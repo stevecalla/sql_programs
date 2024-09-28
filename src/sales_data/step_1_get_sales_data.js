@@ -1,0 +1,455 @@
+const fs = require('fs');
+const path = require('path');
+const fastcsv = require('fast-csv');
+const mysql = require('mysql2');
+const dotenv = require('dotenv');
+dotenv.config({ path: "../../.env" });
+
+const { Client } = require('ssh2');
+const sshClient = new Client();
+const { forwardConfig , dbConfig, sshConfig, csv_export_path } = require('../../utilities/config');
+
+const { query_one_day_sales } = require('../../queries/sales_data/membership_financials_w_transactions_discovery_096424_new_member_6_one_day_with_fields');
+
+const { query_get_sales_data } = require('../../queries/sales_data/0_get_sales_data_master_logic');
+
+const { query_one_day_sales_units_logic } = require('../../queries/sales_data/5b_one_day_sales_units_logic');
+const { query_annual_sales_units_logic } = require('../../queries/sales_data/5c_annual_sales_units_logic');
+const { query_coaches_sales_units_logic } = require('../../queries/sales_data/5d_coaches_sales_units_logic');
+
+const { generateLogFile } = require('../../utilities/generateLogFile');
+const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
+const { runTimer, stopTimer } = require('../../utilities/timer');
+
+// Function to create a Promise for managing the SSH connection and MySQL queries
+function createSSHConnection() {
+    return new Promise((resolve, reject) => {
+        sshClient.on('ready', () => {
+            console.log('\nSSH tunnel established.\n');
+
+            const { srcHost, srcPort, dstHost, dstPort } = forwardConfig;
+            sshClient.forwardOut(
+                srcHost,
+                srcPort,
+                dstHost,
+                dstPort,
+                (err, stream) => {
+                    if (err) reject(err);
+
+                    const updatedDbServer = {
+                        ...dbConfig,
+                        stream,
+                        ssl: {
+                            rejectUnauthorized: false,
+                        },
+                    };
+
+                    const pool = mysql.createPool(updatedDbServer);
+
+                    resolve(pool);
+                }
+            );
+        }).connect(sshConfig);
+    });
+}
+
+async function create_directory(directoryPath) {
+    // CHECK IF DIRECTORY EXISTS, IF NOT, CREATE IT
+    if (!fs.existsSync(directoryPath)) {
+        fs.mkdirSync(directoryPath, { recursive: true });
+        // console.log(`Directory created: ${directoryPath}`);
+    }
+}
+
+// STEP #1 - DELETE ARCHIVED FILES
+async function deleteArchivedFiles() {
+    console.log('Deleting files from archive');
+
+    // Create the "archive" directory if it doesn't exist
+    const archivePath = `${csv_export_path}usat_sales_data_archive`;
+    create_directory(archivePath);
+
+    // List all files in the directory
+    const files = fs.readdirSync(`${csv_export_path}usat_sales_data_archive`);
+    console.log(files);
+
+    // Iterate through each file
+    files?.forEach((file) => {
+        if (file.endsWith('.csv')) {
+            // Construct the full file path
+            const filePath = `${csv_export_path}usat_sales_data_archive/${file}`;
+            console.log(filePath);
+
+            try {
+                // Delete the file
+                fs.unlinkSync(filePath);
+                console.log(`File ${filePath} deleted successfully.`);
+                generateLogFile('get_usat_sales_data', `File ${filePath} deleted successfully.`, csv_export_path);
+            } catch (deleteErr) {
+                console.error(`Error deleting file ${filePath}:`, deleteErr);
+                generateLogFile('get_usat_sales_data', `Error deleting file ${filePath}: ${deleteErr}`, csv_export_path);
+            }
+        }
+    });
+}
+
+// STEP #2 - MOVE FILES TO ARCHIVE
+async function moveFilesToArchive() {
+    console.log('Moving files to archive');
+
+    try {
+        // List all files in the directory
+        const files = fs.readdirSync(`${csv_export_path}usat_sales_data`);
+        console.log(files);
+
+        // Create the "archive" directory if it doesn't exist
+        const archivePath = `${csv_export_path}usat_sales_data_archive`;
+        create_directory(archivePath);
+
+        // Iterate through each file
+        for (const file of files) {
+            if (file.endsWith('.csv')) {
+                // Construct the full file paths
+                const sourceFilePath = `${csv_export_path}usat_sales_data/${file}`;
+                const destinationFilePath = `${archivePath}/${file}`;
+
+                try {
+                    // Move the file to the "archive" directory
+                    fs.renameSync(sourceFilePath, destinationFilePath);
+                    console.log(`Archived ${file}`);
+                    // generateLogFile('get_user_data', `Archived ${file}`, csv_export_path);
+                } catch (archiveErr) {
+                    console.error(`Error moving file ${file} to archive:`, archiveErr);
+                    generateLogFile('get_user_data', `Error archive file ${file}: ${archiveErr}`, csv_export_path);
+                }
+            }
+        }
+
+    } catch (readErr) {
+        console.error('Error reading files:', readErr);
+    }
+}
+
+// STEP #3: GET / QUERY USER DATA & RETURN RESULTS
+async function execute_query_get_usat_sales_data(pool, membership_category_logic, i, year, membership_period_ends) {
+    const startTime = performance.now(); // Start timing
+
+    try {
+        // Wrap pool.query in a promise
+        const results = await new Promise((resolve, reject) => {
+            // const query = query_one_day_sales;
+            const query = query_get_sales_data(membership_category_logic, year, membership_period_ends);
+            // console.log('query =', query);
+
+            pool.query(query, (queryError, results) => {
+                if (queryError) {
+                    reject(queryError);
+                } else {
+                    resolve(results);
+                }
+            });
+        });
+
+        // Calculate elapsed time
+        const endTime = performance.now();
+        const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); // Convert ms to sec
+
+        // Log results and elapsed time
+        // console.log(`\n\nQuery results: `);
+        // console.table(results);
+        console.log(`\nQuery results length: ${results.length}, Elapsed Time: ${elapsedTime} sec`);
+
+        // Additional operations (optional)
+        generateLogFile('get_usat_sales_data', `Query results length: ${results.length}, Elapsed Time: ${elapsedTime} sec`, csv_export_path);
+
+        return results; // Return results if needed
+
+    } catch (error) {
+        // Handle errors
+        console.error('Error executing select query:', error);
+        throw error; // Rethrow error if needed
+    } finally {
+    }
+}
+
+// STEP #4 EXPORT RESULTS TO CSV FILE
+async function export_results_to_csv(results, file_name, i) {
+    console.log('STEP #4 EXPORT RESULTS TO CSV FILE', `${i}_export ${file_name}`);
+    const startTime = performance.now(); // Start timing
+
+    if (results.length === 0) {
+        console.log('No results to export.');
+        generateLogFile('get_usat_sales_data', 'No results to export.', csv_export_path);
+        return;
+    }
+
+    // DEFINE DIRECTORY PATH
+    const directoryPath = path.join(csv_export_path, 'usat_sales_data');
+    // console.log('Directory path = ', directoryPath);
+
+    // CHECK IF DIRECTORY EXISTS, IF NOT, CREATE IT
+    create_directory(directoryPath);
+
+    try {
+        const header = Object.keys(results[0]);
+
+        const csvContent = `${header.join(',')}\n${results.map(row =>
+            header.map(key => (row[key] !== null ? row[key] : 'NULL')).join(',')
+        ).join('\n')}`;
+
+        const created_at_formatted = getCurrentDateTimeForFileNaming();
+        const filePath = path.join(directoryPath, `results_${created_at_formatted}_${file_name}.csv`);
+        // console.log('File path = ', filePath);
+
+        fs.writeFileSync(filePath, csvContent);
+
+        console.log(`Results exported to ${filePath}`);
+        generateLogFile('load_big_query', `Results exported to ${filePath}`, csv_export_path);
+
+    } catch (error) {
+        console.error(`Error exporting results to csv:`, error);
+
+        generateLogFile('load_big_query', `Error exporting results to csv: ${error}`, csv_export_path);
+
+        console.log("----------------------------------------------");
+        console.log("EXPORT FAILED: RUNNING BACKUP STREAMING EXPORT");
+        console.log("----------------------------------------------");
+
+        export_results_to_csv_fast_csv(results, file_name, i);
+    }
+}
+
+async function export_results_to_csv_fast_csv(results, file_name, i) {
+    console.log('STEP #4 EXPORT RESULTS TO CSV FILE', `${i}_export file_name`);
+    const startTime = performance.now(); // Start timing
+
+    if (results.length === 0) {
+        console.log('No results to export.');
+        generateLogFile('get_usat_sales_data', 'No results to export.', csv_export_path);
+        return;
+    }
+
+    // DEFINE DIRECTORY PATH
+    const directoryPath = path.join(csv_export_path, 'usat_sales_data');
+    // console.log('Directory path = ', directoryPath);
+
+    // CHECK IF DIRECTORY EXISTS, IF NOT, CREATE IT
+    create_directory(directoryPath);
+
+    try {
+        const header = Object.keys(results[0]);
+
+        // Create file path with timestamp
+        const created_at_formatted = getCurrentDateTimeForFileNaming();
+        const filePath = path.join(directoryPath, `results_${created_at_formatted}_${file_name}.csv`);
+        // console.log('File path = ', filePath);
+
+        // Create a writable stream to the file
+        const writeStream = fs.createWriteStream(filePath);
+        
+        // Create a fast-csv stream
+        const csvStream = fastcsv.format({ headers: true });
+        
+        // Pipe the csv stream to the writable stream
+        csvStream.pipe(writeStream);
+
+        // Write the rows
+        results.forEach(row => {
+            csvStream.write(header.reduce((acc, key) => ({
+                ...acc,
+                [key]: row[key] !== null ? row[key] : 'NULL'
+            }), {}));
+        });
+
+        // End the CSV stream
+        csvStream.end();
+
+        // Await stream finish
+        await new Promise((resolve, reject) => {
+            writeStream.on('finish', resolve);
+            writeStream.on('error', reject);
+        });
+
+        // Calculate elapsed time
+        const endTime = performance.now();
+        const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); // Convert ms to sec
+
+        console.log(`STEP #4 EXPORT RESULTS TO CSV FILE: Elapsed Time: ${elapsedTime} sec`);
+
+        console.log(`Results exported to ${filePath}`);
+        generateLogFile('get_usat_sales_data', `User data exported to ${filePath}`, csv_export_path);
+
+        return;
+
+    } catch (error) {
+        console.error(`Error exporting results to csv:`, error);
+        generateLogFile('get_usat_sales_data', `Error exporting results to csv: ${error}`, csv_export_path);
+    } finally {
+    }
+}
+
+// Main function to handle SSH connection and execute queries
+async function execute_get_sales_data() {
+    let pool;
+    const startTime = performance.now();
+
+    try {
+        // STEP #0: ENSURE FILE WAS UPDATED RECENTLY
+
+        // STEP #1: DELETE PRIOR FILES
+        // await deleteArchivedFiles(); //todo:
+
+        // STEP #2 - MOVE FILES TO ARCHIVE
+        // await moveFilesToArchive(); //todo:
+
+        // STEP #3: GET / QUERY USER DATA & RETURN RESULTS
+        pool = await createSSHConnection();
+        // console.log('pool =', pool)
+
+        const membership_category_logic = [
+            // {
+            //     query: query_coaches_sales_units_logic,
+            //     file_name: 'coaches_sales_units',
+            // },
+            // {
+            //     query: query_annual_sales_units_logic, //todo:
+            //     file_name: 'annual_sales_units',
+            // },
+            // {
+            //     query: query_one_day_sales_units_logic, //todo:
+            //     file_name: 'one_day_sales_units',
+            // },
+        ];
+
+        // -- current rule
+        const date_periods = [
+            // { 
+            //     year: 2021,
+            //     membership_period_ends: '2022-01-01',
+            // },
+            // { 
+            //     year: 2022,
+            //     membership_period_ends: '2022-01-01',
+            // },
+            // { 
+            //     year: 2023,
+            //     membership_period_ends: '2022-01-01',
+            // },
+            // { 
+            //     year: 2024,
+            //     membership_period_ends: '2022-01-01',
+            // },
+            // { 
+            //     year: 2025,
+            //     membership_period_ends: '2022-01-01',
+            // },
+            // { 
+            //     year: 2026,
+            //     membership_period_ends: '2022-01-01',
+            // }
+        ]
+
+        // -- attempt to look back in time
+        // const date_periods = [
+        //     { 
+        //         year: 2019,
+        //         membership_period_ends: '2019-01-01',
+        //     },
+        //     { 
+        //         year: 2020,
+        //         membership_period_ends: '2020-01-01',
+        //     },
+        //     { 
+        //         year: 2021,
+        //         membership_period_ends: '2021-01-01',
+        //     },
+        //     { 
+        //         year: 2022,
+        //         membership_period_ends: '2022-01-01',
+        //     },
+        //     { 
+        //         year: 2023,
+        //         membership_period_ends: '2023-01-01',
+        //     },
+        //     { 
+        //         year: 2024,
+        //         membership_period_ends: '2024-01-01',
+        //     },
+        //     { 
+        //         year: 2025,
+        //         membership_period_ends: '2025-01-01',
+        //     },
+        //     { 
+        //         year: 2026,
+        //         membership_period_ends: '2026-01-01',
+        //     }
+        // ]
+
+        let results = [];
+        for (let i = 0; i < date_periods.length; i++) {
+            for (let j = 0; j < membership_category_logic.length; j++) {
+
+                let { query, file_name } = membership_category_logic[j];
+    
+                runTimer(`${j}_get_data`);
+                results = await execute_query_get_usat_sales_data(pool, query, j, date_periods[i].year, date_periods[i].membership_period_ends);
+                stopTimer(`${j}_get_data`);
+    
+                console.log(`File ${i + 1} of ${date_periods.length} complete.\n`);  
+    
+                generateLogFile('get_usat_sales_data', `Query for  execute_query_get_sales_data executed successfully.`, csv_export_path);  
+                
+                // STEP #4: EXPORT RESULTS TO CSV
+                // runTimer(`${i}_export`);
+                let file_name_date = `${file_name}_${date_periods[i].year}`
+                await export_results_to_csv(results, file_name_date, j); 
+                
+                console.log(file_name_date, date_periods[i].year, date_periods[i].membership_period_ends);
+    
+                // await export_results_to_csv_fast_csv(results, file_name, i); // added to catch block in export_results_to_csv
+    
+                // stopTimer(`${i}_export`);
+                
+            }
+        }
+
+    } catch (error) {
+        console.error('Error:', error);
+        generateLogFile('get_usat_sales_data', `Error loading user data: ${error}`, csv_export_path);
+        
+    } finally {
+        // CLOSE CONNECTION
+        await sshClient.end(err => {
+            if (err) {
+              console.error('Error closing SSH connection pool:', err.message);
+            } else {
+              console.log('\nSSH Connection pool closed successfully.');
+            }
+          });
+  
+        await pool.end(err => {
+            if (err) {
+                console.error('Error closing connection pool:', err.message);
+            } else {
+                console.log('\nConnection pool closed successfully.');
+            }
+        });
+
+        // LOG RESULTS
+        const endTime = performance.now();
+        const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
+
+        console.log(`\nAll get usat sales data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
+
+        process.exit();
+
+        return elapsedTime;
+    }
+}
+
+// Run the main function
+execute_get_sales_data();
+
+module.exports = {
+    execute_get_sales_data,
+}
