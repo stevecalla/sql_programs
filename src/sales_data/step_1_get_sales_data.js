@@ -9,13 +9,13 @@ const { Client } = require('ssh2');
 const sshClient = new Client();
 const { forwardConfig , dbConfig, sshConfig, csv_export_path } = require('../../utilities/config');
 
-const { query_one_day_sales } = require('../../queries/sales_data/membership_financials_w_transactions_discovery_096424_new_member_6_one_day_with_fields');
+// const { query_one_day_sales } = require('../queries/sales_data/membership_financials_w_transactions_discovery_096424_new_member_6_one_day_with_fields');
 
-const { query_get_sales_data } = require('../../queries/sales_data/0_get_sales_data_master_logic');
+const { query_get_sales_data } = require('../queries/sales_data/0_get_sales_data_master_logic');
 
-const { query_one_day_sales_units_logic } = require('../../queries/sales_data/5b_one_day_sales_units_logic');
-const { query_annual_sales_units_logic } = require('../../queries/sales_data/5c_annual_sales_units_logic');
-const { query_coaches_sales_units_logic } = require('../../queries/sales_data/5d_coaches_sales_units_logic');
+const { query_one_day_sales_units_logic } = require('../queries/sales_data/5b_one_day_sales_units_logic');
+const { query_annual_sales_units_logic } = require('../queries/sales_data/5c_annual_sales_units_logic');
+const { query_coaches_sales_units_logic } = require('../queries/sales_data/5d_coaches_sales_units_logic');
 
 const { generateLogFile } = require('../../utilities/generateLogFile');
 const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
@@ -297,71 +297,43 @@ async function execute_get_sales_data() {
         // STEP #0: ENSURE FILE WAS UPDATED RECENTLY
 
         // STEP #1: DELETE PRIOR FILES
-        // await deleteArchivedFiles(); //todo:
+        await deleteArchivedFiles(); //todo:
 
         // STEP #2 - MOVE FILES TO ARCHIVE
-        // await moveFilesToArchive(); //todo:
+        await moveFilesToArchive(); //todo:
 
         // STEP #3: GET / QUERY USER DATA & RETURN RESULTS
         pool = await createSSHConnection();
         // console.log('pool =', pool)
 
+        // todo:
         const membership_category_logic = [
-            // {
-            //     query: query_coaches_sales_units_logic,
-            //     file_name: 'coaches_sales_units',
-            // },
-            // {
-            //     query: query_annual_sales_units_logic, //todo:
-            //     file_name: 'annual_sales_units',
-            // },
-            // {
-            //     query: query_one_day_sales_units_logic, //todo:
-            //     file_name: 'one_day_sales_units',
-            // },
+            {
+                query: query_coaches_sales_units_logic,
+                file_name: 'coaches_sales_units',
+            },
+            {
+                query: query_annual_sales_units_logic,
+                file_name: 'annual_sales_units',
+            },
+            {
+                query: query_one_day_sales_units_logic,
+                file_name: 'one_day_sales_units',
+            },
         ];
 
         // -- current rule
-        const date_periods = [
-            // { 
-            //     year: 2021,
-            //     membership_period_ends: '2022-01-01',
-            // },
-            // { 
-            //     year: 2022,
-            //     membership_period_ends: '2022-01-01',
-            // },
-            // { 
-            //     year: 2023,
-            //     membership_period_ends: '2022-01-01',
-            // },
-            // { 
-            //     year: 2024,
-            //     membership_period_ends: '2022-01-01',
-            // },
-            // { 
-            //     year: 2025,
-            //     membership_period_ends: '2022-01-01',
-            // },
-            // { 
-            //     year: 2026,
-            //     membership_period_ends: '2022-01-01',
-            // }
-        ]
-
-        // -- attempt to look back in time
         // const date_periods = [
         //     { 
-        //         year: 2019,
-        //         membership_period_ends: '2019-01-01',
+        //         year: 2021,
+        //         membership_period_ends: '2022-01-01',
         //     },
-        //     { 
-        //         year: 2020,
-        //         membership_period_ends: '2020-01-01',
-        //     },
+        // ]
+
+        // const date_periods = [
         //     { 
         //         year: 2021,
-        //         membership_period_ends: '2021-01-01',
+        //         membership_period_ends: '2022-01-01',
         //     },
         //     { 
         //         year: 2022,
@@ -369,21 +341,94 @@ async function execute_get_sales_data() {
         //     },
         //     { 
         //         year: 2023,
-        //         membership_period_ends: '2023-01-01',
+        //         membership_period_ends: '2022-01-01',
         //     },
         //     { 
         //         year: 2024,
-        //         membership_period_ends: '2024-01-01',
+        //         membership_period_ends: '2022-01-01',
         //     },
         //     { 
         //         year: 2025,
-        //         membership_period_ends: '2025-01-01',
+        //         membership_period_ends: '2022-01-01',
         //     },
         //     { 
         //         year: 2026,
-        //         membership_period_ends: '2026-01-01',
+        //         membership_period_ends: '2022-01-01',
         //     }
         // ]
+        // ************************************
+
+        // -- attempt to look back in time
+        const date_periods = [
+            { 
+                year: 2010,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2011,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2012,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2013,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2014,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2015,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2016,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2017,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2018,
+                membership_period_ends: '2008-01-01',
+            },
+            {
+                year: 2019,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2020,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2021,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2022,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2023,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2024,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2025,
+                membership_period_ends: '2008-01-01',
+            },
+            { 
+                year: 2026,
+                membership_period_ends: '2008-01-01',
+            }
+        ];
 
         let results = [];
         for (let i = 0; i < date_periods.length; i++) {
@@ -392,7 +437,9 @@ async function execute_get_sales_data() {
                 let { query, file_name } = membership_category_logic[j];
     
                 runTimer(`${j}_get_data`);
+
                 results = await execute_query_get_usat_sales_data(pool, query, j, date_periods[i].year, date_periods[i].membership_period_ends);
+
                 stopTimer(`${j}_get_data`);
     
                 console.log(`File ${i + 1} of ${date_periods.length} complete.\n`);  
@@ -406,7 +453,7 @@ async function execute_get_sales_data() {
                 
                 console.log(file_name_date, date_periods[i].year, date_periods[i].membership_period_ends);
     
-                // await export_results_to_csv_fast_csv(results, file_name, i); // added to catch block in export_results_to_csv
+                // await export_results_to_csv_fast_csv(results, file_name_date, j); // added to catch block in export_results_to_csv
     
                 // stopTimer(`${i}_export`);
                 

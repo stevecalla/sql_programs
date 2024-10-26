@@ -9,10 +9,10 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 const { csv_export_path } = require('../../utilities/config');
 const { generateLogFile } = require('../../utilities/generateLogFile');
 
-const { query_create_database } = require('../../queries/create_drop_db_table/queries_create_db');
-const { query_drop_database, query_drop_table } = require('../../queries/create_drop_db_table/queries_drop_db_tables');
-const { query_load_sales_data } = require('../../queries/load_data/query_load_data');
-const { tables_library } = require('../../queries/create_drop_db_table/queries_create_tables');
+const { query_create_database } = require('../queries/create_drop_db_table/queries_create_db');
+const { query_drop_database, query_drop_table } = require('../queries/create_drop_db_table/queries_drop_db_tables');
+const { query_load_sales_data } = require('../queries/load_data/query_load_data');
+const { tables_library } = require('../queries/create_drop_db_table/queries_create_tables');
 
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
@@ -138,10 +138,11 @@ async function main() {
         pool = await create_connection();
 
         const db_name = `usat_sales_db`;
+        console.log(db_name);
 
         // STEP #1: CREATE DATABASE
-        await execute_mysql_working_query(pool, db_name, query_drop_database(db_name), `STEP #1.0: DROP DB`);
-        await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
+        // await execute_mysql_working_query(pool, db_name, query_drop_database(db_name), `STEP #1.0: DROP DB`);
+        // await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
 
         // STEP #2: CREATE TABLES = all files loaded into single table
         for (const table of tables_library) {

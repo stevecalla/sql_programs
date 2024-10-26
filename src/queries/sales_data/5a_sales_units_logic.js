@@ -1,5 +1,5 @@
 const { query_is_allowable_logic } = require('./10_is_allowable_logic');
-const { query_is_allowable_logic_modified } = require('./10_is_allowable_logic_modified')
+// const { query_is_allowable_logic_modified } = require('./10_is_allowable_logic_modified')
 // -- ${query_is_allowable_logic} // original line 57
 // ${query_is_allowable_logic_modified}
 
@@ -8,14 +8,16 @@ function query_sales_units_logic(year, membership_category_logic, operator, memb
         SELECT 
             members.member_number AS member_number_members,
             MAX(membership_periods.id) as max_membership_period_id,
-            CASE
-                WHEN membership_periods.membership_type_id IN (1, 2, 3, 52, 55, 60, 62, 64, 65, 66, 67, 68, 70, 71, 73, 74, 75, 85, 89, 91, 93, 96, 98, 99, 101, 103, 104, 112, 113, 114, 117) THEN 'adult_annual'
-                WHEN membership_periods.membership_type_id IN (4, 51, 54, 61, 94, 107) THEN 'youth_annual'
-                WHEN membership_periods.membership_type_id IN (5, 46, 47, 72, 97, 100, 115, 118) THEN 'one_day'
-                WHEN membership_periods.membership_type_id IN (56, 58, 81, 105) THEN 'club'
-                WHEN membership_periods.membership_type_id IN (83, 84, 86, 87, 88, 90, 102) THEN 'elite'
-                ELSE "other"
-            END AS real_membership_types,
+            -- todo: changed to real membership from prior table vs using case
+            mc.real_membership_types,
+            -- CASE
+            --     WHEN membership_periods.membership_type_id IN (1, 2, 3, 52, 55, 60, 62, 64, 65, 66, 67, 68, 70, 71, 73, 74, 75, 85, 89, 91, 93, 96, 98, 99, 101, 103, 104, 112, 113, 114, 117) THEN 'adult_annual'
+            --     WHEN membership_periods.membership_type_id IN (4, 51, 54, 61, 94, 107) THEN 'youth_annual'
+            --     WHEN membership_periods.membership_type_id IN (5, 46, 47, 72, 97, 100, 115, 118) THEN 'one_day'
+            --     WHEN membership_periods.membership_type_id IN (56, 58, 81, 105) THEN 'club'
+            --     WHEN membership_periods.membership_type_id IN (83, 84, 86, 87, 88, 90, 102) THEN 'elite'
+            --     ELSE "other"
+            -- END AS real_membership_types,
             
             mc.max_membership_fee_6 AS max_membership_fee_6,
             mc.new_member_category_6,
@@ -67,7 +69,7 @@ function query_sales_units_logic(year, membership_category_logic, operator, memb
 
             AND membership_periods.terminated_on IS NULL
 
-            AND membership_periods.ends >= ${membership_periods_ends}
+            AND membership_periods.ends >= '${membership_periods_ends}'
             
         GROUP BY 
             members.member_number,

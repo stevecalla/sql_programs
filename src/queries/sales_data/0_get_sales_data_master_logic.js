@@ -20,7 +20,7 @@ function query_get_sales_data(query_membership_category_logic, year, membership_
    return `
       -- STEP #1 - CREATE SOURCE 2
       WITH source_2_type AS (
-         ${query_source_2_logic(year, operator)} -- TODO: SET YEAR, SET OPERATOR
+         ${query_source_2_logic(year, operator, membership_period_ends)} -- TODO: SET YEAR, SET OPERATOR
       ),
 
       -- STEP #2 - CREATE KOZ ACCEPTION
