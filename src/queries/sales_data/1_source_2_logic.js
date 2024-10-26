@@ -1,4 +1,4 @@
-function query_source_2_logic(year, operator) {
+function query_source_2_logic(year, operator, membership_period_ends) {
     return `
         SELECT 
             membership_periods.id AS id_membership_periods,
@@ -67,7 +67,8 @@ function query_source_2_logic(year, operator) {
             -- AND membership_periods.purchased_on >= @start_date
             -- AND membership_periods.purchased_on <= @end_date
 
-            AND membership_periods.ends >= '2022-01-01'
+            -- AND membership_periods.ends >= '2022-01-01'
+            AND membership_periods.ends >= '${membership_period_ends}'
             AND membership_periods.membership_type_id > 0
             AND membership_periods.terminated_on IS NULL
 
