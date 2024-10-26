@@ -7,6 +7,7 @@ const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 const { csv_export_path } = require('../../utilities/config');
+const { create_directory } = require('../../utilities/createDirectory');
 const { generateLogFile } = require('../../utilities/generateLogFile');
 
 const { query_create_database } = require('../queries/create_drop_db_table/queries_create_db');
@@ -38,6 +39,7 @@ async function create_connection() {
 
 // EXECUTE MYSQL TO CREATE DB QUERY
 async function execute_mysql_create_db_query(pool, query, step_info) {
+    
     return new Promise((resolve, reject) => {
 
         const startTime = performance.now();
@@ -47,7 +49,7 @@ async function execute_mysql_create_db_query(pool, query, step_info) {
             const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
 
             if (queryError) {
-                console.error('Error executing select query:', queryError);
+                console.error('Error executing create query:', queryError);
                 reject(queryError);
             } else {
                 console.log(`\n${step_info}`);
@@ -130,7 +132,7 @@ async function execute_insert_createdAt_query(pool, db_name, table, step) {
 }
 
 async function main() {
-    let pool; // Declare the pool variable outside the try block to close connection in finally block
+    let pool;
     const startTime = performance.now();
 
     try {
@@ -163,7 +165,7 @@ async function main() {
 
         let rows_added = 0;
 
-        const directory = `${csv_export_path}usat_sales_data`; // Directory containing CSV files
+        const directory = await create_directory('usat_sales_data');
         console.log(directory);
 
         // List all files in the directory
@@ -176,7 +178,7 @@ async function main() {
             let currentFile = files[i];
 
             if (currentFile.endsWith('.csv')) {
-                numer_of_files++;
+        //         numer_of_files++;
 
                 // Construct the full file path
                 const filePath = `${directory}/${currentFile}`;
@@ -187,7 +189,7 @@ async function main() {
                 
                 const query_load_data = query_load_sales_data(filePath, table_name);
 
-                // Insert file into "" table
+                // // Insert file into "" table
                 let query = await execute_mysql_working_query(pool, db_name, query_load_data, filePath, table_name, rows_added, i);
 
                 // track number of rows added
@@ -197,8 +199,8 @@ async function main() {
             }
         }
 
-        generateLogFile('loading_usat_sales_data', `Total files added = ${numer_of_files} Total rows added = ${rows_added.toLocaleString()}`, csv_export_path);
-        console.log('Files processed =', numer_of_files);
+        // generateLogFile('loading_usat_sales_data', `Total files added = ${numer_of_files} Total rows added = ${rows_added.toLocaleString()}`, csv_export_path);
+        // console.log('Files processed =', numer_of_files);
 
         // STEP #5 - INSERT "CREATED AT" DATE
         // console.log(`STEP #5 - INSERT "CREATED AT" DATE`);
