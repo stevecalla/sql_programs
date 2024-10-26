@@ -141,8 +141,8 @@ async function main() {
         console.log(db_name);
 
         // STEP #1: CREATE DATABASE
-        // await execute_mysql_working_query(pool, db_name, query_drop_database(db_name), `STEP #1.0: DROP DB`);
-        // await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
+        await execute_mysql_working_query(pool, db_name, query_drop_database(db_name), `STEP #1.0: DROP DB`);
+        await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
 
         // STEP #2: CREATE TABLES = all files loaded into single table
         for (const table of tables_library) {

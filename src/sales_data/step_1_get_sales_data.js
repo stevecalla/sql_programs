@@ -7,7 +7,9 @@ dotenv.config({ path: "../../.env" });
 
 const { Client } = require('ssh2');
 const sshClient = new Client();
-const { forwardConfig , dbConfig, sshConfig, csv_export_path, csv_export_path_mac } = require('../../utilities/config');
+const { forwardConfig , dbConfig, sshConfig } = require('../../utilities/config');
+const { determineOSPath } = require('../../utilities/determineOSPath');
+const { create_directory } = require('../../utilities/createDirectory');
 
 // const { query_one_day_sales } = require('../queries/sales_data/membership_financials_w_transactions_discovery_096424_new_member_6_one_day_with_fields');
 
@@ -51,27 +53,6 @@ function createSSHConnection() {
             );
         }).connect(sshConfig);
     });
-}
-
-async function determineOSPath() {
-    // Determine the CSV export path based on the OS
-    const isMac = process.platform === 'darwin'; // macOS
-    // const isWindows = process.platform === 'win32'; // Windows
-    const os_path = isMac ? csv_export_path_mac : csv_export_path;
-    return os_path;
-}
-
-async function create_directory(directoryName) {
-    const os_path = await determineOSPath();
-    const directoryPath = path.join(os_path, directoryName);
-
-    // CHECK IF DIRECTORY EXISTS, IF NOT, CREATE IT
-    if (!fs.existsSync(directoryPath)) {
-        fs.mkdirSync(directoryPath, { recursive: true });
-        // console.log(`Directory created: ${directoryPath}`);
-    }
-
-    return directoryPath;
 }
 
 // STEP #1 - DELETE ARCHIVED FILES
@@ -471,7 +452,7 @@ async function execute_get_sales_data() {
 
         process.exit();
 
-        return elapsedTime;
+        // return elapsedTime;
     }
 }
 

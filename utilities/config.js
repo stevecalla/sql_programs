@@ -40,16 +40,14 @@ const local_usat_sales_db_config = {
     connectionLimit: 20,
 };
 
-const csv_export_path = `C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/data/`;
-const csv_export_path_mac = `/Users/teamkwsc/development/usat/data/`;
-// csvExportPath: './output/results.csv', // Update this path accordingly
-// csvExportPath: 'C:/Users/calla/Google Drive/Resume & Stuff/ezhire/sql_analysis/data',
+// const csv_export_path = `C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/data/`;
+// const csv_export_path_mac = `/Users/teamkwsc/development/usat/data/`;
 
 module.exports = {
     dbConfig,
     sshConfig,
     forwardConfig,
-    csv_export_path,
-    csv_export_path_mac,
+    // csv_export_path,
+    // csv_export_path_mac,
     local_usat_sales_db_config,
 };
