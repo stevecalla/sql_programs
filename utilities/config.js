@@ -20,7 +20,8 @@ const sshConfig = {
     port: parseInt(process.env.SSH_PORT),
     username: process.env.SSH_USERNAME,
     // password: process.env.SSH_PASSWORD,
-    privateKey: fs.readFileSync(process.env.SSH_PRIVATE_KEY_PATH),
+    // privateKey: fs.readFileSync(process.env.SSH_PRIVATE_KEY_PATH),
+    privateKey: fs.existsSync(process.env.SSH_PRIVATE_KEY_PATH) && fs.readFileSync(process.env.SSH_PRIVATE_KEY_PATH) || fs.readFileSync(process.env.SSH_PRIVATE_KEY_PATH_MAC),
 };
 
 const forwardConfig = {

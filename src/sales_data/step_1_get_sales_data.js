@@ -297,10 +297,10 @@ async function execute_get_sales_data() {
         // STEP #0: ENSURE FILE WAS UPDATED RECENTLY
 
         // STEP #1: DELETE PRIOR FILES
-        await deleteArchivedFiles(); //todo:
+        // await deleteArchivedFiles(); //todo:
 
         // STEP #2 - MOVE FILES TO ARCHIVE
-        await moveFilesToArchive(); //todo:
+        // await moveFilesToArchive(); //todo:
 
         // STEP #3: GET / QUERY USER DATA & RETURN RESULTS
         pool = await createSSHConnection();
@@ -322,143 +322,107 @@ async function execute_get_sales_data() {
             },
         ];
 
-        // -- current rule
+        // -- attempt to look back in time
         // const date_periods = [
         //     { 
-        //         year: 2021,
-        //         membership_period_ends: '2022-01-01',
+        //         year: 2010,
+        //         membership_period_ends: '2008-01-01',
         //     },
-        // ]
-
-        // const date_periods = [
+        //     { 
+        //         year: 2011,
+        //         membership_period_ends: '2008-01-01',
+        //     },
+        //     { 
+        //         year: 2012,
+        //         membership_period_ends: '2008-01-01',
+        //     },
+        //     { 
+        //         year: 2013,
+        //         membership_period_ends: '2008-01-01',
+        //     },
+        //     { 
+        //         year: 2014,
+        //         membership_period_ends: '2008-01-01',
+        //     },
+        //     { 
+        //         year: 2015,
+        //         membership_period_ends: '2008-01-01',
+        //     },
+        //     { 
+        //         year: 2016,
+        //         membership_period_ends: '2008-01-01',
+        //     },
+        //     { 
+        //         year: 2017,
+        //         membership_period_ends: '2008-01-01',
+        //     },
+        //     { 
+        //         year: 2018,
+        //         membership_period_ends: '2008-01-01',
+        //     },
+        //     {
+        //         year: 2019,
+        //         membership_period_ends: '2008-01-01',
+        //     },
+        //     { 
+        //         year: 2020,
+        //         membership_period_ends: '2008-01-01',
+        //     },
         //     { 
         //         year: 2021,
-        //         membership_period_ends: '2022-01-01',
+        //         membership_period_ends: '2008-01-01',
         //     },
         //     { 
         //         year: 2022,
-        //         membership_period_ends: '2022-01-01',
+        //         membership_period_ends: '2008-01-01',
         //     },
         //     { 
         //         year: 2023,
-        //         membership_period_ends: '2022-01-01',
+        //         membership_period_ends: '2008-01-01',
         //     },
         //     { 
         //         year: 2024,
-        //         membership_period_ends: '2022-01-01',
+        //         membership_period_ends: '2008-01-01',
         //     },
         //     { 
         //         year: 2025,
-        //         membership_period_ends: '2022-01-01',
+        //         membership_period_ends: '2008-01-01',
         //     },
         //     { 
         //         year: 2026,
-        //         membership_period_ends: '2022-01-01',
+        //         membership_period_ends: '2008-01-01',
         //     }
-        // ]
-        // ************************************
+        // ];
 
-        // -- attempt to look back in time
-        const date_periods = [
-            { 
-                year: 2010,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2011,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2012,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2013,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2014,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2015,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2016,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2017,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2018,
-                membership_period_ends: '2008-01-01',
-            },
-            {
-                year: 2019,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2020,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2021,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2022,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2023,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2024,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2025,
-                membership_period_ends: '2008-01-01',
-            },
-            { 
-                year: 2026,
-                membership_period_ends: '2008-01-01',
-            }
-        ];
+        // let results = [];
+        // for (let i = 0; i < date_periods.length; i++) {
+        //     for (let j = 0; j < membership_category_logic.length; j++) {
 
-        let results = [];
-        for (let i = 0; i < date_periods.length; i++) {
-            for (let j = 0; j < membership_category_logic.length; j++) {
-
-                let { query, file_name } = membership_category_logic[j];
+        //         let { query, file_name } = membership_category_logic[j];
     
-                runTimer(`${j}_get_data`);
+        //         runTimer(`${j}_get_data`);
 
-                results = await execute_query_get_usat_sales_data(pool, query, j, date_periods[i].year, date_periods[i].membership_period_ends);
+        //         results = await execute_query_get_usat_sales_data(pool, query, j, date_periods[i].year, date_periods[i].membership_period_ends);
 
-                stopTimer(`${j}_get_data`);
+        //         stopTimer(`${j}_get_data`);
     
-                console.log(`File ${i + 1} of ${date_periods.length} complete.\n`);  
+        //         console.log(`File ${i + 1} of ${date_periods.length} complete.\n`);  
     
-                generateLogFile('get_usat_sales_data', `Query for  execute_query_get_sales_data executed successfully.`, csv_export_path);  
+        //         generateLogFile('get_usat_sales_data', `Query for  execute_query_get_sales_data executed successfully.`, csv_export_path);  
                 
-                // STEP #4: EXPORT RESULTS TO CSV
-                // runTimer(`${i}_export`);
-                let file_name_date = `${file_name}_${date_periods[i].year}`
-                await export_results_to_csv(results, file_name_date, j); 
+        //         // STEP #4: EXPORT RESULTS TO CSV
+        //         // runTimer(`${i}_export`);
+        //         let file_name_date = `${file_name}_${date_periods[i].year}`
+        //         await export_results_to_csv(results, file_name_date, j); 
                 
-                console.log(file_name_date, date_periods[i].year, date_periods[i].membership_period_ends);
+        //         console.log(file_name_date, date_periods[i].year, date_periods[i].membership_period_ends);
     
-                // await export_results_to_csv_fast_csv(results, file_name_date, j); // added to catch block in export_results_to_csv
+        //         // await export_results_to_csv_fast_csv(results, file_name_date, j); // added to catch block in export_results_to_csv
     
-                // stopTimer(`${i}_export`);
+        //         // stopTimer(`${i}_export`);
                 
-            }
-        }
+        //     }
+        // }
 
     } catch (error) {
         console.error('Error:', error);
