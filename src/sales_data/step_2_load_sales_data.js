@@ -2,6 +2,7 @@ const fsp = require('fs').promises; // promses necessary for "fs.readdir"
 // const mysql = require('mysql2');
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
+const path = require('path');
 
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
@@ -77,9 +78,10 @@ async function execute_mysql_working_query(pool, db_name, query, filePath, step_
 
                 if (queryError) {
                     console.error('Error executing select query:', queryError);
+
                     reject(queryError);
                 } else {
-                    console.log(`\n${step_info}`);
+                    // console.log(`\n${step_info}`);
                     console.table(results);
                     console.log(`Query results: ${results.info}, Elapsed Time: ${elapsedTime} sec\n`);
 
@@ -188,13 +190,17 @@ async function main() {
                 numer_of_files++;
 
                 // Construct the full file path
-                const filePath = `${directory}/${currentFile}`;
+                let filePath = path.join(directory, currentFile);
+                filePath = filePath.replace(/\\/g, '/');
+
                 console.log('file path to insert data = ', filePath);
 
                 // let table_name = tables_library[i].table_name;
                 let table_name = tables_library[0].table_name;
                 
                 const query_load_data = query_load_sales_data(filePath, table_name);
+                // console.log(query_load_data);
+                // console.log('check step info = ', step_info);
 
                 // // Insert file into "" table
                 let query = await execute_mysql_working_query(pool, db_name, query_load_data, filePath, rows_added, i);
