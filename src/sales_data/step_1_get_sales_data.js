@@ -24,7 +24,10 @@ const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentD
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
 // Function to create a Promise for managing the SSH connection and MySQL queries
-function createSSHConnection() {
+async function createSSHConnection() {
+
+    const getSshConfig = await sshConfig();
+
     return new Promise((resolve, reject) => {
         sshClient.on('ready', () => {
             console.log('\nSSH tunnel established.\n');
@@ -51,7 +54,7 @@ function createSSHConnection() {
                     resolve(pool);
                 }
             );
-        }).connect(sshConfig);
+        }).connect(getSshConfig);
     });
 }
 
@@ -97,7 +100,7 @@ async function moveFilesToArchive() {
 
     try {
         // List all files in the directory
-        const sourcePath = `${os_path}/usat_sales_data`;
+        const sourcePath = `${os_path}usat_sales_data`;
         const files = fs.readdirSync(sourcePath);
         console.log(files);
 
@@ -131,7 +134,7 @@ async function moveFilesToArchive() {
 }
 
 // STEP #3: GET / QUERY USER DATA & RETURN RESULTS
-async function execute_query_get_usat_sales_data(pool, membership_category_logic, i, year, membership_period_ends) {
+async function execute_query_get_usat_sales_data(pool, membership_category_logic, i, year, start_date, end_date, membership_period_ends) {
     const startTime = performance.now(); // Start timing
     const logPath = await determineOSPath();
 
@@ -139,7 +142,7 @@ async function execute_query_get_usat_sales_data(pool, membership_category_logic
         // Wrap pool.query in a promise
         const results = await new Promise((resolve, reject) => {
             // const query = query_one_day_sales;
-            const query = query_get_sales_data(membership_category_logic, year, membership_period_ends);
+            const query = query_get_sales_data(membership_category_logic, year, start_date, end_date, membership_period_ends);
             // console.log('query =', query);
 
             pool.query(query, (queryError, results) => {
@@ -302,9 +305,7 @@ async function execute_get_sales_data() {
 
         // STEP #3: GET / QUERY USER DATA & RETURN RESULTS
         pool = await createSSHConnection();
-        // console.log('pool =', pool)
 
-        // todo:
         const membership_category_logic = [
             {
                 query: query_coaches_sales_units_logic,
@@ -320,87 +321,221 @@ async function execute_get_sales_data() {
             },
         ];
 
-        // -- attempt to look back in time
         const date_periods = [
             { 
                 year: 2010,
                 membership_period_ends: '2008-01-01',
+                start_date: '2010-01-01',
+                end_date: '2010-06-30',
+            },
+            { 
+                year: 2010,
+                membership_period_ends: '2008-01-01',
+                start_date: '2010-07-01',
+                end_date: '2010-12-31',
             },
             { 
                 year: 2011,
                 membership_period_ends: '2008-01-01',
+                start_date: '2011-01-01',
+                end_date: '2011-06-30',
+            },
+            { 
+                year: 2011,
+                membership_period_ends: '2008-01-01',
+                start_date: '2011-07-01',
+                end_date: '2011-12-31',
             },
             { 
                 year: 2012,
                 membership_period_ends: '2008-01-01',
+                start_date: '2012-01-01',
+                end_date: '2012-06-30',
+            },
+            { 
+                year: 2012,
+                membership_period_ends: '2008-01-01',
+                start_date: '2012-07-01',
+                end_date: '2012-12-31',
             },
             { 
                 year: 2013,
                 membership_period_ends: '2008-01-01',
+                start_date: '2013-01-01',
+                end_date: '2013-06-30',
+            },
+            { 
+                year: 2013,
+                membership_period_ends: '2008-01-01',
+                start_date: '2013-07-01',
+                end_date: '2013-12-31',
             },
             { 
                 year: 2014,
                 membership_period_ends: '2008-01-01',
+                start_date: '2014-01-01',
+                end_date: '2014-06-30',
+            },
+            { 
+                year: 2014,
+                membership_period_ends: '2008-01-01',
+                start_date: '2014-07-01',
+                end_date: '2014-12-31',
             },
             { 
                 year: 2015,
                 membership_period_ends: '2008-01-01',
+                start_date: '2015-01-01',
+                end_date: '2015-06-30',
+            },
+            { 
+                year: 2015,
+                membership_period_ends: '2008-01-01',
+                start_date: '2015-07-01',
+                end_date: '2015-12-31',
             },
             { 
                 year: 2016,
                 membership_period_ends: '2008-01-01',
+                start_date: '2016-01-01',
+                end_date: '2016-06-30',
+            },
+            { 
+                year: 2016,
+                membership_period_ends: '2008-01-01',
+                start_date: '2016-07-01',
+                end_date: '2016-12-31',
             },
             { 
                 year: 2017,
                 membership_period_ends: '2008-01-01',
+                start_date: '2017-01-01',
+                end_date: '2017-06-30',
+            },
+            { 
+                year: 2017,
+                membership_period_ends: '2008-01-01',
+                start_date: '2017-07-01',
+                end_date: '2017-12-31',
             },
             { 
                 year: 2018,
                 membership_period_ends: '2008-01-01',
+                start_date: '2018-01-01',
+                end_date: '2018-06-30',
+            },
+            { 
+                year: 2018,
+                membership_period_ends: '2008-01-01',
+                start_date: '2018-07-01',
+                end_date: '2018-12-31',
             },
             {
                 year: 2019,
                 membership_period_ends: '2008-01-01',
+                start_date: '2019-01-01',
+                end_date: '2019-06-30',
+            },
+            { 
+                year: 2019,
+                membership_period_ends: '2008-01-01',
+                start_date: '2019-07-01',
+                end_date: '2019-12-31',
             },
             { 
                 year: 2020,
                 membership_period_ends: '2008-01-01',
+                start_date: '2020-01-01',
+                end_date: '2020-06-30',
+            },
+            { 
+                year: 2020,
+                membership_period_ends: '2008-01-01',
+                start_date: '2020-07-01',
+                end_date: '2020-12-31',
             },
             { 
                 year: 2021,
                 membership_period_ends: '2008-01-01',
+                start_date: '2021-01-01',
+                end_date: '2021-06-30',
+            },
+            { 
+                year: 2021,
+                membership_period_ends: '2008-01-01',
+                start_date: '2021-07-01',
+                end_date: '2021-12-31',
             },
             { 
                 year: 2022,
                 membership_period_ends: '2008-01-01',
+                start_date: '2022-01-01',
+                end_date: '2022-06-30',
+            },
+            { 
+                year: 2022,
+                membership_period_ends: '2008-01-01',
+                start_date: '2022-07-01',
+                end_date: '2022-12-31',
             },
             { 
                 year: 2023,
                 membership_period_ends: '2008-01-01',
+                start_date: '2023-01-01',
+                end_date: '2023-06-30',
+            },
+            { 
+                year: 2023,
+                membership_period_ends: '2008-01-01',
+                start_date: '2023-07-01',
+                end_date: '2023-12-31',
             },
             { 
                 year: 2024,
                 membership_period_ends: '2008-01-01',
+                start_date: '2024-01-01',
+                end_date: '2024-06-30',
+            },
+            { 
+                year: 2024,
+                membership_period_ends: '2008-01-01',
+                start_date: '2024-07-01',
+                end_date: '2024-12-31',
             },
             { 
                 year: 2025,
                 membership_period_ends: '2008-01-01',
+                start_date: '2025-01-01',
+                end_date: '2025-06-30',
+            },
+            { 
+                year: 2025,
+                membership_period_ends: '2008-01-01',
+                start_date: '2025-07-01',
+                end_date: '2025-12-31',
             },
             { 
                 year: 2026,
                 membership_period_ends: '2008-01-01',
-            }
+                start_date: '2026-01-01',
+                end_date: '2026-06-30',
+            },
+            { 
+                year: 2026,
+                membership_period_ends: '2008-01-01',
+                start_date: '2026-07-01',
+                end_date: '2026-12-31',
+            },
         ];
 
-        // let results = [];
         for (let i = 0; i < date_periods.length; i++) {
             for (let j = 0; j < membership_category_logic.length; j++) {
-
-                let { query, file_name } = membership_category_logic[j];
-    
                 runTimer(`${j}_get_data`);
 
-                results = await execute_query_get_usat_sales_data(pool, query, j, date_periods[i].year, date_periods[i].membership_period_ends);
+                let { query, file_name } = membership_category_logic[j];
+                // console.log(query);
+
+                results = await execute_query_get_usat_sales_data(pool, query, j, date_periods[i].year, date_periods[i].start_date, date_periods[i].end_date, date_periods[i].membership_period_ends);
 
                 stopTimer(`${j}_get_data`);
     
@@ -409,15 +544,17 @@ async function execute_get_sales_data() {
                 generateLogFile('get_usat_sales_data', `Query for  execute_query_get_sales_data executed successfully.`, logPath);  
                 
                 // STEP #4: EXPORT RESULTS TO CSV
-                // runTimer(`${i}_export`);
-                let file_name_date = `${file_name}_${date_periods[i].year}`
-                await export_results_to_csv(results, file_name_date, j); 
+                runTimer(`${i}_export`);
+
+                let file_name_date = `${file_name}_${date_periods[i].start_date}`
+
+                // await export_results_to_csv(results, file_name_date, j); 
+                // added to catch block in export_results_to_csv
+                await export_results_to_csv_fast_csv(results, file_name_date, j); 
                 
                 console.log(file_name_date, date_periods[i].year, date_periods[i].membership_period_ends);
     
-                // await export_results_to_csv_fast_csv(results, file_name_date, j); // added to catch block in export_results_to_csv
-    
-                // stopTimer(`${i}_export`);
+                stopTimer(`${i}_export`);
                 
             }
         }
