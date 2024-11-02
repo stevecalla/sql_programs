@@ -7,7 +7,7 @@ const query_actual_membership_fee_6_logic =
         mp.membership_type_id AS membership_type_id_membership_periods,
         -- real_membership_types
         CASE
-            WHEN mp.membership_type_id IN (1, 2, 3, 52, 55, 60, 62, 64, 65, 66, 67, 68, 70, 71, 73, 74, 75, 85, 89, 91, 93, 96, 98, 99, 101, 103, 104, 112, 113, 114, 117) THEN 'adult_annual'
+            WHEN mp.membership_type_id IN (1, 2, 3, 52, 55, 60, 62, 64, 65, 66, 67, 68, 70, 71, 73, 74, 75, 85, 89, 91, 93, 96, 98, 99, 101, 103, 104, 112, 113, 114, 117, 119) THEN 'adult_annual'
             WHEN mp.membership_type_id IN (4, 51, 54, 61, 94, 107) THEN 'youth_annual'
             WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115, 118) THEN 'one_day'
             WHEN mp.membership_type_id IN (56, 58, 81, 105) THEN 'club'
@@ -90,8 +90,8 @@ const query_actual_membership_fee_6_logic =
                         ELSE NULL
                     END IS NULL THEN 0
                 WHEN mp.membership_type_id IN (2, 52, 65, 70, 73, 91, 93, 96, 98) THEN 100 -- 2year
-                WHEN mp.membership_type_id IN (3, 66, 68, 85, 89, 99) AND mp.purchased_on < '2024-06-04 12:00:00' THEN 135 -- 3year
-                WHEN mp.membership_type_id IN (3, 66, 68, 85, 89, 99) THEN 180 -- 3year
+                WHEN mp.membership_type_id IN (3, 66, 68, 85, 89, 99, 119) AND mp.purchased_on < '2024-06-04 12:00:00' THEN 135 -- 3year
+                WHEN mp.membership_type_id IN (3, 66, 68, 85, 89, 99, 119) THEN 180 -- 3year
                 WHEN mp.membership_type_id IN (74, 103) THEN 1000 -- lifetime
                 WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100) AND ma.event_id IN (30785, 30768, 30770) THEN 0 -- one-day; //these events were comped
                 -- 'KOZ Acception'

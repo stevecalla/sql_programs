@@ -9,7 +9,7 @@ const query_new_member_category_6_logic =
         -- new_member_category_6
         CASE
             WHEN mp.membership_type_id IN (2, 52, 65, 70, 73, 91, 93, 96, 98) THEN '2-Year'
-            WHEN mp.membership_type_id IN (3, 66, 68, 85, 89, 99) THEN '3-Year'
+            WHEN mp.membership_type_id IN (3, 66, 68, 85, 89, 99, 119) THEN '3-Year'
             WHEN mp.membership_type_id IN (74, 103) THEN 'Lifetime'
             WHEN mp.membership_type_id IN (4, 51, 54, 61, 94) THEN 'Youth Annual'
             WHEN mp.membership_type_id IN (112) THEN 'Silver'
