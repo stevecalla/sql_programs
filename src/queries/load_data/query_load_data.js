@@ -400,7 +400,7 @@ const transform_fields = `
 
 function query_load_sales_data(filePath, table) {
   return `
-    LOAD DATA INFILE '${filePath}'
+    LOAD DATA LOCAL INFILE '${filePath}'
     INTO TABLE ${table}
     FIELDS TERMINATED BY ','
     ENCLOSED BY '"'

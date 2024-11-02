@@ -1,10 +1,31 @@
-const fs = require('fs');
+// const fs = require('fs');
+const fs = require('fs').promises; // Use promises API
 const dotenv = require('dotenv');
-dotenv.config({path: "../.env"}); // adding the path ensures each folder will read the .env file as necessary
+const { Z_BINARY } = require('zlib');
+dotenv.config(); // adding the path ensures each folder will read the .env file as necessary
 const connectionLimitThrottle = 30;
 
 // console.log(process.env); // double check if env variables are available
 // console.log(process.env.MYSQL_HOST); // double check if env variables are available
+
+async function getPrivateKey() {
+    const isMac = process.platform === 'darwin'; // macOS
+    const isLinux = process.platform === 'linux'; // Linux
+
+    const privateKeyPath = isMac
+        ? process.env.SSH_PRIVATE_KEY_PATH_MAC
+        : (isLinux ? process.env.SSH_PRIVATE_KEY_PATH_LINUX : process.env.SSH_PRIVATE_KEY_PATH_WINDOWS);
+
+    try {
+        // Check if the private key file exists
+        await fs.access(privateKeyPath); // Check file existence
+
+        // Read and return the private key
+        return await fs.readFile(privateKeyPath);
+    } catch (error) {
+        throw new Error(`Private key not found or cannot be read at ${privateKeyPath}: ${error.message}`);
+    }
+}
 
 const dbConfig = {
     host: process.env.MYSQL_HOST,
@@ -15,13 +36,15 @@ const dbConfig = {
     connectionLimit: connectionLimitThrottle,
 };
 
-const sshConfig = {
-    host: process.env.SSH_HOST,
-    port: parseInt(process.env.SSH_PORT),
-    username: process.env.SSH_USERNAME,
-    // password: process.env.SSH_PASSWORD,
-    // privateKey: fs.readFileSync(process.env.SSH_PRIVATE_KEY_PATH),
-    privateKey: fs.existsSync(process.env.SSH_PRIVATE_KEY_PATH) && fs.readFileSync(process.env.SSH_PRIVATE_KEY_PATH) || fs.readFileSync(process.env.SSH_PRIVATE_KEY_PATH_MAC),
+async function sshConfig() {
+    return {
+        host: process.env.SSH_HOST,
+        port: parseInt(process.env.SSH_PORT),
+        username: process.env.SSH_USERNAME,
+        // password: process.env.SSH_PASSWORD,
+        // privateKey: fs.readFileSync(process.env.SSH_PRIVATE_KEY_PATH),
+        privateKey: await getPrivateKey(),
+    }
 };
 
 const forwardConfig = {
@@ -40,14 +63,9 @@ const local_usat_sales_db_config = {
     connectionLimit: 20,
 };
 
-// const csv_export_path = `C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/data/`;
-// const csv_export_path_mac = `/Users/teamkwsc/development/usat/data/`;
-
 module.exports = {
     dbConfig,
     sshConfig,
     forwardConfig,
-    // csv_export_path,
-    // csv_export_path_mac,
     local_usat_sales_db_config,
 };

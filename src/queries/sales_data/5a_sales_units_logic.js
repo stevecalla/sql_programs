@@ -3,7 +3,7 @@ const { query_is_allowable_logic } = require('./10_is_allowable_logic');
 // -- ${query_is_allowable_logic} // original line 57
 // ${query_is_allowable_logic_modified}
 
-function query_sales_units_logic(year, membership_category_logic, operator, membership_periods_ends) {
+function query_sales_units_logic(year, start_date, end_date, membership_category_logic, operator, membership_periods_ends) {
     return `
         SELECT 
             members.member_number AS member_number_members,
@@ -55,7 +55,10 @@ function query_sales_units_logic(year, membership_category_logic, operator, memb
             
             LEFT JOIN new_member_category_6 AS mc ON membership_periods.id = mc.id_membership_periods   
         WHERE
-            year(membership_periods.purchased_on) ${operator} ${year}
+            -- year(membership_periods.purchased_on) ${operator} ${year}
+
+            membership_periods.purchased_on >= '${start_date}'
+            AND membership_periods.purchased_on <= '${end_date}'
                      
             ${query_is_allowable_logic}
             ${membership_category_logic}
