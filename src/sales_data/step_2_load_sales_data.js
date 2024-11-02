@@ -1,5 +1,5 @@
-const fs = require('fs').promises; // promses necessary for "fs.readdir"
-const mysql = require('mysql2');
+const fsp = require('fs').promises; // promses necessary for "fs.readdir"
+// const mysql = require('mysql2');
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
 const path = require('path');
@@ -7,9 +7,9 @@ const path = require('path');
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
-const { csv_export_path } = require('../../utilities/config');
+// const { csv_export_path } = require('../../utilities/config');
 const { create_directory } = require('../../utilities/createDirectory');
-const { generateLogFile } = require('../../utilities/generateLogFile');
+// const { generateLogFile } = require('../../utilities/generateLogFile');
 
 const { query_create_database } = require('../queries/create_drop_db_table/queries_create_db');
 const { query_drop_database, query_drop_table } = require('../queries/create_drop_db_table/queries_drop_db_tables');
@@ -26,10 +26,8 @@ async function create_connection() {
     try {
         // Create a connection to MySQL
         const config_details = local_usat_sales_db_config;
-        // console.log(config_details);
 
         const pool = create_local_db_connection(config_details);
-        // console.log(pool);
 
         return (pool);
 
@@ -63,12 +61,18 @@ async function execute_mysql_create_db_query(pool, query, step_info) {
 }
 
 // EXECUTE MYSQL TO CREATE TABLES & WORK WITH TABLES QUERY
-async function execute_mysql_working_query(pool, db_name, query, rows_added, i) {
+async function execute_mysql_working_query(pool, db_name, query, filePath, step_info, rows_added) {
     const startTime = performance.now();
+    const fs = require('fs');
 
     return new Promise((resolve, reject) => {
         pool.query(`USE ${db_name};`, (queryError, results) => {
-            pool.query(query, (queryError, results) => {
+            // pool.query(query, (queryError, results) => {
+            pool.query({
+                sql: query,
+                infileStreamFactory: function() { return fs.createReadStream(filePath)}}, 
+                (queryError, results) => {
+
                 const endTime = performance.now();
                 const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
 
@@ -81,7 +85,7 @@ async function execute_mysql_working_query(pool, db_name, query, rows_added, i) 
                     console.table(results);
                     console.log(`Query results: ${results.info}, Elapsed Time: ${elapsedTime} sec\n`);
 
-                    // stopTimer(i);nod
+                    // stopTimer(i);
                     rows_added = parseInt(results.affectedRows);
                     resolve(rows_added);
                 }
@@ -91,47 +95,47 @@ async function execute_mysql_working_query(pool, db_name, query, rows_added, i) 
 }
 
 // INSERT "CREATED AT" DATE, INSERT "UPDATED AT" DATA
-async function execute_insert_createdAt_query(pool, db_name, table, step) {
-    return new Promise((resolve, reject) => {
+// async function execute_insert_createdAt_query(pool, db_name, table, step) {
+//     return new Promise((resolve, reject) => {
 
-        const startTime = performance.now();
+//         const startTime = performance.now();
 
-        const addCreateAtDate = `
-            ALTER TABLE ${table} 
-                ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;`;
+//         const addCreateAtDate = `
+//             ALTER TABLE ${table} 
+//                 ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+//                 ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;`;
 
-        pool.query(`USE ${db_name};`, (queryError, results) => {
-            pool.query(addCreateAtDate, (queryError, results) => {
-                const endTime = performance.now();
-                const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
+//         pool.query(`USE ${db_name};`, (queryError, results) => {
+//             pool.query(addCreateAtDate, (queryError, results) => {
+//                 const endTime = performance.now();
+//                 const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
 
-                if (queryError) {
-                    console.error(`Error executing ${step}:`, queryError);
-                    reject(queryError);
-                } else {
-                    console.log(`\n${step}`);
-                    console.table(results);
-                    console.log(`Query results: ${results.info}, Elapsed Time: ${elapsedTime} sec\n`);
+//                 if (queryError) {
+//                     console.error(`Error executing ${step}:`, queryError);
+//                     reject(queryError);
+//                 } else {
+//                     console.log(`\n${step}`);
+//                     console.table(results);
+//                     console.log(`Query results: ${results.info}, Elapsed Time: ${elapsedTime} sec\n`);
 
-                    // resolve();
-                }
-            });
-        });
+//                     // resolve();
+//                 }
+//             });
+//         });
 
-        // Update the created_at and updated_at columns to UTC timestamps
-        pool.query(`USE ${db_name};`, (queryError, results) => {
-            pool.query(`
-                UPDATE ${table}
-                SET created_at = UTC_TIMESTAMP()
-                    -- updated_at = UTC_TIMESTAMP()
-                WHERE your_condition;
-            `);
+//         // Update the created_at and updated_at columns to UTC timestamps
+//         pool.query(`USE ${db_name};`, (queryError, results) => {
+//             pool.query(`
+//                 UPDATE ${table}
+//                 SET created_at = UTC_TIMESTAMP()
+//                     -- updated_at = UTC_TIMESTAMP()
+//                 WHERE your_condition;
+//             `);
 
-            resolve();
-        });
-    });
-}
+//             resolve();
+//         });
+//     });
+// }
 
 async function main() {
     let pool;
@@ -171,16 +175,19 @@ async function main() {
         console.log(directory);
 
         // List all files in the directory
-        const files = await fs.readdir(directory);
+        const files = await fsp.readdir(directory);
         console.log(files);
         let numer_of_files = 0;
 
         // Iterate through each file
         for (let i = 0; i < files.length; i++) {
+
+            runTimer(`${i}_get_data`);
+
             let currentFile = files[i];
 
             if (currentFile.endsWith('.csv')) {
-                // numer_of_files++;
+                numer_of_files++;
 
                 // Construct the full file path
                 let filePath = path.join(directory, currentFile);
@@ -195,22 +202,24 @@ async function main() {
                 // console.log(query_load_data);
                 // console.log('check step info = ', step_info);
 
-                // Insert file into "" table
-                let query = await execute_mysql_working_query(pool, db_name, query_load_data, rows_added, i);
+                // // Insert file into "" table
+                let query = await execute_mysql_working_query(pool, db_name, query_load_data, filePath, rows_added, i);
 
                 // track number of rows added
                 rows_added += parseInt(query);
                 console.log(`File ${i} of ${files.length}`);
                 console.log(`Rows added = ${rows_added}\n`);
+
+                stopTimer(`${i}_get_data`);
             }
         }
 
         // generateLogFile('loading_usat_sales_data', `Total files added = ${numer_of_files} Total rows added = ${rows_added.toLocaleString()}`, csv_export_path);
-        // console.log('Files processed =', numer_of_files);
+        console.log('Files processed =', numer_of_files);
 
         // STEP #5 - INSERT "CREATED AT" DATE
         // console.log(`STEP #5 - INSERT "CREATED AT" DATE`);
-        // await execute_insert_createdAt_query(pool, `${table}`);
+        // await execute_insert_createdAt_query(pool, 'all_membership_sales_data_2015_left');
 
         // STEP #4: UPDATE TABLES TO INCLUDE A CREATED AT AND UPDATED AT FIELD/DATE
         // for (const table of tables_library) {
