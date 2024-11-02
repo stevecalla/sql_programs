@@ -398,6 +398,7 @@ const transform_fields = `
 
 `;
 
+// LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/data/usat_sales_data/results_2024-10-26_17-48-05_annual_sales_units_2011.csv'
 function query_load_sales_data(filePath, table) {
   return `
     LOAD DATA INFILE '${filePath}'
