@@ -102,15 +102,15 @@ const membership_period_table = `
 
   purchased_on_mp DATETIME,
   purchased_on_date_mp DATE,
-  purchased_on_month_mp INT,
-  purchased_on_quarter_mp INT,
   purchased_on_year_mp YEAR,
+  purchased_on_quarter_mp INT,
+  purchased_on_month_mp INT,
   
   purchased_on_adjusted_mp DATETIME, 
   purchased_on_date_adjusted_mp DATE,
-  purchased_on_month_adjusted_mp INT,
-  purchased_on_quarter_adjusted_mp INT,
   purchased_on_year_adjusted_mp YEAR,
+  purchased_on_quarter_adjusted_mp INT,
+  purchased_on_month_adjusted_mp INT,
 
   remote_id_mp VARCHAR(255),
   renewed_membership_period_id INT,

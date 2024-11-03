@@ -101,16 +101,16 @@ const membership_period_table = `
     progress_status_mp,
 
     @purchased_on_mp, -- TODO:
-    @purchased_on_date_mp, -- TODO:
-    purchased_on_month_mp,
-    purchased_on_quarter_mp,
+    purchased_on_date_mp, -- TODO:
     purchased_on_year_mp,
+    purchased_on_quarter_mp,
+    purchased_on_month_mp,
 
     @purchased_on_adjusted_mp, -- TODO:
-    @purchased_on_date_adjusted_mp, -- TODO:
-    purchased_on_month_adjusted_mp,
-    purchased_on_quarter_adjusted_mp,
+    purchased_on_date_adjusted_mp, -- TODO:
     purchased_on_year_adjusted_mp,
+    purchased_on_quarter_adjusted_mp,
+    purchased_on_month_adjusted_mp,
 
     remote_id_mp,
     renewed_membership_period_id,
@@ -234,14 +234,6 @@ const transform_fields = `
             NULL
     END,
 
-    -- CONVERTS "Fri Jun 11 2021 12:03:17 GMT-0600 (Mountain Daylight Time)" TO '2021-06-11'; THE DATE TYPE EXCLUDES THE H M S
-    purchased_on_date_mp = CASE
-        WHEN @purchased_on_date_mp IS NOT NULL AND @purchased_on_date_mp != 'Invalid Date' THEN
-            STR_TO_DATE(SUBSTRING_INDEX(SUBSTRING_INDEX(@purchased_on_date_mp, ' GMT', 1), ' ', -5), '%a %b %d %Y %H:%i:%s')
-        ELSE
-            NULL
-    END,
-
     purchased_on_adjusted_mp = CASE
         WHEN @purchased_on_adjusted_mp IS NOT NULL AND @purchased_on_adjusted_mp != 'Invalid Date' THEN
             -- ADDDATE(STR_TO_DATE(SUBSTRING_INDEX(SUBSTRING_INDEX(@purchased_on_adjusted_mp, ' GMT', 1), ' ', -5), '%a %b %d %Y %H:%i:%s'), INTERVAL 6 HOUR)
@@ -250,14 +242,6 @@ const transform_fields = `
             NULL
     END,
     
-    -- CONVERTS "Fri Jun 11 2021 12:03:17 GMT-0600 (Mountain Daylight Time)" TO '2021-06-11'; THE DATE TYPE EXCLUDES THE H M S
-    purchased_on_date_adjusted_mp = CASE
-        WHEN @purchased_on_date_adjusted_mp IS NOT NULL AND @purchased_on_date_adjusted_mp != 'Invalid Date' THEN
-            STR_TO_DATE(SUBSTRING_INDEX(SUBSTRING_INDEX(@purchased_on_date_adjusted_mp, ' GMT', 1), ' ', -5), '%a %b %d %Y %H:%i:%s')
-        ELSE
-            NULL
-    END,
-
     updated_at_mp = CASE
         WHEN @updated_at_mp IS NOT NULL AND @updated_at_mp != 'Invalid Date' THEN
             -- ADDDATE(STR_TO_DATE(SUBSTRING_INDEX(SUBSTRING_INDEX(@updated_at_mp, ' GMT', 1), ' ', -5), '%a %b %d %Y %H:%i:%s'), INTERVAL 6 HOUR)
@@ -449,7 +433,6 @@ function query_load_sales_data(filePath, table) {
   module.exports = {
     query_load_sales_data,
   };
-
 
 // SECTION: EVENTS
   // registration_information_events = TRIM(BOTH '"' FROM registration_information_events),

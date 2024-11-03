@@ -186,9 +186,9 @@ const membership_period_table = `
 
     mp.purchased_on AS purchased_on_mp,
     DATE_FORMAT(STR_TO_DATE(mp.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d') AS purchased_on_date_mp,
-    MONTH(mp.purchased_on) AS purchased_on_month_mp,
-    QUARTER(mp.purchased_on) AS purchased_on_quarter_mp,
     YEAR(mp.purchased_on) AS purchase_on_year_mp,
+    QUARTER(mp.purchased_on) AS purchased_on_quarter_mp,
+    MONTH(mp.purchased_on) AS purchased_on_month_mp,
 
     -- todo: adjusts purchased on to starts on date if starts < purchase on
     CASE   
