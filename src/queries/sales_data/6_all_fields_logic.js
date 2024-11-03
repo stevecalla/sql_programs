@@ -197,7 +197,7 @@ const membership_period_table = `
     END AS purchase_on_adjusted_mp,
     CASE   
         WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN mp.starts
-        ELSE DATE_FORMAT(STR_TO_DATE(mp.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d') AS purchased_on_date_mp,
+        ELSE DATE_FORMAT(STR_TO_DATE(mp.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d')
     END AS purchase_on_date_adjusted_mp,
     CASE   
         WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN YEAR(mp.starts)
