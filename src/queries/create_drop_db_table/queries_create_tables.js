@@ -100,12 +100,14 @@ const membership_period_table = `
   period_status_mp VARCHAR(255),
   progress_status_mp VARCHAR(255),
 
-  purchased_on_mp DATETIME, 
+  purchased_on_mp DATETIME,
+  purchased_on_date_mp DATE,
   purchased_on_month_mp INT,
   purchased_on_quarter_mp INT,
   purchased_on_year_mp YEAR,
   
   purchased_on_adjusted_mp DATETIME, 
+  purchased_on_date_adjusted_mp DATE,
   purchased_on_month_adjusted_mp INT,
   purchased_on_quarter_adjusted_mp INT,
   purchased_on_year_adjusted_mp YEAR,
@@ -156,6 +158,7 @@ const membership_types_table = `
 
 const profiles_table = `
   -- PROFILES TABLE
+  id_profiles INT,
   created_at_profiles DATETIME, -- todo:
   date_of_birth_profiles DATE,
 `;

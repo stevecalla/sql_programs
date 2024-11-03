@@ -156,6 +156,7 @@ const membership_types_table = `
 
 const profiles_table = `
     -- PROFILES TABLE
+    id AS id_profiles,
     @created_at_profiles,
     @date_of_birth_profiles, -- todo:
 `;

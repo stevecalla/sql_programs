@@ -183,8 +183,9 @@ const membership_period_table = `
     mp.origin AS origin_mp,
     mp.period_status AS period_status_mp,
     mp.progress_status AS progress_status_mp,
-    mp.purchased_on AS purchased_on_mp,
 
+    mp.purchased_on AS purchased_on_mp,
+    DATE_FORMAT(STR_TO_DATE(mp.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d') AS purchased_on_date_mp,
     MONTH(mp.purchased_on) AS purchased_on_month_mp,
     QUARTER(mp.purchased_on) AS purchased_on_quarter_mp,
     YEAR(mp.purchased_on) AS purchase_on_year_mp,
@@ -195,17 +196,21 @@ const membership_period_table = `
         ELSE mp.purchased_on
     END AS purchase_on_adjusted_mp,
     CASE   
-        WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN MONTH(mp.starts)
-        ELSE MONTH(mp.purchased_on)
-    END AS purchased_on_month_adjusted_mp,
+        WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN mp.starts
+        ELSE DATE_FORMAT(STR_TO_DATE(mp.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d') AS purchased_on_date_mp,
+    END AS purchase_on_date_adjusted_mp,
+    CASE   
+        WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN YEAR(mp.starts)
+        ELSE YEAR(mp.purchased_on)
+    END AS purchased_on_year_adjusted_mp,
     CASE   
         WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN QUARTER(mp.starts)
         ELSE QUARTER(mp.purchased_on)
     END AS purchased_on_quarter_adjusted_mp,
     CASE   
-        WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN YEAR(mp.starts)
-        ELSE YEAR(mp.purchased_on)
-    END AS purchased_on_year_adjusted_mp,
+        WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN MONTH(mp.starts)
+        ELSE MONTH(mp.purchased_on)
+    END AS purchased_on_month_adjusted_mp,
 
     mp.remote_id AS remote_id_mp,
     mp.renewed_membership_period_id AS renewed_membership_period_id,
@@ -253,6 +258,7 @@ const membership_types_table = `
 
 const profiles_table = `
     -- PROFILES TABLE
+    profiles.id AS id_profiles,
     profiles.created_at AS created_at_profiles,
     profiles.date_of_birth AS date_of_birth_profiles, -- todo:
 `;
