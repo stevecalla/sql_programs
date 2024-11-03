@@ -186,7 +186,7 @@ const membership_period_table = `
 
     mp.purchased_on AS purchased_on_mp,
     DATE_FORMAT(STR_TO_DATE(mp.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d') AS purchased_on_date_mp,
-    YEAR(mp.purchased_on) AS purchase_on_year_mp,
+    YEAR(mp.purchased_on) AS purchased_on_year_mp,
     QUARTER(mp.purchased_on) AS purchased_on_quarter_mp,
     MONTH(mp.purchased_on) AS purchased_on_month_mp,
 
@@ -194,11 +194,11 @@ const membership_period_table = `
     CASE   
         WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN mp.starts
         ELSE mp.purchased_on
-    END AS purchase_on_adjusted_mp,
+    END AS purchased_on_adjusted_mp,
     CASE   
         WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN mp.starts
         ELSE DATE_FORMAT(STR_TO_DATE(mp.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d')
-    END AS purchase_on_date_adjusted_mp,
+    END AS purchased_on_date_adjusted_mp,
     CASE   
         WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN YEAR(mp.starts)
         ELSE YEAR(mp.purchased_on)
