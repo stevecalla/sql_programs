@@ -202,6 +202,8 @@ const index_fields = `
   INDEX idx_date_of_birth_registration_audit (date_of_birth_registration_audit),
 
   INDEX idx_member_number (member_number_members)
+
+  INDEX idx_origin_flag_ma (origin_flag_ma(255))
 `;
 
 // RIGHT JOINS
