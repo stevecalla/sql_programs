@@ -1,7 +1,6 @@
 // const fs = require('fs');
 const fs = require('fs').promises; // Use promises API
 const dotenv = require('dotenv');
-const { Z_BINARY } = require('zlib');
 dotenv.config(); // adding the path ensures each folder will read the .env file as necessary
 const connectionLimitThrottle = 30;
 
