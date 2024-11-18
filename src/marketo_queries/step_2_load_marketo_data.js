@@ -145,74 +145,74 @@ async function main() {
         // STEP #0: CREATE CONNECTION
         pool = await create_connection();
 
-        const db_name = `usat_sales_db`;
+        const db_name = `usat_marketo_db`;
         console.log(db_name);
 
         // STEP #1: CREATE DATABASE
-        // await execute_mysql_working_query(pool, db_name, query_drop_database(db_name), `STEP #1.0: DROP DB`);
-        // await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
+        await execute_mysql_working_query(pool, db_name, query_drop_database(db_name), `STEP #1.0: DROP DB`);
+        await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
 
         // STEP #2: CREATE TABLES = all files loaded into single table
-        for (const table of tables_library) {
-            const { table_name, create_query, step, step_info } = table;
+        // for (const table of tables_library) {
+        //     const { table_name, create_query, step, step_info } = table;
 
-            const drop_query = query_drop_table(table_name.toUpperCase());
+        //     const drop_query = query_drop_table(table_name.toUpperCase());
 
-            const drop_info = `${step} DROP ${step_info.toUpperCase()} TABLE`;
-            const create_info = `${step} CREATE ${step_info.toUpperCase()} TABLE`;
+        //     const drop_info = `${step} DROP ${step_info.toUpperCase()} TABLE`;
+        //     const create_info = `${step} CREATE ${step_info.toUpperCase()} TABLE`;
 
-            await execute_mysql_working_query(pool, db_name, drop_query, drop_info);
-            await execute_mysql_working_query(pool, db_name, create_query, create_info);
-        }
+        //     await execute_mysql_working_query(pool, db_name, drop_query, drop_info);
+        //     await execute_mysql_working_query(pool, db_name, create_query, create_info);
+        // }
 
-        // STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "USER DATA" TABLE
-        console.log(`STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "usat all_membership_sales_data" TABLE`);
-        console.log(getCurrentDateTime());
+        // // STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "USER DATA" TABLE
+        // console.log(`STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "usat all_membership_sales_data" TABLE`);
+        // console.log(getCurrentDateTime());
 
-        let rows_added = 0;
+        // let rows_added = 0;
 
-        const directory = await create_directory('usat_sales_data');
-        console.log(directory);
+        // const directory = await create_directory('usat_sales_data');
+        // console.log(directory);
 
-        // List all files in the directory
-        const files = await fsp.readdir(directory);
-        console.log(files);
-        let numer_of_files = 0;
+        // // List all files in the directory
+        // const files = await fsp.readdir(directory);
+        // console.log(files);
+        // let numer_of_files = 0;
 
-        // Iterate through each file
-        for (let i = 0; i < files.length; i++) {
+        // // Iterate through each file
+        // for (let i = 0; i < files.length; i++) {
 
-            runTimer(`${i}_get_data`);
+        //     runTimer(`${i}_get_data`);
 
-            let currentFile = files[i];
+        //     let currentFile = files[i];
 
-            if (currentFile.endsWith('.csv')) {
-                numer_of_files++;
+        //     if (currentFile.endsWith('.csv')) {
+        //         numer_of_files++;
 
-                // Construct the full file path
-                let filePath = path.join(directory, currentFile);
-                filePath = filePath.replace(/\\/g, '/');
+        //         // Construct the full file path
+        //         let filePath = path.join(directory, currentFile);
+        //         filePath = filePath.replace(/\\/g, '/');
 
-                console.log('file path to insert data = ', filePath);
+        //         console.log('file path to insert data = ', filePath);
 
-                // let table_name = tables_library[i].table_name;
-                let table_name = tables_library[0].table_name;
+        //         // let table_name = tables_library[i].table_name;
+        //         let table_name = tables_library[0].table_name;
                 
-                const query_load_data = query_load_sales_data(filePath, table_name);
-                // console.log(query_load_data);
-                // console.log('check step info = ', step_info);
+        //         const query_load_data = query_load_sales_data(filePath, table_name);
+        //         // console.log(query_load_data);
+        //         // console.log('check step info = ', step_info);
 
-                // // Insert file into "" table
-                let query = await execute_mysql_working_query(pool, db_name, query_load_data, filePath, rows_added, i);
+        //         // // Insert file into "" table
+        //         let query = await execute_mysql_working_query(pool, db_name, query_load_data, filePath, rows_added, i);
 
-                // track number of rows added
-                rows_added += parseInt(query);
-                console.log(`File ${i} of ${files.length}`);
-                console.log(`Rows added = ${rows_added}\n`);
+        //         // track number of rows added
+        //         rows_added += parseInt(query);
+        //         console.log(`File ${i} of ${files.length}`);
+        //         console.log(`Rows added = ${rows_added}\n`);
 
-                stopTimer(`${i}_get_data`);
-            }
-        }
+        //         stopTimer(`${i}_get_data`);
+        //     }
+        // }
 
         // generateLogFile('loading_usat_sales_data', `Total files added = ${numer_of_files} Total rows added = ${rows_added.toLocaleString()}`, csv_export_path);
         console.log('Files processed =', numer_of_files);
