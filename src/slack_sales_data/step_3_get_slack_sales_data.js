@@ -6,43 +6,29 @@ const mysql = require('mysql2');
 
 const { Client } = require('ssh2');
 const sshClient = new Client();
-const { forwardConfig , dbConfig, sshConfig } = require('../../utilities/config');
+const { local_usat_sales_db_config } = require('../../utilities/config');
+const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
 
 const { query_slack_sales_data } = require('../queries/slack_sales_data/get_sales_data_112524');
+const { create_slack_sales_message} = require('../../utilities/slack_sales_message');
+const { slack_message_api } = require('../../utilities/slack_message_api');
 
-// Function to create a Promise for managing the SSH connection and MySQL queries
-async function createSSHConnection() {
+// Connect to MySQL
+async function create_connection() {
 
-    const getSshConfig = await sshConfig();
+    console.log('create connection');
 
-    return new Promise((resolve, reject) => {
-        sshClient.on('ready', () => {
-            console.log('\nSSH tunnel established.\n');
+    try {
+        // Create a connection to MySQL
+        const config_details = local_usat_sales_db_config;
 
-            const { srcHost, srcPort, dstHost, dstPort } = forwardConfig;
-            sshClient.forwardOut(
-                srcHost,
-                srcPort,
-                dstHost,
-                dstPort,
-                (err, stream) => {
-                    if (err) reject(err);
+        const pool = create_local_db_connection(config_details);
 
-                    const updatedDbServer = {
-                        ...dbConfig,
-                        stream,
-                        ssl: {
-                            rejectUnauthorized: false,
-                        },
-                    };
+        return (pool);
 
-                    const pool = mysql.createPool(updatedDbServer);
-
-                    resolve(pool);
-                }
-            );
-        }).connect(getSshConfig);
-    });
+    } catch (error) {
+        console.log(`Error connecting: ${error}`)
+    }
 }
 
 // STEP #1: GET / QUERY DAILY PROMO DATA
@@ -60,7 +46,7 @@ async function execute_query_get_promo_data(pool, query) {
                 reject(queryError);
             } else {
 
-                console.table(results);
+                // console.table(results);
                 // console.log(results);
                 console.log(`Query results length: ${results.length}, Elapsed Time: ${elapsedTime} sec`);
 
@@ -70,27 +56,48 @@ async function execute_query_get_promo_data(pool, query) {
     });
 }
 
-async function execute_get_sales_data() {
+async function execute_get_slack_sales_data() {
+    // TESTING VARIABLES
+    const send_slack_to_calla = true;
+
     let pool;
     let results;
     const startTime = performance.now();
 
+
     try {
         // STEP #1: GET / QUERY Promo DATA & RETURN RESULTS
-        pool = await createSSHConnection();
+        pool = await create_connection();
 
+        // STEP #2: GET DATA FOR SLACK MESSAGE
         const query = query_slack_sales_data();
         results = await execute_query_get_promo_data(pool, query);
 
-        // console.log(results);
+        if (results) {
+            // STEP #3: CREATE SLACK MESSAGE
+            const slack_message = await create_slack_sales_message(results);
+            console.log(slack_message);
 
-        // Return the results from the try block
-        return results;
+            // STEP #4: SEND MESSAGE TO SLACK
+            if (send_slack_to_calla) {
+                await slack_message_api(slack_message, "steve_calla_slack_channel");
+              } else {
+                await slack_message_api(slack_message, "daily_slack_bot_slack_channel");
+              }
+        } else {
+            const slack_message = "Error - No results";
+            await slack_message_api(slack_message, "steve_calla_slack_channel");
+        }
+
+        // return results;
 
     } catch (error) {
-        // Handle errors
         console.error('Error:', error);
-        throw error;  // Optionally re-throw the error if you want to propagate it further
+
+        const slack_message = `Error - No results: error`;
+        await slack_message_api(slack_message, "steve_calla_slack_channel");
+
+        throw error; 
 
     } finally {
         // Ensure cleanup happens even if there is an error
@@ -127,8 +134,8 @@ async function execute_get_sales_data() {
 }
 
 // Run the main function
-execute_get_sales_data();
+// execute_get_slack_sales_data();
 
 module.exports = {
-    execute_get_sales_data,
+    execute_get_slack_sales_data,
 }

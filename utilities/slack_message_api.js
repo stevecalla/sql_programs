@@ -50,7 +50,7 @@ async function sendSlackMessage(message, slack_channel_url) {
 async function slack_message_api(message, channel) {
   
   const slack_message_url = {
-    // "steve_calla_slack_channel": process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL,
+    "steve_calla_slack_channel": process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL,
     // "daily_sales_bot_slack_channel": process.env.SLACK_WEBHOOK_USAT_DAILY_SALES_BOT_URL 
   };
 

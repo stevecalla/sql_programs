@@ -3,7 +3,9 @@ const bodyParser = require('body-parser');
 const axios = require('axios');
 
 // USAT SALES DATA
-const { execute_get_sales_data } = require('./src/daily_slack_sales_data/step_1_get_slack_sales_data');
+const { execute_get_sales_data } = require('./src/slack_sales_data/step_1_get_sales_data');
+const { execute_load_sales_data } = require('./src/slack_sales_data/step_2_load_sales_data');
+const { execute_get_slack_sales_data } = require('./src/slack_sales_data/step_3_get_slack_sales_data');
 
 // SLACK SETUP
 const { slack_message_api } = require('./utilities/slack_message_api');
@@ -22,36 +24,28 @@ app.use(bodyParser.json());
 
 // Endpoint to handle crontab usat promo data job
 app.get('/scheduled-usat-sales', async (req, res) => {
-    // TESTING VARIABLES
-    let send_slack_to_calla = true;
-    
     console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
 
     try {
-        const usat_sales_results = await execute_get_sales_data();;
+        // STEP #1 GET RAW SALES DATA / EXPORT TO CSV
+        await execute_get_sales_data();
 
-        if (usat_sales_results) {
-            // const slack_message = await create_daily_lead_slack_message(usat_sales_results);
+        // STEP #2 LOAD SALES DATA INTO DB
+        await execute_load_sales_data();
 
-            const slack_message = 'test';
+        // STEP #3 QUERY SLACK DATA & SEND MESSAGE
+        await execute_get_slack_sales_data();
 
-            if (send_slack_to_calla) {
-                await slack_message_api(slack_message, "steve_calla_slack_channel");
-              } else {
-                await slack_message_api(slack_message, "daily_slack_bot_slack_channel");
-              }
-        };
-        
         // Send a success response
         res.status(200).json({
-            message: 'Sales queried & sent successfully.',
+            message: 'Membership sales queried & sent successfully.',
         });
     } catch (error) {
-        console.error('Error quering or sending sales data:', error);
+        console.error('Error quering or sending membership sales data:', error);
         
         // Send an error response
         res.status(500).json({
-            message: 'Error quering or sending sales data.',
+            message: 'Error quering or sending membership sales data.',
             error: error.message || 'Internal Server Error',
         });
     }
