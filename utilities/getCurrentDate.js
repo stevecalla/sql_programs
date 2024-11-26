@@ -40,6 +40,16 @@ function getFormattedDate(date) {
     return createdAtFormatted;
 }
 
+//takes '2024-10-19 16:05:27'; returns '2024-10-19 04:05:27 pm'
+function getFormattedDateAmPm(date) {
+    date = dayjs(date);
+
+    const createdAtFormatted = date.format('YYYY-MM-DD hh:mm:ss a');
+
+    return createdAtFormatted;
+}
+
+
 // Function to convert Unix timestamp 1712179121648 to 2024-04-03 15:18:41
 function convertTimestampToDateTime(timestamp) {
     // Ensure the timestamp is parsed as a number (if it's a string)
@@ -68,4 +78,5 @@ module.exports = {
     getCurrentTime,
     convertTimestampToDateTime,
     getFormattedDate,
+    getFormattedDateAmPm,
 }

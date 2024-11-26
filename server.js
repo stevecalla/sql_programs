@@ -2,8 +2,11 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 
-// USAT SALES SETUP
-const { execute_get_promo_data } = require('./src/daily_promo_data/step_1_sql_get_promo_data');
+// USAT SALES DATA
+const { execute_get_sales_data } = require('./src/daily_slack_sales_data/step_1_get_slack_sales_data');
+
+// SLACK SETUP
+const { slack_message_api } = require('./utilities/slack_message_api');
 // const { create_daily_lead_slack_message } = require('../schedule_slack/slack_daily_lead_message');
 
 // NGROK TUNNEL
@@ -25,16 +28,17 @@ app.get('/scheduled-usat-sales', async (req, res) => {
     console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
 
     try {
-        const usat_sales_results = await execute_get_promo_data();;
+        const usat_sales_results = await execute_get_sales_data();;
 
         if (usat_sales_results) {
-            const slack_message = await create_daily_lead_slack_message(usat_sales_results);
+            // const slack_message = await create_daily_lead_slack_message(usat_sales_results);
+
+            const slack_message = 'test';
 
             if (send_slack_to_calla) {
-                await slack_message_steve_calla_channel(slack_message);
+                await slack_message_api(slack_message, "steve_calla_slack_channel");
               } else {
-                await slack_message_400_bookings_channel(slack_message);
-                await slack_message_350_bookings_channel(slack_message);
+                await slack_message_api(slack_message, "daily_slack_bot_slack_channel");
               }
         };
         

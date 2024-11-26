@@ -1,13 +1,10 @@
 const axios = require('axios');
 
 const dotenv = require('dotenv');
-dotenv.config({  path: "../../.env" });
+dotenv.config({  path: "../.env" });
 
 async function sendSlackMessage(message, slack_channel_url) {
   const slack_message = `${message}`;
-
-  console.log(message);
-  console.log(slack_channel_url);
 
   const payload = {
     response_type: "ephemeral",  // Make the response visible only to the sender
@@ -37,7 +34,7 @@ async function sendSlackMessage(message, slack_channel_url) {
 
     } else {
       // Fallback to axios
-      response = await axios.post(url, payload, {
+      response = await axios.post(slack_channel_url, payload, {
         headers: {
           'Content-Type': 'application/json',
         },
@@ -50,12 +47,19 @@ async function sendSlackMessage(message, slack_channel_url) {
   }
 }
 
-async function slack_message_api(message) {
-  await sendSlackMessage(message, process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL);
-  // await sendSlackMessage(message, process.env.SLACK_WEBHOOK_USAT_DAILY_SALES_BOT_URL);
+async function slack_message_api(message, channel) {
+  
+  const slack_message_url = {
+    // "steve_calla_slack_channel": process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL,
+    // "daily_sales_bot_slack_channel": process.env.SLACK_WEBHOOK_USAT_DAILY_SALES_BOT_URL 
+  };
+
+  let url = slack_message_url[channel];
+
+  await sendSlackMessage(message, slack_message_url[channel]);
 }
 
-slack_message_api('test');
+// slack_message_api('test', "steve_calla_slack_channel");
 
 module.exports = {
   slack_message_api,

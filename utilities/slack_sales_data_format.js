@@ -1,5 +1,5 @@
 const dayjs = require('dayjs');
-const { lead_data } = require('./seed_data');
+const { sales_data_seed } = require('./slack_seed_data');
 
 async function create_summary(data, option, segmentField, is_value_only) {
     let summary = '';
@@ -366,7 +366,7 @@ async function create_table_output(data, segmentField, is_value_only) {
     return { today_table_by_segment, yesterday_table_by_segment };
 }
 
-async function group_and_format_data_for_slack(data) {
+async function slack_sales_data_format(data) {
     const country = 'renting_in_country';
     const source = 'source_name';
     let is_value_only = false; // adjust formatting to only include the value / count not the segmentField & value/count
@@ -395,8 +395,8 @@ async function group_and_format_data_for_slack(data) {
     return { only_all_countries_output_text, all_countries_output_text, all_source_output_text, uae_only_country_output_text, uae_only_source_output_text, table_output_by_country, table_output_by_source };
 }
 
-// group_and_format_data_for_slack(lead_data);
+slack_sales_data_format(sales_data_seed);
 
 module.exports = {
-    group_and_format_data_for_slack,
+    slack_sales_data_format,
 };

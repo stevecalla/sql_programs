@@ -1,4 +1,4 @@
-const lead_data = [
+const sales_data_seed = [
   {
     created_on_gst: '2024-11-15',
     renting_in_country: '',
@@ -385,6 +385,49 @@ const lead_data = [
   }
 ];
 
+const slack_sales_data_seed = [
+  {
+    purchase_on: '2024-11-25',
+    adult: 190,
+    one_day: 249,
+    youth: 5,
+    elite: 0,
+    '3-yyear': 26,
+    silver: 128,
+    gold: 18,
+    other: 272,
+    total: 444,
+    queried_at: 2024-11-26T07:36:22.000Z
+  },
+  {
+    purchase_on: '2024-11-26',
+    adult: 0,
+    one_day: 2,
+    youth: 0,
+    elite: 0,
+    '3-yyear': 0,
+    silver: 0,
+    gold: 0,
+    other: 2,
+    total: 2,
+    queried_at: 2024-11-26T07:36:22.000Z
+  },
+  {
+    purchase_on: 'Total',
+    adult: 190,
+    one_day: 251,
+    youth: 5,
+    elite: 0,
+    '3-yyear': 26,
+    silver: 128,
+    gold: 18,
+    other: 274,
+    total: 446,
+    queried_at: 2024-11-26T07:36:22.000Z
+  }
+];
+
 module.exports = {
-    lead_data
+    sales_data_seed,
+    slack_sales_data_seed,
 }

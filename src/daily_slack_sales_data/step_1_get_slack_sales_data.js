@@ -8,7 +8,7 @@ const { Client } = require('ssh2');
 const sshClient = new Client();
 const { forwardConfig , dbConfig, sshConfig } = require('../../utilities/config');
 
-const { query_promo_data } = require('../queries/promo_data/get_promo_data_112524');
+const { query_slack_sales_data } = require('../queries/slack_sales_data/get_sales_data_112524');
 
 // Function to create a Promise for managing the SSH connection and MySQL queries
 async function createSSHConnection() {
@@ -51,8 +51,6 @@ async function execute_query_get_promo_data(pool, query) {
 
         const startTime = performance.now();
 
-        // console.log(query);
-
         pool.query(query, (queryError, results) => {
             const endTime = performance.now();
             const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
@@ -62,8 +60,8 @@ async function execute_query_get_promo_data(pool, query) {
                 reject(queryError);
             } else {
 
-                // console.table(results);
-                // console.log(results);
+                console.table(results);
+                console.log(results);
                 console.log(`Query results length: ${results.length}, Elapsed Time: ${elapsedTime} sec`);
 
                 resolve(results);
@@ -72,7 +70,7 @@ async function execute_query_get_promo_data(pool, query) {
     });
 }
 
-async function execute_get_promo_data() {
+async function execute_get_sales_data() {
     let pool;
     let results;
     const startTime = performance.now();
@@ -81,7 +79,7 @@ async function execute_get_promo_data() {
         // STEP #1: GET / QUERY Promo DATA & RETURN RESULTS
         pool = await createSSHConnection();
 
-        const query = query_promo_data();
+        const query = query_slack_sales_data();
         results = await execute_query_get_promo_data(pool, query);
 
         // console.log(results);
@@ -129,8 +127,8 @@ async function execute_get_promo_data() {
 }
 
 // Run the main function
-// execute_get_promo_data();
+execute_get_sales_data();
 
 module.exports = {
-    execute_get_promo_data,
+    execute_get_sales_data,
 }
