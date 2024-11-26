@@ -206,15 +206,7 @@ const index_fields = `
   INDEX idx_origin_flag_ma (origin_flag_ma(255))
 `;
 
-// RIGHT JOINS
-// const table = `all_membership_sales_data_2015_right`; // DONE
-// const table = `all_membership_sales_data_2021_right`; // DONE
-// const table = `all_membership_sales_data_2019`; // DONE
-// const table = `all_membership_sales_data`; // DONE
-
-// LEFT JOINS
-const table = `all_membership_sales_data_2015_left`; // todo: in progress
-// const table = `all_membership_sales_data_test_2010`;
+const table = `all_membership_sales_data_2015_left`;
 
 const query_create_all_membership_sales_table = `
   CREATE TABLE IF NOT EXISTS ${table} (

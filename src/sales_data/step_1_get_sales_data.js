@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const fastcsv = require('fast-csv');
-const mysql = require('mysql2');
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
+
+const mysql = require('mysql2');
+const fastcsv = require('fast-csv');
 
 const { Client } = require('ssh2');
 const sshClient = new Client();
@@ -11,13 +12,13 @@ const { forwardConfig , dbConfig, sshConfig } = require('../../utilities/config'
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { create_directory } = require('../../utilities/createDirectory');
 
-// const { query_one_day_sales } = require('../sales_queries/sales_data/membership_financials_w_transactions_discovery_096424_new_member_6_one_day_with_fields');
+// const { query_one_day_sales } = require('../queries/sales_data/membership_financials_w_transactions_discovery_096424_new_member_6_one_day_with_fields');
 
-const { query_get_sales_data } = require('../sales_queries/sales_data/0_get_sales_data_master_logic');
+const { query_get_sales_data } = require('../queries/sales_data/0_get_sales_data_master_logic');
 
-const { query_one_day_sales_units_logic } = require('../sales_queries/sales_data/5b_one_day_sales_units_logic');
-const { query_annual_sales_units_logic } = require('../sales_queries/sales_data/5c_annual_sales_units_logic');
-const { query_coaches_sales_units_logic } = require('../sales_queries/sales_data/5d_coaches_sales_units_logic');
+const { query_one_day_sales_units_logic } = require('../queries/sales_data/5b_one_day_sales_units_logic');
+const { query_annual_sales_units_logic } = require('../queries/sales_data/5c_annual_sales_units_logic');
+const { query_coaches_sales_units_logic } = require('../queries/sales_data/5d_coaches_sales_units_logic');
 
 const { generateLogFile } = require('../../utilities/generateLogFile');
 const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');

@@ -15,6 +15,8 @@ async function getPrivateKey() {
         ? process.env.SSH_PRIVATE_KEY_PATH_MAC
         : (isLinux ? process.env.SSH_PRIVATE_KEY_PATH_LINUX : process.env.SSH_PRIVATE_KEY_PATH_WINDOWS);
 
+    console.log('private key path ', privateKeyPath);
+
     try {
         // Check if the private key file exists
         await fs.access(privateKeyPath); // Check file existence
