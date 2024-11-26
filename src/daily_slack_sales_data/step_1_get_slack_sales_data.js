@@ -61,7 +61,7 @@ async function execute_query_get_promo_data(pool, query) {
             } else {
 
                 console.table(results);
-                console.log(results);
+                // console.log(results);
                 console.log(`Query results length: ${results.length}, Elapsed Time: ${elapsedTime} sec`);
 
                 resolve(results);
