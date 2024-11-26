@@ -84,7 +84,7 @@ async function execute_get_promo_data() {
         const query = query_promo_data();
         results = await execute_query_get_promo_data(pool, query);
 
-        console.log(results);
+        // console.log(results);
 
         // Return the results from the try block
         return results;
@@ -129,7 +129,7 @@ async function execute_get_promo_data() {
 }
 
 // Run the main function
-execute_get_promo_data();
+// execute_get_promo_data();
 
 module.exports = {
     execute_get_promo_data,
