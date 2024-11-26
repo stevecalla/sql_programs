@@ -8,7 +8,7 @@ const { Client } = require('ssh2');
 const sshClient = new Client();
 const { forwardConfig , dbConfig, sshConfig } = require('../../utilities/config');
 
-const { query_promo_data } = require('./get_promo_data_112524');
+const { query_promo_data } = require('../queries/promo_data/get_promo_data_112524');
 
 // Function to create a Promise for managing the SSH connection and MySQL queries
 async function createSSHConnection() {
@@ -46,12 +46,11 @@ async function createSSHConnection() {
 }
 
 // STEP #1: GET / QUERY DAILY PROMO DATA
-async function execute_query_get_promo_data(pool) {
+async function execute_query_get_promo_data(pool, query) {
     return new Promise((resolve, reject) => {
 
         const startTime = performance.now();
 
-        const query = query_lead_stats();
         // console.log(query);
 
         pool.query(query, (queryError, results) => {
@@ -81,7 +80,11 @@ async function execute_get_promo_data() {
     try {
         // STEP #1: GET / QUERY Promo DATA & RETURN RESULTS
         pool = await createSSHConnection();
-        // results = await execute_query_get_promo_data(pool);
+
+        const query = query_promo_data();
+        results = await execute_query_get_promo_data(pool, query);
+
+        console.log(results);
 
         // Return the results from the try block
         return results;
