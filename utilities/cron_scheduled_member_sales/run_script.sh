@@ -13,7 +13,8 @@ JS_FILE="/home/steve-calla/development/usat/sql_programs/utilities/cron_schedule
 
 # EXECUTE THE JS FILE USING NODE
 # LINUX
-/usr/bin/node "$JS_FILE"
+# /usr/bin/node "$JS_FILE"
+/home/steve-calla/.nvm/versions/node/v18.20.4/bin/node "$JS_FILE"
 
 # WINDOWS
 #/c/Program\ Files/nodejs/node "$JS_FILE"
