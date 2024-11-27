@@ -26,7 +26,7 @@ async function create_slack_sales_message(data) {
   // FINAL MESSAGE
   const slackMessage = 
     `\n**************\n` +    
-    `🥇 MEMBERSHIP SALES UNITS\n` +
+    `🥇 MEMBERSHIP SALES SNAPSHOT\n` +
     `📢 ${queried_at_message}\n` +
     // `${most_recent_date_message}\n` + // took this out because the most recent lead at looks wrong
     `--------------\n` +
