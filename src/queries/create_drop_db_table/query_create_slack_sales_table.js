@@ -201,18 +201,12 @@ const index_fields = `
   INDEX idx_date_of_birth_ma (date_of_birth_ma),
   INDEX idx_date_of_birth_registration_audit (date_of_birth_registration_audit),
 
-  INDEX idx_member_number (member_number_members)
+  INDEX idx_member_number (member_number_members),
+
+  INDEX idx_origin_flag_ma (origin_flag_ma(255))
 `;
 
-// RIGHT JOINS
-// const table = `all_membership_sales_data_2015_right`; // DONE
-// const table = `all_membership_sales_data_2021_right`; // DONE
-// const table = `all_membership_sales_data_2019`; // DONE
-// const table = `all_membership_sales_data`; // DONE
-
-// LEFT JOINS
-const table = `all_membership_sales_data_2015_left`; // todo: in progress
-// const table = `all_membership_sales_data_test_2010`;
+const table = `slack_membership_sales_data`;
 
 const query_create_all_membership_sales_table = `
   CREATE TABLE IF NOT EXISTS ${table} (
@@ -235,7 +229,7 @@ const tables_library = [
     table_name: `${table}`,
     create_query: query_create_all_membership_sales_table,
     step: "STEP #2.1:",
-    step_info: "all membership sales_data",
+    step_info: "slack membership sales data",
   },
 ];
 
@@ -243,26 +237,3 @@ module.exports = {
   tables_library,
   query_create_all_membership_sales_table,
 }
-
-// active_profiles TINYINT(1),
-// date_of_birth_profiles DATE, -- todo:
-// deceased_recorded_on_profiles DATE, -- todo:
-// deleted_at_profiles DATETIME, -- todo:
-// first_name_profiles VARCHAR(255),
-// gender_id_profiles INT,
-// last_name_profiles VARCHAR(255),
-// name_profiles VARCHAR(255),
-// primary_email_id_profiles VARCHAR(255),
-// primary_phone_id_profiles VARCHAR(20),
-// updated_at_profiles DATETIME, -- todo:
-
-// registration_company_id INT,
-// price_paid_rama DECIMAL(10, 2),
-
-// active_users TINYINT(1),
-// deleted_at_users DATETIME, -- todo:
-// email_users VARCHAR(255),
-// invalid_email_users TINYINT(1),
-// name_users VARCHAR(255),
-// opted_out_of_notifications_users TINYINT(1),
-// updated_at_users DATETIME, -- todo:

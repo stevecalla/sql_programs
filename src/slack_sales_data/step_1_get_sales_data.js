@@ -64,7 +64,7 @@ async function deleteArchivedFiles() {
     console.log('Deleting files from archive');
 
     // Create the "archive" directory if it doesn't exist
-    const directoryName  = `usat_sales_data_archive`;
+    const directoryName  = `usat_slack_sales_data_archive`;
     const directoryPath = await create_directory(directoryName);
 
     // List all files in the directory
@@ -101,12 +101,12 @@ async function moveFilesToArchive() {
 
     try {
         // List all files in the directory
-        const sourcePath = `${os_path}usat_sales_data`;
+        const sourcePath = `${os_path}usat_slack_sales_data`;
         const files = fs.readdirSync(sourcePath);
         console.log(files);
 
         // Create the "archive" directory if it doesn't exist
-        const directoryName  = `usat_sales_data_archive`;
+        const directoryName  = `usat_slack_sales_data_archive`;
         const destinationPath = await create_directory(directoryName);
         console.log(destinationPath);
 
@@ -190,7 +190,7 @@ async function export_results_to_csv(results, file_name, i) {
     }
 
     // DEFINE DIRECTORY PATH
-    const directoryName  = `usat_sales_data`;
+    const directoryName  = `usat_slack_sales_data`;
     const directoryPath = await create_directory(directoryName);
 
     try {
@@ -234,7 +234,7 @@ async function export_results_to_csv_fast_csv(results, file_name, i) {
     }
 
     // DEFINE DIRECTORY PATH
-    const directoryName  = `usat_sales_data`;
+    const directoryName  = `usat_slack_sales_data`;
     const directoryPath = await create_directory(directoryName);
 
     try {
@@ -324,209 +324,12 @@ async function execute_get_sales_data() {
 
         const date_periods = [
             { 
-                year: 2010,
-                membership_period_ends: '2008-01-01',
-                start_date: '2010-01-01',
-                end_date: '2010-06-30',
-            },
-            { 
-                year: 2010,
-                membership_period_ends: '2008-01-01',
-                start_date: '2010-07-01',
-                end_date: '2010-12-31',
-            },
-            { 
-                year: 2011,
-                membership_period_ends: '2008-01-01',
-                start_date: '2011-01-01',
-                end_date: '2011-06-30',
-            },
-            { 
-                year: 2011,
-                membership_period_ends: '2008-01-01',
-                start_date: '2011-07-01',
-                end_date: '2011-12-31',
-            },
-            { 
-                year: 2012,
-                membership_period_ends: '2008-01-01',
-                start_date: '2012-01-01',
-                end_date: '2012-06-30',
-            },
-            { 
-                year: 2012,
-                membership_period_ends: '2008-01-01',
-                start_date: '2012-07-01',
-                end_date: '2012-12-31',
-            },
-            { 
-                year: 2013,
-                membership_period_ends: '2008-01-01',
-                start_date: '2013-01-01',
-                end_date: '2013-06-30',
-            },
-            { 
-                year: 2013,
-                membership_period_ends: '2008-01-01',
-                start_date: '2013-07-01',
-                end_date: '2013-12-31',
-            },
-            { 
-                year: 2014,
-                membership_period_ends: '2008-01-01',
-                start_date: '2014-01-01',
-                end_date: '2014-06-30',
-            },
-            { 
-                year: 2014,
-                membership_period_ends: '2008-01-01',
-                start_date: '2014-07-01',
-                end_date: '2014-12-31',
-            },
-            { 
-                year: 2015,
-                membership_period_ends: '2008-01-01',
-                start_date: '2015-01-01',
-                end_date: '2015-06-30',
-            },
-            { 
-                year: 2015,
-                membership_period_ends: '2008-01-01',
-                start_date: '2015-07-01',
-                end_date: '2015-12-31',
-            },
-            { 
-                year: 2016,
-                membership_period_ends: '2008-01-01',
-                start_date: '2016-01-01',
-                end_date: '2016-06-30',
-            },
-            { 
-                year: 2016,
-                membership_period_ends: '2008-01-01',
-                start_date: '2016-07-01',
-                end_date: '2016-12-31',
-            },
-            { 
-                year: 2017,
-                membership_period_ends: '2008-01-01',
-                start_date: '2017-01-01',
-                end_date: '2017-06-30',
-            },
-            { 
-                year: 2017,
-                membership_period_ends: '2008-01-01',
-                start_date: '2017-07-01',
-                end_date: '2017-12-31',
-            },
-            { 
-                year: 2018,
-                membership_period_ends: '2008-01-01',
-                start_date: '2018-01-01',
-                end_date: '2018-06-30',
-            },
-            { 
-                year: 2018,
-                membership_period_ends: '2008-01-01',
-                start_date: '2018-07-01',
-                end_date: '2018-12-31',
-            },
-            {
-                year: 2019,
-                membership_period_ends: '2008-01-01',
-                start_date: '2019-01-01',
-                end_date: '2019-06-30',
-            },
-            { 
-                year: 2019,
-                membership_period_ends: '2008-01-01',
-                start_date: '2019-07-01',
-                end_date: '2019-12-31',
-            },
-            { 
-                year: 2020,
-                membership_period_ends: '2008-01-01',
-                start_date: '2020-01-01',
-                end_date: '2020-06-30',
-            },
-            { 
-                year: 2020,
-                membership_period_ends: '2008-01-01',
-                start_date: '2020-07-01',
-                end_date: '2020-12-31',
-            },
-            { 
-                year: 2021,
-                membership_period_ends: '2008-01-01',
-                start_date: '2021-01-01',
-                end_date: '2021-06-30',
-            },
-            { 
-                year: 2021,
-                membership_period_ends: '2008-01-01',
-                start_date: '2021-07-01',
-                end_date: '2021-12-31',
-            },
-            { 
-                year: 2022,
-                membership_period_ends: '2008-01-01',
-                start_date: '2022-01-01',
-                end_date: '2022-06-30',
-            },
-            { 
-                year: 2022,
-                membership_period_ends: '2008-01-01',
-                start_date: '2022-07-01',
-                end_date: '2022-12-31',
-            },
-            { 
-                year: 2023,
-                membership_period_ends: '2008-01-01',
-                start_date: '2023-01-01',
-                end_date: '2023-06-30',
-            },
-            { 
-                year: 2023,
-                membership_period_ends: '2008-01-01',
-                start_date: '2023-07-01',
-                end_date: '2023-12-31',
-            },
-            { 
                 year: 2024,
                 membership_period_ends: '2008-01-01',
-                start_date: '2024-01-01',
-                end_date: '2024-06-30',
-            },
-            { 
-                year: 2024,
-                membership_period_ends: '2008-01-01',
-                start_date: '2024-07-01',
+                start_date: '2024-11-22',
                 end_date: '2024-12-31',
             },
-            { 
-                year: 2025,
-                membership_period_ends: '2008-01-01',
-                start_date: '2025-01-01',
-                end_date: '2025-06-30',
-            },
-            { 
-                year: 2025,
-                membership_period_ends: '2008-01-01',
-                start_date: '2025-07-01',
-                end_date: '2025-12-31',
-            },
-            { 
-                year: 2026,
-                membership_period_ends: '2008-01-01',
-                start_date: '2026-01-01',
-                end_date: '2026-06-30',
-            },
-            { 
-                year: 2026,
-                membership_period_ends: '2008-01-01',
-                start_date: '2026-07-01',
-                end_date: '2026-12-31',
-            },
+    
         ];
 
         for (let i = 0; i < date_periods.length; i++) {
@@ -588,14 +391,14 @@ async function execute_get_sales_data() {
 
         console.log(`\nAll get usat sales data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
 
-        process.exit();
+        // process.exit();
 
         // return elapsedTime;
     }
 }
 
 // Run the main function
-execute_get_sales_data();
+// execute_get_sales_data();
 
 module.exports = {
     execute_get_sales_data,
