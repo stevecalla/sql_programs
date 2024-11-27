@@ -47,7 +47,8 @@ async function execute_query_get_promo_data(pool, query) {
             } else {
 
                 // console.table(results);
-                // console.log(results);
+
+                console.log(results);
                 console.log(`Query results length: ${results.length}, Elapsed Time: ${elapsedTime} sec`);
 
                 resolve(results);
@@ -73,26 +74,26 @@ async function execute_get_slack_sales_data(is_cron_job = true) {
         const query = query_slack_sales_data();
         results = await execute_query_get_promo_data(pool, query);
 
-        if (results) {
-            // STEP #3: CREATE SLACK MESSAGE
-            const slack_message = await create_slack_sales_message(results);
-            console.log(slack_message);
+        // if (results) {
+        //     // STEP #3: CREATE SLACK MESSAGE
+        //     const slack_message = await create_slack_sales_message(results);
+        //     console.log(slack_message);
 
-            // STEP #4: SEND CRON SCHEDULED MESSAGE TO SLACK
-            // ONLY EXECUTE IF is_cron_job is true
-            if (send_slack_to_calla && is_cron_job) {
-                await slack_message_api(slack_message, "steve_calla_slack_channel");
-            } else if(is_cron_job) {
-                await slack_message_api(slack_message, "daily_sales_bot_slack_channel");
-            }
+        //     // STEP #4: SEND CRON SCHEDULED MESSAGE TO SLACK
+        //     // ONLY EXECUTE IF is_cron_job is true
+        //     if (send_slack_to_calla && is_cron_job) {
+        //         await slack_message_api(slack_message, "steve_calla_slack_channel");
+        //     } else if(is_cron_job) {
+        //         await slack_message_api(slack_message, "daily_sales_bot_slack_channel");
+        //     }
 
-            // STEP #5: RETURN SLACK MESSAGE TO SLASH ROUTE /get-member-sales TO RESPOND
-            return slack_message;
+        //     // STEP #5: RETURN SLACK MESSAGE TO SLASH ROUTE /get-member-sales TO RESPOND
+        //     return slack_message;
 
-        } else {
-            const slack_message = "Error - No results";
-            await slack_message_api(slack_message, "steve_calla_slack_channel");
-        }
+        // } else {
+        //     const slack_message = "Error - No results";
+        //     await slack_message_api(slack_message, "steve_calla_slack_channel");
+        // }
 
     } catch (error) {
         console.error('Error:', error);
@@ -137,7 +138,7 @@ async function execute_get_slack_sales_data(is_cron_job = true) {
 }
 
 // Run the main function
-// execute_get_slack_sales_data();
+execute_get_slack_sales_data();
 
 module.exports = {
     execute_get_slack_sales_data,

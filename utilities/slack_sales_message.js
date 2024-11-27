@@ -8,7 +8,7 @@ async function date_info(data) {
   const query_date = `${getFormattedDateAmPm(data[0].queried_at_mtn)} MTN`;
   const queried_at_message = `Info Queried At: ${query_date}`;
 
-  const most_recent_date = `${getFormattedDateAmPm(data[0].max_created_on_mtn)} MTN`;
+  const most_recent_date = `${getFormattedDateAmPm(data[0].max_purchased_on_mtn)} MTN`;
   const most_recent_date_message = `Most Recent Purchase At: ${most_recent_date}`;
 
   return { queried_at_message, most_recent_date_message };
@@ -28,7 +28,7 @@ async function create_slack_sales_message(data) {
     `\n**************\n` +    
     `🥇 MEMBERSHIP SALES SNAPSHOT\n` +
     `📢 ${queried_at_message}\n` +
-    // `${most_recent_date_message}\n` + // took this out because the most recent lead at looks wrong
+    `${most_recent_date_message}\n` + // took this out because the most recent lead at looks wrong
     `--------------\n` +
       "*🏊‍♂️ By Product:* \n" + 
       `\`\`\`${table_output_by_new_membership_type}\`\`\`` + `\n` + 
