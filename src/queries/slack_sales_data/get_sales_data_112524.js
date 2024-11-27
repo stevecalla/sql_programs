@@ -32,6 +32,7 @@ function query_slack_sales_data() {
                     ELSE "Other"
                 END AS new_membership_type,
         
+                -- DATES
 		        DATE_FORMAT(sd.purchased_on_adjusted_mp, '%Y-%m-%d %H:%i:%s') AS purchased_on_adjusted_mp_mtn,
                 DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s') AS queried_at_mtn,
                 
