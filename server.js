@@ -8,7 +8,7 @@ const { execute_load_sales_data } = require('./src/slack_sales_data/step_2_load_
 const { execute_get_slack_sales_data } = require('./src/slack_sales_data/step_3_get_slack_sales_data');
 
 // SLACK SETUP
-const { slack_message_api } = require('./utilities/slack_message_api');
+// const { slack_message_api } = require('./utilities/slack_message_api');
 // const { create_daily_lead_slack_message } = require('../schedule_slack/slack_daily_lead_message');
 
 // NGROK TUNNEL
