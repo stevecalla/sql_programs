@@ -48,11 +48,11 @@ async function create_slack_sales_message(data) {
 }
 
 // TESTING FUNCTION
-// async function testing() {
+async function testing() {
 
   // TEST WITH SEED DATA
-  // let slack_message = await create_slack_sales_message(slack_sales_data_seed);
-  // console.log(slack_message);
+  let slack_message = await create_slack_sales_message(slack_sales_data_seed);
+  console.log(slack_message);
   
   // const { slack_message_api } = require('./slack_message_api');
   // await slack_message_api(slack_message, "steve_calla_slack_channel");
@@ -65,9 +65,9 @@ async function create_slack_sales_message(data) {
   
   // const { slack_message_steve_calla_channel } = require('./slack_steve_calla_channel');
   // await slack_message_steve_calla_channel(slack_message);
-// }
+}
 
-// testing();
+testing();
 
 module.exports = {
   create_slack_sales_message,

@@ -994,7 +994,7 @@ const slack_sales_data_seed = [
     count_units: 1
   },
   {
-    purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    purchased_on_date_adjusted_mp_mtn: '2024-11-27',
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
