@@ -22,6 +22,31 @@ const PORT = process.env.PORT || 8001;
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
+// Endpoint to handle slash "/sales" command
+app.post('/get-member-sales', async (req, res) => {
+    console.log('Received request for stats:', {
+        body: req.body,
+        headers: req.headers,
+    });
+    console.log('/get-leads route req.rawHeaders = ', req.rawHeaders);
+
+    // Acknowledge the command from Slack immediately to avoid a timeout
+    const processingMessage = "Retrieving member sales information. Will respond in about 30 seconds.";
+
+    // Respond back to Slack
+    res.json({
+        text: processingMessage,
+    });
+
+    const getResults = await execute_get_daily_lead_data();
+    const slackMessage = await create_daily_lead_slack_message(getResults); 
+    // console.log(slackMessage);
+
+    // Send a follow-up message to Slack
+    await sendFollowUpMessage(req.body.channel_id, req.body.channel_name, req.body.user_id, slackMessage);
+});
+
+
 // Endpoint to handle crontab usat promo data job
 app.get('/scheduled-usat-sales', async (req, res) => {
     console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
@@ -60,13 +85,13 @@ async function sendFollowUpMessage(channelId, channelName, userId, message) {
                 user: userId,
                 text: message,
             });
-            console.log('Message sent to Slack');
+            console.log(`Message sent to Slack ${channelName}`);
         } else if (channelId && message && channelName === "directmessage") {
             await slackClient.chat.postMessage({
                 channel: userId,
                 text: message,
             });
-            console.log('Message sent to Slack');
+            console.log(`Message sent to Slack ${channelName}`);
         } else {
             console.error('Channel ID or message is missing');
         }
