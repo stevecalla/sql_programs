@@ -1,6 +1,6 @@
 const fs = require('fs');
 const dotenv = require('dotenv');
-dotenv.config(); 
+dotenv.config();
 
 const mysql = require('mysql2');
 
@@ -10,7 +10,7 @@ const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
 
 const { query_slack_sales_data } = require('../queries/slack_sales_data/get_sales_data_112524');
-const { create_slack_sales_message} = require('../../utilities/slack_sales_message');
+const { create_slack_sales_message } = require('../../utilities/slack_sales_message');
 const { slack_message_api } = require('../../utilities/slack_message_api');
 
 // Connect to MySQL
@@ -56,7 +56,7 @@ async function execute_query_get_promo_data(pool, query) {
     });
 }
 
-async function execute_get_slack_sales_data() {
+async function execute_get_slack_sales_data(is_cron_job = true) {
     // TESTING VARIABLES
     const send_slack_to_calla = true;
 
@@ -78,18 +78,21 @@ async function execute_get_slack_sales_data() {
             const slack_message = await create_slack_sales_message(results);
             console.log(slack_message);
 
-            // STEP #4: SEND MESSAGE TO SLACK
-            if (send_slack_to_calla) {
+            // STEP #4: SEND CRON SCHEDULED MESSAGE TO SLACK
+            // ONLY EXECUTE IF is_cron_job is true
+            if (send_slack_to_calla && is_cron_job) {
                 await slack_message_api(slack_message, "steve_calla_slack_channel");
-              } else {
-                await slack_message_api(slack_message, "daily_slack_bot_slack_channel");
-              }
+            } else if(is_cron_job) {
+                await slack_message_api(slack_message, "daily_sales_bot_slack_channel");
+            }
+
+            // STEP #5: RETURN SLACK MESSAGE TO SLASH ROUTE /get-member-sales TO RESPOND
+            return slack_message;
+
         } else {
             const slack_message = "Error - No results";
             await slack_message_api(slack_message, "steve_calla_slack_channel");
         }
-
-        // return results;
 
     } catch (error) {
         console.error('Error:', error);
@@ -97,7 +100,7 @@ async function execute_get_slack_sales_data() {
         const slack_message = `Error - No results: error`;
         await slack_message_api(slack_message, "steve_calla_slack_channel");
 
-        throw error; 
+        throw error;
 
     } finally {
         // Ensure cleanup happens even if there is an error
