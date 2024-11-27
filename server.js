@@ -98,13 +98,30 @@ async function startNgrok() {
     }
 }
 
+// Clean up on exit
+async function cleanup() {
+    console.log('\nGracefully shutting down...');
+    try {
+        if (ngrokUrl) {
+            await ngrok.disconnect();
+            await ngrok.kill();
+            console.log('Ngrok tunnel closed.');
+        }
+    } catch (error) {
+        console.error('Error during cleanup:', error);
+    }
+    process.exit();
+}
+
+// Handle termination signals
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+
 // Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-
     startNgrok();
 });
-
 
 
 

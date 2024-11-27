@@ -21,23 +21,24 @@ async function create_slack_sales_message(data) {
 
   let { queried_at_message, most_recent_date_message } = await date_info(data);
 
+  // 📈🤼🚴‍♂️🥇👀📢🏊‍♂️🏃‍♀️🚴‍♂️
+
   // FINAL MESSAGE
   const slackMessage = 
     `\n**************\n` +    
-    `MEMBERSHIP SALES UNITS\n` +
-    `--------------\n` +
-    `${queried_at_message}\n` +
+    `🥇 MEMBERSHIP SALES UNITS\n` +
+    `📢 ${queried_at_message}\n` +
     // `${most_recent_date_message}\n` + // took this out because the most recent lead at looks wrong
     `--------------\n` +
-      "*By Product:* \n" + 
+      "*🏊‍♂️ By Product:* \n" + 
       `\`\`\`${table_output_by_new_membership_type}\`\`\`` + `\n` + 
-      "*By Membership Type:* \n" +
+      "*🏃‍♀️ By Membership Type:* \n" +
       `\`\`\`${table_output_by_real_membership_type}\`\`\`` + `\n`+
-      "*By Channel:* \n" + 
+      "*🚴‍♂️ By Channel:* \n" + 
       `\`\`\`${table_output_by_origin_flag}\`\`\`` + `\n`+
 
       `* Sub = Subscription Renewal\n` +
-      `* Other = Elite, Youth Annual/Annual/Premier, Platinum\n` +
+      `* Other = Elite, Platinum, Youth Annual/Premier, Young Adult\n` +
       `**************\n`
   ;
 
