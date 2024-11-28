@@ -55,6 +55,7 @@ async function slack_message_api(message, channel) {
   };
 
   let url = slack_message_url[channel];
+  console.log('slack api = ', url);
 
   await sendSlackMessage(message, slack_message_url[channel], channel);
 }
