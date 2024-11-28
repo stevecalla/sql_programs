@@ -37,12 +37,12 @@ function query_slack_sales_data() {
                 DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s') AS queried_at_mtn,
                 
                 -- BLACK FRIDAY INCENTIVE ELIGIBLE
-                CASE WHEN DATE(sd.purchased_on_adjusted_mp) >= '2024-11-27' THEN 1 ELSE 0 END AS '>=_2024_11_27',
-                CASE WHEN DATE(sd.purchased_on_adjusted_mp) >= '2024-11-27' AND TIME(sd.purchased_on_adjusted_mp) >= '06:00:00' THEN 1 ELSE 0 END AS '>=06:00_am',
+                CASE WHEN DATE(sd.purchased_on_adjusted_mp) >= '2024-11-29' THEN 1 ELSE 0 END AS '>=_2024_11_27',
+                CASE WHEN DATE(sd.purchased_on_adjusted_mp) >= '2024-11-29' AND TIME(sd.purchased_on_adjusted_mp) >= '06:00:00' THEN 1 ELSE 0 END AS '>=06:00_am',
 
                 CASE
                     WHEN 
-                        DATE(sd.purchased_on_adjusted_mp) >= '2024-11-27'
+                        DATE(sd.purchased_on_adjusted_mp) >= '2024-11-29'
                         AND TIME(sd.purchased_on_adjusted_mp) >= '06:00:00'
                         AND sd.new_member_category_6_sa IN ('Gold', 'Silver', '3-Year') 
                         AND sd.origin_flag_ma IS NULL -- blank represents Member Hub sales, excluding subscription & registration channels  
@@ -52,13 +52,13 @@ function query_slack_sales_data() {
                 -- INCENTIVE INVENTORY
                 CASE
                     WHEN 
-                        DATE(sd.purchased_on_adjusted_mp) >= '2024-11-27'
+                        DATE(sd.purchased_on_adjusted_mp) >= '2024-11-29'
                         AND TIME(sd.purchased_on_adjusted_mp) >= '06:00:00'
                         AND sd.new_member_category_6_sa IN ('Gold', 'Silver') 
                         AND sd.origin_flag_ma IS NULL
                     THEN 380
                     WHEN 
-                        DATE(sd.purchased_on_adjusted_mp) >= '2024-11-27'
+                        DATE(sd.purchased_on_adjusted_mp) >= '2024-11-29'
                         AND TIME(sd.purchased_on_adjusted_mp) >= '06:00:00'
                         AND sd.new_member_category_6_sa IN ('3-Year') 
                         AND sd.origin_flag_ma IS NULL

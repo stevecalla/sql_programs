@@ -45,7 +45,7 @@ async function sortByDateAndSegment(data, dateField, segmentField) {
 
 async function format_table(data, segment) {
   if (!data || data.length === 0) {
-    return "No data provided";
+    return "No sales yet!! Check back on 11/29/24, please.";
   }
 
   // Extract unique purchased dates and membership types
@@ -184,7 +184,7 @@ async function slack_sales_data_format(data) {
     const table_output_is_incentive_eligible = await create_table_output(is_incentive_eligible, new_membership_type);
 
     // console.log(is_incentive_eligible);
-    console.log(table_output_is_incentive_eligible);
+    // console.log(table_output_is_incentive_eligible);
 
     return { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type, table_output_is_incentive_eligible };
 }
