@@ -180,7 +180,7 @@ async function slack_sales_data_format(data) {
     return { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type };
 }
 
-// slack_sales_data_format(slack_sales_data_seed);
+slack_sales_data_format(slack_sales_data_seed);
 
 module.exports = {
     slack_sales_data_format,

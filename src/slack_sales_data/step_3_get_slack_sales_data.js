@@ -32,7 +32,7 @@ async function create_connection() {
 }
 
 // STEP #1: GET / QUERY DAILY PROMO DATA
-async function execute_query_get_promo_data(pool, query) {
+async function execute_query_get_sales_data(pool, query) {
     return new Promise((resolve, reject) => {
 
         const startTime = performance.now();
@@ -72,7 +72,7 @@ async function execute_get_slack_sales_data(is_cron_job = true) {
 
         // STEP #2: GET DATA FOR SLACK MESSAGE
         const query = query_slack_sales_data();
-        results = await execute_query_get_promo_data(pool, query);
+        results = await execute_query_get_sales_data(pool, query);
 
         if (results) {
             // STEP #3: CREATE SLACK MESSAGE
