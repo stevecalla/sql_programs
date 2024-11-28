@@ -72,7 +72,7 @@ async function execute_get_slack_sales_data(is_cron_job = true) {
         results = await execute_query_get_sales_data(pool, query);
 
         // TESTING VARIABLEj
-        const send_slack_to_calla = false;
+        const send_slack_to_calla = true;
 
         if (results) {
             // STEP #3: CREATE SLACK MESSAGE

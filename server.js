@@ -10,12 +10,7 @@
     // SLACK SETUP
     const { WebClient } = require('@slack/web-api');
     const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN); // Make sure to set your token; Initialize Slack Web API client
-    // const { slack_message_api } = require('./utilities/slack_message_api');
-    // const { create_daily_lead_slack_message } = require('../schedule_slack/slack_daily_lead_message');
 
-    // NGROK TUNNEL
-    const ngrok = require('ngrok');
-e
     // EXPRESS SERVER
     const app = express();
     const PORT = process.env.PORT || 8001;
@@ -118,7 +113,7 @@ e
                 console.error('Channel ID or message is missing');
             }
         } catch (error) {
-            console.error('Error sending message to Slack:', error);
+            console.error('Error sending message to Slack in server.js:', error);
         }
     }
 
