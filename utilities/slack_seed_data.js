@@ -22,7 +22,7 @@ const slack_sales_data_seed = [
     queried_at_mtn: '2024-11-27 14:52:05',
     '>=_2024_11_27': 0,
     '>=06:00_am': 0,
-    is_incentive_eligible: 0,
+    is_incentive_eligible: 1,
     inventive_inventory: 0,
     max_purchased_on_mtn: '2024-11-27 13:32:26',
     count_units: 1
@@ -36,7 +36,7 @@ const slack_sales_data_seed = [
     queried_at_mtn: '2024-11-27 14:52:05',
     '>=_2024_11_27': 0,
     '>=06:00_am': 0,
-    is_incentive_eligible: 0,
+    is_incentive_eligible: 1,
     inventive_inventory: 0,
     max_purchased_on_mtn: '2024-11-27 13:32:26',
     count_units: 1

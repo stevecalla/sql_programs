@@ -172,12 +172,21 @@ async function slack_sales_data_format(data) {
     const origin_flag_category = 'origin_flag_category';
     const new_membership_type = 'new_membership_type';
 
-    // CREATE TABLE OUTPUT
+    console.log(data[0]);
+
+    // CREATE SALES OUTPUT
     const table_output_by_new_membership_type = await create_table_output(data, new_membership_type);
     const table_output_by_real_membership_type = await create_table_output(data, real_membership_types);
     const table_output_by_origin_flag = await create_table_output(data, origin_flag_category);
 
-    return { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type };
+    // CREATE INCENTIVE ELIGIBLE OUTPUT
+    const is_incentive_eligible = data.filter(purchase => purchase.is_incentive_eligible);
+    const table_output_is_incentive_eligible = await create_table_output(is_incentive_eligible, new_membership_type);
+
+    // console.log(is_incentive_eligible);
+    console.log(table_output_is_incentive_eligible);
+
+    return { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type, table_output_is_incentive_eligible };
 }
 
 slack_sales_data_format(slack_sales_data_seed);

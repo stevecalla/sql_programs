@@ -17,7 +17,7 @@ async function date_info(data) {
 async function create_slack_sales_message(data) {
 
   // TEXT OUTPUT
-  const { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type } = await slack_sales_data_format(data);
+  const { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type, table_output_is_incentive_eligible } = await slack_sales_data_format(data);
 
   let { queried_at_message, most_recent_date_message } = await date_info(data);
 
@@ -26,20 +26,22 @@ async function create_slack_sales_message(data) {
   // FINAL MESSAGE
   const slackMessage = 
     `\n**************\n` +    
-    `🥇 *MEMBERSHIP SNAPSHOT - SALES UNITS*\n` +
+    `👀 *MEMBERSHIP SNAPSHOT - SALES UNITS*\n` +
     `📢 ${queried_at_message}\n` +
     `🕕 ${most_recent_date_message}\n` + // took this out because the most recent lead at looks wrong
     `--------------\n` +
-      "*🏊‍♂️ By Product:* \n" + 
-      `\`\`\`${table_output_by_new_membership_type}\`\`\`` + `\n` + 
-      "*🏃‍♀️ By Type:* \n" +
-      `\`\`\`${table_output_by_real_membership_type}\`\`\`` + `\n`+
-      "*🚴‍♂️ By Channel:* \n" + 
-      `\`\`\`${table_output_by_origin_flag}\`\`\`` + `\n`+
+    `*🥇 BFTD Gift Card Sales "Direct Only >= 11/29/24 6 AM":* \n` + 
+    `\`\`\`${table_output_is_incentive_eligible}\`\`\`` + `\n`+
+    `*🏊‍♂️ By Product:* \n` + 
+    `\`\`\`${table_output_by_new_membership_type}\`\`\`` + `\n` + 
+    `*🏃‍♀️ By Type:* \n` +
+    `\`\`\`${table_output_by_real_membership_type}\`\`\`` + `\n`+
+    `*🚴‍♂️ By Channel:* \n` + 
+    `\`\`\`${table_output_by_origin_flag}\`\`\`` + `\n`+
 
-      `* Sub = Subscription Renewal\n` +
-      `* Other = Elite, Platinum, Youth Annual/Premier, Young Adult\n` +
-      `**************\n`
+    `* Sub = Subscription Renewal\n` +
+    `* Other = Elite, Platinum, Youth Annual/Premier, Young Adult\n` +
+    `**************\n`
   ;
 
   console.log('slack_sales_message.js = ', slackMessage);
