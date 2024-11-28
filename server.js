@@ -122,86 +122,86 @@
         }
     }
 
-    async function start_ngrok_random_domain() {
-        try { 
-            const ngrokUrl = await ngrok.connect(PORT);
-            console.log(`Ngrok tunnel established at: ${ngrokUrl}`);
+    // async function start_ngrok_random_domain() {
+    //     try { 
+    //         const ngrokUrl = await ngrok.connect(PORT);
+    //         console.log(`Ngrok tunnel established at: ${ngrokUrl}`);
 
-            // Fetch tunnel details from the ngrok API
-            const apiUrl = 'http://127.0.0.1:4040/api/tunnels';
-            const response = await axios.get(apiUrl);
+    //         // Fetch tunnel details from the ngrok API
+    //         const apiUrl = 'http://127.0.0.1:4040/api/tunnels';
+    //         const response = await axios.get(apiUrl);
             
-            // Log tunnel information
-            response.data.tunnels.forEach(tunnel => {
-                // console.log({tunnel});
-                console.log(`Tunnel: ${tunnel.public_url}`);
-                console.log(`Forwarding to: ${tunnel.config.addr}`);
-                console.log(`Traffic Inspector: https://dashboard.ngrok.com/ac_2J6Qn9CeVqC2bGd0EhZnAT612RQ/observability/traffic-inspector`)
-                console.log(`Status: http://127.0.0.1:4040/status`)
-            });
+    //         // Log tunnel information
+    //         response.data.tunnels.forEach(tunnel => {
+    //             // console.log({tunnel});
+    //             console.log(`Tunnel: ${tunnel.public_url}`);
+    //             console.log(`Forwarding to: ${tunnel.config.addr}`);
+    //             console.log(`Traffic Inspector: https://dashboard.ngrok.com/ac_2J6Qn9CeVqC2bGd0EhZnAT612RQ/observability/traffic-inspector`)
+    //             console.log(`Status: http://127.0.0.1:4040/status`)
+    //         });
 
-        } catch (error) {
-            console.error(`Could not create ngrok tunnel: ${error}`);
-        }
-    }
+    //     } catch (error) {
+    //         console.error(`Could not create ngrok tunnel: ${error}`);
+    //     }
+    // }
 
-    async function start_ngrok_static_domain() {
-        try {
-            // Configure ngrok with a specific hostname
-            const ngrokUrl = await ngrok.connect({
-                addr: PORT,
-                // hostname: 'koala-huge-goldfish.ngrok-free.app',
-                url: 'koala-huge-goldfish.ngrok-free.app 8001',
-                region: 'us',
-            });
+    // async function start_ngrok_static_domain() {
+    //     try {
+    //         // Configure ngrok with a specific hostname
+    //         const ngrokUrl = await ngrok.connect({
+    //             addr: PORT,
+    //             // hostname: 'koala-huge-goldfish.ngrok-free.app',
+    //             url: 'koala-huge-goldfish.ngrok-free.app 8001',
+    //             region: 'us',
+    //         });
     
-            console.log(`Ngrok tunnel established at: ${ngrokUrl}`);
+    //         console.log(`Ngrok tunnel established at: ${ngrokUrl}`);
     
-            // Check ngrok API availability
-            const apiUrl = 'http://127.0.0.1:4040/api/tunnels';
-            const response = await axios.get(apiUrl);
-            response.data.tunnels.forEach(tunnel => {
-                console.log(`Tunnel: ${tunnel.public_url}`);
-                console.log(`Forwarding to: ${tunnel.config.addr}`);
-                console.log(`Traffic Inspector: https://dashboard.ngrok.com/ac_2J6Qn9CeVqC2bGd0EhZnAT612RQ/observability/traffic-inspector`)
-                console.log(`Status: http://127.0.0.1:4040/status`)
-            });
+    //         // Check ngrok API availability
+    //         const apiUrl = 'http://127.0.0.1:4040/api/tunnels';
+    //         const response = await axios.get(apiUrl);
+    //         response.data.tunnels.forEach(tunnel => {
+    //             console.log(`Tunnel: ${tunnel.public_url}`);
+    //             console.log(`Forwarding to: ${tunnel.config.addr}`);
+    //             console.log(`Traffic Inspector: https://dashboard.ngrok.com/ac_2J6Qn9CeVqC2bGd0EhZnAT612RQ/observability/traffic-inspector`)
+    //             console.log(`Status: http://127.0.0.1:4040/status`)
+    //         });
     
-        } catch (error) {
-            console.error('Error starting ngrok:', error);
-            console.error('Ensure ngrok is running and the API is accessible at http://127.0.0.1:4040');
-        }
-    }
+    //     } catch (error) {
+    //         console.error('Error starting ngrok:', error);
+    //         console.error('Ensure ngrok is running and the API is accessible at http://127.0.0.1:4040');
+    //     }
+    // }
     
-    async function start_ngrok_cli_command() {
-        const { exec } = require('child_process');
+    // async function start_ngrok_cli_command() {
+    //     const { exec } = require('child_process');
 
-        const command = 'ngrok http --url=koala-huge-goldfish.ngrok-free.app 8001';
-        const process = exec(command);
+    //     const command = 'ngrok http --url=koala-huge-goldfish.ngrok-free.app 8001';
+    //     const process = exec(command);
         
-        console.log(`Ngrok tunnel established at: POST https://koala-huge-goldfish.ngrok-free.app/get-member-sales`);
-        console.log(`Traffic Inspector: https://dashboard.ngrok.com/ac_2J6Qn9CeVqC2bGd0EhZnAT612RQ/observability/traffic-inspector`)
-        console.log(`Status: http://127.0.0.1:4040/status`)
+    //     console.log(`Ngrok tunnel established at: POST https://koala-huge-goldfish.ngrok-free.app/get-member-sales`);
+    //     console.log(`Traffic Inspector: https://dashboard.ngrok.com/ac_2J6Qn9CeVqC2bGd0EhZnAT612RQ/observability/traffic-inspector`)
+    //     console.log(`Status: http://127.0.0.1:4040/status`)
 
-        // ngrok http http://localhost:8001
-        // ngrok http --url=koala-huge-goldfish.ngrok-free.app 80
+    //     // ngrok http http://localhost:8001
+    //     // ngrok http --url=koala-huge-goldfish.ngrok-free.app 80
 
-        process.stdout.on('data', data => {
-            console.log(`ngrok: ${data}`);
-        });
+    //     process.stdout.on('data', data => {
+    //         console.log(`ngrok: ${data}`);
+    //     });
     
-        process.stderr.on('data', data => {
-            console.error(`ngrok error: ${data}`);
-        });
+    //     process.stderr.on('data', data => {
+    //         console.error(`ngrok error: ${data}`);
+    //     });
     
-        process.on('close', code => {
-            console.log(`ngrok process exited with code ${code}`);
-        });
+    //     process.on('close', code => {
+    //         console.log(`ngrok process exited with code ${code}`);
+    //     });
     
-        process.on('error', err => {
-            console.error('Failed to start ngrok:', err);
-        });
-    }
+    //     process.on('error', err => {
+    //         console.error('Failed to start ngrok:', err);
+    //     });
+    // }
 
     // Clean up on exit
     async function cleanup() {
@@ -226,11 +226,11 @@
     app.listen(PORT, () => {
         console.log(`Server is running on http://localhost:${PORT}`);
 
+        // switched to cloudflare; see notes.txt
+
         // start_ngrok_random_domain();
-
         // start_ngrok_static_domain(); -- didn't work but I was able to start the static domain from the cli
-
-        start_ngrok_cli_command(); // static domain did start from the cli; this function mimics that behavior
+        // start_ngrok_cli_command(); // static domain did start from the cli; this function mimics that behavior
     });
 
 
