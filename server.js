@@ -228,9 +228,9 @@
 
         // start_ngrok_random_domain();
 
-        // start_ngrok_static_domain();
+        // start_ngrok_static_domain(); -- didn't work but I was able to start the static domain from the cli
 
-        start_ngrok_cli_command();
+        start_ngrok_cli_command(); // static domain did start from the cli; this function mimics that behavior
     });
 
 
