@@ -66,6 +66,10 @@ function convertTimestampToDateTime(timestamp) {
     return formattedDateTime;
 }
 
+function getDayOfWeek(date) {
+    const formattedDate = dayjs(date).format('ddd'); // 'ddd' for abbreviated day of the week
+    return formattedDate;
+  }
 // getCurrentDateForFileNaming();
 // getCurrentDateTimeForFileNaming();
 // convertTimestampToDateTime('1712179121648');
@@ -78,4 +82,5 @@ module.exports = {
     convertTimestampToDateTime,
     getFormattedDate,
     getFormattedDateAmPm,
+    getDayOfWeek,
 }

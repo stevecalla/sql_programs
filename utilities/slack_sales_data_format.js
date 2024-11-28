@@ -1,4 +1,4 @@
-const dayjs = require('dayjs');
+const { getDayOfWeek } = require('../utilities/getCurrentDate');
 const { slack_sales_data_seed } = require('./slack_seed_data');
 
 async function sortByDateAndSegment(data, dateField, segmentField) {
@@ -112,11 +112,6 @@ async function format_table(data, segment) {
   return [divider, headerRow, divider, ...rows, divider].join("\n");
 }
 
-function get_day_of_week(date) {
-  const formattedDate = dayjs(date).format('ddd'); // 'ddd' for abbreviated day of the week
-  return formattedDate;
-}
-
 async function rollup_by_segment(data, segment) {
     // Group the data by purchased_on_date_adjusted_mp_mtn and segment
     const grouped = data.reduce((acc, curr) => {
@@ -124,7 +119,7 @@ async function rollup_by_segment(data, segment) {
       if (!acc[key]) {
         acc[key] = {
           purchased: curr.purchased_on_date_adjusted_mp_mtn,
-          day: get_day_of_week(curr.purchased_on_date_adjusted_mp_mtn),
+          day: getDayOfWeek(curr.purchased_on_date_adjusted_mp_mtn),
           [segment]: curr[segment],
           total_count_units: 0
         };
@@ -141,7 +136,7 @@ async function rollup_by_segment(data, segment) {
       if (!acc[curr.purchased_on_date_adjusted_mp_mtn]) {
         acc[curr.purchased_on_date_adjusted_mp_mtn] = {
           purchased: curr.purchased_on_date_adjusted_mp_mtn,
-          day: get_day_of_week(curr.purchased_on_date_adjusted_mp_mtn),
+          day: getDayOfWeek(curr.purchased_on_date_adjusted_mp_mtn),
           [segment]: 'Total',
           total_count_units: 0
         };
