@@ -1,6 +1,6 @@
 const slack_sales_data_seed = [
   {
-    purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    purchased_on_date_adjusted_mp_mtn: '2024-12-01',
     origin_flag_category: 'Audit',
     real_membership_type: 'Adult',
     new_membership_type: 'Silver',
@@ -17,7 +17,7 @@ const slack_sales_data_seed = [
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
     origin_flag_category: 'Audit',
     real_membership_type: 'Adult',
-    new_membership_type: 'Silver',
+    new_membership_type: '3-Year',
     purchased_on_adjusted_mp_mtn: '2024-11-22 19:55:57',
     queried_at_mtn: '2024-11-27 14:52:05',
     '>=_2024_11_27': 0,
@@ -31,7 +31,7 @@ const slack_sales_data_seed = [
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
     origin_flag_category: 'Audit',
     real_membership_type: 'Adult',
-    new_membership_type: 'Silver',
+    new_membership_type: 'Gold',
     purchased_on_adjusted_mp_mtn: '2024-11-22 20:14:17',
     queried_at_mtn: '2024-11-27 14:52:05',
     '>=_2024_11_27': 0,
@@ -44,8 +44,8 @@ const slack_sales_data_seed = [
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
     origin_flag_category: 'Audit',
-    real_membership_type: 'Adult',
-    new_membership_type: 'Silver',
+    real_membership_type: 'Youth',
+    new_membership_type: 'Other',
     purchased_on_adjusted_mp_mtn: '2024-11-22 20:31:51',
     queried_at_mtn: '2024-11-27 14:52:05',
     '>=_2024_11_27': 0,
@@ -72,8 +72,8 @@ const slack_sales_data_seed = [
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
     origin_flag_category: 'Audit',
-    real_membership_type: 'Adult',
-    new_membership_type: 'Silver',
+    real_membership_type: 'Elite',
+    new_membership_type: 'Other',
     purchased_on_adjusted_mp_mtn: '2024-11-22 21:47:14',
     queried_at_mtn: '2024-11-27 14:52:05',
     '>=_2024_11_27': 0,

@@ -76,6 +76,10 @@ function query_slack_sales_data() {
                 COUNT(*) AS count_units
 
             FROM slack_membership_sales_data AS sd
+
+            -- Filter for the last 5 days including today
+            WHERE DATE(sd.purchased_on_date_adjusted_mp) BETWEEN DATE_SUB(DATE(NOW()), INTERVAL 4 DAY) AND DATE(NOW())
+            
             GROUP BY 1, 2, 3, 4, 5, 7, 8, 9, 10
             ORDER BY 1, 2, 3, 4;
         -- **************************************

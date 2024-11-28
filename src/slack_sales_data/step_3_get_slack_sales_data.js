@@ -47,8 +47,8 @@ async function execute_query_get_promo_data(pool, query) {
             } else {
 
                 // console.table(results);
+                // console.log(results);
 
-                console.log(results);
                 console.log(`Query results length: ${results.length}, Elapsed Time: ${elapsedTime} sec`);
 
                 resolve(results);
@@ -77,7 +77,7 @@ async function execute_get_slack_sales_data(is_cron_job = true) {
         if (results) {
             // STEP #3: CREATE SLACK MESSAGE
             const slack_message = await create_slack_sales_message(results);
-            console.log(slack_message);
+            // console.log(slack_message);
 
             // STEP #4: SEND CRON SCHEDULED MESSAGE TO SLACK
             // ONLY EXECUTE IF is_cron_job is true
@@ -138,7 +138,7 @@ async function execute_get_slack_sales_data(is_cron_job = true) {
 }
 
 // Run the main function
-// execute_get_slack_sales_data();
+execute_get_slack_sales_data();
 
 module.exports = {
     execute_get_slack_sales_data,
