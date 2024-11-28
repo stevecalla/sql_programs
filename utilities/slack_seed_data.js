@@ -1,6 +1,8 @@
 const slack_sales_data_seed = [
   {
     purchased_on_date_adjusted_mp_mtn: '2024-12-01',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'Adult',
     new_membership_type: 'Silver',
@@ -15,6 +17,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'Adult',
     new_membership_type: '3-Year',
@@ -29,6 +33,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'Adult',
     new_membership_type: 'Gold',
@@ -43,6 +49,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'Youth',
     new_membership_type: 'Other',
@@ -57,6 +65,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'Adult',
     new_membership_type: 'Silver',
@@ -71,6 +81,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'Elite',
     new_membership_type: 'Other',
@@ -85,6 +97,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'Adult',
     new_membership_type: 'Silver',
@@ -99,6 +113,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -113,6 +129,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -127,6 +145,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -141,6 +161,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -155,6 +177,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -169,6 +193,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -183,6 +209,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -197,6 +225,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -211,6 +241,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -225,6 +257,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -239,6 +273,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -253,6 +289,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -267,6 +305,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -281,6 +321,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -295,6 +337,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -309,6 +353,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -323,6 +369,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -337,6 +385,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -351,6 +401,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -365,6 +417,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -379,6 +433,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -393,6 +449,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -407,6 +465,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -421,6 +481,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -435,6 +497,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -449,6 +513,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -463,6 +529,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -477,6 +545,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -491,6 +561,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -505,6 +577,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -519,6 +593,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -533,6 +609,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -547,6 +625,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -561,6 +641,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -575,6 +657,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -589,6 +673,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -603,6 +689,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -617,6 +705,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -631,6 +721,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -645,6 +737,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -659,6 +753,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -673,6 +769,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -687,6 +785,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -701,6 +801,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -715,6 +817,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -729,6 +833,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -743,6 +849,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -757,6 +865,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -771,6 +881,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -785,6 +897,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -799,6 +913,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -813,6 +929,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -827,6 +945,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -841,6 +961,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -855,6 +977,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -869,6 +993,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -883,6 +1009,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -897,6 +1025,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -911,6 +1041,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -925,6 +1057,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -939,6 +1073,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -953,6 +1089,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -967,6 +1105,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -981,6 +1121,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-22',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',
@@ -995,6 +1137,8 @@ const slack_sales_data_seed = [
   },
   {
     purchased_on_date_adjusted_mp_mtn: '2024-11-27',
+    member_number_members_sa: 123456,
+    id_membership_periods_sa: 654331,
     origin_flag_category: 'Audit',
     real_membership_type: 'One_Day',
     new_membership_type: 'Bronze',

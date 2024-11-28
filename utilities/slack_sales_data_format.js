@@ -43,7 +43,7 @@ async function sortByDateAndSegment(data, dateField, segmentField) {
   return [...sortedNonTotalEntries, ...totalEntries];
 }
 
-async function format_table(data, segment) {
+async function format_table(data, segment, includeRowTotal = false) {
   if (!data || data.length === 0) {
     return "No sales yet!! Check back on 11/29/24, please.";
   }
@@ -75,6 +75,15 @@ async function format_table(data, segment) {
     });
     return row;
   });
+
+  // Add a total row if the includeRowTotal flag is true
+  if (includeRowTotal) {
+    const totalRow = { purchased: "Total", day: "" };
+    membershipTypes.forEach(type => {
+      totalRow[type] = formattedData.reduce((sum, row) => sum + (row[type] || 0), 0);
+    });
+    formattedData.push(totalRow);
+  }
 
   // Calculate the maximum width for each column
   const columnWidths = headers.map(header =>
@@ -154,13 +163,13 @@ async function rollup_by_segment(data, segment) {
     return finalResult;
 }
 
-async function create_table_output(data, segment) {
+async function create_table_output(data, segment, include_row_total) {
     // SEGMENT ROLLUPS
     const segment_rollup = await rollup_by_segment(data, segment);
     const segment_rollup_sorted = await sortByDateAndSegment(segment_rollup, 'purchased', segment);
 
     // Format the tables
-    const table_by_segment = await format_table(segment_rollup_sorted, segment);
+    const table_by_segment = await format_table(segment_rollup_sorted, segment, include_row_total);
 
     // console.log(table_by_segment);
 
@@ -172,24 +181,21 @@ async function slack_sales_data_format(data) {
     const origin_flag_category = 'origin_flag_category';
     const new_membership_type = 'new_membership_type';
 
-    console.log(data[0]);
-
     // CREATE SALES OUTPUT
-    const table_output_by_new_membership_type = await create_table_output(data, new_membership_type);
-    const table_output_by_real_membership_type = await create_table_output(data, real_membership_types);
-    const table_output_by_origin_flag = await create_table_output(data, origin_flag_category);
+    let include_row_total = false;
+    const table_output_by_new_membership_type = await create_table_output(data, new_membership_type, include_row_total);
+    const table_output_by_real_membership_type = await create_table_output(data, real_membership_types, include_row_total);
+    const table_output_by_origin_flag = await create_table_output(data, origin_flag_category, include_row_total);
 
     // CREATE INCENTIVE ELIGIBLE OUTPUT
-    const is_incentive_eligible = data.filter(purchase => purchase.is_incentive_eligible);
-    const table_output_is_incentive_eligible = await create_table_output(is_incentive_eligible, new_membership_type);
-
-    // console.log(is_incentive_eligible);
-    // console.log(table_output_is_incentive_eligible);
+    include_row_total = true;
+    const is_eligible_data = data.filter(purchase => purchase.is_incentive_eligible);
+    const table_output_is_incentive_eligible = await create_table_output(is_eligible_data, new_membership_type, include_row_total);
 
     return { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type, table_output_is_incentive_eligible };
 }
 
-slack_sales_data_format(slack_sales_data_seed);
+// slack_sales_data_format(slack_sales_data_seed);
 
 module.exports = {
     slack_sales_data_format,

@@ -30,17 +30,17 @@ async function create_slack_sales_message(data) {
     `📢 ${queried_at_message}\n` +
     `🕕 ${most_recent_date_message}\n` + // took this out because the most recent lead at looks wrong
     `--------------\n` +
-    `*🥇 BFTD Gift Card Sales "Direct Only >= 11/29/24 6 AM":* \n` + 
-    `\`\`\`${table_output_is_incentive_eligible}\`\`\`` + `\n`+
+    `*🥇 BFTD Gift Card Eligible (Direct Only >= 11/29/24 6 AM):* \n` + 
+    `\`\`\`${table_output_is_incentive_eligible}\n* Total sales units. Review necessary to identify stacking.\`\`\`` + `\n`+
     `*🏊‍♂️ By Product:* \n` + 
-    `\`\`\`${table_output_by_new_membership_type}\`\`\`` + `\n` + 
+    `\`\`\`${table_output_by_new_membership_type}\n * Other = Elite, Platinum, Youth Annual/Premier, Young Adult.\`\`\`` + `\n` + 
     `*🏃‍♀️ By Type:* \n` +
     `\`\`\`${table_output_by_real_membership_type}\`\`\`` + `\n`+
     `*🚴‍♂️ By Channel:* \n` + 
-    `\`\`\`${table_output_by_origin_flag}\`\`\`` + `\n`+
+    `\`\`\`${table_output_by_origin_flag}\n* Sub = Subscription Renewal.\`\`\`` + `\n`+
 
-    `* Sub = Subscription Renewal\n` +
-    `* Other = Elite, Platinum, Youth Annual/Premier, Young Adult\n` +
+    // `* Sub = Subscription Renewal\n` +
+    // `* Other = Elite, Platinum, Youth Annual/Premier, Young Adult\n` +
     `**************\n`
   ;
 
