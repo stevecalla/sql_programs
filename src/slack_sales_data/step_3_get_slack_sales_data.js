@@ -138,7 +138,7 @@ async function execute_get_slack_sales_data(is_cron_job = true) {
 }
 
 // Run the main function
-execute_get_slack_sales_data();
+// execute_get_slack_sales_data();
 
 module.exports = {
     execute_get_slack_sales_data,

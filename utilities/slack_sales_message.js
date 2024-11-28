@@ -44,7 +44,7 @@ async function create_slack_sales_message(data) {
     `**************\n`
   ;
 
-  console.log('slack_sales_message.js = ', slackMessage);
+  // console.log('slack_sales_message.js = ', slackMessage);
 
   return slackMessage;
 }

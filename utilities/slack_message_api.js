@@ -3,7 +3,7 @@ const axios = require('axios');
 const dotenv = require('dotenv');
 dotenv.config({  path: "../.env" });
 
-async function sendSlackMessage(message, slack_channel_url) {
+async function sendSlackMessage(message, slack_channel_url, channel) {
   const slack_message = `${message}`;
 
   const payload = {
@@ -41,7 +41,7 @@ async function sendSlackMessage(message, slack_channel_url) {
       });
     }
 
-    console.log('Message sent to eZhire Slack Steve Calla channel');
+    console.log(`Message sent to USAT ${channel}`);
   } catch (error) {
     console.error('Error sending message to Slack:', error.response ? error.response.data : error.message);
   }
@@ -56,7 +56,7 @@ async function slack_message_api(message, channel) {
 
   let url = slack_message_url[channel];
 
-  await sendSlackMessage(message, slack_message_url[channel]);
+  await sendSlackMessage(message, slack_message_url[channel], channel);
 }
 
 // slack_message_api('test', "steve_calla_slack_channel");
