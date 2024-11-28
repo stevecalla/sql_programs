@@ -14,12 +14,31 @@ async function date_info(data) {
   return { queried_at_message, most_recent_date_message };
 }
 
+async function incentive_output(table_output_is_incentive_eligible) {
+  let output = table_output_is_incentive_eligible;
+
+  // Assuming table_output_is_incentive_eligible contains the table content as a string
+  if (table_output_is_incentive_eligible.includes("No sales yet")) {
+
+    output = table_output_is_incentive_eligible;
+
+    return output;
+  } 
+
+  output = `${table_output_is_incentive_eligible}\n* Total sales units. Review necessary to identify stacking.`;
+
+  return output;
+
+}
+
 async function create_slack_sales_message(data) {
 
   // TEXT OUTPUT
   const { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type, table_output_is_incentive_eligible } = await slack_sales_data_format(data);
 
   let { queried_at_message, most_recent_date_message } = await date_info(data);
+
+  const get_incentive_output = await incentive_output(table_output_is_incentive_eligible);
 
   // 📈🤼🚴‍♂️🥇👀📢🏊‍♂️🏃‍♀️🚴‍♂️🕕
 
@@ -31,7 +50,7 @@ async function create_slack_sales_message(data) {
     `🕕 ${most_recent_date_message}\n` + // took this out because the most recent lead at looks wrong
     `--------------\n` +
     `*🥇 BFTD Gift Card Eligible (Direct Only >= 11/29/24 6 AM):* \n` + 
-    `\`\`\`${table_output_is_incentive_eligible}\n* Total sales units. Review necessary to identify stacking.\`\`\`` + `\n`+
+    `\`\`\`${get_incentive_output}\`\`\`` + `\n`+
     `*🏊‍♂️ By Product:* \n` + 
     `\`\`\`${table_output_by_new_membership_type}\n * Other = Elite, Platinum, Youth Annual/Premier, Young Adult.\`\`\`` + `\n` + 
     `*🏃‍♀️ By Type:* \n` +
@@ -39,8 +58,7 @@ async function create_slack_sales_message(data) {
     `*🚴‍♂️ By Channel:* \n` + 
     `\`\`\`${table_output_by_origin_flag}\n* Sub = Subscription Renewal.\`\`\`` + `\n`+
 
-    // `* Sub = Subscription Renewal\n` +
-    // `* Other = Elite, Platinum, Youth Annual/Premier, Young Adult\n` +
+    // `* Add text here if necessary\n` +
     `**************\n`
   ;
 
