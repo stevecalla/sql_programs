@@ -6,10 +6,10 @@ const { slack_sales_data_format } = require('./slack_sales_data_format');
 async function date_info(data) {
   // DATE INFO
   const query_date = `${getFormattedDateAmPm(data[0].queried_at_mtn)} MTN`;
-  const queried_at_message = `Info Queried At: ${query_date}`;
+  const queried_at_message = `*Info Queried At:* ${query_date}`;
 
-  const most_recent_date = `${getFormattedDateAmPm(data[0].max_created_on_mtn)} MTN`;
-  const most_recent_date_message = `Most Recent Purchase At: ${most_recent_date}`;
+  const most_recent_date = `${getFormattedDateAmPm(data[0].max_purchased_on_mtn)} MTN`;
+  const most_recent_date_message = `*Most Recent Purchase At:* ${most_recent_date}`;
 
   return { queried_at_message, most_recent_date_message };
 }
@@ -17,32 +17,34 @@ async function date_info(data) {
 async function create_slack_sales_message(data) {
 
   // TEXT OUTPUT
-  const { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type } = await slack_sales_data_format(data);
+  const { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type, table_output_is_incentive_eligible } = await slack_sales_data_format(data);
 
   let { queried_at_message, most_recent_date_message } = await date_info(data);
 
-  // 📈🤼🚴‍♂️🥇👀📢🏊‍♂️🏃‍♀️🚴‍♂️
+  // 📈🤼🚴‍♂️🥇👀📢🏊‍♂️🏃‍♀️🚴‍♂️🕕
 
   // FINAL MESSAGE
   const slackMessage = 
     `\n**************\n` +    
-    `🥇 MEMBERSHIP SALES UNITS\n` +
+    `👀 *MEMBERSHIP SNAPSHOT - SALES UNITS*\n` +
     `📢 ${queried_at_message}\n` +
-    // `${most_recent_date_message}\n` + // took this out because the most recent lead at looks wrong
+    `🕕 ${most_recent_date_message}\n` + // took this out because the most recent lead at looks wrong
     `--------------\n` +
-      "*🏊‍♂️ By Product:* \n" + 
-      `\`\`\`${table_output_by_new_membership_type}\`\`\`` + `\n` + 
-      "*🏃‍♀️ By Membership Type:* \n" +
-      `\`\`\`${table_output_by_real_membership_type}\`\`\`` + `\n`+
-      "*🚴‍♂️ By Channel:* \n" + 
-      `\`\`\`${table_output_by_origin_flag}\`\`\`` + `\n`+
+    `*🥇 BFTD Gift Card Eligible (Direct Only >= 11/29/24 6 AM):* \n` + 
+    `\`\`\`${table_output_is_incentive_eligible}\n* Total sales units. Review necessary to identify stacking.\`\`\`` + `\n`+
+    `*🏊‍♂️ By Product:* \n` + 
+    `\`\`\`${table_output_by_new_membership_type}\n * Other = Elite, Platinum, Youth Annual/Premier, Young Adult.\`\`\`` + `\n` + 
+    `*🏃‍♀️ By Type:* \n` +
+    `\`\`\`${table_output_by_real_membership_type}\`\`\`` + `\n`+
+    `*🚴‍♂️ By Channel:* \n` + 
+    `\`\`\`${table_output_by_origin_flag}\n* Sub = Subscription Renewal.\`\`\`` + `\n`+
 
-      `* Sub = Subscription Renewal\n` +
-      `* Other = Elite, Platinum, Youth Annual/Premier, Young Adult\n` +
-      `**************\n`
+    // `* Sub = Subscription Renewal\n` +
+    // `* Other = Elite, Platinum, Youth Annual/Premier, Young Adult\n` +
+    `**************\n`
   ;
 
-  console.log('slack_sales_message.js = ', slackMessage);
+  // console.log('slack_sales_message.js = ', slackMessage);
 
   return slackMessage;
 }

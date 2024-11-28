@@ -40,15 +40,14 @@ function getFormattedDate(date) {
     return createdAtFormatted;
 }
 
-//takes '2024-10-19 16:05:27'; returns '2024-10-19 04:05:27 pm'
+//takes '2024-10-19 16:05:27'; returns '2024-10-19 04:05:27 PM' use "a" below for lower case and "A" for upper case
 function getFormattedDateAmPm(date) {
     date = dayjs(date);
 
-    const createdAtFormatted = date.format('YYYY-MM-DD hh:mm:ss a');
+    const createdAtFormatted = date.format('YYYY-MM-DD hh:mm:ss A');
 
     return createdAtFormatted;
 }
-
 
 // Function to convert Unix timestamp 1712179121648 to 2024-04-03 15:18:41
 function convertTimestampToDateTime(timestamp) {
@@ -67,6 +66,10 @@ function convertTimestampToDateTime(timestamp) {
     return formattedDateTime;
 }
 
+function getDayOfWeek(date) {
+    const formattedDate = dayjs(date).format('ddd'); // 'ddd' for abbreviated day of the week
+    return formattedDate;
+  }
 // getCurrentDateForFileNaming();
 // getCurrentDateTimeForFileNaming();
 // convertTimestampToDateTime('1712179121648');
@@ -79,4 +82,5 @@ module.exports = {
     convertTimestampToDateTime,
     getFormattedDate,
     getFormattedDateAmPm,
+    getDayOfWeek,
 }
