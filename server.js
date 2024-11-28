@@ -64,7 +64,7 @@
         }
     });
 
-    // Endpoint to handle crontab usat promo data job
+    // Endpoint to handle crontab usat sales data job
     app.get('/scheduled-usat-sales', async (req, res) => {
         console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
 
@@ -76,7 +76,8 @@
             await execute_load_sales_data();
 
             // STEP #3 QUERY SLACK DATA & SEND MESSAGE
-            const slackMessage = await execute_get_slack_sales_data(true);
+            const is_cron_job = true;
+            const slackMessage = await execute_get_slack_sales_data(is_cron_job);
 
             // Send a success response
             res.status(200).json({

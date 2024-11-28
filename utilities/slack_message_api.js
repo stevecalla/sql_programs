@@ -29,7 +29,7 @@ async function sendSlackMessage(message, slack_channel_url, channel) {
 
 
       if (!response.ok) {
-        throw new Error(`Error sending message to Slack HELP: ${response.status} ${response.statusText}`);
+        throw new Error(`Error sending message to Slack - slack message api 1: ${response.status} ${response.statusText}`);
       }
 
     } else {
@@ -43,7 +43,7 @@ async function sendSlackMessage(message, slack_channel_url, channel) {
 
     console.log(`Message sent to USAT ${channel}`);
   } catch (error) {
-    console.error('Error sending message to Slack:', error.response ? error.response.data : error.message);
+    console.error('Error sending message to Slack - slack message api 2:', error.response ? error.response.data : error.message);
   }
 }
 
@@ -51,7 +51,7 @@ async function slack_message_api(message, channel) {
   
   const slack_message_url = {
     "steve_calla_slack_channel": process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL,
-    // "daily_sales_bot_slack_channel": process.env.SLACK_WEBHOOK_USAT_DAILY_SALES_BOT_URL 
+    "daily_sales_bot_slack_channel": process.env.SLACK_WEBHOOK_USAT_DAILY_SALES_BOT_URL 
   };
 
   let url = slack_message_url[channel];
