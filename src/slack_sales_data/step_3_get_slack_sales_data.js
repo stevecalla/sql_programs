@@ -58,9 +58,6 @@ async function execute_query_get_sales_data(pool, query) {
 }
 
 async function execute_get_slack_sales_data(is_cron_job = true) {
-    // TESTING VARIABLES
-    const send_slack_to_calla = true;
-
     let pool;
     let results;
     const startTime = performance.now();
@@ -77,13 +74,22 @@ async function execute_get_slack_sales_data(is_cron_job = true) {
         if (results) {
             // STEP #3: CREATE SLACK MESSAGE
             const slack_message = await create_slack_sales_message(results);
-            // console.log(slack_message);
+            console.log('step_3_get_slack... =', slack_message);
 
             // STEP #4: SEND CRON SCHEDULED MESSAGE TO SLACK
             // ONLY EXECUTE IF is_cron_job is true
+
+            // TESTING VARIABLEj
+            const send_slack_to_calla = false;
+
+            console.log('send slack to calla =', send_slack_to_calla);
+            console.log('is cron = ', is_cron_job);
+
             if (send_slack_to_calla && is_cron_job) {
+                console.log('1 =', send_slack_to_calla, is_cron_job, send_slack_to_calla && is_cron_job);
                 await slack_message_api(slack_message, "steve_calla_slack_channel");
             } else if(is_cron_job) {
+                console.log('2 =', send_slack_to_calla, is_cron_job, send_slack_to_calla && is_cron_job);
                 await slack_message_api(slack_message, "daily_sales_bot_slack_channel");
             }
 

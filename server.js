@@ -10,11 +10,6 @@
     // SLACK SETUP
     const { WebClient } = require('@slack/web-api');
     const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN); // Make sure to set your token; Initialize Slack Web API client
-    // const { slack_message_api } = require('./utilities/slack_message_api');
-    // const { create_daily_lead_slack_message } = require('../schedule_slack/slack_daily_lead_message');
-
-    // NGROK TUNNEL
-    const ngrok = require('ngrok');
 
     // EXPRESS SERVER
     const app = express();
@@ -69,7 +64,7 @@
         }
     });
 
-    // Endpoint to handle crontab usat promo data job
+    // Endpoint to handle crontab usat sales data job
     app.get('/scheduled-usat-sales', async (req, res) => {
         console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
 
@@ -81,7 +76,8 @@
             await execute_load_sales_data();
 
             // STEP #3 QUERY SLACK DATA & SEND MESSAGE
-            const slackMessage = await execute_get_slack_sales_data(true);
+            const is_cron_job = true;
+            const slackMessage = await execute_get_slack_sales_data(is_cron_job);
 
             // Send a success response
             res.status(200).json({
@@ -118,103 +114,14 @@
                 console.error('Channel ID or message is missing');
             }
         } catch (error) {
-            console.error('Error sending message to Slack:', error);
+            console.error('Error sending message to Slack in server.js:', error);
         }
-    }
-
-    async function start_ngrok_random_domain() {
-        try { 
-            const ngrokUrl = await ngrok.connect(PORT);
-            console.log(`Ngrok tunnel established at: ${ngrokUrl}`);
-
-            // Fetch tunnel details from the ngrok API
-            const apiUrl = 'http://127.0.0.1:4040/api/tunnels';
-            const response = await axios.get(apiUrl);
-            
-            // Log tunnel information
-            response.data.tunnels.forEach(tunnel => {
-                // console.log({tunnel});
-                console.log(`Tunnel: ${tunnel.public_url}`);
-                console.log(`Forwarding to: ${tunnel.config.addr}`);
-                console.log(`Traffic Inspector: https://dashboard.ngrok.com/ac_2J6Qn9CeVqC2bGd0EhZnAT612RQ/observability/traffic-inspector`)
-                console.log(`Status: http://127.0.0.1:4040/status`)
-            });
-
-        } catch (error) {
-            console.error(`Could not create ngrok tunnel: ${error}`);
-        }
-    }
-
-    async function start_ngrok_static_domain() {
-        try {
-            // Configure ngrok with a specific hostname
-            const ngrokUrl = await ngrok.connect({
-                addr: PORT,
-                // hostname: 'koala-huge-goldfish.ngrok-free.app',
-                url: 'koala-huge-goldfish.ngrok-free.app 8001',
-                region: 'us',
-            });
-    
-            console.log(`Ngrok tunnel established at: ${ngrokUrl}`);
-    
-            // Check ngrok API availability
-            const apiUrl = 'http://127.0.0.1:4040/api/tunnels';
-            const response = await axios.get(apiUrl);
-            response.data.tunnels.forEach(tunnel => {
-                console.log(`Tunnel: ${tunnel.public_url}`);
-                console.log(`Forwarding to: ${tunnel.config.addr}`);
-                console.log(`Traffic Inspector: https://dashboard.ngrok.com/ac_2J6Qn9CeVqC2bGd0EhZnAT612RQ/observability/traffic-inspector`)
-                console.log(`Status: http://127.0.0.1:4040/status`)
-            });
-    
-        } catch (error) {
-            console.error('Error starting ngrok:', error);
-            console.error('Ensure ngrok is running and the API is accessible at http://127.0.0.1:4040');
-        }
-    }
-    
-    async function start_ngrok_cli_command() {
-        const { exec } = require('child_process');
-
-        const command = 'ngrok http --url=koala-huge-goldfish.ngrok-free.app 8001';
-        const process = exec(command);
-        
-        console.log(`Ngrok tunnel established at: POST https://koala-huge-goldfish.ngrok-free.app/get-member-sales`);
-        console.log(`Traffic Inspector: https://dashboard.ngrok.com/ac_2J6Qn9CeVqC2bGd0EhZnAT612RQ/observability/traffic-inspector`)
-        console.log(`Status: http://127.0.0.1:4040/status`)
-
-        // ngrok http http://localhost:8001
-        // ngrok http --url=koala-huge-goldfish.ngrok-free.app 80
-
-        process.stdout.on('data', data => {
-            console.log(`ngrok: ${data}`);
-        });
-    
-        process.stderr.on('data', data => {
-            console.error(`ngrok error: ${data}`);
-        });
-    
-        process.on('close', code => {
-            console.log(`ngrok process exited with code ${code}`);
-        });
-    
-        process.on('error', err => {
-            console.error('Failed to start ngrok:', err);
-        });
     }
 
     // Clean up on exit
     async function cleanup() {
         console.log('\nGracefully shutting down...');
-        try {
-            if (ngrokUrl) {
-                await ngrok.disconnect();
-                await ngrok.kill();
-                console.log('Ngrok tunnel closed.');
-            }
-        } catch (error) {
-            console.error('Error during cleanup:', error);
-        }
+
         process.exit();
     }
 
@@ -226,11 +133,10 @@
     app.listen(PORT, () => {
         console.log(`Server is running on http://localhost:${PORT}`);
 
-        // start_ngrok_random_domain();
+        console.log(`Tunnel using cloudflare https://usat-sales.kidderwise.org/get-member-sales`)
 
-        // start_ngrok_static_domain(); -- didn't work but I was able to start the static domain from the cli
+        // switched to cloudflare; see notes.txt
 
-        start_ngrok_cli_command(); // static domain did start from the cli; this function mimics that behavior
     });
 
 
