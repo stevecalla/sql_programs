@@ -91,6 +91,7 @@ async function format_table(data, segment, includeTotalRow = false, includeInven
       Silver: 380,
       Gold: 380,
       "3-Year": 180,
+      "Total": 940,
     };
 
     const inventoryRow = { purchased: "Gift Cards", day: "" };
@@ -105,7 +106,7 @@ async function format_table(data, segment, includeTotalRow = false, includeInven
   // Add a ratio row if the includeRatioRow flag is true
 if (includeInventoryRow) {
   // if (includeRatioRow && includeTotalRow && includeInventoryRow) {
-    const ratioRow = { purchased: "Total / Gift Cards (%)", day: "" };
+    const ratioRow = { purchased: "% GC Used", day: "" };
   
     // Find the total and inventory rows
     const totalRow = formattedData.find(row => row.purchased === "Total");
@@ -166,7 +167,6 @@ if (includeInventoryRow) {
   // Assemble the full table
   return [divider, headerRow, divider, ...rows, divider].join("\n");
 }
-
 
 async function rollup_by_segment(data, segment) {
     // Group the data by purchased_on_date_adjusted_mp_mtn and segment
