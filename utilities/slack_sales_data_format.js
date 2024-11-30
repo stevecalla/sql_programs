@@ -241,12 +241,10 @@ async function slack_sales_data_format(data) {
     const is_eligible_data = data.filter(purchase => purchase.is_incentive_eligible);
     const table_output_is_incentive_eligible = await create_table_output(is_eligible_data, new_membership_type, include_total_row, include_inventory_row);
 
-    console.log(table_output_is_incentive_eligible);
-
     return { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type, table_output_is_incentive_eligible };
 }
 
-slack_sales_data_format(slack_sales_data_seed);
+// slack_sales_data_format(slack_sales_data_seed);
 
 module.exports = {
     slack_sales_data_format,
