@@ -43,7 +43,7 @@ async function sortByDateAndSegment(data, dateField, segmentField) {
   return [...sortedNonTotalEntries, ...totalEntries];
 }
 
-async function format_table(data, segment, includeRowTotal = false) {
+async function format_table(data, segment, includeTotalRow = false, includeInventoryRow = false) {
   if (!data || data.length === 0) {
     return "No sales yet!! Check back on 11/29/24, please.";
   }
@@ -76,13 +76,59 @@ async function format_table(data, segment, includeRowTotal = false) {
     return row;
   });
 
-  // Add a total row if the includeRowTotal flag is true
-  if (includeRowTotal) {
+  // Add a total row if the includeTotalRow flag is true
+  if (includeTotalRow) {
     const totalRow = { purchased: "Total", day: "" };
     membershipTypes.forEach(type => {
       totalRow[type] = formattedData.reduce((sum, row) => sum + (row[type] || 0), 0);
     });
     formattedData.push(totalRow);
+  }
+
+  // Add a "Gift Cards" row with hardcoded values if the includeInventoryRow flag is true
+  if (includeInventoryRow) {
+    const inventoryValues = {
+      Silver: 380,
+      Gold: 380,
+      "3-Year": 180,
+    };
+
+    const inventoryRow = { purchased: "Gift Cards", day: "" };
+
+    membershipTypes.forEach(type => {
+      inventoryRow[type] = inventoryValues[type] || 0; // Use the mapped value or 0 if no match
+    });
+
+    formattedData.push(inventoryRow);
+  }
+
+  // Add a ratio row if the includeRatioRow flag is true
+if (includeInventoryRow) {
+  // if (includeRatioRow && includeTotalRow && includeInventoryRow) {
+    const ratioRow = { purchased: "Total / Gift Cards (%)", day: "" };
+  
+    // Find the total and inventory rows
+    const totalRow = formattedData.find(row => row.purchased === "Total");
+    const inventoryRow = formattedData.find(row => row.purchased === "Gift Cards");
+  
+    membershipTypes.forEach(type => {
+      const totalValue = totalRow ? totalRow[type] || 0 : 0;
+      const inventoryValue = inventoryRow ? inventoryRow[type] || 0 : 0;
+  
+      // Calculate the ratio as a percentage, avoiding division by zero
+      ratioRow[type] = inventoryValue !== 0 
+        ? `${Math.round((totalValue / inventoryValue) * 100)}%` 
+        : "N/A";
+    });
+  
+    // Calculate the "Total" column ratio
+    const totalValue = totalRow ? totalRow.Total || 0 : 0;
+    const inventoryValue = inventoryRow ? inventoryRow.Total || 0 : 0;
+    ratioRow.Total = inventoryValue !== 0 
+      ? `${Math.round((totalValue / inventoryValue) * 100)}%` 
+      : "N/A";
+  
+    formattedData.push(ratioRow);
   }
 
   // Calculate the maximum width for each column
@@ -120,6 +166,7 @@ async function format_table(data, segment, includeRowTotal = false) {
   // Assemble the full table
   return [divider, headerRow, divider, ...rows, divider].join("\n");
 }
+
 
 async function rollup_by_segment(data, segment) {
     // Group the data by purchased_on_date_adjusted_mp_mtn and segment
@@ -163,13 +210,13 @@ async function rollup_by_segment(data, segment) {
     return finalResult;
 }
 
-async function create_table_output(data, segment, include_row_total) {
+async function create_table_output(data, segment, include_total_row, include_inventory_row) {
     // SEGMENT ROLLUPS
     const segment_rollup = await rollup_by_segment(data, segment);
     const segment_rollup_sorted = await sortByDateAndSegment(segment_rollup, 'purchased', segment);
 
     // Format the tables
-    const table_by_segment = await format_table(segment_rollup_sorted, segment, include_row_total);
+    const table_by_segment = await format_table(segment_rollup_sorted, segment, include_total_row, include_inventory_row);
 
     // console.log(table_by_segment);
 
@@ -182,15 +229,19 @@ async function slack_sales_data_format(data) {
     const new_membership_type = 'new_membership_type';
 
     // CREATE SALES OUTPUT
-    let include_row_total = false;
-    const table_output_by_new_membership_type = await create_table_output(data, new_membership_type, include_row_total);
-    const table_output_by_real_membership_type = await create_table_output(data, real_membership_types, include_row_total);
-    const table_output_by_origin_flag = await create_table_output(data, origin_flag_category, include_row_total);
+    let include_total_row = false;
+    include_inventory_row = false;
+    const table_output_by_new_membership_type = await create_table_output(data, new_membership_type, include_total_row, include_inventory_row);
+    const table_output_by_real_membership_type = await create_table_output(data, real_membership_types, include_total_row, include_inventory_row);
+    const table_output_by_origin_flag = await create_table_output(data, origin_flag_category, include_total_row, include_inventory_row);
 
     // CREATE INCENTIVE ELIGIBLE OUTPUT
-    include_row_total = true;
+    include_total_row = true;
+    include_inventory_row = true;
     const is_eligible_data = data.filter(purchase => purchase.is_incentive_eligible);
-    const table_output_is_incentive_eligible = await create_table_output(is_eligible_data, new_membership_type, include_row_total);
+    const table_output_is_incentive_eligible = await create_table_output(is_eligible_data, new_membership_type, include_total_row, include_inventory_row);
+
+    console.log(table_output_is_incentive_eligible);
 
     return { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type, table_output_is_incentive_eligible };
 }
