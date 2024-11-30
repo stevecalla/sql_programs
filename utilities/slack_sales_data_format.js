@@ -91,6 +91,7 @@ async function format_table(data, segment, includeTotalRow = false, includeInven
       Silver: 380,
       Gold: 380,
       "3-Year": 180,
+      "Total": 940,
     };
 
     const inventoryRow = { purchased: "Gift Cards", day: "" };
@@ -105,7 +106,7 @@ async function format_table(data, segment, includeTotalRow = false, includeInven
   // Add a ratio row if the includeRatioRow flag is true
 if (includeInventoryRow) {
   // if (includeRatioRow && includeTotalRow && includeInventoryRow) {
-    const ratioRow = { purchased: "Total / Gift Cards (%)", day: "" };
+    const ratioRow = { purchased: "% GC Used", day: "" };
   
     // Find the total and inventory rows
     const totalRow = formattedData.find(row => row.purchased === "Total");
@@ -166,7 +167,6 @@ if (includeInventoryRow) {
   // Assemble the full table
   return [divider, headerRow, divider, ...rows, divider].join("\n");
 }
-
 
 async function rollup_by_segment(data, segment) {
     // Group the data by purchased_on_date_adjusted_mp_mtn and segment
@@ -246,7 +246,7 @@ async function slack_sales_data_format(data) {
     return { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type, table_output_is_incentive_eligible };
 }
 
-// slack_sales_data_format(slack_sales_data_seed);
+slack_sales_data_format(slack_sales_data_seed);
 
 module.exports = {
     slack_sales_data_format,
