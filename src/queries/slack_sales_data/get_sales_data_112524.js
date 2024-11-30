@@ -44,8 +44,7 @@ function query_slack_sales_data() {
 
                 CASE
                     WHEN 
-                        DATE(sd.purchased_on_adjusted_mp) >= '2024-11-29'
-                        AND TIME(sd.purchased_on_adjusted_mp) >= '06:00:00'
+                        sd.purchased_on_adjusted_mp > '2024-11-29 06:00:00' -- Full datetime comparison
                         AND sd.new_member_category_6_sa IN ('Gold', 'Silver', '3-Year') 
                         AND sd.origin_flag_ma IS NULL -- blank represents Member Hub sales, excluding subscription & registration channels  
                     THEN 1 ELSE 0
