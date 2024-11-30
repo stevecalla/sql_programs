@@ -88,9 +88,9 @@ async function format_table(data, segment, includeTotalRow = false, includeInven
   // Add a "Gift Cards" row with hardcoded values if the includeInventoryRow flag is true
   if (includeInventoryRow) {
     const inventoryValues = {
-      Silver: 380,
-      Gold: 380,
-      "3-Year": 180,
+      Silver: 380, // no change
+      Gold: 200, //changed to 200
+      "3-Year": 360, // changed to 360
       "Total": 940,
     };
 
