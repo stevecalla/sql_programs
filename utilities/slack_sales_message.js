@@ -27,7 +27,7 @@ async function incentive_output(table_output_is_incentive_eligible) {
 
   // output = `${table_output_is_incentive_eligible}\n* Gift Card Limits = Silver 380, Gold 380, 3-Year 180.\n* Total sales units. Review necessary to identify stacking.`;
 
-  output = `${table_output_is_incentive_eligible}\n\n* Total sales units. Review necessary to identify stacking.`;
+  output = `${table_output_is_incentive_eligible}\n* Total sales units. Review necessary to identify stacking.`;
 
   return output;
 
