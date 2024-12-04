@@ -51,8 +51,8 @@ async function create_slack_sales_message(data) {
     `📢 ${queried_at_message}\n` +
     `🕕 ${most_recent_date_message}\n` + // took this out because the most recent lead at looks wrong
     `--------------\n` +
-    `*🥇 BFTD Gift Card Eligible (Direct Only >= 11/29/24 6 AM):* \n` + 
-    `\`\`\`${get_incentive_output}\`\`\`` + `\n`+
+    // `*🥇 BFTD Gift Card Eligible (Direct Only >= 11/29/24 6 AM):* \n` + 
+    // `\`\`\`${get_incentive_output}\`\`\`` + `\n`+
     `*🏊‍♂️ By Product:* \n` + 
     `\`\`\`${table_output_by_new_membership_type}\n * Other = Elite, Platinum, Youth Annual/Premier, Young Adult.\`\`\`` + `\n` + 
     `*🏃‍♀️ By Type:* \n` +
