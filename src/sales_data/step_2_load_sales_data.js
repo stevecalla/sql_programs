@@ -117,7 +117,7 @@ async function main() {
         for (const table of tables_library) {
             const { table_name, create_query, step, step_info } = table;
 
-            const drop_query = await query_drop_table(table_name.toUpperCase());
+            const drop_query = await query_drop_table(table_name);
 
             const drop_info = `${step} DROP ${step_info.toUpperCase()} TABLE`;
             const create_info = `${step} CREATE ${step_info.toUpperCase()} TABLE`;

@@ -592,7 +592,7 @@ async function execute_get_sales_data() {
 
         // return elapsedTime;
     }
-}
+}   
 
 // Run the main function
 execute_get_sales_data();
