@@ -1,5 +1,4 @@
-const query_actual_membership_fee_6_logic = 
-`
+const query_actual_membership_fee_6_logic = `
     SELECT 
         ka.id_membership_periods,
         ka.source_2,
@@ -67,7 +66,10 @@ const query_actual_membership_fee_6_logic =
                 WHEN rama.price_paid IN (105.68)    THEN 99  
                 WHEN rama.price_paid IS NOT NULL    THEN rama.price_paid -- assigns 6, 13, 18, 23 et al as appropriate
 
-                WHEN mp.origin_flag = "ADMIN_BULK_UPLOADER" AND ma.payment_type = "ironman-ticketsocket" THEN 23
+                -- WHEN mp.origin_flag = "ADMIN_BULK_UPLOADER" AND ma.payment_type = "ironman-ticketsocket" THEN 23 -- remove 12/6/24 per Eric Passe replaced with below
+                WHEN mp.origin_flag = 'admin_bulk_uploader' and ma.payment_type = 'ironman-ticketsocket' and mp.membership_type_id in (115) then 23
+                WHEN mp.origin_flag = 'admin_bulk_uploader' and ma.payment_type = 'ironman-ticketsocket' and mp.membership_type_id in (112) then 60
+                WHEN mp.origin_flag = 'admin_bulk_uploader' and ma.payment_type = 'ironman-ticketsocket' and mp.membership_type_id in (113) then 99
 
                 -- 'KOZ Acception'
                 WHEN mp.origin_flag = "ADMIN_BULK_UPLOADER" AND ma.payment_type != "Chronotrack" AND ka.is_koz_acception IN (0) THEN 0 -- ISNULL('KOZ Acception')
@@ -136,11 +138,10 @@ const query_actual_membership_fee_6_logic =
         -- mp.membership_type_id IN (107) AND mp.purchased_on >= '2024-01-16 09:00:00' -- THEN 30
         -- mp.membership_type_id IN (55) AND mp.purchased_on >= '2024-01-16 09:00:00' -- THEN 40
 
-        -- use case for bronze 6 relay being priced at $23; added rule above if rama.price_paid = 6 then price at 6
+        -- use case for bronze 6 relay beinnodg priced at $23; added rule above if rama.price_paid = 6 then price at 6
         -- id_membership_periods IN (4698020, 4636868) 
 
     GROUP BY ka.id_membership_periods
-
 `;
 
 module.exports = { query_actual_membership_fee_6_logic };

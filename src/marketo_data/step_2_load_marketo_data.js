@@ -120,7 +120,7 @@ async function main() {
         for (const table of table_library) {
             const { table_name, create_query, step, step_info } = table;
 
-            const drop_query = await query_drop_table(table_name.toUpperCase());
+            const drop_query = await query_drop_table(table_name);
             const drop_info = `${step} DROP ${step_info.toUpperCase()} TABLE`;
             await execute_mysql_working_query(pool, db_name, drop_query, drop_info);
 

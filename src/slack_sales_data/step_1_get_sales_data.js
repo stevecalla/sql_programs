@@ -327,7 +327,7 @@ async function execute_get_sales_data() {
                 year: 2024,
                 membership_period_ends: '2008-01-01',
                 start_date: '2024-11-22',
-                end_date: '2024-12-31',
+                end_date: '2026-12-31',
             },
     
         ];
