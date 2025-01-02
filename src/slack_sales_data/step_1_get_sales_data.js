@@ -326,8 +326,8 @@ async function execute_get_sales_data() {
             { 
                 year: 2024,
                 membership_period_ends: '2008-01-01',
-                start_date: '2024-12-31',
-                end_date: '2025-01-01', // set to the next day because the comparison is based on the time stamp not the date
+                start_date: '2024-11-22',
+                end_date: '2024-12-31 23:59:59', // set to the next day because the comparison is based on the time stamp not the date
             },
             { 
                 year: 2025,
