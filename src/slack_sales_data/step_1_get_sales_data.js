@@ -326,7 +326,7 @@ async function execute_get_sales_data() {
             { 
                 year: 2024,
                 membership_period_ends: '2008-01-01',
-                start_date: '2024-11-22',
+                start_date: '2024-11-22 00:00:00',
                 end_date: '2024-12-31 23:59:59', // set to the next day because the comparison is based on the time stamp not the date
             },
             { 
@@ -361,7 +361,8 @@ async function execute_get_sales_data() {
                 // STEP #4: EXPORT RESULTS TO CSV
                 runTimer(`${i}_export`);
 
-                let file_name_date = `${file_name}_${date_periods[i].start_date}`
+                const dateOnly = date_periods[i].start_date.split(' ')[0]; // convert time stamp to date only
+                let file_name_date = `${file_name}_${dateOnly}`;
 
                 // await export_results_to_csv(results, file_name_date, j); 
                 // added to catch block in export_results_to_csv

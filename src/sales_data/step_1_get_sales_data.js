@@ -546,8 +546,9 @@ async function execute_get_sales_data() {
                 
                 // STEP #4: EXPORT RESULTS TO CSV
                 runTimer(`${i}_export`);
-                const dateOnly = date_periods[i].start_date.split(' ')[0];
-                let file_name_date = `${file_name}_${dateOnly}`
+
+                const dateOnly = date_periods[i].start_date.split(' ')[0]; // convert time stamp to date only
+                let file_name_date = `${file_name}_${dateOnly}`;
 
                 // await export_results_to_csv(results, file_name_date, j); 
                 // added to catch block in export_results_to_csv
