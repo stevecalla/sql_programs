@@ -326,20 +326,20 @@ async function execute_get_sales_data() {
             { 
                 year: 2024,
                 membership_period_ends: '2008-01-01',
-                start_date: '2024-11-22',
-                end_date: '2024-12-31',
+                start_date: '2024-12-31',
+                end_date: '2025-01-01', // set to the next day because the comparison is based on the time stamp not the date
             },
             { 
                 year: 2025,
                 membership_period_ends: '2008-01-01',
                 start_date: '2025-01-01',
-                end_date: '2025-06-30',
+                end_date: '2025-07-01',
             },
             { 
                 year: 2025,
                 membership_period_ends: '2008-01-01',
                 start_date: '2025-07-01',
-                end_date: '2025-12-31',
+                end_date: '2026-01-01',
             }
         ];
 
@@ -409,7 +409,7 @@ async function execute_get_sales_data() {
 }
 
 // Run the main function
-// execute_get_sales_data();
+execute_get_sales_data();
 
 module.exports = {
     execute_get_sales_data,
