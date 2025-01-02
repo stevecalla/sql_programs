@@ -28,16 +28,16 @@ function formatTime(totalSeconds) {
 let position = 10;
 async function startTimerMessage() {
     // console.clear();
-    readline.cursorTo(process.stdout, 0, position); //positions next console.log 1 line below SSH msg
+    // readline.cursorTo(process.stdout, 0, position); //positions next console.log 1 line below SSH msg
     process.stdout.write(`${BLUE}\nStarting timer... Press Ctrl+C to stop...`);
-    readline.clearLine(process.stdout, position); // Clear the current line
+    // readline.clearLine(process.stdout, position); // Clear the current line
 }
 
 // Function to update timer
 async function updateTimer(i) {
     await startTimerMessage();
 
-    readline.cursorTo(process.stdout, 0, position + 2 + i); // Move cursor to top-left corner, but 2 lines below starting line
+    // readline.cursorTo(process.stdout, 0, position + 2 + i); // Move cursor to top-left corner, but 2 lines below starting line
     // readline.clearLine(process.stdout, position_2); // Clear the current line
     
     process.stdout.write(`${RED}Timer: ${YELLOW}${formatTime(seconds)}${RESET}...`); // Display the timer in red and yellow
