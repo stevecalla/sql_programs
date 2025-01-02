@@ -327,20 +327,20 @@ async function execute_get_sales_data() {
                 year: 2024,
                 membership_period_ends: '2008-01-01',
                 start_date: '2024-11-22 00:00:00',
-                end_date: '2024-12-31 23:59:59', // set to the next day because the comparison is based on the time stamp not the date
+                end_date: '2024-12-31 23:59:59',
             },
             { 
                 year: 2025,
                 membership_period_ends: '2008-01-01',
-                start_date: '2025-01-01',
-                end_date: '2025-07-01',
+                start_date: '2025-01-01 00:00:00',
+                end_date: '2025-06-30 23:59:59',
             },
             { 
                 year: 2025,
                 membership_period_ends: '2008-01-01',
-                start_date: '2025-07-01',
-                end_date: '2026-01-01',
-            }
+                start_date: '2025-07-01 00:00:00',
+                end_date: '2025-12-31 23:59:59', // set to the next day because the comparison is based on the time stamp not the date
+            },
         ];
 
         for (let i = 0; i < date_periods.length; i++) {

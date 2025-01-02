@@ -333,7 +333,7 @@ async function execute_get_sales_data() {
                 year: 2010,
                 membership_period_ends: '2008-01-01',
                 start_date: '2010-07-01 00:00:00',
-                end_date: '2011-12-31 23:59:59',
+                end_date: '2010-12-31 23:59:59',
             },
             { 
                 year: 2011,
@@ -345,7 +345,7 @@ async function execute_get_sales_data() {
                 year: 2011,
                 membership_period_ends: '2008-01-01',
                 start_date: '2011-07-01 00:00:00',
-                end_date: '2012-12-31 23:59:59',
+                end_date: '2011-12-31 23:59:59',
             },
             { 
                 year: 2012,
@@ -357,7 +357,7 @@ async function execute_get_sales_data() {
                 year: 2012,
                 membership_period_ends: '2008-01-01',
                 start_date: '2012-07-01 00:00:00',
-                end_date: '2013-12-31 23:59:59',
+                end_date: '2012-12-31 23:59:59',
             },
             { 
                 year: 2013,
@@ -369,7 +369,7 @@ async function execute_get_sales_data() {
                 year: 2013,
                 membership_period_ends: '2008-01-01',
                 start_date: '2013-07-01 00:00:00',
-                end_date: '2014-12-31 23:59:59',
+                end_date: '2013-12-31 23:59:59',
             },
             { 
                 year: 2014,
@@ -381,7 +381,7 @@ async function execute_get_sales_data() {
                 year: 2014,
                 membership_period_ends: '2008-01-01',
                 start_date: '2014-07-01 00:00:00',
-                end_date: '2015-12-31 23:59:59',
+                end_date: '2014-12-31 23:59:59',
             },
             { 
                 year: 2015,
@@ -393,7 +393,7 @@ async function execute_get_sales_data() {
                 year: 2015,
                 membership_period_ends: '2008-01-01',
                 start_date: '2015-07-01 00:00:00',
-                end_date: '2016-12-31 23:59:59',
+                end_date: '2015-12-31 23:59:59',
             },
             { 
                 year: 2016,
@@ -405,7 +405,7 @@ async function execute_get_sales_data() {
                 year: 2016,
                 membership_period_ends: '2008-01-01',
                 start_date: '2016-07-01 00:00:00',
-                end_date: '2017-12-31 23:59:59',
+                end_date: '2016-12-31 23:59:59',
             },
             { 
                 year: 2017,
@@ -417,13 +417,13 @@ async function execute_get_sales_data() {
                 year: 2017,
                 membership_period_ends: '2008-01-01',
                 start_date: '2017-07-01 00:00:00',
-                end_date: '2018-12-31 23:59:59',
+                end_date: '2017-12-31 23:59:59',
             },
             { 
                 year: 2018,
                 membership_period_ends: '2008-01-01',
                 start_date: '2018-01-01 00:00:00',
-                end_date: '2019-06-30 23:59:59',
+                end_date: '2018-06-30 23:59:59',
             },
             { 
                 year: 2018,
@@ -435,7 +435,7 @@ async function execute_get_sales_data() {
                 year: 2019,
                 membership_period_ends: '2008-01-01',
                 start_date: '2019-01-01 00:00:00',
-                end_date: '2020-06-30 23:59:59',
+                end_date: '2019-06-30 23:59:59',
             },
             { 
                 year: 2019,
@@ -447,7 +447,7 @@ async function execute_get_sales_data() {
                 year: 2020,
                 membership_period_ends: '2008-01-01',
                 start_date: '2020-01-01 00:00:00',
-                end_date: '2021-06-30 23:59:59',
+                end_date: '2020-06-30 23:59:59',
             },
             { 
                 year: 2020,
@@ -465,7 +465,7 @@ async function execute_get_sales_data() {
                 year: 2021,
                 membership_period_ends: '2008-01-01',
                 start_date: '2021-07-01 00:00:00',
-                end_date: '2022-12-31 23:59:59',
+                end_date: '2021-12-31 23:59:59',
             },
             { 
                 year: 2022,
@@ -477,7 +477,7 @@ async function execute_get_sales_data() {
                 year: 2022,
                 membership_period_ends: '2008-01-01',
                 start_date: '2022-07-01 00:00:00',
-                end_date: '2023-12-31 23:59:59',
+                end_date: '2022-12-31 23:59:59',
             },
             { 
                 year: 2023,
@@ -489,7 +489,7 @@ async function execute_get_sales_data() {
                 year: 2023,
                 membership_period_ends: '2008-01-01',
                 start_date: '2023-07-01 00:00:00',
-                end_date: '2024-12-31 23:59:59',
+                end_date: '2023-12-31 23:59:59',
             },
             { 
                 year: 2024,
@@ -501,7 +501,7 @@ async function execute_get_sales_data() {
                 year: 2024,
                 membership_period_ends: '2008-01-01',
                 start_date: '2024-07-01 00:00:00',
-                end_date: '2025-12-31 23:59:59',
+                end_date: '2024-12-31 23:59:59',
             },
             { 
                 year: 2025,
@@ -513,7 +513,7 @@ async function execute_get_sales_data() {
                 year: 2025,
                 membership_period_ends: '2008-01-01',
                 start_date: '2025-07-01 00:00:00',
-                end_date: '2026-12-31 23:59:59', // set to the next day because the comparison is based on the time stamp not the date
+                end_date: '2025-12-31 23:59:59', // set to the next day because the comparison is based on the time stamp not the date
             },
             { 
                 year: 2026,
@@ -525,7 +525,7 @@ async function execute_get_sales_data() {
                 year: 2026,
                 membership_period_ends: '2008-01-01',
                 start_date: '2026-07-01 00:00:00 00:00:00',
-                end_date: '2027-12-31 23:59:59', // set to the next day because the comparison is based on the time stamp not the date
+                end_date: '2026-12-31 23:59:59', // set to the next day because the comparison is based on the time stamp not the date
             },
         ];
 
