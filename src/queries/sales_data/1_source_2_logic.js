@@ -58,6 +58,7 @@ function query_source_2_logic(year, start_date, end_date, operator, membership_p
             LEFT JOIN users ON profiles.user_id = users.id
             LEFT JOIN events ON membership_applications.event_id = events.id
             LEFT JOIN transactions ON orders.id = transactions.order_id
+            
         WHERE 
             membership_periods.membership_type_id NOT IN (56, 58, 81, 105)
             AND membership_periods.id NOT IN (4652554)
