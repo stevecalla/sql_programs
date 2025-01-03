@@ -201,7 +201,7 @@ async function execute_load_sales_data() {
     }
 }
 
-// execute_load_sales_data();
+execute_load_sales_data();
 
 module.exports = {
     execute_load_sales_data,

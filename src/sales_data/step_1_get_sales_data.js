@@ -350,7 +350,7 @@ async function execute_get_sales_data() {
             { 
                 year: 2012,
                 membership_period_ends: '2008-01-01 00:00:00',
-                start_date: '2012-01-01 00:00:00-01-01',
+                start_date: '2012-01-01 00:00:00',
                 end_date: '2012-06-30 23:59:59',
             },
             { 
@@ -524,7 +524,7 @@ async function execute_get_sales_data() {
             { 
                 year: 2026,
                 membership_period_ends: '2008-01-01',
-                start_date: '2026-07-01 00:00:00 00:00:00',
+                start_date: '2026-07-01 00:00:00',
                 end_date: '2026-12-31 23:59:59', // set to the next day because the comparison is based on the time stamp not the date
             },
         ];
