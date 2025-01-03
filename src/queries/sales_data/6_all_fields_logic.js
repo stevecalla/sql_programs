@@ -8,6 +8,7 @@ const derived_fields = `
     sa.real_membership_types AS real_membership_types_sa,
     sa.new_member_category_6 AS new_member_category_6_sa,
     sa.max_membership_fee_6 AS actual_membership_fee_6_sa,
+    sa.max_membership_fee_6_rule, -- todo: rule additional field
     sa.source_2 AS source_2_sa,
     sa.is_koz_acception AS is_koz_acception_sa,
 `;

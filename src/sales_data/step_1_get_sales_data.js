@@ -349,7 +349,7 @@ async function execute_get_sales_data() {
             },
             { 
                 year: 2012,
-                membership_period_ends: '2008-01-01 00:00:00',
+                membership_period_ends: '2008-01-01',
                 start_date: '2012-01-01 00:00:00',
                 end_date: '2012-06-30 23:59:59',
             },

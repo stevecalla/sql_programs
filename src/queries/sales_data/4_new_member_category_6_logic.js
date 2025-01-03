@@ -6,6 +6,8 @@ const query_new_member_category_6_logic =
         mf.is_koz_acception,
         mf.real_membership_types AS real_membership_types,
         mf.max_membership_fee_6 AS max_membership_fee_6,
+        r.max_membership_fee_6_rule, -- todo: rule additional field
+
         -- new_member_category_6
         CASE
             WHEN mp.membership_type_id IN (2, 52, 65, 70, 73, 91, 93, 96, 98) THEN '2-Year'
@@ -61,6 +63,7 @@ const query_new_member_category_6_logic =
         COUNT(*) AS count
 
     FROM actual_membership_fee_6 AS mf
+        LEFT JOIN actual_membership_fee_6_rule AS r ON mf.id_membership_periods = r.id_membership_periods -- todo: rule additional field
         LEFT JOIN membership_applications AS ma ON mf.id_membership_periods = ma.membership_period_id
         LEFT JOIN membership_periods AS mp ON mf.id_membership_periods = mp.id
 
