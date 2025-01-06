@@ -12,7 +12,6 @@ function generateLogFile(source, content, passedFolderPath) {
     const folderPath = passedFolderPath ? `${passedFolderPath}/logs` : `${defaultFolderPath}`;
     const filePath = folderPath ? `${folderPath}/${fileName}` : `${defaultFolderPath}/${fileName}`;
     // console.log('File path = ', folderPath);
-    // console.log('File path = ', folderPath);
 
     // CREATE CONTENT
     const logContent = `${getCurrentDateTime()} - ${content}\n`;

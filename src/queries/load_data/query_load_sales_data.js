@@ -8,6 +8,7 @@ const derived_fields = `
     real_membership_types_sa,
     new_member_category_6_sa,
     actual_membership_fee_6_sa,
+    actual_membership_fee_6_rule_sa, -- todo: rule additional field
     source_2_sa,
     is_koz_acception_sa,
 `;

@@ -1,5 +1,4 @@
 const fsp = require('fs').promises; // promses necessary for "fs.readdir"
-// const mysql = require('mysql2');
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
 const path = require('path');
@@ -60,13 +59,12 @@ async function execute_mysql_create_db_query(pool, query, step_info) {
 }
 
 // EXECUTE MYSQL TO CREATE TABLES & WORK WITH TABLES QUERY
-async function execute_mysql_working_query(pool, db_name, query, filePath, step_info, rows_added) {
+async function execute_mysql_working_query(pool, db_name, query, filePath, rows_added) {
     const startTime = performance.now();
     const fs = require('fs');
 
     return new Promise((resolve, reject) => {
         pool.query(`USE ${db_name};`, (queryError, results) => {
-            // pool.query(query, (queryError, results) => {
             pool.query({
                 sql: query,
                 infileStreamFactory: function() { return fs.createReadStream(filePath)}}, 
@@ -80,11 +78,9 @@ async function execute_mysql_working_query(pool, db_name, query, filePath, step_
 
                     reject(queryError);
                 } else {
-                    // console.log(`\n${step_info}`);
                     console.table(results);
                     console.log(`Query results: ${results.info}, Elapsed Time: ${elapsedTime} sec\n`);
 
-                    // stopTimer(i);
                     rows_added = parseInt(results.affectedRows);
                     resolve(rows_added);
                 }
@@ -105,10 +101,10 @@ async function execute_load_sales_data() {
         console.log(db_name);
 
         // STEP #1: CREATE DATABASE - ONLY NEED TO CREATE DB INITIALLY
-        // const drop_db = false; // normally don't drop db
-        // drop_db && await execute_mysql_working_query(pool, db_name, query_drop_database(db_name), `STEP #1.0: DROP DB`);
+        const drop_db = false; // normally don't drop db
+        drop_db && await execute_mysql_working_query(pool, db_name, query_drop_database(db_name), `STEP #1.0: DROP DB`);
 
-        // await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
+        drop_db && await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
 
         // STEP #2: CREATE TABLES = all files loaded into single table
         for (const table of tables_library) {
@@ -135,7 +131,7 @@ async function execute_load_sales_data() {
         // List all files in the directory
         const files = await fsp.readdir(directory);
         console.log(files);
-        let numer_of_files = 0;
+        let number_of_files = 0;
 
         // Iterate through each file
         for (let i = 0; i < files.length; i++) {
@@ -145,7 +141,7 @@ async function execute_load_sales_data() {
             let currentFile = files[i];
 
             if (currentFile.endsWith('.csv')) {
-                numer_of_files++;
+                number_of_files++;
 
                 // Construct the full file path
                 let filePath = path.join(directory, currentFile);
@@ -172,8 +168,8 @@ async function execute_load_sales_data() {
             }
         }
 
-        // generateLogFile('loading_usat_sales_data', `Total files added = ${numer_of_files} Total rows added = ${rows_added.toLocaleString()}`, csv_export_path);
-        console.log('Files processed =', numer_of_files);
+        // generateLogFile('loading_usat_sales_data', `Total files added = ${number_of_files} Total rows added = ${rows_added.toLocaleString()}`, csv_export_path);
+        console.log('Files processed =', number_of_files);
 
         // STEP #5a: Log results
         console.log('STEP #5A: All queries executed successfully.');
@@ -195,13 +191,13 @@ async function execute_load_sales_data() {
                 console.error('Error closing connection pool:', err.message);
             } else {
                 console.log('Connection pool closed successfully.');
-                process.exit();
+                // process.exit();
             }
         });
     }
 }
 
-execute_load_sales_data();
+// execute_load_sales_data();
 
 module.exports = {
     execute_load_sales_data,
