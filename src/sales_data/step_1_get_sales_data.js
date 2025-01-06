@@ -12,8 +12,6 @@ const { forwardConfig , dbConfig, sshConfig } = require('../../utilities/config'
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { create_directory } = require('../../utilities/createDirectory');
 
-// const { query_one_day_sales } = require('../queries/sales_data/membership_financials_w_transactions_discovery_096424_new_member_6_one_day_with_fields');
-
 const { query_get_sales_data } = require('../queries/sales_data/0_get_sales_data_master_logic');
 
 const { query_one_day_sales_units_logic } = require('../queries/sales_data/5b_one_day_sales_units_logic');
@@ -178,50 +176,6 @@ async function execute_query_get_usat_sales_data(pool, membership_category_logic
 }
 
 // STEP #4 EXPORT RESULTS TO CSV FILE
-async function export_results_to_csv(results, file_name, i) {
-    console.log('STEP #4 EXPORT RESULTS TO CSV FILE', `${i}_export ${file_name}`);
-    // const startTime = performance.now(); // Start timing
-    const logPath = await determineOSPath();
-
-    if (results.length === 0) {
-        console.log('No results to export.');
-        generateLogFile('get_usat_sales_data', 'No results to export.', logPath);
-        return;
-    }
-
-    // DEFINE DIRECTORY PATH
-    const directoryName  = `usat_sales_data`;
-    const directoryPath = await create_directory(directoryName);
-
-    try {
-        const header = Object.keys(results[0]);
-
-        const csvContent = `${header.join(',')}\n${results.map(row =>
-            header.map(key => (row[key] !== null ? row[key] : 'NULL')).join(',')
-        ).join('\n')}`;
-
-        const created_at_formatted = getCurrentDateTimeForFileNaming();
-        const filePath = path.join(directoryPath, `results_${created_at_formatted}_${file_name}.csv`);
-        // console.log('File path = ', filePath);
-
-        fs.writeFileSync(filePath, csvContent);
-
-        console.log(`Results exported to ${filePath}`);
-        generateLogFile('load_big_query', `Results exported to ${filePath}`, logPath);
-
-    } catch (error) {
-        console.error(`Error exporting results to csv:`, error);
-
-        generateLogFile('load_big_query', `Error exporting results to csv: ${error}`, logPath);
-
-        console.log("----------------------------------------------");
-        console.log("EXPORT FAILED: RUNNING BACKUP STREAMING EXPORT");
-        console.log("----------------------------------------------");
-
-        export_results_to_csv_fast_csv(results, file_name, i);
-    }
-}
-
 async function export_results_to_csv_fast_csv(results, file_name, i) {
     console.log('STEP #4 EXPORT RESULTS TO CSV FILE', `${i}_export file_name`);
     const startTime = performance.now(); // Start timing
@@ -349,7 +303,7 @@ async function execute_get_sales_data() {
             },
             { 
                 year: 2012,
-                membership_period_ends: '2008-01-01 00:00:00',
+                membership_period_ends: '2008-01-01',
                 start_date: '2012-01-01 00:00:00',
                 end_date: '2012-06-30 23:59:59',
             },
@@ -550,14 +504,11 @@ async function execute_get_sales_data() {
                 const dateOnly = date_periods[i].start_date.split(' ')[0]; // convert time stamp to date only
                 let file_name_date = `${file_name}_${dateOnly}`;
 
-                // await export_results_to_csv(results, file_name_date, j); 
-                // added to catch block in export_results_to_csv
                 await export_results_to_csv_fast_csv(results, file_name_date, j); 
                 
                 console.log(file_name_date, date_periods[i].year, date_periods[i].membership_period_ends);
     
-                stopTimer(`${i}_export`);
-                
+                stopTimer(`${i}_export`);  
             }
         }
 
@@ -589,14 +540,14 @@ async function execute_get_sales_data() {
 
         console.log(`\nAll get usat sales data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
 
-        process.exit();
+        // process.exit();
 
         // return elapsedTime;
     }
 }   
 
 // Run the main function
-execute_get_sales_data();
+// execute_get_sales_data();
 
 module.exports = {
     execute_get_sales_data,

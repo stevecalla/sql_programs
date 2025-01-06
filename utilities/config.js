@@ -60,6 +60,7 @@ const local_usat_sales_db_config = {
     password: process.env.LOCAL_MYSQL_PASSWORD,
     database: process.env.LOCAL_USAT_SALES_DB,
     connectionLimit: 20,
+    multipleStatements: true // Enable multiple statements
 };
 
 module.exports = {

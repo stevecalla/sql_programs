@@ -18,10 +18,15 @@ const rl = readline.createInterface({
 });
 
 // Function to format time as HH:MM:SS
-function formatTime(totalSeconds) {
+function formatTime(totalSeconds, milliseconds) {
+
+    if (milliseconds)
+        totalSeconds = Math.floor(endTime / 1000); // Convert to seconds
+
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const secs = totalSeconds % 60;
+
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
@@ -66,4 +71,4 @@ function runTimer(i) {
 }
 
 // Export functions
-module.exports = { runTimer, stopTimer };
+module.exports = { runTimer, stopTimer, formatTime };

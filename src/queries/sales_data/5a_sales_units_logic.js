@@ -8,6 +8,7 @@ function query_sales_units_logic(year, start_date, end_date, membership_category
         SELECT 
             members.member_number AS member_number_members,
             MAX(membership_periods.id) as max_membership_period_id,
+            max_membership_fee_6_rule, -- todo: rule additional field
             -- todo: changed to real membership from prior table vs using case
             mc.real_membership_types,
             -- CASE

@@ -1,6 +1,7 @@
 const { query_source_2_logic } = require('./1_source_2_logic');
 const { query_koz_acception_logic } = require('./2_koz_acception_logic');
 const { query_actual_membership_fee_6_logic } = require('./3_actual_membership_fee_6_logic');
+const { query_actual_membership_fee_6_rule_logic } = require('./3a_actual_membership_fee_6_rule_logic');
 const { query_new_member_category_6_logic } = require('./4_new_member_category_6_logic');
 const { query_all_fields_logic } = require('./6_all_fields_logic');
 
@@ -33,6 +34,11 @@ function query_get_sales_data(query_membership_category_logic, year, start_date,
          ${query_actual_membership_fee_6_logic}
       ),
 
+      -- STEP #3a - Actual Membership Fee 6 Rule
+      actual_membership_fee_6_rule AS (
+         ${query_actual_membership_fee_6_rule_logic}
+      ),
+
       -- STEP #4 - new_member_category_6
       new_member_category_6 AS (
          ${query_new_member_category_6_logic}
@@ -49,11 +55,21 @@ function query_get_sales_data(query_membership_category_logic, year, start_date,
       append_all_fields AS (
          ${query_all_fields_logic}
       )
-            
-      SELECT * FROM append_all_fields
-      -- SELECT * FROM append_all_fields LIMIT 1
+      
+      -- RETURN ALL RECORDS
+      SELECT * FROM append_all_fields -- THIS IS THE DEFAULT
 
+      -- TESTING
+      -- SELECT * FROM append_all_fields LIMIT 1
       -- SELECT * FROM append_all_fields LIMIT 10
+
+      -- GET PRICE RULES COUNT
+      -- SELECT 
+      --    max_membership_fee_6_rule, 
+      --    COUNT(*) 
+      -- FROM append_all_fields 
+      -- GROUP BY 1 WITH ROLLUP
+      -- ORDER BY 1 -- todo: rule additional field
 
       -- GET COUNT BY YEAR
       -- SELECT
