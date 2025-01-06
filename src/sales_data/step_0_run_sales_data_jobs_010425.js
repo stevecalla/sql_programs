@@ -1,4 +1,3 @@
-const { generateLogFile } = require('../../utilities/generateLogFile');
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 const { execute_get_sales_data } = require('./step_1_get_sales_data');
@@ -22,11 +21,9 @@ async function executeSteps(stepFunctions) {
         const getResults = await stepFunction();
         const message = getResults ? `${stepName} executed successfully. Elapsed Time: ${getResults}` : `${stepName} executed successfully.`; // Modified message
         console.log(message);
-        generateLogFile('load_big_query', message);
 
       } catch (error) {
         console.error(`Error executing ${stepName}:`, error);
-        generateLogFile('load_big_query', `Error executing ${stepName}: ${error}`);
         // Decide whether to continue or break the loop here.
         // For example, to stop on the first error:
         break;
@@ -45,7 +42,6 @@ async function execute_run_sales_data_jobs() {
   const startTime = performance.now();
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
-  generateLogFile('get sales data & create sales data tables', `\n\nPROGRAM START TIME = ${startTime}`);
 
   try {
     const stepFunctions = [
@@ -58,7 +54,6 @@ async function execute_run_sales_data_jobs() {
 
   } catch (error) {
     console.error('Error in main process:', error); // More specific message
-    generateLogFile('get sales data & create sales data tables', `Error in main process: ${error}`);
     return;
   }
 
@@ -66,8 +61,6 @@ async function execute_run_sales_data_jobs() {
   const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); // converts to seconds
 
   console.log(`\nPROGRAM END TIME: ${getCurrentDateTime()}; ELASPED TIME: ${elapsedTime} sec\n`);
-
-  generateLogFile('get sales data & create sales data tables', `\nPROGRAM END TIME: ${getCurrentDateTime()}; ELASPED TIME: ${elapsedTime} sec\n`);
 
   return elapsedTime;
 }

@@ -168,7 +168,6 @@ async function execute_load_sales_data() {
             }
         }
 
-        // generateLogFile('loading_usat_sales_data', `Total files added = ${number_of_files} Total rows added = ${rows_added.toLocaleString()}`, csv_export_path);
         console.log('Files processed =', number_of_files);
 
         // STEP #5a: Log results
