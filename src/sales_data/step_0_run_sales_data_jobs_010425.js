@@ -19,11 +19,18 @@ async function executeSteps(stepFunctions) {
 
       try { // Add try/catch within the loop for individual step error handling
         const getResults = await stepFunction();
-        const message = getResults ? `${stepName} executed successfully. Elapsed Time: ${getResults}` : `${stepName} executed successfully.`; // Modified message
+
+        const message = getResults ? `SUCCESS: ${stepName} executed successfully. Elapsed Time: ${getResults}. Time now = ${now} MTN.` : `ERROR: ${stepName} NOT executed successfully. Elapsed Time: ${getResults}. Time now = ${now} MTN.`;
+
         console.log(message);
+        await slack_message_api(message, "steve_calla_slack_channel");
 
       } catch (error) {
-        console.error(`Error executing ${stepName}:`, error);
+        const error_message = `ERROR: Executing ${stepName}: ${error}. Time now = ${now} MTN.`;
+
+        console.error(error_message);
+        await slack_message_api(error_message, "steve_calla_slack_channel");
+
         // Decide whether to continue or break the loop here.
         // For example, to stop on the first error:
         break;

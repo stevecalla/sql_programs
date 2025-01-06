@@ -48,11 +48,6 @@
             // Send a follow-up message to Slack
             await sendFollowUpMessage(req.body.channel_id, req.body.channel_name, req.body.user_id, slackMessage);
             
-            // Send a success response
-            // res.status(200).json({
-            //     message: 'Membership sales queried & sent successfully.',
-            // });
-            
         } catch (error) {
             console.error('Error quering or sending membership sales data:', error);
             
