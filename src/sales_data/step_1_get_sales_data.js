@@ -254,6 +254,13 @@ async function execute_get_sales_data() {
             {
                 query: query_coaches_sales_units_logic,
                 file_name: 'coaches_sales_units',
+            },            {
+                query: query_annual_sales_units_logic,
+                file_name: 'annual_sales_units',
+            },
+            {
+                query: query_one_day_sales_units_logic,
+                file_name: 'one_day_sales_units',
             },
             {
                 query: query_annual_sales_units_logic,
@@ -529,7 +536,7 @@ async function execute_get_sales_data() {
                 console.log('\nConnection pool closed successfully.');
             }
         });
-
+        
         // LOG RESULTS
         const endTime = performance.now();
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
