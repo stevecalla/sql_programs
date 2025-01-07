@@ -8,6 +8,7 @@ const derived_fields = `
   real_membership_types_sa VARCHAR(255),
   new_member_category_6_sa VARCHAR(255),
   actual_membership_fee_6_sa DECIMAL(10,2),
+  actual_membership_fee_6_rule_sa VARCHAR(255), -- todo: rule additional field
   source_2_sa VARCHAR(255),
   is_koz_acception_sa BOOLEAN,
 `;

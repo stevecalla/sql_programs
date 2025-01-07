@@ -43,7 +43,8 @@
             await execute_load_sales_data();
 
             // STEP #3 QUERY SLACK DATA & SEND MESSAGE
-            const slackMessage = await execute_get_slack_sales_data(false);
+            const is_cron_job = false;
+            const slackMessage = await execute_get_slack_sales_data(is_cron_job);
 
             // Send a follow-up message to Slack
             await sendFollowUpMessage(req.body.channel_id, req.body.channel_name, req.body.user_id, slackMessage);
