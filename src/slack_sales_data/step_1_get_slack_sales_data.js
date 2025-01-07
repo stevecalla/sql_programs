@@ -275,7 +275,7 @@ async function export_results_to_csv_fast_csv(results, file_name, i) {
 }
 
 // Main function to handle SSH connection and execute queries
-async function execute_get_sales_data() {
+async function execute_get_slack_sales_data() {
     let pool;
     const startTime = performance.now();
     const logPath = await determineOSPath();
@@ -392,8 +392,8 @@ async function execute_get_sales_data() {
 }
 
 // Run the main function
-// execute_get_sales_data();
+// execute_get_slack_sales_data();
 
 module.exports = {
-    execute_get_sales_data,
+    execute_get_slack_sales_data,
 }

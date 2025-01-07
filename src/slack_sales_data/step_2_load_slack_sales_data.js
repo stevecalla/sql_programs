@@ -93,7 +93,7 @@ async function execute_mysql_working_query(pool, db_name, query, filePath, step_
     });
 }
 
-async function execute_load_sales_data() {
+async function execute_load_slack_sales_data() {
     let pool;
     const startTime = performance.now();
 
@@ -200,8 +200,8 @@ async function execute_load_sales_data() {
     }
 }
 
-// execute_load_sales_data();
+// execute_load_slack_sales_data();
 
 module.exports = {
-    execute_load_sales_data,
+    execute_load_slack_sales_data,
 }

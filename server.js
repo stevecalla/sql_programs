@@ -2,10 +2,13 @@
     const bodyParser = require('body-parser');
     const axios = require('axios');
 
-    // USAT SALES DATA
-    const { execute_get_sales_data } = require('./src/slack_sales_data/step_1_get_sales_data');
-    const { execute_load_sales_data } = require('./src/slack_sales_data/step_2_load_sales_data');
-    const { execute_get_slack_sales_data } = require('./src/slack_sales_data/step_3_get_slack_sales_data');
+    // USAT ALL - SALES DATA
+    const { execute_run_sales_data_jobs } = require('./src/sales_data/step_0_run_sales_data_jobs_010425');
+
+    // USAT SLACK - SALES DATA
+    const { execute_get_slack_sales_data } = require('./src/slack_sales_data/step_1_get_slack_sales_data');
+    const { execute_load_slack_sales_data } = require('./src/slack_sales_data/step_2_load_slack_sales_data');
+    const { execute_create_send_slack_sales_data } = require('./src/slack_sales_data/step_3_create_send_slack_sales_data');
 
     // SLACK SETUP
     const { WebClient } = require('@slack/web-api');
@@ -19,7 +22,39 @@
     app.use(bodyParser.urlencoded({ extended: true }));
     app.use(bodyParser.json());
 
-    // Endpoint to handle slackk slash "/sales" command
+    // **********************************
+    // ALL - DAILY SALES DATA - START
+    // **********************************
+    // Endpoint to handle crontab all usat sales data job
+    app.get('/scheduled-all-sales', async (req, res) => {
+        console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
+
+        try {
+            // GETS ALL SALES DATA, LOADS INTO MYSQL, CREATES SALES KEY METRICS
+            await execute_run_sales_data_jobs();
+
+            // Send a success response
+            res.status(200).json({
+                message: 'Membership sales queried & sent successfully.',
+            });
+        } catch (error) {
+            console.error('Error quering or sending membership sales data:', error);
+            
+            // Send an error response
+            res.status(500).json({
+                message: 'Error quering or sending membership sales data.',
+                error: error.message || 'Internal Server Error',
+            });
+        }
+    });
+    // **********************************
+    // ALL - DAILY SALES DATA - START
+    // **********************************
+
+    // **********************************
+    // SLACK - DAILY SALES DATA - START
+    // **********************************
+    // Endpoint to handle slack slash "/sales" command
     app.post('/get-member-sales', async (req, res) => {
         console.log('Received request for stats:', {
             body: req.body,
@@ -37,14 +72,14 @@
 
         try {
             // STEP #1 GET RAW SALES DATA / EXPORT TO CSV
-            await execute_get_sales_data();
+            await execute_get_slack_sales_data();
 
             // STEP #2 LOAD SALES DATA INTO DB
-            await execute_load_sales_data();
+            await execute_load_slack_sales_data();
 
             // STEP #3 QUERY SLACK DATA & SEND MESSAGE
             const is_cron_job = false;
-            const slackMessage = await execute_get_slack_sales_data(is_cron_job);
+            const slackMessage = await execute_create_send_slack_sales_data(is_cron_job);
 
             // Send a follow-up message to Slack
             await sendFollowUpMessage(req.body.channel_id, req.body.channel_name, req.body.user_id, slackMessage);
@@ -60,20 +95,20 @@
         }
     });
 
-    // Endpoint to handle crontab usat sales data job
-    app.get('/scheduled-usat-sales', async (req, res) => {
+    // Endpoint to handle crontab usat slack sales data job
+    app.get('/scheduled-slack-sales', async (req, res) => {
         console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
 
         try {
             // STEP #1 GET RAW SALES DATA / EXPORT TO CSV
-            await execute_get_sales_data();
+            await execute_get_slack_sales_data();
 
             // STEP #2 LOAD SALES DATA INTO DB
-            await execute_load_sales_data();
+            await execute_load_slack_sales_data();
 
             // STEP #3 QUERY SLACK DATA & SEND MESSAGE
             const is_cron_job = true;
-            const slackMessage = await execute_get_slack_sales_data(is_cron_job);
+            const slackMessage = await execute_create_send_slack_sales_data(is_cron_job);
 
             // Send a success response
             res.status(200).json({
@@ -89,6 +124,9 @@
             });
         }
     });
+    // **********************************
+    // SLACK - DAILY SALES DATA - START
+    // **********************************
 
     // Function to send follow-up message to Slack
     async function sendFollowUpMessage(channelId, channelName, userId, message) {
