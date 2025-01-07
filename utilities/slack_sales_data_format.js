@@ -1,7 +1,7 @@
 const { getDayOfWeek } = require('../utilities/getCurrentDate');
 const { slack_sales_data_seed } = require('./slack_seed_data');
 
-async function sortByDateAndSegment(data, dateField, segmentField) {
+async function sortByDateAndSegment(data, dateField, segmentField) {  
   // Define segment order for sorting
   const segmentOrder = {
     Bronze: 1,
@@ -228,17 +228,19 @@ async function slack_sales_data_format(data) {
     const origin_flag_category = 'origin_flag_category';
     const new_membership_type = 'new_membership_type';
 
+    const data_object = data[0];
+
     // CREATE SALES OUTPUT
     let include_total_row = false;
     include_inventory_row = false;
-    const table_output_by_new_membership_type = await create_table_output(data, new_membership_type, include_total_row, include_inventory_row);
-    const table_output_by_real_membership_type = await create_table_output(data, real_membership_types, include_total_row, include_inventory_row);
-    const table_output_by_origin_flag = await create_table_output(data, origin_flag_category, include_total_row, include_inventory_row);
+    const table_output_by_new_membership_type = await create_table_output(data_object, new_membership_type, include_total_row, include_inventory_row);
+    const table_output_by_real_membership_type = await create_table_output(data_object, real_membership_types, include_total_row, include_inventory_row);
+    const table_output_by_origin_flag = await create_table_output(data_object, origin_flag_category, include_total_row, include_inventory_row);
 
     // CREATE INCENTIVE ELIGIBLE OUTPUT
     include_total_row = true;
     include_inventory_row = true;
-    const is_eligible_data = data.filter(purchase => purchase.is_incentive_eligible);
+    const is_eligible_data = data_object.filter(purchase => purchase.is_incentive_eligible);
     const table_output_is_incentive_eligible = await create_table_output(is_eligible_data, new_membership_type, include_total_row, include_inventory_row);
 
     return { table_output_by_real_membership_type, table_output_by_origin_flag, table_output_by_new_membership_type, table_output_is_incentive_eligible };
