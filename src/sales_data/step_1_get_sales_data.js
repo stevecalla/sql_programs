@@ -18,7 +18,6 @@ const { query_one_day_sales_units_logic } = require('../queries/sales_data/5b_on
 const { query_annual_sales_units_logic } = require('../queries/sales_data/5c_annual_sales_units_logic');
 const { query_coaches_sales_units_logic } = require('../queries/sales_data/5d_coaches_sales_units_logic');
 
-const { generateLogFile } = require('../../utilities/generateLogFile');
 const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
@@ -82,10 +81,8 @@ async function deleteArchivedFiles() {
                 // Delete the file
                 fs.unlinkSync(filePath);
                 console.log(`File ${filePath} deleted successfully.`);
-                generateLogFile('get_usat_sales_data', `File ${filePath} deleted successfully.`, logPath);
             } catch (deleteErr) {
                 console.error(`Error deleting file ${filePath}:`, deleteErr);
-                generateLogFile('get_usat_sales_data', `Error deleting file ${filePath}: ${deleteErr}`, logPath);
             }
         }
     });
@@ -119,10 +116,8 @@ async function moveFilesToArchive() {
                     // Move the file to the "archive" directory
                     fs.renameSync(sourceFilePath, destinationFilePath);
                     console.log(`Archived ${file}`);
-                    // generateLogFile('get_user_data', `Archived ${file}`, logPath);
                 } catch (archiveErr) {
                     console.error(`Error moving file ${file} to archive:`, archiveErr);
-                    generateLogFile('get_user_data', `Error archive file ${file}: ${archiveErr}`, logPath);
                 }
             }
         }
@@ -162,9 +157,6 @@ async function execute_query_get_usat_sales_data(pool, membership_category_logic
         // console.table(results);
         console.log(`\nQuery results length: ${results.length}, Elapsed Time: ${elapsedTime} sec`);
 
-        // Additional operations (optional)
-        generateLogFile('get_usat_sales_data', `Query results length: ${results.length}, Elapsed Time: ${elapsedTime} sec`, logPath);
-
         return results; // Return results if needed
 
     } catch (error) {
@@ -183,7 +175,6 @@ async function export_results_to_csv_fast_csv(results, file_name, i) {
 
     if (results.length === 0) {
         console.log('No results to export.');
-        generateLogFile('get_usat_sales_data', 'No results to export.', logPath);
         return;
     }
 
@@ -232,13 +223,11 @@ async function export_results_to_csv_fast_csv(results, file_name, i) {
         console.log(`STEP #4 EXPORT RESULTS TO CSV FILE: Elapsed Time: ${elapsedTime} sec`);
 
         console.log(`Results exported to ${filePath}`);
-        generateLogFile('get_usat_sales_data', `User data exported to ${filePath}`, logPath);
 
         return;
 
     } catch (error) {
         console.error(`Error exporting results to csv:`, error);
-        generateLogFile('get_usat_sales_data', `Error exporting results to csv: ${error}`, logPath);
     } finally {
     }
 }
@@ -275,6 +264,16 @@ async function execute_get_sales_data() {
                 file_name: 'one_day_sales_units',
             },
         ];
+
+        // TEST
+        // const date_periods = [
+        //     { 
+        //         year: 2025,
+        //         membership_period_ends: '2025-01-01',
+        //         start_date: '2025-01-01 00:00:00',
+        //         end_date: '2025-01-31 23:59:59',
+        //     },
+        // ];
 
         const date_periods = [
             { 
@@ -495,8 +494,6 @@ async function execute_get_sales_data() {
                 stopTimer(`${j}_get_data`);
     
                 console.log(`File ${i + 1} of ${date_periods.length} complete.\n`);  
-    
-                generateLogFile('get_usat_sales_data', `Query for  execute_query_get_sales_data executed successfully.`, logPath);  
                 
                 // STEP #4: EXPORT RESULTS TO CSV
                 runTimer(`${i}_export`);
@@ -514,7 +511,6 @@ async function execute_get_sales_data() {
 
     } catch (error) {
         console.error('Error:', error);
-        generateLogFile('get_usat_sales_data', `Error loading user data: ${error}`, logPath);
         
     } finally {
         // CLOSE CONNECTION
@@ -540,9 +536,7 @@ async function execute_get_sales_data() {
 
         console.log(`\nAll get usat sales data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
 
-        // process.exit();
-
-        // return elapsedTime;
+        return elapsedTime;
     }
 }   
 

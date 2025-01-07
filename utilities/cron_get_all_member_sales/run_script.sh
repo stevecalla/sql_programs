@@ -6,10 +6,10 @@ start_time_readable=$(date +"%I:%M:%S %p")
 
 # PATH TO JS FILE
 # LINUX
-JS_FILE="/home/steve-calla/development/usat/sql_programs/utilities/cron_scheduled_member_sales/script.js"
+JS_FILE="/home/steve-calla/development/usat/sql_programs/utilities/cron_get_all_member_sales/script.js"
 
 # WINDOWS
-#JS_FILE="C:/Users/calla/development/usat/sql_programs/utilities/cron_scheduled_member_sales/script.js"
+#JS_FILE="C:/Users/calla/development/usat/sql_programs/utilities/cron_get_all_member_sales/script.js"
 
 # EXECUTE THE JS FILE USING NODE
 # LINUX

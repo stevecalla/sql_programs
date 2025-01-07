@@ -8,8 +8,6 @@ const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 const { create_directory } = require('../../utilities/createDirectory');
-// const { csv_export_path } = require('../../utilities/config');
-// const { generateLogFile } = require('../../utilities/generateLogFile');
 
 const { query_create_database } = require('../queries/create_drop_db_table/queries_create_db');
 const { query_drop_database, query_drop_table } = require('../queries/create_drop_db_table/queries_drop_db_tables');
@@ -195,9 +193,6 @@ async function main() {
                 stopTimer(`${i}_get_data`);
             }
         }
-
-        // generateLogFile('loading_usat_sales_data', `Total files added = ${number_of_fles} Total rows added = ${rows_added.toLocaleString()}`, csv_export_path);
-        // console.log('Files processed =', number_of_fles);
 
         // STEP #5a: Log results
         console.log('STEP #5A: All queries executed successfully.');

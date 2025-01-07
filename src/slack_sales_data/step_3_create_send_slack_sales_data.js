@@ -57,11 +57,10 @@ async function execute_query_get_sales_data(pool, query) {
     });
 }
 
-async function execute_get_slack_sales_data(is_cron_job = true) {
+async function execute_create_send_slack_sales_data(is_cron_job = true) {
     let pool;
     let results;
     const startTime = performance.now();
-
 
     try {
         // STEP #1: GET / QUERY Promo DATA & RETURN RESULTS
@@ -81,7 +80,6 @@ async function execute_get_slack_sales_data(is_cron_job = true) {
 
             // TESTING VARIABLEj
             const send_slack_to_calla = false;
-
             console.log('send slack to calla =', send_slack_to_calla);
             console.log('is cron = ', is_cron_job);
 
@@ -144,8 +142,8 @@ async function execute_get_slack_sales_data(is_cron_job = true) {
 }
 
 // Run the main function
-// execute_get_slack_sales_data();
+// execute_create_send_slack_sales_data();
 
 module.exports = {
-    execute_get_slack_sales_data,
+    execute_create_send_slack_sales_data,
 }
