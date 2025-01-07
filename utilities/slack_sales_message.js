@@ -1,5 +1,4 @@
 const { getFormattedDateAmPm } = require('../utilities/getCurrentDate');
-const { slack_sales_data_seed } = require('./slack_seed_data');
 const { slack_sales_data_format } = require('./slack_sales_data_format');
 
 // CREATE DATE INFO
@@ -72,21 +71,14 @@ async function create_slack_sales_message(data) {
 // TESTING FUNCTION
 // async function testing() {
 
-  // TEST WITH SEED DATA
-  // let slack_message = await create_slack_sales_message(slack_sales_data_seed);
-  // console.log(slack_message);
-  
-  // const { slack_message_api } = require('./slack_message_api');
-  // await slack_message_api(slack_message, "steve_calla_slack_channel");
-  
-  // TEST VIA THE API
-  // const { execute_get_daily_sales_data_seed } = require('../daily_lead_setup/step_1_sql_get_daily_sales_data_seed');
-  // let data = await execute_get_daily_sales_data_seed();
+//   // TEST WITH SEED DATA
+//   const { slack_sales_data_seed } = require('./slack_seed_data');
+//   let slack_message = await create_slack_sales_message(slack_sales_data_seed);
 
-  // let slack_message= await create_daily_lead_slack_message(data);
+//   // console.log(slack_message);
   
-  // const { slack_message_steve_calla_channel } = require('./slack_steve_calla_channel');
-  // await slack_message_steve_calla_channel(slack_message);
+//   // const { slack_message_api } = require('./slack_message_api');
+//   // await slack_message_api(slack_message, "steve_calla_slack_channel");
 // }
 
 // testing();
