@@ -265,6 +265,16 @@ async function execute_get_sales_data() {
             },
         ];
 
+        // TEST
+        // const date_periods = [
+        //     { 
+        //         year: 2025,
+        //         membership_period_ends: '2025-01-01',
+        //         start_date: '2025-01-01 00:00:00',
+        //         end_date: '2025-01-31 23:59:59',
+        //     },
+        // ];
+
         const date_periods = [
             { 
                 year: 2010,
@@ -526,9 +536,7 @@ async function execute_get_sales_data() {
 
         console.log(`\nAll get usat sales data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
 
-        // process.exit();
-
-        // return elapsedTime;
+        return elapsedTime;
     }
 }   
 

@@ -30,13 +30,14 @@
         console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
 
         try {
+            // Send a success response
+            res.status(200).json({
+                message: 'All Sales Data = get, load and create sales key metrics started succesfully.',
+            });
+
             // GETS ALL SALES DATA, LOADS INTO MYSQL, CREATES SALES KEY METRICS
             await execute_run_sales_data_jobs();
 
-            // Send a success response
-            res.status(200).json({
-                message: 'Membership sales queried & sent successfully.',
-            });
         } catch (error) {
             console.error('Error quering or sending membership sales data:', error);
             
