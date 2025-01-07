@@ -6,8 +6,8 @@ const { execute_create_sales_key_metrics } = require('./step_3_create_sales_key_
 
 const { slack_message_api } = require('../../utilities/slack_message_api');
 
-const run_step_1 = true; // get sales data
-const run_step_2 = true; // load sales data
+const run_step_1 = false; // get sales data
+const run_step_2 = false; // load sales data
 const run_step_3 = true; // create sales stats summary
 
 async function executeSteps(stepFunctions) {
@@ -27,7 +27,7 @@ async function executeSteps(stepFunctions) {
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2);
         const end_local_time = new Date().toLocaleString(); // Get the current local date and time as a string
 
-        const message = results ? `SUCCESS All Sales Data: ${stepName} executed successfully. Start time ${start_local_time} MTN. Elapsed Time: ${elapsedTime} sec. End time = ${end_local_time} MTN.` : `ERROR: ${stepName} NOT executed successfully. Start time ${start_local_time} MTN. Elapsed Time: ${elapsedTime}. Time now = ${end_local_time} MTN.`;
+        const message = results ? `${stepName} SUCCESS: All sales data executed successfully. Start time ${start_local_time} MTN. Elapsed Time: ${elapsedTime} sec. End time = ${end_local_time} MTN.` : `${stepName} ERROR: NOT executed successfully. Start time ${start_local_time} MTN. Elapsed Time: ${elapsedTime}. Time now = ${end_local_time} MTN.`;
 
         console.log(message);
         await slack_message_api(message, "steve_calla_slack_channel");
@@ -37,7 +37,7 @@ async function executeSteps(stepFunctions) {
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2);
         const end_local_time = new Date().toLocaleString(); // Get the current local date and time as a string
 
-        const skip_message = `Skipped ${stepName} All sales data due to toggle set to false. Start time ${start_local_time} MTN. Elapsed Time: ${elapsedTime} sec. End time = ${end_local_time} MTN.`;
+        const skip_message = `${stepName} SKIPPED: All sales data skipped due to toggle set to false. Start time ${start_local_time} MTN. Elapsed Time: ${elapsedTime} sec. End time = ${end_local_time} MTN.`;
 
         console.log(skip_message);
         await slack_message_api(skip_message, "steve_calla_slack_channel");
@@ -48,7 +48,7 @@ async function executeSteps(stepFunctions) {
       const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2);
       const end_local_time = new Date().toLocaleString(); // Get the current local date and time as a string
 
-      const error_message = `ERROR All Sales DAta: Executing ${stepName}: ${error}. Start time ${start_local_time} MTN. Elapsed Time: ${elapsedTime} sec. End time = ${end_local_time} MTN.`;
+      const error_message = `{stepName} ERROR: All Sales Data: ${error}. Start time ${start_local_time} MTN. Elapsed Time: ${elapsedTime} sec. End time = ${end_local_time} MTN.`;
 
       console.error(error_message);
       await slack_message_api(error_message, "steve_calla_slack_channel");
