@@ -1,19 +1,29 @@
-// const fs = require('fs');
 const fs = require('fs').promises; // Use promises API
+
 const dotenv = require('dotenv');
-dotenv.config({ path: "../../.env" }); // adding the path ensures each folder will read the .env file as necessary
+dotenv.config({ path: "../.env" });
+
+const { determineOSUser } = require('./determineOSPath');
 const connectionLimitThrottle = 30;
 
-// console.log(process.env); // double check if env variables are available
-// console.log(process.env.MYSQL_HOST); // double check if env variables are available
+// console.log(process.env);
+// console.log(process.env.MYSQL_HOST);
 
 async function getPrivateKey() {
     const isMac = process.platform === 'darwin'; // macOS
-    const isLinux = process.platform === 'linux'; // Linux
+    const isLinux = process.platform === 'linux'; // Lijnux
+    const os_user = await determineOSUser();
 
-    const privateKeyPath = isMac
-        ? process.env.SSH_PRIVATE_KEY_PATH_MAC
-        : (isLinux ? process.env.SSH_PRIVATE_KEY_PATH_LINUX : process.env.SSH_PRIVATE_KEY_PATH_WINDOWS);
+    let privateKeyPath = "";
+
+    if (isMac)
+        privateKeyPath = process.env.SSH_PRIVATE_KEY_PATH_MAC
+    else if (isLinux && os_user === "usat-server") 
+        privateKeyPath = process.env.SSH_PRIVATE_KEY_PATH_LINUX_USAT_SERVER
+    else if (isLinux && os_user === "steve-calla")
+        privateKeyPath = process.env.SSH_PRIVATE_KEY_PATH_LINUX
+    else
+        privateKeyPath = process.env.SSH_PRIVATE_KEY_PATH_WINDOWS
 
     try {
         // Check if the private key file exists

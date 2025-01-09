@@ -237,6 +237,7 @@ async function execute_get_sales_data() {
     let pool;
     const startTime = performance.now();
     const logPath = await determineOSPath();
+    console.log(logPath);
 
     try {
         // STEP #0: ENSURE FILE WAS UPDATED RECENTLY
