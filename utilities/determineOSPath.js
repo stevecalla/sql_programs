@@ -22,7 +22,7 @@ async function determineOSPath() {
     if (platform === 'darwin') {// macOS
         return csv_export_paths.mac;
     } else if (platform === 'linux') {
-        const username = determineOSUser();
+        const username = await determineOSUser();
         return csv_export_paths.linux[username] || csv_export_paths.linux['usat-server'];
     } else {// Windows
         return csv_export_paths.windows;
