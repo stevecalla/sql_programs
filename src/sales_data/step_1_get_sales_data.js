@@ -237,6 +237,7 @@ async function execute_get_sales_data() {
     let pool;
     const startTime = performance.now();
     const logPath = await determineOSPath();
+    console.log(logPath);
 
     try {
         // STEP #0: ENSURE FILE WAS UPDATED RECENTLY
@@ -254,14 +255,7 @@ async function execute_get_sales_data() {
             {
                 query: query_coaches_sales_units_logic,
                 file_name: 'coaches_sales_units',
-            },            {
-                query: query_annual_sales_units_logic,
-                file_name: 'annual_sales_units',
-            },
-            {
-                query: query_one_day_sales_units_logic,
-                file_name: 'one_day_sales_units',
-            },
+            },            
             {
                 query: query_annual_sales_units_logic,
                 file_name: 'annual_sales_units',
