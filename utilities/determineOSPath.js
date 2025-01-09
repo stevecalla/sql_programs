@@ -1,14 +1,33 @@
+const os = require('os');
 
-const csv_export_path_linux = `/home/steve-calla/development/usat/data/`;
-const csv_export_path_mac = `/Users/teamkwsc/development/usat/data/`;
-const csv_export_path_windows = `C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/data/`;
+// Define paths for different platforms and users
+const csv_export_paths = {
+    linux: {
+        'steve-calla': '/home/steve-calla/development/usat/data/',
+        'usat-server': '/home/usat-server/development/usat/data/'
+    },
+    mac: '/Users/teamkwsc/development/usat/data/',
+    windows: 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/data/'
+};
 
-async function determineOSPath() {
-    // Determine the CSV export path based on the OS
-    const isMac = process.platform === 'darwin'; // macOS
-    const isLinux = process.platform === 'linux'; // Linux
-    const os_path = isMac ? csv_export_path_mac : (isLinux ? csv_export_path_linux : csv_export_path_windows);
-    return os_path;
+async function determineOSUser() {
+    const os_user_name = os.userInfo().username;
+    return os_user_name;
 }
 
-module.exports = { determineOSPath };
+async function determineOSPath() {
+    // Get the current platform
+    const platform = process.platform;
+    
+    if (platform === 'darwin') {// macOS
+        return csv_export_paths.mac;
+    } else if (platform === 'linux') {
+        const username = determineOSUser();
+        return csv_export_paths.linux[username] || csv_export_paths.linux['usat-server'];
+    } else {// Windows
+        return csv_export_paths.windows;
+    }
+}
+
+module.exports = { determineOSPath, determineOSUser };
+
