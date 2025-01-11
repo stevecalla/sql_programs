@@ -522,6 +522,7 @@ async function execute_get_sales_data() {
     } finally {
         if (pool) await pool.end();
         const endTime = performance.now();
+        const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
         console.log(`Elapsed time: ${((endTime - startTime) / 1000).toFixed(2)} sec`);
 
         // Clear the lock file at the end
@@ -544,6 +545,8 @@ async function execute_get_sales_data() {
         date_periods = null;
 
         if (global.gc) global.gc();
+
+        return elapsedTime;
     }
 }
 
