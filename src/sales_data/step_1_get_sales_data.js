@@ -8,14 +8,14 @@ const fastcsv = require('fast-csv');
 
 const { Client } = require('ssh2');
 const sshClient = new Client();
-const { forwardConfig , dbConfig, sshConfig } = require('../../utilities/config');
+const { forwardConfig, dbConfig, sshConfig } = require('../../utilities/config');
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { create_directory } = require('../../utilities/createDirectory');
 
 const { query_get_sales_data } = require('../queries/sales_data/0_get_sales_data_master_logic');
 
-const { generate_monthly_date_periods } = require('./data_query_criteria/generate_date_periods');
-const { generate_membership_category_logic } = require('./data_query_criteria/generate_membership_category_logic ');
+const { generate_monthly_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods_by_month');
+const { generate_membership_category_logic } = require('../../utilities/data_query_criteria/generate_membership_category_logic');
 
 const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
 const { runTimer, stopTimer } = require('../../utilities/timer');
@@ -418,7 +418,7 @@ async function execute_get_sales_data() {
     let offset = 0;
     const retrieval_batch_size = 30000; // Retrieve 30,000 records at a time
     const write_batch_size = 1000; // Write 1,000 records at a time
-    const start_year = 2025; // Default = 2025
+    const start_year = 2010; // Default = 2025
 
     let membership_category_logic = generate_membership_category_logic;
     let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2025

@@ -6,8 +6,11 @@
     const { execute_run_sales_data_jobs } = require('./src/sales_data/step_0_run_sales_data_jobs_010425');
 
     // USAT SLACK - SALES DATA
-    const { execute_get_slack_sales_data } = require('./src/slack_sales_data/step_1_get_slack_sales_data');
-    const { execute_load_slack_sales_data } = require('./src/slack_sales_data/step_2_load_slack_sales_data');
+    const { execute_run_slack_sales_data_jobs } = require('./src/slack_sales_data/step_0_run_slack_sales_data_jobs_01125');
+
+    // const { execute_get_slack_sales_data } = require('./src/slack_sales_data/step_1_get_slack_sales_data');
+    // const { execute_load_slack_sales_data } = require('./src/slack_sales_data/step_2_load_slack_sales_data');
+
     const { execute_create_send_slack_sales_data } = require('./src/slack_sales_data/step_3_create_send_slack_sales_data');
 
     // SLACK SETUP
@@ -49,7 +52,7 @@
         }
     });
     // **********************************
-    // ALL - DAILY SALES DATA - START
+    // ALL - DAILY SALES DATA - END
     // **********************************
 
     // **********************************
@@ -61,7 +64,7 @@
             body: req.body,
             headers: req.headers,
         });
-        console.log('/get-leads route req.rawHeaders = ', req.rawHeaders);
+        console.log('/get-sales route req.rawHeaders = ', req.rawHeaders);
 
         // Acknowledge the command from Slack immediately to avoid a timeout
         const processingMessage = "Retrieving member sales. Will respond in about 30 seconds.";
@@ -73,10 +76,8 @@
 
         try {
             // STEP #1 GET RAW SALES DATA / EXPORT TO CSV
-            await execute_get_slack_sales_data();
-
             // STEP #2 LOAD SALES DATA INTO DB
-            await execute_load_slack_sales_data();
+            await execute_run_slack_sales_data_jobs();
 
             // STEP #3 QUERY SLACK DATA & SEND MESSAGE
             const is_cron_job = false;
@@ -102,14 +103,12 @@
 
         try {
             // STEP #1 GET RAW SALES DATA / EXPORT TO CSV
-            await execute_get_slack_sales_data();
-
             // STEP #2 LOAD SALES DATA INTO DB
-            await execute_load_slack_sales_data();
+            await execute_run_slack_sales_data_jobs();
 
             // STEP #3 QUERY SLACK DATA & SEND MESSAGE
             const is_cron_job = true;
-            const slackMessage = await execute_create_send_slack_sales_data(is_cron_job);
+            await execute_create_send_slack_sales_data(is_cron_job);
 
             // Send a success response
             res.status(200).json({
@@ -126,7 +125,7 @@
         }
     });
     // **********************************
-    // SLACK - DAILY SALES DATA - START
+    // SLACK - DAILY SALES DATA - END
     // **********************************
 
     // Function to send follow-up message to Slack

@@ -8,20 +8,18 @@ const fastcsv = require('fast-csv');
 
 const { Client } = require('ssh2');
 const sshClient = new Client();
-const { forwardConfig , dbConfig, sshConfig } = require('../../utilities/config');
+const { forwardConfig, dbConfig, sshConfig } = require('../../utilities/config');
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { create_directory } = require('../../utilities/createDirectory');
 
-// const { query_one_day_sales } = require('../queries/sales_data/membership_financials_w_transactions_discovery_096424_new_member_6_one_day_with_fields');
-
 const { query_get_sales_data } = require('../queries/sales_data/0_get_sales_data_master_logic');
 
-const { query_one_day_sales_units_logic } = require('../queries/sales_data/5b_one_day_sales_units_logic');
-const { query_annual_sales_units_logic } = require('../queries/sales_data/5c_annual_sales_units_logic');
-const { query_coaches_sales_units_logic } = require('../queries/sales_data/5d_coaches_sales_units_logic');
+const { generate_monthly_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods_by_month');
+const { generate_membership_category_logic } = require('../../utilities/data_query_criteria/generate_membership_category_logic');
 
 const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
 const { runTimer, stopTimer } = require('../../utilities/timer');
+const { generate_date_periods_last_7_days } = require('../../utilities/data_query_criteria/generate_date_periods_last_7_days');
 
 // Function to create a Promise for managing the SSH connection and MySQL queries
 async function createSSHConnection() {
@@ -130,15 +128,14 @@ async function moveFilesToArchive() {
 }
 
 // STEP #3: GET / QUERY USER DATA & RETURN RESULTS
-async function execute_query_get_usat_sales_data(pool, membership_category_logic, i, year, start_date, end_date, membership_period_ends) {
-    const startTime = performance.now(); // Start timing
-    const logPath = await determineOSPath();
+async function execute_query_get_usat_sales_data_batch(pool, membership_category_logic, year, start_date, end_date, membership_period_ends, offset, batch_size) {
+    const startTime = performance.now();
 
     try {
         // Wrap pool.query in a promise
         const results = await new Promise((resolve, reject) => {
             // const query = query_one_day_sales;
-            const query = query_get_sales_data(membership_category_logic, year, start_date, end_date, membership_period_ends);
+            const query = query_get_sales_data(membership_category_logic, year, start_date, end_date, membership_period_ends, offset, batch_size);
             // console.log('query =', query);
 
             pool.query(query, (queryError, results) => {
@@ -170,58 +167,17 @@ async function execute_query_get_usat_sales_data(pool, membership_category_logic
 }
 
 // STEP #4 EXPORT RESULTS TO CSV FILE
-async function export_results_to_csv(results, file_name, i) {
-    console.log('STEP #4 EXPORT RESULTS TO CSV FILE', `${i}_export ${file_name}`);
-    // const startTime = performance.now(); // Start timing
-    const logPath = await determineOSPath();
-
-    if (results.length === 0) {
-        console.log('No results to export.');
-        return;
-    }
-
-    // DEFINE DIRECTORY PATH
-    const directoryName  = `usat_slack_sales_data`;
-    const directoryPath = await create_directory(directoryName);
-
-    try {
-        const header = Object.keys(results[0]);
-
-        const csvContent = `${header.join(',')}\n${results.map(row =>
-            header.map(key => (row[key] !== null ? row[key] : 'NULL')).join(',')
-        ).join('\n')}`;
-
-        const created_at_formatted = getCurrentDateTimeForFileNaming();
-        const filePath = path.join(directoryPath, `results_${created_at_formatted}_${file_name}.csv`);
-        // console.log('File path = ', filePath);
-
-        fs.writeFileSync(filePath, csvContent);
-
-        console.log(`Results exported to ${filePath}`);
-
-    } catch (error) {
-        console.error(`Error exporting results to csv:`, error);
-
-        console.log("----------------------------------------------");
-        console.log("EXPORT FAILED: RUNNING BACKUP STREAMING EXPORT");
-        console.log("----------------------------------------------");
-
-        export_results_to_csv_fast_csv(results, file_name, i);
-    }
-}
-
-async function export_results_to_csv_fast_csv(results, file_name, i) {
+async function export_generator_results_to_csv_fast_csv(results, file_name, i) {
     console.log('STEP #4 EXPORT RESULTS TO CSV FILE', `${i}_export file_name`);
     const startTime = performance.now(); // Start timing
-    const logPath = await determineOSPath();
 
-    if (results.length === 0) {
+    if (!results || results.length === 0) {
         console.log('No results to export.');
         return;
     }
 
     // DEFINE DIRECTORY PATH
-    const directoryName  = `usat_slack_sales_data`;
+    const directoryName = `usat_slack_sales_data`;
     const directoryPath = await create_directory(directoryName);
 
     try {
@@ -230,24 +186,29 @@ async function export_results_to_csv_fast_csv(results, file_name, i) {
         // Create file path with timestamp
         const created_at_formatted = getCurrentDateTimeForFileNaming();
         const filePath = path.join(directoryPath, `results_${created_at_formatted}_${file_name}.csv`);
-        // console.log('File path = ', filePath);
 
         // Create a writable stream to the file
         const writeStream = fs.createWriteStream(filePath);
-        
+
         // Create a fast-csv stream
         const csvStream = fastcsv.format({ headers: true });
-        
+
         // Pipe the csv stream to the writable stream
         csvStream.pipe(writeStream);
 
-        // Write the rows
-        results.forEach(row => {
-            csvStream.write(header.reduce((acc, key) => ({
-                ...acc,
-                [key]: row[key] !== null ? row[key] : 'NULL'
-            }), {}));
-        });
+        // Use a generator function to yield rows one at a time
+        function* rowGenerator(rows) {
+            for (const row of rows) {
+                yield header.reduce((acc, key) => ({
+                    ...acc,
+                    [key]: row[key] !== null ? row[key] : 'NULL'
+                }), {});
+            }
+        }
+
+        for (const row of rowGenerator(results)) {
+            csvStream.write(row);
+        }
 
         // End the CSV stream
         csvStream.end();
@@ -262,7 +223,7 @@ async function export_results_to_csv_fast_csv(results, file_name, i) {
         const endTime = performance.now();
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); // Convert ms to sec
 
-        console.log(`STEP #4 EXPORT RESULTS TO CSV FILE: Elapsed Time: ${elapsedTime} sec`);
+        console.log(`STEP #4 Elapsed Time: ${elapsedTime} sec`);
 
         console.log(`Results exported to ${filePath}`);
 
@@ -270,129 +231,329 @@ async function export_results_to_csv_fast_csv(results, file_name, i) {
 
     } catch (error) {
         console.error(`Error exporting results to csv:`, error);
-    } finally {
     }
 }
 
+async function processResultsInBatches(results, batchSize, processFunction) {
+    for (let start = 0; start < results.length; start += batchSize) {
+
+        const batch = results.slice(start, start + batchSize);
+
+        console.log('start =', start + '; batchSize =', batchSize + '; batch =', batch.length + '; start + batchSize = ', start + batchSize);
+
+        await processFunction(batch);
+    }
+
+    // CLEAR MEMORY
+    results = null;
+    batchSize = null;
+    processFunction = null;
+    
+    // console.log('Before GC BATCH PROCESS:', process.memoryUsage());
+    if (global.gc) global.gc();
+    // console.log('After GC BATCH PROCESS:', process.memoryUsage());
+}
+
 // Main function to handle SSH connection and execute queries
-async function execute_get_slack_sales_data() {
+// OFFSET & BATCH = USES OFFSET / BATCH TO PROCESS SMALLER QUERY RESULTS & WRITE TO CSV
+async function execute_get_slack_sales_data_works() {
     let pool;
     const startTime = performance.now();
-    const logPath = await determineOSPath();
+    console.log('Before GC FUNCTION START:', process.memoryUsage());
+
+    let results;
+    let offset = 0;
+    const retrieval_batch_size = 30000; // Retrieve 10,000 records at a time
+    const write_batch_size = 1000; // Write 1,000 records at a time
+    const start_year = 2010; // Default = 2010
+
+    let membership_category_logic = generate_membership_category_logic;
+    let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2025
 
     try {
         // STEP #0: ENSURE FILE WAS UPDATED RECENTLY
 
         // STEP #1: DELETE PRIOR FILES
-        await deleteArchivedFiles(); //todo:
+        await deleteArchivedFiles();
 
         // STEP #2 - MOVE FILES TO ARCHIVE
-        await moveFilesToArchive(); //todo:
+        await moveFilesToArchive();
 
-        // STEP #3: GET / QUERY USER DATA & RETURN RESULTS
         pool = await createSSHConnection();
-
-        const membership_category_logic = [
-            {
-                query: query_coaches_sales_units_logic,
-                file_name: 'coaches_sales_units',
-            },
-            {
-                query: query_annual_sales_units_logic,
-                file_name: 'annual_sales_units',
-            },
-            {
-                query: query_one_day_sales_units_logic,
-                file_name: 'one_day_sales_units',
-            },
-        ];
-
-        const date_periods = [
-            { 
-                year: 2024,
-                membership_period_ends: '2008-01-01',
-                start_date: '2024-11-22 00:00:00',
-                end_date: '2024-12-31 23:59:59',
-            },
-            { 
-                year: 2025,
-                membership_period_ends: '2008-01-01',
-                start_date: '2025-01-01 00:00:00',
-                end_date: '2025-06-30 23:59:59',
-            },
-            { 
-                year: 2025,
-                membership_period_ends: '2008-01-01',
-                start_date: '2025-07-01 00:00:00',
-                end_date: '2025-12-31 23:59:59', // set to the next day because the comparison is based on the time stamp not the date
-            },
-        ];
 
         for (let i = 0; i < date_periods.length; i++) {
             for (let j = 0; j < membership_category_logic.length; j++) {
-                runTimer(`${j}_get_data`);
+                offset = 0; // Reset offset
 
-                let { query, file_name } = membership_category_logic[j];
-                // console.log(query);
+                const { query, file_name } = membership_category_logic[j];
+                const year = date_periods[i].year;
+                const start_date = date_periods[i].start_date;
+                const start_date_time = date_periods[i].start_date_time;
+                const end_date_time = date_periods[i].end_date_time;
+                const membership_period_ends = date_periods[i].membership_period_ends;
 
-                results = await execute_query_get_usat_sales_data(pool, query, j, date_periods[i].year, date_periods[i].start_date, date_periods[i].end_date, date_periods[i].membership_period_ends);
+                console.log('start_date_time = ', start_date_time + '; end_date_time = ', end_date_time);
+                console.log('membership file name = ', file_name);
 
-                stopTimer(`${j}_get_data`);
-    
-                console.log(`File ${i + 1} of ${date_periods.length} complete.\n`);  
+                do {
+                    runTimer(`${i}_get_data`);
                 
-                // STEP #4: EXPORT RESULTS TO CSV
-                runTimer(`${i}_export`);
+                    // Retrieve data in batches of 10,000 records
+                    results = await execute_query_get_usat_sales_data_batch(
+                        pool,
+                        query,
+                        year,
+                        start_date_time,
+                        end_date_time,
+                        membership_period_ends,
+                        offset,
+                        retrieval_batch_size
+                    );
 
-                const dateOnly = date_periods[i].start_date.split(' ')[0]; // convert time stamp to date only
-                let file_name_date = `${file_name}_${dateOnly}`;
+                    console.log('GET DATA: Results length = ', results.length + '; offset = ', offset);
 
-                // await export_results_to_csv(results, file_name_date, j); 
-                // added to catch block in export_results_to_csv
-                await export_results_to_csv_fast_csv(results, file_name_date, j); 
-                
-                console.log(file_name_date, date_periods[i].year, date_periods[i].membership_period_ends);
-    
-                stopTimer(`${i}_export`);
-                
+                    offset += retrieval_batch_size;
+
+                    stopTimer(`${i}_get_data`);
+
+                    let batchCounter = 0; // Initialize a batch counter
+
+                    await processResultsInBatches(results, write_batch_size, async (batch) => {
+                        // Increment the batch counter for each batch
+                        batchCounter++;
+
+                        // Generate a unique file name for this batch
+                        let file_name_date = `${file_name}_${start_date}_batch_${batchCounter}`;
+
+                        console.log(`Exporting batch ${batchCounter} to file: ${file_name_date}`);
+
+                        await export_generator_results_to_csv_fast_csv(batch, file_name_date, j);
+                    });
+
+                    // Clear memory if needed
+                    if (global.gc) global.gc();
+
+                } while (results.length > 0);
+            }
+        }
+    } catch (error) {
+        console.error('Error:', error);
+    } finally {
+        if (pool) await pool.end();
+        const endTime = performance.now();
+        console.log(`Elapsed time: ${((endTime - startTime) / 1000).toFixed(2)} sec`);
+
+        // Clear memory
+        results = null;
+        membership_category_logic = null;
+        date_periods = null;
+
+        if (global.gc) global.gc();
+    }
+}
+
+const tempDir = path.join(__dirname, 'temp'); // Directory for temporary files
+if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir);
+}
+
+const dateIndexFilePath = path.join(tempDir, 'date_periods_indices.txt'); // File to track processed indices
+const dateIndexLockFilePath = path.join(tempDir, 'date_periods_index_lock.txt'); // Lock file to ensure single initialization
+const moveDeleteLockPath = path.join(tempDir, 'move_delete_lock.txt'); // Lock file to ensure single initialization
+
+// Function to initialize the index file (Only once)
+function initializeIndexFile() {
+    if (!fs.existsSync(dateIndexLockFilePath)) {
+        try {
+            // Acquire a lock by creating the lock file
+            fs.writeFileSync(dateIndexLockFilePath, 'lock', { flag: 'wx' });
+
+            // Initialize the index file (create or clear it)
+            if (!fs.existsSync(dateIndexFilePath)) {
+                fs.writeFileSync(dateIndexFilePath, '', { flag: 'w' });
+                console.log('Index file created and initialized.');
+            } else {
+                console.log('Index file already exists.');
+            }
+        } catch (err) {
+            console.error('Error initializing index file:', err);
+        } finally {
+            // Release the lock
+            // if (fs.existsSync(dateIndexLockFilePath)) {
+            //     fs.unlinkSync(dateIndexLockFilePath);
+            // }
+        }
+    } else {
+        console.log('Another process is initializing the index file. Skipping...');
+    }
+}
+
+// Function to check if an index is already processed (Sync)
+function isIndexProcessedSync(dateIndexFilePath, index) {
+    try {
+        const data = fs.readFileSync(dateIndexFilePath, 'utf-8');
+        const processedIndices = data.split('\n').filter((line) => line.trim() !== '').map(Number);
+        return processedIndices.includes(index);
+    } catch (err) {
+        console.error('Error reading index file:', err);
+        return false;
+    }
+}
+
+// Function to mark an index as processed (Sync)
+function markIndexAsProcessedSync(dateIndexFilePath, index) {
+    try {
+        fs.appendFileSync(dateIndexFilePath, `${index}\n`, { flag: 'a' }); // Append index to the file
+        console.log(`Index ${index} marked as processed.`);
+    } catch (err) {
+        console.error(`Error marking index ${index} as processed:`, err);
+    }
+}
+
+async function execute_get_slack_sales_data() {
+    let pool;
+    const startTime = performance.now();
+    // console.log('Before GC FUNCTION START:', process.memoryUsage());
+
+    let results;
+    let offset = 0;
+    const retrieval_batch_size = 30000; // Retrieve 30,000 records at a time
+    const write_batch_size = 1000; // Write 1,000 records at a time
+    // const start_year = 2025; // Default = 2025
+
+    let membership_category_logic = generate_membership_category_logic;
+    // let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2025
+    let date_periods = await generate_date_periods_last_7_days();
+
+    // Initialize the index file (only once, even in parallel processes)
+    initializeIndexFile();
+
+    try {
+        // Ensure delete and move operations are only executed once
+        if (!fs.existsSync(moveDeleteLockPath)) {
+            console.log("Executing delete and move files operations...");
+
+            // Create the lock file to indicate operations are in progress
+            fs.writeFileSync(moveDeleteLockPath, 'lock', { flag: 'wx' });
+
+            // Execute once-only functions
+            await deleteArchivedFiles();
+            await moveFilesToArchive();
+
+            // Update the lock file to indicate operations are complete
+            fs.writeFileSync(moveDeleteLockPath, 'done');
+        } else {
+            console.log("Delete and move operations already completed or in progress.");
+        }
+
+        pool = await createSSHConnection();
+
+        for (let i = 0; i < date_periods.length; i++) {
+            const isProcessed = isIndexProcessedSync(dateIndexFilePath, i);
+            console.log('is processed ', isProcessed);
+
+            if (isProcessed) {
+                console.log(`Skipping already processed index ${i}`);
+                continue; // Skip already processed indices
+            }
+
+            // Mark the current index as processed synchronously
+            markIndexAsProcessedSync(dateIndexFilePath, i);
+            console.log('mark index');
+
+            const date_period = date_periods[i];
+
+            console.log('date period =', date_period);
+
+            for (let j = 0; j < membership_category_logic.length; j++) {
+                offset = 0;
+
+                const { query, file_name } = membership_category_logic[j];
+                const year = date_period.year;
+                const start_date = date_period.start_date;
+                const start_date_time = date_period.start_date_time;
+                const end_date_time = date_period.end_date_time;
+                const membership_period_ends = date_period.membership_period_ends;
+
+                console.log(`Processing date period index ${i}:`, start_date_time, '-', end_date_time);
+
+                do {
+                    runTimer(`${i}_get_data`);
+
+                    // Retrieve data in batches of 10,000 records
+                    results = await execute_query_get_usat_sales_data_batch(
+                        pool,
+                        query,
+                        year,
+                        start_date_time,
+                        end_date_time,
+                        membership_period_ends,
+                        offset,
+                        retrieval_batch_size
+                    );
+
+                    console.log('GET DATA: Results length = ', results.length + '; offset = ', offset);
+
+                    offset += retrieval_batch_size;
+
+                    stopTimer(`${i}_get_data`);
+
+                    let batchCounter = 0; // Initialize a batch counter
+
+                    await processResultsInBatches(results, write_batch_size, async (batch) => {
+                        // Increment the batch counter for each batch
+                        batchCounter++;
+
+                        // Generate a unique file name for this batch
+                        let file_name_date = `${file_name}_${start_date}_batch_${batchCounter}`;
+
+                        console.log(`Exporting batch ${batchCounter} to file: ${file_name_date}`);
+
+                        await export_generator_results_to_csv_fast_csv(batch, file_name_date, j);
+                    });
+
+                    // Clear memory if needed
+                    if (global.gc) global.gc();
+                    
+                } while (results.length > 0);
             }
         }
 
     } catch (error) {
-        console.error('Error:', error);
-        
+        console.error('Error #1: ', error);
     } finally {
-        // CLOSE CONNECTION
-        await sshClient.end(err => {
-            if (err) {
-              console.error('Error closing SSH connection pool:', err.message);
-            } else {
-              console.log('\nSSH Connection pool closed successfully.');
-            }
-          });
-  
-        await pool.end(err => {
-            if (err) {
-                console.error('Error closing connection pool:', err.message);
-            } else {
-                console.log('\nConnection pool closed successfully.');
-            }
-        });
-
-        // LOG RESULTS
+        if (pool) await pool.end();
         const endTime = performance.now();
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
+        console.log(`Elapsed time: ${((endTime - startTime) / 1000).toFixed(2)} sec`);
 
-        console.log(`\nAll get usat sales data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
+        // Clear the lock file at the end
+        if (fs.existsSync(dateIndexLockFilePath)) {
+            fs.unlinkSync(dateIndexLockFilePath);
+        }
 
-        // process.exit();
+        if (fs.existsSync(moveDeleteLockPath)) {
+            fs.unlinkSync(moveDeleteLockPath);
+        }
 
-        // return elapsedTime;
+        if (fs.existsSync(dateIndexFilePath)) {
+            fs.unlinkSync(dateIndexFilePath);
+        }
+
+        // Clear memory
+        results = null;
+        offset = null;
+        membership_category_logic = null;
+        date_periods = null;
+
+        if (global.gc) global.gc();
+
+        return elapsedTime;
     }
 }
 
 // Run the main function
-// execute_get_slack_sales_data();
+// execute_get_sales_data();
 
 module.exports = {
     execute_get_slack_sales_data,
