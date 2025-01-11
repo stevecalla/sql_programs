@@ -7,17 +7,11 @@ const { query_all_fields_logic } = require('./6_all_fields_logic');
 
 const { query_sales_units_logic } = require('./5a_sales_units_logic');
 
-// const year = 2019;
-// const membership_period_ends = '2019-01-01';
-
-// const year = 2021; // todo:
-// const membership_period_ends = '2022-01-01'; // todo:
-
 // const operator = '=';
 const operator = '>=';
 
-// const query_get_sales_data = 
-function query_get_sales_data(query_membership_category_logic, year, start_date, end_date, membership_period_ends) {
+function query_get_sales_data(query_membership_category_logic, year, start_date, end_date, membership_period_ends, offset, batch_size) {
+   
    return `
       -- STEP #1 - CREATE SOURCE 2
       WITH source_2_type AS (
@@ -57,7 +51,12 @@ function query_get_sales_data(query_membership_category_logic, year, start_date,
       )
       
       -- RETURN ALL RECORDS
-      SELECT * FROM append_all_fields -- THIS IS THE DEFAULT
+      -- SELECT * FROM append_all_fields -- THIS IS THE DEFAULT
+
+      SELECT *
+      FROM append_all_fields
+      ORDER BY id_membership_periods_sa
+      LIMIT ${batch_size} OFFSET ${offset};
 
       -- TESTING
       -- SELECT * FROM append_all_fields LIMIT 1

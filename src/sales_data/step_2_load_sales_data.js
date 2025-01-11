@@ -1,7 +1,8 @@
 const fsp = require('fs').promises; // promses necessary for "fs.readdir"
-const dotenv = require('dotenv');
-dotenv.config({ path: "../../.env" });
 const path = require('path');
+const dotenv = require('dotenv');
+dotenv.config();
+
 
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
@@ -78,8 +79,8 @@ async function execute_mysql_working_query(pool, db_name, query, filePath, rows_
 
                     reject(queryError);
                 } else {
-                    console.table(results);
-                    console.log(`Query results: ${results.info}, Elapsed Time: ${elapsedTime} sec\n`);
+                    // console.table(results);
+                    // console.log(`Query results: ${results.info}, Elapsed Time: ${elapsedTime} sec\n`);
 
                     rows_added = parseInt(results.affectedRows);
                     resolve(rows_added);
@@ -97,10 +98,12 @@ async function execute_load_sales_data() {
         // STEP #0: CREATE CONNECTION
         pool = await create_connection();
 
-        const db_name = `usat_sales_db`;
-        console.log(db_name);
+        // console.log(pool);
 
-        // STEP #1: CREATE DATABASE - ONLY NEED TO CREATE DB INITIALLY
+        const db_name = `usat_sales_db`;
+        console.log(`\ndb_name`);
+
+        // // STEP #1: CREATE DATABASE - ONLY NEED TO CREATE DB INITIALLY
         const drop_db = false; // normally don't drop db
         drop_db && await execute_mysql_working_query(pool, db_name, query_drop_database(db_name), `STEP #1.0: DROP DB`);
 
@@ -111,6 +114,7 @@ async function execute_load_sales_data() {
             const { table_name, create_query, step, step_info } = table;
 
             const drop_query = await query_drop_table(table_name);
+            console.log(`\n${drop_query}`);
 
             const drop_info = `${step} DROP ${step_info.toUpperCase()} TABLE`;
             const create_info = `${step} CREATE ${step_info.toUpperCase()} TABLE`;
@@ -136,7 +140,7 @@ async function execute_load_sales_data() {
         // Iterate through each file
         for (let i = 0; i < files.length; i++) {
 
-            runTimer(`${i}_get_data`);
+            // runTimer(`${i}_get_data`);
 
             let currentFile = files[i];
 
@@ -164,7 +168,7 @@ async function execute_load_sales_data() {
                 console.log(`File ${i} of ${files.length}`);
                 console.log(`Rows added = ${rows_added}\n`);
 
-                stopTimer(`${i}_get_data`);
+                // stopTimer(`${i}_get_data`);
             }
         }
 

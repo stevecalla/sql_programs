@@ -168,7 +168,7 @@
     app.listen(PORT, () => {
         console.log(`Server is running on http://localhost:${PORT}`);
 
-        console.log(`Tunnel using cloudflare https://usat-sales.kidderwise.org/get-member-sales`)
+        console.log(`Tunnel using cloudflare https://usat.kidderwise.org/get-member-sales`)
 
         // switched to cloudflare; see notes.txt
 
