@@ -418,7 +418,7 @@ async function execute_get_sales_data() {
     let offset = 0;
     const retrieval_batch_size = 30000; // Retrieve 30,000 records at a time
     const write_batch_size = 1000; // Write 1,000 records at a time
-    const start_year = 2010; // Default = 2025
+    const start_year = 2025; // Default = 2025
 
     let membership_category_logic = generate_membership_category_logic;
     let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2025
@@ -448,6 +448,7 @@ async function execute_get_sales_data() {
 
         for (let i = 0; i < date_periods.length; i++) {
             const isProcessed = isIndexProcessedSync(dateIndexFilePath, i);
+            console.log('is processed ', isProcessed);
 
             if (isProcessed) {
                 console.log(`Skipping already processed index ${i}`);
@@ -456,8 +457,11 @@ async function execute_get_sales_data() {
 
             // Mark the current index as processed synchronously
             markIndexAsProcessedSync(dateIndexFilePath, i);
+            console.log('mark index');
 
             const date_period = date_periods[i];
+
+            console.log('date period =', date_period);
 
             for (let j = 0; j < membership_category_logic.length; j++) {
                 offset = 0;
@@ -514,7 +518,7 @@ async function execute_get_sales_data() {
         }
 
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Error #1: ', error);
     } finally {
         if (pool) await pool.end();
         const endTime = performance.now();
