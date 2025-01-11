@@ -46,26 +46,30 @@ module.exports = {
 //     {
 //         year: 2025,
 //         membership_period_ends: '2008-01-01',
-//         start_date: '2025-10-01 00:00:00',
-//         end_date: '2025-10-31 23:59:59'
+//         state_date: '2025-10-01'
+//         start_date_time: '2025-10-01 00:00:00',
+//         end_date_time_time: '2025-10-31 23:59:59'
 //     },
 //     {
 //         year: 2025,
 //         membership_period_ends: '2008-01-01',
-//         start_date: '2025-11-01 00:00:00',
-//         end_date: '2025-11-30 23:59:59'
+//         state_date: '2025-11-01'
+//         start_date_time: '2025-11-01 00:00:00',
+//         end_date_time: '2025-11-30 23:59:59'
 //     },
 //     {
 //         year: 2025,
 //         membership_period_ends: '2008-01-01',
-//         start_date: '2025-12-01 00:00:00',
-//         end_date: '2025-12-31 23:59:59'
+//         state_date: '2025-12-01'
+//         start_date_time: '2025-12-01 00:00:00',
+//         end_date_time: '2025-12-31 23:59:59'
 //     },
 //     {
 //         year: 2026,
 //         membership_period_ends: '2008-01-01',
-//         start_date: '2026-01-01 00:00:00',
-//         end_date: '2026-01-31 23:59:59'
+//         state_date: '2026-01-01'
+//         start_date_time: '2026-01-01 00:00:00',
+//         end_date_time: '2026-01-31 23:59:59'
 //     }
 // ]
 

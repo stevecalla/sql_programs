@@ -14,7 +14,7 @@ const { create_directory } = require('../../utilities/createDirectory');
 
 const { query_get_sales_data } = require('../queries/sales_data/0_get_sales_data_master_logic');
 
-const { generate_monthly_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
+const { generate_monthly_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods_by_month');
 const { generate_membership_category_logic } = require('../../utilities/data_query_criteria/generate_membership_category_logic');
 
 const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
