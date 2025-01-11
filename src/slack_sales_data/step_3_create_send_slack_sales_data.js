@@ -91,7 +91,7 @@ async function execute_create_send_slack_sales_data(is_cron_job = true) {
                 await slack_message_api(slack_message, "daily_sales_bot_slack_channel");
             }
 
-            // STEP #5: RETURN SLACK MESSAGE TO SLASH ROUTE /get-member-sales TO RESPOND
+            // STEP #5: RETURN SLACK MESSAGE TO SLASH ROUTE /get-member-sales
             return slack_message;
 
         } else {

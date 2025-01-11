@@ -186,8 +186,7 @@ async function execute_load_slack_sales_data() {
         const endTime = performance.now();
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
         console.log(`\nSTEP #5C = TIME LOG. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
-        // return elapsedTime;
-
+        
         // STEP #6: CLOSE CONNECTION/POOL
         await pool.end(err => {
             if (err) {
@@ -197,6 +196,8 @@ async function execute_load_slack_sales_data() {
                 // process.exit();
             }
         });
+
+        return elapsedTime;
     }
 }
 
