@@ -3,7 +3,6 @@ const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config();
 
-
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
@@ -11,11 +10,12 @@ const { create_directory } = require('../../utilities/createDirectory');
 
 const { query_create_database } = require('../queries/create_drop_db_table/queries_create_db');
 const { query_drop_database, query_drop_table } = require('../queries/create_drop_db_table/queries_drop_db_tables');
+const { query_create_all_membership_sales_table } = require('../queries/create_drop_db_table/query_create_sales_table');
 const { query_load_sales_data } = require('../queries/load_data/query_load_sales_data');
 
-const { tables_library } = require('../queries/create_drop_db_table/query_create_sales_table');
+// const { tables_library } = require('../queries/create_drop_db_table/query_create_sales_table');
 
-const { runTimer, stopTimer } = require('../../utilities/timer');
+// const { runTimer, stopTimer } = require('../../utilities/timer');
 
 // Connect to MySQL
 async function create_connection() {
@@ -109,19 +109,19 @@ async function execute_load_sales_data() {
 
         drop_db && await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
 
-        // STEP #2: CREATE TABLES = all files loaded into single table
-        for (const table of tables_library) {
-            const { table_name, create_query, step, step_info } = table;
+        // STEP #2: CREATE TABLE = all files loaded into single table
+        const table_name = `all_membership_sales_data_2015_left`;
+        const step = `STEP #2.1:`;
+        const step_info = `all_membership_sales_data_2015_left`;
 
-            const drop_query = await query_drop_table(table_name);
-            console.log(`\n${drop_query}`);
+        const drop_query = await query_drop_table(table_name);
+        const create_query = await query_create_all_membership_sales_table(table_name);
 
-            const drop_info = `${step} DROP ${step_info.toUpperCase()} TABLE`;
-            const create_info = `${step} CREATE ${step_info.toUpperCase()} TABLE`;
+        const drop_info = `${step} DROP ${step_info.toUpperCase()} TABLE`;
+        const create_info = `${step} CREATE ${step_info.toUpperCase()} TABLE`;
 
-            await execute_mysql_working_query(pool, db_name, drop_query, drop_info);
-            await execute_mysql_working_query(pool, db_name, create_query, create_info);
-        }
+        await execute_mysql_working_query(pool, db_name, drop_query, drop_info);
+        await execute_mysql_working_query(pool, db_name, create_query, create_info);
 
         // STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "USER DATA" TABLE
         console.log(`STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "usat all_membership_sales_data" TABLE`);
@@ -152,13 +152,8 @@ async function execute_load_sales_data() {
                 filePath = filePath.replace(/\\/g, '/');
 
                 console.log('file path to insert data = ', filePath);
-
-                // let table_name = tables_library[i].table_name;
-                let table_name = tables_library[0].table_name;
                 
                 const query_load = query_load_sales_data(filePath, table_name);
-                // console.log(query_load_sales_data);
-                // console.log('check step info = ', step_info);
 
                 // // Insert file into "" table
                 let query = await execute_mysql_working_query(pool, db_name, query_load, filePath, rows_added, i);

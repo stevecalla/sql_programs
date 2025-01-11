@@ -8,7 +8,7 @@ const { slack_message_api } = require('../../utilities/slack_message_api');
 
 const run_step_1 = true; // get sales data
 const run_step_2 = true; // load sales data
-const run_step_3 = false; // create sales stats summary
+const run_step_3 = false; // create slack messaage; default = false
 
 async function executeSteps(stepFunctions) {
   for (let i = 0; i < stepFunctions.length; i++) {
