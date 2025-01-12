@@ -1,8 +1,5 @@
-    const express = require('express');
+ const express = require('express');
     const bodyParser = require('body-parser');
-
-    // ALL - SALES DATA
-    const { execute_run_sales_data_jobs } = require('./src/sales_data/step_0_run_sales_data_jobs_010425');
 
     // SLACK - SALES DATA
     const { execute_run_slack_sales_data_jobs } = require('./src/slack_sales_data/step_0_run_slack_sales_data_jobs_01125');
@@ -14,30 +11,6 @@
     // Middleware
     app.use(bodyParser.urlencoded({ extended: true }));
     app.use(bodyParser.json());
-
-    // Endpoint to handle crontab all usat sales data job
-    app.get('/scheduled-all-sales', async (req, res) => {
-        console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
-
-        try {
-            // Send a success response
-            res.status(200).json({
-                message: 'All Sales Data = get, load and create sales key metrics started succesfully.',
-            });
-
-            // GETS ALL SALES DATA, LOADS INTO MYSQL, CREATES SALES KEY METRICS
-            await execute_run_sales_data_jobs();
-
-        } catch (error) {
-            console.error('Error quering or sending membership sales data:', error);
-            
-            // Send an error response
-            res.status(500).json({
-                message: 'Error quering or sending membership sales data.',
-                error: error.message || 'Internal Server Error',
-            });
-        }
-    });
 
     // Endpoint to handle slack slash "/sales" command
     app.post('/get-member-sales', async (req, res) => {
@@ -121,10 +94,8 @@
     app.listen(PORT, () => {
         console.log(`Server is running on http://localhost:${PORT}`);
 
-        console.log(`Tunnel using cloudflare https://usat.kidderwise.org/get-member-sales`)
-
-        // switched to cloudflare; see notes.txt
-
+        console.log(`Tunnel using cloudflare https://usat-slack.kidderwise.org/get-member-sales`)
+        // 192.168.1.87:8001
     });
 
 
