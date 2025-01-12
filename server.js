@@ -8,9 +8,6 @@
     // USAT SLACK - SALES DATA
     const { execute_run_slack_sales_data_jobs } = require('./src/slack_sales_data/step_0_run_slack_sales_data_jobs_01125');
 
-    // const { execute_get_slack_sales_data } = require('./src/slack_sales_data/step_1_get_slack_sales_data');
-    // const { execute_load_slack_sales_data } = require('./src/slack_sales_data/step_2_load_slack_sales_data');
-
     const { execute_create_send_slack_sales_data } = require('./src/slack_sales_data/step_3_create_send_slack_sales_data');
 
     // SLACK SETUP
