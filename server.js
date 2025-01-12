@@ -1,17 +1,11 @@
     const express = require('express');
     const bodyParser = require('body-parser');
 
-    // USAT ALL - SALES DATA
+    // ALL - SALES DATA
     const { execute_run_sales_data_jobs } = require('./src/sales_data/step_0_run_sales_data_jobs_010425');
 
-    // USAT SLACK - SALES DATA
+    // SLACK - SALES DATA
     const { execute_run_slack_sales_data_jobs } = require('./src/slack_sales_data/step_0_run_slack_sales_data_jobs_01125');
-
-    const { execute_create_send_slack_sales_data } = require('./src/slack_sales_data/step_3_create_send_slack_sales_data');
-
-    // // SLACK SETUP
-    // const { WebClient } = require('@slack/web-api');
-    // const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN); // Make sure to set your token; Initialize Slack Web API client
 
     // EXPRESS SERVER
     const app = express();
@@ -21,9 +15,6 @@
     app.use(bodyParser.urlencoded({ extended: true }));
     app.use(bodyParser.json());
 
-    // **********************************
-    // ALL - DAILY SALES DATA - START
-    // **********************************
     // Endpoint to handle crontab all usat sales data job
     app.get('/scheduled-all-sales', async (req, res) => {
         console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
@@ -47,13 +38,7 @@
             });
         }
     });
-    // **********************************
-    // ALL - DAILY SALES DATA - END
-    // **********************************
 
-    // **********************************
-    // SLACK - DAILY SALES DATA - START
-    // **********************************
     // Endpoint to handle slack slash "/sales" command
     app.post('/get-member-sales', async (req, res) => {
         console.log('Received request for stats:', {
@@ -120,9 +105,6 @@
             });
         }
     });
-    // **********************************
-    // SLACK - DAILY SALES DATA - END
-    // **********************************
 
     // Clean up on exit
     async function cleanup() {
