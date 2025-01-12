@@ -4,19 +4,41 @@
 start_time=$(date +%s)
 start_time_readable=$(date +"%I:%M:%S %p")
 
-# PATH TO JS FILE
-# LINUX
-JS_FILE="/home/steve-calla/development/usat/sql_programs/utilities/cron_get_slack_member_sales/script.js"
+# LINUX PROCESS
+# Determine the current OS user
+current_user=$(whoami)
+echo "Current user: $current_user"
 
-# WINDOWS
-#JS_FILE="C:/Users/calla/development/usat/sql_programs/utilities/cron_get_slack_member_sales/script.js"
+# PATH TO JS FILE
+if [ "$current_user" == "steve-calla" ]; then
+    JS_FILE="/home/steve-calla/development/usat/sql_programs/utilities/cron_get_slack_member_sales/script.js"
+    NODE_PATH="/home/$current_user/.nvm/versions/node/v18.20.4/bin/node"
+elif [ "$current_user" == "usat-server" ]; then
+    JS_FILE="/home/usat-server/development/usat/sql_programs/utilities/cron_get_slack_member_sales/script.js"
+    NODE_PATH="/usr/bin/node"
+else
+    echo "Unknown user: $current_user"
+    exit 1
+fi
 
 # EXECUTE THE JS FILE USING NODE
-# LINUX
-# /usr/bin/node "$JS_FILE"
-/home/steve-calla/.nvm/versions/node/v18.20.4/bin/node "$JS_FILE"
+# # /usr/bin/node "$JS_FILE"
+# NODE_PATH="/home/$current_user/.nvm/versions/node/v18.20.4/bin/node"
 
-# WINDOWS
+if [ -f "$JS_FILE" ]; then
+    if [ -x "$NODE_PATH" ]; then
+        "$NODE_PATH" "$JS_FILE"
+    else
+        echo "Node.js not found at $NODE_PATH"
+        exit 1
+    fi
+else
+    echo "JavaScript file not found at $JS_FILE"
+    exit 1
+fi
+
+# WINDOWS PROCESS
+#JS_FILE="C:/Users/calla/development/usat/sql_programs/utilities/cron_get_slack_member_sales/script.js"
 #/c/Program\ Files/nodejs/node "$JS_FILE"
 
 # End timer
