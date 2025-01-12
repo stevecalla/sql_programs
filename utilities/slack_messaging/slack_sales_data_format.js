@@ -1,4 +1,4 @@
-const { getDayOfWeek } = require('../utilities/getCurrentDate');
+const { getDayOfWeek } = require('../getCurrentDate');
 const { slack_sales_data_seed } = require('./slack_seed_data');
 
 async function sortByDateAndSegment(data, dateField, segmentField) {  

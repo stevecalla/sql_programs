@@ -8,8 +8,8 @@ const { create_local_db_connection } = require('../../utilities/connectionLocalD
 
 const { query_slack_sales_data } = require('../queries/slack_sales_data/get_sales_data_112524');
 const { send_slack_followup_message } = require('../../utilities/slack_messaging/send_followup_message');
-const { create_slack_sales_message } = require('../../utilities/slack_sales_message');
-const { slack_message_api } = require('../../utilities/slack_message_api');
+const { create_slack_sales_message } = require('../../utilities/slack_messaging/slack_sales_message');
+const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 // Connect to MySQL
 async function create_connection() {
