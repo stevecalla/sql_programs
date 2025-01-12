@@ -4,7 +4,7 @@ const { execute_get_sales_data } = require('./step_1_get_sales_data');
 const { execute_load_sales_data } = require('./step_2_load_sales_data');
 const { execute_create_sales_key_metrics } = require('./step_3_create_sales_key_metrics_010425');
 
-const { slack_message_api } = require('../../utilities/slack_message_api');
+const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 const run_step_1 = true; // get sales data
 const run_step_2 = true; // load sales data

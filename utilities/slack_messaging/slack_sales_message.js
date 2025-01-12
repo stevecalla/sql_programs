@@ -1,4 +1,4 @@
-const { getFormattedDateAmPm } = require('../utilities/getCurrentDate');
+const { getFormattedDateAmPm } = require('../getCurrentDate');
 const { slack_sales_data_format } = require('./slack_sales_data_format');
 
 // CREATE DATE INFO

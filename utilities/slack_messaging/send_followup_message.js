@@ -1,0 +1,35 @@
+const dotenv = require('dotenv');
+dotenv.config({ path: "../../.env" });
+
+// SLACK SETUP
+const { WebClient } = require('@slack/web-api');
+const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
+
+// Function to send follow-up message to Slack
+async function send_slack_followup_message(channelId, channelName, userId, message) {
+    try {
+        if(channelId && message && channelName !== "directmessage"){
+            await slackClient.chat.postEphemeral({
+                channel: channelId,
+                user: userId,
+                text: message,
+            });
+            console.log(`Message sent to Slack ${channelName}`);
+        } else if (channelId && message && channelName === "directmessage") {
+            await slackClient.chat.postMessage({
+                channel: userId,
+                text: message,
+            });
+            console.log(`Message sent to Slack ${channelName}`);
+        } else {
+            console.error('Channel ID or message is missing');
+        }
+    } catch (error) {
+        console.error('Error sending message to Slack in server.js:', error);
+    }
+}
+
+module.exports = {
+    send_slack_followup_message,
+}
+

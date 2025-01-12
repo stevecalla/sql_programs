@@ -1,8 +1,5 @@
-const fs = require('fs');
 const dotenv = require('dotenv');
 dotenv.config();
-
-const mysql = require('mysql2');
 
 const { Client } = require('ssh2');
 const sshClient = new Client();
@@ -10,8 +7,9 @@ const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
 
 const { query_slack_sales_data } = require('../queries/slack_sales_data/get_sales_data_112524');
-const { create_slack_sales_message } = require('../../utilities/slack_sales_message');
-const { slack_message_api } = require('../../utilities/slack_message_api');
+const { send_slack_followup_message } = require('../../utilities/slack_messaging/send_followup_message');
+const { create_slack_sales_message } = require('../../utilities/slack_messaging/slack_sales_message');
+const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 // Connect to MySQL
 async function create_connection() {
@@ -57,7 +55,7 @@ async function execute_query_get_sales_data(pool, query) {
     });
 }
 
-async function execute_create_send_slack_sales_data(is_cron_job = true) {
+async function execute_create_send_slack_sales_data(is_cron_job = true, channel_id, channel_name, user_id) {
     let pool;
     let results;
     const startTime = performance.now();
@@ -89,10 +87,10 @@ async function execute_create_send_slack_sales_data(is_cron_job = true) {
             } else if(is_cron_job) {
                 console.log('2 =', send_slack_to_calla, is_cron_job, send_slack_to_calla && is_cron_job);
                 await slack_message_api(slack_message, "daily_sales_bot_slack_channel");
+            } else {
+                // Send a follow-up message to Slack
+                await send_slack_followup_message(channel_id, channel_name, user_id, slack_message);
             }
-
-            // STEP #5: RETURN SLACK MESSAGE TO SLASH ROUTE /get-member-sales
-            return slack_message;
 
         } else {
             const slack_message = "Error - No results";
@@ -138,6 +136,8 @@ async function execute_create_send_slack_sales_data(is_cron_job = true) {
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
 
         console.log(`\nAll lead data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Oops error getting time"} sec\n`);
+
+        return elapsedTime;
     }
 }
 
