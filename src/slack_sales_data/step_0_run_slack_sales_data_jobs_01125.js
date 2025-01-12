@@ -8,9 +8,9 @@ const { slack_message_api } = require('../../utilities/slack_message_api');
 
 const run_step_1 = true; // get sales data
 const run_step_2 = true; // load sales data
-const run_step_3 = false; // create slack messaage; default = false
+const run_step_3 = true; // create slack messaage; default = false
 
-async function executeSteps(stepFunctions) {
+async function executeSteps(stepFunctions, is_cron_job, channel_id, channel_name, user_id) {
   for (let i = 0; i < stepFunctions.length; i++) {
     const start_local_time = new Date().toLocaleString(); // Get the current local date and time as a string
     const startTime = performance.now();
@@ -21,7 +21,7 @@ async function executeSteps(stepFunctions) {
     console.log(`\n*************** STARTING ${stepName} ***************\n`);
     try {
       if (stepFunction) {
-        const results = await stepFunction();
+        const results = await stepFunction(is_cron_job, channel_id, channel_name, user_id);
 
         const endTime = performance.now();
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2);
@@ -64,7 +64,7 @@ async function executeSteps(stepFunctions) {
   }
 }
 
-async function execute_run_slack_sales_data_jobs() {
+async function execute_run_slack_sales_data_jobs(is_cron_job, channel_id, channel_name, user_id) {
   const startTime = performance.now();
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
@@ -76,10 +76,10 @@ async function execute_run_slack_sales_data_jobs() {
       run_step_3 ? execute_create_send_slack_sales_data : null,
     ];
 
-    await executeSteps(stepFunctions); // Call the new function
+    await executeSteps(stepFunctions, is_cron_job, channel_id, channel_name, user_id);
 
   } catch (error) {
-    console.error('Error in main process:', error); // More specific message
+    console.error('Error in main process:', error);
     return;
   }
 

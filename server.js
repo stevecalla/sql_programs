@@ -1,6 +1,5 @@
     const express = require('express');
     const bodyParser = require('body-parser');
-    const axios = require('axios');
 
     // USAT ALL - SALES DATA
     const { execute_run_sales_data_jobs } = require('./src/sales_data/step_0_run_sales_data_jobs_010425');
@@ -10,9 +9,9 @@
 
     const { execute_create_send_slack_sales_data } = require('./src/slack_sales_data/step_3_create_send_slack_sales_data');
 
-    // SLACK SETUP
-    const { WebClient } = require('@slack/web-api');
-    const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN); // Make sure to set your token; Initialize Slack Web API client
+    // // SLACK SETUP
+    // const { WebClient } = require('@slack/web-api');
+    // const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN); // Make sure to set your token; Initialize Slack Web API client
 
     // EXPRESS SERVER
     const app = express();
@@ -74,14 +73,13 @@
         try {
             // STEP #1 GET RAW SALES DATA / EXPORT TO CSV
             // STEP #2 LOAD SALES DATA INTO DB
-            await execute_run_slack_sales_data_jobs();
-
             // STEP #3 QUERY SLACK DATA & SEND MESSAGE
-            const is_cron_job = false;
-            const slackMessage = await execute_create_send_slack_sales_data(is_cron_job);
 
-            // Send a follow-up message to Slack
-            await sendFollowUpMessage(req.body.channel_id, req.body.channel_name, req.body.user_id, slackMessage);
+            // only used for STEP #3 to route slack messages
+            const is_cron_job = false; 
+            const { channel_id, channel_name, user_id } = req.body;
+
+            await execute_run_slack_sales_data_jobs(is_cron_job, channel_id, channel_name, user_id);
             
         } catch (error) {
             console.error('Error quering or sending membership sales data:', error);
@@ -101,11 +99,12 @@
         try {
             // STEP #1 GET RAW SALES DATA / EXPORT TO CSV
             // STEP #2 LOAD SALES DATA INTO DB
-            await execute_run_slack_sales_data_jobs();
-
             // STEP #3 QUERY SLACK DATA & SEND MESSAGE
-            const is_cron_job = true;
-            await execute_create_send_slack_sales_data(is_cron_job);
+
+            // only used for STEP #3 to route slack messages
+            const is_cron_job = true; 
+
+            await execute_run_slack_sales_data_jobs(is_cron_job);
 
             // Send a success response
             res.status(200).json({
@@ -124,30 +123,6 @@
     // **********************************
     // SLACK - DAILY SALES DATA - END
     // **********************************
-
-    // Function to send follow-up message to Slack
-    async function sendFollowUpMessage(channelId, channelName, userId, message) {
-        try {
-            if(channelId && message && channelName !== "directmessage"){
-                await slackClient.chat.postEphemeral({
-                    channel: channelId,
-                    user: userId,
-                    text: message,
-                });
-                console.log(`Message sent to Slack ${channelName}`);
-            } else if (channelId && message && channelName === "directmessage") {
-                await slackClient.chat.postMessage({
-                    channel: userId,
-                    text: message,
-                });
-                console.log(`Message sent to Slack ${channelName}`);
-            } else {
-                console.error('Channel ID or message is missing');
-            }
-        } catch (error) {
-            console.error('Error sending message to Slack in server.js:', error);
-        }
-    }
 
     // Clean up on exit
     async function cleanup() {
