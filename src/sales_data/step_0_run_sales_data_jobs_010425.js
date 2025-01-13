@@ -6,9 +6,9 @@ const { execute_create_sales_key_metrics } = require('./step_3_create_sales_key_
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-const run_step_1 = true; // get sales data
+const run_step_1 = false; // get sales data
 const run_step_2 = true; // load sales data
-const run_step_3 = true; // create sales stats summary
+const run_step_3 = false; // create sales stats summary
 
 async function executeSteps(stepFunctions) {
   for (let i = 0; i < stepFunctions.length; i++) {
