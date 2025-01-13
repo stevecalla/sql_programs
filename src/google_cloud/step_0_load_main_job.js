@@ -1,14 +1,14 @@
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 const { execute_retrieve_data } = require('./step_1_retrieve_data_process');
-// const { execute_upload_csv_to_cloud } = require('./step_2_upload_csv_to_cloud');
-// const { execute_create_bigquery_dataset } = require('./step_3_create_bigquery_dataset');
-// const { execute_load_big_query_database } = require('./step_4_load_biq_query_database');
+const { execute_upload_csv_to_cloud } = require('./step_2_upload_csv_to_cloud');
+const { execute_create_bigquery_dataset } = require('./step_3_create_bigquery_dataset');
+const { execute_load_big_query_database } = require('./step_4_load_biq_query_database');
 
 const run_step_1 = false;
 const run_step_2 = true;
-// const run_step_3 = false;
-// const run_step_4 = false;
+const run_step_3 = false;
+const run_step_4 = false;
 
 async function executeSteps(stepFunctions) {
   for (let i = 0; i < stepFunctions.length; i++) {
@@ -47,9 +47,9 @@ async function execute_load_data_to_bigquery() {
   try {
     const stepFunctions = [
       run_step_1 ? execute_retrieve_data : null,
-    //   run_step_2 ? execute_upload_csv_to_cloud : null,
-    //   run_step_3 ? execute_create_bigquery_dataset : null,
-    //   run_step_4 ? execute_load_big_query_database : null,
+      run_step_2 ? execute_upload_csv_to_cloud : null,
+      run_step_3 ? execute_create_bigquery_dataset : null,
+      run_step_4 ? execute_load_big_query_database : null,
     ];
 
     await executeSteps(stepFunctions); // Call the new function
