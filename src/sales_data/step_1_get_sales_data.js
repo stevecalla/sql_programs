@@ -248,108 +248,106 @@ async function processResultsInBatches(results, batchSize, processFunction) {
     batchSize = null;
     processFunction = null;
     
-    // console.log('Before GC BATCH PROCESS:', process.memoryUsage());
     if (global.gc) global.gc();
-    // console.log('After GC BATCH PROCESS:', process.memoryUsage());
 }
 
 // Main function to handle SSH connection and execute queries
 // OFFSET & BATCH = USES OFFSET / BATCH TO PROCESS SMALLER QUERY RESULTS & WRITE TO CSV
-async function execute_get_sales_data_works() {
-    let pool;
-    const startTime = performance.now();
-    console.log('Before GC FUNCTION START:', process.memoryUsage());
+// async function execute_get_sales_data_works() {
+//     let pool;
+//     const startTime = performance.now();
+//     console.log('Before GC FUNCTION START:', process.memoryUsage());
 
-    let results;
-    let offset = 0;
-    const retrieval_batch_size = 30000; // Retrieve 10,000 records at a time
-    const write_batch_size = 1000; // Write 1,000 records at a time
-    const start_year = 2010; // Default = 2010
+//     let results;
+//     let offset = 0;
+//     const retrieval_batch_size = 30000; // Retrieve 10,000 records at a time
+//     const write_batch_size = 1000; // Write 1,000 records at a time
+//     const start_year = 2010; // Default = 2010
 
-    let membership_category_logic = generate_membership_category_logic;
-    let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2025
+//     let membership_category_logic = generate_membership_category_logic;
+//     let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2025
 
-    try {
-        // STEP #0: ENSURE FILE WAS UPDATED RECENTLY
+//     try {
+//         // STEP #0: ENSURE FILE WAS UPDATED RECENTLY
 
-        // STEP #1: DELETE PRIOR FILES
-        await deleteArchivedFiles();
+//         // STEP #1: DELETE PRIOR FILES
+//         await deleteArchivedFiles();
 
-        // STEP #2 - MOVE FILES TO ARCHIVE
-        await moveFilesToArchive();
+//         // STEP #2 - MOVE FILES TO ARCHIVE
+//         await moveFilesToArchive();
 
-        pool = await createSSHConnection();
+//         pool = await createSSHConnection();
 
-        for (let i = 0; i < date_periods.length; i++) {
-            for (let j = 0; j < membership_category_logic.length; j++) {
-                offset = 0; // Reset offset
+//         for (let i = 0; i < date_periods.length; i++) {
+//             for (let j = 0; j < membership_category_logic.length; j++) {
+//                 offset = 0; // Reset offset
 
-                const { query, file_name } = membership_category_logic[j];
-                const year = date_periods[i].year;
-                const start_date = date_periods[i].start_date;
-                const start_date_time = date_periods[i].start_date_time;
-                const end_date_time = date_periods[i].end_date_time;
-                const membership_period_ends = date_periods[i].membership_period_ends;
+//                 const { query, file_name } = membership_category_logic[j];
+//                 const year = date_periods[i].year;
+//                 const start_date = date_periods[i].start_date;
+//                 const start_date_time = date_periods[i].start_date_time;
+//                 const end_date_time = date_periods[i].end_date_time;
+//                 const membership_period_ends = date_periods[i].membership_period_ends;
 
-                console.log('start_date_time = ', start_date_time + '; end_date_time = ', end_date_time);
-                console.log('membership file name = ', file_name);
+//                 console.log('start_date_time = ', start_date_time + '; end_date_time = ', end_date_time);
+//                 console.log('membership file name = ', file_name);
 
-                do {
-                    runTimer(`${i}_get_data`);
+//                 do {
+//                     runTimer(`${i}_get_data`);
                 
-                    // Retrieve data in batches of 10,000 records
-                    results = await execute_query_get_usat_sales_data_batch(
-                        pool,
-                        query,
-                        year,
-                        start_date_time,
-                        end_date_time,
-                        membership_period_ends,
-                        offset,
-                        retrieval_batch_size
-                    );
+//                     // Retrieve data in batches of 10,000 records
+//                     results = await execute_query_get_usat_sales_data_batch(
+//                         pool,
+//                         query,
+//                         year,
+//                         start_date_time,
+//                         end_date_time,
+//                         membership_period_ends,
+//                         offset,
+//                         retrieval_batch_size
+//                     );
 
-                    console.log('GET DATA: Results length = ', results.length + '; offset = ', offset);
+//                     console.log('GET DATA: Results length = ', results.length + '; offset = ', offset);
 
-                    offset += retrieval_batch_size;
+//                     offset += retrieval_batch_size;
 
-                    stopTimer(`${i}_get_data`);
+//                     stopTimer(`${i}_get_data`);
 
-                    let batchCounter = 0; // Initialize a batch counter
+//                     let batchCounter = 0; // Initialize a batch counter
 
-                    await processResultsInBatches(results, write_batch_size, async (batch) => {
-                        // Increment the batch counter for each batch
-                        batchCounter++;
+//                     await processResultsInBatches(results, write_batch_size, async (batch) => {
+//                         // Increment the batch counter for each batch
+//                         batchCounter++;
 
-                        // Generate a unique file name for this batch
-                        let file_name_date = `${file_name}_${start_date}_batch_${batchCounter}`;
+//                         // Generate a unique file name for this batch
+//                         let file_name_date = `${file_name}_${start_date}_batch_${batchCounter}`;
 
-                        console.log(`Exporting batch ${batchCounter} to file: ${file_name_date}`);
+//                         console.log(`Exporting batch ${batchCounter} to file: ${file_name_date}`);
 
-                        await export_generator_results_to_csv_fast_csv(batch, file_name_date, j);
-                    });
+//                         await export_generator_results_to_csv_fast_csv(batch, file_name_date, j);
+//                     });
 
-                    // Clear memory if needed
-                    if (global.gc) global.gc();
+//                     // Clear memory if needed
+//                     if (global.gc) global.gc();
 
-                } while (results.length > 0);
-            }
-        }
-    } catch (error) {
-        console.error('Error:', error);
-    } finally {
-        if (pool) await pool.end();
-        const endTime = performance.now();
-        console.log(`Elapsed time: ${((endTime - startTime) / 1000).toFixed(2)} sec`);
+//                 } while (results.length > 0);
+//             }
+//         }
+//     } catch (error) {
+//         console.error('Error:', error);
+//     } finally {
+//         if (pool) await pool.end();
+//         const endTime = performance.now();
+//         console.log(`Elapsed time: ${((endTime - startTime) / 1000).toFixed(2)} sec`);
 
-        // Clear memory
-        results = null;
-        membership_category_logic = null;
-        date_periods = null;
+//         // Clear memory
+//         results = null;
+//         membership_category_logic = null;
+//         date_periods = null;
 
-        if (global.gc) global.gc();
-    }
-}
+//         if (global.gc) global.gc();
+//     }
+// }
 
 const tempDir = path.join(__dirname, 'temp'); // Directory for temporary files
 if (!fs.existsSync(tempDir)) {
@@ -412,7 +410,7 @@ function markIndexAsProcessedSync(dateIndexFilePath, index) {
 async function execute_get_sales_data() {
     let pool;
     const startTime = performance.now();
-    // console.log('Before GC FUNCTION START:', process.memoryUsage());
+    // console.log('Befor   e GC FUNCTION START:', process.memoryUsage());
 
     let results;
     let offset = 0;
