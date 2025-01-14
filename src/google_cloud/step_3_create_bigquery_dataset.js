@@ -6,8 +6,6 @@ dotenv.config({ path: "../../.env" });
 
 const { execute_google_cloud_command } = require('./google_cloud_execute_command');
 
-console.log('usat google service account =', process.env.USAT_GOOGLE_SERVICE_ACCOUNT);
-
 const datasetId = "membership_reporting";
 const tableIds = ["membership_data"];
 
