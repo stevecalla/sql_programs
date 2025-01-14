@@ -109,15 +109,15 @@ async function execute_load_big_query_database() {
             skipLeadingRows: 1,
             schema: { fields: members_schema },
             location: 'US',
-            writeDisposition: 'WRITE_APPEND', // Append data to the table
-            // writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
+            // writeDisposition: 'WRITE_APPEND', // Append data to the table
+            writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
         } : {
             sourceFormat: 'CSV',
             skipLeadingRows: 1,
             autodetect: true,
             location: 'US',
-            writeDisposition: 'WRITE_APPEND', // Append data to the table
-            // writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
+            // writeDisposition: 'WRITE_APPEND', // Append data to the table
+            writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
         };
 
         // Load data from the file into the BigQuery table
