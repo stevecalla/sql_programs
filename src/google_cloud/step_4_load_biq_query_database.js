@@ -10,7 +10,7 @@ const { determineOSPath } = require('../../utilities/determineOSPath');
 
 const { execute_google_cloud_command } = require('./google_cloud_execute_command');
 
-const { booking_schema } = require('./schemas/schema_booking_data');
+const { members_schema } = require('./schemas/schema_member_data');
 
 const bucketName = 'membership-reporting';
 const datasetId = "membership_reporting";
@@ -67,7 +67,7 @@ async function execute_load_big_query_database() {
     //     const metadata = file.tableName === "booking_data" ? {
     //         sourceFormat: 'CSV',
     //         skipLeadingRows: 1,
-    //         schema: { fields: booking_schema },
+    //         schema: { fields: member_schema },
     //         // autodetect: true,
     //         location: 'US',
     //         // Set the write disposition to overwrite existing table data.
@@ -103,23 +103,31 @@ async function execute_load_big_query_database() {
 
     // Loop through files and load them into the same BigQuery table
     for (const filePath of files) {
-        // Configure the load job metadata
-        const metadata = {
+        // Configure the load job metadataj
+        const metadata = tableName === "membership_data" ? {
             sourceFormat: 'CSV',
             skipLeadingRows: 1,
-            autodetect: true, // Automatically detect the schema
+            schema: { fields: members_schema },
             location: 'US',
             writeDisposition: 'WRITE_APPEND', // Append data to the table
+            // writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
+        } : {
+            sourceFormat: 'CSV',
+            skipLeadingRows: 1,
+            autodetect: true,
+            location: 'US',
+            writeDisposition: 'WRITE_APPEND', // Append data to the table
+            // writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
         };
 
         // Load data from the file into the BigQuery table
-        const [job] = await bigqueryClient
+        const [job] = await bigqueryClient // without await this does error
             .dataset(datasetId) // Replace with your dataset ID
             .table(tableName) // Replace with the single target table name
             .load(storageClient.bucket(bucketName).file(filePath), metadata);
 
         console.log(`File ${++numberOfFiles} of ${files.length}, File name: ${filePath}`);
-        console.log(`Job ${job.id} completed. Elapsed time: ${elapsedTime}\n`);
+        console.log(`Job ${job.id} completed.`);
 
         // Check the job's status for errors
         const errors = job.status.errors;
@@ -127,10 +135,10 @@ async function execute_load_big_query_database() {
             throw errors;
         }
     }
-
     const endTime = performance.now();
     elapsedTime = ((endTime - startTime) / 1000).toFixed(2); // CONVERT MS TO SEC
-    return elapsedTime; // RETURN ELAPSED TIME AFTER ALL UPLOADS COMPLETE
+    console.log(`STEP #4: Elapsed time: ${elapsedTime}\n`);
+    return elapsedTime;
 }
 
 // execute_load_big_query_database();
