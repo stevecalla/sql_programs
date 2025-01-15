@@ -112,7 +112,7 @@ async function execute_create_year_over_year_key_metrics() {
     }
 }
 
-// execute_create_sales_key_metrics();
+execute_create_year_over_year_key_metrics();
 
 module.exports = {
     execute_create_year_over_year_key_metrics,

@@ -4,7 +4,7 @@
 function step_1_sales_year_over_year_data() {
     return `
         -- STEP #1 = CREATE YEAR OVER YEAR TABLE
-        DROP TABLE IF EXISTS sales_data_year_over_year
+        DROP TABLE IF EXISTS sales_data_year_over_year;
         
         SET @current_year_date = CURDATE();
         SET @prior_year_date = @current_year_date - INTERVAL 1 YEAR;
@@ -106,7 +106,11 @@ function step_1_sales_year_over_year_data() {
                         WHEN SUM(prior_units) = 0 THEN NULL
                         ELSE (SUM(current_units) - SUM(prior_units)) / SUM(prior_units) * 100
                     END AS units_diff_pct,
-                    CURDATE() AS created_at_date
+
+                    -- data created at dates
+                    DATE_FORMAT(DATE_ADD(NOW(), INTERVAL -6 HOUR), '%Y-%m-%d') AS created_at_mtn,
+                    DATE_FORMAT(NOW(), '%Y-%m-%d') AS created_at_utc
+
                 FROM all_data
                 GROUP BY 
                     common_date,
@@ -118,7 +122,7 @@ function step_1_sales_year_over_year_data() {
             )
             SELECT *
             FROM combined_data
-            ORDER BY common_purchased_on_date_adjusted, real_membership_types_sa, new_member_category_6_sa, origin_flag_ma, origin_flag_category, member_created_at_category;
+            ORDER BY common_purchased_on_date_adjusted, real_membership_types_sa, new_member_category_6_sa, origin_flag_ma, origin_flag_category, member_created_at_category
 
             -- SELECT SUM(current_revenue), SUM(prior_revenue), COUNT(*) FROM all_data
             ;
