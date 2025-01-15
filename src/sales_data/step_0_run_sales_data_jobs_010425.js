@@ -3,12 +3,14 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 const { execute_get_sales_data } = require('./step_1_get_sales_data');
 const { execute_load_sales_data } = require('./step_2_load_sales_data');
 const { execute_create_sales_key_metrics } = require('./step_3_create_sales_key_metrics_010425');
+const { execute_create_year_over_year_key_metrics } = require('./step_4_create_sales_year_over_year_metrics_011425');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-const run_step_1 = true // get sales data
-const run_step_2 = true; // load sales data
-const run_step_3 = true; // create sales stats summary
+const run_step_1 = false // get sales data
+const run_step_2 = false; // load sales data
+const run_step_3 = false; // create sales stats summary table
+const run_step_4 = true; // create year-over-year common date table
 
 async function executeSteps(stepFunctions) {
   for (let i = 0; i < stepFunctions.length; i++) {
@@ -74,6 +76,7 @@ async function execute_run_sales_data_jobs() {
       run_step_1 ? execute_get_sales_data : null,
       run_step_2 ? execute_load_sales_data : null,
       run_step_3 ? execute_create_sales_key_metrics : null,
+      run_step_4 ? execute_create_year_over_year_key_metrics : null,
     ];
 
     await executeSteps(stepFunctions); // Call the new function

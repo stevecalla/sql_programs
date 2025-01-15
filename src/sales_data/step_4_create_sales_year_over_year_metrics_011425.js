@@ -17,7 +17,7 @@ async function create_connection() {
 
     try {
         // Create a connection to MySQL
-        const config_details = local_usat_sales_db_config;
+        const config_details = await local_usat_sales_db_config();
 
         const pool = create_local_db_connection(config_details);
 
@@ -63,6 +63,7 @@ async function execute_create_year_over_year_key_metrics() {
     try {
         // STEP #0: CREATE CONNECTION
         pool = await create_connection();
+        // console.log(pool);
 
         const db_name = `usat_sales_db`;
         console.log(db_name);
@@ -71,6 +72,8 @@ async function execute_create_year_over_year_key_metrics() {
             // EACH QUERY CONTAINS A TABLE DROP, TABLE CREATE, & INDEXES (IF APPLICABLE)
         const query_list = await query_step_0_year_over_year_data_master_logic();
         const number_of_queries = query_list.length;
+
+        console.log(query_list);
 
         for (let i = 0; i < query_list.length; i++) {
 

@@ -18,7 +18,7 @@ async function create_connection() {
 
     try {
         // Create a connection to MySQL
-        const config_details = local_usat_sales_db_config;
+        const config_details = await local_usat_sales_db_config();
 
         const pool = create_local_db_connection(config_details);
 
