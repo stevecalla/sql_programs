@@ -21,7 +21,7 @@ async function execute_load_big_query_sales_year_over_year_metrics() {
 
     await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
 
-    return;
+    return true;
 }
 
 // execute_load_big_query_sales_year_over_year_metrics();
