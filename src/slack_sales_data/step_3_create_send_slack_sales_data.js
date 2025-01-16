@@ -1,9 +1,6 @@
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
 
-const dotenv = require('dotenv');
-dotenv.config({ path: "../../.env" });
-
 const { Client } = require('ssh2');
 const sshClient = new Client();
 const { local_usat_sales_db_config } = require('../../utilities/config');

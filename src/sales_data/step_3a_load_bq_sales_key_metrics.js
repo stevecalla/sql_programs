@@ -21,7 +21,7 @@ async function execute_load_big_query_sales_key_metrics() {
 
     await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
 
-    return;
+    return true; // placeholder to return to ensure success msg
 }
 
 // execute_load_big_query_database();
