@@ -6,7 +6,7 @@ dotenv.config({ path: "../../.env" });
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
 
-const { query_step_0_sales_key_metrics_master_logic } = require('../queries/sales_data_key_metrics/step_0_get_sales_key_metrics_data_master_logic_010425');
+const { query_step_0_year_over_year_data_master_logic } = require('../queries/sales_data_year_over_year/step_0_get_sales_year_over_year_data_master_logic_011425');
 
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
@@ -56,21 +56,24 @@ async function execute_mysql_working_query(pool, db_name, query) {
     });
 }
 
-async function execute_create_sales_key_metrics() {
+async function execute_create_year_over_year_key_metrics() {
     let pool;
     const startTime = performance.now();
 
     try {
         // STEP #0: CREATE CONNECTION
         pool = await create_connection();
+        // console.log(pool);
 
         const db_name = `usat_sales_db`;
         console.log(db_name);
 
         // STEP #1: ITERATE THRU EACH QUERY & EXECUTE
             // EACH QUERY CONTAINS A TABLE DROP, TABLE CREATE, & INDEXES (IF APPLICABLE)
-        const query_list = await query_step_0_sales_key_metrics_master_logic();
+        const query_list = await query_step_0_year_over_year_data_master_logic();
         const number_of_queries = query_list.length;
+
+        console.log(query_list);
 
         for (let i = 0; i < query_list.length; i++) {
 
@@ -112,8 +115,8 @@ async function execute_create_sales_key_metrics() {
     }
 }
 
-// execute_create_sales_key_metrics();
+// execute_create_year_over_year_key_metrics();
 
 module.exports = {
-    execute_create_sales_key_metrics,
+    execute_create_year_over_year_key_metrics,
 }

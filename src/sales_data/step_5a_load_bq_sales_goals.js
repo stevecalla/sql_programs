@@ -1,0 +1,33 @@
+const { query_sales_goals_data } = require('../google_cloud/queries/query_sales_goals_data');
+
+const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
+
+// EXECUTE LOAD BIQ QUERY
+async function execute_load_big_query_sales_goals() {
+    const options = [
+        {
+            fileName: 'sales_goals', // append to csv file name
+            query: query_sales_goals_data,
+            tableId: "sales_goals", // table name
+        }
+    ];
+
+    // the google load process for sales goals does not use the sql query of the db
+    // because step #1 in the process produces a bad csv thus the code passes a directoryName
+    // which contains the original / source csv for the sales goals which loads in step 2
+    // then is used in step 4
+    const directoryName = `usat_sales_goal_data`;
+    const datasetId = "membership_reporting"; // database name
+    const bucketName = 'membership-reporting'; // google cloud bucket
+    const schema = ""; // leave blank so Step #4 in Google Load process will use auto schema
+
+    await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
+
+    return;
+}
+
+// execute_load_big_query_sales_goals();
+
+module.exports = {
+    execute_load_big_query_sales_goals,
+}

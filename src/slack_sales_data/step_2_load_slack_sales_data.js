@@ -1,8 +1,7 @@
 const fsp = require('fs').promises; // promses necessary for "fs.readdir"
-// const mysql = require('mysql2');
+const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
-const path = require('path');
 
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
@@ -23,7 +22,7 @@ async function create_connection() {
 
     try {
         // Create a connection to MySQL
-        const config_details = local_usat_sales_db_config;
+        const config_details = await local_usat_sales_db_config();
 
         const pool = create_local_db_connection(config_details);
 

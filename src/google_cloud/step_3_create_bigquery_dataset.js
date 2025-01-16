@@ -6,10 +6,8 @@ dotenv.config({ path: "../../.env" });
 
 const { execute_google_cloud_command } = require('./google_cloud_execute_command');
 
-const datasetId = "membership_reporting";
-const tableIds = ["membership_data"];
+async function execute_create_bigquery_dataset(options, datasetId, bucketName, schema, directoryNam) {
 
-async function execute_create_bigquery_dataset() {
     try {
         const startTime = performance.now();
         
@@ -24,12 +22,13 @@ async function execute_create_bigquery_dataset() {
         const [dataset] = await bigqueryClient.dataset(datasetId).get({ autoCreate: true });
         console.log(`Dataset ${dataset.id} created or already exists.`);
 
-        const options = {
+        const bq_options = {
             location: 'US',
         };
 
-        for (const tableId of tableIds) {
-            // Check if the table already exists
+        for (let i = 0; i < options.length; i++) {
+            const { tableId } = options[i];
+
             const [tableExists] = await bigqueryClient
                 .dataset(datasetId)
                 .table(tableId)
@@ -47,7 +46,7 @@ async function execute_create_bigquery_dataset() {
             const [table] = await bigqueryClient
                 .dataset(datasetId)
                 .createTable(tableId, {
-                    ...options,
+                    ...bq_options,
                     replace: true, // Replace the table if it already exists
                 });
     
@@ -56,7 +55,7 @@ async function execute_create_bigquery_dataset() {
 
         const endTime = performance.now();
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
-        return (elapsedTime); // Resolve the promise with the elapsed time
+        return (elapsedTime);
 
     } catch (error) {
         console.error('Error:', error);

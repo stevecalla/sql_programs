@@ -5,19 +5,17 @@ const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
-
 const { execute_google_cloud_command } = require('./google_cloud_execute_command');
 
-const bucketName = 'membership-reporting';
-const destinationPath = `gs://${bucketName}/`;
-
 // ASYNC FUNCTION TO UPLOAD CSV FILES TO GOOGLE CLOUD STORAGE
-async function execute_upload_csv_to_cloud() {
+async function execute_upload_csv_to_cloud(options, datasetId, bucketName, schema, directoryName) {
+  
+  const destinationPath = `gs://${bucketName}/`;
+
   try {
     const startTime = performance.now();
 
     const os_path = await determineOSPath();
-    let directoryName = `google_cloud_member_data`;
     const directory = `${os_path}${directoryName}`;
 
     // GOOGLE CLOUD = LOGIN AND SET PROPERTY ID

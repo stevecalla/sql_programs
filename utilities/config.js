@@ -1,5 +1,4 @@
 const fs = require('fs').promises; // Use promises API
-
 const dotenv = require('dotenv');
 dotenv.config({ path: "../.env" });
 
@@ -63,15 +62,23 @@ const forwardConfig = {
     dstPort: parseInt(process.env.MYSQL_PORT),
 };
 
-const local_usat_sales_db_config = {
-    host: process.env.LOCAL_HOST,
-    port: 3306,
-    user: process.env.LOCAL_MYSQL_USER,
-    password: process.env.LOCAL_MYSQL_PASSWORD,
-    database: process.env.LOCAL_USAT_SALES_DB,
-    connectionLimit: 20,
-    multipleStatements: true // Enable multiple statements
+async function local_usat_sales_db_config() {
+    const config = {
+        host: process.env.LOCAL_HOST,
+        port: 3306,
+        user: process.env.LOCAL_MYSQL_USER,
+        password: process.env.LOCAL_MYSQL_PASSWORD,
+        database: process.env.LOCAL_USAT_SALES_DB,
+        connectionLimit: 20,
+        multipleStatements: true // Enable multiple statements
+    };
+
+    // console.log(config);
+
+    return config;
 };
+
+// local_usat_sales_db_config();
 
 module.exports = {
     dbConfig,

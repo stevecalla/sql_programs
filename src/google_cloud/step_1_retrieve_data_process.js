@@ -11,8 +11,6 @@ const { create_local_db_connection } = require('../../utilities/connectionLocalD
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { create_directory } = require('../../utilities/createDirectory');
 
-const { query_member_data } = require('./queries/query_member_data');
-
 const { getCurrentDateTime, getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
@@ -21,7 +19,7 @@ async function deleteArchivedFiles() {
     console.log('Deleting files from archive');
 
     // Create the "archive" directory if it doesn't exist
-    const directoryName  = `google_cloud_member_data_archive`;
+    const directoryName  = `usat_google_bigquery_data_archive`;
     const directoryPath = await create_directory(directoryName);
 
     // List all files in the directory
@@ -57,7 +55,7 @@ async function moveFilesToArchive() {
     try {
         // Create the "archive" directory if it doesn't exist
         // List all files in the directory
-        let directoryName = `google_cloud_member_data`;
+        let directoryName = `usat_google_bigquery_data`;
         await create_directory(directoryName);
         const sourcePath = `${os_path}${directoryName}`;
         
@@ -65,7 +63,7 @@ async function moveFilesToArchive() {
         console.log(files);
 
         // Create the "archive" directory if it doesn't exist
-        directoryName  = `google_cloud_member_data_archive`;
+        directoryName  = `usat_google_bigquery_data_archive`;
         const destinationPath = await create_directory(directoryName);
         console.log(destinationPath);
 
@@ -92,7 +90,6 @@ async function moveFilesToArchive() {
 }
 
 // STEP #1 - RETRIEVE BOOKING, KEY METRICS, PACING DATA
-//todo:
 async function execute_get_data(pool, file_name, query) {
     return new Promise((resolve, reject) => {
 
@@ -128,13 +125,14 @@ async function export_results_to_csv_fast_csv(results, file_name, i) {
     }
 
     // DEFINE DIRECTORY PATH
-    const directoryName  = `google_cloud_member_data`;
+    const directoryName  = `usat_google_bigquery_data`;
     const directoryPath = await create_directory(directoryName);
 
     console.log('Directory path = ', directoryPath);
 
     try {
         const header = Object.keys(results[0]);
+        // console.log(header);
 
         // Create file path with timestamp
         const created_at_formatted = getCurrentDateTimeForFileNaming();
@@ -184,7 +182,7 @@ async function export_results_to_csv_fast_csv(results, file_name, i) {
 }
 
 // MAIN FUNCTION TO EXECUTE THE PROCESS
-async function execute_retrieve_data() {
+async function execute_retrieve_data(options) {
     let pool = "";
     const startTime = performance.now();
 
@@ -199,28 +197,20 @@ async function execute_retrieve_data() {
         console.log(`\nSTEP 3: PULL SQL DATA FROM DATA TABLE`);
         console.log(`${getCurrentDateTime()}\n`);
 
-        const getData = [
-            {
-                poolName: local_usat_sales_db_config,
-                fileName: 'member_data',
-                query: query_member_data
-            },
-        ];
-
-        for (let i = 0; i < getData.length; i++) {
+        for (let i = 0; i < options.length; i++) {
             runTimer(`${i}_get_data`);
 
-            const { poolName, fileName, query } = getData[i];
+            const { fileName, query } = options[i];
 
-            pool = await create_local_db_connection(poolName);
+            pool = await create_local_db_connection(await local_usat_sales_db_config());
 
             let results = await execute_get_data(pool, fileName, query);
-            // console.log(results);
+            // console.table(results[0]);         
+            // console.log(results[0]);
 
             // STEP 3a SAVE DATA TO CSV FILE
             console.log(`STEP 3a SAVE ${fileName} TO CSV FILE`);
 
-            // export_results_to_csv(results, fileName); 
             await export_results_to_csv_fast_csv(results, fileName, i); 
 
             stopTimer(`${i}_get_data`);  
