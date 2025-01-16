@@ -11,8 +11,6 @@ const { create_local_db_connection } = require('../../utilities/connectionLocalD
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { create_directory } = require('../../utilities/createDirectory');
 
-const { query_member_data } = require('./queries/query_member_data');
-
 const { getCurrentDateTime, getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
@@ -134,6 +132,7 @@ async function export_results_to_csv_fast_csv(results, file_name, i) {
 
     try {
         const header = Object.keys(results[0]);
+        // console.log(header);
 
         // Create file path with timestamp
         const created_at_formatted = getCurrentDateTimeForFileNaming();
@@ -206,7 +205,8 @@ async function execute_retrieve_data(options) {
             pool = await create_local_db_connection(await local_usat_sales_db_config());
 
             let results = await execute_get_data(pool, fileName, query);
-            // console.log(results);
+            // console.table(results[0]);         
+            // console.log(results[0]);
 
             // STEP 3a SAVE DATA TO CSV FILE
             console.log(`STEP 3a SAVE ${fileName} TO CSV FILE`);

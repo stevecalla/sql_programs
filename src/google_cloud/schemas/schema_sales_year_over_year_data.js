@@ -176,7 +176,7 @@ const members_sales_year_over_year_schema = [
     }
 ];
 
-console.log(members_sales_year_over_year_schema.length);
+// console.log(members_sales_year_over_year_schema.length);
 
 module.exports = {
     members_sales_year_over_year_schema,

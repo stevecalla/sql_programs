@@ -13,7 +13,7 @@ const { execute_google_cloud_command } = require('./google_cloud_execute_command
 // membership-reporting-447700.membership_reporting.membership_data
 
 // Import a GCS file into a table with manually defined schema.
-async function execute_load_big_query_database(options, datasetId, bucketName, schema) {
+async function execute_load_big_query_database(options, datasetId, bucketName, schema, directoryName) {
     const startTime = performance.now();
     let elapsedTime;
         
@@ -33,7 +33,6 @@ async function execute_load_big_query_database(options, datasetId, bucketName, s
     */
 
     const os_path = await determineOSPath();
-    let directoryName = `usat_google_bigquery_data`;
     const directory = `${os_path}${directoryName}`;
 
     const files = await fs.readdir(directory); // LIST ALL FILES IN THE DIRECTORY
@@ -43,15 +42,36 @@ async function execute_load_big_query_database(options, datasetId, bucketName, s
 
     // Loop through files and load them into the same BigQuery table
     for (const filePath of files) {
+        let metadata = "";
+
+        if (schema) {
+           metadata =  {
+                sourceFormat: 'CSV',
+                skipLeadingRows: 1,
+                schema: { fields: schema },
+                location: 'US',
+                // writeDisposition: 'WRITE_APPEND', // Append data to the table
+                writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
+            };
+        } else {
+            metadata =  {
+                sourceFormat: 'CSV',
+                skipLeadingRows: 1,
+                autodetect: true,
+                location: 'US',
+                // writeDisposition: 'WRITE_APPEND', // Append data to the table
+                writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
+             };
+        }
         // Configure the load job metadata
-        const metadata =  {
-            sourceFormat: 'CSV',
-            skipLeadingRows: 1,
-            schema: { fields: schema },
-            location: 'US',
-            // writeDisposition: 'WRITE_APPEND', // Append data to the table
-            writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
-        };
+        // const metadata =  {
+        //     sourceFormat: 'CSV',
+        //     skipLeadingRows: 1,
+        //     schema: { fields: schema },
+        //     location: 'US',
+        //     // writeDisposition: 'WRITE_APPEND', // Append data to the table
+        //     writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
+        // };
 
         // const metadata = options[0].tableId === "membership_data" ? {
         //     sourceFormat: 'CSV',
@@ -61,12 +81,12 @@ async function execute_load_big_query_database(options, datasetId, bucketName, s
         //     // writeDisposition: 'WRITE_APPEND', // Append data to the table
         //     writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
         // } : {
-        //     sourceFormat: 'CSV',
-        //     skipLeadingRows: 1,
-        //     autodetect: true,
-        //     location: 'US',
-        //     // writeDisposition: 'WRITE_APPEND', // Append data to the table
-        //     writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
+            // sourceFormat: 'CSV',
+            // skipLeadingRows: 1,
+            // autodetect: true,
+            // location: 'US',
+            // // writeDisposition: 'WRITE_APPEND', // Append data to the table
+            // writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
         // };
 
         // Load data from the file into the BigQuery table

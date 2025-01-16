@@ -14,7 +14,7 @@ app.use(bodyParser.json());
 
 // Endpoint to handle crontab all usat sales data job
 app.get('/scheduled-all-sales', async (req, res) => {
-    console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
+    console.log('/scheduled-all-sales route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response

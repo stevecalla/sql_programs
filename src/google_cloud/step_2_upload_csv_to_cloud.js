@@ -8,7 +8,7 @@ const { determineOSPath } = require('../../utilities/determineOSPath');
 const { execute_google_cloud_command } = require('./google_cloud_execute_command');
 
 // ASYNC FUNCTION TO UPLOAD CSV FILES TO GOOGLE CLOUD STORAGE
-async function execute_upload_csv_to_cloud(options, datasetId, bucketName, schema) {
+async function execute_upload_csv_to_cloud(options, datasetId, bucketName, schema, directoryName) {
   
   const destinationPath = `gs://${bucketName}/`;
 
@@ -16,7 +16,6 @@ async function execute_upload_csv_to_cloud(options, datasetId, bucketName, schem
     const startTime = performance.now();
 
     const os_path = await determineOSPath();
-    let directoryName = `usat_google_bigquery_data`;
     const directory = `${os_path}${directoryName}`;
 
     // GOOGLE CLOUD = LOGIN AND SET PROPERTY ID

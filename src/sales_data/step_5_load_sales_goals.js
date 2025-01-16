@@ -121,8 +121,8 @@ async function execute_load_sales_goal_data() {
         await execute_mysql_working_query(pool, db_name, drop_query, drop_info);
         await execute_mysql_working_query(pool, db_name, create_query, create_info);
 
-        // STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "USER DATA" TABLE
-        console.log(`STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "usat all_membership_sales_data" TABLE`);
+        // STEP #3 - GET FILES IN DIRECTORY / LOAD INTO TABLE
+        console.log(`STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "usat sales goal" TABLE`);
         console.log(getCurrentDateTime());
 
         let rows_added = 0;

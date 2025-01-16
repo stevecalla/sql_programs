@@ -5,16 +5,20 @@ const { execute_load_sales_data } = require('./step_2_load_sales_data');
 const { execute_create_sales_key_metrics } = require('./step_3_create_sales_key_metrics_010425');
 const { execute_load_big_query_sales_key_metrics } = require('./step_3a_load_bq_sales_key_metrics');
 const { execute_create_year_over_year_key_metrics } = require('./step_4_create_sales_year_over_year_metrics_011425');
+const { execute_load_big_query_sales_year_over_year_metrics } = require('./step_4a_load_bq_year_over_year_metrics');
 const { execute_load_sales_goal_data } = require('./step_5_load_sales_goals');
+const { execute_load_big_query_sales_goals } = require('./step_5a_load_bq_sales_goals');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-const run_step_1 = false; // get sales data
-const run_step_2 = false; // load sales data
-const run_step_3 = false; // create sales key metrics stats table
+const run_step_1  = true; // get sales data
+const run_step_2  = true; // load sales data
+const run_step_3  = true; // create sales key metrics stats table
 const run_step_3a = false; // load sales key metrics stats to biqquery
-const run_step_4 = true; // create year-over-year common date table
-const run_step_5 = false; // load sales goal data
+const run_step_4  = false; // create year-over-year common date table
+const run_step_4a = false; // load sales key metrics stats to biqquery
+const run_step_5  = false; // load sales goal data
+const run_step_5a = false; // load sales goals to bigquery
 
 async function executeSteps(stepFunctions, stepName) {
   for (let i = 0; i < stepFunctions.length; i++) {
@@ -79,21 +83,25 @@ async function execute_run_sales_data_jobs() {
 
   try {
     const stepFunctions = [
-      run_step_1 ? execute_get_sales_data : null,
-      run_step_2 ? execute_load_sales_data : null,
-      run_step_3 ? execute_create_sales_key_metrics : null,
+      run_step_1  ? execute_get_sales_data : null,
+      run_step_2  ? execute_load_sales_data : null,
+      run_step_3  ? execute_create_sales_key_metrics : null,
       run_step_3a ? execute_load_big_query_sales_key_metrics : null,
-      run_step_4 ? execute_create_year_over_year_key_metrics : null,
-      run_step_5 ? execute_load_sales_goal_data : null,
+      run_step_4  ? execute_create_year_over_year_key_metrics : null,
+      run_step_4a ? execute_load_big_query_sales_year_over_year_metrics : null,
+      run_step_5  ? execute_load_sales_goal_data : null,
+      run_step_5a ? execute_load_big_query_sales_goals : null,
     ];
 
     const stepName = [
       `Step #1 - Get Sales Data:`, 
-      `Step #2 = Load Sales Data: `, 
+      `Step #2 - Load Sales Data: `, 
       `Step #3 - Create Sales Key Metrics: `, 
       `Step #3a - Load Sales Key Metrics to BQ: `, 
       `Step #4 - Create Year-over-Year Data: `, 
-      `Step #5 - Create Sales Data:`
+      `Step #4a - Load Sales YoY Metris to BQ: `,
+      `Step #5 - Create Sales Data:`,
+      `Step #5a - Load Sales Goals to BQ`,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function

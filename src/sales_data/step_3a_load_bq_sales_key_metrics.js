@@ -14,11 +14,12 @@ async function execute_load_big_query_sales_key_metrics() {
         }
     ];
 
+    const directoryName = `usat_google_bigquery_data`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting';
     const schema = members_schema;
 
-    await execute_load_data_to_bigquery(options, datasetId, bucketName, schema);
+    await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
 
     return;
 }

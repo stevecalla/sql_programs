@@ -6,7 +6,7 @@ dotenv.config({ path: "../../.env" });
 
 const { execute_google_cloud_command } = require('./google_cloud_execute_command');
 
-async function execute_create_bigquery_dataset(options, datasetId) {
+async function execute_create_bigquery_dataset(options, datasetId, bucketName, schema, directoryNam) {
 
     try {
         const startTime = performance.now();
