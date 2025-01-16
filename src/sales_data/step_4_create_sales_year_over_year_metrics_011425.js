@@ -1,7 +1,7 @@
 const fsp = require('fs').promises; // promses necessary for "fs.readdir"
+const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
-const path = require('path');
 
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');

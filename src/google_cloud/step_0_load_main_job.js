@@ -10,7 +10,10 @@ const run_step_2 = true;
 const run_step_3 = true;
 const run_step_4 = true;
 
-async function executeSteps(stepFunctions) {
+async function executeSteps(stepFunctions, options, datasetId, bucketName, schema) {
+  
+  console.log('load bq = #2 = ');
+
   for (let i = 0; i < stepFunctions.length; i++) {
 
     const stepFunction = stepFunctions[i];
@@ -20,7 +23,8 @@ async function executeSteps(stepFunctions) {
       console.log(`\n*************** STARTING ${stepName} ***************\n`);
 
       try { // Add try/catch within the loop for individual step error handling
-        const getResults = await stepFunction();
+        const getResults = await stepFunction(options, datasetId, bucketName, schema);
+
         const message = getResults ? `${stepName} executed successfully. Elapsed Time: ${getResults}` : `${stepName} executed successfully.`; // Modified message
         console.log(message);
 
@@ -40,9 +44,11 @@ async function executeSteps(stepFunctions) {
   }
 }
 
-async function execute_load_data_to_bigquery() {
+async function execute_load_data_to_bigquery(options, datasetId, bucketName, schema) {
   const startTime = performance.now();
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
+
+  console.log('load bq = #1');
 
   try {
     const stepFunctions = [
@@ -52,7 +58,7 @@ async function execute_load_data_to_bigquery() {
       run_step_4 ? execute_load_big_query_database : null,
     ];
 
-    await executeSteps(stepFunctions); // Call the new function
+    await executeSteps(stepFunctions, options, datasetId, bucketName, schema); // Call the new function
 
   } catch (error) {
     console.error('Error in main process:', error); // More specific message
@@ -67,7 +73,7 @@ async function execute_load_data_to_bigquery() {
   return elapsedTime;
 }
 
-execute_load_data_to_bigquery();
+// execute_load_data_to_bigquery();
 
 module.exports = {
   execute_load_data_to_bigquery,

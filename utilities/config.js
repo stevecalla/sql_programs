@@ -63,7 +63,7 @@ const forwardConfig = {
 };
 
 async function local_usat_sales_db_config() {
-    return {
+    const config = {
         host: process.env.LOCAL_HOST,
         port: 3306,
         user: process.env.LOCAL_MYSQL_USER,
@@ -72,7 +72,13 @@ async function local_usat_sales_db_config() {
         connectionLimit: 20,
         multipleStatements: true // Enable multiple statements
     };
+
+    // console.log(config);
+
+    return config;
 };
+
+// local_usat_sales_db_config();
 
 module.exports = {
     dbConfig,
