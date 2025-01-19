@@ -14,7 +14,7 @@ const { execute_load_big_query_sales_goals } = require('./step_5a_load_bq_sales_
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-const run_step_1  = false; // get sales data
+const run_step_1  = true; // get sales data
 const run_step_2  = true; // load sales data
 const run_step_3  = true; // create sales key metrics stats table
 const run_step_3a = true; // load sales key metrics stats to biqquery
