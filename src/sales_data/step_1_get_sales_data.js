@@ -1,7 +1,10 @@
 const fs = require('fs');
 const path = require('path');
+// const dotenv = require('dotenv');
+// dotenv.config();
+
 const dotenv = require('dotenv');
-dotenv.config();
+dotenv.config({ path: "../../.env" });
 
 const mysql = require('mysql2');
 const fastcsv = require('fast-csv');
@@ -19,6 +22,7 @@ const { generate_membership_category_logic } = require('../../utilities/data_que
 
 const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
 const { runTimer, stopTimer } = require('../../utilities/timer');
+const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
 
 // Function to create a Promise for managing the SSH connection and MySQL queries
 async function createSSHConnection() {
@@ -251,104 +255,6 @@ async function processResultsInBatches(results, batchSize, processFunction) {
     if (global.gc) global.gc();
 }
 
-// Main function to handle SSH connection and execute queries
-// OFFSET & BATCH = USES OFFSET / BATCH TO PROCESS SMALLER QUERY RESULTS & WRITE TO CSV
-// async function execute_get_sales_data_works() {
-//     let pool;
-//     const startTime = performance.now();
-//     console.log('Before GC FUNCTION START:', process.memoryUsage());
-
-//     let results;
-//     let offset = 0;
-//     const retrieval_batch_size = 30000; // Retrieve 10,000 records at a time
-//     const write_batch_size = 1000; // Write 1,000 records at a time
-//     const start_year = 2010; // Default = 2010
-
-//     let membership_category_logic = generate_membership_category_logic;
-//     let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2025
-
-//     try {
-//         // STEP #0: ENSURE FILE WAS UPDATED RECENTLY
-
-//         // STEP #1: DELETE PRIOR FILES
-//         await deleteArchivedFiles();
-
-//         // STEP #2 - MOVE FILES TO ARCHIVE
-//         await moveFilesToArchive();
-
-//         pool = await createSSHConnection();
-
-//         for (let i = 0; i < date_periods.length; i++) {
-//             for (let j = 0; j < membership_category_logic.length; j++) {
-//                 offset = 0; // Reset offset
-
-//                 const { query, file_name } = membership_category_logic[j];
-//                 const year = date_periods[i].year;
-//                 const start_date = date_periods[i].start_date;
-//                 const start_date_time = date_periods[i].start_date_time;
-//                 const end_date_time = date_periods[i].end_date_time;
-//                 const membership_period_ends = date_periods[i].membership_period_ends;
-
-//                 console.log('start_date_time = ', start_date_time + '; end_date_time = ', end_date_time);
-//                 console.log('membership file name = ', file_name);
-
-//                 do {
-//                     runTimer(`${i}_get_data`);
-                
-//                     // Retrieve data in batches of 10,000 records
-//                     results = await execute_query_get_usat_sales_data_batch(
-//                         pool,
-//                         query,
-//                         year,
-//                         start_date_time,
-//                         end_date_time,
-//                         membership_period_ends,
-//                         offset,
-//                         retrieval_batch_size
-//                     );
-
-//                     console.log('GET DATA: Results length = ', results.length + '; offset = ', offset);
-
-//                     offset += retrieval_batch_size;
-
-//                     stopTimer(`${i}_get_data`);
-
-//                     let batchCounter = 0; // Initialize a batch counter
-
-//                     await processResultsInBatches(results, write_batch_size, async (batch) => {
-//                         // Increment the batch counter for each batch
-//                         batchCounter++;
-
-//                         // Generate a unique file name for this batch
-//                         let file_name_date = `${file_name}_${start_date}_batch_${batchCounter}`;
-
-//                         console.log(`Exporting batch ${batchCounter} to file: ${file_name_date}`);
-
-//                         await export_generator_results_to_csv_fast_csv(batch, file_name_date, j);
-//                     });
-
-//                     // Clear memory if needed
-//                     if (global.gc) global.gc();
-
-//                 } while (results.length > 0);
-//             }
-//         }
-//     } catch (error) {
-//         console.error('Error:', error);
-//     } finally {
-//         if (pool) await pool.end();
-//         const endTime = performance.now();
-//         console.log(`Elapsed time: ${((endTime - startTime) / 1000).toFixed(2)} sec`);
-
-//         // Clear memory
-//         results = null;
-//         membership_category_logic = null;
-//         date_periods = null;
-
-//         if (global.gc) global.gc();
-//     }
-// }
-
 const tempDir = path.join(__dirname, 'temp'); // Directory for temporary files
 if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir);
@@ -410,16 +316,19 @@ function markIndexAsProcessedSync(dateIndexFilePath, index) {
 async function execute_get_sales_data() {
     let pool;
     const startTime = performance.now();
-    // console.log('Befor   e GC FUNCTION START:', process.memoryUsage());
+    // console.log('Before GC FUNCTION START:', process.memoryUsage());
 
     let results;
     let offset = 0;
-    const retrieval_batch_size = 30000; // Retrieve 30,000 records at a time
-    const write_batch_size = 1000; // Write 1,000 records at a time
-    const start_year = 2010; // Default = 2025
+    const retrieval_batch_size = 50000; // Retrieve 50,000 records at a time
+    const write_batch_size = 5000; // Write 1,000 records at a time
+    const start_year = 2010; // Default = 2010
+    const membershipPeriodEnds = '2008-01-01';
+    const period_interval = 6; // create date periods for 6 month durations; options in include 1 month and 3 months
 
     let membership_category_logic = generate_membership_category_logic;
-    let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2025
+    // let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2010
+    let date_periods = await generate_date_periods(start_year, membershipPeriodEnds, period_interval);
 
     // Initialize the index file (only once, even in parallel processes)
     initializeIndexFile();
