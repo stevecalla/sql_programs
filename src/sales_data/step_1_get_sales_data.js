@@ -414,13 +414,13 @@ function markIndexAsProcessedSync(dateIndexFilePath, index) {
 async function execute_get_sales_data() {
     let pool;
     const startTime = performance.now();
-    // console.log('Befor   e GC FUNCTION START:', process.memoryUsage());
+    // console.log('Before GC FUNCTION START:', process.memoryUsage());
 
     let results;
     let offset = 0;
-    const retrieval_batch_size = 30000; // Retrieve 30,000 records at a time
+    const retrieval_batch_size = 50000; // Retrieve 50,000 records at a time
     const write_batch_size = 5000; // Write 1,000 records at a time
-    const start_year = 2024; // Default = 2025
+    const start_year = 2010; // Default = 2010
     const membershipPeriodEnds = '2008-01-01';
     const period_interval = 6; // create date periods for 6 month durations; options in include 1 month and 3 months
 
