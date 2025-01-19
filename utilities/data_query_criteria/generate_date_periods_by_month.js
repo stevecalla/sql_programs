@@ -31,8 +31,8 @@ async function generate_monthly_date_periods(startYear = 2010, membershipPeriodE
     return periods;
 }
 
-const datePeriods = generate_monthly_date_periods(2023);
-console.log(datePeriods);
+// const datePeriods = generate_monthly_date_periods(2023);
+// console.log(datePeriods);
 
 module.exports = {
     generate_monthly_date_periods
