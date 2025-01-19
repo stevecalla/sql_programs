@@ -19,6 +19,7 @@ const { generate_membership_category_logic } = require('../../utilities/data_que
 
 const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
 const { runTimer, stopTimer } = require('../../utilities/timer');
+const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
 
 // Function to create a Promise for managing the SSH connection and MySQL queries
 async function createSSHConnection() {
@@ -416,10 +417,13 @@ async function execute_get_sales_data() {
     let offset = 0;
     const retrieval_batch_size = 30000; // Retrieve 30,000 records at a time
     const write_batch_size = 1000; // Write 1,000 records at a time
-    const start_year = 2010; // Default = 2025
+    const start_year = 2024; // Default = 2025
+    const membershipPeriodEnds = '2008-01-01';
+    const period_interval = 6; // create date periods for 6 month durations; options in include 1 month and 3 months
 
     let membership_category_logic = generate_membership_category_logic;
-    let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2025
+    // let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2010
+    let date_periods = await generate_date_periods(start_year, membershipPeriodEnds, period_interval);
 
     // Initialize the index file (only once, even in parallel processes)
     initializeIndexFile();
