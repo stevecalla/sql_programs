@@ -1,3 +1,6 @@
+const dotenv = require('dotenv');
+dotenv.config({ path: "../../.env" });
+
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 const { execute_get_sales_data } = require('./step_1_get_sales_data');
