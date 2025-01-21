@@ -6,7 +6,7 @@ const { execute_run_sales_data_jobs } = require('./src/sales_data/step_0_run_sal
 
 // EXPRESS SERVER
 const app = express();
-const PORT = process.env.PORT || 8002;
+const PORT = process.env.PORT || 8003; // 01/20/25 port 8002 worked locally but did not respond to cloudflared; switched to 8003
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
