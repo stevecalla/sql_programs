@@ -6,6 +6,8 @@ dotenv.config({ path: "../../.env" });
 const mysql = require('mysql2');
 const fastcsv = require('fast-csv');
 
+const { triggerGarbageCollection } = require('../../utilities/garbage_collection/trigger_garbage_collection');
+
 const { Client } = require('ssh2');
 const sshClient = new Client();
 const { forwardConfig, dbConfig, sshConfig } = require('../../utilities/config');
@@ -248,8 +250,8 @@ async function processResultsInBatches(results, batchSize, processFunction) {
     results = null;
     batchSize = null;
     processFunction = null;
-    
-    if (global.gc) global.gc();
+
+    await triggerGarbageCollection();
 }
 
 const tempDir = path.join(__dirname, 'temp'); // Directory for temporary files
@@ -415,7 +417,7 @@ async function execute_get_sales_data() {
                     });
 
                     // Clear memory if needed
-                    if (global.gc) global.gc();
+                    await triggerGarbageCollection();
                     
                 } while (results.length > 0);
             }
@@ -448,7 +450,7 @@ async function execute_get_sales_data() {
         membership_category_logic = null;
         date_periods = null;
 
-        if (global.gc) global.gc();
+        await triggerGarbageCollection();
 
         return elapsedTime;
     }

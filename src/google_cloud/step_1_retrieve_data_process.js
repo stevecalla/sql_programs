@@ -5,6 +5,8 @@ const fastcsv = require('fast-csv');
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" }); // add path to read.env file
 
+const { triggerGarbageCollection } = require('../../utilities/garbage_collection/trigger_garbage_collection');
+
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
 
@@ -213,6 +215,8 @@ async function execute_retrieve_data(options) {
 
             // This removes references, making the memory eligible for garbage collection.
             results = null;
+            await triggerGarbageCollection();
+
 
             stopTimer(`${i}_get_data`);  
         }

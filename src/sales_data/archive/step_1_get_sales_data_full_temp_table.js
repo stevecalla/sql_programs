@@ -6,6 +6,8 @@ dotenv.config({ path: "../../.env" });
 const mysql = require('mysql2');
 const fastcsv = require('fast-csv');
 
+const {} = require('../../../utilities/garbage_collection/trigger_garbage_collection');
+
 const { Client } = require('ssh2');
 const sshClient = new Client();
 const { forwardConfig , dbConfig, sshConfig } = require('../../../utilities/config');
@@ -287,7 +289,8 @@ async function execute_get_sales_data_batch() {
                         await export_generator_results_to_csv_fast_csv(batch, file_name_date, j);
                     });
 
-                    if (global.gc) global.gc(); // Optional GC
+                    await triggerGarbageCollection();
+                    
                 } while (results.length > 0);
 
                 // Drop temporary table
