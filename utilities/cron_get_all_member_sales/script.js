@@ -1,7 +1,7 @@
 console.log(`\nHello - RUN ALL MEMBERSHIP SALES JOB`);
 console.log("Current Date and Time:", new Date().toLocaleString());
 
-fetch('http://localhost:8002/scheduled-all-sales')
+fetch('http://localhost:8003/scheduled-all-sales')
     .then(response => {
 
         if (!response.ok) {
