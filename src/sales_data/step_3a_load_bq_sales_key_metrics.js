@@ -2,6 +2,7 @@ const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
 
 const { logPM2MemoryUsage } = require('../../utilities/pm2_scripts/pm2_log_memory_usage');
+const { runTimer, stopTimer } = require('../../utilities/timer');
 
 const { query_member_data } = require('../google_cloud/queries/query_member_data');
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
@@ -9,6 +10,7 @@ const { members_schema } = require('../google_cloud/schemas/schema_member_data')
 
 // EXECUTE LOAD BIQ QUERY
 async function execute_load_big_query_sales_key_metrics() {
+    runTimer(`load_bigquery`);
 
     const app_name = "usat_sales";
     await logPM2MemoryUsage(app_name);
@@ -32,6 +34,8 @@ async function execute_load_big_query_sales_key_metrics() {
     // within that process, results are assigned to null then garbage collection is run 
     // to clear memory
     await logPM2MemoryUsage(app_name);
+
+    stopTimer(`load_bigquery`);
 
     return true; // placeholder to return to ensure success msg
 }
