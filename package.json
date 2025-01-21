@@ -4,15 +4,37 @@
   "description": "",
   "main": "query_AllPayments.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+
+    "pm2_monitor": "npx pm2 monit",
+    "pm2_list": "npx pm2 list",
+    "pm2_restart_all": "npx pm2 restart all",
+    "pm2_logs_all": "npm pm2 logs all",
+
+    "pm2_start_slack": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack.js --name usat_slack --no-autorestart --max-memory-restart 3G --cron-restart '30 * * * *' --node-args=\"--expose-gc\"",
+
+    "pm2_logs_slack": "npx pm2 logs usat_slack",
+    "stop_slack": "npx pm2 stop usat_slack",
+    "delete_slack": "npx pm2 delete usat_slack",    
+    "show_slack": "npx pm2 show usat_slack",
+    "restart_slack": "npx pm2 restart usat_slack",
+
+
+    "pm2_start_sales": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_sales.js --name usat_sales --no-autorestart --max-memory-restart 3G --cron-restart '00 08 * * *' --node-args=\"--expose-gc\"",
+    
+    "pm2_logs_sales": "npx pm2 logs usat_sales",
+    "stop_sales": "npx pm2 stop usat_sales",
+    "delete_sales": "npx pm2 delete usat_sales",    
+    "show_sales": "npx pm2 show usat_sales",
+    "restart_sales": "npx pm2 restart usat_sales"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@google-cloud/bigquery": "^7.5.2",
-    "@google-cloud/storage": "^7.9.0",
     "@google-cloud/local-auth": "^2.1.0",
+    "@google-cloud/storage": "^7.9.0",
     "@slack/web-api": "^7.5.0",
     "axios": "^1.7.7",
     "body-parser": "^1.20.3",
@@ -21,7 +43,9 @@
     "express": "^4.21.0",
     "fast-csv": "^5.0.1",
     "mysql2": "^3.9.2",
-    "pm2": "^5.4.3",
     "ssh2": "^1.15.0"
+  },
+  "devDependencies": {
+    "pm2": "^5.4.3"
   }
 }

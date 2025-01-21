@@ -1,5 +1,7 @@
-const { query_sales_goals_data } = require('../google_cloud/queries/query_sales_goals_data');
+const dotenv = require('dotenv');
+dotenv.config({ path: "../../.env" });
 
+const { query_sales_goals_data } = require('../google_cloud/queries/query_sales_goals_data');
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
 // EXECUTE LOAD BIQ QUERY

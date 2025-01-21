@@ -6,6 +6,8 @@ dotenv.config();
 const mysql = require('mysql2');
 const fastcsv = require('fast-csv');
 
+const { triggerGarbageCollection } = require('../../utilities/garbage_collection/trigger_garbage_collection');
+
 const { Client } = require('ssh2');
 const sshClient = new Client();
 const { forwardConfig, dbConfig, sshConfig } = require('../../utilities/config');
@@ -250,7 +252,7 @@ async function processResultsInBatches(results, batchSize, processFunction) {
     processFunction = null;
     
     // console.log('Before GC BATCH PROCESS:', process.memoryUsage());
-    if (global.gc) global.gc();
+    await triggerGarbageCollection();
     // console.log('After GC BATCH PROCESS:', process.memoryUsage());
 }
 
@@ -331,7 +333,7 @@ async function execute_get_slack_sales_data_works() {
                     });
 
                     // Clear memory if needed
-                    if (global.gc) global.gc();
+                    await triggerGarbageCollection();
 
                 } while (results.length > 0);
             }
@@ -348,7 +350,7 @@ async function execute_get_slack_sales_data_works() {
         membership_category_logic = null;
         date_periods = null;
 
-        if (global.gc) global.gc();
+        await triggerGarbageCollection();
     }
 }
 
@@ -513,7 +515,7 @@ async function execute_get_slack_sales_data() {
                     });
 
                     // Clear memory if needed
-                    if (global.gc) global.gc();
+                    await triggerGarbageCollection();
                     
                 } while (results.length > 0);
             }
@@ -546,7 +548,7 @@ async function execute_get_slack_sales_data() {
         membership_category_logic = null;
         date_periods = null;
 
-        if (global.gc) global.gc();
+        await triggerGarbageCollection();
 
         return elapsedTime;
     }
