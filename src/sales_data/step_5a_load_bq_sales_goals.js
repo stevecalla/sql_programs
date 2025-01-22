@@ -14,9 +14,8 @@ async function execute_load_big_query_sales_goals() {
         }
     ];
 
-    // the google load process for sales goals does not use the sql query of the db
-    // because step #1 in the process produces a bad csv thus the code passes a directoryName
-    // which contains the original / source csv for the sales goals which loads in step 2
+    // the google load process for sales goals does not query the local goals DB because it produces bad results
+    // thus the code passes a directoryName which contains the original / source csv for the sales goals which loads in step 2
     // then is used in step 4
     const directoryName = `usat_sales_goal_data`;
     const datasetId = "membership_reporting"; // database name
