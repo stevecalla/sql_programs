@@ -11,8 +11,12 @@ function step_8_sales_key_stats_2015() {
                     am.member_number_members_sa, 
                     am.id_profiles,
 
-                    -- sale origin
-                    am.origin_flag_ma,        
+                    -- sale origin       
+                    CASE
+                        -- categorize NULL as sourced from member_portal
+                        WHEN am.purchased_on_year_adjusted_mp >= 2023 AND am.origin_flag_ma IS NULL THEN 'member_portal'
+                        ELSE am.origin_flag_ma
+                    END AS origin_flag_ma,          
                     CASE
                         -- categorize NULL as sourced from usat direct
                         WHEN am.purchased_on_year_adjusted_mp >= 2023 AND am.origin_flag_ma IS NULL THEN 'source_usat_direct'
