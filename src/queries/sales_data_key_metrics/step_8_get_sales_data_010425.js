@@ -118,7 +118,7 @@ function step_8_sales_key_stats_2015() {
                     ad.age_now,
                     CASE  
                         WHEN ad.age_now < 4 THEN 'bad_age'
-                        WHEN ad.age_now >= 4 AND ad.age_now < 10 THEN '0-9'
+                        WHEN ad.age_now >= 4 AND ad.age_now < 10 THEN '4-9'
                         WHEN ad.age_now < 20 THEN '10-19'
                         WHEN ad.age_now < 30 THEN '20-29'
                         WHEN ad.age_now < 40 THEN '30-39'
@@ -135,7 +135,7 @@ function step_8_sales_key_stats_2015() {
                     sd.age_as_of_sale_date,
                     CASE 
                         WHEN sd.age_as_of_sale_date < 4 THEN 'bad_age'
-                        WHEN sd.age_as_of_sale_date >= 4 AND sd.age_as_of_sale_date < 10 THEN '0-9'
+                        WHEN sd.age_as_of_sale_date >= 4 AND sd.age_as_of_sale_date < 10 THEN '4-9'
                         WHEN sd.age_as_of_sale_date < 20 THEN '10-19'
                         WHEN sd.age_as_of_sale_date < 30 THEN '20-29'
                         WHEN sd.age_as_of_sale_date < 40 THEN '30-39'
@@ -152,7 +152,7 @@ function step_8_sales_key_stats_2015() {
                     ye.age_at_end_of_year,
                     CASE 
                         WHEN ye.age_at_end_of_year < 4 THEN 'bad_age'
-                        WHEN ye.age_at_end_of_year >= 4 AND ye.age_at_end_of_year < 10 THEN '0-9'
+                        WHEN ye.age_at_end_of_year >= 4 AND ye.age_at_end_of_year < 10 THEN '4-9'
                         WHEN ye.age_at_end_of_year < 20 THEN '10-19'
                         WHEN ye.age_at_end_of_year < 30 THEN '20-29'
                         WHEN ye.age_at_end_of_year < 40 THEN '30-39'
