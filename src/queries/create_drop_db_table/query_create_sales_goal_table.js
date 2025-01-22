@@ -7,7 +7,11 @@ const derived_fields = `
   new_member_category_6_sa VARCHAR(50),
   sales_revenue DECIMAL(10,2),
   sales_units INT, 
-  rev_per_unit DECIMAL(10,2)
+  rev_per_unit DECIMAL(10,2),
+  revenue_2024 DECIMAL(10,2),
+  units_2024 INT,
+  rev_per_unit_2024	 DECIMAL(10,2),
+  created_at DATE
 `;
 
 const index_fields = `
