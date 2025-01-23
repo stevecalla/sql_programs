@@ -117,7 +117,7 @@ const query_member_data = `
         DATE_FORMAT(created_at_utc, '%Y-%m-%d') AS created_at_utc -- date '2024-02-12'
 
     FROM usat_sales_db.sales_key_stats_2015 
-    WHERE purchased_on_year_adjusted_mp >= 2022
+    WHERE purchased_on_year_adjusted_mp >= 2019
     -- LIMIT 100;
 `;
 
