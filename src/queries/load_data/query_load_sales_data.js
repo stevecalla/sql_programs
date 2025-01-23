@@ -14,11 +14,11 @@ const derived_fields = `
 `;
 
 const addresses_table = `
-    addresses.postal_code_addresses,
-    addresses.state_code_addresses,
-    addresses.state_name_addresses,
-    addresses.country_name_addresses,
-    addresses.state_id_addresses,
+    postal_code_addresses,
+    state_code_addresses,
+    state_name_addresses,
+    country_name_addresses,
+    state_id_addresses,
 `;
 
 const events_table = `

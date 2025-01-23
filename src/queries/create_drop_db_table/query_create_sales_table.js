@@ -18,7 +18,7 @@ const addresses_table = `
     state_code_addresses VARCHAR(50),
     state_name_addresses VARCHAR(255),
     country_name_addresses VARCHAR(255),
-    state_id_addresses,
+    state_id_addresses INT,
 `;
 
 const events_table = `
