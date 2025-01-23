@@ -63,7 +63,8 @@ function step_8_sales_key_stats_2015() {
                     QUARTER(mc.min_created_at) AS member_min_created_at_quarter,
                     MONTH(mc.min_created_at) AS member_min_created_at_month,
 
-                    am.purchased_on_year_adjusted_mp - YEAR(mc.min_created_at) AS member_created_at_years_out,
+                    -- am.purchased_on_year_adjusted_mp - YEAR(mc.min_created_at) AS member_created_at_years_out,
+                    -- GREATEST(am.purchased_on_year_adjusted_mp - year(mc.min_created_at), 0) AS member_created_at_years_out, -- TODO
                     CASE
                         WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
                         WHEN am.purchased_on_year_adjusted_mp > YEAR(mc.min_created_at) THEN 'after_created_year'
@@ -102,7 +103,8 @@ function step_8_sales_key_stats_2015() {
 
                     -- member first purchase year segmentation
                     fd.first_purchased_on_year_adjusted_mp AS member_first_purchase_year,
-                    am.purchased_on_year_adjusted_mp - first_purchased_on_year_adjusted_mp AS member_first_purchase_years_out,
+                    -- am.purchased_on_year_adjusted_mp - first_purchased_on_year_adjusted_mp AS member_first_purchase_years_out,
+                    -- GREATEST(am.purchased_on_year_adjusted_mp - first_purchased_on_year_adjusted_mp, 0) AS member_first_purchase_years_out, -- TODO
                     CASE
                         WHEN am.purchased_on_year_adjusted_mp = fd.first_purchased_on_year_adjusted_mp THEN 'first_year'
                         WHEN am.purchased_on_year_adjusted_mp > fd.first_purchased_on_year_adjusted_mp THEN 'after_first_year'
@@ -185,7 +187,7 @@ function step_8_sales_key_stats_2015() {
                                     '\\b[0-9]{1,2}(st|nd|rd|th)\\s*', ''  -- Remove series number
                                 ), 
                                 '-', '' -- Replace - with a single space
-                            ), 
+                            ), /step_8_get_sales_data_010425'); // step 8
                             '/', ' ' -- Replace / with a single space
                         )),
                     '\\s+', ' ' -- Replace multiple spaces with a single space
@@ -252,6 +254,9 @@ function step_8_sales_key_stats_2015() {
                     LEFT JOIN step_7_prior_purchase AS pp
                     ON am.id_membership_periods_sa = pp.id_membership_periods_sa
 
+
+W               -- HERE id_membership_periods_sa IN (421768, 1214842, 1214843, 1952878, 3272901) -- bad purchased on dates; eliminated iwth where statement below
+		        WHERE CAST(purchased_on_date_mp AS CHAR) != '0000-00-00';
                 -- LIMIT 10    
                 ;
         -- *********************************************
