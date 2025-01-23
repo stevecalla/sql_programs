@@ -13,6 +13,14 @@ const derived_fields = `
   is_koz_acception_sa BOOLEAN,
 `;
 
+const addresses_table = `
+    postal_code_addresses VARCHAR(255),
+    state_code_addresses VARCHAR(50),
+    state_name_addresses VARCHAR(255),
+    country_name_addresses VARCHAR(255),
+    state_id_addresses,
+`;
+
 const events_table = `
   -- EVENTS TABLE
   id_events INT,                     
@@ -162,6 +170,7 @@ const profiles_table = `
   id_profiles INT,
   created_at_profiles DATETIME, -- todo:
   date_of_birth_profiles DATE,
+  primary_address_id_profiles INT,
 `;
 
 const registration_audit_table = `
@@ -212,6 +221,7 @@ async function query_create_all_membership_sales_table(table_name) {
   const query = `
     CREATE TABLE IF NOT EXISTS ${table_name} (
       ${derived_fields}
+      ${addresses_table}
       ${events_table}
       ${membership_applications_table}
       ${membership_period_table}
