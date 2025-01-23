@@ -13,6 +13,14 @@ const derived_fields = `
     is_koz_acception_sa,
 `;
 
+const addresses_table = `
+    postal_code_addresses,
+    state_code_addresses,
+    state_name_addresses,
+    country_name_addresses,
+    state_id_addresses,
+`;
+
 const events_table = `
     -- EVENTS TABLE
     id_events,
@@ -161,7 +169,8 @@ const profiles_table = `
     -- PROFILES TABLE
     id_profiles,
     @created_at_profiles,
-    @date_of_birth_profiles, -- todo:
+    @date_of_birth_profiles,
+    primary_address_id_profiles,
 `;
 
 const registration_audit_table = `
@@ -416,6 +425,7 @@ function query_load_sales_data(filePath, table) {
     -- IGNORE 2 LINES
     (
       ${derived_fields}
+      ${addresses_table}
       ${events_table}
       ${membership_applications_table}
       ${membership_period_table}

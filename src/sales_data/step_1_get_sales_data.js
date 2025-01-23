@@ -16,12 +16,13 @@ const { create_directory } = require('../../utilities/createDirectory');
 
 const { query_get_sales_data } = require('../queries/sales_data/0_get_sales_data_master_logic');
 
-const { generate_monthly_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods_by_month');
+// const { generate_monthly_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods_by_month');
+const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
+
 const { generate_membership_category_logic } = require('../../utilities/data_query_criteria/generate_membership_category_logic');
 
 const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
 const { runTimer, stopTimer } = require('../../utilities/timer');
-const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
 
 // Function to create a Promise for managing the SSH connection and MySQL queries
 async function createSSHConnection() {
@@ -321,7 +322,7 @@ async function execute_get_sales_data() {
     let offset = 0;
     const retrieval_batch_size = 50000; // Retrieve 50,000 records at a time
     const write_batch_size = 5000; // Write 1,000 records at a time
-    const start_year = 2010; // Default = 2010
+    const start_year = 2024; // Default = 2010
     const membershipPeriodEnds = '2008-01-01';
     const period_interval = 6; // create date periods for 6 month durations; options in include 1 month and 3 months
 

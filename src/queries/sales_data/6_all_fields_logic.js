@@ -13,6 +13,14 @@ const derived_fields = `
     sa.is_koz_acception AS is_koz_acception_sa,
 `;
 
+const addresses_table = `
+    addresses.postal_code AS postal_code_addresses,
+    addresses.state_code AS state_code_addresses,
+    addresses.state_name AS state_name_addresses,
+    addresses.country_name AS country_name_addresses,
+    addresses.state_id AS state_id_addresses,
+`;
+
 const events_table = `
     -- EVENTS TABLE
     events.id AS id_events,
@@ -261,7 +269,8 @@ const profiles_table = `
     -- PROFILES TABLE
     profiles.id AS id_profiles,
     profiles.created_at AS created_at_profiles,
-    profiles.date_of_birth AS date_of_birth_profiles, -- todo:
+    profiles.date_of_birth AS date_of_birth_profiles,
+    profiles.primary_address_id AS primary_address_id_profiles,
 `;
 
 const registration_audit_table = `
@@ -294,43 +303,19 @@ const from_statement_left = `
         LEFT JOIN membership_types ON ma.membership_type_id = membership_types.id
 
         LEFT JOIN members ON mp.member_id = members.id -- DONE = CHANGED FROM RIGHT JOIN TO LEFT
-        LEFT JOIN profiles ON members.memberable_id = profiles.id -- DONE = CHANGED FROM RIGHT JOIN TO LEFT
 
+        LEFT JOIN profiles ON members.memberable_id = profiles.id -- DONE = CHANGED FROM RIGHT JOIN TO LEFT
         LEFT JOIN users ON profiles.user_id = users.id
+        LEFT JOIN addresses ON profiles.primary_address_id = addresses.id
+
         LEFT JOIN events ON ma.event_id = events.id
         LEFT JOIN transactions ON orders.id = transactions.order_id
 `;
 
-// SECTION: VERSION 2
-// const from_statement_right = `
-//     FROM one_day_sales_actual_member_fee AS sa
-//         LEFT JOIN membership_periods AS mp ON sa.max_membership_period_id = mp.id -- DONE
-//         LEFT JOIN membership_applications AS ma ON sa.max_membership_period_id = ma.membership_period_id -- DONE   
-//         LEFT JOIN order_products AS op ON ma.id = op.purchasable_id -- DONE
-//         LEFT JOIN orders ON op.order_id = orders.id -- DONE
-//         LEFT JOIN registration_audit ON sa.max_membership_period_id = registration_audit.membership_period_id
-//         LEFT JOIN registration_audit_membership_application ON registration_audit.id = registration_audit_membership_application.audit_id
-        
-//         -- RIGHT JOIN membership_periods ON (membership_applications.membership_period_id = membership_periods.id) -- DONE LINE 879
-
-//         LEFT JOIN membership_types ON ma.membership_type_id = membership_types.id -- DONE
-
-//         -- RIGHT JOIN members ON membership_periods.member_id = members.id
-//         -- LEFT JOIN members ON mp.member_id = members.id -- DONE = CHANGED FROM RIGHT JOIN TO LEFT
-//         RIGHT JOIN members ON mp.member_id = members.id -- DONE = CHANGED FROM RIGHT JOIN TO LEFT
-
-//         -- RIGHT JOIN profiles ON members.memberable_id = profiles.id
-//         -- LEFT JOIN profiles ON members.memberable_id = profiles.id -- DONE = CHANGED FROM RIGHT JOIN TO LEFT
-//         RIGHT JOIN profiles ON members.memberable_id = profiles.id -- DONE = CHANGED FROM RIGHT JOIN TO LEFT
-
-//         LEFT JOIN users ON profiles.user_id = users.id
-//         LEFT JOIN events ON ma.event_id = events.id
-//         LEFT JOIN transactions ON orders.id = transactions.order_id   
-// `;
-
 const query_all_fields_logic = `
     SELECT 
         ${derived_fields}
+        ${addresses_table}
         ${events_table}
         ${membership_applications_table}
         ${membership_period_table}
