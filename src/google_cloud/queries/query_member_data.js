@@ -34,6 +34,11 @@ const query_member_data = `
         ends_quarter_mp,
         ends_month_mp,
 
+        -- ADDRESS TABLE
+        member_postal_code_addresses,
+        member_state_code_addresses,
+        member_state_name_addresses,
+        member_country_name_addresses,
 
         -- member_min_created_at,
         DATE_FORMAT(DATE(member_min_created_at), '%Y-%m-%d') AS member_min_created_at,

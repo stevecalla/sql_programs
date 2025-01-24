@@ -57,6 +57,12 @@ function step_8_sales_key_stats_2015() {
             QUARTER(am.ends_mp) ends_quarter_mp,
             MONTH(am.ends_mp) ends_month_mp,
 
+            -- ADDRESS TABLE
+            am.postal_code_addresses AS member_postal_code_addresses,
+            am.state_code_addresses AS member_state_code_addresses,
+            am.state_name_addresses AS member_state_name_addresses,
+            am.country_name_addresses AS member_country_name_addresses,
+
             -- member created at segmentation
             mc.min_created_at AS member_min_created_at,
             YEAR(mc.min_created_at) AS member_min_created_at_year,
