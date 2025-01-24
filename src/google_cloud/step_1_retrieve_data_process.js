@@ -217,7 +217,6 @@ async function execute_retrieve_data(options) {
             results = null;
             await triggerGarbageCollection();
 
-
             stopTimer(`${i}_get_data`);  
         }
 

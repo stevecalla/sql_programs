@@ -174,40 +174,6 @@ const members_schema = [
         "fields": []
     },
 
-
-    {
-        "name": "member_postal_code_addresses",
-        "mode": "NULLABLE",
-        "type": "STRING",
-        "description": null,
-        "fields": []
-    },
-    {
-        "name": "member_state_code_addresses",
-        "mode": "NULLABLE",
-        "type": "STRING",
-        "description": null,
-        "fields": []
-    },
-    {
-        "name": "member_state_name_addresses",
-        "mode": "NULLABLE",
-        "type": "STRING",
-        "description": null,
-        "fields": []
-    },
-    {
-        "name": "member_country_name_addresses",
-        "mode": "NULLABLE",
-        "type": "STRING",
-        "description": null,
-        "fields": []
-    },
-
-
-
-
-
     {
         "name": "member_min_created_at",
         "mode": "NULLABLE",
