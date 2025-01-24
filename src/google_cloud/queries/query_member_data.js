@@ -34,7 +34,6 @@ const query_member_data = `
         ends_quarter_mp,
         ends_month_mp,
 
-
         -- member_min_created_at,
         DATE_FORMAT(DATE(member_min_created_at), '%Y-%m-%d') AS member_min_created_at,
 
@@ -46,7 +45,7 @@ const query_member_data = `
         member_created_at_category,
 
         DATE_FORMAT(CONVERT_TZ(most_recent_purchase_date, @@session.time_zone, @@session.time_zone), '%Y-%m-%d %H:%i:%s') AS most_recent_purchase_date,
-        
+
         CASE 
             WHEN most_recent_prior_purchase_date IS NOT NULL THEN 
                 DATE_FORMAT(CONVERT_TZ(most_recent_prior_purchase_date, @@session.time_zone, @@session.time_zone),'%Y-%m-%d %H:%i:%s')
@@ -89,7 +88,7 @@ const query_member_data = `
         created_at_month_events,
         created_at_quarter_events,
         created_at_year_events,
-    
+
         DATE_FORMAT(starts_events, '%Y-%m-%d') AS starts_events,
         starts_month_events,
         starts_quarter_events,
@@ -115,6 +114,7 @@ const query_member_data = `
 
         DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn, -- date '2024-02-12'        
         DATE_FORMAT(created_at_utc, '%Y-%m-%d') AS created_at_utc -- date '2024-02-12'
+        
 
     FROM usat_sales_db.sales_key_stats_2015 
     WHERE purchased_on_year_adjusted_mp >= 2019

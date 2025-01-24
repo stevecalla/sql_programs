@@ -173,6 +173,7 @@ const members_schema = [
         "description": null,
         "fields": []
     },
+
     {
         "name": "member_min_created_at",
         "mode": "NULLABLE",
