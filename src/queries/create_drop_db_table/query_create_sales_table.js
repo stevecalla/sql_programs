@@ -14,18 +14,25 @@ const derived_fields = `
 `;
 
 const addresses_table = `
+    city_addresses VARCHAR(255),
     postal_code_addresses VARCHAR(255),
+    lng_addresses FLOAT,
+    lat_addresses FLOAT,
     state_code_addresses VARCHAR(50),
-    state_name_addresses VARCHAR(255),
-    country_name_addresses VARCHAR(255),
-    state_id_addresses INT,
+    country_code_addresses VARCHAR(255),
 `;
 
 const events_table = `
   -- EVENTS TABLE
   id_events INT,                     
   event_type_id_events INT,                     
-  name_events VARCHAR(255),           
+  name_events VARCHAR(255),                      
+
+  address_events VARCHAR(255),
+  city_events varchar(191), 
+  zip_events VARCHAR(50),          
+  state_code_events varchar(10),              
+  country_code_events varchar(10),             
 
   created_at_events DATETIME,
   created_at_month_events INT,
@@ -45,12 +52,7 @@ const events_table = `
   status_events VARCHAR(50),        
   
   race_director_id_events INT,                
-  last_season_event_id INT,                      
-
-  city_events varchar(191),               
-  state_events varchar(191),                   
-  country_name_events varchar(191),              
-  country_events varchar(191),                  
+  last_season_event_id INT,                
 `;
 
 const membership_applications_table = `

@@ -14,11 +14,12 @@ const derived_fields = `
 `;
 
 const addresses_table = `
+    city_addresses,
     postal_code_addresses,
+    lng_addresses,
+    lat_addresses,
     state_code_addresses,
-    state_name_addresses,
-    country_name_addresses,
-    state_id_addresses,
+    country_code_addresses,
 `;
 
 const events_table = `
@@ -26,6 +27,12 @@ const events_table = `
     id_events,
     event_type_id_events,
     name_events,
+    
+    address_events,
+    city_events,
+    zip_events,
+    state_code_events,
+    country_code_events,
 
     @created_at_events, -- todo:
     created_at_month_events,
@@ -46,11 +53,6 @@ const events_table = `
     
     race_director_id_events,
     last_season_event_id,
-    
-    city_events,
-    state_events,
-    country_name_events,
-    country_events,
 `;
 
 const membership_applications_table = `

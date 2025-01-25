@@ -58,10 +58,12 @@ function step_8_sales_key_stats_2015() {
             MONTH(am.ends_mp) ends_month_mp,
 
             -- ADDRESS TABLE
+            am.city_addresses AS member_city_addresses,
             am.postal_code_addresses AS member_postal_code_addresses,
+            am.lng_addresses AS member_lng_addresses,
+            am.lat_addresses AS member_lat_addresses,
             am.state_code_addresses AS member_state_code_addresses,
-            am.state_name_addresses AS member_state_name_addresses,
-            am.country_name_addresses AS member_country_name_addresses,
+            am.country_code_addresses AS member_country_code_addresses,
 
             -- member created at segmentation
             mc.min_created_at AS member_min_created_at,
@@ -217,11 +219,12 @@ function step_8_sales_key_stats_2015() {
 
             am.race_director_id_events,
             am.last_season_event_id,
-
+            
+            am.address_events,
             am.city_events,
-            am.state_events,
-            am.country_name_events,
-            am.country_events,
+            am.zip_events,
+            am.state_code_events,
+            am.country_code_events,
 
             -- key stats
             st.sales_units,

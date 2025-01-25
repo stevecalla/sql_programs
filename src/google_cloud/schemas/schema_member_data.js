@@ -174,6 +174,7 @@ const members_schema = [
         "fields": []
     },
 
+
     {
         "name": "member_min_created_at",
         "mode": "NULLABLE",
@@ -502,34 +503,6 @@ const members_schema = [
         "fields": []
     },
     {
-        "name": "city_events",
-        "mode": "NULLABLE",
-        "type": "STRING",
-        "description": null,
-        "fields": []
-    },
-    {
-        "name": "state_events",
-        "mode": "NULLABLE",
-        "type": "STRING",
-        "description": null,
-        "fields": []
-    },
-    {
-        "name": "country_name_events",
-        "mode": "NULLABLE",
-        "type": "STRING",
-        "description": null,
-        "fields": []
-    },
-    {
-        "name": "country_events",
-        "mode": "NULLABLE",
-        "type": "STRING",
-        "description": null,
-        "fields": []
-    },
-    {
         "name": "sales_units",
         "mode": "NULLABLE",
         "type": "INTEGER",
@@ -545,6 +518,85 @@ const members_schema = [
     },
     {
         "name": "actual_membership_fee_6_rule_sa",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    }, 
+    // could not get this field to load in BQ
+    // {
+    //     "name": "city_member",
+    //     "mode": "NULLABLE",
+    //     "type": "STRING",
+    //     "description": null,
+    //     "fields": []
+    // },          
+    [ {
+        "name": "postal_code_member",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "lng_member",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "lat_member",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "state_code_member",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "country_code_member",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "address_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "city_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+
+    {
+        "name": "zip_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "state_code_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "country_code_events",
         "mode": "NULLABLE",
         "type": "STRING",
         "description": null,
