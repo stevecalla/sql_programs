@@ -107,30 +107,33 @@ const query_member_data = `
         sales_revenue,
         actual_membership_fee_6_rule_sa,
   
-        -- ADDRESSES
-        -- COULD NOT GET EITHER VERSION OF CITY MEMBER TO LOAD
-        -- TRY TO REPLACE "\" AND QUOTES? NEXT
-        -- TRIM(BOTH '"' FROM member_city_addresses) AS city_member,
-        -- member_city_addresses AS city_member,
-
+        -- MEMBER ADDRESSES
+            -- COULD NOT GET EITHER VERSION OF CITY MEMBER TO LOAD
+            -- TRY TO REPLACE "\" AND QUOTES? NEXT
+            -- TRIM(BOTH '"' FROM member_city_addresses) AS city_member,
+            -- member_city_addresses AS city_member,
         member_postal_code_addresses AS postal_code_member,
         member_lng_addresses AS lng_member,
         member_lat_addresses AS lat_member,
         member_state_code_addresses AS state_code_member,
         member_country_code_addresses AS country_code_member,
+        region_name_member,
+        region_abbr_member,
 
+        -- EVENT ADDRESSES
         TRIM(BOTH '"' FROM address_events) AS address_events,
         TRIM(BOTH '"' FROM city_events) AS city_events,
         zip_events,
         state_code_events,
         country_code_events,
+        region_name_events,
+        region_abbr_events,
 
         DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn, -- date '2024-02-12'        
         DATE_FORMAT(created_at_utc, '%Y-%m-%d') AS created_at_utc -- date '2024-02-12'
         
-
     FROM usat_sales_db.sales_key_stats_2015 
-    WHERE purchased_on_year_adjusted_mp >= 2019
+    WHERE purchased_on_year_adjusted_mp >= 2020
     -- LIMIT 1000;
 `;
 

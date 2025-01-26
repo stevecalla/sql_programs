@@ -531,7 +531,7 @@ const members_schema = [
     //     "description": null,
     //     "fields": []
     // },          
-    [ {
+    {
         "name": "postal_code_member",
         "mode": "NULLABLE",
         "type": "STRING",
@@ -561,6 +561,20 @@ const members_schema = [
     },
     {
         "name": "country_code_member",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "region_name_member",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "region_abbr_member",
         "mode": "NULLABLE",
         "type": "STRING",
         "description": null,
@@ -597,6 +611,20 @@ const members_schema = [
     },
     {
         "name": "country_code_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "region_name_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "region_abbr_events",
         "mode": "NULLABLE",
         "type": "STRING",
         "description": null,

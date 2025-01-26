@@ -194,7 +194,7 @@ async function execute_load_region_data() {
     }
 }
 
-execute_load_region_data();
+// execute_load_region_data();
 
 module.exports = {
     execute_load_region_data,
