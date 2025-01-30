@@ -1,7 +1,7 @@
 // SOURCE:
 // C:\Users\calla\development\usat\sql_code\5_race_participation\discovery_race_count_by_event_summary_012925.sql
 
-function step_1_participation_data(start, end) {
+function step_1_get_participation_data(start_date, end_date, offset, batch_size) {
     return `
           SELECT 
                 -- RACE / EVENT INFO
@@ -11,13 +11,7 @@ function step_1_participation_data(start, end) {
                 , e.sanctioning_event_id AS id_santioning_events
                 , e.event_type_id AS event_type_id_events
                 , et.name AS name_event_type
-                
-                -- MEMBER INFO (REMOVE TO GET HIGHER LEVEL SUMMARY)
-                , rr.profile_id AS profile_id_rr
-                , rr.member_number as member_number_rr
-                
-                -- RACE DATES
-                , r.start_date
+
                 
                 -- EVENTS / EVENT TYPES TABLE
                 , CONCAT('"', 
@@ -55,17 +49,17 @@ function step_1_participation_data(start, end) {
                 , e.state_code AS state_code_events
                 , e.country_code AS country_code_events
                 
-                , e.created_at AS created_at_events
+                , DATE_FORMAT(r.created_at, '%Y-%m-%d %H:%i:%s') AS created_at_events
                 , MONTH(e.created_at) AS created_at_month_events
                 , QUARTER(e.created_at) AS created_at_quarter_events
                 , YEAR(e.created_at) AS created_at_year_events
 
-                , e.starts AS starts_events
+                , DATE_FORMAT(e.starts, '%Y-%m-%d') AS starts_events 
                 , MONTH(e.starts) AS starts_month_events
                 , QUARTER(e.starts) AS starts_quarter_events
                 , YEAR(e.starts) AS starts_year_events
 
-                , e.ends AS ends_events
+                , DATE_FORMAT(e.ends, '%Y-%m-%d') AS ends_events
                 , MONTH(e.ends) AS ends_month_events
                 , QUARTER(e.ends) AS ends_quarter_events
                 , YEAR(e.ends) AS ends_year_events
@@ -98,15 +92,30 @@ function step_1_participation_data(start, end) {
                 LEFT JOIN event_types AS et ON e.event_type_id = et.id
                 LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id
         WHERE 
-                r.start_date > ${start}
-                AND r.start_date < ${end}
+                r.start_date >= '${start_date}'
+                AND r.start_date <= '${end_date}'
+                -- AND rr.profile_id IS NULL
                 
         GROUP BY 1, 2, 3, 4, 5, 6, 7
         ORDER BY 4, 3, 1 ASC
-        LIMIT 100    
+        LIMIT ${batch_size} OFFSET ${offset}  
     `;
 }
 
 module.exports = {
-    step_1_participation_data,
+    step_1_get_participation_data,
 }
+
+                
+// -- MEMBER INFO (REMOVE TO GET HIGHER LEVEL SUMMARY)
+// , rr.profile_id AS profile_id_rr
+// , rr.member_number as member_number_rr
+
+// r.start_date >= ${start_date}
+// AND r.start_date <= ${end_date}
+
+// r.start_date >= '2024-01-01 00:00:00'
+// AND r.start_date <= '2024-01-10 00:00:00'
+
+// YEAR(r.start_date) >= '2024-01-01'
+// AND YEAR(r.start_date) <= '2024-01-10'

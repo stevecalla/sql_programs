@@ -1,12 +1,11 @@
-const { step_1_sales_year_over_year_data } = require('./step_1_get_sales_year_over_year_data_011425'); // step 1
+const { step_1_get_participation_data } = require('./step_1_get_participation_data'); // step 1
 
-async function query_step_0_year_over_year_data_master_logic() {
-    const query_list = [
-        step_1_sales_year_over_year_data,
-    ]
+async function query_step_0_participant_data_master_logic(start_date, end_date, offset, batch_size) {
+    const query_list = step_1_get_participation_data(start_date, end_date, offset, batch_size);
+
     return query_list;
 }
 
 module.exports = {
-    query_step_0_year_over_year_data_master_logic,
+    query_step_0_participant_data_master_logic,
 }

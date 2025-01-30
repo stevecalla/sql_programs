@@ -14,11 +14,9 @@ const { forwardConfig, dbConfig, sshConfig } = require('../../utilities/config')
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { create_directory } = require('../../utilities/createDirectory');
 
-const { query_get_participation_data } = require('../queries/participation_data/step_0_get_participation_data_master_logic');
+const { query_step_0_participant_data_master_logic } = require('../queries/participation_data/step_0_get_participation_data_master_logic');
 
 const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
-
-const { generate_membership_category_logic } = require('../../utilities/data_query_criteria/generate_membership_category_logic');
 
 const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
 const { runTimer, stopTimer } = require('../../utilities/timer');
@@ -63,7 +61,7 @@ async function deleteArchivedFiles() {
     console.log('Deleting files from archive');
 
     // Create the "archive" directory if it doesn't exist
-    const directoryName  = `usat_participation_data_archive`;
+    const directoryName = `usat_participation_data_archive`;
     const directoryPath = await create_directory(directoryName);
 
     // List all files in the directory
@@ -98,12 +96,18 @@ async function moveFilesToArchive() {
 
     try {
         // List all files in the directory
-        const sourcePath = `${os_path}usat_participation_data`;
+        const directoryName_v1 = `usat_participation_data`;
+        const destinationPath_v1 = await create_directory(directoryName_v1);
+
+        console.log(destinationPath_v1);
+
+        // const sourcePath = `${os_path}usat_participation_data`;
+        const sourcePath = destinationPath_v1;
         const files = fs.readdirSync(sourcePath);
         console.log(files);
 
         // Create the "archive" directory if it doesn't exist
-        const directoryName  = `usat_participation_data_archive`;
+        const directoryName = `usat_participation_data_archive`;
         const destinationPath = await create_directory(directoryName);
         console.log(destinationPath);
 
@@ -130,18 +134,19 @@ async function moveFilesToArchive() {
 }
 
 // STEP #3: GET / QUERY USER DATA & RETURN RESULTS
-async function execute_query_get_usat_participation_data_batch(pool, membership_category_logic, year, start_date, end_date, membership_period_ends, offset, batch_size) {
+async function execute_query_get_usat_participation_data_batch(pool, start_date, end_date, offset, batch_size) {
     const startTime = performance.now();
 
     try {
+        const query = await query_step_0_participant_data_master_logic(start_date, end_date, offset, batch_size);
+        // console.log('query =', query);
+
         // Wrap pool.query in a promise
         const results = await new Promise((resolve, reject) => {
-            // const query = query_one_day_participation;
-            const query = query_get_participation_data(membership_category_logic, year, start_date, end_date, membership_period_ends, offset, batch_size);
-            // console.log('query =', query);
-
             pool.query(query, (queryError, results) => {
+
                 if (queryError) {
+                    console.log('*************** ERROR **************')
                     reject(queryError);
                 } else {
                     resolve(results);
@@ -322,10 +327,11 @@ async function execute_get_participation_data() {
     const retrieval_batch_size = 50000; // Retrieve 50,000 records at a time
     const write_batch_size = 5000; // Write 1,000 records at a time
     const start_year = 2025; // Default = 2010
+    const membershipPeriodEnds = '2008-01-01';
     const period_interval = 3; // create date periods for 6 month durations; options in include 1 month and 3 months
 
-    // let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2010
     let date_periods = await generate_date_periods(start_year, membershipPeriodEnds, period_interval);
+    // console.log(date_periods);
 
     // Initialize the index file (only once, even in parallel processes)
     initializeIndexFile();
@@ -350,76 +356,70 @@ async function execute_get_participation_data() {
 
         pool = await createSSHConnection();
 
-        // for (let i = 0; i < date_periods.length; i++) {
-        //     const isProcessed = isIndexProcessedSync(dateIndexFilePath, i);
-        //     console.log('is processed ', isProcessed);
+        for (let i = 0; i < date_periods.length; i++) {
+            const isProcessed = isIndexProcessedSync(dateIndexFilePath, i);
+            console.log('is processed ', isProcessed);
 
-        //     if (isProcessed) {
-        //         console.log(`Skipping already processed index ${i}`);
-        //         continue; // Skip already processed indices
-        //     }
+            if (isProcessed) {
+                console.log(`Skipping already processed index ${i}`);
+                continue; // Skip already processed indices
+            }
 
-        //     // Mark the current index as processed synchronously
-        //     markIndexAsProcessedSync(dateIndexFilePath, i);
-        //     console.log('mark index');
+            // Mark the current index as processed synchronously
+            markIndexAsProcessedSync(dateIndexFilePath, i);
+            console.log('mark index');
 
-        //     const date_period = date_periods[i];
+            offset = 0;
+            const file_name = 'participation_data';
 
-        //     console.log('date period =', date_period);
+            const date_period = date_periods[i];
+            const start_date = date_period.start_date;
+            // const start_date_time = date_period.start_date_time;
+            // const end_date_time = date_period.end_date_time;
+            const start_date_time = '2021-06-01 00:00:00';
+            const end_date_time = '2021-06-15 00:00:00';
 
-        //     for (let j = 0; j < membership_category_logic.length; j++) {
-        //         offset = 0;
+            console.log('date period =', date_period);
+            console.log(`Processing date period index ${i}:`, start_date_time, '-', end_date_time);
 
-        //         const { query, file_name } = membership_category_logic[j];
-        //         const year = date_period.year;
-        //         const start_date = date_period.start_date;
-        //         const start_date_time = date_period.start_date_time;
-        //         const end_date_time = date_period.end_date_time;
-        //         const membership_period_ends = date_period.membership_period_ends;
+            do {
+                runTimer(`${i}_get_data`);
 
-        //         console.log(`Processing date period index ${i}:`, start_date_time, '-', end_date_time);
+                // Retrieve data in batches of 10,000 records
+                results = await execute_query_get_usat_participation_data_batch(
+                    pool,
+                    start_date_time,
+                    end_date_time,
+                    offset,
+                    retrieval_batch_size
+                );
 
-        //         do {
-        //             runTimer(`${i}_get_data`);
+                // console.table(results);
+                console.log('GET DATA: Results length = ', results.length + '; offset = ', offset);
 
-        //             // Retrieve data in batches of 10,000 records
-        //             results = await execute_query_get_usat_participation_data_batch(
-        //                 pool,
-        //                 query,
-        //                 year,
-        //                 start_date_time,
-        //                 end_date_time,
-        //                 membership_period_ends,
-        //                 offset,
-        //                 retrieval_batch_size
-        //             );
+                offset += retrieval_batch_size;
 
-        //             console.log('GET DATA: Results length = ', results.length + '; offset = ', offset);
+                stopTimer(`${i}_get_data`);
 
-        //             offset += retrieval_batch_size;
+                let batchCounter = 0; // Initialize a batch counter
 
-        //             stopTimer(`${i}_get_data`);
+                await processResultsInBatches(results, write_batch_size, async (batch) => {
+                    // Increment the batch counter for each batch
+                    batchCounter++;
 
-        //             let batchCounter = 0; // Initialize a batch counter
+                    // Generate a unique file name for this batch
+                    let file_name_date = `${file_name}_${start_date}_batch_${batchCounter}`;
 
-        //             await processResultsInBatches(results, write_batch_size, async (batch) => {
-        //                 // Increment the batch counter for each batch
-        //                 batchCounter++;
+                    console.log(`Exporting batch ${batchCounter} to file: ${file_name_date}`);
 
-        //                 // Generate a unique file name for this batch
-        //                 let file_name_date = `${file_name}_${start_date}_batch_${batchCounter}`;
+                    await export_generator_results_to_csv_fast_csv(batch, file_name_date, i);
+                });
 
-        //                 console.log(`Exporting batch ${batchCounter} to file: ${file_name_date}`);
+                // Clear memory if needed
+                await triggerGarbageCollection();
 
-        //                 await export_generator_results_to_csv_fast_csv(batch, file_name_date, j);
-        //             });
-
-        //             // Clear memory if needed
-        //             await triggerGarbageCollection();
-                    
-        //         } while (results.length > 0);
-        //     }
-        // }
+            } while (results.length > 0);
+        }
 
     } catch (error) {
         console.error('Error #1: ', error);
