@@ -14,11 +14,21 @@ const derived_fields = `
 `;
 
 const addresses_table = `
+    CONCAT('"', 
+        REPLACE(
+            REPLACE(
+                REPLACE(SUBSTRING(addresses.city, 1, 255), '''', ''), 
+                '"', ''
+            ), 
+            ',', ''
+        ), 
+        '"'
+    ) AS city_addresses,
     addresses.postal_code AS postal_code_addresses,
+    addresses.lng AS lng_addresses,
+    addresses.lat AS lat_addresses,
     addresses.state_code AS state_code_addresses,
-    addresses.state_name AS state_name_addresses,
-    addresses.country_name AS country_name_addresses,
-    addresses.state_id AS state_id_addresses,
+    addresses.country_code AS country_code_addresses,
 `;
 
 const events_table = `
@@ -34,7 +44,31 @@ const events_table = `
             ',', ''
         ), 
         '"'
-    ) AS name_events, -- todo:
+    ) AS name_events,
+
+    CONCAT('"', 
+    REPLACE(
+        REPLACE(
+            REPLACE(SUBSTRING(events.address, 1, 255), '''', ''), 
+            '"', ''
+            ), 
+            ',', ''
+        ), 
+        '"'
+    ) AS address_events,
+    CONCAT('"', 
+        REPLACE(
+            REPLACE(
+                REPLACE(SUBSTRING(events.city, 1, 255), '''', ''), 
+                '"', ''
+            ), 
+            ',', ''
+        ), 
+        '"'
+    ) AS city_events,
+    events.zip AS zip_events,
+    events.state_code AS state_code_events,
+    events.country_code AS country_code_events,
     
     events.created_at AS created_at_events,
     MONTH(events.created_at) AS created_at_month_events,
@@ -55,33 +89,6 @@ const events_table = `
 
     events.race_director_id AS race_director_id_events,
     events.last_season_event_id AS last_season_event_id,
-
-    -- events.city AS city_events,
-    CONCAT('"', 
-        REPLACE(
-            REPLACE(
-                REPLACE(SUBSTRING(events.city, 1, 255), '''', ''), 
-                '"', ''
-            ), 
-            ',', ''
-        ), 
-        '"'
-    ) AS city_events, -- todo:
-
-    -- events.state AS state_events,
-    CONCAT('"', 
-        REPLACE(
-            REPLACE(
-                REPLACE(SUBSTRING(events.state, 1, 255), '''', ''), 
-                '"', ''
-            ), 
-            ',', ''
-        ), 
-        '"'
-    ) AS state_events, -- todo:
-
-    events.country_name AS country_name_events,
-    events.country AS country_events,
 `;
 
 const membership_applications_table = `

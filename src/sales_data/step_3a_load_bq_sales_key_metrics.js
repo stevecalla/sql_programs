@@ -18,7 +18,9 @@ async function execute_load_big_query_sales_key_metrics() {
     const options = [
         {
             fileName: 'member_data',
+            // fileName: 'member_data_state_info',
             query: query_member_data,
+            // tableId: "membership_data_state_info",
             tableId: "membership_data", // table name
         }
     ];
