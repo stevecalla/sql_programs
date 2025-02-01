@@ -15,6 +15,11 @@ const query_sales_year_over_year_data = `
         origin_flag_category,	
         member_created_at_category,	
 
+        region_name_member,
+        region_abbr_member,
+        region_name_events,
+        region_abbr_events,
+
         revenue_current,	
         revenue_prior,	
         revenue_diff_abs,	
