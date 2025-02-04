@@ -34,6 +34,8 @@ const query_actual_membership_fee_6_logic = `
             CASE
                 WHEN mp.terminated_on IS NOT NULL THEN 0 -- membership period terminated on ISNULL filtered in the source_2 CTE query above 
 
+                WHEN events.id IN ('32774', '32775') AND mp.membership_type_id IN (115) THEN 14 -- tri for cure rule; sale is at $0 then race director is billed the membership fee; added 2/4/25
+
                 -- elseif [Source] = "Membership System/RTAV Classic" then [MS or Classic Fee 2] // essentially does it have an Order ID
                 -- [Source] 
                     -- has a rule such that if not isnull([Cart Label]) then "Membership System/RTAV Classic"
@@ -128,6 +130,7 @@ const query_actual_membership_fee_6_logic = `
         LEFT JOIN registration_audit AS ra ON ka.id_membership_periods = ra.membership_period_id
         LEFT JOIN order_products AS op ON ma.id = op.purchasable_id
         LEFT JOIN registration_audit_membership_application AS rama ON ra.id = rama.audit_id
+        LEFT JOIN events ON ma.event_id = events.id
 
     -- WHERE 
         -- mp.terminated_on IS NULL
