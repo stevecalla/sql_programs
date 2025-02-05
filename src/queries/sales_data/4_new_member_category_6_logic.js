@@ -37,6 +37,9 @@ const query_new_member_category_6_logic =
             WHEN mp.membership_type_id IN (118) AND ma.membership_type_id = 118 THEN 'Bronze - AO'
             WHEN mp.membership_type_id IN (115) AND ma.membership_type_id = 118 THEN 'Bronze - AO'
             WHEN mp.membership_type_id IN (115) AND mf.max_membership_fee_6 = 6 THEN 'Bronze - $6' -- 'Actual Membership Fee 6'
+            
+            WHEN events.id IN ('32774', '32775') AND mp.membership_type_id IN (115) THEN 'Bronze - $13' -- tri for cure rule; sale is at $0 then race director is billed the membership fee; added 2/4/25
+
             WHEN mp.membership_type_id IN (115) AND mf.max_membership_fee_6 = 13 THEN 'Bronze - $13' -- 'Actual Membership Fee 6'
             WHEN mp.membership_type_id IN (115) AND mf.max_membership_fee_6 = 15 THEN 'One Day - $15' -- 'Actual Membership Fee 6'
             WHEN mp.membership_type_id IN (115) AND mf.max_membership_fee_6 = 18 THEN 'Bronze - $18' -- 'Actual Membership Fee 6'
@@ -66,6 +69,7 @@ const query_new_member_category_6_logic =
         LEFT JOIN actual_membership_fee_6_rule AS r ON mf.id_membership_periods = r.id_membership_periods -- todo: rule additional field
         LEFT JOIN membership_applications AS ma ON mf.id_membership_periods = ma.membership_period_id
         LEFT JOIN membership_periods AS mp ON mf.id_membership_periods = mp.id
+        LEFT JOIN events ON ma.event_id = events.id
 
     GROUP BY mf.id_membership_periods
 
