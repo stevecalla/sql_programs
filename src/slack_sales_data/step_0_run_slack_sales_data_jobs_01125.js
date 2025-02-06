@@ -7,8 +7,8 @@ const { execute_create_send_slack_sales_data } = require('./step_3_create_send_s
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 const run_step_1 = true; // get sales data
-const run_step_2 = false; // load sales data
-const run_step_3 = false; // create slack messaage; default = false
+const run_step_2 = true; // load sales data
+const run_step_3 = true;// create slack messaage; default = false
 
 async function executeSteps(stepFunctions, is_cron_job, channel_id, channel_name, user_id) {
   for (let i = 0; i < stepFunctions.length; i++) {
