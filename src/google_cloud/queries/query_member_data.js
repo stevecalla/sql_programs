@@ -2,8 +2,13 @@ const query_member_data = `
     SELECT 
         member_number_members_sa,
         id_profiles,
+
         origin_flag_ma,
         origin_flag_category,
+
+        created_at_mp, -- '2025-01-24 15:00:39'
+        DATE_FORMAT(created_at_mp, '%Y-%m-%d') AS created_at_date_mp, -- '2025-01-24 15:00:39'
+
         id_membership_periods_sa,
         real_membership_types_sa,
         new_member_category_6_sa,
