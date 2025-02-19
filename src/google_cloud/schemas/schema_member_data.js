@@ -28,6 +28,20 @@ const members_schema = [
         "fields": []
     },
     {
+        "name": "created_at_mp",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "2025-01-24 15:00:39",
+        "fields": []
+    },
+    {
+        "name": "created_at_date_mp",
+        "mode": "NULLABLE",
+        "type": "DATE",
+        "description": "date '2024-02-12'",
+        "fields": []
+    },
+    {
         "name": "id_membership_periods_sa",
         "mode": "NULLABLE",
         "type": "INTEGER",

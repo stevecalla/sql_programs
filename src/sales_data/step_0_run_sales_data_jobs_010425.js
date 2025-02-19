@@ -29,7 +29,7 @@ const run_step_4  = true; // create year-over-year common date table
 const run_step_4a = true; // load sales key metrics stats to biqquery
 
 const run_step_5  = true; // load sales goal data
-const run_step_5a = true // load sales goals to bigquery
+const run_step_5a = true; // load sales goals to bigquery
 
 async function executeSteps(stepFunctions, stepName) {
   for (let i = 0; i < stepFunctions.length; i++) {
