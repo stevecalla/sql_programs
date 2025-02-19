@@ -28,7 +28,8 @@ function step_8_sales_key_stats_2015() {
 
                 -- membership periods, types, category
                 am.created_at_mp,
-                DATE(am.created_at_mp),
+                DATE(am.created_at_mp) AS created_at_date_mp,
+
                 am.id_membership_periods_sa, 
                 am.real_membership_types_sa, 
                 am.new_member_category_6_sa, 

@@ -31,7 +31,7 @@ const members_schema = [
         "name": "created_at_mp",
         "mode": "NULLABLE",
         "type": "STRING",
-        "description": null,
+        "description": "2025-01-24 15:00:39",
         "fields": []
     },
     {
