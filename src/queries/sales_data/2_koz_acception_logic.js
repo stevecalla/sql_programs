@@ -1,4 +1,6 @@
-// KOZ handled registration outside of the api, but they sent us files to upload. they have not paid for these athletes yet so we have excluded the sales from our list until post-race documents are sent in and the money is paid.
+// -- Section 2: KOZ Acception
+// -- Purpose: KOZ was a series of event that had occurred where we had issues with the payments. Will be assigned either $10 or $15 based on membership type; KOZ handled registration outside of the api, but they sent us files to upload. they have not paid for these athletes yet so we have excluded the sales from our list until post-race documents are sent in and the money is paid.
+// -- JAN2025CHANGES: No changes
 
 const query_koz_acception_logic = 
 `
@@ -36,7 +38,5 @@ const query_koz_acception_logic =
     --     st.source_2 IS NULL
     
     GROUP BY st.id_membership_periods
-
 `;
-
 module.exports = { query_koz_acception_logic };
