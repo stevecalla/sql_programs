@@ -30,10 +30,11 @@ function query_source_2_logic(year, start_date, end_date, operator, membership_p
             LEFT JOIN users ON profiles.user_id = users.id
             LEFT JOIN events ON membership_applications.event_id = events.id
             LEFT JOIN transactions ON orders.id = transactions.order_id
-            LEFT JOIN registration_companies ON registration_companies.id = registration_audit.registration_company_id -- JAN2025CHANGE Added Join
+            -- JAN2025CHANGE Added Join
+            LEFT JOIN registration_companies ON registration_companies.id = registration_audit.registration_company_id 
             
         WHERE 
-            AND membership_periods.membership_type_id NOT IN (56, 58, 81, 105) -- Excluding club memberships
+            membership_periods.membership_type_id NOT IN (56, 58, 81, 105) -- Excluding club memberships
             -- AND membership_periods.id NOT IN (4652554) -- JAN2025CHANGE Commented out. Sam inactivated.
 
             -- YEAR(membership_periods.purchased_on) ${operator} ${year}
