@@ -110,9 +110,9 @@ async function execute_load_sales_data() {
         drop_db && await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
 
         // STEP #2: CREATE TABLE = all files loaded into single table
-        const table_name = `all_membership_sales_data_2015_left`;
+        const table_name = `all_participation_data_raw`;
         const step = `STEP #2.1:`;
-        const step_info = `all_membership_sales_data_2015_left`;
+        const step_info = `all_participation_data_raw`;
 
         const drop_query = await query_drop_table(table_name);
         const create_query = await query_create_all_membership_sales_table(table_name);
@@ -129,7 +129,7 @@ async function execute_load_sales_data() {
 
         let rows_added = 0;
 
-        const directory = await create_directory('usat_sales_data');
+        const directory = await create_directory('usat_participation_data');
         console.log(directory);
 
         // List all files in the directory

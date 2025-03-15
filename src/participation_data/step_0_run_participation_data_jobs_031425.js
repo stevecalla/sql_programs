@@ -70,9 +70,10 @@ async function execute_run_participation_data_jobs() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1  = true; // get participation data
+  const run_step_1  = true; // get all participation data
   // const run_step_2  = false; // load participation data
   // const run_step_2a = false; // load region table
+
 
   try {
     const stepFunctions = [
