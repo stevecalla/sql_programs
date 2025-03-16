@@ -10,8 +10,8 @@ const { create_directory } = require('../../utilities/createDirectory');
 
 const { query_create_database } = require('../queries/create_drop_db_table/queries_create_db');
 const { query_drop_database, query_drop_table } = require('../queries/create_drop_db_table/queries_drop_db_tables');
-const { query_create_all_membership_sales_table } = require('../queries/create_drop_db_table/query_create_sales_table');
-const { query_load_sales_data } = require('../queries/load_data/query_load_sales_data');
+const { query_create_participation_table } = require('../queries/create_drop_db_table/query_create_participation_table');
+const { query_load_participation_data } = require('../queries/load_data/query_load_participation_data');
 
 // const { tables_library } = require('../queries/create_drop_db_table/query_create_sales_table');
 
@@ -90,7 +90,7 @@ async function execute_mysql_working_query(pool, db_name, query, filePath, rows_
     });
 }
 
-async function execute_load_sales_data() {
+async function execute_load_participation_data() {
     let pool;
     const startTime = performance.now();
 
@@ -106,7 +106,6 @@ async function execute_load_sales_data() {
         // // STEP #1: CREATE DATABASE - ONLY NEED TO CREATE DB INITIALLY
         const drop_db = false; // normally don't drop db
         drop_db && await execute_mysql_working_query(pool, db_name, query_drop_database(db_name), `STEP #1.0: DROP DB`);
-
         drop_db && await execute_mysql_create_db_query(pool, query_create_database(db_name), `STEP #1.1: CREATE DATABASE`);
 
         // STEP #2: CREATE TABLE = all files loaded into single table
@@ -115,14 +114,14 @@ async function execute_load_sales_data() {
         const step_info = `all_participation_data_raw`;
 
         const drop_query = await query_drop_table(table_name);
-        const create_query = await query_create_all_membership_sales_table(table_name);
+        const create_query = await query_create_participation_table(table_name);
 
         const drop_info = `${step} DROP ${step_info.toUpperCase()} TABLE`;
         const create_info = `${step} CREATE ${step_info.toUpperCase()} TABLE`;
 
         await execute_mysql_working_query(pool, db_name, drop_query, drop_info);
         await execute_mysql_working_query(pool, db_name, create_query, create_info);
-
+        
         // STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "USER DATA" TABLE
         console.log(`STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "usat all_membership_sales_data" TABLE`);
         console.log(getCurrentDateTime());
@@ -135,6 +134,7 @@ async function execute_load_sales_data() {
         // List all files in the directory
         const files = await fsp.readdir(directory);
         console.log(files);
+        console.log(`\nnumber of files = `, files.length);
         let number_of_files = 0;
 
         // Iterate through each file
@@ -152,10 +152,10 @@ async function execute_load_sales_data() {
                 filePath = filePath.replace(/\\/g, '/');
 
                 console.log('file path to insert data = ', filePath);
-                
-                const query_load = query_load_sales_data(filePath, table_name);
 
-                // // Insert file into "" table
+                const query_load = query_load_participation_data(filePath, table_name);
+
+                // Insert file into "" table
                 let query = await execute_mysql_working_query(pool, db_name, query_load, filePath, rows_added, i);
 
                 // track number of rows added
@@ -196,8 +196,8 @@ async function execute_load_sales_data() {
     }
 }
 
-// execute_load_sales_data();
+// execute_load_participation_data();
 
 module.exports = {
-    execute_load_sales_data,
+    execute_load_participation_data,
 }

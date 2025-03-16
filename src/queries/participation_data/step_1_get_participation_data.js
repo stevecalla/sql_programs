@@ -5,20 +5,18 @@ function step_1_get_participation_data(start_date, end_date, offset, batch_size)
     return `
         SELECT 
                 -- RACE / EVENT INFO
-                rr.race_id AS id_race_results,
+                rr.id AS id_rr,
+                rr.race_id AS id_race_rr,
+        
                 r.id AS id_races,
                 e.id AS id_events,
                 e.sanctioning_event_id AS id_sanctioning_events,
                 e.event_type_id AS event_type_id_events,
+                
+                -- EVENT TYPES
                 et.name AS name_event_type,
 
-                -- RACES TABLE
-                DATE_FORMAT(r.start_date, '%Y-%m-%d') AS start_date_races,
-                MONTH(r.start_date) AS start_date_month_events,
-                QUARTER(r.start_date) AS start_date_quarter_events,
-                YEAR(r.start_date) AS start_date_year_events,
-
-                -- EVENTS / EVENT TYPES TABLE
+                -- EVENTS
                 CONCAT('"', REPLACE(REPLACE(REPLACE(SUBSTRING(e.name, 1, 255), '''', ''), '"', ''), ',', ''), '"') AS name_events,
                 CONCAT('"', REPLACE(REPLACE(REPLACE(SUBSTRING(e.address, 1, 255), '''', ''), '"', ''), ',', ''), '"') AS address_events,
                 CONCAT('"', REPLACE(REPLACE(REPLACE(SUBSTRING(e.city, 1, 255), '''', ''), '"', ''), ',', ''), '"') AS city_events,
@@ -48,78 +46,61 @@ function step_1_get_participation_data(start_date, end_date, offset, batch_size)
 
                 e.race_director_id AS race_director_id_events,
                 e.last_season_event_id AS last_season_event_id,
-
+                
+                -- IRONMAN
+                CASE 
+                        WHEN e.name LIKE '%IRONMAN%' OR e.name LIKE '%Ironman%' 
+                        OR e.name LIKE '%70.3%' OR e.name LIKE '%140.6%' THEN 1 
+                        ELSE 0
+                END AS is_ironman,
+                
+                -- RACES TABLE
+                DATE_FORMAT(r.start_date, '%Y-%m-%d') AS start_date_races,
+                MONTH(r.start_date) AS start_date_month_races,
+                QUARTER(r.start_date) AS start_date_quarter_races,
+                YEAR(r.start_date) AS start_date_year_races,
+                
                 -- MEMBER DETAIL
-                rr.gender_code,
-                rr.gender_id,
-
-                -- RACE DETAILS
-                dt.name AS name_distance_types,
-                rr.category,
-                
-                -- RACE TYPES
-                rt.id AS id_race_types,
-                rt.name AS name_race_type,     
-                
-                -- MEMBER INFO (REMOVE TO GET HIGHER LEVEL SUMMARY)
                 rr.profile_id AS id_profile_rr,
                 rr.member_number as member_number_rr,
+                rr.gender_code,
+                rr.gender_id,
                 rr.score,
                 rr.finish_status,
                 rr.age,
                 rr.readable_time,
                 rr.milliseconds,
                 
-                -- IRONMAN
-                CASE 
-                        WHEN e.name LIKE '%IRONMAN%' OR e.name LIKE '%Ironman%' 
-                                OR e.name LIKE '%70.3%' OR e.name LIKE '%140.6%' THEN 1 
-                        ELSE 0
-                END AS is_ironman, -- 1 = is_ironman / 0 = is_not_ironman
+                -- RACE DISTANCE TYPES
+                dt.name AS name_distance_types,
+                
+                -- RACE TYPES
+                rt.id AS id_race_types,
+                rt.name AS name_race_type,
 
-                rr.created_at AS created_at_rr,
-                rr.updated_at AS updated_at_rr,
-
-                CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'America/Denver') AS created_at_mtn,
-                UTC_TIMESTAMP() AS created_at_utc,
-
-                -- METRICS
-                COUNT(DISTINCT rr.profile_id) AS count_profile_id_distinct, -- Excludes those without a profile ID
-                COUNT(*) AS count_all_participation, -- Includes all race participants because this query includes granular data
-
-                -- GENDER COUNT
-                COUNT(DISTINCT CASE WHEN rr.gender_id IN (1) THEN e.sanctioning_event_id END) AS gender_male_count,
-                COUNT(DISTINCT CASE WHEN rr.gender_id IN (2) THEN e.sanctioning_event_id END) AS gender_female_count,
-                COUNT(DISTINCT CASE WHEN rr.gender_id NOT IN (1, 2) THEN e.sanctioning_event_id END) AS gender_other_count
-
+                -- CREATED AT DATES
+                DATE_FORMAT(CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'America/Denver'), '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
+                DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s') AS created_at_utc
+                
         FROM race_results AS rr
                 LEFT JOIN races AS r ON rr.race_id = r.id 
                 LEFT JOIN race_types AS rt ON r.race_type_id = rt.id
                 LEFT JOIN events AS e ON r.event_id = e.id
                 LEFT JOIN event_types AS et ON e.event_type_id = et.id
                 LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id
-
-        WHERE 
-                r.start_date >= '${start_date}'
+        
+        WHERE 1 = 1
+                -- AND r.start_date >= @start_date
+                -- AND r.start_date <= @end_date
+                -- AND YEAR(r.start_date) = @year
+                
+                -- NODE / JS
+                AND r.start_date >= '${start_date}'
                 AND r.start_date <= '${end_date}'
-                -- AND rr.profile_id IS NULL
-                
-        GROUP BY 
-                rr.race_id, r.id, e.id, e.sanctioning_event_id, e.event_type_id, et.name,
-                e.name, e.address, e.city, e.zip, e.state_code, e.country_code,
-                r.created_at, e.created_at, e.starts, e.ends, e.status, e.race_director_id,
-                e.last_season_event_id, rr.gender_code, rr.gender_id,
-                dt.name, rr.category, rt.id, rt.name,
-                
-                rr.profile_id,
-                rr.member_number,
-                rr.score,
-                rr.finish_status,
-                rr.age,
-                rr.readable_time,
-                rr.milliseconds
 
-        ORDER BY e.sanctioning_event_id, e.id, rr.race_id ASC
+        ORDER BY rr.id ASC
+
+        -- NODE / JS
         LIMIT ${batch_size} OFFSET ${offset}  
     `;
 }

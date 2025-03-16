@@ -5,7 +5,7 @@ function step_1_get_participation_data(start_date, end_date, offset, batch_size)
     return `
           SELECT 
                 -- RACE / EVENT INFO
-                rr.race_id AS id_race_results
+                rr.race_id AS id_race_rr
                 , r.id AS id_races
                 , e.id AS id_events
                 , e.sanctioning_event_id AS id_santioning_events
