@@ -107,6 +107,7 @@ const index_fields = `
     INDEX idx_name_events (name_events),
     INDEX idx_starts_events (starts_events),
 
+    INDEX idx_id_profile_rr (id_profile_rr),
     INDEX idx_member_number_rr (member_number_rr),
     INDEX idx_gender_code_rr (gender_code),
 
