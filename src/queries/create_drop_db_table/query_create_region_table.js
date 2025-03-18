@@ -1,4 +1,4 @@
-const derived_fields = `
+const region_fields = `
   state_id INT,	
   region_code INT,
   state_name VARCHAR(100),	
@@ -11,7 +11,7 @@ const derived_fields = `
 async function query_create_region_table(table_name) {
   const query = `
     CREATE TABLE IF NOT EXISTS ${table_name} (
-      ${derived_fields}
+      ${region_fields}
     );
   `;
 

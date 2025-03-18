@@ -85,19 +85,6 @@ const created_at_dates = `
     created_at_utc DATETIME,
 `;
 
-const gender_count = `
-    -- GENDER COUNT
-    gender_male_count INT,
-    gender_female_count INT,
-    gender_other_count INT,
-`;
-
-const metrics = `
-    -- METRICS
-    count_profile_id_distinct INT,
-    count_all_participation INT,
-`;
-
 const index_fields = `
     -- PRIMARY KEY (id_race_rr, id_profile_rr),
     INDEX idx_id_events (id_events),
@@ -129,8 +116,6 @@ async function query_create_participation_table(table_name) {
       ${distance_types_table}
       ${race_types_table}
       ${created_at_dates}
-      ${gender_count}
-      ${metrics}
       ${index_fields}
     );
   `;
