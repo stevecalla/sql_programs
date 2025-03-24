@@ -76,10 +76,20 @@ function step_8_sales_key_stats_2015() {
                 -- member lapsed, new, renew segmentation
                 pp.most_recent_purchase_date,
                 pp.most_recent_prior_purchase_date,
+
+                pp.most_recent_mp_ends_date,
+                pp.most_recent_prior_mp_ends_date,
+
                 CASE
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year' -- new   
-                    WHEN pp.most_recent_purchase_date > DATE_ADD(most_recent_prior_purchase_date, INTERVAL 2 YEAR) THEN 'after_created_year_lapsed'
-                    WHEN pp.most_recent_purchase_date <= DATE_ADD(most_recent_prior_purchase_date, INTERVAL 2 YEAR) THEN 'after_created_year_renew'
+                    -- ORIGINAL DEFINITION BASED ON MOST RECENT PURCHASE DATE LOGIC; REVISED TO USE MP END & START PERIOD DATE
+                    -- WHEN pp.most_recent_purchase_date > DATE_ADD(most_recent_prior_purchase_date, INTERVAL 2 YEAR) THEN 'after_created_year_lapsed'
+                    -- WHEN pp.most_recent_purchase_date <= DATE_ADD(most_recent_prior_purchase_date, INTERVAL 2 YEAR) THEN 'after_created_year_renew'
+
+                    -- current starts_mp is within 2 years of the most recent ends_mp
+                    WHEN am.starts_mp > DATE_ADD(pp.most_recent_prior_mp_ends_date, INTERVAL 2 YEAR) THEN 'after_created_year_lapsed' 
+                    WHEN am.starts_mp <= DATE_ADD(pp.most_recent_prior_mp_ends_date, INTERVAL 2 YEAR) THEN 'after_created_year_renew'
+
                     ELSE 'error_lapsed_renew_segmentation'
                 END AS member_lapsed_renew_category,
 
