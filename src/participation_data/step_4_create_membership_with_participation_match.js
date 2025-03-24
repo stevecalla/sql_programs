@@ -12,8 +12,8 @@ const {
     query_append_region_fields,
     query_append_membership_period_fields,
     query_append_index_fields,
-    step_4_create_participation_with_membership_match,
-} = require("../queries/participation_data/step_3_create_participation_with_membership_match");
+    step_4_create_membership_with_participation_match,
+} = require("../queries/participation_data/step_4_create_membership_with_participation_match");
 
 const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
 const { runTimer, stopTimer } = require('../../utilities/timer');
@@ -69,17 +69,19 @@ async function create_table(pool, db_name, table_name) {
 
     // DROP TABLE
     const query_to_drop_table = await query_drop_table(table_name);
+    console.log(`DROP TABLE QUERY = ${query_to_drop_table}`);
     await execute_mysql_working_query(pool, db_name, query_to_drop_table);
 
     // CREATE TABLE, ADD PARTICIPATION FIELDS
     const query_to_create_table = await query_create_table(table_name);
+    console.log(`CREATE TABLE QUERY = ${query_to_create_table}`);
     await execute_mysql_working_query(pool, db_name, query_to_create_table);
 
-    // APPEND REGION FIELDS
+    // // APPEND REGION FIELDS
     const query_to_append_region_fields = await query_append_region_fields(table_name);
     await execute_mysql_working_query(pool, db_name, query_to_append_region_fields);
 
-    // APPEND SALES, ROW NUMBER & IS ACTIVE FIELDS
+    // // APPEND SALES, ROW NUMBER & IS ACTIVE FIELDS
     const query_to_append_membership_period_fields = await query_append_membership_period_fields(table_name);
     await execute_mysql_working_query(pool, db_name, query_to_append_membership_period_fields);
 
@@ -106,14 +108,14 @@ async function insert_data(pool, db_name, table_name, test = false) {
         let end_date_time = "";
         
         if (test) {
-            start_date_time = '2025-03-01 00:00:00';
-            end_date_time = '2025-03-01 23:59:00';
+            start_date_time = '2025-01-01 00:00:00';
+            end_date_time = '2025-01-01 23:59:00';
         } else {
             start_date_time = date_period.start_date_time;
             end_date_time = date_period.end_date_time;
         }
 
-        const query_to_insert_data = await step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time);
+        const query_to_insert_data = await step_4_create_membership_with_participation_match(table_name, start_date_time, end_date_time);
 
         console.log(`\nQuery of ${i + 1} of ${date_periods.length}: ****** Start Date: ${start_date_time}; End Date: ${end_date_time}.`)
 
@@ -137,7 +139,7 @@ async function append_indexes(pool, db_name, table_name) {
     return;
 }
 
-async function execute_create_participation_with_membership_match() {
+async function execute_create_membership_with_participation_match() {
     let pool;
     const startTime = performance.now();
     let test = false; // true will run less data for insert
@@ -147,10 +149,11 @@ async function execute_create_participation_with_membership_match() {
         pool = await create_connection();
 
         const db_name = `usat_sales_db`;
-        const table_name = `all_participation_data_with_membership_match`;
+        const table_name = `all_membership_data_with_participation_match`;
         console.log(db_name);
 
         // STEP #1: CREATE TABLE
+        console.log(`CREATE TABLE = ${table_name}`)
         await create_table(pool, db_name, table_name);
 
         // STEP #2: INSERT DATA
@@ -158,7 +161,7 @@ async function execute_create_participation_with_membership_match() {
  
         // STEP #3: APPEND INDEXES
         console.log('CREATED INDEXES ****************')
-        // await append_indexes(pool, db_name, table_name)
+        await append_indexes(pool, db_name, table_name)
 
         // STEP #5a: Log results
         console.log('STEP #1: All queries executed successfully.');
@@ -187,8 +190,8 @@ async function execute_create_participation_with_membership_match() {
     }
 }
 
-// execute_create_participation_with_membership_match();
+// execute_create_membership_with_participation_match();
 
 module.exports = {
-    execute_create_participation_with_membership_match,
+    execute_create_membership_with_participation_match,
 }

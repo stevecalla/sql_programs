@@ -9,6 +9,8 @@ const { execute_load_participation_data } = require('./step_2_load_participation
 
 const { execute_create_participation_with_membership_match } = require("./step_3_create_participation_with_membership_match");
 
+const { execute_create_membership_with_participation_match } = require("./step_4_create_membership_with_participation_match");
+
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 async function executeSteps(stepFunctions, stepName) {
@@ -76,7 +78,8 @@ async function execute_run_participation_data_jobs() {
   const run_step_2  = false; // load participation data
   // const run_step_2a = false; // load region table
 
-  const run_step_3 = true; // create table participation with membership sales match
+  const run_step_3 = false; // create table participation with membership sales match
+  const run_step_4 = true; // create table membership with participation match
 
 
   try {
@@ -86,6 +89,7 @@ async function execute_run_participation_data_jobs() {
       // run_step_2a ? execute_load_region_data : null,
 
       run_step_3 ? execute_create_participation_with_membership_match : null,
+      run_step_4 ? execute_create_membership_with_participation_match : null,
     ];
 
     const stepName = [
@@ -94,6 +98,7 @@ async function execute_run_participation_data_jobs() {
       // `Step #2a - Load Region Data: `, 
 
       `Step #3 - Created participation data with membership match`,
+      `Step #4 - Created membership data with participation match`,
 
     ];
 

@@ -1,35 +1,28 @@
 // SOURCE 
-// working query: C:\Users\calla\development\usat\sql_code\5_race_participation\final_0_local_paticiption_working_query_031825.sql
+// working query: C:\Users\calla\development\usat\sql_code\5_race_participation\final_0_local_membership_working_query_031825.sql
 // discovery: C:\Users\calla\development\usat\sql_code\5_race_participation\local_participation_raw_merge_region_and_sales.sql
 
 // STEP #2: INSERT DATA INTO TABLE
-async function step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time) {
+async function step_4_create_membership_with_participation_match(table_name, start_date_time, end_date_time) {
     return `
         SET @start_date = '2025-01-01';
-        SET @end_date = '2025-03-16';
+        SET @end_date = '2025-03-01';
 
         INSERT INTO ${table_name}
-            WITH participation AS (
+            WITH membership_sales AS (
                 SELECT 
                     *
-                FROM all_participation_data_raw
+                FROM sales_key_stats_2015
 
                 WHERE 1 = 1 
-                    -- AND start_date_year_races = 2025
-                    -- AND start_date_races >= @start_date
-                    -- AND start_date_races <= @end_date
+                    -- AND purchased_on_year_adjusted_mp = 2023
+                    -- AND purchased_on_date_adjusted_mp = '${start_date_time}'
 
-                    AND start_date_races >= '${start_date_time}'
-                    AND start_date_races <= '${end_date_time}'
-
-                -- Uncomment and modify the following lines if you need additional filters:
-                -- AND id_profile_rr = 42 
-                -- AND id_rr = 4527556 -- this member is missing memberships to match race history; total number of races = 6; total memberships = 4 with missing for 2014, 2017, 2021 races; id_profile_rr = 42
-                -- AND id_profile_rr = 999977 
-                -- AND id_rr = 1197359 -- this member has multiple memberships for the same race (a one day & an annual)
+                    AND purchased_on_date_adjusted_mp >= '${start_date_time}'
+                    AND purchased_on_date_adjusted_mp <= '${end_date_time}'
             ),
 
-            merge_participation_with_active_membership AS (
+            merge_membership_sales_with_participation AS (
                 SELECT 
                     -- PARTICIPATION DATA
                     p.id_rr,
@@ -122,24 +115,25 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     
                     s.sales_revenue,
                     s.sales_units,
-
+                    		
                     -- IDENTIFY DUPLICATES = when race result id is applied to more than 1 membership
                     ROW_NUMBER() OVER (
-                        PARTITION BY p.id_rr -- p.id_rr should never be null in the race results / participation table
+                        -- ensures null values are not counted in the same grouping then filtered out in the final select query below; null should have unique membership period id
+                        PARTITION BY CASE WHEN p.id_rr IS NULL THEN s.id_membership_periods_sa ELSE p.id_rr END 
                         ORDER BY ABS(TIMESTAMPDIFF(SECOND, p.start_date_races, s.purchased_on_date_adjusted_mp)) ASC
                     ) AS rn, -- Ranks duplicates based on the nearest MP purchase date to the race start date,
 
                     -- IDENTIFY ACTIVE MEMBERSHIP DATES OVERLAP WITH RACE DATES
-                    CASE WHEN s.starts_mp IS NOT NULL THEN 1 ELSE 0 END AS is_active_membership
+                    CASE WHEN p.id_rr IS NOT NULL THEN 1 ELSE 0 END AS has_overlapping_race_result
 
-                FROM participation p
-                    LEFT JOIN sales_key_stats_2015 s ON s.id_profiles = p.id_profile_rr
+                FROM membership_sales AS s
+                    LEFT JOIN all_participation_data_raw p ON p.id_profile_rr = s.id_profiles
                         AND s.starts_mp <= p.start_date_races
                         AND s.ends_mp >= p.start_date_races
                     LEFT JOIN region_data AS r ON p.state_code_events = r.state_code
             )
             SELECT *
-            FROM merge_participation_with_active_membership
+            FROM merge_membership_sales_with_participation
             WHERE 1 = 1
                 AND rn = 1;
 
@@ -178,6 +172,28 @@ async function query_create_table(table_name) {
         );
     `;
 }
+
+// async function query_create_table(table_name) {
+//     return `
+//         CREATE TABLE IF NOT EXISTS ${table_name} (
+//             id_profiles VARCHAR(255),
+
+//             purchased_on_date_adjusted_mp DATE,
+//             purchased_on_month_adjusted_mp INT,
+//             purchased_on_year_adjusted_mp INT,
+//             id_membership_periods_sa INT,
+
+//             starts_mp DATE,
+//             ends_mp DATE,
+
+//             real_membership_types_sa VARCHAR(255),
+//             new_member_category_6_sa VARCHAR(255),
+
+//             sales_revenue BIGINT,
+//             sales_units DECIMAL
+//         );
+//     `;
+// }
 
 // STEP #1A: APPEND REGION FIELDS AFTER TABLE IS CREATED
 async function query_append_region_fields(table_name) {
@@ -240,7 +256,7 @@ async function query_append_membership_period_fields(table_name) {
 
             ADD COLUMN rn INT,
 
-            ADD COLUMN is_active_membership INT;
+            ADD COLUMN has_overlapping_race_result INT;
     `;
 }
 
@@ -292,5 +308,5 @@ module.exports = {
     query_append_region_fields,
     query_append_membership_period_fields,
     query_append_index_fields,
-    step_4_create_participation_with_membership_match,
+    step_4_create_membership_with_participation_match,
 }

@@ -3,7 +3,7 @@ function query_drop_database(db_name) {
 }
 
 async function query_drop_table(table_name) {
-    return(`DROP TABLE IF EXISTS ${table_name}`);
+    return(`DROP TABLE IF EXISTS ${table_name};`);
 }
 
 module.exports = {
