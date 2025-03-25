@@ -210,14 +210,20 @@ async function execute_retrieve_data(options) {
 
             // STEP 3a SAVE DATA TO CSV FILE
             console.log(`STEP 3a SAVE ${fileName} TO CSV FILE`);
+            
+            stopTimer(`${i}_get_data`);  
+
+            console.log(`STEP 4 Export ${fileName} TO CSV FILE`);
+
+            runTimer(`${i + 1}_export_data`);
 
             await export_results_to_csv_fast_csv(results, fileName, i); 
+
+            stopTimer(`${i + 1}_export_data`);  
 
             // This removes references, making the memory eligible for garbage collection.
             results = null;
             await triggerGarbageCollection();
-
-            stopTimer(`${i}_get_data`);  
         }
 
         console.log('All queries executed successfully.');
