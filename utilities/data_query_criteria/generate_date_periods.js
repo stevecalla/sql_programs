@@ -16,17 +16,20 @@ async function generate_date_periods(startYear = 2010, membershipPeriodEnds = '2
         const start_date_time = `${start_date} 00:00:00`;
 
         // Calculate the end date based on the selected interval
+        
         let endDate;
-        if (periodInterval === 1) {
-            // For 1 month interval, the end date is the last day of the same month
-            endDate = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth() + 1, 0); // Last day of the current month
-        } else if (periodInterval === 3) {
-            // For 3 month interval, the end date is the last day of the 3rd month from start date
-            endDate = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth() + 3, 0); // Last day of the 3rd month
-        } else if (periodInterval === 6) {
-            // For 6 month interval, the end date is the last day of the 6th month from start date
-            endDate = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth() + 6, 0); // Last day of the 6th month
-        }
+        endDate = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth() + periodInterval, 0);
+
+        // if (periodInterval === 1) {
+        //     // For 1 month interval, the end date is the last day of the same month
+        //     endDate = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth() + 1, 0); // Last day of the current month
+        // } else if (periodInterval === 3) {
+        //     // For 3 month interval, the end date is the last day of the 3rd month from start date
+        //     endDate = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth() + 3, 0); // Last day of the 3rd month
+        // } else if (periodInterval === 6) {
+        //     // For 6 month interval, the end date is the last day of the 6th month from start date
+        //     endDate = new Date(currentStartDate.getFullYear(), currentStartDate.getMonth() + 6, 0); // Last day of the 6th month
+        // }
 
         // Format the end date as required
         const end_date_time = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')} 23:59:59`;
@@ -48,7 +51,7 @@ async function generate_date_periods(startYear = 2010, membershipPeriodEnds = '2
 }
 
 // Example Usage:
-// const datePeriods = generate_date_periods(2023, '2008-01-01', 6); // Generate periods with 6 months interval
+// const datePeriods = generate_date_periods(2023, '2008-01-01', 1); // Generate periods with 6 months interval
 // console.log(datePeriods);
 
 module.exports = {
