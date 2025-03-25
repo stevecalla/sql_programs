@@ -57,6 +57,14 @@ const query_member_data = `
             ELSE NULL
         END AS most_recent_prior_purchase_date,
 
+        DATE_FORMAT(DATE(most_recent_mp_ends_date), '%Y-%m-%d') AS most_recent_mp_ends_date,
+
+        CASE 
+            WHEN most_recent_prior_mp_ends_date IS NOT NULL THEN
+                DATE_FORMAT(DATE(most_recent_prior_mp_ends_date), '%Y-%m-%d')
+            ELSE NULL
+        END AS most_recent_prior_mp_ends_date,
+
         member_lapsed_renew_category,
 
         most_recent_prior_purchase_membership_type,

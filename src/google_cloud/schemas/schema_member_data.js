@@ -187,8 +187,6 @@ const members_schema = [
         "description": null,
         "fields": []
     },
-
-
     {
         "name": "member_min_created_at",
         "mode": "NULLABLE",
@@ -239,6 +237,20 @@ const members_schema = [
     },
     {
         "name": "most_recent_prior_purchase_date",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "most_recent_mp_ends_date",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "most_recent_prior_mp_ends_date",
         "mode": "NULLABLE",
         "type": "STRING",
         "description": null,
