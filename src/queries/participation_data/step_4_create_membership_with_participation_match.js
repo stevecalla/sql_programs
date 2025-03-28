@@ -2,11 +2,23 @@
 // working query: C:\Users\calla\development\usat\sql_code\5_race_participation\final_0_local_membership_working_query_031825.sql
 // discovery: C:\Users\calla\development\usat\sql_code\5_race_participation\local_participation_raw_merge_region_and_sales.sql
 
-// STEP #2: INSERT DATA INTO TABLE
-async function step_4_create_membership_with_participation_match(table_name, start_date_time, end_date_time) {
+
+// STEP #2: GET MIN & MAX MEMBERSHIP PERIOD END DATES; USED TO LIMIT THE QUERY OF PARTICIPANT RAW DATA
+async function query_get_min_and_max_mp_dates(start_date_time, end_date_time) {
     return `
-        SET @start_date = '2025-01-01';
-        SET @end_date = '2025-03-01';
+        SELECT 
+            CONCAT(DATE(MIN(starts_mp)), ' 00:00:00') AS min_date,
+            CONCAT(DATE(MAX(ends_mp)), ' 23:59:59') AS max_date
+        FROM sales_key_stats_2015
+        WHERE purchased_on_date_adjusted_mp BETWEEN '${start_date_time}' AND '${end_date_time}';
+    `;
+}
+
+// STEP #2a: INSERT DATA INTO TABLE
+async function step_4_create_membership_with_participation_match(table_name, start_date_time, end_date_time, min_start_date, max_end_date) {
+    return `
+        -- SET @start_date = '2025-01-01';
+        -- SET @end_date = '2025-03-01';
 
         INSERT INTO ${table_name}
             WITH membership_sales AS (
@@ -20,9 +32,21 @@ async function step_4_create_membership_with_participation_match(table_name, sta
 
                     AND purchased_on_date_adjusted_mp >= '${start_date_time}'
                     AND purchased_on_date_adjusted_mp <= '${end_date_time}'
-            ),
 
-            merge_membership_sales_with_participation AS (
+                    -- AND id_profiles IN ('1000119', '1000906') -- 1000906 has a duplicate for Dino Gravel Tri; using rn field and filter to remove
+
+                -- LIMIT 1
+            )    
+
+            , filtered_all_participation_data_raw AS (
+                SELECT
+                    *
+                FROM all_participation_data_raw AS p
+                WHERE 1 = 1
+                    AND p.start_date_races BETWEEN '${min_start_date}' AND '${max_end_date}'
+            )
+
+            , merge_membership_sales_with_participation AS (
                 SELECT 
                     -- PARTICIPATION DATA
                     p.id_rr,
@@ -64,6 +88,7 @@ async function step_4_create_membership_with_participation_match(table_name, sta
 
                     p.name_distance_types,
                     p.name_race_type,
+                    p.category,
 
                     -- REGION DATA
                     r.state_id,
@@ -128,16 +153,15 @@ async function step_4_create_membership_with_participation_match(table_name, sta
                     CASE WHEN p.id_rr IS NOT NULL THEN 1 ELSE 0 END AS has_overlapping_race_result
 
                 FROM membership_sales AS s
-                    LEFT JOIN all_participation_data_raw p ON p.id_profile_rr = s.id_profiles
-                        AND s.starts_mp <= p.start_date_races
-                        AND s.ends_mp >= p.start_date_races
+                    LEFT JOIN filtered_all_participation_data_raw p ON p.id_profile_rr = s.id_profiles
+                        AND p.start_date_races BETWEEN s.starts_mp AND s.ends_mp
                     LEFT JOIN region_data AS r ON p.state_code_events = r.state_code
             )
-            SELECT *
+            SELECT 
+                *
             FROM merge_membership_sales_with_participation
             WHERE 1 = 1
                 AND rn = 1;
-
     `;
 }
 
@@ -169,32 +193,11 @@ async function query_create_table(table_name) {
             age_as_race_results_bin VARCHAR(15),
 
             name_distance_types VARCHAR(255),
-            name_race_type VARCHAR(255)
+            name_race_type VARCHAR(255),
+            category VARCHAR(50)
         );
     `;
 }
-
-// async function query_create_table(table_name) {
-//     return `
-//         CREATE TABLE IF NOT EXISTS ${table_name} (
-//             id_profiles VARCHAR(255),
-
-//             purchased_on_date_adjusted_mp DATE,
-//             purchased_on_month_adjusted_mp INT,
-//             purchased_on_year_adjusted_mp INT,
-//             id_membership_periods_sa INT,
-
-//             starts_mp DATE,
-//             ends_mp DATE,
-
-//             real_membership_types_sa VARCHAR(255),
-//             new_member_category_6_sa VARCHAR(255),
-
-//             sales_revenue BIGINT,
-//             sales_units DECIMAL
-//         );
-//     `;
-// }
 
 // STEP #1A: APPEND REGION FIELDS AFTER TABLE IS CREATED
 async function query_append_region_fields(table_name) {
@@ -258,7 +261,8 @@ async function query_append_membership_period_fields(table_name) {
 
             ADD COLUMN rn INT,
 
-            ADD COLUMN has_overlapping_race_result INT;
+            ADD COLUMN has_overlapping_race_result INT
+            ;
     `;
 }
 
@@ -310,5 +314,6 @@ module.exports = {
     query_append_region_fields,
     query_append_membership_period_fields,
     query_append_index_fields,
+    query_get_min_and_max_mp_dates,
     step_4_create_membership_with_participation_match,
 }

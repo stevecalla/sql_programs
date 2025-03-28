@@ -75,12 +75,11 @@ async function execute_run_participation_data_jobs() {
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
   const run_step_1  = false; // get all participation data
-  const run_step_2  = true; // load participation data
+  const run_step_2  = false; // load participation data
   // const run_step_2a = false; // load region table
 
-  const run_step_3 = false; // create table participation with membership sales match
+  const run_step_3 = true; // create table participation with membership sales match
   const run_step_4 = false; // create table membership with participation match
-
 
   try {
     const stepFunctions = [
