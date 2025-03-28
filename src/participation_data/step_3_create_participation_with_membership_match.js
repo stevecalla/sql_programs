@@ -158,7 +158,7 @@ async function execute_create_participation_with_membership_match() {
  
         // STEP #3: APPEND INDEXES
         console.log('CREATED INDEXES ****************')
-        // await append_indexes(pool, db_name, table_name)
+        await append_indexes(pool, db_name, table_name)
 
         // STEP #5a: Log results
         console.log('STEP #1: All queries executed successfully.');
