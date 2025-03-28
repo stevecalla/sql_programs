@@ -324,11 +324,11 @@ async function execute_get_participation_data() {
 
     let results;
     let offset = 0;
-    const retrieval_batch_size = 100000; // Retrieve 50,000 records at a time
-    const write_batch_size = 10000; // Write 1,000 records at a time
+    const retrieval_batch_size = 300000; // Retrieve 100,000 records at a time
+    const write_batch_size = 50000; // Write 10,000 records at a time
     const start_year = 2010; // Default = 2010
     const membershipPeriodEnds = '2008-01-01';
-    const period_interval = 3; // create date periods for 6 month durations; options in include 1 month and 3 months
+    const period_interval = 6; // create date periods for 6 month durations; options in include 1 month and 3 months
 
     let date_periods = await generate_date_periods(start_year, membershipPeriodEnds, period_interval);
     console.log(date_periods);

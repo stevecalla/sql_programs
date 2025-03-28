@@ -67,6 +67,7 @@ const race_results_table = `
     age,
     readable_time,
     milliseconds,
+    category,
 `;
 
 const distance_types_table = `
@@ -82,7 +83,7 @@ const race_types_table = `
 const created_at_dates = `
     -- CREATED AT DATES
     created_at_mtn,
-    created_at_utc,
+    created_at_utc
 `;
 
 const gender_count = `
@@ -119,8 +120,6 @@ function query_load_participation_data(filePath, table) {
       ${distance_types_table}
       ${race_types_table}
       ${created_at_dates}
-      ${gender_count}
-      ${metrics}
     ) 
   `
   }
