@@ -82,6 +82,7 @@ async function step_4_create_participation_with_membership_match(table_name, sta
 
                     -- MEMBERSHIP DATA
                     s.id_profiles,
+                    s.member_min_created_at_year,
 
                     s.region_name_member,
                     s.region_abbr_member,
@@ -197,6 +198,7 @@ async function query_append_membership_period_fields(table_name) {
     return `
         ALTER TABLE ${table_name}
             ADD COLUMN id_profiles VARCHAR(255),
+            ADD COLUMN member_min_created_at_year INT,
 
             ADD COLUMN region_name_member VARCHAR(100),
             ADD COLUMN region_abbr_member VARCHAR(10),
