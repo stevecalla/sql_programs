@@ -78,7 +78,12 @@ async function execute_run_participation_data_jobs() {
   const run_step_2  = false; // load participation data
   // const run_step_2a = false; // load region table
 
-  const run_step_3 = true; // create table participation with membership sales match
+  const run_step_3 = false; // create table participation with membership sales match
+
+  const run_step_3a = false; // create participation match racer (profile_id) profile table
+
+  const run_step_3b = true; // create participationn match race (race_id) profile table
+
   const run_step_4 = false; // create table membership with participation match
 
   try {
@@ -88,6 +93,11 @@ async function execute_run_participation_data_jobs() {
       // run_step_2a ? execute_load_region_data : null,
 
       run_step_3 ? execute_create_participation_with_membership_match : null,
+
+      run_step_3a ? execute_create_participation_with_membership_match : null,
+
+      run_step_3b ? execute_create_participation_with_membership_match : null,
+
       run_step_4 ? execute_create_membership_with_participation_match : null,
     ];
 
