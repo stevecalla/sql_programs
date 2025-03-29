@@ -9,9 +9,9 @@ const { create_local_db_connection } = require('../../utilities/connectionLocalD
 const { query_drop_table } = require("../queries/create_drop_db_table/queries_drop_db_tables");
 
 const { 
-    query_create_participation_race_profiles,
+    query_create_participation_profiles,
     query_append_index_fields
-} = require("../queries/participation_data/step_3b_create_participation_match_race_profile_table");
+} = require("../queries/participation_data/step_3a_create_participation_match_profile_table");
 
 const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
 const { runTimer, stopTimer } = require('../../utilities/timer');
@@ -60,7 +60,7 @@ async function execute_mysql_working_query(pool, db_name, query) {
     });
 }
 
-async function execute_create_participation_tables() {   
+async function execute_create_participation_profile_table() {   
     let pool;
     const startTime = performance.now();
     let test = false; // true will run less data for insert
@@ -70,7 +70,7 @@ async function execute_create_participation_tables() {
         pool = await create_connection();
 
         const db_name = `usat_sales_db`;
-        const table_name = `participation_race_profiles`;
+        const table_name = `participation_profiles`;
         console.log(db_name);
         
         // STEP #1: DROP TABLE
@@ -81,19 +81,19 @@ async function execute_create_participation_tables() {
         await execute_mysql_working_query(pool, db_name, query_to_drop_table);
 
         // STEP #2: CREATE TABLE
-        const query_to_create_table = await query_create_participation_race_profiles(table_name);
+        const query_to_create_table = await query_create_participation_profiles(table_name);
         await execute_mysql_working_query(pool, db_name, query_to_create_table);
 
         stopTimer(`query_to_drop_and_create_table`);
  
         // STEP #3: APPEND INDEXES
-        console.log('\nCREATED INDEXES ****************');
-        runTimer(`query_to_create_indexes`);
+        // console.log('\nCREATED INDEXES ****************');
+        // runTimer(`query_to_create_indexes`);
 
-        const query_to_create_indexes = await query_append_index_fields(table_name);
-        await execute_mysql_working_query(pool, db_name, query_to_create_indexes);
+        // const query_to_create_indexes = await query_append_index_fields(table_name);
+        // await execute_mysql_working_query(pool, db_name, query_to_create_indexes);
 
-        stopTimer(`query_to_create_indexes`);
+        // stopTimer(`query_to_create_indexes`);
 
         // STEP #5a: Log results
         console.log('STEP #1: All queries executed successfully.');
@@ -122,8 +122,8 @@ async function execute_create_participation_tables() {
     }
 }
 
-// execute_create_participation_tables();
+// execute_create_participation_profile_table();
 
 module.exports = {
-    execute_create_participation_tables,
+    execute_create_participation_profile_table,
 }

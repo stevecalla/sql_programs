@@ -4,10 +4,14 @@ dotenv.config({ path: "./.env" });
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 const { execute_get_participation_data } = require('./step_1_get_participation_data');
+
 const { execute_load_participation_data } = require('./step_2_load_participation_data');
 // const { execute_load_region_data } = require('./step_2a_load_region_table');
 
 const { execute_create_participation_with_membership_match } = require("./step_3_create_participation_with_membership_match");
+
+const { execute_create_participation_profile_table } = require("./step_3a_create_participation_match_profile");
+const { execute_create_participation_tables } = require("./step_3b_create_participation_match_race_profile");
 
 const { execute_create_membership_with_participation_match } = require("./step_4_create_membership_with_participation_match");
 
@@ -74,39 +78,43 @@ async function execute_run_participation_data_jobs() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1  = false; // get all participation data
-  const run_step_2  = false; // load participation data
+  // const run_step_1  = false; // get all participation data
+  // const run_step_2  = false; // load participation data
   // const run_step_2a = false; // load region table
 
-  const run_step_3 = false; // create table participation with membership sales match
+  // const run_step_3 = false; // create table participation with membership sales match
 
-  const run_step_3a = false; // create participation match racer (profile_id) profile table
+  // const run_step_3a = true; // create participation match racer (profile_id) profile table
 
-  const run_step_3b = true; // create participationn match race (race_id) profile table
+  // const run_step_3b = true; // create participationn match race (race_id) profile table
 
-  const run_step_4 = false; // create table membership with participation match
+  const run_step_4 = true; // create table membership with participation match
 
   try {
     const stepFunctions = [
-      run_step_1  ? execute_get_participation_data : null,
-      run_step_2  ? execute_load_participation_data : null,
+      // run_step_1  ? execute_get_participation_data : null,
+      // run_step_2  ? execute_load_participation_data : null,
       // run_step_2a ? execute_load_region_data : null,
 
-      run_step_3 ? execute_create_participation_with_membership_match : null,
+      // run_step_3 ? execute_create_participation_with_membership_match : null,
+      // run_step_3a ? execute_create_participation_with_membership_match : null,
 
-      run_step_3a ? execute_create_participation_with_membership_match : null,
-
-      run_step_3b ? execute_create_participation_with_membership_match : null,
+      // run_step_3a ? execute_create_participation_profile_table : null,
+      // run_step_3b ? execute_create_participation_tables : null,
 
       run_step_4 ? execute_create_membership_with_participation_match : null,
     ];
 
     const stepName = [
-      `Step #1 - Get participation Data:`, 
-      `Step #2 - Load participation Data: `, 
+      // `Step #1 - Get participation Data:`, 
+      // `Step #2 - Load participation Data: `, 
       // `Step #2a - Load Region Data: `, 
+      // `Step #3 - Created participation data with membership match`,
 
-      `Step #3 - Created participation data with membership match`,
+      // `Step #3a - Created participation profile table`,
+
+      // `Step #3b - Created participation race profile table`,
+
       `Step #4 - Created membership data with participation match`,
 
     ];

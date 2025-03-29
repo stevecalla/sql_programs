@@ -137,7 +137,7 @@ async function insert_data(pool, db_name, table_name, test = false) {
         // QUERY TO INSERT THE DATA
         console.log('\nStep 2: get insert query running');
         const query_to_insert_data = await step_4_create_membership_with_participation_match(table_name, start_date_time, end_date_time, min_start_date, max_end_date);
-        // console.log(query_to_insert_data);
+        console.log(query_to_insert_data);
 
         console.log('\nStep 3: insert query running');
         await execute_mysql_working_query(pool, db_name, query_to_insert_data);

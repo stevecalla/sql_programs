@@ -43,7 +43,9 @@ async function step_4_create_membership_with_participation_match(table_name, sta
                     *
                 FROM all_participation_data_raw AS p
                 WHERE 1 = 1
-                    AND p.start_date_races BETWEEN '${min_start_date}' AND '${max_end_date}'
+                    -- AND p.start_date_races BETWEEN '${min_start_date}' AND '${max_end_date}'
+                    -- AND p.start_date_races BETWEEN '${start_date_time}' AND '${end_date_time}'
+                    AND p.start_date_races BETWEEN '${start_date_time}' AND '${max_end_date}'
             )
 
             , merge_membership_sales_with_participation AS (
