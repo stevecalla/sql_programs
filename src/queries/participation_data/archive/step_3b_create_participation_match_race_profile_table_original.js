@@ -3,6 +3,23 @@
 // STEP #1b: CREATE PARTICIPATION RACE PROFILE TABLE
 async function query_create_participation_race_profiles(table_name) {
     return `
+        SET @created_at_mtn = (         
+            SELECT CASE 
+                WHEN UTC_TIMESTAMP() >= DATE_ADD(
+                        DATE_ADD(CONCAT(YEAR(UTC_TIMESTAMP()), '-03-01'),
+                            INTERVAL ((7 - DAYOFWEEK(CONCAT(YEAR(UTC_TIMESTAMP()), '-03-01')) + 1) % 7 + 7) DAY),
+                        INTERVAL 2 HOUR)
+                AND UTC_TIMESTAMP() < DATE_ADD(
+                        DATE_ADD(CONCAT(YEAR(UTC_TIMESTAMP()), '-11-01'),
+                            INTERVAL ((7 - DAYOFWEEK(CONCAT(YEAR(UTC_TIMESTAMP()), '-11-01')) + 1) % 7) DAY),
+                        INTERVAL 2 HOUR)
+                THEN DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL -6 HOUR), '%Y-%m-%d %H:%i:%s')
+                ELSE DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL -7 HOUR), '%Y-%m-%d %H:%i:%s')
+            END
+        );
+
+        SET @created_at_utc = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s');
+
         CREATE TABLE ${table_name} AS
             -- ======================================================
             -- 1. Raw Participation Data
@@ -32,8 +49,8 @@ async function query_create_participation_race_profiles(table_name) {
                     QUARTER(start_date_races) AS starts_quarter_events,
                     start_date_year_races,
 
-                    SUM(sales_units),
-                    SUM(sales_revenue),
+                    SUM(sales_units) AS sales_units,
+                    SUM(sales_revenue) AS sales_revenue,
 
                     -- count of new / repeat
                     SUM(CASE WHEN member_created_at_category IN ('after_created_year') THEN 1 ELSE 0 END) AS count_is_repeat,
@@ -48,9 +65,20 @@ async function query_create_participation_race_profiles(table_name) {
                     -- count of active memberships / membership matches
                     SUM(CASE WHEN is_active_membership = 1 THEN 1 ELSE 0 END) AS count_is_membership_match,
                     SUM(CASE WHEN is_active_membership = 0 THEN 1 ELSE 0 END) AS count_is_not_membership_match,
-
+    
+                    (   SELECT 
+                            COUNT(DISTINCT id_profile_rr)
+                        FROM all_participation_data_with_membership_match
+                        -- WHERE start_date_year_races = 2024 
+                        GROUP BY start_date_year_races
+                    ) AS total_id_profile_distinct,
+                        
                     COUNT(DISTINCT id_profile_rr) AS count_id_profile_distinct,
-                    COUNT(id_race_rr) AS count_all_participants
+                    COUNT(id_race_rr) AS count_all_participants,
+                    
+                    -- CREATED AT DATES
+                    @created_at_mtn AS created_at_mtn,
+                    @created_at_utc AS created_at_utc
 
                 FROM all_participation_data_with_membership_match
                 

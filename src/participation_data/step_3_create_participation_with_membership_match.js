@@ -110,7 +110,6 @@ async function insert_data(pool, db_name, table_name, test = false) {
         runTimer(`${i}_query_to_insert_data`);
         
         const date_period = date_periods[i];
-        console.log(`\nQuery of ${i + 1} of ${date_periods.length}: ****** Start Date: ${start_date_time}; End Date: ${end_date_time}.`);
 
         if (!test) {
             start_date_time = date_period.start_date_time;
@@ -129,6 +128,8 @@ async function insert_data(pool, db_name, table_name, test = false) {
             // console.log(query_min_max_dates);
             // console.log(date);
         }
+        
+        console.log(`\nQuery of ${i + 1} of ${date_periods.length}: ****** Start Date: ${start_date_time}; End Date: ${end_date_time}.`);
 
         console.log(`Query of ${i + 1} of ${date_periods.length}: ****** Min Race Date: ${min_start_date}; Max Race Date: ${max_end_date}.`);
 

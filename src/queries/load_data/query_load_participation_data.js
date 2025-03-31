@@ -86,19 +86,6 @@ const created_at_dates = `
     created_at_utc
 `;
 
-const gender_count = `
-    -- GENDER COUNT
-    gender_male_count,
-    gender_female_count,
-    gender_other_count,
-`;
-
-const metrics = `
-    -- METRICS
-    count_profile_id_distinct,
-    count_all_participation
-`;
-
 // LOAD DATA INFILE C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/data/usat_participation_data/results_2025-03-14_22-02-23_participation_data_2024-01-01_batch_1.csv
 function query_load_participation_data(filePath, table) {
   return `
