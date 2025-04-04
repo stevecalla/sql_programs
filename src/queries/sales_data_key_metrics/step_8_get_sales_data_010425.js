@@ -88,6 +88,7 @@ function step_8_sales_key_stats_2015() {
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
                     WHEN lp.member_lifetime_purchases > 1 AND YEAR(first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year'
+
                     WHEN am.starts_mp > DATE_ADD(pp.most_recent_prior_mp_ends_date, INTERVAL 2 YEAR) THEN 'after_created_year_lapsed' 
                     WHEN am.starts_mp <= DATE_ADD(pp.most_recent_prior_mp_ends_date, INTERVAL 2 YEAR) THEN 'after_created_year_renew'
                     ELSE 'error_lapsed_renew_segmentation'
