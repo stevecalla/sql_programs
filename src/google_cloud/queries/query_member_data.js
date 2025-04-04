@@ -69,7 +69,9 @@ const query_member_data = `
 
         most_recent_prior_purchase_membership_type,
         most_recent_prior_purchase_membership_category,
+
         member_upgrade_downgrade_category,
+        member_upgrade_downgrade_major,
 
         member_lifetime_purchases,
         member_lifetime_frequency,
