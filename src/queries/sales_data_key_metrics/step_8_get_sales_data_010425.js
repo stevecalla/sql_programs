@@ -66,23 +66,16 @@ function step_8_sales_key_stats_2015() {
                 QUARTER(mc.min_created_at) AS member_min_created_at_quarter,
                 MONTH(mc.min_created_at) AS member_min_created_at_month,
 
-                GREATEST(am.purchased_on_year_adjusted_mp - YEAR(mc.min_created_at), 0) AS member_created_at_years_out, -- TODO
-                CASE
-                    WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
-                    WHEN am.purchased_on_year_adjusted_mp > YEAR(mc.min_created_at) THEN 'after_created_year'
-                    ELSE 'error_first_purchase_year_category'
-                END AS member_created_at_category,
-
+                GREATEST(am.purchased_on_year_adjusted_mp - YEAR(mc.min_created_at), 0) AS member_created_at_years_out,
                 CASE
                     -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN lp.member_lifetime_purchases > 1 AND YEAR(first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year'
-
+                    
                     WHEN am.purchased_on_year_adjusted_mp > YEAR(mc.min_created_at) THEN 'after_created_year'
-
                     ELSE 'error_first_purchase_year_category'
-                END AS member_created_at_category_revised, -- todo:
+                END AS member_created_at_category,
 
                 -- member lapsed, new, renew segmentation
                 pp.most_recent_purchase_date,
@@ -90,29 +83,13 @@ function step_8_sales_key_stats_2015() {
 
                 pp.most_recent_mp_ends_date,
                 pp.most_recent_prior_mp_ends_date,
-
-                -- todo: ORIGINAL DEFINITION BASED ON MOST RECENT PURCHASE DATE LOGIC; REVISED TO USE MP END & START PERIOD DATE
-                -- WHEN pp.most_recent_purchase_date > DATE_ADD(most_recent_prior_purchase_date, INTERVAL 2 YEAR) THEN 'after_created_year_lapsed'
-                -- WHEN pp.most_recent_purchase_date <= DATE_ADD(most_recent_prior_purchase_date, INTERVAL 2 YEAR) THEN 'after_created_year_renew'
-                
-                -- CASE
-                    -- WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year' -- new
-                    -- current starts_mp is within 2 years of the most recent ends_mp
-                    -- WHEN am.starts_mp > DATE_ADD(pp.most_recent_prior_mp_ends_date, INTERVAL 2 YEAR) THEN 'after_created_year_lapsed' 
-                    -- WHEN am.starts_mp <= DATE_ADD(pp.most_recent_prior_mp_ends_date, INTERVAL 2 YEAR) THEN 'after_created_year_renew'
-                    -- ELSE 'error_lapsed_renew_segmentation'
-                -- END AS member_lapsed_renew_category, -- todo:
-
-                -- todo: revised as of 4/2/25
-                CASE
+                CASE -- todo: revised as of 4/2/25
                     -- new first year member
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
                     WHEN lp.member_lifetime_purchases > 1 AND YEAR(first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year'
-
                     WHEN am.starts_mp > DATE_ADD(pp.most_recent_prior_mp_ends_date, INTERVAL 2 YEAR) THEN 'after_created_year_lapsed' 
                     WHEN am.starts_mp <= DATE_ADD(pp.most_recent_prior_mp_ends_date, INTERVAL 2 YEAR) THEN 'after_created_year_renew'
-
                     ELSE 'error_lapsed_renew_segmentation'
                 END AS member_lapsed_renew_category,
 
@@ -120,25 +97,14 @@ function step_8_sales_key_stats_2015() {
                 most_recent_prior_purchase_membership_type,
                 most_recent_prior_purchase_membership_category,
 
-                CASE
-                    WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year' -- new 
-
-                    WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'adult_annual' THEN 'upgrade_oneday_to_annual'
-                    WHEN pp.most_recent_prior_purchase_membership_type = 'adult_annual' AND real_membership_types_sa = 'one_day' THEN 'downgrade_annual_to_oneday'
-
-                    WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'one_day' THEN 'same_one_day_to_one_day'
-                    WHEN pp.most_recent_prior_purchase_membership_type ='adult_annual' AND real_membership_types_sa = 'adult_annual' THEN 'same_annual_to_annual'
-
-                    ELSE 'other'
-                END AS member_upgrade_downgrade_category,
-
-                CASE
+                CASE -- todo: revised as of 4/2/25
                     -- new first year member
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
                     WHEN lp.member_lifetime_purchases > 1 AND YEAR(first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year'
 
                     WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'adult_annual' THEN 'upgrade_oneday_to_annual'
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'elite' THEN 'upgrade_oneday_to_elite'
                     WHEN pp.most_recent_prior_purchase_membership_type = 'youth_annual' AND real_membership_types_sa = 'adult_annual' THEN 'upgrade_youth_to_annual'
                     WHEN pp.most_recent_prior_purchase_membership_type = 'youth_annual' AND real_membership_types_sa = 'one_day' THEN 'upgrade_youth_to_oneday'
                     WHEN pp.most_recent_prior_purchase_membership_type = 'adult_annual' AND real_membership_types_sa = 'elite' THEN 'upgrade_annual_to_elite'
@@ -153,7 +119,7 @@ function step_8_sales_key_stats_2015() {
                     WHEN pp.most_recent_prior_purchase_membership_type ='elite' AND real_membership_types_sa = 'elite' THEN 'same_elite_to_elite'
 
                     ELSE 'other'
-                END AS member_upgrade_downgrade_category_revised, -- todo:
+                END AS member_upgrade_downgrade_category,
                 
                 -- member lifetime frequency
                 lp.member_lifetime_purchases, -- total lifetime purchases  
@@ -165,7 +131,7 @@ function step_8_sales_key_stats_2015() {
 
                 -- member first purchase year segmentation
                 fd.first_purchased_on_year_adjusted_mp AS member_first_purchase_year,
-                fd.first_starts_mp AS first_starts_mp, -- todo:
+                fd.first_starts_mp AS first_starts_mp, -- todo: revised as of 4/2/25
                 GREATEST(am.purchased_on_year_adjusted_mp - first_purchased_on_year_adjusted_mp, 0) AS member_first_purchase_years_out,
                 CASE
                     WHEN am.purchased_on_year_adjusted_mp = fd.first_purchased_on_year_adjusted_mp THEN 'first_year'
