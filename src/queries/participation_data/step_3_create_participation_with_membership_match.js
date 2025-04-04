@@ -158,7 +158,6 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     LEFT JOIN filtered_sales_key_stats_2015 s ON s.id_profiles = p.id_profile_rr
                         AND s.starts_mp <= p.start_date_races
                         AND s.ends_mp >= p.start_date_races
-                    
                     LEFT JOIN region_data AS r ON p.state_code_events = r.state_code
             )
             SELECT 

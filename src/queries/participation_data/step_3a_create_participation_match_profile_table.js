@@ -1,15 +1,35 @@
 // tbd C:\Users\calla\development\usat\sql_code\5_race_participation\final_3_1_local_paticiption_profiles_031825.sql
 
-// STEP #1b: CREATE PARTICIPATION RACE PROFILE TABLE
-async function query_create_participation_profiles(table_name) {
+async function created_at_mtn() {
     return `
-        SET SESSION group_concat_max_len = 1000000;
+        -- GET CURRENT DATE IN MTN (MST OR MDT) & UTC
+        SET @created_at_mtn = (         
+            SELECT CASE 
+                WHEN UTC_TIMESTAMP() >= DATE_ADD(
+                        DATE_ADD(CONCAT(YEAR(UTC_TIMESTAMP()), '-03-01'),
+                            INTERVAL ((7 - DAYOFWEEK(CONCAT(YEAR(UTC_TIMESTAMP()), '-03-01')) + 1) % 7 + 7) DAY),
+                        INTERVAL 2 HOUR)
+                AND UTC_TIMESTAMP() < DATE_ADD(
+                        DATE_ADD(CONCAT(YEAR(UTC_TIMESTAMP()), '-11-01'),
+                            INTERVAL ((7 - DAYOFWEEK(CONCAT(YEAR(UTC_TIMESTAMP()), '-11-01')) + 1) % 7) DAY),
+                        INTERVAL 2 HOUR)
+                THEN DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL -6 HOUR), '%Y-%m-%d %H:%i:%s')
+                ELSE DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL -7 HOUR), '%Y-%m-%d %H:%i:%s')
+                END
+        );
+    `;
+}
 
+async function created_at_utc() {
+    return `
+        SET @created_at_utc = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s');
+    `;
+}
+
+// CTE = raw_participation_data
+async function raw_participation_data(table_name, where, limit) {
+    return `
         CREATE TABLE ${table_name} AS
-            -- ======================================================
-            -- 1. Raw Participation Data
-            --    Extract raw columns from the source table with meaningful aliases.
-            -- ======================================================
             WITH raw_participation_data AS (
                 SELECT
                     id_profile_rr AS profile_id,
@@ -18,6 +38,7 @@ async function query_create_participation_profiles(table_name) {
                     id_sanctioning_events,
 
                     start_date_races,
+                    MONTH(start_date_races) AS start_date_month_races,
                     start_date_year_races,
 
                     region_name,
@@ -60,315 +81,242 @@ async function query_create_participation_profiles(table_name) {
                     purchased_on_year_adjusted_mp
 
                 FROM all_participation_data_with_membership_match
-                -- LIMIT 1000
-            ),
-
-            -- ======================================================
-            -- 2. Aggregated Participation Stats
-            --    Compute aggregates per profile, grouped into logical sections.
-            -- ======================================================
-            aggregated_participation_stats AS (
-                SELECT
-                    profile_id,
-                    
-                    -- [Race Metrics]
-                    COUNT(DISTINCT id_race_rr) AS count_races_distinct,
-                    COUNT(DISTINCT start_date_year_races) AS count_of_start_years_distinct,
-                    GROUP_CONCAT(DISTINCT start_date_year_races ORDER BY start_date_races ASC) AS start_years_distinct,
-                    MIN(start_date_year_races) AS start_year_least_recent,
-                    MAX(start_date_year_races) AS start_year_most_recent,
-                    
-                    -- [Region Metrics]
-                    COUNT(DISTINCT region_name) AS count_of_race_regions_distinct,
-                    GROUP_CONCAT(DISTINCT region_name ORDER BY start_date_races ASC) AS race_regions_distinct,
-
-                    -- city_events,
-                    GROUP_CONCAT(DISTINCT city_events ORDER BY start_date_races ASC) AS aggregated_city_events,
-                    SUBSTRING_INDEX(GROUP_CONCAT(DISTINCT city_events ORDER BY start_date_races DESC), ',', 1) AS most_recent_city_events,
-                    
-                    -- state_code_events,
-                    GROUP_CONCAT(DISTINCT state_code_events ORDER BY start_date_races ASC) AS aggregated_state_code_events,
-                    SUBSTRING_INDEX(GROUP_CONCAT(DISTINCT state_code_events ORDER BY start_date_races DESC), ',', 1) AS most_recent_state_code_events,
-                    
-                    -- [Race Type Metrics]
-                    GROUP_CONCAT(DISTINCT name_race_type ORDER BY start_date_races ASC) AS name_race_type_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT name_race_type ORDER BY start_date_races DESC),
-                        ',', 1
-                    ) AS most_recent_name_race_type,
-                    
-                    -- [Distance Types]
-                    GROUP_CONCAT(DISTINCT name_distance_types ORDER BY start_date_races ASC) AS name_distance_types_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT name_distance_types ORDER BY start_date_races DESC),
-                        ',', 1
-                    ) AS most_recent_name_distance_types,
-                    
-                    -- [Event Type Metrics]
-                    GROUP_CONCAT(DISTINCT name_event_type ORDER BY start_date_races ASC) AS name_event_type_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT name_event_type ORDER BY start_date_races DESC),
-                        ',', 1
-                    ) AS most_recent_name_event_type,
-                    
-                    -- [Event Name Metrics]
-                    GROUP_CONCAT(DISTINCT name_events_rr ORDER BY start_date_races ASC) AS name_events_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT name_events_rr ORDER BY start_date_races DESC),
-                        ',', 1
-                    ) AS most_recent_name_events,
-                    
-                    -- [Event Zip Code Metrics]
-                    GROUP_CONCAT(DISTINCT zip_events ORDER BY start_date_races ASC) AS zip_events_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT zip_events ORDER BY start_date_races DESC),
-                        ',', 1
-                    ) AS most_recent_zip_events,
-                    
-                    -- [Ironman Metrics]
-                    GROUP_CONCAT(DISTINCT is_ironman ORDER BY start_date_races ASC) AS is_ironman_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT is_ironman ORDER BY start_date_races DESC),
-                        ',', 1
-                    ) AS most_recent_is_ironman,
-                    CASE WHEN MAX(is_ironman) = 1 THEN 'yes' ELSE 'no' END AS is_ironman_flag,
-                    
-                    -- [Gender and Age Metrics]
-                    GROUP_CONCAT(DISTINCT gender_code ORDER BY start_date_races ASC) AS gender_code_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT gender_code ORDER BY start_date_races DESC),
-                        ',', 1
-                    ) AS most_recent_gender_code,
-
-                    GROUP_CONCAT(DISTINCT age ORDER BY start_date_races ASC) AS age_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT age ORDER BY start_date_races DESC),
-                        ',', 1
-                    ) AS most_recent_age,
-
-                    -- [Member Created At]
-                    GROUP_CONCAT(DISTINCT member_min_created_at_year ORDER BY start_date_races ASC) AS member_min_created_at_year_distinct,
-
-                    -- [Member Address Fields]
-                    -- region_name_member
-                    GROUP_CONCAT(DISTINCT region_name_member ORDER BY start_date_races ASC) AS aggregated_region_name_member,
-                    SUBSTRING_INDEX(GROUP_CONCAT(DISTINCT region_name_member ORDER BY start_date_races DESC), ',', 1) AS most_recent_region_name_member,
-                    
-                    -- member_city_addresses
-                    GROUP_CONCAT(DISTINCT member_city_addresses ORDER BY start_date_races ASC) AS aggregated_member_city_addresses,
-                    SUBSTRING_INDEX(GROUP_CONCAT(DISTINCT member_city_addresses ORDER BY start_date_races DESC), ',', 1) AS most_recent_member_city_addresses,
-                    
-                    -- member_state_code_addresses
-                    GROUP_CONCAT(DISTINCT member_state_code_addresses ORDER BY start_date_races ASC) AS aggregated_member_state_code_addresses,
-                    SUBSTRING_INDEX(GROUP_CONCAT(DISTINCT member_state_code_addresses ORDER BY start_date_races DESC), ',', 1) AS most_recent_member_state_code_addresses,
-                    
-                    -- member_postal_code_addresses
-                    GROUP_CONCAT(DISTINCT member_postal_code_addresses ORDER BY start_date_races ASC) AS aggregated_member_postal_code_addresses,
-                    SUBSTRING_INDEX(GROUP_CONCAT(DISTINCT member_postal_code_addresses ORDER BY start_date_races DESC), ',', 1) AS most_recent_member_postal_code_addresses,
-                    
-                    -- member_lat_addresses
-                    GROUP_CONCAT(DISTINCT member_lat_addresses ORDER BY start_date_races ASC) AS aggregated_member_lat_addresses,
-                    SUBSTRING_INDEX(GROUP_CONCAT(DISTINCT member_lat_addresses ORDER BY start_date_races DESC), ',', 1) AS most_recent_member_lat_addresses,
-                    
-                    -- member_lng_addresses
-                    GROUP_CONCAT(DISTINCT member_lng_addresses ORDER BY start_date_races ASC) AS aggregated_member_lng_addresses,
-                    SUBSTRING_INDEX(GROUP_CONCAT(DISTINCT member_lng_addresses ORDER BY start_date_races DESC), ',', 1) AS most_recent_member_lng_addresses,
-
-                    -- [Membership Period Metrics]
-                    GROUP_CONCAT(DISTINCT id_membership_periods_sa ORDER BY start_date_races ASC) AS id_membership_period_sa_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT id_membership_periods_sa ORDER BY start_date_races DESC),
-                        ',', 1
-                    ) AS most_recent_id_membership_period_sa,
-                    
-                    -- [Membership Type Metrics]
-                    GROUP_CONCAT(DISTINCT real_membership_types_sa ORDER BY starts_mp ASC) AS memberships_type_purchased_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT real_membership_types_sa ORDER BY starts_mp ASC),
-                        ',', 1
-                    ) AS least_recent_membership_type,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT real_membership_types_sa ORDER BY starts_mp DESC),
-                        ',', 1
-                    ) AS most_recent_membership_type,
-                    
-                    -- [Membership Category Metrics]
-                    GROUP_CONCAT(DISTINCT new_member_category_6_sa ORDER BY starts_mp ASC) AS memberships_category_purchased_distinct,
-                    GROUP_CONCAT(new_member_category_6_sa ORDER BY starts_mp ASC) AS memberships_category_purchased_all,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT new_member_category_6_sa ORDER BY starts_mp DESC),
-                        ',', 1
-                    ) AS most_recent_new_member_category_6_sa,
-                    
-                    -- [Membership Creation Category Metrics]
-                    GROUP_CONCAT(member_created_at_category ORDER BY member_min_created_at_year ASC) AS member_created_at_category_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(member_created_at_category ORDER BY member_min_created_at_year ASC),
-                        ',', 1
-                    ) AS least_recent_member_created_at_category,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(member_created_at_category ORDER BY member_min_created_at_year DESC),
-                        ',', 1
-                    ) AS most_recent_member_created_at_category,
-                    
-                    -- [Starts/Ends Metrics]
-                    GROUP_CONCAT(DISTINCT starts_mp ORDER BY starts_mp ASC) AS starts_mp_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT starts_mp ORDER BY starts_mp DESC),
-                        ',', 1
-                    ) AS most_recent_starts_mp,
-                    GROUP_CONCAT(DISTINCT ends_mp ORDER BY ends_mp ASC) AS ends_mp_distinct,
-                    SUBSTRING_INDEX(
-                        GROUP_CONCAT(DISTINCT ends_mp ORDER BY ends_mp DESC),
-                        ',', 1
-                    ) AS most_recent_ends_mp,
-                    
-                    -- [Active Membership Metrics]
-                    GROUP_CONCAT(DISTINCT is_active_membership ORDER BY start_date_races ASC) AS is_active_membership_distinct,
-
-                    -- count of active memberships / membership matches
-                    SUM(CASE WHEN is_active_membership = 1 THEN 1 ELSE 0 END) AS count_is_membership_match,
-                    SUM(CASE WHEN is_active_membership = 0 THEN 1 ELSE 0 END) AS count_is_not_membership_match,
-
-                    -- [Sales and Purchase Metrics]
-                    COUNT(purchased_on_year_adjusted_mp) AS count_of_purchased_years_all,
-                    SUM(sales_units) AS sales_units_total,
-                    SUM(sales_revenue) AS sales_revenue_total
-
-                FROM raw_participation_data
-                GROUP BY profile_id
-            ),
-
-            -- ======================================================
-            -- 3. Aggregate Participation Profile Stats
-            --    Combine aggregated stats with the latest membership status and apply final filters.
-            -- ======================================================
-            aggregate_participation_profile_stats AS (
-                SELECT
-                    -- [Profile & Race Metrics]
-                    ap.profile_id,
-
-                    -- city_events
-                    aggregated_city_events,
-                    most_recent_city_events,
-                    
-                    -- state_code_events
-                    aggregated_state_code_events,
-                    most_recent_state_code_events,
-
-                    -- [Race Types, Distances, and Event Metrics]
-                    ap.name_race_type_distinct,
-                    ap.most_recent_name_race_type,
-                    
-                    ap.name_distance_types_distinct,
-                    ap.most_recent_name_distance_types,
-                    
-                    ap.name_event_type_distinct,
-                    ap.most_recent_name_event_type,
-                    
-                    ap.name_events_distinct,
-                    ap.most_recent_name_events,
-                    
-                    ap.zip_events_distinct,
-                    ap.most_recent_zip_events,
-                    
-                    -- [Ironman, Gender, and Age Metrics]
-                    ap.is_ironman_distinct,
-                    ap.most_recent_is_ironman,
-                    ap.is_ironman_flag,
-                    
-                    ap.gender_code_distinct,
-                    ap.most_recent_gender_code,
-                    
-                    ap.age_distinct,
-                    ap.most_recent_age,
-
-                    -- [MEMBER CREATED AT]
-                    ap.member_min_created_at_year_distinct,
-
-                    -- region_name_member
-                    ap.aggregated_region_name_member,
-                    ap.most_recent_region_name_member,
-                    
-                    -- member_city_addresses
-                    ap.aggregated_member_city_addresses,
-                    ap.most_recent_member_city_addresses,
-                    
-                    -- member_state_code_addresses
-                    ap.aggregated_member_state_code_addresses,
-                    ap.most_recent_member_state_code_addresses,
-                    
-                    -- member_postal_code_addresses
-                    ap.aggregated_member_postal_code_addresses,
-                    ap.most_recent_member_postal_code_addresses,
-                    
-                    -- member_lat_addresses
-                    ap.aggregated_member_lat_addresses,
-                    ap.most_recent_member_lat_addresses,
-                    
-                    -- member_lng_addresses
-                    ap.aggregated_member_lng_addresses,
-                    ap.most_recent_member_lng_addresses,
-                    
-                    -- [Membership Period and Type Metrics]
-                    ap.id_membership_period_sa_distinct,
-                    ap.most_recent_id_membership_period_sa,
-                    
-                    ap.memberships_type_purchased_distinct,
-                    ap.least_recent_membership_type,
-                    ap.most_recent_membership_type,
-                    
-                    -- [Membership Category and Creation Metrics]
-                    ap.memberships_category_purchased_distinct,
-                    ap.memberships_category_purchased_all,
-                    ap.most_recent_new_member_category_6_sa,
-                    
-                    ap.member_created_at_category_distinct,
-                    ap.least_recent_member_created_at_category,
-                    ap.most_recent_member_created_at_category,
-                    
-                    -- [Starts/Ends Metrics]
-                    ap.starts_mp_distinct,
-                    ap.most_recent_starts_mp,
-
-                    -- RACE METRICS
-                    ap.start_years_distinct,
-                    ap.start_year_least_recent,
-                    ap.start_year_most_recent,
-                    CASE WHEN ap.count_races_distinct > 1 THEN 1 ELSE 0 END AS is_repeat_racer,
-
-                    -- count of active memberships / membership matches
-                    ap.count_is_membership_match,
-                    ap.count_is_not_membership_match,
-                    ap.count_races_distinct,
-                    ap.count_of_start_years_distinct,
-                    CASE 
-                        WHEN ap.count_of_start_years_distinct > 0 THEN ap.count_races_distinct / ap.count_of_start_years_distinct
-                        ELSE 0
-                    END AS avg_races_per_year,
-                    
-                    -- [Region Metrics]
-                    ap.count_of_race_regions_distinct,
-                    ap.race_regions_distinct,
-                    ap.is_active_membership_distinct,   
-                    CASE WHEN FIND_IN_SET('1', is_active_membership_distinct) > 0 THEN 1 ELSE 0 END AS had_race_membership_match,  
-                    
-                    -- [Sales Metrics]
-                    ap.count_of_purchased_years_all,
-                    ap.sales_units_total,
-                    ap.sales_revenue_total
-                    
-                FROM aggregated_participation_stats ap
                 WHERE 1 = 1
-                    -- AND ap.most_recent_member_created_at_category  = 'created_year'
-                    -- AND ap.start_year_least_recent > 2022
-                GROUP BY ap.profile_id
-            )
+                    ${where}
+                ${limit}
 
-            -- ======================================================
-            -- 4. Final Output
-            -- ======================================================
-            SELECT * FROM aggregate_participation_profile_stats;
+                -- WHERE id_profile_rr = 489329 
+                -- LIMIT 1000
+            )
+        `
+    ;
+}
+
+async function least_recent_fields(table_name) {
+    return `
+        , least_recent_fields AS (
+        SELECT 
+            r.profile_id,
+            r.real_membership_types_sa AS least_recent_membership_type,
+            r.member_created_at_category AS least_recent_member_created_at_category,
+            r.member_min_created_at_year
+        FROM ${table_name} r
+        INNER JOIN (
+            SELECT profile_id, MIN(start_date_races) AS min_start_date
+            FROM ${table_name}
+            GROUP BY profile_id
+        ) lr
+            ON r.profile_id = lr.profile_id 
+            AND r.start_date_races = lr.min_start_date
+        )    
+    `;
+}
+
+async function most_recent_fields(table_name) {
+    return `
+        -- ======================================================
+        -- 3. Most Recent Fields
+        -- ======================================================
+        , most_recent_fields AS (
+        SELECT 
+            r.profile_id,
+            r.region_name AS most_recent_region_name,
+            r.city_events AS most_recent_city_events,
+            r.state_code_events AS most_recent_state_code_events,
+            r.name_race_type AS most_recent_name_race_type,
+            r.name_distance_types AS most_recent_name_distance_types,
+            r.name_event_type AS most_recent_name_event_type,
+            r.name_events_rr AS most_recent_name_events,
+            r.zip_events AS most_recent_zip_events,
+            r.is_ironman AS most_recent_is_ironman,
+            r.gender_code AS most_recent_gender_code,
+            r.age AS most_recent_age,
+            r.region_name_member AS most_recent_region_name_member,
+            r.member_city_addresses AS most_recent_member_city_addresses,
+            r.member_state_code_addresses AS most_recent_member_state_code_addresses,
+            r.member_postal_code_addresses AS most_recent_member_postal_code_addresses,
+            r.member_lat_addresses AS most_recent_member_lat_addresses,
+            r.member_lng_addresses AS most_recent_member_lng_addresses,
+            r.id_membership_periods_sa AS most_recent_id_membership_period_sa,
+            r.real_membership_types_sa AS most_recent_membership_type,
+            r.new_member_category_6_sa AS most_recent_new_member_category_6_sa,
+            r.member_created_at_category AS most_recent_member_created_at_category,
+            r.starts_mp AS most_recent_starts_mp,
+            r.ends_mp AS most_recent_ends_mp
+
+        FROM ${table_name} r
+        INNER JOIN (
+            SELECT profile_id, MAX(start_date_races) AS max_start_date
+            FROM ${table_name}
+            GROUP BY profile_id
+        ) mr
+            ON r.profile_id = mr.profile_id 
+            AND r.start_date_races = mr.max_start_date
+        )
+    `;
+}
+
+// STEP #1b: CREATE PARTICIPATION PROFILE TABLE
+async function query_create_participation_profiles(table_name) {
+    return `
+        -- SET sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));
+        SET SESSION group_concat_max_len = 1000000;
+        ${await created_at_mtn()}
+        ${await created_at_utc()}
+
+        -- 'AND 1 = 1', 'LIMIT 1000'
+        -- 'AND id_profile_rr = 489329', '-- LIMIT 1000'
+        -- 'AND id_profile_rr = 489329', '-- LIMIT 1000'
+        ${await raw_participation_data(table_name, '', 'LIMIT 1000')}
+
+        ${await least_recent_fields('raw_participation_data')}
+        ${await most_recent_fields('raw_participation_data')}
+
+-- ======================================================
+-- 2. Aggregated Participation Stats
+--    Compute aggregates per profile, grouped into logical sections.
+-- ======================================================
+, aggregated_participation_stats AS (
+    SELECT
+        profile_id,
+        
+        GROUP_CONCAT(DISTINCT start_date_year_races ORDER BY start_date_races ASC) AS start_years_distinct,
+        MIN(start_date_races) AS start_date_last_recent,
+        MIN(start_date_month_races) AS start_month_least_recent,
+        MIN(start_date_year_races) AS start_year_least_recent,
+
+        MAX(start_date_races) AS start_date_most_recent,
+        MAX(start_date_month_races) AS start_month_most_recent,
+        MAX(start_date_year_races) AS start_year_most_recent,
+
+        GROUP_CONCAT(DISTINCT name_events_rr ORDER BY start_date_races ASC) AS name_events_distinct,
+        
+        GROUP_CONCAT(DISTINCT id_membership_periods_sa ORDER BY start_date_races ASC) AS id_membership_period_sa_distinct,
+        GROUP_CONCAT(DISTINCT starts_mp ORDER BY starts_mp ASC) AS starts_mp_distinct,
+        GROUP_CONCAT(DISTINCT ends_mp ORDER BY ends_mp ASC) AS ends_mp_distinct,
+
+        GROUP_CONCAT(DISTINCT is_active_membership ORDER BY start_date_races ASC) AS is_active_membership_distinct,
+        SUM(CASE WHEN is_active_membership = 1 THEN 1 ELSE 0 END) AS count_is_membership_match,
+        SUM(CASE WHEN is_active_membership = 0 THEN 1 ELSE 0 END) AS count_is_not_membership_match,
+
+        -- [Sales and Purchase Metrics]
+        COUNT(DISTINCT id_race_rr) AS count_races_distinct,
+
+        SUM(CASE WHEN start_date_year_races = YEAR(CURDATE()) THEN 1 ELSE 0 END) AS count_current_year_races,
+        SUM(CASE WHEN start_date_year_races = YEAR(CURDATE()) - 1 THEN 1 ELSE 0 END) AS count_prior_year_races,
+
+        COUNT(DISTINCT start_date_year_races) AS count_of_start_years_distinct,
+        COUNT(DISTINCT region_name) AS count_of_race_regions_distinct,
+        COUNT(purchased_on_year_adjusted_mp) AS count_of_purchased_years_all,
+        SUM(sales_units) AS sales_units_total,
+        SUM(sales_revenue) AS sales_revenue_total
+
+    FROM raw_participation_data
+    GROUP BY profile_id
+)
+
+-- ======================================================
+-- 3. Aggregate Participation Profile Stats
+--    Combine aggregated stats with the latest membership status and apply final filters.
+-- ======================================================
+, aggregate_participation_profile_stats AS (
+    SELECT
+        -- [Profile & Race Metrics]
+        ap.profile_id,
+
+        -- ******************
+        -- MOST RECENT FIELDS 
+        -- ******************
+        -- [REGION INFO]
+        ANY_VALUE(m.most_recent_region_name) AS most_recent_region_name,
+        ANY_VALUE(m.most_recent_city_events) AS most_recent_city_events,
+        ANY_VALUE(m.most_recent_state_code_events) AS most_recent_state_code_events,
+
+        -- [RACE INFO]
+        ANY_VALUE(m.most_recent_name_race_type) AS most_recent_name_race_type,
+        ANY_VALUE(m.most_recent_name_distance_types) AS most_recent_name_distance_types,
+
+        -- [EVENT INFO]
+        ANY_VALUE(m.most_recent_name_event_type) AS most_recent_name_event_type,
+        ANY_VALUE(m.most_recent_name_events) AS most_recent_name_events,
+        ANY_VALUE(m.most_recent_zip_events) AS most_recent_zip_events,
+
+        ANY_VALUE(m.most_recent_is_ironman) AS most_recent_is_ironman,
+        ANY_VALUE(CASE WHEN m.most_recent_is_ironman = 1 THEN 'yes' ELSE 'no' END) AS is_ironman_flag,
+
+        ANY_VALUE(m.most_recent_gender_code) AS most_recent_gender_code,
+        ANY_VALUE(m.most_recent_age) AS most_recent_age,
+
+        -- [MEMBER GEO INFO]
+        ANY_VALUE(m.most_recent_region_name_member) AS most_recent_region_name_member,
+        ANY_VALUE(m.most_recent_member_city_addresses) AS most_recent_member_city_addresses,
+        ANY_VALUE(m.most_recent_member_state_code_addresses) AS most_recent_member_state_code_addresses,
+        ANY_VALUE(m.most_recent_member_postal_code_addresses) AS most_recent_member_postal_code_addresses,
+        ANY_VALUE(m.most_recent_member_lat_addresses) AS most_recent_member_lat_addresses,
+        ANY_VALUE(m.most_recent_member_lng_addresses) AS most_recent_member_lng_addresses,
+
+        -- [MEMBER PERIOD INFO]
+        ANY_VALUE(m.most_recent_id_membership_period_sa) AS most_recent_id_membership_period_sa,
+        ANY_VALUE(m.most_recent_membership_type) AS most_recent_membership_type,
+        ANY_VALUE(m.most_recent_new_member_category_6_sa) AS most_recent_new_member_category_6_sa,
+        ANY_VALUE(m.most_recent_member_created_at_category) AS most_recent_member_created_at_category,
+
+        -- [STARTS / ENDS]
+        ANY_VALUE(m.most_recent_starts_mp) AS most_recent_starts_mp,
+        ANY_VALUE(m.most_recent_ends_mp) AS most_recent_ends_mp,
+
+        -- ******************
+        -- LEAST RECENT FIELDS
+        -- ******************
+        ANY_VALUE(l.least_recent_membership_type) AS least_recent_membership_type,
+        ANY_VALUE(l.least_recent_member_created_at_category) AS least_recent_member_created_at_category,
+        ANY_VALUE(l.member_min_created_at_year) AS member_min_created_at_year,
+
+        -- ******************
+        -- AGGREGATE FIELDS
+        -- ******************
+        ap.start_years_distinct,
+        ap.start_year_least_recent,
+        ap.start_year_most_recent,
+
+        ap.name_events_distinct,
+        
+        ap.id_membership_period_sa_distinct,
+        ap.starts_mp_distinct,
+        ap.ends_mp_distinct,
+
+        ap.is_active_membership_distinct,
+        ap.count_is_membership_match,
+        ap.count_is_not_membership_match,
+
+        -- ******************
+        -- METRICS
+        -- ******************
+        ap.count_races_distinct,
+        ap.count_of_start_years_distinct,
+        ap.count_of_race_regions_distinct,
+
+        ap.count_current_year_races,
+        ap.count_prior_year_races,
+
+        ap.count_of_purchased_years_all,
+        ap.sales_units_total
+        -- ap.sales_revenue_total
+        
+    FROM aggregated_participation_stats ap
+        LEFT JOIN most_recent_fields m ON ap.profile_id = m.profile_id
+        LEFT JOIN least_recent_fields l ON ap.profile_id = l.profile_id
+    WHERE 1 = 1
+        -- AND ap.most_recent_member_created_at_category  = 'created_year'
+        -- AND ap.start_year_least_recent > 2022
+    GROUP BY ap.profile_id
+)
+
+    -- ======================================================
+    -- 4. Final Output
+    -- ======================================================
+    SELECT * FROM aggregate_participation_profile_stats;
+
 
     `;
 }

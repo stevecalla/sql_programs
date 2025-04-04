@@ -93,7 +93,7 @@ async function create_table(pool, db_name, table_name) {
 async function insert_data(pool, db_name, table_name, test = false) {
     const start_year = 2010; // Default = 2010
     const membershipPeriodEnds = '2008-01-01';
-    const period_interval = 6; // options include 1, 3, 6 months
+    const period_interval = 3; // options include 1, 3, 6 months
 
     let start_date_time = "2010-03-01 00:00:00";
     let end_date_time = "2010-03-01 23:59:00";
@@ -138,7 +138,7 @@ async function insert_data(pool, db_name, table_name, test = false) {
         // QUERY TO INSERT THE DATA
         console.log('\nStep 2: get insert query running');
         const query_to_insert_data = await step_4_create_membership_with_participation_match(table_name, start_date_time, end_date_time, min_start_date, max_end_date);
-        console.log(query_to_insert_data);
+        // console.log(query_to_insert_data);
 
         console.log('\nStep 3: insert query running');
         await execute_mysql_working_query(pool, db_name, query_to_insert_data);

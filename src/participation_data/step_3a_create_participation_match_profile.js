@@ -52,7 +52,7 @@ async function execute_mysql_working_query(pool, db_name, query) {
                     reject(queryError);
                 } else {
                     console.log("\nQuery results - Elapsed Time:", elapsedTime, "sec");
-
+                    
                     resolve(results);
                 }
             });
@@ -80,13 +80,16 @@ async function execute_create_participation_profile_table() {
         const query_to_drop_table = await query_drop_table(table_name);
         await execute_mysql_working_query(pool, db_name, query_to_drop_table);
 
+        console.log(query_to_drop_table);
+
         // STEP #2: CREATE TABLE
         const query_to_create_table = await query_create_participation_profiles(table_name);
+        console.log(query_to_create_table);
         await execute_mysql_working_query(pool, db_name, query_to_create_table);
 
         stopTimer(`query_to_drop_and_create_table`);
  
-        // STEP #3: APPEND INDEXES
+        // // STEP #3: APPEND INDEXES
         // console.log('\nCREATED INDEXES ****************');
         // runTimer(`query_to_create_indexes`);
 
