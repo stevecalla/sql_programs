@@ -70,6 +70,7 @@ function step_1_get_participation_data(start_date, end_date, offset, batch_size)
                 rr.age,
                 rr.readable_time,
                 rr.milliseconds,
+                rr.category,
                 
                 -- RACE DISTANCE TYPES
                 dt.name AS name_distance_types,

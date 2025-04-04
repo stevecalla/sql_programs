@@ -67,6 +67,7 @@ const race_results_table = `
     age,
     readable_time,
     milliseconds,
+    category,
 `;
 
 const distance_types_table = `
@@ -82,20 +83,7 @@ const race_types_table = `
 const created_at_dates = `
     -- CREATED AT DATES
     created_at_mtn,
-    created_at_utc,
-`;
-
-const gender_count = `
-    -- GENDER COUNT
-    gender_male_count,
-    gender_female_count,
-    gender_other_count,
-`;
-
-const metrics = `
-    -- METRICS
-    count_profile_id_distinct,
-    count_all_participation
+    created_at_utc
 `;
 
 // LOAD DATA INFILE C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/data/usat_participation_data/results_2025-03-14_22-02-23_participation_data_2024-01-01_batch_1.csv
@@ -119,8 +107,6 @@ function query_load_participation_data(filePath, table) {
       ${distance_types_table}
       ${race_types_table}
       ${created_at_dates}
-      ${gender_count}
-      ${metrics}
     ) 
   `
   }

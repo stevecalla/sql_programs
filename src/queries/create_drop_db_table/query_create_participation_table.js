@@ -67,6 +67,7 @@ const race_results_member_detail_table = `
     age INT,
     readable_time VARCHAR(50),
     milliseconds INT,
+    category VARCHAR(50),
 `;
 
 const distance_types_table = `

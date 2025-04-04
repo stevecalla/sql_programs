@@ -12,6 +12,7 @@ const {
     query_append_region_fields,
     query_append_membership_period_fields,
     query_append_index_fields,
+    query_get_min_and_max_races_dates,
     step_4_create_participation_with_membership_match,
 } = require("../queries/participation_data/step_3_create_participation_with_membership_match");
 
@@ -57,7 +58,7 @@ async function execute_mysql_working_query(pool, db_name, query) {
                     console.log("Query results - Elapsed Time:", elapsedTime, "sec");
 
 
-                    resolve(results.affectedRows);
+                    resolve(results);
                 }
             });
         });
@@ -90,10 +91,17 @@ async function create_table(pool, db_name, table_name) {
 async function insert_data(pool, db_name, table_name, test = false) {
     const start_year = 2010; // Default = 2010
     const membershipPeriodEnds = '2008-01-01';
-    const period_interval = 2; // options include 1, 3, 6 months
+    const period_interval = 3; // options include 1, 3, 6 months
 
+    let start_date_time = "2010-03-01 00:00:00";
+    let end_date_time = "2010-03-01 23:59:00";
+    let min_start_date = start_date_time;
+    let max_end_date = "2033-05-12 23:59:00";
+
+    // GET DATE PERIODS
     let date_periods = await generate_date_periods(start_year, membershipPeriodEnds, period_interval);
 
+    // SET LOOP ITERATION; IF TEST SET LOOP TO ONE TIME ONLY
     let loop_iteration = 0;
     test ? loop_iteration = 1 : loop_iteration = date_periods.length;
 
@@ -102,21 +110,35 @@ async function insert_data(pool, db_name, table_name, test = false) {
         runTimer(`${i}_query_to_insert_data`);
         
         const date_period = date_periods[i];
-        let start_date_time = "";
-        let end_date_time = "";
-        
-        if (test) {
-            start_date_time = '2025-03-01 00:00:00';
-            end_date_time = '2025-03-01 23:59:00';
-        } else {
+
+        if (!test) {
             start_date_time = date_period.start_date_time;
             end_date_time = date_period.end_date_time;
+
+            // GET MIN & MAX MP DATES TO LIMIT THE RACE RESULTS QUERY
+            const query_min_max_dates = await query_get_min_and_max_races_dates(start_date_time, end_date_time);
+
+            console.log('\nSTEP 1: min & max date query running')
+            const date = await execute_mysql_working_query(pool, db_name, query_min_max_dates);
+            const { min_date, max_date } = date[0];
+
+            min_start_date = min_date || start_date_time;
+            max_end_date = max_date || max_end_date;
+
+            // console.log(query_min_max_dates);
+            // console.log(date);
         }
+        
+        console.log(`\nQuery of ${i + 1} of ${date_periods.length}: ****** Start Date: ${start_date_time}; End Date: ${end_date_time}.`);
 
-        const query_to_insert_data = await step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time);
+        console.log(`Query of ${i + 1} of ${date_periods.length}: ****** Min Race Date: ${min_start_date}; Max Race Date: ${max_end_date}.`);
 
-        console.log(`\nQuery of ${i + 1} of ${date_periods.length}: ****** Start Date: ${start_date_time}; End Date: ${end_date_time}.`)
+        // QUERY TO INSERT THE DATA
+        console.log('\nStep 2: get insert query running');
+        const query_to_insert_data = await step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time, min_start_date, max_end_date);
+        // console.log(query_to_insert_data);
 
+        console.log('\nStep 3: insert query running');
         await execute_mysql_working_query(pool, db_name, query_to_insert_data);
 
         stopTimer(`${i}_query_to_insert_data`);
@@ -137,7 +159,7 @@ async function append_indexes(pool, db_name, table_name) {
     return;
 }
 
-async function execute_create_participation_with_membership_match() {
+async function execute_create_participation_with_membership_match() {   
     let pool;
     const startTime = performance.now();
     let test = false; // true will run less data for insert

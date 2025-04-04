@@ -19,7 +19,7 @@ function step_7_prior_purchase() {
                         FROM all_membership_sales_data_2015_left am2
                         WHERE 
                             am2.member_number_members_sa = am1.member_number_members_sa
-                            AND DATE(am2.purchased_on_adjusted_mp) < DATE(am1.purchased_on_adjusted_mp)
+                            AND DATE(am2.purchased_on_adjusted_mp) = DATE(am1.purchased_on_adjusted_mp) 
                             -- AND am2.member_number_members_sa IN ('1001416', '100181772', '100142051', '100853852') 
                         LIMIT 1
                     ) AS most_recent_prior_purchase_date,
@@ -29,7 +29,7 @@ function step_7_prior_purchase() {
                         FROM all_membership_sales_data_2015_left am2
                         WHERE 
                             am2.member_number_members_sa = am1.member_number_members_sa
-                            AND DATE(am2.ends_mp) < DATE(am1.ends_mp)
+                            AND DATE(am2.ends_mp) = DATE(am1.ends_mp) 
                             -- AND am2.member_number_members_sa IN ('1001416', '100181772', '100142051', '100853852') 
                         LIMIT 1
                     ) AS most_recent_prior_mp_ends_date,
@@ -39,7 +39,7 @@ function step_7_prior_purchase() {
                         FROM all_membership_sales_data_2015_left am2
                         WHERE 
                             am2.member_number_members_sa = am1.member_number_members_sa
-                            AND DATE(am2.purchased_on_adjusted_mp) < DATE(am1.purchased_on_adjusted_mp)
+                            AND DATE(am2.purchased_on_adjusted_mp) = DATE(am1.purchased_on_adjusted_mp) 
                             -- AND am2.member_number_members_sa IN ('1001416', '100181772', '100142051', '100853852') 
                         ORDER BY am2.purchased_on_adjusted_mp DESC
                         LIMIT 1
@@ -50,7 +50,7 @@ function step_7_prior_purchase() {
                         FROM all_membership_sales_data_2015_left am2
                         WHERE 
                             am2.member_number_members_sa = am1.member_number_members_sa
-                            AND DATE(am2.purchased_on_adjusted_mp) < DATE(am1.purchased_on_adjusted_mp)
+                            AND DATE(am2.purchased_on_adjusted_mp) = DATE(am1.purchased_on_adjusted_mp) 
                             -- AND am2.member_number_members_sa IN ('1001416', '100181772', '100142051', '100853852') 
                         ORDER BY am2.purchased_on_adjusted_mp DESC
                         LIMIT 1

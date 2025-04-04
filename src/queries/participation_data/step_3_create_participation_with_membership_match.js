@@ -2,8 +2,19 @@
 // working query: C:\Users\calla\development\usat\sql_code\5_race_participation\final_0_local_paticiption_working_query_031825.sql
 // discovery: C:\Users\calla\development\usat\sql_code\5_race_participation\local_participation_raw_merge_region_and_sales.sql
 
-// STEP #2: INSERT DATA INTO TABLE
-async function step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time) {
+// STEP #2: GET MIN & MAX MEMBERSHIP PERIOD END DATES; USED TO LIMIT THE QUERY OF PARTICIPANT RAW DATA
+async function query_get_min_and_max_races_dates(start_date_time, end_date_time) {
+    return `
+        SELECT 
+            CONCAT(DATE(MIN(start_date_races)), ' 00:00:00') AS min_date,
+            CONCAT(DATE(MAX(start_date_races)), ' 23:59:59') AS max_date
+        FROM all_participation_data_raw
+        WHERE start_date_races BETWEEN '${start_date_time}' AND '${end_date_time}';
+    `;
+}
+
+// STEP #2a: INSERT DATA INTO TABLE
+async function step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time, min_start_date, max_end_date) {
     return `
         SET @start_date = '2025-01-01';
         SET @end_date = '2025-03-16';
@@ -27,9 +38,18 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                 -- AND id_rr = 4527556 -- this member is missing memberships to match race history; total number of races = 6; total memberships = 4 with missing for 2014, 2017, 2021 races; id_profile_rr = 42
                 -- AND id_profile_rr = 999977 
                 -- AND id_rr = 1197359 -- this member has multiple memberships for the same race (a one day & an annual)
-            ),
+            )
 
-            merge_participation_with_active_membership AS (
+            , filtered_sales_key_stats_2015 AS (
+                SELECT
+                    *
+                FROM sales_key_stats_2015 AS s
+                WHERE 1 = 1
+                    AND s.starts_mp <= '${max_end_date}'
+                    AND s.ends_mp >= '${min_start_date}'
+            )
+
+            , merge_participation_with_active_membership AS (
                 SELECT 
                     -- PARTICIPATION DATA
                     p.id_rr,
@@ -71,6 +91,7 @@ async function step_4_create_participation_with_membership_match(table_name, sta
 
                     p.name_distance_types,
                     p.name_race_type,
+                    p.category,
 
                     -- REGION DATA
                     r.state_id,
@@ -134,12 +155,13 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     CASE WHEN s.starts_mp IS NOT NULL THEN 1 ELSE 0 END AS is_active_membership
 
                 FROM participation p
-                    LEFT JOIN sales_key_stats_2015 s ON s.id_profiles = p.id_profile_rr
+                    LEFT JOIN filtered_sales_key_stats_2015 s ON s.id_profiles = p.id_profile_rr
                         AND s.starts_mp <= p.start_date_races
                         AND s.ends_mp >= p.start_date_races
                     LEFT JOIN region_data AS r ON p.state_code_events = r.state_code
             )
-            SELECT *
+            SELECT 
+                *
             FROM merge_participation_with_active_membership
             WHERE 1 = 1
                 AND rn = 1;
@@ -175,7 +197,8 @@ async function query_create_table(table_name) {
             age_as_race_results_bin VARCHAR(15),
 
             name_distance_types VARCHAR(255),
-            name_race_type VARCHAR(255)
+            name_race_type VARCHAR(255),
+            category VARCHAR(50)
         );
     `;
 }
@@ -294,5 +317,6 @@ module.exports = {
     query_append_region_fields,
     query_append_membership_period_fields,
     query_append_index_fields,
+    query_get_min_and_max_races_dates,
     step_4_create_participation_with_membership_match,
 }
