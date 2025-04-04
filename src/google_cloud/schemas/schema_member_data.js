@@ -285,6 +285,13 @@ const members_schema = [
         "fields": []
     },
     {
+        "name": "member_upgrade_downgrade_major",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
         "name": "member_lifetime_purchases",
         "mode": "NULLABLE",
         "type": "INTEGER",
