@@ -105,23 +105,53 @@ function step_8_sales_key_stats_2015() {
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
                     WHEN lp.member_lifetime_purchases > 1 AND YEAR(first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year'
 
+                    -- UPGRADE
                     WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'adult_annual' THEN 'upgrade_oneday_to_annual'
-                    WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'elite' THEN 'upgrade_oneday_to_elite'
-                    WHEN pp.most_recent_prior_purchase_membership_type = 'youth_annual' AND real_membership_types_sa = 'adult_annual' THEN 'upgrade_youth_to_annual'
-                    WHEN pp.most_recent_prior_purchase_membership_type = 'youth_annual' AND real_membership_types_sa = 'one_day' THEN 'upgrade_youth_to_oneday'
-                    WHEN pp.most_recent_prior_purchase_membership_type = 'adult_annual' AND real_membership_types_sa = 'elite' THEN 'upgrade_annual_to_elite'
-                    WHEN pp.most_recent_prior_purchase_membership_type = 'youth_annual' AND real_membership_types_sa = 'elite' THEN 'upgrade_annual_to_elite'
-
-                    WHEN pp.most_recent_prior_purchase_membership_type = 'adult_annual' AND real_membership_types_sa = 'one_day' THEN 'downgrade_annual_to_oneday'
-                    WHEN pp.most_recent_prior_purchase_membership_type = 'elite' AND real_membership_types_sa <> 'elite' THEN 'downgrade_elite_to_any_other_membership'
                     
+                    -- DOWNGRADE
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'adult_annual' AND real_membership_types_sa = 'one_day' THEN 'downgrade_annual_to_oneday'
+                    
+                    -- SAME
                     WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'one_day' THEN 'same_one_day_to_one_day'
                     WHEN pp.most_recent_prior_purchase_membership_type ='adult_annual' AND real_membership_types_sa = 'adult_annual' THEN 'same_annual_to_annual'
+                    
+                    -- OTHER = UPGRADE
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'youth_annual' AND real_membership_types_sa = 'adult_annual' THEN 'upgrade_youth_to_annual'
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'youth_annual' AND real_membership_types_sa = 'one_day' THEN 'upgrade_youth_to_oneday'
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'elite' THEN 'upgrade_oneday_to_elite'
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'adult_annual' AND real_membership_types_sa = 'elite' THEN 'upgrade_annual_to_elite'
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'youth_annual' AND real_membership_types_sa = 'elite' THEN 'upgrade_youth_to_elite'
+                    
+                    -- OTHER = DOWNGRADE
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'elite' AND real_membership_types_sa <> 'elite' THEN 'downgrade_elite_to_any_other_membership'
+                    
+                    -- OTHER = SAME
                     WHEN pp.most_recent_prior_purchase_membership_type ='youth_annual' AND real_membership_types_sa = 'youth_annual' THEN 'same_youth_to_youth'
                     WHEN pp.most_recent_prior_purchase_membership_type ='elite' AND real_membership_types_sa = 'elite' THEN 'same_elite_to_elite'
 
                     ELSE 'other'
                 END AS member_upgrade_downgrade_category,
+
+                                CASE -- todo: revised as of 4/2/25
+                    -- new first year member
+                    WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
+                    WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
+                    WHEN lp.member_lifetime_purchases > 1 AND YEAR(first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year'
+
+                    -- UPGRADE
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'adult_annual' THEN 'upgrade_oneday_to_annual'
+                    
+                    -- DOWNGRADE
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'adult_annual' AND real_membership_types_sa = 'one_day' THEN 'downgrade_annual_to_oneday'
+                    
+                    -- SAME
+                    WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'one_day' THEN 'same_one_day_to_one_day'
+                    WHEN pp.most_recent_prior_purchase_membership_type ='adult_annual' AND real_membership_types_sa = 'adult_annual' THEN 'same_annual_to_annual'
+                    
+                    -- OTHER
+                    ELSE 'other'
+
+                END AS member_upgrade_downgrade_major,
                 
                 -- member lifetime frequency
                 lp.member_lifetime_purchases, -- total lifetime purchases  
