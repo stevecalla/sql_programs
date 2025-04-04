@@ -24,7 +24,7 @@
     
     "pm2_logs_sales": "npx pm2 logs usat_sales",
     "stop_sales": "npx pm2 stop usat_sales",
-    "delete_sales": "npx pm2 delete usat_sales",    
+    "delete_sales": "npnx pm2 delete usat_sales",    
     "show_sales": "npx pm2 show usat_sales",
     "restart_sales": "npx pm2 restart usat_sales"
   },
