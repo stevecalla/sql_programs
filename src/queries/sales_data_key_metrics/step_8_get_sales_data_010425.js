@@ -83,6 +83,7 @@ function step_8_sales_key_stats_2015() {
 
                 pp.most_recent_mp_ends_date,
                 pp.most_recent_prior_mp_ends_date,
+                
                 CASE -- todo: revised as of 4/2/25
                     -- new first year member
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
