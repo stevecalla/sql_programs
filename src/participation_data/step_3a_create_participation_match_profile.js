@@ -131,20 +131,20 @@ async function with_connection(callback) {
   
 // STEP A: Create the participation profiles table.
 async function create_participation_profiles_table(pool, db_name, final_table) {
-console.log('STEP A: Creating Participation Profiles Table');
-await execute_process_step(pool, db_name, step_a_create_participation_profiles_table, final_table);
+    console.log('STEP A: Creating Participation Profiles Table');
+    await execute_process_step(pool, db_name, step_a_create_participation_profiles_table, final_table);
 }
   
 // STEP B: Create the distinct profile IDs table.
 async function create_distinct_profile_id_table(pool, db_name, profile_id_table) {
-console.log('STEP B: Creating Distinct Profile ID Table');
-await execute_process_step(pool, db_name, step_b_create_distinct_profile_id_table, profile_id_table);
+    console.log('STEP B: Creating Distinct Profile ID Table');
+    await execute_process_step(pool, db_name, step_b_create_distinct_profile_id_table, profile_id_table);
 }
   
 // STEP C: Process batches of profile IDs and run processing steps (D–I).
 async function process_batches(pool, db_name, profile_id_table, base_table, final_table) {
     console.log('STEP C: Processing batches for profile IDs');
-    const page_size = 100000; // todo:
+    const page_size = 1000; // todo:
     let offset = 0;
     let counter = 0;
   
