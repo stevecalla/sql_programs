@@ -310,9 +310,9 @@ async function query_create_participation_profiles(table_name, profile_ids) {
                         a.count_races_distinct,
                         a.count_of_start_years_distinct,
                         CASE 
-                        WHEN a.count_of_start_years_distinct > 0 
-                        THEN a.count_races_distinct / a.count_of_start_years_distinct
-                        ELSE 0 
+                            WHEN a.count_of_start_years_distinct > 0 
+                            THEN a.count_races_distinct / a.count_of_start_years_distinct
+                            ELSE 0 
                         END AS avg_races_per_year,
             
                         -- a.is_active_membership_distinct,

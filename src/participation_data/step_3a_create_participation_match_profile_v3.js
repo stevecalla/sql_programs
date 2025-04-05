@@ -113,19 +113,6 @@ async function execute_create_participation_profile_table() {
         ;
         // await execute_mysql_working_query(pool, db_name, query_to_add_index); // todo:
 
-        // 2. Retrieve distinct profile IDs from your source table.
-        const page_size = 10000; // todo:
-        let offset = 0;
-        let batch;
-        let counter = 0;
-
-        const query_count_of_profile_id = `
-            SELECT COUNT(*) AS count_profile_ids FROM tmp_distinct_participant_profile_ids;
-        `;
-
-        query_profile_id_count = await execute_mysql_working_query(pool, db_name, query_count_of_profile_id);
-        const { count_profile_ids } = query_profile_id_count[0];
-        // console.log(count_profile_ids);
         
         console.log(`STEP 4: INSERT DATA INTO ${table_name}`);
         do {
