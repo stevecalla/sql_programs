@@ -265,9 +265,9 @@ async function execute_create_participation_profile_table() {
     const profile_id_table = 'step_b_distinct_profile_id';
 
     // Configuration for which steps to run.
-    const steps_to_run = {
+    const steps_to_run = { // todo:
         create_profile_table: true,
-        create_distinct_ids: true,
+        create_distinct_ids: false,
         process_batches: true,
         append_indexes: true
     };

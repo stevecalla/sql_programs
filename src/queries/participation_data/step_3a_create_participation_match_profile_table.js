@@ -102,13 +102,13 @@ async function step_a_create_participation_profiles_table(table_name) {
             starts_mp_distinct TEXT,
             ends_mp_distinct TEXT,
             
-            is_active_membership_distinct TEXT,
-            count_is_membership_match INT,
-            count_is_not_membership_match INT,
-            
             is_ironman_distinct TEXT,
             is_ironman_flag INT,
             
+            is_active_membership_distinct TEXT,
+
+            count_is_membership_match INT,
+            count_is_not_membership_match INT,
             count_races_distinct INT,
             
             count_current_year_races INT,
@@ -368,13 +368,13 @@ async function step_h_participation_aggregated_metrics(table_name, where, limit,
                 GROUP_CONCAT(DISTINCT id_membership_periods_sa ORDER BY start_date_races ASC) AS id_membership_period_sa_distinct,
                 GROUP_CONCAT(DISTINCT starts_mp ORDER BY starts_mp ASC) AS starts_mp_distinct,
                 GROUP_CONCAT(DISTINCT ends_mp ORDER BY ends_mp ASC) AS ends_mp_distinct,
+                
+                GROUP_CONCAT(DISTINCT is_ironman ORDER BY start_date_races ASC) AS is_ironman_distinct,
+                CASE WHEN MAX(is_ironman) = 1 THEN 1 ELSE 0 END AS is_ironman_flag,
 
                 GROUP_CONCAT(DISTINCT is_active_membership ORDER BY start_date_races ASC) AS is_active_membership_distinct,
                 SUM(CASE WHEN is_active_membership = 1 THEN 1 ELSE 0 END) AS count_is_membership_match,
                 SUM(CASE WHEN is_active_membership = 0 THEN 1 ELSE 0 END) AS count_is_not_membership_match,
-                
-                GROUP_CONCAT(DISTINCT is_ironman ORDER BY start_date_races ASC) AS is_ironman_distinct,
-                CASE WHEN MAX(is_ironman) = 1 THEN 'yes' ELSE 'no' END AS is_ironman_flag,
 
                 -- [Sales and Purchase Metrics]
                 COUNT(DISTINCT id_race_rr) AS count_races_distinct,
@@ -476,13 +476,13 @@ async function step_i_insert_participation_profiles(table_name) {
                 m.starts_mp_distinct,
                 m.ends_mp_distinct,
                 
-                m.is_active_membership_distinct,
-                m.count_is_membership_match,
-                m.count_is_not_membership_match,
-                
                 is_ironman_distinct,
                 is_ironman_flag,
                 
+                m.is_active_membership_distinct,
+
+                m.count_is_membership_match,
+                m.count_is_not_membership_match,
                 m.count_races_distinct,
                 
                 m.count_current_year_races,
