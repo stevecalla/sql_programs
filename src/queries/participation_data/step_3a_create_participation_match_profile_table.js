@@ -29,7 +29,9 @@ async function created_at_utc() {
 async function step_a_create_participation_profiles_table(table_name) {
     return `
         CREATE TABLE IF NOT EXISTS ${table_name} (
-            profile_id VARCHAR(255) UNIQUE,
+            profile_id VARCHAR(255),
+            
+            CONSTRAINT idx_profile_id UNIQUE (profile_id),
 
             -- ******************
             -- LEAST RECENT MEMBERSHIP FIELDS
@@ -74,7 +76,7 @@ async function step_a_create_participation_profiles_table(table_name) {
             most_recent_start_date_year_races INT,
             
             most_recent_region_name VARCHAR(255),
-            most_recent_zip_event VARCHAR(255),
+            most_recent_zip_events VARCHAR(255),
             most_recent_city_events VARCHAR(255),
             most_recent_state_code_events VARCHAR(255),
             
@@ -92,14 +94,15 @@ async function step_a_create_participation_profiles_table(table_name) {
             -- METRICS
             -- ******************
             start_years_distinct TEXT,
+
             name_events_distinct TEXT,
-            
+            id_sanctioning_events_distinct TEXT,
+
             id_membership_period_sa_distinct TEXT,
             starts_mp_distinct TEXT,
             ends_mp_distinct TEXT,
             
             is_active_membership_distinct TEXT,
-
             count_is_membership_match INT,
             count_is_not_membership_match INT,
             
@@ -499,9 +502,6 @@ async function step_i_insert_participation_profiles(table_name) {
                 LEFT JOIN step_g_participation_most_recent_race_data AS rr ON p.profile_id = rr.profile_id
                 LEFT JOIN step_h_participation_aggregated_metrics AS m ON p.profile_id = m.profile_id
         ;
-            
-        -- DROP TABLE tmp_distinct_participant_profile_ids;
-        -- DROP TABLE tmp_raw_participation_data;
     `;
 }
 
@@ -509,25 +509,31 @@ async function step_i_insert_participation_profiles(table_name) {
 async function query_append_index_fields(table_name) {
     return `
         ALTER TABLE ${table_name}
-            ADD INDEX idx_id_race_rr (id_race_rr),
-            ADD INDEX idx_id_sanctioning_events (id_sanctioning_events),
-            ADD INDEX idx_id_events_rr (id_events_rr),
+            -- ADD INDEX idx_profile_id (profile_id), -- created via UNIQUE when table created
+
+            -- Race-related indexes
+            ADD INDEX idx_most_recent_id_rr (most_recent_id_rr),
+            ADD INDEX idx_most_recent_id_race (most_recent_id_race),
+            ADD INDEX idx_most_recent_id_sanctioning_events (most_recent_id_sanctioning_events),
             
-            ADD INDEX idx_name_race_type (name_race_type),
-            ADD INDEX idx_name_distance_types (name_distance_types),
-            ADD INDEX idx_name_event_type (name_event_type),
-            ADD INDEX idx_name_events_rr (name_events_rr),
+            ADD INDEX idx_most_recent_name_race_type (most_recent_name_race_type),
+            ADD INDEX idx_most_recent_name_distance_types (most_recent_name_distance_types),
+            ADD INDEX idx_most_recent_name_event_type (most_recent_name_event_type),
+            ADD INDEX idx_most_recent_name_events (most_recent_name_events),
             
-            ADD INDEX idx_gender_code (gender_code),
-            ADD INDEX idx_category (category),
+            ADD INDEX idx_most_recent_gender_code (most_recent_gender_code),
             
-            ADD INDEX idx_region_name (region_name),
-            ADD INDEX idx_city_events (city_events),
-            ADD INDEX idx_state_code_events (state_code_events),
-            ADD INDEX idx_zip_events (zip_events),
+            ADD INDEX idx_most_recent_region_name (most_recent_region_name),
+            ADD INDEX idx_most_recent_city_events (most_recent_city_events),
+            ADD INDEX idx_most_recent_state_code_events (most_recent_state_code_events),
+            ADD INDEX idx_most_recent_zip_events (most_recent_zip_events),
             
-            ADD INDEX idx_start_date_races (start_date_races),
-            ADD INDEX idx_start_date_year_races (start_date_year_races);
+            ADD INDEX idx_most_recent_starts_date_races (most_recent_starts_date_races),
+            ADD INDEX idx_most_recent_start_date_year_races (most_recent_start_date_year_races),
+            
+            -- Membership-related index (if filtering by membership category is common)
+            ADD INDEX idx_most_recent_member_created_at_category (most_recent_member_created_at_category)
+        ;
     `;
 }
 
@@ -538,10 +544,7 @@ module.exports = {
     step_e_participation_least_recent_member_data,
     step_f_participation_most_recent_member_data,
     step_g_participation_most_recent_race_data,
-
     step_h_participation_aggregated_metrics,
-
     step_i_insert_participation_profiles,
-
     query_append_index_fields
 }
