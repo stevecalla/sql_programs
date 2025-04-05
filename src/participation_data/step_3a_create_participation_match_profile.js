@@ -250,7 +250,7 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
       offset += batch.length;
       counter++;
       // For testing, this loop stops after one batch; adjust the condition as needed.
-    } while (batch.length === page_size && counter < 2);
+    } while (batch.length === page_size && counter < 1);
     // } while (batch.length === page_size); // todo:
 }
 
