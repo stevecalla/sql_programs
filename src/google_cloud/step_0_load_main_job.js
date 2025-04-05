@@ -8,7 +8,7 @@ const { execute_load_big_query_database } = require('./step_4_load_biq_query_dat
 const run_step_1 = true;
 const run_step_2 = true;
 const run_step_3 = true;
-const run_step_4 = true;
+const run_step_4 = false;
 
 async function executeSteps(stepFunctions, options, datasetId, bucketName, schema, directoryName) {
   

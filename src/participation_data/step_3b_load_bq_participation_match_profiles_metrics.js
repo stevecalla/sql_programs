@@ -18,12 +18,13 @@ async function execute_load_big_query_participation_profile_metrics() {
 
     const options = [
         {
-            fileName: 'participation_profile_data',
             query: query_participation_profile,
-            tableId: 'participation_profile_data', // table name
+
+            // fileName: 'participation_profile_data',
+            // tableId: 'participation_profile_data', // table name
             
-            // fileName: 'participation_profile_data_v2',
-            // tableId: "participation_profile_data_v2",
+            fileName: 'participation_profile_data_v2',
+            tableId: "participation_profile_data_v2",
         }
     ];
 

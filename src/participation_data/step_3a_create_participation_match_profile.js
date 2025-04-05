@@ -144,7 +144,7 @@ async function create_distinct_profile_id_table(pool, db_name, profile_id_table)
 // STEP C: Process batches of profile IDs and run processing steps (D–I).
 async function process_batches(pool, db_name, profile_id_table, base_table, final_table) {
     console.log('STEP C: Processing batches for profile IDs');
-    const page_size = 1000; // todo:
+    const page_size = 50000; // todo:
     let offset = 0;
     let counter = 0;
   
@@ -250,7 +250,7 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
       offset += batch.length;
       counter++;
       // For testing, this loop stops after one batch; adjust the condition as needed.
-    } while (batch.length === page_size && counter < 1);
+    } while (batch.length === page_size && counter < 2);
     // } while (batch.length === page_size); // todo:
 }
 
