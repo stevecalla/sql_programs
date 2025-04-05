@@ -1,7 +1,7 @@
 const query_participation_profile = `
     SELECT
-        profile_id,
-
+        profile_id,        
+        
         -- ******************
         -- LEAST RECENT MEMBERSHIP FIELDS
         -- ******************
@@ -10,9 +10,9 @@ const query_participation_profile = `
         least_recent_membership_type,
         least_recent_member_created_at_category,
 
-        least_recent_starts_mp,
-        least_recent_ends_mp,
-
+        DATE_FORMAT(least_recent_starts_mp, '%Y-%m-%d') AS least_recent_starts_mp,
+        DATE_FORMAT(least_recent_ends_mp, '%Y-%m-%d') AS least_recent_ends_mp,
+        
         -- ******************
         -- MOST RECENT MEMBERSHIP FIELDS
         -- ******************
@@ -22,11 +22,11 @@ const query_participation_profile = `
         most_recent_new_member_category_6_sa,
         most_recent_member_created_at_category,
 
-        most_recent_starts_mp,
-        most_recent_ends_mp,
+        DATE_FORMAT(most_recent_starts_mp, '%Y-%m-%d') AS most_recent_starts_mp,
+        DATE_FORMAT(most_recent_ends_mp, '%Y-%m-%d') AS most_recent_ends_mp,
         
         most_recent_region_name_member,
-        TRIM(BOTH '"' FROM most_recent_member_city_addresses) AS most_recent_member_city_addresses,
+        REPLACE(REPLACE(REPLACE(most_recent_member_city_addresses, '\r', ''), '\n', ''), '"', '') AS most_recent_member_city_addresses,
         most_recent_member_state_code_addresses,
         most_recent_member_postal_code_addresses,
         
@@ -40,7 +40,7 @@ const query_participation_profile = `
         IFNULL(most_recent_id_race, '') AS most_recent_id_race,
         IFNULL(most_recent_id_sanctioning_events, '') AS most_recent_id_sanctioning_events,
         
-        most_recent_starts_date_races,
+        DATE_FORMAT(most_recent_starts_date_races, '%Y-%m-%d') AS most_recent_starts_date_races,
         most_recent_start_date_month_races,
         most_recent_start_date_year_races,
         
@@ -97,6 +97,9 @@ const query_participation_profile = `
         IFNULL(sales_units_total, '') AS sales_units_total,
         IFNULL(sales_revenue_total, '') AS sales_revenue_total,
 
+        -- ******************
+        -- CREATED AT DATES
+        -- ******************
         DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
         DATE_FORMAT(created_at_utc, '%Y-%m-%d %H:%i:%s') AS created_at_utc
         

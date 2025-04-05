@@ -99,6 +99,7 @@ const participation_profile_schema = [
       "description": "City addresses for most recent membership",
       "fields": []
     },
+    
     {
       "name": "most_recent_member_state_code_addresses",
       "mode": "NULLABLE",
@@ -402,6 +403,7 @@ const participation_profile_schema = [
       "description": "Total sales revenue",
       "fields": []
     },
+    // CREATED AT DATES
     {
       "name": "created_at_mtn",
       "mode": "NULLABLE",

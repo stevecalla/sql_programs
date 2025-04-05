@@ -249,9 +249,11 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
   
       offset += batch.length;
       counter++;
+      
       // For testing, this loop stops after one batch; adjust the condition as needed.
-    } while (batch.length === page_size && counter < 2);
-    // } while (batch.length === page_size); // todo:
+    // } while (batch.length === page_size && counter < 2);
+
+    } while (batch.length === page_size); // todo:
 }
 
 // Main function to execute the overall process.
@@ -267,7 +269,7 @@ async function execute_create_participation_profile_table() {
     // Configuration for which steps to run.
     const steps_to_run = { // todo:
         create_profile_table: true,
-        create_distinct_ids: false,
+        create_distinct_ids: true,
         process_batches: true,
         append_indexes: true
     };
