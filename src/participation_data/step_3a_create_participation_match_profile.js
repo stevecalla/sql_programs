@@ -15,7 +15,9 @@ const {
     step_e_participation_least_recent_member_data,
     step_f_participation_most_recent_member_data,
     step_g_participation_most_recent_race_data,
+    step_g_1_participation_most_recent_start_year_data,
     step_h_participation_aggregated_metrics,
+    step_h_1_participation_number_of_start_years_data,
     step_i_insert_participation_profiles,
     query_append_index_fields
 } = require("../queries/participation_data/step_3a_create_participation_match_profile_table");
@@ -144,18 +146,20 @@ async function create_distinct_profile_id_table(pool, db_name, profile_id_table)
 // STEP C: Process batches of profile IDs and run processing steps (D–I).
 async function process_batches(pool, db_name, profile_id_table, base_table, final_table) {
     console.log('STEP C: Processing batches for profile IDs');
-    const page_size = 50000; // todo:
+    const page_size = 1000; // todo:
     let offset = 0;
     let counter = 0;
   
-    // Configuration for processing steps inside batch processing.
+    // Conf truetion for processing steps inside batch processing.
     const processing_steps = {
-      step_d: true, // Create base data.
-      step_e: true, // Create least recent membership data.
-      step_f: true, // Create most recent membership data.
-      step_g: true, // Create most recent race data.
-      step_h: true, // Create participation metrics.
-      step_i: true  // Insert participant profiles into final table.
+      step_d:   true, // Create base data.
+      step_e:   true, // Create least recent membership data.
+      step_f:   true, // Create most recent membership data.
+      step_g:   true, // Create most recent race data.
+      step_g_1: true, // Create most start year metric.
+      step_h:   true, // Create participation metrics.
+      step_h_1: true, // Create number of start_years.
+      step_i:   true, // Insert participant profiles into final table.
     };
   
     // Retrieve total number of profile IDs.
@@ -220,6 +224,14 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
             }
           },
           {
+            step: 'G_1',
+            enabled: processing_steps.step_g_1,
+            log: 'STEP G: Creating Most Recent Start Year Data',
+            fn: async () => {
+              await execute_process_step(pool, db_name, step_g_1_participation_most_recent_start_year_data, 'step_g_1_participation_most_recent_start_year_data', '', '', 'step_g_participation_most_recent_race_data');
+            }
+          },
+          {
             step: 'H',
             enabled: processing_steps.step_h,
             log: 'STEP H: Creating Participation Metrics',
@@ -228,10 +240,18 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
             }
           },
           {
+            step: 'H_1',
+            enabled: processing_steps.step_h_1,
+            log: 'STEP H_1: Creating Number of Start Years Data',
+            fn: async () => {
+              await execute_process_step(pool, db_name, step_h_1_participation_number_of_start_years_data, 'step_h_1_participation_number_of_start_years_data', '', '', 'step_h_participation_aggregated_metrics');
+            }
+          },
+          {
             step: 'I',
             enabled: processing_steps.step_i,
             log: `STEP I: Inserting Participant Profiles into final table ${final_table}`,
-            fn: async () => {
+            fn: async () => {   
               const insert_query = await step_i_insert_participation_profiles(final_table);
               await execute_mysql_working_query(pool, db_name, insert_query);
             }
@@ -249,11 +269,11 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
   
       offset += batch.length;
       counter++;
-      
-      // For testing, this loop stops after one batch; adjust the condition as needed.
-    // } while (batch.length === page_size && counter < 2);
 
-    } while (batch.length === page_size); // todo:
+    //   For testing, this loop stops after one batch; adjust the condition as needed.
+    } while (batch.length === page_size && counter < 1);
+
+    // } while (batch.length === page_size); // todo:
 }
 
 // Main function to execute the overall process.
@@ -269,9 +289,9 @@ async function execute_create_participation_profile_table() {
     // Configuration for which steps to run.
     const steps_to_run = { // todo:
         create_profile_table: true,
-        create_distinct_ids: true,
+        create_distinct_ids: false,
         process_batches: true,
-        append_indexes: true
+        append_indexes: true,
     };
 
     try {

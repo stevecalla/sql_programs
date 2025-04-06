@@ -91,6 +91,25 @@ async function step_a_create_participation_profiles_table(table_name) {
             most_recent_race_age INT,
 
             -- ******************
+            -- MOST RECENT START YEAR METRICS
+            -- ******************
+            most_recent_start_year_before_2020 INT,
+            most_recent_start_year_before_2023 INT,
+            most_recent_start_year_2023 INT,
+            most_recent_start_year_2024 INT,
+            most_recent_start_year_2025_plus INT,
+
+            -- ******************
+            -- NUMBER OF START YEARS
+            -- ******************
+            start_year_count_one INT,
+            start_year_count_two INT,
+            start_year_count_three INT,
+            start_year_count_four INT,
+            start_year_count_five INT,
+            start_year_count_six_plus INT,
+
+            -- ******************
             -- METRICS
             -- ******************
             start_years_distinct TEXT,
@@ -115,6 +134,7 @@ async function step_a_create_participation_profiles_table(table_name) {
             count_prior_year_races INT,
             
             count_of_start_years_distinct INT,
+
             count_of_race_regions_distinct INT,
             count_of_purchased_years_all INT,
 
@@ -351,12 +371,36 @@ async function step_g_participation_most_recent_race_data(table_name, where, lim
     `;
 }
 
+async function step_g_1_participation_most_recent_start_year_data(table_name, where, limit, base_table) {
+    // step_g_1_participation_most_recent_start_year_data
+    return `
+    CREATE TABLE ${table_name} AS
+        WITH most_recent_start_year_data AS (
+            SELECT 
+                profile_id,
+                
+                -- MOST RECENT START YEAR       
+                CASE WHEN most_recent_start_date_year_races < 2020 THEN 1 ELSE 0 END AS most_recent_start_year_before_2020,
+                CASE WHEN most_recent_start_date_year_races < 2023 THEN 1 ELSE 0 END AS most_recent_start_year_before_2023,
+                CASE WHEN most_recent_start_date_year_races IN (2023) THEN 1 ELSE 0 END AS most_recent_start_year_2023,
+                CASE WHEN most_recent_start_date_year_races IN (2024) THEN 1 ELSE 0 END AS most_recent_start_year_2024,
+                CASE WHEN most_recent_start_date_year_races >= 2025 THEN 1 ELSE 0 END AS most_recent_start_year_2025_plus
+
+            FROM ${base_table}
+            WHERE most_recent_starts_date_races IS NOT NULL
+        )
+        SELECT 
+            *
+        FROM most_recent_start_year_data
+    ;  
+`;
+}
+
 async function step_h_participation_aggregated_metrics(table_name, where, limit, base_table) {
     return `
         SET SESSION group_concat_max_len = 1000000;
 
         CREATE TABLE ${table_name} AS
-        -- , aggregated_participation_stats AS (
             SELECT
                 profile_id,
                 
@@ -382,6 +426,7 @@ async function step_h_participation_aggregated_metrics(table_name, where, limit,
                 SUM(CASE WHEN start_date_year_races = YEAR(CURDATE()) THEN 1 ELSE 0 END) AS count_current_year_races,
                 SUM(CASE WHEN start_date_year_races = YEAR(CURDATE()) - 1 THEN 1 ELSE 0 END) AS count_prior_year_races,
 
+                -- NUMBER OF START YEARS
                 COUNT(DISTINCT start_date_year_races) AS count_of_start_years_distinct,
                 COUNT(DISTINCT region_name) AS count_of_race_regions_distinct,
                 COUNT(purchased_on_year_adjusted_mp) AS count_of_purchased_years_all,
@@ -392,6 +437,31 @@ async function step_h_participation_aggregated_metrics(table_name, where, limit,
             GROUP BY profile_id
         ;
     `;
+}
+
+async function step_h_1_participation_number_of_start_years_data(table_name, where, limit, base_table) {
+    // step_h_1_participation_number_of_start_years_data
+    return `
+    CREATE TABLE ${table_name} AS
+        WITH number_of_start_years AS (
+            SELECT 
+                profile_id,
+        
+                -- NUMBER OF START YEARS
+                CASE WHEN count_of_start_years_distinct IN (1) THEN 1 ELSE 0 END AS start_year_count_one,
+                CASE WHEN count_of_start_years_distinct IN (2) THEN 1 ELSE 0 END AS start_year_count_two,
+                CASE WHEN count_of_start_years_distinct IN (3) THEN 1 ELSE 0 END AS start_year_count_three,
+                CASE WHEN count_of_start_years_distinct IN (4) THEN 1 ELSE 0 END AS start_year_count_four,
+                CASE WHEN count_of_start_years_distinct IN (5) THEN 1 ELSE 0 END AS start_year_count_five,
+                CASE WHEN count_of_start_years_distinct >= (6) THEN 1 ELSE 0 END AS start_year_count_six_plus
+
+            FROM ${base_table}
+        )
+        SELECT 
+            *
+        FROM number_of_start_years
+    ;  
+`;
 }
 
 // STEP #1b: CREATE PARTICIPATION PROFILE TABLE
@@ -465,6 +535,25 @@ async function step_i_insert_participation_profiles(table_name) {
                 rr.most_recent_race_age,
 
                 -- ******************
+                -- MOST RECENT START YEAR METRICS
+                -- ******************
+                most_recent_start_year_before_2020,
+                most_recent_start_year_before_2023,
+                most_recent_start_year_2023,
+                most_recent_start_year_2024,
+                most_recent_start_year_2025_plus,
+
+                -- ******************
+                -- NUMBER OF START YEARS
+                -- ******************
+                yc.start_year_count_one,
+                yc.start_year_count_two,
+                yc.start_year_count_three,
+                yc.start_year_count_four,
+                yc.start_year_count_five,
+                yc.start_year_count_six_plus,
+
+                -- ******************
                 -- METRICS
                 -- ******************
                 m.start_years_distinct,
@@ -489,6 +578,7 @@ async function step_i_insert_participation_profiles(table_name) {
                 m.count_prior_year_races,
                 
                 m.count_of_start_years_distinct,
+
                 m.count_of_race_regions_distinct,
                 m.count_of_purchased_years_all,
 
@@ -509,7 +599,9 @@ async function step_i_insert_participation_profiles(table_name) {
                 LEFT JOIN step_e_participation_least_recent_member_data AS lr ON p.profile_id = lr.profile_id
                 LEFT JOIN step_f_participation_most_recent_member_data AS mr ON p.profile_id = mr.profile_id
                 LEFT JOIN step_g_participation_most_recent_race_data AS rr ON p.profile_id = rr.profile_id
+                LEFT JOIN step_g_1_participation_most_recent_start_year_data AS sy ON p.profile_id = sy.profile_id
                 LEFT JOIN step_h_participation_aggregated_metrics AS m ON p.profile_id = m.profile_id
+                LEFT JOIN step_h_1_participation_number_of_start_years_data AS yc ON p.profile_id = yc.profile_id
         ;
     `;
 }
@@ -553,7 +645,9 @@ module.exports = {
     step_e_participation_least_recent_member_data,
     step_f_participation_most_recent_member_data,
     step_g_participation_most_recent_race_data,
+    step_g_1_participation_most_recent_start_year_data,
     step_h_participation_aggregated_metrics,
+    step_h_1_participation_number_of_start_years_data,
     step_i_insert_participation_profiles,
     query_append_index_fields
 }
