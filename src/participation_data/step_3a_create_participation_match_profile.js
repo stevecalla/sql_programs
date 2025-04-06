@@ -289,7 +289,7 @@ async function execute_create_participation_profile_table() {
     // Configuration for which steps to run.
     const steps_to_run = { // todo:
         create_profile_table:   true,
-        create_distinct_ids:    false,
+        create_distinct_ids:    true,
         process_batches:        true,
         append_indexes:         true,
     };
