@@ -248,6 +248,85 @@ const participation_profile_schema = [
       "description": "Race age for most recent race",
       "fields": []
     },
+    // MOST RECENT YEAR METRICS
+    {
+      "name": "most_recent_start_year_before_2020",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Most recent start year before 2020",
+      "fields": []
+    },
+    {
+      "name": "most_recent_start_year_before_2023",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Most recent start year before 2023",
+      "fields": []
+    },
+    {
+      "name": "most_recent_start_year_2023",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Most recent start year is 2023",
+      "fields": []
+    },
+    {
+      "name": "most_recent_start_year_2024",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Most recent start year is 2024",
+      "fields": []
+    },
+    {
+      "name": "most_recent_start_year_2025_plus",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Most recent start year is 2025 or later",
+      "fields": []
+    },
+    // MOST RECENT YEAR METRICS
+    {
+      "name": "start_year_count_one",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Count of profiles with one distinct start year",
+      "fields": []
+    },
+    {
+      "name": "start_year_count_two",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Count of profiles with two distinct start years",
+      "fields": []
+    },
+    {
+      "name": "start_year_count_three",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Count of profiles with three distinct start years",
+      "fields": []
+    },
+    {
+      "name": "start_year_count_four",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Count of profiles with four distinct start years",
+      "fields": []
+    },
+    {
+      "name": "start_year_count_five",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Count of profiles with five distinct start years",
+      "fields": []
+    },
+    {
+      "name": "start_year_count_six_plus",
+      "mode": "NULLABLE",
+      "type": "INTEGER",
+      "description": "Count of profiles with six or more distinct start years",
+      "fields": []
+    },
     // METRICS
     {
       "name": "start_years_distinct",

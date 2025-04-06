@@ -60,6 +60,25 @@ const query_participation_profile = `
         IFNULL(most_recent_race_age, '') AS most_recent_race_age,
 
         -- ******************
+        -- MOST RECENT START YEAR METRICS
+        -- ******************
+        most_recent_start_year_before_2020,
+        most_recent_start_year_before_2023,
+        most_recent_start_year_2023,
+        most_recent_start_year_2024,
+        most_recent_start_year_2025_plus,
+
+        -- ******************
+        -- NUMBER OF START YEARS
+        -- ******************
+        start_year_count_one,
+        start_year_count_two,
+        start_year_count_three,
+        start_year_count_four,
+        start_year_count_five,
+        start_year_count_six_plus,
+
+        -- ******************
         -- METRICS
         -- ******************
         start_years_distinct,

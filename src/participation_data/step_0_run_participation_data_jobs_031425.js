@@ -89,7 +89,7 @@ async function execute_run_participation_data_jobs() {
   // const run_step_3 = true; // create table participation with membership sales match
 
   const run_step_3a = true; // create participation profile (profile_id) table
-  // const run_step_3b = true; // load membership participation match profile to bigquery
+  const run_step_3b = true; // load membership participation match profile to bigquery
   
   // const run_step_3c = true; // create membership participation race (race_id) profile table
   // const run_step_3d = true; // load membership participation match race to bigquery
@@ -105,7 +105,7 @@ async function execute_run_participation_data_jobs() {
       // run_step_3 ? execute_create_participation_with_membership_match : null,
 
         run_step_3a ? execute_create_participation_profile_table : null,
-        // run_step_3b ? execute_load_big_query_participation_profile_metrics : null,
+        run_step_3b ? execute_load_big_query_participation_profile_metrics : null,
 
         // run_step_3c ? execute_create_participation_race_profile_tables : null,
         // run_step_3d ? execute_load_big_query_participation_race_profile_metrics : null,
@@ -121,7 +121,7 @@ async function execute_run_participation_data_jobs() {
       // `Step #3 - Created participation data with membership match`,
 
       `Step #3a - Created participation profile table`, // takes about 10 minutes
-      // `Step #3b - Load participation profile to BQ: `,
+      `Step #3b - Load participation profile to BQ: `,
 
       // `Step #3c - Created participation race profile table`, // takes about 3 minutes
       // `Step #3d - Load participation race profile to BQ: `,

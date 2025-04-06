@@ -537,11 +537,11 @@ async function step_i_insert_participation_profiles(table_name) {
                 -- ******************
                 -- MOST RECENT START YEAR METRICS
                 -- ******************
-                most_recent_start_year_before_2020,
-                most_recent_start_year_before_2023,
-                most_recent_start_year_2023,
-                most_recent_start_year_2024,
-                most_recent_start_year_2025_plus,
+                ys.most_recent_start_year_before_2020,
+                ys.most_recent_start_year_before_2023,
+                ys.most_recent_start_year_2023,
+                ys.most_recent_start_year_2024,
+                ys.most_recent_start_year_2025_plus,
 
                 -- ******************
                 -- NUMBER OF START YEARS
@@ -599,7 +599,7 @@ async function step_i_insert_participation_profiles(table_name) {
                 LEFT JOIN step_e_participation_least_recent_member_data AS lr ON p.profile_id = lr.profile_id
                 LEFT JOIN step_f_participation_most_recent_member_data AS mr ON p.profile_id = mr.profile_id
                 LEFT JOIN step_g_participation_most_recent_race_data AS rr ON p.profile_id = rr.profile_id
-                LEFT JOIN step_g_1_participation_most_recent_start_year_data AS sy ON p.profile_id = sy.profile_id
+                LEFT JOIN step_g_1_participation_most_recent_start_year_data AS ys ON p.profile_id = sy.profile_id
                 LEFT JOIN step_h_participation_aggregated_metrics AS m ON p.profile_id = m.profile_id
                 LEFT JOIN step_h_1_participation_number_of_start_years_data AS yc ON p.profile_id = yc.profile_id
         ;
