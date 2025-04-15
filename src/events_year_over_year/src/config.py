@@ -12,7 +12,7 @@ PATH_PREFIX_OUTPUT = "src/event_output/"
 OUTPUT_FILE = f"{PATH_PREFIX_OUTPUT}cleaned_grouped_event_data_with_summary.xlsx"
 os.makedirs("src/event_output", exist_ok=True)
 
-MATCH_SCORE_THRESHOLD = 80  # Adjustable threshold
+MATCH_SCORE_THRESHOLD = 80  # Adjustable threshold; see fuzzy_matching.py
 
 # --- MONTH CONFIGURATION FOR EVENT TIMING ---
 ANALYSIS_MONTH = 4  # April (1 = January, ..., 12 = December)

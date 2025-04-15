@@ -19,7 +19,7 @@ def export_to_excel(df, grouped_df, qa_summary, match_summary, match_summary_202
         shifted_into_month_output.to_excel(writer, sheet_name=f'shifted_into_{MONTH_NAME.lower()}', index=False)
         unmatched_2024.to_excel(writer, sheet_name='2024_unmatched_events', index=False)
         pivot_value_all.to_excel(writer, sheet_name='pivot_value_all', index=False)
-        # pivot_value_filtered.to_excel(writer, sheet_name='pivot_value_filtered', index=False)
+        pivot_value_filtered.to_excel(writer, sheet_name='pivot_value_filtered', index=False)
 
         # Format each sheet: set column width with center alignment
         workbook = writer.book
@@ -37,7 +37,7 @@ def export_to_excel(df, grouped_df, qa_summary, match_summary, match_summary_202
             f'shifted_into_{MONTH_NAME.lower()}': shifted_into_month_output,
             '2024_unmatched_events': unmatched_2024,
             'pivot_value_all': pivot_value_all,
-            # 'pivot_value_filtered': pivot_value_filtered
+            'pivot_value_filtered': pivot_value_filtered
 
         }
         for sheet_name, data in sheet_data.items():

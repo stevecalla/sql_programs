@@ -97,10 +97,10 @@ def main():
     filtered_grouped_df = grouped_df[~grouped_df['Status'].str.lower().isin(['cancelled', 'deleted'])]
 
     # --- FUZZY MATCHING 2025 TO 2024 ---
-    events_2025, events_2024, match_summary = match_events_2025_vs_2024(grouped_df, MATCH_SCORE_THRESHOLD)
+    events_2025, match_summary_2025 = match_events_2025_vs_2024(grouped_df)
 
     # --- FUZZY MATCHING 2024 TO 2025 ---
-    events_2024, match_summary_2024 = match_events_2024_vs_2025(events_2024, events_2025, MATCH_SCORE_THRESHOLD)
+    events_2024, match_summary_2024 = match_events_2024_vs_2025(grouped_df)
 
     # Filter Draft events for 2024
     draft_2024_events = grouped_df[(grouped_df['year'] == 2024) & (grouped_df['Status'].str.lower() == 'draft')]
@@ -124,11 +124,7 @@ def main():
      pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
 
     # --- CHART EXPORTS TO PDF ---
-    # create_chart_pdf(grouped_df, qa_summary, summary_2024, summary_2025,
-    #  pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift)
-    
-    create_chart_pdf(grouped_df, qa_summary, summary_2024, summary_2025,
-     pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
+    create_chart_pdf(grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
 
     # --- EVENTS IN 2024 WITH NO MATCH IN 2025 ---
     unmatched_2024 = events_2024[~events_2024['Name'].isin(
@@ -136,7 +132,7 @@ def main():
     )]
 
     # --- EXPORT TO EXCEL ---
-    export_to_excel(df, grouped_df, qa_summary, match_summary, match_summary_2024,
+    export_to_excel(df, grouped_df, qa_summary, match_summary_2025, match_summary_2024,
                     events_2025, events_2024, draft_2024_events,
                     timing_shift_output, shifted_into_month_output, unmatched_2024, pivot_value_all, pivot_value_filtered)
 

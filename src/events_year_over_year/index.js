@@ -1,11 +1,15 @@
 const { exec } = require('child_process');
 const path = require('path');
+const { runTimer, stopTimer } = require('../../utilities/timer');
+
 
 // const pythonScript = path.join(__dirname, 'compare_v3.py');
 const pythonScript = path.join(__dirname, 'src/main.py');
 
 // Start timer
 const start = Date.now();
+
+runTimer(`get_data`);
 
 // Run Python script
 exec(`python "${pythonScript}"`, (error, stdout, stderr) => {
@@ -15,12 +19,17 @@ exec(`python "${pythonScript}"`, (error, stdout, stderr) => {
 
   if (error) {
     console.error('❌ Failed to run process in main.py:', error.message);
+    
+    stopTimer(`get_data`);
+
     return;
   }
 
   if (stderr) {
     console.error('⚠️ Python stderr:', stderr);
+    stopTimer(`get_data`);
   }
 
   console.log('📄 Output from main.py:\n', stdout.trim());
+  stopTimer(`get_data`);
 });

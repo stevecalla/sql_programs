@@ -118,8 +118,9 @@ def group_clean_data(df):
     pivot_value_all = create_yoy_value_by_month_pivot(grouped_df)
     pivot_value_filtered = create_yoy_value_by_month_pivot(filtered_df)
 
-    print(pivot_value_all)
-    print(pivot_value_filtered)
+    # print(pivot_value_all)
+    # print(pivot_value_filtered)
+    print(summary_2025)
 
     return (grouped_df, qa_summary, summary_2024, summary_2025,
             pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered)
