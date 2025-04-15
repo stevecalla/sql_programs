@@ -80,7 +80,7 @@ def perform_year_over_year_analysis(path_prefix_output, grouped_df, events_2025,
         "excel_file": excel_output
     }
 
-def plot_value_summary(pivot_df, output_path):
+def plot_value_summary(pivot_df, output_path, file_prefix):
     """Generate a grouped bar chart for event counts by Value."""
     fig, ax = plt.subplots(figsize=(10, 6))
     pivot_sorted = pivot_df.sort_index()
@@ -157,6 +157,19 @@ def plot_new_repeat_by_month(pivot_new_repeat, output_path):
     ax.set_ylabel('Event Count')
     ax.set_title('2025 New vs. Repeated Events by Month')
     ax.legend()
+    
+    # Add value labels to the new events bars.
+    for bar in bars_new:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2, height, str(int(height)),
+                ha='center', va='bottom', fontsize=9)
+        
+    # Add value labels to the repeated events bars.
+    for bar in bars_repeat:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2, height, str(int(height)),
+                ha='center', va='bottom', fontsize=9)
+        
     plt.tight_layout()
     plt.savefig(output_path)
     plt.close(fig)

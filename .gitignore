@@ -1,6 +1,10 @@
 # notes
 notes.txt
 test.txt
+*.png
+*.xlsx
+*.pdf
+*.csv
 .vscode/
 
 # google analytics

@@ -26,18 +26,34 @@ def save_match_score_histogram(events_2025, output_path):
     plt.close()
 
 def save_bar_chart(df_summary, year, output_path, title_prefix="Monthly Event Trends for"):
+    # Calculate total events for this DataFrame (for the given year)
+    total_events = df_summary['event_count'].sum()
+    
+    # Compute monthly totals (ensuring proper calendar order)
     """Save a bar chart for the event counts per month."""
     monthly_total = df_summary.groupby('month_name')['event_count'].sum()
     order = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
     monthly_total = monthly_total.reindex(order).fillna(0)
-    plt.figure(figsize=(10, 5))
+
+    # Create the bar chart
+    fig = plt.figure(figsize=(10, 5))
     bars = plt.bar(monthly_total.index, monthly_total.values)
     for bar in bars:
         height = bar.get_height()
         plt.text(bar.get_x() + bar.get_width() / 2, height, int(height), ha='center', va='bottom')
+
     plt.title(f"{title_prefix} {year}")
     plt.ylabel("Event Count" if "Trends" in title_prefix else "Draft Event Count")
     plt.xticks(rotation=45)
+
+    # Add annotation for the total count in the top-right of the axes
+    plt.gca().annotate(
+        f"Total: {int(total_events)}",
+        xy=(0.95, 0.95), xycoords='axes fraction',
+        ha='right', va='top', fontsize=12,
+        bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5')
+    )
+
     plt.tight_layout()
     plt.savefig(output_path)
     plt.close()
@@ -46,27 +62,49 @@ def save_yoy_comparison_chart(pivot, title, output_path):
     """Save a Year-over-Year comparison chart using a twin axis plot."""
     fig, ax1 = plt.subplots(figsize=(12, 6))
     x = range(len(pivot))
+    
+    # Plot event counts for both years
     ax1.plot(x, pivot[2024], label='2024', marker='o')
     ax1.plot(x, pivot[2025], label='2025', marker='o')
     ax1.set_xticks(x)
     ax1.set_xticklabels(pivot.index, rotation=45)
     ax1.set_ylabel("Event Count")
+    
+    # Annotate each data point on both lines
     for i in x:
         ax1.text(i, pivot[2024].iloc[i], str(int(pivot[2024].iloc[i])), ha='center', va='bottom')
         ax1.text(i, pivot[2025].iloc[i], str(int(pivot[2025].iloc[i])), ha='center', va='bottom')
+
+    # Add a secondary y-axis with a bar plot for the difference
     ax2 = ax1.twinx()
     bars = ax2.bar(x, pivot['difference'], alpha=0.3, color='gray', label='YoY Diff')
     for i, bar in enumerate(bars):
         height = bar.get_height()
         ax2.text(bar.get_x() + bar.get_width() / 2, height, str(int(height)), ha='center', va='bottom')
+
+    # Compute overall totals for each year
+    total_2024 = pivot[2024].sum()
+    total_2025 = pivot[2025].sum()
+    
+    # Add totals annotation at the upper right-hand corner
+    ax1.annotate(
+        f"Total 2024: {int(total_2024)}\nTotal 2025: {int(total_2025)}",
+        xy=(0.95, 0.95), xycoords='axes fraction',
+        ha='right', va='top', fontsize=12,
+        bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5')
+    )
+    
     ax1.legend(loc='upper left')
     ax1.grid(True, axis='y', linestyle='--', alpha=0.5)
     ax2.set_ylabel("Year-over-Year Difference")
     ax2.axhline(0, color='black', linestyle='--', linewidth=0.5)
+    
+    # Set y-axis limits based on your data range
     min_val = min(pivot[2024].min(), pivot[2025].min(), pivot['difference'].min(), 0)
     max_val = max(pivot[2024].max(), pivot[2025].max(), pivot['difference'].max())
     ax1.set_ylim(min_val, max_val)
     ax2.set_ylim(min_val, max_val)
+
     plt.title(title)
     plt.tight_layout()
     plt.savefig(output_path)
@@ -88,7 +126,6 @@ def save_yoy_comparison_chart_for_value(pivot_value, value_segment, output_path)
     """
     # Filter the pivot table to only rows with the given value_segment
     df_seg = pivot_value[pivot_value['Value'] == value_segment].copy()
-    # df_seg = pivot_value[pivot_value['Value'] == "Adult Event"].copy()
 
     if df_seg.empty:
         print(f"No data found for Value segment: {value_segment}")
@@ -134,6 +171,18 @@ def save_yoy_comparison_chart_for_value(pivot_value, value_segment, output_path)
     max_val = max(df_seg[2024].max(), df_seg[2025].max(), df_seg['difference'].max())
     ax1.set_ylim(min_val, max_val)
     ax2.set_ylim(min_val, max_val)
+    
+    # Compute full year totals for 2024 and 2025
+    total_2024 = df_seg[2024].sum()
+    total_2025 = df_seg[2025].sum()
+    
+    # Add annotation for the full year totals in the top-right of the chart
+    ax1.annotate(
+        f"Total 2024: {int(total_2024)}\nTotal 2025: {int(total_2025)}",
+        xy=(0.95, 0.95), xycoords='axes fraction',
+        ha='right', va='top', fontsize=12,
+        bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5')
+    )
     
     plt.title(f"Year-over-Year Comparison by Month - {value_segment}")
     plt.tight_layout()

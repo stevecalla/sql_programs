@@ -1,21 +1,7 @@
 import pandas as pd
 
 def group_clean_data(df):
-    """Group and clean the raw data and calculate supporting summaries.
-    
-    - If RaceDate is blank or missing, it is populated with StartDate.
-    - The CreatedDate field is included using its first value,
-      preserving its original order (appearing after Email in the file).
-    """
-    # --- Adjust RaceDate if blank ---
-    # Replace RaceDate with StartDate if RaceDate is missing or an empty string.
-    df['RaceDate'] = df.apply(
-        lambda row: row['RaceDate'] if pd.notnull(row['RaceDate']) and str(row['RaceDate']).strip() != "" 
-                    else row['StartDate'],
-        axis=1
-    )
-    
-    # --- Group and aggregate data ---
+    """Group and clean the raw data and calculate supporting summaries."""
     grouped_df = (
         df.groupby('ApplicationID')
         .agg({
@@ -30,14 +16,12 @@ def group_clean_data(df):
             'Website': 'first',
             'RegistrationWebsite': 'first',
             'Email': 'first',
-            'CreatedDate': 'first',      # Use the first CreatedDate based on file order
         })
         .reset_index()
     )
 
-    # Calculate earliest_race_date by taking the minimum RaceDate per ApplicationID.
     grouped_df['earliest_race_date'] = pd.to_datetime(
-        df.groupby('ApplicationID')['RaceDate'].min().values, errors='coerce'
+        df.groupby('ApplicationID')['RaceDate'].min().values
     )
     grouped_df['year'] = grouped_df['earliest_race_date'].dt.year
     grouped_df['month'] = grouped_df['earliest_race_date'].dt.month
@@ -95,22 +79,30 @@ def group_clean_data(df):
         creates a pivot table with a multi-index of (month_name, Value) to compare
         the event counts for 2024 and 2025, including a 'difference' column.
         """
+        # Group by year, month, month_name, and Value
         value_monthly = (
             df_inner.groupby(['year', 'month', 'month_name', 'Value'])
             .size()
             .reset_index(name='event_count')
         )
+        # Pivot with a multi-index: (month_name, Value) and columns as year
         pivot_value = value_monthly.pivot(index=['month_name', 'Value'], columns='year', values='event_count').fillna(0)
         
+        # Calculate the difference assuming both 2024 and 2025 exist in the data
         if 2024 in pivot_value.columns and 2025 in pivot_value.columns:
             pivot_value['difference'] = pivot_value[2025] - pivot_value[2024]
         else:
             pivot_value['difference'] = None
 
+        # Reset index so we can sort by month order and then by Value
         pivot_value = pivot_value.reset_index()
+
+        # Map month_name to a month order for proper sorting
         import calendar
         month_order = {calendar.month_name[i]: i for i in range(1, 13)}
         pivot_value['month_order'] = pivot_value['month_name'].map(month_order)
+
+        # Sort by the month order and then by Value (alphabetically)
         pivot_value = pivot_value.sort_values(['month_order', 'Value'])
         
         return pivot_value
@@ -121,5 +113,5 @@ def group_clean_data(df):
     print(pivot_value_all)
     print(pivot_value_filtered)
 
-    return (grouped_df, qa_summary, summary_2024, summary_2025,
-            pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered)
+    return grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered
+
