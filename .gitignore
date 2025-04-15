@@ -5,6 +5,8 @@ test.txt
 *.xlsx
 *.pdf
 *.csv
+__pycache__/
+*.pyc
 .vscode/
 
 # google analytics
