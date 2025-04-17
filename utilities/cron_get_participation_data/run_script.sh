@@ -7,6 +7,7 @@ start_time_readable=$(date +"%I:%M:%S %p")
 # Determine the current OS user
 current_user=$(whoami)
 echo "Current user: $current_user"
+echo "Running participation data cron job."
 
 # PATH TO JS FILE
 if [ "$current_user" == "steve-calla" ]; then
