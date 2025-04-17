@@ -1,6 +1,12 @@
 # notes
 notes.txt
 test.txt
+*.png
+*.xlsx
+*.pdf
+*.csv
+__pycache__/
+*.pyc
 .vscode/
 
 # google analytics

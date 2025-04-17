@@ -1,20 +1,20 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 
-// ALL - SALES DATA
-const { execute_run_sales_data_jobs } = require('./src/sales_data/step_0_run_sales_data_jobs_010425');
+// ALL - RACE RESULTS DATA
+const { execute_run_participation_data_jobs } = require('./src/participation_data/step_0_run_participation_data_jobs_031425');
 
 // EXPRESS SERVER
 const app = express();
-const PORT = process.env.PORT || 8003; // 01/20/25 port 8002 worked locally but did not respond to cloudflared; switched to 8003
+const PORT = process.env.PORT || 8004; // 01/20/25 port 8002 worked locally but did not respond to cloudflared; switched to 8003
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-// Endpoint to handle crontab all usat sales data job
-app.get('/scheduled-all-sales', async (req, res) => {
-    console.log('/scheduled-all-sales route req.rawHeaders = ', req.rawHeaders);
+// Endpoint to handle crontab all usat participation data job
+app.get('/scheduled-participation', async (req, res) => {
+    console.log('/scheduled-participation route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response
@@ -22,8 +22,8 @@ app.get('/scheduled-all-sales', async (req, res) => {
             message: 'All Sales Data = get, load and create sales key metrics started succesfully.',
         });
 
-        // GETS ALL SALES DATA, LOADS INTO MYSQL, CREATES SALES KEY METRICS
-        await execute_run_sales_data_jobs();
+        // GETS ALL PARTICIPATION DATA, LOADS INTO MYSQL / BQ, CREATES DETAILED DATA
+        await execute_run_participation_data_jobs();
 
     } catch (error) {
         console.error('Error quering or sending membership sales data:', error);
@@ -51,8 +51,8 @@ process.on('SIGTERM', cleanup);
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
-    console.log(`Tunnel using cloudflare https://usat-member-sales.kidderwise.org/scheduled-all-sales`)
-    // 192.168.187:8003
+    console.log(`Tunnel using cloudflare https://usat-member-sales.kidderwise.org/scheduled-participation`)
+    // 192.168.187:8004
 });
 
 
