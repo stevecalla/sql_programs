@@ -25,7 +25,15 @@
     "stop_sales": "npx pm2 stop usat_sales",
     "delete_sales": "npnx pm2 delete usat_sales",    
     "show_sales": "npx pm2 show usat_sales",
-    "restart_sales": "npx pm2 restart usat_sales"
+    "restart_sales": "npx pm2 restart usat_sales",
+
+    "pm2_start_p": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_participation.js --name usat_race --no-autorestart --max-memory-restart 10G --cron-restart '00 08 * * *' --node-args=\"--expose-gc\"",
+    
+    "pm2_logs_race": "npx pm2 logs usat_race",
+    "stop_race": "npx pm2 stop usat_race",
+    "delete_race": "npnx pm2 delete usat_race",    
+    "show_race": "npx pm2 show usat_race",
+    "restart_race": "npx pm2 restart usat_race"
   },
   "keywords": [],
   "author": "",
