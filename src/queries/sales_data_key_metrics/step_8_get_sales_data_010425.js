@@ -335,7 +335,7 @@ function step_8_sales_key_stats_2015() {
                     ON am.state_code_addresses = ar.state_code
 
             WHERE 
-                am.purchased_on_year_adjusted_mp >= 2019 AND -- TODO:
+                am.purchased_on_year_adjusted_mp >= 2010 AND -- TODO:
                 CAST(am.purchased_on_date_mp AS CHAR) != '0000-00-00'
                 -- LIMIT 1     
             ;
