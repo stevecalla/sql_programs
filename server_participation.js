@@ -13,8 +13,8 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 // Endpoint to handle crontab all usat participation data job
-app.get('/scheduled-race-results', async (req, res) => {
-    console.log('/scheduled-race-results route req.rawHeaders = ', req.rawHeaders);
+app.get('/scheduled-participation', async (req, res) => {
+    console.log('/scheduled-participation route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response
@@ -22,7 +22,7 @@ app.get('/scheduled-race-results', async (req, res) => {
             message: 'All Sales Data = get, load and create sales key metrics started succesfully.',
         });
 
-        // GETS ALL PARTICIPATION DATA, LOADS INTO MYSQL, CREATES DETAILED DATA
+        // GETS ALL PARTICIPATION DATA, LOADS INTO MYSQL / BQ, CREATES DETAILED DATA
         await execute_run_participation_data_jobs();
 
     } catch (error) {
@@ -51,7 +51,7 @@ process.on('SIGTERM', cleanup);
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
-    console.log(`Tunnel using cloudflare https://usat-member-sales.kidderwise.org/scheduled-race-results`)
+    console.log(`Tunnel using cloudflare https://usat-member-sales.kidderwise.org/scheduled-participation`)
     // 192.168.187:8004
 });
 
