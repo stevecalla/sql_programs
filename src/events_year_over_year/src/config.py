@@ -6,7 +6,7 @@ import calendar
 # INPUT_FILE = "src/event_input/santioning_list_040723.xlsx" 
 # INPUT_FILE = "src/event_input/santioning_list_041423_wo_created_date.xlsx"  
 # INPUT_FILE = "src/event_input/santioning_list_041423_w_created_date.xlsx" 
-INPUT_FILE = "src/event_input/santioning_list_041523_w_created_date.xlsx" 
+INPUT_FILE = "src/event_input/santioning_list_041523_w_created_date_fixed.xlsx" 
 
 PATH_PREFIX_OUTPUT = "src/event_output/"
 OUTPUT_FILE = f"{PATH_PREFIX_OUTPUT}cleaned_grouped_event_data_with_summary.xlsx"

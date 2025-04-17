@@ -71,6 +71,34 @@ Shift+Alt+V
 | 309261        | The Great Loon Triathlon | 8/17/2025 | 2024-08-18 |
 | 309811        | OBX TRI                  | 9/13/2025 | 9/14/2024  |
 
+| month_name | Value        | 2024 | 2025 | difference |
+|------------|--------------|------|------|------------|
+| April      | Adult Clinic | 7    | 10   | 3          |
+| April      | Adult Event  | 52   | 50   | -2         |
+| April      | Youth Clinic | 4    | 4    | 0          |
+| April      | Youth Event  | 12   | 12   | 0          |
+| April      | Total        | 75   | 76   | 1          |
+
+| month_name | Value        | 2024 | 2025 | difference |
+|------------|--------------|------|------|------------|
+| May        | Adult Clinic | 12   | 10   | -2         |
+| May        | Adult Event  | 87   | 107  | 20         |
+| May        | Youth Clinic | 1    | 1    | 0          |
+| May        | Youth Event  | 21   | 28   | 7          |
+| April      | Total        | 121  | 146  | 25         |
+
+| Row Labels   | 2025        | 2024        | difference        |
+|--------------|-------------|-------------|-------------------|
+| Adult Clinic | 81          | 90          | -9                |
+| Adult Event  | 806         | 826         | -20               |
+| Youth Clinic | 26          | 33          | -7                |
+| Youth Event  | 193         | 209         | -16               |
+| Grand Total  | 1,106       | 1,158       | -52               |
+
+
+
+
+
 
 
 
