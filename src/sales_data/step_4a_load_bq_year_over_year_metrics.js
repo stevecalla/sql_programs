@@ -10,7 +10,6 @@ async function execute_load_big_query_sales_year_over_year_metrics() {
     const options = [
         {
             fileName: 'sales_year_over_year_data',
-            // query: query_sales_year_over_year_data,
             query: (retrieval_batch_size, offset) => query_sales_year_over_year_data(retrieval_batch_size, offset),
             tableId: "sales_year_over_year_data", // table name
         }
