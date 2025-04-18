@@ -5,6 +5,7 @@ dotenv.config({ path: "../../.env" });
 
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
+const { triggerGarbageCollection } = require('../../utilities/garbage_collection/trigger_garbage_collection');
 
 const { query_drop_table } = require("../queries/create_drop_db_table/queries_drop_db_tables");
 const { 
@@ -116,8 +117,14 @@ async function insert_data(pool, db_name, table_name, test = false) {
         console.log('\nStep 3: insert query running');
         await execute_mysql_working_query(pool, db_name, query_to_insert_data);
 
+        // Clear memory
+        await triggerGarbageCollection();
+
         stopTimer(`${i}_query_to_insert_data`);
     }
+    
+    // Clear memory
+    await triggerGarbageCollection();
 
     return;
 }
@@ -179,6 +186,15 @@ async function execute_create_participation_race_profile_tables() {
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
 
         console.log(`\nSTEP #1 = TIME LOG. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
+        
+        // Clear memory
+        startTime = null;
+        test = null;
+        pool = null;
+        db_name = null;
+        table_name = null;
+
+        await triggerGarbageCollection();
         
         return elapsedTime;
     }

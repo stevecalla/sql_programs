@@ -5,6 +5,7 @@ dotenv.config({ path: "../../.env" });
 
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
+const { triggerGarbageCollection } = require('../../utilities/garbage_collection/trigger_garbage_collection');
 
 const { query_drop_table } = require("../queries/create_drop_db_table/queries_drop_db_tables");
 
@@ -263,6 +264,9 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
           if (current_step.enabled) {
             console.log(current_step.log);
             await current_step.fn();
+
+            // Clear memory if needed
+            await triggerGarbageCollection();
           }
         }
       }
@@ -274,6 +278,17 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
     // } while (batch.length === page_size && counter < 1);
 
     } while (batch.length === page_size); // todo:
+
+    // Clear memory
+    page_size = null;
+    offset = null;
+    counter = null;
+    processing_steps = null;
+    count_query = null;
+    count_result = null;
+    count_profile_ids = null;
+
+    await triggerGarbageCollection();
 }
 
 // Main function to execute the overall process.
@@ -321,6 +336,15 @@ async function execute_create_participation_profile_table() {
     } finally {
         const elapsed_time = ((performance.now() - start_time) / 1000).toFixed(2);
         console.log(`Elapsed Time: ${elapsed_time} sec`);
+
+        // Clear memory
+        final_table = null;
+        base_table = null;
+        profile_id_table = null;
+        steps_to_run = null;
+
+        await triggerGarbageCollection();
+
         return elapsed_time;
     }
 }
