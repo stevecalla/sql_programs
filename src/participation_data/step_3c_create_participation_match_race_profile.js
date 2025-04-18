@@ -79,9 +79,9 @@ async function create_table(pool, db_name, table_name) {
 }
 
 async function insert_data(pool, db_name, table_name, test = false) {
-    const start_year = 2010; // Default = 2010
-    const membershipPeriodEnds = '2008-01-01';
-    const period_interval = 12; // options include 1, 3, 6 months
+    let start_year = 2010; // Default = 2010
+    let membershipPeriodEnds = '2008-01-01';
+    let period_interval = 12; // options include 1, 3, 6 months
 
     let start_date_time = "2010-01-01 00:00:00";
     let end_date_time = "2010-12-31 23:59:00";
@@ -100,7 +100,7 @@ async function insert_data(pool, db_name, table_name, test = false) {
     
         runTimer(`${i}_query_to_insert_data`);
         
-        const date_period = date_periods[i];
+        let date_period = date_periods[i];
 
         if (!test) {
             start_date_time = date_period.start_date_time;
@@ -143,15 +143,17 @@ async function append_indexes(pool, db_name, table_name) {
 
 async function execute_create_participation_race_profile_tables() {   
     let pool;
-    const startTime = performance.now();
+    let startTime = performance.now();
     let test = false; // true will run less data for insert
+    let db_name = "";
+    let table_name = "";
 
     try {
         // STEP #0: CREATE CONNECTION
         pool = await create_connection();
 
-        const db_name = `usat_sales_db`;
-        const table_name = `participation_race_profiles`;
+        db_name = `usat_sales_db`;
+        table_name = `participation_race_profiles`;
         console.log(db_name);
 
         // STEP #1: CREATE TABLE
@@ -188,9 +190,9 @@ async function execute_create_participation_race_profile_tables() {
         console.log(`\nSTEP #1 = TIME LOG. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
         
         // Clear memory
+        pool = null;
         startTime = null;
         test = null;
-        pool = null;
         db_name = null;
         table_name = null;
 
