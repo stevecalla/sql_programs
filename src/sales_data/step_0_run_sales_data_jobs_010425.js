@@ -26,7 +26,7 @@ const run_step_3  = false; // create sales key metrics stats table
 const run_step_3a = false; // load sales key metrics stats to biqquery
 
 const run_step_4  = false; // create year-over-year common date table
-const run_step_4a = false; // load sales key metrics stats to biqquery
+const run_step_4a = true; // load sales key metrics stats to biqquery
 
 const run_step_5  = false; // load sales goal data
 const run_step_5a = false; // load sales goals to bigquery
