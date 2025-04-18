@@ -1,5 +1,4 @@
 async function query_member_data(batch_size = 10, offset = 0) {
-    console.log(batch_size, offset);
     return `
         SELECT 
             member_number_members_sa,

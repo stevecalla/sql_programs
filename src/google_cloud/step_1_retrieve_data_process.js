@@ -93,7 +93,7 @@ async function execute_retrieve_data(options) {
 
     const directory_name = `usat_google_bigquery_data`;
     const directory_name_archive = `usat_google_bigquery_data_archive`;
-    const retrieval_batch_size = 10000000;
+    const retrieval_batch_size = 100000;
 
     let offset = 0;
     let batchCounter = 0;
@@ -106,7 +106,7 @@ async function execute_retrieve_data(options) {
 
         let rowsReturned;
 
-        // do {
+        do {
             const sql = typeof query === 'function' ? await query(retrieval_batch_size, offset) : query;
 
             // console.log(sql);
@@ -136,7 +136,7 @@ async function execute_retrieve_data(options) {
 
             await triggerGarbageCollection();
 
-        // } while (rowsReturned > 0);
+        } while (rowsReturned > 0);
 
     } catch (err) {
         console.error('🔥 Error in data retrieval:', err);
