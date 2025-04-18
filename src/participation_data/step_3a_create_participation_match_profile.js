@@ -147,12 +147,12 @@ async function create_distinct_profile_id_table(pool, db_name, profile_id_table)
 // STEP C: Process batches of profile IDs and run processing steps (D–I).
 async function process_batches(pool, db_name, profile_id_table, base_table, final_table) {
     console.log('STEP C: Processing batches for profile IDs');
-    const page_size = 50000; // todo:
+    let page_size = 50000; // todo:
     let offset = 0;
     let counter = 0;
   
     // Conf truetion for processing steps inside batch processing.
-    const processing_steps = {
+    let processing_steps = {
       step_d:   true, // Create base data.
       step_e:   true, // Create least recent membership data.
       step_f:   true, // Create most recent membership data.
@@ -164,9 +164,9 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
     };
   
     // Retrieve total number of profile IDs.
-    const count_query = `SELECT COUNT(*) AS count_profile_ids FROM ${profile_id_table};`;
-    const count_result = await execute_mysql_working_query(pool, db_name, count_query);
-    const { count_profile_ids } = count_result[0];
+    let count_query = `SELECT COUNT(*) AS count_profile_ids FROM ${profile_id_table};`;
+    let count_result = await execute_mysql_working_query(pool, db_name, count_query);
+    let { count_profile_ids } = count_result[0];
     console.log(`Total profile IDs: ${count_profile_ids}`);
   
     let batch;
@@ -191,7 +191,7 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
         };
   
         // Define the steps as an array of objects.
-        const steps = [
+        let steps = [
           {
             step: 'D',
             enabled: processing_steps.step_d,
@@ -293,16 +293,16 @@ async function process_batches(pool, db_name, profile_id_table, base_table, fina
 
 // Main function to execute the overall process.
 async function execute_create_participation_profile_table() {
-    const start_time = performance.now();
-    const db_name = 'usat_sales_db';
+    let start_time = performance.now();
+    let db_name = 'usat_sales_db';
 
     // Table names configuration.
-    const final_table = 'step_a_participation_profiles';
-    const base_table = 'step_d_participation_base_data';
-    const profile_id_table = 'step_b_distinct_profile_id';
+    let final_table = 'step_a_participation_profiles';
+    let base_table = 'step_d_participation_base_data';
+    let profile_id_table = 'step_b_distinct_profile_id';
 
     // Configuration for which steps to run.
-    const steps_to_run = { // todo:
+    let steps_to_run = { // todo:
         create_profile_table:   true,
         create_distinct_ids:    true,
         process_batches:        true,
@@ -334,7 +334,7 @@ async function execute_create_participation_profile_table() {
     } catch (error) {
         console.error('Error executing queries:', error);
     } finally {
-        const elapsed_time = ((performance.now() - start_time) / 1000).toFixed(2);
+        let elapsed_time = ((performance.now() - start_time) / 1000).toFixed(2);
         console.log(`Elapsed Time: ${elapsed_time} sec`);
 
         // Clear memory
