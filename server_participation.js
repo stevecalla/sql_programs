@@ -12,6 +12,27 @@ const PORT = process.env.PORT || 8004; // 01/20/25 port 8002 worked locally but 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
+// Test endpoint
+app.get('/participation-test', async (req, res) => {
+    console.log('/participation-test route req.rawHeaders = ', req.rawHeaders);
+
+    try {
+        // Send a success response
+        res.status(200).json({
+            message: 'Particiption server is up and running. Stands Ready.',
+        });
+
+    } catch (error) {
+        console.error('Error quering or sending participation data:', error);
+        
+        // Send an error response
+        res.status(500).json({
+            message: 'Error quering or sending participation data.',
+            error: error.message || 'Internal Server Error',
+        });
+    }
+});
+
 // Endpoint to handle crontab all usat participation data job
 app.get('/scheduled-participation', async (req, res) => {
     console.log('/scheduled-participation route req.rawHeaders = ', req.rawHeaders);
@@ -19,18 +40,18 @@ app.get('/scheduled-participation', async (req, res) => {
     try {
         // Send a success response
         res.status(200).json({
-            message: 'All Sales Data = get, load and create sales key metrics started succesfully.',
+            message: 'All Participation Data = get, load and create data succesful.',
         });
 
         // GETS ALL PARTICIPATION DATA, LOADS INTO MYSQL / BQ, CREATES DETAILED DATA
         await execute_run_participation_data_jobs();
 
     } catch (error) {
-        console.error('Error quering or sending membership sales data:', error);
+        console.error('Error quering or sending participation data:', error);
         
         // Send an error response
         res.status(500).json({
-            message: 'Error quering or sending membership sales data.',
+            message: 'Error quering or sending participation data.',
             error: error.message || 'Internal Server Error',
         });
     }
