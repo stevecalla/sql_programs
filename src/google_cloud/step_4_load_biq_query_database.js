@@ -45,7 +45,7 @@ async function execute_load_big_query_database(options, datasetId, bucketName, s
         let metadata = "";
 
         if (schema) {
-           metadata =  {
+            metadata =  {
                 sourceFormat: 'CSV',
                 skipLeadingRows: 1,
                 schema: { fields: schema },
@@ -61,7 +61,7 @@ async function execute_load_big_query_database(options, datasetId, bucketName, s
                 location: 'US',
                 writeDisposition: 'WRITE_APPEND', // Append data to the table
                 // writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
-             };
+            };
         }
         // Configure the load job metadata
         // const metadata =  {
