@@ -18,9 +18,8 @@ async function execute_load_big_query_participation_profile_metrics() {
 
     const options = [
         {
-            query: query_participation_profile,
-
             fileName: 'participation_profile_data',
+            query: (retrieval_batch_size, offset) => query_participation_profile(retrieval_batch_size, offset),
             tableId: 'participation_profile_data', // table name
             
             // fileName: 'participation_profile_data_v2',

@@ -19,7 +19,7 @@ async function execute_load_big_query_participation_race_profile_metrics() {
     const options = [
         {
             fileName: 'participation_race_profile_data',
-            query: query_participation_race_profile,
+            query: (retrieval_batch_size, offset) => query_participation_race_profile(retrieval_batch_size, offset),
             tableId: 'participation_race_profile_data', // table name
             
             // fileName: 'participation_race_profile_data_v2',
