@@ -11,10 +11,10 @@ echo "Running participation data cron job."
 
 # PATH TO JS FILE
 if [ "$current_user" == "steve-calla" ]; then
-    JS_FILE="/home/steve-calla/development/usat/sql_programs/utilities/utilities/cron_get_participation_data/script.js"
+    JS_FILE="/home/steve-calla/development/usat/sql_programs/utilities/cron_get_participation_data/script.js"
     NODE_PATH="/home/$current_user/.nvm/versions/node/v18.20.4/bin/node"
 elif [ "$current_user" == "usat-server" ]; then
-    JS_FILE="/home/usat-server/development/usat/sql_programs/utilities/utilities/cron_get_participation_data/script.js"
+    JS_FILE="/home/usat-server/development/usat/sql_programs/utilities/cron_get_participation_data/script.js"
     NODE_PATH="/usr/bin/node"
 else
     echo "Unknown user: $current_user"

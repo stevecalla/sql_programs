@@ -6,6 +6,8 @@ function step_1_sales_year_over_year_data() {
     DROP TABLE IF EXISTS sales_data_year_over_year;
 
     SET @current_year_date_today = CURDATE();
+    -- SET @current_year_date_today = '2025-04-17';
+
     SET @current_year_date_yesterday = @current_year_date_today - INTERVAL 1 DAY;
     SET @current_year = YEAR(@current_year_date_today);
 

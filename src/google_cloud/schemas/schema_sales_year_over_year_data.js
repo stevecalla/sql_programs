@@ -69,8 +69,6 @@ const members_sales_year_over_year_schema = [
         "description": "The category of the origin flag.",
         "fields": []
     },
-
-
     {
         "name": "member_created_at_category",
         "mode": "NULLABLE",
@@ -78,8 +76,6 @@ const members_sales_year_over_year_schema = [
         "description": "The category indicating when the member was created.",
         "fields": []
     },
-
-
     {
         "name": "region_name_member",
         "mode": "NULLABLE",
