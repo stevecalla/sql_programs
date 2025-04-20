@@ -19,7 +19,8 @@
     "show_slack": "npx pm2 show usat_slack",
     "restart_slack": "npx pm2 restart usat_slack",
 
-    "pm2_start_sales": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_sales.js --name usat_sales --no-autorestart --max-memory-restart 10G --cron-restart '00 08 * * *' --node-args=\"--expose-gc\"",
+    "pm2_start_sales_0800": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_sales.js --name usat_sales --no-autorestart --max-memory-restart 10G --cron-restart '00 08 * * *' --node-args=\"--expose-gc\"",
+    "pm2_start_sales_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_sales.js --name usat_sales --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     
     "pm2_logs_sales": "npx pm2 logs usat_sales",
     "stop_sales": "npx pm2 stop usat_sales",
@@ -27,7 +28,8 @@
     "show_sales": "npx pm2 show usat_sales",
     "restart_sales": "npx pm2 restart usat_sales",
 
-    "pm2_start_p": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_participation.js --name usat_race --no-autorestart --max-memory-restart 10G --cron-restart '00 08 * * *' --node-args=\"--expose-gc\"",
+    "pm2_start_race_0800": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_participation.js --name usat_race --no-autorestart --max-memory-restart 10G --cron-restart '00 08 * * *' --node-args=\"--expose-gc\"",
+    "pm2_start_race_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_participation.js --name usat_race --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     
     "pm2_logs_race": "npx pm2 logs usat_race",
     "stop_race": "npx pm2 stop usat_race",
