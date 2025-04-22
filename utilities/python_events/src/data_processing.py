@@ -87,13 +87,14 @@ def group_clean_data(df):
     pivot_all = create_yoy_pivot(grouped_df)
 
     # filtered_df = grouped_df[~grouped_df['Status'].str.lower().isin(['canceled', 'cancelled', 'deleted'])]
+    
     # fill NaN with empty string, cast every value to str, then lowercase + filter
     filtered_df = grouped_df[
         ~grouped_df['Status']
         .fillna('')                       # replace NaN/None with ''
         .astype(str)                      # everything becomes a string
         .str.lower()                      # lowercase
-        .isin(['cancelled', 'deleted'])   # is in blacklist?
+        .isin(['canceled', 'cancelled', 'deleted'])   # is in blacklist?
     ]
 
     pivot_filtered = create_yoy_pivot(filtered_df)

@@ -1,9 +1,11 @@
 USE vapor;
 
--- SELECT * FROM events AS e WHERE e.sanctioning_event_id = '307440'LIMIT 10;
+SELECT * FROM events AS e WHERE e.sanctioning_event_id = '307440'LIMIT 10;
 SELECT COUNT(*), COUNT(DISTINCT id), COUNT(DISTINCT sanctioning_event_id) FROM events;
+SELECT status, COUNT(status) FROM events GROUP BY 1;
 -- SELECT COUNT(id) FROM events AS e;
-SELECT * FROM races LIMIT 10;
+
+-- SELECT * FROM races LIMIT 10;
 -- SELECT * FROM event_types LIMIT 10;
 -- SELECT * FROM race_types LIMIT 10;
 -- SELECT * FROM vapor.profiles LIMIT 10;

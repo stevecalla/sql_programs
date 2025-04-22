@@ -71,6 +71,9 @@ Shift+Alt+V
 | 309261        | The Great Loon Triathlon | 8/17/2025 | 2024-08-18 |
 | 309811        | OBX TRI                  | 9/13/2025 | 9/14/2024  |
 
+Great Loon Tri StartDate (event date) should be 8/17/24 and OBX RaceDate should be 9/14/25?
+
+
 | month_name | Value        | 2024 | 2025 | difference |
 |------------|--------------|------|------|------------|
 | April      | Adult Clinic | 7    | 10   | 3          |

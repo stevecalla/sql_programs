@@ -1,21 +1,30 @@
 import os
 import calendar
+from pathlib import Path
 
-# --- CONFIGURATION ---
-# --- FILE PATH SHOULD BE AT THE LEVEL OF THE index.js thus using "src/" prefix
-# INPUT_FILE = "src/event_input/santioning_list_040723.xlsx" 
-# INPUT_FILE = "src/event_input/santioning_list_041423_wo_created_date.xlsx"  
-# INPUT_FILE = "src/event_input/santioning_list_041423_w_created_date.xlsx" 
+# Base directory for resolving relative paths (the directory containing this config file)
+BASE_DIR = Path(__file__).resolve().parent
 
-# INPUT_FILE = "src/event_input/santioning_list_041523_w_created_date_fixed.xlsx" 
-INPUT_FILE = "src/event_input/test.csv" 
+# --- INPUT CONFIGURATION ---
+# Always points to src/event_input/test.csv regardless of current working directory
+INPUT_FILE = BASE_DIR / "event_input" / "test.csv"
 
-PATH_PREFIX_OUTPUT = "src/event_output/"
-OUTPUT_FILE = f"{PATH_PREFIX_OUTPUT}cleaned_grouped_event_data_with_summary.xlsx"
-os.makedirs("src/event_output", exist_ok=True)
+# --- OUTPUT CONFIGURATION ---
+# Directory for output files under src/event_output
+OUTPUT_DIR = BASE_DIR / "event_output"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-MATCH_SCORE_THRESHOLD = 80  # Adjustable threshold; see fuzzy_matching.py
+# Path prefix for backward compatibility (as a string)
+# If main still uses PATH_PREFIX_OUTPUT, it will now be absolute
+PATH_PREFIX_OUTPUT = str(OUTPUT_DIR) + os.sep
 
-# --- MONTH CONFIGURATION FOR EVENT TIMING ---
-ANALYSIS_MONTH = 4  # April (1 = January, ..., 12 = December)
+# Full path to the main Excel output
+OUTPUT_FILE = OUTPUT_DIR / "cleaned_grouped_event_data_with_summary.xlsx"
+
+# --- ANALYSIS PARAMETERS ---
+# Threshold for fuzzy matching
+MATCH_SCORE_THRESHOLD = 80
+
+# Month configuration for timing analysis
+ANALYSIS_MONTH = 4  # April
 MONTH_NAME = calendar.month_name[ANALYSIS_MONTH]

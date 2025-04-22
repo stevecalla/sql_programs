@@ -30,12 +30,39 @@ def create_chart_png(grouped_df, qa_summary, summary_2024, summary_2025,
         save_bar_chart(summary_2025, 2025, f"{PATH_PREFIX_OUTPUT}chart_2025.png", None, title_prefix="Monthly Event Trends for")
         
         # Add Draft status charts
-        save_bar_chart(summary_2024[summary_2024['Status'].str.lower() == 'draft'], 2024, 
-                            f"{PATH_PREFIX_OUTPUT}chart_2024_draft_status.png",
-                           None, title_prefix="Monthly Draft Events for")
-        save_bar_chart(summary_2025[summary_2025['Status'].str.lower() == 'draft'], 2025,
-                           f"{PATH_PREFIX_OUTPUT}chart_2025_draft_status.png", 
-                           None, title_prefix="Monthly Draft Events for")
+        # save_bar_chart(summary_2024[summary_2024['Status'].str.lower() == 'draft'], 2024, f"{PATH_PREFIX_OUTPUT}chart_2024_draft_status.png", None, title_prefix="Monthly Draft Events for")
+
+        # save_bar_chart(summary_2025[summary_2025['Status'].str.lower() == 'draft'], 2025, f"{PATH_PREFIX_OUTPUT}chart_2025_draft_status.png", None, title_prefix="Monthly Draft Events for")
+
+        # safe Draft filter for 2024
+        mask_2024 = (
+            summary_2024['Status']
+            .fillna('')           # replace NaN/None with ''
+            .astype(str)          # cast everything to str
+            .str.lower() == 'draft'
+        )
+        save_bar_chart(
+            summary_2024[mask_2024],
+            2024,
+            f"{PATH_PREFIX_OUTPUT}chart_2024_draft_status.png",
+            None,
+            title_prefix="Monthly Draft Events for"
+        )
+
+        # safe Draft filter for 2025
+        mask_2025 = (
+            summary_2025['Status']
+            .fillna('')
+            .astype(str)
+            .str.lower() == 'draft'
+        )
+        save_bar_chart(
+            summary_2025[mask_2025],
+            2025,
+            f"{PATH_PREFIX_OUTPUT}chart_2025_draft_status.png",
+            None,
+            title_prefix="Monthly Draft Events for"
+        )
         
         # Add YoY charts (all and filtered)
         save_yoy_comparison_chart(pivot_all, "YoY Comparison (All)", f"{PATH_PREFIX_OUTPUT}chart_yoy_all.png", None)
@@ -66,11 +93,40 @@ def create_chart_pdf(grouped_df, qa_summary, summary_2024, summary_2025,
         save_bar_chart(summary_2025, 2025, None, pdf_pages)
         
         # Add Draft status charts
-        save_bar_chart(summary_2024[summary_2024['Status'].str.lower() == 'draft'], 2024, None,
-                           pdf_pages, title_prefix="Monthly Draft Events for")
-        save_bar_chart(summary_2025[summary_2025['Status'].str.lower() == 'draft'], 2025,
-                           None, pdf_pages, title_prefix="Monthly Draft Events for")
-        
+        # save_bar_chart(summary_2024[summary_2024['Status'].str.lower() == 'draft'], 2024, None, pdf_pages, title_prefix="Monthly Draft Events for")
+
+        # save_bar_chart(summary_2025[summary_2025['Status'].str.lower() == 'draft'], 2025, None, pdf_pages, title_prefix="Monthly Draft Events for")
+
+        # safe Draft filter for 2024
+        mask_2024 = (
+            summary_2024['Status']
+            .fillna('')           # replace NaN/None with ''
+            .astype(str)          # cast everything to str
+            .str.lower() == 'draft'
+        )
+        save_bar_chart(
+            summary_2024[mask_2024],
+            2024,
+            None, 
+            pdf_pages,
+            title_prefix="Monthly Draft Events for"
+        )
+
+        # safe Draft filter for 2025
+        mask_2025 = (
+            summary_2025['Status']
+            .fillna('')
+            .astype(str)
+            .str.lower() == 'draft'
+        )
+        save_bar_chart(
+            summary_2025[mask_2025],
+            2025,
+            None, 
+            pdf_pages,
+            title_prefix="Monthly Draft Events for"
+        )
+ 
         # Add YoY charts (all and filtered)
         save_yoy_comparison_chart(pivot_all, "YoY Comparison (All)", None, pdf_pages)
         save_yoy_comparison_chart(pivot_filtered, "YoY Comparison (Filtered)", None, pdf_pages)
@@ -101,7 +157,7 @@ def main():
         .fillna('')                       # replace NaN/None with ''
         .astype(str)                      # everything becomes a string
         .str.lower()                      # lowercase
-        .isin(['cancelled', 'deleted'])   # is in blacklist?
+        .isin(['canceled', 'cancelled', 'deleted'])   # is in blacklist?
     ]
 
     # --- FUZZY MATCHING 2025 TO 2024 ---
@@ -111,7 +167,18 @@ def main():
     events_2024, match_summary_2024 = match_events_2024_vs_2025(grouped_df)
 
     # Filter Draft events for 2024
-    draft_2024_events = grouped_df[(grouped_df['year'] == 2024) & (grouped_df['Status'].str.lower() == 'draft')]
+    # draft_2024_events = grouped_df[(grouped_df['year'] == 2024) & (grouped_df['Status'].str.lower() == 'draft')]
+
+    # Filter Draft events for 2024, safely handling NaN or non‑string statuses
+    draft_2024_events = grouped_df[
+        (grouped_df['year'] == 2024) &
+        (grouped_df['Status']
+            .fillna('')          # turn NaN/None into ''
+            .astype(str)         # everything becomes a string
+            .str.lower()         # now safe to lowercase
+            == 'draft'
+        )
+    ]
 
     # --- DATE SHIFT ANALYSIS ---
     timing_shift_output, shifted_into_month_output, timing_shift_data = date_shift_analysis(

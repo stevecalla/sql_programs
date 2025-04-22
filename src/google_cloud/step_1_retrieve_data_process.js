@@ -136,6 +136,7 @@ async function execute_retrieve_data(options) {
 
             await triggerGarbageCollection();
 
+        // } while (batchCounter < 1);  //testing
         } while (rowsReturned > 0);
 
     } catch (err) {

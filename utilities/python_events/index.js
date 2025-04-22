@@ -1,34 +1,45 @@
 const { exec } = require('child_process');
+const util = require('util');
+const exec_async = util.promisify(exec);
 const path = require('path');
-const { runTimer, stopTimer } = require('../../utilities/timer');
+const { runTimer: run_timer, stopTimer: stop_timer } = require('../../utilities/timer');
 
-// const pythonScript = path.join(__dirname, 'compare_v3.py');
-const pythonScript = path.join(__dirname, 'src/main.py');
+/**
+ * Runs a Python script and logs timing.
+ * @param {string} [script_path=default_script_path] - Absolute path to the Python script.
+ * @returns {Promise<string>} Resolves with stdout.
+*/
+const default_script_path = path.join(__dirname, 'src/main.py');
 
-// Start timer
-const start = Date.now();
+async function execute_run_python_event_reports(script_path = default_script_path) {
+  const start = Date.now();
+  run_timer('get_data');
 
-runTimer(`get_data`);
+  try {
+    const { stdout, stderr } = await exec_async(`python "${script_path}"`);
 
-// Run Python script
-exec(`python "${pythonScript}"`, (error, stdout, stderr) => {
-  const duration = (Date.now() - start) / 1000;
+    const duration = ((Date.now() - start) / 1000).toFixed(2);
+    console.log(`⏳ ${path.basename(script_path)} took ${duration} seconds`);
 
-  console.log(`⏳ main.py took ${duration.toFixed(2)} seconds`);
+    if (stderr) {
+      console.warn('⚠️ Python stderr:', stderr);
+    }
+    console.log('📄 Output from script:\n', stdout.trim());
 
-  if (error) {
-    console.error('❌ Failed to run process in main.py:', error.message);
-    
-    stopTimer(`get_data`);
+    return stdout.trim();
 
-    return;
+  } catch (error) {
+    console.error('❌ Failed to run process:', error.message);
+    throw error;
+
+  } finally {
+    stop_timer('get_data');
+
   }
+}
 
-  if (stderr) {
-    console.error('⚠️ Python stderr:', stderr);
-    stopTimer(`get_data`);
-  }
+// execute_run_python_event_reports();
 
-  console.log('📄 Output from main.py:\n', stdout.trim());
-  stopTimer(`get_data`);
-});
+module.exports = { 
+  execute_run_python_event_reports 
+};

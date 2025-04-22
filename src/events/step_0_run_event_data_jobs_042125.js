@@ -8,8 +8,9 @@ const { execute_transfer_usat_to_local } = require('./step_1_transfer_data_usat_
 const { execute_create_event_data_metrics } = require('./step_2_create_event_data_metrics');
 
 const { execute_get_python_event_data } = require('./step_5_get_python_event_data');
+const { execute_run_python_event_reports } = require('../../utilities/python_events/index'); // step #6 run python event reports
 
-// const { execute_create_participation_profile_table } = require("./step_3a_create_participation_match_profile");
+const { execute_load_big_query_event_data_metrics } = require("./step_3_load_bq_event_data_metrics");
 // const { execute_load_big_query_participation_profile_metrics } = require('./step_3b_load_bq_participation_match_profiles_metrics');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
@@ -77,32 +78,31 @@ async function execute_run_event_data_jobs() {
 
   const run_step_1  = false; // tranfer USAT event data to Local DB
   const run_step_2  = false; // execute_create_event_data_metrics
+  const run_step_3  = true; // load event metrics to bigquery
 
-  const run_step_5  = true; // execute_get_python_event_data
+  const run_step_5  = false; // execute_get_python_event_data
+  const run_step_6  = false; // run python event reports
   
-  // const run_step_3a = true; // create participation profile (profile_id) table
-  // const run_step_3b = true; // load membership participation match profile to bigquery
 
   try {
     const stepFunctions = [
       run_step_1 ? execute_transfer_usat_to_local : null,
       run_step_2 ? execute_create_event_data_metrics : null,
+      run_step_3 ? execute_load_big_query_event_data_metrics : null,
 
       run_step_5 ? execute_get_python_event_data : null,
+      run_step_6 ? execute_run_python_event_reports : null,
       
-      // run_step_3a ? execute_create_participation_profile_table : null,
-      // run_step_3b ? execute_load_big_query_participation_profile_metrics : null,
     ];
 
     const stepName = [
       `Step #1 - Transfer data from USAT to Local db:`, 
       `Step #2 - Create event data metrics: `, 
+      `Step #3 - Load event metrics to BQ: `,
 
       `Step #5 - Get python event data`,
+      `Step_#6 - Run python event reports`,
       
-      // `Step #3a - Created participation profile table`, // takes about 10 minutes
-      // `Step #3b - Load participation profile to BQ: `,
-
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function

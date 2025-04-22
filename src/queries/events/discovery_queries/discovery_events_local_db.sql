@@ -1,5 +1,8 @@
 USE usat_sales_db;
 
+-- ****************************
+-- EVENT DATA RAW TABLE
+-- ****************************
 SELECT * FROM all_event_data_raw LIMIT 10;
 SELECT COUNT(*) FROM all_event_data_raw LIMIT 10;
 
@@ -24,7 +27,9 @@ ORDER BY
   starts_month_events ASC
 ;
 
+-- ****************************
 -- EVENT METRICS TABLE
+-- ****************************
 SELECT * FROM usat_sales_db.event_data_metrics;
 SELECT COUNT(*), COUNT(DISTINCT id_sanctioning_events) FROM usat_sales_db.event_data_metrics;
 SELECT DISTINCT region_name, region_state_code, COUNT(*) FROM event_data_metrics GROUP BY 1, 2 ORDER BY 1 ASC, 2 ASC;
@@ -42,21 +47,31 @@ WHERE 1 = 1
 ORDER BY id_events DESC, id_races ASC
 LIMIT 10 OFFSET 0
 ;
-
+-- ****************************
 -- PYTHON QUERY
+-- ****************************
 SELECT 
     id_sanctioning_events AS ApplicationID,
     -- id_races,
+
     TRIM(BOTH '"' FROM name_events) AS Name,
+
     starts_events AS StartDate,
+
     start_date_races AS RaceDate,
-    "" AS Status,
+
+    status_events AS Status,
+
     state_code_events AS 2LetterCode,
     zip_events AS ZipCode,
+
     name_event_type AS Value,
+
     "" AS RaceDirectorUserID,
+
     event_website_url AS Website,
     registration_url AS RegistrationWebsite,
+
     "" AS Email,
 	  DATE_FORMAT(created_at_events, '%Y-%m-%d') AS CreatedDate
 

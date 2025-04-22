@@ -3,6 +3,7 @@ function step_5_query_python_event_data(batch_size, offset) {
         SELECT 
             id_sanctioning_events AS ApplicationID,
             -- id_races,
+
             TRIM(BOTH '"' FROM name_events) AS Name,
 
             -- starts_events AS StartDate,
@@ -19,8 +20,10 @@ function step_5_query_python_event_data(batch_size, offset) {
             name_event_type AS Value,
 
             "" AS RaceDirectorUserID,
+
             event_website_url AS Website,
             registration_url AS RegistrationWebsite,
+            
             "" AS Email,
 
             DATE_FORMAT(created_at_events, '%Y-%m-%d') AS CreatedDate
