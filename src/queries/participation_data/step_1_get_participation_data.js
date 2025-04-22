@@ -27,7 +27,7 @@ function step_1_get_participation_data(start_date, end_date, offset, batch_size)
                 e.country_code AS country_code_events,
 
                 -- EVENTS DATES
-                DATE_FORMAT(r.created_at, '%Y-%m-%d %H:%i:%s') AS created_at_events,
+                DATE_FORMAT(e.created_at, '%Y-%m-%d %H:%i:%s') AS created_at_events,
                 MONTH(e.created_at) AS created_at_month_events,
                 QUARTER(e.created_at) AS created_at_quarter_events,
                 YEAR(e.created_at) AS created_at_year_events,
