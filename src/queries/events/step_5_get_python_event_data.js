@@ -1,0 +1,44 @@
+function step_5_query_python_event_data(batch_size, offset) {
+    return `
+        SELECT 
+            id_sanctioning_events AS ApplicationID,
+            -- id_races,
+
+            TRIM(BOTH '"' FROM name_events) AS Name,
+
+            -- starts_events AS StartDate,
+            DATE_FORMAT(starts_events, '%Y-%m-%d') AS StartDate,
+
+            -- start_date_races AS RaceDate,
+            DATE_FORMAT(start_date_races, '%Y-%m-%d') AS RaceDate,
+
+            "" AS Status,
+
+            state_code_events AS 2LetterCode,
+            zip_events AS ZipCode,
+
+            name_event_type AS Value,
+
+            "" AS RaceDirectorUserID,
+
+            event_website_url AS Website,
+            registration_url AS RegistrationWebsite,
+            
+            "" AS Email,
+
+            DATE_FORMAT(created_at_events, '%Y-%m-%d') AS CreatedDate
+
+        FROM all_event_data_raw AS e
+
+        WHERE 1 = 1
+            AND id_sanctioning_events IS NOT NULL
+            AND start_date_year_races IN (2024, 2025)
+        GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+        LIMIT ${batch_size} OFFSET ${offset}
+        ;
+    `;
+}
+
+module.exports = {
+    step_5_query_python_event_data,
+}

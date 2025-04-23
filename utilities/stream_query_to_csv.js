@@ -19,18 +19,18 @@ async function streamQueryToCsv(pool, query, filePath) {
                 csvStream.end();
             })
             .on('error', err => {
-                console.error('Stream error:', err);
+                console.error('\nStream error:', err);
                 reject(err);
             });
 
         csvStream
             .pipe(writeStream)
             .on('finish', () => {
-                console.log(`✔️ Streamed to: ${filePath}`);
+                console.log(`\n✔️ Streamed to: ${filePath}`);
                 resolve();
             })
             .on('error', err => {
-                console.error('CSV Stream error:', err);
+                console.error('\nCSV Stream error:', err);
                 reject(err);
             });
     });

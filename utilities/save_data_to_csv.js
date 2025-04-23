@@ -4,16 +4,16 @@ const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
 
-const { triggerGarbageCollection } = require('../../utilities/garbage_collection/trigger_garbage_collection');
+const { triggerGarbageCollection } = require('../utilities/garbage_collection/trigger_garbage_collection');
 
-const { local_usat_sales_db_config } = require('../../utilities/config');
-const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
-const { streamQueryToCsv } = require('../../utilities/stream_query_to_csv');
+const { local_usat_sales_db_config } = require('../utilities/config');
+const { create_local_db_connection } = require('../utilities/connectionLocalDB');
+const { streamQueryToCsv } = require('../utilities/stream_query_to_csv');
 
-const { determineOSPath } = require('../../utilities/determineOSPath');
-const { create_directory } = require('../../utilities/createDirectory');
+const { determineOSPath } = require('../utilities/determineOSPath');
+const { create_directory } = require('../utilities/createDirectory');
 
-const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
+const { getCurrentDateTimeForFileNaming } = require('../utilities/getCurrentDate');
 
 // STEP #1 - DELETE ARCHIVED FILES
 async function deleteArchivedFiles(directory_name_archive) {
@@ -86,23 +86,20 @@ async function moveFilesToArchive(directory_name, directory_name_archive) {
 }
 
 // QUERIES & STREAMS DATA DIRECTLY TO CSV VS HOLDING IN MEMORY
-async function execute_retrieve_data(options) {
+async function execute_save_data_to_csv(options) {
     const startTime = performance.now();
 
     const pool = await create_local_db_connection(await local_usat_sales_db_config());
-
-    const directory_name = `usat_google_bigquery_data`;
-    const directory_name_archive = `usat_google_bigquery_data_archive`;
-    const retrieval_batch_size = 100000;
 
     let offset = 0;
     let batchCounter = 0;
 
     try {
+        const { directory_name, directory_name_archive, fileName, query, retrieval_batch_size } = options[0];
+
         await deleteArchivedFiles(directory_name_archive);
         await moveFilesToArchive(directory_name, directory_name_archive);
 
-        const { fileName, query } = options[0];
 
         let rowsReturned;
 
@@ -131,12 +128,18 @@ async function execute_retrieve_data(options) {
             const stats = fs.statSync(filePath);
             rowsReturned = stats.size > 100 ? retrieval_batch_size : 0; // crude check
 
+            if (rowsReturned === 0) {
+                // delete the empty file and exit the loop
+                fs.unlinkSync(filePath);
+                console.log(`🗑️ Deleted empty file: ${filePath}`);
+                break;
+            }
+
             offset += retrieval_batch_size;
             batchCounter++;
 
             await triggerGarbageCollection();
 
-        // } while (batchCounter < 1);  //testing
         } while (rowsReturned > 0);
 
     } catch (err) {
@@ -148,11 +151,13 @@ async function execute_retrieve_data(options) {
 
         await triggerGarbageCollection();
     }
+
+    return true;
 }
 
 // Run the main function
-// execute_retrieve_data();
+// execute_save_data_to_csv();
 
 module.exports = {
-    execute_retrieve_data,
+    execute_save_data_to_csv,
 }

@@ -1,7 +1,8 @@
-console.log(`\nHello - RUN ALL PARTICIPATION JOB`);
+console.log(`\nHello - RUN ALL EVENTS JOB`);
 console.log("Current Date and Time:", new Date().toLocaleString());
 
-fetch('http://localhost:8004/scheduled-participation')
+fetch('http://localhost:8005/scheduled-events')
+// fetch('http://localhost:8005/events-test')
     .then(response => {
 
         if (!response.ok) {
@@ -10,8 +11,8 @@ fetch('http://localhost:8004/scheduled-participation')
         return response.text();
     })
     .then(data => {
-        console.log('Response from /scheduled-participation:', data);
+        console.log('Response from /scheduled-events:', data);
     })
     .catch(error => {
-        console.error('Error with request /scheduled-participation:', error.message);
+        console.error('Error with request /scheduled-events:', error.message);
     });
