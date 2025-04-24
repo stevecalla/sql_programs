@@ -30,6 +30,7 @@ SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e W
 SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e WHERE LOWER(e.name) NOT LIKE '%test%' GROUP BY 1 WITH ROLLUP; -- not test event records
 SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e WHERE e.deleted_at IS NOT NULL GROUP BY 1 WITH ROLLUP; -- deleted event records
 SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e WHERE e.deleted_at IS NULL GROUP BY 1 WITH ROLLUP; -- not deleted event records
+
 SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e WHERE e.deleted_at IS NULL AND LOWER(e.name) NOT LIKE '%test%' GROUP BY 1 WITH ROLLUP; -- not deleted event records
 
 SELECT
@@ -52,11 +53,11 @@ SELECT
 
     -- Total less tests and deletions
     COUNT(DISTINCT e.sanctioning_event_id)
-      - SUM(CASE WHEN LOWER(e.name) LIKE '%test%' THEN 1 ELSE 0 END)
-      - SUM(CASE WHEN e.deleted_at IS NOT NULL THEN 1 ELSE 0 END)
+      - SUM(CASE WHEN LOWER(e.name) LIKE '%test%' OR e.deleted_at IS NOT NULL THEN 1 ELSE 0 END) -- use or to consider overlaps between these conditions
     AS is_not_deleted_not_test_events
 
 FROM events AS e
+WHERE 1 = 1 AND YEAR(e.starts) >= 2014
 GROUP BY YEAR(e.starts)
 WITH ROLLUP;
 
@@ -171,9 +172,10 @@ WHERE 1 = 1
     -- FILTERS
     -- AND LOWER(e.name) LIKE '%test%'
     -- AND e.deleted_at IS NOT NULL
+    AND YEAR(e.starts) >= 2014
     AND LOWER(e.name) NOT LIKE '%test%'
     AND e.deleted_at IS NULL
-    AND r.deleted_at IS NULL
+    -- AND r.deleted_at IS NULL
 
 ORDER BY e.id DESC, r.id ASC
 

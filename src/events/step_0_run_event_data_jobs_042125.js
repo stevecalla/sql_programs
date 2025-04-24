@@ -75,12 +75,12 @@ async function execute_run_event_data_jobs() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1  = true; // tranfer USAT event data to Local DB
+  const run_step_1  = false; // tranfer USAT event data to Local DB
   const run_step_2  = false; // execute_create_event_data_metrics
   const run_step_3  = false; // load event metrics to bigquery
 
-  const run_step_5  = false; // execute_get_python_event_data
-  const run_step_6  = false; // run python event reports
+  const run_step_5  = true; // execute_get_python_event_data
+  const run_step_6  = true; // run python event reports
   
 
   try {
@@ -119,7 +119,7 @@ async function execute_run_event_data_jobs() {
   return elapsedTime;
 }
 
-execute_run_event_data_jobs();
+// execute_run_event_data_jobs();
 
 module.exports = {
   execute_run_event_data_jobs,

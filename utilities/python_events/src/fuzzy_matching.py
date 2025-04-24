@@ -34,7 +34,7 @@ def match_events_2025_vs_2024(grouped_df):
     match_cols = [
         'match_name_2024', 'match_score_name_only', 'match_score_name_and_site',
         'match_score_name_and_zip', 'has_match', 'application_id_2024', 'status_2024',
-        'earliest_race_date_2024', 'website_2024', 'zip_code_2024', 'state_code_2024',
+        'earliest_start_date_2024', 'website_2024', 'zip_code_2024', 'state_code_2024',
         'match_formula_used'
     ]
     for col in match_cols:
@@ -139,7 +139,7 @@ def match_events_2025_vs_2024(grouped_df):
             # Populate additional fields from the matching 2024 event.
             events_2025.at[idx, 'application_id_2024'] = best_candidate['ApplicationID']
             events_2025.at[idx, 'status_2024'] = best_candidate['Status']
-            events_2025.at[idx, 'earliest_race_date_2024'] = best_candidate['earliest_race_date']
+            events_2025.at[idx, 'earliest_start_date_2024'] = best_candidate['earliest_start_date']
             events_2025.at[idx, 'website_2024'] = best_candidate['Website']
             events_2025.at[idx, 'zip_code_2024'] = best_candidate['ZipCode']
             events_2025.at[idx, 'state_code_2024'] = best_candidate['2LetterCode']
@@ -149,7 +149,7 @@ def match_events_2025_vs_2024(grouped_df):
             events_2025.at[idx, 'match_formula_used'] = "No Match"
             events_2025.at[idx, 'application_id_2024'] = row['ApplicationID']
             events_2025.at[idx, 'status_2024'] = row['Status']
-            events_2025.at[idx, 'earliest_race_date_2024'] = row['earliest_race_date']
+            events_2025.at[idx, 'earliest_start_date_2024'] = row['earliest_start_date']
             events_2025.at[idx, 'website_2024'] = row['Website']
             events_2025.at[idx, 'zip_code_2024'] = row['ZipCode']
             events_2025.at[idx, 'state_code_2024'] = row['2LetterCode']
@@ -197,7 +197,7 @@ def match_events_2024_vs_2025(grouped_df):
     match_cols = [
         'match_name_2025', 'match_score_name_only', 'match_score_name_and_site',
         'match_score_name_and_zip', 'has_match', 'application_id_2025', 'status_2025',
-        'earliest_race_date_2025', 'website_2025', 'zip_code_2025', 'state_code_2025',
+        'earliest_start_date_2025', 'website_2025', 'zip_code_2025', 'state_code_2025',
         'match_formula_used'
     ]
     for col in match_cols:
@@ -301,7 +301,7 @@ def match_events_2024_vs_2025(grouped_df):
             # Populate additional candidate fields from the 2025 event.
             events_2024.at[idx, 'application_id_2025'] = best_candidate['ApplicationID']
             events_2024.at[idx, 'status_2025'] = best_candidate['Status']
-            events_2024.at[idx, 'earliest_race_date_2025'] = best_candidate['earliest_race_date']
+            events_2024.at[idx, 'earliest_start_date_2025'] = best_candidate['earliest_start_date']
             events_2024.at[idx, 'website_2025'] = best_candidate['Website']
             events_2024.at[idx, 'zip_code_2025'] = best_candidate['ZipCode']
             events_2024.at[idx, 'state_code_2025'] = best_candidate['2LetterCode']
@@ -311,7 +311,7 @@ def match_events_2024_vs_2025(grouped_df):
             events_2024.at[idx, 'match_formula_used'] = "No Match"
             events_2024.at[idx, 'application_id_2025'] = row['ApplicationID']
             events_2024.at[idx, 'status_2025'] = row['Status']
-            events_2024.at[idx, 'earliest_race_date_2025'] = row['earliest_race_date']
+            events_2024.at[idx, 'earliest_start_date_2025'] = row['earliest_start_date']
             events_2024.at[idx, 'website_2025'] = row['Website']
             events_2024.at[idx, 'zip_code_2025'] = row['ZipCode']
             events_2024.at[idx, 'state_code_2025'] = row['2LetterCode']

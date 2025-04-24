@@ -70,6 +70,7 @@ function step_1_query_event_data() {
                 
         FROM events AS e
             LEFT JOIN races AS r ON e.id = r.event_id 
+                AND r.deleted_at IS NULL
             LEFT JOIN race_types AS rt ON r.race_type_id = rt.id
             LEFT JOIN event_types AS et ON e.event_type_id = et.id
             LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id
@@ -81,9 +82,11 @@ function step_1_query_event_data() {
             -- FILTERS
             -- AND LOWER(e.name) LIKE '%test%'
             -- AND e.deleted_at IS NOT NULL
+
+            AND YEAR(e.starts) >= 2014
             AND LOWER(e.name) NOT LIKE '%test%'
             AND e.deleted_at IS NULL
-            AND r.deleted_at IS NULL
+            -- AND r.deleted_at IS NULL -- put in the join to correctly eliminate deleted races
 
         ORDER BY e.id DESC, r.id ASC
 
@@ -95,15 +98,3 @@ function step_1_query_event_data() {
 module.exports = {
     step_1_query_event_data,
 }
-
-
-// -- NODE / JS
-// -- LIMIT ${batch_size} OFFSET ${offset} 
-
-// -- AND r.start_date >= @start_date
-// -- AND r.start_date <= @end_date
-// -- AND YEAR(r.start_date) = @year
-
-// -- NODE / JS
-// -- AND r.start_date >= '${start_date}'
-// -- AND r.start_date <= '${end_date}'

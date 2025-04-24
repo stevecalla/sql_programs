@@ -35,13 +35,28 @@ def group_clean_data(df):
         .reset_index()
     )
 
-    # Calculate earliest_race_date by taking the minimum RaceDate per ApplicationID.
-    grouped_df['earliest_race_date'] = pd.to_datetime(
-        df.groupby('ApplicationID')['RaceDate'].min().values, errors='coerce'
+    # --- Compute earliest_start_date & derive year/month ---
+    # Turn StartDate into datetime if it isn’t already
+    df['StartDate'] = pd.to_datetime(df['StartDate'], errors='coerce')
+
+    # Find the minimum StartDate per ApplicationID
+    min_start = df.groupby('ApplicationID')['StartDate'].min()
+
+    # Assign back to grouped_df
+    grouped_df['earliest_start_date'] = pd.to_datetime(
+        min_start.values, errors='coerce'
     )
-    grouped_df['year'] = grouped_df['earliest_race_date'].dt.year
-    grouped_df['month'] = grouped_df['earliest_race_date'].dt.month
-    grouped_df['month_name'] = grouped_df['earliest_race_date'].dt.month_name()
+    grouped_df['year']       = grouped_df['earliest_start_date'].dt.year
+    grouped_df['month']      = grouped_df['earliest_start_date'].dt.month
+    grouped_df['month_name'] = grouped_df['earliest_start_date'].dt.month_name()
+
+    # # Calculate earliest_race_date by taking the minimum RaceDate per ApplicationID.
+    # grouped_df['earliest_race_date'] = pd.to_datetime(
+    #     df.groupby('ApplicationID')['RaceDate'].min().values, errors='coerce'
+    # )
+    # grouped_df['year'] = grouped_df['earliest_race_date'].dt.year
+    # grouped_df['month'] = grouped_df['earliest_race_date'].dt.month
+    # grouped_df['month_name'] = grouped_df['earliest_race_date'].dt.month_name()
 
     # --- FLAG DUPLICATES ---
     application_counts = df['ApplicationID'].value_counts()
