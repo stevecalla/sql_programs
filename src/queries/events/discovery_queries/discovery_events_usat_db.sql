@@ -3,9 +3,68 @@ USE vapor;
 SELECT * FROM events AS e WHERE e.sanctioning_event_id = '307440'LIMIT 10;
 SELECT COUNT(*), COUNT(DISTINCT id), COUNT(DISTINCT sanctioning_event_id) FROM events;
 SELECT status, COUNT(status) FROM events GROUP BY 1;
--- SELECT COUNT(id) FROM events AS e;
+SELECT YEAR(starts), COUNT(*) FROM events GROUP BY 1;
 
--- SELECT * FROM races LIMIT 10;
+-- COUNT QA CHECK BETWEEN EVENTS AND RACE START DATES
+SELECT COUNT(*) FROM events AS e LEFT JOIN races AS r ON e.id = r.event_id;
+SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e LEFT JOIN races AS r ON e.id = r.event_id GROUP BY 1; -- COUNT BY EVENT START DATE
+SELECT YEAR(r.start_date), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e LEFT JOIN races AS r ON e.id = r.event_id GROUP BY 1; -- COUNT BY RACE START DATE
+SELECT YEAR(e.starts), YEAR(r.start_date), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e LEFT JOIN races AS r ON e.id = r.event_id GROUP BY 1, 2; -- COUNT BY EVENT START BY RACE START DATE
+-- PULL BAD RACE DATE INFO FOR SAM TO CORRECT
+SELECT 
+	e.sanctioning_event_id, 
+    YEAR(e.starts), e.starts, 
+    YEAR(r.start_date), r.start_date, 
+    CASE
+		WHEN YEAR(e.starts) = YEAR(r.start_date) THEN 0
+        ELSE 1
+	END AS is_not_year_match,
+    COUNT(DISTINCT e.sanctioning_event_id) 
+FROM events AS e LEFT JOIN races AS r ON e.id = r.event_id 
+GROUP BY 1, 2, 3, 4, 5
+HAVING is_not_year_match IN (0, 1)
+;
+
+-- EVENT TABLE FILTER QA
+SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e WHERE LOWER(e.name) LIKE '%test%' GROUP BY 1 WITH ROLLUP; -- test event records
+SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e WHERE LOWER(e.name) NOT LIKE '%test%' GROUP BY 1 WITH ROLLUP; -- not test event records
+SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e WHERE e.deleted_at IS NOT NULL GROUP BY 1 WITH ROLLUP; -- deleted event records
+SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e WHERE e.deleted_at IS NULL GROUP BY 1 WITH ROLLUP; -- not deleted event records
+SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e WHERE e.deleted_at IS NULL AND LOWER(e.name) NOT LIKE '%test%' GROUP BY 1 WITH ROLLUP; -- not deleted event records
+
+SELECT
+    YEAR(e.starts) AS event_year,
+
+    -- How many “test” events
+    SUM(CASE 
+            WHEN LOWER(e.name) LIKE '%test%' THEN 1 
+            ELSE 0 
+        END) AS is_test,
+
+    -- How many deleted events
+    SUM(CASE 
+            WHEN e.deleted_at IS NOT NULL THEN 1 
+            ELSE 0 
+        END) AS is_deleted,
+
+    -- Total distinct events
+    COUNT(DISTINCT e.sanctioning_event_id) AS total_events,
+
+    -- Total less tests and deletions
+    COUNT(DISTINCT e.sanctioning_event_id)
+      - SUM(CASE WHEN LOWER(e.name) LIKE '%test%' THEN 1 ELSE 0 END)
+      - SUM(CASE WHEN e.deleted_at IS NOT NULL THEN 1 ELSE 0 END)
+    AS is_not_deleted_not_test_events
+
+FROM events AS e
+GROUP BY YEAR(e.starts)
+WITH ROLLUP;
+
+SELECT * FROM races AS r LIMIT 10;
+SELECT YEAR(r.start_date), COUNT(DISTINCT r.id) FROM races AS r WHERE r.deleted_at IS NOT NULL GROUP BY 1 WITH ROLLUP; -- deleted race records
+SELECT YEAR(r.start_date), COUNT(DISTINCT r.id) FROM races AS r WHERE r.deleted_at IS NULL GROUP BY 1 WITH ROLLUP; -- not deleted race records
+
+-- SELECT COUNT(*) FROM races LIMIT 10;
 -- SELECT * FROM event_types LIMIT 10;
 -- SELECT * FROM race_types LIMIT 10;
 -- SELECT * FROM vapor.profiles LIMIT 10;
@@ -80,6 +139,19 @@ SELECT
     r.womens_only, -- no doesn't work
     rt.id AS id_race_types,
     rt.name AS name_race_type,
+    
+    -- FILTERS
+    CASE
+        WHEN LOWER(e.name) LIKE '%test%' THEN 1
+        WHEN LOWER(e.name) NOT LIKE '%test%' THEN 0
+        ELSE 0
+	END is_test,
+    CASE
+        WHEN e.deleted_at IS NOT NULL THEN 1
+        WHEN e.deleted_at IS NULL THEN 0
+        ELSE 0
+	END is_deleted,
+    e.deleted_at,
 
     -- CREATED AT DATES
     DATE_FORMAT(CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'America/Denver'), '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
@@ -95,22 +167,19 @@ FROM events AS e
 WHERE 1 = 1
     -- AND e.sanctioning_event_id = '308400'
     -- AND e.sanctioning_event_id = '308417'
-    -- remove test?
-    AND LOWER(e.name) NOT LIKE '%test%'
-
-    -- AND r.start_date >= @start_date
-    -- AND r.start_date <= @end_date
-    -- AND YEAR(r.start_date) = @year
     
-    -- NODE / JS
-    -- AND r.start_date >= '${start_date}'
-    -- AND r.start_date <= '${end_date}'
+    -- FILTERS
+    -- AND LOWER(e.name) LIKE '%test%'
+    -- AND e.deleted_at IS NOT NULL
+    AND LOWER(e.name) NOT LIKE '%test%'
+    AND e.deleted_at IS NULL
+    AND r.deleted_at IS NULL
 
 ORDER BY e.id DESC, r.id ASC
 
 -- NODE / JS
 -- LIMIT ${batch_size} OFFSET ${offset} 
-LIMIT 10 OFFSET 0
+-- 10 OFFSET 0
 ;
 
 

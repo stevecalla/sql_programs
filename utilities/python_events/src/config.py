@@ -7,7 +7,8 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # --- INPUT CONFIGURATION ---
 # Always points to src/event_input/test.csv regardless of current working directory
-INPUT_FILE = BASE_DIR / "event_input" / "test.csv"
+# INPUT_FILE = BASE_DIR / "event_input" / "test.csv"
+INPUT_FILE = BASE_DIR / "event_input" / "results_2025-04-23_16-42-07_python_event_data_offset_0_batch_1.csv"
 
 # --- OUTPUT CONFIGURATION ---
 # Directory for output files under src/event_output

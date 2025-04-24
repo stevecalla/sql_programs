@@ -16,7 +16,7 @@ async function execute_run_python_event_reports(script_path = default_script_pat
   run_timer('get_data');
 
   try {
-    const { stdout, stderr } = await exec_async(`python "${script_path}"`);
+    const { stdout, stderr } = await exec_async(`python3 "${script_path}"`);
 
     const duration = ((Date.now() - start) / 1000).toFixed(2);
     console.log(`⏳ ${path.basename(script_path)} took ${duration} seconds`);

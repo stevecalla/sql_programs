@@ -77,7 +77,13 @@ function step_1_query_event_data() {
         WHERE 1 = 1
             -- AND e.sanctioning_event_id = '308400'
             -- AND e.sanctioning_event_id = '308417'
+            
+            -- FILTERS
+            -- AND LOWER(e.name) LIKE '%test%'
+            -- AND e.deleted_at IS NOT NULL
             AND LOWER(e.name) NOT LIKE '%test%'
+            AND e.deleted_at IS NULL
+            AND r.deleted_at IS NULL
 
         ORDER BY e.id DESC, r.id ASC
 
