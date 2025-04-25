@@ -19,12 +19,12 @@ function step_5_query_python_event_data(batch_size, offset) {
 
             name_event_type AS Value,
 
-            "" AS RaceDirectorUserID,
+            member_number_members AS RaceDirectorUserID,
 
             event_website_url AS Website,
             registration_url AS RegistrationWebsite,
             
-            "" AS Email,
+            email_users AS Email,
 
             DATE_FORMAT(created_at_events, '%Y-%m-%d') AS CreatedDate
 

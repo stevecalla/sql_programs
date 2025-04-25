@@ -9,6 +9,9 @@ __pycache__/
 *.pyc
 .vscode/
 
+# Ignore Python virtual environments
+venv/
+
 # google analytics
 ga4Api-1d3aa03bf5df.json
 cool-ship-418513-f8169a99b552.json

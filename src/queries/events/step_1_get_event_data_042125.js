@@ -42,7 +42,11 @@ function step_1_query_event_data() {
 
             e.status AS status_events,
 
+            -- RACE DIRECTOR
             e.race_director_id AS race_director_id_events,
+            rd.id as id_race_director,
+            u.email AS email_users,
+            m.member_number AS member_number_members,
             
             -- IRONMAN
             CASE 
@@ -67,13 +71,28 @@ function step_1_query_event_data() {
             -- CREATED AT DATES
             DATE_FORMAT(CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'America/Denver'), '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
             DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s') AS created_at_utc
-                
+
         FROM events AS e
             LEFT JOIN races AS r ON e.id = r.event_id 
                 AND r.deleted_at IS NULL
             LEFT JOIN race_types AS rt ON r.race_type_id = rt.id
             LEFT JOIN event_types AS et ON e.event_type_id = et.id
-            LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id
+            LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id    
+            LEFT JOIN race_directors AS rd ON e.race_director_id = rd.id
+            LEFT JOIN users AS u ON u.id = rd.user_id
+            LEFT JOIN profiles AS p ON p.user_id = u.id
+            -- LEFT JOIN members AS m ON p.id = m.memberable_id
+            -- 	AND m.memberable_type = "profiles"
+            -- the basic join above results in multiple member records thus the sub join below is appropriate
+            LEFT JOIN (
+                SELECT
+                    memberable_id,
+                    member_number,
+                    MAX(created_at) AS last_joined_at
+                FROM members
+                WHERE memberable_type = 'profiles'
+                GROUP BY memberable_id
+            ) AS m ON m.memberable_id = p.id
 
         WHERE 1 = 1
             -- AND e.sanctioning_event_id = '308400'

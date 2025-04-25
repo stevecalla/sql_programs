@@ -41,8 +41,12 @@ async function query_event_metrics(batch_size = 10, offset = 0) {
             ends_year_events,
             
             status_events,
-            
+    
+            -- RACE DIRECTOR
             race_director_id_events,
+            id_race_director,
+            email_users,
+            member_number_members,
             
             -- IRONMAN
             is_ironman,

@@ -8,9 +8,9 @@ SELECT id_sanctioning_events, name_events, starts_events, start_date_races FROM 
 SELECT status_events, COUNT(status_events) FROM all_event_data_raw GROUP BY 1 WITH ROLLUP;
 SELECT COUNT(*) FROM all_event_data_raw LIMIT 10;
 
-SELECT starts_year_events, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1;
+SELECT starts_year_events, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1 WITH ROLLUP;
 SELECT starts_year_events, start_date_year_races, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1, 2;
-SELECT start_date_year_races, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1;
+SELECT start_date_year_races, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1 WITH ROLLUP;
 
 -- GET ROLLUP OF NUMBER OF EVENTS BY YEAR BY MONTH
 WITH events_cte AS (
@@ -32,7 +32,6 @@ ORDER BY
   starts_year_events ASC,
   starts_month_events ASC
 ;
-
 -- ****************************
 -- EVENT METRICS TABLE
 -- ****************************

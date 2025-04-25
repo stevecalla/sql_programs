@@ -41,8 +41,12 @@ const events_table = `
     ends_year_events INT,
 
     status_events VARCHAR(50),
-
+    
+    -- RACE DIRECTOR
     race_director_id_events INT,
+    id_race_director INT,
+    email_users VARCHAR(255),
+    member_number_members VARCHAR(50),
     
     -- IRONMAN
     is_ironman BOOLEAN,

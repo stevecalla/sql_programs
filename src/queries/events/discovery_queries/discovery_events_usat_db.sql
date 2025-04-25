@@ -56,8 +56,37 @@ SELECT
       - SUM(CASE WHEN LOWER(e.name) LIKE '%test%' OR e.deleted_at IS NOT NULL THEN 1 ELSE 0 END) -- use or to consider overlaps between these conditions
     AS is_not_deleted_not_test_events
 
+-- FROM events AS e
+-- WHERE 1 = 1 AND YEAR(e.starts) >= 2014
+-- GROUP BY YEAR(e.starts)
+
 FROM events AS e
-WHERE 1 = 1 AND YEAR(e.starts) >= 2014
+    LEFT JOIN races AS r ON e.id = r.event_id 
+		-- AND r.deleted_at IS NULL
+    LEFT JOIN race_types AS rt ON r.race_type_id = rt.id
+    LEFT JOIN event_types AS et ON e.event_type_id = et.id
+    LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id    
+    LEFT JOIN race_directors AS rd ON e.race_director_id = rd.id
+    LEFT JOIN users AS u ON u.id = rd.user_id
+    LEFT JOIN profiles AS p ON p.user_id = u.id
+    -- LEFT JOIN members AS m ON p.id = m.memberable_id
+    -- 	AND m.memberable_type = "profiles"
+      -- the basic join above results in multiple member records thus the sub join below is appropriate
+    LEFT JOIN (
+      SELECT
+        memberable_id,
+              member_number,
+        MAX(created_at) AS last_joined_at
+      FROM members
+      WHERE memberable_type = 'profiles'
+      GROUP BY memberable_id
+    ) AS m ON m.memberable_id = p.id
+
+WHERE 1 = 1
+    AND YEAR(e.starts) >= 2014
+    AND LOWER(e.name) NOT LIKE '%test%'
+    AND e.deleted_at IS NULL
+
 GROUP BY YEAR(e.starts)
 WITH ROLLUP;
 
@@ -118,7 +147,11 @@ SELECT
 
     e.status AS status_events,
 
+	-- RACE DIRECTOR
     e.race_director_id AS race_director_id_events,
+    rd.id as id_race_director,
+    u.email AS email_users,
+    m.member_number AS member_number_members,
     
     -- IRONMAN
     CASE 
@@ -157,18 +190,32 @@ SELECT
     -- CREATED AT DATES
     DATE_FORMAT(CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'America/Denver'), '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
     DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s') AS created_at_utc
-        
--- FROM race_results AS rr
+
 FROM events AS e
     LEFT JOIN races AS r ON e.id = r.event_id 
+		-- AND r.deleted_at IS NULL
     LEFT JOIN race_types AS rt ON r.race_type_id = rt.id
     LEFT JOIN event_types AS et ON e.event_type_id = et.id
-    LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id
+    LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id    
+	LEFT JOIN race_directors AS rd ON e.race_director_id = rd.id
+	LEFT JOIN users AS u ON u.id = rd.user_id
+	LEFT JOIN profiles AS p ON p.user_id = u.id
+	-- LEFT JOIN members AS m ON p.id = m.memberable_id
+	-- 	AND m.memberable_type = "profiles"
+    -- the basic join above results in multiple member records thus the sub join below is appropriate
+	LEFT JOIN (
+		SELECT
+			memberable_id,
+            member_number,
+			MAX(created_at) AS last_joined_at
+		FROM members
+		WHERE memberable_type = 'profiles'
+		GROUP BY memberable_id
+	) AS m ON m.memberable_id = p.id
 
 WHERE 1 = 1
     -- AND e.sanctioning_event_id = '308400'
     -- AND e.sanctioning_event_id = '308417'
-    
     -- FILTERS
     -- AND LOWER(e.name) LIKE '%test%'
     -- AND e.deleted_at IS NOT NULL
@@ -178,12 +225,52 @@ WHERE 1 = 1
     -- AND r.deleted_at IS NULL
 
 ORDER BY e.id DESC, r.id ASC
-
--- NODE / JS
--- LIMIT ${batch_size} OFFSET ${offset} 
--- 10 OFFSET 0
 ;
 
+-- ORIGIN JOIN LOGIC THAT DID NOT WORK
+SELECT * FROM events AS e WHERE e.sanctioning_event_id = 308417 LIMIT 10; -- race director id = 5076
+SELECT * FROM profiles AS p WHERE user_id = 5076 LIMIT 10;  -- elise alfred; p.id 5050
+SELECT * FROM users AS u WHERE id = 5076 LIMIT 10; -- email 'elisetonne@yahoo.com' doesn't match jen.mcveay@lls.org
+SELECT * FROM members AS m LEFT JOIN profiles AS p ON p.id = m.memberable_id WHERE p.id = 5076 LIMIT 10; -- member_number = 161254 doesn't match 2100004549
+
+-- REVISED JOIN LOGIC THAT USES p.user_id TO MATCH TO THE user TABLE
+SELECT * FROM events AS e WHERE e.sanctioning_event_id = 308417 LIMIT 10; -- race director id = 5076
+SELECT * FROM race_directors WHERE id = 5076;
+SELECT * FROM profiles AS p WHERE user_id = 171943 LIMIT 10;  -- Jen McVeay 
+SELECT * FROM users AS u WHERE id = 171943 LIMIT 10; -- email 'jennymac18@gmail.com' doesn't match jen.mcveay@lls.org
+SELECT * FROM members AS m LEFT JOIN profiles AS p ON p.id = m.memberable_id WHERE p.id = 5076 LIMIT 10; -- member_number = 161254 doesn't match 2100004549
+
+-- GET RACE DIRECTOR INFO
+SELECT 
+	e.sanctioning_event_id,
+    e.name,
+	e.race_director_id,
+    rd.id AS id_rd,
+    u.id AS id_u,
+    u.email as email_u,
+    p.user_id AS id_user_p
+--     m.member_number,
+--     m.memberable_type
+    -- MAX(m.updated_at)
+FROM events AS e
+    LEFT JOIN races AS r ON e.id = r.event_id 
+		AND r.deleted_at IS NULL
+    LEFT JOIN race_types AS rt ON r.race_type_id = rt.id
+    LEFT JOIN event_types AS et ON e.event_type_id = et.id
+    LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id
+    LEFT JOIN race_directors AS rd ON e.race_director_id = rd.id
+    LEFT JOIN users AS u ON u.id = rd.user_id
+    LEFT JOIN profiles AS p ON p.user_id = u.id
+	-- LEFT JOIN members AS m ON p.id = m.memberable_id
+-- 		AND m.memberable_type = "profiles"
+WHERE 1 = 1
+--     AND e.sanctioning_event_id = '308400'
+--     OR e.sanctioning_event_id = '308417'
+    AND YEAR(e.starts) >= 2014
+    AND LOWER(e.name) NOT LIKE '%test%'
+    AND e.deleted_at IS NULL
+-- GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
+;
 
 -- GET ROLLUP OF NUMBER OF EVENTS BY YEAR BY MONTH
 WITH events_cte AS (
@@ -192,10 +279,10 @@ WITH events_cte AS (
     YEAR(e.starts)  AS start_year,
     MONTH(e.starts) AS start_month
   FROM events AS e
-    LEFT JOIN races        AS r  ON e.id = r.event_id 
-    LEFT JOIN event_types  AS et ON e.event_type_id = et.id
+    LEFT JOIN races AS r  ON e.id = r.event_id 
+    LEFT JOIN event_types AS et ON e.event_type_id = et.id
     LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id
-    LEFT JOIN race_types   AS rt ON r.race_type_id = rt.id
+    LEFT JOIN race_types AS rt ON r.race_type_id = rt.id
   WHERE LOWER(e.name) NOT LIKE '%test%'
     -- (any other filters you need)
 )
@@ -211,4 +298,20 @@ GROUP BY
 ORDER BY
   start_year ASC,
   start_month ASC
-  ;
+;
+
+-- CHECK DELETED RACES
+SELECT
+	COUNT(*)
+FROM events AS e
+    LEFT JOIN races AS r ON e.id = r.event_id 
+		AND r.deleted_at IS NULL
+WHERE 1 = 1
+--     AND e.sanctioning_event_id = '308400'
+--     OR e.sanctioning_event_id = '308417'
+    AND YEAR(e.starts) >= 2014
+    AND LOWER(e.name) NOT LIKE '%test%'
+    AND e.deleted_at IS NULL
+-- GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
+;
+

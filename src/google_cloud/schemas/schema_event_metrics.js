@@ -193,7 +193,7 @@ const event_metrics_schema = [
     fields: []
   },
 
-  // Status & Director
+  // Status
   {
     name: "status_events",
     mode: "NULLABLE",
@@ -201,6 +201,7 @@ const event_metrics_schema = [
     description: "Current status of the event",
     fields: []
   },
+  // RACE DIRECTOR
   {
     name: "race_director_id_events",
     mode: "NULLABLE",
@@ -208,7 +209,27 @@ const event_metrics_schema = [
     description: "User ID of the race director",
     fields: []
   },
-
+  {
+    name: "id_race_director",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "ID of the race director",
+    fields: []
+  },
+  {
+    name: "email_users",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Email of the race director",
+    fields: []
+  },
+  {
+    name: "member_number_members",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Member number of the race director",
+    fields: []
+  },
   // Ironman Flag
   {
     name: "is_ironman",
