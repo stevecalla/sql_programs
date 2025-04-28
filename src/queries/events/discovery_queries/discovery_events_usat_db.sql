@@ -10,6 +10,7 @@ SELECT COUNT(*) FROM events AS e LEFT JOIN races AS r ON e.id = r.event_id;
 SELECT YEAR(e.starts), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e LEFT JOIN races AS r ON e.id = r.event_id GROUP BY 1; -- COUNT BY EVENT START DATE
 SELECT YEAR(r.start_date), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e LEFT JOIN races AS r ON e.id = r.event_id GROUP BY 1; -- COUNT BY RACE START DATE
 SELECT YEAR(e.starts), YEAR(r.start_date), COUNT(DISTINCT e.sanctioning_event_id) FROM events AS e LEFT JOIN races AS r ON e.id = r.event_id GROUP BY 1, 2; -- COUNT BY EVENT START BY RACE START DATE
+
 -- PULL BAD RACE DATE INFO FOR SAM TO CORRECT
 SELECT 
 	e.sanctioning_event_id, 
@@ -22,6 +23,38 @@ SELECT
     COUNT(DISTINCT e.sanctioning_event_id) 
 FROM events AS e LEFT JOIN races AS r ON e.id = r.event_id 
 GROUP BY 1, 2, 3, 4, 5
+HAVING is_not_year_match IN (0, 1)
+;
+
+-- GET 350000+ EVENTS FOR SAM
+SELECT * FROM events AS e WHERE e.sanctioning_event_id >= 350000 LIMIT 10;
+SELECT COUNT(*) FROM events AS e WHERE e.sanctioning_event_id >= 350000;
+SELECT 
+	e.sanctioning_event_id,
+    e.created_at,
+    e.name,
+    e.deleted_at,
+    r.designation,    
+    -- EVENT TYPES
+    e.event_type_id AS event_type_id_events,
+    et.name AS name_event_type,
+    -- check the event race type?
+    YEAR(e.starts), e.starts, 
+    YEAR(r.start_date), r.start_date AS start_date_races, 
+    CASE
+		WHEN YEAR(e.starts) = YEAR(r.start_date) THEN 0
+        ELSE 1
+	END AS is_not_year_match,
+    COUNT(DISTINCT e.sanctioning_event_id) 
+FROM events AS e
+	LEFT JOIN races AS r ON e.id = r.event_id
+    LEFT JOIN event_types AS et ON e.event_type_id = et.id
+WHERE 1 = 1	
+	AND e.sanctioning_event_id >= 350000
+	-- AND YEAR(e.starts) >= 2014
+	-- AND LOWER(e.name) NOT LIKE '%test%'
+	-- AND e.deleted_at IS NULL
+GROUP BY 1, 2, 3, 4, 5, 6, 7
 HAVING is_not_year_match IN (0, 1)
 ;
 
@@ -99,21 +132,38 @@ SELECT YEAR(r.start_date), COUNT(DISTINCT r.id) FROM races AS r WHERE r.deleted_
 -- SELECT * FROM race_types LIMIT 10;
 -- SELECT * FROM vapor.profiles LIMIT 10;
     
-SELECT 
-    -- REQUESTED FIELDS
-    -- status
-    -- race gender
-    -- RaceDirectorUserID
-    -- Email
+SELECT
+	  -- status = update event status to represent actual not summarized status
+    -- count using sanctioning event id vs sanctioning event id & designation
+		    -- created id_designation_custom_races; distinct count matches sanction with 2 exceptions "AND e.sanctioning_event_id IN (310522, 307623)"
+        -- need to add "id_designation_custom_races" to queries... raw data, key metrics, python
+    -- race designation vs event type
+      -- meed to add "END AS name_event_type_or_race_desigation" to raw data, key metrics, python
     
     -- RACE / EVENT INFO
     e.id AS id_events,
     e.sanctioning_event_id AS id_sanctioning_events,
+    r.designation,
     r.id AS id_races,
     
+    -- RACE DESIGNATION
+		-- field added to create count consistency over time
+    r.designation AS designation_races,
+    CASE 
+		WHEN r.designation IS NOT NULL AND r.designation != '' 
+        THEN CONCAT(e.sanctioning_event_id, '-', r.designation)
+      ELSE e.sanctioning_event_id
+    END AS id_designation_custom_races,
+    
     -- EVENT TYPES
-    e.event_type_id AS event_type_id_events,
-    et.name AS name_event_type,
+    e.event_type_id AS event_type_id_events, -- used prior to 4/18/25 change to new salesforce santioning db
+    et.name AS name_event_type, -- used prior to 4/18/25 change to new salesforce santioning db
+    -- new logic based on salesforce santioning db not using event type going forward, using race designation
+    CASE
+      WHEN e.event_type_id IS NOT NULL THEN et.name
+      WHEN e.sanctioning_event_id >= 350000 THEN r.designation
+      ELSE "missing_event_type"
+	  END AS name_event_type_or_race_desigation,
     
     -- WEBSITES
     e.event_website_url,
@@ -179,12 +229,12 @@ SELECT
         WHEN LOWER(e.name) LIKE '%test%' THEN 1
         WHEN LOWER(e.name) NOT LIKE '%test%' THEN 0
         ELSE 0
-	END is_test,
+    END is_test,
     CASE
         WHEN e.deleted_at IS NOT NULL THEN 1
         WHEN e.deleted_at IS NULL THEN 0
         ELSE 0
-	END is_deleted,
+    END is_deleted,
     e.deleted_at,
 
     -- CREATED AT DATES
@@ -193,32 +243,34 @@ SELECT
 
 FROM events AS e
     LEFT JOIN races AS r ON e.id = r.event_id 
-		-- AND r.deleted_at IS NULL
+		  AND r.deleted_at IS NULL
     LEFT JOIN race_types AS rt ON r.race_type_id = rt.id
     LEFT JOIN event_types AS et ON e.event_type_id = et.id
-    LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id    
-	LEFT JOIN race_directors AS rd ON e.race_director_id = rd.id
-	LEFT JOIN users AS u ON u.id = rd.user_id
-	LEFT JOIN profiles AS p ON p.user_id = u.id
-	-- LEFT JOIN members AS m ON p.id = m.memberable_id
-	-- 	AND m.memberable_type = "profiles"
-    -- the basic join above results in multiple member records thus the sub join below is appropriate
-	LEFT JOIN (
-		SELECT
-			memberable_id,
-            member_number,
-			MAX(created_at) AS last_joined_at
-		FROM members
-		WHERE memberable_type = 'profiles'
-		GROUP BY memberable_id
-	) AS m ON m.memberable_id = p.id
+    LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id   
+    LEFT JOIN race_directors AS rd ON e.race_director_id = rd.id
+    LEFT JOIN users AS u ON u.id = rd.user_id
+    LEFT JOIN profiles AS p ON p.user_id = u.id
+    -- LEFT JOIN members AS m ON p.id = m.memberable_id
+    -- 	AND m.memberable_type = "profiles"
+      -- the basic join above results in multiple member records thus the sub join below is appropriate
+    LEFT JOIN (
+      SELECT
+        memberable_id,
+              member_number,
+        MAX(created_at) AS last_joined_at
+      FROM members
+      WHERE memberable_type = 'profiles'
+      GROUP BY memberable_id
+    ) AS m ON m.memberable_id = p.id
 
 WHERE 1 = 1
     -- AND e.sanctioning_event_id = '308400'
     -- AND e.sanctioning_event_id = '308417'
+    -- AND e.sanctioning_event_id IN (310522, 307623) -- exceptions: unique count for sanction id vs id_designation_custom_races
     -- FILTERS
     -- AND LOWER(e.name) LIKE '%test%'
     -- AND e.deleted_at IS NOT NULL
+
     AND YEAR(e.starts) >= 2014
     AND LOWER(e.name) NOT LIKE '%test%'
     AND e.deleted_at IS NULL

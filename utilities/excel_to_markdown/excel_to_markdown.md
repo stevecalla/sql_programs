@@ -155,6 +155,23 @@ Great Loon Tri StartDate (event date) should be 8/17/24 and OBX RaceDate should 
 
 
 
+| # id_events | id_sanctioning_events | id_races | id_designation_custom_races | designation_races | event_type_id_events | name_event_type |
+|-------------|-----------------------|----------|-----------------------------|-------------------|----------------------|-----------------|
+| 32227       | 310522                | 4253986  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
+| 32227       | 310522                | 4254075  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
+| 32227       | 310522                | 4254076  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
+| 32227       | 310522                | 4254077  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
+| 32227       | 310522                | 4254078  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
+| 32227       | 310522                | 4254079  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
+| 32227       | 310522                | 4254080  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
+| 32227       | 310522                | 4256954  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
+| 32227       | 310522                | 4257690  | 310522                      |                   | 1                    | Adult Event     |
+| 29355       | 307623                | 4252305  | 307623-Adult Race           | Adult Race        | 2                    | Adult Clinic    |
+| 29355       | 307623                | 4252334  | 307623-Adult Clinic         | Adult Clinic      | 2                    | Adult Clinic    |
+
+
+
+
 
 
 
