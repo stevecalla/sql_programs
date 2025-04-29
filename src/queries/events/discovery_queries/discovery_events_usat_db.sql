@@ -32,6 +32,7 @@ SELECT COUNT(*) FROM events AS e WHERE e.sanctioning_event_id >= 350000;
 SELECT 
 	e.sanctioning_event_id,
     e.created_at,
+    e.updated_at,
     e.name,
     e.deleted_at,
     r.designation,    
@@ -48,12 +49,13 @@ SELECT
     COUNT(DISTINCT e.sanctioning_event_id) 
 FROM events AS e
 	LEFT JOIN races AS r ON e.id = r.event_id
+		  AND r.deleted_at IS NULL
     LEFT JOIN event_types AS et ON e.event_type_id = et.id
 WHERE 1 = 1	
 	AND e.sanctioning_event_id >= 350000
-	-- AND YEAR(e.starts) >= 2014
-	-- AND LOWER(e.name) NOT LIKE '%test%'
-	-- AND e.deleted_at IS NULL
+	AND YEAR(e.starts) >= 2014
+	AND LOWER(e.name) NOT LIKE '%test%'
+	AND e.deleted_at IS NULL
 GROUP BY 1, 2, 3, 4, 5, 6, 7
 HAVING is_not_year_match IN (0, 1)
 ;
@@ -133,12 +135,19 @@ SELECT YEAR(r.start_date), COUNT(DISTINCT r.id) FROM races AS r WHERE r.deleted_
 -- SELECT * FROM vapor.profiles LIMIT 10;
     
 SELECT
-	  -- status = update event status to represent actual not summarized status
-    -- count using sanctioning event id vs sanctioning event id & designation
-		    -- created id_designation_custom_races; distinct count matches sanction with 2 exceptions "AND e.sanctioning_event_id IN (310522, 307623)"
-        -- need to add "id_designation_custom_races" to queries... raw data, key metrics, python
+    -- create sanctioning event id combined with designation
+		    -- created id_designation_custom_races
+        -- QA = ensured count was the same historically using sanction id vs the new combined sanction id
+        -- fix exceptions = 2 exceptions "AND e.sanctioning_event_id IN (310522, 307623)"; fixed by Sam on 4/28/25
     -- race designation vs event type
-      -- meed to add "END AS name_event_type_or_race_desigation" to raw data, key metrics, python
+      -- create new event type using event type or race designation
+      -- modify the event type to match the race type (ie adult event = adult race)
+    -- add to raw data query
+        -- revised event type def 
+        -- revised sanctioning id def
+    -- key metrics
+    -- python
+
     
     -- RACE / EVENT INFO
     e.id AS id_events,
@@ -159,11 +168,15 @@ SELECT
     e.event_type_id AS event_type_id_events, -- used prior to 4/18/25 change to new salesforce santioning db
     et.name AS name_event_type, -- used prior to 4/18/25 change to new salesforce santioning db
     -- new logic based on salesforce santioning db not using event type going forward, using race designation
+    r.designation as designation_races,
     CASE
-      WHEN e.event_type_id IS NOT NULL THEN et.name
-      WHEN e.sanctioning_event_id >= 350000 THEN r.designation
-      ELSE "missing_event_type"
-	  END AS name_event_type_or_race_desigation,
+      WHEN r.designation IS NOT NULL THEN r.designation
+      WHEN r.designation IS NULL AND e.event_type_id = 1 THEN 'Adult Race'
+      WHEN r.designation IS NULL AND e.event_type_id = 2 THEN 'Adult Clinic'
+      WHEN r.designation IS NULL AND e.event_type_id = 3 THEN 'Youth Race'
+      WHEN r.designation IS NULL AND e.event_type_id = 4 THEN 'Youth Clinic'
+      ELSE "missing_event_type_race_designation"
+    END AS name_event_type_or_race_desigation,
     
     -- WEBSITES
     e.event_website_url,

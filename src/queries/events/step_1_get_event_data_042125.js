@@ -3,12 +3,26 @@ function step_1_query_event_data() {
         SELECT
             -- RACE / EVENT INFO
             e.id AS id_events,
-            e.sanctioning_event_id AS id_sanctioning_events,
+            -- e.sanctioning_event_id AS id_sanctioning_events,
+            CASE 
+                WHEN r.designation IS NOT NULL AND r.designation != '' 
+                    THEN CONCAT(e.sanctioning_event_id, '-', r.designation)
+                ELSE e.sanctioning_event_id
+            END AS id_sanctioning_events,
             r.id AS id_races,
             
             -- EVENT TYPES
             e.event_type_id AS event_type_id_events,
-            et.name AS name_event_type,
+            -- et.name AS name_event_type, 
+            r.designation as designation_races,
+            CASE
+                WHEN r.designation IS NOT NULL THEN r.designation
+                WHEN r.designation IS NULL AND e.event_type_id = 1 THEN 'Adult Race'
+                WHEN r.designation IS NULL AND e.event_type_id = 2 THEN 'Adult Clinic'
+                WHEN r.designation IS NULL AND e.event_type_id = 3 THEN 'Youth Race'
+                WHEN r.designation IS NULL AND e.event_type_id = 4 THEN 'Youth Clinic'
+                ELSE "missing_event_type_race_designation"
+            END AS name_event_type,
             
             -- WEBSITES
             e.event_website_url,

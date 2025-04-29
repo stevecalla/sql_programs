@@ -8,6 +8,7 @@ async function query_event_metrics(batch_size = 10, offset = 0) {
             
             -- EVENT TYPES
             event_type_id_events,
+            designation_races,
             name_event_type,
             
             -- WEBSITES

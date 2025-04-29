@@ -34,12 +34,12 @@ SELECT
     YEAR(e.starts) AS event_year,
     
 	-- find difference unique count using sanctioning id and id_designation_custom_races
-  --     e.sanctioning_event_id,
-  -- 	CASE 
-  -- 		WHEN r.designation IS NOT NULL AND r.designation != '' 
-  --           THEN CONCAT(e.sanctioning_event_id, '-', r.designation)
-  --         ELSE e.sanctioning_event_id
-  -- 	END AS count_combined_distinct,
+--       e.sanctioning_event_id,
+--   	CASE 
+--   		WHEN r.designation IS NOT NULL AND r.designation != '' 
+--             THEN CONCAT(e.sanctioning_event_id, '-', r.designation)
+--           ELSE e.sanctioning_event_id
+--     END AS id_designation_custom_races,
     
     -- How many “test” events
     SUM(CASE 
@@ -68,7 +68,7 @@ SELECT
           THEN CONCAT(e.sanctioning_event_id, '-', r.designation)
         ELSE e.sanctioning_event_id
       END
-    ) AS count_combined_distinct
+    ) AS count_id_designation_custom_races
     
 --     CASE
 -- 		when event type = make it that event
@@ -78,7 +78,7 @@ SELECT
 
 FROM events AS e
     LEFT JOIN races AS r ON e.id = r.event_id 
-		-- AND r.deleted_at IS NULL
+		AND r.deleted_at IS NULL
     LEFT JOIN race_types AS rt ON r.race_type_id = rt.id
     LEFT JOIN event_types AS et ON e.event_type_id = et.id
     LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id 
@@ -99,8 +99,8 @@ FROM events AS e
     ) AS m ON m.memberable_id = p.id
 
 WHERE 1 = 1
-    -- AND YEAR(e.starts) >= 2014
-    AND YEAR(e.starts) = 2024
+    AND YEAR(e.starts) >= 2014
+    -- AND YEAR(e.starts) = 2024
     AND LOWER(e.name) NOT LIKE '%test%'
     AND e.deleted_at IS NULL
 

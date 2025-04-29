@@ -7,6 +7,7 @@ const id_fields = `
 
 const event_types = `
     event_type_id_events INT,
+    designation_races VARCHAR(100),
     name_event_type VARCHAR(255),
 `;
 

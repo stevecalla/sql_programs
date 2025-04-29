@@ -157,22 +157,55 @@ Great Loon Tri StartDate (event date) should be 8/17/24 and OBX RaceDate should 
 
 | # id_events | id_sanctioning_events | id_races | id_designation_custom_races | designation_races | event_type_id_events | name_event_type |
 |-------------|-----------------------|----------|-----------------------------|-------------------|----------------------|-----------------|
-| 32227       | 310522                | 4253986  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
-| 32227       | 310522                | 4254075  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
-| 32227       | 310522                | 4254076  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
-| 32227       | 310522                | 4254077  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
-| 32227       | 310522                | 4254078  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
-| 32227       | 310522                | 4254079  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
-| 32227       | 310522                | 4254080  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
 | 32227       | 310522                | 4256954  | 310522-Adult Race           | Adult Race        | 1                    | Adult Event     |
 | 32227       | 310522                | 4257690  | 310522                      |                   | 1                    | Adult Event     |
+
 | 29355       | 307623                | 4252305  | 307623-Adult Race           | Adult Race        | 2                    | Adult Clinic    |
-| 29355       | 307623                | 4252334  | 307623-Adult Clinic         | Adult Clinic      | 2                    | Adult Clinic    |
+| 29355       | 307623                | 4252334  | 307623-Adult Clinic         | Adult Clinic      | 
+2                    | Adult Clinic    |
 
 
 
+| id_events | id_sanctioning_events | id_races | designation_races | id_designation_custom_races | event_type_id_events | name_event_type | name_event_type_or_race_desigation |
+|-----------|-----------------------|----------|-------------------|-----------------------------|----------------------|-----------------|------------------------------------|
+| 32227     | 310522                | 4256954  | Adult Race        | 310522-Adult Race           | 1                    | Adult Event     | Adult Event                        |
+| 32227     | 310522                | 4257690  | Youth Race        | 310522-Youth Race           | 1                    | Adult Event     | Adult Event                        |
+
+| 29355     | 307623                | 4252334  | Adult Clinic      | 307623-Adult Clinic         | 2                    | Adult Clinic    | Adult Clinic                       |
 
 
+| Full Year                           | 2024  | 2025  | difference |
+|-------------------------------------|-------|-------|------------|
+| Adult Clinic                        | 90    | 83    | -7         |
+| Adult Race                          | 825   | 809   | -16        |
+| Youth Clinic                        | 33    | 29    | -4         |
+| Youth Race                          | 210   | 193   | -17        |
+| missing_event_type_race_designation | 0     | 1     | 1          |
+| Total                               | 1,158 | 1,115 | -43        |
+|                                     |       |       |            |
+| April                               | 2024  | 2025  | difference |
+| Adult Clinic                        | 7     | 11    | 4          |
+| Adult Race                          | 52    | 50    | -2         |
+| Youth Clinic                        | 4     | 5     | 1          |
+| Youth Race                          | 12    | 13    | 1          |
+| missing_event_type_race_designation | 0     | 0     | 0          |
+| Total                               | 75    | 79    | 4          |
+|                                     |       |       |            |
+| May                                 | 2024  | 2025  | difference |
+| Adult Clinic                        | 12    | 11    | -1         |
+| Adult Race                          | 87    | 106   | 19         |
+| Youth Clinic                        | 1     | 3     | 2          |
+| Youth Race                          | 22    | 26    | 4          |
+| missing_event_type_race_designation | 0     | 1     | 1          |
+| Total                               | 122   | 147   | 25         |
+|                                     |       |       |            |
+| June                                | 2024  | 2025  | difference |
+| Adult Clinic                        | 16    | 12    | -4         |
+| Adult Race                          | 152   | 150   | -2         |
+| Youth Clinic                        | 8     | 7     | -1         |
+| Youth Race                          | 35    | 34    | -1         |
+| missing_event_type_race_designation | 0     | 0     | 0          |
+| Total                               | 211   | 203   | -8         |
 
 
 

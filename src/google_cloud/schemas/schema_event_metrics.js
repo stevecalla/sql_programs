@@ -23,12 +23,19 @@ const event_metrics_schema = [
     description: "Primary key for races table",
     fields: []
   },  
-  // Event Types
+  // Event Types & Race Designation
   {
     name: "event_type_id_events",
     mode: "NULLABLE",
     type: "INTEGER",
     description: "Identifier for event type",
+    fields: []
+  },
+  {
+    name: "designation_races",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Name of the race type / designation",
     fields: []
   },
   {
