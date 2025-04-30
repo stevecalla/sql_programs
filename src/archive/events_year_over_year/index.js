@@ -12,7 +12,7 @@ const start = Date.now();
 runTimer(`get_data`);
 
 // Run Python script
-exec(`python "${pythonScript}"`, (error, stdout, stderr) => {
+exec(`python3 "${pythonScript}"`, (error, stdout, stderr) => {
   const duration = (Date.now() - start) / 1000;
 
   console.log(`⏳ main.py took ${duration.toFixed(2)} seconds`);

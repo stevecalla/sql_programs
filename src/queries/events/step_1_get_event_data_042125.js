@@ -3,12 +3,26 @@ function step_1_query_event_data() {
         SELECT
             -- RACE / EVENT INFO
             e.id AS id_events,
-            e.sanctioning_event_id AS id_sanctioning_events,
+            -- e.sanctioning_event_id AS id_sanctioning_events,
+            CASE 
+                WHEN r.designation IS NOT NULL AND r.designation != '' 
+                    THEN CONCAT(e.sanctioning_event_id, '-', r.designation)
+                ELSE e.sanctioning_event_id
+            END AS id_sanctioning_events,
             r.id AS id_races,
             
             -- EVENT TYPES
             e.event_type_id AS event_type_id_events,
-            et.name AS name_event_type,
+            -- et.name AS name_event_type, 
+            r.designation as designation_races,
+            CASE
+                WHEN r.designation IS NOT NULL THEN r.designation
+                WHEN r.designation IS NULL AND e.event_type_id = 1 THEN 'Adult Race'
+                WHEN r.designation IS NULL AND e.event_type_id = 2 THEN 'Adult Clinic'
+                WHEN r.designation IS NULL AND e.event_type_id = 3 THEN 'Youth Race'
+                WHEN r.designation IS NULL AND e.event_type_id = 4 THEN 'Youth Clinic'
+                ELSE "missing_event_type_race_designation"
+            END AS name_event_type,
             
             -- WEBSITES
             e.event_website_url,
@@ -42,7 +56,11 @@ function step_1_query_event_data() {
 
             e.status AS status_events,
 
+            -- RACE DIRECTOR
             e.race_director_id AS race_director_id_events,
+            rd.id as id_race_director,
+            u.email AS email_users,
+            m.member_number AS member_number_members,
             
             -- IRONMAN
             CASE 
@@ -67,17 +85,41 @@ function step_1_query_event_data() {
             -- CREATED AT DATES
             DATE_FORMAT(CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'America/Denver'), '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
             DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s') AS created_at_utc
-                
+
         FROM events AS e
             LEFT JOIN races AS r ON e.id = r.event_id 
+                AND r.deleted_at IS NULL
             LEFT JOIN race_types AS rt ON r.race_type_id = rt.id
             LEFT JOIN event_types AS et ON e.event_type_id = et.id
-            LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id
+            LEFT JOIN distance_types AS dt ON r.distance_type_id = dt.id    
+            LEFT JOIN race_directors AS rd ON e.race_director_id = rd.id
+            LEFT JOIN users AS u ON u.id = rd.user_id
+            LEFT JOIN profiles AS p ON p.user_id = u.id
+            -- LEFT JOIN members AS m ON p.id = m.memberable_id
+            -- 	AND m.memberable_type = "profiles"
+            -- the basic join above results in multiple member records thus the sub join below is appropriate
+            LEFT JOIN (
+                SELECT
+                    memberable_id,
+                    member_number,
+                    MAX(created_at) AS last_joined_at
+                FROM members
+                WHERE memberable_type = 'profiles'
+                GROUP BY memberable_id
+            ) AS m ON m.memberable_id = p.id
 
         WHERE 1 = 1
             -- AND e.sanctioning_event_id = '308400'
             -- AND e.sanctioning_event_id = '308417'
+            
+            -- FILTERS
+            -- AND LOWER(e.name) LIKE '%test%'
+            -- AND e.deleted_at IS NOT NULL
+
+            AND YEAR(e.starts) >= 2014
             AND LOWER(e.name) NOT LIKE '%test%'
+            AND e.deleted_at IS NULL
+            -- AND r.deleted_at IS NULL -- put in the join to correctly eliminate deleted races
 
         ORDER BY e.id DESC, r.id ASC
 
@@ -89,15 +131,3 @@ function step_1_query_event_data() {
 module.exports = {
     step_1_query_event_data,
 }
-
-
-// -- NODE / JS
-// -- LIMIT ${batch_size} OFFSET ${offset} 
-
-// -- AND r.start_date >= @start_date
-// -- AND r.start_date <= @end_date
-// -- AND YEAR(r.start_date) = @year
-
-// -- NODE / JS
-// -- AND r.start_date >= '${start_date}'
-// -- AND r.start_date <= '${end_date}'

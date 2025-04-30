@@ -12,19 +12,19 @@ function step_5_query_python_event_data(batch_size, offset) {
             -- start_date_races AS RaceDate,
             DATE_FORMAT(start_date_races, '%Y-%m-%d') AS RaceDate,
 
-            "" AS Status,
+            status_events AS Status,
 
             state_code_events AS 2LetterCode,
             zip_events AS ZipCode,
 
             name_event_type AS Value,
 
-            "" AS RaceDirectorUserID,
+            member_number_members AS RaceDirectorUserID,
 
             event_website_url AS Website,
             registration_url AS RegistrationWebsite,
             
-            "" AS Email,
+            email_users AS Email,
 
             DATE_FORMAT(created_at_events, '%Y-%m-%d') AS CreatedDate
 
@@ -32,7 +32,7 @@ function step_5_query_python_event_data(batch_size, offset) {
 
         WHERE 1 = 1
             AND id_sanctioning_events IS NOT NULL
-            AND start_date_year_races IN (2024, 2025)
+            AND starts_year_events IN (2024, 2025)
         GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
         LIMIT ${batch_size} OFFSET ${offset}
         ;

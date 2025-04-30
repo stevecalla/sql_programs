@@ -7,7 +7,9 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # --- INPUT CONFIGURATION ---
 # Always points to src/event_input/test.csv regardless of current working directory
-INPUT_FILE = BASE_DIR / "event_input" / "test.csv"
+# INPUT_FILE = BASE_DIR / "event_input" / "test.csv"
+# INPUT_FILE = BASE_DIR / "event_input" / "results_2025-04-24_13-01-19_python_event_data_offset_0_batch_1.csv"
+# FOR THE SERVER VERSION, THE data_loader gets the data from the path C:\ProgramData\MySQL\MySQL Server 8.0\Uploads\data\usat_python_data based on the operating system. See data_loader.py for the path options
 
 # --- OUTPUT CONFIGURATION ---
 # Directory for output files under src/event_output

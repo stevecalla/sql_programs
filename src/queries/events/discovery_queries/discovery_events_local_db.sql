@@ -4,7 +4,14 @@ USE usat_sales_db;
 -- EVENT DATA RAW TABLE
 -- ****************************
 SELECT * FROM all_event_data_raw LIMIT 10;
+SELECT id_sanctioning_events, name_events, starts_events, start_date_races FROM all_event_data_raw WHERE id_sanctioning_events IN (309261, 309811) GROUP BY 1, 2, 3, 4 ORDER BY 1 LIMIT 10;
+SELECT * FROM all_event_data_raw WHERE id_sanctioning_events = 309811;
+SELECT status_events, COUNT(status_events) FROM all_event_data_raw GROUP BY 1 WITH ROLLUP;
 SELECT COUNT(*) FROM all_event_data_raw LIMIT 10;
+
+SELECT starts_year_events, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1 WITH ROLLUP;
+SELECT starts_year_events, start_date_year_races, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1, 2;
+SELECT start_date_year_races, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1 WITH ROLLUP;
 
 -- GET ROLLUP OF NUMBER OF EVENTS BY YEAR BY MONTH
 WITH events_cte AS (
@@ -26,7 +33,6 @@ ORDER BY
   starts_year_events ASC,
   starts_month_events ASC
 ;
-
 -- ****************************
 -- EVENT METRICS TABLE
 -- ****************************
@@ -67,13 +73,13 @@ SELECT
 
     name_event_type AS Value,
 
-    "" AS RaceDirectorUserID,
+	member_number_members AS RaceDirectorUserID,
 
     event_website_url AS Website,
     registration_url AS RegistrationWebsite,
 
-    "" AS Email,
-	  DATE_FORMAT(created_at_events, '%Y-%m-%d') AS CreatedDate
+    email_users AS Email,
+	DATE_FORMAT(created_at_events, '%Y-%m-%d') AS CreatedDate
 
 FROM all_event_data_raw AS e
 
