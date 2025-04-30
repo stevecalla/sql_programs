@@ -52,7 +52,7 @@ function step_1_sales_actual_v_goal_data() {
                     WHEN purchased_on_month_adjusted_mp IN (7,8,9) THEN 3
                     ELSE 4
                 END as quarter_goal,
-                2025 AS year_goal,
+                "2025" AS year_goal,
 
                 real_membership_types_sa AS type_goal,
                 new_member_category_6_sa AS category_goal,
@@ -66,7 +66,31 @@ function step_1_sales_actual_v_goal_data() {
 
             FROM sales_goal_data AS sg
             GROUP BY 1, 2, 3, 4, 5
-            ORDER BY 1
+            -- ORDER BY 1
+
+            UNION ALL
+
+            -- Add a row for Unknown category per month/type since unknown doesn't exist in goals but might for actual (as it does for 3/2025)
+            SELECT
+                purchased_on_month_adjusted_mp AS month_goal,
+                CASE 
+                    WHEN purchased_on_month_adjusted_mp IN (1,2,3) THEN 1
+                    WHEN purchased_on_month_adjusted_mp IN (4,5,6) THEN 2
+                    WHEN purchased_on_month_adjusted_mp IN (7,8,9) THEN 3
+                    ELSE 4
+                END AS quarter_goal,
+                "2025" AS year_goal,
+                real_membership_types_sa AS type_goal,
+                'Unknown' AS category_goal,
+                0 AS sales_rev_2025_goal,
+                0 AS sales_rev_2024_goal,
+                0 AS sales_units_2025_goal,
+                0 AS sales_units_2024_goal,
+                0 AS rev_per_unit_2025_goal,
+                0 AS rev_per_unit_2024_goal
+            FROM sales_goal_data
+            GROUP BY 1, 2, 3, 4
+            -- ORDER BY 1
         )
         -- SELECT * FROM sales_actuals
         SELECT
