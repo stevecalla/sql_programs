@@ -16,6 +16,9 @@ const { execute_load_big_query_sales_year_over_year_metrics } = require('./step_
 const { execute_load_sales_goal_data } = require('./step_5_load_sales_goals');
 const { execute_load_big_query_sales_goals } = require('./step_5a_load_bq_sales_goals');
 
+const { execute_create_actual_vs_goal_metrics } = require('./step_6_create_actual_vs_goal_metrics_042925');
+const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load_bq_actual_vs_goal_metrics');
+
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 const run_step_1  = true; // get sales data
@@ -30,6 +33,9 @@ const run_step_4a = true; // load sales key metrics stats to biqquery
 
 const run_step_5  = true; // load sales goal data
 const run_step_5a = true; // load sales goals to bigquery
+
+const run_step_6  = true; // create actual vs goal data table
+const run_step_6a = true; // load actual vs goal to bigquery
 
 async function executeSteps(stepFunctions, stepName) {
   for (let i = 0; i < stepFunctions.length; i++) {
@@ -103,6 +109,8 @@ async function execute_run_sales_data_jobs() {
       run_step_4a ? execute_load_big_query_sales_year_over_year_metrics : null,
       run_step_5  ? execute_load_sales_goal_data : null,
       run_step_5a ? execute_load_big_query_sales_goals : null,
+      run_step_6  ? execute_create_actual_vs_goal_metrics : null,
+      run_step_6a ? execute_load_big_query_actual_vs_goal_metrics : null,
     ];
 
     const stepName = [
@@ -115,6 +123,8 @@ async function execute_run_sales_data_jobs() {
       `Step #4a - Load Sales YoY Metris to BQ: `,
       `Step #5 - Create Sales Data:`,
       `Step #5a - Load Sales Goals to BQ`,
+      `Step 6 - Create Actual vs Goal Metrics Table`,
+      `Step #6a - Load Actual vs Goal to BQ`,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function
