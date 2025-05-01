@@ -88,14 +88,14 @@ const members_sales_actual_vs_goal_schema = [
     },
     {
       name: "is_current_month",
-      type: "INTEGER",
+      type: "BOOLEAN",
       mode: "NULLABLE",
       description: "The current month.",
       fields: []
     },
     {
       name: "is_year_to_date",
-      type: "INTEGER",
+      type: "BOOLEAN",
       mode: "NULLABLE",
       description: "The year to date.",
       fields: []
