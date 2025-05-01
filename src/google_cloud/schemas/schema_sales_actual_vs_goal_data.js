@@ -87,6 +87,22 @@ const members_sales_actual_vs_goal_schema = [
       fields: []
     },
     {
+      name: "is_current_month",
+      type: "INTEGER",
+      mode: "NULLABLE",
+      description: "The current month.",
+      fields: []
+    },
+    {
+      name: "is_year_to_date",
+      type: "INTEGER",
+      mode: "NULLABLE",
+      description: "The year to date.",
+      fields: []
+    },
+
+    // SEGMENTS
+    {
       name: "type_actual",
       type: "STRING",
       mode: "NULLABLE",
@@ -100,6 +116,15 @@ const members_sales_actual_vs_goal_schema = [
       description: "The actual member category.",
       fields: []
     },
+    {
+      name: "category_sort_order_actual",
+      type: "INTEGER",
+      mode: "NULLABLE",
+      description: "The category sort order.",
+      fields: []
+    },
+
+    // METRICS
     {
       name: "sales_rev_2025_actual",
       type: "FLOAT",

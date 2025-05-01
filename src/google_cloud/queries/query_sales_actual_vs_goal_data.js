@@ -18,10 +18,16 @@ async function query_sales_actual_vs_goal_data(batch_size = 10, offset = 0) {
             month_actual,
             quarter_actual,
             year_actual,
-            
+
+            is_current_month,
+            is_year_to_date,
+
+            -- SEGMENTS
             type_actual,
             category_actual,
+            category_sort_order_actual,
             
+            -- METRICS
             sales_rev_2025_actual,
             sales_rev_2024_actual,
             sales_units_2025_actual,
