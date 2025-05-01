@@ -14,6 +14,8 @@ async function execute_load_big_query_actual_vs_goal_metrics() {
             fileName: 'sales_actual_vs_goal_data',
             query: (retrieval_batch_size, offset) => query_sales_actual_vs_goal_data(retrieval_batch_size, offset),
             tableId: "sales_actual_vs_goal_data", // table name
+
+            // tableId: "sales_actual_vs_goal_data_test", // table name
         }
     ];
 
