@@ -9,6 +9,14 @@ SELECT * FROM all_event_data_raw WHERE id_sanctioning_events = 309811;
 SELECT status_events, COUNT(status_events) FROM all_event_data_raw GROUP BY 1 WITH ROLLUP;
 SELECT COUNT(*) FROM all_event_data_raw LIMIT 10;
 
+
+SELECT 
+	id_sanctioning_events,
+    name_events
+FROM all_event_data_raw
+WHERE id_sanctioning_events LIKE '35%';
+
+
 SELECT starts_year_events, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1 WITH ROLLUP;
 SELECT starts_year_events, start_date_year_races, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1, 2;
 SELECT start_date_year_races, COUNT(DISTINCT id_sanctioning_events) FROM all_event_data_raw GROUP BY 1 WITH ROLLUP;
