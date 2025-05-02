@@ -8,7 +8,7 @@ const derived_fields = `
     real_membership_types_sa,
     new_member_category_6_sa,
     actual_membership_fee_6_sa,
-    actual_membership_fee_6_rule_sa, -- todo: rule additional field
+    actual_membership_fee_6_rule_sa,
     source_2_sa,
     is_koz_acception_sa,
 `;
@@ -25,6 +25,7 @@ const addresses_table = `
 const events_table = `
     -- EVENTS TABLE
     id_events,
+    id_sanctioning_events,
     event_type_id_events,
     name_events,
     
@@ -34,17 +35,17 @@ const events_table = `
     state_code_events,
     country_code_events,
 
-    @created_at_events, -- todo:
+    @created_at_events, 
     created_at_month_events,
     created_at_quarter_events,
     created_at_year_events,
 
-    @starts_events, -- todo: 
+    @starts_events,  
     starts_month_events,
     starts_quarter_events,
     starts_year_events,
 
-    @ends_events, -- todo:
+    @ends_events, 
     ends_month_events,
     ends_quarter_events,
     ends_year_events,
@@ -63,9 +64,9 @@ const membership_applications_table = `
     city_ma,
     confirmation_code_ma,
     country_ma,
-    @created_at_ma, -- todo:
-    @date_of_birth_ma, -- todo:
-    @deleted_at_ma, -- todo:
+    @created_at_ma, 
+    @date_of_birth_ma, 
+    @deleted_at_ma, 
     distance_type_id_ma,
     email_ma,
     event_id_ma,
@@ -89,7 +90,7 @@ const membership_applications_table = `
     referral_code_ma,
     state_ma,
     status_ma,
-    @updated_at_ma, -- todo:
+    @updated_at_ma, 
     uuid_ma,
     zip_ma,
     club_affiliations_ma,
@@ -100,9 +101,9 @@ const membership_applications_table = `
 
 const membership_period_table = `
     -- MEMBERSHIP PERIODS TABLE
-    @created_at_mp, -- TODO:
-    @deleted_at_mp, -- TODO:
-    @ends_mp, -- TODO:
+    @created_at_mp, 
+    @deleted_at_mp, 
+    @ends_mp, 
     member_id_mp,
     membership_type_id_mp,
     origin_flag_mp,
@@ -111,25 +112,25 @@ const membership_period_table = `
     period_status_mp,
     progress_status_mp,
 
-    @purchased_on_mp, -- TODO:
-    purchased_on_date_mp, -- TODO:
+    @purchased_on_mp, 
+    purchased_on_date_mp, 
     purchased_on_year_mp,
     purchased_on_quarter_mp,
     purchased_on_month_mp,
 
-    @purchased_on_adjusted_mp, -- TODO:
-    purchased_on_date_adjusted_mp, -- TODO:
+    @purchased_on_adjusted_mp, 
+    purchased_on_date_adjusted_mp, 
     purchased_on_year_adjusted_mp,
     purchased_on_quarter_adjusted_mp,
     purchased_on_month_adjusted_mp,
 
     remote_id_mp,
     renewed_membership_period_id,
-    @starts_mp, -- TODO:
+    @starts_mp, 
     state_mp,
     status_mp,
-    @terminated_on_mp, -- TODO:
-    @updated_at_mp, -- TODO:
+    @terminated_on_mp, 
+    @updated_at_mp, 
     upgraded_from_id_mp,
     upgraded_to_id_mp,
     waiver_status_mp,
@@ -138,8 +139,8 @@ const membership_period_table = `
 const members_table = `
     -- MEMBERS TABLE
     active_members,
-    @created_at_members, -- todo:
-    @deleted_at_members, -- todo:
+    @created_at_members, 
+    @deleted_at_members, 
     id_members,
     longevity_status_members,
     member_number_members,
@@ -147,13 +148,13 @@ const members_table = `
     memberable_type_members,
     period_status_members,
     referrer_code_members,
-    @updated_at_members, -- todo:
+    @updated_at_members, 
 `;
 
 const membership_types_table = `
     -- MEMBERSHIP TYPES TABLE
-    @created_at_mt, -- todo:
-    @deleted_at_mt, -- todo:
+    @created_at_mt, 
+    @deleted_at_mt, 
     extension_type_mt,
     id_mt,
     membership_card_template_id_mt,
@@ -163,7 +164,7 @@ const membership_types_table = `
     published_mt,
     require_admin_approval_mt,
     tag_id_mt,
-    @updated_at_mt, -- todo:
+    @updated_at_mt, 
     short_description_mt,
 `;
 
@@ -175,14 +176,25 @@ const profiles_table = `
     primary_address_id_profiles,
 `;
 
+const orders_products_table = `
+    -- ORDERS PRODUCTS TABLE
+    order_id_orders_products,
+`;
+
 const registration_audit_table = `
     -- REGISTRATION AUDIT
-    @date_of_birth_registration_audit, -- todo:
+    id_registration_audit,
+    @date_of_birth_registration_audit, 
+`;
+
+const registration_companies = `
+    -- REGISTRATION COMPANY TABLE
+    name_registration_companies,
 `;
 
 const users_table = `
     -- USERS TABLE
-    @created_at_users, -- todo:
+    @created_at_users, 
 `;
 
 const select_fields = `
@@ -196,10 +208,10 @@ const select_fields = `
 const transform_fields = `
     -- SECTION: EVENTS
     -- CONVERTS "Fri Jun 11 2021 12:03:17 GMT-0600 (Mountain Daylight Time)" TO '2021-06-11 12:03:17' TO MAINTAIN MTN TIME
-    created_at_events = CASE -- todo:
-        WHEN @created_at_events IS NOT NULL AND @created_at_events != 'Invalid Date' THEN -- todo:
-            -- ADDDATE(STR_TO_DATE(SUBSTRING_INDEX(SUBSTRING_INDEX(@created_at_mp, ' GMT', 1), ' ', -5), '%a %b %d %Y %H:%i:%s'), INTERVAL 6 HOUR) -- todo:
-            STR_TO_DATE(SUBSTRING_INDEX(SUBSTRING_INDEX(@created_at_events, ' GMT', 1), ' ', -5), '%a %b %d %Y %H:%i:%s') -- todo:
+    created_at_events = CASE 
+        WHEN @created_at_events IS NOT NULL AND @created_at_events != 'Invalid Date' THEN 
+            -- ADDDATE(STR_TO_DATE(SUBSTRING_INDEX(SUBSTRING_INDEX(@created_at_mp, ' GMT', 1), ' ', -5), '%a %b %d %Y %H:%i:%s'), INTERVAL 6 HOUR) 
+            STR_TO_DATE(SUBSTRING_INDEX(SUBSTRING_INDEX(@created_at_events, ' GMT', 1), ' ', -5), '%a %b %d %Y %H:%i:%s') 
         ELSE
             NULL  -- Or specify a default value or an error message
     END,
@@ -421,22 +433,24 @@ function query_load_sales_data(filePath, table) {
     FIELDS TERMINATED BY ','
     ENCLOSED BY '"'
     LINES TERMINATED BY '\\n'
-    -- todo:
+    
     IGNORE 1 LINES
     -- REMOVES HEADER & ROW WITH ALL NULLS DUE TO RIGHT JOINS
     -- IGNORE 2 LINES
     (
-      ${derived_fields}
-      ${addresses_table}
-      ${events_table}
-      ${membership_applications_table}
-      ${membership_period_table}
-      ${members_table}
-      ${membership_types_table}
-      ${profiles_table}
-      ${registration_audit_table}
-      ${users_table}
-      ${select_fields}
+        ${derived_fields}
+        ${addresses_table}
+        ${events_table}
+        ${membership_applications_table}
+        ${membership_period_table}
+        ${members_table}
+        ${membership_types_table}
+        ${profiles_table}
+        ${orders_products_table}
+        ${registration_audit_table}
+        ${registration_companies}
+        ${users_table}
+        ${select_fields}
     )   
       SET 
         ${transform_fields};
@@ -461,24 +475,24 @@ function query_load_sales_data(filePath, table) {
   // deceased_recorded_on_profiles = STR_TO_DATE(SUBSTRING_INDEX(SUBSTRING_INDEX(@deceased_recorded_on_profiles, ' GMT', 1),' ', -5),'%a %b %d %Y %H:%i:%s'),
 
   // active_profiles,
-  // @date_of_birth_profiles, -- todo:
-  // @deceased_recorded_on_profiles, -- todo:
-  // @deleted_at_profiles, -- todo:
+  // @date_of_birth_profiles, 
+  // @deceased_recorded_on_profiles, 
+  // @deleted_at_profiles, 
   // first_name_profiles,
   // gender_id_profiles,
   // last_name_profiles,
   // name_profiles,
   // primary_email_id_profiles,
   // primary_phone_id_profiles,
-  // @updated_at_profiles, -- todo:
+  // @updated_at_profiles, 
 
   // registration_company_id,
   // price_paid_rama,
 
   // active_users,
-  // @deleted_at_users, -- todo:
+  // @deleted_at_users, 
   // email_users,
   // invalid_email_users,
   // name_users,
   // opted_out_of_notifications_users,
-  // @updated_at_users -- todo:
+  // @updated_at_users 

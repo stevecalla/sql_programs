@@ -8,7 +8,7 @@ const derived_fields = `
     sa.real_membership_types AS real_membership_types_sa,
     sa.new_member_category_6 AS new_member_category_6_sa,
     sa.max_membership_fee_6 AS actual_membership_fee_6_sa,
-    sa.max_membership_fee_6_rule AS actual_membership_fee_6_rule_sa, -- todo: rule additional field
+    sa.max_membership_fee_6_rule AS actual_membership_fee_6_rule_sa,
     sa.source_2 AS source_2_sa,
     sa.is_koz_acception AS is_koz_acception_sa,
 `;
@@ -31,9 +31,10 @@ const addresses_table = `
     addresses.country_code AS country_code_addresses,
 `;
 
-const events_table = `
+const events_table = ` -- todo:
     -- EVENTS TABLE
     events.id AS id_events,
+    events.sanctioning_event_id AS id_sanctioning_events,
     events.event_type_id AS event_type_id_events,
     CONCAT('"', 
         REPLACE(
@@ -102,7 +103,7 @@ const membership_applications_table = `
             ',', ''
         ), 
         '"'
-    ) AS address_ma, -- todo:
+    ) AS address_ma, 
 
     ma.application_type AS application_type_ma,
     ma.approval_status AS approval_status_ma,
@@ -116,7 +117,7 @@ const membership_applications_table = `
             ',', ''
         ), 
         '"'
-    ) AS city_ma, -- todo:
+    ) AS city_ma, 
 
     ma.confirmation_code AS confirmation_code_ma,
     ma.country AS country_ma,
@@ -137,7 +138,7 @@ const membership_applications_table = `
             ',', ''
         ), 
         '"'
-    ) AS first_name_ma, -- todo:
+    ) AS first_name_ma, 
 
     ma.gender AS gender_ma,
     ma.id AS id_ma,
@@ -151,7 +152,7 @@ const membership_applications_table = `
             ',', ''
         ), 
         '"'
-    ) AS last_name_ma, -- todo:
+    ) AS last_name_ma, 
     ma.membership_type_id AS membership_type_id_ma,
     ma.middle_name AS middle_name_ma,
     ma.origin_flag AS origin_flag_ma,
@@ -175,15 +176,15 @@ const membership_applications_table = `
             ',', ''
         ), 
         '"'
-    ) AS state_ma, -- todo:
+    ) AS state_ma, 
 
     ma.status AS status_ma,
     ma.updated_at AS updated_at_ma,
     ma.uuid AS uuid_ma,
     ma.zip AS zip_ma,
-    CONCAT('"', SUBSTRING(ma.club_affiliations, 1, 1024), '"') AS club_affiliations_ma, -- todo:
-    CONCAT('"', SUBSTRING(ma.denial_reason, 1, 1024), '"') AS denial_reason_ma, -- todo:
-    CONCAT('"', SUBSTRING(ma.payment_explanation, 1, 1024), '"') AS payment_explanation_ma, -- todo:
+    CONCAT('"', SUBSTRING(ma.club_affiliations, 1, 1024), '"') AS club_affiliations_ma, 
+    CONCAT('"', SUBSTRING(ma.denial_reason, 1, 1024), '"') AS denial_reason_ma, 
+    CONCAT('"', SUBSTRING(ma.payment_explanation, 1, 1024), '"') AS payment_explanation_ma, 
     SUBSTRING(ma.upgrade_code, 1, 1024) AS upgrade_code_ma,    
 `;
 
@@ -206,7 +207,7 @@ const membership_period_table = `
     QUARTER(mp.purchased_on) AS purchased_on_quarter_mp,
     MONTH(mp.purchased_on) AS purchased_on_month_mp,
 
-    -- todo: adjusts purchased on to starts on date if starts < purchase on
+    -- adjusts purchased on to starts on date if starts < purchase on
     CASE   
         WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN mp.starts
         ELSE mp.purchased_on
@@ -242,7 +243,7 @@ const membership_period_table = `
 
 const members_table = `
     -- MEMBERS TABLE
-    members.active AS active_members, -- todo:
+    members.active AS active_members, 
     members.created_at AS created_at_members,
     members.deleted_at AS deleted_at_members,
     members.id AS id_members,
@@ -280,9 +281,20 @@ const profiles_table = `
     profiles.primary_address_id AS primary_address_id_profiles,
 `;
 
-const registration_audit_table = `
+const orders_products_table = ` -- todo:
+    -- ORDERS PRODUCTS TABLE
+    op.order_id AS order_id_orders_products,
+`;
+
+const registration_audit_table = ` -- todo:
     -- REGISTRATION AUDIT
-    registration_audit.date_of_birth AS date_of_birth_registration_audit, -- todo:
+    registration_audit.id AS id_registration_audit,
+    registration_audit.date_of_birth AS date_of_birth_registration_audit,
+`;
+
+const registration_companies = ` -- todo:
+    -- REGISTRATION COMPANY TABLE
+    registration_companies.name AS name_registration_companies,
 `;
 
 const users_table = `
@@ -301,12 +313,17 @@ const select_fields = `
 // SECTION: VERSION 1
 const from_statement_left = `
     FROM one_day_sales_actual_member_fee AS sa
+
         LEFT JOIN membership_periods AS mp ON sa.max_membership_period_id = mp.id
         LEFT JOIN membership_applications AS ma ON sa.max_membership_period_id = ma.membership_period_id
+
         LEFT JOIN order_products AS op ON ma.id = op.purchasable_id
         LEFT JOIN orders ON op.order_id = orders.id
+
         LEFT JOIN registration_audit ON sa.max_membership_period_id = registration_audit.membership_period_id
         LEFT JOIN registration_audit_membership_application ON registration_audit.id = registration_audit_membership_application.audit_id
+        LEFT JOIN registration_companies ON registration_audit.registration_company_id = registration_companies.id
+
         LEFT JOIN membership_types ON ma.membership_type_id = membership_types.id
 
         LEFT JOIN members ON mp.member_id = members.id -- DONE = CHANGED FROM RIGHT JOIN TO LEFT
@@ -329,7 +346,9 @@ const query_all_fields_logic = `
         ${members_table}
         ${membership_types_table}
         ${profiles_table}
+        ${orders_products_table}
         ${registration_audit_table}
+        ${registration_companies}
         ${users_table}
         ${select_fields}
     ${from_statement_left}
@@ -353,7 +372,7 @@ module.exports = { query_all_fields_logic };
 //         ',', ''
 //     ), 
 //     '"'
-// ) AS first_name_profiles, -- todo:
+// ) AS first_name_profiles, 
 
 // profiles.gender_id AS gender_id_profiles,
 
@@ -366,7 +385,7 @@ module.exports = { query_all_fields_logic };
 //         ',', ''
 //     ), 
 //     '"'
-// ) AS last_name_profiles, -- todo:
+// ) AS last_name_profiles, 
 
 // CONCAT('"', 
 //     REPLACE(
@@ -377,7 +396,7 @@ module.exports = { query_all_fields_logic };
 //         ',', ''
 //     ), 
 //     '"'
-// ) AS name_profiles, -- todo:
+// ) AS name_profiles, 
 
 // profiles.primary_email_id AS primary_email_id_profiles,
 // profiles.primary_phone_id AS primary_phone_id_profiles,
@@ -392,7 +411,7 @@ module.exports = { query_all_fields_logic };
 // users.email AS email_users,
 // users.invalid_email AS invalid_email_users,
 
-// -- CONCAT('"', SUBSTRING(users.name, 1, 1024), '"') AS name_users, -- todo:
+// -- CONCAT('"', SUBSTRING(users.name, 1, 1024), '"') AS name_users, 
 // CONCAT('"', 
 //     REPLACE(
 //         REPLACE(
@@ -402,7 +421,7 @@ module.exports = { query_all_fields_logic };
 //         ',', ''
 //     ), 
 //     '"'
-// ) AS name_users, -- todo:
+// ) AS name_users, 
 
 // users.opted_out_of_notifications AS opted_out_of_notifications_users,
 // users.updated_at AS updated_at_users

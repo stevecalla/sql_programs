@@ -95,6 +95,7 @@ async function query_member_data(batch_size = 10, offset = 0) {
             age_as_year_end_bin,
 
             id_events,
+            id_sanctioning_events, -- todo:
             event_type_id_events,
             TRIM(BOTH '"' FROM name_events) AS name_events,
             TRIM(BOTH '"' FROM cleaned_name_events) AS cleaned_name_events,
@@ -144,6 +145,12 @@ async function query_member_data(batch_size = 10, offset = 0) {
             country_code_events,
             region_name_events,
             region_abbr_events,
+
+            -- OTHER -- todo:
+            DATE_FORMAT(created_at_ma, '%Y-%m-%d %H:%i:%s') AS created_at_ma,
+            order_id_orders_products,
+            id_registration_audit,
+            name_registration_companies,
 
             DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn, -- date '2024-02-12'        
             DATE_FORMAT(created_at_utc, '%Y-%m-%d') AS created_at_utc -- date '2024-02-12'

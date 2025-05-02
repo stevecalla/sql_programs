@@ -8,7 +8,7 @@ const derived_fields = `
   real_membership_types_sa VARCHAR(255),
   new_member_category_6_sa VARCHAR(255),
   actual_membership_fee_6_sa DECIMAL(10,2),
-  actual_membership_fee_6_rule_sa VARCHAR(255), -- todo: rule additional field
+  actual_membership_fee_6_rule_sa VARCHAR(255),
   source_2_sa VARCHAR(255),
   is_koz_acception_sa BOOLEAN,
 `;
@@ -22,9 +22,10 @@ const addresses_table = `
     country_code_addresses VARCHAR(255),
 `;
 
-const events_table = `
+const events_table = ` -- todo:
   -- EVENTS TABLE
-  id_events INT,                     
+  id_events INT,
+  id_sanctioning_events INT, -- todo:                   
   event_type_id_events INT,                     
   name_events VARCHAR(255),                      
 
@@ -55,7 +56,7 @@ const events_table = `
   last_season_event_id INT,                
 `;
 
-const membership_applications_table = `
+const membership_applications_table = ` -- todo:
   -- MEMBERSHIP APPLICATIONS TABLE
   address_ma TEXT,
   application_type_ma VARCHAR(50),
@@ -63,7 +64,7 @@ const membership_applications_table = `
   city_ma VARCHAR(100),
   confirmation_code_ma VARCHAR(100),
   country_ma VARCHAR(100),
-  created_at_ma DATETIME,
+  created_at_ma DATETIME, -- todo:
   date_of_birth_ma DATE,
   deleted_at_ma DATETIME,
   distance_type_id_ma VARCHAR(255),
@@ -103,8 +104,8 @@ const membership_period_table = `
   created_at_mp DATETIME,
   deleted_at_mp DATETIME, 
   ends_mp DATE, 
-  member_id_mp INT, -- todo: was INT
-  membership_type_id_mp INT, -- todo: was INT 96548
+  member_id_mp INT,
+  membership_type_id_mp INT,
   origin_flag_mp VARCHAR(255),
   origin_status_mp VARCHAR(255),
   origin_mp VARCHAR(255),
@@ -142,7 +143,7 @@ const members_table = `
   deleted_at_members DATETIME,
   id_members INT,
   longevity_status_members VARCHAR(255),
-  member_number_members VARCHAR(255), -- todo: changed to VARCHAR due to i.e. 'davesoroka'
+  member_number_members VARCHAR(255), -- changed to VARCHAR due to i.e. 'davesoroka'
   memberable_id_members VARCHAR(255),
   memberable_type_members VARCHAR(255),
   period_status_members VARCHAR(255),
@@ -170,19 +171,30 @@ const membership_types_table = `
 const profiles_table = `
   -- PROFILES TABLE
   id_profiles INT,
-  created_at_profiles DATETIME, -- todo:
+  created_at_profiles DATETIME,
   date_of_birth_profiles DATE,
   primary_address_id_profiles INT,
 `;
 
-const registration_audit_table = `
+const orders_products_table = ` -- todo:
+    -- ORDERS PRODUCTS TABLE
+    order_id_orders_products INT, -- todo:
+`;
+
+const registration_audit_table = ` -- todo:
   -- REGISTRATION AUDIT
-  date_of_birth_registration_audit DATE, -- todo:
+  id_registration_audit INT,
+  date_of_birth_registration_audit DATE,
+`;
+
+const registration_companies = ` -- todo:
+    -- REGISTRATION COMPANY TABLE
+    name_registration_companies VARCHAR(255), -- todo:
 `;
 
 const users_table = `
   -- USERS TABLE
-  created_at_users DATETIME, -- todo:
+  created_at_users DATETIME,
 `;
 
 const select_fields = `
@@ -230,7 +242,9 @@ async function query_create_all_membership_sales_table(table_name) {
       ${members_table}
       ${membership_types_table}
       ${profiles_table}
+      ${orders_products_table}
       ${registration_audit_table}
+      ${registration_companies}
       ${users_table}
       ${select_fields}
       ${index_fields}

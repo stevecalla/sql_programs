@@ -17,12 +17,12 @@ async function execute_load_big_query_sales_key_metrics() {
 
     const options = [
         {
-            fileName: 'member_data',
             query: (retrieval_batch_size, offset) => query_member_data(retrieval_batch_size, offset),
+            fileName: 'member_data',
             tableId: "membership_data", // table name
             
-            // fileName: 'member_data_state_info',
-            // tableId: "membership_data_v2",
+            // fileName: 'member_data_test',
+            // tableId: "membership_data_test", // table name
         }
     ];
 
