@@ -403,6 +403,13 @@ const members_schema = [
         "fields": []
     },
     {
+        "name": "id_sanctioning_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
         "name": "event_type_id_events",
         "mode": "NULLABLE",
         "type": "STRING",
@@ -663,6 +670,38 @@ const members_schema = [
         "description": null,
         "fields": []
     },
+
+    // OTHER
+    {
+        "name": "created_at_ma",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "order_id_orders_products",
+        "mode": "NULLABLE",
+        "type": "INTEGER",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "id_registration_audit",
+        "mode": "NULLABLE",
+        "type": "INTEGER",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "name_registration_companies",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+
+    // CREATED AT DATES
     {
         "name": "created_at_mtn",
         "mode": "NULLABLE",

@@ -230,6 +230,7 @@ function step_8_sales_key_stats_2015() {
 
                 -- event detais
                 am.id_events,
+                am.id_sanctioning_events,
                 am.event_type_id_events,
                 am.name_events,
                 -- cleaned event name for comparison
@@ -292,6 +293,12 @@ function step_8_sales_key_stats_2015() {
                 am.country_code_events,
                 er.region_name AS region_name_events,
                 er.region_abbr AS region_abbr_events,
+
+                -- OTHER
+                am.created_at_ma,
+                am.order_id_orders_products,
+                am.id_registration_audit,
+                am.name_registration_companies,
 
                 -- key stats
                 st.sales_units,

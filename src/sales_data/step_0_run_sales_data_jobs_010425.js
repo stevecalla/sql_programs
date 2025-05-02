@@ -21,11 +21,11 @@ const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-const run_step_1  = true; // get sales data
-const run_step_2  = false; // load sales data
+const run_step_1  = false; // get sales data
+const run_step_2  = true; // load sales data
 const run_step_2a = false; // load region table
 
-const run_step_3  = false; // create sales key metrics stats table
+const run_step_3  = true; // create sales key metrics stats table
 const run_step_3a = false; // load sales key metrics stats to biqquery
 
 const run_step_4  = false; // create year-over-year common date table

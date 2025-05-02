@@ -56,7 +56,7 @@ const events_table = ` -- todo:
   last_season_event_id INT,                
 `;
 
-const membership_applications_table = `
+const membership_applications_table = ` -- todo:
   -- MEMBERSHIP APPLICATIONS TABLE
   address_ma TEXT,
   application_type_ma VARCHAR(50),
@@ -64,7 +64,7 @@ const membership_applications_table = `
   city_ma VARCHAR(100),
   confirmation_code_ma VARCHAR(100),
   country_ma VARCHAR(100),
-  created_at_ma DATETIME,
+  created_at_ma DATETIME, -- todo:
   date_of_birth_ma DATE,
   deleted_at_ma DATETIME,
   distance_type_id_ma VARCHAR(255),
@@ -178,7 +178,7 @@ const profiles_table = `
 
 const orders_products_table = ` -- todo:
     -- ORDERS PRODUCTS TABLE
-    order_id_orders_products INT,
+    order_id_orders_products INT, -- todo:
 `;
 
 const registration_audit_table = ` -- todo:
@@ -189,7 +189,7 @@ const registration_audit_table = ` -- todo:
 
 const registration_companies = ` -- todo:
     -- REGISTRATION COMPANY TABLE
-    name_registration_companies VARCHAR(255),
+    name_registration_companies VARCHAR(255), -- todo:
 `;
 
 const users_table = `
