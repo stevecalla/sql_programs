@@ -6,12 +6,7 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 // GET & LOAD EVENT DATA
 const { execute_create_recognition_base_data } = require('./step_1_create_recognition_base_data');
 
-// const { execute_create_event_data_metrics } = require('./step_2_create_event_data_metrics');
-
-// const { execute_get_python_event_data } = require('./step_5_get_python_event_data');
-// const { execute_run_python_event_reports } = require('../../utilities/python_events/index'); // step #6 run python event reports
-
-// const { execute_load_big_query_event_data_metrics } = require("./step_3_load_bq_event_data_metrics");
+const { execute_load_big_query_recognition_base_data } = require("./step_2_load_bq_recognition_base_data");
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
@@ -77,35 +72,17 @@ async function execute_run_recognition_data_jobs() {
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
   const run_step_1  = true; // execute_create_recognition_base_data
-
-  // const run_step_2  = false; // execute_create_event_data_metrics
-  // const run_step_3  = false; // load event metrics to bigquery
-
-  // const run_step_5  = false; // execute_get_python_event_data
-  // const run_step_6  = false; // run python event reports
-  
+  const run_step_2  = true; // load recognition_base_data to BQ
 
   try {
     const stepFunctions = [
       run_step_1 ? execute_create_recognition_base_data : null,
-      
-      // run_step_2 ? execute_create_event_data_metrics : null,
-      // run_step_3 ? execute_load_big_query_event_data_metrics : null,
-
-      // run_step_5 ? execute_get_python_event_data : null,
-      // run_step_6 ? execute_run_python_event_reports : null,
-      
+      run_step_2 ? execute_load_big_query_recognition_base_data : null,
     ];
 
     const stepName = [
       `Step #1 - Create revenue recognition base data:`, 
-
-      // `Step #2 - Create event data metrics: `, 
-      // `Step #3 - Load event metrics to BQ: `,
-
-      // `Step #5 - Get python event data`,
-      // `Step_#6 - Run python event reports`,
-      
+      `Step #2 - Load recognition_base_data to BQ: `,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function

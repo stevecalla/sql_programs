@@ -1,21 +1,52 @@
-const all_membership_sales_data_2015_left = `
+const id_fields = `
     id_profiles INT,
     id_membership_periods_sa INT,
-    
+`;
+
+const member_origin_types = `
     real_membership_types_sa VARCHAR(255),
     new_member_category_6_sa VARCHAR(255),
     origin_flag_ma VARCHAR(255),
-    
-    created_at_mp DATETIME,
-    updated_at_mp DATETIME,
-    purchased_on_date_mp DATE,
-    purchased_on_date_adjusted_mp DATE,
-    
-    starts_mp DATE,
-    ends_mp DATE,
+`;
+
+const key_dates = `         
+  created_at_mp DATETIME,
+  created_at_mp_month INT,
+  created_at_mp_quarter INT,
+  created_at_mp_year INT,
+
+  updated_at_mp DATETIME,
+  updated_at_mp_month INT,
+  updated_at_mp_quarter INT,
+  updated_at_mp_year INT,
+
+  purchased_on_date_mp DATE,
+  purchased_on_date_mp_month INT,
+  purchased_on_date_mp_quarter INT,
+  purchased_on_date_mp_year INT,
+
+  purchased_on_date_adjusted_mp DATE,
+  purchased_on_date_adjusted_mp_month INT,
+  purchased_on_date_adjusted_mp_quarter INT,
+  purchased_on_date_adjusted_mp_year INT,
+
+  starts_mp DATE,
+  starts_mp_month INT,
+  starts_mp_quarter INT,
+  starts_mp_year INT,
+
+  ends_mp DATE,
+  ends_mp_month INT,
+  ends_mp_quarter INT,
+  ends_mp_year INT,
+`;
+
+const total_months = `
     total_months INT,
     total_months_recursive INT,
-    
+`;
+
+const flags = `
     -- Flag if the prior period (previous start and end) is the same as the current period's start and end
     is_duplicate_previous_period INT,
     
@@ -31,7 +62,9 @@ const all_membership_sales_data_2015_left = `
     is_lifetime INT,
 
     has_created_at_gt_purchased_on INT,
+`;
 
+const metrics = `
     actual_membership_fee_6_rule_sa VARCHAR(255),
     sales_revenue DECIMAL,
     sales_units INT,
@@ -58,7 +91,12 @@ const index_fields = `
 async function query_create_rev_recognition_base_table(table_name) {
   const query = `
     CREATE TABLE IF NOT EXISTS ${table_name} (
-      ${all_membership_sales_data_2015_left}
+      ${id_fields}
+      ${member_origin_types}
+      ${key_dates}
+      ${total_months}
+      ${flags}
+      ${metrics}
       ${created_at_dates}
       ${index_fields}
     );

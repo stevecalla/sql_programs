@@ -24,12 +24,34 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc) {
             origin_flag_ma,
             
             created_at_mp AS created_at_mp,
+            MONTH(created_at_mp) AS created_at_mp_month,
+            QUARTER(created_at_mp) AS created_at_mp_quarter,
+            YEAR(created_at_mp) AS created_at_mp_year,
+
             updated_at_mp AS updated_at_mp,
+            MONTH(updated_at_mp) AS updated_at_mp_month,
+            QUARTER(updated_at_mp) AS updated_at_mp_quarter,
+            YEAR(updated_at_mp) AS updated_at_mp_year,
+
             purchased_on_date_mp,
+            MONTH(purchased_on_date_mp) AS purchased_on_date_mp_month,
+            QUARTER(purchased_on_date_mp) AS purchased_on_date_mp_quarter,
+            YEAR(purchased_on_date_mp) AS purchased_on_date_mp_year,
+
             purchased_on_date_adjusted_mp,
-            
+            MONTH(purchased_on_date_adjusted_mp) AS purchased_on_date_adjusted_mp_month,
+            QUARTER(purchased_on_date_adjusted_mp) AS purchased_on_date_adjusted_mp_quarter,
+            YEAR(purchased_on_date_adjusted_mp) AS purchased_on_date_adjusted_mp_year,
+
             starts_mp,
+            MONTH(starts_mp) AS starts_mp_month,
+            QUARTER(starts_mp) AS starts_mp_quarter,
+            YEAR(starts_mp) AS starts_mp_year,
+
             ends_mp,
+            MONTH(ends_mp) AS ends_mp_month,
+            QUARTER(ends_mp) AS ends_mp_quarter,
+            YEAR(ends_mp) AS ends_mp_year,
 
             -- Standard difference (excludes the first partial month)
             TIMESTAMPDIFF(MONTH, starts_mp, ends_mp) AS total_months,
@@ -75,10 +97,6 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc) {
             actual_membership_fee_6_rule_sa,
             actual_membership_fee_6_sa AS sales_revenue,
             1 AS sales_units,
-
-            -- CREATED AT DATES
-            -- DATE_FORMAT(CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'America/Denver'), '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
-            -- DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s') AS created_at_utc
 
             -- CREATED AT DATES
             '${created_at_mtn}' AS created_at_mtn,

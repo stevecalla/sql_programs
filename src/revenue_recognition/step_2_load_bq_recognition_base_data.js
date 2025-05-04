@@ -4,13 +4,13 @@ dotenv.config({ path: "../../.env" });
 const { logPM2MemoryUsage } = require('../../utilities/pm2_scripts/pm2_log_memory_usage');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
-const { query_event_metrics} = require('../google_cloud/queries/query_event_metrics');
-const { event_metrics_schema } = require('../google_cloud/schemas/schema_event_metrics');
+const { query_rev_recognition_base_data } = require('../google_cloud/queries/query_rev_recognition_base_data');
+const { rev_recognition_base_data_schema } = require('../google_cloud/schemas/schema_rev_recognition_base_data');
 
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
 // EXECUTE LOAD BIQ QUERY
-async function execute_load_big_query_event_data_metrics() {
+async function execute_load_big_query_recognition_base_data() {
     runTimer(`load_bigquery`);
 
     const app_name = "usat_sales";
@@ -18,20 +18,19 @@ async function execute_load_big_query_event_data_metrics() {
 
     const options = [
         {
-            fileName: 'event_metrics_data',
-            query: (retrieval_batch_size, offset) => query_event_metrics(retrieval_batch_size, offset),
-            // tableId: 'participation_profile_data', // table name
-            tableId: 'event_metrics_data', // table name
+            query: (retrieval_batch_size, offset) => query_rev_recognition_base_data(retrieval_batch_size, offset),
+            fileName: `rev_recognition_base_data`,
+            tableId: `rev_recognition_base_data`, // table name
             
-            // fileName: 'event_metrics_data_v2',
-            // tableId: "event_metrics_data_v2",
+            // fileName: 'rev_recognition_base_data_v2',
+            // tableId: 'rev_recognition_base_data_v2',
         }
     ];
 
     const directoryName = `usat_google_bigquery_data`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting';
-    const schema = event_metrics_schema;
+    const schema = rev_recognition_base_data_schema;
     
     await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
 
@@ -45,16 +44,16 @@ async function execute_load_big_query_event_data_metrics() {
     return true; // placeholder to return to ensure success msg
 }
 
-// execute_load_big_query_event_data_metrics();
+// execute_load_big_query_recognition_base_data();
 // (async () => {
 //     try {
 //         console.log('\nStarting data load.');
-//         await execute_load_big_query_event_data_metrics();
+//         await execute_load_big_query_recognition_base_data();
 //     } catch (error) {
 //         console.error("Error during data load:", error);
 //     }
 // })();
 
 module.exports = {
-    execute_load_big_query_event_data_metrics,
+    execute_load_big_query_recognition_base_data,
 }
