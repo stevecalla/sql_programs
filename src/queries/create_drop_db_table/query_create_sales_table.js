@@ -227,7 +227,9 @@ const index_fields = `
 
   INDEX idx_member_number (member_number_members),
 
-  INDEX idx_origin_flag_ma (origin_flag_ma(255))
+  INDEX idx_origin_flag_ma (origin_flag_ma(255)),
+
+  INDEX idx_profiles_membership_starts (id_profiles, id_membership_periods_sa, starts_mp)
 `;
 
 async function query_create_all_membership_sales_table(table_name) {
