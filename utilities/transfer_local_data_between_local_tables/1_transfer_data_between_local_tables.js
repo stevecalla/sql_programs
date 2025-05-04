@@ -79,7 +79,7 @@ async function flush_batch(dst, TABLE_NAME, rows) {
 }
 
 async function execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY) {
-  console.log('get data query = ', GET_DATA_QUERY);
+  // console.log('get data query = ', GET_DATA_QUERY);
 
   const src = await get_src_connection();  // non‑promise, for .stream()
   const dst = await get_dst_connection();  // promise API, for transaction + execute()
@@ -152,7 +152,6 @@ async function execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREA
 
   return result;  
 }
-
 
 // execute_transfer_data_between_tables().catch(err => {
 //     console.error('Stream failed:', err);
