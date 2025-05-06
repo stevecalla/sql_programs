@@ -1,6 +1,7 @@
 // SOURCE:
 // C:\Users\calla\development\usat\sql_code\21_recognized_membership_revenue\step_0_create_recognized_revenue_all_query_base_table.sql
 
+// THIS QUERY IS USED AS AN INSERT QUERY IN THE FETCH FUNCTION IN STEP 1 CREATE RECOGNIZTED BASE DATA
 function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc) {
     return `
         -- GET PROFILES IDS TO USE IN THE NEXT QUERY; THIS ENSURES THE QUERY RETRIEVES ALL PROFILE ID HISTORY
@@ -11,7 +12,11 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc) {
             WHERE 1 = 1
                 AND id_profiles NOT IN (0) -- 0 is a bad / invalid profile id based on dates et al
                 AND ends_mp >= DATE_FORMAT(NOW(), '%Y-01-01') -- current year dynamically without needing to manually change the date each year
+
+                -- AND id_profiles = @id_profile
                 -- AND ends_mp >= '2025-01-01'
+                -- AND id_profiles BETWEEN 35 AND 50
+
             ORDER BY id_profiles, starts_mp
             -- LIMIT 100 OFFSET 0  -- Paginating on distinct profile IDs, not raw rows.
         )
@@ -105,8 +110,6 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc) {
         FROM all_membership_sales_data_2015_left
         WHERE 1 = 1
             AND id_profiles IN (SELECT id_profiles FROM get_n_profiles_ids)
-            -- AND id_profiles = @id_profile
-            -- AND id_profiles BETWEEN 35 AND 50
         ORDER BY id_profiles, starts_mp
         ;
     `;

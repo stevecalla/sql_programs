@@ -78,7 +78,7 @@ async function flush_batch(dst, TABLE_NAME, rows) {
   await dst.execute(sql, values);
 }
 
-async function execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY) {
+async function execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS) {
   // console.log('get data query = ', GET_DATA_QUERY);
 
   const src = await get_src_connection();  // non‑promise, for .stream()
@@ -105,7 +105,7 @@ async function execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREA
     
     // 3) Stream rows from src.sales_key_stats into an internal buffer
     const stream = src
-      .query(GET_DATA_QUERY(created_at_mtn, created_at_utc))
+      .query(GET_DATA_QUERY(created_at_mtn, created_at_utc, QUERY_OPTIONS))
       .stream()
     ;
 

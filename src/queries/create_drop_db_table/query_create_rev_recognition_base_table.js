@@ -66,7 +66,7 @@ const flags = `
 
 const metrics = `
     actual_membership_fee_6_rule_sa VARCHAR(255),
-    sales_revenue DECIMAL,
+    sales_revenue DECIMAL(12, 2),
     sales_units INT,
 `;
 
