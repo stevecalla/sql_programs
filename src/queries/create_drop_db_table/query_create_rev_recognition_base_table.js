@@ -10,12 +10,14 @@ const member_origin_types = `
 `;
 
 const key_dates = `         
-  created_at_mp DATETIME,
+  created_at_mp DATETIME,   
+  created_at_date_mp DATE,
   created_at_mp_month INT,
   created_at_mp_quarter INT,
   created_at_mp_year INT,
 
   updated_at_mp DATETIME,
+  updated_at_date_mp DATE,
   updated_at_mp_month INT,
   updated_at_mp_quarter INT,
   updated_at_mp_year INT,
@@ -41,9 +43,9 @@ const key_dates = `
   ends_mp_year INT,
 `;
 
-const total_months = `
-    total_months INT,
-    total_months_recursive INT,
+const mp_months = `
+    months_mp_difference INT,
+    months_mp_allocated_custom INT,
 `;
 
 const flags = `
@@ -52,6 +54,8 @@ const flags = `
     
     -- Flag if the current period overlaps with the previous one (start of current <= end of previous)
     is_overlaps_previous_mp INT,
+
+    is_stacked_previous_mp INT,
 
     days_between_previous_end_and_start INT,
     
@@ -94,7 +98,7 @@ async function query_create_rev_recognition_base_table(table_name) {
       ${id_fields}
       ${member_origin_types}
       ${key_dates}
-      ${total_months}
+      ${mp_months}
       ${flags}
       ${metrics}
       ${created_at_dates}

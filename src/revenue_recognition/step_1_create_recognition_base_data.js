@@ -22,7 +22,10 @@ async function get_src_connection() {
 }
 
 async function execute_create_recognition_base_data() {
-  let BATCH_SIZE   = 500;
+  let BATCH_SIZE = 500;
+  let TABLE_NAME = "";
+  let CREATE_TABLE_QUERY = "";
+  let GET_DATA_QUERY = "";
 
   // VARIABLES
   let QUERY_OPTIONS = {
@@ -32,9 +35,9 @@ async function execute_create_recognition_base_data() {
   
   // Step 1: Create and populate the profile IDs table
   BATCH_SIZE = 2000;
-  let TABLE_NAME = 'rev_recognition_base_profile_ids_data';
-  let CREATE_TABLE_QUERY = await query_create_rev_recognition_profile_ids_table(TABLE_NAME);
-  let GET_DATA_QUERY = step_1a_query_rev_recognition_profile_ids_data;
+  TABLE_NAME = 'rev_recognition_base_profile_ids_data';
+  CREATE_TABLE_QUERY = await query_create_rev_recognition_profile_ids_table(TABLE_NAME);
+  GET_DATA_QUERY = step_1a_query_rev_recognition_profile_ids_data;
 
   // CREATE TABLE & GET / TRANSFER DATA
   await execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS);

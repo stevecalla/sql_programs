@@ -46,6 +46,7 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
 
             -- NODE VARIABLES
             AND ends_mp >= '${ends_mp}' -- TODO:
+            -- AND id_profiles IN (54) -- TODO:
             -- AND id_profiles IN (54, 57, 60) -- TODO:
 
         UNION ALL

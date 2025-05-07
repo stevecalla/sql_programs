@@ -19,7 +19,8 @@ async function execute_create_recognition_allocation_data() {
 
   // VARIABLES
   const QUERY_OPTIONS = {
-    ends_mp: '2024-01-01'
+    ends_mp: '2024-01-01',
+    is_create_table: true, // is used to control loops in 1_transfer_data_betwen_local_tables
   };
 
   // CREATE TABLE & GET / TRANSFER DATA

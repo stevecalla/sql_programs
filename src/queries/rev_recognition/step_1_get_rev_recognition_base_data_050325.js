@@ -16,11 +16,13 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
         a.origin_flag_ma,
 
         a.created_at_mp,
+        DATE_FORMAT(a.created_at_mp, '%Y-%m-%d') AS created_at_date_mp,
         MONTH(a.created_at_mp) AS created_at_mp_month,
         QUARTER(a.created_at_mp) AS created_at_mp_quarter,
         YEAR(a.created_at_mp) AS created_at_mp_year,
 
         a.updated_at_mp,
+        DATE_FORMAT(a.updated_at_mp, '%Y-%m-%d') AS updated_at_date_mp,
         MONTH(a.updated_at_mp) AS updated_at_mp_month,
         QUARTER(a.updated_at_mp) AS updated_at_mp_quarter,
         YEAR(a.updated_at_mp) AS updated_at_mp_year,
@@ -45,19 +47,27 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
         QUARTER(a.ends_mp) AS ends_mp_quarter,
         YEAR(a.ends_mp) AS ends_mp_year,
 
-        TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) AS total_months,
-        TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) + 2 AS total_months_recursive,
+        TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) AS months_mp_difference,
+        TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) + 2 AS months_mp_allocated_custom,
 
+        -- Definition: This flag indicates that the current membership period (based on start and end dates) is exactly the same as the previous period for the same profile.
         CASE
             WHEN a.starts_mp = LAG(a.starts_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp) 
               AND a.ends_mp = LAG(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp)
             THEN 1 ELSE 0
         END AS is_duplicate_previous_period,
 
+        -- Definition: This flag indicates that the start date of the current membership period is on or before the end date of the previous period for the same profile.
         CASE
             WHEN a.starts_mp <= LAG(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp)
             THEN 1 ELSE 0
         END AS is_overlaps_previous_mp,
+    
+        -- Definition: Stacked membership is one where the start date of the current membership is within 30 days before or after the end date of the previous membership.
+        CASE
+            WHEN ABS(DATEDIFF(a.starts_mp, LAG(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp))) <= 30
+            THEN 1 ELSE 0
+        END AS is_stacked_previous_mp,
 
         DATEDIFF(
             a.starts_mp,

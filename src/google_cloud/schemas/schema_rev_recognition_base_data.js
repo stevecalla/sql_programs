@@ -47,6 +47,13 @@ const rev_recognition_base_data_schema = [
     fields: []
   },
   {
+    name: "created_at_date_mp",
+    mode: "NULLABLE",
+    type: "DATE",
+    description: "Membership period created at date",
+    fields: []
+  },
+  {
     name: "created_at_mp_month",
     mode: "NULLABLE",
     type: "INTEGER",
@@ -74,6 +81,13 @@ const rev_recognition_base_data_schema = [
     mode: "NULLABLE",
     type: "DATETIME",
     description: "Last update timestamp of membership period",
+    fields: []
+  },
+  {
+    name: "updated_at_date_mp",
+    mode: "NULLABLE",
+    type: "DATE",
+    description: "Membership period created at date",
     fields: []
   },
   {
@@ -216,17 +230,17 @@ const rev_recognition_base_data_schema = [
 
   // Duration & Flags
   {
-    name: "total_months",
+    name: "months_mp_difference",
     mode: "NULLABLE",
     type: "INTEGER",
     description: "Total membership months (standard method)",
     fields: []
   },
   {
-    name: "total_months_recursive",
+    name: "months_mp_allocated_custom",
     mode: "NULLABLE",
     type: "INTEGER",
-    description: "Total membership months (recursive logic)",
+    description: "Total membership months using custom logic",
     fields: []
   },
   {
@@ -241,6 +255,13 @@ const rev_recognition_base_data_schema = [
     mode: "NULLABLE",
     type: "INTEGER",
     description: "1 if current period overlaps with previous",
+    fields: []
+  },
+  {
+    name: "is_stacked_previous_mp",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Start date of the current membership is within 30 days before or after the end date of the previous membership",
     fields: []
   },
   {

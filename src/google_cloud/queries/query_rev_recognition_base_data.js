@@ -9,11 +9,13 @@ async function query_rev_recognition_base_data(batch_size = 10, offset = 0) {
             origin_flag_ma,
             
             DATE_FORMAT(created_at_mp, '%Y-%m-%d %H:%i:%s') AS created_at_mp,
+            DATE_FORMAT(created_at_date_mp, '%Y-%m-%d') AS created_at_date_mp,
             created_at_mp_month,
             created_at_mp_quarter,
             created_at_mp_year,
 
             DATE_FORMAT(updated_at_mp, '%Y-%m-%d %H:%i:%s') AS updated_at_mp,
+            DATE_FORMAT(updated_at_mp, '%Y-%m-%d') AS updated_at_date_mp,
             updated_at_mp_month,
             updated_at_mp_quarter,
             updated_at_mp_year,
@@ -39,16 +41,19 @@ async function query_rev_recognition_base_data(batch_size = 10, offset = 0) {
             ends_mp_year,
 
             -- Standard difference (excludes the first partial month)
-            total_months,
+            months_mp_difference, -- was total_months
 
             -- Recursive-style logic (includes the start month)
-            total_months_recursive,
+            months_mp_allocated_custom -- was total_months_recursive,
             
             -- Flag if the prior period (previous start and end) is the same as the current period's start and end
             is_duplicate_previous_period,
             
             -- Flag if the current period overlaps with the previous one (start of current <= end of previous)
             is_overlaps_previous_mp,
+
+            -- Flage ifstart date of the current membership is within 30 days before or after the end date of the previous membership.
+            is_stacked_previous_mp,
 
             days_between_previous_end_and_start,
             
