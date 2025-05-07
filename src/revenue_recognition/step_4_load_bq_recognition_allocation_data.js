@@ -4,8 +4,8 @@ dotenv.config({ path: "../../.env" });
 const { logPM2MemoryUsage } = require('../../utilities/pm2_scripts/pm2_log_memory_usage');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
-const { query_rev_recognition_base_data } = require('../google_cloud/queries/query_rev_recognition_base_data');
-const { rev_recognition_base_data_schema } = require('../google_cloud/schemas/schema_rev_recognition_base_data');
+const { query_rev_recognition_allocation_data } = require('../google_cloud/queries/query_rev_recognition_allocation_data');
+const {rev_recognition_allocation_allocation_schema } = require('../google_cloud/schemas/schema_rev_recognition_allocation_data');
 
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
@@ -18,19 +18,19 @@ async function execute_load_big_query_recognition_allocation_data() {
 
     const options = [
         {
-            query: (retrieval_batch_size, offset) => query_rev_recognition_base_data(retrieval_batch_size, offset),
-            fileName: `rev_recognition_allocated_data`,
-            tableId: `rev_recognition_allocated_data`, // table name
+            query: (retrieval_batch_size, offset) => query_rev_recognition_allocation_data(retrieval_batch_size, offset),
+            fileName: `rev_recognition_allocation_data`,
+            tableId: `rev_recognition_allocation_data`, // table name
             
-            // fileName: 'rev_recognition_base_data_v2',
-            // tableId: 'rev_recognition_base_data_v2',
+            // fileName: 'rev_recognition_allocation_data_v2',
+            // tableId: 'rev_recognition_allocation_data_v2',
         }
     ];
 
     const directoryName = `usat_google_bigquery_data`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting';
-    const schema = rev_recognition_base_data_schema;
+    const schema = rev_recognition_allocation_allocation_schema;
     
     await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
 

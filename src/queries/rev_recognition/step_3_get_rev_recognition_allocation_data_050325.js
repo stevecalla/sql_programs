@@ -1,16 +1,17 @@
 // SOURCE:
-// C:\Users\calla\development\usat\sql_code\21_recognized_membership_revenue\step_1a_create_recognized_revenue_table_controling_allocated_months.sql
+// C:\Users\calla\development\usat\sql_code\21_recognized_membership_revenue\step_1a_create_recognized_revenue_table_controling_allocation_months.sql
 
 // THIS QUERY IS USED AS AN INSERT QUERY IN THE FETCH FUNCTION IN STEP 1 CREATE RECOGNIZTED ALLOCATION DATA
-function step_2_query_rev_recognition_allocated_data(created_at_mtn, created_at_utc, QUERY_OPTIONS) {
-    
-    const{ ends_mp } = QUERY_OPTIONS
+function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at_utc, QUERY_OPTIONS) {
+
+    const{ ends_mp } = QUERY_OPTIONS;
+    console.log('step 3 query = ', QUERY_OPTIONS);
 
     return `
         -- ***********************
         -- Revenue Recognition with Using Combined Fix Total Months or Recursion
         -- ***********************
-        -- CREATE TABLE rev_recognition_allocated_data AS
+        -- CREATE TABLE rev_recognition_allocation_data AS
         WITH RECURSIVE membership_months AS (
         -- Anchor: first month
         SELECT
@@ -70,20 +71,20 @@ function step_2_query_rev_recognition_allocated_data(created_at_mtn, created_at_
             m.sales_revenue,
             m.sales_units
 
-        FROM membership_months m
-        -- WHERE m.month_index + 1 < COALESCE(m.total_months_recursive, m.total_months)
-        -- WHERE DATE_ADD(m.current_month, INTERVAL 1 MONTH) <= m.ends_mp
-        WHERE
-            (
-                m.total_months_recursive IS NOT NULL
-                AND m.month_index + 1 < m.total_months_recursive
-            )
-            OR 
-            (
-                m.total_months_recursive IS NULL
-                AND DATE_ADD(m.current_month, INTERVAL 1 MONTH) <= m.ends_mp
-            )
-        )
+            FROM membership_months m
+            WHERE DATE_ADD(m.current_month, INTERVAL 1 MONTH) <= m.ends_mp
+
+            -- WHERE m.month_index + 1 < COALESCE(m.total_months_recursive, m.total_months)
+            -- WHERE
+            --     (
+            --         m.total_months_recursive IS NOT NULL
+            --         AND m.month_index + 1 < m.total_months_recursive
+            --     )
+            --     OR 
+            --     (
+            --         m.total_months_recursive IS NULL
+            --         AND DATE_ADD(m.current_month, INTERVAL 1 MONTH) <= m.ends_mp
+            --     )            
 
         SELECT
             mm.id_profiles,
@@ -137,5 +138,5 @@ function step_2_query_rev_recognition_allocated_data(created_at_mtn, created_at_
 }
 
 module.exports = {
-    step_2_query_rev_recognition_allocated_data,
+    step_3_query_rev_recognition_allocation_data,
 }
