@@ -44,7 +44,7 @@ async function query_rev_recognition_base_data(batch_size = 10, offset = 0) {
             months_mp_difference, -- was total_months
 
             -- Recursive-style logic (includes the start month)
-            months_mp_allocated_custom -- was total_months_recursive,
+            months_mp_allocated_custom, -- was total_months_recursive
             
             -- Flag if the prior period (previous start and end) is the same as the current period's start and end
             is_duplicate_previous_period,
