@@ -74,35 +74,6 @@ Shift+Alt+V
 Great Loon Tri StartDate (event date) should be 8/17/24 and OBX RaceDate should be 9/14/25?
 
 
-| month_name | Value        | 2024 | 2025 | difference |
-|------------|--------------|------|------|------------|
-| April      | Adult Clinic | 7    | 10   | 3          |
-| April      | Adult Event  | 52   | 50   | -2         |
-| April      | Youth Clinic | 4    | 4    | 0          |
-| April      | Youth Event  | 12   | 12   | 0          |
-| April      | Total        | 75   | 76   | 1          |
-
-| month_name | Value        | 2024 | 2025 | difference |
-|------------|--------------|------|------|------------|
-| May        | Adult Clinic | 12   | 10   | -2         |
-| May        | Adult Event  | 87   | 107  | 20         |
-| May        | Youth Clinic | 1    | 1    | 0          |
-| May        | Youth Event  | 21   | 28   | 7          |
-| April      | Total        | 121  | 146  | 25         |
-
-| Row Labels   | 2025        | 2024        | difference        |
-|--------------|-------------|-------------|-------------------|
-| Adult Clinic | 81          | 90          | -9                |
-| Adult Event  | 806         | 826         | -20               |
-| Youth Clinic | 26          | 33          | -7                |
-| Youth Event  | 193         | 209         | -16               |
-| Grand Total  | 1,106       | 1,158       | -52               |
-
-
-
-
-
-
 
 
 | report_field        | membership_db_field                                                     | table       |
@@ -207,8 +178,102 @@ Great Loon Tri StartDate (event date) should be 8/17/24 and OBX RaceDate should 
 | missing_event_type_race_designation | 0     | 0     | 0          |
 | Total                               | 211   | 203   | -8         |
 
+| sanctioning id | created date | status 5/1             | status 5/2    |
+|----------------|--------------|------------------------|---------------|
+| 350168         | 4/22/2025    | in membership          | missing       |
+| 350260         | 4/29/2025    | in membership          | in membership |
+| 350265         | 4/29/2025    | in membership          | in membership |
+| 350270         | 4/29/2025    | mising from membership | in membership |
+| 350272         | 4/30/2025    | mising from membership | in member     |
+| 350276         | 4/30/2025    | mising from membership | in member     |
+| 350278         | 4/30/2025    | mising from membership | missing       |
+| 350286         | 5/1/2025     | mising from membership | missing       |
+| 350292         | 45779        | in membership          | new           |
+| 350301         | 45779        | in membership          | new           |
 
 
+As of 4/15/25
+| month_name | Value        | 2024 | 2025 | difference |
+|------------|--------------|------|------|------------|
+| April      | Adult Clinic | 7    | 10   | 3          |
+| April      | Adult Event  | 52   | 50   | -2         |
+| April      | Youth Clinic | 4    | 4    | 0          |
+| April      | Youth Event  | 12   | 12   | 0          |
+| April      | Total        | 75   | 76   | 1          |
 
+| month_name | Value        | 2024 | 2025 | difference |
+|------------|--------------|------|------|------------|
+| May        | Adult Clinic | 12   | 10   | -2         |
+| May        | Adult Event  | 87   | 107  | 20         |
+| May        | Youth Clinic | 1    | 1    | 0          |
+| May        | Youth Event  | 21   | 28   | 7          |
+| April      | Total        | 121  | 146  | 25         |
+
+| Row Labels   | 2025        | 2024        | difference        |
+|--------------|-------------|-------------|-------------------|
+| Adult Clinic | 81          | 90          | -9                |
+| Adult Event  | 806         | 826         | -20               |
+| Youth Clinic | 26          | 33          | -7                |
+| Youth Event  | 193         | 209         | -16               |
+| Grand Total  | 1,106       | 1,158       | -52               |
+
+As of 5/2/25
+| month_name                          | (All)       |             |             |
+|-------------------------------------|-------------|-------------|-------------|
+|                                     |             |             |             |
+| Row Labels                          | Sum of 2024 | Sum of 2025 | Sum of diff |
+| Adult Clinic                        | 90          | 83          | -7          |
+| Adult Race                          | 825         | 808         | -17         |
+| missing_event_type_race_designation | 0           | 5           | 5           |
+| Youth Clinic                        | 33          | 29          | -4          |
+| Youth Race                          | 209         | 195         | -14         |
+| Grand Total                         | 1157        | 1120        | -37         |
+|                                     |             |             |             |
+| month_name                          | April       |             |             |
+|                                     |             |             |             |
+| Row Labels                          | Sum of 2024 | Sum of 2025 | Sum of diff |
+| Adult Clinic                        | 7           | 11          | 4           |
+| Adult Race                          | 52          | 50          | -2          |
+| Youth Clinic                        | 4           | 5           | 1           |
+| Youth Race                          | 12          | 13          | 1           |
+| Grand Total                         | 75          | 79          | 4           |
+|                                     |             |             |             |
+| month_name                          | May         |             |             |
+|                                     |             |             |             |
+| Row Labels                          | Sum of 2024 | Sum of 2025 | Sum of diff |
+| Adult Clinic                        | 12          | 11          | -1          |
+| Adult Race                          | 87          | 106         | 19          |
+| missing_event_type_race_designation | 0           | 2           | 2           |
+| Youth Clinic                        | 1           | 3           | 2           |
+| Youth Race                          | 22          | 26          | 4           |
+| Grand Total                         | 122         | 148         | 26          |
+|                                     |             |             |             |
+| month_name                          | June        |             |             |
+|                                     |             |             |             |
+| Row Labels                          | Sum of 2024 | Sum of 2025 | Sum of diff |
+| Adult Clinic                        | 16          | 12          | -4          |
+| Adult Race                          | 152         | 150         | -2          |
+| missing_event_type_race_designation | 0           | 1           | 1           |
+| Youth Clinic                        | 8           | 7           | -1          |
+| Youth Race                          | 35          | 35          | 0           |
+| Grand Total                         | 211         | 205         | -6          |
+
+| Row Labels                          | v 4/15 | v 5/2 | Sum of diff |
+|-------------------------------------|--------|-------|-------------|
+| Adult Clinic                        | 81     | 83    | 2           |
+| Adult Race                          | 806    | 808   | 2           |
+| missing_event_type_race_designation | 0      | 5     | 5           |
+| Youth Clinic                        | 26     | 29    | 3           |
+| Youth Race                          | 193    | 195   | 2           |
+| Grand Total                         | 1106   | 1120  | 14          |
+
+| Row Labels                          | v 4/15 | v 5/2 | v 5/9 | Sum of diff |
+|-------------------------------------|--------|-------|-------|-------------|
+| Adult Clinic                        | 81     | 83    | 83    | 0           |
+| Adult Race                          | 806    | 808   | 809   | 1           |
+| missing_event_type_race_designation | 0      | 5     | 9     | 4           |
+| Youth Clinic                        | 26     | 29    | 29    | 0           |
+| Youth Race                          | 193    | 195   | 195   | 0           |
+| Grand Total                         | 1,106  | 1,120 | 1,125 | 5           |
 
 

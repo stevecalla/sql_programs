@@ -22,7 +22,7 @@ async function execute_load_big_query_sales_goals() {
     // then is used in step 4
     // const directoryName = `usat_sales_goal_data`;
 
-    const directoryName = `usat_google_bigquery_data`;
+    const directoryName = `usat_bigquery_${options[0].fileName}`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting'; // google cloud bucket
     const schema = members_sales_goals_schema; // leave blank so Step #4 in Google Load process will use auto schema

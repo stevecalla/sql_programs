@@ -7,6 +7,8 @@ SELECT * FROM events AS e WHERE e.sanctioning_event_id IN (307440, 350276) LIMIT
 SELECT sanctioning_event_id, name, created_at, deleted_at, status FROM events AS e WHERE e.sanctioning_event_id IN ( 350276, 350168, 350272, 350260, 350265, 350270, 350278, 
 350286) LIMIT 10;
 
+SELECT sanctioning_event_id, name, created_at, deleted_at, status FROM events AS e WHERE created_at > '2025-04-28' LIMIT 10;
+
 SELECT COUNT(*), COUNT(DISTINCT id), COUNT(DISTINCT sanctioning_event_id) FROM events;
 SELECT status, COUNT(status) FROM events GROUP BY 1;
 SELECT YEAR(starts), COUNT(*) FROM events GROUP BY 1;
