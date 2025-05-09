@@ -23,18 +23,43 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
             origin_flag_ma,
 
             created_at_mp,
+            created_at_date_mp,
+            created_at_mp_month,
+            created_at_mp_quarter,
+            created_at_mp_year,
+
             purchased_on_date_adjusted_mp,
+            purchased_on_date_adjusted_mp_month,
+            purchased_on_date_adjusted_mp_quarter,
+            purchased_on_date_adjusted_mp_year,
+
             starts_mp,
+            starts_mp_month,
+            starts_mp_quarter,
+            starts_mp_year,
+
             ends_mp,
+            ends_mp_month,
+            ends_mp_quarter,
+            ends_mp_year,
 
             DATE_FORMAT(starts_mp, '%Y-%m-01') AS current_month,
             0 AS month_index,  -- Adding a month_index column to track recursion step
 
-            -- Standard difference (excludes the first partial month)
-            total_months, 
-            -- Logic for total_months_recursive based on membership type from base data
-            null AS total_months_recursive, -- TODO: test null condition
-            -- total_months_recursive,
+            months_mp_difference, 
+            null AS months_mp_allocated_custom, -- TODO: test null condition
+            -- months_mp_allocated_custom,
+            
+            -- NOTE: Removed b/c produces too much data
+            -- is_duplicate_previous_period,
+            -- is_overlaps_previous_mp,
+            -- is_stacked_previous_mp,
+            -- days_between_previous_end_and_start,
+            -- is_sales_revenue_zero,
+            -- is_bulk,
+            -- is_youth_premier,
+            -- is_lifetime,
+            -- has_created_at_gt_purchased_on,
 
             sales_revenue,
             sales_units
@@ -59,15 +84,42 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
             m.new_member_category_6_sa,
             m.origin_flag_ma,
 
-            m.created_at_mp,
-            m.purchased_on_date_adjusted_mp,
-            m.starts_mp,
-            m.ends_mp,
+            created_at_mp,
+            created_at_date_mp,
+            created_at_mp_month,
+            created_at_mp_quarter,
+            created_at_mp_year,
+
+            purchased_on_date_adjusted_mp,
+            purchased_on_date_adjusted_mp_month,
+            purchased_on_date_adjusted_mp_quarter,
+            purchased_on_date_adjusted_mp_year,
+
+            starts_mp,
+            starts_mp_month,
+            starts_mp_quarter,
+            starts_mp_year,
+
+            ends_mp,
+            ends_mp_month,
+            ends_mp_quarter,
+            ends_mp_year,
 
             DATE_ADD(m.current_month, INTERVAL 1 MONTH),
             m.month_index + 1,  -- Increment the month index
-            m.total_months,
-            m.total_months_recursive,
+            m.months_mp_difference,
+            m.months_mp_allocated_custom,
+            
+            -- NOTE: Removed b/c produces too much data
+            -- is_duplicate_previous_period,
+            -- is_overlaps_previous_mp,
+            -- is_stacked_previous_mp,
+            -- days_between_previous_end_and_start,
+            -- is_sales_revenue_zero,
+            -- is_bulk,
+            -- is_youth_premier,
+            -- is_lifetime,
+            -- has_created_at_gt_purchased_on,
 
             m.sales_revenue,
             m.sales_units
@@ -75,15 +127,15 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
             FROM membership_months m
             WHERE DATE_ADD(m.current_month, INTERVAL 1 MONTH) <= m.ends_mp
 
-            -- WHERE m.month_index + 1 < COALESCE(m.total_months_recursive, m.total_months)
+            -- WHERE m.month_index + 1 < COALESCE(m.months_mp_allocated_custom, m.months_mp_difference)
             -- WHERE
             --     (
-            --         m.total_months_recursive IS NOT NULL
-            --         AND m.month_index + 1 < m.total_months_recursive
+            --         m.months_mp_allocated_custom IS NOT NULL
+            --         AND m.month_index + 1 < m.months_mp_allocated_custom
             --     )
             --     OR 
             --     (
-            --         m.total_months_recursive IS NULL
+            --         m.months_mp_allocated_custom IS NULL
             --         AND DATE_ADD(m.current_month, INTERVAL 1 MONTH) <= m.ends_mp
             --     )   
         )         
@@ -96,30 +148,69 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
             mm.new_member_category_6_sa,
             mm.origin_flag_ma,
 
-            mm.created_at_mp,
-            DATE_FORMAT(mm.created_at_mp, '%Y-%m') AS created_month,
-            mm.purchased_on_date_adjusted_mp,
-            DATE_FORMAT(mm.purchased_on_date_adjusted_mp, '%Y-%m') AS purchased_on_adjusted_month,
+            created_at_mp,
+            created_at_date_mp,
+            created_at_mp_month,
+            created_at_mp_quarter,
+            created_at_mp_year,
 
-            mm.starts_mp,
-            mm.ends_mp,
+            DATE_FORMAT(mm.created_at_mp, '%Y-%m') AS created_year_month,
 
-            DATE_FORMAT(mm.current_month, '%Y-%m') AS revenue_month,
+            purchased_on_date_adjusted_mp,
+            purchased_on_date_adjusted_mp_month,
+            purchased_on_date_adjusted_mp_quarter,
+            purchased_on_date_adjusted_mp_year,
+        
+            DATE_FORMAT(mm.purchased_on_date_adjusted_mp, '%Y-%m') AS purchased_on_adjusted_year_month,
+
+            starts_mp,
+            starts_mp_month,
+            starts_mp_quarter,
+            starts_mp_year,
+
+            ends_mp,
+            ends_mp_month,
+            ends_mp_quarter,
+            ends_mp_year,
+
+            DATE_FORMAT(mm.current_month, '%Y-%m-01') AS revenue_date,
+            DATE_FORMAT(mm.current_month, '%m') AS revenue_month_date,
+            QUARTER(DATE_FORMAT(mm.current_month, '%Y-%m-01')) AS revenue_quarter_date,
+            DATE_FORMAT(mm.current_month, '%Y') AS revenue_year_date,
+
+            DATE_FORMAT(mm.current_month, '%Y-%m') AS revenue_year_month,
+
+        CASE 
+            WHEN DATE_FORMAT(mm.current_month, '%Y-%m-01') = DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN 1 
+            ELSE 0 
+        END AS is_current_month,
 
             mm.month_index + 1 AS recursion_month_index,  -- This shows the month used in recursion
-            mc.total_months,
-            mm.total_months_recursive,
+
+            mc.months_mp_allocation_recursive,
+            mm.months_mp_allocated_custom,
+            
+            -- NOTE: Removed b/c produces too much data
+            -- is_duplicate_previous_period,
+            -- is_overlaps_previous_mp,
+            -- is_stacked_previous_mp,
+            -- days_between_previous_end_and_start,
+            -- is_sales_revenue_zero,
+            -- is_bulk,
+            -- is_youth_premier,
+            -- is_lifetime,
+            -- has_created_at_gt_purchased_on,
 
             mm.sales_units, 
-            ROUND(mm.sales_units / mc.total_months, 4) AS monthly_sales_units,
+            ROUND(mm.sales_units / mc.months_mp_allocation_recursive, 4) AS monthly_sales_units,
             mm.sales_revenue,
-            ROUND(mm.sales_revenue / mc.total_months, 2) AS monthly_revenue,
+            ROUND(mm.sales_revenue / mc.months_mp_allocation_recursive, 2) AS monthly_revenue,
 
             -- CREATED AT DATES
             -- CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'America/Denver') AS created_at_mtn,
             -- UTC_TIMESTAMP() AS created_at_utc
 
-            -- NODE VARIABLES
+            -- NOTE: NODE VARIABLES
             '${created_at_mtn}' AS created_at_mtn, -- TODO:
             '${created_at_utc}' AS created_at_utc -- TODO:
 
@@ -128,13 +219,13 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
             SELECT
                 id_profiles,
                 id_membership_periods_sa,
-                COUNT(*) AS total_months
+                COUNT(*) AS months_mp_allocation_recursive
             FROM membership_months
             GROUP BY id_profiles, id_membership_periods_sa
         ) mc
         ON mm.id_profiles = mc.id_profiles
         AND mm.id_membership_periods_sa = mc.id_membership_periods_sa
-        ORDER BY mm.id_profiles, mm.id_membership_periods_sa, revenue_month
+        ORDER BY mm.id_profiles, mm.id_membership_periods_sa, revenue_year_date
         ;
     `;
 }

@@ -38,7 +38,7 @@ const rev_recognition_allocation_allocation_schema = [
     fields: []
   },
 
-  // Created & Purchase Dates
+  // Created At
   {
     name: "created_at_mp",
     mode: "NULLABLE",
@@ -47,17 +47,69 @@ const rev_recognition_allocation_allocation_schema = [
     fields: []
   },
   {
-    name: "created_month",
+    name: "created_at_date_mp",
+    mode: "NULLABLE",
+    type: "DATE",
+    description: "Membership period created at date",
+    fields: []
+  },
+  {
+    name: "created_at_mp_month",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Month of created_at_mp",
+    fields: []
+  },
+  {
+    name: "created_at_mp_quarter",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Quarter of created_at_mp",
+    fields: []
+  },
+  {
+    name: "created_at_mp_year",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Year of created_at_mp",
+    fields: []
+  },
+
+  {
+    name: "created_year_month",
     mode: "NULLABLE",
     type: "STRING",
     description: "Month portion (YYYY-MM) of created_at_mp",
     fields: []
   },
+
+  // Purchase Dates
   {
     name: "purchased_on_date_adjusted_mp",
     mode: "NULLABLE",
     type: "DATE",
-    description: "Adjusted purchase date of membership",
+    description: "Adjusted purchase date",
+    fields: []
+  },
+  {
+    name: "purchased_on_date_adjusted_mp_month",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Month of adjusted purchase date",
+    fields: []
+  },
+  {
+    name: "purchased_on_date_adjusted_mp_quarter",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Quarter of adjusted purchase date",
+    fields: []
+  },
+  {
+    name: "purchased_on_date_adjusted_mp_year",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Year of adjusted purchase date",
     fields: []
   },
   {
@@ -67,29 +119,111 @@ const rev_recognition_allocation_allocation_schema = [
     description: "Month portion (YYYY-MM) of adjusted purchase date",
     fields: []
   },
+  
 
-  // Membership Dates
+  // Membership Start & End
   {
     name: "starts_mp",
     mode: "NULLABLE",
     type: "DATE",
-    description: "Membership start date",
+    description: "Membership period start date",
+    fields: []
+  },
+  {
+    name: "starts_mp_month",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Start month of membership period",
+    fields: []
+  },
+  {
+    name: "starts_mp_quarter",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Start quarter of membership period",
+    fields: []
+  },
+  {
+    name: "starts_mp_year",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Start year of membership period",
     fields: []
   },
   {
     name: "ends_mp",
     mode: "NULLABLE",
     type: "DATE",
-    description: "Membership end date",
+    description: "Membership period end date",
+    fields: []
+  },
+  {
+    name: "ends_mp_month",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "End month of membership period",
+    fields: []
+  },
+  {
+    name: "ends_mp_quarter",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "End quarter of membership period",
+    fields: []
+  },
+  {
+    name: "ends_mp_year",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "End year of membership period",
     fields: []
   },
 
-  // Revenue Recognition Month
+  // revenue month
+  ,
   {
-    name: "revenue_month",
+    name: "revenue_date",
+    mode: "NULLABLE",
+    type: "DATE",
+    description: "Membership period revenue month",
+    fields: []
+  },
+  {
+    name: "revenue_month_date",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Month of revenue month",
+    fields: []
+  },
+  {
+    name: "revenue_quarte_date",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Quarter of revenue month",
+    fields: []
+  },
+  {
+    name: "revenue_year_date",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Year of revenue month",
+    fields: []
+  },
+
+  {
+    name: "revenue_year_month",
     mode: "NULLABLE",
     type: "STRING",
-    description: "Month revenue is recognized (YYYY-MM)",
+    description: "Month portion (YYYY-MM) of revenue month",
+    fields: []
+  },
+
+  // Is current month
+  {
+    name: "is_current_month",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Is current month boolean",
     fields: []
   },
 
@@ -102,19 +236,85 @@ const rev_recognition_allocation_allocation_schema = [
     fields: []
   },
   {
-    name: "total_months",
+    name: "months_mp_allocation_recursive",
     mode: "NULLABLE",
     type: "INTEGER",
-    description: "Total months by standard logic",
+    description: "Total months basedon recursive",
     fields: []
   },
   {
-    name: "total_months_recursive",
+    name: "months_mp_allocated_custom",
     mode: "NULLABLE",
     type: "INTEGER",
-    description: "Total months by recursive logic (target_months)",
+    description: "Total months based on custom rules",
     fields: []
   },
+  
+  // NOTE: Removed b/c produces too much data
+  // Flags
+  // {
+  //   name: "is_duplicate_previous_period",
+  //   mode: "NULLABLE",
+  //   type: "INTEGER",
+  //   description: "1 if current period equals previous period",
+  //   fields: []
+  // },
+  // {
+  //   name: "is_overlaps_previous_mp",
+  //   mode: "NULLABLE",
+  //   type: "INTEGER",
+  //   description: "1 if current period overlaps with previous",
+  //   fields: []
+  // },
+  // {
+  //   name: "is_stacked_previous_mp",
+  //   mode: "NULLABLE",
+  //   type: "INTEGER",
+  //   description: "Start date of the current membership is within 30 days before or after the end date of the previous membership",
+  //   fields: []
+  // },
+  // {
+  //   name: "days_between_previous_end_and_start",
+  //   mode: "NULLABLE",
+  //   type: "INTEGER",
+  //   description: "Days between previous period end and current start",
+  //   fields: []
+  // },
+  // {
+  //   name: "is_sales_revenue_zero",
+  //   mode: "NULLABLE",
+  //   type: "INTEGER",
+  //   description: "1 if sales revenue is zero",
+  //   fields: []
+  // },
+  // {
+  //   name: "is_bulk",
+  //   mode: "NULLABLE",
+  //   type: "INTEGER",
+  //   description: "1 if membership is part of bulk purchase",
+  //   fields: []
+  // },
+  // {
+  //   name: "is_youth_premier",
+  //   mode: "NULLABLE",
+  //   type: "INTEGER",
+  //   description: "1 if youth premier membership",
+  //   fields: []
+  // },
+  // {
+  //   name: "is_lifetime",
+  //   mode: "NULLABLE",
+  //   type: "INTEGER",
+  //   description: "1 if lifetime membership",
+  //   fields: []
+  // },
+  // {
+  //   name: "has_created_at_gt_purchased_on",
+  //   mode: "NULLABLE",
+  //   type: "INTEGER",
+  //   description: "1 if created_at date is after purchase date",
+  //   fields: []
+  // },
 
   // Financials
   {

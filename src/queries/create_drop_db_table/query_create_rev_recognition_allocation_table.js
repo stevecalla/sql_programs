@@ -9,24 +9,67 @@ const member_origin_types = `
   origin_flag_ma VARCHAR(255),
 `;
 
-const key_dates = `         
-  created_at_mp DATETIME,
-  created_month VARCHAR(50),
+const key_dates = `     
+  created_at_mp DATETIME,   
+  created_at_date_mp DATE,
+  created_at_mp_month INT,
+  created_at_mp_quarter INT,
+  created_at_mp_year INT,
+
+  created_year_month VARCHAR(50),
 
   purchased_on_date_adjusted_mp DATE,
-  purchased_on_adjusted_month VARCHAR(50),
-  
-  starts_mp DATE,
-  ends_mp DATE,
+  purchased_on_date_adjusted_mp_month INT,
+  purchased_on_date_adjusted_mp_quarter INT,
+  purchased_on_date_adjusted_mp_year INT,
 
-  revenue_month VARCHAR(50),
+  purchased_on_adjusted_year_month VARCHAR(50),
+
+  starts_mp DATE,
+  starts_mp_month INT,
+  starts_mp_quarter INT,
+  starts_mp_year INT,
+
+  ends_mp DATE,
+  ends_mp_month INT,
+  ends_mp_quarter INT,
+  ends_mp_year INT,
+
+  revenue_date DATE,
+  revenue_month_date INT,
+  revenue_quarter_date INT,
+  revenue_year_date INT,
+  
+  revenue_year_month VARCHAR(50),
+
+  is_current_month INT,
 `;
 
 const recursion_info = `
   recursion_month_index INT,  -- This shows the month used in recursion
-  total_months INT,
-  total_months_recursive INT,
+
+  months_mp_allocation_recursive INT,
+  months_mp_allocated_custom INT,
 `;
+
+// NOTE: Removed b/c produces too much data
+// const flags = `
+//     is_duplicate_previous_period INT,
+    
+//     is_overlaps_previous_mp INT,
+
+//     is_stacked_previous_mp INT,
+
+//     days_between_previous_end_and_start INT,
+    
+//     is_sales_revenue_zero INT,
+//     is_bulk INT,
+
+//     is_youth_premier INT,
+//     is_lifetime INT,
+
+//     has_created_at_gt_purchased_on INT,
+// `;
 
 const metrics = `
   sales_units INT, 
@@ -44,10 +87,11 @@ const created_at_dates = `
 const index_fields = `
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 
-  INDEX idx_profiles_periods (id_profiles, id_membership_periods_sa),
+  INDEX idx_profiles_periods (id_profiles, id_membership_periods_sa), -- id_profiles et al not primary due to intentional duplicates caused by recursion
   INDEX idx_profiles (id_profiles),
   INDEX idx_start_end_dates (starts_mp, ends_mp),
-  INDEX idx_created_purchased (created_at_mp, created_month, purchased_on_date_adjusted_mp, purchased_on_adjusted_month),
+  INDEX idx_created_purchased (created_at_date_mp, created_year_month, purchased_on_date_adjusted_mp, purchased_on_adjusted_year_month),
+  -- INDEX idx_sales_flags (is_sales_revenue_zero, is_duplicate_previous_period, is_overlaps_previous_mp, is_stacked_previous_mp),
   INDEX idx_membership_type (real_membership_types_sa, new_member_category_6_sa),
   INDEX idx_origin (origin_flag_ma),
   INDEX idx_revenue (sales_revenue)

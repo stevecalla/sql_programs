@@ -11,7 +11,6 @@ const run_step_3 = true;
 const run_step_4 = true;
 
 async function executeSteps(stepFunctions, options, datasetId, bucketName, schema, directoryName) {
-  
 
   for (let i = 0; i < stepFunctions.length; i++) {
 

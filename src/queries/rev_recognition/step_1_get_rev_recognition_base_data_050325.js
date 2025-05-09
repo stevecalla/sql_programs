@@ -48,7 +48,7 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
         YEAR(a.ends_mp) AS ends_mp_year,
 
         TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) AS months_mp_difference,
-        TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) + 2 AS months_mp_allocated_custom,
+        TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) + 1 AS months_mp_allocated_custom,
 
         -- Definition: This flag indicates that the current membership period (based on start and end dates) is exactly the same as the previous period for the same profile.
         CASE

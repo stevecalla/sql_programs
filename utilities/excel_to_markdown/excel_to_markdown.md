@@ -267,3 +267,13 @@ As of 5/2/25
 | Youth Race                          | 193    | 195   | 2           |
 | Grand Total                         | 1106   | 1120  | 14          |
 
+| Row Labels                          | v 4/15 | v 5/2 | v 5/9 | Sum of diff |
+|-------------------------------------|--------|-------|-------|-------------|
+| Adult Clinic                        | 81     | 83    | 83    | 0           |
+| Adult Race                          | 806    | 808   | 809   | 1           |
+| missing_event_type_race_designation | 0      | 5     | 9     | 4           |
+| Youth Clinic                        | 26     | 29    | 29    | 0           |
+| Youth Race                          | 193    | 195   | 195   | 0           |
+| Grand Total                         | 1,106  | 1,120 | 1,125 | 5           |
+
+
