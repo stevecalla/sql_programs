@@ -27,7 +27,7 @@ async function execute_load_big_query_recognition_allocation_data() {
         }
     ];
 
-    const directoryName = `usat_google_bigquery_data`;
+    const directoryName = `usat_bigquery_${options[0].fileName}`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting';
     const schema = rev_recognition_allocation_allocation_schema;

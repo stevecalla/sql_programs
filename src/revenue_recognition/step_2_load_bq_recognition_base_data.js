@@ -11,6 +11,10 @@ const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_m
 
 // EXECUTE LOAD BIQ QUERY
 async function execute_load_big_query_recognition_base_data() {
+
+    
+  console.log('hello 2');
+
     runTimer(`load_bigquery`);
 
     const app_name = "usat_sales";
@@ -26,11 +30,13 @@ async function execute_load_big_query_recognition_base_data() {
             // tableId: 'rev_recognition_base_data_v2',
         }
     ];
-
-    const directoryName = `usat_google_bigquery_data`;
+    
+    const directoryName = `usat_bigquery_${options[0].fileName}`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting';
     const schema = rev_recognition_base_data_schema;
+
+    console.log(options, directoryName);
     
     await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
 

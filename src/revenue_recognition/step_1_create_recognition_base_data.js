@@ -26,6 +26,7 @@ async function execute_create_recognition_base_data() {
   let TABLE_NAME = "";
   let CREATE_TABLE_QUERY = "";
   let GET_DATA_QUERY = "";
+  const is_not_test = true;
 
   // VARIABLES
   let QUERY_OPTIONS = {
@@ -34,16 +35,20 @@ async function execute_create_recognition_base_data() {
   };
   
   // Step 1: Create and populate the profile IDs table
-  BATCH_SIZE = 2000;
-  TABLE_NAME = 'rev_recognition_base_profile_ids_data';
-  CREATE_TABLE_QUERY = await query_create_rev_recognition_profile_ids_table(TABLE_NAME);
-  GET_DATA_QUERY = step_1a_query_rev_recognition_profile_ids_data;
+  // NOTE: only run is_not_test === true
+  if (is_not_test) {
+    BATCH_SIZE = 2000;
+    TABLE_NAME = 'rev_recognition_base_profile_ids_data';
+    CREATE_TABLE_QUERY = await query_create_rev_recognition_profile_ids_table(TABLE_NAME);
+    GET_DATA_QUERY = step_1a_query_rev_recognition_profile_ids_data;
 
-  // CREATE TABLE & GET / TRANSFER DATA
-  await execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS);
+    // CREATE TABLE & GET / TRANSFER DATA
+    await execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS);
+  }
 
   // Step 2: Count number of rows in rev_recognition_base_profile_ids_data
   const src = await get_src_connection();
+  TABLE_NAME = 'rev_recognition_base_profile_ids_data';
   let [[{ count }]]  = await src.promise().query(`SELECT COUNT(*) AS count FROM ${TABLE_NAME}`);
 
   console.log('*********************************');
@@ -58,6 +63,7 @@ async function execute_create_recognition_base_data() {
 
   const LIMIT_SIZE = 1000;
   let result = "";
+  count = is_not_test ? count : 1; // NOTE: only run loop once is_not_test = false
 
   for (let offset = 0; offset < count; offset += LIMIT_SIZE) {
 

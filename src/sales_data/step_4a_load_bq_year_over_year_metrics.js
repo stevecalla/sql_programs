@@ -15,7 +15,7 @@ async function execute_load_big_query_sales_year_over_year_metrics() {
         }
     ];
 
-    const directoryName = `usat_google_bigquery_data`;
+    const directoryName = `usat_bigquery_${options[0].fileName}`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting';
     const schema = members_sales_year_over_year_schema;

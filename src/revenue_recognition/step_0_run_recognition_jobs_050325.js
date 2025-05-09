@@ -71,6 +71,7 @@ async function execute_run_recognition_data_jobs() {
   const startTime = performance.now();
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
+  console.log('hello 1');
 
   const run_step_1  = true; // execute_create_recognition_base_data
   const run_step_2  = true; // load recognition_base_data to BQ

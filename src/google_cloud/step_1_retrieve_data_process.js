@@ -86,14 +86,19 @@ async function moveFilesToArchive(directory_name, directory_name_archive) {
 }
 
 // QUERIES & STREAMS DATA DIRECTLY TO CSV VS HOLDING IN MEMORY
-async function execute_retrieve_data(options) {
+// async function execute_retrieve_data(options) {
+async function execute_retrieve_data(options, datasetId, bucketName, schema, directoryName) {
+
     const startTime = performance.now();
 
     const pool = await create_local_db_connection(await local_usat_sales_db_config());
+    
+    const directory_name = directoryName ? directoryName : `usat_google_bigquery_data`;
+    const directory_name_archive = directoryName ? `${directoryName}_archive` : `usat_google_bigquery_data_archive`;
 
-    const directory_name = `usat_google_bigquery_data`;
-    const directory_name_archive = `usat_google_bigquery_data_archive`;
     const retrieval_batch_size = 100000;
+
+    console.log(options, directory_name, directory_name_archive);
 
     let offset = 0;
     let batchCounter = 0;

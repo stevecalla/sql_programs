@@ -26,8 +26,8 @@ async function execute_load_big_query_participation_profile_metrics() {
             // tableId: "participation_profile_data_v2",
         }
     ];
-
-    const directoryName = `usat_google_bigquery_data`;
+    
+    const directoryName = `usat_bigquery_${options[0].fileName}`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting';
     const schema = participation_profile_schema;

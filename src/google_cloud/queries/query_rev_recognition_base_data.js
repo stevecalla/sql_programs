@@ -77,6 +77,7 @@ async function query_rev_recognition_base_data(batch_size = 10, offset = 0) {
         WHERE 1 = 1
         ORDER BY id_profiles, starts_mp
         LIMIT ${batch_size} OFFSET ${offset}
+        -- LIMIT 1 OFFSET 0
         ;
     `;
 }
