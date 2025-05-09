@@ -22,10 +22,10 @@ const addresses_table = `
     country_code_addresses VARCHAR(255),
 `;
 
-const events_table = ` -- todo:
+const events_table = `
   -- EVENTS TABLE
   id_events INT,
-  id_sanctioning_events INT, -- todo:                   
+  id_sanctioning_events INT,                  
   event_type_id_events INT,                     
   name_events VARCHAR(255),                      
 
@@ -56,7 +56,7 @@ const events_table = ` -- todo:
   last_season_event_id INT,                
 `;
 
-const membership_applications_table = ` -- todo:
+const membership_applications_table = `
   -- MEMBERSHIP APPLICATIONS TABLE
   address_ma TEXT,
   application_type_ma VARCHAR(50),
@@ -64,7 +64,7 @@ const membership_applications_table = ` -- todo:
   city_ma VARCHAR(100),
   confirmation_code_ma VARCHAR(100),
   country_ma VARCHAR(100),
-  created_at_ma DATETIME, -- todo:
+  created_at_ma DATETIME,
   date_of_birth_ma DATE,
   deleted_at_ma DATETIME,
   distance_type_id_ma VARCHAR(255),
@@ -176,20 +176,20 @@ const profiles_table = `
   primary_address_id_profiles INT,
 `;
 
-const orders_products_table = ` -- todo:
+const orders_products_table = `
     -- ORDERS PRODUCTS TABLE
-    order_id_orders_products INT, -- todo:
+    order_id_orders_products INT,
 `;
 
-const registration_audit_table = ` -- todo:
+const registration_audit_table = `
   -- REGISTRATION AUDIT
   id_registration_audit INT,
   date_of_birth_registration_audit DATE,
 `;
 
-const registration_companies = ` -- todo:
+const registration_companies = `
     -- REGISTRATION COMPANY TABLE
-    name_registration_companies VARCHAR(255), -- todo:
+    name_registration_companies VARCHAR(255),
 `;
 
 const users_table = `
