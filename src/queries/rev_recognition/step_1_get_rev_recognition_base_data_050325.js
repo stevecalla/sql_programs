@@ -50,22 +50,27 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
         TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) AS months_mp_difference,
         TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) + 1 AS months_mp_allocated_custom,
 
-        -- Definition: This flag indicates that the current membership period (based on start and end dates) is exactly the same as the previous period for the same profile.
+        -- Definition: This flag indicates that the current membership period (based on start and end dates) is exactly the same as the previous or the next period for the same profile.
         CASE
-            WHEN a.starts_mp = LAG(a.starts_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp) 
-              AND a.ends_mp = LAG(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp)
+            WHEN (starts_mp = LAG(starts_mp) OVER (PARTITION BY id_profiles ORDER BY starts_mp)
+                  AND ends_mp = LAG(ends_mp) OVER (PARTITION BY id_profiles ORDER BY starts_mp))
+              OR
+                (starts_mp = LEAD(starts_mp) OVER (PARTITION BY id_profiles ORDER BY starts_mp)
+                  AND ends_mp = LEAD(ends_mp) OVER (PARTITION BY id_profiles ORDER BY starts_mp))
             THEN 1 ELSE 0
         END AS is_duplicate_previous_period,
 
-        -- Definition: This flag indicates that the start date of the current membership period is on or before the end date of the previous period for the same profile.
+        -- Definition: This flag indicates that the start date of the current membership period is on or before the end date of the previous or the next period for the same profile.
         CASE
             WHEN a.starts_mp <= LAG(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp)
+              OR a.starts_mp <= LEAD(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp)
             THEN 1 ELSE 0
         END AS is_overlaps_previous_mp,
     
-        -- Definition: Stacked membership is one where the start date of the current membership is within 30 days before or after the end date of the previous membership.
+        -- Definition: Stacked membership is one where the start date of the current membership is within 30 days before or after the end date of the previous or the next membership.
         CASE
             WHEN ABS(DATEDIFF(a.starts_mp, LAG(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp))) <= 30
+              OR ABS(DATEDIFF(a.starts_mp, LEAD(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp))) <= 30
             THEN 1 ELSE 0
         END AS is_stacked_previous_mp,
 
