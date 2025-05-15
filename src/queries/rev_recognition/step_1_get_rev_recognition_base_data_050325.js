@@ -84,6 +84,14 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
         CASE WHEN a.new_member_category_6_sa LIKE "%Youth Premier%" THEN 1 ELSE 0 END AS is_youth_premier,
         CASE WHEN a.new_member_category_6_sa = 'Lifetime' THEN 1 ELSE 0 END AS is_lifetime,
 
+        a.upgraded_from_id_mp,
+        b.upgraded_to_id_mp,
+        CASE 
+            WHEN a.upgraded_from_id_mp IS NOT NULL THEN 1 
+            WHEN b.upgraded_to_id_mp IS NOT NULL THEN 1 
+            ELSE 0 
+        END AS has_upgrade_from_or_to_path,
+
         CASE 
             WHEN YEAR(a.created_at_mp) > YEAR(a.purchased_on_date_mp)
               OR (YEAR(a.created_at_mp) = YEAR(a.purchased_on_date_mp)
@@ -100,19 +108,25 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
 
     FROM all_membership_sales_data_2015_left a
       -- INNER JOIN rev_recognition_base_profile_ids_data p ON a.id_profiles = p.id_profiles
-      
+
+      LEFT JOIN rev_recognition_base_upgraded_from_ids_data b ON a.id_membership_periods_sa = b.upgraded_from_id_mp
+
+      -- Optional: filter to only the batch you're processing
       INNER JOIN (
         SELECT 
           id_profiles
         FROM rev_recognition_base_profile_ids_data
+        WHERE 1 = 1
+          -- AND id_profiles IN (2599832, 2737677) -- upgraded from / to examples
         ORDER BY id_profiles
-
+        
         LIMIT ${limit_size} OFFSET ${offset_size}
         -- LIMIT 100000 OFFSET 0
         
       ) p ON a.id_profiles = p.id_profiles
 
-    ORDER BY a.id_profiles, a.starts_mp;
+    ORDER BY a.id_profiles, a.starts_mp
+    ;
   `;
 }
   

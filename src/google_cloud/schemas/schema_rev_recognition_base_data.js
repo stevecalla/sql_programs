@@ -300,6 +300,27 @@ const rev_recognition_base_data_schema = [
     fields: []
   },
   {
+    name: "upgraded_from_id_mp",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Id of the membership upgraded from",
+    fields: []
+  },
+  {
+    name: "upgraded_to_id_mp",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Id of the membership upgraded to",
+    fields: []
+  },
+  {
+    name: "has_upgrade_from_or_to_path",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Has eithre an upgrade from or upgrade to id",
+    fields: []
+  },
+  {
     name: "has_created_at_gt_purchased_on",
     mode: "NULLABLE",
     type: "INTEGER",

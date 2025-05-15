@@ -289,6 +289,7 @@ const orders_products_table = ` -- todo:
 const registration_audit_table = ` -- todo:
     -- REGISTRATION AUDIT
     registration_audit.id AS id_registration_audit,
+    registration_audit.confirmation_number AS confirmation_number_registration_audit,
     registration_audit.date_of_birth AS date_of_birth_registration_audit,
 `;
 

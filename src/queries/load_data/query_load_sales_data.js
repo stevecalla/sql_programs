@@ -184,6 +184,7 @@ const orders_products_table = `
 const registration_audit_table = `
     -- REGISTRATION AUDIT
     id_registration_audit,
+    confirmation_number_registration_audit,
     @date_of_birth_registration_audit, 
 `;
 

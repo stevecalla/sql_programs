@@ -184,6 +184,7 @@ const orders_products_table = `
 const registration_audit_table = `
   -- REGISTRATION AUDIT
   id_registration_audit INT,
+  confirmation_number_registration_audit VARCHAR(255),
   date_of_birth_registration_audit DATE,
 `;
 
@@ -211,6 +212,7 @@ const index_fields = `
   INDEX idx_id_events (id_events),
   INDEX idx_name_events (name_events),
   INDEX idx_name_events_starts_events (name_events, starts_events),
+  INDEX idx_upgrade_chain (upgraded_from_id_mp, id_membership_periods_sa),
   
   INDEX idx_real_membership_types (real_membership_types_sa),
   INDEX idx_new_member_category_6 (new_member_category_6_sa),
