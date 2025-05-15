@@ -132,7 +132,7 @@ function step_8_sales_key_stats_2015() {
                     ELSE 'other'
                 END AS member_upgrade_downgrade_category,
 
-                                CASE -- todo: revised as of 4/2/25
+                CASE -- todo: revised as of 4/2/25
                     -- new first year member
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
@@ -298,6 +298,7 @@ function step_8_sales_key_stats_2015() {
                 am.created_at_ma,
                 am.order_id_orders_products,
                 am.id_registration_audit,
+                am.confirmation_number_registration_audit, -- todo: added 5/14/25
                 am.name_registration_companies,
 
                 -- key stats

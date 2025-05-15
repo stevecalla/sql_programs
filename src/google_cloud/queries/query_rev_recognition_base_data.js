@@ -62,8 +62,12 @@ async function query_rev_recognition_base_data(batch_size = 10, offset = 0) {
             
             is_youth_premier,
             is_lifetime,
+     
+            upgraded_from_id_mp,
+            upgraded_to_id_mp,
+            has_upgrade_from_or_to_path,
 
-             has_created_at_gt_purchased_on,
+            has_created_at_gt_purchased_on,
 
             actual_membership_fee_6_rule_sa,
             sales_revenue,

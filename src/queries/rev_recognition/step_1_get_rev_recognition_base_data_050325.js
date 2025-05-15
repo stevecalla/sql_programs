@@ -50,22 +50,27 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
         TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) AS months_mp_difference,
         TIMESTAMPDIFF(MONTH, a.starts_mp, a.ends_mp) + 1 AS months_mp_allocated_custom,
 
-        -- Definition: This flag indicates that the current membership period (based on start and end dates) is exactly the same as the previous period for the same profile.
+        -- Definition: This flag indicates that the current membership period (based on start and end dates) is exactly the same as the previous or the next period for the same profile.
         CASE
-            WHEN a.starts_mp = LAG(a.starts_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp) 
-              AND a.ends_mp = LAG(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp)
+            WHEN (starts_mp = LAG(starts_mp) OVER (PARTITION BY id_profiles ORDER BY starts_mp)
+                  AND ends_mp = LAG(ends_mp) OVER (PARTITION BY id_profiles ORDER BY starts_mp))
+              OR
+                (starts_mp = LEAD(starts_mp) OVER (PARTITION BY id_profiles ORDER BY starts_mp)
+                  AND ends_mp = LEAD(ends_mp) OVER (PARTITION BY id_profiles ORDER BY starts_mp))
             THEN 1 ELSE 0
         END AS is_duplicate_previous_period,
 
-        -- Definition: This flag indicates that the start date of the current membership period is on or before the end date of the previous period for the same profile.
+        -- Definition: This flag indicates that the start date of the current membership period is on or before the end date of the previous or the next period for the same profile.
         CASE
             WHEN a.starts_mp <= LAG(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp)
+              OR a.starts_mp <= LEAD(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp)
             THEN 1 ELSE 0
         END AS is_overlaps_previous_mp,
     
-        -- Definition: Stacked membership is one where the start date of the current membership is within 30 days before or after the end date of the previous membership.
+        -- Definition: Stacked membership is one where the start date of the current membership is within 30 days before or after the end date of the previous or the next membership.
         CASE
             WHEN ABS(DATEDIFF(a.starts_mp, LAG(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp))) <= 30
+              OR ABS(DATEDIFF(a.starts_mp, LEAD(a.ends_mp) OVER (PARTITION BY a.id_profiles ORDER BY a.starts_mp))) <= 30
             THEN 1 ELSE 0
         END AS is_stacked_previous_mp,
 
@@ -78,6 +83,14 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
         CASE WHEN a.origin_flag_ma = "ADMIN_BULK_UPLOADER" THEN 1 ELSE 0 END AS is_bulk,
         CASE WHEN a.new_member_category_6_sa LIKE "%Youth Premier%" THEN 1 ELSE 0 END AS is_youth_premier,
         CASE WHEN a.new_member_category_6_sa = 'Lifetime' THEN 1 ELSE 0 END AS is_lifetime,
+
+        a.upgraded_from_id_mp,
+        b.upgraded_to_id_mp,
+        CASE 
+            WHEN a.upgraded_from_id_mp IS NOT NULL THEN 1 
+            WHEN b.upgraded_to_id_mp IS NOT NULL THEN 1 
+            ELSE 0 
+        END AS has_upgrade_from_or_to_path,
 
         CASE 
             WHEN YEAR(a.created_at_mp) > YEAR(a.purchased_on_date_mp)
@@ -95,19 +108,25 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
 
     FROM all_membership_sales_data_2015_left a
       -- INNER JOIN rev_recognition_base_profile_ids_data p ON a.id_profiles = p.id_profiles
-      
+
+      LEFT JOIN rev_recognition_base_upgraded_from_ids_data b ON a.id_membership_periods_sa = b.upgraded_from_id_mp
+
+      -- Optional: filter to only the batch you're processing
       INNER JOIN (
         SELECT 
           id_profiles
         FROM rev_recognition_base_profile_ids_data
+        WHERE 1 = 1
+          -- AND id_profiles IN (2599832, 2737677) -- upgraded from / to examples
         ORDER BY id_profiles
-
+        
         LIMIT ${limit_size} OFFSET ${offset_size}
         -- LIMIT 100000 OFFSET 0
         
       ) p ON a.id_profiles = p.id_profiles
 
-    ORDER BY a.id_profiles, a.starts_mp;
+    ORDER BY a.id_profiles, a.starts_mp
+    ;
   `;
 }
   

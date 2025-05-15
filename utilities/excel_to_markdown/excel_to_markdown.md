@@ -276,4 +276,16 @@ As of 5/2/25
 | Youth Race                          | 193    | 195   | 195   | 0           |
 | Grand Total                         | 1,106  | 1,120 | 1,125 | 5           |
 
+| Type                | 2024  | 2025  | diff |
+|---------------------|-------|-------|------|
+| Adult Race          | 825   | 809   | -16  |
+| Adult Clinic        | 90    | 83    | -7   |
+| Youth Race          | 210   | 195   | -15  |
+| Youth Clinic        | 33    | 29    | -4   |
+| No Race Designation | 0     | 9     | 9    |
+| Total               | 1,158 | 1,125 | -33  |
+
+
+
+
 

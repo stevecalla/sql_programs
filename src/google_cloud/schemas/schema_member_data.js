@@ -694,6 +694,13 @@ const members_schema = [
         "fields": []
     },
     {
+        "name": "confirmation_number_registration_audit",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
         "name": "name_registration_companies",
         "mode": "NULLABLE",
         "type": "STRING",

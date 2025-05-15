@@ -146,10 +146,11 @@ async function query_member_data(batch_size = 10, offset = 0) {
             region_name_events,
             region_abbr_events,
 
-            -- OTHER -- todo:
+            -- OTHER --
             DATE_FORMAT(created_at_ma, '%Y-%m-%d %H:%i:%s') AS created_at_ma,
             order_id_orders_products,
             id_registration_audit,
+            confirmation_number_registration_audit,
             name_registration_companies,
 
             DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn, -- date '2024-02-12'        

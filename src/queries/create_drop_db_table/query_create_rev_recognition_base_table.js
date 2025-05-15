@@ -65,6 +65,10 @@ const flags = `
   is_youth_premier INT,
   is_lifetime INT,
 
+  upgraded_from_id_mp INT,
+  upgraded_to_id_mp INT,
+  has_upgrade_from_or_to_path INT,
+
   has_created_at_gt_purchased_on INT,
 `;
 
