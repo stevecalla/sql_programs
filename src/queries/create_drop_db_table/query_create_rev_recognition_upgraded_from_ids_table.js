@@ -1,4 +1,5 @@
 const upgrade_from_ids = `
+  id_profiles INT,
   id_membership_periods_sa INT,
   upgraded_from_id_mp INT, 
   upgraded_to_id_mp INT,

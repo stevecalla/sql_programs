@@ -1,6 +1,7 @@
 function step_1b_query_rev_recognition_upgraded_from_ids_data(created_at_mtn, created_at_utc, QUERY_OPTIONS) {
     return `
         SELECT DISTINCT 
+            id_profiles,
             id_membership_periods_sa,
             upgraded_from_id_mp,
             id_membership_periods_sa AS upgraded_to_id_mp,
@@ -12,7 +13,13 @@ function step_1b_query_rev_recognition_upgraded_from_ids_data(created_at_mtn, cr
         FROM all_membership_sales_data_2015_left
         WHERE 1 = 1
           AND ends_mp >= '${QUERY_OPTIONS.ends_mp}'
-          AND id_membership_periods_sa != upgraded_from_id_mp -- excludes 4486005 which appears to be an error
+          -- NOTE: excludes 4486005 which appears to be an error
+          AND id_membership_periods_sa != upgraded_from_id_mp 
+          -- NOTE: excludes these combinations b/c the upgrade_from_id was included incorrectly for these records (a ticket was submitted to DS 5/15/25 to correct)
+          AND (id_profiles, id_membership_periods_sa) NOT IN (
+            (2701138, 4767827),
+            (2738933, 4631539)
+          )
           
         -- TESTING EXAMPLES
         -- AND ends_mp = '${QUERY_OPTIONS.ends_mp}'

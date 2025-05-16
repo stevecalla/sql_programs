@@ -43,6 +43,7 @@ SELECT
     e.updated_at,
     e.name,
     e.deleted_at,
+    e.status,
     r.designation,    
     -- EVENT TYPES
     e.event_type_id AS event_type_id_events,
