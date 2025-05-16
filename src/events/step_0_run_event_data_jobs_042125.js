@@ -119,7 +119,7 @@ async function execute_run_event_data_jobs() {
   return elapsedTime;
 }
 
-// execute_run_event_data_jobs();
+execute_run_event_data_jobs();
 
 module.exports = {
   execute_run_event_data_jobs,

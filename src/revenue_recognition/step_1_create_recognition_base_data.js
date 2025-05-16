@@ -37,29 +37,29 @@ async function execute_create_recognition_base_data() {
     is_create_table: true,
   };
   
-  // // Step 1: Create and populate the profile IDs table
-  // // NOTE: only run is_not_test === true
-  // if (is_not_test) {
-  //   BATCH_SIZE = 2000;
-  //   TABLE_NAME = 'rev_recognition_base_profile_ids_data';
-  //   CREATE_TABLE_QUERY = await query_create_rev_recognition_profile_ids_table(TABLE_NAME);
-  //   GET_DATA_QUERY = step_1a_query_rev_recognition_profile_ids_data;
+  // Step 1: Create and populate the profile IDs table
+  // NOTE: only run is_not_test === true
+  if (is_not_test) {
+    BATCH_SIZE = 2000;
+    TABLE_NAME = 'rev_recognition_base_profile_ids_data';
+    CREATE_TABLE_QUERY = await query_create_rev_recognition_profile_ids_table(TABLE_NAME);
+    GET_DATA_QUERY = step_1a_query_rev_recognition_profile_ids_data;
 
-  //   // CREATE TABLE & GET / TRANSFER DATA
-  //   await execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS);
-  // }
+    // CREATE TABLE & GET / TRANSFER DATA
+    await execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS);
+  }
 
-  // // Step 1b: Create and populate the upgraded from table
-  // // NOTE: only run is_not_test === true
-  // if (is_not_test) {
-  //   BATCH_SIZE = 2000;
-  //   TABLE_NAME = 'rev_recognition_base_upgraded_from_ids_data';
-  //   CREATE_TABLE_QUERY = await query_create_rev_recognition_upgraded_from_ids_table(TABLE_NAME);
-  //   GET_DATA_QUERY = step_1b_query_rev_recognition_upgraded_from_ids_data;
+  // Step 1b: Create and populate the upgraded from table
+  // NOTE: only run is_not_test === true
+  if (is_not_test) {
+    BATCH_SIZE = 2000;
+    TABLE_NAME = 'rev_recognition_base_upgraded_from_ids_data';
+    CREATE_TABLE_QUERY = await query_create_rev_recognition_upgraded_from_ids_table(TABLE_NAME);
+    GET_DATA_QUERY = step_1b_query_rev_recognition_upgraded_from_ids_data;
 
-  //   // CREATE TABLE & GET / TRANSFER DATA
-  //   await execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS);
-  // }
+    // CREATE TABLE & GET / TRANSFER DATA
+    await execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS);
+  }
 
   // Step 2: Count number of rows in rev_recognition_base_profile_ids_data
   const src = await get_src_connection();

@@ -285,6 +285,60 @@ As of 5/2/25
 | No Race Designation | 0     | 9     | 9    |
 | Total               | 1,158 | 1,125 | -33  |
 
+| # combination_type | num_combinations |
+|--------------------|------------------|
+| unique             | 2,137,819        |
+| duplicate          | 163,071          |
+
+| # combination_count_bin | num_combinations |
+|-------------------------|------------------|
+| 1) 1                    | 2,137,819        |
+| 2) 2                    | 150,200          |
+| 3) 3-10                 | 12,798           |
+| 4) 11-20                | 6                |
+| 5) 21+                  | 67               |
+
+
+| Row Labels                          | v 4/15 | v 5/2 | v 5/9 | v 5/15 (draft) | Sum of diff |
+|-------------------------------------|--------|-------|-------|----------------|-------------|
+| Adult Clinic                        | 81     | 83    | 83    | 83             | 0           |
+| Adult Race                          | 806    | 808   | 809   | 812            | 3           |
+| missing_event_type_race_designation | 0      | 5     | 9     | 20             | 11          |
+| Youth Clinic                        | 26     | 29    | 29    | 29             | 0           |
+| Youth Race                          | 193    | 195   | 195   | 193            | -2          |
+| Grand Total                         | 1,106  | 1,120 | 1,125 | 1,137          | 12          |
+
+
+
+
+
+| # query_name                  | query_criteria                               | confidence_level                           | FORMAT(COUNT(*), 0) |
+|-------------------------------|----------------------------------------------|--------------------------------------------|---------------------|
+| chatgpt_dedupe_enhanced_query | chatgpt_dedupe_first_last_name_dob_phone_zip | duplicate_risk_2_duplicates                | 63                  |
+| chatgpt_dedupe_enhanced_query | chatgpt_dedupe_first_last_name_dob_phone_zip | moderate_duplicate_risk_3_to_10_duplicates | 2                   |
+| chatgpt_dedupe_enhanced_query | chatgpt_dedupe_first_last_name_dob_phone_zip | needs_review_missing_field(s)              | 55,860              |
+| chatgpt_dedupe_enhanced_query | chatgpt_dedupe_first_last_name_dob_phone_zip |                                            | 55,925              |
+
+| # query_name                   | query_criteria                            | confidence_level                           | FORMAT(COUNT(*), 0) |
+|--------------------------------|-------------------------------------------|--------------------------------------------|---------------------|
+| calla_#1_dedupe_enhanced_query | calla_#1_dedupe_first_last_name_dob_email | duplicate_risk_2_duplicates                | 757                 |
+| calla_#1_dedupe_enhanced_query | calla_#1_dedupe_first_last_name_dob_email | elevated_duplicate_risk_11_to_20_dupicates | 1                   |
+| calla_#1_dedupe_enhanced_query | calla_#1_dedupe_first_last_name_dob_email | high_duplicate_risk_21_or_more_duplicates  | 37                  |
+| calla_#1_dedupe_enhanced_query | calla_#1_dedupe_first_last_name_dob_email | needs_review_missing_field(s)              | 8,158               |
+| calla_#1_dedupe_enhanced_query | calla_#1_dedupe_first_last_name_dob_email |                                            | 8,953               |
+
+| # query_name          | query_criteria                        | confidence_level                           | FORMAT(COUNT(*), 0) |
+|-----------------------|---------------------------------------|--------------------------------------------|---------------------|
+| dedupe_enhanced_query | calla_#2_dedupe_first_last_name_email | duplicate_risk_2_duplicates                | 6,331               |
+| dedupe_enhanced_query | calla_#2_dedupe_first_last_name_email | elevated_duplicate_risk_11_to_20_dupicates | 1                   |
+| dedupe_enhanced_query | calla_#2_dedupe_first_last_name_email | high_duplicate_risk_21_or_more_duplicates  | 37                  |
+| dedupe_enhanced_query | calla_#2_dedupe_first_last_name_email | moderate_duplicate_risk_3_to_10_duplicates | 89                  |
+| dedupe_enhanced_query | calla_#2_dedupe_first_last_name_email | needs_review_missing_field(s)              | 66,663              |
+| dedupe_enhanced_query | calla_#2_dedupe_first_last_name_email |                                            | 73,121              |
+
+
+
+
 
 
 
