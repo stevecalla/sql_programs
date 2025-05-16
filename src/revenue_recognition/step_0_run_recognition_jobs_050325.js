@@ -74,10 +74,10 @@ async function execute_run_recognition_data_jobs() {
   console.log('hello 1');
 
   const run_step_1  = true; // execute_create_recognition_base_data
-  const run_step_2  = false; // load recognition_base_data to BQ
+  const run_step_2  = true; // load recognition_base_data to BQ
 
-  const run_step_3  = false; // execute_load_big_query_recognition_base_data
-  const run_step_4  = false; // load recognition_allocation_data to BQ
+  const run_step_3  = true; // execute_load_big_query_recognition_base_data
+  const run_step_4  = true; // load recognition_allocation_data to BQ
 
   try {
     const stepFunctions = [
