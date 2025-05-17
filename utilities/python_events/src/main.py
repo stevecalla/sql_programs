@@ -16,6 +16,14 @@ from chart_output_png_pdf import (
 from excel_export import export_to_excel
 from match_analysis import perform_year_over_year_analysis
 
+import sys
+import os
+
+# Ensure emoji/unicode output works on Windows
+if os.name == 'nt':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 # CREATE PNG USING POSITIONAL PARAMETER
 def create_chart_png(grouped_df, qa_summary, summary_2024, summary_2025,
      pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered):
@@ -211,5 +219,49 @@ def main():
                     events_2025, events_2024, draft_2024_events,
                     timing_shift_output, shifted_into_month_output, unmatched_2024, pivot_value_all, pivot_value_filtered)
 
+def is_venv():
+    return sys.prefix != sys.base_prefix
+
+def test():
+    """Lightweight test to verify that the script loads data and initializes key steps."""
+    print("🔍 Running lightweight test...")
+
+    print("🐍 Python executable:", sys.executable)
+    print("📦 Site-packages location:", next(p for p in sys.path if 'site-packages' in p))
+    print("🧪 VENV active:", is_venv())
+
+    if not is_venv():
+        print("❌ ERROR: You are not using the virtual environment!")
+        print(f"   Python used: {sys.executable}")
+        sys.exit(1)
+
+    try:
+        # Load and display basic info from data
+        df = load_data()
+        print(f"✅ Data loaded: {df.shape[0]} rows, {df.shape[1]} columns")
+
+        # Run group and clean step
+        grouped_df, *_ = group_clean_data(df)
+        print(f"✅ Grouped data: {grouped_df.shape[0]} rows")
+
+        # Try matching logic on a sample
+        sample_2025, _ = match_events_2025_vs_2024(grouped_df.head(100))
+        print(f"✅ Sample matching complete: {sample_2025.shape[0]} events")
+
+        print("🎉 Test passed successfully.")
+
+    except Exception as e:
+        print("❌ Test failed:", str(e))
+
+# NOTE: See note_test_run.txt to view how to test this file
+# NOTE: See notes_venv_setup.txt to setup venv environment
+
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--test" in sys.argv:
+        test()
+    else:
+        main()
+
+# if __name__ == "__main__":
+#     main()
