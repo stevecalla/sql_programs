@@ -18,7 +18,8 @@ function step_1b_query_rev_recognition_upgraded_from_ids_data(created_at_mtn, cr
           -- NOTE: excludes these combinations b/c the upgrade_from_id was included incorrectly for these records (a ticket was submitted to DS 5/15/25 to correct)
           AND (id_profiles, id_membership_periods_sa) NOT IN (
             (2701138, 4767827),
-            (2738933, 4631539)
+            (2738933, 4631539),
+            (2390634, 4882173) -- best guess is that 4882173 shouldn't have upgraded from; the other possibility is 5019736
           )
           
         -- TESTING EXAMPLES
