@@ -1,0 +1,16 @@
+NOTE:
+To allow this script to be tested when run directly (e.g., to validate functionality without running the full pipeline), you can add a test function that is invoked if the script is run with a --test argument.
+
+NOTE:
+python main.py           # runs normally
+python main.py --test    # passes "--test" to the Python script
+
+in python_events/src folder run 
+../venv/Scripts/python.exe main.py --test
+
+NOTE:
+node index.js           # runs normally
+node index.js --test    # passes "--test" to the Python script
+
+in python_events folder run 
+./venv/Scripts/python.exe src/main.py --test

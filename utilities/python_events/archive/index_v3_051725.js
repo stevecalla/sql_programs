@@ -1,9 +1,9 @@
 // index.js
 // Ensures we pick up the project's venv Python, add timing, and run the analysis script
 
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
-const os = require('os');
+const os   = require('os');
 const { exec } = require('child_process');
 const util = require('util');
 const exec_async = util.promisify(exec);
@@ -21,13 +21,13 @@ const default_script_path = path.join(project_root, 'src', 'main.py');
 /**
  * Runs the Python analysis script in the project venv and logs timing.
  * @param {string} [script_path=default_script_path]
- * @param {string[]} [args=[]]
  * @returns {Promise<string>} Resolves with stdout.
  */
-async function execute_run_python_event_reports(script_path = default_script_path, args = []) {
+async function execute_run_python_event_reports(script_path = default_script_path) {
   const start = Date.now();
   run_timer('get_data');
 
+  // Determine the exact python binary in the venv
   const pyBin = path.join(
     venv_dir,
     os.platform() === 'win32' ? 'python.exe' : 'python'
@@ -35,19 +35,19 @@ async function execute_run_python_event_reports(script_path = default_script_pat
 
   console.log(`Expecting Python at: ${pyBin}`);
 
+  // Fail early if the venv python doesn’t exist
   if (!fs.existsSync(pyBin)) {
     console.error(
-      `ERROR: Virtual-env Python not found at:\n  ${pyBin}\n` +
+      `ERROR: Virtual‐env Python not found at:\n  ${pyBin}\n` +
       `Please run from project root:\n  python -m venv venv`
     );
     process.exit(1);
   }
 
   try {
-    // Prepare CLI command with optional args
-    const fullCommand = `"${pyBin}" "${script_path}" ${args.join(' ')}`;
+    // Invoke the venv python explicitly
     const { stdout, stderr } = await exec_async(
-      fullCommand,
+      `"${pyBin}" "${script_path}"`,
       { env: { ...process.env, PATH: `${venv_dir}${path.delimiter}${process.env.PATH}` } }
     );
 
@@ -68,14 +68,10 @@ async function execute_run_python_event_reports(script_path = default_script_pat
   }
 }
 
-// If invoked directly, parse CLI args and run
+// If invoked directly, run immediately
 if (require.main === module) {
-  const args = process.argv.slice(2); // supports --test or other args
-  execute_run_python_event_reports(default_script_path, args).catch(() => process.exit(1));
+  execute_run_python_event_reports().catch(() => process.exit(1));
 }
-
-// NOTE: See note_test_run.txt to view how to test this file
-// NOTE: See notes_venv_setup.txt to setup venv environment
 
 // Export for use elsewhere
 module.exports = { execute_run_python_event_reports };
