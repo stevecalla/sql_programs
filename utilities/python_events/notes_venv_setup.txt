@@ -1,5 +1,16 @@
 Setup Instructions: How to create and use the virtual environment (venv) with requirements.txt
 
+ON LINUX 
+# Step 1: Create a virtual environment in the current folder
+python3 -m venv venv
+
+# Step 2: Activate the virtual environment
+source venv/bin/activate
+
+# Step 3: Install required packages inside the venv
+pip install -r requirements.txt
+
+ON WINDOWS
 1. Create a virtual environment in your project directory (run this only once):
 
    python -m venv venv
@@ -44,3 +55,4 @@ Notes:
 - You only need to create the venv once. Next time, just activate it.
 
 That’s it! You’re all set to develop using the isolated environment.
+
