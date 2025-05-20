@@ -564,13 +564,13 @@ const members_schema = [
         "fields": []
     }, 
     // could not get this field to load in BQ
-    // {
-    //     "name": "city_member",
-    //     "mode": "NULLABLE",
-    //     "type": "STRING",
-    //     "description": null,
-    //     "fields": []
-    // },          
+    {
+        "name": "city_member",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },          
     {
         "name": "postal_code_member",
         "mode": "NULLABLE",

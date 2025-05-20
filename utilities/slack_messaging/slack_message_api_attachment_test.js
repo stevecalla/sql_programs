@@ -1,16 +1,40 @@
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
-const FormData = require('form-data');
-const { WebClient } = require('@slack/web-api');
+// const fs = require('fs');
+// const path = require('path');
+// const axios = require('axios');
+// const FormData = require('form-data');
+// const { WebClient } = require('@slack/web-api');
 
-const dotenv = require('dotenv');
-dotenv.config({ path: "../../.env" });
+// const dotenv = require('dotenv');
+// dotenv.config({ path: "../../.env" });
 
-const slackToken = process.env.SLACK_BOT_TOKEN;
-const web = new WebClient(slackToken);
+// const slackToken = process.env.SLACK_BOT_TOKEN;
+// const web = new WebClient(slackToken);
 
 // async function uploadAndShareFile(filePath, channelId, messageText) {
+
+//   const fileName = path.basename(filePath);
+//   console.log(fileName, filePath);
+
+//   const result = await web.filesUploadV2({
+//     channel_id: channelId,
+//     thread_ts: '1223313423434.131321',
+//     initial_comment: messageText,
+//     file_uploads: [
+//       {
+//         file: filePath,
+//         filename: fileName,
+//       },
+//       {
+//         file: filePath,
+//         filename: fileName,
+//       },
+//     ],
+//   });
+
+//   console.log('result ', result);
+// }
+
+// async function uploadAndShareFile_v2(filePath, channelId, messageText) {
 //   try {
 //     const fileName = path.basename(filePath);
 //     const fileSize = fs.statSync(filePath).size;
@@ -73,40 +97,36 @@ const web = new WebClient(slackToken);
 //   }
 // }
 
-// // Example usage
+// // // Example usage
 // const upload_file_path = '../../utilities/python_events/src/event_output/chart_yoy_filtered_adult_race.png';
-// // const filePath = path.resolve(__dirname, 'your_file.pdf'); // Replace with your file path
+// // // const filePath = path.resolve(__dirname, 'your_file.pdf'); // Replace with your file path
 // const filePath = path.resolve(__dirname, upload_file_path); // Replace with your file path
-// // const channelId = 'C08TMBPTKEC'; // test_calla (private channel with bot /invite @membership-sales-bot)
-// const channelId = 'D07H5CCLNKB'; // steve calla channel
+
+// const channelId = 'C08TMBPTKEC'; // test_calla (private channel with bot /invite @membership-sales-bot)
+// // const channelId = 'D07H5CCLNKB'; // steve calla channel
+
 // const messageText = 'Here is the latest report 📄';
 
 // uploadAndShareFile(filePath, channelId, messageText);
 
 
-const email = "steve.calla@usatriathlon.org";
 
-async function getUserIdByEmail(email) {
-  try {
-    const result = await web.users.lookupByEmail({ email });
-    console.log("User ID:", result.user.id); // 👈 this is your user ID
-    return result.user.id;
-  } catch (error) {
-    console.error("Error fetching user ID:", error.data?.error || error.message);
-  }
-}
+// NOTE: To send a message (with a file) to your own Slack DM ("Steve Calla"), you need the user ID and the ability to open or use the direct message (IM) channel ID.
 
-getUserIdByEmail(email);
+// const email = "steve.calla@usatriathlon.org";
 
+// async function getUserIdByEmail(email) {
+//   try {
+//     const result = await web.users.lookupByEmail({ email });
+//     console.log("User ID:", result.user.id); // 👈 this is your user ID
 
-// NOTE:
-// const file_path = 'C:/Users/calla/development/usat/sql_programs/utilities/python_events/src/event_output/chart_yoy_filtered_adult_race.png';
-// const file_path = '../../utilities/python_events/src/event_output/chart_yoy_filtered_adult_race.png';
+//     return result.user.id;
+//   } catch (error) {
+//     console.error("Error fetching user ID:", error.data?.error || error.message);
+//   }
+// }
 
-// console.log('dirname ', __dirname);
-// console.log(path.resolve(__dirname, '../../output/daily_report.csv'));
-// console.log(path.resolve(__dirname, file_path));
-// console.log(process.env.SLACK_BOT_TOKEN);
+// getUserIdByEmail(email);
 
 // NOTE: Here's a small Node.js script to list your Slack channel names and their corresponding channel IDs using your bot token (SLACK_BOT_TOKEN). This will help you identify the correct channel ID to use with files.upload.
 
