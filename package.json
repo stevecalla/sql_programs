@@ -52,7 +52,7 @@
     
     "pm2_logs_events": "npx pm2 logs usat_events",
     "stop_events": "npx pm2 stop usat_events",
-    "delete_events": "npnx pm2 delete usat_events",    
+    "delete_events": "npx pm2 delete usat_events",    
     "show_events": "npx pm2 show usat_events",
     "restart_events": "npx pm2 restart usat_events"
   },
