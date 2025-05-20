@@ -123,12 +123,8 @@ async function query_member_data(batch_size = 10, offset = 0) {
             sales_units,
             sales_revenue,
             actual_membership_fee_6_rule_sa,
-    
-            -- MEMBER ADDRESSES
-                -- COULD NOT GET EITHER VERSION OF CITY MEMBER TO LOAD
-                -- TRY TO REPLACE "\" AND QUOTES? NEXT
-                -- TRIM(BOTH '"' FROM member_city_addresses) AS city_member,
-                -- member_city_addresses AS city_member,
+     
+            REPLACE(REPLACE(REPLACE(member_city_addresses, '\r', ''), '\n', ''), '"', '') AS city_member,
             member_postal_code_addresses AS postal_code_member,
             member_lng_addresses AS lng_member,
             member_lat_addresses AS lat_member,
