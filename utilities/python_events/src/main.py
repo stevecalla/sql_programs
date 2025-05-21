@@ -151,7 +151,7 @@ def create_chart_pdf(grouped_df, qa_summary, summary_2024, summary_2025,
 
 def main():
     # --- LOAD DATA ---
-    df = load_data()
+    df = load_data("usat_python_data")
 
     # --- GROUP & CLEAN DATA ---
     (grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered) = group_clean_data(df)
