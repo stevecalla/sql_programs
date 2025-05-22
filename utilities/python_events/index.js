@@ -24,6 +24,7 @@ const default_script_path = path.join(project_root, 'src', 'main.py');
  * @param {string[]} [args=[]]
  * @returns {Promise<string>} Resolves with stdout.
  */
+
 async function execute_run_python_event_reports(script_path = default_script_path, args = []) {
   const start = Date.now();
   run_timer('get_data');

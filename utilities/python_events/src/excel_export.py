@@ -1,9 +1,14 @@
 import pandas as pd
-from config import OUTPUT_FILE, MONTH_NAME
 
-def export_to_excel(df, grouped_df, qa_summary, match_summary, match_summary_2024,
+from config import OUTPUT_FILE, MONTH_NAME
+from get_data_path import get_data_path
+
+def export_to_excel(event_output_path, df, grouped_df, qa_summary, match_summary, match_summary_2024,
                     events_2025, events_2024, draft_2024_events,
                     timing_shift_output, shifted_into_month_output, unmatched_2024, pivot_value_all, pivot_value_filtered):
+
+    OUTPUT_FILE = f"{event_output_path}cleaned_grouped_event_data_with_summary.xlsx"
+
     """Export all DataFrames to an Excel file with multiple sheets and formatting."""
     with pd.ExcelWriter(OUTPUT_FILE, engine='xlsxwriter') as writer:
         # Write all sheets
@@ -49,4 +54,4 @@ def export_to_excel(df, grouped_df, qa_summary, match_summary, match_summary_202
                     worksheet.set_column(i, i, max_len, center_format)
                 else:
                     worksheet.set_column(i, i, None, center_format)
-    print(f"File saved to {OUTPUT_FILE}")
+    print(f"File saved to {event_output_path}")

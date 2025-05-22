@@ -1,6 +1,7 @@
 import platform
 import getpass
 from pathlib import Path
+import os
 import pandas as pd
 
 # --- CONFIGURE YOUR FOLDERS HERE ---
@@ -35,3 +36,17 @@ def get_data_path(subfolder: str = "usat_data") -> Path:
     return full_path
 
 # get_data_path()
+
+# # SET FOLDER NAME & CREATE PATCH
+# event_output_slack_path = get_data_path("usat_event_slack_files")
+# event_output_path = get_data_path("usat_event_files")
+
+# OUTPUT_PATH = str(event_output_slack_path) + os.sep
+
+# print(event_output_slack_path)
+# print(event_output_path)
+# print(OUTPUT_PATH)
+
+# # MAKE FOLDER IF DOESN'T EXIST
+# event_output_slack_path.mkdir(parents=True, exist_ok=True)
+# event_output_path.mkdir(parents=True, exist_ok=True)

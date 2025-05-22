@@ -338,6 +338,19 @@ As of 5/2/25
 
 
 
+year	2025		
+is_match	0		
+            
+| year        | 2025                                                            |         |                        |
+|-------------|-----------------------------------------------------------------|---------|------------------------|
+| is_match    | 0                                                               |         |                        |
+|             |                                                                 |         |                        |
+| sanction_id | Name                                                            | Status  | Count of ApplicationID |
+| 310200      | 2025 Florida Anvil Ultra Triathlon - Double World Championship  | DELETED | 1                      |
+| 311130      | 2025 Startline Coaching Off Season group training - Brooklyn NY | DRAFT   | 1                      |
+| 311531      | 2025 Florida ANVIL Ultra Triathlon                              | DELETED | 1                      |
+| 350317      | Oro Valley Triathlon and Duathlon Festival                      | PENDING | 1                      |
+| Grand Total |                                                                 |         | 4                      |
 
 
 

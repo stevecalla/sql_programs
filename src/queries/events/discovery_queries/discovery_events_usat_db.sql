@@ -1,5 +1,13 @@
 USE vapor;
 
+-- SF RECONCILIATION
+SELECT * FROM events AS e WHERE e.sanctioning_event_id = 310323; -- delete at date
+SELECT * FROM events AS e WHERE e.sanctioning_event_id = 311130; -- delete at date
+SELECT * FROM events AS e WHERE e.sanctioning_event_id IN (310323,310425,310725,310728,310769,310782,310783,310887,311146,311292,311293,311318,311319,311328,311374,311419,311420,311496,311537,311623,311637,311648,350340,350350,350554
+); -- delete at date
+
+
+-- INITIAL DISCOVERY
 SELECT * FROM events AS e WHERE e.sanctioning_event_id = '307440' LIMIT 10;
 
 SELECT * FROM events AS e WHERE e.sanctioning_event_id IN (307440, 350276) LIMIT 10;

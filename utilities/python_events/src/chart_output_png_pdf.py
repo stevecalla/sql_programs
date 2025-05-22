@@ -32,7 +32,6 @@ def save_match_score_histogram(events_2025, output_path, pdf_pages=None):
         plt.savefig(output_path)
     plt.close(fig)
 
-
 def save_bar_chart(df_summary, year, output_path, pdf_pages=None, title_prefix="Monthly Event Trends for"):
     """Save a bar chart for the event counts per month.
     
@@ -69,7 +68,6 @@ def save_bar_chart(df_summary, year, output_path, pdf_pages=None, title_prefix="
     else:
         plt.savefig(output_path)
     plt.close(fig)
-
 
 def save_yoy_comparison_chart(pivot, title, output_path, pdf_pages=None):
     """Save a Year-over-Year comparison chart using a twin axis plot.
@@ -121,7 +119,6 @@ def save_yoy_comparison_chart(pivot, title, output_path, pdf_pages=None):
     else:
         plt.savefig(output_path)
     plt.close(fig)
-
 
 def save_yoy_comparison_chart_for_value(pivot_value, value_segment, output_path, pdf_pages=None):
     """
@@ -181,7 +178,6 @@ def save_yoy_comparison_chart_for_value(pivot_value, value_segment, output_path,
         plt.savefig(output_path)
     plt.close(fig)
 
-
 def save_day_diff_histogram(april_shift, month_name, output_path, pdf_pages=None):
     """Save a histogram of day differences for events in the analysis month.
     
@@ -211,7 +207,6 @@ def save_day_diff_histogram(april_shift, month_name, output_path, pdf_pages=None
         plt.savefig(output_path)
     plt.close(fig)
     return output_path
-
 
 def save_month_shift_bar(april_shift, month_name, output_path, pdf_pages=None):
     """Save a bar chart of the month shift counts.
