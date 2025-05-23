@@ -17,7 +17,7 @@ def load_data(subfolder: str) -> pd.DataFrame:
     5) Verifies that 'RaceDate' exists.
     """
     data_dir = get_os_path(subfolder)
-    print(f"Looking in data directory: {data_dir!r}")
+    # print(f"Looking in data directory: {data_dir!r}")
 
     if not data_dir.exists():
         raise FileNotFoundError(f"No such directory: {data_dir!r}")
@@ -27,7 +27,7 @@ def load_data(subfolder: str) -> pd.DataFrame:
         p for p in data_dir.iterdir()
         if p.is_file() and p.suffix.lower() in ALL_EXTS
     ]
-    print(f"Found files: {[p.name for p in files]}")
+    # print(f"Found files: {[p.name for p in files]}")
 
     if not files:
         raise FileNotFoundError(f"No CSV/Excel files in {data_dir!r}")
@@ -35,7 +35,7 @@ def load_data(subfolder: str) -> pd.DataFrame:
     # pick the most recently modified
     files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     chosen = files[0]
-    print(f"Loading file: {chosen.name} (full path: {chosen.resolve()})")
+    # print(f"Loading file: {chosen.name} (full path: {chosen.resolve()})")
 
     # load into pandas
     if chosen.suffix.lower() in EXCEL_EXTS:
@@ -45,7 +45,7 @@ def load_data(subfolder: str) -> pd.DataFrame:
 
     # strip whitespace from column names
     df.columns = df.columns.str.strip()
-    print(f"Columns after strip: {df.columns.tolist()}")
+    # print(f"Columns after strip: {df.columns.tolist()}")
 
     # verify RaceDate exists
     if 'RaceDate' not in df.columns:

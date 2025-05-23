@@ -62,7 +62,7 @@ def perform_year_over_year_analysis(PATH_PREFIX, grouped_df, events_2025, events
         value_summary, excel_output
     )
     
-    print(f"Excel analysis saved to: {excel_output}")
+    # print(f"Excel analysis saved to: {excel_output}")
     
     # Return a summary of outputs in a dictionary
     return {
@@ -145,4 +145,4 @@ def export_analysis_to_excel(grouped_df, pivot_value, repeated_events_2025,
             worksheet = writer.sheets[sheet]
             worksheet.set_column(0, 50, 20, center_format)
             
-    print(f"Excel analysis exported to: {out_file}")
+    # print(f"Excel analysis exported to: {out_file}")

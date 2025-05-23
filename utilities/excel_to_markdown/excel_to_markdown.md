@@ -356,35 +356,43 @@ is_match	0
 
 
 Sales: As of TU5/20
+
+
+SALES
 | MTD                 | REV   | UNITS | RPU
 |---------------------|-------|-------|------
+| Goal - Abs          | $735K | 25.6K | $28.73
 | Goal                | +18%  | +1.4% | 16.8%
-| Actual - MTD TU5/20 | +26%  | + 2%  | +23%
-| Actual - MTD M5/19  | +25%  | + 6%  | +17%
-| Actual - MTD M5/12  | +23%  | + 7%  | +15%
-| Actual - MTD M5/5   | +34%  | +17%  | +15%
 
-| Goal                | $735K | 25.6K | $28.73
+| Actual - MTD        | +26%  | +  2% | +23%
 | May '25 - MTD       | $443K | 14.5K | $30.56
 | May '24 - MTD       | $355K | 14.2K | $24.59
+| abs diff            | $ 87K |   164 | $ 5.50
 
-Ranked Results:
-| MTD            | Races  | Races   | Racers  | Racers |
+|---------------------|-------|-------|------
+| Goal                | +18%  | +1.4% | 16.8%
+| Actual - YTD April  | +26%  | + 2%  | +23%
+
+
+RANKED RESULTS
+|                | Races  | Races   | Racers  | Racers |
 | MTD            | 2024   | 2025    | 2024    | 2025   |  
 |----------------|--------|---------|---------|--------| 
 | Q125           | 56     | 54      | 10.9K   | 11.0K  | 
 | April          | 64     | 48      | 23.1K   | 17.9K  | 
 | May            | 103    | 21      | 30.5K   |  3.4K  |
 
-2025 Event Type Count
-| Row Labels                          | v 4/15 | v 5/2 | v 5/9 | v 5/20 (draft) | Sum of diff |
-|-------------------------------------|--------|-------|-------|----------------|-------------|
-| Adult Clinic                        | 81     | 83    | 83    | 83             | 0           |
-| Adult Race                          | 806    | 808   | 809   | 811    (824)   | 2           |
-| missing_event_type_race_designation | 0      | 5     | 9     | 23             | 14          |
-| Youth Clinic                        | 26     | 29    | 29    | 29             | 0           |
-| Youth Race                          | 193    | 195   | 195   | 194            | -1          |
-| Grand Total                         | 1,106  | 1,120 | 1,125 | 1,140          | 15          |
+EVENTS
+| Type                | 2024  | 2025  | diff |
+|---------------------|-------|-------|------|
+| Adult Race          | 825   | 812   | -13  |
+| Adult Clinic        | 90    | 83    | -7   |
+| Youth Race          | 210   | 193   | -17  |
+| Youth Clinic        | 33    | 29    | -4   |
+| No Race Designation | 0     | 20    | 20   |
+| Total               | 1,158 | 1,137 | -21  |
+
+* Working with Sam to manually update race designation & event status
 
 
 

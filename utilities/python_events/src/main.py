@@ -114,15 +114,15 @@ def test():
     try:
         # Load and display basic info from data
         df = load_data()
-        print(f"✅ Data loaded: {df.shape[0]} rows, {df.shape[1]} columns")
+        # print(f"✅ Data loaded: {df.shape[0]} rows, {df.shape[1]} columns")
 
         # Run group and clean step
         grouped_df, *_ = group_clean_data(df)
-        print(f"✅ Grouped data: {grouped_df.shape[0]} rows")
+        # print(f"✅ Grouped data: {grouped_df.shape[0]} rows")
 
         # Try matching logic on a sample
         sample_2025, _ = match_events_2025_vs_2024(grouped_df.head(100))
-        print(f"✅ Sample matching complete: {sample_2025.shape[0]} events")
+        # print(f"✅ Sample matching complete: {sample_2025.shape[0]} events")
 
         print("🎉 Test passed successfully.")
 

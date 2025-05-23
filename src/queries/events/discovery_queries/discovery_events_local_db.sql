@@ -9,6 +9,8 @@ SELECT * FROM all_event_data_raw WHERE id_sanctioning_events = 309811;
 SELECT status_events, COUNT(status_events) FROM all_event_data_raw GROUP BY 1 WITH ROLLUP;
 SELECT COUNT(*) FROM all_event_data_raw LIMIT 10;
 
+SELECT * FROM all_event_data_raw WHERE id_sanctioning_events = 310323;
+
 
 SELECT 
 	id_sanctioning_events,

@@ -48,7 +48,7 @@ def perform_year_over_year_analysis(event_output_path, grouped_df, events_2025, 
     
     # --- (d) Analysis for Non-Repeating Events ---
     output_chart_nonrepeating = event_output_path / "nonrepeating_events_chart.png"
-    plot_nonrepeating_counts(new_events_2025, output_chart_nonrepeating, file_prefix)
+    plot_nonrepeating_counts(new_events_2025, lost_events_2024, output_chart_nonrepeating, file_prefix)
     
     # --- (e) Breakout of New vs. Repeated Events by Month ---
     new_repeat_pivot = new_repeat_by_month(events_2025)
@@ -65,7 +65,7 @@ def perform_year_over_year_analysis(event_output_path, grouped_df, events_2025, 
         value_summary, new_repeat_pivot, excel_output
     )
     
-    print(f"Excel analysis saved to: {excel_output}")
+    # print(f"Excel analysis saved to: {excel_output}")
     
     return {
         "repeated_events_2025": repeated_events_2025,
@@ -196,4 +196,4 @@ def export_analysis_to_excel(grouped_df, pivot_value, repeated_events_2025,
         for sheet in writer.sheets:
             worksheet = writer.sheets[sheet]
             worksheet.set_column(0, 50, 20, center_format)
-    print(f"Excel analysis exported to: {out_file}")
+    # print(f"Excel analysis exported to: {out_file}")
