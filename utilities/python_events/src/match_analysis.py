@@ -43,14 +43,17 @@ def perform_year_over_year_analysis(event_output_path, grouped_df, events_2025, 
         pivot_value['difference'] = None
 
     # Create chart for the Value summary.
-    plot_value_summary(pivot_value, event_output_path / f"value_summary_chart_{file_prefix}.png", file_prefix)
+    output_chart_value_summary = event_output_path / f"value_summary_chart_{file_prefix}.png"
+    plot_value_summary(pivot_value, output_chart_value_summary, file_prefix)
     
     # --- (d) Analysis for Non-Repeating Events ---
-    plot_nonrepeating_counts(new_events_2025, lost_events_2024, event_output_path / "nonrepeating_events_chart.png", file_prefix)
+    output_chart_nonrepeating = event_output_path / "nonrepeating_events_chart.png"
+    plot_nonrepeating_counts(new_events_2025, output_chart_nonrepeating, file_prefix)
     
     # --- (e) Breakout of New vs. Repeated Events by Month ---
     new_repeat_pivot = new_repeat_by_month(events_2025)
-    plot_new_repeat_by_month(new_repeat_pivot, event_output_path / "new_repeat_events_by_month_chart.png")
+    output_chart_new_repeat = event_output_path / "new_repeat_events_by_month_chart.png"
+    plot_new_repeat_by_month(new_repeat_pivot, output_chart_new_repeat)
     
     # --- Export All Analysis to Excel ---
     excel_output = event_output_path / "events_year_over_year_analysis.xlsx"
@@ -72,9 +75,9 @@ def perform_year_over_year_analysis(event_output_path, grouped_df, events_2025, 
         "pivot_value": pivot_value,
         "value_summary": value_summary,
         "new_repeat_pivot": new_repeat_pivot,
-        "value_summary_chart": chart_value_summary,
-        "nonrepeating_events_chart": chart_nonrepeating,
-        "new_repeat_chart": chart_new_repeat,
+        "value_summary_chart": output_chart_value_summary,
+        "nonrepeating_events_chart": output_chart_nonrepeating,
+        "new_repeat_chart": output_chart_new_repeat,
         "excel_file": excel_output
     }
 
