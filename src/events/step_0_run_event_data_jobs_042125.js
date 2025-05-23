@@ -82,7 +82,6 @@ async function execute_run_event_data_jobs() {
   const run_step_5  = true; // execute_get_python_event_data
   const run_step_6  = true; // run python event reports
   
-
   try {
     const stepFunctions = [
       run_step_1 ? execute_transfer_usat_to_local : null,
