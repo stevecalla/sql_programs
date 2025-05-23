@@ -1,7 +1,7 @@
 from pathlib import Path
 import pandas as pd
 
-from get_data_path import get_data_path
+from directory_utilities import get_os_path
 
 # Extensions we’ll consider
 EXCEL_EXTS = {'.xls', '.xlsx', '.xlsm', '.xlsb'}
@@ -16,7 +16,7 @@ def load_data(subfolder: str) -> pd.DataFrame:
     4) Strips header whitespace.
     5) Verifies that 'RaceDate' exists.
     """
-    data_dir = get_data_path(subfolder)
+    data_dir = get_os_path(subfolder)
     print(f"Looking in data directory: {data_dir!r}")
 
     if not data_dir.exists():

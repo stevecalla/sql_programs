@@ -2,11 +2,8 @@ import os
 import sys
 import pandas as pd
 from pathlib import Path
-import shutil
-from matplotlib.backends.backend_pdf import PdfPages
 
-from config import MATCH_SCORE_THRESHOLD, ANALYSIS_MONTH, MONTH_NAME, PATH_PREFIX_OUTPUT
-from get_data_path import get_data_path
+from directory_utilities import get_output_path, archive_prior_output, parse_args, get_month_info
 
 from data_loader import load_data
 from data_processing import group_clean_data
@@ -14,173 +11,27 @@ from fuzzy_matching import match_events_2025_vs_2024, match_events_2024_vs_2025
 from date_analysis import date_shift_analysis
 from match_analysis import perform_year_over_year_analysis
 
-from chart_output_png_pdf import (
-    save_match_score_histogram, save_bar_chart,
-    save_yoy_comparison_chart, save_day_diff_histogram, save_month_shift_bar,
-    save_yoy_comparison_chart_for_value
-)
-from excel_export import export_to_excel
+from export_to_png_pdf import (create_chart_png, create_chart_pdf)
+from export_to_excel import export_to_excel
 
 # Ensure emoji/unicode output works on Windows
 if os.name == 'nt':
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
 
-# Directory utility functions
-def prepare_output_path(directory):
-    path = get_data_path(directory)
-    archive_old = path.exists()  # True or false; Automatically archive if directory already exists
-    path.mkdir(parents=True, exist_ok=True)
-
-    if archive_old:
-        # archive_path = path / "archive"
-        archive_path = get_data_path("usat_event_files_archive")
-        archive_path.mkdir(parents=True, exist_ok=True)
-
-        # Clear existing archive directory
-        for file in archive_path.glob("*"):
-            if file.is_file():
-                file.unlink()
-
-        # Move current files to archive
-        for file in path.glob("*"):
-            if file.is_file():
-                shutil.move(str(file), archive_path / file.name)
-
-    return path
-
-# CREATE PNG USING POSITIONAL PARAMETER
-def create_chart_png(event_output_path, grouped_df, qa_summary, summary_2024, summary_2025,
-     pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered):
-    
-    with PdfPages(f"{event_output_path}charts.pdf") as pdf_pages:
-
-        # Add match score histogram
-        save_match_score_histogram(events_2025, f"{event_output_path}match_score_hist.png", None)
-        
-        # Add monthly bar charts
-        save_bar_chart(summary_2024, 2024, f"{event_output_path}chart_2024.png", None, title_prefix="Monthly Event Trends for")
-        save_bar_chart(summary_2025, 2025, f"{event_output_path}chart_2025.png", None, title_prefix="Monthly Event Trends for")
-        
-        # Add Draft status charts
-        # save_bar_chart(summary_2024[summary_2024['Status'].str.lower() == 'draft'], 2024, f"{event_output_path}chart_2024_draft_status.png", None, title_prefix="Monthly Draft Events for")
-
-        # save_bar_chart(summary_2025[summary_2025['Status'].str.lower() == 'draft'], 2025, f"{event_output_path}chart_2025_draft_status.png", None, title_prefix="Monthly Draft Events for")
-
-        # safe Draft filter for 2024
-        mask_2024 = (
-            summary_2024['Status']
-            .fillna('')           # replace NaN/None with ''
-            .astype(str)          # cast everything to str
-            .str.lower() == 'draft'
-        )
-        save_bar_chart(
-            summary_2024[mask_2024],
-            2024,
-            f"{event_output_path}chart_2024_draft_status.png",
-            None,
-            title_prefix="Monthly Draft Events for"
-        )
-
-        # safe Draft filter for 2025
-        mask_2025 = (
-            summary_2025['Status']
-            .fillna('')
-            .astype(str)
-            .str.lower() == 'draft'
-        )
-        save_bar_chart(
-            summary_2025[mask_2025],
-            2025,
-            f"{event_output_path}chart_2025_draft_status.png",
-            None,
-            title_prefix="Monthly Draft Events for"
-        )
-        
-        # Add YoY charts (all and filtered)
-        save_yoy_comparison_chart(pivot_all, "YoY Comparison (All)", f"{event_output_path}chart_yoy_all.png", None)
-        save_yoy_comparison_chart(pivot_filtered, "YoY Comparison (Filtered)", f"{event_output_path}chart_yoy_filtered.png", None)
-        
-        # Add month shift charts
-        save_day_diff_histogram(analysis_month_shift, MONTH_NAME, f"{event_output_path}{MONTH_NAME.lower()}_2025_shift_histogram.png", None)
-        save_month_shift_bar(analysis_month_shift, MONTH_NAME, f"{event_output_path}{MONTH_NAME.lower()}_2025_month_shift_bar.png", None)
-        
-        # Add YoY charts for each unique value
-        for val in pivot_value_filtered['Value'].unique():
-            # If you want to specify a filename, you could construct it here:
-            filename = f"chart_yoy_filtered_{str(val).replace(' ', '_').lower()}.png"
-            out_path = os.path.join(event_output_path, filename)
-            save_yoy_comparison_chart_for_value(pivot_value_filtered, val, out_path, None)
-
-# CREATE PDF USING POSITIONAL PARAMETER
-def create_chart_pdf(event_output_path, grouped_df, qa_summary, summary_2024, summary_2025,
-     pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered):
-
-    with PdfPages(f"{event_output_path}charts.pdf") as pdf_pages:
-
-        # Add match score histogram
-        save_match_score_histogram(events_2025, None, pdf_pages)
-        
-        # Add monthly bar charts
-        save_bar_chart(summary_2024, 2024, None, pdf_pages, title_prefix="Monthly Event Trends for")
-        save_bar_chart(summary_2025, 2025, None, pdf_pages)
-        
-        # Add Draft status charts
-        # save_bar_chart(summary_2024[summary_2024['Status'].str.lower() == 'draft'], 2024, None, pdf_pages, title_prefix="Monthly Draft Events for")
-
-        # save_bar_chart(summary_2025[summary_2025['Status'].str.lower() == 'draft'], 2025, None, pdf_pages, title_prefix="Monthly Draft Events for")
-
-        # safe Draft filter for 2024
-        mask_2024 = (
-            summary_2024['Status']
-            .fillna('')           # replace NaN/None with ''
-            .astype(str)          # cast everything to str
-            .str.lower() == 'draft'
-        )
-        save_bar_chart(
-            summary_2024[mask_2024],
-            2024,
-            None, 
-            pdf_pages,
-            title_prefix="Monthly Draft Events for"
-        )
-
-        # safe Draft filter for 2025
-        mask_2025 = (
-            summary_2025['Status']
-            .fillna('')
-            .astype(str)
-            .str.lower() == 'draft'
-        )
-        save_bar_chart(
-            summary_2025[mask_2025],
-            2025,
-            None, 
-            pdf_pages,
-            title_prefix="Monthly Draft Events for"
-        )
- 
-        # Add YoY charts (all and filtered)
-        save_yoy_comparison_chart(pivot_all, "YoY Comparison (All)", None, pdf_pages)
-        save_yoy_comparison_chart(pivot_filtered, "YoY Comparison (Filtered)", None, pdf_pages)
-        
-        # Add month shift charts
-        save_day_diff_histogram(analysis_month_shift, MONTH_NAME, None, pdf_pages)
-        save_month_shift_bar(analysis_month_shift, MONTH_NAME, None, pdf_pages)
-        
-        # Add YoY charts for each unique value
-        for val in pivot_value_filtered['Value'].unique():
-            # If you want to specify a filename, you could construct it here:
-            # filename = f"chart_yoy_filtered_{str(val).replace(' ', '_').lower()}.pdf"
-            save_yoy_comparison_chart_for_value(pivot_value_filtered, val, None, pdf_pages)
-
 def main():
+    # Parse command line arguments
+    args = parse_args()
+    ANALYSIS_MONTH, ANALYSIS_MONTH_NAME = get_month_info(args.month)
+
     # --- CREATE DIRECTORIES ---
     print("🔍 Creating directories & paths")
-    event_output_path = prepare_output_path("usat_event_files")
+    directory = "usat_event_python_output_data"
+    archive_prior_output(directory)
+    event_output_path = get_output_path(directory)
 
     # --- LOAD DATA ---
-    df = load_data("usat_python_data")
+    df = load_data("usat_event_python_input_data")
 
     # --- GROUP & CLEAN DATA ---
     (grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered) = group_clean_data(df)
@@ -217,7 +68,7 @@ def main():
 
     # --- DATE SHIFT ANALYSIS ---
     timing_shift_output, shifted_into_month_output, timing_shift_data = date_shift_analysis(
-        events_2025, ANALYSIS_MONTH, MONTH_NAME
+        events_2025, ANALYSIS_MONTH, ANALYSIS_MONTH_NAME
     )
 
     # Now run the year-over-year analysis.
@@ -230,11 +81,11 @@ def main():
     analysis_month_shift = timing_shift_data[timing_shift_data['month_2025'] == ANALYSIS_MONTH].copy()
 
     # --- CHART EXPORTS TO INDIVIDUAL PNG FILES ---
-    create_chart_png(event_output_path, grouped_df, qa_summary, summary_2024, summary_2025,
+    create_chart_png(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summary, summary_2024, summary_2025,
      pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
 
     # --- CHART EXPORTS TO PDF ---
-    create_chart_pdf(event_output_path, grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
+    create_chart_pdf(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
 
     # --- EVENTS IN 2024 WITH NO MATCH IN 2025 ---
     unmatched_2024 = events_2024[~events_2024['Name'].isin(
@@ -242,9 +93,7 @@ def main():
     )]
 
     # --- EXPORT TO EXCEL ---
-    export_to_excel(event_output_path, df, grouped_df, qa_summary, match_summary_2025, match_summary_2024,
-                    events_2025, events_2024, draft_2024_events,
-                    timing_shift_output, shifted_into_month_output, unmatched_2024, pivot_value_all, pivot_value_filtered)
+    export_to_excel(event_output_path, ANALYSIS_MONTH_NAME, df, grouped_df, qa_summary, match_summary_2025, match_summary_2024, events_2025, events_2024, draft_2024_events, timing_shift_output, shifted_into_month_output, unmatched_2024, pivot_value_all, pivot_value_filtered)
 
 def is_venv():
     return sys.prefix != sys.base_prefix

@@ -16,8 +16,8 @@ async function execute_get_python_event_data() {
 
     const options = [
         {    
-            directory_name: `usat_python_data`,
-            directory_name_archive: `usat_python_data_archive`,
+            directory_name: `usat_event_python_input_data`,
+            directory_name_archive: `usat_event_python_input_data_archive`,
             fileName: 'python_event_data',
             query: (retrieval_batch_size, offset) => step_5_query_python_event_data(retrieval_batch_size, offset),
             retrieval_batch_size: 100000,

@@ -3,12 +3,14 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def perform_year_over_year_analysis(path_prefix_output, grouped_df, events_2025, events_2024, file_prefix):
+# from main import get_output_path
+
+def perform_year_over_year_analysis(event_output_path, grouped_df, events_2025, events_2024, file_prefix):
     """
     Conducts year-over-year analysis and outputs charts and Excel results.
     
     Parameters:
-      path_prefix_output: str
+      event_output_path: str
           The folder prefix where outputs (charts, Excel file) will be saved.
       grouped_df: DataFrame
           The full cleaned/grouped DataFrame.
@@ -19,7 +21,6 @@ def perform_year_over_year_analysis(path_prefix_output, grouped_df, events_2025,
     
     Returns a dictionary with paths to the output files and selected DataFrames.
     """
-    os.makedirs(path_prefix_output, exist_ok=True)
     
     # --- (a) Analysis for Current Year (2025) ---
     repeated_events_2025 = events_2025[events_2025['has_match'] == True].copy()
@@ -42,21 +43,18 @@ def perform_year_over_year_analysis(path_prefix_output, grouped_df, events_2025,
         pivot_value['difference'] = None
 
     # Create chart for the Value summary.
-    chart_value_summary = f"{path_prefix_output}value_summary_chart_{file_prefix}.png"
-    plot_value_summary(pivot_value, chart_value_summary, file_prefix)
+    plot_value_summary(pivot_value, event_output_path / f"value_summary_chart_{file_prefix}.png", file_prefix)
     
     # --- (d) Analysis for Non-Repeating Events ---
-    chart_nonrepeating = os.path.join(path_prefix_output, "nonrepeating_events_chart.png")
-    plot_nonrepeating_counts(new_events_2025, lost_events_2024, chart_nonrepeating, file_prefix)
+    plot_nonrepeating_counts(new_events_2025, lost_events_2024, event_output_path / "nonrepeating_events_chart.png", file_prefix)
     
     # --- (e) Breakout of New vs. Repeated Events by Month ---
     new_repeat_pivot = new_repeat_by_month(events_2025)
-    chart_new_repeat = os.path.join(path_prefix_output, "new_repeat_events_by_month_chart.png")
-    plot_new_repeat_by_month(new_repeat_pivot, chart_new_repeat)
+    plot_new_repeat_by_month(new_repeat_pivot, event_output_path / "new_repeat_events_by_month_chart.png")
     
     # --- Export All Analysis to Excel ---
-    excel_output = os.path.join(path_prefix_output, "events_year_over_year_analysis.xlsx")
-    excel_output = f"{path_prefix_output}events_year_over_year_analysis_{file_prefix}.xlsx"
+    excel_output = event_output_path / "events_year_over_year_analysis.xlsx"
+    excel_output = event_output_path / f"events_year_over_year_analysis_{file_prefix}.xlsx"
     export_analysis_to_excel(
         grouped_df, pivot_value,
         repeated_events_2025, new_events_2025,

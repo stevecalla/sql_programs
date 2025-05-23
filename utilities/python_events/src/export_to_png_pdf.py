@@ -1,5 +1,7 @@
-import matplotlib.pyplot as plt
 import pandas as pd
+import os
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 
 def save_match_score_histogram(events_2025, output_path, pdf_pages=None):
     """Save a histogram showing the distribution of match scores.
@@ -233,3 +235,136 @@ def save_month_shift_bar(april_shift, month_name, output_path, pdf_pages=None):
         plt.savefig(output_path)
     plt.close(fig)
     return output_path
+
+# CREATE PNG USING POSITIONAL PARAMETER
+def create_chart_png(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered):
+
+    with PdfPages(event_output_path / "charts.pdf") as pdf_pages:
+
+        # Add match score histogram
+        save_match_score_histogram(events_2025, event_output_path / "match_score_hist.png", None)
+        
+        # Add monthly bar charts
+        save_bar_chart(summary_2024, 2024, event_output_path / "chart_2024.png", None, title_prefix="Monthly Event Trends for")
+        save_bar_chart(summary_2025, 2025, event_output_path / "chart_2025.png", None, title_prefix="Monthly Event Trends for")
+        
+        # Add Draft status charts
+        # save_bar_chart(summary_2024[summary_2024['Status'].str.lower() == 'draft'], 2024, event_output_path / "chart_2024_draft_status.png", None, title_prefix="Monthly Draft Events for")
+
+        # save_bar_chart(summary_2025[summary_2025['Status'].str.lower() == 'draft'], 2025, event_output_path / "chart_2025_draft_status.png", None, title_prefix="Monthly Draft Events for")
+
+        # safe Draft filter for 2024
+        mask_2024 = (
+            summary_2024['Status']
+            .fillna('')           # replace NaN/None with ''
+            .astype(str)          # cast everything to str
+            .str.lower() == 'draft'
+        )
+        save_bar_chart(
+            summary_2024[mask_2024],
+            2024,
+            event_output_path / "chart_2024_draft_status.png",
+            None,
+            title_prefix="Monthly Draft Events for"
+        )
+
+        # safe Draft filter for 2025
+        mask_2025 = (
+            summary_2025['Status']
+            .fillna('')
+            .astype(str)
+            .str.lower() == 'draft'
+        )
+        save_bar_chart(
+            summary_2025[mask_2025],
+            2025,
+            event_output_path / "chart_2025_draft_status.png",
+            None,
+            title_prefix="Monthly Draft Events for"
+        )
+        
+        # Add YoY charts (all and filtered)
+        save_yoy_comparison_chart(pivot_all, "YoY Comparison (All)", event_output_path / "chart_yoy_all.png", None)
+        save_yoy_comparison_chart(pivot_filtered, "YoY Comparison (Filtered)", event_output_path / "chart_yoy_filtered.png", None)
+        
+        # Add month shift charts
+        save_day_diff_histogram(
+            analysis_month_shift,
+            ANALYSIS_MONTH_NAME,
+            event_output_path / f"{ANALYSIS_MONTH_NAME.lower()}_2025_shift_histogram.png",
+            None
+        )
+        save_month_shift_bar(
+            analysis_month_shift,
+            ANALYSIS_MONTH_NAME,
+            event_output_path / f"{ANALYSIS_MONTH_NAME.lower()}_2025_shift_bar.png",
+            None
+        )
+        
+        # Add YoY charts for each unique value
+        for val in pivot_value_filtered['Value'].unique():
+            # If you want to specify a filename, you could construct it here:
+            filename = f"chart_yoy_filtered_{str(val).replace(' ', '_').lower()}.png"
+            out_path = os.path.join(event_output_path, filename)
+            save_yoy_comparison_chart_for_value(pivot_value_filtered, val, out_path, None)
+
+# CREATE PDF USING POSITIONAL PARAMETER
+def create_chart_pdf(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered):
+
+    with PdfPages(event_output_path / "charts.pdf") as pdf_pages:
+
+        # Add match score histogram
+        save_match_score_histogram(events_2025, None, pdf_pages)
+        
+        # Add monthly bar charts
+        save_bar_chart(summary_2024, 2024, None, pdf_pages, title_prefix="Monthly Event Trends for")
+        save_bar_chart(summary_2025, 2025, None, pdf_pages)
+        
+        # Add Draft status charts
+        # save_bar_chart(summary_2024[summary_2024['Status'].str.lower() == 'draft'], 2024, None, pdf_pages, title_prefix="Monthly Draft Events for")
+
+        # save_bar_chart(summary_2025[summary_2025['Status'].str.lower() == 'draft'], 2025, None, pdf_pages, title_prefix="Monthly Draft Events for")
+
+        # safe Draft filter for 2024
+        mask_2024 = (
+            summary_2024['Status']
+            .fillna('')           # replace NaN/None with ''
+            .astype(str)          # cast everything to str
+            .str.lower() == 'draft'
+        )
+        save_bar_chart(
+            summary_2024[mask_2024],
+            2024,
+            None, 
+            pdf_pages,
+            title_prefix="Monthly Draft Events for"
+        )
+
+        # safe Draft filter for 2025
+        mask_2025 = (
+            summary_2025['Status']
+            .fillna('')
+            .astype(str)
+            .str.lower() == 'draft'
+        )
+        save_bar_chart(
+            summary_2025[mask_2025],
+            2025,
+            None, 
+            pdf_pages,
+            title_prefix="Monthly Draft Events for"
+        )
+ 
+        # Add YoY charts (all and filtered)
+        save_yoy_comparison_chart(pivot_all, "YoY Comparison (All)", None, pdf_pages)
+        save_yoy_comparison_chart(pivot_filtered, "YoY Comparison (Filtered)", None, pdf_pages)
+        
+        # Add month shift charts
+        save_day_diff_histogram(analysis_month_shift, ANALYSIS_MONTH_NAME, None, pdf_pages)
+        save_month_shift_bar(analysis_month_shift, ANALYSIS_MONTH_NAME, None, pdf_pages)
+        
+        # Add YoY charts for each unique value
+        for val in pivot_value_filtered['Value'].unique():
+            # If you want to specify a filename, you could construct it here:
+            # filename = f"chart_yoy_filtered_{str(val).replace(' ', '_').lower()}.pdf"
+            save_yoy_comparison_chart_for_value(pivot_value_filtered, val, None, pdf_pages)
