@@ -1,7 +1,6 @@
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
-const { execute_step_1_get_slack_daily_stats } = require('./step_1_get_slack_daily_stats_data');
-const { execute_step_2_create_send_daily_stats } = require('./step_2_create_send_slack_daily_stats');
+const { execute_step_1_create_send_revenue_stats } = require('./step_1_create_send_slack_revenue_stats');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
@@ -67,18 +66,15 @@ async function execute_run_slack_sales_data_jobs(is_cron_job, channel_id, channe
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
   
-  const run_step_1 = false; // get daily stats for revenue, events, participation
-  const run_step_2 = true; // create slack messaage; default = false
+  const run_step_1 = true; // create slack messaage; default = false
 
   try {
     const stepFunctions = [
-      run_step_1 ? execute_step_1_get_slack_daily_stats : null,
-      run_step_2 ? execute_step_2_create_send_daily_stats : null,
+      run_step_1 ? execute_step_1_create_send_revenue_stats : null,
     ];
   
     const stepName = [
-      `Step #1 - Transfer data from USAT to Local db:`, 
-      `Step #2 - execute_step_2_create_send_daily_stats: `, 
+      `Step #1 - execute_step_2_create_send_daily_stats: `, 
     ];
 
     await executeSteps(stepFunctions, stepName, is_cron_job, channel_id, channel_name, user_id);
