@@ -1,10 +1,12 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 
+// NGROK TUNNEL FOR TESTING
+const ngrok = require('ngrok');
+const axios = require('axios');
+
 // ALL - STATS DATA
 const { execute_step_1_create_send_revenue_stats } = require('./src/slack_daily_stats/step_1_create_send_slack_revenue_stats');
-
-const { execute_run_sales_data_jobs } = require('./src/sales_data/step_0_run_sales_data_jobs_010425');
 
 // EXPRESS SERVER
 const app = express();
@@ -179,16 +181,41 @@ async function cleanup() {
     process.exit();
 }
 
+async function startNgrok() {
+    try {
+        const ngrokUrl = await ngrok.connect(PORT);
+        console.log(`Ngrok tunnel established at: ${ngrokUrl}`);
+
+        // Fetch tunnel details from the ngrok API
+        const apiUrl = 'http://127.0.0.1:4040/api/tunnels';
+        const response = await axios.get(apiUrl);
+
+        // Log tunnel information
+        response.data.tunnels.forEach(tunnel => {
+            // console.log({tunnel});
+            console.log(`Tunnel: ${tunnel.public_url}`);
+            console.log(`Forwarding to: ${tunnel.config.addr}`);
+            console.log(`Traffic Inspector: https://dashboard.ngrok.com/ac_2J6Qn9CeVqC2bGd0EhZnAT612RQ/observability/traffic-inspector`)
+            console.log(`Status: http://127.0.0.1:4040/status`)
+        });
+
+    } catch (error) {
+        console.error(`Could not create ngrok tunnel: ${error}`);
+    }
+}
+
 // Handle termination signals
-process.on('SIGINT', cleanup);
-process.on('SIGTERM', cleanup);
+// process.on('SIGINT', cleanup);
+// process.on('SIGTERM', cleanup);
 
 // Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
     console.log(`Tunnel using cloudflare https://usat-stats.kidderwise.org/scheduled-stats`)
-    // 192.168.187:8005
+    // 192.168.187:8007
+
+    startNgrok();
 });
 
 
