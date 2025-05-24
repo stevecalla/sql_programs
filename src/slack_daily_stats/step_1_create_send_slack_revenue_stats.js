@@ -1,8 +1,6 @@
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
 
-// console.log(process.env);
-
 const mysqlP                                  = require('mysql2/promise');   // only for dst.execute
 const { local_usat_sales_db_config }          = require('../../utilities/config');
 const { runTimer, stopTimer }                 = require('../../utilities/timer');

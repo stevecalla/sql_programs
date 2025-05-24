@@ -1,8 +1,13 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 
-// ALL - STATS DATA
+const ngrok = require('@ngrok/ngrok');
+
 const { execute_step_1_create_send_revenue_stats } = require('./src/slack_daily_stats/step_1_create_send_slack_revenue_stats');
+const { type_map, category_map} = require('./utilities/membership_products');
+
+const { slack_message_api } = require('./utilities/slack_messaging/slack_message_api');
+const { send_slack_followup_message } = require('./utilities/slack_messaging/send_followup_message');
 
 // EXPRESS SERVER
 const app = express();
@@ -13,66 +18,62 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 // Test endpoint
-app.get('/stats-test', async (req, res) => {
-    console.log('/stats-test route req.rawHeaders = ', req.rawHeaders);
+app.get('/revenue-test', async (req, res) => {
+    console.log('/revenue-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response
         res.status(200).json({
-            message: 'Stats server is up and running. Stands Ready.',
+            message: 'Revenue server is up and running. Stands Ready.',
         });
 
     } catch (error) {
-        console.error('Error quering or sending stats data:', error);
+        console.error('Error quering or sending revenue data:', error);
         
         // Send an error response
         res.status(500).json({
-            message: 'Error quering or sending stats data.',
-            error: error.message || 'Internal Server Error',
-        });
-    }
-});
-
-// Endpoint to handle crontab all usat stats data job
-app.get('/scheduled-stats', async (req, res) => {
-    console.log('/scheduled-stats route req.rawHeaders = ', req.rawHeaders);
-
-    try {
-        // Send a success response
-        res.status(200).json({
-            message: 'All stats Data = get, load and create data succesful.',
-        });
-
-        // GETS ALL PARTICIPATION DATA, LOADS INTO MYSQL / BQ, CREATES DETAILED DATA
-        await execute_run_stats_data_jobs();
-
-    } catch (error) {
-        console.error('Error quering or sending stats data:', error);
-        
-        // Send an error response
-        res.status(500).json({
-            message: 'Error quering or sending stats data.',
+            message: 'Error quering or sending revenue data.',
             error: error.message || 'Internal Server Error',
         });
     }
 });
 
 // Example Requests for Slack
-app.get('/stats-examples', async (req, res) => {
-    console.log('/stats-test route req.rawHeaders = ', req.rawHeaders);
+app.post('/revenue-examples', async (req, res) => {
+    // console.log('/revenue_exmaples route req.rawHeaders = ', req.rawHeaders);
+
+    console.log('Received request for revenue - /revenue-examples :', {
+        body: req.body,
+        headers: req.headers,
+        query: req.query,
+        param: req.params,
+        text: req.body.text,
+    });
+    
+    const { channel_id, channel_name, user_id } = req.body;
 
     try {
         // Send a success response
         res.status(200).json({
-            message: 
-                `
-                Sample Requests:
-                1) 
-                2) 
-                3) 
-                4)
-                `,
+            message: 'All revenue data = get, create slack msg, send slack msg data succesful.',
         });
+
+const slack_message = `
+👀 *Sample Requests:*
+\`\`\`
+1) /revenue              (returns MTD, all types)
+2) /revenue month=1 type=adult_annual category=silver
+3) /revenue category=silver month=ytd
+
+Options:
+- Months:     Enter month number 1 to current month or "ytd"
+- Types:      ${type_map.join(", ")}
+- Categories: ${Object.keys(category_map).join(", ")}
+\`\`\`
+`;
+
+        // await slack_message_api(slack_message, "steve_calla_slack_channel");
+        send_slack_followup_message(channel_id, channel_name, user_id, slack_message)
 
     } catch (error) {
         console.error('Error quering or sending stats data:', error);
@@ -86,10 +87,10 @@ app.get('/stats-examples', async (req, res) => {
 });
 
 // Endpoint to handle crontab all usat stats data job
-app.get('/stats-revenue', async (req, res) => {
-    // console.log('/stats-revenue route req.rawHeaders = ', req.rawHeaders);
+app.post('/revenue-stats', async (req, res) => {
+    // console.log('/revenue_stats route req.rawHeaders = ', req.rawHeaders);
 
-    console.log('Received request for revenue - /stats-revenuenode :', {
+    console.log('Received request for revenue - /revenue-stats :', {
         body: req.body,
         headers: req.headers,
         query: req.query,
@@ -97,7 +98,34 @@ app.get('/stats-revenue', async (req, res) => {
         text: req.body.text,
     });
 
-    const { month, type, category } = req.query;
+    // First try to get values from query
+    let { month, type, category } = req.query;
+
+    if (req.body.text) {
+        const args = req.body.text.trim().split(/\s+/); // Split by space
+        for (const arg of args) {
+            const [key, value] = arg.split('=');
+            if (key && value) {
+                const normalizedKey = key.toLowerCase();
+                switch (normalizedKey) {
+                    case 'month':
+                        if (!month) month = value;
+                        break;
+                    case 'type':
+                        if (!type) type = value;
+                        break;
+                    case 'category':
+                        if (!category) category = value;
+                        break;
+                    default:
+                        console.warn(`Unknown parameter: ${key}`);
+                }
+            }
+        }
+    }
+
+    // Now you have clean variables regardless of how it was sent
+    console.log({ month, type, category });
 
     // VALIDATION
     const currentMonth = new Date().getMonth() + 1; // getMonth() returns 0-11
@@ -111,36 +139,14 @@ app.get('/stats-revenue', async (req, res) => {
         }
     }
     
-    const membership_types = ["adult_annual", "one_day", "elite", "youth_annual"];
     if (typeof type === 'string' && type.trim() !== '') {
-        if (!membership_types.includes(type)) {
+        if (!type_map.includes(type)) {
             return res.status(400).json({
-                message: `Error: Inpput = ${type}. Please enter a valid membership type. Allowed types are: ${membership_types.join(", ")}.`,
+                message: `Error: Inpput = ${type}. Please enter a valid membership type. Allowed types are: ${type_map.join(", ")}.`,
             });
         }
     }
 
-    // Mapping of simplified types to possible actual category values (for optional future use)
-    const category_map = {
-        // one_day / bronze
-        bronze: ["Bronze - $0", "Bronze - AO", "Bronze - Distance Upgrade", "Bronze - Intermediate", "Bronze - Relay", "Bronze - Sprint", "Bronze - Ultra", "One Day - $15"],
-        //annual
-        silver: ["1-Year $50", "Silver"],
-        gold: ["Gold"],
-        two: ["2-Year"],
-        three: ["3-Year"],
-        lifetime: ["Lifetime"],
-        elite: ["Elite"],
-        youth_annual: ["Youth Annual"],
-        foundation: ["Platinum - Foundation"],
-        team_usa: ["Platinum - Team USA"],
-        // young adult
-        young_adult: ["Young Adult - $36", "Young Adult - $40", "Youth Premier - $25", "Youth Premier - $30"],
-        // other
-        club: ["Club"],
-        other: ["Unknown"],
-    };
-   
     if (typeof category === 'string' && category.trim() !== '') {
         if (!Object.keys(category_map).includes(category)) { 
             return res.status(400).json({
@@ -181,13 +187,22 @@ async function cleanup() {
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
 
-// Start the server
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+// Start server
+app.listen(PORT, async () => {
+	console.log(`Server is running on http://localhost:${PORT}`);
 
-    console.log(`Tunnel using cloudflare https://usat-stats.kidderwise.org/scheduled-stats`)
-    // 192.168.187:8007
+    // CLOUDFLARE TUNNEL
+    // console.log(`Tunnel using cloudflare https://usat-revenue.kidderwise.org/revenue-stats`)
+
+    // NGROK TUNNEL
+	try {
+        ngrok.connect({ 
+            addr: PORT, 
+            authtoken_from_env: true,
+         }).then(listener => console.log(`Ingress established at: ${listener.url()}`));
+
+    } catch (err) {
+        console.error('Error starting ngrok:', err);
+    }
 });
-
-
 

@@ -77,7 +77,6 @@ async function generate_revenue_markdown_table(options) {
   }
   
   const raw_markdown_message = await create_markdown(row, month_name);
-  console.log(raw_markdown_message);
 
   const final_formatted_message = await pad_markdown(raw_markdown_message);
 
