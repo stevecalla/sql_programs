@@ -1,6 +1,8 @@
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
 
+// console.log(process.env);
+
 const mysqlP                                  = require('mysql2/promise');   // only for dst.execute
 const { local_usat_sales_db_config }          = require('../../utilities/config');
 const { runTimer, stopTimer }                 = require('../../utilities/timer');
@@ -13,6 +15,7 @@ const { create_slack_revenue_message } = require('./step_1a_slack_revenue_messag
 // Connect to MySQL
 async function get_dst_connection() {
   const cfg = await local_usat_sales_db_config();
+  console.log(cfg);
   return await mysqlP.createConnection(cfg);
 }
 
@@ -202,6 +205,9 @@ async function execute_step_1_create_send_revenue_stats(is_cron_job = true, mont
         result = 'Tranfer Successful';          // only set this if we got all the way through
 
         } catch (err) {
+            
+            stopTimer('timer');
+
             console.error('Error during data queries:', err);
 
             const slack_message = `Error - No results: error`;
