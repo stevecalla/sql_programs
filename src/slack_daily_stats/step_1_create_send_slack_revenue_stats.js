@@ -5,20 +5,18 @@ const mysqlP                                  = require('mysql2/promise');   // 
 const { local_usat_sales_db_config }          = require('../../utilities/config');
 const { runTimer, stopTimer }                 = require('../../utilities/timer');
 
-const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
-const { create_slack_revenue_message } = require('./step_1a_slack_revenue_message');
-const { type_map, category_map} = require('../../utilities/membership_products');
-
-// const { send_slack_followup_message } = require('../../utilities/slack_messaging/send_followup_message');
+const { create_slack_message } = require('./step_1a_slack_revenue_message');
+const { type_map, category_map} = require('./utilities/product_mapping');
 
 // Connect to MySQL
 async function get_dst_connection() {
   const cfg = await local_usat_sales_db_config();
-  console.log(cfg);
   return await mysqlP.createConnection(cfg);
 }
 
 async function query_revenue(type, category) {
+    
+    console.log(type, category);
 
     // BUILD WHERE CLAUSE(S)
     const type_where_clause = type ? `AND type_actual = "${type}"` : "";
@@ -145,28 +143,26 @@ async function query_revenue(type, category) {
       `
 }
 
-async function execute_step_1_create_send_revenue_stats(
-    is_cron_job, month, type, category, channel_id, channel_name, user_id) {
-
+async function execute_step_1_create_send_revenue_stats(month, type, category) {
     runTimer('timer');
     const startTime = performance.now();
-    
-    let result = 'Transfer Failed';        // default if something blows up
+
+    let slack_message = "Error - No results";
+    let slack_block = "";
 
     const dst = await get_dst_connection();  // mysql2/promise connection
     
     try {
-        // STEP #1: GET DATA
+        // STEP #1: CONVERT TYPE & CATEGORY INPUT INTO LIST OF TYPES OR CATEGORIES
         const type_list = type_map[type] ? type_map[type] : type;
         const category_list = category_map[category] ? category_map[category] : category;
-        
-        const [revenue_rows] = await dst.query(await query_revenue(type_list, category_list));
 
-        const results = [
-            { name: 'Revenue', data: revenue_rows },
-          ];
+        // STEP #2: GET REVENUE DATA
+        const [result] = await dst.query(await query_revenue(type_list, category_list));
 
-        // for (const { name, data } of results) {
+        console.log(result);
+
+        // for (const { name, data } of result) {
         //   if (!data.length) {
         //     console.warn(`No data returned from ${name} query`);
         //   } else {
@@ -176,60 +172,36 @@ async function execute_step_1_create_send_revenue_stats(
         //   }
         // }
       
-        // STEP #2: CREATE SLACK MESSAGE
-        if (results) {
-            const slack_message = await create_slack_revenue_message(results, type, category, month);
+        // STEP #3: CREATE SLACK MESSAGE
+        if (result) {
+            slack_message = await create_slack_message(result, type, category, month);
             console.log('step_3_get_slack... =', slack_message);
+        } 
 
-            // STEP #4: SEND CRON SCHEDULED MESSAGE TO SLACK
-            // ONLY EXECUTE IF is_cron_job is true
-
-            // TESTING VARIABLE
-            const send_slack_to_calla = true;
-            console.log('send slack to calla =', send_slack_to_calla);
-            console.log('is cron = ', is_cron_job);
-
-            if (send_slack_to_calla && is_cron_job) {
-                console.log('1 =', send_slack_to_calla, is_cron_job, send_slack_to_calla && is_cron_job);
-                await slack_message_api(slack_message, "steve_calla_slack_channel");
-            } 
-            // else if(is_cron_job) {
-            //     console.log('2 =', send_slack_to_calla, is_cron_job, send_slack_to_calla && is_cron_job);
-            //     await slack_message_api(slack_message, "daily_sales_bot_slack_channel");
-            // } else {
-            //     // Send a follow-up message to Slack
-            //     await send_slack_followup_message(channel_id, channel_name, user_id, slack_message);
-            // }
-        } else {
-            const slack_message = "Error - No results";
-            // await slack_message_api(slack_message, "steve_calla_slack_channel");
-        }
-
-        result = 'Tranfer Successful';          // only set this if we got all the way through
-
-        } catch (err) {
+    } catch (err) {
             
-            stopTimer('timer');
+        stopTimer('timer');
 
-            console.error('Error during data queries:', err);
+        console.error('Error during data queries:', err);
 
-            const slack_message = `Error - No results: error`;
-            // await slack_message_api(slack_message, "steve_calla_slack_channel");
+        slack_message = `Error - No results: error`;
+        // await slack_message_api(slack_message, "steve_calla_slack_channel");
 
-            throw err;
+        throw err;
     
-        } finally {
-            await dst.end();  // Properly close MySQL connection
-            stopTimer('timer');
+    } finally {
+        await dst.end();  // Properly close MySQL connection
+        stopTimer('timer');
 
-            // LOG RESULTS
-            const endTime = performance.now();
-            const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
+        // LOG RESULTS
+        const endTime = performance.now();
+        const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
 
-            console.log(`\nAll lead data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Oops error getting time"} sec\n`);
+        console.log(`\nAll lead data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Oops error getting time"} sec\n`);
+
+        return { slack_message, slack_block };
     }
     
-  return result;
 }
 
 // Run the main function

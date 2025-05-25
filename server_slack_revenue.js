@@ -4,9 +4,8 @@ const bodyParser = require('body-parser');
 const ngrok = require('@ngrok/ngrok');
 
 const { execute_step_1_create_send_revenue_stats } = require('./src/slack_daily_stats/step_1_create_send_slack_revenue_stats');
-const { type_map, category_map} = require('./utilities/membership_products');
+const { type_map, category_map} = require('./src/slack_daily_stats/utilities/product_mapping');
 
-const { slack_message_api } = require('./utilities/slack_messaging/slack_message_api');
 const { send_slack_followup_message } = require('./utilities/slack_messaging/send_followup_message');
 
 // EXPRESS SERVER
@@ -49,8 +48,12 @@ app.post('/revenue-examples', async (req, res) => {
         param: req.params,
         text: req.body.text,
     });
-    
-    const { channel_id, channel_name, user_id } = req.body;
+
+    const {
+        channel_id = process.env.SLACK_CALLA_CHANNEL_ID,
+        channel_name = process.env.SLACK_CALLA_CHANNEL_NAME,
+        user_id = process.env.SLACK_CALLA_USER_ID
+    } = req.body;
 
     try {
         // Send a success response
@@ -77,16 +80,6 @@ const slack_message = `
                 text: {
                     type: "mrkdwn",
                     text: slack_message,
-                    // text:
-                    // "👀 *Slash Commands:*" + "\n" +
-                    // "1) `/revenue` – returns current month to date, all types" + "\n" +
-                    // "2) `/revenue month=1 type=adult_annual category=silver`" + "\n" +
-                    // "3) `/revenue category=silver month=ytd`" + "\n" +
-                    // "\n" +
-                    // "🤼 *Options:*" + "\n" +
-                    // "• *Months:* Enter month number `1` to current month or `ytd`" + "\n" +
-                    // `• *Types:* ${type_map.join(", ")}` + "\n" +
-                    // `• *Categories:* ${Object.keys(category_map).join(", ")}`
                 }
             },
             {
@@ -101,13 +94,7 @@ const slack_message = `
             },
         ];
 
-        if (!channel_id || !channel_name || !user_id) {
-            // Fallback to hardcoded channel if required Slack metadata is missing
-            await slack_message_api(slack_message, "steve_calla_slack_channel", slack_blocks);
-        } else {
-            // Send a follow-up message to the user/channel from the request
-            await send_slack_followup_message(channel_id, channel_name, user_id, slack_message, slack_blocks);
-        }
+        await send_slack_followup_message(channel_id, channel_name, user_id, slack_message, slack_blocks);
 
     } catch (error) {
         console.error('Error quering or sending stats data:', error);
@@ -131,15 +118,24 @@ app.post('/revenue-stats', async (req, res) => {
         param: req.params,
         text: req.body.text,
     });
-    
-    // If request not recived via slack, then destructure req.query parameters
-    // First try to get values from query
+
+    const is_test = true;
+    const {
+        channel_id = is_test ? process.env.SLACK_CALLA_CHANNEL_ID : SLACK_DAILY_SALES_BOT_CHANNEL_ID,
+        channel_name = is_test ? process.env.SLACK_CALLA_CHANNEL_NAME : SLACK_DAILY_SALES_BOT_CHANNEL_NAME,
+        user_id = is_test ? process.env.SLACK_CALLA_USER_ID : SLACK_DAILY_SALES_BOT_USER_ID,
+    } = req.body;
+
+    // If request not received via slack, then destructure req.query parameters
     let { month, type, category } = req.query;
     
     // If request received from slack, then destructure req.body.text
-    const { channel_id, channel_name, user_id } = req.body;
-    if (req.body.text) {
-        const args = req.body.text.trim().split(/\s+/); // Split by space
+    // ensure req.body is not empty and that req.body.text exists
+    if (req.body && Object.keys(req.body).length > 0 && req.body.text) {
+
+        // is_cron_job = false; // set cron job to false to send response is request
+        const args = req?.body?.text?.trim().split(/\s+/); // Split by space
+
         for (const arg of args) {
             const [key, value] = arg.split('=');
             if (key && value) {
@@ -164,69 +160,21 @@ app.post('/revenue-stats', async (req, res) => {
     // Now you have clean variables regardless of how it was sent
     console.log({ month, type, category });
 
-    // VALIDATION
-    // let is_valid = true;
-    // let slack_message = "";
-    // console.log(`*********** month = `, month);
-    // month = month === "ytd" ? month : Number(month);
-    // console.log(`*********** month = `, month);
-    // const currentMonth = new Date().getMonth() + 1; // getMonth() returns 0-11
-
-    // if (typeof month === 'string' && month.trim() !== '') {
-    //     if (!(month === 'ytd' || (monthNum >= 1 && monthNum <= currentMonth))) {
-    //         const monthNum = Number(month);
-    //         slack_message = `Error: Please enter a month from 1 to ${currentMonth} or "ytd".`;
-    //         is_valid = false;
-    //         res.status(400).json({
-    //             // res.json({
-    //             text: slack_message,
-    //         });
-    //     }
-    // }
-    
-    // if (typeof type === 'string' && type.trim() !== '') {
-    //     if (!Object.keys(type_map).includes(type)) {
-    //         slack_message = `Error: Inpput = ${type}. Please enter a valid membership type. Allowed types are: ${Object.keys(type_map).join(", ")}.`;
-    //         is_valid = false;
-    //         res.status(400).json({
-    //             // res.json({
-    //             text: slack_message,
-    //         });
-    //     }
-    // }
-
-    // if (typeof category === 'string' && category.trim() !== '') {
-    //     if (!Object.keys(category_map).includes(category)) { 
-    //         slack_message = `Error: Input = "${category}". Please enter a valid category. Allowed values include: ${Object.keys(category_map).join(", ")}.`;
-    //         is_valid = false;
-    //         res.status(400).json({
-    //             // res.json({
-    //             text: slack_message,
-    //         });
-    //     }
-    // }
-
-    // if(!is_valid) {
-    //     if (!channel_id || !channel_name || !user_id) {
-    //         // Fallback to hardcoded channel if required Slack metadata is missing
-    //         await slack_message_api(slack_message, "steve_calla_slack_channel", slack_blocks = undefined);
-    //         return;
-    //     } else {
-    //         // Send a follow-up message to the user/channel from the request
-    //         await send_slack_followup_message(channel_id, channel_name, user_id, slack_message, slack_blocks = undefined);
-    //         return;
-    //     }
-    // }
+    // VALIDATION = if a user enters a bad month / type / category
+    // ... the step_1 will attempt the query but return an error message
+    // ... with example slash command
 
     try {
         // Send a success response
         res.status(200).json({
-            text: 'Retrieving revenue stats. Will respond soon.',
+            text: 'Retrieving revenue stats. Will respond shortly.',
         });
 
         // GETS ALL PARTICIPATION DATA, LOADS INTO MYSQL / BQ, CREATES DETAILED DATA
-        let is_cron_job = true;
-        await execute_step_1_create_send_revenue_stats(is_cron_job, month, type, category);
+        // await execute_step_1_create_send_revenue_stats(is_cron_job, month, type, category, channel_id, channel_name, user_id);
+        const { slack_message, slack_blocks } = await execute_step_1_create_send_revenue_stats(month, type, category);
+
+        await send_slack_followup_message(channel_id, channel_name, user_id, slack_message, slack_blocks);
 
     } catch (error) {
         console.error('Error quering or sending revenue data:', error);
