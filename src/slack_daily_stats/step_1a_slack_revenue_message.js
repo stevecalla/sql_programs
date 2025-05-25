@@ -42,6 +42,7 @@ async function create_slack_revenue_message(result, type_input = "All", category
   // Ensure `month` is a number (or null/undefined if not set)
   let month_name = "";
   let is_ytd_row = "";
+
   if (month === 'ytd') {
     month = "";
     is_ytd_row = 1;
@@ -49,25 +50,22 @@ async function create_slack_revenue_message(result, type_input = "All", category
   } else {
     month = month !== undefined && month !== null ? Number(month) : new Date().getMonth() + 1;
     month_name = await get_month_name(month);
-  }
-  const options = { data: data, is_ytd_row: is_ytd_row, month: month, month_name: month_name};
-  
-  // console.log(data);
-  // console.log(options);
-
-  const table = await generate_revenue_markdown_table(options);
+  };
 
   let { updated_at_message } = await date_info(data);
 
-  // MESSAGE
-  // 📈🤼🚴‍♂️🥇👀📢🏊‍♂️🏃‍♀️🚴‍♂️🕕ℹ️
-  const slackMessage =    
-    `📢 *MEMBERSHIP - REVENUE SNAPSHOT*\n` +
-    `🕕 ${updated_at_message}\n` +
-    `📈 ${await looker_links()}` + `\n` +
-    `ℹ️ *Month:* ${month_name}, *Type:* ${type_input}, *Category:* ${category_input}` + `\n` +
-      `\`\`\`${table}\n \`\`\``
-  ;
+  const options = { data, is_ytd_row, month, month_name, type_input, category_input};
+  const { final_formatted_message, error_message, is_error } = await generate_revenue_markdown_table(options);
+
+// MESSAGE
+// 📈🤼🚴‍♂️🥇👀📢🏊‍♂️🏃‍♀️🚴‍♂️🕕ℹ️
+const slackMessage =    
+  `📢 *MEMBERSHIP - REVENUE SNAPSHOT*\n` +
+  `🕕 ${updated_at_message}\n` +
+  `📈 ${await looker_links()}\n` +
+  `ℹ️ *Month:* ${month_name}, *Type:* ${type_input}, *Category:* ${category_input}\n` +
+  (is_error ? error_message : `\`\`\`${final_formatted_message}\n\`\`\``);
+
 
   // console.log('slack_sales_message.js = ', slackMessage);
 

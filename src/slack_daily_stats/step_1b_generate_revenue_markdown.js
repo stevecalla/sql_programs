@@ -1,3 +1,5 @@
+const { type_map, category_map} = require('../../utilities/membership_products');
+
 // Format helpers with null/undefined/NaN safety
 const fmtCurrency = val => {
   const num = parseFloat(val);
@@ -58,10 +60,20 @@ async function generate_revenue_markdown_table(options) {
 
   // Choose the correct row based on flags
   let row;
+  let is_error = false;
+  const error_message = `
+  
+⚠️ No data available for the selected month/type/category.
+
+🤼 *Options:*
+• *Months:*      Enter month number \`1\` to current month or \`ytd\`
+• *Types:*         \`${Object.keys(type_map).join(", ")}\`
+• *Categories:*  \`${Object.keys(category_map).join(", ")}\`
+`;
 
   if (!data || data.length === 0) {
       console.error("No matching row found with given filters.");
-      return "⚠️ No data available for the selected month/type/category.";
+      is_error = true;
   } else if (is_ytd_row === 1) {
       row = data.find(r => r.is_ytd_row === 1);
   } else if (month) {
@@ -72,15 +84,14 @@ async function generate_revenue_markdown_table(options) {
   }
 
   if (!row) {
-    console.error("No matching row found with given filters.");
-    return "⚠️ No data available for the selected month/type/category.";
+      console.error("No matching row found with given filters.");
+      is_error = true;
   }
   
-  const raw_markdown_message = await create_markdown(row, month_name);
+  const raw_markdown_message = !is_error && await create_markdown(row, month_name);
+  const final_formatted_message = !is_error && await pad_markdown(raw_markdown_message);
 
-  const final_formatted_message = await pad_markdown(raw_markdown_message);
-
-  return final_formatted_message;
+  return { final_formatted_message, error_message, is_error };
 }
 
 // Example usage:

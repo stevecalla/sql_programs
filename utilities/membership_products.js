@@ -1,4 +1,9 @@
-const type_map = ["adult_annual", "one_day", "elite", "youth_annual"];
+const type_map = {
+    adult: "adult_annual", 
+    bronze: "one_day", 
+    elite: "elite", 
+    youth: "youth_annual",
+};
 
 const category_map = {
     // one_day / bronze

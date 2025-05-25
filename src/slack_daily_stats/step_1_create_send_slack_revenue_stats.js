@@ -7,6 +7,7 @@ const { runTimer, stopTimer }                 = require('../../utilities/timer')
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 const { create_slack_revenue_message } = require('./step_1a_slack_revenue_message');
+const { type_map, category_map} = require('../../utilities/membership_products');
 
 // const { send_slack_followup_message } = require('../../utilities/slack_messaging/send_followup_message');
 
@@ -17,14 +18,14 @@ async function get_dst_connection() {
   return await mysqlP.createConnection(cfg);
 }
 
-async function query_revenue(type_input, category_input) {
+async function query_revenue(type, category) {
 
     // BUILD WHERE CLAUSE(S)
-    const type_where_clause = type_input ? `AND type_actual = "${type_input}"` : "";
+    const type_where_clause = type ? `AND type_actual = "${type}"` : "";
     
     // Safely quote each category
-    const category_list = category_input?.map(c => `'${c}'`).join(", ");
-    const category_where_clause = category_input?.length ? `AND category_actual IN (${category_list})` : "";
+    const category_list = category?.map ? category?.map(c => `'${c}'`).join(", ") : `'${category}'`;
+    const category_where_clause = category?.length ? `AND category_actual IN (${category_list})` : "";
 
     return `
         WITH monthly_agg AS (
@@ -144,7 +145,8 @@ async function query_revenue(type_input, category_input) {
       `
 }
 
-async function execute_step_1_create_send_revenue_stats(is_cron_job = true, month, type_input, category_input, category_sql_list, channel_id, channel_name, user_id) {
+async function execute_step_1_create_send_revenue_stats(
+    is_cron_job, month, type, category, channel_id, channel_name, user_id) {
 
     runTimer('timer');
     const startTime = performance.now();
@@ -155,7 +157,10 @@ async function execute_step_1_create_send_revenue_stats(is_cron_job = true, mont
     
     try {
         // STEP #1: GET DATA
-        const [revenue_rows] = await dst.query(await query_revenue(type_input, category_sql_list));
+        const type_list = type_map[type] ? type_map[type] : type;
+        const category_list = category_map[category] ? category_map[category] : category;
+        
+        const [revenue_rows] = await dst.query(await query_revenue(type_list, category_list));
 
         const results = [
             { name: 'Revenue', data: revenue_rows },
@@ -173,7 +178,7 @@ async function execute_step_1_create_send_revenue_stats(is_cron_job = true, mont
       
         // STEP #2: CREATE SLACK MESSAGE
         if (results) {
-            const slack_message = await create_slack_revenue_message(results, type_input, category_input, month);
+            const slack_message = await create_slack_revenue_message(results, type, category, month);
             console.log('step_3_get_slack... =', slack_message);
 
             // STEP #4: SEND CRON SCHEDULED MESSAGE TO SLACK
