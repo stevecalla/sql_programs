@@ -5,8 +5,8 @@ const mysqlP                                  = require('mysql2/promise');   // 
 const { local_usat_sales_db_config }          = require('../../utilities/config');
 const { runTimer, stopTimer }                 = require('../../utilities/timer');
 
-const { create_slack_message } = require('./step_1a_slack_revenue_message');
 const { type_map, category_map} = require('./utilities/product_mapping');
+const { create_slack_message } = require('./step_1a_create_revenue_message');
 
 // Connect to MySQL
 async function get_dst_connection() {
@@ -16,7 +16,7 @@ async function get_dst_connection() {
 
 async function query_revenue(type, category) {
     
-    console.log(type, category);
+    console.log('type =', type, 'category =', category);
 
     // BUILD WHERE CLAUSE(S)
     const type_where_clause = type ? `AND type_actual = "${type}"` : "";
@@ -143,12 +143,11 @@ async function query_revenue(type, category) {
       `
 }
 
-async function execute_step_1_create_send_revenue_stats(month, type, category) {
+async function execute_get_revenue_stats(type, category, month) {
     runTimer('timer');
     const startTime = performance.now();
 
-    let slack_message = "Error - No results";
-    let slack_block = "";
+    let result = "Error - No results";
 
     const dst = await get_dst_connection();  // mysql2/promise connection
     
@@ -158,9 +157,7 @@ async function execute_step_1_create_send_revenue_stats(month, type, category) {
         const category_list = category_map[category] ? category_map[category] : category;
 
         // STEP #2: GET REVENUE DATA
-        const [result] = await dst.query(await query_revenue(type_list, category_list));
-
-        console.log(result);
+        const [data] = await dst.query(await query_revenue(type_list, category_list));
 
         // for (const { name, data } of result) {
         //   if (!data.length) {
@@ -173,9 +170,8 @@ async function execute_step_1_create_send_revenue_stats(month, type, category) {
         // }
       
         // STEP #3: CREATE SLACK MESSAGE
-        if (result) {
-            slack_message = await create_slack_message(result, type, category, month);
-            console.log('step_3_get_slack... =', slack_message);
+        if (data) {
+            result = data;
         } 
 
     } catch (err) {
@@ -185,7 +181,6 @@ async function execute_step_1_create_send_revenue_stats(month, type, category) {
         console.error('Error during data queries:', err);
 
         slack_message = `Error - No results: error`;
-        // await slack_message_api(slack_message, "steve_calla_slack_channel");
 
         throw err;
     
@@ -197,9 +192,9 @@ async function execute_step_1_create_send_revenue_stats(month, type, category) {
         const endTime = performance.now();
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
 
-        console.log(`\nAll lead data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Oops error getting time"} sec\n`);
+        console.log(`\nAll revenue data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Oops error getting time"} sec\n`);
 
-        return { slack_message, slack_block };
+        return result;
     }
     
 }
@@ -211,5 +206,5 @@ async function execute_step_1_create_send_revenue_stats(month, type, category) {
 // });
 
 module.exports = {
-    execute_step_1_create_send_revenue_stats,
+    execute_get_revenue_stats,
 }

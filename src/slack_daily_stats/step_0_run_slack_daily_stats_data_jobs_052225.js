@@ -1,6 +1,6 @@
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
-const { execute_step_1_create_send_revenue_stats } = require('./step_1_create_send_slack_revenue_stats');
+const { execute_get_revenue_stats } = require('./step_1_get_revenue_stats');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
@@ -70,11 +70,11 @@ async function execute_run_slack_sales_data_jobs(is_cron_job, channel_id, channe
 
   try {
     const stepFunctions = [
-      run_step_1 ? execute_step_1_create_send_revenue_stats : null,
+      run_step_1 ? execute_get_revenue_stats : null,
     ];
   
     const stepName = [
-      `Step #1 - execute_step_2_create_send_daily_stats: `, 
+      `Step #1 - execute_get_revenue_stats: `, 
     ];
 
     await executeSteps(stepFunctions, stepName, is_cron_job, channel_id, channel_name, user_id);
@@ -92,7 +92,7 @@ async function execute_run_slack_sales_data_jobs(is_cron_job, channel_id, channe
   return elapsedTime;
 }
 
-execute_run_slack_sales_data_jobs();
+// execute_run_slack_sales_data_jobs();
 
 module.exports = {
   execute_run_slack_sales_data_jobs,

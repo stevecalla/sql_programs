@@ -1,16 +1,21 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 
-const ngrok = require('@ngrok/ngrok');
-
-const { execute_step_1_create_send_revenue_stats } = require('./src/slack_daily_stats/step_1_create_send_slack_revenue_stats');
-const { type_map, category_map} = require('./src/slack_daily_stats/utilities/product_mapping');
-
-const { send_slack_followup_message } = require('./utilities/slack_messaging/send_followup_message');
-
 // EXPRESS SERVER
 const app = express();
 const PORT = process.env.PORT || 8007;
+
+// NGROK TUNNEL FOR TESTING
+const run_ngrok = true;
+const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
+
+// EXAMPLE SLACK SLASH COMMANDS
+const { get_slash_example_revenue } = require('./src/slack_daily_stats/utilities/example_slash_commands');
+
+// REVENUE STATS PROCESS
+const { execute_get_revenue_stats } = require('./src/slack_daily_stats/step_1_get_revenue_stats');
+const { create_slack_message } = require('./src/slack_daily_stats/step_1a_create_revenue_message');
+const { send_slack_followup_message } = require('./utilities/slack_messaging/slack_message_api_v2');
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -37,7 +42,7 @@ app.get('/revenue-test', async (req, res) => {
     }
 });
 
-// Example Requests for Slack
+// Example Slack Slash Commands
 app.post('/revenue-examples', async (req, res) => {
     // console.log('/revenue_exmaples route req.rawHeaders = ', req.rawHeaders);
 
@@ -47,12 +52,14 @@ app.post('/revenue-examples', async (req, res) => {
         query: req.query,
         param: req.params,
         text: req.body.text,
+        response_url: req.body.response_url,
     });
 
     const {
         channel_id = process.env.SLACK_CALLA_CHANNEL_ID,
         channel_name = process.env.SLACK_CALLA_CHANNEL_NAME,
-        user_id = process.env.SLACK_CALLA_USER_ID
+        user_id = process.env.SLACK_CALLA_USER_ID,
+        response_url,
     } = req.body;
 
     try {
@@ -61,40 +68,9 @@ app.post('/revenue-examples', async (req, res) => {
             text: 'Retrieving revenue stats. Will respond soon.',
         });
 
-const slack_message = `
-👀 *Slash Commands:*
-1) \`/revenue\` – returns current month to date, all types
-2) \`/revenue month=1 type=adult_annual category=silver\`
-3) \`/revenue category=silver month=ytd\`
+        const { slack_message, slack_blocks } = await get_slash_example_revenue();
 
-🤼 *Options:*
-• *Months:*      Enter month number \`1\` to current month or \`ytd\`
-• *Types:*         \`${Object.keys(type_map).join(", ")}\`
-• *Categories:*  \`${Object.keys(category_map).join(", ")}\`
-`.trim();
-
-        // const slack_blocks = undefined; // if slack block undefined uses slack_message text
-        const slack_blocks = [
-            {
-                type: "section",
-                text: {
-                    type: "mrkdwn",
-                    text: slack_message,
-                }
-            },
-            {
-                "type": "divider"
-            },
-            {
-                "type": "image",
-                "image_url": "https://cataas.com/cat?type=square&position=center",
-                "alt_text": "Cute kitten",
-                // "image_url": "https://picsum.photos/100",
-                // "alt_text": "Random image",
-            },
-        ];
-
-        await send_slack_followup_message(channel_id, channel_name, user_id, slack_message, slack_blocks);
+        await send_slack_followup_message(channel_id, channel_name, user_id, response_url, slack_message, slack_blocks);
 
     } catch (error) {
         console.error('Error quering or sending stats data:', error);
@@ -107,7 +83,7 @@ const slack_message = `
     }
 });
 
-// Endpoint to handle crontab all usat stats data job
+// Endpoint to handle requests from all sources including Crontab, Insomnia, Slack, Testing
 app.post('/revenue-stats', async (req, res) => {
     // console.log('/revenue_stats route req.rawHeaders = ', req.rawHeaders);
 
@@ -117,13 +93,17 @@ app.post('/revenue-stats', async (req, res) => {
         query: req.query,
         param: req.params,
         text: req.body.text,
+        response_url: req.body.response_url,
     });
 
+    // if user initiated request then returns to user otherwise returns to default channel
+        // unless is_test === true
     const is_test = true;
     const {
         channel_id = is_test ? process.env.SLACK_CALLA_CHANNEL_ID : SLACK_DAILY_SALES_BOT_CHANNEL_ID,
         channel_name = is_test ? process.env.SLACK_CALLA_CHANNEL_NAME : SLACK_DAILY_SALES_BOT_CHANNEL_NAME,
         user_id = is_test ? process.env.SLACK_CALLA_USER_ID : SLACK_DAILY_SALES_BOT_USER_ID,
+        response_url,
     } = req.body;
 
     // If request not received via slack, then destructure req.query parameters
@@ -131,6 +111,7 @@ app.post('/revenue-stats', async (req, res) => {
     
     // If request received from slack, then destructure req.body.text
     // ensure req.body is not empty and that req.body.text exists
+    // inspect req.body.text to assign values to month, type, category
     if (req.body && Object.keys(req.body).length > 0 && req.body.text) {
 
         // is_cron_job = false; // set cron job to false to send response is request
@@ -157,24 +138,26 @@ app.post('/revenue-stats', async (req, res) => {
         }
     }
 
-    // Now you have clean variables regardless of how it was sent
-    console.log({ month, type, category });
+    // VALID INPUT = if a user enters a bad month / type / category
+        // ... step_1 will query the data but return no data available
+        // ... user will be sent no data with example of slash command
+        // ... when try block below executes
 
-    // VALIDATION = if a user enters a bad month / type / category
-    // ... the step_1 will attempt the query but return an error message
-    // ... with example slash command
-
+    // VALID IPNUT = GET DATA, CREATE SLACK MESSAGE, SEND SLACK MESSAGE
     try {
         // Send a success response
         res.status(200).json({
             text: 'Retrieving revenue stats. Will respond shortly.',
         });
 
-        // GETS ALL PARTICIPATION DATA, LOADS INTO MYSQL / BQ, CREATES DETAILED DATA
-        // await execute_step_1_create_send_revenue_stats(is_cron_job, month, type, category, channel_id, channel_name, user_id);
-        const { slack_message, slack_blocks } = await execute_step_1_create_send_revenue_stats(month, type, category);
+        // STEP 1: GET REVENUE STATS
+        const result = await execute_get_revenue_stats(type, category, month);
 
-        await send_slack_followup_message(channel_id, channel_name, user_id, slack_message, slack_blocks);
+        // STEP 2: CREATE SLACK MESSAGE
+        const { slack_message, slack_blocks } = await create_slack_message(result, type, category, month);
+
+        // STEP 3: SEND SLACK MESSAGE
+        await send_slack_followup_message(channel_id, channel_name, user_id, response_url, slack_message, slack_blocks);
 
     } catch (error) {
         console.error('Error quering or sending revenue data:', error);
@@ -206,14 +189,8 @@ app.listen(PORT, async () => {
     // console.log(`Tunnel using cloudflare https://usat-revenue.kidderwise.org/revenue-stats`)
 
     // NGROK TUNNEL
-	try {
-        ngrok.connect({ 
-            addr: PORT, 
-            authtoken_from_env: true,
-         }).then(listener => console.log(`Ingress established at: ${listener.url()}`));
-
-    } catch (err) {
-        console.error('Error starting ngrok:', err);
+    if(run_ngrok) {
+        create_ngrok_tunnel(PORT);
     }
 });
 

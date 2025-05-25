@@ -54,7 +54,7 @@ async function generate_markdown_table(options) {
   } else if (is_ytd_row === 1) {
       row = result.find(r => r.is_ytd_row === 1);
   } else if (month) {
-      console.log('month condition = ', month);
+      // console.log('month condition = ', month);
       row = result.find(r => r.month_actual === month);
   } else {
       row = result.find(r => r.is_current_month === 1);
@@ -73,6 +73,9 @@ async function generate_markdown_table(options) {
 }
 
 async function create_slack_message(result, type_input = "All", category_input = "All", month) {
+
+  let slack_message = "Error - No results";
+  let slack_blocks = "";
 
   let { date_message } = await get_date_message(result[0].created_at_mtn);
 
@@ -95,16 +98,16 @@ async function create_slack_message(result, type_input = "All", category_input =
 
 // MESSAGE
 // 📈🤼🚴‍♂️🥇👀📢🏊‍♂️🏃‍♀️🚴‍♂️🕕ℹ️
-const slackMessage =    
+slack_message =    
   `📢 *MEMBERSHIP - REVENUE SNAPSHOT*\n` +
   `🕕 ${date_message}\n` +
   `📈 ${await looker_link(`https://lookerstudio.google.com/u/0/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_bc9xthh1rd`)}\n` +
   `ℹ️ *Month:* ${month_name}, *Type:* ${type_input}, *Category:* ${category_input}\n` +
   (is_error ? error_message : `\`\`\`${final_formatted_message}\n\`\`\``);
 
-  // console.log('slack_sales_message.js = ', slackMessage);
+  // console.log('slack_sales_message.js = ', slack_message);
 
-  return slackMessage;
+  return { slack_message, slack_blocks };
 }
 
 // TEST WITH SEED DATA
