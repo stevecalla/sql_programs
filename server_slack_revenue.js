@@ -158,7 +158,8 @@ app.post('/revenue-stats', async (req, res) => {
     try {
         // Send a success response
         res.status(200).json({
-            message: 'All revenue data = get, create slack msg, send slack msg data succesful.',
+            // message: 'All revenue data = get, create slack msg, send slack msg data succesful.',
+            text: 'All revenue data = get, create slack msg, send slack msg data succesful.',
         });
 
         // GETS ALL PARTICIPATION DATA, LOADS INTO MYSQL / BQ, CREATES DETAILED DATA
