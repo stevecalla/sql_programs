@@ -1,12 +1,16 @@
  const express = require('express');
 const bodyParser = require('body-parser');
 
-// SLACK - SALES DATA
-const { execute_run_slack_sales_data_jobs } = require('./src/slack_sales_data/step_0_run_slack_sales_data_jobs_01125');
+// NGROK TUNNEL FOR TESTING
+const run_ngrok = false;
+const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // EXPRESS SERVER
 const app = express();
 const PORT = process.env.PORT || 8001;
+
+// SLACK - SALES DATA
+const { execute_run_slack_sales_data_jobs } = require('./src/slack_sales_data/step_0_run_slack_sales_data_jobs_01125');
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -96,6 +100,11 @@ app.listen(PORT, () => {
 
     console.log(`Tunnel using cloudflare https://usat-slack.kidderwise.org/get-member-sales`)
     // 192.168.1.87:8001
+
+    // NGROK TUNNEL
+    if(run_ngrok) {
+        create_ngrok_tunnel(PORT);
+    }
 });
 
 

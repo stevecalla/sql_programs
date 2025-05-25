@@ -61,10 +61,9 @@ async function send_slack_followup_message(channelId, channelName, userId, respo
 
     const isDirectMessage = channelId.startsWith('D');
 
-    if (isDirectMessage) {
-        await axios.post(response_url, {
-        text: message,
+    if (isDirectMessage) {await axios.post(response_url, {
         response_type: 'ephemeral', // or 'in_channel' if desired
+        text: message,
         ...(blocks?.length > 0 && { blocks }),
     });
 
