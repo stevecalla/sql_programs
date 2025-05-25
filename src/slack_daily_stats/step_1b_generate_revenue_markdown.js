@@ -55,14 +55,11 @@ async function generate_revenue_markdown_table(options) {
 
   let { data, is_ytd_row, month, month_name } = options;
 
-  // console.log(data);
-  // console.log('options = ', options);
-
   // Choose the correct row based on flags
   let row;
   let is_error = false;
   const error_message = `
-  
+
 ⚠️ No data available for the selected month/type/category.
 
 🤼 *Options:*
