@@ -180,8 +180,8 @@ app.post('/revenue-stats', async (req, res) => {
 });
 
 // Endpoint to handle crontab for revenue data
-app.get('/scheduled_revenue-stats', async (req, res) => {
-    // console.log('/scheduled_revenue_stats route req.rawHeaders = ', req.rawHeaders);
+app.get('/scheduled-revenue-stats', async (req, res) => {
+    // console.log('/scheduled-revenue_stats route req.rawHeaders = ', req.rawHeaders);
 
     try {
         const type = undefined;
