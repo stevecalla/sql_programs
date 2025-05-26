@@ -112,7 +112,7 @@ slack_message =
   (is_error ? "" : ytd_message)
 ;
 
-const slack_blocks = get_slack_block_template(slack_message);
+  const slack_blocks = await get_slack_block_template(slack_message);
 
   return { slack_message, slack_blocks };
 }
