@@ -232,7 +232,7 @@ app.listen(PORT, async () => {
 	console.log(`Server is running on http://localhost:${PORT}`);
 
     // CLOUDFLARE TUNNEL
-    // console.log(`Tunnel using cloudflare https://usat-revenue.kidderwise.org/revenue-stats`)
+    console.log(`Tunnel using cloudflare https://usat-revenue.kidderwise.org/revenue-stats`)
 
     // NGROK TUNNEL
     if(is_test_ngrok) {
