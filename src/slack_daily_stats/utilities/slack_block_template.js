@@ -15,8 +15,7 @@ async function get_slack_block_template(slack_message) {
         },
         {
             "type": "image",
-            // "image_url": "https://cataas.com/cat?type=square&position=center",
-            "image_url": "https://cataas.com/cat/gif/says/Hello?&filter=mono&fontColor=orange&fontSize=20&type=square",
+            "image_url": "https://cataas.com/cat?type=square&position=center",
             "alt_text": "Cute kitten",
             // "image_url": "https://picsum.photos/100",
             // "alt_text": "Random image",
