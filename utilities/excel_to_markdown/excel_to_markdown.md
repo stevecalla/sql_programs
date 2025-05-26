@@ -338,6 +338,61 @@ As of 5/2/25
 
 
 
+year	2025		
+is_match	0		
+            
+| year        | 2025                                                            |         |                        |
+|-------------|-----------------------------------------------------------------|---------|------------------------|
+| is_match    | 0                                                               |         |                        |
+|             |                                                                 |         |                        |
+| sanction_id | Name                                                            | Status  | Count of ApplicationID |
+| 310200      | 2025 Florida Anvil Ultra Triathlon - Double World Championship  | DELETED | 1                      |
+| 311130      | 2025 Startline Coaching Off Season group training - Brooklyn NY | DRAFT   | 1                      |
+| 311531      | 2025 Florida ANVIL Ultra Triathlon                              | DELETED | 1                      |
+| 350317      | Oro Valley Triathlon and Duathlon Festival                      | PENDING | 1                      |
+| Grand Total |                                                                 |         | 4                      |
+
+
+
+
+Sales: As of TU5/20
+
+
+SALES
+| MTD                 | REV   | UNITS | RPU
+|---------------------|-------|-------|------
+| Goal - Abs          | $735K | 25.6K | $28.73
+| Goal                | +18%  | +1.4% | 16.8%
+
+| Actual - MTD        | +26%  | +  2% | +23%
+| May '25 - MTD       | $443K | 14.5K | $30.56
+| May '24 - MTD       | $355K | 14.2K | $24.59
+| abs diff            | $ 87K |   164 | $ 5.50
+
+|---------------------|-------|-------|------
+| Goal                | +18%  | +1.4% | 16.8%
+| Actual - YTD April  | +26%  | + 2%  | +23%
+
+
+RANKED RESULTS
+|                | Races  | Races   | Racers  | Racers |
+| MTD            | 2024   | 2025    | 2024    | 2025   |  
+|----------------|--------|---------|---------|--------| 
+| Q125           | 56     | 54      | 10.9K   | 11.0K  | 
+| April          | 64     | 48      | 23.1K   | 17.9K  | 
+| May            | 103    | 21      | 30.5K   |  3.4K  |
+
+EVENTS
+| Type                | 2024  | 2025  | diff |
+|---------------------|-------|-------|------|
+| Adult Race          | 825   | 812   | -13  |
+| Adult Clinic        | 90    | 83    | -7   |
+| Youth Race          | 210   | 193   | -17  |
+| Youth Clinic        | 33    | 29    | -4   |
+| No Race Designation | 0     | 20    | 20   |
+| Total               | 1,158 | 1,137 | -21  |
+
+* Working with Sam to manually update race designation & event status
 
 
 

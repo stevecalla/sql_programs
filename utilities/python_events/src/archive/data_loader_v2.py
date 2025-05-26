@@ -1,22 +1,48 @@
+import platform
+import getpass
 from pathlib import Path
 import pandas as pd
 
-from directory_utilities import get_os_path
+# --- CONFIGURE YOUR FOLDERS HERE ---
+BASE_PATHS = {
+    'Linux': {
+        'steve-calla': Path('/home/steve-calla/development/usat/data/usat_python_data'),
+        'usat-server': Path('/home/usat-server/development/usat/data/usat_python_data'),
+        'default':     Path('/home/other-user/development/usat/data/usat_python_data'),
+    },
+    'Darwin': Path('/Users/teamkwsc/development/usat/data/usat_python_data'),
+    'Windows': Path(r'C:\ProgramData\MySQL\MySQL Server 8.0\Uploads\data\usat_python_data'),
+}
 
 # Extensions we’ll consider
 EXCEL_EXTS = {'.xls', '.xlsx', '.xlsm', '.xlsb'}
 CSV_EXTS   = {'.csv'}
 ALL_EXTS   = EXCEL_EXTS | CSV_EXTS
 
-def load_data(subfolder: str) -> pd.DataFrame:
+
+def get_data_dir() -> Path:
     """
-    1) Scans the specified subfolder under the platform-appropriate directory for CSV/Excel files.
+    Picks the right base folder for your platform/user.
+    """
+    os_name = platform.system()  # 'Linux', 'Darwin', or 'Windows'
+    if os_name == 'Linux':
+        user = getpass.getuser()
+        return BASE_PATHS['Linux'].get(user, BASE_PATHS['Linux']['default'])
+    elif os_name in ('Darwin', 'Windows'):
+        return BASE_PATHS[os_name]
+    else:
+        raise RuntimeError(f"Unsupported OS: {os_name}")
+
+
+def load_data() -> pd.DataFrame:
+    """
+    1) Scans the platform-appropriate directory for CSV/Excel files.
     2) Picks the newest one.
     3) Loads it into a DataFrame.
     4) Strips header whitespace.
     5) Verifies that 'RaceDate' exists.
     """
-    data_dir = get_os_path(subfolder)
+    data_dir = get_data_dir()
     # print(f"Looking in data directory: {data_dir!r}")
 
     if not data_dir.exists():
@@ -55,5 +81,4 @@ def load_data(subfolder: str) -> pd.DataFrame:
 
     return df
 
-# load_data("usat_python_data")
-# load_data("usat_event_output")
+# load_data()

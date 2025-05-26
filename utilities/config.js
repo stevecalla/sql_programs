@@ -1,12 +1,13 @@
 const fs = require('fs').promises; // Use promises API
 const dotenv = require('dotenv');
-dotenv.config({ path: "../.env" });
+dotenv.config();
+// dotenv.config({ path: "../.env" });
 
 const { determineOSUser } = require('./determineOSPath');
 const connectionLimitThrottle = 30;
 
 // console.log(process.env);
-// console.log(process.env.MYSQL_HOST);
+console.log('config process.env = ', process.env.MYSQL_HOST);
 
 async function getPrivateKey() {
     const isMac = process.platform === 'darwin'; // macOS

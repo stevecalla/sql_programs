@@ -109,8 +109,6 @@
 
 // uploadAndShareFile(filePath, channelId, messageText);
 
-
-
 // NOTE: To send a message (with a file) to your own Slack DM ("Steve Calla"), you need the user ID and the ability to open or use the direct message (IM) channel ID.
 
 // const email = "steve.calla@usatriathlon.org";

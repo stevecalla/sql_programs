@@ -30,7 +30,7 @@ from data_processing import group_clean_data
 from fuzzy_matching import match_events_2025_vs_2024, match_events_2024_vs_2025
 from date_analysis import date_shift_analysis
 
-from chart_output_png_pdf import (
+from utilities.python_events.src.export_to_png_pdf import (
     save_match_score_histogram,
     save_bar_chart,
     save_yoy_comparison_chart,

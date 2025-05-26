@@ -1,16 +1,6 @@
-const dotenv = require('dotenv');
-dotenv.config({ path: "./.env" });
-
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
-// GET & LOAD EVENT DATA
-const { execute_transfer_usat_to_local } = require('./step_1_transfer_data_usat_to_local');
-const { execute_create_event_data_metrics } = require('./step_2_create_event_data_metrics');
-
-const { execute_get_python_event_data } = require('./step_5_get_python_event_data');
-const { execute_run_python_event_reports } = require('../../utilities/python_events/index'); // step #6 run python event reports
-
-const { execute_load_big_query_event_data_metrics } = require("./step_3_load_bq_event_data_metrics");
+const { execute_get_revenue_stats } = require('./step_1_get_revenue_stats');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
@@ -70,43 +60,27 @@ async function executeSteps(stepFunctions, stepName) {
   }
 }
 
-async function execute_run_event_data_jobs() {
+async function execute_run_slack_sales_data_jobs(is_cron_job, channel_id, channel_name, user_id) {
+
   const startTime = performance.now();
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
-
-  const run_step_1  = true; // tranfer USAT event data to Local DB
-  const run_step_2  = true; // execute_create_event_data_metrics
-  const run_step_3  = true; // load event metrics to bigquery
-
-  const run_step_5  = true; // execute_get_python_event_data
-  const run_step_6  = true; // run python event reports
   
+  const run_step_1 = true; // create slack messaage; default = false
+
   try {
     const stepFunctions = [
-      run_step_1 ? execute_transfer_usat_to_local : null,
-      run_step_2 ? execute_create_event_data_metrics : null,
-      run_step_3 ? execute_load_big_query_event_data_metrics : null,
-
-      run_step_5 ? execute_get_python_event_data : null,
-      run_step_6 ? execute_run_python_event_reports : null,
-      
+      run_step_1 ? execute_get_revenue_stats : null,
     ];
-
+  
     const stepName = [
-      `Step #1 - Transfer data from USAT to Local db:`, 
-      `Step #2 - Create event data metrics: `, 
-      `Step #3 - Load event metrics to BQ: `,
-
-      `Step #5 - Get python event data`,
-      `Step_#6 - Run python event reports`,
-      
+      `Step #1 - execute_get_revenue_stats: `, 
     ];
 
-    await executeSteps(stepFunctions, stepName); // Call the new function
+    await executeSteps(stepFunctions, stepName, is_cron_job, channel_id, channel_name, user_id);
 
   } catch (error) {
-    console.error('Error in main process:', error); // More specific message
+    console.error('Error in main process:', error);
     return;
   }
 
@@ -118,8 +92,8 @@ async function execute_run_event_data_jobs() {
   return elapsedTime;
 }
 
-// execute_run_event_data_jobs();
+// execute_run_slack_sales_data_jobs();
 
 module.exports = {
-  execute_run_event_data_jobs,
+  execute_run_slack_sales_data_jobs,
 };

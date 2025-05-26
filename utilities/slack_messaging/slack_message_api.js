@@ -3,15 +3,15 @@ const axios = require('axios');
 const dotenv = require('dotenv');
 dotenv.config({  path: "../.env" });
 
-async function sendSlackMessage(message, slack_channel_url, channel) {
+async function sendSlackMessage(message, slack_channel_url, channel, blocks) {
   const slack_message = `${message}`;
 
   const payload = {
-    response_type: "ephemeral",  // Make the response visible only to the sender
-    // response_type: "in_channel",  // Make the response visible to everyone
-    text: slack_message,
     icon_emoji: ":ghost:",
     username: "Steve Calla",
+    response_type: 'ephemeral', // Make visible only to sender; use 'in_channel' visible to all
+    text: slack_message,
+    ...(blocks?.length > 0 && { blocks }), // only include 'blocks' if provided
   };
 
   try {
@@ -47,7 +47,7 @@ async function sendSlackMessage(message, slack_channel_url, channel) {
   }
 }
 
-async function slack_message_api(message, channel) {
+async function slack_message_api(message, channel, blocks) {
   
   const slack_message_url = {
     "steve_calla_slack_channel": process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL,
@@ -57,7 +57,7 @@ async function slack_message_api(message, channel) {
   let url = slack_message_url[channel];
   console.log('slack api = ', url);
 
-  await sendSlackMessage(message, slack_message_url[channel], channel);
+  await sendSlackMessage(message, slack_message_url[channel], channel, blocks);
 }
 
 // slack_message_api('test', "steve_calla_slack_channel");

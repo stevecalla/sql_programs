@@ -145,4 +145,4 @@ def export_analysis_to_excel(grouped_df, pivot_value, repeated_events_2025,
             worksheet = writer.sheets[sheet]
             worksheet.set_column(0, 50, 20, center_format)
             
-    print(f"Excel analysis exported to: {out_file}")
+    # print(f"Excel analysis exported to: {out_file}")
