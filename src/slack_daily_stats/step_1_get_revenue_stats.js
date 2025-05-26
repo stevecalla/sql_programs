@@ -6,7 +6,6 @@ const { local_usat_sales_db_config }          = require('../../utilities/config'
 const { runTimer, stopTimer }                 = require('../../utilities/timer');
 
 const { type_map, category_map} = require('./utilities/product_mapping');
-const { create_slack_message } = require('./step_1a_create_revenue_message');
 
 // Connect to MySQL
 async function get_dst_connection() {
@@ -14,16 +13,19 @@ async function get_dst_connection() {
   return await mysqlP.createConnection(cfg);
 }
 
-async function query_revenue(type, category) {
+async function query_revenue(type_list, category_list) {
+    // source: C:\Users\calla\development\usat\sql_code\22_slack_daily_stats_052225\discovery_revenue_052225.sql
     
-    console.log('type =', type, 'category =', category);
+    console.log('type =', type_list, 'category =', category_list);
 
     // BUILD WHERE CLAUSE(S)
-    const type_where_clause = type ? `AND type_actual = "${type}"` : "";
+    const type_where_clause = type_list ? `AND type_actual = "${type_list}"` : "";
+    console.log('type where clause =', type_where_clause);
     
     // Safely quote each category
-    const category_list = category?.map ? category?.map(c => `'${c}'`).join(", ") : `'${category}'`;
-    const category_where_clause = category?.length ? `AND category_actual IN (${category_list})` : "";
+    const category_list_formatted = category_list?.map ? category_list?.map(c => `'${c}'`).join(", ") : `'${category_list}'`;
+    const category_where_clause = category_list?.length ? `AND category_actual IN (${category_list_formatted})` : "";
+    console.log('category where clause =', category_where_clause);
 
     return `
         WITH monthly_agg AS (
@@ -146,33 +148,45 @@ async function query_revenue(type, category) {
 async function execute_get_revenue_stats(type, category, month) {
     runTimer('timer');
     const startTime = performance.now();
-
-    let result = "Error - No results";
-
-    const dst = await get_dst_connection();  // mysql2/promise connection
     
+    const dst = await get_dst_connection();  // mysql2/promise connection
+
+    let result = [];
+
+    // If month is undefined/null, default to current month number (1-12) 
+    if (month === null || month === undefined) {
+        const now = new Date();
+        month = now.getMonth() + 1; // getMonth() returns 0-11, so add 1
+    }
+    console.log('type =', type, 'category =', category, 'month =', month);
+
     try {
-        // STEP #1: CONVERT TYPE & CATEGORY INPUT INTO LIST OF TYPES OR CATEGORIES
-        const type_list = type_map[type] ? type_map[type] : type;
-        const category_list = category_map[category] ? category_map[category] : category;
+        // STEP 1: Resolve type and category filters
+        const type_list = type_map[type];
+        const category_list = category_map[category];
 
-        // STEP #2: GET REVENUE DATA
-        const [data] = await dst.query(await query_revenue(type_list, category_list));
+        // STEP 2: Determine if values were passed but invalid
+        const type_invalid = type !== undefined && type_list === undefined;
+        const category_invalid = category !== undefined && category_list === undefined;
 
-        // for (const { name, data } of result) {
-        //   if (!data.length) {
-        //     console.warn(`No data returned from ${name} query`);
-        //   } else {
+        // STEP 3: Run query only if no invalid filters
+        let data;
+        if (!type_invalid && !category_invalid) {
+            [data] = await dst.query(await query_revenue(type_list, category_list));
+        } else {
+            data = undefined;
+        }
+
+        // if (data && data.length > 0) {
+        //     console.log('length =', data.length);
         //     const sample = data[0];
-        //     console.log(`${name} - Available keys:`, Object.keys(sample));
-        //     console.log(`${name} - Sample row:`, sample);
-        //   }
+        //     console.log(`Sample row:`, sample);
+        // } else {
+        //     console.log('data is undefined or empty:', data);
         // }
-      
-        // STEP #3: CREATE SLACK MESSAGE
-        if (data) {
-            result = data;
-        } 
+
+        // STEP #3: CREATE SLACK MESSAGE (pass along array if undefined)
+        result = (data !== undefined && data !== null) ? data : [];
 
     } catch (err) {
             
@@ -199,11 +213,27 @@ async function execute_get_revenue_stats(type, category, month) {
     
 }
 
-// Run the main function
-// execute_get_revenue_stats().catch(err => {
-//     console.error('Stream failed:', err);
+// async function test() {
+//     const { create_slack_message } = require('./step_1a_create_revenue_message');
+    
+//     const type = "adult"; const category = undefined; let month; // result full table
+//     // const type = undefined; const category = undefined; const month = 3; // result full table
+//     // const type = undefined; const category = undefined; let month; // result full table
+//     // const type = "adult"; const category = undefined; const month = "ytd"; // result full table
+
+//     // const type = "invalid input"; const category = undefined; const month = 3; // result = error message
+//     // const type = "invalid input"; const category = undefined; const month = "ytd"; // result = empty table
+//     // const type = undefined; const category = "invalid input"; const month = "ytd"; // result = empty table
+
+//     const result = await execute_get_revenue_stats(type, category, month);
+//     const { slack_message, slack_blocks } = await create_slack_message(result, type, category, month);
+
+//     console.log('message =', slack_message);
+
 //     process.exit(1);
-// });
+// }
+
+// test();
 
 module.exports = {
     execute_get_revenue_stats,
