@@ -7,7 +7,7 @@ const { determineOSUser } = require('./determineOSPath');
 const connectionLimitThrottle = 30;
 
 // console.log(process.env);
-console.log('config process.env = ', process.env.MYSQL_HOST);
+// console.log('config process.env = ', process.env.MYSQL_HOST);
 
 async function getPrivateKey() {
     const isMac = process.platform === 'darwin'; // macOS
