@@ -6,7 +6,7 @@ const app = express();
 const PORT = process.env.PORT || 8007;
 
 // NGROK TUNNEL FOR TESTING
-const run_ngrok = true;
+const is_test_ngrok = false;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // EXAMPLE SLACK SLASH COMMANDS
@@ -16,6 +16,7 @@ const { get_slash_example_revenue } = require('./src/slack_daily_stats/utilities
 const { execute_get_revenue_stats } = require('./src/slack_daily_stats/step_1_get_revenue_stats');
 const { create_slack_message } = require('./src/slack_daily_stats/step_1a_create_revenue_message');
 const { send_slack_followup_message } = require('./utilities/slack_messaging/send_message_api_v2_followup');
+const { slack_message_api } = require('./utilities/slack_messaging/slack_message_api');
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -32,11 +33,11 @@ app.get('/revenue-test', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error quering or sending revenue data:', error);
+        console.error('Error querying or sending revenue data.', error);
         
         // Send an error response
         res.status(500).json({
-            message: 'Error quering or sending revenue data.',
+            message: 'Error querying or sending revenue data.',
             error: error.message || 'Internal Server Error',
         });
     }
@@ -168,11 +169,48 @@ app.post('/revenue-stats', async (req, res) => {
         await send_slack_followup_message(channel_id, channel_name, user_id, response_url, slack_message, slack_blocks);
 
     } catch (error) {
-        console.error('Error quering or sending revenue data:', error);
+        console.error('Error querying or sending revenue data.', error);
         
         // Send an error response
         res.status(500).json({  
-            message: 'Error quering or sending revenue data.',
+            message: 'Error querying or sending revenue data.',
+            error: error.message || 'Internal Server Error',
+        });
+    }
+});
+
+// Endpoint to handle crontab for revenue data
+app.get('/scheduled_revenue-stats', async (req, res) => {
+    // console.log('/scheduled_revenue_stats route req.rawHeaders = ', req.rawHeaders);
+
+    try {
+        const type = undefined;
+        const category = undefined;
+        const month = undefined;
+
+        // STEP 1: GET REVENUE STATS
+        const result = await execute_get_revenue_stats(type, category, month);
+
+        // STEP 2: CREATE SLACK MESSAGE
+        const { slack_message, slack_blocks } = await create_slack_message(result, type, category, month);
+
+        // STEP 3: SEND SLACK MESSAGE
+        const is_test = false;
+        const slack_channel = is_test ? "steve_calla_slack_channel" : "daily_sales_bot_slack_channel";
+
+        await slack_message_api(slack_message, slack_channel, slack_blocks);
+
+        // Send a success response
+        res.status(200).json({
+            message: 'Membership revenue queried & sent successfully.',
+        });
+
+    } catch (error) {
+        console.error('Error querying or sending revenue data.', error);
+        
+        // Send an error response
+        res.status(500).json({  
+            message: 'Error querying or sending revenue data.',
             error: error.message || 'Internal Server Error',
         });
     }
@@ -197,7 +235,7 @@ app.listen(PORT, async () => {
     // console.log(`Tunnel using cloudflare https://usat-revenue.kidderwise.org/revenue-stats`)
 
     // NGROK TUNNEL
-    if(run_ngrok) {
+    if(is_test_ngrok) {
         create_ngrok_tunnel(PORT);
     }
 });
