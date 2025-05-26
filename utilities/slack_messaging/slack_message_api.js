@@ -7,13 +7,11 @@ async function sendSlackMessage(message, slack_channel_url, channel, blocks) {
   const slack_message = `${message}`;
 
   const payload = {
-    // response_type: "in_channel",  // Make the response visible to everyone
-    response_type: "ephemeral",  // Make the response visible only to the sender
     icon_emoji: ":ghost:",
     username: "Steve Calla",
+    response_type: 'ephemeral', // Make visible only to sender; use 'in_channel' visible to all
     text: slack_message,
     ...(blocks?.length > 0 && { blocks }), // only include 'blocks' if provided
-    // blocks: blocks,
   };
 
   try {

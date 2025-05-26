@@ -15,7 +15,7 @@ const { get_slash_example_revenue } = require('./src/slack_daily_stats/utilities
 // REVENUE STATS PROCESS
 const { execute_get_revenue_stats } = require('./src/slack_daily_stats/step_1_get_revenue_stats');
 const { create_slack_message } = require('./src/slack_daily_stats/step_1a_create_revenue_message');
-const { send_slack_followup_message } = require('./utilities/slack_messaging/slack_message_api_v2');
+const { send_slack_followup_message } = require('./utilities/slack_messaging/send_message_api_v2_followup');
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -55,12 +55,17 @@ app.post('/revenue-examples', async (req, res) => {
         response_url: req.body.response_url,
     });
 
+    // if user initiated request then returns to user otherwise returns to default channel
     const {
-        channel_id = process.env.SLACK_CALLA_CHANNEL_ID,
-        channel_name = process.env.SLACK_CALLA_CHANNEL_NAME,
-        user_id = process.env.SLACK_CALLA_USER_ID,
-        response_url,
+        channel_id,
+        channel_name,
+        user_id,
     } = req.body;
+
+    if (req.body && Object.keys(req.body).length === 0)
+        response_url = process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL
+    else 
+        response_url = req.body.response_url
 
     try {
         // Send a success response
@@ -83,7 +88,8 @@ app.post('/revenue-examples', async (req, res) => {
     }
 });
 
-// Endpoint to handle requests from all sources including Crontab, Insomnia, Slack, Testing
+// Endpoint to handle requests slack slash "/revenue" command only
+    // originating from slack slash will always have req.body unless testing curl, insomnia et al
 app.post('/revenue-stats', async (req, res) => {
     // console.log('/revenue_stats route req.rawHeaders = ', req.rawHeaders);
 
@@ -97,14 +103,16 @@ app.post('/revenue-stats', async (req, res) => {
     });
 
     // if user initiated request then returns to user otherwise returns to default channel
-        // unless is_test === true
-    const is_test = true;
     const {
-        channel_id = is_test ? process.env.SLACK_CALLA_CHANNEL_ID : SLACK_DAILY_SALES_BOT_CHANNEL_ID,
-        channel_name = is_test ? process.env.SLACK_CALLA_CHANNEL_NAME : SLACK_DAILY_SALES_BOT_CHANNEL_NAME,
-        user_id = is_test ? process.env.SLACK_CALLA_USER_ID : SLACK_DAILY_SALES_BOT_USER_ID,
-        response_url,
+        channel_id,
+        channel_name,
+        user_id,
     } = req.body;
+
+    if (req.body && Object.keys(req.body).length === 0)
+        response_url = process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL
+    else 
+        response_url = req.body.response_url
 
     // If request not received via slack, then destructure req.query parameters
     let { month, type, category } = req.query;
