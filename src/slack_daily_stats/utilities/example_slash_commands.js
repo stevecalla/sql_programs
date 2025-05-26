@@ -1,4 +1,5 @@
 const { type_map, category_map} = require('./product_mapping');
+const { get_slack_block_template } = require('./slack_block_template');
 
 const slack_message_revenue = `
 👀 *Slash Commands:*
@@ -15,28 +16,10 @@ const slack_message_revenue = `
 
 async function get_slash_example_revenue() {
 
-    // const slack_blocks = undefined; // if slack block undefined uses slack_message text
     const slack_message = slack_message_revenue;
-
-    const slack_blocks = [
-        {
-            type: "section",
-            text: {
-                type: "mrkdwn",
-                text: slack_message,
-            }
-        },
-        {
-            "type": "divider"
-        },
-        {
-            "type": "image",
-            "image_url": "https://cataas.com/cat?type=square&position=center",
-            "alt_text": "Cute kitten",
-            // "image_url": "https://picsum.photos/100",
-            // "alt_text": "Random image",
-        },
-  ];
+    
+    const slack_blocks = await get_slack_block_template(slack_message);
+    // const slack_blocks = undefined; // if slack block undefined defaults to slack_message
 
   return { slack_message, slack_blocks };
 }
