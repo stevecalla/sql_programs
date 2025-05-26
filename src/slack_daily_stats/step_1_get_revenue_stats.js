@@ -200,7 +200,7 @@ async function execute_get_revenue_stats(type, category, month) {
 }
 
 // Run the main function
-// execute_step_1_create_send_revenue_stats().catch(err => {
+// execute_get_revenue_stats().catch(err => {
 //     console.error('Stream failed:', err);
 //     process.exit(1);
 // });
