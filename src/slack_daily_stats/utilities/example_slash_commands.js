@@ -4,8 +4,10 @@ const { get_slack_block_template } = require('./slack_block_template');
 const slack_message_revenue = `
 👀 *Slash Commands:*
 1) \`/revenue\` – returns current month to date, all types
-2) \`/revenue month=1 type=adult_annual category=silver\`
-3) \`/revenue category=silver month=ytd\`
+2) \`/revenue month=3\` – returns March for all types
+3) \`/revenue month=1 type=adult\`
+4) \`/revenue category=silver month=ytd\`
+3) \`/revenue month=2 type=adult category=bronze\`
 
 🤼 *Options:*
 • *Months:*      Enter month number \`1\` to current month or \`ytd\`
