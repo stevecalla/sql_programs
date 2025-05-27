@@ -107,7 +107,7 @@ slack_message =
   `📢 *MEMBERSHIP - REVENUE SNAPSHOT*\n` +
   `🕕 ${date_message}\n` +
   `📈 ${await looker_link(`https://lookerstudio.google.com/u/0/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_bc9xthh1rd`)}\n` + '\n' +
-  `ℹ️ *Month:* ${month_name}, *Type:* ${type_input}, *Category:* ${category_input}\n` +
+  `ℹ️ *Month:* \`${month_name}\`, *Type:* \`${type_input}\`, *Category:* \`${category_input}\`\n` +
   (is_error ? error_message : `\`\`\`${final_formatted_table}\n\`\`\``) +
   (is_error ? "" : ytd_message)
 ;
