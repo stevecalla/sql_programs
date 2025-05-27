@@ -7,7 +7,7 @@ const slack_message_revenue = `
 2) \`/revenue month=3\` – returns March for all types
 3) \`/revenue month=1 type=adult\`
 4) \`/revenue category=silver month=ytd\`
-3) \`/revenue month=2 type=adult category=bronze\`
+5) \`/revenue month=2 type=adult category=bronze\`
 
 🤼 *Options:*
 • *Months:*      Enter month number \`1\` to current month or \`ytd\`
