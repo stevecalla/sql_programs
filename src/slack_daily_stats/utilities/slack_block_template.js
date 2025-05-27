@@ -1,9 +1,10 @@
 const { get_image_url } = require('./get_random_image_url');
 
 async function get_slack_block_template(slack_message) {
+    
+    const url = await get_image_url();
 
     // const slack_blocks = undefined; // if slack block undefined uses slack_message text
-
     const slack_blocks = [
         {
             type: "section",
@@ -17,11 +18,8 @@ async function get_slack_block_template(slack_message) {
         },
         {
             "type": "image",
-            "image_url": await get_image_url(),
-            // "image_url": "https://cataas.com/cat?type=square&position=center",
-            // "alt_text": "Cute kitten",
-            // "image_url": "https://picsum.photos/100",
-            // "alt_text": "Random image",
+            "image_url": `${url}`,
+            "alt_text": "Random image of cat, dog, fox or other",
         },
   ];
 
@@ -30,7 +28,7 @@ async function get_slack_block_template(slack_message) {
   return slack_blocks;
 }
 
-get_slack_block_template('hello');
+// get_slack_block_template('hello');
 
 module.exports = {
     get_slack_block_template,
