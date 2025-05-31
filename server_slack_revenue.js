@@ -1,3 +1,6 @@
+const dotenv = require('dotenv');
+dotenv.config();
+
 const express = require('express');
 const bodyParser = require('body-parser');
 
@@ -6,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 8007;
 
 // NGROK TUNNEL FOR TESTING
-const is_test_ngrok = false;
+const is_test_ngrok = true;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // EXAMPLE SLACK SLASH COMMANDS
