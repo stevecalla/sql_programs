@@ -14,7 +14,6 @@ body {
   height: 100%;
 }
 
-
 /* MAP */
 #map { 
     position: absolute; 
@@ -47,7 +46,7 @@ body {
   vertical-align: middle;
 }
 
-/* LOADING ICON */
+/* SPINNER ICON */
 .spinner-overlay {
     position: fixed;
     top: 0;

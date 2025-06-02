@@ -50,9 +50,7 @@ app.get('/', (req, res) => {
 app.get('/map', (req, res) => {
     console.log('/customer-map route req.rawHeaders = ');
 
-    // C:\Users\calla\development\usat\sql_programs\src\maps\map.html
-
-    const map_path = path.join(__dirname, 'src/maps/map-test-v2.html');
+    const map_path = path.join(__dirname, '/public/index.html');
 
     console.log(map_path);
 

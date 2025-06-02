@@ -36,14 +36,13 @@ const toggleCluster = debounce(async () => {
     }
 }, 1000); // 1000ms debounce delay
 
-// document.getElementById('toggle-cluster').addEventListener('click', toggleCluster);
 document.getElementById('toggle-cluster').addEventListener('change', toggleCluster);
 
 // FUNCTIONS
 // =======================
 async function fetch_geo_data() {
     try {
-        const res = await fetch('/data/customer_map_no_clusters.geojson');
+        const res = await fetch('/data/dallas_ftworth_frisco_tx.geojson');
         return await res.json();
     } catch (err) {
         console.error('Error fetching geo data:', err);
@@ -170,16 +169,16 @@ async function add_customer_layers(clustered) {
     });
 
     map.on('click', 'unclustered-point', (e) => {
-    const props = e.features[0].properties;
-    new mapboxgl.Popup()
-        .setLngLat(e.lngLat)
-        .setHTML(`
+        const props = e.features[0].properties;
+        new mapboxgl.Popup()
+            .setLngLat(e.lngLat)
+            .setHTML(`
             <strong>${props.id_profiles}</strong><br>
             Memberships: ${props.membership_periods}<br>
             Status: ${props.radius_tag}
         `)
-        .addTo(map);
-});
+            .addTo(map);
+    });
 
 }
 
@@ -261,7 +260,7 @@ map.on('load', async () => {
         await fetch_geo_data();              // Load once if needed later
         await add_radius_circles();          // Add city markers + 40mi radius
         await add_customer_layers(clusteringEnabled); // Load customer data
-        
+
         // Wait for map to become idle (all tiles/layers rendered)
 
         map.once('idle', hide_spinner); // <- clean
