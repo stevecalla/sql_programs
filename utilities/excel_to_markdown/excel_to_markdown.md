@@ -434,3 +434,17 @@ EVENTS
 | 350554                  | 2025-05-31       | 2025-06-07    | 1                                              |
 
 
+| Events       | Jan | Feb | Mar | Apr | May | Total |
+|--------------|-----|-----|-----|-----|-----|-------|
+| Sanctioned   | 4   | 26  | 35  | 62  | 133 | 260   |
+| Race Results | 4   | 20  | 32  | 53  | 62  | 171   |
+| Variance     | 0   | -6  | -3  | -9  | -71 | -89   |
+
+| event type                          | 2024 | 2025 | difference |
+|-------------------------------------|------|------|------------|
+| Adult Clinic                        | 16   | 16   | 0          |
+| Adult Race                          | 152  | 149  | -3         |
+| Youth Clinic                        | 8    | 7    | -1         |
+| Youth Race                          | 34   | 36   | 2          |
+| missing_event_type_race_designation | 0    | 3    | 3          |
+| Total                               | 210  | 211  | 1          |

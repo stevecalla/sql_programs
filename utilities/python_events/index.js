@@ -47,6 +47,8 @@ async function execute_run_python_event_reports(script_path = default_script_pat
   try {
     // Prepare CLI command with optional args
     const fullCommand = `"${pyBin}" "${script_path}" ${args.join(' ')}`;
+    console.log('Python commmand = ', fullCommand);
+
     const { stdout, stderr } = await exec_async(
       fullCommand,
       { env: { ...process.env, PATH: `${venv_dir}${path.delimiter}${process.env.PATH}` } }
@@ -70,6 +72,7 @@ async function execute_run_python_event_reports(script_path = default_script_pat
 }
 
 // If invoked directly, parse CLI args and run
+// node index.js --month 4
 if (require.main === module) {
   const args = process.argv.slice(2); // supports --test or other args
   execute_run_python_event_reports(default_script_path, args).catch(() => process.exit(1));
