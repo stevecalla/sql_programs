@@ -1,5 +1,6 @@
 # notes
 notes.txt
+*.txt
 test.txt
 *.png
 *.xlsx
