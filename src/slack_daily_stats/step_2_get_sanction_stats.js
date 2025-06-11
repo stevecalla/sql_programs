@@ -91,8 +91,10 @@ async function query_last_7_days() {
         -- Create a 7-day range using a derived table of numbers (0 to 6)
 
         WITH RECURSIVE date_range AS (
-            SELECT CURDATE() - INTERVAL 6 DAY AS generated_date
+            SELECT CURDATE() - INTERVAL 7 DAY AS generated_date
+
             UNION ALL
+
             SELECT generated_date + INTERVAL 1 DAY
             FROM date_range
             WHERE generated_date + INTERVAL 1 DAY <= CURDATE()
@@ -100,7 +102,8 @@ async function query_last_7_days() {
 
         SELECT
             "last_7_days" AS label,
-            d.generated_date AS created_date,
+            DATE_FORMAT(d.generated_date, '%Y-%m-%d') AS created_at_mtn,
+            DATE_FORMAT(d.generated_date, '%a') AS created_weekday_abbr,  -- 3-letter weekday
             COALESCE(
                 CASE 
                 WHEN e.name_event_type LIKE "%missing%" THEN "missing" 
@@ -112,12 +115,11 @@ async function query_last_7_days() {
             COUNT(DISTINCT e.id_sanctioning_events) AS count_distinct_id_sanctioning_events
 
         FROM date_range d
-        LEFT JOIN event_data_metrics e
-        ON DATE(e.created_at_events) = d.generated_date
-        AND e.status_events NOT IN ('cancelled', 'declined')
+            LEFT JOIN event_data_metrics e ON DATE(e.created_at_events) = d.generated_date
+            AND e.status_events NOT IN ('cancelled', 'declined', 'deleted')
         GROUP BY d.generated_date, event_type
         ORDER BY d.generated_date DESC, event_type
-        LIMIT 100;
+        LIMIT 100
         ;
       `
 }
@@ -130,16 +132,16 @@ async function query_last_10_created_events() {
 
         SELECT
             "last_10_created_events",
-            created_at_mtn,
-            NOW() AS now_mtn,
-            created_at_events,
+            DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn,
+            DATE_FORMAT(NOW(), '%Y-%m-%d') AS now_date_mtn,
+            DATE_FORMAT(created_at_events, '%Y-%m-%d %H:%i:%s') AS created_at_events,
             id_sanctioning_events,
             TRIM(BOTH '"' FROM name_events) AS name_events,
             status_events,
             CASE WHEN name_event_type LIKE "%missing%" THEN "missing" ELSE name_event_type END name_event_type,
             name_distance_types,
             name_race_type,
-            starts_events,
+            DATE_FORMAT(starts_events, '%Y-%m-%d') AS starts_events,
             state_code_events
         FROM event_data_metrics
         -- WHERE created_at_events >= NOW() - INTERVAL 3 DAY
@@ -245,17 +247,20 @@ async function execute_get_sanction_stats(month) {
 async function test() {
     const { create_slack_message } = require('./step_2a_create_sanction_message');
     
-    // month = "";    
-    month = "7";
+    month = "";    
+    // month = "7";
     // month = "ten";
 
     const { result_year_over_year, result_last_7_days, result_last_10_created_events } = await execute_get_sanction_stats(month);
-    console.log(result_year_over_year);
-    console.log(result_last_7_days);
-    console.log(result_last_10_created_events);
+    // console.log(result_year_over_year);
+    // console.log(result_last_7_days);
+    // console.log(result_last_10_created_events);
 
-    // const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, month);
-    // console.log('message =', slack_message);
+    // let test = format_markdown_table_last_10_created_events(result_last_10_created_events);
+    // console.log(test);
+
+    const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, month, result_last_7_days, result_last_10_created_events);
+    console.log('message =', slack_message);
 
     process.exit(1);
 }

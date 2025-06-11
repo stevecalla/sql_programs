@@ -1,10 +1,8 @@
 const { type_map, category_map} = require('./utilities/product_mapping');
 
-const { fmtCurrency,fmtNumber, fmtRPU, fmtPct} = require('./utilities/number_formats');
-// const { pad_markdown_table} = require('./utilities/markdown_table_padding');
+const { fmtNumber} = require('./utilities/number_formats');
 const { looker_link } = require('./utilities/looker_link');
 const { get_date_message, get_month_name } = require('./utilities/date_info');
-const { get_ytd_message } = require('./utilities/get_ytd_message');
 const { get_slack_block_template } = require('./utilities/slack_block_template');
 
 async function generate_error_message() {
@@ -20,6 +18,119 @@ function pad(str, length) {
   return String(str ?? "").padEnd(length);
 }
 
+async function format_markdown_table_last_7_days(data) {
+  const colWidths = {
+    date: 12,
+    weekday: 8,
+    eventType: 12,
+    total: 5
+  };
+
+  // Get event types (excluding blank ones), sorted alphabetically
+  const eventTypes = [...new Set(data.map(d => d.event_type))]
+    .filter(type => type && type.trim() !== "")
+    .sort();
+
+  // Get all unique dates with weekday info
+  const dateMeta = {};
+  for (const row of data) {
+    dateMeta[row.created_at_mtn] = row.created_weekday_abbr;
+  }
+
+  const sortedDates = Object.keys(dateMeta).sort((a, b) => new Date(b) - new Date(a));
+
+  // Build matrix: date -> event_type -> count
+  const matrix = {};
+  for (const row of data) {
+    const date = row.created_at_mtn;
+    const type = row.event_type;
+    if (!matrix[date]) matrix[date] = {};
+    if (!type || type.trim() === "") continue; // Skip blank headers
+    matrix[date][type] = row.count_distinct_id_sanctioning_events;
+  }
+
+  // Header and divider
+  const header = "| " +
+    pad("Date", colWidths.date) + " | " +
+    pad("Weekday", colWidths.weekday) + " | " +
+    eventTypes.map(t => pad(t, colWidths.eventType)).join(" | ") + " | " +
+    pad("Total", colWidths.total) + " |";
+
+  const divider = "|-" +
+    "-".repeat(colWidths.date) + "-|-" +
+    "-".repeat(colWidths.weekday) + "-|-" +
+    eventTypes.map(() => "-".repeat(colWidths.eventType)).join("-|-") +
+    "-|-" + "-".repeat(colWidths.total) + "-|";
+
+  // Data rows
+  const rows = sortedDates.map(date => {
+    const weekday = dateMeta[date] ?? "";
+    const counts = eventTypes.map(type => {
+      const val = matrix[date]?.[type] ?? 0;
+      return pad(val === 0 ? "" : fmtNumber(val), colWidths.eventType);
+    });
+    const total = eventTypes.reduce((sum, type) => sum + (matrix[date]?.[type] || 0), 0);
+    return "| " +
+      pad(date, colWidths.date) + " | " +
+      pad(weekday, colWidths.weekday) + " | " +
+      counts.join(" | ") + " | " +
+      pad(total === 0 ? "" : fmtNumber(total), colWidths.total) + " |";
+  });
+
+  return [header, divider, ...rows].join("\n");
+}
+
+async function format_markdown_table_last_10_created_events(data) {
+    const headerMap = {
+        id_sanctioning_events: 'Sanction Id',
+        name_events: 'Name',
+        name_event_type: 'Type',
+        name_race_type: 'Race',
+        name_distance_types: 'Distance',
+        starts_events: 'Start Date',
+        state_code_events: 'State',
+    };
+
+    // Get fields in order from headerMap keys
+    const fields = Object.keys(headerMap);
+
+    // Build headers array from headerMap values
+    const headers = fields.map(f => headerMap[f]);
+
+    // Slice first 10 rows
+    const rows = data.slice(0, 10);
+
+    // Prepare data rows as arrays of strings, matching fields order
+    const tableData = rows.map((row, i) =>
+        fields.map(f => (row[f] !== undefined && row[f] !== null ? String(row[f]) : ''))
+    );
+
+    // Add row numbering as first column, so add header and data column for that
+    const numberedHeaders = ['#'].concat(headers);
+    const numberedRows = tableData.map((row, i) => [String(i + 1)].concat(row));
+
+    // Combine header and data
+    const allRows = [numberedHeaders, ...numberedRows];
+
+    // Calculate max widths per column
+    const colWidths = numberedHeaders.map((_, colIndex) =>
+        Math.max(...allRows.map(row => row[colIndex].length))
+    );
+
+    // Helper to pad strings left-aligned
+    function pad(str, width) {
+        return str + ' '.repeat(width - str.length);
+    }
+
+    // Build lines with padded columns separated by ' | '
+    const lines = allRows.map(row => row.map((cell, i) => pad(cell, colWidths[i])).join(' | '));
+
+    // Insert separator line after header
+    lines.splice(1, 0, colWidths.map(w => '-'.repeat(w)).join('-|-'));
+
+    return lines.join('\n');
+}
+
 async function format_markdown_table_year_over_year(data) {
   const columns = [
     { key: "event_type", header: "event_type", width: 15, isNumber: false },
@@ -32,7 +143,7 @@ async function format_markdown_table_year_over_year(data) {
   function formatValue(value, isNumber) {
     if (value === null || value === undefined) return "";
     if (isNumber && !isNaN(value)) {
-      return Number(value).toLocaleString(); // Adds commas
+      return fmtNumber(Number(value)); // Adds commas
     }
     return String(value);
   }
@@ -49,13 +160,15 @@ async function format_markdown_table_year_over_year(data) {
   return [headerRow, dividerRow, ...dataRows].join("\n");
 }
 
-async function create_slack_message(result_year_over_year, month) {
+async function create_slack_message(result_year_over_year, month, result_last_7_days, result_last_10_created_events) {
 
   console.log('month = ', month);
 
   let slack_message = "Error - No results";
   let is_error = false;
   let year_over_year_table = "";
+  let last_7_days_table = "";
+  let last_10_created_events = "";
 
   let { date_message } = await get_date_message(result_year_over_year[0]?.created_at_mtn);
 
@@ -80,6 +193,8 @@ async function create_slack_message(result_year_over_year, month) {
     is_error = true;
   } else {
     year_over_year_table = await format_markdown_table_year_over_year(result_year_over_year);
+    last_7_days_table = await format_markdown_table_last_7_days(result_last_7_days);
+    last_10_created_events = await format_markdown_table_last_10_created_events(result_last_10_created_events);
   }
 
 // MESSAGE
@@ -89,7 +204,11 @@ slack_message =
   `🕕 ${date_message}\n` +
   `📈 ${await looker_link(`https://lookerstudio.google.com/u/0/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_h2wxc2blsd`)}\n` + '\n' +
   `ℹ️ *Month:* \`${month_name}\`\n` +  
-  (is_error ? await generate_error_message() : `\`\`\`${year_over_year_table}\n\`\`\``)
+  (is_error ? await generate_error_message() : `\`\`\`${year_over_year_table}\n\`\`\``) +  
+  `\n📈 Most Recent 7 Days:\n` +  
+  (!is_error && `\`\`\`${last_7_days_table}\n\`\`\``) +  
+  `\n📈 Most Recent 10 Events:\n` +  
+  (!is_error && `\`\`\`${last_10_created_events}\n\`\`\``)
 ;
 
   const slack_blocks = await get_slack_block_template(slack_message);
