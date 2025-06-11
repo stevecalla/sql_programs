@@ -155,7 +155,9 @@ async function execute_get_sanction_stats(month) {
     
     const dst = await get_dst_connection();  // mysql2/promise connection
 
-    let result = [];
+    let result_year_over_year = [];
+    let result_last_7_days = [];
+    let result_last_10_created_events = [];
 
     // If month is undefined/null, default to current month number (1-12) 
     if (month === null || month === undefined) {
@@ -178,23 +180,41 @@ async function execute_get_sanction_stats(month) {
         );
 
         // STEP 2: Run query only if no invalid filters
-        let data;
+        let data_year_over_year;
         if (!month_invalid) {
-            [data] = await dst.query(await query_year_over_year_counts(month));
+            [data_year_over_year] = await dst.query(await query_year_over_year_counts(month));
         } else {
-            data = undefined;
+            data_year_over_year = undefined;
         }
 
-        // if (data && data.length > 0) {
-        //     console.log('length =', data.length);
-        //     const sample = data[0];
+        // STEP 3: Run query only if no invalid filters
+        let data_last_7_days;
+        if (!month_invalid) {
+            [data_last_7_days] = await dst.query(await query_last_7_days());
+        } else {
+            data_last_7_days = undefined;
+        }
+
+        // STEP 4: Run query only if no invalid filters
+        let data_last_10_created_events;
+        if (!month_invalid) {
+            [data_last_10_created_events] = await dst.query(await query_last_10_created_events());
+        } else {
+            data_last_10_created_events = undefined;
+        }
+
+        // if (data_year_over_year && data_year_over_year.length > 0) {
+        //     console.log('length =', data_year_over_year.length);
+        //     const sample = data_year_over_year[0];
         //     console.log(`Sample row:`, sample);
         // } else {
-        //     console.log('data is undefined or empty:', data);
+        //     console.log('data_year_over_year is undefined or empty:', data_year_over_year);
         // }
 
         // STEP #3: CREATE SLACK MESSAGE (pass along array if undefined)
-        result = (data !== undefined && data !== null) ? data : [];
+        result_year_over_year = (data_year_over_year !== undefined && data_year_over_year !== null) ? data_year_over_year : [];
+        result_last_7_days = (data_last_7_days!== undefined && data_last_7_days !== null) ? data_last_7_days : [];
+        result_last_10_created_events = (data_last_10_created_events !== undefined && data_last_10_created_events !== null) ? data_last_10_created_events : [];
 
     } catch (err) {
             
@@ -216,7 +236,8 @@ async function execute_get_sanction_stats(month) {
 
         console.log(`\nAll sanction data queries executed successfully. Elapsed Time: ${elapsedTime ? elapsedTime : "Oops error getting time"} sec\n`);
 
-        return result;
+        // return result;
+        return { result_year_over_year, result_last_7_days, result_last_10_created_events };
     }
     
 }
@@ -224,13 +245,17 @@ async function execute_get_sanction_stats(month) {
 async function test() {
     const { create_slack_message } = require('./step_2a_create_sanction_message');
     
-    month = "";    
-    month = "ten";
-    const result_year_over_year = await execute_get_sanction_stats(month);
-    // console.log(result);
+    // month = "";    
+    month = "7";
+    // month = "ten";
 
-    const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, month);
-    console.log('message =', slack_message);
+    const { result_year_over_year, result_last_7_days, result_last_10_created_events } = await execute_get_sanction_stats(month);
+    console.log(result_year_over_year);
+    console.log(result_last_7_days);
+    console.log(result_last_10_created_events);
+
+    // const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, month);
+    // console.log('message =', slack_message);
 
     process.exit(1);
 }
