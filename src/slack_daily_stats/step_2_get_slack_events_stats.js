@@ -100,15 +100,28 @@ async function query_last_7_days() {
             WHERE generated_date + INTERVAL 1 DAY <= CURDATE()
         )
 
+        WITH RECURSIVE date_range AS (
+            SELECT CURDATE() - INTERVAL 30 DAY AS generated_date
+
+            UNION ALL
+
+            SELECT generated_date + INTERVAL 1 DAY
+            FROM date_range
+            WHERE generated_date + INTERVAL 1 DAY <= CURDATE() - INTERVAL 25 DAY
+        )
+
         SELECT
             "last_7_days" AS label,
             DATE_FORMAT(d.generated_date, '%Y-%m-%d') AS created_at_mtn,
             DATE_FORMAT(d.generated_date, '%a') AS created_weekday_abbr,  -- 3-letter weekday
             COALESCE(
                 CASE 
-                WHEN e.name_event_type LIKE "%missing%" THEN "missing" 
-                WHEN e.name_event_type IS NOT NULL THEN e.name_event_type
-                ELSE ""
+                    WHEN LOWER(e.name_event_type) LIKE "%missing%" THEN "missing" 
+                    WHEN LOWER(e.name_event_type) LIKE "%adult clinic%" THEN "AC" 
+                    WHEN LOWER(e.name_event_type) LIKE "%adult race%" THEN "AR" 
+                    WHEN LOWER(e.name_event_type) LIKE "%youth clinic%" THEN "YC"
+                    WHEN LOWER(e.name_event_type) LIKE "%youth race%" THEN "YC"
+                    ELSE ""
                 END, 'no_event'
             ) AS event_type,
             COUNT(e.id_sanctioning_events) AS count_total,
@@ -129,27 +142,23 @@ async function query_last_10_created_events() {
 
     return `
         -- last 10 created events by created date with event name, region, event start date
-
         SELECT
             "last_10_created_events",
             DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn,
             DATE_FORMAT(NOW(), '%Y-%m-%d') AS now_date_mtn,
             DATE_FORMAT(created_at_events, '%Y-%m-%d %H:%i:%s') AS created_at_events,
-            -- id_sanctioning_events,
             SUBSTRING_INDEX(id_sanctioning_events, '-', 1) AS id_sanctioning_events, -- removed the event type used to get unique count
-            TRIM(BOTH '"' FROM name_events) AS name_events,
-            status_events,
-            CASE WHEN name_event_type LIKE "%missing%" THEN "missing" ELSE name_event_type END name_event_type,
-            name_distance_types,
-            name_race_type,
+            LEFT(TRIM(BOTH '"' FROM name_events), 30) AS name_events,
             DATE_FORMAT(starts_events, '%Y-%m-%d') AS starts_events,
-            state_code_events
+            state_code_events,
+            COUNT(DISTINCT(id_races)) AS race_count
         FROM event_data_metrics
         -- WHERE created_at_events >= NOW() - INTERVAL 3 DAY
+        GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
         ORDER BY created_at_events DESC
         LIMIT 10
-        ;
-      `
+        ;      
+    `
 }
 
 async function execute_get_slack_events_stats(month) {

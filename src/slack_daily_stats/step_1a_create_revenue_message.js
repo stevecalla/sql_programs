@@ -101,12 +101,15 @@ async function create_slack_message(result, type_input = "All", category_input =
   const { final_formatted_table, error_message, is_error } = await generate_markdown_table(options);
   const ytd_message = await get_ytd_message(month);
 
+    const looker_url = `https://lookerstudio.google.com/u/0/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_bc9xthh1rd`;
+  const looker_report = `Gold`;
+
 // MESSAGE
 // 📈🤼🚴‍♂️🥇👀📢🏊‍♂️🏃‍♀️🚴‍♂️🕕ℹ️
 slack_message =    
   `📢 *MEMBERSHIP - REVENUE SNAPSHOT*\n` +
   `🕕 ${date_message}\n` +
-  `📈 ${await looker_link(`https://lookerstudio.google.com/u/0/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_bc9xthh1rd`)}\n` + '\n' +
+  `📈 ${await looker_link(looker_url, looker_report)}\n` + '\n' +
   `ℹ️ *Month:* \`${month_name}\`, *Type:* \`${type_input}\`, *Category:* \`${category_input}\`\n` +
   (is_error ? error_message : `\`\`\`${final_formatted_table}\n\`\`\``) +
   (is_error ? "" : ytd_message)
