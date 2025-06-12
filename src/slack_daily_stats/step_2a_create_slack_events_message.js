@@ -84,9 +84,9 @@ async function format_markdown_table_last_10_created_events(data) {
     const headerMap = {
         id_sanctioning_events: 'Sanction Id',
         name_events: 'Name',
-        name_event_type: 'Type',
-        name_race_type: 'Race',
-        name_distance_types: 'Distance',
+        // name_event_type: 'Type',
+        // name_race_type: 'Race',
+        // name_distance_types: 'Distance',
         starts_events: 'Start Date',
         state_code_events: 'State',
     };
@@ -177,7 +177,7 @@ async function create_slack_message(result_year_over_year, month, result_last_7_
   let month_name = "";
 
   // VALIDATE MONTH
-  if (month === "") {
+  if (!month || month === "") {
     month_name = "Full Year";
   } else if (isNaN(month) || month < 1 || month > 12) {
     month_name = month;
@@ -203,7 +203,7 @@ slack_message =
   `📢 *EVENTS - SANCTIONING SNAPSHOT*\n` +
   `🕕 ${date_message}\n` +
   `📈 ${await looker_link(`https://lookerstudio.google.com/u/0/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_h2wxc2blsd`)}\n` + '\n' +
-  `ℹ️ *Month:* \`${month_name}\`\n` +  
+  `ℹ️ *Month:* \`${month_name}\`; *Excludes:* \`cancelled, deleted, declined\`\n` +  
   (is_error ? await generate_error_message() : `\`\`\`${year_over_year_table}\n\`\`\``) +  
   `\n📈 Most Recent 7 Days:\n` +  
   (!is_error && `\`\`\`${last_7_days_table}\n\`\`\``) +  

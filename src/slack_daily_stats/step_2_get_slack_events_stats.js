@@ -135,7 +135,8 @@ async function query_last_10_created_events() {
             DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn,
             DATE_FORMAT(NOW(), '%Y-%m-%d') AS now_date_mtn,
             DATE_FORMAT(created_at_events, '%Y-%m-%d %H:%i:%s') AS created_at_events,
-            id_sanctioning_events,
+            -- id_sanctioning_events,
+            SUBSTRING_INDEX(id_sanctioning_events, '-', 1) AS id_sanctioning_events, -- removed the event type used to get unique count
             TRIM(BOTH '"' FROM name_events) AS name_events,
             status_events,
             CASE WHEN name_event_type LIKE "%missing%" THEN "missing" ELSE name_event_type END name_event_type,
@@ -151,7 +152,7 @@ async function query_last_10_created_events() {
       `
 }
 
-async function execute_get_sanction_stats(month) {
+async function execute_get_slack_events_stats(month) {
     runTimer('timer');
     const startTime = performance.now();
     
@@ -162,10 +163,10 @@ async function execute_get_sanction_stats(month) {
     let result_last_10_created_events = [];
 
     // If month is undefined/null, default to current month number (1-12) 
-    if (month === null || month === undefined) {
-        const now = new Date();
-        month = now.getMonth() + 1; // getMonth() returns 0-11, so add 1
-    }
+    // if (month === null || month === undefined) {
+    //     const now = new Date();
+    //     month = now.getMonth() + 1; // getMonth() returns 0-11, so add 1
+    // }
     console.log('month =', month ? month : "no month given");
 
     try {
@@ -244,29 +245,29 @@ async function execute_get_sanction_stats(month) {
     
 }
 
-async function test() {
-    const { create_slack_message } = require('./step_2a_create_sanction_message');
+// async function test() {
+    // const { create_slack_message } = require('./step_2a_create_slack_events_message');
     
-    month = "";    
-    // month = "7";
-    // month = "ten";
+//     month = "";    
+//     // month = "7";
+//     // month = "ten";
 
-    const { result_year_over_year, result_last_7_days, result_last_10_created_events } = await execute_get_sanction_stats(month);
-    // console.log(result_year_over_year);
-    // console.log(result_last_7_days);
-    // console.log(result_last_10_created_events);
+    // const { result_year_over_year, result_last_7_days, result_last_10_created_events } = await execute_get_slack_events_stats(month);
+//     // console.log(result_year_over_year);
+//     // console.log(result_last_7_days);
+//     // console.log(result_last_10_created_events);
 
-    // let test = format_markdown_table_last_10_created_events(result_last_10_created_events);
-    // console.log(test);
+//     // let test = format_markdown_table_last_10_created_events(result_last_10_created_events);
+//     // console.log(test);
 
-    const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, month, result_last_7_days, result_last_10_created_events);
-    console.log('message =', slack_message);
+//     const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, month, result_last_7_days, result_last_10_created_events);
+//     console.log('message =', slack_message);
 
-    process.exit(1);
-}
+//     process.exit(1);
+// }
 
-test();
+// test();
 
 module.exports = {
-    execute_get_sanction_stats,
+    execute_get_slack_events_stats,
 }
