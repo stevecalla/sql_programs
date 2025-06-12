@@ -214,7 +214,7 @@ slack_message =
   +  
   (is_error ? await generate_error_message() : `\`\`\`${year_over_year_table}\n\`\`\``) 
   +  
-  `\n📈 Most Recent 7 Days:\n` 
+  `\n🏃‍♀️ Most Recent 7 Days:\n` 
   +  
   (!is_error && `\`\`\`${last_7_days_table}\n\`\`\``) 
   +  

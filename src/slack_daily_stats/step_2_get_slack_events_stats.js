@@ -100,16 +100,6 @@ async function query_last_7_days() {
             WHERE generated_date + INTERVAL 1 DAY <= CURDATE()
         )
 
-        WITH RECURSIVE date_range AS (
-            SELECT CURDATE() - INTERVAL 30 DAY AS generated_date
-
-            UNION ALL
-
-            SELECT generated_date + INTERVAL 1 DAY
-            FROM date_range
-            WHERE generated_date + INTERVAL 1 DAY <= CURDATE() - INTERVAL 25 DAY
-        )
-
         SELECT
             "last_7_days" AS label,
             DATE_FORMAT(d.generated_date, '%Y-%m-%d') AS created_at_mtn,
