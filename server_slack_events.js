@@ -25,20 +25,20 @@ app.use(bodyParser.json());
 
 // Test endpoint
 app.get('/slack-events-test', async (req, res) => {
-    console.log('/sanction-events-test route req.rawHeaders = ', req.rawHeaders);
+    console.log('/slack-events-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response
         res.status(200).json({
-            message: 'Sanction server is up and running. Stands Ready.',
+            message: 'Slack events server is up and running. Stands Ready.',
         });
 
     } catch (error) {
-        console.error('Error querying or sending sanction data.', error);
+        console.error('Error querying or sending slack events data.', error);
         
         // Send an error response
         res.status(500).json({
-            message: 'Error querying or sending sanction data.',
+            message: 'Error querying or sending slack events data.',
             error: error.message || 'Internal Server Error',
         });
     }
@@ -49,7 +49,7 @@ app.get('/slack-events-test', async (req, res) => {
 app.post('/slack-events-stats', async (req, res) => {
     // console.log('/slack-events-stats route req.rawHeaders = ', req.rawHeaders);
 
-    console.log('Received request for sanction - /slack-events-stats :', {
+    console.log('Received request for slack events - /slack-events-stats :', {
         body: req.body,
         headers: req.headers,
         query: req.query,
@@ -131,50 +131,83 @@ app.post('/slack-events-stats', async (req, res) => {
         await send_slack_followup_message(channel_id, channel_name, user_id, response_url, slack_message, slack_blocks);
 
     } catch (error) {
-        console.error('Error querying or sending sanction data.', error);
+        console.error('Error querying or sending slack events data.', error);
         
         // Send an error response
         res.status(500).json({  
-            message: 'Error querying or sending sanction data.',
+            message: 'Error querying or sending slack events data.',
             error: error.message || 'Internal Server Error',
         });
     }
 });
 
-// Endpoint to handle crontab for sanction data
-app.get('/scheduled-sanction-events-stats', async (req, res) => {
-    // console.log('/scheduled_sanction_stats route req.rawHeaders = ', req.rawHeaders);
+const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+let isRunning = false;
+let lockTimeout;
+
+// Endpoint to handle crontab for slack events data
+app.get('/scheduled-slack-events-stats', async (req, res) => {
+    const { v4: uuidv4 } = require('uuid');
+    // npm install uuid
+    const jobId = uuidv4();
+    console.log(`Started Slack job ${jobId}`);
+
+    // console.log('/scheduled_slack_stats route req.rawHeaders = ', req.rawHeaders);
+    if (isRunning) {
+        const is_running_message = '/scheduled_slack_stats = Slack event job is already running. Please try again later.';
+
+        const YELLOW = '\x1b[33m';
+        const RESET = '\x1b[0m';
+
+        console.warn(`${YELLOW}⚠️ ${is_running_message} ${RESET}`);
+        console.log(`Finished Slack job ${jobId}`);
+
+        return res.status(429).json({ message: is_running_message });
+    }
+    isRunning = true;
+
+    // Sets a failsafe timeout: if the job never finishes (e.g., due to an unhandled error or infinite loop), the timeout ensures isRunning will be reset after 5 minutes. This avoids the app being stuck in a "locked" state forever.
+    lockTimeout = setTimeout(() => {
+        console.warn('Slack event job timed out.');
+        console.log(`Finished Slack job ${jobId}`);
+        isRunning = false;
+    }, TIMEOUT_MS);
 
     try {
-        const type = undefined;
-        const category = undefined;
+        // month is not extracted for scheduled job as it always runs the full year stats
         const month = undefined;
 
-        // STEP 1: GET SANCTION STATS
-        const result = await execute_get_sanction_stats(type, category, month);
+        // STEP 1: GET SLACK EVENTS STATS
+        const { result_year_over_year, result_last_7_days, result_last_10_created_events } = await execute_get_slack_events_stats(month);
 
-        // STEP 2: CREATE SLACK MESSAGE
-        const { slack_message, slack_blocks } = await create_slack_message(result, type, category, month);
+        // STEP 2: CREATE SLACK EVENTS MESSAGE
+        const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, month, result_last_7_days, result_last_10_created_events);
+        // console.log('text message =', slack_message);
+        // console.log('blocks message =', slack_blocks);
 
         // STEP 3: SEND SLACK MESSAGE
-        const is_test = false;
+        const is_test = true;
         const slack_channel = is_test ? "steve_calla_slack_channel" : "daily_sales_bot_slack_channel";
 
         await slack_message_api(slack_message, slack_channel, slack_blocks);
 
         // Send a success response
         res.status(200).json({
-            message: 'Membership sanction queried & sent successfully.',
+            message: 'Membership slack events queried & sent successfully.',
         });
 
     } catch (error) {
-        console.error('Error querying or sending sanction data.', error);
+        console.error('Error querying or sending slack events data.', error);
         
         // Send an error response
         res.status(500).json({  
-            message: 'Error querying or sending sanction data.',
+            message: 'Error querying or sending slack events data.',
             error: error.message || 'Internal Server Error',
         });
+    } finally {  
+        console.log(`Finished Slack job ${jobId}`);
+        clearTimeout(lockTimeout); // Cancel timeout if job finished properly
+        isRunning = false;         // Release the lock so next request can run
     }
 });
 
@@ -194,7 +227,7 @@ app.listen(PORT, async () => {
 	console.log(`Server is running on http://localhost:${PORT}`);
 
     // CLOUDFLARE TUNNEL
-    console.log(`Tunnel using cloudflare https://usat-sanction.kidderwise.org/slack-events-stats`)
+    console.log(`Tunnel using cloudflare https://usat-slack-events.kidderwise.org/slack-events-stats`)
 
     // NGROK TUNNEL
     if(is_test_ngrok) {
