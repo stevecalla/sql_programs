@@ -9,7 +9,9 @@ const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
 // Function to send follow-up message to Slack
 async function send_slack_followup_message(channelId, channelName, userId, response_url, message, blocks) {
 
-    console.log('send slack followup =', channelId, channelName, userId, response_url, message, blocks);
+    console.log('send slack v2 followup channel details =', channelId, channelName, userId, response_url);
+    // console.log('send slack v2 followup =', message);
+    console.log('send slack v2 followup blocks =', blocks);
 
     try {
         if (channelId && message && channelName !== "directmessage") {

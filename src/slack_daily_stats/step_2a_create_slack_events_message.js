@@ -163,7 +163,7 @@ async function format_markdown_table_year_over_year(data) {
 
 async function create_slack_message(result_year_over_year, month, result_last_7_days, result_last_10_created_events) {
 
-  console.log('month = ', month);
+  console.log('step 2a create slack events message: month = ', month);
 
   let slack_message = "Error - No results";
   let is_error = false;

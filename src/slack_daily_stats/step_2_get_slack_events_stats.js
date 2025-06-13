@@ -14,11 +14,11 @@ async function get_dst_connection() {
 async function query_year_over_year_counts(month) {
     // C:\Users\calla\development\usat\sql_code\22_slack_daily_stats_052225\discovery_sanction_061025.sql
     
-    console.log('month =', month);
+    // console.log('month =', month);
 
     // BUILD WHERE CLAUSE(S)
     const month_where_clause = month ? `AND starts_month_events IN (${month})` : "";
-    console.log('month where clause =', month_where_clause ? month_where_clause : "no where");
+    // console.log('month where clause =', month_where_clause ? month_where_clause : "no where");
 
     return `
         -- year over year data for full year or by month by event type
@@ -161,12 +161,7 @@ async function execute_get_slack_events_stats(month) {
     let result_last_7_days = [];
     let result_last_10_created_events = [];
 
-    // If month is undefined/null, default to current month number (1-12) 
-    // if (month === null || month === undefined) {
-    //     const now = new Date();
-    //     month = now.getMonth() + 1; // getMonth() returns 0-11, so add 1
-    // }
-    console.log('month =', month ? month : "no month given");
+    console.log('step_2_get_slack_events_stats: month =', month ? month : "no month given");
 
     try {
         // STEP 1: Determine if month passed is invalid; if month is not provided default to full year

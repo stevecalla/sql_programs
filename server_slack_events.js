@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 8008;
 
 // NGROK TUNNEL FOR TESTING
-const is_test_ngrok = true;
+const is_test_ngrok = false;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // SLACK EVENTS STATS PROCESS
@@ -44,7 +44,7 @@ app.get('/slack-events-test', async (req, res) => {
     }
 });
 
-// Endpoint to handle requests slack slash "/sanction" command only
+// Endpoint to handle requests slack slash "/events" command only
     // originating from slack slash will always have req.body unless testing curl, insomnia et al
 app.post('/slack-events-stats', async (req, res) => {
     // console.log('/slack-events-stats route req.rawHeaders = ', req.rawHeaders);
@@ -58,8 +58,8 @@ app.post('/slack-events-stats', async (req, res) => {
         response_url: req.body.response_url,
     });
 
-    console.log('req.query = ', req.query);
-    console.log('req.body.text = ', req.body.text);
+    // console.log('req.query = ', req.query);
+    // console.log('req.body.text = ', req.body.text);
 
     // if user initiated request then returns to user otherwise returns to default channel
     const {
