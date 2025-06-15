@@ -19,7 +19,7 @@ async function query_year_over_year_counts() {
         WITH participant_events AS (
             SELECT
                 "year_over_year_counts" AS label,
-                DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn,
+                MAX(created_at_mtn) AS created_at_mtn,
                 start_date_month_races,
 
                 YEAR(CURDATE()) - 1 AS last_year,
@@ -33,7 +33,7 @@ async function query_year_over_year_counts() {
 
             FROM participation_race_profiles
             WHERE start_date_year_races IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
-            GROUP BY DATE_FORMAT(created_at_mtn, '%Y-%m-%d'), start_date_month_races
+            GROUP BY start_date_month_races
             HAVING participant_event_count_this_year > 0
         )
             SELECT
@@ -107,7 +107,7 @@ async function query_sanctioned_vs_participation_counts() {
 
             combined AS (
                 SELECT
-                    -- r.created_at_mtn,
+                    "participation_v_sanction_events_query" AS label,
                     GREATEST(r.created_at_mtn, s.created_at_mtn) AS max_created_at,
                     r.month_label,
                     s.sanction_count_last_year,
@@ -124,7 +124,7 @@ async function query_sanctioned_vs_participation_counts() {
                 UNION
 
                 SELECT
-                    -- r.created_at_mtn,
+                    "participation_v_sanction_events_query" AS label,
                     GREATEST(r.created_at_mtn, s.created_at_mtn) AS max_created_at,
                     s.month_label,
                     s.sanction_count_last_year,
@@ -145,6 +145,7 @@ async function query_sanctioned_vs_participation_counts() {
 
             -- Total row
             SELECT
+                'TOTAL',
                 'TOTAL',
                 'TOTAL' AS month_label,
                 SUM(sanction_count_last_year),
@@ -219,23 +220,20 @@ async function execute_get_participation_stats() {
     
 }
 
-async function test() {
-    // const { create_slack_message } = require('./step_2a_create_slack_events_message');
+// async function test() {
+//     const { create_slack_message } = require('./step_3a_create_slack_events_message');
 
-    const { result_year_over_year, result_sanctioned_vs_participation } = await execute_get_participation_stats();
-    console.log(result_year_over_year);
-    console.log(result_sanctioned_vs_participation);
+//     const { result_year_over_year, result_sanctioned_vs_participation } = await execute_get_participation_stats();
+//     // console.log(result_year_over_year);
+//     // console.log(result_sanctioned_vs_participation);
 
-    // let test = format_markdown_table_last_10_created_events(result_last_10_created_events);
-    // console.log(test);
+//     const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, result_sanctioned_vs_participation);
+//     console.log('message =', slack_message);
 
-    // const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, month, result_last_7_days, result_last_10_created_events);
-    // console.log('message =', slack_message);
+//     process.exit(1);
+// }
 
-    process.exit(1);
-}
-
-test();
+// test();
 
 module.exports = {
     execute_get_participation_stats,

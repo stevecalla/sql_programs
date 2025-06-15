@@ -1,6 +1,6 @@
 const { type_map, category_map} = require('./utilities/product_mapping');
 
-const { fmtNumber} = require('./utilities/number_formats');
+const { fmtNumber } = require('./utilities/number_formats');
 const { looker_link } = require('./utilities/looker_link');
 const { get_date_message, get_month_name } = require('./utilities/date_info');
 const { get_slack_block_template } = require('./utilities/slack_block_template');
