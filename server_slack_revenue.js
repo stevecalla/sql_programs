@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 8007;
 
 // NGROK TUNNEL FOR TESTING
-const is_test_ngrok = true;
+const is_test_ngrok = false;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // EXAMPLE SLACK SLASH COMMANDS
