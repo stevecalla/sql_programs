@@ -13,8 +13,8 @@ const is_test_ngrok = false;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // SLACK RACES STATS PROCESS
-const { execute_get_participation_stats } = require('./src/slack_daily_stats/step_3_get_slack_participation_stats');
-const { create_slack_message } = require('./src/slack_daily_stats/step_3a_create_slack_events_message');
+const { get_google_news_rss } = require('./src/news_api/step_1_get_google_news');
+const { create_slack_message } = require('./src/news_api/step_1a_create_slack_news_message');
 
 const { send_slack_followup_message } = require('./utilities/slack_messaging/send_message_api_v2_followup');
 const { slack_message_api } = require('./utilities/slack_messaging/slack_message_api');
@@ -22,10 +22,6 @@ const { slack_message_api } = require('./utilities/slack_messaging/slack_message
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-
-async function get_google_news(term) {
-
-}
 
 // Test endpoint
 app.get('/slack-news-test', async (req, res) => {
@@ -78,31 +74,45 @@ app.post('/slack-news-stats', async (req, res) => {
         response_url = req.body.response_url
 
     // If request not received via slack, then destructure req.query parameters
-    let { month } = req.query;
+    let { subject, count } = req.query;
     
     // If request received from slack, then destructure req.body.text
     // ensure req.body is not empty and that req.body.text exists
     // inspect req.body.text to assign values to month
+    console.log('req.body 1 = ', req.body);
+    
     if (req.body && Object.keys(req.body).length > 0 && req.body.text) {
 
-        // is_cron_job = false; // set cron job to false to send response is request
-        const args = req?.body?.text?.trim().split(/\s+/); // Split by space
+        // modified to allow for space in subject / search term
+        // example input { text: 'subject=vail resorts mtn count=5' }
+        // example output { subject: 'vail resorts mtn', count: '5'}
+        const input = req?.body?.text?.trim();
+        const args = {};
 
-        for (const arg of args) {
-            const [key, value] = arg.split('=');
+        // deliminator can be ":" or "="
+        if (input) {
+            input.split(/\s+(?=\w+[:=])/).forEach(part => {
+                const [key, ...valueParts] = part.split(/[:=]/);
+                if (key && valueParts.length) {
+                    args[key.trim()] = valueParts.join(':').trim(); // or '=' if you prefer
+                }
+            });
+        }
+
+        // console.log('args input = ', input);
+        // console.log('args output = ', args);
+
+        for (const [key, value] of Object.entries(args)) {
             if (key && value) {
                 const normalizedKey = key.toLowerCase();
+                // If the key is "subject" and subject hasn't been set yet, it sets subject = value.
+                // allows for req.query above
                 switch (normalizedKey) {
-                    case 'month':
-                        // If the key is "month" and month hasn't been set yet, it sets month = value.
-                        // allows for req.query above
-                        if (!month) month = value;
+                    case 'subject':
+                        if (!subject) subject = value;
                         break;
-                    case 'type':
-                        if (!type) type = value;
-                        break;
-                    case 'category':
-                        if (!category) category = value;
+                    case 'count':
+                        if (!count) count = value;
                         break;
                     default:
                         console.warn(`Unknown parameter: ${key}`);
@@ -111,24 +121,23 @@ app.post('/slack-news-stats', async (req, res) => {
         }
     }
 
-    // VALID INPUT = if a user enters a bad month / type / category
-        // ... step_1 will query the data but return no data available
-        // ... user will be sent no data with example of slash command
-        // ... when try block below executes
-
-    // VALID IPNUT = GET DATA, CREATE SLACK MESSAGE, SEND SLACK MESSAGE
     try {
         // Send a success response
         res.status(200).json({
-            text: 'Retrieving slack event stats. Will respond shortly.',
+            text: 'Retrieving slack news stats. Will respond shortly.',
         });
 
         // STEP 1: GET SLACK RACES STATS
-        const { result_year_over_year, result_sanctioned_vs_participation } = await execute_get_participation_stats();
+        // const news = await get_google_news_rss("Vail Resorts", 1);
+        console.log('subject & count = ', subject, count);
+        subject = subject ? subject : "triathlon";
+        count = count ? count : 5;
+
+        const result_news = await get_google_news_rss(subject, count);
 
         // STEP 2: CREATE SLACK RACES MESSAGE
-        const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, result_sanctioned_vs_participation);
-        // console.log('text message =', slack_message);
+        const { slack_message, slack_blocks } = await create_slack_message(result_news, subject, count);
+        console.log('text message =', slack_message);
         // console.log('blocks message =', slack_blocks);
 
         // STEP 3: SEND SLACK MESSAGE
@@ -158,7 +167,7 @@ app.get('/scheduled-slack-news-stats', async (req, res) => {
 
     // console.log('/scheduled_slack_stats route req.rawHeaders = ', req.rawHeaders);
     if (isRunning) {
-        const is_running_message = '/scheduled_slack_stats = Slack event job is already running. Please try again later.';
+        const is_running_message = '/scheduled_slack_stats = Slack news job is already running. Please try again later.';
 
         const YELLOW = '\x1b[33m';
         const RESET = '\x1b[0m';
@@ -172,25 +181,26 @@ app.get('/scheduled-slack-news-stats', async (req, res) => {
 
     // Sets a failsafe timeout: if the job never finishes (e.g., due to an unhandled error or infinite loop), the timeout ensures isRunning will be reset after 5 minutes. This avoids the app being stuck in a "locked" state forever.
     lockTimeout = setTimeout(() => {
-        console.warn('Slack event job timed out.');
+        console.warn('Slack news job timed out.');
         console.log(`Finished Slack job ${jobId}`);
         isRunning = false;
     }, TIMEOUT_MS);
 
     try {
-        // month is not extracted for scheduled job as it always runs the full year stats
-        const month = undefined;
-
-        // STEP 1: GET SLACK RACES STATS
-        const { result_year_over_year, result_sanctioned_vs_participation } = await execute_get_participation_stats();
+        // STEP 1: GET SLACK NEWS DATA
+        const subject = "triathlon";
+        const count = 5;
+        
+        // const result_news = await get_google_news_rss("Vail Resorts", 1);
+        const result_news = await get_google_news_rss(subject, count);
 
         // STEP 2: CREATE SLACK RACES MESSAGE
-        const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, result_sanctioned_vs_participation);
-        // console.log('text message =', slack_message);
+        const { slack_message, slack_blocks } = await create_slack_message(result_news, subject, count);
+        console.log('text message =', slack_message);
         // console.log('blocks message =', slack_blocks);
 
         // STEP 3: SEND SLACK MESSAGE
-        const is_test = true;
+        const is_test = false;
         const slack_channel = is_test ? "steve_calla_slack_channel" : "daily_sales_bot_slack_channel";
 
         await slack_message_api(slack_message, slack_channel, slack_blocks);

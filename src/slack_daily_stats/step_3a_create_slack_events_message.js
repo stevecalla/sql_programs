@@ -14,10 +14,6 @@ const error_message = `⚠️ No data available for the selected month.
   return error_message;
 }
 
-function pad(str, length) {
-  return String(str ?? "").padEnd(length);
-}
-
 function padString(str, length) {
   str = String(str);
   if (str.length >= length) return str;

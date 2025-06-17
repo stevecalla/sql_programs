@@ -1,5 +1,25 @@
 const dayjs = require('dayjs');
 
+// input = 2025-06-11T15:14:16.000Z, returns 'Jun 11, 2025, 9:14 AM'
+// input is in UTC, and format_date() converts it to local time, unless a timeZone is specified in the options
+function format_date(date) {
+  return date.toLocaleString('en-US', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true
+  });
+}
+
+// input = 2025-06-11T15:14:16.000Z, returns 'Jun 11, 2025'
+// input is in UTC, and format_date() converts it to local time, unless a timeZone is specified in the options
+function format_date_only(date) {
+  return date.toLocaleString('en-US', {
+    weekday: 'short',        // Adds day of week (e.g., "Mon")
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+}
+
 //returns "2024-03-10_10-25-25"
 function getCurrentDateTimeForFileNaming() {
     const createdAt = dayjs(); // Current date and time
@@ -75,6 +95,8 @@ function getDayOfWeek(date) {
 // convertTimestampToDateTime('1712179121648');
 
 module.exports = {
+    format_date,
+    format_date_only,
     getCurrentDateTimeForFileNaming,
     getCurrentDateForFileNaming,
     getCurrentDateTime,

@@ -11,7 +11,7 @@ async function send_slack_followup_message(channelId, channelName, userId, respo
 
     console.log('send slack v2 followup channel details =', channelId, channelName, userId, response_url);
     // console.log('send slack v2 followup =', message);
-    console.log('send slack v2 followup blocks =', blocks);
+    // console.log('send slack v2 followup blocks =', blocks);
 
     try {
         if (channelId && message && channelName !== "directmessage") {

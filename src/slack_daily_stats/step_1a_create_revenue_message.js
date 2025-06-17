@@ -102,7 +102,7 @@ async function create_slack_message(result, type_input = "All", category_input =
   const ytd_message = await get_ytd_message(month);
 
     const looker_url = `https://lookerstudio.google.com/u/0/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_bc9xthh1rd`;
-  const looker_report = `Gold`;
+    const looker_report = `Gold`;
 
 // MESSAGE
 // 📈🤼🚴‍♂️🥇👀📢🏊‍♂️🏃‍♀️🚴‍♂️🕕ℹ️
