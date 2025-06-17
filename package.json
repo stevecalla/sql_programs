@@ -9,7 +9,7 @@
     "pm2_list": "npx pm2 list",
     "pm2_restart_all": "npx pm2 restart all",
     "pm2_logs_all": "npx pm2 logs all",
-
+    
     "pm2_start_slack": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack.js --name usat_slack --no-autorestart --max-memory-restart 3G --cron-restart '30 * * * *' --node-args=\"--expose-gc\"",
     "pm2_start_slack_test": "npx pm2 start server_slack.js --name usat_slack",
     "pm2_logs_slack": "npx pm2 logs usat_slack",
@@ -62,7 +62,7 @@
     "delete_slack_events": "npx pm2 delete usat_slack_events",
     "show_slack_events": "npx pm2 show usat_slack_events",
     "restart_slack_events": "npx pm2 restart usat_slack_events",
-    
+
     "pm2_start_slack_races_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack_races.js --name usat_slack_races --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     "pm2_start_slack_races": "npx pm2 start server_slack_races.js --name usat_slack_races",
     "pm2_logs_slack_races": "npx pm2 logs usat_slack_races",
