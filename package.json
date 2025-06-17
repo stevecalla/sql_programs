@@ -19,7 +19,6 @@
     "restart_slack": "npx pm2 restart usat_slack",
 
     "pm2_start_sales_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_sales.js --name usat_sales --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
-
     "pm2_logs_sales": "npx pm2 logs usat_sales",
     "stop_sales": "npx pm2 stop usat_sales",
     "delete_sales": "npnx pm2 delete usat_sales",
@@ -54,7 +53,31 @@
     "stop_revenue": "npx pm2 stop usat_revenue",
     "delete_revenue": "npx pm2 delete usat_revenue",
     "show_revenue": "npx pm2 show usat_revenue",
-    "restart_revenue": "npx pm2 restart usat_revenue"
+    "restart_revenue": "npx pm2 restart usat_revenue",
+
+    "pm2_start_slack_events_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack_events.js --name usat_slack_events --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
+    "pm2_start_slack_events": "npx pm2 start server_slack_events.js --name usat_slack_events",
+    "pm2_logs_slack_events": "npx pm2 logs usat_slack_events",
+    "stop_slack_events": "npx pm2 stop usat_slack_events",
+    "delete_slack_events": "npx pm2 delete usat_slack_events",
+    "show_slack_events": "npx pm2 show usat_slack_events",
+    "restart_slack_events": "npx pm2 restart usat_slack_events",
+    
+    "pm2_start_slack_races_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack_races.js --name usat_slack_races --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
+    "pm2_start_slack_races": "npx pm2 start server_slack_races.js --name usat_slack_races",
+    "pm2_logs_slack_races": "npx pm2 logs usat_slack_races",
+    "stop_slack_races": "npx pm2 stop usat_slack_races",
+    "delete_slack_races": "npx pm2 delete usat_slack_races",
+    "show_slack_races": "npx pm2 show usat_slack_races",
+    "restart_slack_races": "npx pm2 restart usat_slack_races",
+
+    "pm2_start_slack_news_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack_news.js --name usat_slack_news --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
+    "pm2_start_slack_news": "npx pm2 start server_slack_news.js --name usat_slack_news",
+    "pm2_logs_slack_news": "npx pm2 logs usat_slack_news",
+    "stop_slack_news": "npx pm2 stop usat_slack_news",
+    "delete_slack_news": "npx pm2 delete usat_slack_news",
+    "show_slack_news": "npx pm2 show usat_slack_news",
+    "restart_slack_news": "npx pm2 restart usat_slack_news"
   },
   "keywords": [],
   "author": "",
@@ -72,7 +95,10 @@
     "express": "^4.21.0",
     "fast-csv": "^5.0.1",
     "mysql2": "^3.9.2",
-    "ssh2": "^1.15.0"
+    "ssh2": "^1.15.0",
+    "tinyurl": "^1.1.7",
+    "xmldom": "^0.6.0",
+    "xpath": "^0.0.34"
   },
   "devDependencies": {
     "pm2": "^5.4.3"

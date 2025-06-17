@@ -4,13 +4,13 @@ dotenv.config({ path: "./.env" });
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 // GET & LOAD EVENT DATA
-const { execute_transfer_usat_to_local } = require('./step_1_transfer_data_usat_to_local');
-const { execute_create_event_data_metrics } = require('./step_2_create_event_data_metrics');
+const { execute_transfer_usat_to_local } = require('./step_1_transfer_data_usat_to_local'); // Step #1: tranfer USAT event data to Local DB
+const { execute_create_event_data_metrics } = require('./step_2_create_event_data_metrics'); // Step #2: execute_create_event_data_metrics
+const { execute_load_big_query_event_data_metrics } = require("./step_3_load_bq_event_data_metrics"); // Step #3: load event metrics to bigquery
 
-const { execute_get_python_event_data } = require('./step_5_get_python_event_data');
-const { execute_run_python_event_reports } = require('../../utilities/python_events/index'); // step #6 run python event reports
+const { execute_get_python_event_data } = require('./step_5_get_python_event_data'); // Step #5: execute_get_python_event_data
+const { execute_run_python_event_reports } = require('../../utilities/python_events/index'); // Step #6: run python event reports
 
-const { execute_load_big_query_event_data_metrics } = require("./step_3_load_bq_event_data_metrics");
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 

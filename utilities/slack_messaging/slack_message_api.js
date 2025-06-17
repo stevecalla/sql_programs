@@ -27,7 +27,6 @@ async function sendSlackMessage(message, slack_channel_url, channel, blocks) {
         body: JSON.stringify(payload),
       });
 
-
       if (!response.ok) {
         throw new Error(`Error sending message to Slack - slack message api 1: ${response.status} ${response.statusText}`);
       }

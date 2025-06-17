@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Customer Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <script src="/mapbox-token.js"></script> <!-- Token injected here -->
+    
+    <!-- Mapbox GL Geocoder -->
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.7.2/mapbox-gl-geocoder.min.js"></script>
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.7.2/mapbox-gl-geocoder.css" type="text/css" />
+    
+    <script src="script.js" defer></script>
+
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css">
+
+</head>
+<body>
+    <main id="map-container">
+        <div id="map"></div>
+
+        <div id="loading-spinner" class="spinner-overlay">
+            <div class="spinner"></div>
+        </div>
+
+        <div id="legend" class="map-legend">
+            <h4>Legend</h4>
+            <div id="legend-content">
+                <div><span class="legend-color" style="background:#00cc44;"></span>Small Cluster (≤25)</div>
+                <div><span class="legend-color" style="background:#ff6600;"></span>Medium Cluster (26–100)</div>
+                <div><span class="legend-color" style="background:#0066ff;"></span>Large Cluster (101–500)</div>
+                <div><span class="legend-color" style="background:#cc0000;"></span>Very Large Cluster (&gt;500)</div>
+            </div>
+        </div>
+
+        <div id="cluster-toggle-container" class="map-legend">
+            <h4>Clustering</h4>
+            <label class="switch">
+                <input type="checkbox" id="toggle-cluster" checked>
+                <span class="slider round"></span>
+            </label>
+        </div>
+    </div>
+</body>
+</html>

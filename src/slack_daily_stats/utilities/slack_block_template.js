@@ -23,7 +23,7 @@ async function get_slack_block_template(slack_message) {
         },
   ];
 
-  console.log('slack blocks =', slack_blocks);
+//   console.log('slack blocks =', slack_blocks);
 
   return slack_blocks;
 }

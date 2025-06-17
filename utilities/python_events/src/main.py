@@ -21,9 +21,11 @@ if os.name == 'nt':
 
 def main():
     # Parse command line arguments
+    # python main.py --month 4
     args = parse_args()
     ANALYSIS_MONTH, ANALYSIS_MONTH_NAME = get_month_info(args.month)
-
+    print("🔍 Analysis Month = ", ANALYSIS_MONTH)
+    
     # --- CREATE DIRECTORIES ---
     print("🔍 Creating directories & paths")
     directory = "usat_event_python_output_data"

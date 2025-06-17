@@ -1,5 +1,6 @@
 # notes
 notes.txt
+*.txt
 test.txt
 *.png
 *.xlsx
@@ -8,6 +9,8 @@ test.txt
 __pycache__/
 *.pyc
 .vscode/
+*.geojson
+*.mbtiles
 
 # Ignore Python virtual environments
 venv/

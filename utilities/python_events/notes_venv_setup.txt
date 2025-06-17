@@ -19,6 +19,9 @@ ON WINDOWS
 
 2. Activate the virtual environment:
 
+   - in vscodeterminal on Windows
+   source venv/Scripts/activate
+
    - On Windows (PowerShell):
      .\venv\Scripts\Activate.ps1
 

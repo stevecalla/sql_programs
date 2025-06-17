@@ -14,3 +14,10 @@ node index.js --test    # passes "--test" to the Python script
 
 in python_events folder run 
 ./venv/Scripts/python.exe src/main.py --test
+
+NOTE:
+-- Runs the month shift date analysis for a specific month; default is current
+node index.js --month 4
+node index.js --month 5 DONE
+node index.js --month 6 DONE
+node index.js --month 7 IN PROCESS
