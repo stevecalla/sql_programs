@@ -186,7 +186,7 @@ app.get('/scheduled-slack-events-stats', async (req, res) => {
         // console.log('blocks message =', slack_blocks);
 
         // STEP 3: SEND SLACK MESSAGE
-        const is_test = true;
+        const is_test = false;
         const slack_channel = is_test ? "steve_calla_slack_channel" : "daily_sales_bot_slack_channel";
 
         await slack_message_api(slack_message, slack_channel, slack_blocks);
