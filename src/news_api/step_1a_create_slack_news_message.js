@@ -25,7 +25,7 @@ function padString(str, length) {
 async function format_markdown_table_news_data(news_data) {
     const headers = ['Date', 'Title (hover & click link)'];
     const date_width = 17;
-    const title_width = 60;
+    const title_width = 55;
     const colWidths = [date_width, title_width];
 
     // Format header row
