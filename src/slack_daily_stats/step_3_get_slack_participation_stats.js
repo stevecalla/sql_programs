@@ -221,7 +221,7 @@ async function execute_get_participation_stats() {
 }
 
 // async function test() {
-//     const { create_slack_message } = require('./step_3a_create_slack_events_message');
+//     const { create_slack_message } = require('./step_3a_create_slack_participation_message');
 
 //     const { result_year_over_year, result_sanctioned_vs_participation } = await execute_get_participation_stats();
 //     // console.log(result_year_over_year);

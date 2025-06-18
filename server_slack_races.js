@@ -14,7 +14,7 @@ const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // SLACK RACES STATS PROCESS
 const { execute_get_participation_stats } = require('./src/slack_daily_stats/step_3_get_slack_participation_stats');
-const { create_slack_message } = require('./src/slack_daily_stats/step_3a_create_slack_events_message');
+const { create_slack_message } = require('./src/slack_daily_stats/step_3a_create_slack_participation_message');
 
 const { send_slack_followup_message } = require('./utilities/slack_messaging/send_message_api_v2_followup');
 const { slack_message_api } = require('./utilities/slack_messaging/slack_message_api');
