@@ -4,7 +4,7 @@ const dayjs = require('dayjs');
 // input is in UTC, and format_date() converts it to local time, unless a timeZone is specified in the options
 function format_date(date) {
   return date.toLocaleString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric',
+    year: '2-digit', month: 'short', day: 'numeric',
     hour: 'numeric', minute: '2-digit', hour12: true
   });
 }
@@ -14,7 +14,7 @@ function format_date(date) {
 function format_date_only(date) {
   return date.toLocaleString('en-US', {
     weekday: 'short',        // Adds day of week (e.g., "Mon")
-    year: 'numeric',
+    year: '2-digit',
     month: 'short',
     day: 'numeric'
   });
