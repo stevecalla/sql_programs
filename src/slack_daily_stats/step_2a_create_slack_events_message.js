@@ -80,58 +80,6 @@ async function format_markdown_table_last_7_days(data) {
   return [header, divider, ...rows].join("\n");
 }
 
-// async function format_markdown_table_last_10_created_events(data) {
-//     const headerMap = {
-//         id_sanctioning_events: 'Sanction Id',
-//         name_events: 'Name *',
-//         // name_event_type: 'Type',
-//         // name_race_type: 'Race',
-//         // name_distance_types: 'Distance',
-//         starts_events: 'Start Date',
-//         state_code_events: 'State',
-//         race_count: 'Race Count',
-//     };
-
-//     // Get fields in order from headerMap keys
-//     const fields = Object.keys(headerMap);
-
-//     // Build headers array from headerMap values
-//     const headers = fields.map(f => headerMap[f]);
-
-//     // Slice first 10 rows
-//     const rows = data.slice(0, 10);
-
-//     // Prepare data rows as arrays of strings, matching fields order
-//     const tableData = rows.map((row, i) =>
-//         fields.map(f => (row[f] !== undefined && row[f] !== null ? String(row[f]) : ''))
-//     );
-
-//     // Add row numbering as first column, so add header and data column for that
-//     const numberedHeaders = ['#'].concat(headers);
-//     const numberedRows = tableData.map((row, i) => [String(i + 1)].concat(row));
-
-//     // Combine header and data
-//     const allRows = [numberedHeaders, ...numberedRows];
-
-//     // Calculate max widths per column
-//     const colWidths = numberedHeaders.map((_, colIndex) =>
-//         Math.max(...allRows.map(row => row[colIndex].length))
-//     );
-
-//     // Helper to pad strings left-aligned
-//     function pad(str, width) {
-//         return str + ' '.repeat(width - str.length);
-//     }
-
-//     // Build lines with padded columns separated by ' | '
-//     const lines = allRows.map(row => row.map((cell, i) => pad(cell, colWidths[i])).join(' | '));
-
-//     // Insert separator line after header
-//     lines.splice(1, 0, colWidths.map(w => '-'.repeat(w)).join('-|-'));
-
-//     return lines.join('\n');
-// }
-
 async function format_markdown_table_last_10_created_events(data) {
   // race name truncated
   // count = race count
@@ -172,7 +120,6 @@ async function format_markdown_table_last_10_created_events(data) {
 
   return lines.join('\n');
 }
-
 
 async function format_markdown_table_year_over_year(data) {
   const columns = [
