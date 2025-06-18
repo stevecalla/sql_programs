@@ -130,7 +130,7 @@ async function format_markdown_participation_v_sanction(data) {
 
 async function create_slack_message(result_year_over_year, result_sanctioned_vs_participation, month) {
 
-  console.log('step 3a create slack events message');
+  console.log('step 3a create slack participation message');
 
   let slack_message = "Error - No results";
   let is_error = false;

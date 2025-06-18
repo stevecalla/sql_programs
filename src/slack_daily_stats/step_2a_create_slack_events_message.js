@@ -81,55 +81,44 @@ async function format_markdown_table_last_7_days(data) {
 }
 
 async function format_markdown_table_last_10_created_events(data) {
-    const headerMap = {
-        id_sanctioning_events: 'Sanction Id',
-        name_events: 'Name *',
-        // name_event_type: 'Type',
-        // name_race_type: 'Race',
-        // name_distance_types: 'Distance',
-        starts_events: 'Start Date',
-        state_code_events: 'State',
-        race_count: 'Race Count',
-    };
+  // race name truncated
+  // count = race count
 
-    // Get fields in order from headerMap keys
-    const fields = Object.keys(headerMap);
+  const headerMap = {
+    id_sanctioning_events: 'Sanction Id',
+    name_events: 'Name *',
+    starts_events: 'Start Date',
+    state_code_events: 'ST',
+    race_count: 'Count **',
+  };
 
-    // Build headers array from headerMap values
-    const headers = fields.map(f => headerMap[f]);
+  const fields = Object.keys(headerMap);
+  const headers = fields.map(f => headerMap[f]);
+  const rows = data.slice(0, 10);
 
-    // Slice first 10 rows
-    const rows = data.slice(0, 10);
+  const tableData = rows.map((row, i) =>
+    fields.map(f => (row[f] !== undefined && row[f] !== null ? String(row[f]) : ''))
+  );
 
-    // Prepare data rows as arrays of strings, matching fields order
-    const tableData = rows.map((row, i) =>
-        fields.map(f => (row[f] !== undefined && row[f] !== null ? String(row[f]) : ''))
-    );
+  const numberedHeaders = ['#'].concat(headers);
+  const numberedRows = tableData.map((row, i) => [String(i + 1)].concat(row));
+  const allRows = [numberedHeaders, ...numberedRows];
 
-    // Add row numbering as first column, so add header and data column for that
-    const numberedHeaders = ['#'].concat(headers);
-    const numberedRows = tableData.map((row, i) => [String(i + 1)].concat(row));
+  // 🔧 Set manual fixed widths per column
+  const fixedWidths = [3, 12, 25, 10, 7, 7]; // [#, Sanction Id, Name, Start Date, ST, Count]
 
-    // Combine header and data
-    const allRows = [numberedHeaders, ...numberedRows];
+  function padAndTrim(str, width) {
+    if (str.length > width) return str.slice(0, width - 1) + '…'; // Truncate with ellipsis
+    return str + ' '.repeat(width - str.length); // Pad
+  }
 
-    // Calculate max widths per column
-    const colWidths = numberedHeaders.map((_, colIndex) =>
-        Math.max(...allRows.map(row => row[colIndex].length))
-    );
+  const lines = allRows.map(row =>
+    row.map((cell, i) => padAndTrim(cell, fixedWidths[i])).join(' | ')
+  );
 
-    // Helper to pad strings left-aligned
-    function pad(str, width) {
-        return str + ' '.repeat(width - str.length);
-    }
+  lines.splice(1, 0, fixedWidths.map(w => '-'.repeat(w)).join('-|-'));
 
-    // Build lines with padded columns separated by ' | '
-    const lines = allRows.map(row => row.map((cell, i) => pad(cell, colWidths[i])).join(' | '));
-
-    // Insert separator line after header
-    lines.splice(1, 0, colWidths.map(w => '-'.repeat(w)).join('-|-'));
-
-    return lines.join('\n');
+  return lines.join('\n');
 }
 
 async function format_markdown_table_year_over_year(data) {
@@ -221,6 +210,8 @@ slack_message =
   `\n🚴‍♂️ Most Recent 10 Events:\n` 
   +  
   (!is_error && `\`\`\`${last_10_created_events}\n\`\`\``)
+  + 
+  `* Race name is truncated; ** Count = race count`
 ;
 
   const slack_blocks = await get_slack_block_template(slack_message);
