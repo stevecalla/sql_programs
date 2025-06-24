@@ -7,7 +7,10 @@ from directory_utilities import get_output_path, archive_prior_output, parse_arg
 
 from data_loader import load_data
 from data_processing import group_clean_data
-from fuzzy_matching import match_events_2025_vs_2024, match_events_2024_vs_2025
+
+# from fuzzy_matching import match_events_2025_vs_2024, match_events_2024_vs_2025
+from fuzzy_matching import match_events_bidirectional
+
 from date_analysis import date_shift_analysis
 from match_analysis import perform_year_over_year_analysis
 
@@ -45,14 +48,17 @@ def main():
         .fillna('')                       # replace NaN/None with ''
         .astype(str)                      # everything becomes a string
         .str.lower()                      # lowercase
-        .isin(['canceled', 'cancelled', 'deleted'])   # is in blacklist?
+        .isin(['canceled', 'cancelled', 'deleted', 'declined'])   # is in blacklist?
     ]
 
     # --- FUZZY MATCHING 2025 TO 2024 ---
-    events_2025, match_summary_2025 = match_events_2025_vs_2024(grouped_df)
+    # events_2025, match_summary_2025 = match_events_2025_vs_2024(grouped_df)
 
     # --- FUZZY MATCHING 2024 TO 2025 ---
-    events_2024, match_summary_2024 = match_events_2024_vs_2025(grouped_df)
+    # events_2024, match_summary_2024 = match_events_2024_vs_2025(grouped_df)
+
+    # --- FUZZY MATCHING 2024 TO 2025 & 2025 TO 2024 ---
+    events_2025, events_2024, match_summary_2025, match_summary_2024 = match_events_bidirectional(grouped_df)
 
     # Filter Draft events for 2024
     # draft_2024_events = grouped_df[(grouped_df['year'] == 2024) & (grouped_df['Status'].str.lower() == 'draft')]
