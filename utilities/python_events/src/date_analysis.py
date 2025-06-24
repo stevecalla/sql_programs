@@ -15,6 +15,7 @@ def date_shift_analysis(events_2025, analysis_month, month_name):
     timing_shift_data['day_2025'] = timing_shift_data['earliest_start_date'].dt.day
     timing_shift_data['year_2025'] = timing_shift_data['earliest_start_date'].dt.year
     timing_shift_data['month_2025'] = timing_shift_data['earliest_start_date'].dt.month
+    timing_shift_data['month_2024'] = timing_shift_data['earliest_start_date_2024'].dt.month
     timing_shift_data['day_2024'] = timing_shift_data['earliest_start_date_2024'].dt.day
     timing_shift_data['weekday_2025'] = timing_shift_data['earliest_start_date'].dt.strftime('%A')
     timing_shift_data['weekday_2024'] = timing_shift_data['earliest_start_date_2024'].dt.strftime('%A')
@@ -25,9 +26,9 @@ def date_shift_analysis(events_2025, analysis_month, month_name):
 
     # Prepare the output DataFrame for Excel export
     timing_shift_output = timing_shift_data[[ 
-        'Name', 'ApplicationID', 'match_name_2024',
+        'Name', 'ApplicationID', 'Status', 'match_name_2024', 'status_2024',
         'earliest_start_date', 'year_2025', 'month_2025', 'weekday_2025', 'day_2025',
-        'earliest_start_date_2024', 'weekday_2024', 'day_2024',
+        'earliest_start_date_2024', 'month_2024', 'weekday_2024', 'day_2024',
         'day_diff', 'match_score_name_only', 'match_formula_used'
     ]]
 
