@@ -41,27 +41,8 @@ def main():
     # --- GROUP & CLEAN DATA ---
     (grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered) = group_clean_data(df)
 
-    # Create a filtered grouped DataFrame that excludes canceled or deleted events.
-    # fill NaN with empty string, cast every value to str, then lowercase + filter
-    filtered_grouped_df = grouped_df[
-        ~grouped_df['Status']
-        .fillna('')                       # replace NaN/None with ''
-        .astype(str)                      # everything becomes a string
-        .str.lower()                      # lowercase
-        .isin(['canceled', 'cancelled', 'deleted', 'declined'])   # is in blacklist?
-    ]
-
-    # --- FUZZY MATCHING 2025 TO 2024 ---
-    # events_2025, match_summary_2025 = match_events_2025_vs_2024(grouped_df)
-
-    # --- FUZZY MATCHING 2024 TO 2025 ---
-    # events_2024, match_summary_2024 = match_events_2024_vs_2025(grouped_df)
-
     # --- FUZZY MATCHING 2024 TO 2025 & 2025 TO 2024 ---
     events_2025, events_2024, match_summary_2025, match_summary_2024 = match_events_bidirectional(grouped_df)
-
-    # Filter Draft events for 2024
-    # draft_2024_events = grouped_df[(grouped_df['year'] == 2024) & (grouped_df['Status'].str.lower() == 'draft')]
 
     # Filter Draft events for 2024, safely handling NaN or non‑string statuses
     draft_2024_events = grouped_df[
@@ -83,7 +64,7 @@ def main():
     perform_year_over_year_analysis(event_output_path, grouped_df, events_2025, events_2024, "all")
 
      # Now run the year-over-year analysis.
-    perform_year_over_year_analysis(event_output_path, filtered_grouped_df, events_2025, events_2024, "filtered")
+    perform_year_over_year_analysis(event_output_path, filtered_df, events_2025, events_2024, "filtered")
 
     # For the analysis month (e.g., April 2025) use the subset from timing_shift_data
     analysis_month_shift = timing_shift_data[timing_shift_data['month_2025'] == ANALYSIS_MONTH].copy()

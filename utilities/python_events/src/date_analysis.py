@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 def date_shift_analysis(events_2025, analysis_month, month_name):
     """Perform timing shift analysis between matched events from 2025 and 2024."""
@@ -20,16 +21,18 @@ def date_shift_analysis(events_2025, analysis_month, month_name):
     timing_shift_data['weekday_2025'] = timing_shift_data['earliest_start_date'].dt.strftime('%A')
     timing_shift_data['weekday_2024'] = timing_shift_data['earliest_start_date_2024'].dt.strftime('%A')
     timing_shift_data['day_diff'] = timing_shift_data['day_2025'] - timing_shift_data['day_2024']
-
-    # **NEW:** Attach the 'month_2024' column to the full DataFrame so it is available later.
-    timing_shift_data['month_2024'] = timing_shift_data['earliest_start_date_2024'].dt.month
+    timing_shift_data['month_match'] = np.where(
+        timing_shift_data['month_2025'] == timing_shift_data['month_2024'],
+        'same_month',
+        'other_month'
+    )
 
     # Prepare the output DataFrame for Excel export
     timing_shift_output = timing_shift_data[[ 
         'Name', 'ApplicationID', 'Status', 'match_name_2024', 'status_2024',
         'earliest_start_date', 'year_2025', 'month_2025', 'weekday_2025', 'day_2025',
         'earliest_start_date_2024', 'month_2024', 'weekday_2024', 'day_2024',
-        'day_diff', 'match_score_name_only', 'match_formula_used'
+        'day_diff', 'match_score_name_only', 'match_formula_used', 'month_match'
     ]]
 
     # Filter for the analysis month (e.g., April)
