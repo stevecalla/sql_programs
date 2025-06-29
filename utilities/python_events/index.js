@@ -58,7 +58,8 @@ async function execute_run_python_event_reports(script_path = default_script_pat
     console.log(`⏳ ${path.basename(script_path)} took ${duration} seconds`);
 
     if (stderr) console.warn('⚠️ Python stderr:', stderr.trim());
-    console.log('📄 Python stdout:\n', stdout.trim());
+
+    console.log('📄 Python stdout: at python_events/index.js:\n', stdout.trim());
 
     return stdout.trim();
 
@@ -73,10 +74,10 @@ async function execute_run_python_event_reports(script_path = default_script_pat
 
 // If invoked directly, parse CLI args and run
 // node index.js --month 4
-if (require.main === module) {
-  const args = process.argv.slice(2); // supports --test or other args
-  execute_run_python_event_reports(default_script_path, args).catch(() => process.exit(1));
-}
+// if (require.main === module) {
+//   const args = process.argv.slice(2); // supports --test or other args
+//   execute_run_python_event_reports(default_script_path, args).catch(() => process.exit(1));
+// }
 
 // NOTE: See note_test_run.txt to view how to test this file
 // NOTE: See notes_venv_setup.txt to setup venv environment

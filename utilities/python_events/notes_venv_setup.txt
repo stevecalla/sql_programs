@@ -51,6 +51,17 @@ ON WINDOWS
 
    deactivate
 
+6. To update requirements.txt
+   either do it manually
+
+   or 
+
+   Overwrite requirements.txt with your full environment:
+   pip freeze > requirements.txt
+
+   (Best practice: keep requirements.txt up-to-date so you or your teammates can pip install -r requirements.txt later and get the same packages.)
+
+
 Notes:
 
 - Always activate the venv before installing packages or running your code.

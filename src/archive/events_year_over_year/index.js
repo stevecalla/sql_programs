@@ -15,7 +15,7 @@ runTimer(`get_data`);
 exec(`python3 "${pythonScript}"`, (error, stdout, stderr) => {
   const duration = (Date.now() - start) / 1000;
 
-  console.log(`⏳ main.py took ${duration.toFixed(2)} seconds`);
+  console.log(`\n⏳ main.py took ${duration.toFixed(2)} seconds`);
 
   if (error) {
     console.error('❌ Failed to run process in main.py:', error.message);

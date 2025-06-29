@@ -9,13 +9,15 @@ from data_loader import load_data
 from data_processing import group_clean_data
 
 # from fuzzy_matching import match_events_2025_vs_2024, match_events_2024_vs_2025
-from fuzzy_matching import match_events_bidirectional
+from fuzzy_matching import fuzzy_match_events_bidirectional
 
 from date_analysis import date_shift_analysis
 from match_analysis import perform_year_over_year_analysis
 
 from export_to_png_pdf import (create_chart_png, create_chart_pdf)
 from export_to_excel import export_to_excel
+
+print(">>> Starting main.py", flush=True)
 
 # Ensure emoji/unicode output works on Windows
 if os.name == 'nt':
@@ -42,7 +44,7 @@ def main():
     (grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered) = group_clean_data(df)
 
     # --- FUZZY MATCHING 2024 TO 2025 & 2025 TO 2024 ---
-    events_2025, events_2024, match_summary_2025, match_summary_2024 = match_events_bidirectional(grouped_df)
+    events_2025, events_2024, match_summary_2025, match_summary_2024 = fuzzy_match_events_bidirectional(grouped_df)
 
     # Filter Draft events for 2024, safely handling NaN or non‑string statuses
     draft_2024_events = grouped_df[
@@ -62,9 +64,6 @@ def main():
 
     # Now run the year-over-year analysis.
     perform_year_over_year_analysis(event_output_path, grouped_df, events_2025, events_2024, "all")
-
-     # Now run the year-over-year analysis.
-    perform_year_over_year_analysis(event_output_path, filtered_df, events_2025, events_2024, "filtered")
 
     # For the analysis month (e.g., April 2025) use the subset from timing_shift_data
     analysis_month_shift = timing_shift_data[timing_shift_data['month_2025'] == ANALYSIS_MONTH].copy()

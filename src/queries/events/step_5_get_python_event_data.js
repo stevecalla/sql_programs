@@ -28,7 +28,8 @@ function step_5_query_python_event_data(batch_size, offset) {
 
             DATE_FORMAT(created_at_events, '%Y-%m-%d') AS CreatedDate
 
-        FROM all_event_data_raw AS e
+        -- FROM all_event_data_raw AS e
+        FROM event_data_metrics AS e
 
         WHERE 1 = 1
             AND id_sanctioning_events IS NOT NULL
