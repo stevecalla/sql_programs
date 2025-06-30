@@ -26,8 +26,7 @@
 
 - [x] merge month shift data with consolidated match
     - [x] add in sanction id for match and other fields
-
-    why doesn't the pivot summary match the pivot table
+    - [x] why doesn't the pivot summary match the pivot table
 
     load into mysql
 

@@ -76,11 +76,7 @@ def perform_year_over_year_analysis(event_output_path, df, grouped_df, events_th
     merged_df = merge_event_match_and_timing_shifts(consolidated_match_data, timing_shift_output)
 
     # --- (f.2) push consolidated_match_data & merged_df to mysql ---
-    table_name = "event_data_metrics_yoy_match_v2"
-    push_df_to_mysql(consolidated_match_data, table_name)
-
-    table_name = "event_data_metrics_yoy_match"
-    push_df_to_mysql(merged_df, table_name)
+    load_into_mysql(consolidated_match_data, merged_df)
 
     # --- (g) Create Pivots by Month/Status ---
     pivot_all, pivot_active, pivot_active_by_event_name = generate_month_by_match_detail_pivots(merged_df)
@@ -302,7 +298,7 @@ def build_event_match_consolidated(events_this_year, events_last_year):
     cols_to_show = [
        'ApplicationID', 'Name', 'StartDate', 'RaceDate', 'Status', '2LetterCode', 'ZipCode', 'Value', 'RaceDirectorUserID', 'Website', 'RegistrationWebsite', 'Email', 'CreatedDate', 'earliest_start_date', 'year', 'month', 'month_name', 'possible_duplicate', 'match_idx_last_year', 'match_formula_used', 'match_score_name_only', 'match_score_name_and_zip', 'match_score_name_and_site', 'match_name_last_year', 'has_match', 'application_id_last_year', 'status_last_year', 'earliest_start_date_2024', 'website_last_year', 'zip_code_last_year', 'state_code_last_year', 'common_date', 'common_year', 'common_month', 'status_this_year', 'common_status', "match_category", "match_category_detailed", "source_year",  # <-- Include these for year-by-year diagnosis
     ]
-    
+
     existing_cols = [col for col in cols_to_show if col in consolidated_match_data.columns]
     return consolidated_match_data[existing_cols]
 
@@ -459,20 +455,27 @@ def create_timing_shift_pivots(merged_df):
     pivot_month_shift_last_year_by_month_match.index.name = "shift_month_last_year"
     pivot_month_shift_last_year_by_month_match.columns.name = "shift_month_match"
 
-    print("\nPivot 1: This Year (rows) vs Last Year (cols)")
-    print(pivot_month_shift_this_year_by_last_year_month.to_string())
+    # print("\nPivot 1: This Year (rows) vs Last Year (cols)")
+    # print(pivot_month_shift_this_year_by_last_year_month.to_string())
 
-    print("\nPivot 2: This Year (rows) vs Month Match (cols)")
-    print(pivot_month_shift_this_year_by_month_match.to_string())
+    # print("\nPivot 2: This Year (rows) vs Month Match (cols)")
+    # print(pivot_month_shift_this_year_by_month_match.to_string())
 
-    print("\nPivot 3: Last Year (rows) vs Month Match (cols)")
-    print(pivot_month_shift_last_year_by_month_match.to_string())
+    # print("\nPivot 3: Last Year (rows) vs Month Match (cols)")
+    # print(pivot_month_shift_last_year_by_month_match.to_string())
 
     return (
         pivot_month_shift_this_year_by_last_year_month,
         pivot_month_shift_this_year_by_month_match,
         pivot_month_shift_last_year_by_month_match
     )
+
+def load_into_mysql(consolidated_match_data, merged_df):
+    table_name = "event_data_metrics_yoy_match_v2"
+    push_df_to_mysql(consolidated_match_data, table_name)
+
+    table_name = "event_data_metrics_yoy_match"
+    push_df_to_mysql(merged_df, table_name)
 
 # --- Export All Analysis to Excel ---
 def export_analysis_to_excel(df, grouped_df, pivot_value, repeated_events_this_year,
