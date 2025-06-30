@@ -33,7 +33,10 @@ function step_5_query_python_event_data(batch_size, offset) {
 
         WHERE 1 = 1
             AND id_sanctioning_events IS NOT NULL
-            AND starts_year_events IN (2024, 2025)
+            
+            -- AND starts_year_events IN (2024, 2025)
+            AND starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
+            
         GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
         LIMIT ${batch_size} OFFSET ${offset}
         ;

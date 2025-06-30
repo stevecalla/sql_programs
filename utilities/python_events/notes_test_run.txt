@@ -18,18 +18,22 @@
     if event has a match but the either the match or the event is cancel et al
     then assign a specific category
 
-- [] create some summary pivot tables
+- [x] create some summary pivot tables
     = [x] load consolidated_match_data from python in mysql
-
     - [x] why does it print out the group df counts twice (is it running twice?)
         It wasn't running twice. A console log was printing it a 2nd time.
+    - [x] setup to run as this year vs last year not hard coded 2024 / 2025 from initial sql to 
 
-    - [] load data into bq & create looker studio reports
-    - [] setup to run as this year vs last year not hard coded 2024 / 2025 from initial sql to python
+- [x] merge month shift data with consolidated match
+    - [x] add in sanction id for match and other fields
+
+    why doesn't the pivot summary match the pivot table
+
+    load into mysql
+
     - [] check 2024 vs 2025 status for events that were cancelled in either
-    - [] remove common status
 
-- [] month to month shift data
+- [] load data into bq & create looker studio reportspython
 - [] join to sales
  
 

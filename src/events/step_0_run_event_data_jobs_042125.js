@@ -118,9 +118,9 @@ async function execute_run_event_data_jobs() {
   return elapsedTime;
 }
 
-// if (require.main === module) {
-//   execute_run_event_data_jobs();
-// }
+if (require.main === module) {
+  execute_run_event_data_jobs();
+}
 
 module.exports = {
   execute_run_event_data_jobs,

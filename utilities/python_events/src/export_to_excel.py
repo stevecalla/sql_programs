@@ -1,6 +1,6 @@
 import pandas as pd
 
-def export_to_excel(event_output_path,  ANALYSIS_MONTH_NAME, df, grouped_df, qa_summary, match_summary, match_summary_2024,events_2025, events_2024, draft_2024_events, timing_shift_output, shifted_into_month_output, unmatched_2024, pivot_value_all, pivot_value_filtered):
+def export_to_excel(event_output_path,  ANALYSIS_MONTH_NAME, df, grouped_df, qa_summary, match_summary_this_year, match_summary_last_year, events_this_year, events_last_year, draft_last_year_events, timing_shift_output, shifted_into_month_output, unmatched_last_year, pivot_value_all, pivot_value_filtered):
 
     OUTPUT_FILE = event_output_path / "cleaned_grouped_event_data_with_summary.xlsx"
 
@@ -10,14 +10,14 @@ def export_to_excel(event_output_path,  ANALYSIS_MONTH_NAME, df, grouped_df, qa_
         df.to_excel(writer, sheet_name='original_data', index=False)
         grouped_df.to_excel(writer, sheet_name='grouped_data', index=False)
         qa_summary.to_excel(writer, sheet_name='qa_summary', index=False)
-        match_summary.to_excel(writer, sheet_name='2025_match_summary', index=False)
-        match_summary_2024.to_excel(writer, sheet_name='2024_match_summary', index=False)
-        events_2025.to_excel(writer, sheet_name='events_2025_matches', index=False)
-        events_2024.to_excel(writer, sheet_name='events_2024_matches', index=False)
-        draft_2024_events.to_excel(writer, sheet_name='2024_draft_events', index=False)
+        match_summary_this_year.to_excel(writer, sheet_name='match_summary_this_year', index=False)
+        match_summary_last_year.to_excel(writer, sheet_name='match_summary_last_year', index=False)
+        events_this_year.to_excel(writer, sheet_name='events_this_year_matches', index=False)
+        events_last_year.to_excel(writer, sheet_name='events_last_year_matches', index=False)
+        draft_last_year_events.to_excel(writer, sheet_name='draft_events_last_year', index=False)
         timing_shift_output.to_excel(writer, sheet_name='timing_shift_analysis', index=False)
         shifted_into_month_output.to_excel(writer, sheet_name=f'shifted_into_{ ANALYSIS_MONTH_NAME.lower()}', index=False)
-        unmatched_2024.to_excel(writer, sheet_name='2024_unmatched_events', index=False)
+        unmatched_last_year.to_excel(writer, sheet_name='unmatched_events_last_year', index=False)
         pivot_value_all.to_excel(writer, sheet_name='pivot_value_all', index=False)
         pivot_value_filtered.to_excel(writer, sheet_name='pivot_value_filtered', index=False)
 
@@ -28,14 +28,14 @@ def export_to_excel(event_output_path,  ANALYSIS_MONTH_NAME, df, grouped_df, qa_
             'original_data': df,
             'grouped_data': grouped_df,
             'qa_summary': qa_summary,
-            '2025_match_summary': match_summary,
-            'events_2025_matches': events_2025,
-            '2024_match_summary': match_summary_2024,
-            'events_2024_matches': events_2024,
-            '2024_draft_events': draft_2024_events,
+            'match_summary_this_year': match_summary_this_year,
+            'events_this_year_matches': events_this_year,
+            'match_summary_last_year': match_summary_last_year,
+            'events_last_year_matches': events_last_year,
+            'draft_events_last_year': draft_last_year_events,
             'timing_shift_analysis': timing_shift_output,
             f'shifted_into_{ ANALYSIS_MONTH_NAME.lower()}': shifted_into_month_output,
-            '2024_unmatched_events': unmatched_2024,
+            'unmatched_events_last_year': unmatched_last_year,
             'pivot_value_all': pivot_value_all,
             'pivot_value_filtered': pivot_value_filtered
 
