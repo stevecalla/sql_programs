@@ -1,5 +1,7 @@
 # notes
 notes.txt
+notes_test_run.txt
+notes_venv_setup.txt
 *.txt
 test.txt
 *.png
