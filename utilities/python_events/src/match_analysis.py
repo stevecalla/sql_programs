@@ -471,8 +471,8 @@ def create_timing_shift_pivots(merged_df):
     )
 
 def load_into_mysql(consolidated_match_data, merged_df):
-    table_name = "event_data_metrics_yoy_match_v2"
-    push_df_to_mysql(consolidated_match_data, table_name)
+    # table_name = "event_data_metrics_yoy_match_v2"
+    # push_df_to_mysql(consolidated_match_data, table_name)
 
     table_name = "event_data_metrics_yoy_match"
     push_df_to_mysql(merged_df, table_name)
