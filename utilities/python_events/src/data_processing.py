@@ -1,4 +1,5 @@
 import pandas as pd
+from datetime import datetime
 
 def group_clean_data(df):
     """Group and clean the raw data and calculate supporting summaries.
@@ -7,6 +8,11 @@ def group_clean_data(df):
     - The CreatedDate field is included using its first value,
       preserving its original order (appearing after Email in the file).
     """
+    
+    # Dynamically set the years for YOY analysis
+    this_year = datetime.now().year
+    last_year = this_year - 1
+
     # --- Adjust RaceDate if blank ---
     # Replace RaceDate with StartDate if RaceDate is missing or an empty string.
     df['RaceDate'] = df.apply(
@@ -84,8 +90,12 @@ def group_clean_data(df):
         .size()
         .reset_index(name='event_count')
     )
-    summary_2024 = status_summary[status_summary['year'] == 2024]
-    summary_2025 = status_summary[status_summary['year'] == 2025]
+
+    # summary_2024 = status_summary[status_summary['year'] == 2024]
+    # summary_2025 = status_summary[status_summary['year'] == 2025]
+
+    summary_last_year = status_summary[status_summary['year'] == last_year]
+    summary_this_year = status_summary[status_summary['year'] == this_year]
 
     # --- PIVOT FOR YOY ---
     def create_yoy_pivot(df_inner):
@@ -95,7 +105,10 @@ def group_clean_data(df):
             .reset_index(name='event_count')
         )
         pivot = monthly.pivot(index='month_name', columns='year', values='event_count').fillna(0)
-        pivot['difference'] = pivot[2025] - pivot[2024]
+
+        # pivot['difference'] = pivot[2025] - pivot[2024]
+        pivot['difference'] = pivot[this_year] - pivot[last_year]
+
         pivot['month_order'] = pd.to_datetime(pivot.index.to_series(), format='%B').dt.month
         return pivot.sort_values('month_order')
 
@@ -103,13 +116,14 @@ def group_clean_data(df):
 
     # filtered_df = grouped_df[~grouped_df['Status'].str.lower().isin(['canceled', 'cancelled', 'deleted'])]
     
+    # Create a filtered grouped DataFrame that excludes canceled or deleted events.
     # fill NaN with empty string, cast every value to str, then lowercase + filter
     filtered_df = grouped_df[
         ~grouped_df['Status']
         .fillna('')                       # replace NaN/None with ''
         .astype(str)                      # everything becomes a string
         .str.lower()                      # lowercase
-        .isin(['canceled', 'cancelled', 'deleted'])   # is in blacklist?
+        .isin(['canceled', 'cancelled', 'deleted', 'declined'])   # is in blacklist?
     ]
 
     pivot_filtered = create_yoy_pivot(filtered_df)
@@ -128,9 +142,15 @@ def group_clean_data(df):
         )
         pivot_value = value_monthly.pivot(index=['month_name', 'Value'], columns='year', values='event_count').fillna(0)
         
-        if 2024 in pivot_value.columns and 2025 in pivot_value.columns:
-            pivot_value['difference'] = pivot_value[2025] - pivot_value[2024]
+        # if 2024 in pivot_value.columns and 2025 in pivot_value.columns:
+        #     pivot_value['difference'] = pivot_value[2025] - pivot_value[2024]
+        # else:
+        #     pivot_value['difference'] = None
+
+        if last_year in pivot_value.columns and this_year in pivot_value.columns:
+            pivot_value['difference'] = pivot_value[this_year] - pivot_value[last_year]
         else:
+            # fallback if one of the years is missing
             pivot_value['difference'] = None
 
         pivot_value = pivot_value.reset_index()
@@ -146,7 +166,7 @@ def group_clean_data(df):
 
     # print(pivot_value_all)
     # print(pivot_value_filtered)
-    print(summary_2025)
+    # print(summary_this_year)
 
-    return (grouped_df, qa_summary, summary_2024, summary_2025,
+    return (grouped_df, qa_summary, summary_last_year, summary_this_year,
             pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered)

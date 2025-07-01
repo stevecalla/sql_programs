@@ -2,17 +2,26 @@ import os
 import sys
 import pandas as pd
 from pathlib import Path
+from datetime import datetime
 
 from directory_utilities import get_output_path, archive_prior_output, parse_args, get_month_info
 
 from data_loader import load_data
 from data_processing import group_clean_data
-from fuzzy_matching import match_events_2025_vs_2024, match_events_2024_vs_2025
+
+from fuzzy_matching import fuzzy_match_events_bidirectional
+
 from date_analysis import date_shift_analysis
 from match_analysis import perform_year_over_year_analysis
 
 from export_to_png_pdf import (create_chart_png, create_chart_pdf)
 from export_to_excel import export_to_excel
+
+# Dynamically set the years for YOY analysis
+this_year = datetime.now().year
+last_year = this_year - 1
+
+print(">>> Starting main.py", flush=True)
 
 # Ensure emoji/unicode output works on Windows
 if os.name == 'nt':
@@ -36,29 +45,20 @@ def main():
     df = load_data("usat_event_python_input_data")
 
     # --- GROUP & CLEAN DATA ---
-    (grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered) = group_clean_data(df)
+    (grouped_df, qa_summary, summary_last_year, summary_this_year, pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered) = group_clean_data(df)
 
-    # Create a filtered grouped DataFrame that excludes canceled or deleted events.
-    # fill NaN with empty string, cast every value to str, then lowercase + filter
-    filtered_grouped_df = grouped_df[
-        ~grouped_df['Status']
-        .fillna('')                       # replace NaN/None with ''
-        .astype(str)                      # everything becomes a string
-        .str.lower()                      # lowercase
-        .isin(['canceled', 'cancelled', 'deleted'])   # is in blacklist?
-    ]
+    # TEST 100 from each year for testing
+    # test_df = pd.concat([
+    #     grouped_df[grouped_df['year'] == this_year].head(100),
+    #     grouped_df[grouped_df['year'] == last_year].head(100)
+    # ])
+    # events_this_year, events_last_year, match_summary_this_year, match_summary_last_year = fuzzy_match_events_bidirectional(test_df)
 
-    # --- FUZZY MATCHING 2025 TO 2024 ---
-    events_2025, match_summary_2025 = match_events_2025_vs_2024(grouped_df)
+    # --- FUZZY MATCHING LAST YEAR TO THIS YEAR & THIS YEAR TO LAST YEAR ---
+    events_this_year, events_last_year, match_summary_this_year, match_summary_last_year = fuzzy_match_events_bidirectional(grouped_df)
 
-    # --- FUZZY MATCHING 2024 TO 2025 ---
-    events_2024, match_summary_2024 = match_events_2024_vs_2025(grouped_df)
-
-    # Filter Draft events for 2024
-    # draft_2024_events = grouped_df[(grouped_df['year'] == 2024) & (grouped_df['Status'].str.lower() == 'draft')]
-
-    # Filter Draft events for 2024, safely handling NaN or non‑string statuses
-    draft_2024_events = grouped_df[
+    # Filter Draft events for LAST YEAR, safely handling NaN or non‑string statuses
+    draft_last_year_events = grouped_df[
         (grouped_df['year'] == 2024) &
         (grouped_df['Status']
             .fillna('')          # turn NaN/None into ''
@@ -70,32 +70,31 @@ def main():
 
     # --- DATE SHIFT ANALYSIS ---
     timing_shift_output, shifted_into_month_output, timing_shift_data = date_shift_analysis(
-        events_2025, ANALYSIS_MONTH, ANALYSIS_MONTH_NAME
+        events_this_year, ANALYSIS_MONTH, ANALYSIS_MONTH_NAME
     )
 
-    # Now run the year-over-year analysis.
-    perform_year_over_year_analysis(event_output_path, grouped_df, events_2025, events_2024, "all")
-
-     # Now run the year-over-year analysis.
-    perform_year_over_year_analysis(event_output_path, filtered_grouped_df, events_2025, events_2024, "filtered")
-
     # For the analysis month (e.g., April 2025) use the subset from timing_shift_data
-    analysis_month_shift = timing_shift_data[timing_shift_data['month_2025'] == ANALYSIS_MONTH].copy()
+    analysis_month_shift = timing_shift_data[timing_shift_data['month_this_year'] == ANALYSIS_MONTH].copy()
 
-    # --- CHART EXPORTS TO INDIVIDUAL PNG FILES ---
-    create_chart_png(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summary, summary_2024, summary_2025,
-     pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
+    # Now run the year-over-year analysis.  
+    consolidated_match_data = perform_year_over_year_analysis(event_output_path, df, grouped_df, events_this_year, events_last_year, "all", timing_shift_output)
 
-    # --- CHART EXPORTS TO PDF ---
-    create_chart_pdf(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summary, summary_2024, summary_2025, pivot_all, pivot_filtered, filtered_df, events_2025, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
+    # print("TYPE consolidated_match_data:", type(consolidated_match_data))
+    # print("TYPE timing_shift_output:", type(timing_shift_output))
 
-    # --- EVENTS IN 2024 WITH NO MATCH IN 2025 ---
-    unmatched_2024 = events_2024[~events_2024['Name'].isin(
-        events_2025[events_2025['has_match'] == True]['match_name_2024']
+    # # --- CHART EXPORTS TO INDIVIDUAL PNG FILES --- 
+    create_chart_png(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summary, summary_last_year, summary_this_year, pivot_all, pivot_filtered, filtered_df, events_this_year, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
+
+    # # --- CHART EXPORTS TO PDF ---
+    create_chart_pdf(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summary, summary_last_year, summary_this_year, pivot_all, pivot_filtered, filtered_df, events_this_year, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
+
+    # --- EVENTS IN LAST YEAR WITH NO MATCH IN THIS YEAR ---
+    unmatched_last_year = events_last_year[~events_last_year['Name'].isin(
+        events_this_year[events_this_year['has_match'] == True]['match_name_last_year']
     )]
 
     # --- EXPORT TO EXCEL ---
-    export_to_excel(event_output_path, ANALYSIS_MONTH_NAME, df, grouped_df, qa_summary, match_summary_2025, match_summary_2024, events_2025, events_2024, draft_2024_events, timing_shift_output, shifted_into_month_output, unmatched_2024, pivot_value_all, pivot_value_filtered)
+    export_to_excel(event_output_path, ANALYSIS_MONTH_NAME, df, grouped_df, qa_summary, match_summary_this_year, match_summary_last_year, events_this_year, events_last_year, draft_last_year_events, timing_shift_output, shifted_into_month_output, unmatched_last_year, pivot_value_all, pivot_value_filtered)
 
 def is_venv():
     return sys.prefix != sys.base_prefix
@@ -115,7 +114,7 @@ def test():
 
     try:
         # Load and display basic info from data
-        df = load_data()
+        df = load_data("usat_event_python_input_data")
         # print(f"✅ Data loaded: {df.shape[0]} rows, {df.shape[1]} columns")
 
         # Run group and clean step
@@ -123,8 +122,8 @@ def test():
         # print(f"✅ Grouped data: {grouped_df.shape[0]} rows")
 
         # Try matching logic on a sample
-        sample_2025, _ = match_events_2025_vs_2024(grouped_df.head(100))
-        # print(f"✅ Sample matching complete: {sample_2025.shape[0]} events")
+        sample_this_year, _, _, _ = match_events_bidirectional(grouped_df.head(100))
+        # print(f"✅ Sample matching complete: {sample_this_year.shape[0]} events")
 
         print("🎉 Test passed successfully.")
 

@@ -75,13 +75,13 @@ async function execute_run_event_data_jobs() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1  = true; // tranfer USAT event data to Local DB
-  const run_step_2  = true; // execute_create_event_data_metrics
-  const run_step_3  = true; // load event metrics to bigquery
+  const run_step_1 = true; // tranfer USAT event data to Local DB
+  const run_step_2 = true; // execute_create_event_data_metrics
+  const run_step_3 = true; // load event metrics to bigquery
 
-  const run_step_5  = true; // execute_get_python_event_data
-  const run_step_6  = true; // run python event reports
-  
+  const run_step_5 = true; // execute_get_python_event_data
+  const run_step_6 = true; // run python event reports
+
   try {
     const stepFunctions = [
       run_step_1 ? execute_transfer_usat_to_local : null,
@@ -90,7 +90,7 @@ async function execute_run_event_data_jobs() {
 
       run_step_5 ? execute_get_python_event_data : null,
       run_step_6 ? execute_run_python_event_reports : null,
-      
+
     ];
 
     const stepName = [
@@ -118,7 +118,9 @@ async function execute_run_event_data_jobs() {
   return elapsedTime;
 }
 
-// execute_run_event_data_jobs();
+// if (require.main === module) {
+//   execute_run_event_data_jobs();
+// }
 
 module.exports = {
   execute_run_event_data_jobs,

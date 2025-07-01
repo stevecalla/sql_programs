@@ -1,324 +1,258 @@
 import pandas as pd
-from rapidfuzz import process, fuzz
+from rapidfuzz import fuzz
+from datetime import datetime
 
 # --- Threshold constants ---
-ALL_CANDIDATES_THRESHOLD    =   90   # For all 2024 candidates (highest confidence required)
+ALL_CANDIDATES_THRESHOLD    =   90   # For all candidates (highest confidence required)
 CURRENT_MONTH_THRESHOLD     =   80   # For candidates in the same month
 ADJACENT_MONTH_THRESHOLD    =   80   # For candidates in adjacent months
 FALLBACK_THRESHOLD          =   80   # For fallback selection from entire dataset
 
-def match_events_2025_vs_2024(grouped_df):
+# Dynamically set the years for YOY analysis
+this_year = datetime.now().year
+last_year = this_year - 1
+
+def fuzzy_match_events_bidirectional(grouped_df):
     """
-    Perform fuzzy matching of 2025 events against 2024 events using the following logic:
-      - Consider all 2024 candidates; if a candidate’s combined (Zip+Name) score is above a high threshold, retain that match.
-      - Else, look at candidates in the current month; if the best match has a combined score above a medium threshold, retain that.
-      - Else, look at candidates in adjacent months; if the best match’s score is above that medium threshold, retain that.
-      - Else, from the entire dataset, select the best candidate with a combined score above that medium threshold.
-      
-    Combined score is calculated as the average of the fuzzy name score and zipcode score.
-    After a match is determined, the function also computes the site similarity and combined (Name+Site) score.
-    """
-
-    # Helper function to compute combined name + zipcode score.
-    def compute_combined_score(name_a, name_b, zip_a, zip_b):
-        name_score = fuzz.token_sort_ratio(name_a, name_b)
-        zip_score = fuzz.token_sort_ratio(zip_a, zip_b) if zip_a and zip_b else 0
-        combined = round((name_score * 0.5 + zip_score * 0.5), 2)
-        return combined, name_score, zip_score
-
-    # Separate events by year.
-    events_2024 = grouped_df[grouped_df['year'] == 2024].copy()
-    events_2025 = grouped_df[grouped_df['year'] == 2025].copy()
-
-    # Initialize match columns in events_2025.
-    match_cols = [
-        'match_name_2024', 'match_score_name_only', 'match_score_name_and_site',
-        'match_score_name_and_zip', 'has_match', 'application_id_2024', 'status_2024',
-        'earliest_start_date_2024', 'website_2024', 'zip_code_2024', 'state_code_2024',
-        'match_formula_used'
-    ]
-    for col in match_cols:
-        events_2025[col] = None
-    events_2025['has_match'] = False
-
-    # Loop over each event in 2025.
-    for idx, row in events_2025.iterrows():
-        name_2025 = row['Name']
-        site_2025 = str(row.get('Website', '')).strip().lower()
-        zip_2025 = str(row.get('ZipCode', '')).strip()
-        event_month = row['month']  # Month of the 2025 event
-
-        best_candidate = None
-        best_combined_score = 0  # for Name+Zip combination
-        best_name_score = 0      # to be used later for site score calculation
-        match_formula = ""
-
-        # --- STEP 1: Search All 2024 Candidates ---
-        candidate_pool = events_2024
-        for _, candidate in candidate_pool.iterrows():
-            candidate_name = candidate['Name']
-            candidate_zip = str(candidate.get('ZipCode', '')).strip()
-            score, name_score, _ = compute_combined_score(name_2025, candidate_name, zip_2025, candidate_zip)
-            if score > best_combined_score:
-                best_combined_score = score
-                best_candidate = candidate
-                best_name_score = name_score
-
-        if best_candidate is not None and best_combined_score > ALL_CANDIDATES_THRESHOLD:
-            match_formula = f"All Candidates (Zip+Name > {ALL_CANDIDATES_THRESHOLD})"
-        else:
-            # --- STEP 2: Candidates in the Current Month ---
-            candidate_pool = events_2024[events_2024['month'] == event_month]
-            best_candidate = None
-            best_combined_score = 0
-            for _, candidate in candidate_pool.iterrows():
-                candidate_name = candidate['Name']
-                candidate_zip = str(candidate.get('ZipCode', '')).strip()
-                score, name_score, _ = compute_combined_score(name_2025, candidate_name, zip_2025, candidate_zip)
-                if score > best_combined_score:
-                    best_combined_score = score
-                    best_candidate = candidate
-                    best_name_score = name_score
-
-            if best_candidate is not None and best_combined_score > CURRENT_MONTH_THRESHOLD:
-                match_formula = f"Current Month (Zip+Name > {CURRENT_MONTH_THRESHOLD})"
-            else:
-                # --- STEP 3: Candidates in Adjacent Months ---
-                adjacent_months = []
-                if event_month - 1 >= 1:
-                    adjacent_months.append(event_month - 1)
-                if event_month + 1 <= 12:
-                    adjacent_months.append(event_month + 1)
-                candidate_pool = events_2024[events_2024['month'].isin(adjacent_months)]
-                best_candidate = None
-                best_combined_score = 0
-                for _, candidate in candidate_pool.iterrows():
-                    candidate_name = candidate['Name']
-                    candidate_zip = str(candidate.get('ZipCode', '')).strip()
-                    score, name_score, _ = compute_combined_score(name_2025, candidate_name, zip_2025, candidate_zip)
-                    if score > best_combined_score:
-                        best_combined_score = score
-                        best_candidate = candidate
-                        best_name_score = name_score
-                if best_candidate is not None and best_combined_score > ADJACENT_MONTH_THRESHOLD:
-                    match_formula = f"Adjacent Months (Zip+Name > {ADJACENT_MONTH_THRESHOLD})"
-                else:
-                    # --- STEP 4: Fallback on Entire Dataset ---
-                    candidate_pool = events_2024
-                    best_candidate = None
-                    best_combined_score = 0
-                    for _, candidate in candidate_pool.iterrows():
-                        candidate_name = candidate['Name']
-                        candidate_zip = str(candidate.get('ZipCode', '')).strip()
-                        score, name_score, _ = compute_combined_score(name_2025, candidate_name, zip_2025, candidate_zip)
-                        if score > best_combined_score:
-                            best_combined_score = score
-                            best_candidate = candidate
-                            best_name_score = name_score
-                    if best_candidate is not None and best_combined_score > FALLBACK_THRESHOLD:
-                        match_formula = f"Fallback All Candidates (Zip+Name > {FALLBACK_THRESHOLD})"
-                    else:
-                        match_formula = "No Match"
-
-        # Populate event details for the 2025 event if a candidate is accepted.
-        if best_candidate is not None and best_combined_score > FALLBACK_THRESHOLD:
-            # Compute site similarity score.
-            candidate_site = str(best_candidate.get('Website', '')).strip().lower()
-            site_score = fuzz.token_sort_ratio(site_2025, candidate_site) if site_2025 and candidate_site else 0
-
-            # Combined site score: average of the name score and the site score.
-            combined_site_score = round((best_name_score * 0.5 + site_score * 0.5), 2)
-
-            events_2025.at[idx, 'match_name_2024'] = best_candidate['Name']
-            events_2025.at[idx, 'match_score_name_only'] = best_name_score
-            events_2025.at[idx, 'match_score_name_and_site'] = combined_site_score
-            events_2025.at[idx, 'match_score_name_and_zip'] = best_combined_score
-            events_2025.at[idx, 'has_match'] = True
-            events_2025.at[idx, 'match_formula_used'] = match_formula
-
-            # Populate additional fields from the matching 2024 event.
-            events_2025.at[idx, 'application_id_2024'] = best_candidate['ApplicationID']
-            events_2025.at[idx, 'status_2024'] = best_candidate['Status']
-            events_2025.at[idx, 'earliest_start_date_2024'] = best_candidate['earliest_start_date']
-            events_2025.at[idx, 'website_2024'] = best_candidate['Website']
-            events_2025.at[idx, 'zip_code_2024'] = best_candidate['ZipCode']
-            events_2025.at[idx, 'state_code_2024'] = best_candidate['2LetterCode']
-        else:
-            # If no candidate meets any of the criteria.
-            events_2025.at[idx, 'has_match'] = False
-            events_2025.at[idx, 'match_formula_used'] = "No Match"
-            events_2025.at[idx, 'application_id_2024'] = row['ApplicationID']
-            events_2025.at[idx, 'status_2024'] = row['Status']
-            events_2025.at[idx, 'earliest_start_date_2024'] = row['earliest_start_date']
-            events_2025.at[idx, 'website_2024'] = row['Website']
-            events_2025.at[idx, 'zip_code_2024'] = row['ZipCode']
-            events_2025.at[idx, 'state_code_2024'] = row['2LetterCode']
-
-    # Generate match summary for 2025 events (aggregated by year, month, and month_name).
-    match_summary = (
-        events_2025.groupby(['year', 'month', 'month_name'])
-        .agg(
-            total_events=('Name', 'count'),
-            matched_events=('has_match', lambda x: x.sum()),
-            unmatched_events=('has_match', lambda x: (~x).sum())
-        )
-        .sort_values(by=['year', 'month'])
-        .reset_index()
-    )
-
-    return events_2025, match_summary
-
-def match_events_2024_vs_2025(grouped_df):
-    """
-    Perform fuzzy matching of 2024 events against 2025 events using the following logic:
-      - Consider all 2025 candidates; if a candidate’s combined (Zip+Name) score is above 90, retain that match.
+    Perform fuzzy matching of last_year events against this_year events using the following logic:
+      - First, apply manual matches from a provided list of ApplicationID pairs (this_year <-> last_year). These are assigned directly and excluded from fuzzy matching.
+      - Consider all this_year candidates; if a candidate’s combined (Zip+Name) score is above 90, retain that match.
       - Else, look at candidates in the current month; if the best match has a combined score above 80, retain that.
       - Else, look at candidates in adjacent months; if the best match’s score is above 80, retain that.
       - Else, from the entire dataset, select the best candidate with a combined score above 80.
-      
+
     Combined score is calculated as the average of the fuzzy name score and zipcode score.
     After a match is determined, the function also computes the site similarity and combined (Name+Site) score.
-    
-    The match result columns are stored in the 2024 events, with candidate (i.e. 2025) details appended.
+
+    The match result columns are stored in the last_year and this_year events, ensuring mutual one-to-one assignment.
     """
 
-    # Helper function to compute combined name + zipcode score.
     def compute_combined_score(name_a, name_b, zip_a, zip_b):
         name_score = fuzz.token_sort_ratio(name_a, name_b)
         zip_score = fuzz.token_sort_ratio(zip_a, zip_b) if zip_a and zip_b else 0
-        combined = round((name_score * 0.5 + zip_score * 0.5), 2)
-        return combined, name_score, zip_score
+        return round((name_score * 0.5 + zip_score * 0.5), 2), name_score, zip_score
 
-    # Separate events by year.
-    events_2024 = grouped_df[grouped_df['year'] == 2024].copy()
-    events_2025 = grouped_df[grouped_df['year'] == 2025].copy()
+    def compute_site_score(site_a, site_b):
+        return fuzz.token_sort_ratio(site_a.lower().strip(), site_b.lower().strip()) if site_a and site_b else 0
 
-    # Initialize match columns in events_2024.
-    match_cols = [
-        'match_name_2025', 'match_score_name_only', 'match_score_name_and_site',
-        'match_score_name_and_zip', 'has_match', 'application_id_2025', 'status_2025',
-        'earliest_start_date_2025', 'website_2025', 'zip_code_2025', 'state_code_2025',
-        'match_formula_used'
+    # --- MANUAL MATCHES ---
+    # List of tuples: (ApplicationID_this_year, ApplicationID_last_year)
+    # These will be matched directly and excluded from fuzzy logic.
+    manual_matches = [
+        # Example: ('310617', '309039'),    # ('this_year_ID', 'last_year_ID')
+        ('310617-Adult Race', '309039-Adult Race') # this_year USA Triathlon Sprint and Olympic Distance National Championships
+        # Add more pairs as needed
     ]
-    for col in match_cols:
-        events_2024[col] = None
-    events_2024['has_match'] = False
 
-    # Loop over each event in 2024.
-    for idx, row in events_2024.iterrows():
-        name_2024 = row['Name']
-        site_2024 = str(row.get('Website', '')).strip().lower()
-        zip_2024 = str(row.get('ZipCode', '')).strip()
-        event_month = row['month']  # Month of the 2024 event
+    # Split original dataset into last_year and this_year subsets
+    events_last_year = grouped_df[grouped_df['year'] == last_year].copy()
+    events_this_year = grouped_df[grouped_df['year'] == this_year].copy()
 
-        best_candidate = None
-        best_combined_score = 0  # for Name+Zip combination
-        best_name_score = 0      # to be used later for site score combination
-        match_formula = ""
+    # Initialize match columns
+    events_last_year['match_idx_this_year'] = None
+    events_this_year['match_idx_last_year'] = None
+    events_last_year['match_formula_used'] = ""
+    events_this_year['match_formula_used'] = ""
+    events_last_year['match_score_name_only'] = None
+    events_this_year['match_score_name_only'] = None
+    events_last_year['match_score_name_and_zip'] = None
+    events_this_year['match_score_name_and_zip'] = None
+    events_last_year['match_score_name_and_site'] = None
+    events_this_year['match_score_name_and_site'] = None
+    events_last_year['match_name_this_year'] = None
+    events_this_year['match_name_last_year'] = None
 
-        # --- STEP 1: Search All Candidates from 2025 ---
-        candidate_pool = events_2025
-        for _, candidate in candidate_pool.iterrows():
-            candidate_name = candidate['Name']
-            candidate_zip = str(candidate.get('ZipCode', '')).strip()
-            score, name_score, _ = compute_combined_score(name_2024, candidate_name, zip_2024, candidate_zip)
-            if score > best_combined_score:
-                best_combined_score = score
-                best_candidate = candidate
-                best_name_score = name_score
+    pairs = []  # Store potential matches and associated metadata
 
-        if best_candidate is not None and best_combined_score > ALL_CANDIDATES_THRESHOLD:
-            match_formula = f"All Candidates (Zip+Name > {ALL_CANDIDATES_THRESHOLD})"
+    # --- FIRST: ASSIGN MANUAL MATCHES ---
+    # We match by ApplicationID (must be string for comparison).
+    matched_this_year = set()
+    matched_last_year = set()
+    for aid_this_year, aid_last_year in manual_matches:
+        idx_this_year = events_this_year.index[events_this_year['ApplicationID'].astype(str) == str(aid_this_year)]
+        idx_last_year = events_last_year.index[events_last_year['ApplicationID'].astype(str) == str(aid_last_year)]
+        if len(idx_this_year) and len(idx_last_year):
+            i_this_year = idx_this_year[0]
+            i_last_year = idx_last_year[0]
+
+            # Set matches for both sides
+            events_this_year.at[i_this_year, 'match_idx_last_year'] = i_last_year
+            events_this_year.at[i_this_year, 'match_formula_used'] = 'Manual Match'
+            events_this_year.at[i_this_year, 'match_name_last_year'] = events_last_year.at[i_last_year, 'Name']
+
+            events_last_year.at[i_last_year, 'match_idx_this_year'] = i_this_year
+            events_last_year.at[i_last_year, 'match_formula_used'] = 'Manual Match'
+            events_last_year.at[i_last_year, 'match_name_this_year'] = events_this_year.at[i_this_year, 'Name']
+
+            matched_this_year.add(i_this_year)
+            matched_last_year.add(i_last_year)
+
+    # --- Build all potential pairs between this_year and last_year (excluding already-matched manual pairs) ---
+    for i_this_year, row_this_year in events_this_year.drop(index=matched_this_year, errors='ignore').iterrows():
+        name_this_year = row_this_year['Name']
+        zip_this_year = str(row_this_year.get('ZipCode', '')).strip()
+        site_this_year = str(row_this_year.get('Website', '')).strip()
+        month_this_year = row_this_year['month']
+
+        for i_last_year, row_last_year in events_last_year.drop(index=matched_last_year, errors='ignore').iterrows():
+            name_last_year = row_last_year['Name']
+            zip_last_year = str(row_last_year.get('ZipCode', '')).strip()
+            site_last_year = str(row_last_year.get('Website', '')).strip()
+            month_last_year = row_last_year['month']
+
+            combined_score, name_score, zip_score = compute_combined_score(name_this_year, name_last_year, zip_this_year, zip_last_year)
+            site_score = compute_site_score(site_this_year, site_last_year)
+            combined_site_score = round((name_score * 0.5 + site_score * 0.5), 2)
+
+            # --- STEP 1: Match on All Candidates ---
+            formula = "All Candidates"
+            threshold = ALL_CANDIDATES_THRESHOLD
+
+            # --- STEP 2: Match in the Same Month ---
+            if month_this_year == month_last_year:
+                formula = "Same Month"
+                threshold = CURRENT_MONTH_THRESHOLD
+
+            # --- STEP 3: Match in Adjacent Months ---
+            elif abs(month_this_year - month_last_year) == 1:
+                formula = "Adjacent Month"
+                threshold = ADJACENT_MONTH_THRESHOLD
+
+            if combined_score >= threshold:
+                pairs.append((i_this_year, i_last_year, combined_score, name_score, combined_site_score, formula))
+
+    # Sort by best score first
+    pairs = sorted(pairs, key=lambda x: -x[2])
+
+    # --- Assign the best one-to-one matches (excluding already-matched manual pairs) ---
+    for i_this_year, i_last_year, combined_score, name_score, combined_site_score, formula in pairs:
+        if i_this_year not in matched_this_year and i_last_year not in matched_last_year:
+            events_this_year.at[i_this_year, 'match_idx_last_year'] = i_last_year
+            events_this_year.at[i_this_year, 'match_formula_used'] = formula
+            events_this_year.at[i_this_year, 'match_score_name_only'] = name_score
+            events_this_year.at[i_this_year, 'match_score_name_and_zip'] = combined_score
+            events_this_year.at[i_this_year, 'match_score_name_and_site'] = combined_site_score
+            events_this_year.at[i_this_year, 'match_name_last_year'] = events_last_year.at[i_last_year, 'Name']
+
+            events_last_year.at[i_last_year, 'match_idx_this_year'] = i_this_year
+            events_last_year.at[i_last_year, 'match_formula_used'] = formula
+            events_last_year.at[i_last_year, 'match_score_name_only'] = name_score
+            events_last_year.at[i_last_year, 'match_score_name_and_zip'] = combined_score
+            events_last_year.at[i_last_year, 'match_score_name_and_site'] = combined_site_score
+            events_last_year.at[i_last_year, 'match_name_this_year'] = events_this_year.at[i_this_year, 'Name']
+
+            matched_this_year.add(i_this_year)
+            matched_last_year.add(i_last_year)
+
+    # --- Annotate matches ---
+    events_last_year['has_match'] = events_last_year['match_idx_this_year'].notnull()
+    events_this_year['has_match'] = events_this_year['match_idx_last_year'].notnull()
+
+    # --- Enrich matched data with key fields ---
+    for i_this_year in events_this_year.index:
+        i_last_year = events_this_year.at[i_this_year, 'match_idx_last_year']
+        if pd.notnull(i_last_year):
+            row = events_last_year.loc[i_last_year]
+            events_this_year.at[i_this_year, 'application_id_last_year'] = row['ApplicationID']
+            events_this_year.at[i_this_year, 'status_last_year'] = row['Status']
+            events_this_year.at[i_this_year, f'earliest_start_date_{last_year}'] = row['StartDate']
+            events_this_year.at[i_this_year, 'website_last_year'] = row['Website']
+            events_this_year.at[i_this_year, 'zip_code_last_year'] = row['ZipCode']
+            events_this_year.at[i_this_year, 'state_code_last_year'] = row['2LetterCode']
+
+    for i_last_year in events_last_year.index:
+        i_this_year = events_last_year.at[i_last_year, 'match_idx_this_year']
+        if pd.notnull(i_this_year):
+            row = events_this_year.loc[i_this_year]
+            events_last_year.at[i_last_year, 'application_id_this_year'] = row['ApplicationID']
+            events_last_year.at[i_last_year, 'status_this_year'] = row['Status']
+            events_last_year.at[i_last_year, f'earliest_start_date_{this_year}'] = row['StartDate']
+            events_last_year.at[i_last_year, 'website_this_year'] = row['Website']
+            events_last_year.at[i_last_year, 'zip_code_this_year'] = row['ZipCode']
+            events_last_year.at[i_last_year, 'state_code_this_year'] = row['2LetterCode']
+
+    # --- Assign common_date, common_year, common_month ---
+    # For matched events: both sides get the this_year StartDate as common_date
+    for i_this_year in events_this_year.index:
+        i_last_year = events_this_year.at[i_this_year, 'match_idx_last_year']
+        if pd.notnull(i_last_year):
+            # If match, use this_year StartDate for both
+            common_date = events_this_year.at[i_this_year, 'StartDate']
+            events_this_year.at[i_this_year, 'common_date'] = common_date
+            events_last_year.at[i_last_year, 'common_date'] = common_date
+            # Common year/month
+            events_this_year.at[i_this_year, 'common_year'] = this_year
+            events_last_year.at[i_last_year, 'common_year'] = this_year
+            events_this_year.at[i_this_year, 'common_month'] = events_this_year.at[i_this_year, 'month']
+            events_last_year.at[i_last_year, 'common_month'] = events_this_year.at[i_this_year, 'month']
         else:
-            # --- STEP 2: Look for Candidates in the Same Month ---
-            candidate_pool = events_2025[events_2025['month'] == event_month]
-            best_candidate = None
-            best_combined_score = 0
-            for _, candidate in candidate_pool.iterrows():
-                candidate_name = candidate['Name']
-                candidate_zip = str(candidate.get('ZipCode', '')).strip()
-                score, name_score, _ = compute_combined_score(name_2024, candidate_name, zip_2024, candidate_zip)
-                if score > best_combined_score:
-                    best_combined_score = score
-                    best_candidate = candidate
-                    best_name_score = name_score
-            if best_candidate is not None and best_combined_score > CURRENT_MONTH_THRESHOLD:
-                match_formula = f"Current Month (Zip+Name > {CURRENT_MONTH_THRESHOLD})"
-            else:
-                # --- STEP 3: Look for Candidates in Adjacent Months ---
-                adjacent_months = []
-                if event_month - 1 >= 1:
-                    adjacent_months.append(event_month - 1)
-                if event_month + 1 <= 12:
-                    adjacent_months.append(event_month + 1)
-                candidate_pool = events_2025[events_2025['month'].isin(adjacent_months)]
-                best_candidate = None
-                best_combined_score = 0
-                for _, candidate in candidate_pool.iterrows():
-                    candidate_name = candidate['Name']
-                    candidate_zip = str(candidate.get('ZipCode', '')).strip()
-                    score, name_score, _ = compute_combined_score(name_2024, candidate_name, zip_2024, candidate_zip)
-                    if score > best_combined_score:
-                        best_combined_score = score
-                        best_candidate = candidate
-                        best_name_score = name_score
-                if best_candidate is not None and best_combined_score > ADJACENT_MONTH_THRESHOLD:
-                    match_formula = f"Adjacent Months (Zip+Name > {ADJACENT_MONTH_THRESHOLD})"
-                else:
-                    # --- STEP 4: Fallback on Entire 2025 Dataset ---
-                    candidate_pool = events_2025
-                    best_candidate = None
-                    best_combined_score = 0
-                    for _, candidate in candidate_pool.iterrows():
-                        candidate_name = candidate['Name']
-                        candidate_zip = str(candidate.get('ZipCode', '')).strip()
-                        score, name_score, _ = compute_combined_score(name_2024, candidate_name, zip_2024, candidate_zip)
-                        if score > best_combined_score:
-                            best_combined_score = score
-                            best_candidate = candidate
-                            best_name_score = name_score
-                    if best_candidate is not None and best_combined_score > FALLBACK_THRESHOLD:
-                        match_formula = f"Fallback All Candidates (Zip+Name > {FALLBACK_THRESHOLD})"
-                    else:
-                        match_formula = "No Match"
+            # No match: use this row's own date/year/month
+            events_this_year.at[i_this_year, 'common_date'] = events_this_year.at[i_this_year, 'StartDate']
+            events_this_year.at[i_this_year, 'common_year'] = events_this_year.at[i_this_year, 'year']
+            events_this_year.at[i_this_year, 'common_month'] = events_this_year.at[i_this_year, 'month']
 
-        # Populate event details for the 2024 event if a candidate is accepted.
-        if best_candidate is not None and best_combined_score > 80:
-            # Compute site similarity score.
-            candidate_site = str(best_candidate.get('Website', '')).strip().lower()
-            site_score = fuzz.token_sort_ratio(site_2024, candidate_site) if site_2024 and candidate_site else 0
+    for i_last_year in events_last_year.index:
+        # Already set if matched above, otherwise set here
+        if pd.isnull(events_last_year.at[i_last_year, 'common_date']):
+            events_last_year.at[i_last_year, 'common_date'] = events_last_year.at[i_last_year, 'StartDate']
+            events_last_year.at[i_last_year, 'common_year'] = events_last_year.at[i_last_year, 'year']
+            events_last_year.at[i_last_year, 'common_month'] = events_last_year.at[i_last_year, 'month']
 
-            # Combined site score: average of the name score and the site score.
-            combined_site_score = round((best_name_score * 0.5 + site_score * 0.5), 2)
+    """
+    common_status field logic:
+    - For matched events (across 2024/2025), if EITHER year's status is 'cancelled', 'declined', or 'deleted' (case-insensitive),
+    then common_status is set to 'cancelled/declined/deleted' for BOTH years' event records.
+    - Otherwise, common_status is set to the 2025 status if present, else the 2024 status.
+    - For unmatched events, common_status is just the event's own status.
+    This ensures that for every event (matched or not), there is a single field for status-based filtering and summary reporting
+    that is consistent across years and not split by mismatches in status.
+    """
+    # Common status field logic
+    cancel_statuses = ['cancelled', 'declined', 'deleted']
 
-            events_2024.at[idx, 'match_name_2025'] = best_candidate['Name']
-            events_2024.at[idx, 'match_score_name_only'] = best_name_score
-            events_2024.at[idx, 'match_score_name_and_site'] = combined_site_score
-            events_2024.at[idx, 'match_score_name_and_zip'] = best_combined_score
-            events_2024.at[idx, 'has_match'] = True
-            events_2024.at[idx, 'match_formula_used'] = match_formula
+    for i_this_year in events_this_year.index:
+        i_last_year = events_this_year.at[i_this_year, 'match_idx_last_year']
+        status_this_year = events_this_year.at[i_this_year, 'Status']
+        status_last_year = events_last_year.at[i_last_year, 'Status'] if pd.notnull(i_last_year) else None
 
-            # Populate additional candidate fields from the 2025 event.
-            events_2024.at[idx, 'application_id_2025'] = best_candidate['ApplicationID']
-            events_2024.at[idx, 'status_2025'] = best_candidate['Status']
-            events_2024.at[idx, 'earliest_start_date_2025'] = best_candidate['earliest_start_date']
-            events_2024.at[idx, 'website_2025'] = best_candidate['Website']
-            events_2024.at[idx, 'zip_code_2025'] = best_candidate['ZipCode']
-            events_2024.at[idx, 'state_code_2025'] = best_candidate['2LetterCode']
+        # Assign both statuses for reference
+        events_this_year.at[i_this_year, 'status_last_year'] = status_last_year
+        events_this_year.at[i_this_year, 'status_this_year'] = status_this_year
+        if pd.notnull(i_last_year):
+            events_last_year.at[i_last_year, 'status_last_year'] = status_last_year
+            events_last_year.at[i_last_year, 'status_this_year'] = status_this_year
+
+        # Set common_status if either is cancelled/declined/deleted
+        status_this_year_low = status_this_year.lower() if status_this_year else ''
+        status_last_year_low = status_last_year.lower() if status_last_year else ''
+        if any(s in cancel_statuses for s in [status_this_year_low, status_last_year_low]):
+            common_status = 'cancelled/declined/deleted'
         else:
-            # If no candidate meets any of the criteria.
-            events_2024.at[idx, 'has_match'] = False
-            events_2024.at[idx, 'match_formula_used'] = "No Match"
-            events_2024.at[idx, 'application_id_2025'] = row['ApplicationID']
-            events_2024.at[idx, 'status_2025'] = row['Status']
-            events_2024.at[idx, 'earliest_start_date_2025'] = row['earliest_start_date']
-            events_2024.at[idx, 'website_2025'] = row['Website']
-            events_2024.at[idx, 'zip_code_2025'] = row['ZipCode']
-            events_2024.at[idx, 'state_code_2025'] = row['2LetterCode']
+            # Prefer this_year status if present, else last_year
+            common_status = status_this_year if status_this_year else status_last_year
 
-    # Generate match summary for the 2024 events (aggregated by year, month, and month_name).
-    match_summary = (
-        events_2024.groupby(['year', 'month', 'month_name'])
+        events_this_year.at[i_this_year, 'common_status'] = common_status
+        if pd.notnull(i_last_year):
+            events_last_year.at[i_last_year, 'common_status'] = common_status
+
+    # Fill unmatched events with their own status
+    for i_last_year in events_last_year.index:
+        if pd.isnull(events_last_year.at[i_last_year, 'common_status']):
+            status_last_year = events_last_year.at[i_last_year, 'Status']
+            events_last_year.at[i_last_year, 'common_status'] = status_last_year
+            events_last_year.at[i_last_year, 'status_last_year'] = status_last_year
+            events_last_year.at[i_last_year, 'status_this_year'] = None
+
+    for i_this_year in events_this_year.index:
+        if pd.isnull(events_this_year.at[i_this_year, 'common_status']):
+            status_this_year = events_this_year.at[i_this_year, 'Status']
+            events_this_year.at[i_this_year, 'common_status'] = status_this_year
+            events_this_year.at[i_this_year, 'status_this_year'] = status_this_year
+            events_this_year.at[i_this_year, 'status_last_year'] = None
+
+    # --- Generate summaries by year/month ---
+    match_summary_this_year = (
+        events_this_year.groupby(['year', 'month', 'month_name'])
         .agg(
             total_events=('Name', 'count'),
             matched_events=('has_match', lambda x: x.sum()),
@@ -328,4 +262,15 @@ def match_events_2024_vs_2025(grouped_df):
         .reset_index()
     )
 
-    return events_2024, match_summary
+    match_summary_last_year = (
+        events_last_year.groupby(['year', 'month', 'month_name'])
+        .agg(
+            total_events=('Name', 'count'),
+            matched_events=('has_match', lambda x: x.sum()),
+            unmatched_events=('has_match', lambda x: (~x).sum())
+        )
+        .sort_values(by=['year', 'month'])
+        .reset_index()
+    )
+
+    return events_this_year, events_last_year, match_summary_this_year, match_summary_last_year

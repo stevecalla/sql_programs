@@ -448,3 +448,21 @@ EVENTS
 | Youth Race                          | 34   | 36   | 2          |
 | missing_event_type_race_designation | 0    | 3    | 3          |
 | Total                               | 210  | 211  | 1          |
+
+| command           | description                                            | usage_hint                                  |
+|-------------------|--------------------------------------------------------|---------------------------------------------|
+| /sales            | Enter "/sales" for real time membership sales.         |                                             |
+| /revenue          | Enter "/revenue" for latest membership revenue         | month=ytd type=one_day category=bronze      |
+| /revenue-examples | Some examples of how to request revenue stats          |                                             |
+| /events           | Enter "/events" for latest sanctioned event counts     | /events or /events month=5                  |
+| /races            | Enter "/races" for latest race results                 | /races                                      |
+| /news             | Enter "/news subject=triathlon" for recent google news | /news or /news subject=usatriathlon count=5 |
+
+| data                | auto schedule                         | data update       |
+|---------------------|---------------------------------------|-------------------|
+| /sales              | 8am, 10am, 12 noon, 4pm, 8pm, 11:58pm | real time         |
+| /sales              | 8:30am daily                          | nightly ~2am      |
+| /events             | 8:32am daily                          | 7am, 12 noon, 5pm |
+| /races              | 8:35 am daily                         | nightly ~3am      |
+| /news               | 10:30am, 5pm dally                    | real time         |
+| revenue recognition | none                                  | nightly ~5am      |
