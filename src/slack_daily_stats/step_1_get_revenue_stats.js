@@ -213,27 +213,28 @@ async function execute_get_revenue_stats(type, category, month) {
     
 }
 
-// async function test() {
-//     const { create_slack_message } = require('./step_1a_create_revenue_message');
+async function test() {
+    const { create_slack_message } = require('./step_1a_create_revenue_message');
     
-//     const type = "adult"; const category = undefined; let month; // result full table
-//     // const type = undefined; const category = undefined; const month = 3; // result full table
-//     // const type = undefined; const category = undefined; let month; // result full table
-//     // const type = "adult"; const category = undefined; const month = "ytd"; // result full table
+    // const type = "adult"; const category = undefined; let month; // result full table
+    const type = undefined; const category = undefined; const month = 3; // result full table
+    // const type = undefined; const category = undefined; let month; // result full table
+    // const type = "adult"; const category = undefined; const month = "ytd"; // result full table
 
-//     // const type = "invalid input"; const category = undefined; const month = 3; // result = error message
-//     // const type = "invalid input"; const category = undefined; const month = "ytd"; // result = empty table
-//     // const type = undefined; const category = "invalid input"; const month = "ytd"; // result = empty table
+    // const type = "invalid input"; const category = undefined; const month = 3; // result = error message
+    // const type = "invalid input"; const category = undefined; const month = "ytd"; // result = empty table
+    // const type = undefined; const category = "invalid input"; const month = "ytd"; // result = empty table
 
-//     const result = await execute_get_revenue_stats(type, category, month);
-//     const { slack_message, slack_blocks } = await create_slack_message(result, type, category, month);
+    const result = await execute_get_revenue_stats(type, category, month);
+    console.log(result);
 
-//     console.log('message =', slack_message);
+    // const { slack_message, slack_blocks } = await create_slack_message(result, type, category, month);
+    // console.log('message =', slack_message);
 
-//     process.exit(1);
-// }
+    process.exit(1);
+}
 
-// test();
+test();
 
 module.exports = {
     execute_get_revenue_stats,
