@@ -1,3 +1,5 @@
+// C:\Users\calla\development\usat\sql_code\8_events\step_2_get_event_data_metrics_042125.sql
+
 function step_2_query_event_data() {
     return `
         SELECT 
