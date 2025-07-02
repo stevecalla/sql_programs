@@ -17,25 +17,25 @@ const { execute_load_sales_goal_data } = require('./step_5_load_sales_goals');
 const { execute_load_big_query_sales_goals } = require('./step_5a_load_bq_sales_goals');
 
 const { execute_create_actual_vs_goal_metrics } = require('./step_6_create_actual_vs_goal_metrics_042925');
-const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load_bq_actual_vs_goal_metrics');
+const { execute_load_big_query_actual_vs_goal_lsmetrics} = require('./step_6a_load_bq_actual_vs_goal_metrics');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-const run_step_1  = true; // get sales data
+const run_step_1  = false; // get sales data
 const run_step_2  = true; // load sales data
-const run_step_2a = true; // load region table
+const run_step_2a = false; // load region table
 
-const run_step_3  = true; // create sales key metrics stats table
-const run_step_3a = true; // load sales key metrics stats to biqquery
+const run_step_3  = false; // create sales key metrics stats table
+const run_step_3a = false; // load sales key metrics stats to biqquery
 
-const run_step_4  = true; // create year-over-year common date table
-const run_step_4a = true; // load sales key metrics stats to biqquery
+const run_step_4  = false; // create year-over-year common date table
+const run_step_4a = false; // load sales key metrics stats to biqquery
 
-const run_step_5  = true; // load sales goal data
-const run_step_5a = true; // load sales goals to bigquery
+const run_step_5  = false; // load sales goal data
+const run_step_5a = false; // load sales goals to bigquery
 
-const run_step_6  = true; // create actual vs goal data table
-const run_step_6a = true; // load actual vs goal to bigquery
+const run_step_6  = false; // create actual vs goal data table
+const run_step_6a = false; // load actual vs goal to bigquery
 
 async function executeSteps(stepFunctions, stepName) {
   for (let i = 0; i < stepFunctions.length; i++) {
@@ -142,7 +142,7 @@ async function execute_run_sales_data_jobs() {
   return elapsedTime;
 }
 
-// execute_run_sales_data_jobs();
+execute_run_sales_data_jobs();
 
 module.exports = {
   execute_run_sales_data_jobs,

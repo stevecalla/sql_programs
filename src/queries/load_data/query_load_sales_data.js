@@ -22,10 +22,11 @@ const addresses_table = `
     country_code_addresses,
 `;
 
-const events_table = `
+const events_table = ` -- TODO:
     -- EVENTS TABLE
     id_events,
     id_sanctioning_events,
+    id_sanctioning_events_and_type, -- TODO:
     event_type_id_events,
     name_events,
     
@@ -54,6 +55,13 @@ const events_table = `
     
     race_director_id_events,
     last_season_event_id,
+`;
+
+const event_types_table = ` -- todo:
+    -- EVENT TYPES TABLE
+    id_event_types, 
+    id_event_type_events,
+    name_event_type,
 `;
 
 const membership_applications_table = `
@@ -179,6 +187,11 @@ const profiles_table = `
 const orders_products_table = `
     -- ORDERS PRODUCTS TABLE
     order_id_orders_products,
+`;
+
+const races_table = ` -- TODO:
+    -- RACES TABLE
+    designation_races,
 `;
 
 const registration_audit_table = `
@@ -442,12 +455,14 @@ function query_load_sales_data(filePath, table) {
         ${derived_fields}
         ${addresses_table}
         ${events_table}
+        ${event_types_table}
         ${membership_applications_table}
         ${membership_period_table}
         ${members_table}
         ${membership_types_table}
         ${profiles_table}
         ${orders_products_table}
+        ${races_table}
         ${registration_audit_table}
         ${registration_companies}
         ${users_table}
