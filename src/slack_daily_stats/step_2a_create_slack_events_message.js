@@ -21,8 +21,8 @@ function pad(str, length) {
 async function format_markdown_table_last_7_days(data) {
   const colWidths = {
     date: 12,
-    weekday: 8,
-    eventType: 12,
+    weekday: 5,
+    eventType: 5,
     total: 5
   };
 
@@ -52,7 +52,7 @@ async function format_markdown_table_last_7_days(data) {
   // Header and divider
   const header = "| " +
     pad("Date", colWidths.date) + " | " +
-    pad("Weekday", colWidths.weekday) + " | " +
+    pad("DOW", colWidths.weekday) + " | " +
     eventTypes.map(t => pad(t, colWidths.eventType)).join(" | ") + " | " +
     pad("Total", colWidths.total) + " |";
 
@@ -206,6 +206,8 @@ slack_message =
   `\n🏃‍♀️ Most Recent 7 Days:\n` 
   +  
   (!is_error && `\`\`\`${last_7_days_table}\n\`\`\``) 
+  + 
+  `* M=Missing, AR=Adult Race, AC=Adult Clinic, YR=Youth Race, YC=Youth Clinic`
   +  
   `\n🚴‍♂️ Most Recent 10 Events:\n` 
   +  
