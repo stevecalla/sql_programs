@@ -239,28 +239,28 @@ async function execute_get_slack_events_stats(month) {
     
 }
 
-async function test() {
-    const { create_slack_message } = require('./step_2a_create_slack_events_message');
+// async function test() {
+//     const { create_slack_message } = require('./step_2a_create_slack_events_message');
     
-    month = "";    
-    // month = "7";
-    // month = "ten";
+//     month = "";    
+//     // month = "7";
+//     // month = "ten";
 
-    const { result_year_over_year, result_last_7_days, result_last_10_created_events } = await execute_get_slack_events_stats(month);
-    // console.log(result_year_over_year);
-    // console.log(result_last_7_days);
-    // console.log(result_last_10_created_events);
+//     const { result_year_over_year, result_last_7_days, result_last_10_created_events } = await execute_get_slack_events_stats(month);
+//     // console.log(result_year_over_year);
+//     // console.log(result_last_7_days);
+//     // console.log(result_last_10_created_events);
 
-    // let test = format_markdown_table_last_10_created_events(result_last_10_created_events);
-    // console.log(test);
+//     // let test = format_markdown_table_last_10_created_events(result_last_10_created_events);
+//     // console.log(test);
 
-    const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, month, result_last_7_days, result_last_10_created_events);
-    console.log('message =', slack_message);
+//     const { slack_message, slack_blocks } = await create_slack_message(result_year_over_year, month, result_last_7_days, result_last_10_created_events);
+//     console.log('message =', slack_message);
 
-    process.exit(1);
-}
+//     process.exit(1);
+// }
 
-test();
+// test();
 
 module.exports = {
     execute_get_slack_events_stats,
