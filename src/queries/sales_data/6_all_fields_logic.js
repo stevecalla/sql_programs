@@ -34,8 +34,16 @@ const addresses_table = `
 const events_table = ` -- todo:
     -- EVENTS TABLE
     events.id AS id_events,
+
     events.sanctioning_event_id AS id_sanctioning_events,
+    CASE 
+        WHEN r.designation IS NOT NULL AND r.designation != '' 
+            THEN CONCAT(events.sanctioning_event_id, '-', r.designation)
+        ELSE events.sanctioning_event_id
+    END AS id_sanctioning_events_and_type, -- TODO:
+
     events.event_type_id AS event_type_id_events,
+
     CONCAT('"', 
         REPLACE(
             REPLACE(
@@ -90,6 +98,20 @@ const events_table = ` -- todo:
 
     events.race_director_id AS race_director_id_events,
     events.last_season_event_id AS last_season_event_id,
+`;
+
+const event_types_table = ` -- todo:
+    -- EVENT TYPES TABLE
+    et.id AS id_event_types,
+    events.event_type_id AS id_event_type_events,
+    CASE
+        WHEN r.designation IS NOT NULL THEN r.designation
+        WHEN r.designation IS NULL AND events.event_type_id = 1 THEN 'Adult Race'
+        WHEN r.designation IS NULL AND events.event_type_id = 2 THEN 'Adult Clinic'
+        WHEN r.designation IS NULL AND events.event_type_id = 3 THEN 'Youth Race'
+        WHEN r.designation IS NULL AND events.event_type_id = 4 THEN 'Youth Clinic'
+        ELSE "missing_event_type_race_designation"
+    END AS name_event_type,
 `;
 
 const membership_applications_table = `
@@ -281,19 +303,24 @@ const profiles_table = `
     profiles.primary_address_id AS primary_address_id_profiles,
 `;
 
-const orders_products_table = ` -- todo:
+const orders_products_table = `
     -- ORDERS PRODUCTS TABLE
     op.order_id AS order_id_orders_products,
 `;
 
-const registration_audit_table = ` -- todo:
+const races_table = ` -- todo:
+    -- RACES TABLE
+    r.designation as designation_races,
+`;
+
+const registration_audit_table = `
     -- REGISTRATION AUDIT
     registration_audit.id AS id_registration_audit,
     registration_audit.confirmation_number AS confirmation_number_registration_audit,
     registration_audit.date_of_birth AS date_of_birth_registration_audit,
 `;
 
-const registration_companies = ` -- todo:
+const registration_companies = `
     -- REGISTRATION COMPANY TABLE
     registration_companies.name AS name_registration_companies,
 `;
@@ -312,7 +339,7 @@ const select_fields = `
 `;
 
 // SECTION: VERSION 1
-const from_statement_left = `
+const from_statement_left = ` -- TODO:
     FROM one_day_sales_actual_member_fee AS sa
 
         LEFT JOIN membership_periods AS mp ON sa.max_membership_period_id = mp.id
@@ -334,6 +361,10 @@ const from_statement_left = `
         LEFT JOIN addresses ON profiles.primary_address_id = addresses.id
 
         LEFT JOIN events ON ma.event_id = events.id
+        LEFT JOIN races AS r ON events.id = r.event_id -- TODO:
+            AND r.deleted_at IS NULL
+        LEFT JOIN event_types AS et ON events.event_type_id = et.id -- TODO:
+
         LEFT JOIN transactions ON orders.id = transactions.order_id
 `;
 
@@ -342,12 +373,14 @@ const query_all_fields_logic = `
         ${derived_fields}
         ${addresses_table}
         ${events_table}
+        ${event_types_table}
         ${membership_applications_table}
         ${membership_period_table}
         ${members_table}
         ${membership_types_table}
         ${profiles_table}
         ${orders_products_table}
+        ${races_table}
         ${registration_audit_table}
         ${registration_companies}
         ${users_table}
@@ -357,72 +390,6 @@ const query_all_fields_logic = `
     GROUP BY mp.id
 `;
 
-module.exports = { query_all_fields_logic };
-
-// profiles.active AS active_profiles,
-// profiles.created_at AS created_at_profiles,
-// profiles.deceased_recorded_on AS deceased_recorded_on_profiles,
-// profiles.deleted_at AS deleted_at_profiles,
-
-// CONCAT('"', 
-//     REPLACE(
-//         REPLACE(
-//             REPLACE(SUBSTRING(profiles.first_name, 1, 255), '''', ''), 
-//             '"', ''
-//         ), 
-//         ',', ''
-//     ), 
-//     '"'
-// ) AS first_name_profiles, 
-
-// profiles.gender_id AS gender_id_profiles,
-
-// CONCAT('"', 
-//     REPLACE(
-//         REPLACE(
-//             REPLACE(SUBSTRING(profiles.last_name, 1, 255), '''', ''), 
-//             '"', ''
-//         ), 
-//         ',', ''
-//     ), 
-//     '"'
-// ) AS last_name_profiles, 
-
-// CONCAT('"', 
-//     REPLACE(
-//         REPLACE(
-//             REPLACE(SUBSTRING(profiles.name, 1, 255), '''', ''), 
-//             '"', ''
-//         ), 
-//         ',', ''
-//     ), 
-//     '"'
-// ) AS name_profiles, 
-
-// profiles.primary_email_id AS primary_email_id_profiles,
-// profiles.primary_phone_id AS primary_phone_id_profiles,
-// profiles.updated_at AS updated_at_profiles,
-
-// registration_audit.registration_company_id,
-// registration_audit_membership_application.price_paid AS price_paid_rama,
-
-// users.active AS active_users,
-// users.created_at AS created_at_users,
-// users.deleted_at AS deleted_at_users,
-// users.email AS email_users,
-// users.invalid_email AS invalid_email_users,
-
-// -- CONCAT('"', SUBSTRING(users.name, 1, 1024), '"') AS name_users, 
-// CONCAT('"', 
-//     REPLACE(
-//         REPLACE(
-//             REPLACE(SUBSTRING(users.name, 1, 255), '''', ''), 
-//             '"', ''
-//         ), 
-//         ',', ''
-//     ), 
-//     '"'
-// ) AS name_users, 
-
-// users.opted_out_of_notifications AS opted_out_of_notifications_users,
-// users.updated_at AS updated_at_users
+module.exports = { 
+    query_all_fields_logic 
+};

@@ -1,3 +1,5 @@
+// C:\Users\calla\development\usat\sql_code\8_events\step_5_get_python_event_data.sql
+
 function step_5_query_python_event_data(batch_size, offset) {
     return `
         SELECT 

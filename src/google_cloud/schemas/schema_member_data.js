@@ -410,6 +410,13 @@ const members_schema = [
         "fields": []
     },
     {
+        "name": "id_sanctioning_events_and_type",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
         "name": "event_type_id_events",
         "mode": "NULLABLE",
         "type": "STRING",
@@ -537,6 +544,34 @@ const members_schema = [
     },
     {
         "name": "last_season_event_id",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "id_event_types",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "id_event_type_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "name_event_type",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "designation_races",
         "mode": "NULLABLE",
         "type": "STRING",
         "description": null,

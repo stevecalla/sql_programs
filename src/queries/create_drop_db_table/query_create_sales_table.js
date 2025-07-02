@@ -14,18 +14,19 @@ const derived_fields = `
 `;
 
 const addresses_table = `
-    city_addresses VARCHAR(255),
-    postal_code_addresses VARCHAR(255),
-    lng_addresses FLOAT,
-    lat_addresses FLOAT,
-    state_code_addresses VARCHAR(50),
-    country_code_addresses VARCHAR(255),
+  city_addresses VARCHAR(255),
+  postal_code_addresses VARCHAR(255),
+  lng_addresses FLOAT,
+  lat_addresses FLOAT,
+  state_code_addresses VARCHAR(50),
+  country_code_addresses VARCHAR(255),
 `;
 
 const events_table = `
   -- EVENTS TABLE
   id_events INT,
-  id_sanctioning_events INT,                  
+  id_sanctioning_events INT,  
+  id_sanctioning_events_and_type VARCHAR(255), -- TODO:                
   event_type_id_events INT,                     
   name_events VARCHAR(255),                      
 
@@ -54,6 +55,13 @@ const events_table = `
   
   race_director_id_events INT,                
   last_season_event_id INT,                
+`;
+
+const event_types_table = ` -- todo:
+    -- EVENT TYPES TABLE
+    id_event_types VARCHAR(100), 
+    id_event_type_events VARCHAR(100),
+    name_event_type VARCHAR(100),
 `;
 
 const membership_applications_table = `
@@ -181,6 +189,11 @@ const orders_products_table = `
     order_id_orders_products INT,
 `;
 
+const races_table = ` -- TODO:
+    -- RACES TABLE
+    designation_races VARCHAR(100),
+`;
+
 const registration_audit_table = `
   -- REGISTRATION AUDIT
   id_registration_audit INT,
@@ -241,12 +254,14 @@ async function query_create_all_membership_sales_table(table_name) {
       ${derived_fields}
       ${addresses_table}
       ${events_table}
+      ${event_types_table}
       ${membership_applications_table}
       ${membership_period_table}
       ${members_table}
       ${membership_types_table}
       ${profiles_table}
       ${orders_products_table}
+      ${races_table}
       ${registration_audit_table}
       ${registration_companies}
       ${users_table}

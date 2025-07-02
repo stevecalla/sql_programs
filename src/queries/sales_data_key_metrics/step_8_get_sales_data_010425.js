@@ -84,7 +84,7 @@ function step_8_sales_key_stats_2015() {
                 pp.most_recent_mp_ends_date,
                 pp.most_recent_prior_mp_ends_date,
                 
-                CASE -- todo: revised as of 4/2/25
+                CASE
                     -- new first year member
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
@@ -99,7 +99,7 @@ function step_8_sales_key_stats_2015() {
                 most_recent_prior_purchase_membership_type,
                 most_recent_prior_purchase_membership_category,
 
-                CASE -- todo: revised as of 4/2/25
+                CASE
                     -- new first year member
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
@@ -132,7 +132,7 @@ function step_8_sales_key_stats_2015() {
                     ELSE 'other'
                 END AS member_upgrade_downgrade_category,
 
-                CASE -- todo: revised as of 4/2/25
+                CASE
                     -- new first year member
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
@@ -163,7 +163,7 @@ function step_8_sales_key_stats_2015() {
 
                 -- member first purchase year segmentation
                 fd.first_purchased_on_year_adjusted_mp AS member_first_purchase_year,
-                fd.first_starts_mp AS first_starts_mp, -- todo: revised as of 4/2/25
+                fd.first_starts_mp AS first_starts_mp,
                 GREATEST(am.purchased_on_year_adjusted_mp - first_purchased_on_year_adjusted_mp, 0) AS member_first_purchase_years_out,
                 CASE
                     WHEN am.purchased_on_year_adjusted_mp = fd.first_purchased_on_year_adjusted_mp THEN 'first_year'
@@ -228,11 +228,13 @@ function step_8_sales_key_stats_2015() {
                     ELSE 'bad_age'
                 END AS age_as_year_end_bin, -- create bin for age at the end of year of sale
 
-                -- event detais
+                -- EVENT DETAILS
                 am.id_events,
                 am.id_sanctioning_events,
+                am.id_sanctioning_events_and_type, -- TODO:
                 am.event_type_id_events,
                 am.name_events,
+
                 -- cleaned event name for comparison
                 REGEXP_REPLACE(
                     LOWER(REPLACE(
@@ -275,6 +277,11 @@ function step_8_sales_key_stats_2015() {
                 am.race_director_id_events,
                 am.last_season_event_id,
 
+                -- EVENT TYPES -- TODO:
+                am.id_event_types, 
+                am.id_event_type_events,
+                am.name_event_type,
+
                 -- MEMBER LOCATION INFO
                 am.city_addresses AS member_city_addresses,
                 am.postal_code_addresses AS member_postal_code_addresses,
@@ -298,15 +305,16 @@ function step_8_sales_key_stats_2015() {
                 am.created_at_ma,
                 am.order_id_orders_products,
                 am.id_registration_audit,
-                am.confirmation_number_registration_audit, -- todo: added 5/14/25
+                am.confirmation_number_registration_audit,
                 am.name_registration_companies,
+                am.designation_races, -- TODO:
 
-                -- key stats
+                -- KEY STATS
                 st.sales_units,
                 st.sales_revenue,
                 st.actual_membership_fee_6_rule_sa, 
 
-                -- data created at dates
+                -- DATE CREATED AT DATES
                 DATE_FORMAT(DATE_ADD(NOW(), INTERVAL -6 HOUR), '%Y-%m-%d') AS created_at_mtn,
                 DATE_FORMAT(NOW(), '%Y-%m-%d') AS created_at_utc
 
@@ -343,7 +351,7 @@ function step_8_sales_key_stats_2015() {
                     ON am.state_code_addresses = ar.state_code
 
             WHERE 
-                am.purchased_on_year_adjusted_mp >= 2010 AND -- TODO:
+                am.purchased_on_year_adjusted_mp >= 2010 AND
                 CAST(am.purchased_on_date_mp AS CHAR) != '0000-00-00'
                 -- LIMIT 1     
             ;

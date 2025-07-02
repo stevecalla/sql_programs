@@ -95,7 +95,8 @@ async function query_member_data(batch_size = 10, offset = 0) {
             age_as_year_end_bin,
 
             id_events,
-            id_sanctioning_events, -- todo:
+            id_sanctioning_events,
+            id_sanctioning_events_and_type, -- TODO:
             event_type_id_events,
             TRIM(BOTH '"' FROM name_events) AS name_events,
             TRIM(BOTH '"' FROM cleaned_name_events) AS cleaned_name_events,
@@ -119,6 +120,13 @@ async function query_member_data(batch_size = 10, offset = 0) {
             status_events,
             race_director_id_events,
             last_season_event_id,
+
+            -- TODO:
+            id_event_types, 
+            id_event_type_events,
+            name_event_type,
+
+            designation_races, -- TODO:
 
             sales_units,
             sales_revenue,
