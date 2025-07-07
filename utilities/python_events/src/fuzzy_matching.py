@@ -46,7 +46,16 @@ def fuzzy_match_events_bidirectional(grouped_df):
 
     # Split original dataset into last_year and this_year subsets
     events_last_year = grouped_df[grouped_df['year'] == last_year].copy()
+    # events_last_year = grouped_df[
+    #     (grouped_df['year'] == last_year) &
+    #     (grouped_df['source'] != 'from missing_in_event_data_metrics')
+    # ].copy()
+
     events_this_year = grouped_df[grouped_df['year'] == this_year].copy()
+    # events_this_year = grouped_df[
+    #     (grouped_df['year'] == this_year) &
+    #     (grouped_df['source'] != 'from missing_in_event_data_metrics')
+    # ].copy()
 
     # Initialize match columns
     events_last_year['match_idx_this_year'] = None
@@ -252,7 +261,10 @@ def fuzzy_match_events_bidirectional(grouped_df):
 
     # --- Generate summaries by year/month ---
     match_summary_this_year = (
-        events_this_year.groupby(['year', 'month', 'month_name'])
+    events_this_year[
+            events_this_year['source'] != 'from_missing_in_event_data_metrics'
+        ]
+        .groupby(['year', 'month', 'month_name'])
         .agg(
             total_events=('Name', 'count'),
             matched_events=('has_match', lambda x: x.sum()),
@@ -263,7 +275,10 @@ def fuzzy_match_events_bidirectional(grouped_df):
     )
 
     match_summary_last_year = (
-        events_last_year.groupby(['year', 'month', 'month_name'])
+        events_last_year[
+            events_last_year['source'] != 'from_missing_in_event_data_metrics'
+        ]
+        .groupby(['year', 'month', 'month_name'])
         .agg(
             total_events=('Name', 'count'),
             matched_events=('has_match', lambda x: x.sum()),

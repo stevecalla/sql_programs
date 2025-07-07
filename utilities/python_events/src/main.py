@@ -43,11 +43,13 @@ def main():
 
     # --- LOAD DATA ---
     df = load_data("usat_event_python_input_data")
+    # print("Columns in df:", df.columns)
+    # print("First 5 rows:", df.head())
 
     # --- GROUP & CLEAN DATA ---
     (grouped_df, qa_summary, summary_last_year, summary_this_year, pivot_all, pivot_filtered, filtered_df, pivot_value_all, pivot_value_filtered) = group_clean_data(df)
 
-    # TEST 100 from each year for testing
+    # # TEST 100 from each year for testing
     # test_df = pd.concat([
     #     grouped_df[grouped_df['year'] == this_year].head(100),
     #     grouped_df[grouped_df['year'] == last_year].head(100)
@@ -60,6 +62,7 @@ def main():
     # Filter Draft events for LAST YEAR, safely handling NaN or non‑string statuses
     draft_last_year_events = grouped_df[
         (grouped_df['year'] == 2024) &
+        (grouped_df['source'] != 'from_missing_in_event_data_metrics') &
         (grouped_df['Status']
             .fillna('')          # turn NaN/None into ''
             .astype(str)         # everything becomes a string
@@ -79,19 +82,29 @@ def main():
     # Now run the year-over-year analysis.  
     consolidated_match_data = perform_year_over_year_analysis(event_output_path, df, grouped_df, events_this_year, events_last_year, "all", timing_shift_output)
 
-    # print("TYPE consolidated_match_data:", type(consolidated_match_data))
-    # print("TYPE timing_shift_output:", type(timing_shift_output))
+    # # print("TYPE consolidated_match_data:", type(consolidated_match_data))
+    # # print("TYPE timing_shift_output:", type(timing_shift_output))
 
-    # # --- CHART EXPORTS TO INDIVIDUAL PNG FILES --- 
+    # --- CHART EXPORTS TO INDIVIDUAL PNG FILES --- 
     create_chart_png(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summary, summary_last_year, summary_this_year, pivot_all, pivot_filtered, filtered_df, events_this_year, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
 
     # # --- CHART EXPORTS TO PDF ---
     create_chart_pdf(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summary, summary_last_year, summary_this_year, pivot_all, pivot_filtered, filtered_df, events_this_year, timing_shift_data, analysis_month_shift, pivot_value_all, pivot_value_filtered)
 
-    # --- EVENTS IN LAST YEAR WITH NO MATCH IN THIS YEAR ---
-    unmatched_last_year = events_last_year[~events_last_year['Name'].isin(
+    # Filter out "missing_in_event_data_metrics" from events_last_year
+    filtered_last_year = events_last_year[
+        events_last_year['source'] != 'from_missing_in_event_data_metrics'
+    ]
+
+    # Then do your unmatched logic as before, but with the filtered dataframe
+    unmatched_last_year = filtered_last_year[~filtered_last_year['Name'].isin(
         events_this_year[events_this_year['has_match'] == True]['match_name_last_year']
     )]
+
+    # --- EVENTS IN LAST YEAR WITH NO MATCH IN THIS YEAR ---
+    # unmatched_last_year = events_last_year[~events_last_year['Name'].isin(
+    #     events_this_year[events_this_year['has_match'] == True]['match_name_last_year']
+    # )]
 
     # --- EXPORT TO EXCEL ---
     export_to_excel(event_output_path, ANALYSIS_MONTH_NAME, df, grouped_df, qa_summary, match_summary_this_year, match_summary_last_year, events_this_year, events_last_year, draft_last_year_events, timing_shift_output, shifted_into_month_output, unmatched_last_year, pivot_value_all, pivot_value_filtered)

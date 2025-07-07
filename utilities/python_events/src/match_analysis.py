@@ -296,7 +296,7 @@ def build_event_match_consolidated(events_this_year, events_last_year):
     # ['ApplicationID', 'Name', 'StartDate', 'RaceDate', 'Status', '2LetterCode', 'ZipCode', 'Value', 'RaceDirectorUserID', 'Website', 'RegistrationWebsite', 'Email', 'CreatedDate', 'earliest_start_date', 'year', 'month', 'month_name', 'possible_duplicate', 'match_idx_last_year', 'match_formula_used', 'match_score_name_only', 'match_score_name_and_zip', 'match_score_name_and_site', 'match_name_last_year', 'has_match', 'application_id_last_year', 'status_last_year', 'earliest_start_date_2024', 'website_last_year', 'zip_code_last_year', 'state_code_last_year', 'common_date', 'common_year', 'common_month', 'status_this_year', 'common_status']
 
     cols_to_show = [
-       'ApplicationID', 'Name', 'StartDate', 'RaceDate', 'Status', '2LetterCode', 'ZipCode', 'Value', 'RaceDirectorUserID', 'Website', 'RegistrationWebsite', 'Email', 'CreatedDate', 'earliest_start_date', 'year', 'month', 'month_name', 'possible_duplicate', 'match_idx_last_year', 'match_formula_used', 'match_score_name_only', 'match_score_name_and_zip', 'match_score_name_and_site', 'match_name_last_year', 'has_match', 'application_id_last_year', 'status_last_year', 'earliest_start_date_2024', 'website_last_year', 'zip_code_last_year', 'state_code_last_year', 'common_date', 'common_year', 'common_month', 'status_this_year', 'common_status', "match_category", "match_category_detailed", "source_year",  # <-- Include these for year-by-year diagnosis
+       'ApplicationID', 'Name', 'StartDate', 'RaceDate', 'Status', '2LetterCode', 'ZipCode', 'Value', 'RaceDirectorUserID', 'Website', 'RegistrationWebsite', 'Email', 'CreatedDate', 'sales_units', 'sales_revenue', 'source', 'earliest_start_date', 'year', 'month', 'month_name', 'possible_duplicate', 'created_at', 'match_idx_last_year', 'match_formula_used', 'match_score_name_only', 'match_score_name_and_zip', 'match_score_name_and_site', 'match_name_last_year', 'has_match', 'application_id_last_year', 'status_last_year', 'earliest_start_date_2024', 'website_last_year', 'zip_code_last_year', 'state_code_last_year', 'common_date', 'common_year', 'common_month', 'status_this_year', 'common_status', "match_category", "match_category_detailed", "source_year",  # <-- Include these for year-by-year diagnosis
     ]
 
     existing_cols = [col for col in cols_to_show if col in consolidated_match_data.columns]
@@ -305,10 +305,10 @@ def build_event_match_consolidated(events_this_year, events_last_year):
 def merge_event_match_and_timing_shifts(consolidated_match_data, timing_shift_output):
     # 1. Prefix columns except ApplicationID
     consolidated_prefixed = consolidated_match_data.rename(
-        columns={col: f"con_{col}" for col in consolidated_match_data.columns if col != "ApplicationID"}
+        columns={col: f"{col}_con" for col in consolidated_match_data.columns if col != "ApplicationID"}
     )
     timing_prefixed = timing_shift_output.rename(
-        columns={col: f"shift_{col}" for col in timing_shift_output.columns if col != "ApplicationID"}
+        columns={col: f"{col}_shift" for col in timing_shift_output.columns if col != "ApplicationID"}
     )
 
     # 2. Remove duplicate columns from timing_prefixed (except ApplicationID)
@@ -342,7 +342,7 @@ def generate_month_by_match_detail_pivots(merged_df):
         pivot = pd.pivot_table(
             df,
             index=index_col,
-            columns=['con_source_year', 'con_match_category_detailed'],
+            columns=['source_year_con', 'match_category_detailed_con'],
             values='ApplicationID',
             aggfunc='count',
             fill_value=0,
@@ -375,20 +375,20 @@ def generate_month_by_match_detail_pivots(merged_df):
         return pivot
 
     # Main pivots
-    mask_active = ~merged_df['con_Status'].str.lower().isin(['cancelled', 'declined', 'deleted'])
+    mask_active = ~merged_df['Status_con'].str.lower().isin(['cancelled', 'declined', 'deleted'])
 
-    pivot_all = build_pivot(merged_df, 'con_common_month')
-    pivot_active = build_pivot(merged_df[mask_active], 'con_common_month')
-    pivot_active_by_event_name = build_pivot(merged_df[mask_active], 'con_Name')
+    pivot_all = build_pivot(merged_df, 'common_month_con')
+    pivot_active = build_pivot(merged_df[mask_active], 'common_month_con')
+    pivot_active_by_event_name = build_pivot(merged_df[mask_active], 'Name_con')
 
     return pivot_all, pivot_active, pivot_active_by_event_name
 
 def create_timing_shift_pivots(merged_df):
     """
     Expects columns:
-    - 'shift_month_this_year'
-    - 'shift_month_last_year'
-    - 'shift_month_match' (with values like 'same_month', 'other_month')
+    - 'month_this_year_shift'
+    - 'month_last_year_shift'
+    - 'month_match_shift' (with values like 'same_month', 'other_month')
     - 'ApplicationID'
     Returns three pivot tables as DataFrames, with clear row index names.
     """
@@ -406,14 +406,14 @@ def create_timing_shift_pivots(merged_df):
         return [safe_int(x) for x in axis]
 
     # Exclude events with cancelled/declined/deleted status
-    mask_active = ~merged_df['con_Status'].str.lower().isin(['cancelled', 'declined', 'deleted'])
+    mask_active = ~merged_df['Status_con'].str.lower().isin(['cancelled', 'declined', 'deleted'])
     active_df = merged_df[mask_active]
 
     # 1. Pivot: index = month_this_year, columns = month_last_year, values = count of ApplicationID
     pivot_month_shift_this_year_by_last_year_month = pd.pivot_table(
         active_df,
-        index='shift_month_this_year',
-        columns='shift_month_last_year',
+        index='month_this_year_shift',
+        columns='month_last_year_shift',
         values='ApplicationID',
         aggfunc='count',
         fill_value=0,
@@ -422,14 +422,14 @@ def create_timing_shift_pivots(merged_df):
     )
     pivot_month_shift_this_year_by_last_year_month.index = _format_month_axis(pivot_month_shift_this_year_by_last_year_month.index)
     pivot_month_shift_this_year_by_last_year_month.columns = _format_month_axis(pivot_month_shift_this_year_by_last_year_month.columns)
-    pivot_month_shift_this_year_by_last_year_month.index.name = "shift_month_this_year"
-    pivot_month_shift_this_year_by_last_year_month.columns.name = "shift_month_last_year"
+    pivot_month_shift_this_year_by_last_year_month.index.name = "month_this_year_shift"
+    pivot_month_shift_this_year_by_last_year_month.columns.name = "month_last_year_shift"
 
     # 2. Pivot: index = month_this_year, columns = month_match, values = count of ApplicationID
     pivot_month_shift_this_year_by_month_match = pd.pivot_table(
         active_df,
-        index='shift_month_this_year',
-        columns='shift_month_match',
+        index='month_this_year_shift',
+        columns='month_match_shift',
         values='ApplicationID',
         aggfunc='count',
         fill_value=0,
@@ -437,14 +437,14 @@ def create_timing_shift_pivots(merged_df):
         margins_name='Grand Total'   # <-- You can rename the "All" row/col if you wish
     )
     pivot_month_shift_this_year_by_month_match.index = _format_month_axis(pivot_month_shift_this_year_by_month_match.index)
-    pivot_month_shift_this_year_by_month_match.index.name = "shift_month_this_year"
-    pivot_month_shift_this_year_by_month_match.columns.name = "shift_month_match"
+    pivot_month_shift_this_year_by_month_match.index.name = "month_this_year_shift"
+    pivot_month_shift_this_year_by_month_match.columns.name = "month_match_shift"
 
     # 3. Pivot: index = month_last_year, columns = month_match, values = count of ApplicationID
     pivot_month_shift_last_year_by_month_match = pd.pivot_table(
         active_df,
-        index='shift_month_last_year',
-        columns='shift_month_match',
+        index='month_last_year_shift',
+        columns='month_match_shift',
         values='ApplicationID',
         aggfunc='count',
         fill_value=0,
@@ -452,8 +452,8 @@ def create_timing_shift_pivots(merged_df):
         margins_name='Grand Total'   # <-- You can rename the "All" row/col if you wish
     )
     pivot_month_shift_last_year_by_month_match.index = _format_month_axis(pivot_month_shift_last_year_by_month_match.index)
-    pivot_month_shift_last_year_by_month_match.index.name = "shift_month_last_year"
-    pivot_month_shift_last_year_by_month_match.columns.name = "shift_month_match"
+    pivot_month_shift_last_year_by_month_match.index.name = "month_last_year_shift"
+    pivot_month_shift_last_year_by_month_match.columns.name = "month_match_shift"
 
     # print("\nPivot 1: This Year (rows) vs Last Year (cols)")
     # print(pivot_month_shift_this_year_by_last_year_month.to_string())
