@@ -44,7 +44,7 @@ def save_match_score_histogram_with_table(events_this_year, output_path, pdf_pag
     """Save a histogram showing the distribution of match scores, plus a summary table of bin counts (with column totals)."""
 
     bins_edges = [0, 70, 80, 90, 100]
-    bins_labels = ['<70', '70-80', '80-90', '90-99', '100']
+    bins_labels = ['<70', '70-80', '80-90', '90-100']
     score_types = [
         ('match_score_name_only', 'Name Only'),
         ('match_score_name_and_site', 'Name + Website'),
@@ -55,15 +55,15 @@ def save_match_score_histogram_with_table(events_this_year, output_path, pdf_pag
     bin_counts = []
     for col, _ in score_types:
         cut = pd.cut(
-            events_this_year[col].fillna(-1),  # NaN => -1 so they're not counted
-            bins=[-2, 70, 80, 90, 100, 101],
+            pd.to_numeric(events_this_year[col], errors='coerce').fillna(-1), # NaN => -1 so they're not counted
+            bins=[-2, 70, 80, 90, 101],
             labels=bins_labels,
             right=False,
             include_lowest=True,
         )
-        # Remove values that were originally NaN (now -1, not in any bin)
-        counts = [ (cut == label).sum() for label in bins_labels ]
+        counts = [(cut == label).sum() for label in bins_labels]
         bin_counts.append(counts)
+
     # Transpose so each row = bin, each column = score type
     bin_counts = list(map(list, zip(*bin_counts)))
     # Calculate column totals

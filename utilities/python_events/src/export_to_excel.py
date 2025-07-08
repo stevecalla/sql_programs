@@ -12,11 +12,19 @@ def export_to_excel(
     OUTPUT_FILE = event_output_path / "cleaned_grouped_event_data_with_summary.xlsx"
 
     # --- CLEAN ALL DATAFRAMES --- #
+    # def clean_df(df):
+    #     return (
+    #         df.replace([np.inf, -np.inf], np.nan)  # Convert inf/-inf to NaN
+    #           .fillna('')                          # Replace NaN with empty string
+    #     )
+    
     def clean_df(df):
         return (
             df.replace([np.inf, -np.inf], np.nan)  # Convert inf/-inf to NaN
-              .fillna('')                          # Replace NaN with empty string
+            .infer_objects(copy=False)           # <- fixes FutureWarning
+            .fillna('')                         # Replace NaN with empty string
         )
+
 
     # All DataFrames to export
     sheet_data = {

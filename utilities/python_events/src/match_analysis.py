@@ -228,6 +228,10 @@ def build_event_match_consolidated(events_this_year, events_last_year):
     # print("\nevents_last_year.columns:")
     # print(list(events_last_year.columns))
 
+    # Remove entirely blank rows if present (safety)
+    events_this_year = events_this_year.dropna(how='all')
+    events_last_year = events_last_year.dropna(how='all')
+
     consolidated_rows = []
     cancel_statuses = ['cancelled', 'declined', 'deleted']
 
@@ -292,9 +296,6 @@ def build_event_match_consolidated(events_this_year, events_last_year):
     #   If status_2024 == 'declined' and status_2025 == 'approved'
     #     => the problematic status was in 2024, not 2025.
     #   If both statuses are problematic, then both years were cancelled/declined/deleted.
-
-    # events_this_year.columns:
-    # ['ApplicationID', 'Name', 'StartDate', 'RaceDate', 'Status', '2LetterCode', 'ZipCode', 'Value', 'RaceDirectorUserID', 'Website', 'RegistrationWebsite', 'Email', 'CreatedDate', 'earliest_start_date', 'year', 'month', 'month_name', 'possible_duplicate', 'match_idx_last_year', 'match_formula_used', 'match_score_name_only', 'match_score_name_and_zip', 'match_score_name_and_site', 'match_name_last_year', 'has_match', 'application_id_last_year', 'status_last_year', 'earliest_start_date_2024', 'website_last_year', 'zip_code_last_year', 'state_code_last_year', 'common_date', 'common_year', 'common_month', 'status_this_year', 'common_status']
 
     cols_to_show = [
        'ApplicationID', 'Name', 'StartDate', 'RaceDate', 'Status', '2LetterCode', 'ZipCode', 'Value', 'RaceDirectorUserID', 'Website', 'RegistrationWebsite', 'Email', 'CreatedDate', 'sales_units', 'sales_revenue', 'source', 'earliest_start_date', 'year', 'month', 'month_name', 'possible_duplicate', 'created_at', 'match_idx_last_year', 'match_formula_used', 'match_score_name_only', 'match_score_name_and_zip', 'match_score_name_and_site', 'match_score_bin', 'match_name_last_year', 'has_match', 'application_id_last_year', 'status_last_year', 'earliest_start_date_2024', 'website_last_year', 'zip_code_last_year', 'state_code_last_year', 'common_date', 'common_year', 'common_month', 'status_this_year', 'common_status', "match_category", "match_category_detailed", "source_year",  # <-- Include these for year-by-year diagnosis
