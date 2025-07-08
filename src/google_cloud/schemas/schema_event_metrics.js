@@ -1,5 +1,3 @@
-// Unified schema for all event metrics with consistent `fields` arrays
-
 const event_metrics_schema = [
   // ID Fields
   {
@@ -84,11 +82,6 @@ const event_metrics_schema = [
     fields: []
   },
   
-
-
-
-
-
   // Geo Fields
   {
     name: "zip_events",
