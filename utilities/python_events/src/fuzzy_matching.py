@@ -12,6 +12,19 @@ FALLBACK_THRESHOLD          =   80   # For fallback selection from entire datase
 this_year = datetime.now().year
 last_year = this_year - 1
 
+def get_match_score_bin(score):
+    # Ensure score is a float or None
+    if pd.isna(score):
+        return None
+    try:
+        score = float(score)
+    except Exception:
+        return None
+    if score >= 90: return "90-100"
+    if score >= 80: return "80-90"
+    if score >= 70: return "70-80"
+    if score < 70:  return "<70"
+
 def fuzzy_match_events_bidirectional(grouped_df):
     """
     Perform fuzzy matching of last_year events against this_year events using the following logic:
@@ -46,16 +59,7 @@ def fuzzy_match_events_bidirectional(grouped_df):
 
     # Split original dataset into last_year and this_year subsets
     events_last_year = grouped_df[grouped_df['year'] == last_year].copy()
-    # events_last_year = grouped_df[
-    #     (grouped_df['year'] == last_year) &
-    #     (grouped_df['source'] != 'from missing_in_event_data_metrics')
-    # ].copy()
-
     events_this_year = grouped_df[grouped_df['year'] == this_year].copy()
-    # events_this_year = grouped_df[
-    #     (grouped_df['year'] == this_year) &
-    #     (grouped_df['source'] != 'from missing_in_event_data_metrics')
-    # ].copy()
 
     # Initialize match columns
     events_last_year['match_idx_this_year'] = None
@@ -70,6 +74,8 @@ def fuzzy_match_events_bidirectional(grouped_df):
     events_this_year['match_score_name_and_site'] = None
     events_last_year['match_name_this_year'] = None
     events_this_year['match_name_last_year'] = None
+    events_last_year['match_score_bin'] = None
+    events_this_year['match_score_bin'] = None
 
     pairs = []  # Store potential matches and associated metadata
 
@@ -88,10 +94,12 @@ def fuzzy_match_events_bidirectional(grouped_df):
             events_this_year.at[i_this_year, 'match_idx_last_year'] = i_last_year
             events_this_year.at[i_this_year, 'match_formula_used'] = 'Manual Match'
             events_this_year.at[i_this_year, 'match_name_last_year'] = events_last_year.at[i_last_year, 'Name']
+            events_this_year.at[i_this_year, 'match_score_bin'] = "90-100"  # Manual assumed perfect
 
             events_last_year.at[i_last_year, 'match_idx_this_year'] = i_this_year
             events_last_year.at[i_last_year, 'match_formula_used'] = 'Manual Match'
             events_last_year.at[i_last_year, 'match_name_this_year'] = events_this_year.at[i_this_year, 'Name']
+            events_this_year.at[i_last_year, 'match_score_bin'] = "90-100"  # Manual assumed perfect
 
             matched_this_year.add(i_this_year)
             matched_last_year.add(i_last_year)
@@ -142,6 +150,7 @@ def fuzzy_match_events_bidirectional(grouped_df):
             events_this_year.at[i_this_year, 'match_score_name_and_zip'] = combined_score
             events_this_year.at[i_this_year, 'match_score_name_and_site'] = combined_site_score
             events_this_year.at[i_this_year, 'match_name_last_year'] = events_last_year.at[i_last_year, 'Name']
+            events_this_year.at[i_this_year, 'match_score_bin'] = get_match_score_bin(combined_score)
 
             events_last_year.at[i_last_year, 'match_idx_this_year'] = i_this_year
             events_last_year.at[i_last_year, 'match_formula_used'] = formula
@@ -149,6 +158,7 @@ def fuzzy_match_events_bidirectional(grouped_df):
             events_last_year.at[i_last_year, 'match_score_name_and_zip'] = combined_score
             events_last_year.at[i_last_year, 'match_score_name_and_site'] = combined_site_score
             events_last_year.at[i_last_year, 'match_name_this_year'] = events_this_year.at[i_this_year, 'Name']
+            events_last_year.at[i_last_year, 'match_score_bin'] = get_match_score_bin(combined_score)
 
             matched_this_year.add(i_this_year)
             matched_last_year.add(i_last_year)
@@ -156,6 +166,14 @@ def fuzzy_match_events_bidirectional(grouped_df):
     # --- Annotate matches ---
     events_last_year['has_match'] = events_last_year['match_idx_this_year'].notnull()
     events_this_year['has_match'] = events_this_year['match_idx_last_year'].notnull()
+
+    # Mark matched/unmatched and fill bins for unmatched
+    events_this_year.loc[~events_this_year['has_match'], 'match_score_bin'] = 'no_match'
+    events_last_year.loc[~events_last_year['has_match'], 'match_score_bin'] = 'no_match'
+
+    # (Optional: Print value counts for sanity check)
+    print("This year score bin counts:\n", events_this_year['match_score_bin'].value_counts(dropna=False))
+    print("Last year score bin counts:\n", events_last_year['match_score_bin'].value_counts(dropna=False))
 
     # --- Enrich matched data with key fields ---
     for i_this_year in events_this_year.index:
@@ -232,8 +250,9 @@ def fuzzy_match_events_bidirectional(grouped_df):
             events_last_year.at[i_last_year, 'status_this_year'] = status_this_year
 
         # Set common_status if either is cancelled/declined/deleted
-        status_this_year_low = status_this_year.lower() if status_this_year else ''
-        status_last_year_low = status_last_year.lower() if status_last_year else ''
+        status_this_year_low = str(status_this_year).lower() if status_this_year else ''
+        status_last_year_low = str(status_last_year).lower() if status_last_year else ''
+
         if any(s in cancel_statuses for s in [status_this_year_low, status_last_year_low]):
             common_status = 'cancelled/declined/deleted'
         else:

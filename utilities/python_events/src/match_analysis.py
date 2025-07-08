@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from export_to_mysql import push_df_to_mysql
 from datetime import datetime
+import numpy as np
 
 # Dynamically set the years for YOY analysis
 this_year = datetime.now().year
@@ -296,7 +297,7 @@ def build_event_match_consolidated(events_this_year, events_last_year):
     # ['ApplicationID', 'Name', 'StartDate', 'RaceDate', 'Status', '2LetterCode', 'ZipCode', 'Value', 'RaceDirectorUserID', 'Website', 'RegistrationWebsite', 'Email', 'CreatedDate', 'earliest_start_date', 'year', 'month', 'month_name', 'possible_duplicate', 'match_idx_last_year', 'match_formula_used', 'match_score_name_only', 'match_score_name_and_zip', 'match_score_name_and_site', 'match_name_last_year', 'has_match', 'application_id_last_year', 'status_last_year', 'earliest_start_date_2024', 'website_last_year', 'zip_code_last_year', 'state_code_last_year', 'common_date', 'common_year', 'common_month', 'status_this_year', 'common_status']
 
     cols_to_show = [
-       'ApplicationID', 'Name', 'StartDate', 'RaceDate', 'Status', '2LetterCode', 'ZipCode', 'Value', 'RaceDirectorUserID', 'Website', 'RegistrationWebsite', 'Email', 'CreatedDate', 'sales_units', 'sales_revenue', 'source', 'earliest_start_date', 'year', 'month', 'month_name', 'possible_duplicate', 'created_at', 'match_idx_last_year', 'match_formula_used', 'match_score_name_only', 'match_score_name_and_zip', 'match_score_name_and_site', 'match_name_last_year', 'has_match', 'application_id_last_year', 'status_last_year', 'earliest_start_date_2024', 'website_last_year', 'zip_code_last_year', 'state_code_last_year', 'common_date', 'common_year', 'common_month', 'status_this_year', 'common_status', "match_category", "match_category_detailed", "source_year",  # <-- Include these for year-by-year diagnosis
+       'ApplicationID', 'Name', 'StartDate', 'RaceDate', 'Status', '2LetterCode', 'ZipCode', 'Value', 'RaceDirectorUserID', 'Website', 'RegistrationWebsite', 'Email', 'CreatedDate', 'sales_units', 'sales_revenue', 'source', 'earliest_start_date', 'year', 'month', 'month_name', 'possible_duplicate', 'created_at', 'match_idx_last_year', 'match_formula_used', 'match_score_name_only', 'match_score_name_and_zip', 'match_score_name_and_site', 'match_score_bin', 'match_name_last_year', 'has_match', 'application_id_last_year', 'status_last_year', 'earliest_start_date_2024', 'website_last_year', 'zip_code_last_year', 'state_code_last_year', 'common_date', 'common_year', 'common_month', 'status_this_year', 'common_status', "match_category", "match_category_detailed", "source_year",  # <-- Include these for year-by-year diagnosis
     ]
 
     existing_cols = [col for col in cols_to_show if col in consolidated_match_data.columns]
@@ -478,14 +479,21 @@ def load_into_mysql(consolidated_match_data, merged_df):
     push_df_to_mysql(merged_df, table_name)
 
 # --- Export All Analysis to Excel ---
-def export_analysis_to_excel(df, grouped_df, pivot_value, repeated_events_this_year,
-                              new_events_this_year, repeated_events_last_year, lost_events_last_year,
-                              value_summary, new_repeat_pivot, out_file,
-                              consolidated_match_data=None, pivot_all=None, pivot_active=None,
-                              pivot_active_by_event_name=None, merged_df=None,
-                              pivot_month_shift_this_year_by_last_year_month=None,
-                              pivot_month_shift_this_year_by_month_match=None, pivot_month_shift_last_year_by_month_match=None
-                              ):    # <--- add parameter
+def export_analysis_to_excel(
+    df, grouped_df, pivot_value, repeated_events_this_year,
+    new_events_this_year, repeated_events_last_year, lost_events_last_year,
+    value_summary, new_repeat_pivot, out_file,
+    consolidated_match_data=None, pivot_all=None, pivot_active=None,
+    pivot_active_by_event_name=None, merged_df=None,
+    pivot_month_shift_this_year_by_last_year_month=None,
+    pivot_month_shift_this_year_by_month_match=None, pivot_month_shift_last_year_by_month_match=None
+):
+    def safe_row(row):
+        """Convert NaN/inf/-inf in a list to blank for Excel writing."""
+        return [
+            "" if (pd.isna(x) or (isinstance(x, float) and np.isinf(x))) else x
+            for x in row
+        ]
 
     status_filter_explanation = [
         "How Event Status Filters Affect Year-over-Year (YOY) Repeat Counts",
@@ -535,7 +543,7 @@ def export_analysis_to_excel(df, grouped_df, pivot_value, repeated_events_this_y
             ("original_data", df, [0, 50, 20, fmt_center]),
             ("grouped_data", grouped_df, [0, 50, 20, fmt_center]),
             ("consolidated_match_data", consolidated_match_data, [0, 50, 20, fmt_center]),
-            ("timing_match_data", merged_df, [0, 50, 20, fmt_center]),
+            ("timing_match_data", merged_df, [0, 50, 20, fmt_center])
 
             # ("2025 New Events", new_events_this_year, [0, 50, 20, fmt_center]),
             # ("2025 Repeated Events", repeated_events_this_year, [0, 50, 20, fmt_center]),
@@ -548,14 +556,13 @@ def export_analysis_to_excel(df, grouped_df, pivot_value, repeated_events_this_y
         # if consolidated_match_data is not None:
         #     tabs.insert(1, ("consolidated_match_data", consolidated_match_data, [0, 50, 20, fmt_center]))
         # tabs.insert(1, ("Grouped Data", grouped_df, [0, 50, 20, fmt_center]))
-
-        for name, df, (col_start, col_end, width, fmt) in tabs:
-            df.to_excel(writer, sheet_name=name, index=False)
+        
+        for name, data, (col_start, col_end, width, fmt) in tabs:
+            data.to_excel(writer, sheet_name=name, index=False)
             ws = writer.sheets[name]
             ws.set_zoom(75)
             if name == "Status Filter Methodology":
-                # Left, autofit, wrap text
-                maxlen = df['Explanation'].str.len().max()
+                maxlen = data['Explanation'].str.len().max()
                 ws.set_column(0, 0, min(100, max(25, int(maxlen * 0.95))), fmt)
                 ws.freeze_panes(1, 0)
             else:
@@ -572,27 +579,26 @@ def export_analysis_to_excel(df, grouped_df, pivot_value, repeated_events_this_y
             # Pivot 1
             ws.write(0, 0, "Pivot 1: All Status Values Included", fmt_bold)
             for r, row in enumerate(pivot_all.values.tolist()):
-                ws.write_row(1 + r, 0, row)
+                ws.write_row(1 + r, 0, safe_row(row))
             for c, col in enumerate(pivot_all.columns):
-                ws.write(0, c, str(col), fmt_header)   # <-- header: bold + center
+                ws.write(0, c, str(col), fmt_header)
 
             # Pivot 2
             r2 = 1 + len(pivot_all) + 4
             ws.write(r2 - 1, 0, "Pivot 2: Excludes Cancelled/Declined/Deleted by Status", fmt_bold)
             for r, row in enumerate(pivot_active.values.tolist()):
-                ws.write_row(r2 + r, 0, row)
+                ws.write_row(r2 + r, 0, safe_row(row))
             for c, col in enumerate(pivot_active.columns):
-                ws.write(r2 - 2, c, str(col), fmt_header)   # <-- header: bold + center
+                ws.write(r2 - 2, c, str(col), fmt_header)
 
             # Pivot 3
             r3 = r2 + len(pivot_active) + 4
             ws.write(r3 - 1, 0, "Pivot 3: Excludes Cancelled/Declined/Deleted by Status by Event Name", fmt_bold)
             for r, row in enumerate(pivot_active_by_event_name.values.tolist()):
-                ws.write_row(r3 + r, 0, row)
+                ws.write_row(r3 + r, 0, safe_row(row))
             for c, col in enumerate(pivot_active_by_event_name.columns):
-                ws.write(r3 - 2, c, str(col), fmt_header)   # <-- header: bold + center
+                ws.write(r3 - 2, c, str(col), fmt_header)
 
-            # Formatting for this sheet: col A left, rest centered
             ws.set_column(0, 0, 20, fmt_left)
             ws.set_column(1, 100, 20, fmt_center)
             ws.set_zoom(75)
@@ -612,28 +618,22 @@ def export_analysis_to_excel(df, grouped_df, pivot_value, repeated_events_this_y
             fmt_left = wb.add_format({'align': 'left', 'valign': 'vcenter'})
             fmt_center = wb.add_format({'align': 'center', 'valign': 'vcenter'})
 
-            # Helper to write a pivot table (with title, headers, index, data) at (start_row, start_col)
             def write_pivot(ws, title, pivot, start_row, start_col=0):
                 ws.write(start_row, start_col, title, fmt_bold)
-                # Write column headers (shifted by 1 for index col)
                 for c, col in enumerate(pivot.columns):
                     ws.write(start_row + 1, start_col + 1 + c, str(col), fmt_header)
-                # Write row index and data
                 for r, (idx, row) in enumerate(zip(pivot.index, pivot.values.tolist())):
                     ws.write(start_row + 2 + r, start_col, str(idx), fmt_header)
-                    ws.write_row(start_row + 2 + r, start_col + 1, row, fmt_center)
+                    ws.write_row(start_row + 2 + r, start_col + 1, safe_row(row), fmt_center)
 
-            # Write pivots with some spacing
             write_pivot(ws, "Pivot 1: This Year (rows) vs Last Year (cols)", pivot_month_shift_this_year_by_last_year_month, 0)
             row2 = 0 + 2 + len(pivot_month_shift_this_year_by_last_year_month.index) + 2
             write_pivot(ws, "Pivot 2: This Year (rows) vs Month Match (cols)", pivot_month_shift_this_year_by_month_match, row2)
             row3 = row2 + 2 + len(pivot_month_shift_this_year_by_month_match.index) + 2
             write_pivot(ws, "Pivot 3: Last Year (rows) vs Month Match (cols)", pivot_month_shift_last_year_by_month_match, row3)
 
-            # Formatting for this sheet: col A left, rest centered
             ws.set_column(0, 0, 20, fmt_left)
             ws.set_column(1, 100, 20, fmt_center)
             ws.set_zoom(75)
             ws.freeze_panes(2, 1)
-
 

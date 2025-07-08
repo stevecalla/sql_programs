@@ -56,7 +56,7 @@ def main():
     # ])
     # events_this_year, events_last_year, match_summary_this_year, match_summary_last_year = fuzzy_match_events_bidirectional(test_df)
 
-    # --- FUZZY MATCHING LAST YEAR TO THIS YEAR & THIS YEAR TO LAST YEAR ---
+    # # --- FUZZY MATCHING LAST YEAR TO THIS YEAR & THIS YEAR TO LAST YEAR ---
     events_this_year, events_last_year, match_summary_this_year, match_summary_last_year = fuzzy_match_events_bidirectional(grouped_df)
 
     # Filter Draft events for LAST YEAR, safely handling NaN or non‑string statuses
@@ -100,11 +100,6 @@ def main():
     unmatched_last_year = filtered_last_year[~filtered_last_year['Name'].isin(
         events_this_year[events_this_year['has_match'] == True]['match_name_last_year']
     )]
-
-    # --- EVENTS IN LAST YEAR WITH NO MATCH IN THIS YEAR ---
-    # unmatched_last_year = events_last_year[~events_last_year['Name'].isin(
-    #     events_this_year[events_this_year['has_match'] == True]['match_name_last_year']
-    # )]
 
     # --- EXPORT TO EXCEL ---
     export_to_excel(event_output_path, ANALYSIS_MONTH_NAME, df, grouped_df, qa_summary, match_summary_this_year, match_summary_last_year, events_this_year, events_last_year, draft_last_year_events, timing_shift_output, shifted_into_month_output, unmatched_last_year, pivot_value_all, pivot_value_filtered)
