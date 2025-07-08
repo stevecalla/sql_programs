@@ -472,12 +472,64 @@ def create_timing_shift_pivots(merged_df):
         pivot_month_shift_last_year_by_month_match
     )
 
-def load_into_mysql(consolidated_match_data, merged_df):
+# Fix Zips Before pushing the dataframe:  
+def pad_zip_column(df):
+    zip_col_candidates = ['zip', 'zipcode', 'zip_code', 'postal_code', 'zipcode_con', 'zip_con']
+    found_col = None
+
+    # Lowercase all column names for matching
+    lower_cols = {col.lower(): col for col in df.columns}
+
+    for candidate in zip_col_candidates:
+        if candidate in lower_cols:
+            found_col = lower_cols[candidate]
+            break
+
+    if found_col:
+        # Show a few raw zip codes for NJ/CO before cleaning/padding
+        if '2LetterCode_con' in df.columns:
+            filter_states = df['2LetterCode_con'].isin(['NJ', 'CO'])
+            zips = df.loc[filter_states, found_col].astype(str)
+            # print("Sample NJ/CO zips before cleaning/padding:")
+            # print(zips.head(5).to_list())
+
+        # Remove trailing ".0" and pad with zeros
+        def clean_zip(val):
+            # Handles both float and string representations
+            if pd.isnull(val):
+                return ""
+            sval = str(val).strip()
+            if sval.endswith('.0'):
+                sval = sval[:-2]
+            # After removing .0, pad with zeros to 5 digits (if it's a number)
+            return sval.zfill(5) if sval.isdigit() else sval
+
+        original = df[found_col].astype(str).copy()
+        df[found_col] = df[found_col].apply(clean_zip)
+
+        print(f"Applied zero-padding to column: {found_col}")
+
+        # Show up to 5 actual adjustments where value changed (from original to new)
+        changed = original != df[found_col]
+        # if changed.any():
+        #     print("Sample of adjustments (before -> after):")
+        #     for idx in df[changed].head(5).index:
+        #         print(f"  {original.iloc[idx]} -> {df[found_col].iloc[idx]}")
+        # else:
+        #     print("No values required padding (all were already 5 digits).")
+    else:
+        print("No zip/postal code column found to pad. Columns are:", list(df.columns))
+
+    return df, zip_col_candidates
+
+
+def load_into_mysql(merged_df, consolidated_match_data):
+    table_name = "event_data_metrics_yoy_match"
+    df, zip_col_candidates = pad_zip_column(merged_df) # adjust zip code to include leading zero(s)
+    push_df_to_mysql(df, zip_col_candidates, table_name)
+
     # table_name = "event_data_metrics_yoy_match_v2"
     # push_df_to_mysql(consolidated_match_data, table_name)
-
-    table_name = "event_data_metrics_yoy_match"
-    push_df_to_mysql(merged_df, table_name)
 
 # --- Export All Analysis to Excel ---
 def export_analysis_to_excel(

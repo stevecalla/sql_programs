@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import warnings
 
 def export_to_excel(
     event_output_path, ANALYSIS_MONTH_NAME, df, grouped_df, qa_summary,
@@ -12,19 +13,15 @@ def export_to_excel(
     OUTPUT_FILE = event_output_path / "cleaned_grouped_event_data_with_summary.xlsx"
 
     # --- CLEAN ALL DATAFRAMES --- #
-    # def clean_df(df):
-    #     return (
-    #         df.replace([np.inf, -np.inf], np.nan)  # Convert inf/-inf to NaN
-    #           .fillna('')                          # Replace NaN with empty string
-    #     )
-    
+    # Opt-in globally to new downcasting behavior (future behavior)
+    # Address wrning for the ".replace" function
+    pd.set_option('future.no_silent_downcasting', True)
+
     def clean_df(df):
         return (
             df.replace([np.inf, -np.inf], np.nan)  # Convert inf/-inf to NaN
-            .infer_objects(copy=False)           # <- fixes FutureWarning
-            .fillna('')                         # Replace NaN with empty string
+            .fillna('')                            # Replace NaN with empty string
         )
-
 
     # All DataFrames to export
     sheet_data = {
