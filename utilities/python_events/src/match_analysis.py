@@ -1,9 +1,9 @@
+from datetime import datetime
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-from export_to_mysql import push_df_to_mysql
-from datetime import datetime
 import numpy as np
+from export_to_mysql import push_df_to_mysql
 
 # Dynamically set the years for YOY analysis
 this_year = datetime.now().year
@@ -376,12 +376,18 @@ def generate_month_by_match_detail_pivots(merged_df):
         ]
         return pivot
 
+    # pivot_all = build_pivot(merged_df, 'common_month_con')
+    # pivot_active = build_pivot(merged_df[mask_active], 'common_month_con')
+    # pivot_active_by_event_name = build_pivot(merged_df[mask_active], 'Name_con')
+
     # Main pivots
     mask_active = ~merged_df['Status_con'].str.lower().isin(['cancelled', 'declined', 'deleted'])
+    mask_not_missing = merged_df['source_con'] != 'from_missing_in_event_data_metrics'
 
-    pivot_all = build_pivot(merged_df, 'common_month_con')
-    pivot_active = build_pivot(merged_df[mask_active], 'common_month_con')
-    pivot_active_by_event_name = build_pivot(merged_df[mask_active], 'Name_con')
+    # Use it in all three pivot generations
+    pivot_all = build_pivot(merged_df[mask_not_missing], 'common_month_con')
+    pivot_active = build_pivot(merged_df[mask_active & mask_not_missing], 'common_month_con')
+    pivot_active_by_event_name = build_pivot(merged_df[mask_active & mask_not_missing], 'Name_con')
 
     return pivot_all, pivot_active, pivot_active_by_event_name
 
@@ -521,7 +527,6 @@ def pad_zip_column(df):
         print("No zip/postal code column found to pad. Columns are:", list(df.columns))
 
     return df, zip_col_candidates
-
 
 def load_into_mysql(merged_df, consolidated_match_data):
     table_name = "event_data_metrics_yoy_match"

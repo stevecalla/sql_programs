@@ -10,6 +10,7 @@ const { execute_load_big_query_event_data_metrics } = require("./step_3_load_bq_
 
 const { execute_get_python_event_data } = require('./step_5_get_python_event_data'); // Step #5: execute_get_python_event_data
 const { execute_run_python_event_reports } = require('../../utilities/python_events/index'); // Step #6: run python event reports
+
 const { execute_load_big_query_event_match_data } = require("./step_7_load_bq_event_match_data"); // Step #7: load event match data to bigquery
 
 
@@ -76,12 +77,12 @@ async function execute_run_event_data_jobs() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = false; // tranfer USAT event data to Local DB
-  const run_step_2 = false; // execute_create_event_data_metrics
-  const run_step_3 = false; // load event metrics to bigquery
+  const run_step_1 = true; // tranfer USAT event data to Local DB
+  const run_step_2 = true; // execute_create_event_data_metrics
+  const run_step_3 = true; // load event metrics to bigquery
 
-  const run_step_5 = false; // execute_get_python_event_data
-  const run_step_6 = false; // run python event reports
+  const run_step_5 = true; // execute_get_python_event_data
+  const run_step_6 = true; // run python event reports
   const run_step_7 = true; // load event_data_metrics_yoy_match to bigquery
 
   try {
