@@ -36,7 +36,8 @@ function step_1_query_event_data() {
             CONCAT('"', REPLACE(REPLACE(REPLACE(SUBSTRING(e.city, 1, 255), '''', ''), '"', ''), ',', ''), '"') AS city_events,
 
             -- EVENTS GEO
-            e.zip AS zip_events,
+            -- e.zip AS zip_events,
+            LPAD(CAST(e.zip AS CHAR), 5, '0') AS zip_events,
             e.state_code AS state_code_events,
             e.country_code AS country_code_events,
 
