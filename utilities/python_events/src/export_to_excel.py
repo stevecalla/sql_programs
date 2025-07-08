@@ -62,7 +62,7 @@ def export_to_excel(
             worksheet.set_column(0, 0, 20, left_format)
             worksheet.set_column(1, len(data.columns)-1, 20, center_format)
             worksheet.set_zoom(75)
-            worksheet.freeze_panes(2, 1)  # Freeze first row
+            worksheet.freeze_panes(3, 2)  # Freeze first row
 
     print(f"File saved to {event_output_path}")
 

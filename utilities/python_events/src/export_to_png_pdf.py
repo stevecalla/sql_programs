@@ -40,23 +40,23 @@ def save_match_score_histogram(events_this_year, output_path, pdf_pages=None):
         plt.savefig(output_path)
     plt.close(fig)
 
-def save_match_score_histogram_v2(events_this_year, output_path, pdf_pages=None):
-    """Save a histogram showing the distribution of match scores, plus a summary table of bin counts."""
+def save_match_score_histogram_with_table(events_this_year, output_path, pdf_pages=None):
+    """Save a histogram showing the distribution of match scores, plus a summary table of bin counts (with column totals)."""
 
     bins_edges = [0, 70, 80, 90, 100]
-    bins_labels = ['<70', '70-80', '80-90', '90-100']
+    bins_labels = ['<70', '70-80', '80-90', '90-99', '100']
     score_types = [
         ('match_score_name_only', 'Name Only'),
         ('match_score_name_and_site', 'Name + Website'),
         ('match_score_name_and_zip', 'Name + ZipCode'),
     ]
 
-    # Prepare bin counts
+    # Prepare bin counts for each score type
     bin_counts = []
     for col, _ in score_types:
         cut = pd.cut(
             events_this_year[col].fillna(-1),  # NaN => -1 so they're not counted
-            bins=[-2, 70, 80, 90, 100],
+            bins=[-2, 70, 80, 90, 100, 101],
             labels=bins_labels,
             right=False,
             include_lowest=True,
@@ -64,12 +64,13 @@ def save_match_score_histogram_v2(events_this_year, output_path, pdf_pages=None)
         # Remove values that were originally NaN (now -1, not in any bin)
         counts = [ (cut == label).sum() for label in bins_labels ]
         bin_counts.append(counts)
-    # Total per bin across all types
-    total_counts = [sum(bin_counts[j][i] for j in range(len(score_types))) for i in range(len(bins_labels))]
-
-    # Table Data: one row per score type, plus Total
-    table_rows = [label for _, label in score_types] + ['Total']
-    table_data = [*bin_counts, total_counts]
+    # Transpose so each row = bin, each column = score type
+    bin_counts = list(map(list, zip(*bin_counts)))
+    # Calculate column totals
+    col_totals = [sum(bin_counts[row][col] for row in range(len(bins_labels))) for col in range(len(score_types))]
+    bin_counts.append(col_totals)
+    row_labels = bins_labels + ['Total']
+    col_labels = [label for _, label in score_types]
 
     # Start Figure
     fig, axs = plt.subplots(2, 1, figsize=(10, 7), gridspec_kw={'height_ratios': [3, 1]})
@@ -77,7 +78,7 @@ def save_match_score_histogram_v2(events_this_year, output_path, pdf_pages=None)
     # Top: Histogram
     axs[0].hist(
         [events_this_year[c].dropna() for c, _ in score_types],
-        bins=20, edgecolor='black', label=[lbl for _, lbl in score_types]
+        bins=20, edgecolor='black', label=col_labels
     )
     axs[0].axvline(80, color='red', linestyle='--', label='Typical Match Threshold (80)')
     axs[0].axvline(90, color='green', linestyle='--', label='Strong Match Threshold (90)')
@@ -88,14 +89,9 @@ def save_match_score_histogram_v2(events_this_year, output_path, pdf_pages=None)
     axs[0].legend()
 
     # Bottom: Table
-    table_vals = [row for row in zip(*table_data)]
-    cell_text = [list(row) for row in table_vals]
-    row_labels = bins_labels
-    col_labels = table_rows
-    # Note: table expects rows as bins, cols as types+Total
     axs[1].axis('off')
     table = axs[1].table(
-        cellText=cell_text,
+        cellText=bin_counts,
         rowLabels=row_labels,
         colLabels=col_labels,
         loc='center',
@@ -326,7 +322,7 @@ def create_chart_png(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summ
 
         # Add match score histogram
         save_match_score_histogram(events_this_year, event_output_path / "match_score_hist.png", None)
-        save_match_score_histogram_v2(events_this_year, event_output_path / "match_score_hist_v2.png", None)
+        save_match_score_histogram_with_table(events_this_year, event_output_path / "match_score_hist_v2.png", None)
         
         # Add monthly bar charts
         save_bar_chart(summary_last_year, last_year, event_output_path / f"chart_{last_year}.png", None, title_prefix="Monthly Event Trends for")
@@ -399,6 +395,7 @@ def create_chart_pdf(event_output_path, ANALYSIS_MONTH_NAME, grouped_df, qa_summ
 
         # Add match score histogram
         save_match_score_histogram(events_this_year, None, pdf_pages)
+        save_match_score_histogram_with_table(events_this_year, None, pdf_pages)
         
         # Add monthly bar charts
         save_bar_chart(summary_last_year, last_year, None, pdf_pages, title_prefix="Monthly Event Trends for")
