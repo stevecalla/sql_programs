@@ -281,6 +281,78 @@ const event_data_metrics_yoy_match_schema = [
     description: "Year from which the source data is drawn"
   },
 
+  // --- Added Missing Fields Below ---
+
+  // This year/last year event timing and date breakdowns
+  {
+    name: "earliest_start_date_this_year",
+    type: "DATE",
+    mode: "NULLABLE",
+    description: "Earliest start date for the event this year"
+  },
+  {
+    name: "year_this_year",
+    type: "INTEGER",
+    mode: "NULLABLE",
+    description: "Year for this year's event"
+  },
+  {
+    name: "month_this_year",
+    type: "INTEGER",
+    mode: "NULLABLE",
+    description: "Month for this year's event"
+  },
+  {
+    name: "weekday_this_year",
+    type: "STRING",
+    mode: "NULLABLE",
+    description: "Weekday for this year's event"
+  },
+  {
+    name: "day_this_year",
+    type: "INTEGER",
+    mode: "NULLABLE",
+    description: "Day of month for this year's event"
+  },
+  {
+    name: "earliest_start_date_last_year",
+    type: "DATE",
+    mode: "NULLABLE",
+    description: "Earliest start date for last year's event"
+  },
+  {
+    name: "month_last_year",
+    type: "INTEGER",
+    mode: "NULLABLE",
+    description: "Month for last year's event"
+  },
+  {
+    name: "weekday_last_year",
+    type: "STRING",
+    mode: "NULLABLE",
+    description: "Weekday for last year's event"
+  },
+  {
+    name: "day_last_year",
+    type: "INTEGER",
+    mode: "NULLABLE",
+    description: "Day of month for last year's event"
+  },
+
+  // Year-over-year timing shift
+  {
+    name: "day_diff",
+    type: "INTEGER",
+    mode: "NULLABLE",
+    description: "Difference in days between this and last year's event"
+  },
+  {
+    name: "month_match",
+    type: "STRING",
+    mode: "NULLABLE",
+    description: "Whether event month matched year-over-year"
+  },
+
   // Timestamps
   {
     name: "created_at",

@@ -5,6 +5,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from export_to_mysql import push_df_to_mysql
 
+# Define color codes
+RED    = "\033[91m"
+GREEN  = "\033[92m"
+YELLOW = "\033[93m"
+BLUE   = "\033[94m"
+MAGENTA= "\033[95m"
+CYAN   = "\033[96m"
+RESET  = "\033[0m"
+
 # Dynamically set the years for YOY analysis
 this_year = datetime.now().year
 last_year = this_year - 1
@@ -75,9 +84,11 @@ def perform_year_over_year_analysis(event_output_path, df, grouped_df, events_th
 
     # --- (f.1) merge consolidated_match_data with timing_shift_output ---
     merged_df = merge_event_match_and_timing_shifts(consolidated_match_data, timing_shift_output)
+    
+    # print(f"{BLUE}merged_df columns (return df): {list(merged_df.columns)}{RESET}\n")
 
     # --- (f.2) push consolidated_match_data & merged_df to mysql ---
-    load_into_mysql(consolidated_match_data, merged_df)
+    load_into_mysql(merged_df, consolidated_match_data)
 
     # --- (g) Create Pivots by Month/Status ---
     pivot_all, pivot_active, pivot_active_by_event_name = generate_month_by_match_detail_pivots(merged_df)
@@ -305,26 +316,23 @@ def build_event_match_consolidated(events_this_year, events_last_year):
     return consolidated_match_data[existing_cols]
 
 def merge_event_match_and_timing_shifts(consolidated_match_data, timing_shift_output):
-    # 1. Prefix columns except ApplicationID
-    consolidated_prefixed = consolidated_match_data.rename(
-        columns={col: f"{col}_con" for col in consolidated_match_data.columns if col != "ApplicationID"}
+    # Show columns before merge
+    # print(f"{RED}consolidated_match_data columns: {list(consolidated_match_data.columns)}{RESET}\n")
+    # print(f"{GREEN}timing_shift_output columns: {list(timing_shift_output.columns)}{RESET}\n")
+
+    # Figure out columns in timing_shift_output not in consolidated_match_data (excluding ApplicationID)
+    right_unique_cols = [col for col in timing_shift_output.columns 
+                        if col != "ApplicationID" and col not in consolidated_match_data.columns]
+
+    # Merge, only adding unique columns from right
+    merged_df = pd.merge(
+        consolidated_match_data, 
+        timing_shift_output[["ApplicationID"] + right_unique_cols], 
+        on="ApplicationID", 
+        how="left"
     )
-    timing_prefixed = timing_shift_output.rename(
-        columns={col: f"{col}_shift" for col in timing_shift_output.columns if col != "ApplicationID"}
-    )
 
-    # 2. Remove duplicate columns from timing_prefixed (except ApplicationID)
-    timing_cols_unique = [col for col in timing_prefixed.columns if col not in consolidated_prefixed.columns or col == "ApplicationID"]
-    timing_prefixed_reduced = timing_prefixed[timing_cols_unique]
-
-    # 3. Merge with timing columns at the end
-    merged_df = pd.merge(consolidated_prefixed, timing_prefixed_reduced, on="ApplicationID", how="left")
-
-    # 4. Ensure ApplicationID is the first column, followed by all from consolidated, then timing_shift
-    main_cols = ["ApplicationID"] + [col for col in consolidated_prefixed.columns if col != "ApplicationID"]
-    timing_cols_extra = [col for col in timing_prefixed_reduced.columns if col != "ApplicationID"]
-    merged_df = merged_df[main_cols + timing_cols_extra]
-
+    # print(f"{CYAN}merged_df columns: {list(merged_df.columns)}{RESET}\n")
     return merged_df
 
 def generate_month_by_match_detail_pivots(merged_df):
@@ -340,54 +348,54 @@ def generate_month_by_match_detail_pivots(merged_df):
     """
 
     def build_pivot(df, index_col):
-        # 1. Build the pivot (MultiIndex columns except the index_col)
-        pivot = pd.pivot_table(
-            df,
-            index=index_col,
-            columns=['source_year_con', 'match_category_detailed_con'],
-            values='ApplicationID',
-            aggfunc='count',
-            fill_value=0,
-            dropna=False
-        )
+            # 1. Build the pivot (MultiIndex columns except the index_col)
+            pivot = pd.pivot_table(
+                df,
+                index=index_col,
+                columns=['source_year', 'match_category_detailed'],
+                values='ApplicationID',
+                aggfunc='count',
+                fill_value=0,
+                dropna=False
+            )
 
-        # 2. Remove all-zero columns
-        # Identify non-zero data columns (tuples)
-        non_zero_cols = [col for col in pivot.columns if pivot[col].sum() > 0]
-        # Only keep non-zero columns
-        pivot = pivot[non_zero_cols]
+            # 2. Remove all-zero columns
+            # Identify non-zero data columns (tuples)
+            non_zero_cols = [col for col in pivot.columns if pivot[col].sum() > 0]
+            # Only keep non-zero columns
+            pivot = pivot[non_zero_cols]
 
-        # 3. Row totals and per-year subtotals
-        years = sorted(set(col[0] for col in non_zero_cols))
-        for year in years:
-            year_cols = [col for col in non_zero_cols if col[0] == year]
-            pivot[f"{year}_Subtotal"] = pivot[year_cols].sum(axis=1)
+            # 3. Row totals and per-year subtotals
+            years = sorted(set(col[0] for col in non_zero_cols))
+            for year in years:
+                year_cols = [col for col in non_zero_cols if col[0] == year]
+                pivot[f"{year}_Subtotal"] = pivot[year_cols].sum(axis=1)
 
-        # 4. Grand total row (sum all numeric columns)
-        total_row = [pivot[col].sum() for col in pivot.columns]
-        total_index = pd.Index(['Grand Total'], name=index_col)
-        pivot = pd.concat([pivot, pd.DataFrame([total_row], columns=pivot.columns, index=total_index)])
+            # 4. Grand total row (sum all numeric columns)
+            total_row = [pivot[col].sum() for col in pivot.columns]
+            total_index = pd.Index(['Grand Total'], name=index_col)
+            pivot = pd.concat([pivot, pd.DataFrame([total_row], columns=pivot.columns, index=total_index)])
 
-        # 5. Reset index and flatten columns
-        pivot = pivot.reset_index()
-        pivot.columns = [
-            f"{col[0]}_{col[1]}" if isinstance(col, tuple) else str(col)
-            for col in pivot.columns
-        ]
-        return pivot
+            # 5. Reset index and flatten columns
+            pivot = pivot.reset_index()
+            pivot.columns = [
+                f"{col[0]}_{col[1]}" if isinstance(col, tuple) else str(col)
+                for col in pivot.columns
+            ]
+            return pivot
 
     # pivot_all = build_pivot(merged_df, 'common_month_con')
     # pivot_active = build_pivot(merged_df[mask_active], 'common_month_con')
     # pivot_active_by_event_name = build_pivot(merged_df[mask_active], 'Name_con')
 
     # Main pivots
-    mask_active = ~merged_df['Status_con'].str.lower().isin(['cancelled', 'declined', 'deleted'])
-    mask_not_missing = merged_df['source_con'] != 'from_missing_in_event_data_metrics'
+    mask_active = ~merged_df['Status'].str.lower().isin(['cancelled', 'declined', 'deleted'])
+    mask_not_missing = merged_df['source'] != 'from_missing_in_event_data_metrics'
 
     # Use it in all three pivot generations
-    pivot_all = build_pivot(merged_df[mask_not_missing], 'common_month_con')
-    pivot_active = build_pivot(merged_df[mask_active & mask_not_missing], 'common_month_con')
-    pivot_active_by_event_name = build_pivot(merged_df[mask_active & mask_not_missing], 'Name_con')
+    pivot_all = build_pivot(merged_df[mask_not_missing], 'common_month')
+    pivot_active = build_pivot(merged_df[mask_active & mask_not_missing], 'common_month')
+    pivot_active_by_event_name = build_pivot(merged_df[mask_active & mask_not_missing], 'Name')
 
     return pivot_all, pivot_active, pivot_active_by_event_name
 
@@ -414,14 +422,14 @@ def create_timing_shift_pivots(merged_df):
         return [safe_int(x) for x in axis]
 
     # Exclude events with cancelled/declined/deleted status
-    mask_active = ~merged_df['Status_con'].str.lower().isin(['cancelled', 'declined', 'deleted'])
+    mask_active = ~merged_df['Status'].str.lower().isin(['cancelled', 'declined', 'deleted'])
     active_df = merged_df[mask_active]
 
     # 1. Pivot: index = month_this_year, columns = month_last_year, values = count of ApplicationID
     pivot_month_shift_this_year_by_last_year_month = pd.pivot_table(
         active_df,
-        index='month_this_year_shift',
-        columns='month_last_year_shift',
+        index='month_this_year',
+        columns='month_last_year',
         values='ApplicationID',
         aggfunc='count',
         fill_value=0,
@@ -430,14 +438,14 @@ def create_timing_shift_pivots(merged_df):
     )
     pivot_month_shift_this_year_by_last_year_month.index = _format_month_axis(pivot_month_shift_this_year_by_last_year_month.index)
     pivot_month_shift_this_year_by_last_year_month.columns = _format_month_axis(pivot_month_shift_this_year_by_last_year_month.columns)
-    pivot_month_shift_this_year_by_last_year_month.index.name = "month_this_year_shift"
-    pivot_month_shift_this_year_by_last_year_month.columns.name = "month_last_year_shift"
+    pivot_month_shift_this_year_by_last_year_month.index.name = "month_this_year"
+    pivot_month_shift_this_year_by_last_year_month.columns.name = "month_last_year"
 
     # 2. Pivot: index = month_this_year, columns = month_match, values = count of ApplicationID
     pivot_month_shift_this_year_by_month_match = pd.pivot_table(
         active_df,
-        index='month_this_year_shift',
-        columns='month_match_shift',
+        index='month_this_year',
+        columns='month_match',
         values='ApplicationID',
         aggfunc='count',
         fill_value=0,
@@ -445,14 +453,14 @@ def create_timing_shift_pivots(merged_df):
         margins_name='Grand Total'   # <-- You can rename the "All" row/col if you wish
     )
     pivot_month_shift_this_year_by_month_match.index = _format_month_axis(pivot_month_shift_this_year_by_month_match.index)
-    pivot_month_shift_this_year_by_month_match.index.name = "month_this_year_shift"
-    pivot_month_shift_this_year_by_month_match.columns.name = "month_match_shift"
+    pivot_month_shift_this_year_by_month_match.index.name = "month_this_year"
+    pivot_month_shift_this_year_by_month_match.columns.name = "month_match"
 
     # 3. Pivot: index = month_last_year, columns = month_match, values = count of ApplicationID
     pivot_month_shift_last_year_by_month_match = pd.pivot_table(
         active_df,
-        index='month_last_year_shift',
-        columns='month_match_shift',
+        index='month_last_year',
+        columns='month_match',
         values='ApplicationID',
         aggfunc='count',
         fill_value=0,
@@ -460,8 +468,8 @@ def create_timing_shift_pivots(merged_df):
         margins_name='Grand Total'   # <-- You can rename the "All" row/col if you wish
     )
     pivot_month_shift_last_year_by_month_match.index = _format_month_axis(pivot_month_shift_last_year_by_month_match.index)
-    pivot_month_shift_last_year_by_month_match.index.name = "month_last_year_shift"
-    pivot_month_shift_last_year_by_month_match.columns.name = "month_match_shift"
+    pivot_month_shift_last_year_by_month_match.index.name = "month_last_year"
+    pivot_month_shift_last_year_by_month_match.columns.name = "month_match"
 
     # print("\nPivot 1: This Year (rows) vs Last Year (cols)")
     # print(pivot_month_shift_this_year_by_last_year_month.to_string())
@@ -529,6 +537,9 @@ def pad_zip_column(df):
     return df, zip_col_candidates
 
 def load_into_mysql(merged_df, consolidated_match_data):
+
+    # print(f"{RED}merged_df columns (mysql load): {list(merged_df.columns)}{RESET}\n")
+
     table_name = "event_data_metrics_yoy_match"
     df, zip_col_candidates = pad_zip_column(merged_df) # adjust zip code to include leading zero(s)
     push_df_to_mysql(df, zip_col_candidates, table_name)

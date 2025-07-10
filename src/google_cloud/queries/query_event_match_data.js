@@ -35,6 +35,7 @@ async function query_event_match_data(batch_size = 10, offset = 0) {
             has_match,
             match_category,
             match_category_detailed,
+
             match_idx_last_year,
             match_formula_used,
             match_score_name_only,
@@ -42,6 +43,7 @@ async function query_event_match_data(batch_size = 10, offset = 0) {
             match_score_name_and_site,
             match_score_bin,
             match_name_last_year,
+
             earliest_start_date_2024,
             website_last_year,
             zip_code_last_year,
@@ -54,6 +56,18 @@ async function query_event_match_data(batch_size = 10, offset = 0) {
             status_this_year,
             common_status,
             source_year,
+
+            DATE_FORMAT(earliest_start_date_this_year, '%Y-%m-%d') AS earliest_start_date_this_year,
+            year_this_year, 
+            month_this_year, 
+            weekday_this_year, 
+            day_this_year, 
+            DATE_FORMAT(earliest_start_date_last_year, '%Y-%m-%d') AS earliest_start_date_last_year,
+            month_last_year, 
+            weekday_last_year, 
+            day_last_year, 
+            day_diff, 
+            month_match,
 
             -- CREATED AT DATES
             DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at_mtn
