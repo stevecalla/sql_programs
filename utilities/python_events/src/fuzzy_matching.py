@@ -52,8 +52,10 @@ def fuzzy_match_events_bidirectional(grouped_df):
     # List of tuples: (ApplicationID_this_year, ApplicationID_last_year)
     # These will be matched directly and excluded from fuzzy logic.
     manual_matches = [
-        # Example: ('310617', '309039'),    # ('this_year_ID', 'last_year_ID')
-        ('310617-Adult Race', '309039-Adult Race') # this_year USA Triathlon Sprint and Olympic Distance National Championships
+        # Example: ('310617', '309039'),    
+        # ('this_year_ID', 'last_year_ID'),
+        ('310617-Adult Race', '309039-Adult Race'), # this_year USA Triathlon Sprint and Olympic Distance National Championships
+        ('310759-Adult Race', '309505-Adult Race'), # this_year = Race in the Clouds - Alma Dirt Festival, last_year = Race in the Clouds - Off Road Festival
         # Add more pairs as needed
     ]
 
