@@ -7,7 +7,12 @@ last_year = this_year - 1
 
 def date_shift_analysis(events_this_year, analysis_month, month_name):
     """Perform timing shift analysis between matched events from this_year and last_year."""
-    timing_shift_data = events_this_year[events_this_year['has_match'] == True].copy()
+    # timing_shift_data = events_this_year[events_this_year['has_match'] == True].copy()
+    
+    timing_shift_data = events_this_year[
+        (events_this_year['has_match'] == True) &
+        (events_this_year['source'] != 'from_missing_in_event_data_metrics')
+    ].copy()
 
     # Ensure the dates are datetime objects
     timing_shift_data['earliest_start_date_this_year'] = pd.to_datetime(timing_shift_data['earliest_start_date'], errors='coerce')

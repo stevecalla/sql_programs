@@ -1,6 +1,9 @@
 import pandas as pd
 from datetime import datetime
 
+from zoneinfo import ZoneInfo  # Python 3.9+
+local_tz = ZoneInfo("America/Denver")  # Or your desired local time zone
+
 def group_clean_data(df):
     """Group and clean the raw data and calculate supporting summaries.
     
@@ -37,9 +40,15 @@ def group_clean_data(df):
             'RegistrationWebsite': 'first',
             'Email': 'first',
             'CreatedDate': 'first',      # Use the first CreatedDate based on file order
+            'sales_units': 'first',
+            'sales_revenue': 'first',
+            'source': 'first',
         })
         .reset_index()
-    )
+    ) 
+
+    # Add a local timestamp to all rows
+    grouped_df['created_at'] = datetime.now(local_tz).strftime("%Y-%m-%d %H:%M:%S")
 
     # --- Compute earliest_start_date & derive year/month ---
     # Turn StartDate into datetime if it isn’t already
@@ -85,8 +94,14 @@ def group_clean_data(df):
     })
 
     # --- STATUS SUMMARY ---
+    # status_summary = (
+    #     grouped_df.groupby(['year', 'month', 'month_name', 'Status'])
+    #     .size()
+    #     .reset_index(name='event_count')
+    # )
     status_summary = (
-        grouped_df.groupby(['year', 'month', 'month_name', 'Status'])
+        grouped_df[grouped_df['source'] != 'from_missing_in_event_data_metrics']
+        .groupby(['year', 'month', 'month_name', 'Status'])
         .size()
         .reset_index(name='event_count')
     )
@@ -98,6 +113,13 @@ def group_clean_data(df):
     summary_this_year = status_summary[status_summary['year'] == this_year]
 
     # --- PIVOT FOR YOY ---
+    # def create_yoy_pivot(df_inner):
+    #     monthly = (
+    #         df_inner.groupby(['year', 'month', 'month_name'])
+    #         .size()
+    #         .reset_index(name='event_count')
+    #     )
+
     def create_yoy_pivot(df_inner):
         monthly = (
             df_inner.groupby(['year', 'month', 'month_name'])
@@ -112,18 +134,29 @@ def group_clean_data(df):
         pivot['month_order'] = pd.to_datetime(pivot.index.to_series(), format='%B').dt.month
         return pivot.sort_values('month_order')
 
-    pivot_all = create_yoy_pivot(grouped_df)
+    # pivot_all = create_yoy_pivot(grouped_df)
+    pivot_all = create_yoy_pivot(grouped_df[grouped_df['source'] != 'from_missing_in_event_data_metrics'])
+
 
     # filtered_df = grouped_df[~grouped_df['Status'].str.lower().isin(['canceled', 'cancelled', 'deleted'])]
     
     # Create a filtered grouped DataFrame that excludes canceled or deleted events.
     # fill NaN with empty string, cast every value to str, then lowercase + filter
+    # filtered_df = grouped_df[
+    #     ~grouped_df['Status']
+    #     .fillna('')                       # replace NaN/None with ''
+    #     .astype(str)                      # everything becomes a string
+    #     .str.lower()                      # lowercase
+    #     .isin(['canceled', 'cancelled', 'deleted', 'declined'])   # is in blacklist?
+    # ]
     filtered_df = grouped_df[
-        ~grouped_df['Status']
-        .fillna('')                       # replace NaN/None with ''
-        .astype(str)                      # everything becomes a string
-        .str.lower()                      # lowercase
-        .isin(['canceled', 'cancelled', 'deleted', 'declined'])   # is in blacklist?
+        (grouped_df['source'] != 'from_missing_in_event_data_metrics') &
+        (~grouped_df['Status']
+            .fillna('')
+            .astype(str)
+            .str.lower()
+            .isin(['canceled', 'cancelled', 'deleted', 'declined'])
+        )
     ]
 
     pivot_filtered = create_yoy_pivot(filtered_df)
@@ -161,7 +194,10 @@ def group_clean_data(df):
         
         return pivot_value
 
-    pivot_value_all = create_yoy_value_by_month_pivot(grouped_df)
+    # pivot_value_all = create_yoy_value_by_month_pivot(grouped_df)
+    pivot_value_all = create_yoy_value_by_month_pivot(
+        grouped_df[grouped_df['source'] != 'from_missing_in_event_data_metrics']
+    )
     pivot_value_filtered = create_yoy_value_by_month_pivot(filtered_df)
 
     # print(pivot_value_all)

@@ -1,7 +1,7 @@
 import os
 import pandas as pd
-from sqlalchemy import create_engine
 from dotenv import load_dotenv
+from sqlalchemy import create_engine, String
 
 # NOTE: STEP #1: GET .ENV VARIABLES
 dotenv_path = os.path.abspath('../../../.env')
@@ -21,10 +21,24 @@ MYSQL_DB = os.getenv("LOCAL_USAT_SALES_DB")
 mysql_url = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}"
 
 # NOTE: STEP #2: RUN FUNCTION TO PUSH DATA TO MYSQL
-def push_df_to_mysql(df, table_name):
+def push_df_to_mysql(df, zip_col_candidates, table_name):
     """Push DataFrame to MySQL, replacing the table if it exists."""
+
     engine = create_engine(mysql_url)
-    df.to_sql(table_name, con=engine, if_exists='replace', index=False, chunksize=1000)
+
+    # Only include columns that actually exist in your DataFrame
+    dtype = {col: String(5) for col in zip_col_candidates if col in df.columns}
+    
+    df.to_sql(
+        'event_data_metrics_yoy_match',    # table name
+        con=engine,                        # your engine
+        if_exists='replace',               # replace table if exists
+        index=False,                       # don't write DataFrame index as a column
+        chunksize=1000,                    # batch insert
+        dtype=dtype                        # Safe: only includes present columns
+        # dtype={'ZipCode_con': String(10)}  # force zip column as VARCHAR(5)
+    )
+
     print(f"Pushed {len(df)} rows to MySQL table '{table_name}'")
 
 # NOTE: ---- TEST DATA ----

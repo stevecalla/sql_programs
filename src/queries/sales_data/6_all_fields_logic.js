@@ -36,9 +36,18 @@ const events_table = ` -- todo:
     events.id AS id_events,
 
     events.sanctioning_event_id AS id_sanctioning_events,
+
+    -- CASE 
+    --     WHEN r.designation IS NOT NULL AND r.designation != '' 
+    --         THEN CONCAT(events.sanctioning_event_id, '-', r.designation)
+    --     ELSE events.sanctioning_event_id
+    -- END AS id_sanctioning_events_and_type,
     CASE 
-        WHEN r.designation IS NOT NULL AND r.designation != '' 
-            THEN CONCAT(events.sanctioning_event_id, '-', r.designation)
+        WHEN r.designation IS NOT NULL AND r.designation != '' THEN CONCAT(events.sanctioning_event_id, '-', r.designation)
+        WHEN events.event_type_id = 1 THEN CONCAT(e.sanctioning_event_id, '-', 'Adult Race')
+        WHEN events.event_type_id = 2 THEN CONCAT(e.sanctioning_event_id, '-', 'Adult Clinic')
+        WHEN events.event_type_id = 3 THEN CONCAT(e.sanctioning_event_id, '-', 'Youth Race')
+        WHEN events.event_type_id = 4 THEN CONCAT(e.sanctioning_event_id, '-', 'Youth Clinic')
         ELSE events.sanctioning_event_id
     END AS id_sanctioning_events_and_type, -- TODO:
 

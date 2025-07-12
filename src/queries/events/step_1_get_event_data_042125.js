@@ -7,8 +7,11 @@ function step_1_query_event_data() {
             e.id AS id_events,
             -- e.sanctioning_event_id AS id_sanctioning_events,
             CASE 
-                WHEN r.designation IS NOT NULL AND r.designation != '' 
-                    THEN CONCAT(e.sanctioning_event_id, '-', r.designation)
+                WHEN r.designation IS NOT NULL AND r.designation != '' THEN CONCAT(e.sanctioning_event_id, '-', r.designation)
+                WHEN e.event_type_id = 1 THEN CONCAT(e.sanctioning_event_id, '-', 'Adult Race')
+                WHEN e.event_type_id = 2 THEN CONCAT(e.sanctioning_event_id, '-', 'Adult Clinic')
+                WHEN e.event_type_id = 3 THEN CONCAT(e.sanctioning_event_id, '-', 'Youth Race')
+                WHEN e.event_type_id = 4 THEN CONCAT(e.sanctioning_event_id, '-', 'Youth Clinic')
                 ELSE e.sanctioning_event_id
             END AS id_sanctioning_events,
             r.id AS id_races,
@@ -36,7 +39,8 @@ function step_1_query_event_data() {
             CONCAT('"', REPLACE(REPLACE(REPLACE(SUBSTRING(e.city, 1, 255), '''', ''), '"', ''), ',', ''), '"') AS city_events,
 
             -- EVENTS GEO
-            e.zip AS zip_events,
+            -- e.zip AS zip_events,
+            LPAD(CAST(e.zip AS CHAR), 5, '0') AS zip_events,
             e.state_code AS state_code_events,
             e.country_code AS country_code_events,
 

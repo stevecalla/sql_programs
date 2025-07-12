@@ -11,6 +11,8 @@ const { execute_load_big_query_event_data_metrics } = require("./step_3_load_bq_
 const { execute_get_python_event_data } = require('./step_5_get_python_event_data'); // Step #5: execute_get_python_event_data
 const { execute_run_python_event_reports } = require('../../utilities/python_events/index'); // Step #6: run python event reports
 
+const { execute_load_big_query_event_match_data } = require("./step_7_load_bq_event_match_data"); // Step #7: load event match data to bigquery
+
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
@@ -81,6 +83,7 @@ async function execute_run_event_data_jobs() {
 
   const run_step_5 = true; // execute_get_python_event_data
   const run_step_6 = true; // run python event reports
+  const run_step_7 = true; // load event_data_metrics_yoy_match to bigquery
 
   try {
     const stepFunctions = [
@@ -90,6 +93,7 @@ async function execute_run_event_data_jobs() {
 
       run_step_5 ? execute_get_python_event_data : null,
       run_step_6 ? execute_run_python_event_reports : null,
+      run_step_7 ? execute_load_big_query_event_match_data : null,
 
     ];
 
@@ -100,6 +104,8 @@ async function execute_run_event_data_jobs() {
 
       `Step #5 - Get python event data`,
       `Step_#6 - Run python event reports`,
+
+      `Step_#7 - Load event match data to BQ: `,
       
     ];
 
