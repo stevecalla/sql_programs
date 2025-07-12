@@ -79,11 +79,11 @@ async function execute_run_event_data_jobs() {
 
   const run_step_1 = true; // tranfer USAT event data to Local DB
   const run_step_2 = true; // execute_create_event_data_metrics
-  const run_step_3 = false; // load event metrics to bigquery
+  const run_step_3 = true; // load event metrics to bigquery
 
-  const run_step_5 = false; // execute_get_python_event_data
-  const run_step_6 = false; // run python event reports
-  const run_step_7 = false; // load event_data_metrics_yoy_match to bigquery
+  const run_step_5 = true; // execute_get_python_event_data
+  const run_step_6 = true; // run python event reports
+  const run_step_7 = true; // load event_data_metrics_yoy_match to bigquery
 
   try {
     const stepFunctions = [
@@ -124,9 +124,9 @@ async function execute_run_event_data_jobs() {
   return elapsedTime;
 }
 
-if (require.main === module) {
-  execute_run_event_data_jobs();
-}
+// if (require.main === module) {
+//   execute_run_event_data_jobs();
+// }
 
 module.exports = {
   execute_run_event_data_jobs,
