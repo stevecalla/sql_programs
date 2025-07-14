@@ -56,6 +56,9 @@ def fuzzy_match_events_bidirectional(grouped_df):
         # ('this_year_ID', 'last_year_ID'),
         ('310617-Adult Race', '309039-Adult Race'), # this_year USA Triathlon Sprint and Olympic Distance National Championships
         ('310759-Adult Race', '309505-Adult Race'), # this_year = Race in the Clouds - Alma Dirt Festival, last_year = Race in the Clouds - Off Road Festival
+        ('310539-Adult Race', '309204-Adult Race'), # this year = Gold Nugget Triathlon, last year = Gold Nugget Triathlon  May 13th-19th 2024
+
+
         # Add more pairs as needed
     ]
 
