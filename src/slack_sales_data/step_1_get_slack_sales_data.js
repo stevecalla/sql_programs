@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
-// dotenv.config({path: "../../.env"});
-dotenv.config();
+dotenv.config({path: "../../.env"});
+// dotenv.config();
 
 const mysql = require('mysql2');
 const fastcsv = require('fast-csv');
