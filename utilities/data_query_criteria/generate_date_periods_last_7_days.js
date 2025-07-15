@@ -1,10 +1,10 @@
-async function generate_date_periods_last_7_days(membershipPeriodEnds = '2008-01-01') {
+async function generate_date_periods_last_7_days(days_ago = 7, membershipPeriodEnds = '2008-01-01') {
     const periods = [];
     const currentDate = new Date();
 
     // Calculate the start date (7 days ago including today)
     const startDate = new Date();
-    startDate.setDate(currentDate.getDate() - 7);
+    startDate.setDate(currentDate.getDate() - days_ago);
 
     // Format dates for start and end
     const formatDate = (date) => {

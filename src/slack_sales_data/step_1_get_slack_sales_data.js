@@ -426,7 +426,7 @@ async function execute_get_slack_sales_data() {
 
     let membership_category_logic = generate_membership_category_logic;
     // let date_periods = await generate_monthly_date_periods(start_year); // Starts in 2025
-    let date_periods = await generate_date_periods_last_7_days();
+    let date_periods = await generate_date_periods_last_7_days(7);
 
     // Initialize the index file (only once, even in parallel processes)
     initializeIndexFile();
