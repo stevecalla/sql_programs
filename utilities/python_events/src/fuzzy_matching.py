@@ -58,8 +58,20 @@ def fuzzy_match_events_bidirectional(grouped_df):
         ('310759-Adult Race', '309505-Adult Race'), # this_year = Race in the Clouds - Alma Dirt Festival, last_year = Race in the Clouds - Off Road Festival
         ('310539-Adult Race', '309204-Adult Race'), # this year = Gold Nugget Triathlon, last year = Gold Nugget Triathlon  May 13th-19th 2024
         ('311461-Adult Race', '309459-Adult Race'), # this year = The Boston Triathlon, last year = Columbia Threadneedle Investments Boston Triathlon
-        
-        # Add more pairs as needed
+
+        # ADDED on 7/15/2025 FROM DARREN'S LIST FOR SEPT TO NOV 2025
+        ('310704-Adult Race','309839-Adult Race'), # Ironman Waco 70.3
+        ('310506-Adult Race','309241-Adult Race'), # Visit Panama City Beach IRONMAN Florida
+        ('310797-Adult Race','309702-Adult Race'), # 2024 Pacific Coast Triathlon at Crystal Cove
+        ('310813-Adult Race','310310-Adult Race'), # Mack Cycle TriKB Triathlon #2 & Mack Cycle TriKB Triathlon #1
+        ('310821-Adult Race','310312-Adult Race'), # Mack Cycle TriKB Triathlon #3 & Mack Cycle TriKB Triathlon #2
+        ('310687-Adult Race','309354-Adult Race'), # Pilgrimman & The Outsider (Pilgrimman)
+        ('311598-Adult Race','310252-Adult Race'), # Bearathlon 2024 & Bearathlon 2025
+        ('310843-Adult Race','309462-Adult Race'), # US Performance Center Draft Legal Triathlon Festival & US Performance Center Draft Legal Triathlon Festival
+        ('310972-Adult Race','309851-Adult Race'), # Wonders Sprint Triathlon & USA TRIATHLON NEW JERSEY STATE CHAMPIONSHIPS / WONDERS TRIATHLON
+        ('310973-Youth Race','310133-Youth Race'), # Wonders Kids Triathlon - September & WONDERS KIDS TRIATHLON - NEW JERSEY STATE CHAMPIONSHIPS
+        ('311005-Adult Race','311156-Adult Race'), # World Triathlon Powerman Long Distance Duathlon Championships - Zofingen Switzerland & World Triathlon Powerman Long Distance Duathlon Championships - Zofingen Switzerland
+
     ]
 
     # Split original dataset into last_year and this_year subsets
