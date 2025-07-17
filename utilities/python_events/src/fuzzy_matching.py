@@ -71,7 +71,8 @@ def fuzzy_match_events_bidirectional(grouped_df):
         ('310972-Adult Race','309851-Adult Race'), # Wonders Sprint Triathlon & USA TRIATHLON NEW JERSEY STATE CHAMPIONSHIPS / WONDERS TRIATHLON
         ('310973-Youth Race','310133-Youth Race'), # Wonders Kids Triathlon - September & WONDERS KIDS TRIATHLON - NEW JERSEY STATE CHAMPIONSHIPS
         ('311005-Adult Race','311156-Adult Race'), # World Triathlon Powerman Long Distance Duathlon Championships - Zofingen Switzerland & World Triathlon Powerman Long Distance Duathlon Championships - Zofingen Switzerland
-
+        ('350906-Youth Race','309613-Youth Clinic'), # 2024 Keiki Dip-N-Dash & IRONKiDS KEIKI DIP-N-DASH
+        ('310545-Youth Race','309106-Youth Race'), # Toughkids Triathlon NY 2024 And Super Sprint Triathlon & Toughkids Triathlon Lake Welch Harriman State Park
     ]
 
     # Split original dataset into last_year and this_year subsets
