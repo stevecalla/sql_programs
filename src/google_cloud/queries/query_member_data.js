@@ -161,7 +161,7 @@ async function query_member_data(batch_size = 10, offset = 0) {
             DATE_FORMAT(created_at_utc, '%Y-%m-%d') AS created_at_utc -- date '2024-02-12'
             
         FROM usat_sales_db.sales_key_stats_2015 
-        WHERE purchased_on_year_adjusted_mp >= 2020
+        WHERE purchased_on_year_adjusted_mp >= 2015
         ORDER BY id_profiles
         LIMIT ${batch_size} OFFSET ${offset}
         -- LIMIT 1000
