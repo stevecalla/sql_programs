@@ -8,7 +8,7 @@ const { triggerGarbageCollection } = require('../../utilities/garbage_collection
 
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
-const { streamQueryToCsv } = require('../../utilities/stream_query_to_csv');
+const { streamQueryToCsvAndTrackLastId } = require('../../utilities/streamQueryToCsvAndTrackLastId');
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { create_directory } = require('../../utilities/createDirectory');
@@ -130,7 +130,7 @@ async function execute_retrieve_data(options, datasetId, bucketName, schema, dir
             const before = performance.now();
 
             // ✅ STREAM and track lastSeenId
-            const { lastSeenId: newLastSeenId } = await streamQueryToCsv(
+            const { lastSeenId: newLastSeenId } = await streamQueryToCsvAndTrackLastId(
                 pool,
                 sql,
                 filePath,
