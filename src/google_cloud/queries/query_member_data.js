@@ -163,13 +163,12 @@ async function query_member_data(batch_size = 1000, last_seen_id = 0, offset) {
             
         FROM usat_sales_db.sales_key_stats_2015 
         WHERE 1 = 1
-            AND purchased_on_year_adjusted_mp >= 2015
-            -- AND id_profiles > ${last_seen_id}
+            --  purchased_on_year_adjusted_mp >= 2022
+            AND id_profiles > ${last_seen_id}
         ORDER BY id_profiles ASC
-        -- LIMIT ${batch_size} OFFSET ${offset}
         LIMIT ${batch_size}
         -- LIMIT 1000
-        ;
+    ;
     `
 }
 
