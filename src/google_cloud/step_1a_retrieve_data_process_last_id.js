@@ -8,7 +8,7 @@ const { triggerGarbageCollection } = require('../../utilities/garbage_collection
 
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
-const { streamQueryToCsv } = require('../../utilities/stream_query_to_csv');
+const { streamQueryToCsvAndTrackLastId } = require('../../utilities/streamQueryToCsvAndTrackLastId');
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { create_directory } = require('../../utilities/createDirectory');
@@ -93,8 +93,6 @@ async function execute_retrieve_data(options, datasetId, bucketName, schema, dir
 
     const pool = await create_local_db_connection(await local_usat_sales_db_config());
     
-    // const directory_name = directoryName ? directoryName : `usat_google_bigquery_data`;
-    // const directory_name_archive = directoryName ? `${directoryName}_archive` : `usat_google_bigquery_data_archive`;
     const directory_name = directoryName ?? `usat_google_bigquery_data`;
     const directory_name_archive = `${directory_name}_archive`;
 
@@ -102,7 +100,8 @@ async function execute_retrieve_data(options, datasetId, bucketName, schema, dir
 
     console.log(options, directory_name, directory_name_archive);
 
-    let offset = 0;
+    const id_field = 'id_profiles'; // adjust if using a different unique key
+    let lastSeenId = 0;
     let batchCounter = 0;
     let rowsReturned = 0;
 
@@ -113,7 +112,9 @@ async function execute_retrieve_data(options, datasetId, bucketName, schema, dir
         const { fileName, query } = options[0];
 
         do {
-            const sql = typeof query === 'function' ? await query(retrieval_batch_size, offset) : query;
+            const sql = typeof query === 'function'
+                ? await query(retrieval_batch_size, lastSeenId)
+                : query;
 
             // console.log(sql);
 
@@ -122,27 +123,37 @@ async function execute_retrieve_data(options, datasetId, bucketName, schema, dir
             const timestamp = getCurrentDateTimeForFileNaming();
             const filePath = path.join(
                 dirPath,
-                `results_${timestamp}_${fileName}_offset_${offset}_batch_${batchCounter + 1}.csv`
+                `results_${timestamp}_${fileName}_after_${lastSeenId}_batch_${batchCounter + 1}.csv`
             );
-
+            
             console.log(`🚀 Exporting: ${filePath}`);
             const before = performance.now();
 
-            await streamQueryToCsv(pool, sql, filePath);
+            // ✅ STREAM and track lastSeenId
+            const { lastSeenId: newLastSeenId } = await streamQueryToCsvAndTrackLastId(
+                pool,
+                sql,
+                filePath,
+                id_field
+            );
+            console.log('last seen id', lastSeenId);
 
             const after = performance.now();
             console.log(`⏱️  Elapsed Time: ${((after - before) / 1000).toFixed(2)} sec`);
 
-            // Estimate whether data was returned by checking file size
-            const stats = fs.statSync(filePath);
-            rowsReturned = stats.size > 100 ? retrieval_batch_size : 0; // crude check
+            // SET rowsReturned to terminate do loop
+            if (newLastSeenId !== null) {
+                rowsReturned = retrieval_batch_size; // assume full batch unless otherwise tracked
+                lastSeenId = newLastSeenId;
+            } else {
+                rowsReturned = 0;
+            }
 
-            offset += retrieval_batch_size;
             batchCounter++;
 
             await triggerGarbageCollection();
 
-        // } while (batchCounter < 1);  //testing
+        // } while (batchCounter < 3);  //testing
         } while (rowsReturned > 0);
 
     } catch (err) {

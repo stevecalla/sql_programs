@@ -17,6 +17,9 @@ function step_8a_create_indexes() {
 
             CREATE INDEX idx_date_of_birth_profiles ON sales_key_stats_2015 (date_of_birth_profiles);
 
+            CREATE INDEX idx_id_profiles ON sales_key_stats_2015(id_profiles);
+            CREATE INDEX idx_purchased_on_year_adjusted_mp ON sales_key_stats_2015(purchased_on_year_adjusted_mp);
+
             CREATE INDEX idx_member_number ON sales_key_stats_2015 (member_number_members_sa);
             CREATE INDEX idx_id_membership_periods ON sales_key_stats_2015 (id_membership_periods_sa);
 
@@ -36,7 +39,8 @@ function step_8a_create_indexes() {
             CREATE INDEX idx_most_recent_prior_purchase_membership_category ON sales_key_stats_2015 (most_recent_prior_purchase_membership_category);
             CREATE INDEX idx_member_upgrade_downgrade_category ON sales_key_stats_2015 (member_upgrade_downgrade_category);
             CREATE INDEX idx_most_recent_purchase_date ON sales_key_stats_2015 (most_recent_purchase_date);
-            CREATE INDEX idx_most_recent_prior_purchase_date ON sales_key_stats_2015 (most_recent_prior_purchase_date);
+            CREATE INDEX idx_most_recent_prior_purchase_date ON sales_key_stats_2015 (most_recent_prior_purchase_date)
+        ;
 -- ********************************************
     `;
 }

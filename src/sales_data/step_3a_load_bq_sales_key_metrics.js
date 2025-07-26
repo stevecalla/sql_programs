@@ -5,7 +5,7 @@ const { logPM2MemoryUsage } = require('../../utilities/pm2_scripts/pm2_log_memor
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
 const { query_member_data } = require('../google_cloud/queries/query_member_data');
-const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
+const { execute_load_data_to_bigquery } = require('../google_cloud/step_0a_load_main_job_last_id');
 const { members_schema } = require('../google_cloud/schemas/schema_member_data');
 
 // EXECUTE LOAD BIQ QUERY
@@ -17,7 +17,8 @@ async function execute_load_big_query_sales_key_metrics() {
 
     const options = [
         {
-            query: (retrieval_batch_size, offset) => query_member_data(retrieval_batch_size, offset),
+            // query: (retrieval_batch_size, offset) => query_member_data(retrieval_batch_size, offset),
+            query: (retrieval_batch_size, last_seen_id) => query_member_data(retrieval_batch_size, last_seen_id),
             fileName: 'member_data',
             tableId: "membership_data", // table name
             
