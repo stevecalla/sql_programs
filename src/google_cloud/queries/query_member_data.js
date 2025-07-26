@@ -1,4 +1,5 @@
-async function query_member_data(batch_size = 10, offset = 0) {
+// async function query_member_data(batch_size = 10, offset = 0) {
+async function query_member_data(batch_size = 1000, last_seen_id = 0, offset) {
     return `
         SELECT 
             member_number_members_sa,
@@ -161,9 +162,12 @@ async function query_member_data(batch_size = 10, offset = 0) {
             DATE_FORMAT(created_at_utc, '%Y-%m-%d') AS created_at_utc -- date '2024-02-12'
             
         FROM usat_sales_db.sales_key_stats_2015 
-        WHERE purchased_on_year_adjusted_mp >= 2015
-        ORDER BY id_profiles
-        LIMIT ${batch_size} OFFSET ${offset}
+        WHERE 1 = 1
+            AND purchased_on_year_adjusted_mp >= 2015
+            -- AND id_profiles > ${last_seen_id}
+        ORDER BY id_profiles ASC
+        -- LIMIT ${batch_size} OFFSET ${offset}
+        LIMIT ${batch_size}
         -- LIMIT 1000
         ;
     `

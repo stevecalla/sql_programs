@@ -93,15 +93,21 @@ async function execute_retrieve_data(options, datasetId, bucketName, schema, dir
 
     const pool = await create_local_db_connection(await local_usat_sales_db_config());
     
-    const directory_name = directoryName ? directoryName : `usat_google_bigquery_data`;
-    const directory_name_archive = directoryName ? `${directoryName}_archive` : `usat_google_bigquery_data_archive`;
+    // const directory_name = directoryName ? directoryName : `usat_google_bigquery_data`;
+    // const directory_name_archive = directoryName ? `${directoryName}_archive` : `usat_google_bigquery_data_archive`;
+    const directory_name = directoryName ?? `usat_google_bigquery_data`;
+    const directory_name_archive = `${directory_name}_archive`;
 
     const retrieval_batch_size = 100000;
 
     console.log(options, directory_name, directory_name_archive);
 
-    let offset = 0;
+    // let offset = 0;
+    // let batchCounter = 0;
+    const id_field = 'id_profiles'; // adjust if using a different unique key
+    let lastSeenId = 0;
     let batchCounter = 0;
+    let rowsReturned = 0;
 
     try {
         await deleteArchivedFiles(directory_name_archive);
@@ -109,40 +115,65 @@ async function execute_retrieve_data(options, datasetId, bucketName, schema, dir
 
         const { fileName, query } = options[0];
 
-        let rowsReturned;
+        // let rowsReturned;
 
         do {
-            const sql = typeof query === 'function' ? await query(retrieval_batch_size, offset) : query;
+            // const sql = typeof query === 'function' ? await query(retrieval_batch_size, offset) : query;
+            const sql = typeof query === 'function'
+                ? await query(retrieval_batch_size, lastSeenId)
+                : query;
 
             // console.log(sql);
 
             // Create export directory if needed
             const dirPath = await create_directory(directory_name);
             const timestamp = getCurrentDateTimeForFileNaming();
+            // const filePath = path.join(
+            //     dirPath,
+            //     `results_${timestamp}_${fileName}_offset_${offset}_batch_${batchCounter + 1}.csv`
+            // );
             const filePath = path.join(
                 dirPath,
-                `results_${timestamp}_${fileName}_offset_${offset}_batch_${batchCounter + 1}.csv`
+                `results_${timestamp}_${fileName}_after_${lastSeenId}_batch_${batchCounter + 1}.csv`
             );
+            
 
             console.log(`🚀 Exporting: ${filePath}`);
             const before = performance.now();
 
-            await streamQueryToCsv(pool, sql, filePath);
+            // await streamQueryToCsv(pool, sql, filePath);
+            // ✅ STREAM and track lastSeenId
+            const { lastSeenId: newLastSeenId } = await streamQueryToCsv(
+                pool,
+                sql,
+                filePath,
+                id_field
+            );
+            console.log('last seen id', lastSeenId);
 
             const after = performance.now();
             console.log(`⏱️  Elapsed Time: ${((after - before) / 1000).toFixed(2)} sec`);
 
             // Estimate whether data was returned by checking file size
-            const stats = fs.statSync(filePath);
-            rowsReturned = stats.size > 100 ? retrieval_batch_size : 0; // crude check
+            // const stats = fs.statSync(filePath);
+            // rowsReturned = stats.size > 100 ? retrieval_batch_size : 0; // crude check
 
-            offset += retrieval_batch_size;
+            // offset += retrieval_batch_size;
+            // batchCounter++;
+            
+            if (newLastSeenId !== null) {
+                rowsReturned = retrieval_batch_size; // assume full batch unless otherwise tracked
+                lastSeenId = newLastSeenId;
+            } else {
+                rowsReturned = 0;
+            }
+
             batchCounter++;
 
             await triggerGarbageCollection();
 
-        // } while (batchCounter < 1);  //testing
-        } while (rowsReturned > 0);
+        } while (batchCounter < 3);  //testing
+        // } while (rowsReturned > 0);
 
     } catch (err) {
         console.error('🔥 Error in data retrieval:', err);

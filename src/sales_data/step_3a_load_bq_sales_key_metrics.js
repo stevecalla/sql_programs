@@ -17,7 +17,8 @@ async function execute_load_big_query_sales_key_metrics() {
 
     const options = [
         {
-            query: (retrieval_batch_size, offset) => query_member_data(retrieval_batch_size, offset),
+            // query: (retrieval_batch_size, offset) => query_member_data(retrieval_batch_size, offset),
+            query: (retrieval_batch_size, last_seen_id) => query_member_data(retrieval_batch_size, last_seen_id),
             fileName: 'member_data',
             tableId: "membership_data", // table name
             
