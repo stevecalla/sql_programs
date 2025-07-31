@@ -86,8 +86,9 @@ async function query_sanctioned_vs_participation_counts() {
                 COUNT(DISTINCT CASE WHEN start_date_year_races = YEAR(CURDATE()) - 1 THEN id_sanctioning_events END) AS participant_event_count_last_year,
                 COUNT(DISTINCT CASE WHEN start_date_year_races = YEAR(CURDATE()) THEN id_sanctioning_events END) AS participant_event_count_this_year
             FROM participation_race_profiles
-            WHERE start_date_year_races IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
-                AND LOWER(name_event_type) IN ('adult event', 'youth event')
+            WHERE 1= 1
+                AND start_date_year_races IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
+                AND LOWER(name_event_type) IN ('adult race', 'youth race')
             GROUP BY 
                 DATE_FORMAT(created_at_mtn, '%Y-%m-%d'), start_date_month_races
         ),
