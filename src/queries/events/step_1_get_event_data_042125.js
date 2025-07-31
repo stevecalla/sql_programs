@@ -20,6 +20,8 @@ function step_1_query_event_data() {
             e.event_type_id AS event_type_id_events,
             -- et.name AS name_event_type, 
             r.designation as designation_races,
+            -- ALSO CHANGE CODE FOR BELOW AT...
+            -- ... src\queries\participation_data\step_1_get_participation_data.js
             CASE
                 WHEN r.designation IS NOT NULL THEN r.designation
                 WHEN r.designation IS NULL AND e.event_type_id = 1 THEN 'Adult Race'
