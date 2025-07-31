@@ -123,7 +123,7 @@ async function execute_load_participation_data() {
         await execute_mysql_working_query(pool, db_name, create_query, create_info);
         
         // STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "USER DATA" TABLE
-        console.log(`STEP #3 - GET FILES IN DIRECTORY / LOAD INTO "usat all_membership_sales_data" TABLE`);
+        console.log(`STEP #2 - GET FILES IN DIRECTORY / LOAD INTO "all_participation_data_raw" TABLE`);
         console.log(getCurrentDateTime());
 
         let rows_added = 0;

@@ -14,7 +14,17 @@ function step_1_get_participation_data(start_date, end_date, offset, batch_size)
                 e.event_type_id AS event_type_id_events,
                 
                 -- EVENT TYPES
-                et.name AS name_event_type,
+                -- et.name AS name_event_type,
+                -- COULD HAVE USED et.name below but stayed consistent with...
+                -- ... src\queries\events\step_1_get_event_data_042125.js logic
+                CASE
+                        WHEN r.designation IS NOT NULL THEN r.designation
+                        WHEN r.designation IS NULL AND e.event_type_id = 1 THEN 'Adult Race'
+                        WHEN r.designation IS NULL AND e.event_type_id = 2 THEN 'Adult Clinic'
+                        WHEN r.designation IS NULL AND e.event_type_id = 3 THEN 'Youth Race'
+                        WHEN r.designation IS NULL AND e.event_type_id = 4 THEN 'Youth Clinic'
+                        ELSE "missing_event_type_race_designation"
+                END AS name_event_type,
 
                 -- EVENTS
                 CONCAT('"', REPLACE(REPLACE(REPLACE(SUBSTRING(e.name, 1, 255), '''', ''), '"', ''), ',', ''), '"') AS name_events,
