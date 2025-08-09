@@ -10,7 +10,7 @@ const derived_fields = `
     sa.max_membership_fee_6 AS actual_membership_fee_6_sa,
     sa.max_membership_fee_6_rule AS actual_membership_fee_6_rule_sa,
     sa.source_2 AS source_2_sa,
-    sa.is_koz_acception AS is_koz_acception_sa,
+    sa.is_koz_acception AS is_koz_acception_sa
 `;
 
 const addresses_table = `
@@ -28,7 +28,7 @@ const addresses_table = `
     addresses.lng AS lng_addresses,
     addresses.lat AS lat_addresses,
     addresses.state_code AS state_code_addresses,
-    addresses.country_code AS country_code_addresses,
+    addresses.country_code AS country_code_addresses
 `;
 
 const events_table = ` -- todo:
@@ -106,7 +106,7 @@ const events_table = ` -- todo:
     events.status AS status_events,
 
     events.race_director_id AS race_director_id_events,
-    events.last_season_event_id AS last_season_event_id,
+    events.last_season_event_id AS last_season_event_id
 `;
 
 const event_types_table = ` -- todo:
@@ -120,7 +120,7 @@ const event_types_table = ` -- todo:
         WHEN r.designation IS NULL AND events.event_type_id = 3 THEN 'Youth Race'
         WHEN r.designation IS NULL AND events.event_type_id = 4 THEN 'Youth Clinic'
         ELSE "missing_event_type_race_designation"
-    END AS name_event_type,
+    END AS name_event_type
 `;
 
 const membership_applications_table = `
@@ -269,7 +269,7 @@ const membership_period_table = `
     mp.updated_at AS updated_at_mp,
     mp.upgraded_from_id AS upgraded_from_id_mp,
     mp.upgraded_to_id AS upgraded_to_id_mp,
-    mp.waiver_status AS waiver_status_mp,
+    mp.waiver_status AS waiver_status_mp
 `;
 
 const members_table = `
@@ -284,7 +284,7 @@ const members_table = `
     members.memberable_type AS memberable_type_members,
     members.period_status AS period_status_members,
     members.referrer_code AS referrer_code_members,
-    members.updated_at AS updated_at_members,
+    members.updated_at AS updated_at_members
 `;
 
 const membership_types_table = `
@@ -301,7 +301,7 @@ const membership_types_table = `
     membership_types.require_admin_approval AS require_admin_approval_mt,
     membership_types.tag_id AS tag_id_mt,
     membership_types.updated_at AS updated_at_mt,
-    CONCAT('"', SUBSTRING(membership_types.short_description, 1, 1024), '"') AS short_description_mt,
+    CONCAT('"', SUBSTRING(membership_types.short_description, 1, 1024), '"') AS short_description_mt
 `;
 
 const profiles_table = `
@@ -309,34 +309,34 @@ const profiles_table = `
     profiles.id AS id_profiles,
     profiles.created_at AS created_at_profiles,
     profiles.date_of_birth AS date_of_birth_profiles,
-    profiles.primary_address_id AS primary_address_id_profiles,
+    profiles.primary_address_id AS primary_address_id_profiles
 `;
 
 const orders_products_table = `
     -- ORDERS PRODUCTS TABLE
-    op.order_id AS order_id_orders_products,
+    op.order_id AS order_id_orders_products
 `;
 
 const races_table = ` -- todo:
     -- RACES TABLE
-    r.designation as designation_races,
+    r.designation as designation_races
 `;
 
 const registration_audit_table = `
     -- REGISTRATION AUDIT
     registration_audit.id AS id_registration_audit,
     registration_audit.confirmation_number AS confirmation_number_registration_audit,
-    registration_audit.date_of_birth AS date_of_birth_registration_audit,
+    registration_audit.date_of_birth AS date_of_birth_registration_audit
 `;
 
 const registration_companies = `
     -- REGISTRATION COMPANY TABLE
-    registration_companies.name AS name_registration_companies,
+    registration_companies.name AS name_registration_companies
 `;
 
 const users_table = `
     -- USERS TABLE
-    users.created_at AS created_at_users,
+    users.created_at AS created_at_users
 `;
 
 const select_fields = `
@@ -379,26 +379,49 @@ const from_statement_left = ` -- TODO:
 
 const query_all_fields_logic = `
     SELECT 
-        ${derived_fields}
-        ${addresses_table}
-        ${events_table}
-        ${event_types_table}
-        ${membership_applications_table}
-        ${membership_period_table}
-        ${members_table}
-        ${membership_types_table}
-        ${profiles_table}
-        ${orders_products_table}
-        ${races_table}
-        ${registration_audit_table}
-        ${registration_companies}
-        ${users_table}
+        ${derived_fields},
+        ${addresses_table},
+        ${events_table},
+        ${event_types_table},
+        ${membership_applications_table},
+        ${membership_period_table},
+        ${members_table},
+        ${membership_types_table},
+        ${profiles_table},
+        ${orders_products_table},
+        ${races_table},
+        ${registration_audit_table},
+        ${registration_companies},
+        ${users_table},
         ${select_fields}
     ${from_statement_left}
 
     GROUP BY mp.id
 `;
 
+async function query_all_sales_fields_logic_v2() {
+    const query = `
+        -- SET @start_date = '2025-08-01';
+        -- SET @end_date   = '2025-09-01';
+
+        WITH recent_updated_membership_periods AS (
+            SELECT 
+                mp.id AS id
+            FROM membership_periods AS mp
+            WHERE updated_at >= curr_date()
+        )
+            SELECT 
+                ${membership_period_table}
+            FROM membership_periods mp
+                JOIN recent_updated_membership_periods AS ump ON mp.id = ump.id
+        ;
+    `
+    ;
+
+    return query;
+}
+
 module.exports = { 
-    query_all_fields_logic 
+    query_all_fields_logic,
+    query_all_sales_fields_logic_v2
 };
