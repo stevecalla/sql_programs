@@ -11,8 +11,8 @@ fetch('http://localhost:8003/scheduled-all-sales-partial-update')
         return response.text();
     })
     .then(data => {
-        console.log('Response from /scheduled-all-usat-sales_partial_update:', data);
+        console.log('Response from /scheduled-all-usat-sales-partial-update:', data);
     })
     .catch(error => {
-        console.error('Error with request /scheduled-all-usat-sales_partial_update:', error.message);
+        console.error('Error with request /scheduled-all-usat-sales-partial-update:', error.message);
     });

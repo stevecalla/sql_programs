@@ -1,4 +1,4 @@
-console.log(`\nHello - RUN ALL MEMBERSHIP SALES JOB - PARTIAL UPDATE`);
+console.log(`\nHello - RUN ALL MEMBERSHIP SALES JOB - UPDATED AT`);
 console.log("Current Date and Time:", new Date().toLocaleString());
 
 fetch('http://localhost:8003/scheduled-all-sales-updated-at')
@@ -11,8 +11,8 @@ fetch('http://localhost:8003/scheduled-all-sales-updated-at')
         return response.text();
     })
     .then(data => {
-        console.log('Response from /scheduled-all-usat-sales_partial_update:', data);
+        console.log('Response from /scheduled-all-usat-sales-updated-at:', data);
     })
     .catch(error => {
-        console.error('Error with request /scheduled-all-usat-sales_partial_update:', error.message);
+        console.error('Error with request /scheduled-all-usat-sales-updated-at:', error.message);
     });
