@@ -7,113 +7,80 @@ const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
-
 const { execute_google_cloud_command } = require('./google_cloud_execute_command');
 
 // membership-reporting-447700.membership_reporting.membership_data
 
 // Import a GCS file into a table with manually defined schema.
 async function execute_load_big_query_database(options, datasetId, bucketName, schema, directoryName) {
-    const startTime = performance.now();
-    let elapsedTime;
-        
-    // GOOGLE CLOUD = LOGIN AND SET PROPERTY ID
-    await execute_google_cloud_command("login", "Login successful", "login_to_google_cloud");
-    await execute_google_cloud_command("set_property_id", "Project Id set successfully.", "set_project_id_for_google_cloud");
-    
-    // Instantiate clients
-    const bigqueryClient = new BigQuery({ credentials: JSON.parse(process.env.USAT_GOOGLE_SERVICE_ACCOUNT) });
-    const storageClient = new Storage();
-    
-    /**
-     * This sample loads the CSV file at
-     * https://storage.googleapis.com/cloud-samples-data/bigquery/us-states/us-states.csv
-    *
-    * TODO(developer): Replace the following lines with the path to your file.
-    */
+  const startTime = performance.now();
+  let elapsedTime;
 
-    const os_path = await determineOSPath();
-    const directory = `${os_path}${directoryName}`;
+  // GOOGLE CLOUD = LOGIN AND SET PROPERTY ID
+  await execute_google_cloud_command("login", "Login successful", "login_to_google_cloud");
+  await execute_google_cloud_command("set_property_id", "Project Id set successfully.", "set_project_id_for_google_cloud");
 
-    const files = await fs.readdir(directory); // LIST ALL FILES IN THE DIRECTORY
-    console.log('files length = ', files.length)
-    console.log(files);
-    let numberOfFiles = 0;
+  // Instantiate clients
+  const bigqueryClient = new BigQuery({ credentials: JSON.parse(process.env.USAT_GOOGLE_SERVICE_ACCOUNT) });
+  // const storageClient = new Storage(); // not needed when using URIs array
 
-    // Loop through files and load them into the same BigQuery table
-    for (const filePath of files) {
-        let metadata = "";
+  // Build list of GCS URIs from local filenames
+  const os_path = await determineOSPath();
+  const directory = `${os_path}${directoryName}`;
+  const files = (await fs.readdir(directory)).filter(f => f.endsWith('.csv'));
+  console.log('files length = ', files.length);
+  console.log(files);
 
-        if (schema) {
-            metadata =  {
-                sourceFormat: 'CSV',
-                skipLeadingRows: 1,
-                schema: { fields: schema },
-                location: 'US',
-                compression: 'GZIP',              // <-- Added this line
-                writeDisposition: 'WRITE_APPEND', // Append data to the table
-                // writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
-            };
-        } else {
-            metadata =  {
-                sourceFormat: 'CSV',
-                skipLeadingRows: 1,
-                autodetect: true,
-                location: 'US',
-                compression: 'GZIP',              // <-- Added this line
-                writeDisposition: 'WRITE_APPEND', // Append data to the table
-                // writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
-            };
-        }
-        // Configure the load job metadata
-        // const metadata =  {
-        //     sourceFormat: 'CSV',
-        //     skipLeadingRows: 1,
-        //     schema: { fields: schema },
-        //     location: 'US',
-        //     // writeDisposition: 'WRITE_APPEND', // Append data to the table
-        //     writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
-        // };
+  if (!files.length) {
+    console.log('No CSV files found. Skipping load.');
+    return '0.00';
+  }
 
-        // const metadata = options[0].tableId === "membership_data" ? {
-        //     sourceFormat: 'CSV',
-        //     skipLeadingRows: 1,
-        //     schema: { fields: schema },
-        //     location: 'US',
-        //     // writeDisposition: 'WRITE_APPEND', // Append data to the table
-        //     writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
-        // } : {
-            // sourceFormat: 'CSV',
-            // skipLeadingRows: 1,
-            // autodetect: true,
-            // location: 'US',
-            // // writeDisposition: 'WRITE_APPEND', // Append data to the table
-            // writeDisposition: 'WRITE_TRUNCATE', // overwrite the current table
-        // };
+  const uris = files.map(f => `gs://${bucketName}/${f}`);
 
-        // Load data from the file into the BigQuery table
-        const [job] = await bigqueryClient // without await this does error
-            .dataset(datasetId) // Replace with your dataset ID
-            .table(options[0].tableId) // Replace with the single target table name
-            .load(storageClient.bucket(bucketName).file(filePath), metadata);
+  // One metadata object for the single load job
+  const metadata = schema ? {
+    sourceFormat: 'CSV',
+    skipLeadingRows: 1,
+    schema: { fields: schema },
+    location: 'US',
+    compression: 'GZIP',              // files were uploaded with gsutil -Z
+    writeDisposition: 'WRITE_APPEND', // Append data to the table
+    // writeDisposition: 'WRITE_TRUNCATE',
+  } : {
+    sourceFormat: 'CSV',
+    skipLeadingRows: 1,
+    autodetect: true,
+    location: 'US',
+    compression: 'GZIP',              // files were uploaded with gsutil -Z
+    writeDisposition: 'WRITE_APPEND',
+    // writeDisposition: 'WRITE_TRUNCATE',
+  };
 
-        console.log(`File ${++numberOfFiles} of ${files.length}, File name: ${filePath}`);
-        console.log(`Job ${job.id} completed.`);
+  // Single load job for all files
+  const [job] = await bigqueryClient
+    .dataset(datasetId)
+    .table(options[0].tableId)
+    .load(uris, metadata);
 
-        // Check the job's status for errors
-        const errors = job.status.errors;
-        if (errors && errors.length > 0) {
-            throw errors;
-        }
-    }
-    const endTime = performance.now();
-    elapsedTime = ((endTime - startTime) / 1000).toFixed(2); // CONVERT MS TO SEC
-    console.log(`STEP #4: Elapsed time: ${elapsedTime}\n`);
-    return elapsedTime;
+  console.log(`Job ${job.id} started for ${uris.length} files...`);
+  // Optional: wait for completion + check for errors
+  const [metadataResp] = await job.getMetadata();
+  const errors = metadataResp.status?.errors;
+  if (errors && errors.length > 0) {
+    console.error('Load job errors:', errors);
+    throw errors;
+  }
+  console.log(`Job ${job.id} completed.`);
+
+  const endTime = performance.now();
+  elapsedTime = ((endTime - startTime) / 1000).toFixed(2);
+  console.log(`STEP #4: Elapsed time: ${elapsedTime}\n`);
+  return elapsedTime;
 }
 
 // execute_load_big_query_database();
 
 module.exports = {
-    execute_load_big_query_database,
-}
+  execute_load_big_query_database,
+};
