@@ -10,13 +10,13 @@ echo "Current user: $current_user"
 
 # PATH TO JS FILE
 if [ "$current_user" == "steve-calla" ]; then
-    JS_FILE="/home/steve-calla/development/usat/sql_programs/utilities/cron_get_all_member_sales_partial_update/script.js"
+    JS_FILE="/home/steve-calla/development/usat/sql_programs/utilities/cron_get_all_member_sales_full_update/script.js"
     NODE_PATH="/home/$current_user/.nvm/versions/node/v18.20.4/bin/node"
 elif [ "$current_user" == "usat-server" ]; then
-    JS_FILE="/home/usat-server/development/usat/sql_programs/utilities/cron_get_all_member_sales_partial_update/script.js"
+    JS_FILE="/home/usat-server/development/usat/sql_programs/utilities/cron_get_all_member_sales_full_update/script.js"
     NODE_PATH="/usr/bin/node"
 elif [ "$current_user" == "calla" ]; then
-    JS_FILE="C:/Users/calla/development/usat/sql_programs/utilities/cron_get_all_member_sales_partial_update/script.js"
+    JS_FILE="C:/Users/calla/development/usat/sql_programs/utilities/cron_get_all_member_sales_full_update/script.js"
     /c/Program\ Files/nodejs/node "$JS_FILE"
 else
     echo "Unknown user: $current_user"
@@ -40,7 +40,7 @@ else
 fi
 
 # # WINDOWS
-# JS_FILE="C:/Users/calla/development/usat/sql_programs/utilities/cron_get_all_member_sales_partial_update/script.js"
+# JS_FILE="C:/Users/calla/development/usat/sql_programs/utilities/cron_get_all_member_sales_full_update/script.js"
 # /c/Program\ Files/nodejs/node "$JS_FILE"
 
 # End timer
