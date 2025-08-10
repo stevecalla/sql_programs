@@ -114,7 +114,7 @@ app.get('/scheduled-all-sales-partial-update', async (req, res) => {
 });
 
 // Endpoint to handle crontab all usat sales data job
-// curl http://localhost:8003/scheduled-all-sales-updated_at
+// curl http://localhost:8003/scheduled-all-sales-updated-at
 app.get('/scheduled-all-sales-updated-at', async (req, res) => {
     console.log('/scheduled-all-sales-updated-at route req.rawHeaders = ', req.rawHeaders);
 
