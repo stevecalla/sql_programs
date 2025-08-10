@@ -82,6 +82,7 @@
     "@google-cloud/storage": "^7.16.0",
     "@ngrok/ngrok": "^1.5.1",
     "@slack/web-api": "^7.5.0",
+    "@xmldom/xmldom": "^0.9.8",
     "axios": "^1.7.7",
     "body-parser": "^1.20.3",
     "dayjs": "^1.11.10",
@@ -91,7 +92,6 @@
     "mysql2": "^3.9.2",
     "ssh2": "^1.15.0",
     "tinyurl": "^1.1.7",
-    "xmldom": "^0.6.0",
     "xpath": "^0.0.34"
   },
   "devDependencies": {

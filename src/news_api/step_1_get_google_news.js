@@ -1,4 +1,4 @@
-const { DOMParser } = require('xmldom');
+const { DOMParser } = require('@xmldom/xmldom');
 const xpath = require('xpath');
 
 async function get_google_news_rss(search_term, count) {
