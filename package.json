@@ -9,7 +9,10 @@
     "pm2_list": "npx pm2 list",
     "pm2_restart_all": "npx pm2 restart all",
     "pm2_logs_all": "npx pm2 logs all",
-    
+    "pm2_delete_all": "npx pm2 delete all",
+    "pm2_run_all_servers": "echo '▶ (1 of 9) Starting pm2_start_slack' && npm run pm2_start_slack && echo '▶ (2 of 9) Starting pm2_start_sales_2200' && npm run pm2_start_sales_2200 && echo '▶ (3 of 9) Starting pm2_start_race_2200' && npm run pm2_start_race_2200 && echo '▶ (4 of 9) Starting pm2_start_recognition_2200' && npm run pm2_start_recognition_2200 && echo '▶ (5 of 9) Starting pm2_start_events_2200' && npm run pm2_start_events_2200 && echo '▶ (6 of 9) Starting pm2_start_revenue_2200' && npm run pm2_start_revenue_2200 && echo '▶ (7 of 9) Starting pm2_start_slack_events_2200' && npm run pm2_start_slack_events_2200 && echo '▶ (8 of 9) Starting pm2_start_slack_races_2200' && npm run pm2_start_slack_races_2200 && echo '▶ (9 of 9) Starting pm2_start_slack_news_2200' && npm run pm2_start_slack_news_2200",
+    "get_date": "sh -c 'date \"+%Y-%m-%d %H:%M:%S\"'",
+
     "pm2_start_slack": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack.js --name usat_slack --no-autorestart --max-memory-restart 3G --cron-restart '30 * * * *' --node-args=\"--expose-gc\"",
     "pm2_start_slack_test": "npx pm2 start server_slack.js --name usat_slack",
     "pm2_logs_slack": "npx pm2 logs usat_slack",
