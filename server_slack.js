@@ -1,13 +1,13 @@
- const express = require('express');
+const express = require('express');
 const bodyParser = require('body-parser');
-
-// NGROK TUNNEL FOR TESTING
-const run_ngrok = false;
-const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // EXPRESS SERVER
 const app = express();
 const PORT = process.env.PORT || 8001;
+
+// NGROK TUNNEL FOR TESTING
+const run_ngrok = false;
+const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // SLACK - SALES DATA
 const { execute_run_slack_sales_data_jobs } = require('./src/slack_sales_data/step_0_run_slack_sales_data_jobs_01125');
@@ -15,6 +15,28 @@ const { execute_run_slack_sales_data_jobs } = require('./src/slack_sales_data/st
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+
+// Test endpoint
+// curl http://localhost:8001/get-member-sales-test
+app.get('/get-member-sales-test', async (req, res) => {
+    console.log('/get-member-sales-test route req.rawHeaders = ', req.rawHeaders);
+
+    try {
+        // Send a success response
+        res.status(200).json({
+            message: 'Slack member sales server is up and running. Stands Ready.',
+        });
+
+    } catch (error) {
+        console.error('Error querying or sending slack member sales data.', error);
+        
+        // Send an error response
+        res.status(500).json({
+            message: 'Error querying or sending slack member sales data.',
+            error: error.message || 'Internal Server Error',
+        });
+    }
+});
 
 // Endpoint to handle slack slash "/sales" command
 app.post('/get-member-sales', async (req, res) => {
@@ -38,14 +60,14 @@ app.post('/get-member-sales', async (req, res) => {
         // STEP #3 QUERY SLACK DATA & SEND MESSAGE
 
         // only used for STEP #3 to route slack messages
-        const is_cron_job = false; 
+        const is_cron_job = false;
         const { channel_id, channel_name, user_id } = req.body;
 
         await execute_run_slack_sales_data_jobs(is_cron_job, channel_id, channel_name, user_id);
-        
+
     } catch (error) {
         console.error('Error quering or sending membership sales data:', error);
-        
+
         // Send an error response
         res.status(500).json({
             message: 'Error quering or sending membership sales data.',
@@ -55,8 +77,9 @@ app.post('/get-member-sales', async (req, res) => {
 });
 
 // Endpoint to handle crontab usat slack sales data job
+// curl http://localhost:8001/scheduled-slack-sales
 app.get('/scheduled-slack-sales', async (req, res) => {
-    console.log('/scheduled-leads route req.rawHeaders = ', req.rawHeaders);
+    console.log('/scheduled-slack-sales route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // STEP #1 GET RAW SALES DATA / EXPORT TO CSV
@@ -102,7 +125,7 @@ app.listen(PORT, () => {
     // 192.168.1.87:8001
 
     // NGROK TUNNEL
-    if(run_ngrok) {
+    if (run_ngrok) {
         create_ngrok_tunnel(PORT);
     }
 });

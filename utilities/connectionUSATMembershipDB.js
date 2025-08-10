@@ -37,11 +37,10 @@ async function create_usat_membership_connection() {
                 });
 
                 const connection = mysql.createConnection({
-                ...dbConfig,
-                stream,
-                ssl: {
-                    rejectUnauthorized: false,
-                },
+                    ...dbConfig,
+                    stream,
+                    ssl: { rejectUnauthorized: false },
+                    multipleStatements: true, // 👈 allow multiple SQL statements
                 });
 
                 resolve({ connection, sshClient });

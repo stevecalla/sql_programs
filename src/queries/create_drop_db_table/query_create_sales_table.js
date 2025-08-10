@@ -10,7 +10,7 @@ const derived_fields = `
   actual_membership_fee_6_sa DECIMAL(10,2),
   actual_membership_fee_6_rule_sa VARCHAR(255),
   source_2_sa VARCHAR(255),
-  is_koz_acception_sa BOOLEAN,
+  is_koz_acception_sa BOOLEAN
 `;
 
 const addresses_table = `
@@ -19,7 +19,7 @@ const addresses_table = `
   lng_addresses FLOAT,
   lat_addresses FLOAT,
   state_code_addresses VARCHAR(50),
-  country_code_addresses VARCHAR(255),
+  country_code_addresses VARCHAR(255)
 `;
 
 const events_table = `
@@ -54,14 +54,14 @@ const events_table = `
   status_events VARCHAR(50),        
   
   race_director_id_events INT,                
-  last_season_event_id INT,                
+  last_season_event_id INT               
 `;
 
 const event_types_table = ` -- todo:
     -- EVENT TYPES TABLE
     id_event_types VARCHAR(100), 
     id_event_type_events VARCHAR(100),
-    name_event_type VARCHAR(100),
+    name_event_type VARCHAR(100)
 `;
 
 const membership_applications_table = `
@@ -104,7 +104,7 @@ const membership_applications_table = `
   club_affiliations_ma TEXT,
   denial_reason_ma TEXT,
   payment_explanation_ma TEXT,
-  upgrade_code_ma TEXT, 
+  upgrade_code_ma TEXT
 `;
 
 const membership_period_table = `
@@ -141,7 +141,7 @@ const membership_period_table = `
   updated_at_mp DATETIME, 
   upgraded_from_id_mp INT,
   upgraded_to_id_mp INT,
-  waiver_status_mp VARCHAR(255),
+  waiver_status_mp VARCHAR(255)
 `;
 
 const members_table = `
@@ -156,7 +156,7 @@ const members_table = `
   memberable_type_members VARCHAR(255),
   period_status_members VARCHAR(255),
   referrer_code_members VARCHAR(255),
-  updated_at_members DATETIME,
+  updated_at_members DATETIME
 `;
 
 const membership_types_table = `
@@ -173,7 +173,7 @@ const membership_types_table = `
   require_admin_approval_mt BOOLEAN,
   tag_id_mt INT,
   updated_at_mt DATETIME,
-  short_description_mt TEXT,
+  short_description_mt TEXT
 `;
 
 const profiles_table = `
@@ -181,34 +181,34 @@ const profiles_table = `
   id_profiles INT,
   created_at_profiles DATETIME,
   date_of_birth_profiles DATE,
-  primary_address_id_profiles INT,
+  primary_address_id_profiles INT
 `;
 
 const orders_products_table = `
     -- ORDERS PRODUCTS TABLE
-    order_id_orders_products INT,
+    order_id_orders_products INT
 `;
 
 const races_table = ` -- TODO:
     -- RACES TABLE
-    designation_races VARCHAR(100),
+    designation_races VARCHAR(100)
 `;
 
 const registration_audit_table = `
   -- REGISTRATION AUDIT
   id_registration_audit INT,
   confirmation_number_registration_audit VARCHAR(255),
-  date_of_birth_registration_audit DATE,
+  date_of_birth_registration_audit DATE
 `;
 
 const registration_companies = `
     -- REGISTRATION COMPANY TABLE
-    name_registration_companies VARCHAR(255),
+    name_registration_companies VARCHAR(255)
 `;
 
 const users_table = `
   -- USERS TABLE
-  created_at_users DATETIME,
+  created_at_users DATETIME
 `;
 
 const select_fields = `
@@ -216,7 +216,7 @@ const select_fields = `
   cart_label_op VARCHAR(255),
   amount_per_op DECIMAL(10, 2),
   discount_op DECIMAL(10, 2),
-  amount_refunded_op DECIMAL(10, 2),
+  amount_refunded_op DECIMAL(10, 2)
 `;
 
 const index_fields = `
@@ -235,6 +235,10 @@ const index_fields = `
 
   INDEX idx_starts (starts_mp),
   INDEX idx_ends (ends_mp),
+  INDEX idx_purchased_on_year_mp (purchased_on_year_mp),
+  INDEX idx_purchased_on_date_mp (purchased_on_date_mp),
+  INDEX idx_updated_at_mp (updated_at_mp),
+  INDEX idx_purchased_on_mp_purchased_on_year_mp (purchased_on_date_mp, purchased_on_year_mp),
   
   INDEX idx_date_of_birth_profiles (date_of_birth_profiles),
   INDEX idx_date_of_birth_ma (date_of_birth_ma),
@@ -251,22 +255,32 @@ async function query_create_all_membership_sales_table(table_name) {
 
   const query = `
     CREATE TABLE IF NOT EXISTS ${table_name} (
-      ${derived_fields}
-      ${addresses_table}
-      ${events_table}
-      ${event_types_table}
-      ${membership_applications_table}
-      ${membership_period_table}
-      ${members_table}
-      ${membership_types_table}
-      ${profiles_table}
-      ${orders_products_table}
-      ${races_table}
-      ${registration_audit_table}
-      ${registration_companies}
-      ${users_table}
-      ${select_fields}
+      ${derived_fields},
+      ${addresses_table},
+      ${events_table},
+      ${event_types_table},
+      ${membership_applications_table},
+      ${membership_period_table},
+      ${members_table},
+      ${membership_types_table},
+      ${profiles_table},
+      ${orders_products_table},
+      ${races_table},
+      ${registration_audit_table},
+      ${registration_companies},
+      ${users_table},
+      ${select_fields},
       ${index_fields}
+    );
+  `;
+
+  return query;
+}
+
+async function query_create_sales_table(table_name) {
+  const query = `
+    CREATE TABLE IF NOT EXISTS ${table_name} (
+      ${membership_period_table}
     );
   `;
 
@@ -275,4 +289,5 @@ async function query_create_all_membership_sales_table(table_name) {
 
 module.exports = {
   query_create_all_membership_sales_table,
+  query_create_sales_table,
 }
