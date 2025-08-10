@@ -18,6 +18,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 // Test endpoint
+// curl http://localhost:8003/scheduled-all-sales-test
 app.get('/scheduled-all-sales-test', async (req, res) => {
     console.log('/scheduled_all_sales-test route req.rawHeaders = ', req.rawHeaders);
 
@@ -63,6 +64,7 @@ app.get('/scheduled-all-sales', async (req, res) => {
 });
 
 // Endpoint to handle crontab all usat sales data job
+// curl http://localhost:8003/scheduled-all-sales-full-update
 app.get('/scheduled-all-sales-full-update', async (req, res) => {
     console.log('/scheduled-all-sales_v2 route req.rawHeaders = ', req.rawHeaders);
 
@@ -87,6 +89,7 @@ app.get('/scheduled-all-sales-full-update', async (req, res) => {
 });
 
 // Endpoint to handle crontab all usat sales data job
+// curl http://localhost:8003/scheduled-all-sales-partial-update
 app.get('/scheduled-all-sales-partial-update', async (req, res) => {
     console.log('/scheduled-all-sales_v2 route req.rawHeaders = ', req.rawHeaders);
 
