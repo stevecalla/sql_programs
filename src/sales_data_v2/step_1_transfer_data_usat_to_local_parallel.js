@@ -151,7 +151,7 @@ class Semaphore {
   }
   release() {
     this.inUse--;
-    const next = this.queue.shift();
+    const next = this.queue.shift() ;
     if (next) next();
   }
 }
@@ -190,13 +190,13 @@ async function process_stream_parallel(
 
       const p = (async () => {
         try {
-          if (update_mode = 'full')
+          if (update_mode === 'full')
             await flush_batch_upsert(dst, TABLE_NAME, batch);
 
-          if (update_mode = 'partial')
+          if (update_mode === 'partial')
             await flush_batch_replace(dst, TABLE_NAME, batch);
 
-          if (update_mode = 'updated_at')
+          if (update_mode === 'updated_at')
             await flush_batch_replace(dst, TABLE_NAME, batch);
 
           console.log(`Flushed batch. Rows processed so far: ${rows_processed}`);
@@ -233,7 +233,7 @@ async function process_stream_parallel(
 }
 
 // Updated execute_transfer_usat_to_local function to use process_stream_parallel
-async function execute_transfer_usat_to_local_parallel(update_mode = 'updated-at') {
+async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at') {
   const BATCH_SIZE = 100;
   const TABLE_NAME = `all_membership_sales_data_2015_left`;
   const TABLE_STRUCTURE = await query_create_all_membership_sales_table(TABLE_NAME);
@@ -242,7 +242,7 @@ async function execute_transfer_usat_to_local_parallel(update_mode = 'updated-at
 
   const membership_period_ends = '2008-01-01';
   const start_year_mtn = 2010; // Default = 2010
-  const start_date_mtn = update_mode === 'updated_at' ? get_first_day_of_prior_year() : '2010-01-01';
+  const start_date_mtn = update_mode === 'updated_at' ? await get_first_day_of_prior_year() : '2010-01-01';
   let end_date_mtn = await get_last_day_of_year();
   let updated_at_date_mtn = await get_yesterdays_date(); // Return yesterday in 'YYYY-MM-DD' format
   
