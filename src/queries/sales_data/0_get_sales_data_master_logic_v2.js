@@ -19,11 +19,11 @@ function query_get_sales_data(query_membership_category_logic, year, start_date,
    ` : `
             AND membership_periods.updated_at >= '${updated_at_date_mtn}'
    `;
-   
+
    return `
       -- STEP #1 - CREATE SOURCE 2
       WITH source_2_type AS (
-         ${query_source_2_logic(year, start_date, end_date, operator, membership_period_ends, update_code, updated_at_date_mtn)} -- TODO: SET YEAR, SET OPERATOR
+         ${query_source_2_logic(year, start_date, end_date, operator, membership_period_ends, update_code, updated_at_date_mtn)}
       ),
 
       -- STEP #2 - CREATE KOZ ACCEPTION
@@ -87,7 +87,7 @@ function query_get_sales_data(query_membership_category_logic, year, start_date,
       -- ORDER BY purchased_on_year_mp
       ;
    `
-;
+      ;
 }
 
 module.exports = { query_get_sales_data };

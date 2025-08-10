@@ -6,7 +6,6 @@ const mysqlP = require('mysql2/promise'); // only for dst.execute
 const { create_usat_membership_connection } = require('../../utilities/connectionUSATMembershipDB');
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { runTimer, stopTimer } = require('../../utilities/timer');
-const { upsert_batch } = require('../../utilities/data_query_criteria/upsert_batch_logic');
 
 const { query_create_all_membership_sales_table } = require('../queries/create_drop_db_table/query_create_sales_table');
 const { query_get_sales_data } = require('../queries/sales_data/0_get_sales_data_master_logic_v2');
@@ -15,7 +14,7 @@ const { generate_membership_category_logic } = require('../../utilities/data_que
 // UTILITY FUNCTIONS
 async function get_total_rows_count(src, start_date_mtn) {
   const [count_result] = await src.promise().query(`SELECT COUNT(DISTINCT(id)) AS total FROM membership_periods WHERE starts >= '${start_date_mtn}';`);
-
+  
   if (count_result && count_result.length > 0) {
     return count_result[0].total;  // Access the total count value
   } else {
@@ -56,7 +55,7 @@ async function get_todays_date() {
   const year = today.getFullYear(); // Get the current year
   const month = String(today.getMonth() + 1).padStart(2, '0'); // Get the current month (0-indexed, so we add 1)
   const day = String(today.getDate()).padStart(2, '0'); // Get the current day
-
+  
   // Return the formatted date in 'YYYY-MM-DD' format
   return `${year}-${month}-${day}`;
 }
@@ -85,26 +84,10 @@ async function get_dst_connection() {
 // PROCESSING FUNCTIONS
 // Create (or replace) the destination table
 async function create_target_table(dst, TABLE_NAME, TABLE_STRUCTURE, update_mode) {
-  // if (update_mode === 'full')
-  //   await dst.execute(`DROP TABLE IF EXISTS \`${TABLE_NAME}\``);
+  if (update_mode === 'full')
+    await dst.execute(`DROP TABLE IF EXISTS \`${TABLE_NAME}\``);
 
   await dst.execute(TABLE_STRUCTURE);
-}
-
-// Upsert batch processing with full column list
-async function flush_batch_upsert(dst, tableName, rows) {
-  if (!rows?.length) return { affectedRows: 0 };
-
-  const res = await upsert_batch(dst, tableName, rows, {
-    // 'intersection' = only columns present in both the table and the row objects
-    // Great when streaming partial columns or when schema evolves.
-    schemaColumnsMode: 'intersection',
-    // Or 'all' to use every table column (missing values become NULL on insert)
-    // schemaColumnsMode: 'all',
-    transaction: false,
-  });
-
-  return { affectedRows: res.affectedRows };
 }
 
 // Replace batch processing
@@ -181,12 +164,7 @@ async function process_stream_parallel(
 
       const p = (async () => {
         try {
-          if (update_mode = 'partial')
-            await flush_batch_replace(dst, TABLE_NAME, batch);
-
-          if (update_mode = 'full')
-            await flush_batch_upsert(dst, TABLE_NAME, batch);
-
+          await flush_batch_replace(dst, TABLE_NAME, batch);
           console.log(`Flushed batch. Rows processed so far: ${rows_processed}`);
         } finally {
           sem.release();
