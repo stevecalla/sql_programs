@@ -5,10 +5,10 @@ const { execute_upload_csv_to_cloud } = require('./step_2_upload_csv_to_cloud');
 const { execute_create_bigquery_dataset } = require('./step_3_create_bigquery_dataset');
 const { execute_load_big_query_database } = require('./step_4_load_biq_query_database');
 
-const run_step_1 = true;
-const run_step_2 = true;
-const run_step_3 = true;
-const run_step_4 = true;
+const run_step_1 = true; // retrieve data
+const run_step_2 = true; // upload csv to google cloud bucket
+const run_step_3 = true; // create bigquery dataset
+const run_step_4 = true; // load big query with new data
 
 async function executeSteps(stepFunctions, options, datasetId, bucketName, schema, directoryName) {
 

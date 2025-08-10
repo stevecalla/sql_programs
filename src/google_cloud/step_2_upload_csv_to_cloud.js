@@ -1,68 +1,51 @@
+const os = require('os');
 const fs = require('fs').promises;
+const path = require('path');
 const { exec } = require('child_process');
-
 const dotenv = require('dotenv');
 dotenv.config({ path: "../../.env" });
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { execute_google_cloud_command } = require('./google_cloud_execute_command');
 
-// ASYNC FUNCTION TO UPLOAD CSV FILES TO GOOGLE CLOUD STORAGE
 async function execute_upload_csv_to_cloud(options, datasetId, bucketName, schema, directoryName) {
-  
   const destinationPath = `gs://${bucketName}/`;
 
-  try {
-    const startTime = performance.now();
+  // If you already authenticate at process start, you can skip login.
+  await execute_google_cloud_command("set_property_id", "Project Id set successfully.");
 
-    const os_path = await determineOSPath();
-    const directory = `${os_path}${directoryName}`;
+  const os_path = await determineOSPath();
+  const directory = `${os_path}${directoryName}`;
 
-    // GOOGLE CLOUD = LOGIN AND SET PROPERTY ID
-    await execute_google_cloud_command("login", "Login successful");
-    await execute_google_cloud_command("set_property_id", "Project Id set successfully.");
-    
-    const files = await fs.readdir(directory); // LIST ALL FILES IN THE DIRECTORY
-    console.log(files);
-    let numberOfFiles = 0;
+  // 📌 List CSV files in the directory before upload
+  const files = (await fs.readdir(directory)).filter(f => f.endsWith('.csv'));
+  console.log("Files to be uploaded:");
+  files.forEach(file => console.log(path.join(directory, file)));
 
-    // ITERATE THROUGH EACH FILE USING A FOR...OF LOOP
-    for (const file of files) {
-      if (file.endsWith('.csv')) {
-        numberOfFiles++;
-        const localFilePath = `${directory}/${file}`;
-        const command = `gsutil cp "${localFilePath}" ${destinationPath}`;
+  const start = performance.now();
 
-        // AWAIT EXECUTION OF GSUTIL CP COMMAND
-        await new Promise((resolve, reject) => {
-          exec(command, (error, stdout, stderr) => {
-            if (error) {
-              console.error('Error:', error);
-              reject(error); // REJECT THE PROMISE IF THERE'S AN ERROR
-              return;
-            }
+  const cmd = [
+    `gsutil -m`,
+    `-o "GSUtil:parallel_thread_count=24"`,
+    ...(os.platform() !== 'win32' ? [`-o "GSUtil:parallel_process_count=4"`] : []),
+    // `-o "GSUtil:parallel_composite_upload_threshold=150M"`, // optional: for very large files
+    `cp`,
+    `-Z`, // or use `-z csv` for broader compatibility
+    `*.csv`,
+    destinationPath
+  ].join(' ');
 
-            console.log('File uploaded successfully.');
-            console.log('stdout:', stdout);
-            console.error('stderr:', stderr);
+  await new Promise((resolve, reject) => {
+    exec(cmd, { cwd: directory }, (error, stdout, stderr) => {
+      if (error) return reject(error);
+      if (stdout) console.log(stdout);
+      if (stderr) console.error(stderr);
+      resolve();
+    });
+  });
 
-            resolve(); // RESOLVE THE PROMISE AFTER UPLOAD COMPLETES
-          });
-        });
-      }
-    }
-
-    const endTime = performance.now();
-    const elapsedTime = ((endTime - startTime) / 1000).toFixed(2); // CONVERT MS TO SEC
-    return elapsedTime; // RETURN ELAPSED TIME AFTER ALL UPLOADS COMPLETE
-  } catch (error) {
-    console.error('Error:', error);
-    throw error; // THROW ERROR IF AN ERROR OCCURS DURING UPLOAD PROCESS
-  }
+  const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+  return elapsed;
 }
 
-// execute_upload_csv_to_cloud();
-
-module.exports = {
-  execute_upload_csv_to_cloud,
-};
+module.exports = { execute_upload_csv_to_cloud };
