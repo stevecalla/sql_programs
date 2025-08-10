@@ -3,12 +3,39 @@ dotenv.config({ path: "./.env" });
 
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
-// GET & LOAD EVENT DATA
-const { execute_transfer_usat_to_local } = require('./step_1_transfer_data_usat_to_local'); // Step #1: tranfer USAT event data to Local DB
+const { execute_transfer_usat_to_local_parallel } = require('./step_1_transfer_data_usat_to_local_parallel');
+const { execute_load_region_data } = require('./step_2a_load_region_table');
+
+const { execute_create_sales_key_metrics } = require('./step_3_create_sales_key_metrics_010425');
+const { execute_load_big_query_sales_key_metrics } = require('./step_3a_load_bq_sales_key_metrics');
+
+const { execute_create_year_over_year_key_metrics } = require('./step_4_create_sales_year_over_year_metrics_011425');
+const { execute_load_big_query_sales_year_over_year_metrics } = require('./step_4a_load_bq_year_over_year_metrics');
+
+const { execute_load_sales_goal_data } = require('./step_5_load_sales_goals');
+const { execute_load_big_query_sales_goals } = require('./step_5a_load_bq_sales_goals');
+
+const { execute_create_actual_vs_goal_metrics } = require('./step_6_create_actual_vs_goal_metrics_042925');
+const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load_bq_actual_vs_goal_metrics');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-async function executeSteps(stepFunctions, stepName) {
+const run_step_1  = true; // transfer sales data from usat vapor to local db
+const run_step_2a = true; // load region table
+
+const run_step_3  = true; // create sales key metrics stats table
+const run_step_3a = true; // load sales key metrics stats to biqquery
+
+const run_step_4  = true; // create year-over-year common date table
+const run_step_4a = true; // load sales key metrics stats to biqquery
+
+const run_step_5  = true; // load sales goal data
+const run_step_5a = true; // load sales goals to bigquery
+
+const run_step_6  = true; // create actual vs goal data table
+const run_step_6a = true; // load actual vs goal to bigquery
+
+async function executeSteps(stepFunctions, stepName, update_mode) {
   for (let i = 0; i < stepFunctions.length; i++) {
     
     const start_local_time = new Date().toLocaleString(); // Get the current local date and time as a string
@@ -19,15 +46,15 @@ async function executeSteps(stepFunctions, stepName) {
     console.log(`\n*************** STARTING ${stepName[i]} ***************\n`);
     try {
       if (stepFunction) {
-        const results = await stepFunction();
+        const results = await stepFunction(update_mode);
 
         const endTime = performance.now();
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2);
         const end_local_time = new Date().toLocaleString(); // Get the current local date and time as a string
 
         const message = results ? 
-          `${stepName[i]} ${results}. START: ${start_local_time} MTN. Elapsed Time: ${elapsedTime} sec. END: = ${end_local_time} MTN.` : 
-          `$${stepName[i]} ERROR: ${results}. START: ${start_local_time} MTN. Time now = ${end_local_time} MTN. Elapsed Time: ${elapsedTime} sec. `;
+          `${stepName[i]} SUCCESS. START: ${start_local_time} MTN. Elapsed Time: ${elapsedTime} sec. END: = ${end_local_time} MTN.` : 
+          `$${stepName[i]} ERROR: NOT executed successfully. START: ${start_local_time} MTN. Time now = ${end_local_time} MTN. Elapsed Time: ${elapsedTime} sec. `;
 
         console.log(message);
         await slack_message_api(message, "steve_calla_slack_channel");
@@ -64,24 +91,40 @@ async function executeSteps(stepFunctions, stepName) {
   }
 }
 
-async function execute_run_sales_data_jobs() {
+async function execute_run_sales_data_jobs_v2(update_mode) {
   const startTime = performance.now();
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = true; // tranfer USAT event data to Local DB
-
   try {
     const stepFunctions = [
-      run_step_1 ? execute_transfer_usat_to_local : null,
-
+      run_step_1  ? execute_transfer_usat_to_local_parallel : null,
+      run_step_2a ? execute_load_region_data : null,
+      run_step_3  ? execute_create_sales_key_metrics : null,
+      run_step_3a ? execute_load_big_query_sales_key_metrics : null,
+      run_step_4  ? execute_create_year_over_year_key_metrics : null,
+      run_step_4a ? execute_load_big_query_sales_year_over_year_metrics : null,
+      run_step_5  ? execute_load_sales_goal_data : null,
+      run_step_5a ? execute_load_big_query_sales_goals : null,
+      run_step_6  ? execute_create_actual_vs_goal_metrics : null,
+      run_step_6a ? execute_load_big_query_actual_vs_goal_metrics : null,
     ];
 
     const stepName = [
-      `Step #1 - Transfer data from USAT to Local db:`, 
+      `Step #1 - Get Sales Data:`, 
+      // `Step #2 - Load Sales Data: `, 
+      `Step #2a - Load Region Data: `, 
+      `Step #3 - Create Sales Key Metrics: `, 
+      `Step #3a - Load Sales Key Metrics to BQ: `, 
+      `Step #4 - Create Year-over-Year Data: `, 
+      `Step #4a - Load Sales YoY Metris to BQ: `,
+      `Step #5 - Create Sales Data:`,
+      `Step #5a - Load Sales Goals to BQ`,
+      `Step 6 - Create Actual vs Goal Metrics Table`,
+      `Step #6a - Load Actual vs Goal to BQ`,
     ];
 
-    await executeSteps(stepFunctions, stepName); // Call the new function
+    await executeSteps(stepFunctions, stepName, update_mode); // Call the new function
 
   } catch (error) {
     console.error('Error in main process:', error); // More specific message
@@ -96,10 +139,13 @@ async function execute_run_sales_data_jobs() {
   return elapsedTime;
 }
 
-if (require.main === module) {
-  execute_run_sales_data_jobs();
-}
+// if (require.main === module) {
+//   // const update_mode = 'full';  // Update the full dataset
+//   const update_mode = 'partial';  // Update based on the 'updated_at' date
+
+//   execute_run_sales_data_jobs_v2(update_mode);
+// }
 
 module.exports = {
-  execute_run_sales_data_jobs,
+  execute_run_sales_data_jobs_v2,
 };

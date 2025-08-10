@@ -216,7 +216,7 @@ const membership_applications_table = `
     CONCAT('"', SUBSTRING(ma.club_affiliations, 1, 1024), '"') AS club_affiliations_ma, 
     CONCAT('"', SUBSTRING(ma.denial_reason, 1, 1024), '"') AS denial_reason_ma, 
     CONCAT('"', SUBSTRING(ma.payment_explanation, 1, 1024), '"') AS payment_explanation_ma, 
-    SUBSTRING(ma.upgrade_code, 1, 1024) AS upgrade_code_ma,    
+    SUBSTRING(ma.upgrade_code, 1, 1024) AS upgrade_code_ma  
 `;
 
 const membership_period_table = `     
@@ -399,29 +399,6 @@ const query_all_fields_logic = `
     GROUP BY mp.id
 `;
 
-async function query_all_sales_fields_logic_v2() {
-    const query = `
-        -- SET @start_date = '2025-08-01';
-        -- SET @end_date   = '2025-09-01';
-
-        WITH recent_updated_membership_periods AS (
-            SELECT 
-                mp.id AS id
-            FROM membership_periods AS mp
-            WHERE updated_at >= curr_date()
-        )
-            SELECT 
-                ${membership_period_table}
-            FROM membership_periods mp
-                JOIN recent_updated_membership_periods AS ump ON mp.id = ump.id
-        ;
-    `
-    ;
-
-    return query;
-}
-
 module.exports = { 
     query_all_fields_logic,
-    query_all_sales_fields_logic_v2
 };
