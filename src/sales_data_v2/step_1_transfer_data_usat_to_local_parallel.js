@@ -69,6 +69,14 @@ async function get_last_day_of_year() {
   return `${end_date_mtn.getFullYear()}-${String(end_date_mtn.getMonth() + 1).padStart(2, '0')}-${String(end_date_mtn.getDate()).padStart(2, '0')}`;
 }
 
+async function get_first_day_of_prior_year() {
+  const current_date_mtn = new Date(); // Get the current date
+  let start_date_mtn = new Date(current_date_mtn.getFullYear() - 1, 0, 1); // Set to Jan 1 of prior year
+
+  // Format the date in YYYY-MM-DD format
+  return `${start_date_mtn.getFullYear()}-${String(start_date_mtn.getMonth() + 1).padStart(2, '0')}-${String(start_date_mtn.getDate()).padStart(2, '0')}`;
+}
+
 // DATABASE CONNECTIONS
 // usat vapor connection
 async function get_src_connection_and_ssh() {
@@ -85,9 +93,10 @@ async function get_dst_connection() {
 // PROCESSING FUNCTIONS
 // Create (or replace) the destination table
 async function create_target_table(dst, TABLE_NAME, TABLE_STRUCTURE, update_mode) {
-  // if (update_mode === 'full')
-  //   await dst.execute(`DROP TABLE IF EXISTS \`${TABLE_NAME}\``);
+  if (update_mode === 'full')
+    await dst.execute(`DROP TABLE IF EXISTS \`${TABLE_NAME}\``);
 
+  // else "partial" or "updated at" so don't drop table / replace rows
   await dst.execute(TABLE_STRUCTURE);
 }
 
@@ -181,11 +190,14 @@ async function process_stream_parallel(
 
       const p = (async () => {
         try {
+          if (update_mode = 'full')
+            await flush_batch_upsert(dst, TABLE_NAME, batch);
+
           if (update_mode = 'partial')
             await flush_batch_replace(dst, TABLE_NAME, batch);
 
-          if (update_mode = 'full')
-            await flush_batch_upsert(dst, TABLE_NAME, batch);
+          if (update_mode = 'updated_at')
+            await flush_batch_replace(dst, TABLE_NAME, batch);
 
           console.log(`Flushed batch. Rows processed so far: ${rows_processed}`);
         } finally {
@@ -221,7 +233,7 @@ async function process_stream_parallel(
 }
 
 // Updated execute_transfer_usat_to_local function to use process_stream_parallel
-async function execute_transfer_usat_to_local_parallel(update_mode) {
+async function execute_transfer_usat_to_local_parallel(update_mode = 'updated-at') {
   const BATCH_SIZE = 100;
   const TABLE_NAME = `all_membership_sales_data_2015_left`;
   const TABLE_STRUCTURE = await query_create_all_membership_sales_table(TABLE_NAME);
@@ -230,10 +242,11 @@ async function execute_transfer_usat_to_local_parallel(update_mode) {
 
   const membership_period_ends = '2008-01-01';
   const start_year_mtn = 2010; // Default = 2010
-  const start_date_mtn = '2010-01-01';
+  const start_date_mtn = update_mode === 'updated_at' ? get_first_day_of_prior_year() : '2010-01-01';
   let end_date_mtn = await get_last_day_of_year();
   let updated_at_date_mtn = await get_yesterdays_date(); // Return yesterday in 'YYYY-MM-DD' format
-
+  
+  // const start_date_mtn = '2010-01-01';
   // updated_at_date_mtn = '2025-07-11';
   // console.log(end_date_mtn);  // Logs the last day of the current year in YYYY-MM-DD format TODO: eliminate
   // updated_at_date_mtn = await get_todays_date(); // Return today in 'YYYY-MM-DD' format
@@ -298,10 +311,11 @@ async function execute_transfer_usat_to_local_parallel(update_mode) {
 }
 
 // if (require.main === module) {
-//   // const update_mode = 'full';  // Update the full dataset
-//   // const update_mode = 'partial';  // Update based on the 'updated_at' date
+//   // const update_mode = 'full';        // Update 2010 forward, drop table
+//   // const update_mode = 'partial';        // Update using current & prior year, dont drop
+//   const update_mode = 'update_at';   // Update based on the 'updated_at' date, dont drop
 
-//   execute_transfer_usat_to_local_parallel(update_mode);
+//   execute_run_sales_data_jobs_v2(update_mode);
 // }
 
 module.exports = {

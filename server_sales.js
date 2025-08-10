@@ -66,7 +66,7 @@ app.get('/scheduled-all-sales', async (req, res) => {
 // Endpoint to handle crontab all usat sales data job
 // curl http://localhost:8003/scheduled-all-sales-full-update
 app.get('/scheduled-all-sales-full-update', async (req, res) => {
-    console.log('/scheduled-all-sales_v2 route req.rawHeaders = ', req.rawHeaders);
+    console.log('/scheduled-all-sales-full-update route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response
@@ -91,7 +91,7 @@ app.get('/scheduled-all-sales-full-update', async (req, res) => {
 // Endpoint to handle crontab all usat sales data job
 // curl http://localhost:8003/scheduled-all-sales-partial-update
 app.get('/scheduled-all-sales-partial-update', async (req, res) => {
-    console.log('/scheduled-all-sales_v2 route req.rawHeaders = ', req.rawHeaders);
+    console.log('/scheduled-all-sales-partial-update route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response
@@ -112,6 +112,32 @@ app.get('/scheduled-all-sales-partial-update', async (req, res) => {
         });
     }
 });
+
+// Endpoint to handle crontab all usat sales data job
+// curl http://localhost:8003/scheduled-all-sales-updated_at
+app.get('/scheduled-all-sales-updated-at', async (req, res) => {
+    console.log('/scheduled-all-sales-updated-at route req.rawHeaders = ', req.rawHeaders);
+
+    try {
+        // Send a success response
+        res.status(200).json({
+            message: 'All Sales Data = get updated_at, load and create sales key metrics started succesfully.',
+        });
+        
+        // GETS ALL SALES DATA, LOADS INTO MYSQL, CREATES SALES KEY METRICS
+        await execute_run_sales_data_jobs_v2('update_at');
+
+    } catch (error) {
+        console.error('Error quering or sending membership sales data:', error);
+        
+        // Send an error response
+        res.status(500).json({
+            message: 'Error quering or sending membership sales data.',
+            error: error.message || 'Internal Server Error',
+        });
+    }
+});
+
 
 // Clean up on exit
 async function cleanup() {
