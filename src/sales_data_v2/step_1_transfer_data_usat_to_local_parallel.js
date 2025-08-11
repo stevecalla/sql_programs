@@ -244,7 +244,7 @@ async function process_stream_parallel(
         if (update_mode === 'full' || update_mode === 'partial') await flush_batch_upsert(conn, TABLE_NAME, batch);
         else /* updated_at */     await flush_batch_replace(conn, TABLE_NAME, batch);
         
-        console.log(`Flushing remaining ${batch.length} rows...`);
+        console.log(`\nFlushing remaining ${batch.length} rows...`);
 
       } finally {
         conn.release();            // return to pool
