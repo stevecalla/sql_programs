@@ -138,7 +138,6 @@ app.get('/scheduled-all-sales-updated-at', async (req, res) => {
     }
 });
 
-
 // Clean up on exit
 async function cleanup() {
     console.log('\nGracefully shutting down...');
