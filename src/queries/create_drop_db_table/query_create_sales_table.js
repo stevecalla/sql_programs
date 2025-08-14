@@ -220,7 +220,8 @@ const select_fields = `
 `;
 
 const index_fields = `
-  PRIMARY KEY (member_number_members_sa, id_membership_periods_sa),
+  -- PRIMARY KEY (member_number_members_sa, id_membership_periods_sa),
+  PRIMARY KEY (id_profiles, id_membership_periods_sa), -- changed 8/14/25
    
   INDEX idx_id_events (id_events),
   INDEX idx_name_events (name_events),
