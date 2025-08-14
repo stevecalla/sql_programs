@@ -139,13 +139,13 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
   return elapsedTime;
 }
 
-// if (require.main === module) {
-//   // const update_mode = 'full';        // Update 2010 forward, drop table
-//   // const update_mode = 'partial';        // Update using current & prior year, dont drop
-//   // const update_mode = 'updated_at';   // Update based on the 'updated_at' date, dont drop
-// }
+if (require.main === module) {
+  // const update_mode = 'full';        // Update 2010 forward, drop table
+  // const update_mode = 'partial';        // Update using current & prior year, dont drop
+  const update_mode = 'update_at';   // Update based on the 'updated_at' date, dont drop
 
-//   execute_run_sales_data_jobs_v2(update_mode);
+  execute_run_sales_data_jobs_v2(update_mode);
+}
 
 module.exports = {
   execute_run_sales_data_jobs_v2,
