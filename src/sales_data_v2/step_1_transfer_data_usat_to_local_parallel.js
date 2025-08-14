@@ -294,9 +294,9 @@ async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at
     console.log('UPDATE MODE:', update_mode + '; START DATE:', start_date_mtn + '; END DATE:', end_date_mtn + '; UPDATED AT:', updated_at_date_mtn)
 
     // Get total rows count for progress tracking
-    console.log('\nQuerying for count of total distinct rows.')
-    const total_rows = await get_total_rows_count(src, start_date_mtn);
-    console.log(`Total distinct rows to process: ${total_rows}`); 
+    // console.log('\nQuerying for count of total distinct rows.')
+    // const total_rows = await get_total_rows_count(src, start_date_mtn);
+    // console.log(`Total distinct rows to process: ${total_rows}`); 
 
     // for (let j = 0; j < 1; j++) { // test
     for (let j = 0; j < membership_category_logic.length; j++) {

@@ -13,12 +13,26 @@ const operator = '>=';
 
 function query_get_sales_data(query_membership_category_logic, year, start_date, end_date, membership_period_ends, update_mode, updated_at_date_mtn) {
 
+   // const update_code = 
+   //    (update_mode === 'full' || update_mode === 'partial') ? `
+   //          AND membership_periods.purchased_on >= '${start_date}'
+   //          AND membership_periods.purchased_on <= '${end_date}'
+   // ` : `
+   //          AND membership_periods.updated_at >= '${updated_at_date_mtn}'
+   // `;
+
    const update_code = 
-      (update_mode === 'full' || update_mode === 'partial') ? `
-            AND membership_periods.purchased_on >= '${start_date}'
-            AND membership_periods.purchased_on <= '${end_date}'
+   (update_mode === 'full' || update_mode === 'partial') ? `
+         AND membership_periods.purchased_on >= '${start_date}'
+         AND membership_periods.purchased_on <= '${end_date}'
    ` : `
-            AND membership_periods.updated_at >= '${updated_at_date_mtn}'
+            AND (
+               membership_periods.updated_at >= '${updated_at_date_mtn}'
+               OR (
+                  members.updated_at > '${updated_at_date_mtn}'
+                  AND members.memberable_type = 'profiles'
+               )
+            )
    `;
 
    return `
