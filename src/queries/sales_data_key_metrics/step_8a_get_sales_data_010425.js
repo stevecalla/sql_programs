@@ -3,8 +3,25 @@
 
 function step_8a_create_indexes() {
     return `
-        -- Step #8a: Create indexes on the new table
-        CREATE INDEX idx_name_events ON sales_key_stats_2015 (name_events);
+            -- Step #8a: Create indexes on the new table
+
+            -- 1) Make key columns NOT NULL (required for PK)
+            ALTER TABLE sales_key_stats_2015
+                MODIFY id_profiles               BIGINT NOT NULL,
+                MODIFY id_membership_periods_sa  BIGINT NOT NULL
+            ;
+
+            -- 2) Add the primary key
+            ALTER TABLE sales_key_stats_2015
+                ADD PRIMARY KEY (id_profiles, id_membership_periods_sa)
+            ;
+
+            -- 3) Add more indexes
+        
+            -- CREATE INDEX idx_id_profiles_id_membership_periods ON sales_key_stats_2015 (id_profiles, id_membership_periods_sa);
+
+            CREATE INDEX idx_name_events ON sales_key_stats_2015 (name_events);
+        
             CREATE INDEX idx_name_events_starts_events ON sales_key_stats_2015 (name_events, starts_events);
 
             CREATE INDEX idx_event_search ON sales_key_stats_2015 (

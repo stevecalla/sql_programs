@@ -8,8 +8,8 @@ function step_8_sales_key_stats_2015() {
 
         CREATE TABLE sales_key_stats_2015 AS
             SELECT 
-                am.member_number_members_sa, 
-                am.id_profiles,
+                am.id_profiles, 
+                -- am.id_profiles,
 
                 -- sale origin     
                 CASE
@@ -321,28 +321,28 @@ function step_8_sales_key_stats_2015() {
             FROM all_membership_sales_data_2015_left am
 
                 LEFT JOIN step_1_member_minimum_first_created_at_dates AS fd
-                    ON am.member_number_members_sa = fd.member_number_members_sa
+                    ON am.id_profiles = fd.id_profiles
 
                 LEFT JOIN step_2_member_min_created_at_date AS mc
-                    ON am.member_number_members_sa = mc.member_number_members_sa
+                    ON am.id_profiles = mc.id_profiles
                 
                 LEFT JOIN step_3_member_total_life_time_purchases AS lp
-                    ON am.member_number_members_sa = lp.member_number_members_sa
+                    ON am.id_profiles = lp.id_profiles
 
                 LEFT JOIN step_4_member_age_dimensions AS ad
-                    ON am.member_number_members_sa = ad.member_number_members_sa
+                    ON am.id_profiles = ad.id_profiles
 
                 LEFT JOIN step_5_member_age_at_sale_date AS sd
-                    ON am.id_membership_periods_sa = sd.id_membership_periods_sa
+                    ON am.id_profiles = sd.id_profiles
 
                 LEFT JOIN step_5a_member_age_at_end_of_year_of_sale AS ye
-                    ON am.id_membership_periods_sa = ye.id_membership_periods_sa
+                    ON am.id_profiles = ye.id_profiles
 
                 LEFT JOIN step_6_membership_period_stats AS st
-                    ON am.id_membership_periods_sa = st.id_membership_periods_sa
+                    ON am.id_profiles = st.id_profiles
 
                 LEFT JOIN step_7_prior_purchase AS pp
-                    ON am.id_membership_periods_sa = pp.id_membership_periods_sa
+                    ON am.id_profiles = pp.id_profiles
 
                 LEFT JOIN region_data AS er -- event region
                     ON am.state_code_events = er.state_code
