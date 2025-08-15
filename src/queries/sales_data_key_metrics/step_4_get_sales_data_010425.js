@@ -8,18 +8,19 @@ function step_4_member_age_dimensions() {
 
         CREATE TABLE step_4_member_age_dimensions AS
             SELECT
+                -- member_number_members_sa,
                 id_profiles,
 
                 (YEAR(CURDATE()) - YEAR(date_of_birth_profiles)) - (DATE_FORMAT(CURDATE(), '%m%d') < DATE_FORMAT(date_of_birth_profiles, '%m%d')) AS age_now, -- create age as of now,
                 MIN(date_of_birth_profiles) AS date_of_birth_profiles
 
             FROM all_membership_sales_data_2015_left
+            -- GROUP BY member_number_members_sa, 2
             GROUP BY id_profiles, 2
         ;
 
-        ALTER TABLE step_4_member_age_dimensions
-            ADD PRIMARY KEY (id_profiles)
-        ;
+        ALTER TABLE step_4_member_age_dimensions                
+            ADD INDEX (id_profiles);
         -- *********************************************
     `;
 }

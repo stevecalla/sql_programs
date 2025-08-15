@@ -8,15 +8,18 @@ function step_6_membership_period_stats() {
 
         CREATE TABLE step_6_membership_period_stats AS
             SELECT
-                id_profiles,
+                id_membership_periods_sa,
                 actual_membership_fee_6_rule_sa,
                     
                 COUNT(id_membership_periods_sa) AS sales_units,
                 SUM(actual_membership_fee_6_sa) AS sales_revenue
 
             FROM all_membership_sales_data_2015_left
-            GROUP BY id_profiles, actual_membership_fee_6_rule_sa
+            GROUP BY id_membership_periods_sa, actual_membership_fee_6_rule_sa
         ;
+        
+        ALTER TABLE step_6_membership_period_stats              
+            ADD INDEX (id_membership_periods_sa);
         -- *********************************************
     `;
 }

@@ -9,19 +9,23 @@ function step_5_member_age_at_sale_date() {
         CREATE TABLE step_5_member_age_at_sale_date AS
             SELECT
                 am.id_profiles,
+                -- am.member_number_members_sa,
                 am.id_membership_periods_sa,
                 
                 (
-                    YEAR(purchased_on_adjusted_mp) - YEAR(am.date_of_birth_profiles)) - 
-                    (DATE_FORMAT(am.purchased_on_adjusted_mp, '%m%d') 
-                    < DATE_FORMAT(am.date_of_birth_profiles, '%m%d')
+                    YEAR(MAX(purchased_on_adjusted_mp)) - YEAR(MAX(am.date_of_birth_profiles))) - 
+                    (DATE_FORMAT(MAX(am.purchased_on_adjusted_mp), '%m%d') 
+                    < DATE_FORMAT(MAX(am.date_of_birth_profiles), '%m%d')
                 )   
                 AS age_as_of_sale_date -- create age of of sale date
 
             FROM all_membership_sales_data_2015_left as am
+            -- GROUP BY am.member_number_members_sa, am.id_membership_periods_sa 
             GROUP BY am.id_profiles, am.id_membership_periods_sa 
         ;
 
+        ALTER TABLE step_5_member_age_at_sale_date              
+            ADD INDEX (id_membership_periods_sa);
         -- *********************************************
     `;
 }

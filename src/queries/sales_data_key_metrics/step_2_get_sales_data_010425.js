@@ -8,6 +8,7 @@ function step_2_member_min_created_at_date() {
 
         CREATE TABLE step_2_member_min_created_at_date AS
             SELECT 
+                -- member_number_members_sa,
                 id_profiles,
 
                 -- Calculate the minimum date from the first created at fields, considering nulls
@@ -23,10 +24,8 @@ function step_2_member_min_created_at_date() {
             FROM step_1_member_minimum_first_created_at_dates
         ;
 
-        ALTER TABLE step_2_member_min_created_at_date
-            ADD PRIMARY KEY (id_profiles)
-        ;
-
+    ALTER TABLE step_2_member_min_created_at_date
+        ADD INDEX (id_profiles);
     -- ********************************************* 
     `;
 }

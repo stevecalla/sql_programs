@@ -8,6 +8,7 @@ function step_1_member_minimum_first_created_at_dates() {
 
             CREATE TABLE step_1_member_minimum_first_created_at_dates AS
                 SELECT 
+                    -- member_number_members_sa,
                     id_profiles,
 
                     MIN(created_at_members) AS first_created_at_members,
@@ -21,12 +22,10 @@ function step_1_member_minimum_first_created_at_dates() {
 
                 FROM all_membership_sales_data_2015_left
                 GROUP BY id_profiles
+                -- GROUP BY member_number_members_sa
             ;
 
-            ALTER TABLE step_1_member_minimum_first_created_at_dates
-                ADD PRIMARY KEY (id_profiles)
-            ;
-                
+            ALTER TABLE step_1_member_minimum_first_created_at_dates ADD INDEX (id_profiles);     
         -- *********************************************
     `;
 }
