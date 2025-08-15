@@ -16,11 +16,7 @@ function step_5a_member_age_at_end_of_year_of_sale() {
 
                 FROM all_membership_sales_data_2015_left AS am
                 GROUP BY am.id_profiles, am.id_membership_periods_sa
-            ;
-                
-            -- CREATE INDEX idx_member_number_members_sa ON step_5a_member_age_at_end_of_year_of_sale (member_number_members_sa);
-            -- CREATE INDEX idx_id_membership_periods_sa ON step_5a_member_age_at_end_of_year_of_sale (id_membership_periods_sa);
-            -- CREATE INDEX idx_age_at_end_of_year ON step_5a_member_age_at_end_of_year_of_sale (age_at_end_of_year);
+            ; 
         -- *********************************************
     `;
 }

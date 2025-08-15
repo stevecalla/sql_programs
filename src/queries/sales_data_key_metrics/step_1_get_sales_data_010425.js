@@ -22,9 +22,11 @@ function step_1_member_minimum_first_created_at_dates() {
                 FROM all_membership_sales_data_2015_left
                 GROUP BY id_profiles
             ;
+
+            ALTER TABLE step_1_member_minimum_first_created_at_dates
+                ADD PRIMARY KEY (id_profiles)
+            ;
                 
-                -- CREATE INDEX idx_member_number_members_sa ON step_1_member_minimum_first_created_at_dates (member_number_members_sa);
-                -- CREATE INDEX idx_first_purchased_on_year_adjusted_mp ON step_1_member_minimum_first_created_at_dates (first_purchased_on_year_adjusted_mp);
         -- *********************************************
     `;
 }

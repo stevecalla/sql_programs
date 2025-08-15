@@ -3,6 +3,10 @@
 
 function step_8_sales_key_stats_2015() {
     return `
+        -- Region lookups
+        ALTER TABLE region_data
+            ADD PRIMARY KEY (state_code)
+        ;
 
         DROP TABLE IF EXISTS sales_key_stats_2015;
 

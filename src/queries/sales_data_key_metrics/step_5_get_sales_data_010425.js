@@ -6,21 +6,22 @@ function step_5_member_age_at_sale_date() {
         -- STEP #5 = CREATE MEMBER AGE AT SALE DATE TABLE
         DROP TABLE IF EXISTS step_5_member_age_at_sale_date;
 
-            CREATE TABLE step_5_member_age_at_sale_date AS
-                SELECT
-                    am.id_profiles,
-                    am.id_membership_periods_sa,
-                    
-                    (
-                        YEAR(purchased_on_adjusted_mp) - YEAR(am.date_of_birth_profiles)) - 
-                        (DATE_FORMAT(am.purchased_on_adjusted_mp, '%m%d') 
-                        < DATE_FORMAT(am.date_of_birth_profiles, '%m%d')
-                    )   
-                    AS age_as_of_sale_date -- create age of of sale date
+        CREATE TABLE step_5_member_age_at_sale_date AS
+            SELECT
+                am.id_profiles,
+                am.id_membership_periods_sa,
+                
+                (
+                    YEAR(purchased_on_adjusted_mp) - YEAR(am.date_of_birth_profiles)) - 
+                    (DATE_FORMAT(am.purchased_on_adjusted_mp, '%m%d') 
+                    < DATE_FORMAT(am.date_of_birth_profiles, '%m%d')
+                )   
+                AS age_as_of_sale_date -- create age of of sale date
 
-                FROM all_membership_sales_data_2015_left as am
-                GROUP BY am.id_profiles, am.id_membership_periods_sa 
-            ;
+            FROM all_membership_sales_data_2015_left as am
+            GROUP BY am.id_profiles, am.id_membership_periods_sa 
+        ;
+
         -- *********************************************
     `;
 }

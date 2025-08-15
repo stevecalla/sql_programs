@@ -22,9 +22,11 @@ function step_2_member_min_created_at_date() {
 
             FROM step_1_member_minimum_first_created_at_dates
         ;
-            
-            -- CREATE INDEX idx_member_number_members_sa ON step_2_member_min_created_at_date (member_number_members_sa);
-            -- CREATE INDEX idx_min_created_at ON step_2_member_min_created_at_date (min_created_at);
+
+        ALTER TABLE step_2_member_min_created_at_date
+            ADD PRIMARY KEY (id_profiles)
+        ;
+
     -- ********************************************* 
     `;
 }
