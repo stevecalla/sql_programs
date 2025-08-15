@@ -19,8 +19,8 @@ async function query_step_0_sales_key_metrics_master_logic() {
         step_5a_member_age_at_end_of_year_of_sale, // #6 3:10, 3649353
         step_6_membership_period_stats, // #7 6:48, 3649353
         step_7_prior_purchase, // #8 00:17:00... Query results: 3649353
-        // step_8_sales_key_stats_2015, // #9 Timer: 00:18:03...Query results: 3649353
-        // step_8a_create_indexes, //#10  Timer: 00:16:35...Query results: 0
+        step_8_sales_key_stats_2015, // #9 Timer: 00:18:03...Query results: 3649353
+        step_8a_create_indexes, //#10  Timer: 00:16:35...Query results: 0
     ]
     return query_list;
 }
