@@ -3,7 +3,7 @@ function query_slack_sales_data() {
         -- #3)
             SELECT 
                 DATE_FORMAT(sd.purchased_on_date_adjusted_mp, '%Y-%m-%d') AS purchased_on_date_adjusted_mp_mtn,
-                sd.member_number_members_sa,
+                sd.id_profiles, -- change from sd.member_number_members_sa on 8/14/25
                 sd.id_membership_periods_sa,
                 
                 -- ORIGIN FLAG LOGIC

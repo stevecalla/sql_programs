@@ -8,7 +8,7 @@ function step_2_member_min_created_at_date() {
 
         CREATE TABLE step_2_member_min_created_at_date AS
             SELECT 
-                member_number_members_sa,
+                id_profiles,
 
                 -- Calculate the minimum date from the first created at fields, considering nulls
                 LEAST(
@@ -20,7 +20,8 @@ function step_2_member_min_created_at_date() {
                     COALESCE(first_starts_mp, '9999-12-31')
                 ) AS min_created_at
 
-            FROM step_1_member_minimum_first_created_at_dates;
+            FROM step_1_member_minimum_first_created_at_dates
+        ;
             
             -- CREATE INDEX idx_member_number_members_sa ON step_2_member_min_created_at_date (member_number_members_sa);
             -- CREATE INDEX idx_min_created_at ON step_2_member_min_created_at_date (min_created_at);

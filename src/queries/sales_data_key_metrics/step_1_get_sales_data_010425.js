@@ -8,7 +8,7 @@ function step_1_member_minimum_first_created_at_dates() {
 
             CREATE TABLE step_1_member_minimum_first_created_at_dates AS
                 SELECT 
-                    member_number_members_sa,
+                    id_profiles,
 
                     MIN(created_at_members) AS first_created_at_members,
                     MIN(created_at_mp) AS first_created_at_mp,
@@ -20,7 +20,8 @@ function step_1_member_minimum_first_created_at_dates() {
                     YEAR(MIN(purchased_on_adjusted_mp)) AS first_purchased_on_year_adjusted_mp
 
                 FROM all_membership_sales_data_2015_left
-                GROUP BY member_number_members_sa;
+                GROUP BY id_profiles
+            ;
                 
                 -- CREATE INDEX idx_member_number_members_sa ON step_1_member_minimum_first_created_at_dates (member_number_members_sa);
                 -- CREATE INDEX idx_first_purchased_on_year_adjusted_mp ON step_1_member_minimum_first_created_at_dates (first_purchased_on_year_adjusted_mp);

@@ -8,11 +8,12 @@ function step_3_member_total_life_time_purchases() {
 
             CREATE TABLE step_3_member_total_life_time_purchases AS
                 SELECT
-                    member_number_members_sa,
+                    id_profiles,
                     COUNT(*) AS member_lifetime_purchases -- total lifetime purchases due to group by
 
-            FROM all_membership_sales_data_2015_left
-            GROUP BY member_number_members_sa;
+                FROM all_membership_sales_data_2015_left
+                GROUP BY id_profiles
+            ;
 
             -- CREATE INDEX idx_member_number_members_sa ON step_3_member_total_life_time_purchases (member_number_members_sa);
             -- CREATE INDEX idx_member_lifetime_purchases ON step_3_member_total_life_time_purchases (member_lifetime_purchases);
