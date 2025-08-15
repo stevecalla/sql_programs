@@ -3,17 +3,12 @@
 
 function step_8_sales_key_stats_2015() {
     return `
-        -- Region lookups
-        ALTER TABLE region_data
-            ADD PRIMARY KEY (state_code)
-        ;
-
         DROP TABLE IF EXISTS sales_key_stats_2015;
 
         CREATE TABLE sales_key_stats_2015 AS
             SELECT 
-                am.id_profiles, 
-                -- am.id_profiles,
+                am.member_number_members_sa, 
+                am.id_profiles,
 
                 -- sale origin     
                 CASE
@@ -337,16 +332,16 @@ function step_8_sales_key_stats_2015() {
                     ON am.id_profiles = ad.id_profiles
 
                 LEFT JOIN step_5_member_age_at_sale_date AS sd
-                    ON am.id_profiles = sd.id_profiles
+                    ON am.id_membership_periods_sa = sd.id_membership_periods_sa
 
                 LEFT JOIN step_5a_member_age_at_end_of_year_of_sale AS ye
-                    ON am.id_profiles = ye.id_profiles
+                    ON am.id_membership_periods_sa = ye.id_membership_periods_sa
 
                 LEFT JOIN step_6_membership_period_stats AS st
-                    ON am.id_profiles = st.id_profiles
+                    ON am.id_membership_periods_sa = st.id_membership_periods_sa
 
                 LEFT JOIN step_7_prior_purchase AS pp
-                    ON am.id_profiles = pp.id_profiles
+                    ON am.id_membership_periods_sa = pp.id_membership_periods_sa
 
                 LEFT JOIN region_data AS er -- event region
                     ON am.state_code_events = er.state_code
@@ -354,11 +349,12 @@ function step_8_sales_key_stats_2015() {
                 LEFT JOIN region_data AS ar -- address region
                     ON am.state_code_addresses = ar.state_code
 
-            WHERE 
-                am.purchased_on_year_adjusted_mp >= 2010 AND
-                CAST(am.purchased_on_date_mp AS CHAR) != '0000-00-00'
-                -- LIMIT 1     
-            ;
+            WHERE 1 = 1
+                AND am.purchased_on_year_adjusted_mp >= 2010
+                AND am.id_profiles IS NOT NULL
+
+            -- LIMIT 10000
+        ;
     `;
 }
 
