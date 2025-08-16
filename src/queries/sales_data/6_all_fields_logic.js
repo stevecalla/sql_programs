@@ -309,7 +309,9 @@ const profiles_table = `
     profiles.id AS id_profiles,
     profiles.created_at AS created_at_profiles,
     profiles.date_of_birth AS date_of_birth_profiles,
-    profiles.primary_address_id AS primary_address_id_profiles
+    profiles.primary_address_id AS primary_address_id_profiles,
+    profiles.deleted_at AS deleted_at_profiles,
+    profiles.updated_at AS updated_at_profiles
 `;
 
 const orders_products_table = `
@@ -326,7 +328,10 @@ const registration_audit_table = `
     -- REGISTRATION AUDIT
     registration_audit.id AS id_registration_audit,
     registration_audit.confirmation_number AS confirmation_number_registration_audit,
-    registration_audit.date_of_birth AS date_of_birth_registration_audit
+    registration_audit.date_of_birth AS date_of_birth_registration_audit,
+    registration_audit.created_at AS created_at_registration_audit,
+    registration_audit.updated_at AS updated_at_registration_audit,
+    registration_audit.processed_at AS processed_at_registration_audit
 `;
 
 const registration_companies = `
@@ -396,6 +401,7 @@ const query_all_fields_logic = `
         ${select_fields}
     ${from_statement_left}
 
+    WHERE profiles.deleted_at IS NULL
     GROUP BY mp.id
 `;
 
