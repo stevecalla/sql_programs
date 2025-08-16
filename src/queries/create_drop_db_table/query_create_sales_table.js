@@ -181,7 +181,9 @@ const profiles_table = `
   id_profiles INT,
   created_at_profiles DATETIME,
   date_of_birth_profiles DATE,
-  primary_address_id_profiles INT
+  primary_address_id_profiles INT,
+  deleted_at_profiles DATETIME,
+  updated_at_profiles DATETIME
 `;
 
 const orders_products_table = `
@@ -198,7 +200,10 @@ const registration_audit_table = `
   -- REGISTRATION AUDIT
   id_registration_audit INT,
   confirmation_number_registration_audit VARCHAR(255),
-  date_of_birth_registration_audit DATE
+  date_of_birth_registration_audit DATE,
+  created_at_registration_audit DATETIME,
+  updated_at_registration_audit DATETIME,
+  processed_at_registration_audit DATETIME
 `;
 
 const registration_companies = `

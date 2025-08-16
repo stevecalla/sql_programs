@@ -74,7 +74,7 @@ async function execute_create_sales_key_metrics() {
 
         for (let i = 0; i < query_list.length; i++) {
 
-            console.log(query_list);
+            console.log(query_list[i]);
 
             let current_query = query_list[i]();
 
@@ -82,7 +82,7 @@ async function execute_create_sales_key_metrics() {
 
             const results = await execute_mysql_working_query(pool, db_name, current_query);
             
-            console.log(query_list);
+            console.log(query_list[i]);
             console.log(`\nExecuted ${i} of ${number_of_queries} queries`);
             console.log(`Rows affected/added ${results}\n`);
 

@@ -7,48 +7,52 @@ function step_7_prior_purchase() {
         DROP TABLE IF EXISTS step_7_prior_purchase;
 
         CREATE TABLE step_7_prior_purchase AS
-        WITH ordered AS (
-            SELECT
-                -- am.member_number_members_sa,
-                am.id_profiles,
-                am.id_membership_periods_sa,
-                am.new_member_category_6_sa,
-                am.purchased_on_adjusted_mp,
-                am.ends_mp,
-                am.real_membership_types_sa,
+            SELECT 
+                am1.id_profiles AS id_profiles,
+                am1.id_membership_periods_sa,
+                am1.new_member_category_6_sa,
+                am1.purchased_on_adjusted_mp AS most_recent_purchase_date,
+                am1.ends_mp AS most_recent_mp_ends_date,
+                (
+                    SELECT 
+                        MAX(am2.purchased_on_adjusted_mp)
+                    FROM all_membership_sales_data_2015_left am2
+                    WHERE 
+                        am2.id_profiles = am1.id_profiles
+                        AND DATE(am2.purchased_on_adjusted_mp) < DATE(am1.purchased_on_adjusted_mp)
+                    LIMIT 1
+                ) AS most_recent_prior_purchase_date,
+                (
+                    SELECT 
+                        MAX(am2.ends_mp)
+                    FROM all_membership_sales_data_2015_left am2
+                    WHERE 
+                        am2.id_profiles = am1.id_profiles
+                        AND DATE(am2.ends_mp) < DATE(am1.ends_mp)
+                    LIMIT 1
+                ) AS most_recent_prior_mp_ends_date,
+                (
+                    SELECT 
+                        am2.real_membership_types_sa
+                    FROM all_membership_sales_data_2015_left am2
+                    WHERE 
+                        am2.id_profiles = am1.id_profiles
+                        AND DATE(am2.purchased_on_adjusted_mp) < DATE(am1.purchased_on_adjusted_mp)
+                    ORDER BY am2.purchased_on_adjusted_mp DESC
+                    LIMIT 1
+                ) AS most_recent_prior_purchase_membership_type,
+                (
+                    SELECT 
+                        am2.new_member_category_6_sa
+                    FROM all_membership_sales_data_2015_left am2
+                    WHERE 
+                        am2.id_profiles = am1.id_profiles
+                        AND DATE(am2.purchased_on_adjusted_mp) < DATE(am1.purchased_on_adjusted_mp)
+                    ORDER BY am2.purchased_on_adjusted_mp DESC
+                    LIMIT 1
+                ) AS most_recent_prior_purchase_membership_category
 
-                -- Prior by purchase date (matches your MAX(... WHERE purchased_on < current) intent)
-                LAG(am.purchased_on_adjusted_mp)
-                OVER (PARTITION BY am.id_profiles
-                        ORDER BY am.purchased_on_adjusted_mp) AS most_recent_prior_purchase_date,
-
-                LAG(am.real_membership_types_sa)
-                OVER (PARTITION BY am.id_profiles
-                        ORDER BY am.purchased_on_adjusted_mp) AS most_recent_prior_purchase_membership_type,
-
-                LAG(am.new_member_category_6_sa)
-                OVER (PARTITION BY am.id_profiles
-                        ORDER BY am.purchased_on_adjusted_mp) AS most_recent_prior_purchase_membership_category,
-
-                -- Prior by ends date (matches your MAX(... WHERE ends_mp < current) intent)
-                LAG(am.ends_mp)
-                OVER (PARTITION BY am.id_profiles
-                        ORDER BY am.ends_mp) AS most_recent_prior_mp_ends_date
-                FROM all_membership_sales_data_2015_left am
-            -- 	WHERE member_number_members_sa IN ('1001416', '100181772', '100142051', '100853852') 
-            -- 	LIMIT 100
-        )
-            SELECT
-                id_profiles,
-                id_membership_periods_sa,
-                new_member_category_6_sa,
-                purchased_on_adjusted_mp   AS most_recent_purchase_date,
-                ends_mp                    AS most_recent_mp_ends_date,
-                most_recent_prior_purchase_date,
-                most_recent_prior_mp_ends_date,
-                most_recent_prior_purchase_membership_type,
-                most_recent_prior_purchase_membership_category
-            FROM ordered
+            FROM all_membership_sales_data_2015_left am1
         ;
     `;
 }
