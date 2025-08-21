@@ -101,7 +101,8 @@
     "mysql2": "^3.9.2",
     "ssh2": "^1.15.0",
     "tinyurl": "^1.1.7",
-    "xpath": "^0.0.34"
+    "xpath": "^0.0.34",
+    "http-proxy-middleware": "^3.0.0"
   },
   "devDependencies": {
     "pm2": "^5.4.3"
