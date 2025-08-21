@@ -16,6 +16,7 @@ __pycache__/
 
 # Ignore Python virtual environments
 venv/
+.venv/
 
 # google analytics
 ga4Api-1d3aa03bf5df.json
