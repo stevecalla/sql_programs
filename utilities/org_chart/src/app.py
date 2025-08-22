@@ -23,6 +23,23 @@ st.write(
     f"(Optional ordering column: **{ORDER_COL}**)"
 )
 
+# ---- Template download (place ABOVE the file_uploader) ----
+from pathlib import Path
+# SAMPLE_PATH = Path(__file__).with_name("sample_org.csv")  # or .parent/'assets'/'sample_org.csv'
+SAMPLE_PATH = Path(__file__).parent / "assets" / "sample_org.csv"
+
+if SAMPLE_PATH.exists():
+    st.download_button(
+        "⬇️ Download template (CSV)",
+        data=SAMPLE_PATH.read_bytes(),
+        file_name="sample_org.csv",
+        mime="text/csv",
+        help="Get a ready-to-edit sample org data file.",
+    )
+else:
+    st.info("Template CSV not found. Ask your admin or generate a blank template from the Templates expander.")
+# -----------------------------------------------------------
+
 uploaded = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"])
 
 df = None
