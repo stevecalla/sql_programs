@@ -80,7 +80,14 @@
     "stop_slack_news": "npx pm2 stop usat_slack_news",
     "delete_slack_news": "npx pm2 delete usat_slack_news",
     "show_slack_news": "npx pm2 show usat_slack_news",
-    "restart_slack_news": "npx pm2 restart usat_slack_news"
+    "restart_slack_news": "npx pm2 restart usat_slack_news",
+
+    "pm2_start_org_chart_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_org_chart.js --name org_chart --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
+    "pm2_logs_org_chart": "npx pm2 logs org_chart",
+    "stop_org_chart": "npx pm2 stop org_chart",
+    "delete_org_chart": "npx pm2 delete org_chart",
+    "show_org_chart": "npx pm2 show org_chart",
+    "restart_org_chart": "npx pm2 restart org_chart"
   },
   "keywords": [],
   "author": "",
