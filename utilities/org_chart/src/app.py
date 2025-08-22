@@ -7,6 +7,8 @@ from lo_utils import libreoffice_available, pptx_to_pdf_bytes
 from pdf_preview import embed_pdf_inline
 from pptx_chart import build_ppt
 from config import ORDER_COL
+from buy_me_a_coffee import show_bmac
+
 
 # Backward-compat shim for Streamlit data editor
 try:
@@ -23,22 +25,57 @@ st.write(
     f"(Optional ordering column: **{ORDER_COL}**)"
 )
 
-# ---- Template download (place ABOVE the file_uploader) ----
+# ---- Template download with fallback (assets/sample_org.csv -> embedded CSV) ----
 from pathlib import Path
-# SAMPLE_PATH = Path(__file__).with_name("sample_org.csv")  # or .parent/'assets'/'sample_org.csv'
-SAMPLE_PATH = Path(__file__).parent / "assets" / "sample_org.csv"
 
-if SAMPLE_PATH.exists():
-    st.download_button(
-        "⬇️ Download template (CSV)",
-        data=SAMPLE_PATH.read_bytes(),
-        file_name="sample_org.csv",
-        mime="text/csv",
-        help="Get a ready-to-edit sample org data file.",
-    )
-else:
-    st.info("Template CSV not found. Ask your admin or generate a blank template from the Templates expander.")
-# -----------------------------------------------------------
+ASSETS_DIR = Path(__file__).parent / "assets"
+SAMPLE_PATH = ASSETS_DIR / "sample_org.csv"
+
+# Embedded fallback if the file isn't present
+SAMPLE_CSV_EMBEDDED = """employee_id,name,title,manager_id,department,tenure,tenure_calc,order
+100,Alex Tan,CEO,100,Executive Leadership,7 years,7.0,0
+1101,Jill Meyers,Director of Ops,100,Operations,5 years,5.0,2
+1102,Sam Patel,Ops Manager,1101,Operations,2 years,2.0,2
+1103,Maya Lee,Analyst,1102,Operations,1 year,1.0,2
+2101,Chris Diaz,Director of Eng,100,Engineering,6 years,6.0,1
+2102,Mia Wong,Senior Engineer,2101,Engineering,3 years,3.0,1
+2103,Leo Park,Engineer,2101,Engineering,1 year,1.0,1
+3101,Jamie Fox,Director of Sales,100,Sales,4 years,4.0,3
+3102,Ana Ruiz,Account Exec,3101,Sales,2 years,2.0,3
+3103,Pat O’Neil,Sales Ops,3101,Sales,1 year,1.0,3
+"""
+
+@st.cache_data(show_spinner=False)
+def get_sample_csv_bytes() -> bytes:
+    """Return sample CSV bytes from assets/ if present; otherwise embedded CSV."""
+    try:
+        if SAMPLE_PATH.exists() and SAMPLE_PATH.is_file():
+            return SAMPLE_PATH.read_bytes()
+    except Exception:
+        pass
+    return SAMPLE_CSV_EMBEDDED.encode("utf-8")
+
+# (Optional) auto-create the assets file on first run; keeps local dev handy
+def ensure_assets_sample():
+    try:
+        ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        if not SAMPLE_PATH.exists():
+            SAMPLE_PATH.write_text(SAMPLE_CSV_EMBEDDED, encoding="utf-8")
+    except Exception:
+        # Non-fatal; we'll still serve the embedded CSV
+        pass
+
+ensure_assets_sample()
+
+# The actual download button (uses cached/fallback loader above)
+st.download_button(
+    "⬇️ Download template (CSV)",
+    data=get_sample_csv_bytes(),
+    file_name="sample_org.csv",
+    mime="text/csv",
+    help="Get a ready-to-edit sample org data file.",
+)
+# -------------------------------------------------------------------------------
 
 uploaded = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"])
 
@@ -155,3 +192,15 @@ if btn:
 
             except Exception as e:
                 st.error(f"Failed to generate deck: {e}")
+
+
+# Buy Me a Coffee
+# Sidebar (default light blue)
+show_bmac(username="stevecalla", where="sidebar")
+
+# Or: main area with even lighter blue
+# show_bmac(username="stevecalla", where="main", bg="#F2F7FF", hover_bg="#E4EEFF")
+
+# Or: footer with custom label
+show_bmac(username="stevecalla", where="footer", text="Support this project ☕")
+
