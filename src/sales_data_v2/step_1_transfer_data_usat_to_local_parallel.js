@@ -262,7 +262,7 @@ async function process_stream_parallel(
 
 async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at') {
   const BATCH_SIZE = 100;
-  const TABLE_NAME = `all_membership_sales_data_2015_left`;
+  let TABLE_NAME = `all_membership_sales_data_2015_left`;
   const TABLE_STRUCTURE = await query_create_all_membership_sales_table(TABLE_NAME);
   let result = 'Transfer Failed';
   let offset = 0;
@@ -273,6 +273,9 @@ async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at
   let end_date_mtn = await get_last_day_of_year();
   let updated_at_date_mtn = await get_yesterdays_date(); // Return yesterday in 'YYYY-MM-DD' format
 
+  // =========== TESTING VARIABLES ===============
+  // TABLE_NAME = `all_membership_sales_data_2015_left_join_member_application`;
+  // TABLE_NAME = `all_membership_sales_data_2015_left_join_profiles`;
   // start_date_mtn = '2025-08-01';
   // updated_at_date_mtn = '2025-07-11';
   // console.log(end_date_mtn);  // Logs the last day of the current year in YYYY-MM-DD format TODO: eliminate
