@@ -12,6 +12,7 @@ async function execute_upload_csv_to_cloud(options, datasetId, bucketName, schem
   const destinationPath = `gs://${bucketName}/`;
 
   // If you already authenticate at process start, you can skip login.
+  await execute_google_cloud_command("login", "Login successful", "login_to_google_cloud");
   await execute_google_cloud_command("set_property_id", "Project Id set successfully.");
 
   const os_path = await determineOSPath();
