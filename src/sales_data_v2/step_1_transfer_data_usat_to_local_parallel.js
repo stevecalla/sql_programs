@@ -263,6 +263,9 @@ async function process_stream_parallel(
 async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at') {
   const BATCH_SIZE = 100;
   let TABLE_NAME = `all_membership_sales_data_2015_left`;
+  // TABLE_NAME = `all_membership_sales_data_2015_left_join_member_application`;
+  // TABLE_NAME = `all_membership_sales_data_2015_left_join_profiles`;
+  // TABLE_NAME = `all_membership_sales_data_2015_left_join_membership_periods`;
   const TABLE_STRUCTURE = await query_create_all_membership_sales_table(TABLE_NAME);
   let result = 'Transfer Failed';
   let offset = 0;
@@ -274,8 +277,6 @@ async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at
   let updated_at_date_mtn = await get_yesterdays_date(); // Return yesterday in 'YYYY-MM-DD' format
 
   // =========== TESTING VARIABLES ===============
-  // TABLE_NAME = `all_membership_sales_data_2015_left_join_member_application`;
-  // TABLE_NAME = `all_membership_sales_data_2015_left_join_profiles`;
   // start_date_mtn = '2025-08-01';
   // updated_at_date_mtn = '2025-07-11';
   // console.log(end_date_mtn);  // Logs the last day of the current year in YYYY-MM-DD format TODO: eliminate
@@ -294,6 +295,7 @@ async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at
     await create_target_table(dstConn, TABLE_NAME, TABLE_STRUCTURE, update_mode);
 
     let membership_category_logic = generate_membership_category_logic;
+    console.log('TABLE NAME:', TABLE_NAME);
     console.log('UPDATE MODE:', update_mode + '; START DATE:', start_date_mtn + '; END DATE:', end_date_mtn + '; UPDATED AT:', updated_at_date_mtn)
 
     // Get total rows count for progress tracking
