@@ -24,6 +24,7 @@ function query_get_sales_data(query_membership_category_logic, year, start_date,
                   members.updated_at > '${updated_at_date_mtn}'
                   AND members.memberable_type = 'profiles'
                )
+               OR profiles.updated_at > '${updated_at_date_mtn}'
             )
    `;
 
