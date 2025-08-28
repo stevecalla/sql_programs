@@ -243,7 +243,7 @@ async function process_stream_parallel(
 
         if (update_mode === 'full' || update_mode === 'partial') await flush_batch_upsert(conn, TABLE_NAME, batch);
         else /* updated_at */     await flush_batch_replace(conn, TABLE_NAME, batch);
-        
+
         console.log(`\nFlushing remaining ${batch.length} rows...`);
 
       } finally {
@@ -305,20 +305,20 @@ async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at
 
     // for (let j = 0; j < 1; j++) { // test
     for (let j = 0; j < membership_category_logic.length; j++) {
-      runTimer('timer');
-      const startTime = Date.now();  // Start time tracking
-
       const { query, file_name } = membership_category_logic[j];
-      console.log(`\nStarting transfer for: ${file_name}`);
+      const startTime = Date.now();
 
-      // Process the stream in parallel batches
-      await process_stream_parallel(src, query, start_year_mtn, start_date_mtn, end_date_mtn, membership_period_ends, update_mode, updated_at_date_mtn, offset, BATCH_SIZE, dstPool, TABLE_NAME);
-
-      console.log('Transfer successful.');
-      result = 'Transfer Successful';
-
-      log_duration(startTime, file_name); // Log the duration of the operation
-      stopTimer('timer');
+      runTimer('timer');                   // start for this iteration
+      try {
+        console.log(`\nStarting transfer for: ${file_name}`);
+        // Process the stream in parallel batches
+        await process_stream_parallel(src, query, start_year_mtn, start_date_mtn, end_date_mtn, membership_period_ends, update_mode, updated_at_date_mtn, offset, BATCH_SIZE, dstPool, TABLE_NAME);
+        console.log('Transfer successful.');
+        result = 'Transfer Successful';
+      } finally {
+        log_duration(startTime, file_name);
+        stopTimer('timer');                // make sure it always stops
+      }
     }
   } catch (err) {
     console.error('Transfer failed:', err);
@@ -340,6 +340,8 @@ async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at
         sshClient.end();
       });
       console.log('✅ SSH tunnel closed.');
+
+      stopTimer('timer');
     } catch (closeErr) {
       console.warn('Error during cleanup:', closeErr);
     }
