@@ -77,7 +77,7 @@ async function execute_create_year_over_year_key_metrics() {
 
         for (let i = 0; i < query_list.length; i++) {
 
-            runTimer(`${i}_query_to_create_table`);
+            runTimer(`query_to_create_table`);
 
             let current_query = query_list[i]();
             const results = await execute_mysql_working_query(pool, db_name, current_query);
@@ -85,7 +85,7 @@ async function execute_create_year_over_year_key_metrics() {
             console.log(`\nExecuted ${i} of ${number_of_queries} queries`);
             console.log(`Rows affected/added ${results}\n`);
 
-            stopTimer(`${i}_query_to_create_table`);
+            stopTimer(`query_to_create_table`);
         }
 
         // STEP #5a: Log results
@@ -110,6 +110,8 @@ async function execute_create_year_over_year_key_metrics() {
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
 
         console.log(`\nSTEP #1 = TIME LOG. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
+        
+        stopTimer(`query_to_create_table`);
         
         return elapsedTime;
     }
