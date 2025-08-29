@@ -245,6 +245,8 @@ const index_fields = `
   INDEX idx_purchased_on_date_mp (purchased_on_date_mp),
   INDEX idx_updated_at_mp (updated_at_mp),
   INDEX idx_purchased_on_mp_purchased_on_year_mp (purchased_on_date_mp, purchased_on_year_mp),
+  INDEX idx_updated_at_members (updated_at_members),
+  INDEX idx_updated_at_profiles (updated_at_profiles),
   
   INDEX idx_date_of_birth_profiles (date_of_birth_profiles),
   INDEX idx_date_of_birth_ma (date_of_birth_ma),
