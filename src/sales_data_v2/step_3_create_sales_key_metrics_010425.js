@@ -56,7 +56,7 @@ async function execute_mysql_working_query(pool, db_name, query) {
     });
 }
 
-async function execute_create_sales_key_metrics() {
+async function execute_create_sales_key_metrics(update_mode = 'updated_at') {
     let pool;
     const startTime = performance.now();
 
