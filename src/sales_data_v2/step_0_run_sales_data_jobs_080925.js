@@ -21,19 +21,19 @@ const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 const run_step_1  = true; // transfer sales data from usat vapor to local db
-const run_step_2a = true; // load region table
+const run_step_2a = false; // load region table
 
 const run_step_3  = true; // create sales key metrics stats table
-const run_step_3a = true; // load sales key metrics stats to biqquery
+const run_step_3a = false; // load sales key metrics stats to biqquery
 
 const run_step_4  = true; // create year-over-year common date table
 const run_step_4a = true; // load sales key metrics stats to biqquery
 
 const run_step_5  = true; // load sales goal data
-const run_step_5a = true; // load sales goals to bigquery
+const run_step_5a = false; // load sales goals to bigquery
 
 const run_step_6  = true; // create actual vs goal data table
-const run_step_6a = true; // load actual vs goal to bigquery
+const run_step_6a = false; // load actual vs goal to bigquery
 
 async function executeSteps(stepFunctions, stepName, update_mode) {
   for (let i = 0; i < stepFunctions.length; i++) {
