@@ -161,7 +161,7 @@ async function execute_load_region_data() {
                 console.log(`File ${i} of ${files.length}`);
                 console.log(`Rows added = ${rows_added}\n`);
 
-                stopTimer(`$get_data`);
+                stopTimer(`get_data`);
             }
         }
 
@@ -190,7 +190,7 @@ async function execute_load_region_data() {
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
         console.log(`\nSTEP #5C = TIME LOG. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
 
-        stopTimer(`$get_data`);
+        stopTimer(`get_data`);
         
         return elapsedTime;
     }
