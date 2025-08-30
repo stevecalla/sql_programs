@@ -58,9 +58,6 @@ async function execute_mysql_working_query(pool, db_name, query) {
     });
 }
 
-// TODO:
-// - fix one_day join to avoid reg audit membership period date
-
 async function execute_create_sales_key_metrics(update_mode = 'updated_at', options) {
     let pool;
     const startTime = performance.now();
