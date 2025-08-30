@@ -59,43 +59,16 @@ function query_get_sales_data(query_membership_category_logic, year, start_date,
          ${query_sales_units_logic(year, start_date, end_date, query_membership_category_logic, operator, membership_period_ends, update_code, updated_at_date_mtn)} -- TODO: SET YEAR, SET MEMBERSHIP LOGIC, SET OPERATOR
       ),
 
-      -- SELECT COUNT(*) FROM one_day_sales_actual_member_fee
-
       -- STEP #6: APPEND ALL DATA FIELDS
       append_all_fields AS (
          ${query_all_fields_logic}
       )
-      
-      -- RETURN ALL RECORDS
-      -- SELECT * FROM append_all_fields -- THIS IS THE DEFAULT
-
-      SELECT *
-      FROM append_all_fields
-      ORDER BY id_membership_periods_sa
-
-      -- TESTING
-      -- SELECT * FROM append_all_fields LIMIT 1
-      -- SELECT * FROM append_all_fields LIMIT 10
-
-      -- GET PRICE RULES COUNT
-      -- SELECT 
-      --    max_membership_fee_6_rule, 
-      --    COUNT(*) 
-      -- FROM append_all_fields 
-      -- GROUP BY 1 WITH ROLLUP
-      -- ORDER BY 1 -- todo: rule additional field
-
-      -- GET COUNT BY YEAR
-      -- SELECT
-      --     purchased_on_year_mp,
-      --     FORMAT(COUNT(*), 0) AS total_count,
-      --     FORMAT(SUM(actual_membership_fee_6_sa), 0) AS total_revenue
-      -- FROM append_all_fields
-      -- GROUP BY purchased_on_year_mp WITH ROLLUP
-      -- ORDER BY purchased_on_year_mp
+         SELECT *
+         FROM append_all_fields
+         ORDER BY id_membership_periods_sa
       ;
    `
-      ;
+   ;
 }
 
 module.exports = { query_get_sales_data };
