@@ -101,10 +101,8 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
     membership_period_ends: '2008-01-01',
     start_year_mtn: 2010, // Default = 2010
     start_date_mtn: update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01',
-    // start_date_mtn: update_mode === 'partial' ? '2024-01-01': '2010-01-01',
     end_date_mtn: await get_last_day_of_year(),
-    // end_date_mtn: '2024-12-31',
-    updated_at_date_mtn: await get_yesterdays_date(), // Return yesterday in 'YYYY-MM-DD' format
+    updated_at_date_mtn: await get_yesterdays_date(),
   };
 
   // =========== TESTING VARIABLES ===============
