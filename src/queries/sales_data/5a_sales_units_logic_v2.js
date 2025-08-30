@@ -1,6 +1,6 @@
 const { query_is_allowable_logic } = require('./10_is_allowable_logic');
 
-function query_sales_units_logic(year, start_date, end_date, membership_category_logic, operator, membership_periods_ends, update_code, updated_at_date_mtn) {
+function query_sales_units_logic(year, start_date, end_date, membership_category_logic, operator, membership_periods_ends, WHERE_STATEMENT, updated_at_date_mtn) {
     return `
         SELECT 
             members.member_number AS member_number_members,
@@ -68,7 +68,7 @@ function query_sales_units_logic(year, start_date, end_date, membership_category
 
             -- AND membership_periods.purchased_on >= '${start_date}'
             -- AND membership_periods.purchased_on <= '${end_date}'
-            ${update_code}
+            ${WHERE_STATEMENT}
                      
             AND membership_periods.ends >= '${membership_periods_ends}'
 
