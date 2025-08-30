@@ -18,8 +18,8 @@ function query_sales_units_logic(year, start_date, end_date, membership_category
             
             mc.max_membership_fee_6 AS max_membership_fee_6,
             mc.new_member_category_6,
-            mc.source_2, -- todo:
-            mc.is_koz_acception, -- todo:
+            mc.source_2,
+            mc.is_koz_acception,
 
             DATE(membership_periods.created_at) AS created_at_membership_periods,
 
