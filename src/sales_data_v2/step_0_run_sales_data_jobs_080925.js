@@ -1,7 +1,7 @@
 const dotenv = require('dotenv');
 dotenv.config({ path: "./.env" });
 
-const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
+const { getCurrentDateTime, get_yesterdays_date, get_todays_date, get_last_day_of_year, get_first_day_of_prior_year } = require('../../utilities/getCurrentDate');
 
 const { execute_transfer_usat_to_local_parallel } = require('./step_1_transfer_data_usat_to_local_parallel');
 const { execute_load_region_data } = require('./step_2a_load_region_table');
@@ -35,7 +35,7 @@ const run_step_5a = true; // load sales goals to bigquery
 const run_step_6  = true; // create actual vs goal data table
 const run_step_6a = true; // load actual vs goal to bigquery
 
-async function executeSteps(stepFunctions, stepName, update_mode) {
+async function executeSteps(stepFunctions, stepName, update_mode, options) {
   for (let i = 0; i < stepFunctions.length; i++) {
     
     const start_local_time = new Date().toLocaleString(); // Get the current local date and time as a string
@@ -46,7 +46,7 @@ async function executeSteps(stepFunctions, stepName, update_mode) {
     console.log(`\n*************** STARTING ${stepName[i]} ***************\n`);
     try {
       if (stepFunction) {
-        const results = await stepFunction(update_mode);
+        const results = await stepFunction(update_mode, options);
 
         const endTime = performance.now();
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2);
@@ -96,6 +96,28 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
+  const options = {
+    TABLE_NAME: `all_membership_sales_data_2015_left`,
+    membership_period_ends: '2008-01-01',
+    start_year_mtn: 2010, // Default = 2010
+    start_date_mtn: update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01',
+    // start_date_mtn: update_mode === 'partial' ? '2024-01-01': '2010-01-01',
+    end_date_mtn: await get_last_day_of_year(),
+    // end_date_mtn: '2024-12-31',
+    updated_at_date_mtn: await get_yesterdays_date(), // Return yesterday in 'YYYY-MM-DD' format
+  };
+
+  // =========== TESTING VARIABLES ===============
+  // let TABLE_NAME = `all_membership_sales_data_2015_left`;
+  // TABLE_NAME = `all_membership_sales_data_2015_left_join_member_application`;
+  // TABLE_NAME = `all_membership_sales_data_2015_left_join_profiles`;
+  // TABLE_NAME = `all_membership_sales_data_2015_left_join_membership_periods`;
+  // start_date_mtn = '2025-08-01';
+  // updated_at_date_mtn = '2025-07-11';
+  // console.log(end_date_mtn);  // Logs the last day of the current year in YYYY-MM-DD format
+  // updated_at_date_mtn = await get_todays_date(); // Return today in 'YYYY-MM-DD' format
+  // end_date_mtn = '2025-08-08'; // testing comment out
+
   try {
     const stepFunctions = [
       run_step_1  ? execute_transfer_usat_to_local_parallel : null,
@@ -112,7 +134,7 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
 
     const stepName = [
       `Step #1 - Get Sales Data:`, 
-      // `Step #2 - Load Sales Data: `, 
+      // `Step #2 - Load Sales Data: `, -- not necessary as step 1 retrieves & transfers data
       `Step #2a - Load Region Data: `, 
       `Step #3 - Create Sales Key Metrics: `, 
       `Step #3a - Load Sales Key Metrics to BQ: `, 
@@ -124,7 +146,7 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
       `Step #6a - Load Actual vs Goal to BQ`,
     ];
 
-    await executeSteps(stepFunctions, stepName, update_mode); // Call the new function
+    await executeSteps(stepFunctions, stepName, update_mode, options); // Call the new function
 
   } catch (error) {
     console.error('Error in main process:', error); // More specific message
