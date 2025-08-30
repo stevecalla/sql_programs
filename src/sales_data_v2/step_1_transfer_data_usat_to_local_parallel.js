@@ -39,48 +39,10 @@ function log_duration(startTime, file_name) {
   console.log(`Duration: ${formattedDuration} for ${file_name}`);
 }
 
-async function get_yesterdays_date() {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1); // Move back one day
-
-  const year = yesterday.getFullYear();
-  const month = String(yesterday.getMonth() + 1).padStart(2, '0'); // Months are 0-based
-  const day = String(yesterday.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
-
-async function get_todays_date() {
-  const today = new Date(); // Get the current date
-
-  const year = today.getFullYear(); // Get the current year
-  const month = String(today.getMonth() + 1).padStart(2, '0'); // Get the current month (0-indexed, so we add 1)
-  const day = String(today.getDate()).padStart(2, '0'); // Get the current day
-
-  // Return the formatted date in 'YYYY-MM-DD' format
-  return `${year}-${month}-${day}`;
-}
-
-async function get_last_day_of_year() {
-  const current_date_mtn = new Date(); // Get the current date
-  let end_date_mtn = new Date(current_date_mtn.getFullYear(), 11, 31); // Set the date to December 31st (Month is 0-indexed)
-
-  // Format the date in YYYY-MM-DD format
-  return `${end_date_mtn.getFullYear()}-${String(end_date_mtn.getMonth() + 1).padStart(2, '0')}-${String(end_date_mtn.getDate()).padStart(2, '0')}`;
-}
-
-async function get_first_day_of_prior_year() {
-  const current_date_mtn = new Date(); // Get the current date
-  let start_date_mtn = new Date(current_date_mtn.getFullYear() - 1, 0, 1); // Set to Jan 1 of prior year
-
-  // Format the date in YYYY-MM-DD format
-  return `${start_date_mtn.getFullYear()}-${String(start_date_mtn.getMonth() + 1).padStart(2, '0')}-${String(start_date_mtn.getDate()).padStart(2, '0')}`;
-}
-
 // Console.log the mysql thread id when writing results to db
 async function getThreadId(conn) {
   return conn.threadId ?? conn.connection?.threadId
-      ?? (await conn.query('SELECT CONNECTION_ID() AS id'))[0][0].id;
+    ?? (await conn.query('SELECT CONNECTION_ID() AS id'))[0][0].id;
 }
 
 // DATABASE CONNECTIONS
@@ -260,28 +222,14 @@ async function process_stream_parallel(
   console.log(`Processed a total of ${rows_processed} rows.`);
 }
 
-async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at') {
+async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at', options) {
   const BATCH_SIZE = 100;
-  let TABLE_NAME = `all_membership_sales_data_2015_left`;
-  // TABLE_NAME = `all_membership_sales_data_2015_left_join_member_application`;
-  // TABLE_NAME = `all_membership_sales_data_2015_left_join_profiles`;
-  // TABLE_NAME = `all_membership_sales_data_2015_left_join_membership_periods`;
-  const TABLE_STRUCTURE = await query_create_all_membership_sales_table(TABLE_NAME);
   let result = 'Transfer Failed';
   let offset = 0;
 
-  const membership_period_ends = '2008-01-01';
-  let start_year_mtn = 2010; // Default = 2010
-  let start_date_mtn = update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01';
-  let end_date_mtn = await get_last_day_of_year();
-  let updated_at_date_mtn = await get_yesterdays_date(); // Return yesterday in 'YYYY-MM-DD' format
+  let { TABLE_NAME, membership_period_ends, start_year_mtn, start_date_mtn, end_date_mtn, updated_at_date_mtn } = options;
 
-  // =========== TESTING VARIABLES ===============
-  // start_date_mtn = '2025-08-01';
-  // updated_at_date_mtn = '2025-07-11';
-  // console.log(end_date_mtn);  // Logs the last day of the current year in YYYY-MM-DD format TODO: eliminate
-  // updated_at_date_mtn = await get_todays_date(); // Return today in 'YYYY-MM-DD' format
-  // end_date_mtn = '2025-08-08'; // testing comment out TODO: eliminate
+  const TABLE_STRUCTURE = await query_create_all_membership_sales_table(TABLE_NAME);
 
   const { src, sshClient } = await get_src_connection_and_ssh();
 
