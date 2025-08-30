@@ -1,5 +1,5 @@
 // CODE AFTER 022825
-function query_source_2_logic(year, start_date, end_date, operator, membership_period_ends, update_code, updated_at_date_mtn) {
+function query_source_2_logic(year, start_date, end_date, operator, membership_period_ends, WHERE_STATEMENT, updated_at_date_mtn) {
     return `
         SELECT 
             membership_periods.id AS id_membership_periods,
@@ -50,7 +50,7 @@ function query_source_2_logic(year, start_date, end_date, operator, membership_p
 
             -- AND membership_periods.purchased_on >= '${start_date}'
             -- AND membership_periods.purchased_on <= '${end_date}'
-            ${update_code}
+            ${WHERE_STATEMENT}
 
             AND membership_periods.ends >= '${membership_period_ends}'
 
