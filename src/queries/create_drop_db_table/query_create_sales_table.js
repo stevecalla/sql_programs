@@ -225,7 +225,6 @@ const select_fields = `
 `;
 
 const index_fields = `
-  -- PRIMARY KEY (member_number_members_sa, id_membership_periods_sa),
   PRIMARY KEY (id_profiles, id_membership_periods_sa), -- changed 8/14/25
    
   INDEX idx_id_events (id_events),
@@ -256,7 +255,18 @@ const index_fields = `
 
   INDEX idx_origin_flag_ma (origin_flag_ma(255)),
 
-  INDEX idx_profiles_membership_starts (id_profiles, id_membership_periods_sa, starts_mp)
+  INDEX idx_profiles_membership_starts (id_profiles, id_membership_periods_sa, starts_mp),
+
+  -- for sales key metrics queries 5 & 5a
+  INDEX idx_period_sale_dob (id_membership_periods_sa, purchased_on_adjusted_mp, date_of_birth_profiles),
+
+  -- for sales key metrics query 7; -- Purchase timeline
+  INDEX idx_am_profile_purch (id_profiles, purchased_on_adjusted_mp, id_membership_periods_sa,
+        real_membership_types_sa, new_member_category_6_sa),
+
+  -- for sales key metrics query 7; -- Ends timeline
+  INDEX idx_am_profile_ends (id_profiles, ends_mp, id_membership_periods_sa)
+
 `;
 
 async function query_create_all_membership_sales_table(table_name) {
