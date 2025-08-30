@@ -31,11 +31,12 @@ async function create_connection() {
 // EXECUTE MYSQL TO CREATE TABLES & WORK WITH TABLES QUERY
 async function execute_mysql_working_query(pool, db_name, query) {
     const startTime = performance.now();
-    // const fs = require('fs');
+
+    // console.log(query);
 
     return new Promise((resolve, reject) => {
         pool.query(`USE ${db_name};`, (queryError, results) => {
-            pool.query({sql: query,}, (queryError, results) => {
+            pool.query({ sql: query, }, (queryError, results) => {
 
                 const endTime = performance.now();
                 const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
@@ -45,18 +46,22 @@ async function execute_mysql_working_query(pool, db_name, query) {
 
                     reject(queryError);
                 } else {
-                    // console.table(results[1]);
-                    // console.log(results[1]);
-                    console.log(`Query results: ${results[1].affectedRows}, Elapsed Time: ${elapsedTime} sec\n`);
+                    // console.table(results[1] || results);
+                    // console.log(results[1] || results);
+                    console.log(`Query results: ${results[1]?.affectedRows || results.affectedRows}, Elapsed Time: ${elapsedTime} sec\n`);
 
-                    resolve(results[1].affectedRows);
+
+                    resolve(results[1]?.affectedRows);
                 }
             });
         });
     });
 }
 
-async function execute_create_sales_key_metrics(update_mode = 'updated_at') {
+// TODO:
+// - fix one_day join to avoid reg audit membership period date
+
+async function execute_create_sales_key_metrics(update_mode = 'updated_at', options) {
     let pool;
     const startTime = performance.now();
 
@@ -68,23 +73,28 @@ async function execute_create_sales_key_metrics(update_mode = 'updated_at') {
         console.log(db_name);
 
         // STEP #1: ITERATE THRU EACH QUERY & EXECUTE
-            // EACH QUERY CONTAINS A TABLE DROP, TABLE CREATE, & INDEXES (IF APPLICABLE)
-        const query_list = await query_step_0_sales_key_metrics_master_logic();
+        // EACH QUERY CONTAINS A TABLE DROP, TABLE CREATE, & INDEXES (IF APPLICABLE)
+        const query_list = await query_step_0_sales_key_metrics_master_logic(update_mode);
         const number_of_queries = query_list.length;
+
+        const FROM_STATEMENT = update_mode === 'full' ? `FROM ${options.TABLE_NAME}` : `FROM step_0a_create_updated_at_data`;
+
+        console.log('UPDATE MODE:', update_mode + '; FROM STATEMENT:', FROM_STATEMENT);
 
         for (let i = 0; i < query_list.length; i++) {
 
             console.log(query_list[i]);
 
-            let current_query = query_list[i]();
+            let current_query = await query_list[i](FROM_STATEMENT, pool, update_mode, options);
 
             runTimer(`query_to_create_table`);
 
-            const results = await execute_mysql_working_query(pool, db_name, current_query);
-            
+            let results = "";
+            results = await execute_mysql_working_query(pool, db_name, current_query, FROM_STATEMENT);
+
             console.log(query_list[i]);
             console.log(`\nExecuted ${i} of ${number_of_queries} queries`);
-            console.log(`Rows affected/added ${results}\n`);
+            console.log(`Rows affected/added ${results ?? '(n/a)'}\n`);
 
             stopTimer(`query_to_create_table`);
         }
@@ -111,9 +121,9 @@ async function execute_create_sales_key_metrics(update_mode = 'updated_at') {
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
 
         console.log(`\nSTEP #1 = TIME LOG. Elapsed Time: ${elapsedTime ? elapsedTime : "Opps error getting time"} sec\n`);
-        
+
         stopTimer(`query_to_create_table`);
-        
+
         return elapsedTime;
     }
 }
