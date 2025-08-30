@@ -91,20 +91,7 @@ async function executeSteps(stepFunctions, stepName, update_mode, options) {
   }
 }
 
-async function execute_run_sales_data_jobs_v2(update_mode) {
-  const startTime = performance.now();
-
-  console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
-
-  const options = {
-    TABLE_NAME: `all_membership_sales_data_2015_left`,
-    membership_period_ends: '2008-01-01',
-    start_year_mtn: 2010, // Default = 2010
-    start_date_mtn: update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01',
-    end_date_mtn: await get_last_day_of_year(),
-    updated_at_date_mtn: await get_yesterdays_date(),
-  };
-
+async function create_variables(update_mode) {
   // =========== TESTING VARIABLES ===============
   // let TABLE_NAME = `all_membership_sales_data_2015_left`;
   // TABLE_NAME = `all_membership_sales_data_2015_left_join_member_application`;
@@ -115,6 +102,25 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
   // console.log(end_date_mtn);  // Logs the last day of the current year in YYYY-MM-DD format
   // updated_at_date_mtn = await get_todays_date(); // Return today in 'YYYY-MM-DD' format
   // end_date_mtn = '2025-08-08'; // testing comment out
+
+  const options = {
+    TABLE_NAME: `all_membership_sales_data_2015_left`,
+    membership_period_ends: '2008-01-01',
+    start_year_mtn: 2010, // Default = 2010
+    start_date_mtn: update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01',
+    end_date_mtn: await get_last_day_of_year(),
+    updated_at_date_mtn: await get_yesterdays_date(),
+  };
+
+  return options;
+  
+}
+
+async function execute_run_sales_data_jobs_v2(update_mode) {
+  const startTime = performance.now();
+  console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
+
+  const options = create_variables(update_mode);
 
   try {
     const stepFunctions = [
