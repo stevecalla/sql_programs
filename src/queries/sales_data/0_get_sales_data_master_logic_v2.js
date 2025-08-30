@@ -13,7 +13,7 @@ const operator = '>=';
 
 function query_get_sales_data(query_membership_category_logic, year, start_date, end_date, membership_period_ends, update_mode, updated_at_date_mtn) {
 
-   const update_code = 
+   const WHERE_STATEMENT = 
    (update_mode === 'full' || update_mode === 'partial') ? `
          AND membership_periods.purchased_on >= '${start_date}'
          AND membership_periods.purchased_on <= '${end_date}'
@@ -31,7 +31,7 @@ function query_get_sales_data(query_membership_category_logic, year, start_date,
    return `
       -- STEP #1 - CREATE SOURCE 2
       WITH source_2_type AS (
-         ${query_source_2_logic(year, start_date, end_date, operator, membership_period_ends, update_code, updated_at_date_mtn)}
+         ${query_source_2_logic(year, start_date, end_date, operator, membership_period_ends, WHERE_STATEMENT, updated_at_date_mtn)}
       ),
 
       -- STEP #2 - CREATE KOZ ACCEPTION
@@ -56,7 +56,7 @@ function query_get_sales_data(query_membership_category_logic, year, start_date,
 
       -- STEP #5 - ONE DAY SALES ACTUAL MEMBER FEE
       one_day_sales_actual_member_fee AS (
-         ${query_sales_units_logic(year, start_date, end_date, query_membership_category_logic, operator, membership_period_ends, update_code, updated_at_date_mtn)} -- TODO: SET YEAR, SET MEMBERSHIP LOGIC, SET OPERATOR
+         ${query_sales_units_logic(year, start_date, end_date, query_membership_category_logic, operator, membership_period_ends, WHERE_STATEMENT, updated_at_date_mtn)} -- TODO: SET YEAR, SET MEMBERSHIP LOGIC, SET OPERATOR
       ),
 
       -- STEP #6: APPEND ALL DATA FIELDS
