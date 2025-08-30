@@ -1,7 +1,4 @@
 const { query_is_allowable_logic } = require('./10_is_allowable_logic');
-// const { query_is_allowable_logic_modified } = require('./10_is_allowable_logic_modified')
-// -- ${query_is_allowable_logic} // original line 57
-// ${query_is_allowable_logic_modified}
 
 function query_sales_units_logic(year, start_date, end_date, membership_category_logic, operator, membership_periods_ends, update_code, updated_at_date_mtn) {
     return `
