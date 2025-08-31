@@ -105,9 +105,10 @@ async function create_variables(update_mode) {
 
   const options = {
     TABLE_NAME: `all_membership_sales_data_2015_left`,
+    TARGET_TABLE_NAME: `sales_key_stats_2015_test`,
     membership_period_ends: '2008-01-01',
     start_year_mtn: 2010, // Default = 2010
-    start_date_mtn: update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01',
+    start_date_mtn: update_mode === 'partial' ? 'await get_first_day_of_prior_year()' : '2010-01-01',
     end_date_mtn: await get_last_day_of_year(),
     updated_at_date_mtn: await get_yesterdays_date(),
   };
@@ -167,9 +168,9 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
 }
 
 if (require.main === module) {
-  const update_mode = 'full';        // Update 2010 forward, drop table
+  // const update_mode = 'full';        // Update 2010 forward, drop table
   // const update_mode = 'partial';        // Update using current & prior year, dont drop
-  // const update_mode = 'update_at';   // Update based on the 'updated_at' date, dont drop
+  const update_mode = 'update_at';   // Update based on the 'updated_at' date, dont drop
 
   execute_run_sales_data_jobs_v2(update_mode);
 }

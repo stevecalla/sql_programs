@@ -99,7 +99,6 @@ function step_7_prior_purchase(FROM_STATEMENT) {
         END WHILE;
       END;
 
-
       -- CALL THE PROCEDURE e.g., ~100k IDs per batch
       CALL sp_step7_rebuild_by_range(100000);
     `;

@@ -1,7 +1,7 @@
 // SOURCE?
 // C:\Users\calla\development\usat\sql_code\6_create_key_stats\key_stats_query_cte_create_table_100524.sql
 
-async function step_8_sales_key_stats_2015_query(FROM_STATEMENT, WHERE_STATEMENT) {
+async function step_8_sales_key_stats_2015_query(FROM_STATEMENT, WHERE_STATEMENT = '', ORDER_BY_STATEMENT = '') {
     return `
         SELECT
             am.member_number_members_sa, 
@@ -314,40 +314,25 @@ async function step_8_sales_key_stats_2015_query(FROM_STATEMENT, WHERE_STATEMENT
             DATE_FORMAT(DATE_ADD(NOW(), INTERVAL -6 HOUR), '%Y-%m-%d') AS created_at_mtn,
             DATE_FORMAT(NOW(), '%Y-%m-%d') AS created_at_utc
 
+            -- DATE CREATED AT DATES
+            -- @dt_mtn AS created_at_mtn,
+            -- @dt_utc AS created_at_utc
+
         -- FROM all_membership_sales_data_2015_left am
         ${FROM_STATEMENT} AS am
-
-            LEFT JOIN step_1_member_minimum_first_created_at_dates AS fd
-                ON am.id_profiles = fd.id_profiles
-
-            LEFT JOIN step_2_member_min_created_at_date AS mc
-                ON am.id_profiles = mc.id_profiles
-            
-            LEFT JOIN step_3_member_total_life_time_purchases AS lp
-                ON am.id_profiles = lp.id_profiles
-
-            LEFT JOIN step_4_member_age_dimensions AS ad
-                ON am.id_profiles = ad.id_profiles
-
-            LEFT JOIN step_5_member_age_at_sale_date AS sd
-                ON am.id_membership_periods_sa = sd.id_membership_periods_sa
-
-            LEFT JOIN step_5a_member_age_at_end_of_year_of_sale AS ye
-                ON am.id_membership_periods_sa = ye.id_membership_periods_sa
-
-            LEFT JOIN step_6_membership_period_stats AS st
-                ON am.id_membership_periods_sa = st.id_membership_periods_sa
-
-            LEFT JOIN step_7_prior_purchase AS pp
-                ON am.id_membership_periods_sa = pp.id_membership_periods_sa
-
-            LEFT JOIN region_data AS er -- event region
-                ON am.state_code_events = er.state_code
-
-            LEFT JOIN region_data AS ar -- address region
-                ON am.state_code_addresses = ar.state_code
+            LEFT JOIN step_1_member_minimum_first_created_at_dates AS fd ON am.id_profiles = fd.id_profiles
+            LEFT JOIN step_2_member_min_created_at_date AS mc ON am.id_profiles = mc.id_profiles
+            LEFT JOIN step_3_member_total_life_time_purchases AS lp ON am.id_profiles = lp.id_profiles
+            LEFT JOIN step_4_member_age_dimensions AS ad ON am.id_profiles = ad.id_profiles
+            LEFT JOIN step_5_member_age_at_sale_date AS sd ON am.id_membership_periods_sa = sd.id_membership_periods_sa
+            LEFT JOIN step_5a_member_age_at_end_of_year_of_sale AS ye ON am.id_membership_periods_sa = ye.id_membership_periods_sa
+            LEFT JOIN step_6_membership_period_stats AS st ON am.id_membership_periods_sa = st.id_membership_periods_sa
+            LEFT JOIN step_7_prior_purchase AS pp ON am.id_membership_periods_sa = pp.id_membership_periods_sa
+            LEFT JOIN region_data AS er ON am.state_code_events = er.state_code             -- event region 
+            LEFT JOIN region_data AS ar ON am.state_code_addresses = ar.state_code          -- address region 
 
         ${WHERE_STATEMENT}
+        ${ORDER_BY_STATEMENT}
     `;
 }
 
