@@ -7,17 +7,18 @@ function step_0a_create_updated_at_data(FROM_STATEMENT, pool, update_mode, optio
 
     const WHERE_STATEMENT = 
         (update_mode === 'partial') ? `
-                AND starts_mp >= '${start_date_mtn}'
-                AND ends_mp <= '${end_date_mtn}'
+                AND purchased_on_mp >= '${start_date_mtn}'
+                AND purchased_on_mp <= '${end_date_mtn}'
         ` : `
                 AND (
                     updated_at_mp           >= '${updated_at_date_mtn}'
                     OR updated_at_members   >= '${updated_at_date_mtn}'
                     OR updated_at_profiles  >= '${updated_at_date_mtn}'
                 )
-        `;
+        `
+    ;
 
-    return `
+    const query = `
         -- STEP #0a = CREATE UPDATED AT DATA TABLE
         DROP TABLE IF EXISTS step_0a_create_updated_at_data;
 
@@ -27,7 +28,7 @@ function step_0a_create_updated_at_data(FROM_STATEMENT, pool, update_mode, optio
                     -- FINDS THE SET OF PROFILE IDS BASED ON THE WHERE STATEMENT
                     SELECT DISTINCT 
                         id_profiles
-                    FROM ${FROM_STATEMENT}
+                    FROM ${TABLE_NAME}
                     WHERE 1 = 1
                         ${WHERE_STATEMENT}
                         -- AND (
@@ -41,7 +42,7 @@ function step_0a_create_updated_at_data(FROM_STATEMENT, pool, update_mode, optio
                     , all_joined_profile_records AS (
                         SELECT 
                             t.*
-                        FROM ${FROM_STATEMENT} AS t
+                        FROM ${TABLE_NAME} AS t
                             JOIN updated_profiles AS up USING (id_profiles)
                     )
 
@@ -56,6 +57,8 @@ function step_0a_create_updated_at_data(FROM_STATEMENT, pool, update_mode, optio
             ALTER TABLE step_0a_create_updated_at_data ADD INDEX (id_profiles);     
         -- *********************************************
     `;
+
+    return query;
 }
 
 module.exports = {
