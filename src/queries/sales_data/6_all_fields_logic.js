@@ -1,7 +1,7 @@
 const {
     join_members_profiles_users,
     join_membership_applications,
-    join_orders_transaction_join,
+    join_orders_transactions,
     join_races,
     join_registration_audit,
     join_metadata_addresses,
@@ -9,7 +9,7 @@ const {
     join_metadata_event_types,
     join_metadata_membership_types,
     join_metadata_registration_companies,
-} = require('./utility_joins_083025');
+} = require('./join_library_080325');
 
 const derived_fields = `
     -- ALL FIELDS / ONE DAY SALES / ACTUAL MEMBER FEE TABLE (CTE)
@@ -378,7 +378,7 @@ const from_statement_left = `
         ${join_races}
         
         ${join_registration_audit}
-        ${join_orders_transaction_join}
+        ${join_orders_transactions}
 
         ${join_metadata_addresses}
         ${join_metadata_event_types}
@@ -406,8 +406,9 @@ const query_all_fields_logic = `
     ${from_statement_left}
 
     WHERE 1 = 1
-        AND profiles.id IS NOT NULL
-        AND profiles.deleted_at IS NULL
+        -- moved these to the join
+        -- AND profiles.id IS NOT NULL
+        -- AND profiles.deleted_at IS NULL
     GROUP BY membership_periods.id
 `;
 
@@ -420,26 +421,26 @@ module.exports = {
 // FROM one_day_sales_actual_member_fee AS sa
 
 //     LEFT JOIN membership_periods ON sa.max_membership_period_id = membership_periods.id
-//     LEFT JOIN membership_applications ON sa.max_membership_period_id = membership_applications.membership_period_id    -- xx
+//     LEFT JOIN membership_applications ON sa.max_membership_period_id = membership_applications.membership_period_id
 
-//     LEFT JOIN order_products ON membership_applications.id = order_products.purchasable_id                 -- xx
-//     LEFT JOIN orders ON order_products.order_id = orders.id                                 -- xx
+//     LEFT JOIN order_products ON membership_applications.id = order_products.purchasable_id
+//     LEFT JOIN orders ON order_products.order_id = orders.id
 
 //     LEFT JOIN registration_audit ON sa.max_membership_period_id = registration_audit.membership_period_id
 //     LEFT JOIN registration_audit_membership_application ON registration_audit.id = registration_audit_membership_application.audit_id
 //     LEFT JOIN registration_companies ON registration_audit.registration_company_id = registration_companies.id
 
-//     LEFT JOIN membership_types ON membership_applications.membership_type_id = membership_types.id   -- xx
+//     LEFT JOIN membership_types ON membership_applications.membership_type_id = membership_types.id
 
-//     LEFT JOIN members ON membership_periods.member_id = members.id                              -- xx
+//     LEFT JOIN members ON membership_periods.member_id = members.id
 
-//     LEFT JOIN profiles ON members.memberable_id = profiles.id                   -- xx
-//     LEFT JOIN users ON profiles.user_id = users.id                              -- xx
+//     LEFT JOIN profiles ON members.memberable_id = profiles.id 
+//     LEFT JOIN users ON profiles.user_id = users.id           
 //     LEFT JOIN addresses ON profiles.primary_address_id = addresses.id
 
-//     LEFT JOIN events ON membership_applications.event_id = events.id                                 -- xx
+//     LEFT JOIN events ON membership_applications.event_id = events.id  
 //     LEFT JOIN races ON events.id = races.event_id
 //         AND races.deleted_at IS NULL
 //     LEFT JOIN event_types ON events.event_type_id = event_types.id
 
-//     LEFT JOIN transactions ON orders.id = transactions.order_id                 -- xx
+//     LEFT JOIN transactions ON orders.id = transactions.order_id 
