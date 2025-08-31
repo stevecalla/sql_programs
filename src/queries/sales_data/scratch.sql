@@ -11,8 +11,8 @@ FROM membership_periods
 		-- AND membership_applications.profile_id = profiles.id
 
 	-- audits for the period, and the app↔audit bridge
-	LEFT JOIN registration_audit_membership_application ON registration_audit_membership_application.membership_application_id = membership_applications.id
-	LEFT JOIN registration_audit ON registration_audit_membership_application.audit_id = registration_audit.id
+	LEFT JOIN registration_audit_membership_application     ON registration_audit_membership_application.membership_application_id = membership_applications.id
+	LEFT JOIN registration_audit    ON registration_audit_membership_application.audit_id = registration_audit.id
 
 	-- commerce trail from an application
 	LEFT JOIN order_products ON order_products.purchasable_id = membership_applications.id
