@@ -55,10 +55,11 @@ function query_sales_units_logic(year, start_date, end_date, membership_category
             LEFT JOIN transactions ON (orders.id = transactions.order_id)
             
             LEFT JOIN new_member_category_6 AS mc ON membership_periods.id = mc.id_membership_periods   
-        WHERE
-            -- year(membership_periods.purchased_on) ${operator} ${year}
+        WHERE 1 = 1
+            AND membership_periods.deleted_at IS NULL
 
-            membership_periods.purchased_on >= '${start_date}'
+            -- year(membership_periods.purchased_on) ${operator} ${year}
+            AND membership_periods.purchased_on >= '${start_date}'
             AND membership_periods.purchased_on <= '${end_date}'
                      
             ${query_is_allowable_logic}

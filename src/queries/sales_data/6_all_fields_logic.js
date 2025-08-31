@@ -1,3 +1,16 @@
+const {
+    join_members_profiles_users,
+    join_membership_applications,
+    join_orders_transaction_join,
+    join_races,
+    join_registration_audit,
+    join_metadata_addresses,
+    join_metadata_events,
+    join_metadata_event_types,
+    join_metadata_membership_types,
+    join_metadata_registration_companies,
+} = require('./utility_joins_083025');
+
 const derived_fields = `
     -- ALL FIELDS / ONE DAY SALES / ACTUAL MEMBER FEE TABLE (CTE)
     -- sa = sales actual
@@ -31,25 +44,25 @@ const addresses_table = `
     addresses.country_code AS country_code_addresses
 `;
 
-const events_table = ` -- todo:
+const events_table = `
     -- EVENTS TABLE
     events.id AS id_events,
 
     events.sanctioning_event_id AS id_sanctioning_events,
 
     -- CASE 
-    --     WHEN r.designation IS NOT NULL AND r.designation != '' 
-    --         THEN CONCAT(events.sanctioning_event_id, '-', r.designation)
+    --     WHEN races.designation IS NOT NULL AND races.designation != '' 
+    --         THEN CONCAT(events.sanctioning_event_id, '-', races.designation)
     --     ELSE events.sanctioning_event_id
     -- END AS id_sanctioning_events_and_type,
     CASE 
-        WHEN r.designation IS NOT NULL AND r.designation != '' THEN CONCAT(events.sanctioning_event_id, '-', r.designation)
+        WHEN races.designation IS NOT NULL AND races.designation != '' THEN CONCAT(events.sanctioning_event_id, '-', races.designation)
         WHEN events.event_type_id = 1 THEN CONCAT(events.sanctioning_event_id, '-', 'Adult Race')
         WHEN events.event_type_id = 2 THEN CONCAT(events.sanctioning_event_id, '-', 'Adult Clinic')
         WHEN events.event_type_id = 3 THEN CONCAT(events.sanctioning_event_id, '-', 'Youth Race')
         WHEN events.event_type_id = 4 THEN CONCAT(events.sanctioning_event_id, '-', 'Youth Clinic')
         ELSE events.sanctioning_event_id
-    END AS id_sanctioning_events_and_type, -- TODO:
+    END AS id_sanctioning_events_and_type,
 
     events.event_type_id AS event_type_id_events,
 
@@ -109,16 +122,16 @@ const events_table = ` -- todo:
     events.last_season_event_id AS last_season_event_id
 `;
 
-const event_types_table = ` -- todo:
+const event_types_table = `
     -- EVENT TYPES TABLE
-    et.id AS id_event_types,
+    event_types.id AS id_event_types,
     events.event_type_id AS id_event_type_events,
     CASE
-        WHEN r.designation IS NOT NULL THEN r.designation
-        WHEN r.designation IS NULL AND events.event_type_id = 1 THEN 'Adult Race'
-        WHEN r.designation IS NULL AND events.event_type_id = 2 THEN 'Adult Clinic'
-        WHEN r.designation IS NULL AND events.event_type_id = 3 THEN 'Youth Race'
-        WHEN r.designation IS NULL AND events.event_type_id = 4 THEN 'Youth Clinic'
+        WHEN races.designation IS NOT NULL THEN races.designation
+        WHEN races.designation IS NULL AND events.event_type_id = 1 THEN 'Adult Race'
+        WHEN races.designation IS NULL AND events.event_type_id = 2 THEN 'Adult Clinic'
+        WHEN races.designation IS NULL AND events.event_type_id = 3 THEN 'Youth Race'
+        WHEN races.designation IS NULL AND events.event_type_id = 4 THEN 'Youth Clinic'
         ELSE "missing_event_type_race_designation"
     END AS name_event_type
 `;
@@ -128,7 +141,7 @@ const membership_applications_table = `
     CONCAT('"', 
         REPLACE(
             REPLACE(
-                REPLACE(SUBSTRING(ma.address, 1, 255), '''', ''), 
+                REPLACE(SUBSTRING(membership_applications.address, 1, 255), '''', ''), 
                 '"', ''
             ), 
             ',', ''
@@ -136,13 +149,13 @@ const membership_applications_table = `
         '"'
     ) AS address_ma, 
 
-    ma.application_type AS application_type_ma,
-    ma.approval_status AS approval_status_ma,
+    membership_applications.application_type AS application_type_ma,
+    membership_applications.approval_status AS approval_status_ma,
     
     CONCAT('"', 
         REPLACE(
             REPLACE(
-                REPLACE(SUBSTRING(ma.city, 1, 255), '''', ''), 
+                REPLACE(SUBSTRING(membership_applications.city, 1, 255), '''', ''), 
                 '"', ''
             ), 
             ',', ''
@@ -150,20 +163,20 @@ const membership_applications_table = `
         '"'
     ) AS city_ma, 
 
-    ma.confirmation_code AS confirmation_code_ma,
-    ma.country AS country_ma,
-    ma.created_at AS created_at_ma,
-    ma.date_of_birth AS date_of_birth_ma,
-    ma.deleted_at AS deleted_at_ma,
-    ma.distance_type_id AS distance_type_id_ma,
-    ma.email AS email_ma,
-    ma.event_id AS event_id_ma,
-    ma.extension_type AS extension_type_ma,
+    membership_applications.confirmation_code AS confirmation_code_ma,
+    membership_applications.country AS country_ma,
+    membership_applications.created_at AS created_at_ma,
+    membership_applications.date_of_birth AS date_of_birth_ma,
+    membership_applications.deleted_at AS deleted_at_ma,
+    membership_applications.distance_type_id AS distance_type_id_ma,
+    membership_applications.email AS email_ma,
+    membership_applications.event_id AS event_id_ma,
+    membership_applications.extension_type AS extension_type_ma,
 
     CONCAT('"', 
         REPLACE(
             REPLACE(
-                REPLACE(SUBSTRING(ma.first_name, 1, 255), '''', ''), 
+                REPLACE(SUBSTRING(membership_applications.first_name, 1, 255), '''', ''), 
                 '"', ''
             ), 
             ',', ''
@@ -171,37 +184,37 @@ const membership_applications_table = `
         '"'
     ) AS first_name_ma, 
 
-    ma.gender AS gender_ma,
-    ma.id AS id_ma,
+    membership_applications.gender AS gender_ma,
+    membership_applications.id AS id_ma,
     
     CONCAT('"', 
         REPLACE(
             REPLACE(
-                REPLACE(SUBSTRING(ma.last_name, 1, 255), '''', ''), 
+                REPLACE(SUBSTRING(membership_applications.last_name, 1, 255), '''', ''), 
                 '"', ''
             ), 
             ',', ''
         ), 
         '"'
     ) AS last_name_ma, 
-    ma.membership_type_id AS membership_type_id_ma,
-    ma.middle_name AS middle_name_ma,
-    ma.origin_flag AS origin_flag_ma,
-    ma.outside_payment AS outside_payment_ma,
-    ma.paper_waivers_signed AS paper_waivers_signed_ma,
-    ma.payment_id AS payment_id_ma,
-    ma.payment_type AS payment_type_ma,
-    ma.phone AS phone_ma,
-    ma.plan_id AS plan_id_ma,
-    ma.profile_id AS profile_id_ma,
-    ma.race_id AS race_id_ma,
-    ma.race_type_id AS race_type_id_ma,
-    ma.referral_code AS referral_code_ma,
+    membership_applications.membership_type_id AS membership_type_id_ma,
+    membership_applications.middle_name AS middle_name_ma,
+    membership_applications.origin_flag AS origin_flag_ma,
+    membership_applications.outside_payment AS outside_payment_ma,
+    membership_applications.paper_waivers_signed AS paper_waivers_signed_ma,
+    membership_applications.payment_id AS payment_id_ma,
+    membership_applications.payment_type AS payment_type_ma,
+    membership_applications.phone AS phone_ma,
+    membership_applications.plan_id AS plan_id_ma,
+    membership_applications.profile_id AS profile_id_ma,
+    membership_applications.race_id AS race_id_ma,
+    membership_applications.race_type_id AS race_type_id_ma,
+    membership_applications.referral_code AS referral_code_ma,
 
     CONCAT('"', 
         REPLACE(
             REPLACE(
-                REPLACE(SUBSTRING(ma.state, 1, 255), '''', ''), 
+                REPLACE(SUBSTRING(membership_applications.state, 1, 255), '''', ''), 
                 '"', ''
             ), 
             ',', ''
@@ -209,67 +222,67 @@ const membership_applications_table = `
         '"'
     ) AS state_ma, 
 
-    ma.status AS status_ma,
-    ma.updated_at AS updated_at_ma,
-    ma.uuid AS uuid_ma,
-    ma.zip AS zip_ma,
-    CONCAT('"', SUBSTRING(ma.club_affiliations, 1, 1024), '"') AS club_affiliations_ma, 
-    CONCAT('"', SUBSTRING(ma.denial_reason, 1, 1024), '"') AS denial_reason_ma, 
-    CONCAT('"', SUBSTRING(ma.payment_explanation, 1, 1024), '"') AS payment_explanation_ma, 
-    SUBSTRING(ma.upgrade_code, 1, 1024) AS upgrade_code_ma  
+    membership_applications.status AS status_ma,
+    membership_applications.updated_at AS updated_at_ma,
+    membership_applications.uuid AS uuid_ma,
+    membership_applications.zip AS zip_ma,
+    CONCAT('"', SUBSTRING(membership_applications.club_affiliations, 1, 1024), '"') AS club_affiliations_ma, 
+    CONCAT('"', SUBSTRING(membership_applications.denial_reason, 1, 1024), '"') AS denial_reason_ma, 
+    CONCAT('"', SUBSTRING(membership_applications.payment_explanation, 1, 1024), '"') AS payment_explanation_ma, 
+    SUBSTRING(membership_applications.upgrade_code, 1, 1024) AS upgrade_code_ma  
 `;
 
 const membership_period_table = `     
     -- MEMBERSHIP PERIODS TABLE
-    mp.created_at AS created_at_mp,
-    mp.deleted_at AS deleted_at_mp,
-    mp.ends AS ends_mp,
-    mp.member_id AS member_id_mp,
-    mp.membership_type_id AS membership_type_id_mp,
-    mp.origin_flag AS origin_flag_mp,
-    mp.origin_status AS origin_status_mp,
-    mp.origin AS origin_mp,
-    mp.period_status AS period_status_mp,
-    mp.progress_status AS progress_status_mp,
+    membership_periods.created_at AS created_at_mp,
+    membership_periods.deleted_at AS deleted_at_mp,
+    membership_periods.ends AS ends_mp,
+    membership_periods.member_id AS member_id_mp,
+    membership_periods.membership_type_id AS membership_type_id_mp,
+    membership_periods.origin_flag AS origin_flag_mp,
+    membership_periods.origin_status AS origin_status_mp,
+    membership_periods.origin AS origin_mp,
+    membership_periods.period_status AS period_status_mp,
+    membership_periods.progress_status AS progress_status_mp,
 
-    mp.purchased_on AS purchased_on_mp,
-    DATE_FORMAT(STR_TO_DATE(mp.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d') AS purchased_on_date_mp,
-    YEAR(mp.purchased_on) AS purchased_on_year_mp,
-    QUARTER(mp.purchased_on) AS purchased_on_quarter_mp,
-    MONTH(mp.purchased_on) AS purchased_on_month_mp,
+    membership_periods.purchased_on AS purchased_on_mp,
+    DATE_FORMAT(STR_TO_DATE(membership_periods.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d') AS purchased_on_date_mp,
+    YEAR(membership_periods.purchased_on) AS purchased_on_year_mp,
+    QUARTER(membership_periods.purchased_on) AS purchased_on_quarter_mp,
+    MONTH(membership_periods.purchased_on) AS purchased_on_month_mp,
 
     -- adjusts purchased on to starts on date if starts < purchase on
     CASE   
-        WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN mp.starts
-        ELSE mp.purchased_on
+        WHEN membership_periods.starts < DATE_FORMAT(membership_periods.purchased_on, '%Y-%m-%d') THEN membership_periods.starts
+        ELSE membership_periods.purchased_on
     END AS purchased_on_adjusted_mp,
     CASE   
-        WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN mp.starts
-        ELSE DATE_FORMAT(STR_TO_DATE(mp.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d')
+        WHEN membership_periods.starts < DATE_FORMAT(membership_periods.purchased_on, '%Y-%m-%d') THEN membership_periods.starts
+        ELSE DATE_FORMAT(STR_TO_DATE(membership_periods.purchased_on, '%Y-%m-%d %H:%i:%s'), '%Y-%m-%d')
     END AS purchased_on_date_adjusted_mp,
     CASE   
-        WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN YEAR(mp.starts)
-        ELSE YEAR(mp.purchased_on)
+        WHEN membership_periods.starts < DATE_FORMAT(membership_periods.purchased_on, '%Y-%m-%d') THEN YEAR(membership_periods.starts)
+        ELSE YEAR(membership_periods.purchased_on)
     END AS purchased_on_year_adjusted_mp,
     CASE   
-        WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN QUARTER(mp.starts)
-        ELSE QUARTER(mp.purchased_on)
+        WHEN membership_periods.starts < DATE_FORMAT(membership_periods.purchased_on, '%Y-%m-%d') THEN QUARTER(membership_periods.starts)
+        ELSE QUARTER(membership_periods.purchased_on)
     END AS purchased_on_quarter_adjusted_mp,
     CASE   
-        WHEN mp.starts < DATE_FORMAT(mp.purchased_on, '%Y-%m-%d') THEN MONTH(mp.starts)
-        ELSE MONTH(mp.purchased_on)
+        WHEN membership_periods.starts < DATE_FORMAT(membership_periods.purchased_on, '%Y-%m-%d') THEN MONTH(membership_periods.starts)
+        ELSE MONTH(membership_periods.purchased_on)
     END AS purchased_on_month_adjusted_mp,
 
-    mp.remote_id AS remote_id_mp,
-    mp.renewed_membership_period_id AS renewed_membership_period_id,
-    mp.starts AS starts_mp,
-    mp.state AS state_mp,
-    mp.status AS status_mp,
-    mp.terminated_on AS terminated_on_mp,
-    mp.updated_at AS updated_at_mp,
-    mp.upgraded_from_id AS upgraded_from_id_mp,
-    mp.upgraded_to_id AS upgraded_to_id_mp,
-    mp.waiver_status AS waiver_status_mp
+    membership_periods.remote_id AS remote_id_mp,
+    membership_periods.renewed_membership_period_id AS renewed_membership_period_id,
+    membership_periods.starts AS starts_mp,
+    membership_periods.state AS state_mp,
+    membership_periods.status AS status_mp,
+    membership_periods.terminated_on AS terminated_on_mp,
+    membership_periods.updated_at AS updated_at_mp,
+    membership_periods.upgraded_from_id AS upgraded_from_id_mp,
+    membership_periods.upgraded_to_id AS upgraded_to_id_mp,
+    membership_periods.waiver_status AS waiver_status_mp
 `;
 
 const members_table = `
@@ -316,12 +329,12 @@ const profiles_table = `
 
 const orders_products_table = `
     -- ORDERS PRODUCTS TABLE
-    op.order_id AS order_id_orders_products
+    order_products.order_id AS order_id_orders_products
 `;
 
-const races_table = ` -- todo:
+const races_table = `
     -- RACES TABLE
-    r.designation as designation_races
+    races.designation as designation_races
 `;
 
 const registration_audit_table = `
@@ -345,41 +358,32 @@ const users_table = `
 `;
 
 const select_fields = `
-    op.order_id AS order_id_op,
-    op.cart_label AS cart_label_op,
-    op.amount_per AS amount_per_op,
-    op.discount AS discount_op,
-    op.amount_refunded AS amount_refunded_op
+    order_products.order_id AS order_id_op,
+    order_products.cart_label AS cart_label_op,
+    order_products.amount_per AS amount_per_op,
+    order_products.discount AS discount_op,
+    order_products.amount_refunded AS amount_refunded_op
 `;
 
 // SECTION: VERSION 1
-const from_statement_left = ` -- TODO:
+const from_statement_left = `
     FROM one_day_sales_actual_member_fee AS sa
 
-        LEFT JOIN membership_periods AS mp ON sa.max_membership_period_id = mp.id
-        LEFT JOIN membership_applications AS ma ON sa.max_membership_period_id = ma.membership_period_id
+        LEFT JOIN membership_periods        ON sa.max_membership_period_id = membership_periods.id
+        LEFT JOIN membership_applications   ON sa.max_membership_period_id = membership_applications.membership_period_id
 
-        LEFT JOIN order_products AS op ON ma.id = op.purchasable_id
-        LEFT JOIN orders ON op.order_id = orders.id
+        ${join_members_profiles_users}
 
-        LEFT JOIN registration_audit ON sa.max_membership_period_id = registration_audit.membership_period_id
-        LEFT JOIN registration_audit_membership_application ON registration_audit.id = registration_audit_membership_application.audit_id
-        LEFT JOIN registration_companies ON registration_audit.registration_company_id = registration_companies.id
+        ${join_metadata_events}
+        ${join_races}
+        
+        ${join_registration_audit}
+        ${join_orders_transaction_join}
 
-        LEFT JOIN membership_types ON ma.membership_type_id = membership_types.id
-
-        LEFT JOIN members ON mp.member_id = members.id -- DONE = CHANGED FROM RIGHT JOIN TO LEFT
-
-        LEFT JOIN profiles ON members.memberable_id = profiles.id -- DONE = CHANGED FROM RIGHT JOIN TO LEFT
-        LEFT JOIN users ON profiles.user_id = users.id
-        LEFT JOIN addresses ON profiles.primary_address_id = addresses.id
-
-        LEFT JOIN events ON ma.event_id = events.id
-        LEFT JOIN races AS r ON events.id = r.event_id -- TODO:
-            AND r.deleted_at IS NULL
-        LEFT JOIN event_types AS et ON events.event_type_id = et.id -- TODO:
-
-        LEFT JOIN transactions ON orders.id = transactions.order_id
+        ${join_metadata_addresses}
+        ${join_metadata_event_types}
+        ${join_metadata_membership_types}
+        ${join_metadata_registration_companies}
 `;
 
 const query_all_fields_logic = `
@@ -401,10 +405,41 @@ const query_all_fields_logic = `
         ${select_fields}
     ${from_statement_left}
 
-    WHERE profiles.deleted_at IS NULL
-    GROUP BY mp.id
+    WHERE 1 = 1
+        AND profiles.id IS NOT NULL
+        AND profiles.deleted_at IS NULL
+    GROUP BY membership_periods.id
 `;
 
 module.exports = { 
     query_all_fields_logic,
 };
+
+// ORIGINAL LEFT JOIN
+
+// FROM one_day_sales_actual_member_fee AS sa
+
+//     LEFT JOIN membership_periods ON sa.max_membership_period_id = membership_periods.id
+//     LEFT JOIN membership_applications ON sa.max_membership_period_id = membership_applications.membership_period_id    -- xx
+
+//     LEFT JOIN order_products ON membership_applications.id = order_products.purchasable_id                 -- xx
+//     LEFT JOIN orders ON order_products.order_id = orders.id                                 -- xx
+
+//     LEFT JOIN registration_audit ON sa.max_membership_period_id = registration_audit.membership_period_id
+//     LEFT JOIN registration_audit_membership_application ON registration_audit.id = registration_audit_membership_application.audit_id
+//     LEFT JOIN registration_companies ON registration_audit.registration_company_id = registration_companies.id
+
+//     LEFT JOIN membership_types ON membership_applications.membership_type_id = membership_types.id   -- xx
+
+//     LEFT JOIN members ON membership_periods.member_id = members.id                              -- xx
+
+//     LEFT JOIN profiles ON members.memberable_id = profiles.id                   -- xx
+//     LEFT JOIN users ON profiles.user_id = users.id                              -- xx
+//     LEFT JOIN addresses ON profiles.primary_address_id = addresses.id
+
+//     LEFT JOIN events ON membership_applications.event_id = events.id                                 -- xx
+//     LEFT JOIN races ON events.id = races.event_id
+//         AND races.deleted_at IS NULL
+//     LEFT JOIN event_types ON events.event_type_id = event_types.id
+
+//     LEFT JOIN transactions ON orders.id = transactions.order_id                 -- xx

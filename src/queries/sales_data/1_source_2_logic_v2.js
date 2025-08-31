@@ -1,3 +1,16 @@
+const {
+    join_members_profiles_users,
+    join_membership_applications,
+    join_orders_transaction_join,
+    join_races,
+    join_registration_audit,
+    join_metadata_addresses,
+    join_metadata_events,
+    join_metadata_event_types,
+    join_metadata_membership_types,
+    join_metadata_registration_companies,
+} = require('./utility_joins_083025');
+
 // CODE AFTER 022825
 function query_source_2_logic(year, start_date, end_date, operator, membership_period_ends, WHERE_STATEMENT, updated_at_date_mtn) {
     return `
@@ -19,35 +32,20 @@ function query_source_2_logic(year, start_date, end_date, operator, membership_p
             END AS source_2
 
         FROM membership_periods
-            -- who the period belongs to
-            LEFT JOIN members   ON members.id = membership_periods.member_id
-            LEFT JOIN profiles  ON profiles.id = members.memberable_id
-            LEFT JOIN users     ON users.id = profiles.user_id
+            ${join_members_profiles_users}
+            ${join_membership_applications}
 
-            -- applications tied to the period
-            LEFT JOIN membership_applications ON membership_applications.membership_period_id = membership_periods.id
-                -- (optional, if you also want to enforce profile consistency)
-                -- AND membership_applications.profile_id = profiles.id
+            ${join_registration_audit}
+            ${join_orders_transaction_join}
 
-            -- audits for the period, and the app↔audit bridge
-            LEFT JOIN registration_audit_membership_application ON registration_audit_membership_application.membership_application_id = membership_applications.id
-            LEFT JOIN registration_audit ON registration_audit_membership_application.audit_id = registration_audit.id
-
-            -- commerce trail from an application
-            LEFT JOIN order_products ON order_products.purchasable_id = membership_applications.id
-            LEFT JOIN orders         ON orders.id = order_products.order_id
-            LEFT JOIN transactions   ON transactions.order_id = orders.id
-
-            -- app metadata
-            LEFT JOIN membership_types ON membership_types.id = membership_applications.membership_type_id
-            LEFT JOIN events          ON events.id = membership_applications.event_id
-
-            -- JAN2025CHANGE Added Join
-            LEFT JOIN registration_companies ON registration_companies.id = registration_audit.registration_company_id 
+            ${join_metadata_membership_types}
+            ${join_metadata_events}
+            ${join_metadata_registration_companies}
             
         WHERE 1 = 1
-            -- AND YEAR(membership_periods.purchased_on) ${operator} ${year}
+            AND membership_periods.deleted_at IS NULL
 
+            -- AND YEAR(membership_periods.purchased_on) ${operator} ${year}
             -- AND membership_periods.purchased_on >= '${start_date}'
             -- AND membership_periods.purchased_on <= '${end_date}'
             ${WHERE_STATEMENT}
@@ -71,6 +69,8 @@ function query_source_2_logic(year, start_date, end_date, operator, membership_p
         -- LIMIT 100
     `
 };
+
+module.exports = { query_source_2_logic };
 
 // CODE PRIOR TO 022825
 // function query_source_2_logic(year, start_date, end_date, operator, membership_period_ends) {
@@ -156,5 +156,3 @@ function query_source_2_logic(year, start_date, end_date, operator, membership_p
 //         -- LIMIT 100
 //     `
 // }
-
-module.exports = { query_source_2_logic };

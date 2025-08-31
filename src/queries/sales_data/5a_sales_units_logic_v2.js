@@ -1,4 +1,13 @@
 const { query_is_allowable_logic } = require('./10_is_allowable_logic');
+const {
+    join_members_profiles_users,
+    join_membership_applications,
+    join_registration_audit,
+    join_orders_transaction_join,
+    join_metadata_membership_types,
+    join_metadata_events,
+    join_metadata_registration_companies,
+} = require('./utility_joins_083025');
 
 function query_sales_units_logic(year, start_date, end_date, membership_category_logic, operator, membership_periods_ends, WHERE_STATEMENT, updated_at_date_mtn) {
     return `
@@ -38,34 +47,22 @@ function query_sales_units_logic(year, start_date, end_date, membership_category
             membership_periods.membership_type_id
             
         FROM membership_periods
-            -- who the period belongs to
-            LEFT JOIN members   ON members.id = membership_periods.member_id
-            LEFT JOIN profiles  ON profiles.id = members.memberable_id
-            LEFT JOIN users     ON users.id = profiles.user_id
+            ${join_members_profiles_users}
+            ${join_membership_applications}
 
-            -- applications tied to the period
-            LEFT JOIN membership_applications ON membership_applications.membership_period_id = membership_periods.id
-                -- (optional, if you also want to enforce profile consistency)
-                -- AND membership_applications.profile_id = profiles.id
-
-            -- audits for the period, and the app↔audit bridge
-            LEFT JOIN registration_audit_membership_application ON registration_audit_membership_application.membership_application_id = membership_applications.id
-            LEFT JOIN registration_audit ON registration_audit_membership_application.audit_id = registration_audit.id
-
-            -- commerce trail from an application
-            LEFT JOIN order_products ON order_products.purchasable_id = membership_applications.id
-            LEFT JOIN orders         ON orders.id = order_products.order_id
-            LEFT JOIN transactions   ON transactions.order_id = orders.id
-
-            -- app metadata
-            LEFT JOIN membership_types ON membership_types.id = membership_applications.membership_type_id
-            LEFT JOIN events          ON events.id = membership_applications.event_id
-                    
+            ${join_registration_audit}
+            ${join_orders_transaction_join}
+            
+            ${join_metadata_membership_types}
+            ${join_metadata_events}
+            ${join_metadata_registration_companies}
+            
             LEFT JOIN new_member_category_6 AS mc ON membership_periods.id = mc.id_membership_periods 
 
         WHERE 1 = 1
-            -- AND year(membership_periods.purchased_on) ${operator} ${year}
+            AND membership_periods.deleted_at IS NULL
 
+            -- AND year(membership_periods.purchased_on) ${operator} ${year}
             -- AND membership_periods.purchased_on >= '${start_date}'
             -- AND membership_periods.purchased_on <= '${end_date}'
             ${WHERE_STATEMENT}
@@ -77,7 +74,7 @@ function query_sales_units_logic(year, start_date, end_date, membership_category
 
             -- Excluding club memberships
             AND membership_periods.membership_type_id NOT IN (56, 58, 81, 105) 
-            AND membership_periods.id NOT IN (4652554) 
+            -- AND membership_periods.id NOT IN (4652554) -- JAN2025CHANGE Commented out. Sam inactivated.
             -- AND membership_periods.id IN (4242825, 4242826, 4242827, 4242828, 4242832)
 
             AND membership_periods.membership_type_id > 0

@@ -18,7 +18,9 @@ function step_noop() { return `DO 0`; }; // empty sql statement to not run when 
 async function query_step_0_sales_key_metrics_master_logic(update_mode) {
 
     const query_list = [
-        step_0a_create_updated_at_data,                          // #0a added to process 8/29/2025
+        // step_0a_create_updated_at_data,
+
+        update_mode === 'full' ? step_noop                      : step_0a_create_updated_at_data,   // #0a doesn't need to run on full; added 8/29/25
         step_1_member_minimum_first_created_at_dates,            // #1 done 2:56, 1,621,815
         step_2_member_min_created_at_date,                       // #2 done 1:10, 1,621,815
         step_3_member_total_life_time_purchases,                 // #3 1:32, 1,621,815
