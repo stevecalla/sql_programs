@@ -239,7 +239,7 @@ const index_fields = `
   INDEX idx_new_member_category_6        (new_member_category_6_sa),
   INDEX idx_source_2                     (source_2_sa),
   INDEX idx_member_number                (member_number_members),
-  INDEX idx_origin_flag_ma               (origin_flag_ma(255))             -- keep only if actually filtered
+  INDEX idx_origin_flag_ma               (origin_flag_ma(255)),         -- keep only if actually filtered
     
   -- Timeline queries (per-profile)
   INDEX idx_profile_purchased_on         (id_profiles, purchased_on_adjusted_mp),
