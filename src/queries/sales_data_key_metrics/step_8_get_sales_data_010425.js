@@ -6,7 +6,7 @@ async function step_8_sales_key_stats_2015(FROM_STATEMENT, pool) {
         DROP TABLE IF EXISTS sales_key_stats_2015;
 
             CREATE TABLE sales_key_stats_2015 AS
-                ${await step_8_sales_key_stats_2015_query(FROM_STATEMENT, pool)}
+                ${await step_8_sales_key_stats_2015_query(FROM_STATEMENT)}
             ;
         `
     ;
