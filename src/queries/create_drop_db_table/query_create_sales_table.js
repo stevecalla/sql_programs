@@ -225,48 +225,36 @@ const select_fields = `
 `;
 
 const index_fields = `
-  PRIMARY KEY (id_profiles, id_membership_periods_sa), -- changed 8/14/25
-   
-  INDEX idx_id_events (id_events),
-  INDEX idx_name_events (name_events),
-  INDEX idx_name_events_starts_events (name_events, starts_events),
-  INDEX idx_upgrade_chain (upgraded_from_id_mp, id_membership_periods_sa),
-  
-  INDEX idx_real_membership_types (real_membership_types_sa),
-  INDEX idx_new_member_category_6 (new_member_category_6_sa),
-  INDEX idx_source_2 (source_2_sa),
-  
-  INDEX idx_created_at (created_at_ma),
+  PRIMARY KEY (id_profiles, id_membership_periods_sa),
 
-  INDEX idx_starts (starts_mp),
-  INDEX idx_ends (ends_mp),
-  INDEX idx_purchased_on_year_mp (purchased_on_year_mp),
-  INDEX idx_purchased_on_date_mp (purchased_on_date_mp),
-  INDEX idx_updated_at_mp (updated_at_mp),
-  INDEX idx_purchased_on_mp_purchased_on_year_mp (purchased_on_date_mp, purchased_on_year_mp),
-  INDEX idx_updated_at_members (updated_at_members),
-  INDEX idx_updated_at_profiles (updated_at_profiles),
-  
-  INDEX idx_date_of_birth_profiles (date_of_birth_profiles),
-  INDEX idx_date_of_birth_ma (date_of_birth_ma),
-  INDEX idx_date_of_birth_registration_audit (date_of_birth_registration_audit),
+  -- Events
+  INDEX idx_events_id                    (id_events),
+  INDEX idx_events_name_starts           (name_events, starts_events),
 
-  INDEX idx_member_number (member_number_members),
+  -- Upgrade chain
+  INDEX idx_upgrade_from                 (upgraded_from_id_mp),
 
-  INDEX idx_origin_flag_ma (origin_flag_ma(255)),
+  -- Dimensions commonly filtered
+  INDEX idx_real_membership_types        (real_membership_types_sa),
+  INDEX idx_new_member_category_6        (new_member_category_6_sa),
+  INDEX idx_source_2                     (source_2_sa),
+  INDEX idx_member_number                (member_number_members),
+  INDEX idx_origin_flag_ma               (origin_flag_ma(255))             -- keep only if actually filtered
+    
+  -- Timeline queries (per-profile)
+  INDEX idx_profile_purchased_on         (id_profiles, purchased_on_adjusted_mp),
+  INDEX idx_profile_starts               (id_profiles, starts_mp),
+  INDEX idx_profile_ends                 (id_profiles, ends_mp),
 
-  INDEX idx_profiles_membership_starts (id_profiles, id_membership_periods_sa, starts_mp),
-
-  -- for sales key metrics queries 5 & 5a
-  INDEX idx_period_sale_dob (id_membership_periods_sa, purchased_on_adjusted_mp, date_of_birth_profiles),
-
-  -- for sales key metrics query 7; -- Purchase timeline
-  INDEX idx_am_profile_purch (id_profiles, purchased_on_adjusted_mp, id_membership_periods_sa,
-        real_membership_types_sa, new_member_category_6_sa),
-
-  -- for sales key metrics query 7; -- Ends timeline
-  INDEX idx_am_profile_ends (id_profiles, ends_mp, id_membership_periods_sa)
-
+  -- “updated_at” flows (only keep the ones you use in update_at mode)
+  INDEX idx_updated_at_ma                (created_at_ma),                  -- or updated_at_ma if that’s what you use
+  INDEX idx_updated_at_members           (updated_at_members),
+  INDEX idx_updated_at_profiles          (updated_at_profiles),
+    
+  -- DOB filters (keep only those truly used)
+  INDEX idx_dob_profiles                 (date_of_birth_profiles),
+  INDEX idx_dob_ma                       (date_of_birth_ma),
+  INDEX idx_dob_regaudit                 (date_of_birth_registration_audit)
 `;
 
 async function query_create_all_membership_sales_table(table_name) {

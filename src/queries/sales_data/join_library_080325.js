@@ -22,7 +22,7 @@ const join_membership_applications = `
         -- AND membership_applications.profile_id = profiles.id
 `;
 
-const join_orders_transaction_join = `
+const join_orders_transactions = `
     -- commerce trail from an application
     LEFT JOIN order_products ON order_products.purchasable_id = membership_applications.id
     LEFT JOIN orders         ON orders.id = order_products.order_id
@@ -64,7 +64,7 @@ const join_metadata_registration_companies = `
 module.exports = {
     join_members_profiles_users,
     join_membership_applications,
-    join_orders_transaction_join,
+    join_orders_transactions,
     join_races,
     join_registration_audit,
     join_metadata_addresses,
