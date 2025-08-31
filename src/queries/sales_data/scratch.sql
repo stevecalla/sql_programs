@@ -1,9 +1,16 @@
 -- REVISED JOIN
 FROM membership_periods
 	-- who the period belongs to
-	LEFT JOIN members   ON members.id = membership_periods.member_id
-	LEFT JOIN profiles  ON profiles.id = members.memberable_id
-	LEFT JOIN users     ON users.id = profiles.user_id
+         -- inner join ensures membership period has member else drops membership period
+        INNER JOIN members    ON members.id = membership_periods.member_id 
+            AND members.memberable_type = 'profiles'
+            AND members.deleted_at IS NULL
+
+        -- inner join ensures membership period has profile else drops membership period
+        INNER JOIN profiles   ON profiles.id = members.memberable_id 
+            AND profiles.deleted_at IS NULL
+
+        LEFT JOIN users       ON users.id = profiles.user_id
 
 	-- applications tied to the period
 	LEFT JOIN membership_applications ON membership_applications.membership_period_id = membership_periods.id
