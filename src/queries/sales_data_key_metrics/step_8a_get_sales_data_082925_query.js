@@ -1,7 +1,7 @@
 // SOURCE?
 // C:\Users\calla\development\usat\sql_code\6_create_key_stats\key_stats_query_cte_create_table_100524.sql
 
-async function step_8_sales_key_stats_2015_query(FROM_STATEMENT) {
+async function step_8_sales_key_stats_2015_query(FROM_STATEMENT, WHERE_STATEMENT) {
     return `
         SELECT
             am.member_number_members_sa, 
@@ -347,13 +347,7 @@ async function step_8_sales_key_stats_2015_query(FROM_STATEMENT) {
             LEFT JOIN region_data AS ar -- address region
                 ON am.state_code_addresses = ar.state_code
 
-        WHERE 1 = 1
-            -- AND am.purchased_on_year_adjusted_mp >= 2010
-            -- AND am.id_profiles IS NOT NULL
-            
-        -- GROUP BY am.id_profiles, am.id_membership_periods_sa
-        -- LIMIT 10000
-        -- ;
+        ${WHERE_STATEMENT}
     `;
 }
 

@@ -26,7 +26,7 @@ const run_step_2a = false; // load region table
 const run_step_3  = true; // create sales key metrics stats table
 const run_step_3a = false; // load sales key metrics stats to biqquery
 
-const run_step_4  = false; // create year-over-year common date table
+const run_step_4  = false; // create year-over-year common date table (Elapsed Time: 91.06 sec)
 const run_step_4a = false; // load year-over-year common date table
 
 const run_step_5  = false; // load sales goal data
@@ -145,7 +145,7 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
       `Step #3a - Load Sales Key Metrics to BQ: `, 
       `Step #4 - Create Year-over-Year Data: `, 
       `Step #4a - Load Sales YoY Metris to BQ: `,
-      `Step #5 - Create Sales Data:`,
+      `Step #5 - Create Sales Goal Data:`,
       `Step #5a - Load Sales Goals to BQ`,
       `Step 6 - Create Actual vs Goal Metrics Table`,
       `Step #6a - Load Actual vs Goal to BQ`,
