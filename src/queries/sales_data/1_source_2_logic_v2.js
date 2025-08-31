@@ -1,7 +1,7 @@
 const {
     join_members_profiles_users,
     join_membership_applications,
-    join_orders_transaction_join,
+    join_orders_transactions,
     join_races,
     join_registration_audit,
     join_metadata_addresses,
@@ -9,7 +9,7 @@ const {
     join_metadata_event_types,
     join_metadata_membership_types,
     join_metadata_registration_companies,
-} = require('./utility_joins_083025');
+} = require('./join_library_080325');
 
 // CODE AFTER 022825
 function query_source_2_logic(year, start_date, end_date, operator, membership_period_ends, WHERE_STATEMENT, updated_at_date_mtn) {
@@ -36,7 +36,7 @@ function query_source_2_logic(year, start_date, end_date, operator, membership_p
             ${join_membership_applications}
 
             ${join_registration_audit}
-            ${join_orders_transaction_join}
+            ${join_orders_transactions}
 
             ${join_metadata_membership_types}
             ${join_metadata_events}
