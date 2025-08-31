@@ -121,7 +121,7 @@ async function execute_run_sales_data_jobs() {
       `Step #3a - Load Sales Key Metrics to BQ: `, 
       `Step #4 - Create Year-over-Year Data: `, 
       `Step #4a - Load Sales YoY Metris to BQ: `,
-      `Step #5 - Create Sales Data:`,
+      `Step #5 - Create Sales Goal Data:`,
       `Step #5a - Load Sales Goals to BQ`,
       `Step 6 - Create Actual vs Goal Metrics Table`,
       `Step #6a - Load Actual vs Goal to BQ`,
