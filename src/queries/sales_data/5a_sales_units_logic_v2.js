@@ -3,11 +3,11 @@ const {
     join_members_profiles_users,
     join_membership_applications,
     join_registration_audit,
-    join_orders_transaction_join,
+    join_orders_transactions,
     join_metadata_membership_types,
     join_metadata_events,
     join_metadata_registration_companies,
-} = require('./utility_joins_083025');
+} = require('./join_library_080325');
 
 function query_sales_units_logic(year, start_date, end_date, membership_category_logic, operator, membership_periods_ends, WHERE_STATEMENT, updated_at_date_mtn) {
     return `
@@ -51,7 +51,7 @@ function query_sales_units_logic(year, start_date, end_date, membership_category
             ${join_membership_applications}
 
             ${join_registration_audit}
-            ${join_orders_transaction_join}
+            ${join_orders_transactions}
             
             ${join_metadata_membership_types}
             ${join_metadata_events}
