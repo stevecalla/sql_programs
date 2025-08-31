@@ -172,8 +172,10 @@ async function process_stream_parallel(
           // const tid = await getThreadId(conn);
           // console.log(`batch using threadId=${tid}`);
 
-          if (update_mode === 'full' || update_mode === 'partial') await flush_batch_upsert(conn, TABLE_NAME, batch);
-          else /* updated_at */     await flush_batch_replace(conn, TABLE_NAME, batch);
+          if (update_mode === 'full' || update_mode === 'partial') 
+            await flush_batch_upsert(conn, TABLE_NAME, batch);
+          else /* updated_at */     
+            await flush_batch_replace(conn, TABLE_NAME, batch);
 
           console.log(`Flushed batch. Rows processed so far: ${rows_processed}`);
 

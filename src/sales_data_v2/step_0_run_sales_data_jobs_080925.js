@@ -20,19 +20,19 @@ const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-const run_step_1  = false; // transfer sales data from usat vapor to local db
+const run_step_1  = true; // transfer sales data from usat vapor to local db
 const run_step_2a = false; // load region table
 
 const run_step_3  = true; // create sales key metrics stats table
 const run_step_3a = false; // load sales key metrics stats to biqquery
 
-const run_step_4  = false; // create year-over-year common date table (Elapsed Time: 91.06 sec)
+const run_step_4  = true; // create year-over-year common date table (Elapsed Time: 91.06 sec)
 const run_step_4a = false; // load year-over-year common date table
 
-const run_step_5  = false; // load sales goal data
+const run_step_5  = true; // load sales goal data
 const run_step_5a = false; // load sales goals to bigquery
 
-const run_step_6  = false; // create actual vs goal data table
+const run_step_6  = true; // create actual vs goal data table
 const run_step_6a = false; // load actual vs goal to bigquery
 
 async function executeSteps(stepFunctions, stepName, update_mode, options) {
@@ -105,7 +105,7 @@ async function create_variables(update_mode) {
 
   const options = {
     TABLE_NAME: `all_membership_sales_data_2015_left`,
-    TARGET_TABLE_NAME: `sales_key_stats_2015_test`,
+    TARGET_TABLE_NAME: `sales_key_stats_2015`,
     membership_period_ends: '2008-01-01',
     start_year_mtn: 2010, // Default = 2010
     start_date_mtn: update_mode === 'partial' ? 'await get_first_day_of_prior_year()' : '2010-01-01',
@@ -168,9 +168,9 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
 }
 
 if (require.main === module) {
-  // const update_mode = 'full';        // Update 2010 forward, drop table
-  // const update_mode = 'partial';        // Update using current & prior year, dont drop
-  const update_mode = 'update_at';   // Update based on the 'updated_at' date, dont drop
+  const update_mode = 'full';        // Update 2010 forward, drop table
+  // const update_mode = 'partial';     // Update using current & prior year, dont drop
+  // const update_mode = 'update_at';   // Update based on the 'updated_at' date, dont drop
 
   execute_run_sales_data_jobs_v2(update_mode);
 }
