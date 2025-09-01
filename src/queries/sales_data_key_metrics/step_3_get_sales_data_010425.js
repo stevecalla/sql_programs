@@ -22,6 +22,23 @@ function step_3_member_total_life_time_purchases(FROM_STATEMENT) {
     `;
 }
 
+function step_3_member_total_life_time_purchases_query(FROM_STATEMENT, WHERE_STATEMENT = '', ORDER_BY_STATEMENT = '') {
+    return `
+        -- STEP #3 = CREATE TABLE step_3_member_total_life_time_purchases AS
+        SELECT
+            am.id_profiles,
+            COUNT(*) AS member_lifetime_purchases -- total lifetime purchases due to group by
+
+        -- FROM all_membership_sales_data_2015_left
+        ${FROM_STATEMENT} AS am
+        ${WHERE_STATEMENT}
+        GROUP BY am.id_profiles
+        ${ORDER_BY_STATEMENT}
+        ;
+    `;
+}
+
 module.exports = {
     step_3_member_total_life_time_purchases,
+    step_3_member_total_life_time_purchases_query,
 }

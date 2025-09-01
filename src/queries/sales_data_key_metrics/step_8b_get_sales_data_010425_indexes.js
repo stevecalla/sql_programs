@@ -4,17 +4,14 @@
 function step_8b_create_indexes() {
     return `
         -- Step #8a: Create indexes on the new table
-
-        ALTER TABLE sales_key_stats_2015
-            MODIFY id_profiles              BIGINT NOT NULL,
-            MODIFY id_membership_periods_sa BIGINT NOT NULL,
-            ADD PRIMARY KEY (id_profiles, id_membership_periods_sa)
-        ;
         
         -- ********************************************
         -- SET SESSION innodb_sort_buffer_size = 268435456;  -- 256 MB, adjust to taste
 
         ALTER TABLE sales_key_stats_2015
+            ALGORITHM=INPLACE,
+            LOCK=NONE,
+
             /* =======================
             ID / FK-like lookups
             ======================= */
@@ -37,7 +34,7 @@ function step_8b_create_indexes() {
                 purchased_on_month_adjusted_mp,
                 sales_revenue,
                 sales_units
-            );
+            ),
 
             /* =======================
             Member lifecycle / segmentation
@@ -64,11 +61,9 @@ function step_8b_create_indexes() {
             /* =======================
             Origin / source
             ======================= */
-            ADD INDEX idx_origin_flag_ma (origin_flag_ma(32)),
-
-            ALGORITHM=INPLACE,
-            LOCK=NONE;
-        `;
+            ADD INDEX idx_origin_flag_ma (origin_flag_ma(32))
+        ;`
+    ;
 }
 
 module.exports = {

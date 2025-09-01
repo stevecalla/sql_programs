@@ -9,7 +9,7 @@ const { local_usat_sales_db_config } = require('../../utilities/config');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 const { upsert_batch } = require('../../utilities/data_query_criteria/upsert_batch_logic');
 
-const { step_8_sales_key_stats_2015_query } = require('../queries/sales_data_key_metrics/step_8a_get_sales_data_082925_query');
+const { step_7_prior_purchase_query } = require('../queries/sales_data_key_metrics/step_7_get_sales_data_010425');
 
 // UTILITY FUNCTIONS
 function log_duration(startTime) {
@@ -58,13 +58,10 @@ async function get_dst_pool() {
 
 // PROCESSING FUNCTIONS
 // Create (or replace) the destination table
-async function create_target_table(dstConn, update_mode, options, where_statement, FROM_STATEMENT) {
-  const { TABLE_NAME, TARGET_TABLE_NAME } = options;
+async function create_target_table(dstConn, update_mode, options, where_statement, FROM_STATEMENT, ORDER_BY_STATEMENT, TARGET_TABLE_NAME) {
 
-  if (update_mode === 'full')
-    await dstConn.execute(`DROP TABLE IF EXISTS \`${TARGET_TABLE_NAME}\``);
-  else
-    console.log(`\nNote: Update mode is partial or update_at thus did not drop the current table ${TARGET_TABLE_NAME}.`);
+  console.log('DROPPED TABLE:', TARGET_TABLE_NAME);
+  await dstConn.execute(`DROP TABLE IF EXISTS \`${TARGET_TABLE_NAME}\``);
 
   await dstConn.execute(`
       -- Create table structure by selecting 0 rows (captures all columns & types)
@@ -75,21 +72,19 @@ async function create_target_table(dstConn, update_mode, options, where_statemen
           ENGINE=InnoDB
           AS
           -- SELECT
-          ${await step_8_sales_key_stats_2015_query(FROM_STATEMENT, where_statement, '')}
+          ${await step_7_prior_purchase_query(FROM_STATEMENT, where_statement, ORDER_BY_STATEMENT)}
           -- WHERE 1=0
       ;
   `);
 
-  if (update_mode === 'full') {
-    await dstConn.execute(`
-        -- Add NOT NULL + PK (cheap now because the table is empty)
-        ALTER TABLE \`${TARGET_TABLE_NAME}\`
-            MODIFY id_profiles BIGINT NOT NULL,
-            MODIFY id_membership_periods_sa BIGINT NOT NULL,
-            ADD PRIMARY KEY (id_profiles, id_membership_periods_sa)
-        ;
-    `);
-  }
+  await dstConn.execute(`
+      -- Add NOT NULL + PK (cheap now because the table is empty)
+      ALTER TABLE \`${TARGET_TABLE_NAME}\`
+          MODIFY id_profiles BIGINT NOT NULL,
+          MODIFY id_membership_periods_sa BIGINT NOT NULL,
+          ADD PRIMARY KEY (id_profiles, id_membership_periods_sa)
+      ;
+  `);
 }
 
 // Upsert batch processing with full column list
@@ -175,7 +170,7 @@ async function process_stream_parallel_with_test_mode(QUERY, TARGET_TABLE_NAME, 
       task = (async () => {
         const conn = await dstPool.getConnection();
         try {
-          if (update_mode === 'full' || update_mode === 'partial') 
+          if (update_mode === 'full' || update_mode === 'partial')
             await flush_batch_upsert(conn, TARGET_TABLE_NAME, batch);
           else
             await flush_batch_replace(conn, TARGET_TABLE_NAME, batch);
@@ -213,7 +208,7 @@ async function process_stream_parallel_with_test_mode(QUERY, TARGET_TABLE_NAME, 
         // const tid = await getThreadId(conn);
         // console.log(`batch using threadId=${tid}`);
 
-        if (update_mode === 'full' || update_mode === 'partial') 
+        if (update_mode === 'full' || update_mode === 'partial')
           await flush_batch_upsert(conn, TARGET_TABLE_NAME, batch);
         else /* updated_at */
           await flush_batch_replace(conn, TARGET_TABLE_NAME, batch);
@@ -234,14 +229,13 @@ async function process_stream_parallel_with_test_mode(QUERY, TARGET_TABLE_NAME, 
   console.log(`Processed a total of ${rows_processed} rows.`);
 }
 
-async function step_3a_create_sales_key_metrics_table_parallel(FROM_STATEMENT, pool, update_mode = 'updated_at', options) {
+async function step_3a_create_prior_purchase_table_parallel(FROM_STATEMENT, pool, update_mode = 'updated_at', options) {
   const TEST_MODE_ONLY = false;
-  const TEST_BATCHES = 50000;
+  const TEST_BATCHES = 2;
 
   const BATCH_SIZE = 500;
   let result = 'Transfer Failed';
   let offset = 0;
-
 
   let { TABLE_NAME, TARGET_TABLE_NAME, membership_period_ends, start_year_mtn, start_date_mtn, end_date_mtn, updated_at_date_mtn } = options;
 
@@ -257,29 +251,30 @@ async function step_3a_create_sales_key_metrics_table_parallel(FROM_STATEMENT, p
   try {
     runTimer('timer'); // start for this iteration
 
+    TARGET_TABLE_NAME = `step_7_prior_purchase`;
     console.log('\nTABLE NAME:', TARGET_TABLE_NAME);
     console.log('UPDATE MODE:', update_mode + '; START DATE:', start_date_mtn + '; END DATE:', end_date_mtn + '; UPDATED AT:', updated_at_date_mtn);
-  
+
     const startTime = Date.now();
-    
+
     try {
       let where_statement = `WHERE 1 = 0`;
+      const ORDER_BY_STATEMENT = '';
       const FROM_STATEMENT = update_mode === 'full' ? `FROM \`${TABLE_NAME}\`` : `FROM step_0a_create_updated_at_data`;
-      
+
       // STEP #1: CREATE TABLE IF IT DOESN'T EXIST
-      await create_target_table(dstConn, update_mode, options, where_statement, FROM_STATEMENT);
+      await create_target_table(dstConn, update_mode, options, where_statement, FROM_STATEMENT, ORDER_BY_STATEMENT, TARGET_TABLE_NAME);
 
       // STEP #2 GET QUERY
-      where_statement = `WHERE 1 = 1`;
-      const ORDER_BY_STATEMENT = 'ORDER BY am.id_profiles, am.id_membership_periods_sa';
-      const QUERY = await step_8_sales_key_stats_2015_query(FROM_STATEMENT, where_statement, '');
+      where_statement = `WHERE 1 = 1  `;
+      const QUERY = await step_7_prior_purchase_query(FROM_STATEMENT, where_statement, ORDER_BY_STATEMENT);
+
+      // console.log(QUERY);
 
       // Process the stream in parallel batches
-      // await process_stream_parallel(QUERY, TARGET_TABLE_NAME, update_mode, offset, BATCH_SIZE, dstPool, dstConnStream);
       await process_stream_parallel_with_test_mode(QUERY, TARGET_TABLE_NAME, update_mode, offset, BATCH_SIZE, dstPool, dstConnStream, TEST_MODE_ONLY, TEST_BATCHES);
 
       console.log('Transfer successful.');
-      result = 'Transfer Successful';
       result = `DO 0`;
 
     } finally {
@@ -294,7 +289,7 @@ async function step_3a_create_sales_key_metrics_table_parallel(FROM_STATEMENT, p
     // Cleanup
     try {
       await dstConnStream.end();
-      console.log('✅ Stream conn closed.');
+      console.log('✅ Destination DB stream closed.');
 
       await dstConn.end();
       console.log('✅ Destination DB connection closed.');
@@ -320,17 +315,18 @@ async function step_3a_create_sales_key_metrics_table_parallel(FROM_STATEMENT, p
 //     TARGET_TABLE_NAME: `sales_key_stats_2015_test`,
 //     // membership_period_ends: '2008-01-01',
 //     // start_year_mtn: 2010, // Default = 2010
-//     // start_date_mtn: update_mode === 'partial' ? 'await get_first_day_of_prior_year()' : '2010-01-01',
+//     // start_date_mtn: update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01',
 //     // end_date_mtn: await get_last_day_of_year(),
 //     // updated_at_date_mtn: await get_yesterdays_date(),
 //   };
+// 
 //   // const update_mode = 'full';        // Update 2010 forward, drop table
 //   const update_mode = 'partial';     // Update using current & prior year, dont drop
 //   // const update_mode = 'updated_at';     // Update based on the 'updated_at' date, dont drop
 
-//   step_3a_create_sales_key_metrics_table_parallel(FROM_STATEMENT, pool, update_mode, options);
+//   step_3a_create_prior_purchase_table_parallel(FROM_STATEMENT, pool, update_mode, options);
 // }
 
 module.exports = {
-  step_3a_create_sales_key_metrics_table_parallel,  
+  step_3a_create_prior_purchase_table_parallel,
 };

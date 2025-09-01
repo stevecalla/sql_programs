@@ -205,8 +205,10 @@ async function process_stream_parallel(
         // const tid = await getThreadId(conn);
         // console.log(`batch using threadId=${tid}`);
 
-        if (update_mode === 'full' || update_mode === 'partial') await flush_batch_upsert(conn, TABLE_NAME, batch);
-        else /* updated_at */     await flush_batch_replace(conn, TABLE_NAME, batch);
+        if (update_mode === 'full' || update_mode === 'partial') 
+          await flush_batch_upsert(conn, TABLE_NAME, batch);
+        else /* updated_at */    
+          await flush_batch_replace(conn, TABLE_NAME, batch);
 
         console.log(`\nFlushing remaining ${batch.length} rows...`);
 
@@ -230,6 +232,7 @@ async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at
   let offset = 0;
 
   let { TABLE_NAME, membership_period_ends, start_year_mtn, start_date_mtn, end_date_mtn, updated_at_date_mtn } = options;
+  // console.log(options);
 
   const TABLE_STRUCTURE = await query_create_all_membership_sales_table(TABLE_NAME);
 
@@ -300,13 +303,23 @@ async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at
   return result;
 }
 
-// if (require.main === module) {
-//   // const update_mode = 'full';        // Update 2010 forward, drop table
-//   // const update_mode = 'partial';        // Update using current & prior year, dont drop
-//   const update_mode = 'updated_at';   // Update based on the 'updated_at' date, dont drop
+if (require.main === module) {
+  // const update_mode = 'full';        // Update 2010 forward, drop table
+  // const update_mode = 'partial';        // Update using current & prior year, dont drop
+  const update_mode = 'updated_at';   // Update based on the 'updated_at' date, dont drop
 
-//   execute_run_sales_data_jobs_v2(update_mode);
-// }
+  const options = {
+    TABLE_NAME: `all_membership_sales_data_2015_left`,
+    TARGET_TABLE_NAME: `sales_key_stats_2015_test`,
+    membership_period_ends: '2008-01-01',
+    start_year_mtn: 2010, // Default = 2010
+    start_date_mtn: update_mode === 'partial' ? '2024-01-01' : '2010-01-01',
+    end_date_mtn: '2025-12-31',
+    updated_at_date_mtn: '2025-08-31',
+  };
+
+   execute_transfer_usat_to_local_parallel(update_mode, options);
+}
 
 module.exports = {
   execute_transfer_usat_to_local_parallel,

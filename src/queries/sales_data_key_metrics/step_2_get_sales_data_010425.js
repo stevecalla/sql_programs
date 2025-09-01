@@ -8,7 +8,6 @@ function step_2_member_min_created_at_date() {
 
             CREATE TABLE step_2_member_min_created_at_date AS
                 SELECT 
-                    -- member_number_members_sa,
                     id_profiles,
 
                     -- Calculate the minimum date from the first created at fields, considering nulls
@@ -30,6 +29,31 @@ function step_2_member_min_created_at_date() {
     `;
 }
 
+function step_2_member_min_created_at_date_query(FROM_STATEMENT, WHERE_STATEMENT = '', ORDER_BY_STATEMENT = '') {
+    return `
+        -- STEP #2 = CREATE TABLE step_2_member_min_created_at_date AS
+        SELECT 
+            am.id_profiles,
+
+            -- Calculate the minimum date from the first created at fields, considering nulls
+            LEAST(
+                COALESCE(am.first_created_at_members, '9999-12-31'),
+                COALESCE(am.first_created_at_mp, '9999-12-31'),
+                COALESCE(am.first_created_at_profiles, '9999-12-31'),
+                COALESCE(am.first_created_at_users, '9999-12-31'),
+                COALESCE(am.first_purchased_on_adjusted_mp, '9999-12-31'),
+                COALESCE(am.first_starts_mp, '9999-12-31')
+            ) AS min_created_at
+
+        FROM step_1_member_minimum_first_created_at_dates AS am
+        ${WHERE_STATEMENT}
+        ${ORDER_BY_STATEMENT}
+        ;
+    `;
+}
+
+
 module.exports = {
     step_2_member_min_created_at_date,
+    step_2_member_min_created_at_date_query,
 }

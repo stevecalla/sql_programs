@@ -125,7 +125,7 @@ app.get('/scheduled-all-sales-updated-at', async (req, res) => {
         });
         
         // GETS ALL SALES DATA, LOADS INTO MYSQL, CREATES SALES KEY METRICS
-        await execute_run_sales_data_jobs_v2('update_at');
+        await execute_run_sales_data_jobs_v2('updated_at');
 
     } catch (error) {
         console.error('Error quering or sending membership sales data:', error);

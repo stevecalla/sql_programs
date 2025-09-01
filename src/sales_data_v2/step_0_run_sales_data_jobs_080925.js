@@ -7,7 +7,7 @@ const { execute_transfer_usat_to_local_parallel } = require('./step_1_transfer_d
 const { execute_load_region_data } = require('./step_2a_load_region_table');
 
 const { execute_create_sales_key_metrics } = require('./step_3_create_sales_key_metrics_010425');
-const { execute_load_big_query_sales_key_metrics } = require('./step_3a_load_bq_sales_key_metrics');
+const { execute_load_big_query_sales_key_metrics } = require('./step_3c_load_bq_sales_key_metrics');
 
 const { execute_create_year_over_year_key_metrics } = require('./step_4_create_sales_year_over_year_metrics_011425');
 const { execute_load_big_query_sales_year_over_year_metrics } = require('./step_4a_load_bq_year_over_year_metrics');
@@ -20,19 +20,19 @@ const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-const run_step_1  = true; // transfer sales data from usat vapor to local db
+const run_step_1  = false; // transfer sales data from usat vapor to local db
 const run_step_2a = false; // load region table
 
 const run_step_3  = true; // create sales key metrics stats table
-const run_step_3a = false; // load sales key metrics stats to biqquery
+const run_step_3c = false; // load sales key metrics stats to biqquery
 
-const run_step_4  = true; // create year-over-year common date table (Elapsed Time: 91.06 sec)
+const run_step_4  = false; // create year-over-year common date table (Elapsed Time: 91.06 sec)
 const run_step_4a = false; // load year-over-year common date table
 
-const run_step_5  = true; // load sales goal data
+const run_step_5  = false; // load sales goal data
 const run_step_5a = false; // load sales goals to bigquery
 
-const run_step_6  = true; // create actual vs goal data table
+const run_step_6  = false; // create actual vs goal data table
 const run_step_6a = false; // load actual vs goal to bigquery
 
 async function executeSteps(stepFunctions, stepName, update_mode, options) {
@@ -108,13 +108,12 @@ async function create_variables(update_mode) {
     TARGET_TABLE_NAME: `sales_key_stats_2015`,
     membership_period_ends: '2008-01-01',
     start_year_mtn: 2010, // Default = 2010
-    start_date_mtn: update_mode === 'partial' ? 'await get_first_day_of_prior_year()' : '2010-01-01',
+    start_date_mtn: update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01',
     end_date_mtn: await get_last_day_of_year(),
     updated_at_date_mtn: await get_yesterdays_date(),
   };
 
   return options;
-  
 }
 
 async function execute_run_sales_data_jobs_v2(update_mode) {
@@ -129,7 +128,7 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
       run_step_1  ? execute_transfer_usat_to_local_parallel : null,
       run_step_2a ? execute_load_region_data : null,
       run_step_3  ? execute_create_sales_key_metrics : null,
-      run_step_3a ? execute_load_big_query_sales_key_metrics : null,
+      run_step_3c ? execute_load_big_query_sales_key_metrics : null,
       run_step_4  ? execute_create_year_over_year_key_metrics : null,
       run_step_4a ? execute_load_big_query_sales_year_over_year_metrics : null,
       run_step_5  ? execute_load_sales_goal_data : null,
@@ -143,7 +142,7 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
       // `Step #2 - Load Sales Data: `, -- not necessary as step 1 retrieves & transfers data
       `Step #2a - Load Region Data: `, 
       `Step #3 - Create Sales Key Metrics: `, 
-      `Step #3a - Load Sales Key Metrics to BQ: `, 
+      `Step #3c - Load Sales Key Metrics to BQ: `, 
       `Step #4 - Create Year-over-Year Data: `, 
       `Step #4a - Load Sales YoY Metris to BQ: `,
       `Step #5 - Create Sales Goal Data:`,
@@ -168,9 +167,9 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
 }
 
 if (require.main === module) {
-  const update_mode = 'full';        // Update 2010 forward, drop table
+  // const update_mode = 'full';        // Update 2010 forward, drop table
   // const update_mode = 'partial';     // Update using current & prior year, dont drop
-  // const update_mode = 'update_at';   // Update based on the 'updated_at' date, dont drop
+  const update_mode = 'updated_at';   // Update based on the 'updated_at' date, dont drop
 
   execute_run_sales_data_jobs_v2(update_mode);
 }

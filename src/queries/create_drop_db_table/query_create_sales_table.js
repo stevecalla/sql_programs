@@ -245,8 +245,9 @@ const index_fields = `
   INDEX idx_profile_purchased_on         (id_profiles, purchased_on_adjusted_mp),
   INDEX idx_profile_starts               (id_profiles, starts_mp),
   INDEX idx_profile_ends                 (id_profiles, ends_mp),
+  INDEX idx_purchase_date_profile        (purchased_on_mp, id_profiles),
 
-  -- “updated_at” flows (only keep the ones you use in update_at mode)
+  -- “updated_at” flows (only keep the ones you use in updated_at mode)
   INDEX idx_updated_at_ma                (created_at_ma),                  -- or updated_at_ma if that’s what you use
   INDEX idx_updated_at_members           (updated_at_members),
   INDEX idx_updated_at_profiles          (updated_at_profiles),

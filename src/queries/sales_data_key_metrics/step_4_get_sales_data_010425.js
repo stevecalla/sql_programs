@@ -31,6 +31,32 @@ function step_4_member_age_dimensions(FROM_STATEMENT) {
     `;
 }
 
+function step_4_member_age_dimensions_query(FROM_STATEMENT, WHERE_STATEMENT = '', ORDER_BY_STATEMENT = '') {
+    return `
+        -- STEP #4 = CREATE TABLE step_4_member_age_dimensions AS
+        SELECT
+            am.id_profiles,
+
+            (
+                YEAR(CURDATE()) 
+                - YEAR(MIN(am.date_of_birth_profiles))) 
+                - (DATE_FORMAT(CURDATE(), '%m%d') 
+                < DATE_FORMAT(MIN(am.date_of_birth_profiles), '%m%d')
+                
+            ) AS age_now, -- create age as of now,
+
+            MIN(am.date_of_birth_profiles) AS date_of_birth_profiles
+
+        -- FROM all_membership_sales_data_2015_left
+        ${FROM_STATEMENT} AS am
+        ${WHERE_STATEMENT}
+        GROUP BY am.id_profiles
+        ${ORDER_BY_STATEMENT}
+        ;
+    `;
+}
+
 module.exports = {
     step_4_member_age_dimensions,
+    step_4_member_age_dimensions_query,
 }

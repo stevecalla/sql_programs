@@ -84,6 +84,8 @@ async function execute_create_sales_key_metrics(update_mode = 'updated_at', opti
 
             let current_query = await query_list[i](FROM_STATEMENT, pool, update_mode, options);
 
+            console.log('current_query=', current_query);
+
             runTimer(`query_to_create_table`);
 
             let results = "";
