@@ -417,6 +417,45 @@ async function ensurePrimaryKey(conn, table, cols) {
   await conn.query(`ALTER TABLE \`${table}\`\n  ${alters.join(',\n  ')}`);
 }
 
+async function create_step_8_sales_key_metrics_indexes(update_mode) {
+  // Only add indexes to sales key metrics on full load
+  if (update_mode === 'full') {
+
+    // ✱ declare outside try so finally can close it
+    let dstConn;
+
+    try {
+      runTimer('timer');
+      console.log('Create indexes for sales key metrics');
+
+      dstConn = await get_dst_connection();
+
+      // Faster builds for this session
+      // await dstConn.query('SET SESSION innodb_sort_buffer_size = 268435456');
+      // await dstConn.query('SET SESSION tmp_table_size = 268435456');
+      // await dstConn.query('SET SESSION max_heap_table_size = 268435456');
+      // await dstConn.query('SET SESSION sql_log_bin = 0'); // if safe
+
+      const sql = step_8b_create_indexes();   // ✅ CALL the function
+      await dstConn.query(sql);               // or await dstConn.execute(sql);
+
+    } catch (err) {
+      console.error('Transfer failed:', err);
+      throw err;
+    } finally {
+      try {
+        if (dstConn) {
+          await dstConn.end();
+          console.log('✅ Destination DB connection closed.');
+        }
+        stopTimer('timer');
+      } catch (e) {
+        console.warn('Error during cleanup:', e);
+      }
+    }
+  }
+}
+
 function parseInfo(info) {
   const m = (info || '').match(/Records:\s*(\d+)\s+Duplicates:\s*(\d+)\s+Warnings:\s*(\d+)/i);
   return m ? { records: +m[1], duplicates: +m[2], warnings: +m[3] } : {};
@@ -515,78 +554,315 @@ class Semaphore {
   }
 }
 
-// ---------- parallel runner that logs each batch AFTER it finishes
-async function run_ranges_parallel(pool, items, concurrency = 8) {
-  // items are processed in the order provided (heavy-first is decided upstream)
+// NOTE:parallel runner that runs all heavy batches first
+// async function run_ranges_parallel(pool, items, concurrency = 4) {
+//   // items are processed in the order provided (heavy-first is decided upstream)
+//   const overallStart = Date.now();
+
+//   const queue = [...items];
+//   const total = queue.length;
+//   let done = 0;
+
+//   const MAX_RETRIES = 3;
+//   const RETRIABLE = new Set(['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT']);
+//   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+//   async function worker() {
+//     while (true) {
+//       const job = queue.shift();
+//       if (!job) break;
+
+//       const started = Date.now();
+//       let attempt = 0;
+
+//       for (; ;) {
+//         let conn;
+//         try {
+//           conn = await pool.getConnection();
+
+//           // Soften locking per session
+//           await conn.query("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED");
+//           await conn.query("SET SESSION innodb_lock_wait_timeout = 120");
+
+//           const [res] = await conn.query(job.sql);
+
+//           // >>> This is the "success block" <<<
+//           const affected = (res && typeof res.affectedRows === 'number') ? res.affectedRows : null;
+//           const { records, duplicates, warnings } = parseInfo(res?.info);
+
+//           done++;
+//           // console.log(
+//           //   `✓ ${done}/${total} completed: ${job.label} | affected=${affected ?? 'n/a'} | ` +
+//           //   `duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
+//           // );         
+//           console.log(
+//             `✓ ${done}/${total} completed: ${job.label}` +
+//             (records != null ? ` | records=${records}` : '') +
+//             (duplicates != null ? ` | dupes=${duplicates}` : '') +
+//             (warnings != null ? ` | warnings=${warnings}` : '') +
+//             (affected != null ? ` | affected=${affected}` : '') +
+//             ` | duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
+//           );
+//           break;
+//           // >>> This is the end of the "success block" <<<
+
+//         } catch (err) {
+//           attempt++;
+//           const code = err?.code || 'UNKNOWN_ERROR';
+//           const canRetry = RETRIABLE.has(code) && attempt <= MAX_RETRIES;
+
+//           if (canRetry) {
+//             await sleep(200 * attempt + Math.floor(Math.random() * 300)); // backoff + jitter
+//             continue;
+//           }
+
+//           done++;
+//           console.log(
+//             `✗ ${done}/${total} FAILED: ${job.label} | ${code} after ${attempt} attempt(s) | ` +
+//             `duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
+//           );
+//           break;
+
+//         } finally {
+//           try { await conn?.release(); } catch { }
+//         }
+//       }
+//     }
+//   }
+
+//   const n = Math.max(1, Math.min(concurrency, total));
+//   await Promise.allSettled(Array.from({ length: n }, () => worker()));
+
+//   // Final overall runtime summary
+//   console.log(`All batches finished in ${fmtHMS(Date.now() - overallStart)}`);
+// }
+
+// ---------- parallel runner with smallest jobs first ----------
+// NOTE: it classifies heavies by estCount > 2×median, caps them with maxHeavyInFlight, and fills the rest of the worker slots with non-heavy jobs.
+// async function run_ranges_parallel(pool, items, concurrency = 4, maxHeavyInFlight = 2) {
+//   const HEAVY_FACTOR = 2; // estCount > 2×median → "heavy"
+
+//   const overallStart = Date.now();
+
+//   // Classify heavy vs light based on estCount
+//   const ests = items.map(i => i.estCount || 0).sort((a, b) => a - b);
+//   const median = ests.length ? ests[Math.floor(ests.length / 2)] : 0;
+//   const threshold = median ? HEAVY_FACTOR * median : Number.MAX_SAFE_INTEGER;
+
+//   // Preserve existing ordering but split queues
+//   const heavyQ = [];
+//   const lightQ = [];
+//   for (const it of items) {
+//     if ((it.estCount || 0) > threshold) {
+//       it.heavy = true;
+//       heavyQ.push(it);
+//     } else {
+//       it.heavy = false;
+//       lightQ.push(it);
+//     }
+//   }
+
+//    // ↓↓↓ ADD THIS LINE HERE ↓↓↓ ensures light jobs are run / mixed in with heavy jobs
+//   lightQ.sort((a, b) => (a.estCount || 0) - (b.estCount || 0)); // smallest light first
+
+//   const total = items.length;
+//   let done = 0;
+//   let heavyInFlight = 0;
+
+//   const MAX_RETRIES = 3;
+//   const RETRIABLE = new Set(['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT']);
+//   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+//   // Choose the next job while respecting the heavy cap
+//   function pickNext() {
+//     if (heavyInFlight < maxHeavyInFlight && heavyQ.length) return heavyQ.shift();
+//     if (lightQ.length) return lightQ.shift();
+//     // No light work left → allow heavy to avoid starvation
+//     if (heavyQ.length) return heavyQ.shift();
+//     return null;
+//   }
+
+//   async function worker() {
+//     while (true) {
+//       const job = pickNext();
+//       if (!job) break;
+
+//       if (job.heavy) heavyInFlight++;
+
+//       const started = Date.now();
+//       let attempt = 0;
+//       let conn;
+
+//       try {
+//         for (;;) {
+//           try {
+//             conn = await pool.getConnection();
+
+//             // Soften locking per session
+//             await conn.query("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED");
+//             await conn.query("SET SESSION innodb_lock_wait_timeout = 120");
+
+//             const [res] = await conn.query(job.sql);
+
+//             // Success
+//             const affected = (res && typeof res.affectedRows === 'number') ? res.affectedRows : null;
+//             const { records, duplicates, warnings } = parseInfo(res?.info);
+
+//             done++;
+//             console.log(
+//               `✓ ${done}/${total} completed: ${job.label}` +
+//               (records != null ? ` | records=${records}` : '') +
+//               (duplicates != null ? ` | dupes=${duplicates}` : '') +
+//               (warnings != null ? ` | warnings=${warnings}` : '') +
+//               (affected != null ? ` | affected=${affected}` : '') +
+//               ` | duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
+//             );
+//             break;
+
+//           } catch (err) {
+//             attempt++;
+//             const code = err?.code || 'UNKNOWN_ERROR';
+//             const canRetry = RETRIABLE.has(code) && attempt <= MAX_RETRIES;
+
+//             if (canRetry) {
+//               await sleep(200 * attempt + Math.floor(Math.random() * 300)); // backoff + jitter
+//               continue;
+//             }
+
+//             done++;
+//             console.log(
+//               `✗ ${done}/${total} FAILED: ${job.label} | ${code} after ${attempt} attempt(s) | ` +
+//               `duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
+//             );
+//             break;
+
+//           } finally {
+//             try { await conn?.release(); } catch {}
+//           }
+//         }
+//       } finally {
+//         if (job.heavy) heavyInFlight = Math.max(0, heavyInFlight - 1);
+//       }
+//     }
+//   }
+
+//   const n = Math.max(1, Math.min(concurrency, total));
+//   await Promise.allSettled(Array.from({ length: n }, () => worker()));
+
+//   console.log(`All batches finished in ${fmtHMS(Date.now() - overallStart)}`);
+// }
+
+// NOTE: ---------- parallel runner with MAX_HEAVY_IN_FLIGHT and smallest-light backfill ----------
+async function run_ranges_parallel(pool, items, concurrency = 4, maxHeavyInFlight = 2) {
   const overallStart = Date.now();
 
-  const queue = [...items];
-  const total = queue.length;
+  // --- Classify heavy vs light based on estCount ---
+  const ests = items.map(i => i.estCount ?? 0).sort((a, b) => a - b);
+
+  // Median of positives to avoid "all zeros" median; also use p75 as a guard
+  const positives = ests.filter(x => x > 0);
+  const medPos = positives.length ? positives[Math.floor(positives.length / 2)] : 0;
+  const p75    = positives.length ? positives[Math.floor(0.75 * (positives.length - 1))] : 0;
+
+  // Tune this to your RANGE_SIZE; with 50k ID spans, "heavy" tends to be ~50–120k rows
+  const HEAVY_FACTOR  = 2;
+  const HEAVY_MIN_EST = 50_000;
+
+  const threshold = Math.max(
+    medPos ? HEAVY_FACTOR * medPos : 0,
+    p75,
+    HEAVY_MIN_EST
+  );
+
+  const heavyQ = [];
+  const lightQ = [];
+  for (const it of items) {
+    const est = it.estCount ?? 0;
+    if (est >= threshold) { it.heavy = true;  heavyQ.push(it); }
+    else                  { it.heavy = false; lightQ.push(it); }
+  }
+
+  // Prefer smallest lights first for backfill (keeps slots turning over quickly)
+  lightQ.sort((a, b) => (a.estCount ?? 0) - (b.estCount ?? 0));
+
+  // (Optional) sanity log
+  // console.log(`[sched] heavies=${heavyQ.length}, lights=${lightQ.length}, threshold=${threshold.toLocaleString()}, medPos=${medPos.toLocaleString()}, p75=${p75.toLocaleString()}`);
+
+  const total = items.length;
   let done = 0;
+  let heavyInFlight = 0;
 
   const MAX_RETRIES = 3;
   const RETRIABLE = new Set(['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT']);
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+  function pickNext() {
+    if (heavyInFlight < maxHeavyInFlight && heavyQ.length) return heavyQ.shift();
+    if (lightQ.length) return lightQ.shift();
+    // No light work left → allow heavy to avoid starvation
+    if (heavyQ.length) return heavyQ.shift();
+    return null;
+  }
+
   async function worker() {
     while (true) {
-      const job = queue.shift();
+      const job = pickNext();
       if (!job) break;
+
+      if (job.heavy) heavyInFlight++;
 
       const started = Date.now();
       let attempt = 0;
+      let conn;
 
-      for (; ;) {
-        let conn;
-        try {
-          conn = await pool.getConnection();
+      try {
+        for (;;) {
+          try {
+            conn = await pool.getConnection();
 
-          // Soften locking per session
-          await conn.query("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED");
-          await conn.query("SET SESSION innodb_lock_wait_timeout = 120");
+            // Soften locking per session
+            await conn.query("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED");
+            await conn.query("SET SESSION innodb_lock_wait_timeout = 120");
 
-          const [res] = await conn.query(job.sql);
+            const [res] = await conn.query(job.sql);
 
-          // >>> This is the "success block" <<<
-          const affected = (res && typeof res.affectedRows === 'number') ? res.affectedRows : null;
-          const { records, duplicates, warnings } = parseInfo(res?.info);
+            const affected = (res && typeof res.affectedRows === 'number') ? res.affectedRows : null;
+            const { records, duplicates, warnings } = parseInfo(res?.info);
 
-          done++;
-          // console.log(
-          //   `✓ ${done}/${total} completed: ${job.label} | affected=${affected ?? 'n/a'} | ` +
-          //   `duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
-          // );         
-          console.log(
-            `✓ ${done}/${total} completed: ${job.label}` +
-            (records != null ? ` | records=${records}` : '') +
-            (duplicates != null ? ` | dupes=${duplicates}` : '') +
-            (warnings != null ? ` | warnings=${warnings}` : '') +
-            (affected != null ? ` | affected=${affected}` : '') +
-            ` | duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
-          );
-          break;
-          // >>> This is the end of the "success block" <<<
+            done++;
+            console.log(
+              `✓ ${done}/${total} completed: ${job.label}` +
+              (records != null ? ` | records=${records}` : '') +
+              (duplicates != null ? ` | dupes=${duplicates}` : '') +
+              (warnings != null ? ` | warnings=${warnings}` : '') +
+              (affected != null ? ` | affected=${affected}` : '') +
+              ` | duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
+            );
+            break;
 
-        } catch (err) {
-          attempt++;
-          const code = err?.code || 'UNKNOWN_ERROR';
-          const canRetry = RETRIABLE.has(code) && attempt <= MAX_RETRIES;
+          } catch (err) {
+            attempt++;
+            const code = err?.code || 'UNKNOWN_ERROR';
+            const canRetry = RETRIABLE.has(code) && attempt <= MAX_RETRIES;
 
-          if (canRetry) {
-            await sleep(200 * attempt + Math.floor(Math.random() * 300)); // backoff + jitter
-            continue;
+            if (canRetry) {
+              await sleep(200 * attempt + Math.floor(Math.random() * 300)); // backoff + jitter
+              continue;
+            }
+
+            done++;
+            console.log(
+              `✗ ${done}/${total} FAILED: ${job.label} | ${code} after ${attempt} attempt(s) | ` +
+              `duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
+            );
+            break;
+
+          } finally {
+            try { await conn?.release(); } catch {}
           }
-
-          done++;
-          console.log(
-            `✗ ${done}/${total} FAILED: ${job.label} | ${code} after ${attempt} attempt(s) | ` +
-            `duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
-          );
-          break;
-
-        } finally {
-          try { await conn?.release(); } catch { }
         }
+      } finally {
+        if (job.heavy) heavyInFlight = Math.max(0, heavyInFlight - 1);
       }
     }
   }
@@ -594,15 +870,165 @@ async function run_ranges_parallel(pool, items, concurrency = 8) {
   const n = Math.max(1, Math.min(concurrency, total));
   await Promise.allSettled(Array.from({ length: n }, () => worker()));
 
-  // Final overall runtime summary
   console.log(`All batches finished in ${fmtHMS(Date.now() - overallStart)}`);
 }
+
+// NOTE:---------- parallel runner with MAX_HEAVY_IN_FLIGHT and smallest-light backfill with start batch type light / heavy----------
+// async function run_ranges_parallel(pool, items, concurrency = 4, maxHeavyInFlight = 2) {
+//   const overallStart = Date.now();
+
+//   // --- Classify heavy vs light based on estCount ---
+//   const ests = items.map(i => i.estCount ?? 0).sort((a, b) => a - b);
+
+//   // Median of positives to avoid "all zeros" median; also use p75 as a guard
+//   const positives = ests.filter(x => x > 0);
+//   const medPos = positives.length ? positives[Math.floor(positives.length / 2)] : 0;
+//   const p75    = positives.length ? positives[Math.floor(0.75 * (positives.length - 1))] : 0;
+
+//   // Tune this to your RANGE_SIZE; with 50k ID spans, "heavy" tends to be ~50–120k rows
+//   const HEAVY_FACTOR  = 2;
+//   const HEAVY_MIN_EST = 50_000;
+
+//   const threshold = Math.max(
+//     medPos ? HEAVY_FACTOR * medPos : 0,
+//     p75,
+//     HEAVY_MIN_EST
+//   );
+
+//   const heavyQ = [];
+//   const lightQ = [];
+//   for (const it of items) {
+//     const est = it.estCount ?? 0;
+//     if (est >= threshold) { it.heavy = true;  heavyQ.push(it); }
+//     else                  { it.heavy = false; lightQ.push(it); }
+//   }
+
+//   // Prefer smallest lights first for backfill (keeps slots turning over quickly)
+//   lightQ.sort((a, b) => (a.estCount ?? 0) - (b.estCount ?? 0));
+
+//   // (Optional) sanity log
+//   // console.log(`[sched] heavies=${heavyQ.length}, lights=${lightQ.length}, threshold=${threshold.toLocaleString()}, medPos=${medPos.toLocaleString()}, p75=${p75.toLocaleString()}`);
+
+//   const total = items.length;
+
+//   // ---- Telemetry state for visibility (NEW) ----
+//   let done = 0;
+//   let heavyInFlight = 0;
+//   let running = 0;
+//   const active = new Map(); // label -> { heavy, est, t0, label }
+
+//   const MAX_RETRIES = 3;
+//   const RETRIABLE = new Set(['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT']);
+//   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+//   function pickNext() {
+//     if (heavyInFlight < maxHeavyInFlight && heavyQ.length) return heavyQ.shift();
+//     if (lightQ.length) return lightQ.shift();
+//     // No light work left → allow heavy to avoid starvation
+//     if (heavyQ.length) return heavyQ.shift();
+//     return null;
+//   }
+
+//   // Heartbeat every 10s so you can see what's actually in-flight (NEW)
+//   const hb = setInterval(() => {
+//     const now = Date.now();
+//     const rows = [...active.values()].map(x => {
+//       const dur = fmtHMS(now - x.t0);
+//       return `${x.heavy ? 'H' : 'L'} ${x.label} est=${x.est ?? '?'} dur=${dur}`;
+//     });
+//     console.log(`↻ in-flight H=${heavyInFlight}/${maxHeavyInFlight}, total=${running} | ${rows.join(' | ')} | elapsed=${fmtHMS(now - overallStart)}`);
+//   }, 10_000);
+
+//   async function worker() {
+//     while (true) {
+//       const job = pickNext();
+//       if (!job) break;
+
+//       if (job.heavy) heavyInFlight++;
+//       running++;
+
+//       const started = Date.now();
+//       let attempt = 0;
+//       let conn;
+
+//       // Start log (NEW)
+//       active.set(job.label, { heavy: job.heavy, est: job.estCount, t0: started, label: job.label });
+//       console.log(`▶ start ${job.heavy ? 'HEAVY' : 'LIGHT'}: ${job.label} est=${job.estCount ?? '?'} H=${heavyInFlight}/${maxHeavyInFlight} (HQ=${heavyQ.length}, LQ=${lightQ.length})`);
+
+//       try {
+//         for (;;) {
+//           try {
+//             conn = await pool.getConnection();
+
+//             // Soften locking per session
+//             await conn.query("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED");
+//             await conn.query("SET SESSION innodb_lock_wait_timeout = 120");
+
+//             // Label the SQL so it's obvious in SHOW FULL PROCESSLIST (NEW)
+//             const labeledSql =
+//               `/* ${job.heavy ? 'HEAVY' : 'LIGHT'} ${job.label} est=${job.estCount ?? '?'} started=${new Date(started).toISOString()} */\n` +
+//               job.sql;
+
+//             const [res] = await conn.query(labeledSql);
+
+//             const affected = (res && typeof res.affectedRows === 'number') ? res.affectedRows : null;
+//             const { records, duplicates, warnings } = (typeof parseInfo === 'function' ? parseInfo(res?.info) : {});
+
+//             done++;
+//             console.log(
+//               `✓ ${done}/${total} ${job.heavy ? 'H' : 'L'}: ${job.label}` +
+//               ` | est=${job.estCount ?? '?'}`
+//               + (records != null ? ` | records=${records}` : '') +
+//               (duplicates != null ? ` | dupes=${duplicates}` : '') +
+//               (warnings != null ? ` | warnings=${warnings}` : '') +
+//               (affected != null ? ` | affected=${affected}` : '') +
+//               ` | duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
+//             );
+//             break;
+
+//           } catch (err) {
+//             attempt++;
+//             const code = err?.code || 'UNKNOWN_ERROR';
+//             const canRetry = RETRIABLE.has(code) && attempt <= MAX_RETRIES;
+
+//             if (canRetry) {
+//               await sleep(200 * attempt + Math.floor(Math.random() * 300)); // backoff + jitter
+//               continue;
+//             }
+
+//             done++;
+//             console.log(
+//               `✗ ${done}/${total} ${job.heavy ? 'H' : 'L'} FAILED: ${job.label} | ${code} after ${attempt} attempt(s)` +
+//               ` | duration=${fmtHMS(Date.now() - started)} | total=${fmtHMS(Date.now() - overallStart)}`
+//             );
+//             break;
+
+//           } finally {
+//             try { await conn?.release(); } catch {}
+//           }
+//         }
+//       } finally {
+//         // Finish bookkeeping (NEW)
+//         active.delete(job.label);
+//         if (job.heavy) heavyInFlight = Math.max(0, heavyInFlight - 1);
+//         running = Math.max(0, running - 1);
+//       }
+//     }
+//   }
+
+//   const n = Math.max(1, Math.min(concurrency, total));
+//   await Promise.allSettled(Array.from({ length: n }, () => worker()));
+
+//   clearInterval(hb); // (NEW)
+//   console.log(`All batches finished in ${fmtHMS(Date.now() - overallStart)}`);
+// }
 
 // ================= MAIN (with completion logs) =================
 async function step_3b_create_sales_key_metrics_table_parallel(query, primary_key, drop_table, FROM_STATEMENT, pool, update_mode = 'updated_at', options) {
   // Tunables
-  const CONCURRENCY = 10;       // number of parallel batches
-  const RANGE_SIZE = 100_000; // id_profiles per batch
+  const CONCURRENCY = 4;       // number of parallel batches
+  const RANGE_SIZE = 50_000; // id_profiles per batch
+  const MAX_HEAVY_IN_FLIGHT = 2; // ← new: cap heavy batches running at once
 
   let result = 'Transfer Failed';
   const { TABLE_NAME, TARGET_TABLE_NAME } = options;
@@ -616,6 +1042,7 @@ async function step_3b_create_sales_key_metrics_table_parallel(query, primary_ke
     // runTimer('timer'); // If this is noisy, you can comment it out during the parallel run.
     console.log('\nTABLE NAME:', TARGET_TABLE_NAME);
     console.log('UPDATE MODE:', update_mode);
+    console.log(`CONCURRENCY: ${CONCURRENCY}; RANGE SIZE: ${RANGE_SIZE}; MAX HEAVY IN FLIGHT: ${MAX_HEAVY_IN_FLIGHT}`);
 
     const startTime = Date.now();
 
@@ -741,7 +1168,8 @@ async function step_3b_create_sales_key_metrics_table_parallel(query, primary_ke
       });
 
       // 5) Execute in parallel; logs appear as each batch completes
-      const results = await run_ranges_parallel(dstPool, items, CONCURRENCY);
+      // const results = await run_ranges_parallel(dstPool, items, CONCURRENCY);
+      const results = await run_ranges_parallel(dstPool, items, CONCURRENCY, MAX_HEAVY_IN_FLIGHT);
 
       // Optional summary (runner may not return results; guard it)
       const failed = Array.isArray(results)
@@ -880,34 +1308,30 @@ async function step_3b_create_sales_key_metrics_table_parallel(query, primary_ke
 //   }
 // }
 
-// existing helper
-function fmtHMS(ms) {
-  const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
-  const mm = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
-  const ss = String(totalSec % 60).padStart(2, '0');
-  return `${hh}:${mm}:${ss}`;
-}
+async function step_3b_create_sales_key_metrics_tables_loop_parallel_test(FROM_STATEMENT, pool, update_mode, options) {
 
-async function step_3b_create_sales_key_metrics_tables_loop_parallel(FROM_STATEMENT, pool, update_mode, options) {
   // ✱ total timer start
   const totalStartMs = Date.now();
   const totalStartStr = new Date(totalStartMs).toLocaleString(); // local time; use toISOString() if you prefer UTC
   console.log(`\n[TOTAL] Start: ${totalStartStr}`);
 
   const query_list = [
-    { query: step_1_member_minimum_first_created_at_dates_query, target_table: `step_1_member_minimum_first_created_at_dates`, primary_key: ['id_profiles'], drop_table: true },
-    { query: step_2_member_min_created_at_date_query, target_table: `step_2_member_min_created_at_date`, primary_key: ['id_profiles', 'min_created_at'], drop_table: true },
-    { query: step_3_member_total_life_time_purchases_query, target_table: `step_3_member_total_life_time_purchases`, primary_key: ['id_profiles'], drop_table: true },
-    { query: step_4_member_age_dimensions_query, target_table: `step_4_member_age_dimensions`, primary_key: ['id_profiles'], drop_table: true },
-    { query: step_5_member_age_at_sale_date_query, target_table: `step_5_member_age_at_sale_date`, primary_key: ['id_membership_periods_sa', 'age_as_of_sale_date'], drop_table: true },
-    { query: step_5a_member_age_at_end_of_year_of_sale_query, target_table: `step_5a_member_age_at_end_of_year_of_sale`, primary_key: ['id_profiles', 'id_membership_periods_sa', 'age_at_end_of_year'], drop_table: true },
-    { query: step_6_membership_period_stats_query, target_table: `step_6_membership_period_stats`, primary_key: ['id_membership_periods_sa', 'actual_membership_fee_6_rule_sa', 'sales_units', 'sales_revenue'], drop_table: true },
-    { query: step_7_prior_purchase_query_v2, target_table: `step_7_prior_purchase`, primary_key: ['id_profiles', 'id_membership_periods_sa'], drop_table: true },
+    // { query: step_1_member_minimum_first_created_at_dates_query, target_table: `step_1_member_minimum_first_created_at_dates`, primary_key: ['id_profiles'], drop_table: true },
+    // { query: step_2_member_min_created_at_date_query, target_table: `step_2_member_min_created_at_date`, primary_key: ['id_profiles', 'min_created_at'], drop_table: true },
+    // { query: step_3_member_total_life_time_purchases_query, target_table: `step_3_member_total_life_time_purchases`, primary_key: ['id_profiles'], drop_table: true },
+    // { query: step_4_member_age_dimensions_query, target_table: `step_4_member_age_dimensions`, primary_key: ['id_profiles'], drop_table: true },
+    // { query: step_5_member_age_at_sale_date_query, target_table: `step_5_member_age_at_sale_date`, primary_key: ['id_membership_periods_sa', 'age_as_of_sale_date'], drop_table: true },
+    // { query: step_5a_member_age_at_end_of_year_of_sale_query, target_table: `step_5a_member_age_at_end_of_year_of_sale`, primary_key: ['id_profiles', 'id_membership_periods_sa', 'age_at_end_of_year'], drop_table: true },
+    // { query: step_6_membership_period_stats_query, target_table: `step_6_membership_period_stats`, primary_key: ['id_membership_periods_sa', 'actual_membership_fee_6_rule_sa', 'sales_units', 'sales_revenue'], drop_table: true },
+    // { query: step_7_prior_purchase_query_v2, target_table: `step_7_prior_purchase`, primary_key: ['id_profiles', 'id_membership_periods_sa'], drop_table: true },
     { query: step_8_sales_key_stats_2015_query, target_table: `sales_key_stats_2015`, primary_key: ['id_profiles', 'id_membership_periods_sa'], drop_table: update_mode === 'full' },
   ];
 
-  for (const { query, primary_key, drop_table, target_table } of query_list) {
+  const totalSteps = query_list.length;
+  for (const [i, item] of query_list.entries()) {
+    const { query, primary_key, drop_table, target_table } = item;
+    const stepNo = i + 1;
+
     const opts = { ...options, TARGET_TABLE_NAME: target_table }; // keep TABLE_NAME from outer options
 
     console.log(query);
@@ -920,47 +1344,13 @@ async function step_3b_create_sales_key_metrics_tables_loop_parallel(FROM_STATEM
     const nowStr = new Date(nowMs).toLocaleString();
     console.log(`[STEP ${stepNo}/${totalSteps}] Start: ${totalStartStr} | Now: ${nowStr} | Elapsed: ${fmtHMS(nowMs - totalStartMs)}`);
   }
-}
 
-// Only add indexes to sales key metrics on full load
-if (update_mode === 'full') {
-  // ✱ declare outside try so finally can close it
-  let dstConn;
-  try {
-    runTimer('timer');
-    console.log('Create indexes for sales key metrics');
+  // await create_step_8_sales_key_metrics_indexes(update_mode);
 
-    dstConn = await get_dst_connection();
-
-    // Faster builds for this session
-    await dstConn.query('SET SESSION innodb_sort_buffer_size = 268435456');
-    await dstConn.query('SET SESSION tmp_table_size = 268435456');
-    await dstConn.query('SET SESSION max_heap_table_size = 268435456');
-    await dstConn.query('SET SESSION sql_log_bin = 0'); // if safe
-
-    const sql = step_8b_create_indexes();   // ✅ CALL the function
-    await dstConn.query(sql);               // or await dstConn.execute(sql);
-
-  } catch (err) {
-    console.error('Transfer failed:', err);
-    throw err;
-  } finally {
-    try {
-      if (dstConn) {
-        await dstConn.end();
-        console.log('✅ Destination DB connection closed.');
-      }
-      stopTimer('timer');
-    } catch (e) {
-      console.warn('Error during cleanup:', e);
-    }
-  }
-}
-
-// ✱ total timer end + summary
-const totalEndMs = Date.now();
-const totalEndStr = new Date(totalEndMs).toLocaleString();
-console.log(`[TOTAL] Start: ${totalStartStr} | End: ${totalEndStr} | Duration: ${fmtHMS(totalEndMs - totalStartMs)}`);
+  // ✱ total timer end + summary
+  const totalEndMs = Date.now();
+  const totalEndStr = new Date(totalEndMs).toLocaleString();
+  console.log(`[TOTAL] Start: ${totalStartStr} | End: ${totalEndStr} | Duration: ${fmtHMS(totalEndMs - totalStartMs)}`);
 }
 
 if (require.main === module) {
@@ -969,7 +1359,7 @@ if (require.main === module) {
 
   const options = {
     TABLE_NAME: `all_membership_sales_data_2015_left`,
-    TARGET_TABLE_NAME: `sales_key_stats_2015_test`,
+    TARGET_TABLE_NAME: `sales_key_stats_2015`,
     // membership_period_ends: '2008-01-01',
     // start_year_mtn: 2010, // Default = 2010
     // start_date_mtn: update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01',
@@ -981,10 +1371,10 @@ if (require.main === module) {
   // const update_mode = 'partial';     // Update using current & prior year, dont drop
   // const update_mode = 'updated_at';     // Update based on the 'updated_at' date, dont drop
 
-  step_3b_create_sales_key_metrics_tables_loop_parallel(FROM_STATEMENT, pool, update_mode, options);
+  step_3b_create_sales_key_metrics_tables_loop_parallel_test(FROM_STATEMENT, pool, update_mode, options);
 }
 
 
 module.exports = {
-  step_3b_create_sales_key_metrics_tables_loop_parallel,
+  step_3b_create_sales_key_metrics_tables_loop_parallel_test,
 };

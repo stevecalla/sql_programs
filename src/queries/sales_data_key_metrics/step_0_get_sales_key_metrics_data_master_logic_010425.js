@@ -13,6 +13,8 @@ const { step_3a_create_prior_purchase_table_parallel } = require('../../sales_da
 
 const { step_3b_create_sales_key_metrics_table_parallel } = require('../../sales_data_v2/step_3b_create_sales_key_metrics_table_parallel_083125');
 
+const { step_3b_create_sales_key_metrics_tables_loop_parallel_test } = require('../../sales_data_v2/step_3b_create_sales_key_metrics_table_parallel_083125_test');
+
 const { step_8b_create_indexes } = require('./step_8b_get_sales_data_010425_indexes'); // step 8a
 
 function step_noop() { return `DO 0`; }; // empty sql statement to provide dummy query
@@ -32,13 +34,14 @@ async function query_step_0_sales_key_metrics_master_logic(update_mode) {
         // step_6_membership_period_stats,                          // #6 Query results: 3,831,769, Elapsed Time: 349.92 sec
         // step_7_prior_purchase,                                   // #7 Query results: undefined, Elapsed Time: 840.97 sec
         
+        // below uses node stream concurrency to load data & run parallel streams
         // step_3a_create_prior_purchase_table_parallel,
-        step_3b_create_sales_key_metrics_table_parallel,         // #3a / #8b on full drop & create/upser; on partial...      
-                                                                 // ... upsert; on updated_at replace
+        step_3b_create_sales_key_metrics_table_parallel,
         // update_mode === 'full' ? step_8b_create_indexes         : step_noop, // #8b Query results: undefined, Elapsed Time: 2483.21 sec
 
-        // execute_transfer_usat_to_local_parallel,
-          
+        
+        // below uses concurrency inside mysql to run parallel streams
+        // step_3b_create_sales_key_metrics_tables_loop_parallel_test,         // #3a / #8b on full drop & create/upsert; on partial upsert; on updated_at replace
     ]
 
     return query_list;

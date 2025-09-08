@@ -16,33 +16,47 @@ const { execute_load_sales_goal_data } = require('./step_5_load_sales_goals');
 const { execute_load_big_query_sales_goals } = require('./step_5a_load_bq_sales_goals');
 
 const { execute_create_actual_vs_goal_metrics } = require('./step_6_create_actual_vs_goal_metrics_042925');
-const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load_bq_actual_vs_goal_metrics');
+const { execute_load_big_query_actual_vs_goal_metrics } = require('./step_6a_load_bq_actual_vs_goal_metrics');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-const run_step_1  = false; // transfer sales data from usat vapor to local db
+const run_step_1 = false; // transfer sales data from usat vapor to local db
 const run_step_2a = false; // load region table
 
-const run_step_3  = true; // create sales key metrics stats table
+const run_step_3 = true; // create sales key metrics stats table
 const run_step_3c = false; // load sales key metrics stats to biqquery
 
-const run_step_4  = false; // create year-over-year common date table (Elapsed Time: 91.06 sec)
+const run_step_4 = false; // create year-over-year common date table (Elapsed Time: 91.06 sec)
 const run_step_4a = false; // load year-over-year common date table
 
-const run_step_5  = false; // load sales goal data
+const run_step_5 = false; // load sales goal data
 const run_step_5a = false; // load sales goals to bigquery
 
-const run_step_6  = false; // create actual vs goal data table
+const run_step_6 = false; // create actual vs goal data table
 const run_step_6a = false; // load actual vs goal to bigquery
 
+function fmtHMS(ms) {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const hh = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+  const mm = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+  const ss = String(totalSec % 60).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
 async function executeSteps(stepFunctions, stepName, update_mode, options) {
+  // ✱ total timer start
+  const totalStartMs = Date.now();
+  const totalStartStr = new Date(totalStartMs).toLocaleString(); // local time; use toISOString() if you prefer UTC
+  console.log(`\n[TOTAL] Start: ${totalStartStr}`);
+
+  const totalSteps = stepFunctions.length;
   for (let i = 0; i < stepFunctions.length; i++) {
-    
+
     const start_local_time = new Date().toLocaleString(); // Get the current local date and time as a string
     const startTime = performance.now();
 
     const stepFunction = stepFunctions[i];
-    
+
     console.log(`\n*************** STARTING ${stepName[i]} ***************\n`);
     try {
       if (stepFunction) {
@@ -52,8 +66,8 @@ async function executeSteps(stepFunctions, stepName, update_mode, options) {
         const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2);
         const end_local_time = new Date().toLocaleString(); // Get the current local date and time as a string
 
-        const message = results ? 
-          `${stepName[i]} SUCCESS. START: ${start_local_time} MTN. Elapsed Time: ${elapsedTime} sec. END: = ${end_local_time} MTN.` : 
+        const message = results ?
+          `${stepName[i]} SUCCESS. START: ${start_local_time} MTN. Elapsed Time: ${elapsedTime} sec. END: = ${end_local_time} MTN.` :
           `$${stepName[i]} ERROR: NOT executed successfully. START: ${start_local_time} MTN. Time now = ${end_local_time} MTN. Elapsed Time: ${elapsedTime} sec. `;
 
         console.log(message);
@@ -69,6 +83,11 @@ async function executeSteps(stepFunctions, stepName, update_mode, options) {
         console.log(skip_message);
         await slack_message_api(skip_message, "steve_calla_slack_channel");
       }
+
+      // ✱ per-iteration time summary
+      const nowMs = Date.now();
+      const nowStr = new Date(nowMs).toLocaleString();
+      console.log(`[STEP ${stepName[i]}/${totalSteps}] Start: ${totalStartStr} | Now: ${nowStr} | Elapsed: ${fmtHMS(nowMs - totalStartMs)}`);
 
     } catch (error) {
       const endTime = performance.now();
@@ -105,7 +124,7 @@ async function create_variables(update_mode) {
 
   const options = {
     TABLE_NAME: `all_membership_sales_data_2015_left`,
-    TARGET_TABLE_NAME: `sales_key_stats_2015`,
+    TARGET_TABLE_NAME: `sales_key_stats_2015_test`,
     membership_period_ends: '2008-01-01',
     start_year_mtn: 2010, // Default = 2010
     start_date_mtn: update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01',
@@ -125,25 +144,25 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
 
   try {
     const stepFunctions = [
-      run_step_1  ? execute_transfer_usat_to_local_parallel : null,
+      run_step_1 ? execute_transfer_usat_to_local_parallel : null,
       run_step_2a ? execute_load_region_data : null,
-      run_step_3  ? execute_create_sales_key_metrics : null,
+      run_step_3 ? execute_create_sales_key_metrics : null,
       run_step_3c ? execute_load_big_query_sales_key_metrics : null,
-      run_step_4  ? execute_create_year_over_year_key_metrics : null,
+      run_step_4 ? execute_create_year_over_year_key_metrics : null,
       run_step_4a ? execute_load_big_query_sales_year_over_year_metrics : null,
-      run_step_5  ? execute_load_sales_goal_data : null,
+      run_step_5 ? execute_load_sales_goal_data : null,
       run_step_5a ? execute_load_big_query_sales_goals : null,
-      run_step_6  ? execute_create_actual_vs_goal_metrics : null,
+      run_step_6 ? execute_create_actual_vs_goal_metrics : null,
       run_step_6a ? execute_load_big_query_actual_vs_goal_metrics : null,
     ];
 
     const stepName = [
-      `Step #1 - Get Sales Data:`, 
+      `Step #1 - Get Sales Data:`,
       // `Step #2 - Load Sales Data: `, -- not necessary as step 1 retrieves & transfers data
-      `Step #2a - Load Region Data: `, 
-      `Step #3 - Create Sales Key Metrics: `, 
-      `Step #3c - Load Sales Key Metrics to BQ: `, 
-      `Step #4 - Create Year-over-Year Data: `, 
+      `Step #2a - Load Region Data: `,
+      `Step #3 - Create Sales Key Metrics: `,
+      `Step #3c - Load Sales Key Metrics to BQ: `,
+      `Step #4 - Create Year-over-Year Data: `,
       `Step #4a - Load Sales YoY Metris to BQ: `,
       `Step #5 - Create Sales Goal Data:`,
       `Step #5a - Load Sales Goals to BQ`,
@@ -167,9 +186,9 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
 }
 
 if (require.main === module) {
-  // const update_mode = 'full';        // Update 2010 forward, drop table
+  const update_mode = 'full';        // Update 2010 forward, drop table
   // const update_mode = 'partial';     // Update using current & prior year, dont drop
-  const update_mode = 'updated_at';   // Update based on the 'updated_at' date, dont drop
+  // const update_mode = 'updated_at';   // Update based on the 'updated_at' date, dont drop
 
   execute_run_sales_data_jobs_v2(update_mode);
 }
