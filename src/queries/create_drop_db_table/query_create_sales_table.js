@@ -26,7 +26,7 @@ const events_table = `
   -- EVENTS TABLE
   id_events INT,
   id_sanctioning_events INT,  
-  id_sanctioning_events_and_type VARCHAR(255), -- TODO:                
+  id_sanctioning_events_and_type VARCHAR(255),               
   event_type_id_events INT,                     
   name_events VARCHAR(255),                      
 
@@ -57,7 +57,7 @@ const events_table = `
   last_season_event_id INT               
 `;
 
-const event_types_table = ` -- todo:
+const event_types_table = `
     -- EVENT TYPES TABLE
     id_event_types VARCHAR(100), 
     id_event_type_events VARCHAR(100),
@@ -80,7 +80,6 @@ const membership_applications_table = `
   event_id_ma INT,
   extension_type_ma VARCHAR(50),
   first_name_ma VARCHAR(255),
-  gender_ma VARCHAR(50),
   id_ma INT,
   last_name_ma VARCHAR(100),
   membership_type_id_ma INT,
@@ -176,9 +175,10 @@ const membership_types_table = `
   short_description_mt TEXT
 `;
 
-const profiles_table = `
+const profiles_table = ` -- todo:
   -- PROFILES TABLE
   id_profiles INT,
+  gender_id_profiles INT, -- todo:
   created_at_profiles DATETIME,
   date_of_birth_profiles DATE,
   primary_address_id_profiles INT,
@@ -191,7 +191,7 @@ const orders_products_table = `
     order_id_orders_products INT
 `;
 
-const races_table = ` -- TODO:
+const races_table = `
     -- RACES TABLE
     designation_races VARCHAR(100)
 `;

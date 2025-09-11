@@ -272,7 +272,7 @@ async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at
 
   const membership_period_ends = '2008-01-01';
   let start_year_mtn = 2010; // Default = 2010
-  let start_date_mtn = update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01';
+  let start_date_mtn = update_mode === 'partial' ? await get_first_day_of_prior_year() : '2025-01-01';
   let end_date_mtn = await get_last_day_of_year();
   let updated_at_date_mtn = await get_yesterdays_date(); // Return yesterday in 'YYYY-MM-DD' format
 

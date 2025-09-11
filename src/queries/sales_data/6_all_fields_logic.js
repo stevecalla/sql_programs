@@ -171,7 +171,6 @@ const membership_applications_table = `
         '"'
     ) AS first_name_ma, 
 
-    ma.gender AS gender_ma,
     ma.id AS id_ma,
     
     CONCAT('"', 
@@ -304,9 +303,11 @@ const membership_types_table = `
     CONCAT('"', SUBSTRING(membership_types.short_description, 1, 1024), '"') AS short_description_mt
 `;
 
-const profiles_table = `
+const profiles_table = ` -- todo:
     -- PROFILES TABLE
     profiles.id AS id_profiles,
+    profiles.gender_id AS gender_id_profiles, -- todo:
+
     profiles.created_at AS created_at_profiles,
     profiles.date_of_birth AS date_of_birth_profiles,
     profiles.primary_address_id AS primary_address_id_profiles,
