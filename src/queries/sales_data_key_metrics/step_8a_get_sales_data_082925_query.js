@@ -298,6 +298,13 @@ async function step_8_sales_key_stats_2015_query(FROM_STATEMENT, WHERE_STATEMENT
                 er.region_abbr AS region_abbr_events,
 
                 -- OTHER
+                am.gender_id_profiles, -- todo:
+                CASE
+                    WHEN am.gender_id_profiles = 1 THEN 'm'
+                    WHEN am.gender_id_profiles = 2 THEN 'f'
+                    WHEN am.gender_id_profiles = 3 THEN 'binary'
+                    ELSE 'unknown'
+                END AS gender_profiles,
                 am.created_at_ma,
                 am.order_id_orders_products,
                 am.id_registration_audit,
@@ -354,7 +361,7 @@ async function step_8_sales_key_stats_2015_query(FROM_STATEMENT, WHERE_STATEMENT
             --     AND am.id_profiles IS NOT NULL
             ${ORDER_BY_STATEMENT}
 
-            -- LIMIT 10000
+            -- LIMIT 1000
         ;
     `;
 }
