@@ -708,6 +708,20 @@ const members_schema = [
 
     // OTHER
     {
+        "name": "gender_id_profiles",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "gender_profiles",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
         "name": "created_at_ma",
         "mode": "NULLABLE",
         "type": "STRING",

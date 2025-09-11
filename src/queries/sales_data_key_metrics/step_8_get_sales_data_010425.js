@@ -230,7 +230,7 @@ function step_8_sales_key_stats_2015() {
                 -- EVENT DETAILS
                 am.id_events,
                 am.id_sanctioning_events,
-                am.id_sanctioning_events_and_type, -- TODO:
+                am.id_sanctioning_events_and_type,
                 am.event_type_id_events,
                 am.name_events,
 
@@ -301,7 +301,13 @@ function step_8_sales_key_stats_2015() {
                 er.region_abbr AS region_abbr_events,
 
                 -- OTHER
-                am.gender_ma, -- todo:
+                am.gender_id_profiles, -- todo:
+                CASE
+                    WHEN am.gender_id_profiles = 1 THEN 'm'
+                    WHEN am.gender_id_profiles = 2 THEN 'f'
+                    WHEN am.gender_id_profiles = 3 THEN 'binary'
+                    ELSE 'unknown'
+                END AS gender_profiles,
                 am.created_at_ma,
                 am.order_id_orders_products,
                 am.id_registration_audit,
@@ -354,7 +360,7 @@ function step_8_sales_key_stats_2015() {
                 AND am.purchased_on_year_adjusted_mp >= 2010
                 AND am.id_profiles IS NOT NULL
 
-            -- LIMIT 10000
+            -- LIMIT 1000
         ;
     `;
 }
