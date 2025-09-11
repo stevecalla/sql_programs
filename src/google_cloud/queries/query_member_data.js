@@ -122,12 +122,11 @@ async function query_member_data(batch_size = 1000, last_seen_id = 0, offset) {
             race_director_id_events,
             last_season_event_id,
 
-            -- TODO:
+            -- event / race types
             id_event_types, 
             id_event_type_events,
             name_event_type,
-
-            designation_races, -- TODO:
+            designation_races,
 
             sales_units,
             sales_revenue,
@@ -152,6 +151,8 @@ async function query_member_data(batch_size = 1000, last_seen_id = 0, offset) {
             region_abbr_events,
 
             -- OTHER --
+            gender_id_profiles,
+            gender_profiles,
             DATE_FORMAT(created_at_ma, '%Y-%m-%d %H:%i:%s') AS created_at_ma,
             order_id_orders_products,
             id_registration_audit,

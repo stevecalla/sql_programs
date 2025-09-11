@@ -230,7 +230,7 @@ function step_8_sales_key_stats_2015() {
                 -- EVENT DETAILS
                 am.id_events,
                 am.id_sanctioning_events,
-                am.id_sanctioning_events_and_type, -- TODO:
+                am.id_sanctioning_events_and_type,
                 am.event_type_id_events,
                 am.name_events,
 
@@ -276,7 +276,7 @@ function step_8_sales_key_stats_2015() {
                 am.race_director_id_events,
                 am.last_season_event_id,
 
-                -- EVENT TYPES -- TODO:
+                -- EVENT TYPES
                 am.id_event_types, 
                 am.id_event_type_events,
                 am.name_event_type,
@@ -301,12 +301,19 @@ function step_8_sales_key_stats_2015() {
                 er.region_abbr AS region_abbr_events,
 
                 -- OTHER
+                am.gender_id_profiles, -- todo:
+                CASE
+                    WHEN am.gender_id_profiles = 1 THEN 'm'
+                    WHEN am.gender_id_profiles = 2 THEN 'f'
+                    WHEN am.gender_id_profiles = 3 THEN 'binary'
+                    ELSE 'unknown'
+                END AS gender_profiles,
                 am.created_at_ma,
                 am.order_id_orders_products,
                 am.id_registration_audit,
                 am.confirmation_number_registration_audit,
                 am.name_registration_companies,
-                am.designation_races, -- TODO:
+                am.designation_races,
 
                 -- KEY STATS
                 st.sales_units,
@@ -353,7 +360,7 @@ function step_8_sales_key_stats_2015() {
                 AND am.purchased_on_year_adjusted_mp >= 2010
                 AND am.id_profiles IS NOT NULL
 
-            -- LIMIT 10000
+            -- LIMIT 1000
         ;
     `;
 }
