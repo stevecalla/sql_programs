@@ -2,6 +2,30 @@
 // working query: C:\Users\calla\development\usat\sql_code\5_race_participation\final_0_local_paticiption_working_query_031825.sql
 // discovery: C:\Users\calla\development\usat\sql_code\5_race_participation\local_participation_raw_merge_region_and_sales.sql
 
+// CREATED MTN AND UTC CREATED AT DATES
+async function query_create_mtn_utc_timestamps() {
+    return `
+        SET @created_at_mtn = (         
+            SELECT CASE 
+                WHEN UTC_TIMESTAMP() >= DATE_ADD(
+                    DATE_ADD(CONCAT(YEAR(UTC_TIMESTAMP()), '-03-01'),
+                        INTERVAL ((7 - DAYOFWEEK(CONCAT(YEAR(UTC_TIMESTAMP()), '-03-01')) + 1) % 7 + 7) DAY),
+                    INTERVAL 2 HOUR)
+                AND UTC_TIMESTAMP() < DATE_ADD(
+                    DATE_ADD(CONCAT(YEAR(UTC_TIMESTAMP()), '-11-01'),
+                        INTERVAL ((7 - DAYOFWEEK(CONCAT(YEAR(UTC_TIMESTAMP()), '-11-01')) + 1) % 7) DAY),
+                    INTERVAL 2 HOUR)
+                THEN DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL -6 HOUR), '%Y-%m-%d %H:%i:%s')
+                    ELSE DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL -7 HOUR), '%Y-%m-%d %H:%i:%s')
+                END
+            );
+
+        SET @created_at_utc = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s');
+
+        SELECT @created_at_mtn AS created_at_mtn, @created_at_utc AS created_at_utc;
+    `;
+}
+
 // STEP #2: GET MIN & MAX MEMBERSHIP PERIOD END DATES; USED TO LIMIT THE QUERY OF PARTICIPANT RAW DATA
 async function query_get_min_and_max_races_dates(start_date_time, end_date_time) {
     return `
@@ -14,7 +38,7 @@ async function query_get_min_and_max_races_dates(start_date_time, end_date_time)
 }
 
 // STEP #2a: INSERT DATA INTO TABLE
-async function step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time, min_start_date, max_end_date) {
+async function step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time, min_start_date, max_end_date, created_at_mtn, created_at_utc) {
     return `
         SET @start_date = '2025-01-01';
         SET @end_date = '2025-03-16';
@@ -152,7 +176,10 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     ) AS rn, -- Ranks duplicates based on the nearest MP purchase date to the race start date,
 
                     -- IDENTIFY ACTIVE MEMBERSHIP DATES OVERLAP WITH RACE DATES
-                    CASE WHEN s.starts_mp IS NOT NULL THEN 1 ELSE 0 END AS is_active_membership
+                    CASE WHEN s.starts_mp IS NOT NULL THEN 1 ELSE 0 END AS is_active_membership,
+
+                    '${created_at_mtn}',
+                    '${created_at_utc}'
 
                 FROM participation p
                     LEFT JOIN filtered_sales_key_stats_2015 s ON s.id_profiles = p.id_profile_rr
@@ -212,7 +239,8 @@ async function query_append_region_fields(table_name) {
             ADD COLUMN state_name VARCHAR(100),
             ADD COLUMN state_code VARCHAR(10),
             ADD COLUMN region_name VARCHAR(100),
-            ADD COLUMN region_abbr VARCHAR(10);
+            ADD COLUMN region_abbr VARCHAR(10)
+        ;
     `;
 }
 
@@ -269,6 +297,16 @@ async function query_append_membership_period_fields(table_name) {
     `;
 }
 
+// STEP #1B: APPEND CREATED AT DATES
+async function query_append_created_at_dates(table_name) {
+    return `
+        ALTER TABLE ${table_name}
+            ADD COLUMN created_at_mtn DATETIME,
+            ADD COLUMN created_at_utc DATETIME
+        ;
+    `;
+}
+
 // STEP #1C: APPEND INDEXES
 async function query_append_index_fields(table_name) {
     return `
@@ -308,7 +346,8 @@ async function query_append_index_fields(table_name) {
             ADD INDEX idx_ends_mp (ends_mp),
 
             ADD INDEX idx_real_membership_types_sa (real_membership_types_sa),
-            ADD INDEX idx_new_member_category_6_sa (new_member_category_6_sa);
+            ADD INDEX idx_new_member_category_6_sa (new_member_category_6_sa)
+        ;
     `;
 }
 
@@ -316,7 +355,9 @@ module.exports = {
     query_create_table,
     query_append_region_fields,
     query_append_membership_period_fields,
+    query_append_created_at_dates,
     query_append_index_fields,
     query_get_min_and_max_races_dates,
     step_4_create_participation_with_membership_match,
+    query_create_mtn_utc_timestamps,
 }

@@ -11,9 +11,11 @@ const {
     query_create_table,
     query_append_region_fields,
     query_append_membership_period_fields,
+    query_append_created_at_dates,
     query_append_index_fields,
     query_get_min_and_max_races_dates,
     step_4_create_participation_with_membership_match,
+    query_create_mtn_utc_timestamps,
 } = require("../queries/participation_data/step_3_create_participation_with_membership_match");
 
 const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
@@ -35,6 +37,16 @@ async function create_connection() {
     } catch (error) {
         console.log(`Error connecting: ${error}`)
     }
+}
+
+async function get_created_at_dates(pool, db_name, table_name) {
+    const query = await query_create_mtn_utc_timestamps();
+
+    const result = await execute_mysql_working_query(pool, db_name, query);
+
+    const { created_at_mtn, created_at_utc } = result[2][0];
+
+    return { created_at_mtn, created_at_utc };
 }
 
 // EXECUTE MYSQL TO CREATE TABLES & WORK WITH TABLES QUERY
@@ -84,11 +96,15 @@ async function create_table(pool, db_name, table_name) {
     const query_to_append_membership_period_fields = await query_append_membership_period_fields(table_name);
     await execute_mysql_working_query(pool, db_name, query_to_append_membership_period_fields);
 
+    // APPEND CREATED AT FIELDS
+    const query_to_append_created_at_fields = await query_append_created_at_dates(table_name);
+    await execute_mysql_working_query(pool, db_name, query_to_append_created_at_fields);
+
     stopTimer(`query_to_create_table`);
     return;
 }
 
-async function insert_data(pool, db_name, table_name, test = false) {
+async function insert_data(pool, db_name, table_name, created_at_mtn, created_at_utc, is_test = false) {
     const start_year = 2010; // Default = 2010
     const membershipPeriodEnds = '2008-01-01';
     const period_interval = 3; // options include 1, 3, 6 months
@@ -103,7 +119,7 @@ async function insert_data(pool, db_name, table_name, test = false) {
 
     // SET LOOP ITERATION; IF TEST SET LOOP TO ONE TIME ONLY
     let loop_iteration = 0;
-    test ? loop_iteration = 1 : loop_iteration = date_periods.length;
+    is_test ? loop_iteration = 1 : loop_iteration = date_periods.length;
 
     for (let i = 0; i < loop_iteration; i++) {
     
@@ -111,7 +127,7 @@ async function insert_data(pool, db_name, table_name, test = false) {
         
         const date_period = date_periods[i];
 
-        if (!test) {
+        if (!is_test) {
             start_date_time = date_period.start_date_time;
             end_date_time = date_period.end_date_time;
 
@@ -135,7 +151,7 @@ async function insert_data(pool, db_name, table_name, test = false) {
 
         // QUERY TO INSERT THE DATA
         console.log('\nStep 2: get insert query running');
-        const query_to_insert_data = await step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time, min_start_date, max_end_date);
+        const query_to_insert_data = await step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time, min_start_date, max_end_date, created_at_mtn, created_at_utc);
         // console.log(query_to_insert_data);
 
         console.log('\nStep 3: insert query running');
@@ -162,7 +178,7 @@ async function append_indexes(pool, db_name, table_name) {
 async function execute_create_participation_with_membership_match() {   
     let pool;
     const startTime = performance.now();
-    let test = false; // true will run less data for insert
+    let is_test = false; // true will run less data for insert
 
     try {
         // STEP #0: CREATE CONNECTION
@@ -175,12 +191,16 @@ async function execute_create_participation_with_membership_match() {
         // STEP #1: CREATE TABLE
         await create_table(pool, db_name, table_name);
 
+        // STEP #1A: GET CREATED AT DATE
+        const { created_at_mtn, created_at_utc } = await get_created_at_dates(pool, db_name, table_name);
+        // console.log('CREATED AT DATES =', created_at_mtn, created_at_utc);
+
         // STEP #2: INSERT DATA
-        await insert_data(pool, db_name, table_name, test);
- 
+        await insert_data(pool, db_name, table_name, created_at_mtn, created_at_utc, is_test);
+
         // STEP #3: APPEND INDEXES
         console.log('CREATED INDEXES ****************')
-        await append_indexes(pool, db_name, table_name)
+        // await append_indexes(pool, db_name, table_name)
 
         // STEP #5a: Log results
         console.log('STEP #1: All queries executed successfully.');
