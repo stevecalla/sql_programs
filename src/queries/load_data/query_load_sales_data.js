@@ -22,11 +22,11 @@ const addresses_table = `
     country_code_addresses,
 `;
 
-const events_table = ` -- TODO:
+const events_table = `
     -- EVENTS TABLE
     id_events,
     id_sanctioning_events,
-    id_sanctioning_events_and_type, -- TODO:
+    id_sanctioning_events_and_type,
     event_type_id_events,
     name_events,
     
@@ -57,7 +57,7 @@ const events_table = ` -- TODO:
     last_season_event_id,
 `;
 
-const event_types_table = ` -- todo:
+const event_types_table = `
     -- EVENT TYPES TABLE
     id_event_types, 
     id_event_type_events,
@@ -80,7 +80,6 @@ const membership_applications_table = `
     event_id_ma,
     extension_type_ma,
     first_name_ma,
-    gender_ma,
     id_ma,
     last_name_ma,
     membership_type_id_ma,
@@ -176,9 +175,11 @@ const membership_types_table = `
     short_description_mt,
 `;
 
-const profiles_table = `
+const profiles_table = ` -- todo:
     -- PROFILES TABLE
     id_profiles,
+    gender_id_profiles, -- todo:
+    
     @created_at_profiles,
     @date_of_birth_profiles,
     primary_address_id_profiles,
@@ -189,7 +190,7 @@ const orders_products_table = `
     order_id_orders_products,
 `;
 
-const races_table = ` -- TODO:
+const races_table = `
     -- RACES TABLE
     designation_races,
 `;

@@ -31,7 +31,7 @@ const addresses_table = `
     addresses.country_code AS country_code_addresses
 `;
 
-const events_table = ` -- todo:
+const events_table = `
     -- EVENTS TABLE
     events.id AS id_events,
 
@@ -49,7 +49,7 @@ const events_table = ` -- todo:
         WHEN events.event_type_id = 3 THEN CONCAT(events.sanctioning_event_id, '-', 'Youth Race')
         WHEN events.event_type_id = 4 THEN CONCAT(events.sanctioning_event_id, '-', 'Youth Clinic')
         ELSE events.sanctioning_event_id
-    END AS id_sanctioning_events_and_type, -- TODO:
+    END AS id_sanctioning_events_and_type,
 
     events.event_type_id AS event_type_id_events,
 
@@ -109,7 +109,7 @@ const events_table = ` -- todo:
     events.last_season_event_id AS last_season_event_id
 `;
 
-const event_types_table = ` -- todo:
+const event_types_table = `
     -- EVENT TYPES TABLE
     et.id AS id_event_types,
     events.event_type_id AS id_event_type_events,
@@ -320,7 +320,7 @@ const orders_products_table = `
     op.order_id AS order_id_orders_products
 `;
 
-const races_table = ` -- todo:
+const races_table = `
     -- RACES TABLE
     r.designation as designation_races
 `;
@@ -354,7 +354,7 @@ const select_fields = `
 `;
 
 // SECTION: VERSION 1
-const from_statement_left = ` -- TODO:
+const from_statement_left = `
     FROM one_day_sales_actual_member_fee AS sa
 
         LEFT JOIN membership_periods AS mp ON sa.max_membership_period_id = mp.id
