@@ -11,6 +11,7 @@ const { execute_load_participation_data } = require('./step_2_load_participation
 // MATCH PARTICIPATION & MEMBERSHIP DATA; 
 const { execute_create_participation_with_membership_match } = require("./step_3_create_participation_with_membership_match");
 // TODO: LOAD ALL PARTICIPATION DATA TO BQ / CREATE AGE BUCKETS & BREAKOUT
+const { execute_load_big_query_participation_membership_sales_match } = require('./step_3a_1_load_bq_participation_match_profiles_metrics');
 
 // CREATE & LOAD PARTICIPATION USER PROFILE
 const { execute_create_participation_profile_table } = require("./step_3a_create_participation_match_profile");
@@ -91,6 +92,8 @@ async function execute_run_participation_data_jobs() {
   // const run_step_2a = false; // load region table
 
   const run_step_3  = true; // create table participation with membership sales match
+  const run_step_3a_1 = true; // load participation with membership sales match to bigquery
+
   const run_step_3a = true; // create participation profile (profile_id) table
   const run_step_3b = true; // load membership participation match profile to bigquery
   const run_step_3c = true; // create membership participation race (race_id) profile table
@@ -105,8 +108,11 @@ async function execute_run_participation_data_jobs() {
       // run_step_2a ? execute_load_region_data : null,
 
       run_step_3 ? execute_create_participation_with_membership_match : null,
+      run_step_3a_1 ? execute_load_big_query_participation_membership_sales_match : null,
+
       run_step_3a ? execute_create_participation_profile_table : null,
       run_step_3b ? execute_load_big_query_participation_profile_metrics : null,
+
       run_step_3c ? execute_create_participation_race_profile_tables : null,
       run_step_3d ? execute_load_big_query_participation_race_profile_metrics : null,
 
@@ -119,8 +125,11 @@ async function execute_run_participation_data_jobs() {
       // `Step #2a - Load Region Data: `, 
 
       `Step #3 - Created participation data with membership match`,
+      `Step #3a_1 - Load participation membership sales match to BQ: `,
+
       `Step #3a - Created participation profile table`, // takes about 10 minutes
       `Step #3b - Load participation profile to BQ: `,
+
       `Step #3c - Created participation race profile table`, // takes about 3 minutes
       `Step #3d - Load participation race profile to BQ: `,
 
