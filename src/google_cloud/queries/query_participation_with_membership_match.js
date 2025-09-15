@@ -18,6 +18,8 @@ async function query_participation_with_membership_sales_match(batch_size = 10, 
 
             DATE_FORMAT(start_date_races, '%Y-%m-%d') AS start_date_races,
             start_date_year_races,
+            start_date_month_races,
+            start_date_quarter_races,
             
             is_ironman,
     
