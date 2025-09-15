@@ -80,6 +80,20 @@ const participation_with_membership_sales_match_schema = [
     "fields": []
   },
   {
+    "name": "start_date_month_races",
+    "mode": "NULLABLE",
+    "type": "INTEGER",
+    "description": "Race start month",
+    "fields": []
+  },
+  {
+    "name": "start_date_quarter_races",
+    "mode": "NULLABLE",
+    "type": "INTEGER",
+    "description": "Race start quarter",
+    "fields": []
+  },
+  {
     "name": "is_ironman",
     "mode": "NULLABLE",
     "type": "STRING",
