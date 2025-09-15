@@ -111,6 +111,11 @@ async function insert_data(pool, db_name, table_name, created_at_mtn, created_at
 
     let start_date_time = "2010-03-01 00:00:00";
     let end_date_time = "2010-03-01 23:59:00";
+
+    // testing
+    // start_date_time = "2025-01-01 00:00:00";
+    // end_date_time = "2025-12-31 23:59:00";
+
     let min_start_date = start_date_time;
     let max_end_date = "2033-05-12 23:59:00";
 

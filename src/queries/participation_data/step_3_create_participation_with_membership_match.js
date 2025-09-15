@@ -89,7 +89,9 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     p.zip_events,
 
                     p.start_date_races,
-                    p.start_date_year_races,
+                    p.start_date_year_races,                    
+                    p.start_date_month_races,
+                    p.start_date_quarter_races,
                     
                     is_ironman,
             
@@ -214,6 +216,8 @@ async function query_create_table(table_name) {
 
             start_date_races DATE,
             start_date_year_races INT,
+            start_date_month_races INT,
+            start_date_quarter_races INT,
 
             is_ironman BOOLEAN,
 
