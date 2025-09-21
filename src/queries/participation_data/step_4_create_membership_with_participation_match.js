@@ -130,9 +130,9 @@ async function step_4_create_membership_with_participation_match(table_name, sta
                     s.real_membership_types_sa,
                     s.new_member_category_6_sa,
 
-                    s.member_created_at_category,
+                    s.member_created_at_category, -- todo: update per step 3
+                    s.member_lapsed_renew_category, -- todo: update per step 3
 
-                    s.member_lapsed_renew_category,
                     s.member_lifetime_purchases,
                     s.member_lifetime_frequency,
                     s.member_upgrade_downgrade_category,
