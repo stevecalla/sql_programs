@@ -70,9 +70,13 @@ function step_8_sales_key_stats_2015() {
                     -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
-                    WHEN lp.member_lifetime_purchases > 1 AND YEAR(first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year'
+                    -- can't use; member might purchase for following year
+                    -- WHEN lp.member_lifetime_purchases > 1 AND YEAR(fd.first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year' 
+                    WHEN lp.member_lifetime_purchases > 1 AND YEAR(fd.first_starts_mp) = am.purchased_on_year_adjusted_mp THEN 'created_year'
                     
+                    -- repeat member
                     WHEN am.purchased_on_year_adjusted_mp > YEAR(mc.min_created_at) THEN 'after_created_year'
+
                     ELSE 'error_first_purchase_year_category'
                 END AS member_created_at_category,
 
@@ -87,7 +91,9 @@ function step_8_sales_key_stats_2015() {
                     -- new first year member
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
-                    WHEN lp.member_lifetime_purchases > 1 AND YEAR(first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year'
+                    -- can't use; member might purchase for following year
+                    -- WHEN lp.member_lifetime_purchases > 1 AND YEAR(fd.first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year' 
+                    WHEN lp.member_lifetime_purchases > 1 AND YEAR(fd.first_starts_mp) = am.purchased_on_year_adjusted_mp THEN 'created_year'
 
                     WHEN am.starts_mp > DATE_ADD(pp.most_recent_prior_mp_ends_date, INTERVAL 2 YEAR) THEN 'after_created_year_lapsed' 
                     WHEN am.starts_mp <= DATE_ADD(pp.most_recent_prior_mp_ends_date, INTERVAL 2 YEAR) THEN 'after_created_year_renew'
@@ -102,7 +108,9 @@ function step_8_sales_key_stats_2015() {
                     -- new first year member
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
-                    WHEN lp.member_lifetime_purchases > 1 AND YEAR(first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year'
+                    -- can't use; member might purchase for following year
+                    -- WHEN lp.member_lifetime_purchases > 1 AND YEAR(fd.first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year' 
+                    WHEN lp.member_lifetime_purchases > 1 AND YEAR(fd.first_starts_mp) = am.purchased_on_year_adjusted_mp THEN 'created_year'
 
                     -- UPGRADE
                     WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'adult_annual' THEN 'upgrade_oneday_to_annual'
@@ -135,7 +143,9 @@ function step_8_sales_key_stats_2015() {
                     -- new first year member
                     WHEN lp.member_lifetime_purchases = 1 THEN 'created_year' -- new first year member
                     WHEN am.purchased_on_year_adjusted_mp = YEAR(mc.min_created_at) THEN 'created_year'
-                    WHEN lp.member_lifetime_purchases > 1 AND YEAR(first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year'
+                    -- can't use; member might purchase for following year
+                    -- WHEN lp.member_lifetime_purchases > 1 AND YEAR(fd.first_starts_mp) = YEAR(am.starts_mp) THEN 'created_year' 
+                    WHEN lp.member_lifetime_purchases > 1 AND YEAR(fd.first_starts_mp) = am.purchased_on_year_adjusted_mp THEN 'created_year'
 
                     -- UPGRADE
                     WHEN pp.most_recent_prior_purchase_membership_type = 'one_day' AND real_membership_types_sa = 'adult_annual' THEN 'upgrade_oneday_to_annual'
