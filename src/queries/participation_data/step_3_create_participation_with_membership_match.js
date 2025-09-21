@@ -54,10 +54,11 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     -- AND start_date_races >= @start_date
                     -- AND start_date_races <= @end_date
 
-                    AND start_date_races >= '${start_date_time}'
-                    AND start_date_races <= '${end_date_time}'
+                    AND start_date_races >= '${start_date_time}' -- todo:
+                    AND start_date_races <= '${end_date_time}' -- todo:
 
                 -- Uncomment and modify the following lines if you need additional filters:
+				-- AND id_profile_rr = '924274' -- todo:
                 -- AND id_profile_rr = 42 
                 -- AND id_rr = 4527556 -- this member is missing memberships to match race history; total number of races = 6; total memberships = 4 with missing for 2014, 2017, 2021 races; id_profile_rr = 42
                 -- AND id_profile_rr = 999977 
@@ -69,8 +70,11 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     *
                 FROM sales_key_stats_2015 AS s
                 WHERE 1 = 1
-                    AND s.starts_mp <= '${max_end_date}'
-                    AND s.ends_mp >= '${min_start_date}'
+                    AND s.starts_mp <= '${max_end_date}' -- todo:
+                    AND s.ends_mp >= '${min_start_date}' -- todo:
+
+                    -- test filter
+				    -- AND id_profiles = '924274' -- todo:
             )
 
             , merge_participation_with_active_membership AS (
@@ -157,9 +161,19 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     s.real_membership_types_sa,
                     s.new_member_category_6_sa,
 
-                    s.member_created_at_category,
+                    s.first_starts_mp, -- todo:
+                    s.member_created_at_category AS member_created_at_category_purchased_on, -- todo:
+                    CASE
+                        WHEN YEAR(s.first_starts_mp) < YEAR(s.starts_mp) THEN 'after_created_year'
+                        ELSE s.member_created_at_category
+                    END AS member_created_at_category_starts_mp, -- todo:
 
-                    s.member_lapsed_renew_category,
+                    s.member_lapsed_renew_category AS member_lapsed_renew_category_purchased_on, -- todo:
+                    CASE
+                        WHEN YEAR(s.first_starts_mp) < YEAR(s.starts_mp) THEN 'after_created_year_renew'
+                        ELSE s.member_lapsed_renew_category
+                    END AS member_lapsed_renew_category_starts_mp, -- todo:
+
                     s.member_lifetime_purchases,
                     s.member_lifetime_frequency,
                     s.member_upgrade_downgrade_category,
@@ -184,7 +198,8 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     '${created_at_utc}'
 
                 FROM participation p
-                    LEFT JOIN filtered_sales_key_stats_2015 s ON s.id_profiles = p.id_profile_rr
+                    LEFT JOIN filtered_sales_key_stats_2015 s 
+                        ON s.id_profiles = p.id_profile_rr
                         AND s.starts_mp <= p.start_date_races
                         AND s.ends_mp >= p.start_date_races
                     LEFT JOIN region_data AS r ON p.state_code_events = r.state_code
@@ -281,9 +296,13 @@ async function query_append_membership_period_fields(table_name) {
             ADD COLUMN real_membership_types_sa VARCHAR(255),
             ADD COLUMN new_member_category_6_sa VARCHAR(255),
 
-            ADD COLUMN member_created_at_category VARCHAR(255),
+            ADD COLUMN first_starts_mp DATE, -- todo:
+            ADD COLUMN member_created_at_category_purchased_on VARCHAR(255), -- todo:
+            ADD COLUMN member_created_at_category_starts_mp VARCHAR(255), -- todo:
 
-            ADD COLUMN member_lapsed_renew_category VARCHAR(255),
+            ADD COLUMN member_lapsed_renew_category_purchased_on VARCHAR(255), -- todo:
+            ADD COLUMN member_lapsed_renew_category_starts_mp VARCHAR(255), -- todo:
+
             ADD COLUMN member_lifetime_purchases INT,
             ADD COLUMN member_lifetime_frequency VARCHAR(100),
             ADD COLUMN member_upgrade_downgrade_category VARCHAR(255),
