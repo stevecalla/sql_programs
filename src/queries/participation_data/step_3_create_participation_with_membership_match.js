@@ -37,6 +37,55 @@ async function query_get_min_and_max_races_dates(start_date_time, end_date_time)
     `;
 }
 
+// STEP CREATE all_participation_min_start_date_races
+async function create_participation_min_start_date_races(table_name = 'all_participation_min_start_date_races') {
+    return `
+        DROP TABLE IF EXISTS ${table_name};
+
+        CREATE TABLE ${table_name} AS
+            SELECT
+                id_profile_rr,
+                MIN(start_date_year_races) AS min_start_date_year_races
+            FROM all_participation_data_raw
+            WHERE 1 = 1
+                -- AND id_profile_rr = '2264133'
+            GROUP BY 1
+            ORDER BY 1 DESC
+            -- LIMIT 10
+        ;
+
+        -- Add indexes
+        ALTER TABLE ${table_name}
+            ADD INDEX idx_profile (id_profile_rr);
+    `;
+};
+
+// STEP CREATE all_participation_prev_race_date
+async function create_participation_prev_race_date(table_name = 'all_participation_prev_race_date') {
+    return `
+        DROP TABLE IF EXISTS ${table_name};
+
+        CREATE TABLE ${table_name} AS
+            SELECT
+                p.id_profile_rr,
+                p.id_rr,
+                p.start_date_year_races,
+                p.start_date_races,
+                MIN(p.start_date_year_races) OVER (PARTITION BY p.id_profile_rr) AS first_race_year,
+                LAG(p.start_date_races) OVER (PARTITION BY p.id_profile_rr ORDER BY p.start_date_races, p.id_rr) AS prev_race_date
+            FROM all_participation_data_raw p
+            WHERE 1 = 1
+                -- AND id_profile_rr = '2264133'
+            -- LIMIT 10
+        ;
+
+        -- Add indexes
+        ALTER TABLE ${table_name}
+            ADD INDEX idx_profile (id_profile_rr),
+            ADD INDEX idx_rr (id_rr);
+    `;
+};
+
 // STEP #2a: INSERT DATA INTO TABLE
 async function step_4_create_participation_with_membership_match(table_name, start_date_time, end_date_time, min_start_date, max_end_date, created_at_mtn, created_at_utc) {
     return `
@@ -54,29 +103,29 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     -- AND start_date_races >= @start_date
                     -- AND start_date_races <= @end_date
 
-                    AND start_date_races >= '${start_date_time}' -- todo:
-                    AND start_date_races <= '${end_date_time}' -- todo:
+                    AND start_date_races >= '${start_date_time}'
+                    AND start_date_races <= '${end_date_time}'
 
-                -- Uncomment and modify the following lines if you need additional filters:
-				-- AND id_profile_rr = '924274' -- todo:
-                -- AND id_profile_rr = 42 
-                -- AND id_rr = 4527556 -- this member is missing memberships to match race history; total number of races = 6; total memberships = 4 with missing for 2014, 2017, 2021 races; id_profile_rr = 42
-                -- AND id_profile_rr = 999977 
-                -- AND id_rr = 1197359 -- this member has multiple memberships for the same race (a one day & an annual)
+                    -- Uncomment and modify the following lines if you need additional filters:
+                    -- AND id_profile_rr = '2264133'
+				    -- AND id_profile_rr = '924274'
+                    -- AND id_profile_rr = 42 
+                    -- AND id_rr = 4527556 -- this member is missing memberships to match race history; total number of races = 6; total memberships = 4 with missing for 2014, 2017, 2021 races; id_profile_rr = 42
+                    -- AND id_profile_rr = 999977 
+                    -- AND id_rr = 1197359 -- this member has multiple memberships for the same race (a one day & an annual)
             )
-
             , filtered_sales_key_stats_2015 AS (
                 SELECT
                     *
                 FROM sales_key_stats_2015 AS s
                 WHERE 1 = 1
-                    AND s.starts_mp <= '${max_end_date}' -- todo:
-                    AND s.ends_mp >= '${min_start_date}' -- todo:
+                    AND s.starts_mp <= '${max_end_date}'
+                    AND s.ends_mp >= '${min_start_date}'
 
                     -- test filter
-				    -- AND id_profiles = '924274' -- todo:
+                    -- AND id_profiles = '2264133'
+				    -- AND id_profiles = '924274'
             )
-
             , merge_participation_with_active_membership AS (
                 SELECT 
                     -- PARTICIPATION DATA
@@ -161,18 +210,35 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     s.real_membership_types_sa,
                     s.new_member_category_6_sa,
 
-                    s.first_starts_mp, -- todo:
-                    s.member_created_at_category AS member_created_at_category_purchased_on, -- todo:
-                    CASE
-                        WHEN YEAR(s.first_starts_mp) < YEAR(s.starts_mp) THEN 'after_created_year'
-                        ELSE s.member_created_at_category
-                    END AS member_created_at_category_starts_mp, -- todo:
+                    s.first_starts_mp,
+                    s.member_created_at_category AS member_created_at_category_purchased_on,
+                    s.member_lapsed_renew_category AS member_lapsed_renew_category_purchased_on,
 
-                    s.member_lapsed_renew_category AS member_lapsed_renew_category_purchased_on, -- todo:
+                    mr.min_start_date_year_races,
                     CASE
-                        WHEN YEAR(s.first_starts_mp) < YEAR(s.starts_mp) THEN 'after_created_year_renew'
-                        ELSE s.member_lapsed_renew_category
-                    END AS member_lapsed_renew_category_starts_mp, -- todo:
+                        -- first race record / year for this profile
+                        WHEN p.start_date_year_races = mr.min_start_date_year_races OR pr.prev_race_date IS NULL THEN 'created_year'
+
+                        -- otherwise raced in prior year
+                        WHEN p.start_date_year_races <> min_start_date_year_races THEN 'after_created_year'
+
+                        ELSE 'error_member_created_at_category_starts_mp'
+                    END AS member_created_at_category_starts_mp,           
+                    CASE
+                        -- first record for this profile
+                        WHEN p.start_date_year_races = pr.first_race_year OR pr.prev_race_date IS NULL
+                        THEN 'created_year'
+
+                        -- lapsed if the gap is strictly greater than 2 years
+                        WHEN p.start_date_races > DATE_ADD(pr.prev_race_date, INTERVAL 2 YEAR)
+                        THEN 'after_created_year_lapsed'
+
+                        -- otherwise it's within 2 years (including same year / duplicates)
+                        WHEN p.start_date_races <= DATE_ADD(pr.prev_race_date, INTERVAL 2 YEAR)
+                        THEN 'after_created_year_renew'
+
+                        ELSE 'error_lapsed_renew_segmentation'
+                    END AS member_lapsed_renew_category_starts_mp,
 
                     s.member_lifetime_purchases,
                     s.member_lifetime_frequency,
@@ -198,10 +264,12 @@ async function step_4_create_participation_with_membership_match(table_name, sta
                     '${created_at_utc}'
 
                 FROM participation p
-                    LEFT JOIN filtered_sales_key_stats_2015 s 
-                        ON s.id_profiles = p.id_profile_rr
+                    LEFT JOIN filtered_sales_key_stats_2015 s ON s.id_profiles = p.id_profile_rr
                         AND s.starts_mp <= p.start_date_races
                         AND s.ends_mp >= p.start_date_races
+                    LEFT JOIN all_participation_min_start_date_races AS mr ON mr.id_profile_rr = p.id_profile_rr
+                    LEFT JOIN all_participation_prev_race_date AS pr ON pr.id_profile_rr = p.id_profile_rr 
+                        AND pr.id_rr = p.id_rr
                     LEFT JOIN region_data AS r ON p.state_code_events = r.state_code
             )
             SELECT 
@@ -209,7 +277,6 @@ async function step_4_create_participation_with_membership_match(table_name, sta
             FROM merge_participation_with_active_membership
             WHERE 1 = 1
                 AND rn = 1;
-
     `;
 }
 
@@ -296,12 +363,13 @@ async function query_append_membership_period_fields(table_name) {
             ADD COLUMN real_membership_types_sa VARCHAR(255),
             ADD COLUMN new_member_category_6_sa VARCHAR(255),
 
-            ADD COLUMN first_starts_mp DATE, -- todo:
-            ADD COLUMN member_created_at_category_purchased_on VARCHAR(255), -- todo:
-            ADD COLUMN member_created_at_category_starts_mp VARCHAR(255), -- todo:
+            ADD COLUMN first_starts_mp DATE,
+            ADD COLUMN member_created_at_category_purchased_on VARCHAR(255),
+            ADD COLUMN member_lapsed_renew_category_purchased_on VARCHAR(255),
 
-            ADD COLUMN member_lapsed_renew_category_purchased_on VARCHAR(255), -- todo:
-            ADD COLUMN member_lapsed_renew_category_starts_mp VARCHAR(255), -- todo:
+            ADD COLUMN min_start_date_year_races INT,
+            ADD COLUMN member_created_at_category_starts_mp VARCHAR(255),
+            ADD COLUMN member_lapsed_renew_category_starts_mp VARCHAR(255),
 
             ADD COLUMN member_lifetime_purchases INT,
             ADD COLUMN member_lifetime_frequency VARCHAR(100),
@@ -383,4 +451,6 @@ module.exports = {
     query_get_min_and_max_races_dates,
     step_4_create_participation_with_membership_match,
     query_create_mtn_utc_timestamps,
+    create_participation_min_start_date_races,
+    create_participation_prev_race_date,
 }
