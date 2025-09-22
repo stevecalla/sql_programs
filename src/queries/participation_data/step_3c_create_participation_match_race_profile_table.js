@@ -18,7 +18,7 @@ async function query_insert_participation_race_profiles(table_name, start_date_t
                 ELSE DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL -7 HOUR), '%Y-%m-%d %H:%i:%s')
                 END
         );
-        SET @created_at_utc = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s');
+        SET @created_at_utc = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-participation_fraction%d %H:%i:%s');
 
         SET @year = YEAR('${start_date_time}');
 
@@ -98,8 +98,8 @@ async function query_insert_participation_race_profiles(table_name, start_date_t
                         SUM(CASE WHEN pby.is_active_membership = 1 THEN 1 ELSE 0 END) AS count_is_membership_match,
                         SUM(CASE WHEN pby.is_active_membership = 0 THEN 1 ELSE 0 END) AS count_is_not_membership_match,
 
-                        SUM(CASE WHEN pby.member_created_at_category IN ('after_created_year') THEN 1 ELSE 0 END) AS count_is_repeat,
-                        SUM(CASE WHEN pby.member_created_at_category IN ('created_year') THEN 1 ELSE 0 END) AS count_is_new,
+                        SUM(CASE WHEN pby.member_created_at_category_purchased_on IN ('after_created_year') THEN 1 ELSE 0 END) AS count_is_repeat,
+                        SUM(CASE WHEN pby.member_created_at_category_purchased_on IN ('created_year') THEN 1 ELSE 0 END) AS count_is_new,
                         
                         SUM(CASE WHEN pby.real_membership_types_sa IN ('adult_annual') THEN 1 ELSE 0 END) AS count_is_adult_annual,
                         SUM(CASE WHEN pby.real_membership_types_sa IN ('one_day') THEN 1 ELSE 0 END) AS count_is_one_day,

@@ -211,7 +211,8 @@ async function step_d_participation_base_data(table_name, where, limit) {
 
                 member_min_created_at_year,
                 new_member_category_6_sa,
-                member_created_at_category,
+                -- member_created_at_category,
+                member_created_at_category_purchased_on,
 
                 starts_mp,
                 ends_mp,
@@ -249,7 +250,8 @@ async function step_e_participation_least_recent_member_data(table_name, where, 
                     member_min_created_at_year,
 
                     real_membership_types_sa AS least_recent_membership_type,
-                    member_created_at_category AS least_recent_member_created_at_category,
+                    -- member_created_at_category AS least_recent_member_created_at_category,
+                    member_created_at_category_purchased_on AS least_recent_member_created_at_category,
 
                     starts_mp AS least_recent_starts_mp,
                     ends_mp AS least_recent_ends_mp,
@@ -286,7 +288,9 @@ async function step_f_participation_most_recent_member_data(table_name, where, l
 
                     real_membership_types_sa AS most_recent_membership_type,
                     new_member_category_6_sa AS most_recent_new_member_category_6_sa,
-                    member_created_at_category AS most_recent_member_created_at_category,
+                    -- member_created_at_category AS most_recent_member_created_at_category,
+                    member_created_at_category_purchased_on AS most_recent_member_created_at_category,
+                    
 
                     starts_mp AS most_recent_starts_mp,
                     ends_mp AS most_recent_ends_mp,

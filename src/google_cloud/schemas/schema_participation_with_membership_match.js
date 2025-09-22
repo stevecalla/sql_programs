@@ -354,17 +354,45 @@ const participation_with_membership_sales_match_schema = [
     "fields": []
   },
   {
-    "name": "member_created_at_category",
+    "name": "first_starts_mp",
     "mode": "NULLABLE",
     "type": "STRING",
-    "description": "Created_at cohort/category for member",
+    "description": "First starts mp date",
     "fields": []
   },
   {
-    "name": "member_lapsed_renew_category",
+    "name": "member_created_at_category_purchased_on",
     "mode": "NULLABLE",
     "type": "STRING",
-    "description": "Lapsed/renewal category",
+    "description": "Created_at cohort/category for member for purchased on date",
+    "fields": []
+  },
+  {
+    "name": "member_lapsed_renew_category_purchased_on",
+    "mode": "NULLABLE",
+    "type": "STRING",
+    "description": "Lapsed/renewal category for purchased on date",
+    "fields": []
+  },
+  {
+    "name": "min_start_date_year_races",
+    "mode": "NULLABLE",
+    "type": "STRING",
+    "description": "First race start date by id profile",
+    "fields": []
+  },
+  {
+    "name": "member_created_at_category_starts_mp",
+    "mode": "NULLABLE",
+    "type": "STRING",
+    "description": "Created_at cohort/category for member for starts mp date",
+    "fields": []
+  },
+  {
+    "name": "member_lapsed_renew_category_starts_mp",
+    "mode": "NULLABLE",
+    "type": "STRING",
+    "description": "Lapsed/renewal category for starsts date",
     "fields": []
   },
   {

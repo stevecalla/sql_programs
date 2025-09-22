@@ -16,6 +16,9 @@ const {
     query_get_min_and_max_races_dates,
     step_4_create_participation_with_membership_match,
     query_create_mtn_utc_timestamps,
+    create_participation_min_start_date_races,
+    create_participation_prev_race_date,
+    query_create_indexes,
 } = require("../queries/participation_data/step_3_create_participation_with_membership_match");
 
 const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
@@ -77,6 +80,26 @@ async function execute_mysql_working_query(pool, db_name, query) {
     });
 }
 
+async function create_support_tables(pool, db_name) {
+    runTimer(`query_to_create_table`);
+
+    console.log('CREATE SUPPORT TABLES');
+
+    console.log('Create all_participation_min_start_date_races table');
+    // STEP #1A: CREATE SUPPORT TABLES WITH MIN START DATE RACES & PREV RACE DATE FOR ID PROFILES
+    await execute_mysql_working_query(pool, db_name, await create_participation_min_start_date_races());
+
+    stopTimer(`query_to_create_table`);
+
+    runTimer(`query_to_create_table`);
+
+    console.log('Create all_participation_prev_race_date table');
+    await execute_mysql_working_query(pool, db_name, await create_participation_prev_race_date());
+
+    stopTimer(`query_to_create_table`);
+    return;
+}
+
 async function create_table(pool, db_name, table_name) {
     runTimer(`query_to_create_table`);
 
@@ -113,7 +136,7 @@ async function insert_data(pool, db_name, table_name, created_at_mtn, created_at
     let end_date_time = "2010-03-01 23:59:00";
 
     // testing
-    // start_date_time = "2025-01-01 00:00:00";
+    // start_date_time = "2025-01-01 00:00:00"; // Default = 2025
     // end_date_time = "2025-12-31 23:59:00";
 
     let min_start_date = start_date_time;
@@ -193,10 +216,13 @@ async function execute_create_participation_with_membership_match() {
         const table_name = `all_participation_data_with_membership_match`;
         console.log(db_name);
 
-        // STEP #1: CREATE TABLE
-        await create_table(pool, db_name, table_name);
+        // STEP #1: CREATE TABLES
+        await execute_mysql_working_query(pool, db_name, await query_create_indexes());
+        await create_support_tables(pool, db_name); // WITH MIN START RACE DATES & PREV RACE DATES
 
-        // STEP #1A: GET CREATED AT DATE
+        await create_table(pool, db_name, table_name); // CREATE all_participation_data_with_membership_match
+
+        // STEP #1B: GET CREATED AT DATE
         const { created_at_mtn, created_at_utc } = await get_created_at_dates(pool, db_name, table_name);
         // console.log('CREATED AT DATES =', created_at_mtn, created_at_utc);
 
