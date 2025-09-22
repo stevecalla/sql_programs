@@ -18,7 +18,7 @@ async function query_insert_participation_race_profiles(table_name, start_date_t
                 ELSE DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL -7 HOUR), '%Y-%m-%d %H:%i:%s')
                 END
         );
-        SET @created_at_utc = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-participation_fraction%d %H:%i:%s');
+        SET @created_at_utc = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s');
 
         SET @year = YEAR('${start_date_time}');
 
@@ -129,8 +129,8 @@ async function query_insert_participation_race_profiles(table_name, start_date_t
                         pby.start_date_races,
                         pby.start_date_year_races,
                         pby.is_active_membership
-                        
                         -- WITH ROLLUP
+
                     ORDER BY year ASC, month ASC
                 )
                 SELECT * FROM race_profiles
