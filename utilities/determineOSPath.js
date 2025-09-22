@@ -49,7 +49,7 @@ async function determine_ubuntu_update_log_file_path(file_name) {
         dir_path = ubuntu_folder_path.mac;
     } else if (platform === 'linux') {
         const username = await determineOSUser();
-        dir_path = ubuntu_folder_path.linux[username] || csv_export_paths.linux['usat-server'];
+        dir_path = ubuntu_folder_path.linux[username] || ubuntu_folder_path.linux['usat-server'];
     } else {// Windows
         dir_path = ubuntu_folder_path.windows;
     }
