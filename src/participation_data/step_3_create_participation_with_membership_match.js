@@ -18,6 +18,7 @@ const {
     query_create_mtn_utc_timestamps,
     create_participation_min_start_date_races,
     create_participation_prev_race_date,
+    query_create_indexes,
 } = require("../queries/participation_data/step_3_create_participation_with_membership_match");
 
 const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
@@ -216,7 +217,8 @@ async function execute_create_participation_with_membership_match() {
         console.log(db_name);
 
         // STEP #1: CREATE TABLES
-        // await create_support_tables(pool, db_name); // WITH MIN START RACE DATES & PREV RACE DATES
+        await execute_mysql_working_query(pool, db_name, await query_create_indexes());
+        await create_support_tables(pool, db_name); // WITH MIN START RACE DATES & PREV RACE DATES
 
         await create_table(pool, db_name, table_name); // CREATE all_participation_data_with_membership_match
 
