@@ -75,13 +75,13 @@ async function create_participation_min_start_date_races(table_name = 'all_parti
     `;
 };
 
-// STEP CREATE all_participation_prev_race_date
 async function create_participation_prev_race_date(table_name = 'all_participation_prev_race_date') {
     return `
+        -- Fast path with window; keeps NULL id_profile_rr
         DROP TABLE IF EXISTS ${table_name};
 
         CREATE TABLE ${table_name} AS
-            SELECT
+            SELECT /*+ SET_VAR(optimizer_switch='derived_merge=on') */
                 p.id_profile_rr,
                 p.id_rr,
                 p.start_date_year_races,
@@ -89,20 +89,26 @@ async function create_participation_prev_race_date(table_name = 'all_participati
 
                 m.min_start_date_year_races AS first_race_year,
                 -- MIN(p.start_date_year_races) OVER (PARTITION BY p.id_profile_rr) AS first_race_year,
-                LAG(p.start_date_races) OVER (PARTITION BY p.id_profile_rr ORDER BY p.start_date_races, p.id_rr) AS prev_race_date
 
+                LAG(p.start_date_races) OVER (
+                    PARTITION BY p.id_profile_rr
+                    ORDER BY p.start_date_races, p.id_rr
+                ) AS prev_race_date
             FROM all_participation_data_raw p
-                FORCE INDEX (idx_profile_rr_start_date_races)
-                LEFT JOIN all_participation_min_start_date_races AS m ON m.id_profile_rr = p.id_profile_rr
+                FORCE INDEX (idx_profile_rr_start_date_races)     -- <- matches lag/window order
+                LEFT JOIN all_participation_min_start_date_races m ON m.id_profile_rr = p.id_profile_rr
             WHERE 1 = 1
-                -- AND id_profile_rr = '2264133'
-            -- LIMIT 10
+                -- AND p.id_profile_rr = '2264133'
         ;
 
-        -- Add indexes
+        -- Add indexes AFTER load (much faster)
         ALTER TABLE ${table_name}
-            ADD PRIMARY KEY (id_profile_rr, id_rr);     -- covers id_profile_rr too
-        ;
+            ADD COLUMN row_id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            MODIFY id_rr BIGINT NOT NULL,                                  -- if you’re confident it’s never NULL
+            ADD UNIQUE KEY uniq_profile_rr_idrr (id_profile_rr, id_rr),    -- allows multiple NULL profiles
+            ADD KEY idx_profile (id_profile_rr),
+            ADD KEY idx_rr (id_rr),
+            ADD KEY idx_date (start_date_races);
     `;
 };
 
