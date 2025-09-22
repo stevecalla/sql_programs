@@ -129,7 +129,7 @@ async function create_table(pool, db_name, table_name) {
 async function insert_data(pool, db_name, table_name, created_at_mtn, created_at_utc, is_test = false) {
     const start_year = 2010; // Default = 2010
     const membershipPeriodEnds = '2008-01-01';
-    const period_interval = 3; // options include 1, 3, 6 months
+    const period_interval = 1; // options include 1, 3, 6 months
 
     let start_date_time = "2010-03-01 00:00:00";
     let end_date_time = "2010-03-01 23:59:00";
