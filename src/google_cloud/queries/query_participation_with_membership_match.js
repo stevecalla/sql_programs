@@ -80,7 +80,7 @@ async function query_participation_with_membership_sales_match(batch_size = 10, 
             member_lapsed_renew_category_purchased_on,
 
             member_created_at_category_starts_mp,
-            ember_lapsed_renew_category_starts_mp,
+            member_lapsed_renew_category_starts_mp,
 
             member_lifetime_purchases,
             member_lifetime_frequency,
