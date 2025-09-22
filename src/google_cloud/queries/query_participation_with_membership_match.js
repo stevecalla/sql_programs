@@ -75,9 +75,13 @@ async function query_participation_with_membership_sales_match(batch_size = 10, 
             real_membership_types_sa,
             new_member_category_6_sa,
 
-            member_created_at_category,
+            DATE_FORMAT(first_starts_mp, '%Y-%m-%d') AS first_starts_mp,
+            member_created_at_category_purchased_on,
+            member_lapsed_renew_category_purchased_on,
 
-            member_lapsed_renew_category,
+            member_created_at_category_starts_mp,
+            ember_lapsed_renew_category_starts_mp,
+
             member_lifetime_purchases,
             member_lifetime_frequency,
             member_upgrade_downgrade_category,
