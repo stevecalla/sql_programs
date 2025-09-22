@@ -18,7 +18,6 @@ const {
     query_create_mtn_utc_timestamps,
     create_participation_min_start_date_races,
     create_participation_prev_race_date,
-    query_create_indexes,
 } = require("../queries/participation_data/step_3_create_participation_with_membership_match");
 
 const { generate_date_periods } = require('../../utilities/data_query_criteria/generate_date_periods');
@@ -217,21 +216,20 @@ async function execute_create_participation_with_membership_match() {
         console.log(db_name);
 
         // STEP #1: CREATE TABLES
-        await execute_mysql_working_query(pool, db_name, await query_create_indexes());
         await create_support_tables(pool, db_name); // WITH MIN START RACE DATES & PREV RACE DATES
 
         await create_table(pool, db_name, table_name); // CREATE all_participation_data_with_membership_match
 
         // STEP #1B: GET CREATED AT DATE
         const { created_at_mtn, created_at_utc } = await get_created_at_dates(pool, db_name, table_name);
-        // console.log('CREATED AT DATES =', created_at_mtn, created_at_utc);
+        console.log('CREATED AT DATES =', created_at_mtn, created_at_utc);
 
         // STEP #2: INSERT DATA
         await insert_data(pool, db_name, table_name, created_at_mtn, created_at_utc, is_test);
 
         // STEP #3: APPEND INDEXES
         console.log('CREATED INDEXES ****************')
-        // await append_indexes(pool, db_name, table_name)
+        await append_indexes(pool, db_name, table_name)
 
         // STEP #5a: Log results
         console.log('STEP #1: All queries executed successfully.');
