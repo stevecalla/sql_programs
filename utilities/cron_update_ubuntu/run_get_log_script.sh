@@ -1,4 +1,28 @@
 #!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+ENV_FILE="/home/usat-server/development/usat/sql_programs/.env"
+if [ -f "$ENV_FILE" ]; then
+  # Export only lines that look like KEY=VALUE, ignoring comments/blank lines
+  # Handles quotes and spaces after '='; avoids evaluating command substitutions.
+  while IFS= read -r line; do
+    # skip comments/blank
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    # Only accept KEY=VALUE where KEY is a valid env name
+    if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      val="${BASH_REMATCH[2]}"
+      # strip optional surrounding quotes
+      val="${val#\"}"; val="${val%\"}"
+      val="${val#\'}"; val="${val%\'}"
+      export "$key=$val"
+    fi
+  done < "$ENV_FILE"
+else
+  echo "[ERROR] Env file $ENV_FILE not found" >&2
+  exit 1
+fi
 
 # Start timer
 start_time=$(date +%s)
