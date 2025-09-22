@@ -40,24 +40,38 @@ async function query_get_min_and_max_races_dates(start_date_time, end_date_time)
 // STEP CREATE all_participation_min_start_date_races
 async function create_participation_min_start_date_races(table_name = 'all_participation_min_start_date_races') {
     return `
+        ALTER TABLE all_participation_data_raw -- note: takes 1:30 to create indexes
+            ADD INDEX idx_profile_min_year (id_profile_rr, start_date_year_races),
+            ADD INDEX idx_profile_rr_start_date_races (id_profile_rr, start_date_races, id_rr)    
+        ;
+
+        -- (A) Precreate the target so inserts stream right in
         DROP TABLE IF EXISTS ${table_name};
 
-        CREATE TABLE ${table_name} AS
-            SELECT
-                id_profile_rr,
-                MIN(start_date_year_races) AS min_start_date_year_races
-            FROM all_participation_data_raw
+        CREATE TABLE ${table_name} (
+            id_profile_rr BIGINT NOT NULL,
+            min_start_date_year_races INT NOT NULL,
+            PRIMARY KEY (id_profile_rr)
+        );
+
+        -- (B) Encourage a loose index scan + streaming aggregation
+        INSERT INTO ${table_name} (id_profile_rr, min_start_date_year_races) -- note: takes about 1 minute
+            SELECT /*+ SET_VAR(sort_buffer_size=0) */
+                p.id_profile_rr,
+                MIN(p.start_date_year_races) AS min_start_date_year_races
+            FROM all_participation_data_raw AS p
+                FORCE INDEX (idx_profile_min_year)
             WHERE 1 = 1
+                AND p.id_profile_rr IS NOT NULL
+                AND p.start_date_year_races IS NOT NULL
                 -- AND id_profile_rr = '2264133'
-                AND id_profile_rr IS NOT NULL
-            GROUP BY 1
-            -- ORDER BY 1 DESC
-            -- LIMIT 10
+            GROUP BY p.id_profile_rr
         ;
 
         -- Add indexes
         ALTER TABLE ${table_name}
-            ADD INDEX idx_profile (id_profile_rr);
+            ADD INDEX idx_profile (id_profile_rr)
+        ;
     `;
 };
 
@@ -72,9 +86,14 @@ async function create_participation_prev_race_date(table_name = 'all_participati
                 p.id_rr,
                 p.start_date_year_races,
                 p.start_date_races,
-                MIN(p.start_date_year_races) OVER (PARTITION BY p.id_profile_rr) AS first_race_year,
+
+                m.min_start_date_year_races AS first_race_year,
+                -- MIN(p.start_date_year_races) OVER (PARTITION BY p.id_profile_rr) AS first_race_year,
                 LAG(p.start_date_races) OVER (PARTITION BY p.id_profile_rr ORDER BY p.start_date_races, p.id_rr) AS prev_race_date
+
             FROM all_participation_data_raw p
+                FORCE INDEX (idx_profile_rr_start_date_races)
+                LEFT JOIN all_participation_min_start_date_races AS m ON m.id_profile_rr = p.id_profile_rr
             WHERE 1 = 1
                 -- AND id_profile_rr = '2264133'
             -- LIMIT 10
@@ -82,8 +101,7 @@ async function create_participation_prev_race_date(table_name = 'all_participati
 
         -- Add indexes
         ALTER TABLE ${table_name}
-            ADD INDEX idx_profile (id_profile_rr),
-            ADD INDEX idx_rr (id_rr)
+            ADD PRIMARY KEY (id_profile_rr, id_rr);     -- covers id_profile_rr too
         ;
     `;
 };
