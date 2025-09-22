@@ -80,16 +80,18 @@ async function execute_mysql_working_query(pool, db_name, query) {
 }
 
 async function create_support_tables(pool, db_name) {
+    // =========== TABLE #1 =================
     runTimer(`query_to_create_table`);
 
     console.log('CREATE SUPPORT TABLES');
 
     console.log('Create all_participation_min_start_date_races table');
-    // STEP #1A: CREATE SUPPORT TABLES WITH MIN START DATE RACES & PREV RACE DATE FOR ID PROFILES
+
     await execute_mysql_working_query(pool, db_name, await create_participation_min_start_date_races());
 
     stopTimer(`query_to_create_table`);
 
+    // =========== TABLE #2 =================
     runTimer(`query_to_create_table`);
 
     console.log('Create all_participation_prev_race_date table');
