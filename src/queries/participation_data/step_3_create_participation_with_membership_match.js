@@ -49,7 +49,7 @@ async function create_participation_min_start_date_races(table_name = 'all_parti
             FROM all_participation_data_raw
             WHERE 1 = 1
                 -- AND id_profile_rr = '2264133'
-                id_profile_rr IS NOT NULL
+                AND id_profile_rr IS NOT NULL
             GROUP BY 1
             -- ORDER BY 1 DESC
             -- LIMIT 10
@@ -83,7 +83,8 @@ async function create_participation_prev_race_date(table_name = 'all_participati
         -- Add indexes
         ALTER TABLE ${table_name}
             ADD INDEX idx_profile (id_profile_rr),
-            ADD INDEX idx_rr (id_rr);
+            ADD INDEX idx_rr (id_rr)
+        ;
     `;
 };
 
