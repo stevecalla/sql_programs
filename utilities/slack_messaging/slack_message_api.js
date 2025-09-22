@@ -1,7 +1,8 @@
 const axios = require('axios');
 
 const dotenv = require('dotenv');
-dotenv.config({  path: "../.env" });
+dotenv.config({  path: "../../.env" });
+// dotenv.config();
 
 async function sendSlackMessage(message, slack_channel_url, channel, blocks) {
   const slack_message = `${message}`;
@@ -47,6 +48,8 @@ async function sendSlackMessage(message, slack_channel_url, channel, blocks) {
 }
 
 async function slack_message_api(message, channel, blocks) {
+
+  console.log(message, channel);
   
   const slack_message_url = {
     "steve_calla_slack_channel": process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL,
