@@ -10,9 +10,10 @@ const { execute_load_big_query_event_data_metrics } = require("./step_3_load_bq_
 
 const { execute_get_python_event_data } = require('./step_5_get_python_event_data'); // Step #5: execute_get_python_event_data
 const { execute_run_python_event_reports } = require('../../utilities/python_events/index'); // Step #6: run python event reports
-
 const { execute_load_big_query_event_match_data } = require("./step_7_load_bq_event_match_data"); // Step #7: load event match data to bigquery
 
+const { execute_create_event_vs_participation_match } = require('./step_8_create_event_vs_participation_match_data'); // Step #8: create event vs participation match data
+// const { execute_load_big_query_event_vs_participation_data } = require("tbd"); // Step #9: load event vs participaton match data to bigquery
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
@@ -85,6 +86,9 @@ async function execute_run_event_data_jobs() {
   const run_step_6 = true; // run python event reports
   const run_step_7 = true; // load event_data_metrics_yoy_match to bigquery
 
+  const run_step_8 = true; // create event_vs_participation_match_data table / data set
+  // const run_step_9 = true; // load event_vs_participation_match_data to bigquery
+
   try {
     const stepFunctions = [
       run_step_1 ? execute_transfer_usat_to_local : null,
@@ -94,6 +98,9 @@ async function execute_run_event_data_jobs() {
       run_step_5 ? execute_get_python_event_data : null,
       run_step_6 ? execute_run_python_event_reports : null,
       run_step_7 ? execute_load_big_query_event_match_data : null,
+
+      run_step_8 ? execute_create_event_vs_participation_match : null,
+      // run_step_9 ? tbd : null,
 
     ];
 
@@ -106,6 +113,9 @@ async function execute_run_event_data_jobs() {
       `Step_#6 - Run python event reports`,
 
       `Step_#7 - Load event match data to BQ: `,
+
+      `Step_#8 - Create event_vs_participation_match_data table / data set: `,
+      `Step_#9 - Load event vs participation match data to BQ: `,
       
     ];
 
