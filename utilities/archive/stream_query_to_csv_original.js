@@ -6,19 +6,12 @@ const mysql = require('mysql2');
 /**
  * Stream query results directly to CSV
  */
-async function streamQueryToCsv(pool, query, filePath, params, fileFlags = 'w') {
+async function streamQueryToCsv(pool, query, filePath) {
     return new Promise((resolve, reject) => {
-        const writeStream = fs.createWriteStream(filePath, { flags: fileFlags });
+        const writeStream = fs.createWriteStream(filePath);
+        const csvStream = fastcsv.format({ headers: true });
 
-        // const csvStream = fastcsv.format({ headers: true });
-        const csvStream = fastcsv.format({
-            headers: true,
-            writeBOM: true,     // Excel-friendly
-            quoteColumns: true
-        });
-
-        // const queryStream = pool.query(query).stream();
-        const queryStream = pool.query(query, params).stream({ highWaterMark: 1000 });
+        const queryStream = pool.query(query).stream();
 
         queryStream
             .on('data', row => csvStream.write(row))
