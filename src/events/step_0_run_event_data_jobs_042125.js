@@ -105,7 +105,7 @@ async function execute_run_event_data_jobs() {
     ];
 
     const stepName = [
-      `Step #1 - Transfer data from USAT to Local db:`, 
+      `Step #1 - Transfer data from USAT to Local db: `, 
       `Step #2 - Create event data metrics: `, 
       `Step #3 - Load event metrics to BQ: `,
 
