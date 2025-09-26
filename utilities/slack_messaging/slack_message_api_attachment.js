@@ -138,8 +138,8 @@ async function upload_single_file_to_thread(
   channelId = 'C08TMBPTKEC',
   mainMessageText = '📊 Here is the latest batch of reports:') {
 
-  console.log('file_directory 2 =', file_directory);
-  console.log('file_path 2 = ', file_path);
+  // console.log('file_directory 2 =', file_directory);
+  // console.log('file_path 2 = ', file_path);
 
   // 1. Post the main message
   // Post main message
@@ -170,7 +170,7 @@ async function upload_single_file_to_thread(
       initial_comment: "🧾 Attached files:",
       file_uploads: file_blocks,
     });
-    console.log('✅ Files posted to thread');
+    console.log('\n✅ Files posted to thread');
   } else {
     await post_slack_message({
       channelId,

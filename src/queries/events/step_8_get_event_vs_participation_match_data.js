@@ -1,5 +1,3 @@
-// C:\Users\calla\development\usat\sql_code\22_slack_daily_stats_052225\discovery_participation_event_details_062425.sql
-
 // CREATED MTN AND UTC CREATED AT DATES
 async function query_create_mtn_utc_timestamps() {
     return `
@@ -24,6 +22,8 @@ async function query_create_mtn_utc_timestamps() {
     `;
 }
 
+// QUERY: C:\Users\calla\development\usat\sql_code\22_slack_daily_stats_052225\discovery_participation_event_details_062425.sql  
+// CREATES C:\Users\calla\development\usat\sql_programs\src\queries\create_drop_db_table\query_create_event_vs_participation_match_table.js
 async function step_8_query_event_vs_participation_match_data(created_at_mtn, created_at_utc) {
     return `
         WITH participant_events AS (
@@ -81,10 +81,15 @@ async function step_8_query_event_vs_participation_match_data(created_at_mtn, cr
                         ELSE '❌ Not Reported'
                     END AS reported_flag,
                     
-                    -- s.created_at_mtn AS s_created_at_mtn,
                     '${created_at_mtn}' AS created_at_mtn,
                     '${created_at_utc}' AS created_at_utc,
-
+                    
+                    -- CALC FIELDS
+                    CASE 
+                        WHEN REGEXP_LIKE(COALESCE(GROUP_CONCAT(s.id_sanctioning_events ORDER BY s.id_sanctioning_events ASC SEPARATOR ','), ''), 'race', 'i') THEN 'race'
+                        WHEN REGEXP_LIKE(COALESCE(GROUP_CONCAT(s.id_sanctioning_events ORDER BY s.id_sanctioning_events ASC SEPARATOR ','), ''), 'clinic', 'i') THEN 'clinic'
+                        ELSE "unknown"
+                    END AS event_type_category,
                     COUNT(s.id_sanctioning_events) AS count_s_id_sanctioning_events, -- identify those with count > 1 given group concat
                     COUNT(*) OVER () AS row_count   -- ✅ adds row count at the first column 
 
