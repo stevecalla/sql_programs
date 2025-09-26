@@ -19,6 +19,14 @@ const { create_slack_message } = require('./src/slack_daily_stats/step_2a_create
 const { send_slack_followup_message } = require('./utilities/slack_messaging/send_message_api_v2_followup');
 const { slack_message_api } = require('./utilities/slack_messaging/slack_message_api');
 
+// SLACK EVENTS RERORTING STATS
+const { execute_get_event_vs_participation_detail } = require('./src/slack_daily_stats/step_4_get_slack_event_vs_participation_match_data');
+const { create_slack_events_reporting_message } = require('./src/slack_daily_stats/step_4a_create_slack_event_vs_participation_message');
+const { 
+    upload_single_file_to_thread_scheduled, 
+    upload_single_file_to_thread_user 
+} = require('./utilities/slack_messaging/slack_message_api_attachment');
+
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -152,7 +160,7 @@ app.get('/scheduled-slack-events-stats', async (req, res) => {
     const jobId = uuidv4();
     console.log(`Started Slack job ${jobId}`);
 
-    // console.log('/scheduled_slack_stats route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/scheduled-slack-events-reporting route req.rawHeaders = ', req.rawHeaders);
     if (isRunning) {
         const is_running_message = '/scheduled_slack_stats = Slack event job is already running. Please try again later.';
 
@@ -208,6 +216,178 @@ app.get('/scheduled-slack-events-stats', async (req, res) => {
         console.log(`Finished Slack job ${jobId}`);
         clearTimeout(lockTimeout); // Cancel timeout if job finished properly
         isRunning = false;         // Release the lock so next request can run
+    }
+});
+
+// ===========================
+// Slack events vs participation end points
+// ===========================
+// Endpoint to handle crontab for slack events vs participation reporting data
+app.get('/scheduled-slack-events-reporting', async (req, res) => {
+    const { v4: uuidv4 } = require('uuid');
+    // npm install uuid
+    const jobId = uuidv4();
+    console.log(`Started Slack job ${jobId}`);
+
+    // console.log('/scheduled-slack-events-reporting route req.rawHeaders = ', req.rawHeaders);
+    if (isRunning) {
+        const is_running_message = '/scheduled-slack-events-reporting = Slack event job is already running. Please try again later.';
+
+        const YELLOW = '\x1b[33m';
+        const RESET = '\x1b[0m';
+
+        console.warn(`${YELLOW}⚠️ ${is_running_message} ${RESET}`);
+        console.log(`Finished Slack job ${jobId}`);
+
+        return res.status(429).json({ message: is_running_message });
+    }
+    isRunning = true;
+
+    // Sets a failsafe timeout: if the job never finishes (e.g., due to an unhandled error or infinite loop), the timeout ensures isRunning will be reset after 5 minutes. This avoids the app being stuck in a "locked" state forever.
+    lockTimeout = setTimeout(() => {
+        console.warn('Slack event job timed out.');
+        console.log(`Finished Slack job ${jobId}`);
+        isRunning = false;
+    }, TIMEOUT_MS);
+
+    try {
+        // STEP 1: GET SLACK EVENTS REPORTING STATS
+        const { file_directory, file_path, rows } = await execute_get_event_vs_participation_detail(month = "all", type = 'all', is_reported = 'all');
+
+        // STEP 2: CREATE SLACK EVENTS MESSAGE
+        const { main_message_text } = await create_slack_events_reporting_message(rows, month, type, is_reported);
+
+        // STEP 3: SEND SLACK MESSAGE
+            // channelId = 'C08TMBPTKEC', // channel = test_calla
+            // channelId = 'C08SJ3KE32B', // channel = test_calla_public
+            // channelId = 'C082FHT4G5D', // channel = daily-sales-bot
+        const is_test = false;
+        let channelId = is_test ? 'C08TMBPTKEC' : 'C082FHT4G5D';
+
+        await upload_single_file_to_thread_scheduled(file_directory, file_path, channelId, main_message_text);
+
+        // Send a success response
+        res.status(200).json({
+            message: 'Membership slack events queried & sent successfully.',
+        });
+
+    } catch (error) {
+        console.error('Error querying or sending slack events data.', error);
+        
+        // Send an error response
+        res.status(500).json({  
+            message: 'Error querying or sending slack events data.',
+            error: error.message || 'Internal Server Error',
+        });
+    } finally {  
+        console.log(`Finished Slack job ${jobId}`);
+        clearTimeout(lockTimeout); // Cancel timeout if job finished properly
+        isRunning = false;         // Release the lock so next request can run
+    }
+});
+
+// Endpoint to handle requests slack slash "/reporting" command only
+    // originating from slack slash will always have req.body unless testing curl, insomnia et al
+app.post('/slack-events-reporting', async (req, res) => {
+    // console.log('/slack-events-stats route req.rawHeaders = ', req.rawHeaders);
+
+    console.log('Received request for slack events - /slack-events-reporting :', {
+        body: req.body,
+        headers: req.headers,
+        query: req.query,
+        param: req.params,
+        text: req.body.text,
+        response_url: req.body.response_url,
+    });
+
+    console.log('req.query = ', req.query);
+    console.log('req.body.text = ', req.body.text);
+
+    // default inputs (can be overridden by query or text args)
+    let month     = req.query?.month     ?? null;
+    let type      = req.query?.type      ?? null;
+    let is_reported  = req.query?.reported  ?? null;   // string: 'true' | 'false' | 'all' | null
+
+    // if user initiated request then returns to user otherwise returns to default channel
+    const {
+        channel_id,
+        channel_name,
+        user_id,
+    } = req.body;
+
+    if (req.body && Object.keys(req.body).length === 0)
+        response_url = process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL
+    else 
+        response_url = req.body.response_url
+    
+    // If request received from slack, then destructure req.body.text
+    // ensure req.body is not empty and that req.body.text exists
+    // inspect req.body.text to assign values to month
+    if (req.body && Object.keys(req.body).length > 0 && req.body.text) {
+
+        // is_cron_job = false; // set cron job to false to send response is request
+        const args = req?.body?.text?.trim().split(/\s+/); // Split by space
+        console.log('================ args =', args);
+
+        for (const arg of args) {
+            const [key, value] = arg.split('=');
+            if (key && value) {
+                const normalizedKey = key.toLowerCase();
+                switch (normalizedKey) {
+                    case 'month':
+                        // If the key is "month" and month hasn't been set yet, it sets month = value.
+                        // allows for req.query above
+                        if (!month) month = value;
+                        break;
+                    case 'type':
+                        if (!type) type = value;
+                        break;
+                    case 'reported':
+                        if (!is_reported) is_reported = value;
+                        break;
+                    default:
+                        console.warn(`Unknown parameter: ${key}`);
+                }
+            }
+        }
+    }
+
+    // VALID INPUT = if a user enters a bad month / type / category
+        // ... step_1 will query the data but return no data available
+        // ... user will be sent no data with example of slash command
+        // ... when try block below executes
+
+    // VALID IPNUT = GET DATA, CREATE SLACK MESSAGE, SEND SLACK MESSAGE
+    try {
+        // Keep existing values like "" (empty string), 0, false, "may", etc.
+        // Replace only null or undefined with "all".
+        // empty strings (or whitespace) to default to "all"
+        month       = (month ?? "").trim() || "all";
+        type        = (type ?? "").trim() || "all";
+        is_reported = (is_reported ?? "").trim() || "all";
+
+        // Send a success response
+        res.status(200).json({
+            text: `Retrieving santioned events reported. Will respond shortly.\nMonth=${month}, Type=${type}, Reported=${is_reported}`,
+        });
+        
+        // STEP 1: GET SLACK EVENTS REPORTING STATS
+        const { file_directory, file_path, rows } = await execute_get_event_vs_participation_detail(month, type, is_reported);
+        
+        // STEP 2: CREATE SLACK EVENTS MESSAGE
+        const { main_message_text } = await create_slack_events_reporting_message(rows, month, type, is_reported);
+
+        // STEP 3: SEND SLACK MESSAGE
+        await upload_single_file_to_thread_user(file_directory, file_path, channel_id, main_message_text, channel_name, user_id, month, type, is_reported);
+
+    } catch (error) {
+        console.error('Error querying or sending slack events data.', error);
+        
+        // Send an error response
+        res.status(500).json({  
+            message: 'Error querying or sending slack events data.',
+            error: error.message || 'Internal Server Error',
+        });
     }
 });
 

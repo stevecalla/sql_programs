@@ -194,7 +194,6 @@ async function execute_get_participation_stats() {
         result_year_over_year = (data_year_over_year !== undefined && data_year_over_year !== null) ? data_year_over_year : [];
         result_sanctioned_vs_participation = (data_sanctioned_vs_participation!== undefined && data_sanctioned_vs_participation !== null) ? data_sanctioned_vs_participation : [];
         
-
     } catch (err) {
             
         stopTimer('timer');

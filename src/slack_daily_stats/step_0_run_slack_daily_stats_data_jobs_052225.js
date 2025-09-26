@@ -60,7 +60,7 @@ async function executeSteps(stepFunctions, stepName) {
   }
 }
 
-async function execute_run_slack_sales_data_jobs(is_cron_job, channel_id, channel_name, user_id) {
+async function execute_run_slack_daily_stats_jobs(is_cron_job, channel_id, channel_name, user_id) {
 
   const startTime = performance.now();
 
@@ -92,8 +92,8 @@ async function execute_run_slack_sales_data_jobs(is_cron_job, channel_id, channe
   return elapsedTime;
 }
 
-// execute_run_slack_sales_data_jobs();
+// execute_run_slack_daily_stats_jobs();
 
 module.exports = {
-  execute_run_slack_sales_data_jobs,
+  execute_run_slack_daily_stats_jobs,
 };
