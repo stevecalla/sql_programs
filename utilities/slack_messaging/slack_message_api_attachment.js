@@ -1,34 +1,14 @@
 const fs = require('fs');
 const fs_p = require('fs/promises');
 const path = require('path');
-const { WebClient } = require('@slack/web-api');
 require('dotenv').config({ path: '../../.env' });
 
 const slackToken = process.env.SLACK_BOT_TOKEN;
+const { WebClient } = require('@slack/web-api');
 const web = new WebClient(slackToken);
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
 
-async function get_folder_path(directoryName) {
-  // Create full path
-  const basePath = await determineOSPath();
-
-  console.log('base path =', basePath);
-
-  const fullPath = path.join(basePath, directoryName);
-
-  return { basePath, fullPath };
-}
-
-/**
- * Build file blocks for either a specific file_path, or all files in directory_path.
- * - Non-blocking (async)
- * - Avoids extra stat() by using Dirent
- * - Stable sort
- * @param {string} directory_path
- * @param {string} [file_path] optional absolute/relative file path
- * @returns {Promise<Array<{file:string, filename:string}>>}
- */
 async function get_upload_files(directory_path, file_path) {
   const file_blocks = [];
 
@@ -58,17 +38,7 @@ async function get_upload_files(directory_path, file_path) {
   return { file_blocks };
 }
 
-/**
- * Post a message to a Slack channel or as a threaded reply.
- *
- * @param {Object} options - Configuration for the message.
- * @param {string} options.channelId - The Slack channel ID to post to.
- * @param {string} options.text - The message text.
- * @param {string} [options.thread_ts] - Optional timestamp to post in a thread.
- * @param {WebClient} options.web - Instance of Slack WebClient.
- * @returns {Promise<object>} - The result from Slack API (includes ts for threading).
- */
-async function post_slack_message({ channelId, text, thread_ts, web }) {
+async function post_slack_message({ channelId, text, thread_ts }) {
   try {
     const result = await web.chat.postMessage({
       channel: channelId,
@@ -84,112 +54,140 @@ async function post_slack_message({ channelId, text, thread_ts, web }) {
   }
 }
 
-// Upload all files in a folder and post in thread
-async function upload_all_to_thread(
-  directoryName = "usat_event_output",
-  channelId = 'C08TMBPTKEC',
-  mainMessageText = '📊 Here is the latest batch of reports:') {
-
-  // 1. Post the main message
-  // Post main message
-  const parent = await post_slack_message({
-    channelId,
-    text: mainMessageText,
-    web
-  });
-  const thread_ts = parent.ts;
-
-  // 2. Post additional text to the thread
-  // await post_slack_message({
-  //   channelId,
-  //   text: '✅ Optional Additional Message',
-  //   thread_ts: parent.ts,
-  //   web
-  // });
-
-  // 3. Post a single reply in the thread with all files
-  const { fullPath } = await get_folder_path(directoryName);
-  const { file_blocks } = await get_upload_files(fullPath);
-
-  console.log('full path', fullPath);
-
-  // if (file_blocks.length > 0) {
-  //   await web.filesUploadV2({
-  //     channel_id: channelId,
-  //     thread_ts,
-  //     initial_comment: "🧾 Attached files:",
-  //     file_uploads: file_blocks,
-  //   });
-  //   console.log('✅ Files posted to thread');
-  // } else {  
-  //     await post_slack_message({
-  //       channelId,
-  //       text: '⚠️ No files uploaded',
-  //       thread_ts: parent.ts,
-  //       web
-  //     });
-  //     console.log('⚠️ No files uploaded');
-  // }
-}
-
-async function upload_single_file_to_thread(
-  file_directory,
-  file_path,
-  channelId = 'C08TMBPTKEC',
-  mainMessageText = '📊 Here is the latest batch of reports:') {
-
-  // console.log('file_directory 2 =', file_directory);
-  // console.log('file_path 2 = ', file_path);
-
-  // 1. Post the main message
-  // Post main message
-  const parent = await post_slack_message({
-    channelId,
-    text: mainMessageText,
-    web
-  });
-  const thread_ts = parent.ts;
-
-  // 2. Post additional text to the thread
-  // await post_slack_message({
-  //   channelId,
-  //   text: '✅ Optional Additional Message',
-  //   thread_ts: parent.ts,
-  //   web
-  // });
-
-  // 3. Post a single reply in the thread with all files
+async function file_upload_to_slack(file_directory, file_path, channelId, thread_ts, month, type, is_reported) {
   const { file_blocks } = await get_upload_files(file_directory, file_path);
-
-  // console.log('full path', fullPath);
 
   if (file_blocks.length > 0) {
     await web.filesUploadV2({
       channel_id: channelId,
       thread_ts,
-      initial_comment: "🧾 Attached files:",
+      initial_comment: `🧾 Attached file(s):\nMonth=${month}, Type=${type}, Reported=${is_reported}`,
       file_uploads: file_blocks,
     });
-    console.log('\n✅ Files posted to thread');
+    console.log('\n✅ File(s) posted to thread');
   } else {
     await post_slack_message({
       channelId,
-      text: '⚠️ No files uploaded',
-      thread_ts: parent.ts,
-      web
+      text: '⚠️ No file(s) uploaded',
+      thread_ts,
     });
-    console.log('⚠️ No files uploaded');
+    console.log('⚠️ No file(s) uploaded');
   }
 }
 
+async function upload_single_file_to_thread_scheduled(
+  file_directory,
+  file_path,
+  channelId = 'C08TMBPTKEC', // channel = test_calla
+  mainMessageText = '📊 Here is the latest batch of reports:',
+  channel_name,
+  user_id,) {
+
+  // console.log('========= channel id =', channelId);
+  // console.log('========= channel name = ', channel_name);
+  // console.log('========= user_id = ', user_id);
+
+  // 1. Post the main message
+  // Post main message
+  const parent = await post_slack_message({
+    channelId,
+    text: mainMessageText,
+  });
+  const thread_ts = parent.ts;
+
+  // 2. Post additional text to the thread
+  // await post_slack_message({
+  //   channelId,
+  //   text: '✅ Optional Additional Message',
+  //   thread_ts,
+  // });
+
+  // 3. Post a single reply in the thread with all files
+  await file_upload_to_slack(file_directory, file_path, channelId, thread_ts, month, type, is_reported);
+}
+
+async function upload_single_file_to_thread_user(
+  file_directory,
+  file_path,
+  channelId = 'C08TMBPTKEC',
+  mainMessageText = '📊 Here is the latest batch of reports:',
+  channel_name,
+  user_id,
+  month, 
+  type,
+  is_reported,
+) {
+  // console.log('========= channel id =', channelId);
+  console.log('========= channel name = ', channel_name);
+  // console.log('========= user_id = ', user_id);
+
+  // 1) open DM (app <-> user)
+  const { channel } = await web.conversations.open({ users: user_id });
+  channelId = channel.id;
+
+  // 2) post parent message in DM
+  const parent = await web.chat.postMessage({ channel: channelId, text: mainMessageText });
+  const thread_ts = parent.ts;
+
+  // 3. Post a single reply in the thread with all files
+  await file_upload_to_slack(file_directory, file_path, channelId, thread_ts, month, type, is_reported);
+
+  // 4) get a permalink to the parent message
+  const { permalink } = await web.chat.getPermalink({ channel: channelId, message_ts: parent.ts });
+
+  // 5) use response_url to notify in the original context 
+  const axios = require('axios');
+  await axios.post(response_url, {
+    response_type: "ephemeral",
+    text: `Your file(s) are ready here: ${permalink}`,
+  });
+}
+
 // 🟢 Run
-// upload_all_to_thread(
+// upload_all_to_thread_scheduled(
 //   directoryName = "usat_event_output", 
 //   channelId = 'C08TMBPTKEC', 
 //   mainMessageText = '📊 Here is the latest batch of reports:'
 // );
 
 module.exports = {
-  upload_all_to_thread,
-  upload_single_file_to_thread,
+  // upload_all_to_thread,
+  upload_single_file_to_thread_scheduled,
+  upload_single_file_to_thread_user,
 }
+
+// async function get_folder_path(directoryName) {
+//   // Create full path
+//   const basePath = await determineOSPath();
+//   console.log('base path =', basePath);
+//   const fullPath = path.join(basePath, directoryName);
+//   return { basePath, fullPath };
+// }
+
+// // Upload all files in a folder and post in thread
+// async function upload_all_to_thread(
+//   directoryName = "usat_event_output",
+//   channelId = 'C08TMBPTKEC',
+//   mainMessageText = '📊 Here is the latest batch of reports:') {
+
+//   // 1. Post the main message
+//   // Post main message
+//   const parent = await post_slack_message({
+//     channelId,
+//     text: mainMessageText,
+//   });
+//   const thread_ts = parent.ts;
+
+//   // 2. Post additional text to the thread
+//   // await post_slack_message({
+//   //   channelId,
+//   //   text: '✅ Optional Additional Message',
+//   //   thread_ts: parent.ts,
+//   // });
+
+//   // 3. Post a single reply in the thread with all files
+//   // const { fullPath } = await get_folder_path(directoryName);
+
+//   // 3. Post a single reply in the thread with all files
+//   // await file_upload_to_slack(file_directory, file_path, channelId, thread_ts);
+// }
