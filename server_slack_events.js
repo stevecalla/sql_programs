@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 8008;
 
 // NGROK TUNNEL FOR TESTING
-const is_test_ngrok = true;
+const is_test_ngrok = false;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // SLACK EVENTS STATS PROCESS
@@ -261,7 +261,7 @@ app.get('/scheduled-slack-events-reporting', async (req, res) => {
             // channelId = 'C08TMBPTKEC', // channel = test_calla
             // channelId = 'C08SJ3KE32B', // channel = test_calla_public
             // channelId = 'C082FHT4G5D', // channel = daily-sales-bot
-        const is_test = true;
+        const is_test = false;
         let channelId = is_test ? 'C08TMBPTKEC' : 'C082FHT4G5D';
 
         await upload_single_file_to_thread_scheduled(file_directory, file_path, channelId, main_message_text);
