@@ -33,7 +33,7 @@ async function read_ubuntu_update_log(char_limit = -500) {
 }
 
 async function send_ubuntu_log_via_slack() {
-    let message = await read_ubuntu_update_log(-500);
+    let message = await read_ubuntu_update_log(-2000);
 
     message = `\n================\nUBUNUTU SYSTEM UPDATE / UPGRADE\n================\n${message} \n\n================\nUBUNUTU SYSTEM UPDATE / UPGRADE \n================\n`
 

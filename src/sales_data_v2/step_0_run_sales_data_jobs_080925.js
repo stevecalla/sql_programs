@@ -4,6 +4,8 @@ dotenv.config({ path: "./.env" });
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 const { execute_transfer_usat_to_local_parallel } = require('./step_1_transfer_data_usat_to_local_parallel');
+const { execute_alter_sales_table } = require('./step_1a_alter_sales_table');
+
 const { execute_load_region_data } = require('./step_2a_load_region_table');
 
 const { execute_create_sales_key_metrics } = require('./step_3_create_sales_key_metrics_010425');
@@ -21,6 +23,8 @@ const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 const run_step_1  = true; // transfer sales data from usat vapor to local db
+const run_step_1a  = true; // alter price for ticket socket should be $28 but shows as $23
+
 const run_step_2a = true; // load region table
 
 const run_step_3  = true; // create sales key metrics stats table
@@ -99,6 +103,7 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
   try {
     const stepFunctions = [
       run_step_1  ? execute_transfer_usat_to_local_parallel : null,
+      run_step_1a  ? execute_alter_sales_table : null,
       run_step_2a ? execute_load_region_data : null,
       run_step_3  ? execute_create_sales_key_metrics : null,
       run_step_3a ? execute_load_big_query_sales_key_metrics : null,
@@ -112,6 +117,7 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
 
     const stepName = [
       `Step #1 - Get Sales Data:`, 
+      `Step #1a - Alter Sales Data - Ticket Socket $23 to $28:`, 
       // `Step #2 - Load Sales Data: `, 
       `Step #2a - Load Region Data: `, 
       `Step #3 - Create Sales Key Metrics: `, 
