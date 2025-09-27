@@ -75,7 +75,7 @@ async function execute_create_event_vs_participation_match() {
 
   try {
     // 1) Start a transaction so DDL + data load is atomic
-    await dst.beginTransaction(query_create_mtn_utc_timestamps());
+    await dst.beginTransaction();
 
     // 2) Create the target TABLE_NAME
     await create_target_table(dst, TABLE_NAME, TABLE_STRUCTURE);
