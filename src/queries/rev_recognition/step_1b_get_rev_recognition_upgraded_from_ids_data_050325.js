@@ -17,7 +17,8 @@ function step_1b_query_rev_recognition_upgraded_from_ids_data(created_at_mtn, cr
           AND id_membership_periods_sa != upgraded_from_id_mp 
           -- NOTE: excludes these combinations b/c the upgrade_from_id was included incorrectly for these records (a ticket was submitted to DS 5/15/25 to correct)
           AND (id_profiles, id_membership_periods_sa) NOT IN (
-            (463550, 4828189), -- duplicate with (2865390, 4828189)
+            -- (463550, 4828189), -- duplicate with (2865390, 4828189); looks like 463550 was replaced with 2865390
+            (2737800, 4739539), -- duplicate with '2866313', 4739539 upgraded from '3526545'
             (2701138, 4767827),
             (2738933, 4631539),
             (2390634, 4882173) -- best guess is that 4882173 shouldn't have upgraded from; the other possibility is 5019736
