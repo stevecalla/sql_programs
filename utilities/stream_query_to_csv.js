@@ -1,8 +1,9 @@
 const fs = require('fs');
-// const path = require('path');
 const fastcsv = require('fast-csv');
-// const mysql = require('mysql2');
 const { Transform } = require('stream');
+
+// const path = require('path');
+// const mysql = require('mysql2');
 
 /**
  * Stream query results directly to CSV
@@ -15,7 +16,16 @@ async function streamQueryToCsv(pool, query, filePath, fileFlags = 'w') {
         const csvStream = fastcsv.format({
             headers: true,
             writeBOM: true,     // Excel-friendly
-            quoteColumns: true
+            quoteColumns: true, 
+            quote: '"',                 // default, but make explicit
+            escape: '"',                // escape quotes by doubling
+            includeEndRowDelimiter: true,
+            writeHeaders: true,
+            // If only some columns need quoting:
+            // quoteColumns: { colA: true, colB: true, ... }
+            // To be safest (bigger files but robust), always quote:
+            alwaysQuote: true
+
         });
 
         // const queryStream = pool.query(query).stream();
