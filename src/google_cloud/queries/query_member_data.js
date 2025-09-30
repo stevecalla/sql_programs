@@ -142,8 +142,9 @@ async function query_member_data(batch_size = 1000, last_seen_id = 0, offset) {
             region_abbr_member,
 
             -- EVENT ADDRESSES
-            TRIM(BOTH '"' FROM address_events) AS address_events,
-            TRIM(BOTH '"' FROM city_events) AS city_events,
+            -- Trim quotes off the ends, then clean inside
+            TRIM(BOTH '"' FROM REPLACE(REPLACE(REPLACE(address_events, '\r', ''), '\n', ''), '"', '')) AS address_events,
+            TRIM(BOTH '"' FROM REPLACE(REPLACE(REPLACE(city_events, '\r', ''), '\n', ''), '"', '')) AS city_events,
             zip_events,
             state_code_events,
             country_code_events,

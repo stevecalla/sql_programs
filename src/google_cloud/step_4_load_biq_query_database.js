@@ -48,6 +48,10 @@ async function execute_load_big_query_database(options, datasetId, bucketName, s
     location: 'US',
     compression: 'GZIP',          // because you used gsutil -Z
     writeDisposition: 'WRITE_APPEND',
+    allowQuotedNewlines: true,    // let BigQuery accept quoted embedded \n
+    quote: '"',                   // explicitly set quote char
+    // maxBadRecords: 10,            // tolerate a few malform
+
   } : {
     sourceFormat: 'CSV',
     skipLeadingRows: 1,
@@ -55,6 +59,9 @@ async function execute_load_big_query_database(options, datasetId, bucketName, s
     location: 'US',
     compression: 'GZIP',
     writeDisposition: 'WRITE_APPEND',
+    allowQuotedNewlines: true,    // let BigQuery accept quoted embedded \n
+    quote: '"',                   // explicitly set quote char
+    // maxBadRecords: 10,            // tolerate a few malform
   };
 
   try {
