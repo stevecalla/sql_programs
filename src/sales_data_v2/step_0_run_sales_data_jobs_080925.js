@@ -4,7 +4,11 @@ dotenv.config({ path: "./.env" });
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 const { execute_transfer_usat_to_local_parallel } = require('./step_1_transfer_data_usat_to_local_parallel');
+
 const { execute_alter_sales_table } = require('./step_1a_alter_sales_table');
+const { execute_transfer_deleted_profiles_to_local_parallel } = require('./step_1b_transfer_deleted_profile_data_usat_to_local_parallel');
+
+const { execute_alter_drop_deleted_profiles } = require('./step_1c_alter_drop_deleted_profiles');
 
 const { execute_load_region_data } = require('./step_2a_load_region_table');
 
@@ -104,6 +108,10 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
     const stepFunctions = [
       run_step_1  ? execute_transfer_usat_to_local_parallel : null,
       run_step_1a  ? execute_alter_sales_table : null,
+
+      run_step_1b  ? execute_transfer_deleted_profiles_to_local_parallel : null,
+      run_step_1c  ? execute_alter_drop_deleted_profiles : null,
+
       run_step_2a ? execute_load_region_data : null,
       run_step_3  ? execute_create_sales_key_metrics : null,
       run_step_3a ? execute_load_big_query_sales_key_metrics : null,
@@ -118,6 +126,10 @@ async function execute_run_sales_data_jobs_v2(update_mode) {
     const stepName = [
       `Step #1 - Get Sales Data:`, 
       `Step #1a - Alter Sales Data - Ticket Socket $23 to $28:`, 
+
+      `Step #1b - Transfer_deleted_profile_data_usat_to_local_parallel:`, 
+      `Step #1c  = Step_1c_alter_drop_deleted_profile_data:`,
+
       // `Step #2 - Load Sales Data: `, 
       `Step #2a - Load Region Data: `, 
       `Step #3 - Create Sales Key Metrics: `, 
