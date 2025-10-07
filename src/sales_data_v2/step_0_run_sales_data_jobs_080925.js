@@ -6,8 +6,8 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 const { execute_transfer_usat_to_local_parallel } = require('./step_1_transfer_data_usat_to_local_parallel');
 
 const { execute_alter_sales_table } = require('./step_1a_alter_sales_table');
-const { execute_transfer_deleted_profiles_to_local_parallel } = require('./step_1b_transfer_deleted_profile_data_usat_to_local_parallel');
 
+const { execute_transfer_deleted_profiles_to_local_parallel } = require('./step_1b_transfer_deleted_profile_data_usat_to_local_parallel');
 const { execute_alter_drop_deleted_profiles } = require('./step_1c_alter_drop_deleted_profiles');
 
 const { execute_load_region_data } = require('./step_2a_load_region_table');
@@ -28,6 +28,9 @@ const { slack_message_api } = require('../../utilities/slack_messaging/slack_mes
 
 const run_step_1  = true; // transfer sales data from usat vapor to local db
 const run_step_1a  = true; // alter price for ticket socket should be $28 but shows as $23
+
+const run_step_1b  = true; // execute_transfer_deleted_profiles_to_local_parallel
+const run_step_1c  = true; // execute_alter_drop_deleted_profiles
 
 const run_step_2a = true; // load region table
 
