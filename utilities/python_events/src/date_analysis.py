@@ -3,8 +3,13 @@ import numpy as np
 from datetime import datetime
 import calendar
 
-this_year = datetime.now().year
-last_year = this_year - 1
+# Dynamically set the years for YOY analysis
+# TODO:
+# this_year = datetime.now().year
+# last_year = this_year - 1
+# TODO:
+this_year = 2026
+last_year = 2025
 
 # This function computes the day-of-year difference between two event dates,
 # adjusting for leap years. If one year is a leap year and the other is not,
