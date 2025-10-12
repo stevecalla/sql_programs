@@ -3,11 +3,21 @@ import numpy as np
 import warnings
 
 def export_to_excel(
-    event_output_path, ANALYSIS_MONTH_NAME, df, grouped_df, qa_summary,
-    match_summary_this_year, match_summary_last_year,
-    events_this_year, events_last_year, draft_last_year_events,
-    timing_shift_output, shifted_into_month_output,
-    unmatched_last_year, pivot_value_all, pivot_value_filtered
+    event_output_path, 
+    ANALYSIS_MONTH_NAME, 
+    df, 
+    grouped_df, 
+    qa_summary,
+    match_summary_this_year, 
+    match_summary_last_year,
+    events_this_year, 
+    events_last_year, 
+    draft_last_year_events,
+    timing_shift_output, 
+    shifted_into_month_output,
+    unmatched_last_year, 
+    pivot_value_all, 
+    pivot_value_filtered
 ):
 
     OUTPUT_FILE = event_output_path / "cleaned_grouped_event_data_with_summary.xlsx"

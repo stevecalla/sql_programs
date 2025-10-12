@@ -9,8 +9,12 @@ ADJACENT_MONTH_THRESHOLD    =   80   # For candidates in adjacent months
 FALLBACK_THRESHOLD          =   80   # For fallback selection from entire dataset
 
 # Dynamically set the years for YOY analysis
+# TODO: 2024 vs 2025
 this_year = datetime.now().year
 last_year = this_year - 1
+# TODO: 2025 vs 2026
+# this_year = 2026
+# last_year = 2025
 
 def get_match_score_bin(score):
     # Ensure score is a float or None
@@ -80,18 +84,24 @@ def fuzzy_match_events_bidirectional(grouped_df):
     events_this_year = grouped_df[grouped_df['year'] == this_year].copy()
 
     # Initialize match columns
-    events_last_year['match_idx_this_year'] = None
-    events_this_year['match_idx_last_year'] = None
+    events_last_year[f'match_idx__{this_year}'] = None
+    events_this_year[f'match_idx_{last_year}'] = None
+
     events_last_year['match_formula_used'] = ""
     events_this_year['match_formula_used'] = ""
+
     events_last_year['match_score_name_only'] = None
     events_this_year['match_score_name_only'] = None
+
     events_last_year['match_score_name_and_zip'] = None
     events_this_year['match_score_name_and_zip'] = None
+
     events_last_year['match_score_name_and_site'] = None
     events_this_year['match_score_name_and_site'] = None
+
     events_last_year['match_name_this_year'] = None
     events_this_year['match_name_last_year'] = None
+    
     events_last_year['match_score_bin'] = None
     events_this_year['match_score_bin'] = None
 
@@ -109,12 +119,12 @@ def fuzzy_match_events_bidirectional(grouped_df):
             i_last_year = idx_last_year[0]
 
             # Set matches for both sides
-            events_this_year.at[i_this_year, 'match_idx_last_year'] = i_last_year
+            events_this_year.at[i_this_year, f'match_idx_{last_year}'] = i_last_year
             events_this_year.at[i_this_year, 'match_formula_used'] = 'Manual Match'
             events_this_year.at[i_this_year, 'match_name_last_year'] = events_last_year.at[i_last_year, 'Name']
             events_this_year.at[i_this_year, 'match_score_bin'] = "90-100"  # Manual assumed perfect
 
-            events_last_year.at[i_last_year, 'match_idx_this_year'] = i_this_year
+            events_last_year.at[i_last_year, f'match_idx__{this_year}'] = i_this_year
             events_last_year.at[i_last_year, 'match_formula_used'] = 'Manual Match'
             events_last_year.at[i_last_year, 'match_name_this_year'] = events_this_year.at[i_this_year, 'Name']
             events_this_year.at[i_last_year, 'match_score_bin'] = "90-100"  # Manual assumed perfect
@@ -162,7 +172,7 @@ def fuzzy_match_events_bidirectional(grouped_df):
     # --- Assign the best one-to-one matches (excluding already-matched manual pairs) ---
     for i_this_year, i_last_year, combined_score, name_score, combined_site_score, formula in pairs:
         if i_this_year not in matched_this_year and i_last_year not in matched_last_year:
-            events_this_year.at[i_this_year, 'match_idx_last_year'] = i_last_year
+            events_this_year.at[i_this_year, f'match_idx_{last_year}'] = i_last_year
             events_this_year.at[i_this_year, 'match_formula_used'] = formula
             events_this_year.at[i_this_year, 'match_score_name_only'] = name_score
             events_this_year.at[i_this_year, 'match_score_name_and_zip'] = combined_score
@@ -170,7 +180,7 @@ def fuzzy_match_events_bidirectional(grouped_df):
             events_this_year.at[i_this_year, 'match_name_last_year'] = events_last_year.at[i_last_year, 'Name']
             events_this_year.at[i_this_year, 'match_score_bin'] = get_match_score_bin(combined_score)
 
-            events_last_year.at[i_last_year, 'match_idx_this_year'] = i_this_year
+            events_last_year.at[i_last_year, f'match_idx__{this_year}'] = i_this_year
             events_last_year.at[i_last_year, 'match_formula_used'] = formula
             events_last_year.at[i_last_year, 'match_score_name_only'] = name_score
             events_last_year.at[i_last_year, 'match_score_name_and_zip'] = combined_score
@@ -182,8 +192,8 @@ def fuzzy_match_events_bidirectional(grouped_df):
             matched_last_year.add(i_last_year)
 
     # --- Annotate matches ---
-    events_last_year['has_match'] = events_last_year['match_idx_this_year'].notnull()
-    events_this_year['has_match'] = events_this_year['match_idx_last_year'].notnull()
+    events_last_year['has_match'] = events_last_year[f'match_idx__{this_year}'].notnull()
+    events_this_year['has_match'] = events_this_year[f'match_idx_{last_year}'].notnull()
 
     # Mark matched/unmatched and fill bins for unmatched
     events_this_year.loc[~events_this_year['has_match'], 'match_score_bin'] = 'no_match'
@@ -195,31 +205,37 @@ def fuzzy_match_events_bidirectional(grouped_df):
 
     # --- Enrich matched data with key fields ---
     for i_this_year in events_this_year.index:
-        i_last_year = events_this_year.at[i_this_year, 'match_idx_last_year']
+        i_last_year = events_this_year.at[i_this_year, f'match_idx_{last_year}']
         if pd.notnull(i_last_year):
             row = events_last_year.loc[i_last_year]
-            events_this_year.at[i_this_year, 'application_id_last_year'] = row['ApplicationID']
-            events_this_year.at[i_this_year, 'status_last_year'] = row['Status']
+            events_this_year.at[i_this_year, f'application_id_{last_year}'] = row['ApplicationID']
+            events_this_year.at[i_this_year, f'status_{last_year}'] = row['Status']
             events_this_year.at[i_this_year, f'earliest_start_date_{last_year}'] = row['StartDate']
-            events_this_year.at[i_this_year, 'website_last_year'] = row['Website']
-            events_this_year.at[i_this_year, 'zip_code_last_year'] = row['ZipCode']
-            events_this_year.at[i_this_year, 'state_code_last_year'] = row['2LetterCode']
+            events_this_year.at[i_this_year, f'website_{last_year}'] = row['Website']
+            events_this_year.at[i_this_year, f'zip_code_{last_year}'] = row['ZipCode']
+            events_this_year.at[i_this_year, f'state_code_{last_year}'] = row['2LetterCode']
 
+            events_this_year.at[i_this_year, f'RaceDirectorUserID_{last_year}'] = row['RaceDirectorUserID']
+            events_this_year.at[i_this_year, f'Email_{last_year}'] = row['Email']
+            
     for i_last_year in events_last_year.index:
-        i_this_year = events_last_year.at[i_last_year, 'match_idx_this_year']
+        i_this_year = events_last_year.at[i_last_year, f'match_idx__{this_year}']
         if pd.notnull(i_this_year):
             row = events_this_year.loc[i_this_year]
-            events_last_year.at[i_last_year, 'application_id_this_year'] = row['ApplicationID']
-            events_last_year.at[i_last_year, 'status_this_year'] = row['Status']
+            events_last_year.at[i_last_year, f'application_id_{this_year}'] = row['ApplicationID']
+            events_last_year.at[i_last_year, f'status_{this_year}'] = row['Status']
             events_last_year.at[i_last_year, f'earliest_start_date_{this_year}'] = row['StartDate']
-            events_last_year.at[i_last_year, 'website_this_year'] = row['Website']
-            events_last_year.at[i_last_year, 'zip_code_this_year'] = row['ZipCode']
-            events_last_year.at[i_last_year, 'state_code_this_year'] = row['2LetterCode']
+            events_last_year.at[i_last_year, f'website_{this_year}'] = row['Website']
+            events_last_year.at[i_last_year, f'zip_code_{this_year}'] = row['ZipCode']
+            events_last_year.at[i_last_year, f'state_code_{this_year}'] = row['2LetterCode']
+
+            events_last_year.at[i_last_year, f'RaceDirectorUserID_{this_year}'] = row['RaceDirectorUserID']
+            events_last_year.at[i_last_year, f'Email_{this_year}'] = row['Email']
 
     # --- Assign common_date, common_year, common_month ---
     # For matched events: both sides get the this_year StartDate as common_date
     for i_this_year in events_this_year.index:
-        i_last_year = events_this_year.at[i_this_year, 'match_idx_last_year']
+        i_last_year = events_this_year.at[i_this_year, f'match_idx_{last_year}']
         if pd.notnull(i_last_year):
             # If match, use this_year StartDate for both
             common_date = events_this_year.at[i_this_year, 'StartDate']
@@ -256,7 +272,7 @@ def fuzzy_match_events_bidirectional(grouped_df):
     cancel_statuses = ['cancelled', 'declined', 'deleted']
 
     for i_this_year in events_this_year.index:
-        i_last_year = events_this_year.at[i_this_year, 'match_idx_last_year']
+        i_last_year = events_this_year.at[i_this_year, f'match_idx_{last_year}']
         status_this_year = events_this_year.at[i_this_year, 'Status']
         status_last_year = events_last_year.at[i_last_year, 'Status'] if pd.notnull(i_last_year) else None
 

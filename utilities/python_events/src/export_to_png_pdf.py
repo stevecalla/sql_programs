@@ -5,8 +5,12 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
     
 # Dynamically set the years for YOY analysis
+# TODO: 2024 vs 2025
 this_year = datetime.now().year
 last_year = this_year - 1
+# TODO: 2025 vs 2026
+# this_year vs 2026
+# last_year vs 2025
 
 def save_match_score_histogram(events_this_year, output_path, pdf_pages=None):
     """Save a histogram showing the distribution of match scores.

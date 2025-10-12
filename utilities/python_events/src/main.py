@@ -18,8 +18,12 @@ from export_to_png_pdf import (create_chart_png, create_chart_pdf)
 from export_to_excel import export_to_excel
 
 # Dynamically set the years for YOY analysis
+# TODO: 2024 vs 2025
 this_year = datetime.now().year
 last_year = this_year - 1
+# TODO: 2025 vs 2026
+# this_year = 2026
+# last_year = 2025
 
 print(">>> Starting main.py", flush=True)
 
@@ -61,7 +65,7 @@ def main():
 
     # Filter Draft events for LAST YEAR, safely handling NaN or non‑string statuses
     draft_last_year_events = grouped_df[
-        (grouped_df['year'] == 2024) &
+        (grouped_df['year'] == last_year) &
         (grouped_df['source'] != 'from_missing_in_event_data_metrics') &
         (grouped_df['Status']
             .fillna('')          # turn NaN/None into ''

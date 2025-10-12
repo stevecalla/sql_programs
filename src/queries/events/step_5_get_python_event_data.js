@@ -25,7 +25,10 @@ function step_5_query_python_event_data(batch_size, offset) {
                 em.created_at_events
             FROM event_data_metrics AS em
             WHERE 1=1
-            AND em.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
+                -- TODO: 2024 vs 2025
+                AND em.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
+                -- TODO: 2025 vs 2026
+                -- AND em.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) + 1)
             GROUP BY
                 em.id_sanctioning_events, em.name_events, em.starts_year_events,
                 -- em.starts_events, em.start_date_races, 
@@ -57,7 +60,10 @@ function step_5_query_python_event_data(batch_size, offset) {
                     SUM(s.sales_revenue) AS sales_revenue
                 FROM sales_key_stats_2015 s
                 WHERE 1 = 1
+                    -- TODO: 2024 vs 2025
                     AND s.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
+                    -- TODO: 2025 vs 2026
+                    -- AND s.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) + 1)
                     AND s.id_sanctioning_events NOT IN (999999) -- exclude test event
                 GROUP BY
                     s.id_sanctioning_events,
@@ -98,8 +104,8 @@ function step_5_query_python_event_data(batch_size, offset) {
                     s.sales_revenue,
                     'from_missing_in_event_data_metrics' AS source
                 FROM sales_data_cte s
-                LEFT JOIN event_metrics_cte em ON em.id_sanctioning_events = s.id_sanctioning_events_and_type
-                    AND em.starts_year_events = s.starts_year_events
+                    LEFT JOIN event_metrics_cte em ON em.id_sanctioning_events = s.id_sanctioning_events_and_type
+                        AND em.starts_year_events = s.starts_year_events
                 WHERE em.id_sanctioning_events IS NULL
             )
             -- SELECT * FROM missing_sales_cte; -- 23

@@ -13,8 +13,12 @@ def group_clean_data(df):
     """
     
     # Dynamically set the years for YOY analysis
-    this_year = datetime.now().year
-    last_year = this_year - 1
+    # TODO:
+    # this_year = datetime.now().year
+    # last_year = this_year - 1
+    # TODO:
+    this_year = 2026
+    last_year = 2025
 
     # --- Adjust RaceDate if blank ---
     # Replace RaceDate with StartDate if RaceDate is missing or an empty string.
