@@ -83,7 +83,7 @@ async function execute_run_event_data_jobs() {
   const run_step_3 = true; // load event metrics to bigquery
 
   const run_step_5 = true; // execute_get_python_event_data
-  const run_step_6 = true; // run python event reports
+  const run_step_6 = true; // run python event reports / creates event_data_metric_yoy_match table
   const run_step_7 = true; // load event_data_metrics_yoy_match to bigquery
 
   const run_step_8 = true; // create event_vs_participation_match_data table / data set

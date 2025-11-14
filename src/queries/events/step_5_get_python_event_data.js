@@ -24,11 +24,33 @@ function step_5_query_python_event_data(batch_size, offset) {
                 em.email_users,
                 em.created_at_events
             FROM event_data_metrics AS em
-            WHERE 1=1
+            -- Select events for the correct "year-over-year" comparison window.
+            -- The logic mirrors the Python cutoff rule:
+            --   • From Jan 1 through Oct 14 → compare CURRENT year vs PRIOR year.
+            --   • From Oct 15 through Dec 31 → compare NEXT year vs CURRENT year.
+            -- MySQL dynamically determines which two years to include based on today's date.
+            -- WHERE 1=1
                 -- TODO: 2024 vs 2025
-                AND em.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
+                -- AND em.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
                 -- TODO: 2025 vs 2026
                 -- AND em.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) + 1)
+            WHERE 1=1
+                AND em.starts_year_events IN (
+                        CASE 
+                            /* Before Oct 15 → current year */
+                            WHEN CURDATE() < MAKEDATE(YEAR(CURDATE()), 1) + INTERVAL 9 MONTH + INTERVAL 14 DAY
+                            THEN YEAR(CURDATE())
+                            /* On/after Oct 15 → next year */
+                            ELSE YEAR(CURDATE()) + 1
+                        END,
+                        CASE 
+                            /* Before Oct 15 → previous year */
+                            WHEN CURDATE() < MAKEDATE(YEAR(CURDATE()), 1) + INTERVAL 9 MONTH + INTERVAL 14 DAY
+                            THEN YEAR(CURDATE()) - 1
+                            /* On/after Oct 15 → current year */
+                            ELSE YEAR(CURDATE())
+                        END
+                    )
             GROUP BY
                 em.id_sanctioning_events, em.name_events, em.starts_year_events,
                 -- em.starts_events, em.start_date_races, 
@@ -59,11 +81,34 @@ function step_5_query_python_event_data(batch_size, offset) {
                     COUNT(DISTINCT s.id_membership_periods_sa) AS sales_units,
                     SUM(s.sales_revenue) AS sales_revenue
                 FROM sales_key_stats_2015 s
-                WHERE 1 = 1
+                -- Select events for the correct "year-over-year" comparison window.
+                -- The logic mirrors the Python cutoff rule:
+                --   • From Jan 1 through Oct 14 → compare CURRENT year vs PRIOR year.
+                --   • From Oct 15 through Dec 31 → compare NEXT year vs CURRENT year.
+                -- MySQL dynamically determines which two years to include based on today's date.
+                -- WHERE 1 = 1
                     -- TODO: 2024 vs 2025
-                    AND s.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
+                    -- AND s.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) - 1)
                     -- TODO: 2025 vs 2026
                     -- AND s.starts_year_events IN (YEAR(CURDATE()), YEAR(CURDATE()) + 1)
+                    -- AND s.id_sanctioning_events NOT IN (999999) -- exclude test event
+                WHERE 1=1
+                    AND s.starts_year_events IN (
+                            CASE 
+                                /* Before Oct 15 → current year */
+                                WHEN CURDATE() < MAKEDATE(YEAR(CURDATE()), 1) + INTERVAL 9 MONTH + INTERVAL 14 DAY
+                                THEN YEAR(CURDATE())
+                                /* On/after Oct 15 → next year */
+                                ELSE YEAR(CURDATE()) + 1
+                            END,
+                            CASE 
+                                /* Before Oct 15 → previous year */
+                                WHEN CURDATE() < MAKEDATE(YEAR(CURDATE()), 1) + INTERVAL 9 MONTH + INTERVAL 14 DAY
+                                THEN YEAR(CURDATE()) - 1
+                                /* On/after Oct 15 → current year */
+                                ELSE YEAR(CURDATE())
+                            END
+                        )
                     AND s.id_sanctioning_events NOT IN (999999) -- exclude test event
                 GROUP BY
                     s.id_sanctioning_events,
