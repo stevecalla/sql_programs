@@ -1,16 +1,29 @@
 import pandas as pd
 import os
-from datetime import datetime
+from datetime import datetime, date
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
     
 # Dynamically set the years for YOY analysis
 # TODO: 2024 vs 2025
-this_year = datetime.now().year
-last_year = this_year - 1
+# this_year = datetime.now().year
+# last_year = this_year - 1
 # TODO: 2025 vs 2026
-# this_year vs 2026
-# last_year vs 2025
+# this_year = 2026
+# last_year = 2025
+
+# Dynamically set the years for YOY analysis
+today = date.today()
+cutoff = date(today.year, 10, 15)  # Oct 15 of the current year
+
+if today < cutoff:
+    # 1/1 through 10/14  → use CURRENT and PRIOR year
+    this_year = today.year
+    last_year = today.year - 1
+else:
+    # 10/15 through 12/31 → use NEXT and CURRENT year
+    this_year = today.year + 1
+    last_year = today.year
 
 def save_match_score_histogram(events_this_year, output_path, pdf_pages=None):
     """Save a histogram showing the distribution of match scores.
