@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from export_to_mysql import push_df_to_mysql
+from datetime import date
 
 # Define color codes
 RED    = "\033[91m"
@@ -15,8 +16,29 @@ CYAN   = "\033[96m"
 RESET  = "\033[0m"
 
 # Dynamically set the years for YOY analysis
-this_year = datetime.now().year
-last_year = this_year - 1
+# this_year = datetime.now().year
+# last_year = this_year - 1
+
+# Dynamically set the years for YOY analysis
+# TODO: 2024 vs 2025
+# this_year = datetime.now().year
+# last_year = this_year - 1
+# TODO: 2025 vs 2026
+# this_year = 2026
+# last_year = 2025
+
+# Dynamically set the years for YOY analysis
+today = date.today()
+cutoff = date(today.year, 10, 15)  # Oct 15 of the current year
+
+if today < cutoff:
+    # 1/1 through 10/14  → use CURRENT and PRIOR year
+    this_year = today.year
+    last_year = today.year - 1
+else:
+    # 10/15 through 12/31 → use NEXT and CURRENT year
+    this_year = today.year + 1
+    last_year = today.year
 
 def perform_year_over_year_analysis(event_output_path, df, grouped_df, events_this_year, events_last_year, file_prefix, timing_shift_output):
     print(">>> Starting match_analysis.py", flush=True)
@@ -273,7 +295,8 @@ def build_event_match_consolidated(events_this_year, events_last_year):
             **row,
             "match_category": category,
             "match_category_detailed": detailed,
-            "source_year": 2025,
+            # "source_year": 2025,
+            "source_year": this_year,
         })
 
     # --- Last Year Events ---
@@ -294,7 +317,8 @@ def build_event_match_consolidated(events_this_year, events_last_year):
             **row,
             "match_category": category,
             "match_category_detailed": detailed,
-            "source_year": 2024,
+            # "source_year": 2024,
+            "source_year": last_year,
         })
 
     consolidated_match_data = pd.DataFrame(consolidated_rows)
@@ -538,7 +562,7 @@ def pad_zip_column(df):
 
 def load_into_mysql(merged_df, consolidated_match_data):
 
-    # print(f"{RED}merged_df columns (mysql load): {list(merged_df.columns)}{RESET}\n")
+    print(f"{RED}merged_df columns (mysql load): {list(merged_df.columns)}{RESET}\n")
 
     table_name = "event_data_metrics_yoy_match"
     df, zip_col_candidates = pad_zip_column(merged_df) # adjust zip code to include leading zero(s)

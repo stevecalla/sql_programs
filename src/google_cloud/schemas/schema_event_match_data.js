@@ -216,12 +216,12 @@ const event_data_metrics_yoy_match_schema = [
     mode: "NULLABLE",
     description: "Event name from prior year match"
   },
-  {
-    name: "earliest_start_date_2024",
-    type: "DATE",
-    mode: "NULLABLE",
-    description: "Earliest start date from 2024 match"
-  },
+  // {
+  //   name: "earliest_start_date_2024",
+  //   type: "DATE",
+  //   mode: "NULLABLE",
+  //   description: "Earliest start date from 2024 match"
+  // },
   {
     name: "website_last_year",
     type: "STRING",

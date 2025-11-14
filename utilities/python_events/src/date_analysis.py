@@ -56,7 +56,7 @@ def date_shift_analysis(events_this_year, analysis_month, month_name):
 
     # Ensure the dates are datetime objects
     timing_shift_data['earliest_start_date_this_year'] = pd.to_datetime(timing_shift_data['earliest_start_date'], errors='coerce')
-    timing_shift_data['earliest_start_date_last_year'] = pd.to_datetime(timing_shift_data[f'earliest_start_date_{last_year}'], errors='coerce')
+    timing_shift_data['earliest_start_date_last_year'] = pd.to_datetime(timing_shift_data[f'earliest_start_date_last_year'], errors='coerce')
 
     # Drop rows with missing dates
     timing_shift_data = timing_shift_data.dropna(

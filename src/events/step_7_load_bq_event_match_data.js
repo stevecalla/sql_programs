@@ -22,7 +22,7 @@ async function execute_load_big_query_event_match_data() {
             query: (retrieval_batch_size, offset) => query_event_match_data(retrieval_batch_size, offset),
             tableId: 'event_data_metrics_yoy_match', // table name
             
-            // fileName: 'event_data_metrics_yoy_matcha_v2',
+            // fileName: 'event_data_metrics_yoy_match_v2',
             // tableId: "event_data_metrics_yoy_match_v2",
         }
     ];

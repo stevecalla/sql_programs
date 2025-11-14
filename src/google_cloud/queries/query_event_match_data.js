@@ -44,7 +44,7 @@ async function query_event_match_data(batch_size = 10, offset = 0) {
             match_score_bin,
             match_name_last_year,
 
-            earliest_start_date_2024,
+            -- earliest_start_date_2024,
             website_last_year,
             zip_code_last_year,
             state_code_last_year,

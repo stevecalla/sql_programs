@@ -2,7 +2,7 @@ import os
 import sys
 import pandas as pd
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date
 
 from directory_utilities import get_output_path, archive_prior_output, parse_args, get_month_info
 
@@ -19,11 +19,27 @@ from export_to_excel import export_to_excel
 
 # Dynamically set the years for YOY analysis
 # TODO: 2024 vs 2025
-this_year = datetime.now().year
-last_year = this_year - 1
+# this_year = datetime.now().year
+# last_year = this_year - 1
 # TODO: 2025 vs 2026
 # this_year = 2026
 # last_year = 2025
+
+# Dynamically set the years for YOY analysis
+today = date.today()
+cutoff = date(today.year, 10, 15)  # Oct 15 of the current year
+
+if today < cutoff:
+    # 1/1 through 10/14  → use CURRENT and PRIOR year
+    this_year = today.year
+    last_year = today.year - 1
+else:
+    # 10/15 through 12/31 → use NEXT and CURRENT year
+    this_year = today.year + 1
+    last_year = today.year
+
+print("this_year:", this_year)
+print("last_year:", last_year)
 
 print(">>> Starting main.py", flush=True)
 

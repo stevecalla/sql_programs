@@ -1,5 +1,5 @@
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 
 from zoneinfo import ZoneInfo  # Python 3.9+
 local_tz = ZoneInfo("America/Denver")  # Or your desired local time zone
@@ -13,12 +13,25 @@ def group_clean_data(df):
     """
     
     # Dynamically set the years for YOY analysis
-    # TODO:
+    # TODO: 2024 vs 2025
     # this_year = datetime.now().year
     # last_year = this_year - 1
-    # TODO:
-    this_year = 2026
-    last_year = 2025
+    # TODO: 2025 vs 2026
+    # this_year = 2026
+    # last_year = 2025
+
+    # Dynamically set the years for YOY analysis
+    today = date.today()
+    cutoff = date(today.year, 10, 15)  # Oct 15 of the current year
+
+    if today < cutoff:
+        # 1/1 through 10/14  → use CURRENT and PRIOR year
+        this_year = today.year
+        last_year = today.year - 1
+    else:
+        # 10/15 through 12/31 → use NEXT and CURRENT year
+        this_year = today.year + 1
+        last_year = today.year
 
     # --- Adjust RaceDate if blank ---
     # Replace RaceDate with StartDate if RaceDate is missing or an empty string.
