@@ -9,11 +9,8 @@ const { rev_recognition_base_data_schema } = require('../google_cloud/schemas/sc
 
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
-// EXECUTE LOAD BIQ QUERY
+// EXECUTE LOAD BIG QUERY
 async function execute_load_big_query_recognition_base_data() {
-
-    
-  console.log('hello 2');
 
     runTimer(`load_bigquery`);
 
