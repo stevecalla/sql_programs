@@ -33,7 +33,7 @@ async function execute_create_recognition_base_data() {
 
   // VARIABLES
   let QUERY_OPTIONS = {
-    ends_mp: '2024-01-01',
+    ends_mp: '2025-01-01', // originally 2024-01-01 but changed to 2025-01-01 12/27/25 due to BigQuery costs
     is_create_table: true,
   };
   
