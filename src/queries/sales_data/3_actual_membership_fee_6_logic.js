@@ -182,6 +182,7 @@ const query_actual_membership_fee_6_logic = `
             END
         ) AS max_membership_fee_6,
         COUNT(mp.purchased_on)
+
     FROM koz_acception AS ka
         LEFT JOIN membership_applications AS ma ON ka.id_membership_periods = ma.membership_period_id
         LEFT JOIN membership_periods AS mp ON ka.id_membership_periods = mp.id
@@ -197,7 +198,9 @@ const query_actual_membership_fee_6_logic = `
             FROM events 
             WHERE sanctioning_event_id IN (310118,310159,310009,310187,310210,310248,310348,310278,310317,310323,310354,310714,310372,310356,310418,310357,310446,310408,310742,310419,310404,310420,310473,310424,310458,310507,310551,310552,310618,310536,310682,310603,310554,310704,310529,310725,310726,310762,310506,310970,310931,311092,350152,351065,350971,350406,350706,350720,350930,311684,311683,311682,350978,350536,350496,350410,350557,350363,350150,350177,311625,311599,350758,310542)
         ) evbu ON evbu.event_id = e.id
-        /* END EP CHANGES 2/27/25 */
+        /* END Eric Passe CHANGES 2/27/25 */
     
     GROUP BY ka.id_membership_periods
 `;
+
+module.exports = { query_actual_membership_fee_6_logic };

@@ -69,7 +69,8 @@ function query_get_sales_data(query_membership_category_logic, year, start_date,
       -- RETURN ALL RECORDS
       -- SELECT * FROM append_all_fields -- THIS IS THE DEFAULT
 
-      SELECT *
+      SELECT 
+         *
       FROM append_all_fields
       ORDER BY id_membership_periods_sa
 
