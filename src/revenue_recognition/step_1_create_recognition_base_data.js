@@ -24,18 +24,12 @@ async function get_src_connection() {
   return mysql.createConnection(cfg);
 }
 
-async function execute_create_recognition_base_data() {
+async function execute_create_recognition_base_data(QUERY_OPTIONS) {
   let BATCH_SIZE = 500;
   let TABLE_NAME = "";
   let CREATE_TABLE_QUERY = "";
   let GET_DATA_QUERY = "";
   const is_not_test = true;
-
-  // VARIABLES
-  let QUERY_OPTIONS = {
-    ends_mp: '2025-01-01', // originally 2024-01-01 but changed to 2025-01-01 12/27/25 due to BigQuery costs
-    is_create_table: true,
-  };
   
   // Step 1: Create and populate the profile IDs table
   // NOTE: only run is_not_test === true

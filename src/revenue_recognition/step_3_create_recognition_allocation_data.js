@@ -9,19 +9,13 @@ const { step_3_query_rev_recognition_allocation_data } = require('../queries/rev
 // TRANSFER FUNCTION
 const { execute_transfer_data_between_tables} = require('../../utilities/transfer_local_data_between_local_tables/1_transfer_data_between_local_tables')
 
-async function execute_create_recognition_allocation_data() {
+async function execute_create_recognition_allocation_data(QUERY_OPTIONS) {
   const BATCH_SIZE   = 500;
   const TABLE_NAME   = 'rev_recognition_allocation_data';
 
   // GET QUERIES
   const CREATE_TABLE_QUERY = await query_create_rev_recognition_allocation_table(TABLE_NAME);
   const GET_DATA_QUERY = step_3_query_rev_recognition_allocation_data;
-
-  // VARIABLES
-  const QUERY_OPTIONS = {
-    ends_mp: '2025-01-01',
-    is_create_table: true, // is used to control loops in 1_transfer_data_betwen_local_tables
-  };
 
   // CREATE TABLE & GET / TRANSFER DATA
   const result = await execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS);
