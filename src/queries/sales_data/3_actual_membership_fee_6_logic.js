@@ -36,8 +36,9 @@ const query_actual_membership_fee_6_logic = `
         MAX(
             CASE
                 WHEN mp.terminated_on IS NOT NULL THEN 0
-                -- WHEN event id = the one giving us $0 and the amount = $0 then 14
-                WHEN e.id IN (32774, 32775) AND ma.membership_type_id IN (115) THEN 14 -- Tri for Cure, added 2/4/25, race director will be fulfilling the actual paymen at a later date TODO: ADD THIS TO R SCRIPT, including event join below
+
+                WHEN e.id IN (32774, 32775) AND ma.membership_type_id IN (115) THEN 14 -- Tri for Cure, added 2/4/25, race director will be fulfilling the actual paymen at a later date
+
         -- Section 1: Pulls from order_products. This currently only contains memberships purchased through the website.
                 WHEN op.cart_label IS NOT NULL AND ((op.amount_per - op.discount - op.amount_refunded)  > 0) THEN (op.amount_per - op.discount - op.amount_refunded)
                 WHEN op.cart_label IS NOT NULL AND ((op.amount_per - op.discount - op.amount_refunded)  <= 0) THEN 0
@@ -57,6 +58,7 @@ const query_actual_membership_fee_6_logic = `
                 WHEN rama.price_paid IN (53.38)     THEN 50
                 WHEN rama.price_paid IN (64.05)     THEN 60
                 WHEN rama.price_paid IN (105.68)    THEN 99
+
                 WHEN rama.price_paid BETWEEN 9.36 AND 9.86      THEN 9 -- JAN2025CHANGE $0.25 on either side of expected value based on 6.75% service fee
                 WHEN rama.price_paid BETWEEN 14.70 AND 14.95    THEN 14 -- JAN2025CHANGE Needed to limit upper due to overlapping with previous $15
                 WHEN rama.price_paid BETWEEN 22.17 AND 22.67    THEN 21 -- JAN2025CHANGE $0.25 on either side of expected value based on 6.75% service fee
@@ -64,6 +66,7 @@ const query_actual_membership_fee_6_logic = `
                 WHEN rama.price_paid BETWEEN 68.07 AND 68.57    THEN 64 -- JAN2025CHANGE $0.25 on either side of expected value based on 6.75% service fee
                 WHEN rama.price_paid BETWEEN 175.89 AND 176.39  THEN 165 -- JAN2025CHANGE $0.25 on either side of expected value based on 6.75% service fee
                 WHEN rama.price_paid IS NOT NULL    THEN rama.price_paid
+
                 WHEN mp.origin_flag = 'admin_bulk_uploader' AND ma.payment_type = 'ironman-ticketsocket' AND mp.membership_type_id IN (115) THEN 23
                 WHEN mp.origin_flag = 'admin_bulk_uploader' AND ma.payment_type = 'ironman-ticketsocket' AND mp.membership_type_id IN (112) THEN 60
                 WHEN mp.origin_flag = 'admin_bulk_uploader' AND ma.payment_type = 'ironman-ticketsocket' AND mp.membership_type_id IN (113) THEN 99
@@ -93,35 +96,49 @@ const query_actual_membership_fee_6_logic = `
                         WHEN ma.payment_type LIKE '%stripe%' THEN 'coach_recert' -- 2024 forward
                         ELSE NULL
                     END IS NULL THEN 0
+
                 WHEN mp.membership_type_id IN (2, 52, 65, 70, 73, 91, 93, 96, 98) THEN 100 -- 2year
                 WHEN mp.membership_type_id IN (3, 66, 68, 85, 89, 99, 119) AND mp.purchased_on < '2024-06-04 12:00:00' THEN 135 -- 3year
                 WHEN mp.membership_type_id IN (3, 66, 68, 85, 89, 99, 119) THEN 180 -- 3year
+
                 WHEN mp.membership_type_id IN (74, 103) THEN 1000 -- lifetime
+
                 WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100) AND ma.event_id IN (30785, 30768, 30770) THEN 0 -- one-day; //these events were comped
+
                 WHEN ka.is_koz_acception IN (1) AND mp.membership_type_id IN (4, 51, 54, 61, 94) THEN 10 -- youth = youth annual; 'KOZ Acception' = 'KOZ'
                 WHEN ka.is_koz_acception THEN 15 -- 'KOZ Acception' = 'KOZ'
+
                 WHEN mp.membership_type_id IN (4, 51, 54, 61, 94) THEN 10 -- youth = youth annual
+
                 WHEN mp.membership_type_id IN (112) AND mp.purchased_on < '2025-02-03 00:00:00' THEN 60 -- silver JAN2025CHANGE Added date logic
                 WHEN mp.membership_type_id IN (113) AND mp.purchased_on < '2025-02-03 00:00:00' THEN 99 -- gold JAN2025CHANGE Added date logic
                 WHEN mp.membership_type_id IN (115) AND mp.purchased_on < '2025-02-03 00:00:00' THEN 23 -- bronze JAN2025CHANGE Added date logic
+
                 WHEN mp.membership_type_id IN (114) THEN 400 -- platinum team usa
                 WHEN mp.membership_type_id IN (117) THEN 400 -- platinum foundation
+
                 WHEN ma.membership_type_id = 118 THEN 0 -- bronze
+
                 WHEN mp.membership_type_id IN (107) AND mp.purchased_on >= '2024-01-16 09:00:00' THEN 30 -- youth premier
                 WHEN mp.membership_type_id IN (55) AND mp.purchased_on >= '2024-01-16 09:00:00' THEN 40 -- young adult
+
                 WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100) AND mp.purchased_on >= '2024-01-16 09:00:00' THEN 23  -- one day
                 WHEN mp.membership_type_id IN (1, 60, 62, 64, 67, 71, 75, 104) AND mp.purchased_on >= '2024-01-16 09:00:00' THEN 60 -- 1year
                 WHEN mp.membership_type_id IN (83, 84, 86, 87, 88, 90, 102) AND mp.purchased_on >= '2023-11-01 09:00:00' THEN 60 -- elite
+
                 WHEN mp.membership_type_id IN (107) THEN 25 -- youth premier
                 WHEN mp.membership_type_id IN (55) THEN 36 -- young adult
+
                 WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100) THEN 15 -- one day
                 WHEN mp.membership_type_id IN (1, 60, 62, 64, 67, 71, 75, 104) THEN 50 -- 1 year
                 WHEN mp.membership_type_id IN (83, 84, 86, 87, 88, 90, 102) THEN 50 -- elite
+
                 -- Begin Jan 2025 Section (Backstop)
                 WHEN mp.membership_type_id = 112 AND mp.purchased_on >= '2025-02-03 00:00:00' THEN 64 -- JAN2025CHANGE Added in case we get some memberships coming through this far (likely bulk upload)
                 WHEN mp.membership_type_id = 119 AND mp.purchased_on >= '2025-02-03 00:00:00' THEN 165 -- JAN2025CHANGE Added in case we get some memberships coming through this far (likely bulk upload)
                 WHEN mp.membership_type_id IN (115) AND mp.purchased_on >= '2025-02-03 00:00:00' THEN 28 -- JAN2025CHANGE Added in case we get some memberships coming through this far (likely bulk upload)
                 -- End Jan 2025 Section
+                
                 ELSE 0
             END
         ) AS max_membership_fee_6,
