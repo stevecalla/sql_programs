@@ -5,15 +5,32 @@ function step_1_sales_year_over_year_data() {
     return `-- STEP #1 = CREATE YEAR OVER YEAR TABLE
     DROP TABLE IF EXISTS sales_data_year_over_year;
 
-    SET @current_year_date_today = CURDATE();
-    -- SET @current_year_date_today = '2025-04-17';
+    SET @current_year_date_today = DATE('2026-01-01'); -- = CURDATE();
+	SET @current_year_date_yesterday = DATE_SUB(@current_year_date_today, INTERVAL 1 DAY);
+    
+    SET @current_year = 2025; -- YEAR(@current_year_date_today);
 
-    SET @current_year_date_yesterday = @current_year_date_today - INTERVAL 1 DAY;
-    SET @current_year = YEAR(@current_year_date_today);
+	SET @prior_year_date_today = DATE_SUB(@current_year_date_today, INTERVAL 1 YEAR);
+	SET @prior_year_date_yesterday = DATE_SUB(@prior_year_date_today, INTERVAL 1 DAY);
+    
+    SET @prior_year = 2024; -- YEAR(@prior_year_date_today);
 
-    SET @prior_year_date_today = @current_year_date_today - INTERVAL 1 YEAR;
-    SET @prior_year_date_yesterday = @prior_year_date_today - INTERVAL 1 DAY;
-    SET @prior_year = YEAR(@prior_year_date_today);
+    -- GET CURRENT DATE IN MTN (MST OR MDT) & UTC
+    SET @created_at_mtn = (         
+        SELECT CASE 
+            WHEN UTC_TIMESTAMP() >= DATE_ADD(
+                    DATE_ADD(CONCAT(YEAR(UTC_TIMESTAMP()), '-03-01'),
+                        INTERVAL ((7 - DAYOFWEEK(CONCAT(YEAR(UTC_TIMESTAMP()), '-03-01')) + 1) % 7 + 7) DAY),
+                    INTERVAL 2 HOUR)
+            AND UTC_TIMESTAMP() < DATE_ADD(
+                    DATE_ADD(CONCAT(YEAR(UTC_TIMESTAMP()), '-11-01'),
+                        INTERVAL ((7 - DAYOFWEEK(CONCAT(YEAR(UTC_TIMESTAMP()), '-11-01')) + 1) % 7) DAY),
+                    INTERVAL 2 HOUR)
+            THEN DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL -6 HOUR), '%Y-%m-%d %H:%i:%s')
+            ELSE DATE_FORMAT(DATE_ADD(UTC_TIMESTAMP(), INTERVAL -7 HOUR), '%Y-%m-%d %H:%i:%s')
+            END
+    );
+    SET @created_at_utc = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s');
 
     CREATE TABLE sales_data_year_over_year AS
         WITH all_data AS (
@@ -179,9 +196,9 @@ function step_1_sales_year_over_year_data() {
                         (COALESCE(SUM(prior_revenue), 0) / NULLIF(COALESCE(SUM(prior_units), 0), 0))
                     ) / (COALESCE(SUM(prior_revenue), 0) / NULLIF(COALESCE(SUM(prior_units), 0), 0)) * 100
                 END AS rev_per_unit_diff_pct,
-
-                DATE_FORMAT(DATE_ADD(NOW(), INTERVAL -6 HOUR), '%Y-%m-%d') AS created_at_mtn,
-                DATE_FORMAT(NOW(), '%Y-%m-%d') AS created_at_utc
+                
+                @created_at_mtn AS created_at_mtn,
+                @created_at_utc AS created_at_utc
                 
             FROM all_data
             GROUP BY 
