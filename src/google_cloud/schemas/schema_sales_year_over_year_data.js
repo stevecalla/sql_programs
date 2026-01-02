@@ -189,19 +189,21 @@ const members_sales_year_over_year_schema = [
         "description": "The percentage difference in revenue per unit between the current and prior years.",
         "fields": []
     },
+
+    // Created At (Timezone Variants)
     {
-        "name": "created_at_mtn",
-        "mode": "NULLABLE",
-        "type": "DATE",
-        "description": "The creation date in Mountain Time (MTN) in YYYY-MM-DD format.",
-        "fields": []
+        name: "created_at_mtn",
+        mode: "NULLABLE",
+        type: "DATETIME",
+        description: "Created at timestamp in Mountain Time",
+        fields: []
     },
     {
-        "name": "created_at_utc",
-        "mode": "NULLABLE",
-        "type": "DATE",
-        "description": "The creation date in UTC in YYYY-MM-DD format.",
-        "fields": []
+        name: "created_at_utc",
+        mode: "NULLABLE",
+        type: "DATETIME",
+        description: "Created at timestamp in UTC",
+        fields: []
     }
 ];
 

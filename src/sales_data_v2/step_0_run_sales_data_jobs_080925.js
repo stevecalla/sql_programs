@@ -27,10 +27,10 @@ const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 const run_step_1  = true; // transfer sales data from usat vapor to local db
-const run_step_1a  = true; // alter price for ticket socket should be $28 but shows as $23
+const run_step_1a = true; // alter price for ticket socket should be $28 but shows as $23
 
-const run_step_1b  = true; // execute_transfer_deleted_profiles_to_local_parallel
-const run_step_1c  = true; // execute_alter_drop_deleted_profiles
+const run_step_1b = true; // execute_transfer_deleted_profiles_to_local_parallel
+const run_step_1c = true; // execute_alter_drop_deleted_profiles
 
 const run_step_2a = true; // load region table
 
