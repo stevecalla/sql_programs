@@ -2,7 +2,8 @@ const { step_1_sales_year_over_year_data } = require('./step_1_get_sales_year_ov
 
 async function query_step_0_year_over_year_data_master_logic() {
     const query_list = [
-        step_1_sales_year_over_year_data,
+        step_1_sales_year_over_year_data, // 2025 vs 2024
+        step_1_sales_year_over_year_data, // 2026 vs 2025
     ]
     return query_list;
 }

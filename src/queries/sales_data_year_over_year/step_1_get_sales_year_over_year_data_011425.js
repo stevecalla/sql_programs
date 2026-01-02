@@ -1,19 +1,22 @@
 // SOURCE:
 // C:\Users\calla\development\usat\sql_code\6g_year_over_year_metrics\discovery_year_over_year_common_date_011425.sql
 
-function step_1_sales_year_over_year_data() {
-    return `-- STEP #1 = CREATE YEAR OVER YEAR TABLE
-    DROP TABLE IF EXISTS sales_data_year_over_year;
+function step_1_sales_year_over_year_data(options) {
 
-    SET @current_year_date_today = DATE('2026-01-01'); -- = CURDATE();
+    const { table_name, current_year, current_year_date_today, prior_year } = options;
+
+    return `-- STEP #1 = CREATE YEAR OVER YEAR TABLE
+    DROP TABLE IF EXISTS ${table_name}; -- sales_data_year_over_year
+
+    SET @current_year_date_today = ${current_year_date_today}; -- DATE('2026-01-01'); -- = CURDATE();
 	SET @current_year_date_yesterday = DATE_SUB(@current_year_date_today, INTERVAL 1 DAY);
     
-    SET @current_year = 2025; -- YEAR(@current_year_date_today);
+    SET @current_year = ${current_year}; -- 2025 -- YEAR(@current_year_date_today);
 
 	SET @prior_year_date_today = DATE_SUB(@current_year_date_today, INTERVAL 1 YEAR);
 	SET @prior_year_date_yesterday = DATE_SUB(@prior_year_date_today, INTERVAL 1 DAY);
     
-    SET @prior_year = 2024; -- YEAR(@prior_year_date_today);
+    SET @prior_year = ${prior_year}; -- 2024 -- YEAR(@prior_year_date_today);
 
     -- GET CURRENT DATE IN MTN (MST OR MDT) & UTC
     SET @created_at_mtn = (         
@@ -32,7 +35,7 @@ function step_1_sales_year_over_year_data() {
     );
     SET @created_at_utc = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s');
 
-    CREATE TABLE sales_data_year_over_year AS
+    CREATE TABLE ${table_name} AS -- sales_data_year_over_year
         WITH all_data AS (
             SELECT
                 purchased_on_date_adjusted_mp AS current_year_date,
