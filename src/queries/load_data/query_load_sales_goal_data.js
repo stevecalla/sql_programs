@@ -16,14 +16,26 @@
   `;
 
   const transform_fields = `
-      -- CONVERTS '1969-01-13 00:00:00' TO '1969-01-13'
       created_at = CASE
-          WHEN @created_at IS NOT NULL AND @created_at != 'Invalid Date' THEN
-              STR_TO_DATE(@created_at, '%Y-%m-%d')
-          ELSE
-              NULL
+        WHEN @created_at IS NULL THEN NULL
+        WHEN TRIM(@created_at) = '' THEN NULL
+        WHEN LOWER(TRIM(@created_at)) IN ('null', 'invalid date') THEN NULL
+
+        -- If Excel exported a serial day number (e.g., 45658)
+        WHEN TRIM(@created_at) REGEXP '^[0-9]+(\\.[0-9]+)?$' THEN
+          DATE_ADD('1899-12-30', INTERVAL FLOOR(TRIM(@created_at)) DAY)
+
+        ELSE
+          COALESCE(
+            -- Excel 4-digit year: 1/3/2025
+            STR_TO_DATE(TRIM(@created_at), '%c/%e/%Y'),
+            -- Excel short year: 1/3/25
+            STR_TO_DATE(TRIM(@created_at), '%c/%e/%y'),
+            STR_TO_DATE(TRIM(@created_at), '%Y-%m-%d %H:%i:%s'),
+            STR_TO_DATE(TRIM(@created_at), '%Y-%m-%d')
+          )
       END
-  `;
+  `; 
 
   // "C:\ProgramData\MySQL\MySQL Server 8.0\Uploads\data\usat_sales_goal_data\2025_sales_model_010325_v7_big_query.csv"
   function query_load_sales_goal_data(filePath, table) {
