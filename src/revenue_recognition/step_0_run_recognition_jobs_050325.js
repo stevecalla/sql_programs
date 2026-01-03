@@ -73,10 +73,10 @@ async function execute_run_recognition_data_jobs() {
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
   const run_step_1 = true; // execute_create_recognition_base_data
-  const run_step_2 = false; // load recognition_base_data to BQ
+  const run_step_2 = true; // load recognition_base_data to BQ
 
   const run_step_3 = true; // execute_create_recognition_allocation_data
-  const run_step_4 = false; // load recognition_allocation_data to BQ
+  const run_step_4 = true; // load recognition_allocation_data to BQ
 
   // =============================
   // Resolve Mountain Time year + month reliably (works even if server is UTC)
@@ -149,7 +149,7 @@ async function execute_run_recognition_data_jobs() {
   return elapsedTime;
 }
 
-execute_run_recognition_data_jobs();
+// execute_run_recognition_data_jobs();
 
 module.exports = {
   execute_run_recognition_data_jobs,
