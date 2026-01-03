@@ -7,20 +7,35 @@ const { members_sales_year_over_year_schema } = require('../google_cloud/schemas
 
 // EXECUTE LOAD BIQ QUERY
 async function execute_load_big_query_sales_year_over_year_metrics() {
+
+    const table_name_2025 = "sales_data_year_over_year";
+    const table_name_2026 = "sales_data_year_over_year_2026";
+
     const options = [
         {
             fileName: 'sales_year_over_year_data',
-            query: (retrieval_batch_size, offset) => query_sales_year_over_year_data(retrieval_batch_size, offset),
+            query: (retrieval_batch_size, offset) => query_sales_year_over_year_data(retrieval_batch_size, offset, table_name_2025),
             tableId: "sales_year_over_year_data", // table name
+        },
+        {
+            fileName: 'sales_year_over_year_2026_data',
+            query: (retrieval_batch_size, offset) => query_sales_year_over_year_data(retrieval_batch_size, offset, table_name_2026),
+            tableId: "sales_year_over_year_2026_data", // table name
         }
     ];
 
-    const directoryName = `usat_bigquery_${options[0].fileName}`;
-    const datasetId = "membership_reporting"; // database name
-    const bucketName = 'membership-reporting';
-    const schema = members_sales_year_over_year_schema;
+    for (let i = 0; i < options.length; i++) {
 
-    await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
+        const directoryName = `usat_bigquery_${options[i].fileName}`;
+        const datasetId = "membership_reporting"; // database name
+        const bucketName = 'membership-reporting';
+        const schema = members_sales_year_over_year_schema;
+
+        // ✅ exactly one option, as the loader expects
+        const options_v2 = [options[i]];
+
+        await execute_load_data_to_bigquery(options_v2, datasetId, bucketName, schema, directoryName);
+    }
 
     return true;
 }
