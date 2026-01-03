@@ -1,4 +1,4 @@
-async function query_sales_year_over_year_data(batch_size = 10, offset = 0) {
+async function query_sales_year_over_year_data(batch_size = 10, offset = 0, table_name) {
     return `
         SELECT 
             DATE_FORMAT(common_purchased_on_date_adjusted, '%Y-%m-%d') AS common_purchased_on_date_adjusted, -- date '2024-02-12'
@@ -36,10 +36,15 @@ async function query_sales_year_over_year_data(batch_size = 10, offset = 0) {
             rev_per_unit_diff_abs,	
             rev_per_unit_diff_pct,	
 
-            DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn, -- date '2024-02-12'
-            DATE_FORMAT(created_at_utc, '%Y-%m-%d') AS created_at_utc -- date '2024-02-12'
+            -- TIMESTAMPS
+            created_at_mtn,
+            created_at_utc
 
-        FROM usat_sales_db.sales_data_year_over_year
+            -- DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn, -- date '2024-02-12'
+            -- DATE_FORMAT(created_at_utc, '%Y-%m-%d') AS created_at_utc -- date '2024-02-12'
+
+        -- FROM usat_sales_db.sales_data_year_over_year
+        FROM usat_sales_db.${table_name}
         ORDER BY common_purchased_on_date_adjusted
         LIMIT ${batch_size} OFFSET ${offset}
         -- LIMIT 100

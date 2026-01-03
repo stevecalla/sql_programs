@@ -75,11 +75,30 @@ async function execute_create_year_over_year_key_metrics() {
 
         console.log(query_list);
 
+        const options = [
+            {
+                // 2025
+                table_name: "sales_data_year_over_year",
+                current_year: 2025,
+                current_year_date_today: "DATE('2026-01-01')",
+                prior_year: 2024,
+            },
+            {
+                // current_year 2026
+                table_name: "sales_data_year_over_year_2026",
+                current_year: "YEAR(@current_year_date_today)",     // 2026
+                current_year_date_today: "CURDATE()",               // today
+                prior_year: "YEAR(@prior_year_date_today)",         // 2025
+            }
+        ];
+
         for (let i = 0; i < query_list.length; i++) {
 
             runTimer(`query_to_create_table`);
 
-            let current_query = query_list[i]();
+            let current_query = query_list[i](options[i]);
+            console.log(`query at ${i}`, current_query);
+
             const results = await execute_mysql_working_query(pool, db_name, current_query);
             
             console.log(`\nExecuted ${i} of ${number_of_queries} queries`);
