@@ -76,11 +76,13 @@ async function execute_create_actual_vs_goal_metrics() {
 
         console.log(query_list);
 
+        const options = [{ table_name: "sales_data_actual_v_goal", year: 2025,}];
+
         for (let i = 0; i < query_list.length; i++) {
 
             runTimer(`query_to_create_table`);
 
-            let current_query = query_list[i]();
+            let current_query = await query_list[i](options[i]);
             const results = await execute_mysql_working_query(pool, db_name, current_query);
             
             console.log(`\nExecuted ${i} of ${number_of_queries} queries`);

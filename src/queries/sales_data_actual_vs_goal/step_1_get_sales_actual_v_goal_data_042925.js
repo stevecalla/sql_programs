@@ -1,10 +1,18 @@
 // SOURCE:
 // C:\Users\calla\development\usat\sql_code\6h_actual_vs_goal_metrics\discovery_actual_vs_goal.sql
 
-function step_1_sales_actual_v_goal_data() {
+async function step_1_sales_actual_v_goal_data(options) {
+    // const table_name = "sales_data_actual_v_goal";
+    // const year = 2025;
+
+    const { table_name, year } = options;
+    console.log('1', options);
+    console.log('2', table_name);
+    console.log('3', year);
+
     return `
         -- CREATE ACTUAL VS GOAL DATA
-        DROP TABLE IF EXISTS sales_data_actual_v_goal;
+        DROP TABLE IF EXISTS ${table_name};
 
         -- GET CURRENT DATE IN MTN (MST OR MDT) & UTC
         SET @created_at_mtn = (         
@@ -23,7 +31,7 @@ function step_1_sales_actual_v_goal_data() {
         );
         SET @created_at_utc = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%d %H:%i:%s');
 
-        CREATE TABLE sales_data_actual_v_goal AS
+        CREATE TABLE ${table_name} AS
             WITH sales_actuals AS (
                 SELECT
                     MONTH(common_purchased_on_date_adjusted) AS month_actual,
@@ -93,6 +101,8 @@ function step_1_sales_actual_v_goal_data() {
                     IF(SUM(units_prior_year) = 0, 0, SUM(revenue_prior) / SUM(units_prior_year)) AS rev_per_unit_2024_actual
 
                 FROM sales_data_year_over_year AS sa
+                -- table only contains data from 2025 but if that changes this filter will be necessary
+                WHERE YEAR(common_purchased_on_date_adjusted) = ${year} 
                 GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
             ),
             sales_goals AS (
@@ -171,6 +181,7 @@ function step_1_sales_actual_v_goal_data() {
                     IF(SUM(units_2024) = 0, 0, SUM(revenue_2024) / SUM(units_2024)) AS rev_per_unit_2024_goal
 
                 FROM sales_goal_data AS sg
+                WHERE purchased_on_year_adjusted_mp = ${year}
                 GROUP BY 1, 2, 3, 4, 5, 6, 7
                 -- ORDER BY 1
 
@@ -213,6 +224,7 @@ function step_1_sales_actual_v_goal_data() {
                     0 AS rev_per_unit_2024_goal
 
                 FROM sales_goal_data
+                WHERE purchased_on_year_adjusted_mp = ${year}
                 GROUP BY 1, 2, 3, 4, 5, 6, 7
             )
             -- SELECT * FROM sales_actuals
