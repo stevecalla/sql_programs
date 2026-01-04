@@ -6,9 +6,6 @@ async function step_1_sales_actual_v_goal_data(options) {
     // const year = 2025;
 
     const { table_name, year } = options;
-    console.log('1', options);
-    console.log('2', table_name);
-    console.log('3', year);
 
     return `
         -- CREATE ACTUAL VS GOAL DATA
