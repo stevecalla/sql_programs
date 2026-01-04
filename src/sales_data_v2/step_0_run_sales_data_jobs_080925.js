@@ -26,22 +26,22 @@ const { execute_load_big_query_actual_vs_goal_metrics} = require('./step_6a_load
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-const run_step_1  = false; // transfer sales data from usat vapor to local db
-const run_step_1a = false; // alter price for ticket socket should be $28 but shows as $23
+const run_step_1  = true; // transfer sales data from usat vapor to local db
+const run_step_1a = true; // alter price for ticket socket should be $28 but shows as $23
 
-const run_step_1b = false; // execute_transfer_deleted_profiles_to_local_parallel
-const run_step_1c = false; // execute_alter_drop_deleted_profiles
+const run_step_1b = true; // execute_transfer_deleted_profiles_to_local_parallel
+const run_step_1c = true; // execute_alter_drop_deleted_profiles
 
-const run_step_2a = false; // load region table
+const run_step_2a = true; // load region table
 
-const run_step_3  = false; // create sales key metrics stats table
-const run_step_3a = false; // load sales key metrics stats to biqquery
+const run_step_3  = true; // create sales key metrics stats table
+const run_step_3a = true; // load sales key metrics stats to biqquery
 
-const run_step_4  = false; // create year-over-year common date table
-const run_step_4a = false; // load year-over-year common date table
+const run_step_4  = true; // create year-over-year common date table
+const run_step_4a = true; // load year-over-year common date table
 
-const run_step_5  = false; // load sales goal data
-const run_step_5a = false; // load sales goals to bigquery
+const run_step_5  = true; // load sales goal data
+const run_step_5a = true; // load sales goals to bigquery
 
 const run_step_6  = true; // create actual vs goal data table
 const run_step_6a = true; // load actual vs goal to bigquery

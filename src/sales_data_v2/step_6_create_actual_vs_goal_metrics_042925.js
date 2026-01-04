@@ -74,7 +74,7 @@ async function execute_create_actual_vs_goal_metrics() {
         const query_list = await query_step_0_actual_v_goal_data_master_logic();
         const number_of_queries = query_list.length;
 
-        console.log(query_list);
+        // console.log(query_list);
 
         const options = [{ table_name: "sales_data_actual_v_goal", year: 2025,}];
 
