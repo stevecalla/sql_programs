@@ -30,11 +30,11 @@ async function execute_load_big_query_sales_year_over_year_metrics() {
         const datasetId = "membership_reporting"; // database name
         const bucketName = 'membership-reporting';
         const schema = members_sales_year_over_year_schema;
+        
+        // ✅ exactly one option, as the loader expects as array
+        const option_as_array = [options[i]];
 
-        // ✅ exactly one option, as the loader expects
-        const options_v2 = [options[i]];
-
-        await execute_load_data_to_bigquery(options_v2, datasetId, bucketName, schema, directoryName);
+        await execute_load_data_to_bigquery(option_as_array, datasetId, bucketName, schema, directoryName);
     }
 
     return true;
