@@ -36,30 +36,31 @@ async function query_revenue(type_list, category_list) {
                 0 AS is_ytd_row,
                 created_at_mtn,
 
-                -- 2025 GOAL
+                -- 2026 GOAL (as of 1/16/26... name using 2025 is actually 2026)
                 SUM(sales_rev_2025_goal) AS sales_rev_2025_goal,
                 SUM(sales_units_2025_goal) AS sales_units_2025_goal,
                 NULLIF(SUM(sales_rev_2025_goal), 0) / NULLIF(SUM(sales_units_2025_goal), 0) AS sales_rpu_2025_goal,
 
-                -- 2024 GOAL
+                -- 2025 GOAL (as of 1/16/26... name using 2024 is actually 2025)
                 SUM(sales_rev_2024_goal) AS sales_rev_2024_goal,
                 SUM(sales_units_2024_goal) AS sales_units_2024_goal,
                 NULLIF(SUM(sales_rev_2024_goal), 0) / NULLIF(SUM(sales_units_2024_goal), 0) AS sales_rpu_2024_goal,
 
-                -- 2025 ACTUAL
+                -- 2026 ACTUAL (as of 1/16/26... name using 2025 is actually 2026)
                 SUM(sales_rev_2025_actual) AS sales_rev_2025_actual,
                 SUM(sales_units_2025_actual) AS sales_units_2025_actual,
                 NULLIF(SUM(sales_rev_2025_actual), 0) / NULLIF(SUM(sales_units_2025_actual), 0) AS sales_rpu_2025_actual,
 
-                -- 2024 ACTUAL
+                -- 2025 ACTUAL (as of 1/16/26... name using 2024 is actually 2025)
                 SUM(sales_rev_2024_actual) AS sales_rev_2024_actual,
                 SUM(sales_units_2024_actual) AS sales_units_2024_actual,
                 NULLIF(SUM(sales_rev_2024_actual), 0) / NULLIF(SUM(sales_units_2024_actual), 0) AS sales_rpu_2024_actual
 
             -- FROM sales_data_actual_v_goal
-            FROM sales_data_actual_v_goal_2026
+            FROM sales_data_actual_v_goal
 
             WHERE 1 = 1
+                AND year_goal = 2026
                 AND is_year_to_date
                 ${type_where_clause}
                 ${category_where_clause}
@@ -95,8 +96,9 @@ async function query_revenue(type_list, category_list) {
                 SUM(sales_units_2024_actual) AS sales_units_2024_actual,
                 NULLIF(SUM(sales_rev_2024_actual), 0) / NULLIF(SUM(sales_units_2024_actual), 0) AS sales_rpu_2024_actual
 
-            FROM sales_data_actual_v_goal_2026
+            FROM sales_data_actual_v_goal
             WHERE 1 = 1
+                AND year_goal = 2026
                 AND is_current_month = 0 AND is_year_to_date = 1
                 ${type_where_clause}
                 ${category_where_clause}

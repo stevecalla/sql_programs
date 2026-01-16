@@ -10,24 +10,29 @@ const { members_sales_actual_vs_goal_schema } = require('../google_cloud/schemas
 // EXECUTE LOAD BIQ QUERY
 async function execute_load_big_query_actual_vs_goal_metrics() {
 
-    const table_name_2025 = "sales_data_actual_v_goal";
-    const table_name_2026 = "sales_data_actual_v_goal_2026";
+    const table_name = "sales_data_actual_v_goal";
+    // const table_name_2025 = "sales_data_actual_v_goal";
+    // const table_name_2026 = "sales_data_actual_v_goal_2026";
 
     const options = [
         {
             fileName: 'sales_actual_vs_goal_data',
-            query: (retrieval_batch_size, offset) => query_sales_actual_vs_goal_data(retrieval_batch_size, offset, table_name_2025),
+            query: (retrieval_batch_size, offset) => query_sales_actual_vs_goal_data(retrieval_batch_size, offset, table_name),
             tableId: "sales_actual_vs_goal_data", // table name
 
             // tableId: "sales_actual_vs_goal_data_test", // table name
         },
-        {
-            fileName: 'sales_actual_vs_goal_data_2026',
-            query: (retrieval_batch_size, offset) => query_sales_actual_vs_goal_data(retrieval_batch_size, offset, table_name_2026),
-            tableId: "sales_actual_vs_goal_data_2026", // table name
-
-            // tableId: "sales_actual_vs_goal_data_test", // table name
-        }
+        // DON'T NEED TO PUSH THESE TABLES BECAUSE THEY ARE COMBINED IN THE TABLE ABOVE
+        // {
+        //     fileName: 'sales_actual_vs_goal_data_2025',
+        //     query: (retrieval_batch_size, offset) => query_sales_actual_vs_goal_data(retrieval_batch_size, offset, table_name_2025),
+        //     tableId: "sales_actual_vs_goal_data_2025", // table name
+        // },
+        // {
+        //     fileName: 'sales_actual_vs_goal_data_2026',
+        //     query: (retrieval_batch_size, offset) => query_sales_actual_vs_goal_data(retrieval_batch_size, offset, table_name_2026),
+        //     tableId: "sales_actual_vs_goal_data_2026", // table name
+        // } 
     ];
 
     for (let i = 0; i < options.length; i++) {

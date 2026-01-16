@@ -293,8 +293,41 @@ async function step_1_sales_actual_v_goal_data(options) {
             ORDER BY month_goal, category_sort_order_actual
         ;
     `;
-}
+};
+
+async function step_2_query_join_sales_actual_vs_goal_2025_2026_tables(options) {
+
+    // console.log(options);
+
+    const { join_table_name } = options;
+
+    return `
+        -- DROP ACTUAL VS GOAL DATA
+        DROP TABLE IF EXISTS ${join_table_name};
+        
+        -- CREATE ACTUAL VS GOAL DATA
+        CREATE TABLE ${join_table_name} AS
+		    SELECT 2025 AS 'year_goal', sg25.* FROM sales_data_actual_v_goal_2025 AS sg25
+                UNION ALL
+		    SELECT 2026 AS 'year_goal', sg26.* FROM sales_data_actual_v_goal_2026 AS sg26
+        ;
+    `;
+};
+
+async function step_3_query_drop_table(options) {
+
+    // console.log(options);
+
+    const { table_name } = options;
+
+    return `
+        -- DROP ACTUAL VS GOAL DATA FOR 2025 & 2026
+        DROP TABLE IF EXISTS ${table_name};
+    `;
+};
 
 module.exports = {
     step_1_sales_actual_v_goal_data,
+    step_2_query_join_sales_actual_vs_goal_2025_2026_tables,
+    step_3_query_drop_table,
 }
