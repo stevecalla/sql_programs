@@ -1,6 +1,13 @@
 const members_sales_actual_vs_goal_schema = [
     // SALES GOAL DATA
     {
+      name: "year_goal",
+      type: "INTEGER",
+      mode: "NULLABLE",
+      description: "The goal year.",
+      fields: []
+    },
+    {
       name: "month_goal",
       type: "INTEGER",
       mode: "NULLABLE",

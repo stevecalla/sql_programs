@@ -2,6 +2,7 @@ async function query_sales_actual_vs_goal_data(batch_size = 10, offset = 0, from
     return `
         SELECT 
             -- SALES GOAL DATA
+            year_goal,
             month_goal,
 
             type_goal,
@@ -61,5 +62,5 @@ async function query_sales_actual_vs_goal_data(batch_size = 10, offset = 0, from
 };
 
 module.exports = {
-    query_sales_actual_vs_goal_data
+    query_sales_actual_vs_goal_data,
 }

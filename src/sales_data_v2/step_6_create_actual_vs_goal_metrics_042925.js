@@ -6,7 +6,7 @@ dotenv.config({ path: "../../.env" });
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { create_local_db_connection } = require('../../utilities/connectionLocalDB');
 
-const { query_step_0_actual_v_goal_data_master_logic} = require('../queries/sales_data_actual_vs_goal/step_0_get_sales_actual_v_goal_data_master_logic_042925')
+const { query_step_0_actual_v_goal_data_master_logic } = require('../queries/sales_data_actual_vs_goal/step_0_get_sales_actual_v_goal_data_master_logic_042925')
 
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
@@ -35,7 +35,7 @@ async function execute_mysql_working_query(pool, db_name, query) {
 
     return new Promise((resolve, reject) => {
         pool.query(`USE ${db_name};`, (queryError, results) => {
-            pool.query({sql: query,}, (queryError, results) => {
+            pool.query({ sql: query, }, (queryError, results) => {
 
                 const endTime = performance.now();
                 const elapsedTime = ((endTime - startTime) / 1_000).toFixed(2); //convert ms to sec
@@ -47,9 +47,19 @@ async function execute_mysql_working_query(pool, db_name, query) {
                 } else {
                     // console.table(results[1]);
                     // console.log(results[1]);
-                    console.log(`Query results: ${results[1].affectedRows}, Elapsed Time: ${elapsedTime} sec\n`);
+                    const affectedRows =
+                        results?.[1]?.affectedRows ??
+                        results?.[0]?.affectedRows;
 
-                    resolve(results[1].affectedRows);
+                    console.log(
+                        `Query results: ${affectedRows ?? "N/A"}, Elapsed Time: ${elapsedTime} sec\n`
+                    );
+
+                    // console.log(`Query results: ${results[1].affectedRows}, Elapsed Time: ${elapsedTime} sec\n`);
+
+                    resolve(affectedRows);
+
+                    // resolve(results[1].affectedRows);
                 }
             });
         });
@@ -69,38 +79,57 @@ async function execute_create_actual_vs_goal_metrics() {
         console.log(db_name);
 
         // STEP #1: ITERATE THRU EACH QUERY & EXECUTE
-            // EACH QUERY CONTAINS A TABLE DROP, TABLE CREATE, & INDEXES (IF APPLICABLE)
+        // EACH QUERY CONTAINS A TABLE DROP, TABLE CREATE, & INDEXES (IF APPLICABLE)
         // const query_list = await query_step_0_year_over_year_data_master_logic();
         const query_list = await query_step_0_actual_v_goal_data_master_logic();
         const number_of_queries = query_list.length;
 
         // console.log(query_list);
 
+        const join_table_name = "sales_data_actual_v_goal";
+        const table_name_2025 = "sales_data_actual_v_goal_2025";
+        const table_name_2026 = "sales_data_actual_v_goal_2026";
+
         const options = [
-            { 
+            {
+                purpose: "step 1a: create 2025 sales actuals vs goal table",
+                year: 2025,
+                table_name: table_name_2025, // create this table
+                year_over_year_table: "sales_data_year_over_year", // 2025 data
+            },
+            {
+                purpose: "step 1b: create 2026 sales actuals vs goal table",
                 year: 2026,
-                table_name: "sales_data_actual_v_goal_2026", // create this table
+                table_name: table_name_2026, // create this table
                 year_over_year_table: "sales_data_year_over_year_2026", // 2025 data
             },
-            { 
-                year: 2025,
-                table_name: "sales_data_actual_v_goal", // create this table
-                year_over_year_table: "sales_data_year_over_year", // 2025 data
-            }
+            {
+                purpose: "step 2: join the 2025 & 2026 sales actual vs goal tables",
+                join_table_name: join_table_name,
+            },
+            {
+                purpose: "step 3a: drop 2025 table; not needed after join in step 2",
+                table_name: table_name_2025,
+            },
+            {
+                purpose: "step 3b: drop 2026 table; not needed after join in step 2",
+                table_name: table_name_2026,
+            },
         ];
 
+        // STEP #1: CREATE SALES DATA VS GOAL DATA FOR 2025 & 2026
         for (let i = 0; i < query_list.length; i++) {
 
             runTimer(`query_to_create_table`);
 
             let current_query = await query_list[i](options[i]);
             const results = await execute_mysql_working_query(pool, db_name, current_query);
-            
+
             console.log(`\nExecuted ${i} of ${number_of_queries} queries`);
             console.log(`Rows affected/added ${results}\n`);
 
             stopTimer(`query_to_create_table`);
-        }
+        };
 
         // STEP #5a: Log results
         console.log('STEP #1: All queries executed successfully.');
