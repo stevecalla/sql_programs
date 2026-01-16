@@ -55,7 +55,10 @@ async function query_revenue(type_list, category_list) {
                 SUM(sales_rev_2024_actual) AS sales_rev_2024_actual,
                 SUM(sales_units_2024_actual) AS sales_units_2024_actual,
                 NULLIF(SUM(sales_rev_2024_actual), 0) / NULLIF(SUM(sales_units_2024_actual), 0) AS sales_rpu_2024_actual
-            FROM sales_data_actual_v_goal
+
+            -- FROM sales_data_actual_v_goal
+            FROM sales_data_actual_v_goal_2026
+
             WHERE 1 = 1
                 AND is_year_to_date
                 ${type_where_clause}
@@ -92,7 +95,7 @@ async function query_revenue(type_list, category_list) {
                 SUM(sales_units_2024_actual) AS sales_units_2024_actual,
                 NULLIF(SUM(sales_rev_2024_actual), 0) / NULLIF(SUM(sales_units_2024_actual), 0) AS sales_rpu_2024_actual
 
-            FROM sales_data_actual_v_goal
+            FROM sales_data_actual_v_goal_2026
             WHERE 1 = 1
                 AND is_current_month = 0 AND is_year_to_date = 1
                 ${type_where_clause}

@@ -4,8 +4,9 @@
 async function step_1_sales_actual_v_goal_data(options) {
     // const table_name = "sales_data_actual_v_goal";
     // const year = 2025;
+    // console.log(options);
 
-    const { table_name, year } = options;
+    const { year, table_name, year_over_year_table } = options;
 
     return `
         -- CREATE ACTUAL VS GOAL DATA
@@ -97,8 +98,12 @@ async function step_1_sales_actual_v_goal_data(options) {
                     IF(SUM(units_current_year) = 0, 0, SUM(revenue_current) / SUM(units_current_year)) AS rev_per_unit_2025_actual,
                     IF(SUM(units_prior_year) = 0, 0, SUM(revenue_prior) / SUM(units_prior_year)) AS rev_per_unit_2024_actual
 
-                FROM sales_data_year_over_year AS sa
-                -- table only contains data from 2025 but if that changes this filter will be necessary
+                -- FROM sales_data_year_over_year AS sa
+                FROM ${year_over_year_table} AS sa
+
+                -- table only contains data from 2025 or 2026 basedon the FROM table year_over_year_table variable
+                -- as of 1/15/26, there is a separate table for 2025 and 2026 sales_data_year_over_year
+                -- technically this where statement isn't necessary but if table content includes more years it will be
                 WHERE YEAR(common_purchased_on_date_adjusted) = ${year} 
                 GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
             ),
@@ -111,7 +116,8 @@ async function step_1_sales_actual_v_goal_data(options) {
                         WHEN purchased_on_month_adjusted_mp IN (7,8,9) THEN 3
                         ELSE 4
                     END as quarter_goal,
-                    "2025" AS year_goal,
+                    -- "2025" AS year_goal,
+                    ${year} AS year_goal,
 
                     -- is_current_month: 1 if the month and year match current date
                     CASE 
@@ -167,7 +173,6 @@ async function step_1_sales_actual_v_goal_data(options) {
                         ELSE 999
                     END AS category_sort_order_goal,
 
-                    
                     -- METRICS
                     SUM(sales_revenue) AS sales_rev_2025_goal,
                     SUM(revenue_2024) AS sales_rev_2024_goal,
@@ -177,7 +182,7 @@ async function step_1_sales_actual_v_goal_data(options) {
                     IF(SUM(sales_units) = 0, 0, SUM(sales_revenue) / SUM(sales_units)) AS rev_per_unit_2025_goal,
                     IF(SUM(units_2024) = 0, 0, SUM(revenue_2024) / SUM(units_2024)) AS rev_per_unit_2024_goal
 
-                FROM sales_goal_data AS sg
+                FROM sales_goal_data AS sg -- table includes both 2025 & 2026
                 WHERE purchased_on_year_adjusted_mp = ${year}
                 GROUP BY 1, 2, 3, 4, 5, 6, 7
                 -- ORDER BY 1
@@ -193,7 +198,7 @@ async function step_1_sales_actual_v_goal_data(options) {
                         WHEN purchased_on_month_adjusted_mp IN (7,8,9) THEN 3
                         ELSE 4
                     END AS quarter_goal,
-                    "2025" AS year_goal,
+                    ${year} AS year_goal,
 
                     -- is_current_month: 1 if the month and year match current date
                     CASE 
@@ -220,11 +225,11 @@ async function step_1_sales_actual_v_goal_data(options) {
                     0 AS rev_per_unit_2025_goal,
                     0 AS rev_per_unit_2024_goal
 
-                FROM sales_goal_data
+                FROM sales_goal_data -- table includes both 2025 & 2026
                 WHERE purchased_on_year_adjusted_mp = ${year}
                 GROUP BY 1, 2, 3, 4, 5, 6, 7
             )
-            -- SELECT * FROM sales_actuals
+            -- SELECT * FROM sales_actuals;
             SELECT
                 -- SALES GOAL DATA
                 sg.month_goal,

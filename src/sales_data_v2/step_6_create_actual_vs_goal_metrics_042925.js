@@ -76,7 +76,18 @@ async function execute_create_actual_vs_goal_metrics() {
 
         // console.log(query_list);
 
-        const options = [{ table_name: "sales_data_actual_v_goal", year: 2025,}];
+        const options = [
+            { 
+                year: 2026,
+                table_name: "sales_data_actual_v_goal_2026", // create this table
+                year_over_year_table: "sales_data_year_over_year_2026", // 2025 data
+            },
+            { 
+                year: 2025,
+                table_name: "sales_data_actual_v_goal", // create this table
+                year_over_year_table: "sales_data_year_over_year", // 2025 data
+            }
+        ];
 
         for (let i = 0; i < query_list.length; i++) {
 
