@@ -70,3 +70,5 @@ const query_new_member_category_6_logic = `
 
     GROUP BY mf.id_membership_periods
 `;
+
+module.exports = { query_new_member_category_6_logic };
