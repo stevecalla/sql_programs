@@ -181,13 +181,18 @@ async function process_stream_parallel(
   let buffer = [];
   let rows_processed = 0;
 
+  const query_get_data = query_get_sales_data(
+      query, 
+      start_year_mtn, 
+      start_date_mtn, 
+      end_date_mtn, 
+      membership_period_ends, 
+      update_mode, 
+      updated_at_date_mtn
+  );
+  
   const stream = src
-    .query(
-      query_get_sales_data(
-        query, start_year_mtn, start_date_mtn, end_date_mtn,
-        membership_period_ends, update_mode, updated_at_date_mtn
-      )
-    )
+    .query(query_get_data)
     .stream();
 
   console.log('Starting to stream rows...');
