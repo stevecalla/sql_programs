@@ -8,7 +8,7 @@ const { query_membership_base_data } = require('../google_cloud/queries/query_me
 const { membership_base_metrics_schema } = require('../google_cloud/schemas/schema_membership_base_data');
 
 const { query_membership_detail_data } = require('../google_cloud/queries/query_membership_detail_data');
-const { membership_detail_metrics_schema } = require('../google_cloud/schemas/schema_membership_detail_data');
+const { membership_detail_data_schema } = require('../google_cloud/schemas/schema_membership_detail_data');
 
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
@@ -33,7 +33,7 @@ async function main() {
       fileName: 'membership_detail_data',
       query: (retrieval_batch_size, offset) => query_membership_detail_data(retrieval_batch_size, offset),
       tableId: 'membership_detail_data',
-      schema: membership_detail_metrics_schema,
+      schema: membership_detail_data_schema,
 
       // fileName: 'membership_detail_datav2',
       // tableId: "membership_detail_data_v2",
