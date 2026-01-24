@@ -100,9 +100,9 @@ async function main() {
   return elapsedTime;
 }
 
-if (require.main === module) {
-  main();
-}
+// if (require.main === module) {
+//   main();
+// }
 
 module.exports = {
   execute_run_membership_data_jobs: main,

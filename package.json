@@ -10,7 +10,7 @@
     "pm2_restart_all": "npx pm2 restart all",
     "pm2_logs_all": "npx pm2 logs all",
     "pm2_delete_all": "npx pm2 delete all",
-    "pm2_run_all_servers": "echo '▶ (1 of 10) Starting pm2_start_slack' && npm run pm2_start_slack && echo '▶ (2 of 10) Starting pm2_start_sales_2200' && npm run pm2_start_sales_2200 && echo '▶ (3 of 10) Starting pm2_start_race_2200' && npm run pm2_start_race_2200 && echo '▶ (4 of 10) Starting pm2_start_recognition_2200' && npm run pm2_start_recognition_2200 && echo '▶ (5 of 10) Starting pm2_start_events_2200' && npm run pm2_start_events_2200 && echo '▶ (6 of 10) Starting pm2_start_revenue_2200' && npm run pm2_start_revenue_2200 && echo '▶ (7 of 10) Starting pm2_start_slack_events_2200' && npm run pm2_start_slack_events_2200 && echo '▶ (8 of 10) Starting pm2_start_slack_races_2200' && npm run pm2_start_slack_races_2200 && echo '▶ (9 of 10) Starting pm2_start_slack_news_2200' && npm run pm2_start_slack_news_2200 && echo '▶ (10 of 10) Starting pm2_start_org_chart_2200' && npm run pm2_start_org_chart_2200",
+    "pm2_run_all_servers": "echo '▶ (1 of 11) Starting pm2_start_slack' && npm run pm2_start_slack && echo '▶ (2 of 11) Starting pm2_start_sales_2200' && npm run pm2_start_sales_2200 && echo '▶ (3 of 11) Starting pm2_start_race_2200' && npm run pm2_start_race_2200 && echo '▶ (4 of 11) Starting pm2_start_recognition_2200' && npm run pm2_start_recognition_2200 && echo '▶ (5 of 11) Starting pm2_start_events_2200' && npm run pm2_start_events_2200 && echo '▶ (6 of 11) Starting pm2_start_revenue_2200' && npm run pm2_start_revenue_2200 && echo '▶ (7 of 11) Starting pm2_start_slack_events_2200' && npm run pm2_start_slack_events_2200 && echo '▶ (8 of 11) Starting pm2_start_slack_races_2200' && npm run pm2_start_slack_races_2200 && echo '▶ (9 of 11) Starting pm2_start_slack_news_2200' && npm run pm2_start_slack_news_2200 && echo '▶ (10 of 11) Starting pm2_start_org_chart_2200' && npm run pm2_start_org_chart_2200 && echo '▶ (11 of 11) Starting pm2_start_membership_base_2200' && npm run pm2_start_membership_base_2200",
     "get_date": "sh -c 'date \"+%Y-%m-%d %H:%M:%S\"'",
 
     "pm2_start_slack": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack.js --name usat_slack --no-autorestart --max-memory-restart 3G --cron-restart '30 * * * *' --node-args=\"--expose-gc\"",
@@ -87,7 +87,14 @@
     "stop_org_chart": "npx pm2 stop org_chart",
     "delete_org_chart": "npx pm2 delete org_chart",
     "show_org_chart": "npx pm2 show org_chart",
-    "restart_org_chart": "npx pm2 restart org_chart"
+    "restart_org_chart": "npx pm2 restart org_chart",
+
+    "pm2_start_membership_base_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_membership_base.js --name membership_base --no-autorestart --max-memory-restart 10G --cron-restart \"00 22 * * *\" --node-args=\"--expose-gc\"",
+    "pm2_logs_membership_base": "npx pm2 logs membership_base",
+    "stop_membership_base": "npx pm2 stop membership_base",
+    "delete_membership_base": "npx pm2 delete membership_base",
+    "show_membership_base": "npx pm2 show membership_base",
+    "restart_membership_base": "npx pm2 restart membership_base"
   },
   "keywords": [],
   "author": "",
