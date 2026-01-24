@@ -188,7 +188,7 @@ const main = [
   {
     name: "member_lifetime_frequency",
     mode: "NULLABLE",
-    type: "INTEGER",
+    type: "STRING",
     description: "Frequency classification for lifetime purchases",
     fields: []
   },

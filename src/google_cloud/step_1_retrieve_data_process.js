@@ -100,7 +100,7 @@ async function execute_retrieve_data(options, datasetId, bucketName, schema, dir
 
     const retrieval_batch_size = 100000;
 
-    console.log(options, directory_name, directory_name_archive);
+    // console.log(options, directory_name, directory_name_archive);
 
     let offset = 0;
     let batchCounter = 0;

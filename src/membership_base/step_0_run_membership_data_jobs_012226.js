@@ -6,7 +6,7 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 // GET & LOAD EVENT DATA
 // const { execute_transfer_usat_to_local } = require('./step_1_transfer_data_usat_to_local'); // Step #1: tranfer USAT event data to Local DB
 const { execute_create_membership_base_data } = require('./step_1_create_membership_base_data'); 
-const { execute_load_big_query_membership_data } = require('./step_2_load_bq_membership)_data');
+const { execute_load_big_query_membership_data } = require('./step_2_load_bq_membership_data');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 

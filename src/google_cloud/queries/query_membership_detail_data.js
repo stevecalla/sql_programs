@@ -66,7 +66,7 @@ async function main(batch_size = 10, offset = 0) {
       total_memberships_all_profiles_sales_ytd,
 
       -- YTD WINDOW METADATA
-      ytd_as_of_run_date,
+      DATE_FORMAT(ytd_as_of_run_date, '%Y-%m-%d') AS ytd_as_of_run_date,
       ytd_as_of_day_of_year,
 
       -- BATCH TIMESTAMPS
@@ -76,6 +76,7 @@ async function main(batch_size = 10, offset = 0) {
     FROM usat_sales_db.membership_detail_data
     WHERE 1 = 1
     ORDER BY year DESC, id_profiles ASC
+    -- LIMIT 100
     LIMIT ${batch_size} OFFSET ${offset}
     ;
   `;
