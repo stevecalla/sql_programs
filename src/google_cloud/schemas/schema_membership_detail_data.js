@@ -314,7 +314,7 @@ const main = [
     type: "INTEGER",
     description: "Total memberships purchased across all profiles within the year-to-date window, using the same day-of-year cutoff as the run date",
     fields: []
-  }
+  },
 
   // YTD Metadata
   {
