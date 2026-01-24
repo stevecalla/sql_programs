@@ -60,9 +60,12 @@ async function main(batch_size = 10, offset = 0) {
       -- METRICS / FLAGS
       total_memberships_for_year,
       membership_type_priority,
+      
+      is_sales_through_day_of_year,
       is_sales_ytd,
 
       total_memberships_all_profiles_that_year,
+      total_memberships_all_profiles_sales_through_day_of_year,
       total_memberships_all_profiles_sales_ytd,
 
       -- YTD WINDOW METADATA

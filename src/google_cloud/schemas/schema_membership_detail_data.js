@@ -281,26 +281,40 @@ const main = [
     fields: []
   },
   {
+    name: "is_sales_through_day_of_year",
+    mode: "REQUIRED",
+    type: "BOOLEAN",
+    description: "Indicates whether this membership purchase occurred on or before the same day-of-year cutoff for the given year",
+    fields: []
+  },
+  {
     name: "is_sales_ytd",
     mode: "REQUIRED",
     type: "BOOLEAN",
-    description: "Indicates whether the membership sale falls within YTD window",
+    description: "Indicates whether this membership purchase falls within the year-to-date window, using the same day-of-year cutoff as the run date",
     fields: []
   },
   {
     name: "total_memberships_all_profiles_that_year",
     mode: "REQUIRED",
     type: "INTEGER",
-    description: "Total memberships across all profiles for the year",
+    description: "Total number of memberships held across all profiles in the given year (includes multiple memberships per profile)",
+    fields: []
+  },
+  {
+    name: "total_memberships_all_profiles_sales_through_day_of_year",
+    mode: "REQUIRED",
+    type: "INTEGER",
+    description: "Total memberships purchased across all profiles on or before the same day-of-year cutoff for the given year",
     fields: []
   },
   {
     name: "total_memberships_all_profiles_sales_ytd",
     mode: "REQUIRED",
     type: "INTEGER",
-    description: "Total memberships sold across all profiles within YTD window",
+    description: "Total memberships purchased across all profiles within the year-to-date window, using the same day-of-year cutoff as the run date",
     fields: []
-  },
+  }
 
   // YTD Metadata
   {
@@ -335,6 +349,6 @@ const main = [
   }
 ];
 
-module.exports = { 
-  membership_detail_data_schema: main 
+module.exports = {
+  membership_detail_data_schema: main
 };
