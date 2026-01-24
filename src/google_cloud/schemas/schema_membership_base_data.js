@@ -25,32 +25,47 @@ const main = [
   },
 
   // Counts
+  // Counts
   {
     name: "unique_profiles",
     mode: "REQUIRED",
     type: "INTEGER",
-    description: "Distinct member profiles mapped to this bucket",
+    description: "Distinct member profiles mapped to this membership bucket for the given year, after best-membership selection logic",
     fields: []
   },
   {
     name: "total_memberships_all_profiles_that_year",
     mode: "REQUIRED",
     type: "INTEGER",
-    description: "Total memberships held by all profiles in the given year",
+    description: "Total number of memberships held by all profiles in this bucket during the given year (includes multiple memberships per profile)",
+    fields: []
+  },
+  {
+    name: "unique_profiles_sales_through_day_of_year",
+    mode: "REQUIRED",
+    type: "INTEGER",
+    description: "Distinct member profiles with at least one membership purchase on or before the same day-of-year cutoff for the given year",
+    fields: []
+  },
+  {
+    name: "total_memberships_all_profiles_sales_through_day_of_year",
+    mode: "REQUIRED",
+    type: "INTEGER",
+    description: "Total memberships purchased on or before the same day-of-year cutoff for the given year",
     fields: []
   },
   {
     name: "unique_profiles_sales_ytd",
     mode: "REQUIRED",
     type: "INTEGER",
-    description: "Distinct profiles with sales in YTD window",
+    description: "Distinct member profiles with at least one membership purchase within the year-to-date window, using the same day-of-year cutoff as the run date",
     fields: []
   },
   {
     name: "total_memberships_all_profiles_sales_ytd",
     mode: "REQUIRED",
     type: "INTEGER",
-    description: "Total memberships sold within YTD window",
+    description: "Total memberships purchased within the year-to-date window, using the same day-of-year cutoff as the run date",
     fields: []
   },
 
@@ -87,6 +102,6 @@ const main = [
   }
 ];
 
-module.exports = { 
-  membership_base_data_schema: main 
+module.exports = {
+  membership_base_data_schema: main
 };

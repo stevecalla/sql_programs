@@ -9,6 +9,9 @@ const summary_dims = `
 const summary_metrics = `
   unique_profiles INT NOT NULL,
   total_memberships_all_profiles_that_year INT NOT NULL,
+  
+  unique_profiles_sales_through_day_of_year INT NOT NULL,
+  total_memberships_all_profiles_sales_through_day_of_year INT NOT NULL,
 
   unique_profiles_sales_ytd INT NOT NULL,
   total_memberships_all_profiles_sales_ytd INT NOT NULL,

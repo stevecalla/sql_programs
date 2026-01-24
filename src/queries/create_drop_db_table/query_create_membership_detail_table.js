@@ -66,12 +66,15 @@ const detail_metrics_flags = `
 
   -- computed in Query #2 (best-membership logic ordering)
   membership_type_priority INT NOT NULL,
-
+  
   -- computed in Query #2
+  is_sales_through_day_of_year TINYINT NOT NULL,
   is_sales_ytd TINYINT NOT NULL,
-
+  
   -- ✅ new: per-row contribution to Query #1 totals
   total_memberships_all_profiles_that_year INT NOT NULL,
+  
+  total_memberships_all_profiles_sales_through_day_of_year INT NOT NULL,
 
   -- ✅ new: per-row contribution to Query #1 YTD totals
   total_memberships_all_profiles_sales_ytd INT NOT NULL,

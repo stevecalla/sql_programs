@@ -11,6 +11,10 @@ async function main(batch_size = 10, offset = 0) {
       -- COUNTS
       unique_profiles,
       total_memberships_all_profiles_that_year,
+
+      unique_profiles_sales_through_day_of_year,
+      total_memberships_all_profiles_sales_through_day_of_year,
+
       unique_profiles_sales_ytd,
       total_memberships_all_profiles_sales_ytd,
 
