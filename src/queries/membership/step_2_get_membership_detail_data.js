@@ -127,6 +127,7 @@ function main(is_test) {
             ON rm.year = mc.year AND rm.id_profiles = mc.id_profiles	
             WHERE rm.membership_type_priority = 1	
         )
+
         /* ------------------------------------------------------------
         Final DETAIL output
         ------------------------------------------------------------ */
@@ -135,29 +136,43 @@ function main(is_test) {
 
             /* per-row contribution to Query #1:
             SUM(total_memberships_all_profiles_that_year) */
-            bm.total_memberships_for_year
-                AS total_memberships_all_profiles_that_year,
+            bm.total_memberships_for_year AS total_memberships_all_profiles_that_year,
 
+            -- Distinct profiles whose membership purchase date occurred before the same day-of-year cutoff, regardless of calendar year.
             /* same YTD logic as Query #1 */
             CASE
-                WHEN bm.purchased_on_adjusted_mp >= MAKEDATE(bm.year, 1)
-                AND bm.purchased_on_adjusted_mp <
-                    DATE_ADD(
-                        MAKEDATE(bm.year, 1),
-                        INTERVAL p.ytd_as_of_day_of_year DAY
-                    )
+                WHEN 1 = 1
+                    -- AND bm.purchased_on_adjusted_mp >= MAKEDATE(bm.year, 1)
+                    AND bm.purchased_on_adjusted_mp < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
+                THEN 1 ELSE 0
+            END AS is_sales_through_day_of_year,
+
+            /* per-row contribution to Query #1:
+            SUM(total_memberships_all_profiles_sales_ytd) */
+            CASE
+                WHEN 1 = 1
+                    -- AND bm.purchased_on_adjusted_mp >= MAKEDATE(bm.year, 1)
+                    AND bm.purchased_on_adjusted_mp < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
+                THEN bm.total_memberships_for_year
+                ELSE 0
+            END AS total_memberships_all_profiles_sales_through_day_of_year,
+
+            -- Distinct profiles whose membership purchase date falls between January 1 and the same day-of-year cutoff within that year.
+            -- “sales_through_doy applies only a day-of-year cutoff, while sales_ytd applies both a calendar-year boundary and the same day-of-year cutoff.”
+            /* same YTD logic as Query #1 */
+            CASE
+                WHEN 1 = 1
+                    AND bm.purchased_on_adjusted_mp >= MAKEDATE(bm.year, 1)
+                    AND bm.purchased_on_adjusted_mp < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
                 THEN 1 ELSE 0
             END AS is_sales_ytd,
 
             /* per-row contribution to Query #1:
             SUM(total_memberships_all_profiles_sales_ytd) */
             CASE
-                WHEN bm.purchased_on_adjusted_mp >= MAKEDATE(bm.year, 1)
-                AND bm.purchased_on_adjusted_mp <
-                    DATE_ADD(
-                        MAKEDATE(bm.year, 1),
-                        INTERVAL p.ytd_as_of_day_of_year DAY
-                    )
+                WHEN 1 = 1
+                    AND bm.purchased_on_adjusted_mp >= MAKEDATE(bm.year, 1)
+                    AND bm.purchased_on_adjusted_mp < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
                 THEN bm.total_memberships_for_year
                 ELSE 0
             END AS total_memberships_all_profiles_sales_ytd,
