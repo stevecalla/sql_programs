@@ -71,14 +71,13 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = false; // execute_create_event_data_metrics
+  const run_step_1 = true; // execute_create_event_data_metrics
   const run_step_2 = true; // load membership data to bigquery
 
   try {
     const stepFunctions = [
       run_step_1 ? execute_create_membership_base_data : null,
       run_step_2 ? execute_load_big_query_membership_data: null,
-
     ];
 
     const stepName = [
