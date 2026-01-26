@@ -2,17 +2,9 @@
 
 const { get_mountain_time_offset_hours, to_mysql_datetime } = require("../../../utilities/date_time_tools/get_mountain_time_offset_hours.js");
 
-function main(is_test) {
+function main(is_test, created_at_dates) {
     const limit_where_statement = is_test ? "LIMIT 100" : "";
-
-    // Batch timestamps (UTC → MTN via offset fn)
-    const now_utc = new Date();
-    const mtn_offset_hours = get_mountain_time_offset_hours(now_utc);
-    const now_mtn = new Date(now_utc.getTime() + mtn_offset_hours * 60 * 60 * 1000);
-
-    // IMPORTANT: strings for MySQL DATETIME columns
-    const created_at_utc = to_mysql_datetime(now_utc);
-    const created_at_mtn = to_mysql_datetime(now_mtn);
+    const { created_at_mtn, created_at_utc } = created_at_dates;
 
     return `
         -- QUERY #1 — SUMMARY (stable counts)

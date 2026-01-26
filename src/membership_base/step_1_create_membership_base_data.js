@@ -7,6 +7,7 @@ const mysql = require('mysql2');            // classic API
 const mysqlP = require('mysql2/promise');   // only for dst.execute
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { runTimer, stopTimer } = require('../../utilities/timer');
+const { get_mountain_time_offset_hours, to_mysql_datetime } = require("../../utilities/date_time_tools/get_mountain_time_offset_hours.js");
 
 const { query_create_membership_base_table } = require('../queries/create_drop_db_table/query_create_membership_base_table');
 const { query_create_membership_detail_table } = require('../queries/create_drop_db_table/query_create_membership_detail_table');
@@ -29,6 +30,19 @@ async function get_dst_connection() {
 async function create_target_table(dst, TABLE_NAME, TABLE_STRUCTURE) {
   await dst.execute(`DROP TABLE IF EXISTS \`${TABLE_NAME}\``);
   await dst.execute(TABLE_STRUCTURE);
+}
+
+async function get_created_at_date() {
+    // Batch timestamps (UTC → MTN via offset fn)
+    const now_utc = new Date();
+    const mtn_offset_hours = get_mountain_time_offset_hours(now_utc);
+    const now_mtn = new Date(now_utc.getTime() + mtn_offset_hours * 60 * 60 * 1000);
+
+    // IMPORTANT: strings for MySQL DATETIME columns
+    const created_at_utc = to_mysql_datetime(now_utc);
+    const created_at_mtn = to_mysql_datetime(now_mtn);
+
+  return { created_at_mtn, created_at_utc };
 }
 
 // Flushes one batch of rows into the target table via a single multi-row INSERT
@@ -95,21 +109,19 @@ async function main() {
   try {
     // 1) Start a transaction so DDL + data load is atomic
     await dst.beginTransaction();
+    
+    const is_test = false; // todo: set test = limits queries results
 
-    // 2) Create the target tables
+    // 2) Create the base table
     console.log(`Create ${BASE_TABLE_NAME}`);
     await create_target_table(dst, BASE_TABLE_NAME, BASE_TABLE_STRUCTURE);
+    console.log(`Successfully created ${BASE_TABLE_NAME}`);
 
-    console.log(`Create ${DETAIL_TABLE_NAME}`);
-    await create_target_table(dst, DETAIL_TABLE_NAME, DETAIL_TABLE_STRUCTURE);
+    // 3) Load base query
+    let created_at_dates = await get_created_at_date();
+    const query_base_data = step_1_query_membership_base_data(is_test, created_at_dates);
 
-    console.log(`Successfully created ${BASE_TABLE_NAME} + ${DETAIL_TABLE_NAME}`);
-
-    const is_test = false; // todo: set test = limits queries results
-    const query_base_data = step_1_query_membership_base_data(is_test);
-    const query_detail_data = step_2_query_membership_detail_data(is_test);
-
-    // 3) Load base data
+    // 4) Load/ stream base data
     await stream_query_into_table({
       src,
       dst,
@@ -118,7 +130,16 @@ async function main() {
       batchSize: BATCH_SIZE,
     });
 
-    // 4) Load detail data
+    // 5) Create the detail table
+    console.log(`Create ${DETAIL_TABLE_NAME}`);
+    await create_target_table(dst, DETAIL_TABLE_NAME, DETAIL_TABLE_STRUCTURE);
+    console.log(`Successfully created ${DETAIL_TABLE_NAME}`);
+
+    // 6) Load detail query
+    created_at_dates = await get_created_at_date();
+    const query_detail_data = step_2_query_membership_detail_data(is_test, created_at_dates);
+
+    // 7) Load detail data
     await stream_query_into_table({
       src,
       dst,
@@ -127,7 +148,7 @@ async function main() {
       batchSize: BATCH_SIZE,
     });
 
-    // 5) Commit everything (DDL + both data loads) in one go
+    // 8) Commit everything (DDL + both data loads) in one go
     await dst.commit();
 
     result = 'Tranfer Successful'; // (keeping your original spelling)
