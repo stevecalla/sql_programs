@@ -24,21 +24,35 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 // Test endpoint
+// Test curl http://localhost:8013/slack-membership-base-test
+// curl https://koala-huge-goldfish.ngrok-free.app/bookings/slack-membership-base-test
+// https://usat-slack-members.kidderwise.org/slack-membership-base-test
 app.get('/slack-membership-base-test', async (req, res) => {
-    console.log('/slack-races-test route req.rawHeaders = ', req.rawHeaders);
+    const ROUTE = '/slack-membership-base-test';
+    console.log(`${ROUTE} route req.rawHeaders = ${req.rawHeaders}`);
 
+    const status_details = {
+        status: 'ok',
+        server: `${ROUTE} server is up and running. Stands Ready.`,
+        local_time: new Date().toLocaleString('en-US', { timeZone: 'America/Denver', hour12: false }),
+        timestamp: new Date().toISOString(),
+    }
+
+    console.log(`\n\n***************************************`);
+    console.log(`status details:`, status_details);
+    console.log(`=======================================\n`);
+
+    
     try {
         // Send a success response
-        res.status(200).json({
-            message: 'Slack membership base server is up and running. Stands Ready.',
-        });
+        res.status(200).json(status_details);
 
     } catch (error) {
-        console.error('Error querying or sending slack membership base data.', error);
-        
+        console.error(`Error querying or ${ROUTE} server. ${error}`);
+
         // Send an error response
         res.status(500).json({
-            message: 'Error querying or sending slack membership base data.',
+            message: `Error querying or ${ROUTE} server.`,
             error: error.message || 'Internal Server Error',
         });
     }
