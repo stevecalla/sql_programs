@@ -81,16 +81,16 @@ async function create_slack_message(result) {
   const looker_report = `Membership Base`;
 
   slack_message =
-    `🏊‍♂️🏃‍♀️🚴‍♂️ MEMBERSHIP BASE - UNIQUE MEMBERS\n` +
-
-    `🕕 ${date_message}\n` +
-
-    `📈 ${await looker_link(looker_url, `Link to *${looker_report}* Dasbhoard`)}\n\n` +
-
-    `ℹ️ *Years:* \`2019+\`\n` +
-
-    (is_error ? error_message : `\`\`\`${final_formatted_table}\n\`\`\``) +
-    
+    `🏊‍♂️🏃‍♀️🚴‍♂️ MEMBERSHIP BASE - UNIQUE MEMBERS\n` 
+    +
+    `🕕 ${date_message}\n`
+    +
+    `👀 ${await looker_link(looker_url, looker_report)}\n`
+    +
+    `ℹ️ *Years:* \`2019+\`\n` 
+    +
+    (is_error ? error_message : `\`\`\`${final_formatted_table}\n\`\`\``) 
+    +
     `* UNIQUE = Unique members full year\n` +
     `** YTD CURRENT= Thru current date of year only sold in that year\n` +
     `*** YTD ALL = Thru current date of year sold in any year`
