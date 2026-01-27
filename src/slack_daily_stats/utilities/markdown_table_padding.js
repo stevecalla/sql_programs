@@ -1,11 +1,11 @@
 // add padding to evenly space markdown columns
 
-async function pad_markdown_table(raw_markdown_message) {
+async function pad_markdown_table(raw_markdown_message, custom_padding) {
   // Pad helper
   const pad = (str, width) => (str?.toString?.() ?? "").padEnd(width, " ");
   
   // Column widths
-  const COL_WIDTHS = [30, 9, 9, 9];
+  COL_WIDTHS = custom_padding ? custom_padding : [30, 9, 9, 9];
 
   const final_formatted_message = raw_markdown_message
     .map(cols => cols.length
