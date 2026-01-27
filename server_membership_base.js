@@ -1,7 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 
-// ALL - RACE RESULTS DATA
+// ALL - MEMBERSHIP BASE DATA
 const { execute_run_membership_data_jobs } = require('./src/membership_base/step_0_run_membership_data_jobs_012226');
 
 // EXPRESS SERVER

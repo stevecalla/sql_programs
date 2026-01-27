@@ -31,8 +31,8 @@ async function format_markdown_table(result) {
   // Keep this "dash row" SHORT so it DOES NOT inflate column widths.
   // pad_markdown_table likely uses max string length per column, including this row.
   const markdown_message = [
-    ["YEAR", "UNIQUE", "SALES YTD", "THRU DOY", "YoY Δ", "YoY %"],
-    ["-------", "---------", "---------", "--------", "--------", "--------"],
+    ["YEAR", "UNIQUE", "YTD CURRENT", "YTD ALL", "YoY Δ", "YoY %"],
+    ["-------", "---------", "-----------", "--------", "--------", "--------"],
   ];
 
   for (const r of rows_2019_plus) {
@@ -60,7 +60,7 @@ async function generate_markdown_table(options) {
 
   const raw_markdown_table = !is_error && await format_markdown_table(result);
   
-  const custom_padding = [7, 9, 9, 9, 9, 9];
+  const custom_padding = [7, 9, 11, 9, 9, 9];
   const final_formatted_table = !is_error && await pad_markdown_table(raw_markdown_table, custom_padding);
 
   const error_message = await generate_error_message();
@@ -91,9 +91,9 @@ async function create_slack_message(result) {
 
     (is_error ? error_message : `\`\`\`${final_formatted_table}\n\`\`\``) +
     
-    `* UNIQUE = Unique members full year.\n` +
-    `** SALES YTD = Thru current date of year only sold in that year\n` +
-    `*** THRU DOY = Thru current date of year sold in any year`
+    `* UNIQUE = Unique members full year\n` +
+    `** YTD CURRENT= Thru current date of year only sold in that year\n` +
+    `*** YTD ALL = Thru current date of year sold in any year`
 
   const slack_blocks = await get_slack_block_template(slack_message);
 
