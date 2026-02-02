@@ -121,6 +121,7 @@ let isRunning = false;
 let lockTimeout;
 
 // Endpoint to handle crontab for slack races data
+// curl https://usat-slack-members.kidderwise.org/scheduled-slack-membership-base
 app.get('/scheduled-slack-membership-base', async (req, res) => {
     const { v4: uuidv4 } = require('uuid');
     // npm install uuid
