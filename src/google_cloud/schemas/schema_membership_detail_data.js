@@ -53,6 +53,22 @@ const main = [
     description: "Adjusted purchase month",
     fields: []
   },
+  {
+    name: "first_purchase_any_for_year",
+    mode: "NULLABLE",
+    type: "DATETIME",
+    description:
+      "Earliest adjusted membership purchase timestamp (Mountain Time) among all memberships that map to this profile-year, regardless of calendar year. Used to determine sales_through_day_of_year eligibility.",
+    fields: []
+  },
+  {
+    name: "first_purchase_in_year",
+    mode: "NULLABLE",
+    type: "DATETIME",
+    description:
+      "Earliest adjusted membership purchase timestamp (Mountain Time) that occurred within the given calendar year for this profile-year. Present for audit/analysis; not currently used in sales_ytd calculations.",
+    fields: []
+  },
 
   // Membership Period
   {

@@ -11,6 +11,8 @@ const purchase_dates = `
   purchased_on_year_adjusted_mp INT,
   purchased_on_quarter_adjusted_mp INT,
   purchased_on_month_adjusted_mp INT,
+  first_purchase_any_for_year DATETIME,
+  first_purchase_in_year DATETIME,
 `;
 
 const membership_period_dates = `

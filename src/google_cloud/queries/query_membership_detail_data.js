@@ -14,6 +14,10 @@ async function main(batch_size = 10, offset = 0) {
       purchased_on_quarter_adjusted_mp,
       purchased_on_month_adjusted_mp,
 
+      -- NEW: purchase-date helpers (todo 02/09/26)
+      DATE_FORMAT(first_purchase_any_for_year, '%Y-%m-%d %H:%i:%s') AS first_purchase_any_for_year,
+      DATE_FORMAT(first_purchase_in_year, '%Y-%m-%d %H:%i:%s') AS first_purchase_in_year,
+
       -- MEMBERSHIP PERIOD
       DATE_FORMAT(starts_mp, '%Y-%m-%d') AS starts_mp,
       starts_year_mp,
