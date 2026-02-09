@@ -1,4 +1,4 @@
-// C:\Users\calla\development\usat\sql_code\19_membership_base\discovery_base_membership_012226.sql
+// C:\Users\calla\development\usat\sql_code\19_membership_base\discovery_base_membership_012226_detail_v2.sql
 
 const { get_mountain_time_offset_hours, to_mysql_datetime } = require("../../../utilities/date_time_tools/get_mountain_time_offset_hours.js");
 
@@ -105,8 +105,8 @@ function main(is_test, created_at_dates) {
                             WHEN real_membership_types_sa = 'elite' THEN 4	
                             ELSE 5	
                         END,	
-                        ends_mp ASC,
-                        purchased_on_adjusted_mp ASC
+                        ends_mp DESC,
+                        purchased_on_adjusted_mp DESC
                 ) AS membership_type_priority	
             FROM exploded_years e	
         ),
