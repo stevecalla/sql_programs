@@ -92,6 +92,25 @@ function main(is_test, created_at_dates) {
             FROM exploded_years	
             GROUP BY year, id_profiles	
         ),
+        -- todo: 02/09/26
+        purchase_dates_by_profile_year AS (
+            SELECT
+                year,
+                id_profiles,
+
+                -- Earliest purchase among ALL memberships that map into this profile-year
+                MIN(purchased_on_adjusted_mp) AS first_purchase_any_for_year,
+
+                -- Earliest purchase that occurred within the calendar year (for YTD)
+                MIN(CASE
+                    WHEN purchased_on_adjusted_mp >= MAKEDATE(year, 1)
+                    AND purchased_on_adjusted_mp <  MAKEDATE(year + 1, 1)
+                    THEN purchased_on_adjusted_mp
+                    END) AS first_purchase_in_year
+
+            FROM exploded_years
+            GROUP BY year, id_profiles
+        ),
         ranked_memberships AS (	
             SELECT	
                 e.*,
@@ -110,14 +129,27 @@ function main(is_test, created_at_dates) {
                 ) AS membership_type_priority	
             FROM exploded_years e	
         ),
-        best_memberships AS (	
-            SELECT 	
-                rm.*, 	
-                mc.total_memberships_for_year	
-            FROM ranked_memberships rm	
-            JOIN membership_counts_by_profile_year mc	
-            ON rm.year = mc.year AND rm.id_profiles = mc.id_profiles	
-            WHERE rm.membership_type_priority = 1	
+        -- best_memberships AS (	
+        --     SELECT 	
+        --         rm.*, 	
+        --         mc.total_memberships_for_year	
+        --     FROM ranked_memberships rm	
+        --     JOIN membership_counts_by_profile_year mc	
+        --     ON rm.year = mc.year AND rm.id_profiles = mc.id_profiles	
+        --     WHERE rm.membership_type_priority = 1	
+        -- )
+        best_memberships AS (
+            SELECT
+                rm.*,
+                mc.total_memberships_for_year,
+                pd.first_purchase_any_for_year,
+                pd.first_purchase_in_year
+            FROM ranked_memberships rm
+            JOIN membership_counts_by_profile_year mc
+                ON rm.year = mc.year AND rm.id_profiles = mc.id_profiles
+            JOIN purchase_dates_by_profile_year pd
+                ON rm.year = pd.year AND rm.id_profiles = pd.id_profiles
+            WHERE rm.membership_type_priority = 1
         )
 
         /* ------------------------------------------------------------
@@ -135,7 +167,10 @@ function main(is_test, created_at_dates) {
             CASE
                 WHEN 1 = 1
                     -- AND bm.purchased_on_adjusted_mp >= MAKEDATE(bm.year, 1)
-                    AND bm.purchased_on_adjusted_mp < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
+                    -- AND bm.purchased_on_adjusted_mp < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
+
+                    -- todo: 02/09/26
+                    AND bm.first_purchase_any_for_year < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
                 THEN 1 ELSE 0
             END AS is_sales_through_day_of_year,
 
@@ -144,7 +179,10 @@ function main(is_test, created_at_dates) {
             CASE
                 WHEN 1 = 1
                     -- AND bm.purchased_on_adjusted_mp >= MAKEDATE(bm.year, 1)
-                    AND bm.purchased_on_adjusted_mp < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
+                    -- AND bm.purchased_on_adjusted_mp < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
+
+                    -- todo: 02/09/26
+                    AND bm.first_purchase_any_for_year < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
                 THEN bm.total_memberships_for_year
                 ELSE 0
             END AS total_memberships_all_profiles_sales_through_day_of_year,
@@ -156,6 +194,10 @@ function main(is_test, created_at_dates) {
                 WHEN 1 = 1
                     AND bm.purchased_on_adjusted_mp >= MAKEDATE(bm.year, 1)
                     AND bm.purchased_on_adjusted_mp < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
+
+                    -- todo: 02/09/26
+                    -- AND bm.first_purchase_in_year >= MAKEDATE(bm.year, 1)
+                    -- AND bm.first_purchase_in_year <  DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
                 THEN 1 ELSE 0
             END AS is_sales_ytd,
 
@@ -165,6 +207,10 @@ function main(is_test, created_at_dates) {
                 WHEN 1 = 1
                     AND bm.purchased_on_adjusted_mp >= MAKEDATE(bm.year, 1)
                     AND bm.purchased_on_adjusted_mp < DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
+
+                    -- todo: 02/09/26
+                    -- AND bm.first_purchase_in_year >= MAKEDATE(bm.year, 1)
+                    -- AND bm.first_purchase_in_year <  DATE_ADD(MAKEDATE(bm.year, 1), INTERVAL p.ytd_as_of_day_of_year DAY)
                 THEN bm.total_memberships_for_year
                 ELSE 0
             END AS total_memberships_all_profiles_sales_ytd,
