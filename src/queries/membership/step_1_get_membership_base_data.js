@@ -40,13 +40,13 @@ function main(is_test, created_at_dates) {
         --     SELECT 2026
         -- ),
         WITH RECURSIVE
-            ytd_params AS (
+        ytd_params AS (
             SELECT
                 CURDATE() AS ytd_as_of_run_date,
                 DAYOFYEAR(CURDATE()) AS ytd_as_of_day_of_year,
                 YEAR(CURDATE()) AS current_year
-            ),
-            years AS (
+        ),
+        years AS (
             SELECT 2015 AS y
 
             UNION ALL

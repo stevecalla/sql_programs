@@ -17,13 +17,13 @@ function main(is_test, created_at_dates) {
         -- …and then count distinct id_profiles, you should match Query 1’s unique_profiles for that same bucket (modulo any additional filters you applied in Query 2).
 
         WITH RECURSIVE
-            ytd_params AS (
+        ytd_params AS (
             SELECT
                 CURDATE() AS ytd_as_of_run_date,
                 DAYOFYEAR(CURDATE()) AS ytd_as_of_day_of_year,
                 YEAR(CURDATE()) AS current_year
-            ),
-            years AS (
+        ),
+        years AS (
             SELECT 2015 AS y
 
             UNION ALL
