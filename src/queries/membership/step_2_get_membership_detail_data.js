@@ -16,17 +16,21 @@ function main(is_test, created_at_dates) {
         -- year=2025, membership_type=adult_annual, new_member_category=Renew
         -- …and then count distinct id_profiles, you should match Query 1’s unique_profiles for that same bucket (modulo any additional filters you applied in Query 2).
 
-        WITH ytd_params AS (
+        WITH RECURSIVE
+            ytd_params AS (
             SELECT
                 CURDATE() AS ytd_as_of_run_date,
-                DAYOFYEAR(CURDATE()) AS ytd_as_of_day_of_year
-        ),
-        years AS (	
-            SELECT 2015 AS y UNION ALL SELECT 2016 UNION ALL SELECT 2017 UNION ALL	
-            SELECT 2018 UNION ALL SELECT 2019 UNION ALL SELECT 2020 UNION ALL	
-            SELECT 2021 UNION ALL SELECT 2022 UNION ALL SELECT 2023 UNION ALL 
-            SELECT 2024 UNION ALL SELECT 2025 UNION ALL
-            SELECT 2026
+                DAYOFYEAR(CURDATE()) AS ytd_as_of_day_of_year,
+                YEAR(CURDATE()) AS current_year
+            ),
+            years AS (
+            SELECT 2015 AS y
+
+            UNION ALL
+
+            SELECT y + 1
+            FROM years
+            JOIN ytd_params p ON years.y < p.current_year + 1
         ),
         exploded_years AS (	
             SELECT	
