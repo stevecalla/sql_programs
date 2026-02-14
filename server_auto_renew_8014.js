@@ -14,7 +14,7 @@ app.use(bodyParser.json());
 
 // Test endpoint
 // curl http://localhost:8014/auto-renew-test
-// curl https://usat-members.kidderwise.org/auto-renew-test
+// curl https://usat-auto-renew.kidderwise.org/auto-renew-test
 app.get('/auto-renew-test', async (req, res) => {
     console.log('/auto-renew-test route req.rawHeaders = ', req.rawHeaders);
 
@@ -37,7 +37,7 @@ app.get('/auto-renew-test', async (req, res) => {
 
 // Endpoint to handle crontab all usat auto-renew data job
 // curl http://localhost:8014/scheduled-auto-renew
-// curl https://usat-members.kidderwise.org/scheduled-auto-renew
+// curl https://usat-auto-renew.kidderwise.org/scheduled-auto-renew
 app.get('/scheduled-auto-renew', async (req, res) => {
     console.log('/scheduled-auto-renew route req.rawHeaders = ', req.rawHeaders);
 
@@ -77,7 +77,7 @@ app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
     console.log(`Tunnel using cloudflare https://usat-auto-renew.kidderwise.org/scheduled-auto-renew`)
-    // 192.168.187:8004
+    // 192.168.187:8014
 });
 
 
