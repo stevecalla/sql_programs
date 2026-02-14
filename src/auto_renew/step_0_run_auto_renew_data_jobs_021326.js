@@ -72,7 +72,7 @@ async function main() {
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
   const run_step_1 = true; // tranfer USAT event data to Local DB
-  const run_step_2 = false; // execute_create_event_data_metrics
+  const run_step_2 = false; // execute_create_auto_renew_data_metrics
   const run_step_3 = false; // load event metrics to bigquery
 
   try {
