@@ -73,14 +73,14 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = false; // tranfer USAT event data to Local DB
-  const run_step_2 = false; // execute_create_auto_renew_data_metrics; commented out until needed
+  const run_step_1 = true; // tranfer USAT event data to Local DB
+  // const run_step_2 = false; // execute_create_auto_renew_data_metrics; commented out until needed
   const run_step_3 = true; // load event metrics to bigquery
 
   try {
     const stepFunctions = [
       run_step_1 ? execute_transfer_usat_to_local : null,
-      run_step_2 ? execute_create_event_data_metrics : null,
+      // run_step_2 ? execute_create_event_data_metrics : null,
       run_step_3 ? execute_load_big_query_auto_renew_data_metrics : null,
     ];
 
