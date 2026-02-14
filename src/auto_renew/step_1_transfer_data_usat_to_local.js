@@ -7,8 +7,8 @@ const { create_usat_membership_connection } = require('../../utilities/connectio
 const { local_usat_sales_db_config } = require('../../utilities/config');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
-const { query_create_event_table } = require('../queries/create_drop_db_table/query_create_event_table');
-const { step_1_query_event_data } = require('../queries/events/step_1_get_event_data_042125');
+const { query_create_auto_renew_extract_table } = require('../queries/create_drop_db_table/query_create_auto_renew_table');
+const { step_1_query_auto_renew_data } = require('../queries/auto_renew/step_1_get_auto_renew_data_021326');
 
 async function get_src_connection_and_ssh() {
   const { connection, sshClient } = await create_usat_membership_connection();
@@ -44,12 +44,11 @@ async function flush_batch(dst, tableName, rows) {
   await dst.execute(sql, values);
 }
 
-async function execute_transfer_usat_to_local() {
+async function main() {
   const BATCH_SIZE = 500;
-  const TABLE_NAME = 'all_event_data_raw';
-  const TABLE_STRUCTURE = await query_create_event_table(TABLE_NAME);
+  const TABLE_NAME = 'all_auto_renew_data_raw';
+  const TABLE_STRUCTURE = await query_create_auto_renew_extract_table(TABLE_NAME);
 
-  // const { ceonnection: src, sshClient } = await create_usat_membership_connection(); // Updated
   const { src, sshClient } = await get_src_connection_and_ssh();
   const dst = await get_dst_connection();
 
@@ -68,7 +67,7 @@ async function execute_transfer_usat_to_local() {
     await dst.beginTransaction();
     await create_target_table(dst, TABLE_NAME, TABLE_STRUCTURE);
 
-    const stream = src.query(step_1_query_event_data()).stream();
+    const stream = src.query(step_1_query_auto_renew_data()).stream();
 
     const streamPromise = (async () => {
       let buffer = [];
@@ -117,10 +116,10 @@ async function execute_transfer_usat_to_local() {
 
     stopTimer('timer');
   }
-
+  
   return result;
 }
 
 module.exports = {
-  execute_transfer_usat_to_local,
+  execute_transfer_usat_to_local: main,
 };
