@@ -5,8 +5,10 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 // GET & LOAD EVENT DATA
 const { execute_transfer_usat_to_local } = require('./step_1_transfer_data_usat_to_local'); // Step #1: tranfer USAT event data to Local DB
-const { execute_create_event_data_metrics } = require('./step_2_create_event_data_metrics'); // Step #2: execute_create_event_data_metrics
-const { execute_load_big_query_event_data_metrics } = require("./step_3_load_bq_event_data_metrics"); // Step #3: load event metrics to bigquery
+
+// const { execute_create_auto_renew_data_metrics } = require('./step_2_create_auto_renew_data_metrics'); // Step #2: execute_create_auto_renew_daa
+
+const { execute_load_big_query_auto_renew_data_metrics } = require('./step_3_load_bq_auto_renew_data_metrics');
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
@@ -71,15 +73,15 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = true; // tranfer USAT event data to Local DB
-  const run_step_2 = false; // execute_create_auto_renew_data_metrics
-  const run_step_3 = false; // load event metrics to bigquery
+  const run_step_1 = false; // tranfer USAT event data to Local DB
+  const run_step_2 = false; // execute_create_auto_renew_data_metrics; commented out until needed
+  const run_step_3 = true; // load event metrics to bigquery
 
   try {
     const stepFunctions = [
       run_step_1 ? execute_transfer_usat_to_local : null,
       run_step_2 ? execute_create_event_data_metrics : null,
-      run_step_3 ? execute_load_big_query_event_data_metrics : null,
+      run_step_3 ? execute_load_big_query_auto_renew_data_metrics : null,
     ];
 
     const stepName = [
