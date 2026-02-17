@@ -74,10 +74,10 @@ const recursion_info = `
 const metrics = `
   sales_units INT, 
   monthly_sales_units DECIMAL(10, 4),
-  sales_revenue DECIMAL(12, 2),
-  monthly_revenue DECIMAL(12, 2),
-  sales_revenue_less_deduction DECIMAL(12, 2),
-  monthly_revenue_less_deduction DECIMAL(12, 2),
+  sales_revenue DECIMAL(12, 3),
+  monthly_revenue DECIMAL(12, 3),
+  sales_revenue_less_deduction DECIMAL(12, 3),
+  monthly_revenue_less_deduction DECIMAL(12, 3),
 `;
 
 const created_at_dates = `
