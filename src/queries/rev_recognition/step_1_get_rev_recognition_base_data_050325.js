@@ -104,13 +104,13 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
 
         -- REDUCE SALES REVENUE BY COST ASSUMPTION todo:
         CASE
-          WHEN a.new_member_category_6_sa LIKE "%Platinum - Foundation%" THEN 110
-          WHEN a.new_member_category_6_sa LIKE "%Platinum - Team USA%" THEN 150
+        WHEN a.new_member_category_6_sa LIKE "%Platinum - Team USA%" THEN 110
+          WHEN a.new_member_category_6_sa LIKE "%Platinum - Foundation%" THEN 150
           ELSE 0
         END AS sales_revenue_deduction,
         CASE
-          WHEN a.new_member_category_6_sa LIKE "%Platinum - Foundation%" THEN a.actual_membership_fee_6_sa - 110
-          WHEN a.new_member_category_6_sa LIKE "%Platinum - Team USA%" THEN a.actual_membership_fee_6_sa - 150
+          WHEN a.new_member_category_6_sa LIKE "%Platinum - Team USA%" THEN a.actual_membership_fee_6_sa - 110
+          WHEN a.new_member_category_6_sa LIKE "%Platinum - Foundation%" THEN a.actual_membership_fee_6_sa - 150
           ELSE 0
         END AS sales_revenue_less_deduction,
 
