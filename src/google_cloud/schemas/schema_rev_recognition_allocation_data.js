@@ -345,6 +345,20 @@ const rev_recognition_allocation_allocation_schema = [
     description: "Sales revenue recognized for this month",
     fields: []
   },
+  {
+    name: "sales_revenue_less_deduction",
+    mode: "NULLABLE",
+    type: "DECIMAL",
+    description: "Total sales revenue for membership less deduction e.g. transfered to Foundation et al",
+    fields: []
+  },
+  {
+    name: "monthly_revenue_less_deduction",
+    mode: "NULLABLE",
+    type: "DECIMAL",
+    description: "Sales revenue recognized for this month less transfer deduction",
+    fields: []
+  },
 
   // Metadata
   {

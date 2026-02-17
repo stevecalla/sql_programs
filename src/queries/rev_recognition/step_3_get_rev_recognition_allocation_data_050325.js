@@ -47,7 +47,7 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
             0 AS month_index,  -- Adding a month_index column to track recursion step
 
             months_mp_difference, 
-            null AS months_mp_allocated_custom, -- TODO: test null condition
+            null AS months_mp_allocated_custom,
             -- months_mp_allocated_custom,
             
             -- NOTE: Removed b/c produces too much data
@@ -62,6 +62,7 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
             -- has_created_at_gt_purchased_on,
 
             sales_revenue,
+            sales_revenue_less_deduction, -- todo:
             sales_units
 
         FROM rev_recognition_base_data
@@ -70,9 +71,9 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
             -- AND id_profiles IN (@id_profile_1, @id_profile_2, @id_profile_3)
 
             -- NODE VARIABLES
-            AND ends_mp >= '${ends_mp}' -- TODO:
-            -- AND id_profiles IN (54) -- TODO:
-            -- AND id_profiles IN (54, 57, 60) -- TODO:
+            AND ends_mp >= '${ends_mp}'
+            -- AND id_profiles IN (54)
+            -- AND id_profiles IN (54, 57, 60)
 
         UNION ALL
 
@@ -122,6 +123,7 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
             -- has_created_at_gt_purchased_on,
 
             m.sales_revenue,
+            sales_revenue_less_deduction, -- todo:
             m.sales_units
 
             FROM membership_months m
@@ -205,14 +207,16 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
             ROUND(mm.sales_units / mc.months_mp_allocation_recursive, 4) AS monthly_sales_units,
             mm.sales_revenue,
             ROUND(mm.sales_revenue / mc.months_mp_allocation_recursive, 2) AS monthly_revenue,
+            mm.sales_revenue_less_deduction, -- todo:
+            ROUND(sales_revenue_less_deduction / mc.months_mp_allocation_recursive, 2) AS monthly_revenue_less_deduction, -- todo:
 
             -- CREATED AT DATES
             -- CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'America/Denver') AS created_at_mtn,
             -- UTC_TIMESTAMP() AS created_at_utc
 
             -- NOTE: NODE VARIABLES
-            '${created_at_mtn}' AS created_at_mtn, -- TODO:
-            '${created_at_utc}' AS created_at_utc -- TODO:
+            '${created_at_mtn}' AS created_at_mtn,
+            '${created_at_utc}' AS created_at_utc
 
         FROM membership_months mm
         JOIN (

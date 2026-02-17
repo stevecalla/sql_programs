@@ -62,6 +62,8 @@ async function query_rev_recognition_allocation_data(batch_size = 10, offset = 0
             monthly_sales_units,
             sales_revenue,
             monthly_revenue, 
+            sales_revenue_less_deduction,
+            monthly_revenue_less_deduction,
 
             DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
             DATE_FORMAT(created_at_utc, '%Y-%m-%d %H:%i:%s') AS created_at_utc
