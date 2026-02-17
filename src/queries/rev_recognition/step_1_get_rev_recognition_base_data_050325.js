@@ -111,7 +111,7 @@ function step_1_query_rev_recognition_data(created_at_mtn, created_at_utc, QUERY
         CASE
           WHEN a.new_member_category_6_sa LIKE "%Platinum - Team USA%" THEN a.actual_membership_fee_6_sa - 110
           WHEN a.new_member_category_6_sa LIKE "%Platinum - Foundation%" THEN a.actual_membership_fee_6_sa - 150
-          ELSE 0
+          ELSE a.actual_membership_fee_6_sa
         END AS sales_revenue_less_deduction,
 
         1 AS sales_units,
