@@ -76,6 +76,8 @@ const metrics = `
   monthly_sales_units DECIMAL(10, 4),
   sales_revenue DECIMAL(12, 2),
   monthly_revenue DECIMAL(12, 2),
+  sales_revenue_less_deduction DECIMAL(12, 2),
+  monthly_revenue_less_deduction DECIMAL(12, 2),
 `;
 
 const created_at_dates = `
