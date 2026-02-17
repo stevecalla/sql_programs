@@ -344,6 +344,20 @@ const rev_recognition_base_data_schema = [
     fields: []
   },
   {
+    name: "sales_revenue_deduction",
+    mode: "NULLABLE",
+    type: "FLOAT",
+    description: "Revenue removed from sale due. e.g. transfered to Foundation et al",
+    fields: []
+  },
+  {
+    name: "sales_revenue_less_deduction",
+    mode: "NULLABLE",
+    type: "FLOAT",
+    description: "Revenue recognized from the sale after transfer deduction",
+    fields: []
+  },
+  {
     name: "sales_units",
     mode: "NULLABLE",
     type: "INTEGER",

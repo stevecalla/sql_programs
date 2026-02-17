@@ -71,6 +71,8 @@ async function query_rev_recognition_base_data(batch_size = 10, offset = 0) {
 
             actual_membership_fee_6_rule_sa,
             sales_revenue,
+            sales_revenue_deduction,
+            sales_revenue_less_deduction,
             sales_units,
 
             -- CREATED AT DATES
