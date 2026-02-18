@@ -205,10 +205,12 @@ function step_3_query_rev_recognition_allocation_data(created_at_mtn, created_at
 
             mm.sales_units, 
             ROUND(mm.sales_units / mc.months_mp_allocation_recursive, 4) AS monthly_sales_units,
+
             mm.sales_revenue,
-            ROUND(mm.sales_revenue / mc.months_mp_allocation_recursive, 2) AS monthly_revenue,
-            mm.sales_revenue_less_deduction, -- todo:
-            ROUND(sales_revenue_less_deduction / mc.months_mp_allocation_recursive, 2) AS monthly_revenue_less_deduction, -- todo:
+            ROUND(mm.sales_revenue / mc.months_mp_allocation_recursive, 4) AS monthly_revenue,
+
+            mm.sales_revenue_less_deduction,
+            ROUND(sales_revenue_less_deduction / mc.months_mp_allocation_recursive, 4) AS monthly_revenue_less_deduction,
 
             -- CREATED AT DATES
             -- CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'America/Denver') AS created_at_mtn,
