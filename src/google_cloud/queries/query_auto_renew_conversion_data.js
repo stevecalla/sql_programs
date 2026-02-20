@@ -3,6 +3,9 @@ async function main(batch_size = 10, offset = 0) {
     SELECT
 
       DATE_FORMAT(purchased_on_date_adjusted_mp, '%Y-%m-%d') AS purchased_on_date_adjusted_mp,
+      purchased_on_year_adjusted_mp,
+      purchased_on_month_adjusted_mp,
+
       id_profiles,
       real_membership_types_sa,
       new_member_category_6_sa,
@@ -10,6 +13,8 @@ async function main(batch_size = 10, offset = 0) {
       sales_revenue,
 
       DATE_FORMAT(created_at_date_braintree_subscriptions, '%Y-%m-%d') AS created_at_date_braintree_subscriptions,
+      created_at_year_braintree_subscriptions,
+      created_at_month_braintree_subscriptions,
 
       customer_id_braintree_subscriptions,
       id_profiles AS id_profiles_auto_renew,
@@ -20,9 +25,10 @@ async function main(batch_size = 10, offset = 0) {
       price_braintree_subscriptions,
 
       DATE_FORMAT(next_billing_date_braintree_subscriptions, '%Y-%m-%d') AS next_billing_date_braintree_subscriptions,
+      next_billing_year_braintree_subscriptions,
+      next_billing_month_braintree_subscriptions,
 
       DATE_FORMAT(created_at_braintree_subscriptions, '%Y-%m-%d %H:%i:%s') AS created_at_braintree_subscriptions,
-      
       DATE_FORMAT(updated_at_braintree_subscriptions, '%Y-%m-%d %H:%i:%s') AS updated_at_braintree_subscriptions,
 
       -- BATCH TIMESTAMPS

@@ -4,6 +4,9 @@
 
 const sales_dims = `
   purchased_on_date_adjusted_mp DATE NOT NULL,
+  purchased_on_year_adjusted_mp INT NULL,
+  purchased_on_month_adjusted_mp INT NULL,
+
   id_profiles BIGINT NOT NULL,
   real_membership_types_sa VARCHAR(100) NOT NULL,
   new_member_category_6_sa VARCHAR(50) NOT NULL,
@@ -16,6 +19,8 @@ const sales_metrics = `
 
 const auto_renew_fields = `
   created_at_date_braintree_subscriptions DATE NULL,
+  created_at_year_braintree_subscriptions INT NULL,
+  created_at_month_braintree_subscriptions INT NULL,
 
   customer_id_braintree_subscriptions VARCHAR(64) NULL,
   id_profiles_auto_renew BIGINT NULL,
@@ -27,7 +32,10 @@ const auto_renew_fields = `
   is_active_auto_renew_flag TINYINT(1) NULL,
 
   price_braintree_subscriptions DECIMAL(18,2) NULL,
+
   next_billing_date_braintree_subscriptions DATE NULL,
+  next_billing_year_braintree_subscriptions INT NULL,
+  next_billing_month_braintree_subscriptions INT NULL,
 
   created_at_braintree_subscriptions DATETIME NULL,
   updated_at_braintree_subscriptions DATETIME NULL,

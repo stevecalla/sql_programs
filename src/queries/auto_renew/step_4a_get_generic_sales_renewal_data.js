@@ -98,10 +98,20 @@ function main(is_test, created_at_dates) {
             e.member_number_members_sa,
 
             e.id_membership_periods_sa AS original_id_membership_periods_sa,
+
             e.purchased_on_adjusted_mp AS original_purchased_on_adjusted_mp,
+            DATE_FORMAT(e.purchased_on_adjusted_mp, '%Y-%m-%d') AS original_purchased_on_date_adjusted_mp,
+            YEAR(e.purchased_on_adjusted_mp) AS original_purchased_on_year_adjusted_mp,
+            MONTH(e.purchased_on_adjusted_mp) AS original_purchased_on_month_adjusted_mp,
             
             e.original_start,
+            YEAR(e.original_start) AS original_start_year,
+            MONTH(e.original_start) AS original_start_month,
+
             e.original_end,
+            YEAR(e.original_end) AS original_end_year,
+            MONTH(e.original_end) AS original_end_month,
+
             e.real_membership_types_sa AS original_type,
             e.new_member_category_6_sa AS original_category,
             e.origin_flag_category AS original_origin_flag_category,

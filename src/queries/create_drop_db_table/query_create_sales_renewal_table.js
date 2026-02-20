@@ -15,10 +15,19 @@ const original_membership_dims = `
   member_number_members_sa VARCHAR(255) NULL,
 
   original_id_membership_periods_sa BIGINT NULL,
+
   original_purchased_on_adjusted_mp DATETIME NULL,
+  original_purchased_on_date_adjusted_mp DATE NULL,
+  original_purchased_on_year_adjusted_mp INT NULL,
+  original_purchased_on_month_adjusted_mp INT NULL,
 
   original_start DATE NULL,
+  original_start_year INT NULL,
+  original_start_month INT NULL,
+
   original_end DATE NULL,
+  original_end_year INT NULL,
+  original_end_month INT NULL,
 
   original_type VARCHAR(100) NULL,
   original_category VARCHAR(50) NULL,
