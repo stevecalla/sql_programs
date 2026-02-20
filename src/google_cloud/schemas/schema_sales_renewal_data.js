@@ -71,6 +71,27 @@ const sales_renewal_schema = [
     description: "YYYY-MM-DD HH:MM:SS (from DATE_FORMAT)",
     fields: []
   },
+  {
+    name: "original_purchased_on_date_adjusted_mp",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "YYYY-MM-DD (from DATE_FORMAT)",
+    fields: []
+  },
+  {
+    name: "original_purchased_on_year_adjusted_mp",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Year extracted from original_purchased_on_year_adjusted_mp",
+    fields: []
+  },
+  {
+    name: "original_purchased_on_month_adjusted_mp",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Month extracted from original_purchased_on_month_adjusted_mp",
+    fields: []
+  },
 
   {
     name: "original_start",
@@ -79,12 +100,40 @@ const sales_renewal_schema = [
     description: "YYYY-MM-DD (from DATE_FORMAT)",
     fields: []
   },
+  {
+    name: "original_start_year",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Year extracted from original_start_year",
+    fields: []
+  },
+  {
+    name: "original_start_month",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Month extracted from original_start_month",
+    fields: []
+  },
 
   {
     name: "original_end",
     mode: "NULLABLE",
     type: "STRING",
     description: "YYYY-MM-DD (from DATE_FORMAT)",
+    fields: []
+  },
+  {
+    name: "original_end_year",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Year extracted from original_end_year",
+    fields: []
+  },
+  {
+    name: "original_end_month",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Month extracted from original_end_month",
     fields: []
   },
 

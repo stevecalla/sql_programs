@@ -14,6 +14,21 @@ const auto_renew_conversion_schema = [
     fields: []
   },
   {
+    name: "purchased_on_year_adjusted_mp",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Year extracted from purchased_on_date_adjusted_mp",
+    fields: []
+  },
+  {
+    name: "purchased_on_month_adjusted_mp",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Month extracted from purchased_on_date_adjusted_mp",
+    fields: []
+  },
+
+  {
     name: "id_profiles",
     mode: "NULLABLE",
     type: "INTEGER",
@@ -48,7 +63,6 @@ const auto_renew_conversion_schema = [
     description: null,
     fields: []
   },
-
   {
     name: "created_at_date_braintree_subscriptions",
     mode: "NULLABLE",
@@ -56,6 +70,21 @@ const auto_renew_conversion_schema = [
     description: "YYYY-MM-DD (from DATE_FORMAT)",
     fields: []
   },
+  {
+    name: "created_at_year_braintree_subscriptions",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Year extracted from created_at_date_braintree_subscriptions",
+    fields: []
+  },
+  {
+    name: "created_at_month_braintree_subscriptions",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Month extracted from created_at_date_braintree_subscriptions",
+    fields: []
+  },
+  
   {
     name: "customer_id_braintree_subscriptions",
     mode: "NULLABLE",
@@ -113,6 +142,21 @@ const auto_renew_conversion_schema = [
     description: "YYYY-MM-DD (from DATE_FORMAT)",
     fields: []
   },
+  {
+    name: "next_billing_year_braintree_subscriptions",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Year extracted from next_billing_date_braintree_subscriptions",
+    fields: []
+  },
+  {
+    name: "next_billing_month_braintree_subscriptions",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Month extracted from next_billing_date_braintree_subscriptions",
+    fields: []
+  },
+  
   {
     name: "created_at_braintree_subscriptions",
     mode: "NULLABLE",

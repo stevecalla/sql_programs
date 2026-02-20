@@ -12,6 +12,9 @@ function main(is_test, created_at_dates) {
         sales_purchasers_by_day AS (
         SELECT
             DATE(s.purchased_on_date_adjusted_mp) AS purchased_on_date_adjusted_mp,
+            s.purchased_on_year_adjusted_mp,
+            s.purchased_on_month_adjusted_mp,
+
             s.id_profiles,
             real_membership_types_sa,
             new_member_category_6_sa,
@@ -70,6 +73,9 @@ function main(is_test, created_at_dates) {
 
         SELECT 
             sp.purchased_on_date_adjusted_mp,
+            sp.purchased_on_year_adjusted_mp,
+            sp.purchased_on_month_adjusted_mp,
+
             sp.id_profiles,
             sp.real_membership_types_sa,
             sp.new_member_category_6_sa,
@@ -77,6 +83,9 @@ function main(is_test, created_at_dates) {
             sp.sales_revenue,
 
             ar.created_at_date_braintree_subscriptions,
+            YEAR(ar.created_at_date_braintree_subscriptions) AS created_at_year_braintree_subscriptions,
+            MONTH(ar.created_at_date_braintree_subscriptions) AS created_at_month_braintree_subscriptions,
+
             ar.customer_id_braintree_subscriptions,
             ar.id_profiles AS id_profiles_auto_renew,
             ar.product_id_braintree_plans,
@@ -84,7 +93,11 @@ function main(is_test, created_at_dates) {
             ar.status_braintree_subscriptions,
             ar.is_active_auto_renew_flag,
             ar.price_braintree_subscriptions,
+
             ar.next_billing_date_braintree_subscriptions,
+            YEAR(ar.next_billing_date_braintree_subscriptions) AS next_billing_year_braintree_subscriptions,
+            MONTH(ar.next_billing_date_braintree_subscriptions) AS next_billing_month_braintree_subscriptions,
+
             ar.created_at_braintree_subscriptions,
             ar.updated_at_braintree_subscriptions,
             

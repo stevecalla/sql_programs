@@ -13,10 +13,20 @@ async function main(batch_size = 10, offset = 0) {
       member_number_members_sa,
 
       original_id_membership_periods_sa,
-      DATE_FORMAT(original_purchased_on_adjusted_mp, '%Y-%m-%d %H:%i:%s') AS original_purchased_on_adjusted_mp,
       
+      DATE_FORMAT(original_purchased_on_adjusted_mp, '%Y-%m-%d %H:%i:%s') AS original_purchased_on_adjusted_mp,
+      DATE_FORMAT(original_purchased_on_date_adjusted_mp, '%Y-%m-%d') AS original_purchased_on_date_adjusted_mp,
+      original_purchased_on_year_adjusted_mp,
+      original_purchased_on_month_adjusted_mp,
+
       DATE_FORMAT(original_start, '%Y-%m-%d') AS original_start, 
+      original_start_year,
+      original_start_month,
+
       DATE_FORMAT(original_end, '%Y-%m-%d') AS original_end, 
+      original_end_year,
+      original_end_month,
+
       original_type,
       original_category,
       original_origin_flag_category,
