@@ -10,6 +10,10 @@ const { execute_transfer_usat_to_local } = require('./step_1_transfer_data_usat_
 
 const { execute_load_big_query_auto_renew_data_metrics } = require('./step_3_load_bq_auto_renew_data_metrics');
 
+const { execute_create_auto_renew_and_sales_renewal_data } = require('./step_4_create_auto_renew_conversion_and_sales_renewal_data');
+
+const { execute_load_biq_query_auto_renew_and_sales_renewal_data } = require('./step_5_load_bq_auto_renew_conversion_and_sales_renenewal_data');
+
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 async function executeSteps(stepFunctions, stepName) {
@@ -77,17 +81,26 @@ async function main() {
   // const run_step_2 = false; // execute_create_auto_renew_data_metrics; commented out until needed
   const run_step_3 = true; // load event metrics to bigquery
 
+  const run_step_4 = true; // get / create auto renew & generic sales renewal data
+  const run_step_5 = true; // load event auto renew & generic sales renewal data to bigquery
+
   try {
     const stepFunctions = [
       run_step_1 ? execute_transfer_usat_to_local : null,
       // run_step_2 ? execute_create_event_data_metrics : null,
       run_step_3 ? execute_load_big_query_auto_renew_data_metrics : null,
+
+      run_step_4 ? execute_create_auto_renew_and_sales_renewal_data : null,
+      run_step_5 ? execute_load_biq_query_auto_renew_and_sales_renewal_data : null,
     ];
 
     const stepName = [
       `Step #1 - Transfer data from USAT to Local db: `, 
-      `Step #2 - Create auto_renew data metrics: `, 
+      // `Step #2 - Create auto_renew data metrics: `, 
       `Step #3 - Load auto_renew metrics to BQ: `,
+
+      `Step #4 - Create auto renew conversion & sales renewal data: `, 
+      `Step #5 - Load auto_renew_and_sales_renewal_data to BQ: `,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function
