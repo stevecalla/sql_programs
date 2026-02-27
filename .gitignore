@@ -14,6 +14,9 @@ __pycache__/
 *.geojson
 *.mbtiles
 
+# Used for cron_system_metrics log
+*.jsonl
+
 # Ignore Python virtual environments
 venv/
 .venv/
