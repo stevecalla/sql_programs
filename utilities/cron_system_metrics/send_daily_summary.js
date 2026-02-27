@@ -1,5 +1,9 @@
 // send_daily_summary.js
 // tail -f system_metrics.log
+const dotenv = require("dotenv");
+dotenv.config({
+  path: "/home/usat-server/development/usat/sql_programs/.env"
+});
 
 const fs = require("fs");
 const path = require("path");
