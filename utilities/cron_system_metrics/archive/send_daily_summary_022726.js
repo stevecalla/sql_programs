@@ -3,7 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { slack_message_api } = require("../slack_messaging/slack_message_api");
+const { slack_message_api } = require("../../slack_messaging/slack_message_api");
 
 const metrics_file = path.join(__dirname, "metrics.jsonl");
 
@@ -56,22 +56,6 @@ function ts_utc_ms(ts_utc) {
   if (!ts_utc) return null;
   const t = Date.parse(String(ts_utc).replace(" ", "T") + "Z");
   return Number.isFinite(t) ? t : null;
-}
-
-// 12-hour AM/PM timestamp for peak/min lines (MT)
-function fmt_ts_mtn_from_ts_utc(ts_utc) {
-  const ms = ts_utc_ms(ts_utc);
-  if (ms === null) return "n/a";
-  return new Date(ms).toLocaleString("en-US", {
-    timeZone: "America/Denver",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
 }
 
 function peak(arr, key) {
@@ -272,12 +256,6 @@ async function send_daily_summary() {
     score >= 75 ? ":large_orange_circle:" :
     ":red_circle:";
 
-  const peak_load_time_mtn = fmt_ts_mtn_from_ts_utc(peak_load.ts_utc);
-  const peak_disk_time_mtn = fmt_ts_mtn_from_ts_utc(peak_disk_pct.ts_utc);
-  const peak_swap_time_mtn = fmt_ts_mtn_from_ts_utc(peak_swap.ts_utc);
-  const peak_wa_time_mtn = fmt_ts_mtn_from_ts_utc(peak_wa.ts_utc);
-  const min_mem_time_mtn = fmt_ts_mtn_from_ts_utc(min_mem.ts_utc);
-
   const message =
 `:desktop_computer: *${latest.host_name} — 24h System Health Summary*
 Overall Status: ${overall_emoji} *${overall}*    Health Score: ${score_badge} *${score}/100*
@@ -286,30 +264,30 @@ Samples analyzed (last 24h): ${day.length}
 :floppy_disk: *RAM (Memory)*
 Current Used: ${fmt(mem_used)}/${fmt(mem_total)} GiB (${fmt_pct(mem_used_pct)})   Trend: ${arrow(t_mem_used_pct.delta)} (${fmt(t_mem_used_pct.delta, 1)} pp)
 Current Available: ${fmt(mem_avail)} GiB
-Minimum Available (last 24h): ${fmt(min_mem_avail)} GiB @ ${min_mem_time_mtn} MT
+Minimum Available (last 24h): ${fmt(min_mem_avail)} GiB
 Status: ${emoji_for_status(mem_status)} ${mem_status}
 Memory Pressure (PSI avg10): some=${psi_some === null ? "n/a" : psi_some.toFixed(2)}  full=${psi_full === null ? "n/a" : psi_full.toFixed(2)}   Status: ${pressure_emoji} ${pressure_status}
 ────────────────────────
 :brain: *CPU*
 Current Load (1m/5m/15m): ${latest.load_1}/${latest.load_5}/${latest.load_15}   Trend (1m load): ${arrow(t_load_1.delta)} (${fmt(t_load_1.delta, 2)})
-Peak 1-Minute Load (24h): ${to_num(peak_load.load_1) === null ? "n/a" : to_num(peak_load.load_1).toFixed(2)} @ ${peak_load_time_mtn} MT
+Peak 1-Minute Load (24h): ${to_num(peak_load.load_1) === null ? "n/a" : to_num(peak_load.load_1).toFixed(2)}
 CPU Utilization vs Capacity (approx): ${fmt_pct(cpu_load_pct)}
 Cores: ${latest.cores}
 Status: ${emoji_for_status(cpu_status)} ${cpu_status}
 ────────────────────────
 :minidisc: *Disk (Root /)*
 Current Used: ${fmt(disk_used)}/${fmt(disk_total)} GiB (${disk_pct === null ? "n/a" : disk_pct.toFixed(0)}%)   Trend: ${arrow(t_disk_pct.delta)} (${fmt(t_disk_pct.delta, 1)} pp)
-Peak Usage % (24h): ${peak_disk === null ? "n/a" : peak_disk.toFixed(0)}% @ ${peak_disk_time_mtn} MT
+Peak Usage % (24h): ${peak_disk === null ? "n/a" : peak_disk.toFixed(0)}%
 Status: ${emoji_for_status(disk_status)} ${disk_status}
 ────────────────────────
 :repeat: *Swap (Virtual Memory)*
 Current Used: ${fmt(swap_used)}/${fmt(swap_total)} GiB (${fmt_pct(swap_used_pct)})   Trend: ${arrow(t_swap_used_b.delta)} (${fmt(gib_from_bytes(t_swap_used_b.delta), 2)} GiB)
-Peak Swap Used (24h): ${fmt(peak_swap_used)} GiB @ ${peak_swap_time_mtn} MT
+Peak Swap Used (24h): ${fmt(peak_swap_used)} GiB
 Status: ${emoji_for_status(swap_status)} ${swap_status}
 ────────────────────────
 :zap: *Disk IO Wait*
 Current IO Wait: ${latest.vm_wa}%   Trend: ${arrow(t_vm_wa.delta)} (${fmt(t_vm_wa.delta, 1)} pp)
-Peak IO Wait (24h): ${peak_wa.vm_wa}% @ ${peak_wa_time_mtn} MT
+Peak IO Wait (24h): ${peak_wa.vm_wa}%
 Status: ${emoji_for_status(io_status)} ${io_status}
 ────────────────────────
 :thermometer: *Temperatures*
