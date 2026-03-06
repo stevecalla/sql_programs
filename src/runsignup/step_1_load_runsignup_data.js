@@ -24,9 +24,11 @@ const {
 // ----------------------------------------
 // Config
 // ----------------------------------------
-const YEAR = 2026; // todo
-const START_DATE = `${YEAR}-01-01`;
-const END_DATE = `${YEAR}-12-31`;
+const CURRENT_YEAR = new Date().getFullYear();
+const PRIOR_YEAR = CURRENT_YEAR - 1;
+const NEXT_YEAR = CURRENT_YEAR + 1;
+const YEARS_TO_LOAD = [CURRENT_YEAR, PRIOR_YEAR, NEXT_YEAR];
+// const YEARS_TO_LOAD = [NEXT_YEAR];
 
 const RUNSIGNUP_API_KEY = process.env.RUNSIGNUP_API_KEY || null;
 const RUNSIGNUP_API_SECRET = process.env.RUNSIGNUP_API_SECRET || null;
@@ -101,25 +103,30 @@ async function main() {
     const streamPromise = (async () => {
       let buffer = [];
 
-      const rows_stream = generate_runsignup_rows_streaming({
-        year: YEAR,
-        start_date: START_DATE,
-        end_date: END_DATE,
-        results_per_page: RESULTS_PER_PAGE,
-        enable_race_only: ENABLE_RACE_ONLY,
-        api_key: RUNSIGNUP_API_KEY,
-        api_secret: RUNSIGNUP_API_SECRET,
-        throttle_ms: 200,
-        created_at_mtn,
-        created_at_utc,
-      });
+      for (const year of YEARS_TO_LOAD) {
+        const start_date = `${year}-01-01`;
+        const end_date = `${year}-12-31`;
 
-      for await (const row of rows_stream) {
-        buffer.push(row);
+        const rows_stream = generate_runsignup_rows_streaming({
+          year,
+          start_date,
+          end_date,
+          results_per_page: RESULTS_PER_PAGE,
+          enable_race_only: ENABLE_RACE_ONLY,
+          api_key: RUNSIGNUP_API_KEY,
+          api_secret: RUNSIGNUP_API_SECRET,
+          throttle_ms: 200,
+          created_at_mtn,
+          created_at_utc,
+        });
 
-        if (buffer.length >= BATCH_SIZE) {
-          await flush_batch(dst, TABLE_NAME, buffer);
-          buffer = [];
+        for await (const row of rows_stream) {
+          buffer.push(row);
+
+          if (buffer.length >= BATCH_SIZE) {
+            await flush_batch(dst, TABLE_NAME, buffer);
+            buffer = [];
+          }
         }
       }
 
@@ -151,7 +158,12 @@ async function main() {
 }
 
 if (require.main === module) {
-  main();
+    try {
+        console.log('\nStarting data load.');
+        main();
+    } catch (error) {
+        console.error("Error during data load:", error);
+    }
 }
 
 module.exports = {

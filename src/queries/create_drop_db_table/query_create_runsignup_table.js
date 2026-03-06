@@ -32,8 +32,15 @@ const race_fields = `
   is_private_race TINYINT NULL,
   is_draft_race TINYINT NULL,
 
-  created VARCHAR(50) NULL,
-  last_modified VARCHAR(50) NULL,
+  created_runsignup_timestamp VARCHAR(50) NULL,
+  created_runsignup_date VARCHAR(25) NULL,
+  created_runsignup_month INT NULL,
+  created_runsignup_year INT NULL,
+
+  last_runsignup_modified_timestamp VARCHAR(50) NULL,
+  last_runsignup_modified_date VARCHAR(25) NULL,
+  last_runsignup_modified_month INT NULL,
+  last_runsignup_modified_year INT NULL,
 
   description LONGTEXT NULL,
   timezone VARCHAR(64) NULL,
@@ -132,6 +139,16 @@ const index_fields = `
 
   INDEX idx_race_next_date (race_next_date),
   INDEX idx_event_start_time (event_start_time),
+
+  INDEX idx_created_runsignup_timestamp (created_runsignup_timestamp),
+  INDEX idx_created_runsignup_date (created_runsignup_date),
+  INDEX idx_created_runsignup_month (created_runsignup_month),
+  INDEX idx_created_runsignup_year (created_runsignup_year),
+
+  INDEX idx_last_runsignup_modified_timestamp (last_runsignup_modified_timestamp),
+  INDEX idx_last_runsignup_modified_date (last_runsignup_modified_date),
+  INDEX idx_last_runsignup_modified_month (last_runsignup_modified_month),
+  INDEX idx_last_runsignup_modified_year (last_runsignup_modified_year),
 
   INDEX idx_created_at_mtn (created_at_mtn),
   INDEX idx_created_at_utc (created_at_utc)

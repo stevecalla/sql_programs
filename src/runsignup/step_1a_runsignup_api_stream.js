@@ -247,6 +247,22 @@ function normalize_race_dates(race) {
     race_next_date
   );
 
+  const created_runsignup_timestamp = normalize_date_or_datetime(race?.created);
+  const created_runsignup_date = normalize_date_only(race?.created);
+  const {
+    month: created_runsignup_month,
+    year: created_runsignup_year,
+  } = parse_date_to_month_year(created_runsignup_timestamp);
+
+  const last_runsignup_modified_timestamp = normalize_date_or_datetime(
+    race?.last_modified
+  );
+  const last_runsignup_modified_date = normalize_date_only(race?.last_modified);
+  const {
+    month: last_runsignup_modified_month,
+    year: last_runsignup_modified_year,
+  } = parse_date_to_month_year(last_runsignup_modified_timestamp);
+
   return {
     race_last_date: normalize_date_only(race?.last_date),
     race_last_end_date: normalize_date_only(race?.last_end_date),
@@ -254,6 +270,16 @@ function normalize_race_dates(race) {
     race_next_end_date: normalize_date_only(race?.next_end_date),
     race_month,
     race_year,
+
+    created_runsignup_timestamp,
+    created_runsignup_date,
+    created_runsignup_month,
+    created_runsignup_year,
+
+    last_runsignup_modified_timestamp,
+    last_runsignup_modified_date,
+    last_runsignup_modified_month,
+    last_runsignup_modified_year,
   };
 }
 
@@ -462,8 +488,6 @@ async function* generate_runsignup_rows_streaming(opts) {
         is_private_race: as_bool_flag(race?.is_private_race),
         is_draft_race: as_bool_flag(race?.is_draft_race),
 
-        created: normalize_date_or_datetime(race?.created),
-        last_modified: normalize_date_or_datetime(race?.last_modified),
         description: strip_html(race?.description),
         timezone: as_string(race?.timezone),
 
