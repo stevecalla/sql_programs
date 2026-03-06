@@ -4,8 +4,11 @@ dotenv.config({ path: "../../.env" });
 const { logPM2MemoryUsage } = require('../../utilities/pm2_scripts/pm2_log_memory_usage');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
-const { query_auto_renew_data } = require('../google_cloud/queries/query_auto_renew_data');
-const { all_auto_renew_data_schema } = require('../google_cloud/schemas/schema_auto_renew_data');
+// const { query_runsignup_race_event_data } = require('../google_cloud/queries/query_runsignup_race_event_data');
+const { query_runsignup_race_event_data } = require('../google_cloud/queries/query_runsignup_data');
+
+// const { all_runsignup_data_schema } = require('../google_cloud/schemas/schema_auto_renew_data');
+const { all_runsignup_data_schema } = require('../google_cloud/schemas/schema_runsignup_data');
 
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
@@ -18,19 +21,19 @@ async function main() {
 
     const options = [
         {
-            fileName: 'auto_renew_data',
-            query: (retrieval_batch_size, offset) => query_auto_renew_data(retrieval_batch_size, offset),
-            tableId: 'auto_renew_data', // table name
+            fileName: 'runsignup_data',
+            query: (retrieval_batch_size, offset) => query_runsignup_race_event_data(retrieval_batch_size, offset),
+            tableId: 'runsignup_data', // table name
 
-            // fileName: 'auto_renew_data_v2',
-            // tableId: "auto_renew_data_v2",
+            // fileName: 'runsignup_data_v2',
+            // tableId: "runsignup_data_v2",
         }
     ];
 
     const directoryName = `usat_bigquery_${options[0].fileName}`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting';
-    const schema = all_auto_renew_data_schema;
+    const schema = all_runsignup_data_schema;
 
     await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
 
