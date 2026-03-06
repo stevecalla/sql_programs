@@ -11,6 +11,7 @@ dotenv.config({ path: "../../.env" });
 const mysqlP = require("mysql2/promise");
 const { local_usat_sales_db_config } = require("../../utilities/config");
 const { runTimer, stopTimer } = require("../../utilities/timer");
+const { get_mountain_time_offset_hours, to_mysql_datetime } = require("../../utilities/date_time_tools/get_mountain_time_offset_hours");
 
 const {
   query_create_runsignup_race_event_extract_table,
@@ -62,6 +63,19 @@ async function flush_batch(dst, tableName, rows) {
   await dst.execute(sql, values);
 }
 
+async function get_created_at_date() {
+    // Batch timestamps (UTC → MTN via offset fn)
+    const now_utc = new Date();
+    const mtn_offset_hours = get_mountain_time_offset_hours(now_utc);
+    const now_mtn = new Date(now_utc.getTime() + mtn_offset_hours * 60 * 60 * 1000);
+
+    // IMPORTANT: strings for MySQL DATETIME columns
+    const created_at_utc = to_mysql_datetime(now_utc);
+    const created_at_mtn = to_mysql_datetime(now_mtn);
+
+  return { created_at_mtn, created_at_utc };
+}
+
 async function main() {
   const BATCH_SIZE = 500;
   const TABLE_NAME = "all_runsignup_data_raw";
@@ -82,6 +96,8 @@ async function main() {
     await dst.beginTransaction();
     await create_target_table(dst, TABLE_NAME, TABLE_STRUCTURE);
 
+    const { created_at_mtn, created_at_utc } = await get_created_at_date();
+
     const streamPromise = (async () => {
       let buffer = [];
 
@@ -94,6 +110,8 @@ async function main() {
         api_key: RUNSIGNUP_API_KEY,
         api_secret: RUNSIGNUP_API_SECRET,
         throttle_ms: 200,
+        created_at_mtn,
+        created_at_utc,
       });
 
       for await (const row of rows_stream) {

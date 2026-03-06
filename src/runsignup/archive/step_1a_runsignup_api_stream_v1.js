@@ -6,29 +6,10 @@
  * - normalization helpers
  * - async generator that yields DB-ready "wide" rows (streaming)
  *
- * RunSignup Time Handling Notes
- * -----------------------------
- * According to the RunSignup API documentation:
- *
- * - Most date/time fields returned by the API are in **Eastern Time**.
- * - Some event-level fields (such as event start/end time) may be in the
- *   **timezone of the race itself**.
- *
- * Because of this, this script intentionally **does not perform timezone
- * conversion**. Instead it:
- *
- * - Preserves the **exact date/time values returned by the API**
- * - Only **normalizes formatting** to a consistent database format
- *
  * Date rules (normalized output):
  * - Date-only -> "YYYY-MM-DD"
  * - Date+time -> "YYYY-MM-DD HH:MM:SS"
- *
- * IMPORTANT:
- * - No timezone shifting occurs in this file.
- * - The values stored reflect the **original API-provided clock time**.
- * - Any timezone interpretation or conversion should occur downstream
- *   if needed.
+ * - If input is ISO w/ timezone, we normalize to UTC for datetime outputs.
  */
 
 const API_BASE = "https://api.runsignup.com/rest/races";
@@ -102,29 +83,37 @@ function strip_html(x) {
  * --------
  * Date formatting helpers
  * --------
- *
- * These helpers normalize formatting only.
- *
- * They DO NOT convert timezone offsets or change the clock time.
- * They simply standardize the API-provided values into a consistent
- * database-friendly format.
  */
 
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
 
+function fmt_utc_date(d) {
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(
+    d.getUTCDate()
+  )}`;
+}
+
+function fmt_utc_datetime(d) {
+  return `${fmt_utc_date(d)} ${pad2(d.getUTCHours())}:${pad2(
+    d.getUTCMinutes()
+  )}:${pad2(d.getUTCSeconds())}`;
+}
+
+function has_time_component(raw) {
+  if (!raw) return false;
+  const s = String(raw);
+  return /[T ]\d{1,2}:\d{2}/.test(s) || /:\d{2}/.test(s);
+}
+
 /**
- * Normalize date/datetime strings
- *
- * Behavior:
- * - If the value already looks like YYYY-MM-DD -> return as-is
- * - If it looks like YYYY-MM-DD HH:MM(:SS) -> normalize seconds
- * - Otherwise attempt Date parsing strictly to normalize formatting
- *
- * IMPORTANT:
- * - This function does NOT reinterpret the timezone.
- * - The clock time returned by RunSignup is preserved.
+ * Normalize:
+ * - If string already looks like YYYY-MM-DD -> return as-is
+ * - If string already looks like YYYY-MM-DD[ T]HH:MM(:SS)? -> normalize to "YYYY-MM-DD HH:MM:SS"
+ * - Else try Date parsing:
+ *    - if original seems to include time -> return UTC datetime
+ *    - else -> return UTC date
  */
 function normalize_date_or_datetime(x) {
   const s0 = as_string(x);
@@ -151,14 +140,7 @@ function normalize_date_or_datetime(x) {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return null;
 
-  const yyyy = d.getFullYear();
-  const mm = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
-  const HH = pad2(d.getHours());
-  const MM = pad2(d.getMinutes());
-  const SS = pad2(d.getSeconds());
-
-  return `${yyyy}-${mm}-${dd} ${HH}:${MM}:${SS}`;
+  return has_time_component(s) ? fmt_utc_datetime(d) : fmt_utc_date(d);
 }
 
 function normalize_date_only(x) {
@@ -179,15 +161,7 @@ function normalize_datetime(x) {
 
   const d = new Date(s0);
   if (Number.isNaN(d.getTime())) return null;
-
-  const yyyy = d.getFullYear();
-  const mm = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
-  const HH = pad2(d.getHours());
-  const MM = pad2(d.getMinutes());
-  const SS = pad2(d.getSeconds());
-
-  return `${yyyy}-${mm}-${dd} ${HH}:${MM}:${SS}`;
+  return fmt_utc_datetime(d);
 }
 
 function parse_date_to_month_year(date_str) {
@@ -207,11 +181,6 @@ function parse_date_to_month_year(date_str) {
   return { month, year };
 }
 
-/**
- * Address normalization
- *
- * These fields are passed through directly from the API.
- */
 function normalize_address(race) {
   const addr = race?.address || null;
   return {
@@ -235,12 +204,6 @@ function normalize_urls_and_social(race) {
   };
 }
 
-/**
- * Race-level dates
- *
- * These dates come directly from the RunSignup API.
- * They are normalized to consistent formatting but otherwise preserved.
- */
 function normalize_race_dates(race) {
   const race_next_date = normalize_date_only(race?.next_date);
   const { month: race_month, year: race_year } = parse_date_to_month_year(
@@ -257,12 +220,6 @@ function normalize_race_dates(race) {
   };
 }
 
-/**
- * Event-level dates
- *
- * These values are taken directly from the RunSignup API response.
- * Formatting is standardized but the clock time is preserved.
- */
 function normalize_event_dates(ev) {
   const raw_start = ev?.start_time;
   const raw_end = ev?.end_time;
@@ -366,8 +323,6 @@ async function fetch_races_page({
 
   const url = `${API_BASE}?${params.toString()}`;
 
-  console.log(`Fetching API page ${page}... ${url}`);
-
   const controller = new AbortController();
   const timeout_id = setTimeout(() => controller.abort(), 30000);
 
@@ -413,8 +368,6 @@ async function* generate_runsignup_rows_streaming(opts) {
     api_key,
     api_secret,
     throttle_ms = 200,
-    created_at_mtn = null,
-    created_at_utc = null,
   } = opts;
 
   const seen_race_ids = new Set();
@@ -427,6 +380,8 @@ async function* generate_runsignup_rows_streaming(opts) {
   let global_race_row_index = 0;
 
   while (keep_going) {
+    console.log(`Fetching API page ${page}...`);
+
     const data = await fetch_races_page({
       page,
       results_per_page,
@@ -522,8 +477,8 @@ async function* generate_runsignup_rows_streaming(opts) {
             event_processing_fee: null,
             event_registration_periods_json: "[]",
 
-            created_at_mtn,
-            created_at_utc,
+            created_at_mtn: null,
+            created_at_utc: null,
           };
         }
         continue;
@@ -578,8 +533,8 @@ async function* generate_runsignup_rows_streaming(opts) {
           ...ev_dates,
           ...reg_periods_summary,
 
-          created_at_mtn,
-          created_at_utc,
+          created_at_mtn: null,
+          created_at_utc: null,
         };
       }
     }
