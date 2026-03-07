@@ -10,8 +10,8 @@ const ExcelJS = require("exceljs");
 // -------------------------------
 // SAFETY / TEST KNOBS
 // -------------------------------
-const TEST_MODE = false;
-const TEST_MAX_PAGES = 20;
+const TEST_MODE = true;
+const TEST_MAX_PAGES = 2;
 
 // hard cap for full runs (absolute safety)
 const MAX_PAGES_FULL = 800;
@@ -67,10 +67,10 @@ const xlsx_enriched_path = path.join(output_directory, `${output_stem}_enriched_
 // { query: "sport_ids%5B%5D=9", sport: "Swimming" },= 37
 // { query: "sport_ids%5B0%5D=10", sport: "Triathlon" },= 1,408
 // { query: "sport_ids%5B%5D=12", sport: "Multisport" }, = 16
-const is_test = false;
+const is_test = true;
 const sport_map = is_test
   ? [
-    // { query: "sport_ids%5B%5D=10", sport: "Triathlon" },
+    { query: "sport_ids%5B%5D=10", sport: "Triathlon" },
     // { query: "race_filter_ids%5B%5D=5", sport: "Hyrox" },
     // { query: "sport_ids%5B%5D=2", sport: "Aquabike" },
   ]
