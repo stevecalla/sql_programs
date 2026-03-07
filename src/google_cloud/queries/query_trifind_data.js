@@ -45,7 +45,7 @@ async function main(batch_size = 10, offset = 0) {
 
       usat_link,
       usat_link_text,
-      usat_sanction_number,
+      usat_event_id_number,
       is_usat_sanctioned,
 
       previous_results_count,

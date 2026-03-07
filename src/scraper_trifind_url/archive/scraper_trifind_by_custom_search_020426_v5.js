@@ -250,14 +250,14 @@
     });
 
     const is_usat_sanctioned = usat_link ? "Yes" : "No";
-    const usat_sanction_number = extract_usat_sanction_number_from_url(usat_link);
+    const usat_event_id_number = extract_usat_sanction_number_from_url(usat_link);
 
     return {
       register_now_url,
       visit_race_website_url,
       usat_link,
       usat_link_text, // 🔧 NEW
-      usat_sanction_number,
+      usat_event_id_number,
       is_usat_sanctioned,
       previous_results_count,
     };
@@ -666,7 +666,7 @@
       "visit_race_website_url",
       "usat_link",
       "usat_link_text", // 🔧 NEW
-      "usat_sanction_number",
+      "usat_event_id_number",
       "is_usat_sanctioned",
       "previous_results_count",
     ];
@@ -759,7 +759,7 @@
             visit_race_website_url: null,
             usat_link: null,
             usat_link_text: null, // 🔧 NEW
-            usat_sanction_number: null,
+            usat_event_id_number: null,
             is_usat_sanctioned: "No",
             previous_results_count: 0,
           };
@@ -778,7 +778,7 @@
               visit_race_website_url: null,
               usat_link: null,
               usat_link_text: null, // 🔧 NEW
-              usat_sanction_number: null,
+              usat_event_id_number: null,
               is_usat_sanctioned: "No",
               previous_results_count: 0,
             };

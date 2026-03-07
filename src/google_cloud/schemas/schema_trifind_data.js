@@ -131,7 +131,7 @@ const main = [
     fields: []
   },
   {
-    name: "usat_sanction_number",
+    name: "usat_event_id_number",
     mode: "NULLABLE",
     type: "STRING",
     description: "USAT sanction number best-effort extracted from the USAT link URL",

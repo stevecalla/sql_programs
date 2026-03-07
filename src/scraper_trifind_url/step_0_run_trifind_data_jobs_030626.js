@@ -5,7 +5,10 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 // GET & LOAD trifind DATA
 const { execute_transfer_trifind_website_to_local } = require('./step_1_load_trifind_websitie_data'); // Step #1: Transfer trifind website data to Local db
-const { execute_load_big_query_trifind_data } = require('./step_2_load_bq_trifind_data'); // Step #2: Load trifind data to BQ
+
+const { execute_match_trifind_to_usat } = require('./step_2_match_trifind_to_usat');
+
+const { execute_load_big_query_trifind_data } = require('./step_3_load_bq_trifind_data'); // Step #3: Load trifind data to BQ
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
@@ -70,18 +73,21 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = true; // get trifind website data
-  const run_step_2 = true; // load runsignpup to bigquery
+  const run_step_1 = false; // get trifind website data
+  const run_step_2 = true; // match_trifind_to_usat
+  const run_step_3 = false; // load runsignpup to bigquery
 
   try {
     const stepFunctions = [
       run_step_1 ? execute_transfer_trifind_website_to_local : null,
-      run_step_2 ? execute_load_big_query_trifind_data : null,
+      run_step_2 ? execute_match_trifind_to_usat : null,
+      run_step_3 ? execute_load_big_query_trifind_data : null,
     ];
 
     const stepName = [
       `Step #1 - Transfer trifind website data to Local db: `,  
-      `Step #2 - Load trifind data to BQ: `,
+      `Step #2 - step_2_match_trifind_to_usat: `,  
+      `Step #3 - Load trifind data to BQ: `,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function

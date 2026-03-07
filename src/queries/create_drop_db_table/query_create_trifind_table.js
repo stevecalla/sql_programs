@@ -41,7 +41,7 @@ const detail_fields = `
 
   usat_link VARCHAR(1024) NULL,
   usat_link_text VARCHAR(255) NULL,
-  usat_sanction_number VARCHAR(100) NULL,
+  usat_event_id_number VARCHAR(100) NULL,
   is_usat_sanctioned VARCHAR(10) NULL,
 
   previous_results_count INT NULL,
@@ -67,7 +67,7 @@ const index_fields = `
   INDEX idx_is_canceled (is_canceled),
   INDEX idx_is_duplicate_listing (is_duplicate_listing),
   INDEX idx_is_usat_sanctioned (is_usat_sanctioned),
-  INDEX idx_usat_sanction_number (usat_sanction_number),
+  INDEX idx_usat_sanction_number (usat_event_id_number),
 
   INDEX idx_previous_results_count (previous_results_count),
 

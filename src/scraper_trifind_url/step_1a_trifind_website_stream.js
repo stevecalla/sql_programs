@@ -316,14 +316,14 @@ function parse_detail_page(html) {
   });
 
   const is_usat_sanctioned = usat_link ? "Yes" : "No";
-  const usat_sanction_number = extract_usat_sanction_number_from_url(usat_link);
+  const usat_event_id_number = extract_usat_sanction_number_from_url(usat_link);
 
   return {
     register_now_url,
     visit_race_website_url,
     usat_link,
     usat_link_text,
-    usat_sanction_number,
+    usat_event_id_number,
     is_usat_sanctioned,
     previous_results_count,
   };
@@ -510,7 +510,7 @@ async function enrich_listing_event(listing_event) {
       visit_race_website_url: null,
       usat_link: null,
       usat_link_text: null,
-      usat_sanction_number: null,
+      usat_event_id_number: null,
       is_usat_sanctioned: "No",
       previous_results_count: 0,
     };
@@ -536,7 +536,7 @@ async function enrich_listing_event(listing_event) {
       visit_race_website_url: null,
       usat_link: null,
       usat_link_text: null,
-      usat_sanction_number: null,
+      usat_event_id_number: null,
       is_usat_sanctioned: "No",
       previous_results_count: 0,
     };
@@ -702,7 +702,7 @@ async function* generate_trifind_rows_streaming(opts) {
           visit_race_website_url: enriched?.visit_race_website_url ?? null,
           usat_link: enriched?.usat_link ?? null,
           usat_link_text: enriched?.usat_link_text ?? null,
-          usat_sanction_number: enriched?.usat_sanction_number ?? null,
+          usat_event_id_number: enriched?.usat_event_id_number ?? null,
           is_usat_sanctioned: enriched?.is_usat_sanctioned ?? "No",
           previous_results_count: safe_integer(enriched?.previous_results_count) ?? 0,
 

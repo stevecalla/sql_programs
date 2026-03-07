@@ -11,9 +11,7 @@
     "pm2_logs_all": "npx pm2 logs all",
     "pm2_delete_all": "npx pm2 delete all",
     "pm2_run_all_servers": "echo '▶ (1 of 12) Starting pm2_start_slack' && npm run pm2_start_slack && echo '▶ (2 of 12) Starting pm2_start_sales_2200' && npm run pm2_start_sales_2200 && echo '▶ (3 of 12) Starting pm2_start_race_2200' && npm run pm2_start_race_2200 && echo '▶ (4 of 12) Starting pm2_start_recognition_2200' && npm run pm2_start_recognition_2200 && echo '▶ (5 of 12) Starting pm2_start_events_2200' && npm run pm2_start_events_2200 && echo '▶ (6 of 12) Starting pm2_start_revenue_2200' && npm run pm2_start_revenue_2200 && echo '▶ (7 of 12) Starting pm2_start_slack_events_2200' && npm run pm2_start_slack_events_2200 && echo '▶ (8 of 12) Starting pm2_start_slack_races_2200' && npm run pm2_start_slack_races_2200 && echo '▶ (9 of 12) Starting pm2_start_slack_news_2200' && npm run pm2_start_slack_news_2200 && echo '▶ (10 of 12) Starting pm2_start_org_chart_2200' && npm run pm2_start_org_chart_2200 && echo '▶ (11 of 12) Starting pm2_start_membership_base_2200' && npm run pm2_start_membership_base_2200 && echo '▶ (12 of 12) Starting pm2_start_slack_membership_base_2200' && npm run pm2_start_slack_membership_base_2200 && echo '▶ (13 of 13) Starting pm2_start_auto_renew_2200' && npm run pm2_start_auto_renew_2200",
-
     "get_date": "sh -c 'date \"+%Y-%m-%d %H:%M:%S\"'",
-
     "pm2_start_slack": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack.js --name usat_slack --no-autorestart --max-memory-restart 3G --cron-restart '30 * * * *' --node-args=\"--expose-gc\"",
     "pm2_start_slack_test": "npx pm2 start server_slack.js --name usat_slack",
     "pm2_logs_slack": "npx pm2 logs usat_slack",
@@ -21,21 +19,18 @@
     "delete_slack": "npx pm2 delete usat_slack",
     "show_slack": "npx pm2 show usat_slack",
     "restart_slack": "npx pm2 restart usat_slack",
-    
     "pm2_start_sales_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_sales.js --name usat_sales --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     "pm2_logs_sales": "npx pm2 logs usat_sales",
     "stop_sales": "npx pm2 stop usat_sales",
     "delete_sales": "npnx pm2 delete usat_sales",
     "show_sales": "npx pm2 show usat_sales",
     "restart_sales": "npx pm2 restart usat_sales",
-
     "pm2_start_race_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_participation.js --name usat_race --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     "pm2_logs_race": "npx pm2 logs usat_race",
     "stop_race": "npx pm2 stop usat_race",
     "delete_race": "npnx pm2 delete usat_race",
     "show_race": "npx pm2 show usat_race",
     "restart_race": "npx pm2 restart usat_race",
-
     "pm2_start_recognition_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_recognition.js --name usat_recognition --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     "pm2_start_recognition": "npx pm2 start server_recognition.js --name usrecognition",
     "pm2_logs_recognition": "npx pm2 logs usat_recognition",
@@ -43,14 +38,12 @@
     "delete_recognition": "npx pm2 delete usat_recognition",
     "show_recognition": "npx pm2 show usat_recognition",
     "restart_recognition": "npx pm2 restart usat_recognition",
-
     "pm2_start_events_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_events.js --name usat_events --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     "pm2_logs_events": "npx pm2 logs usat_events",
     "stop_events": "npx pm2 stop usat_events",
     "delete_events": "npx pm2 delete usat_events",
     "show_events": "npx pm2 show usat_events",
     "restart_events": "npx pm2 restart usat_events",
-
     "pm2_start_revenue_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack_revenue.js --name usat_revenue --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     "pm2_start_revenue": "npx pm2 start server_slack_revenue.js --name usat_revenue",
     "pm2_logs_revenue": "npx pm2 logs usat_revenue",
@@ -58,7 +51,6 @@
     "delete_revenue": "npx pm2 delete usat_revenue",
     "show_revenue": "npx pm2 show usat_revenue",
     "restart_revenue": "npx pm2 restart usat_revenue",
-
     "pm2_start_slack_events_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack_events.js --name usat_slack_events --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     "pm2_start_slack_events": "npx pm2 start server_slack_events.js --name usat_slack_events",
     "pm2_logs_slack_events": "npx pm2 logs usat_slack_events",
@@ -66,7 +58,6 @@
     "delete_slack_events": "npx pm2 delete usat_slack_events",
     "show_slack_events": "npx pm2 show usat_slack_events",
     "restart_slack_events": "npx pm2 restart usat_slack_events",
-
     "pm2_start_slack_races_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack_races.js --name usat_slack_races --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     "pm2_start_slack_races": "npx pm2 start server_slack_races.js --name usat_slack_races",
     "pm2_logs_slack_races": "npx pm2 logs usat_slack_races",
@@ -74,7 +65,6 @@
     "delete_slack_races": "npx pm2 delete usat_slack_races",
     "show_slack_races": "npx pm2 show usat_slack_races",
     "restart_slack_races": "npx pm2 restart usat_slack_races",
-
     "pm2_start_slack_news_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack_news.js --name usat_slack_news --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     "pm2_start_slack_news": "npx pm2 start server_slack_news.js --name usat_slack_news",
     "pm2_logs_slack_news": "npx pm2 logs usat_slack_news",
@@ -82,28 +72,24 @@
     "delete_slack_news": "npx pm2 delete usat_slack_news",
     "show_slack_news": "npx pm2 show usat_slack_news",
     "restart_slack_news": "npx pm2 restart usat_slack_news",
-
     "pm2_start_org_chart_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_org_chart.js --name org_chart --no-autorestart --max-memory-restart 10G --cron-restart '00 22 * * *' --node-args=\"--expose-gc\"",
     "pm2_logs_org_chart": "npx pm2 logs org_chart",
     "stop_org_chart": "npx pm2 stop org_chart",
     "delete_org_chart": "npx pm2 delete org_chart",
     "show_org_chart": "npx pm2 show org_chart",
     "restart_org_chart": "npx pm2 restart org_chart",
-
     "pm2_start_membership_base_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_membership_base.js --name membership_base --no-autorestart --max-memory-restart 10G --cron-restart \"00 22 * * *\" --node-args=\"--expose-gc\"",
     "pm2_logs_membership_base": "npx pm2 logs membership_base",
     "stop_membership_base": "npx pm2 stop membership_base",
     "delete_membership_base": "npx pm2 delete membership_base",
     "show_membership_base": "npx pm2 show membership_base",
     "restart_membership_base": "npx pm2 restart membership_base",
-
     "pm2_start_slack_membership_base_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_slack_membership_base.js --name usat_slack_members --no-autorestart --max-memory-restart 10G --cron-restart \"00 22 * * *\" --node-args=\"--expose-gc\"",
     "pm2_logs_slack_membership_base": "npx pm2 logs usat_slack_members",
     "stop_slack_membership_base": "npx pm2 stop usat_slack_members",
     "delete_slack_membership_base": "npx pm2 delete usat_slack_members",
     "show_slack_membership_base": "npx pm2 show usat_slack_members",
     "restart_slack_membership_base": "npx pm2 restart usat_slack_members",
-    
     "pm2_start_auto_renew_2200": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_auto_renew_8014.js --name usat_auto_renew --no-autorestart --max-memory-restart 10G --cron-restart \"00 22 * * *\" --node-args=\"--expose-gc\"",
     "pm2_logs_auto_renew": "npx pm2 logs usat_auto_renew",
     "stop_auto_renew": "npx pm2 stop usat_auto_renew",
@@ -125,12 +111,13 @@
     "body-parser": "^1.20.3",
     "cheerio": "^1.2.0",
     "dayjs": "^1.11.10",
-    "dotenv": "^16.4.5",
+    "dotenv": "^16.6.1",
     "exceljs": "^4.4.0",
     "express": "^4.21.0",
     "fast-csv": "^5.0.1",
+    "fuzzball": "^2.2.3",
     "http-proxy-middleware": "^3.0.0",
-    "mysql2": "^3.9.2",
+    "mysql2": "^3.19.0",
     "ssh2": "^1.15.0",
     "tinyurl": "^1.1.7",
     "xpath": "^0.0.34"
