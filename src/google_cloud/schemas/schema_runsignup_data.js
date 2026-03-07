@@ -452,22 +452,6 @@ const main = [
     fields: []
   },
 
-  // CREATED AT (PIPELINE TIMESTAMPS)
-  {
-    name: "created_at_mtn",
-    mode: "NULLABLE",
-    type: "DATETIME",
-    description: "Row extraction timestamp in Mountain Time",
-    fields: []
-  },
-  {
-    name: "created_at_utc",
-    mode: "NULLABLE",
-    type: "DATETIME",
-    description: "Row extraction timestamp in UTC",
-    fields: []
-  },
-
   // MATCH FIELDS
   {
     name: "usat_match_name",
@@ -601,7 +585,23 @@ const main = [
     type: "STRING",
     description: "Score bucket for the final adjusted score, such as 0–69, 70–79, 80–89, 90–94, or 95–100",
     fields: []
-  }
+  },
+
+  // CREATED AT (PIPELINE TIMESTAMPS)
+  {
+    name: "created_at_mtn",
+    mode: "NULLABLE",
+    type: "DATETIME",
+    description: "Row extraction timestamp in Mountain Time",
+    fields: []
+  },
+  {
+    name: "created_at_utc",
+    mode: "NULLABLE",
+    type: "DATETIME",
+    description: "Row extraction timestamp in UTC",
+    fields: []
+  },
 ];
 
 module.exports = { all_runsignup_data_schema: main };

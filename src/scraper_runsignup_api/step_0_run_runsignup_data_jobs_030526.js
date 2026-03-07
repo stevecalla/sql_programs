@@ -74,8 +74,8 @@ async function main() {
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
   const run_step_1 = false;   // get runsignup API data
-  const run_step_2 = true;    // match_runsignup_to_usat
-  const run_step_3 = false;   // load runsignpup to bigquery
+  const run_step_2 = false;    // match_runsignup_to_usat
+  const run_step_3 = true;   // load runsignpup to bigquery
 
   try {
     const stepFunctions = [
@@ -115,5 +115,5 @@ if (require.main === module) {
 }
 
 module.exports = {
-  execute_run_auto_renew_data_jobs: main
+  execute_get_runsignup_data_jobs: main
 };

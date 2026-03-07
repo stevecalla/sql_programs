@@ -115,5 +115,5 @@ if (require.main === module) {
 }
 
 module.exports = {
-  execute_run_auto_renew_data_jobs: main
+  execute_run_trifind_data_jobs: main
 };

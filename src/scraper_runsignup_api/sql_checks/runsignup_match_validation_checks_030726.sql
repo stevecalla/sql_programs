@@ -227,6 +227,41 @@ SELECT
 FROM all_runsignup_data_raw
 WHERE event_year = 2026
   AND matched_usat_sanctioned = 0
-  AND match_score_internal >= 75
+  AND match_score_internal >= 70
 ORDER BY match_score_internal DESC, id
 LIMIT 100;
+
+-- ============================================================
+-- Query 11
+-- Description: Don't mach on event_type expo
+-- ============================================================
+SELECT
+  11 AS query_number,
+  'dont match on expo' AS query_label,
+  id,
+  race_id,
+  race_name,
+  address_city,
+  address_state,
+  event_start_time,
+  event_type,
+  distance,
+  usat_match_name,
+  usat_match_city,
+  usat_match_state,
+  usat_match_date,
+  match_method,
+  match_score_internal,
+  name_score_internal,
+  date_diff_days_internal,
+  city_match_flag_internal,
+  matched_usat_sanctioned,
+  score_bin_internal
+FROM all_runsignup_data_raw
+WHERE 1 = 1
+	-- AND matched_usat_sanctioned = 1
+	-- AND race_name LIKE ('%PLAYTRI%') -- host Ironman expos
+    AND event_type = 'expo'
+ORDER BY match_score_internal DESC, id
+-- LIMIT 100
+;

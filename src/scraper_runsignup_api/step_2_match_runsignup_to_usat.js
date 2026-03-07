@@ -27,7 +27,7 @@ const { runTimer, stopTimer } = require("../../utilities/timer");
 // ----------------------------------------
 // Config
 // ----------------------------------------
-const SCORE_THRESHOLD = 75;
+const SCORE_THRESHOLD = 74;
 const UPDATE_BATCH_SIZE = 500;
 const RUNSIGNUP_PAGE_SIZE = 500;
 
