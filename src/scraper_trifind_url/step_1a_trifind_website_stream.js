@@ -26,7 +26,7 @@
  * - No timezone conversion occurs in this file.
  * - No attempt is made to coerce Trifind listing dates into MySQL datetime.
  * - The values stored reflect the original website content plus helper fields.
- */
+*/
 
 const cheerio = require("cheerio");
 

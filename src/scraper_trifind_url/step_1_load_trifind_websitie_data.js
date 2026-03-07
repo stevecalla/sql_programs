@@ -28,15 +28,15 @@ const {
 // Config
 // ----------------------------------------
 // testing capability
-const TEST_YEARS = true; // controls time period to scrape 
+const TEST_YEARS = false; // controls time period to scrape 
 const TEST_MODE = false; // controls pagination cap via TEST_MAX_PAGES
 const TEST_MAX_PAGES = 2;
-const IS_TEST = true; // controls whether you use the small test sport_map
+const IS_TEST = false; // controls whether you use the small test sport_map
 
 const CURRENT_YEAR = new Date().getFullYear();
 const PRIOR_YEAR = CURRENT_YEAR - 1;
 const NEXT_YEAR = CURRENT_YEAR + 1;
-const YEARS_TO_LOAD = TEST_YEARS ? [NEXT_YEAR] : [CURRENT_YEAR, PRIOR_YEAR, NEXT_YEAR];
+const YEARS_TO_LOAD = TEST_YEARS ? [PRIOR_YEAR] : [CURRENT_YEAR, PRIOR_YEAR, NEXT_YEAR];
 
 const BATCH_SIZE = 500;
 const TABLE_NAME = "all_trifind_data_raw";

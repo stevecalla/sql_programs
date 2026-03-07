@@ -4,11 +4,8 @@ dotenv.config({ path: "../../.env" });
 const { logPM2MemoryUsage } = require('../../utilities/pm2_scripts/pm2_log_memory_usage');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
-// const { query_runsignup_race_event_data } = require('../google_cloud/queries/query_runsignup_race_event_data');
-const { query_runsignup_race_event_data } = require('../google_cloud/queries/query_runsignup_data');
-
-// const { all_runsignup_data_schema } = require('../google_cloud/schemas/schema_auto_renew_data');
-const { all_runsignup_data_schema } = require('../google_cloud/schemas/schema_runsignup_data');
+const { query_trifind_custom_search_extract_data } = require('../google_cloud/queries/query_trifind_data');
+const { all_trifind_data_schema } = require('../google_cloud/schemas/schema_trifind_data');
 
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
@@ -21,19 +18,19 @@ async function main() {
 
     const options = [
         {
-            fileName: 'runsignup_data',
-            query: (retrieval_batch_size, offset) => query_runsignup_race_event_data(retrieval_batch_size, offset),
-            tableId: 'runsignup_data', // table name
+            fileName: 'trifind_data',
+            query: (retrieval_batch_size, offset) => query_trifind_custom_search_extract_data(retrieval_batch_size, offset),
+            tableId: 'trifind_data', // table name
 
-            // fileName: 'runsignup_data_v2',
-            // tableId: "runsignup_data_v2",
+            // fileName: 'trifind_data_v2',
+            // tableId: "trifind_data_v2",
         }
     ];
 
     const directoryName = `usat_bigquery_${options[0].fileName}`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting';
-    const schema = all_runsignup_data_schema;
+    const schema = all_trifind_data_schema;
 
     await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
 
@@ -57,5 +54,5 @@ if (require.main === module) {
 }
 
 module.exports = {
-    execute_load_big_query_runsignup_data: main,
+    execute_load_big_query_trifind_data: main,
 }

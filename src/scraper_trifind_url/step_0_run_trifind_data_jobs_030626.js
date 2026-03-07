@@ -71,7 +71,7 @@ async function main() {
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
   const run_step_1 = true; // get trifind website data
-  const run_step_2 = false; // load runsignpup to bigquery
+  const run_step_2 = true; // load runsignpup to bigquery
 
   try {
     const stepFunctions = [

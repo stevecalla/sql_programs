@@ -4,10 +4,7 @@ dotenv.config({ path: "../../.env" });
 const { logPM2MemoryUsage } = require('../../utilities/pm2_scripts/pm2_log_memory_usage');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
-// const { query_runsignup_race_event_data } = require('../google_cloud/queries/query_runsignup_race_event_data');
 const { query_runsignup_race_event_data } = require('../google_cloud/queries/query_runsignup_data');
-
-// const { all_runsignup_data_schema } = require('../google_cloud/schemas/schema_auto_renew_data');
 const { all_runsignup_data_schema } = require('../google_cloud/schemas/schema_runsignup_data');
 
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
