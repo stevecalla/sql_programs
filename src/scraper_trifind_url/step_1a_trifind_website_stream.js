@@ -39,7 +39,8 @@ const DEFAULT_TEST_MODE = false;
 const DEFAULT_TEST_MAX_PAGES = 2;
 
 // hard cap for full runs
-const MAX_PAGES_FULL = 800;
+const MAX_PAGES_FULL = 2000;
+const MAX_PAGES_BUFFER = 25;
 
 // HTTP
 const LISTING_HTTP_TIMEOUT_MS = 20000;
@@ -573,13 +574,14 @@ async function* generate_trifind_rows_streaming(opts) {
     detail_concurrency = DETAIL_CONCURRENCY,
   } = opts;
 
-  const max_pages = test_mode ? test_max_pages : MAX_PAGES_FULL;
-
   let global_seq = 0;
+  const total_sports = sport_map.length;
 
-  for (const item of sport_map) {
+  for (const [sport_index, item] of sport_map.entries()) {
     const query = item.query;
     const sport = item.sport;
+    const sport_position = sport_index + 1;
+    const sport_log_prefix = `[sport ${sport_position}/${total_sports} - ${sport}]`;
 
     const first_url = build_search_url({
       start_date,
@@ -587,7 +589,7 @@ async function* generate_trifind_rows_streaming(opts) {
       query,
     });
 
-    console.log(`Listing bootstrap: ${first_url}`);
+    console.log(`${sport_log_prefix} Listing bootstrap: ${first_url}`);
 
     let first_html = null;
     try {
@@ -602,7 +604,7 @@ async function* generate_trifind_rows_streaming(opts) {
         )) || ""
       );
     } catch (err) {
-      console.log(`❌ Failed on page 1 for ${sport}:`, String(err?.message || err));
+      console.log(`${sport_log_prefix} ❌ Failed on page 1:`, String(err?.message || err));
       continue;
     }
 
@@ -613,8 +615,19 @@ async function* generate_trifind_rows_streaming(opts) {
     const panels_page1 = $first(".date-event-whole .panel.panel-info.clearfix");
     const per_page = panels_page1.length || null;
 
+    const max_pages = test_mode
+      ? test_max_pages
+      : (
+          Number.isFinite(target_events) &&
+          target_events > 0 &&
+          Number.isFinite(per_page) &&
+          per_page > 0
+        )
+        ? Math.ceil(target_events / per_page) + MAX_PAGES_BUFFER
+        : MAX_PAGES_FULL;
+
     console.log(
-      `↳ ${sport}: events_found=${target_events ?? "unknown"} per_page=${per_page ?? "unknown"} (paginate until reached)`
+      `${sport_log_prefix} ↳ events_found=${target_events ?? "unknown"} per_page=${per_page ?? "unknown"} max_pages=${max_pages} (paginate until reached)`
     );
 
     const seen_event_keys = new Set();
@@ -647,14 +660,14 @@ async function* generate_trifind_rows_streaming(opts) {
           : target_events;
 
       if (panels_count === 0) {
-        console.log(`✅ No panels on page ${page}. Stopping.`);
+        console.log(`${sport_log_prefix} ✅ No panels on page ${page}. Stopping.`);
         break;
       }
 
       unique_rows_written += new_unique_on_page;
 
       console.log(
-        `  ↳ page ${page} rows parsed: ${rows_on_page} (new unique: ${new_unique_on_page}) | total unique: ${unique_rows_written}${effective_target ? ` / ${effective_target}` : ""}`
+        `${sport_log_prefix}   ↳ page ${page} rows parsed: ${rows_on_page} (new unique: ${new_unique_on_page}) | total unique: ${unique_rows_written}${effective_target ? ` / ${effective_target}` : ""}`
       );
 
       const enriched_results = new Array(listing_events.length);
@@ -700,7 +713,7 @@ async function* generate_trifind_rows_streaming(opts) {
 
       if (effective_target && unique_rows_written >= effective_target) {
         console.log(
-          `✅ Reached target unique events (${unique_rows_written} >= ${effective_target}). Stopping.`
+          `${sport_log_prefix} ✅ Reached target unique events (${unique_rows_written} >= ${effective_target}). Stopping.`
         );
         break;
       }
@@ -709,35 +722,35 @@ async function* generate_trifind_rows_streaming(opts) {
         const nextExists = has_next_page($);
         if (!nextExists) {
           console.log(
-            `✅ No new unique events on page ${page} and no Next link detected. Stopping.`
+            `${sport_log_prefix} ✅ No new unique events on page ${page} and no Next link detected. Stopping.`
           );
           break;
         } else {
           console.log(
-            `⚠️ No new unique events on page ${page}, but Next exists — continuing cautiously.`
+            `${sport_log_prefix} ⚠️ No new unique events on page ${page}, but Next exists — continuing cautiously.`
           );
         }
       }
 
       if (test_mode && page >= test_max_pages) {
-        console.log(`🧪 TEST_MODE hit TEST_MAX_PAGES=${test_max_pages}. Stopping.`);
+        console.log(`${sport_log_prefix} 🧪 TEST_MODE hit TEST_MAX_PAGES=${test_max_pages}. Stopping.`);
         break;
       }
 
       const next_url = get_next_page_url($, current_url);
 
       if (!next_url) {
-        console.log(`✅ No Next link URL found on page ${page}. Stopping.`);
+        console.log(`${sport_log_prefix} ✅ No Next link URL found on page ${page}. Stopping.`);
         break;
       }
 
       if (seen_page_urls.has(String(next_url))) {
-        console.log(`🛑 Next URL already seen (loop detected). Stopping. next_url=${next_url}`);
+        console.log(`${sport_log_prefix} 🛑 Next URL already seen (loop detected). Stopping. next_url=${next_url}`);
         break;
       }
       seen_page_urls.add(String(next_url));
 
-      console.log(`Listing page ${page + 1}: ${next_url}`);
+      console.log(`${sport_log_prefix} Listing page ${page + 1}: ${next_url}`);
 
       try {
         current_html = String(
@@ -753,7 +766,7 @@ async function* generate_trifind_rows_streaming(opts) {
         current_url = next_url;
       } catch (err) {
         console.log(
-          `❌ Failed to fetch Next page after page ${page} for ${sport}:`,
+          `${sport_log_prefix} ❌ Failed to fetch Next page after page ${page}:`,
           String(err?.message || err)
         );
         break;
@@ -765,7 +778,7 @@ async function* generate_trifind_rows_streaming(opts) {
 
     if (target_events != null) {
       console.log(
-        `↳ ${sport}: site reported ${target_events} Events Found; scraped unique=${unique_rows_written}`
+        `${sport_log_prefix} ↳ site reported ${target_events} Events Found; scraped unique=${unique_rows_written}`
       );
     }
   }
