@@ -93,6 +93,27 @@ async function main(batch_size = 10, offset = 0) {
 
         CAST(event_registration_periods_json AS CHAR) AS event_registration_periods_json,
 
+        -- MATCH FIELDS
+        usat_match_name,
+        usat_match_state,
+        usat_match_city,
+        DATE_FORMAT(usat_match_date, '%Y-%m-%d') AS usat_match_date,
+        usat_match_month,
+        usat_match_year,
+        usat_event_id_internal,
+        usat_sanction_id_internal,
+        usat_status_internal,
+        usat_event_type_internal,
+        usat_race_type_internal,
+        match_method,
+        match_score_internal,
+        name_score_internal,
+        date_diff_days_internal,
+        city_match_flag_internal,
+        matched_by_score,
+        matched_usat_sanctioned,
+        score_bin_internal,
+
         -- CREATED AT DATES
         DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
         DATE_FORMAT(created_at_utc, '%Y-%m-%d %H:%i:%s') AS created_at_utc

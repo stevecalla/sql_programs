@@ -5,7 +5,10 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 // GET & LOAD RUNSIGNUP DATA
 const { execute_transfer_runsignup_api_to_local } = require('./step_1_load_runsignup_data'); // Step #1: Transfer runsignup api data to Local db
-const { execute_load_big_query_runsignup_data } = require('./step_2_load_bq_runsignup_data'); // Step #2: Load runsignup data to BQ
+
+const { execute_match_runsignup_to_usat } = require('./step_2_match_runsignup_to_usat');
+
+const { execute_load_big_query_runsignup_data } = require('./step_3_load_bq_runsignup_data'); // Step #3: Load runsignup data to BQ
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 

@@ -466,6 +466,141 @@ const main = [
     type: "DATETIME",
     description: "Row extraction timestamp in UTC",
     fields: []
+  },
+
+  // MATCH FIELDS
+  {
+    name: "usat_match_name",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Best candidate matched USAT event name from event_data_metrics",
+    fields: []
+  },
+  {
+    name: "usat_match_state",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Best candidate matched USAT state code",
+    fields: []
+  },
+  {
+    name: "usat_match_city",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Best candidate matched USAT city",
+    fields: []
+  },
+  {
+    name: "usat_match_date",
+    mode: "NULLABLE",
+    type: "DATE",
+    description: "Best candidate matched USAT event start date",
+    fields: []
+  },
+  {
+    name: "usat_match_month",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Month extracted from usat_match_date",
+    fields: []
+  },
+  {
+    name: "usat_match_year",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Year extracted from usat_match_date",
+    fields: []
+  },
+  {
+    name: "usat_event_id_internal",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Matched internal USAT event id_events value",
+    fields: []
+  },
+  {
+    name: "usat_sanction_id_internal",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Matched internal USAT sanctioning event id_sanctioning_events value",
+    fields: []
+  },
+  {
+    name: "usat_status_internal",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Matched USAT event status",
+    fields: []
+  },
+  {
+    name: "usat_event_type_internal",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Matched USAT event type or concatenated event types",
+    fields: []
+  },
+  {
+    name: "usat_race_type_internal",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Matched USAT race type or concatenated race types",
+    fields: []
+  },
+  {
+    name: "match_method",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Matching path used to select the candidate set, such as state_month_pm_1 or state_only",
+    fields: []
+  },
+  {
+    name: "match_score_internal",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Final adjusted match score after name, date, and city scoring logic",
+    fields: []
+  },
+  {
+    name: "name_score_internal",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Base fuzzy name score comparing RunSignup race_name to USAT name_events",
+    fields: []
+  },
+  {
+    name: "date_diff_days_internal",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Absolute difference in days between the RunSignup event date and matched USAT event date",
+    fields: []
+  },
+  {
+    name: "city_match_flag_internal",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Flag indicating whether normalized RunSignup and USAT cities matched exactly (1/0)",
+    fields: []
+  },
+  {
+    name: "matched_by_score",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Flag indicating whether the final adjusted score met the configured score threshold (1/0)",
+    fields: []
+  },
+  {
+    name: "matched_usat_sanctioned",
+    mode: "NULLABLE",
+    type: "INTEGER",
+    description: "Final matched flag indicating whether the RunSignup row was accepted as matched to a USAT event (1/0)",
+    fields: []
+  },
+  {
+    name: "score_bin_internal",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "Score bucket for the final adjusted score, such as 0–69, 70–79, 80–89, 90–94, or 95–100",
+    fields: []
   }
 ];
 
