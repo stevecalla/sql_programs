@@ -4,7 +4,7 @@ dotenv.config({ path: "./.env" });
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 
 // GET & LOAD trifind DATA
-const { execute_transfer_trifind_website_to_local } = require('./step_1_load_trifind_data'); // Step #1: Transfer trifind website data to Local db
+const { execute_transfer_trifind_website_to_local } = require('./step_1_load_trifind_websitie_data'); // Step #1: Transfer trifind website data to Local db
 const { execute_load_big_query_trifind_data } = require('./step_2_load_bq_trifind_data'); // Step #2: Load trifind data to BQ
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
@@ -70,7 +70,7 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = false; // get trifind website data
+  const run_step_1 = true; // get trifind website data
   const run_step_2 = false; // load runsignpup to bigquery
 
   try {
