@@ -70,18 +70,21 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = false; // get runsignup API data
-  const run_step_2 = true; // load runsignpup to bigquery
+  const run_step_1 = false;   // get runsignup API data
+  const run_step_2 = true;    // match_runsignup_to_usat
+  const run_step_3 = false;   // load runsignpup to bigquery
 
   try {
     const stepFunctions = [
       run_step_1 ? execute_transfer_runsignup_api_to_local : null,
-      run_step_2 ? execute_load_big_query_runsignup_data : null,
+      run_step_2 ? execute_match_runsignup_to_usat : null,
+      run_step_3 ? execute_load_big_query_runsignup_data : null,
     ];
 
     const stepName = [
       `Step #1 - Transfer runsignup api data to Local db: `,  
-      `Step #2 - Load runsignup data to BQ: `,
+      `Step #2 - step_2_match_runsignup_to_usat: `,
+      `Step #3 - Load runsignup data to BQ: `,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function
