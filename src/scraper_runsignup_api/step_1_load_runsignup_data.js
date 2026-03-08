@@ -27,8 +27,9 @@ const {
 const CURRENT_YEAR = new Date().getFullYear();
 const PRIOR_YEAR = CURRENT_YEAR - 1;
 const NEXT_YEAR = CURRENT_YEAR + 1;
-const YEARS_TO_LOAD = [CURRENT_YEAR, PRIOR_YEAR, NEXT_YEAR];
-// const YEARS_TO_LOAD = [NEXT_YEAR];
+
+const TEST_YEARS = false; // controls time period to scrape 
+const YEARS_TO_LOAD = TEST_YEARS ? [NEXT_YEAR] : [CURRENT_YEAR, PRIOR_YEAR, NEXT_YEAR];
 
 const RUNSIGNUP_API_KEY = process.env.RUNSIGNUP_API_KEY || null;
 const RUNSIGNUP_API_SECRET = process.env.RUNSIGNUP_API_SECRET || null;
