@@ -12,5 +12,6 @@
         "retool.config.json": true
     },
     "editor.wordWrap": "on",
-    "task.allowAutomaticTasks": "on"
+    "task.allowAutomaticTasks": "off",
+    "python.terminal.activateEnvironment": false
 }
