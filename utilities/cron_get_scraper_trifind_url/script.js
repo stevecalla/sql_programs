@@ -1,8 +1,8 @@
 console.log(`\nHello - RUN SCRAPER TRIFIND JOB`);
 console.log("Current Date and Time:", new Date().toLocaleString());
 
-fetch('http://localhost:8015/scraper-test')
-// fetch('http://localhost:8015/scheduled-scraper-trifind')
+// fetch('http://localhost:8015/scraper-test')
+fetch('http://localhost:8015/scheduled-scraper-trifind')
     .then(response => {
 
         if (!response.ok) {
