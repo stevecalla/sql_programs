@@ -1,8 +1,8 @@
 console.log(`\nHello - RUN SCRAPER RUNSIGNUP JOB`);
 console.log("Current Date and Time:", new Date().toLocaleString());
 
-fetch('http://localhost:8015/scraper-test')
-// fetch('http://localhost:8015/scheduled-scraper-runsignup')
+// fetch('http://localhost:8015/scraper-test')
+fetch('http://localhost:8015/scheduled-scraper-runsignup')
     .then(response => {
 
         if (!response.ok) {
