@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Looker Dashboard</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: black;
+    }
+
+    iframe {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+    }
+  </style>
+
+  <script>
+    function scheduleRefresh() {
+      const now = new Date();
+
+      // TARGET TIME (8:00 AM)
+      let target = new Date();
+      target.setHours(8, 0, 0, 0);
+
+      // TEST TIME (7:45 PM)
+      let test = new Date();
+      test.setHours(19, 50, 0, 0);
+
+      // If test time is still ahead today, use it for testing
+      if (now < test) {
+        target = test;
+      }
+
+      // If already past the target today, schedule tomorrow 8 AM
+      if (now > target) {
+        target.setDate(target.getDate() + 1);
+        target.setHours(8, 0, 0, 0);
+      }
+
+      const msUntilRefresh = target - now;
+
+      console.log("Next refresh scheduled:", target);
+
+      setTimeout(function () {
+        location.reload();
+      }, msUntilRefresh);
+    }
+
+    scheduleRefresh();
+  </script>
+
+</head>
+
+<body>
+  <div style="position:fixed;top:5px;right:30px;padding:5px;border-radius:3px;color:white;background:black;font-size:18px;z-index:10;">
+    Last Refreshed:
+    <script>
+      document.write(new Date().toLocaleTimeString());
+    </script>
+  </div>
+
+  <iframe src="https://lookerstudio.google.com/embed/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_1lfpxgtmzd"
+    allowfullscreen>
+  </iframe>
+</body>
+
+</html>
+
+<!-- https://candid-hamster-680f8f.netlify.app/ -->

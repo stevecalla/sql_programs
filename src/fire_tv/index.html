@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Looker Dashboard</title>
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: black;
+    }
+
+    iframe {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+    }
+  </style>
+
+  <script>
+    /* -----------------------------------------------------
+       DASHBOARD PAGES
+       -----------------------------------------------------
+       Add dashboards to this list.
+       If the array has ONLY 1 item:
+       → rotation will be skipped automatically.
+       If the array has 2+ items:
+       → dashboards will rotate based on rotationSeconds.
+    ----------------------------------------------------- */
+
+    const pages = [
+      "https://lookerstudio.google.com/embed/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_1lfpxgtmzd", // member sales
+      "https://lookerstudio.google.com/embed/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_h2wxc2blsd", // sanctioned events
+      "https://lookerstudio.google.com/embed/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_h2wxc2blsd", // participation
+      "https://lookerstudio.google.com/embed/reporting/7f97c13e-287d-4bc0-bc70-969b5f3944be/page/p_kn3r3e09zd", // membership base
+    ];
+
+    /* -----------------------------------------------------
+       ROTATION TIMING
+       -----------------------------------------------------
+       JavaScript timers use milliseconds.
+       1 second = 1,000 milliseconds
+       rotationSeconds * 1000 converts seconds → milliseconds
+
+       Examples:
+       30 seconds  = 30 * 1000
+       1 minute    = 60 * 1000
+       10 minutes  = 600 * 1000
+       1 hour      = 3600 * 1000
+
+       We are setting rotation to 1 hour.
+    ----------------------------------------------------- */
+    const is_test = false;
+    const rotationSeconds = is_test ? 120: 3600;   // 120 = 2 minute for testing; 3600 seconds = 1 hour
+
+    let currentPage = 0;
+    /* -----------------------------------------------------
+       PAGE ROTATION
+       -----------------------------------------------------
+       Only rotates if more than one page exists.
+    ----------------------------------------------------- */
+
+    function rotatePages() {
+      if (pages.length <= 1) return;
+
+      const frame = document.getElementById("dashboard");
+
+      setInterval(() => {
+
+        currentPage = (currentPage + 1) % pages.length;
+        frame.src = pages[currentPage];
+
+      }, rotationSeconds * 1000);
+
+    }
+
+    /* -----------------------------------------------------
+       DAILY REFRESH SCHEDULER
+       -----------------------------------------------------
+       The page automatically refreshes at:
+       • TEST TIME: 7:50 PM today (for verification)
+       • NORMAL TIME: 8:00 AM every day
+       After the test refresh happens once,
+       all future refreshes occur at 8:00 AM.
+    ----------------------------------------------------- */
+
+    function scheduleRefresh() {
+      const now = new Date();
+
+      let target = new Date();
+      target.setHours(8, 0, 0, 0);   // 8:00 AM
+
+      let test = new Date();
+      test.setHours(19, 50, 0, 0);   // 7:50 PM test refresh
+
+      if (now < test) {
+        target = test;
+      }
+
+      if (now > target) {
+        target.setDate(target.getDate() + 1);
+        target.setHours(8, 0, 0, 0);
+      }
+
+      const msUntilRefresh = target - now;
+
+      console.log("Next refresh scheduled:", target);
+
+      setTimeout(function () {
+        location.reload();
+      }, msUntilRefresh);
+
+    }
+    /* -----------------------------------------------------
+       INITIAL PAGE LOAD
+    ----------------------------------------------------- */
+    window.onload = function () {
+
+      const frame = document.getElementById("dashboard");
+
+      // Load first dashboard
+      frame.src = pages[0];
+
+      rotatePages();
+      scheduleRefresh();
+
+    };
+  </script>
+
+</head>
+<body>
+
+  <div
+    style="position:fixed;top:5px;right:30px;padding:5px;border-radius:3px;color:white;background:black;font-size:18px;z-index:10;">
+    Last Refreshed:
+    <script>
+      document.write(new Date().toLocaleTimeString());
+    </script>
+  </div>
+
+  <iframe id="dashboard" allowfullscreen></iframe>
+
+</body>
+
+</html>
