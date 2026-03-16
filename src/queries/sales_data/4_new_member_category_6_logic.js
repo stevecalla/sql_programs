@@ -22,9 +22,9 @@ const query_new_member_category_6_logic = `
             WHEN mp.membership_type_id IN (115) AND ma.membership_type_id = 118 THEN 'Bronze - AO' -- Bronze - Comp
 
             -- NOTE: SINGLE SPORT
-            WHEN mp.membership_type_id IN (115) AND ma.race_type_id_ma = 7 THEN 'Bronze - Run' -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
-            WHEN mp.membership_type_id IN (115) AND ma.race_type_id_ma = 8 THEN 'Bronze - Swim' -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
-            WHEN mp.membership_type_id IN (115) AND ma.race_type_id_ma = 9 THEN 'Bronze - Bike' -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
+            WHEN mp.membership_type_id (5, 46, 47, 72, 97, 100, 115) AND ma.race_type_id_ma = 7 THEN 'Bronze - Run' -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
+            WHEN mp.membership_type_id (5, 46, 47, 72, 97, 100, 115) AND ma.race_type_id_ma = 8 THEN 'Bronze - Swim' -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
+            WHEN mp.membership_type_id (5, 46, 47, 72, 97, 100, 115) AND ma.race_type_id_ma = 9 THEN 'Bronze - Bike' -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
             
             -- NOTE: RELAY
             WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND ma.distance_type_id_ma IN (8) THEN 'Bronze - Relay'  -- NOTE: UPDATED 3/16/26
