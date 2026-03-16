@@ -148,9 +148,14 @@ const query_actual_membership_fee_6_logic = `
                 WHEN mp.membership_type_id IN (117) AND mp.purchased_on < '2026-01-01 00:00:00' THEN 400 -- platinum foundation
                 WHEN mp.membership_type_id IN (117) AND mp.purchased_on < '2027-01-01 00:00:00' THEN 429.99 -- platinum foundation
 
-                -- BRONZE
-                WHEN ma.membership_type_id = 118 THEN 0 -- bronze ao              
+                -- BRONZE OTHER
                 WHEN mp.membership_type_id IN (115) AND mp.purchased_on < '2025-02-03 00:00:00' THEN 23 -- seems inaccurate to price all bronze at $23; will need evaluate if necessary
+
+                -- BRONZE AO
+                WHEN ma.membership_type_id = 118 THEN 0 -- bronze ao   
+                
+                -- BRONZE SINGLE SPORT
+                WHEN mp.membership_type_id IN (115) AND ma.race_type_id_ma IN (7, 8, 9) THEN 5 -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
 
                 -- 1-Year
                 WHEN mp.membership_type_id IN (1, 60, 62, 64, 67, 71, 75, 104) AND mp.purchased_on < '2024-01-16 09:00:00' THEN 50 -- 1 Year
