@@ -11,8 +11,9 @@ const query_actual_membership_fee_6_logic = `
             WHEN mp.membership_type_id IN (1, 2, 3, 52, 55, 60, 62, 64, 65, 66, 67, 68, 70, 71, 73, 74, 75, 85, 89, 91, 93, 96, 98, 99, 101, 103, 104, 112, 113, 114, 117, 119) THEN 'adult_annual'
             WHEN mp.membership_type_id IN (4, 51, 54, 61, 94, 107) THEN 'youth_annual'
             WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115, 118) THEN 'one_day'
+            WHEN mp.membership_type_id IN (108, 109, 110) THEN 'one_day'
             WHEN mp.membership_type_id IN (56, 58, 81, 105) THEN 'club'
-            WHEN mp.membership_type_id IN (83, 84, 86, 87, 88, 90, 102) THEN 'elite'
+            WHEN mp.membership_type_id IN (83, 84, 86, 87, 88, 90, 102, 121) THEN 'elite'
             ELSE 'other'
         END AS real_membership_types,
 
