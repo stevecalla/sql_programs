@@ -7,6 +7,7 @@ const query_new_member_category_6_logic = `
         mf.real_membership_types AS real_membership_types,
         mf.max_membership_fee_6 AS max_membership_fee_6,
         r.max_membership_fee_6_rule,
+        
         CASE
             -- BRONZE
             WHEN mp.membership_type_id IN (118) AND ma.membership_type_id = 118 THEN 'Bronze - AO' -- Bronze - Comp

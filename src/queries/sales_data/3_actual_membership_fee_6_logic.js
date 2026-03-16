@@ -6,6 +6,7 @@ const query_actual_membership_fee_6_logic = `
         ka.source_2,
         ka.is_koz_acception,
         mp.membership_type_id AS membership_type_id_membership_periods,
+        
         CASE
             WHEN mp.membership_type_id IN (1, 2, 3, 52, 55, 60, 62, 64, 65, 66, 67, 68, 70, 71, 73, 74, 75, 85, 89, 91, 93, 96, 98, 99, 101, 103, 104, 112, 113, 114, 117, 119) THEN 'adult_annual'
             WHEN mp.membership_type_id IN (4, 51, 54, 61, 94, 107) THEN 'youth_annual'
@@ -14,6 +15,7 @@ const query_actual_membership_fee_6_logic = `
             WHEN mp.membership_type_id IN (83, 84, 86, 87, 88, 90, 102) THEN 'elite'
             ELSE 'other'
         END AS real_membership_types,
+
         mp.purchased_on,
         mp.terminated_on,
         ma.payment_type AS payment_type_membership_applications,

@@ -21,6 +21,7 @@ const query_actual_membership_fee_6_rule_logic = `
             -- Section 2: Looks at registration audit. For all memberships from API RTAV_Batch
                 WHEN ra.registration_company_id IN (1) THEN '4_design_sensory' -- 'Designsensory'
                 WHEN ra.registration_company_id IN (23) THEN '5_acme_usat' -- 'Acme-Usat'
+                
                 WHEN rama.price_paid IN (6.41)      THEN '7_rtav_batch_fee_6'
                 WHEN rama.price_paid IN (10.68)     THEN '7_rtav_batch_fee_10'
                 WHEN rama.price_paid IN (13.88)     THEN '7_rtav_batch_fee_13'
