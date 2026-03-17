@@ -7,48 +7,25 @@ const query_new_member_category_6_logic = `
         mf.real_membership_types AS real_membership_types,
         mf.max_membership_fee_6 AS max_membership_fee_6,
         r.max_membership_fee_6_rule,
-
+        
         CASE
             -- BRONZE
-            -- NOTE: ONE DAY
+            WHEN mp.membership_type_id IN (118) AND ma.membership_type_id = 118 THEN 'Bronze - AO' -- Bronze - Comp
+            WHEN mp.membership_type_id IN (115) AND ma.membership_type_id = 118 THEN 'Bronze - AO' -- Bronze - Comp 
+
             WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100) AND mp.purchased_on < '2024-01-16 09:00:00' THEN 'One Day - $15'
             WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100) AND mp.purchased_on IS NULL AND mp.created_at < '2024-01-16 09:00:00' THEN 'One Day - $15'
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND mf.max_membership_fee_6 IN (15) THEN 'One Day - $15' -- 'Actual Membership Fee 6'
-            
-            -- NOTE: NO CHARGE MEMBERSHIPS
-            WHEN mp.membership_type_id IN (120) THEN 'Bronze Community Membership'
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND mf.max_membership_fee_6 = 0 THEN 'Bronze - $0'
-            WHEN mp.membership_type_id IN (118) AND ma.membership_type_id = 118 THEN 'Bronze - AO' -- Bronze - Comp
-            WHEN mp.membership_type_id IN (115) AND ma.membership_type_id = 118 THEN 'Bronze - AO' -- Bronze - Comp
 
-            -- NOTE: SINGLE SPORT
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND ma.race_type_id = 7 THEN 'Bronze - Run' -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND ma.race_type_id = 8 THEN 'Bronze - Swim' -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND ma.race_type_id = 9 THEN 'Bronze - Bike' -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
-            
-            -- NOTE: RELAY
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND ma.distance_type_id IN (8) THEN 'Bronze - Relay'  -- NOTE: UPDATED 3/16/26
-            -- NOTE: MODIFY AS ABOVE; CAN'T DELETE B/C THE REG COMPANY DEFAULT PRODUCT DOESN'T INCLUDE RACE TPE OR RACE DISTANCE
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND mf.max_membership_fee_6 IN (6, 9) THEN 'Bronze - Relay' 
-
-            -- NOTE: SUPER SPRINT / SPRINT
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND ma.distance_type_id IN (1, 2) THEN 'Bronze - Sprint' -- NOTE: UPDATED 3/16/26; 1 = super sprint, 2 = sprint
-            -- NOTE: MODIFY AS ABOVE; CAN'T DELETE B/C THE REG COMPANY DEFAULT PRODUCT DOESN'T INCLUDE RACE TPE OR RACE DISTANCE
+            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND mf.max_membership_fee_6 IN (6, 9) THEN 'Bronze - Relay'
             WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND mf.max_membership_fee_6 IN (13, 14, 14.99) THEN 'Bronze - Sprint'
-
-            -- NOTE: INTERMEDIATE
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND ma.distance_type_id IN (3) THEN 'Bronze - Intermediate' -- NOTE: UPDATED 3/16/26
-            -- NOTE: MODIFY AS ABOVE; CAN'T DELETE B/C THE REG COMPANY DEFAULT PRODUCT DOESN'T INCLUDE RACE TPE OR RACE DISTANCE
+            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND mf.max_membership_fee_6 IN (15) THEN 'One Day - $15' -- 'Actual Membership Fee 6'
             WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND mf.max_membership_fee_6 IN (18, 21, 24, 24.99) THEN 'Bronze - Intermediate'
-            
-            -- NOTE: LONG / ULTRA
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND ma.distance_type_id IN (4, 5) THEN 'Bronze - Ultra' -- NOTE: UPDATED 3/16/26; 4 = Long, 5 = Ultra
-            -- NOTE: MODIFY AS ABOVE; CAN'T DELETE B/C THE REG COMPANY DEFAULT PRODUCT DOESN'T INCLUDE RACE TPE OR RACE DISTANCE
             WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND mf.max_membership_fee_6 IN (23, 28, 34.99) THEN 'Bronze - Ultra'
-            
-            -- NOTE: CATCH ALL DISTANCE UPGRADE / CLUB
+
+            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND mf.max_membership_fee_6 = 0 THEN 'Bronze - $0'
             WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115) AND mf.max_membership_fee_6 IN (5, 7, 8, 10, 12, 14, 15, 17, 19) THEN 'Bronze - Distance Upgrade'
             WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100) THEN 'Club'
+            WHEN mp.membership_type_id IN (120) THEN 'Bronze Community Membership'
             
             -- ANNUAL
             WHEN mp.membership_type_id IN (1, 60, 62, 64, 67, 71, 75, 104) AND mp.purchased_on < '2024-01-16 09:00:00' THEN '1-Year $50'
