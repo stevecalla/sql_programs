@@ -10,8 +10,8 @@ const query_actual_membership_fee_6_logic = `
         CASE
             WHEN mp.membership_type_id IN (1, 2, 3, 52, 55, 60, 62, 64, 65, 66, 67, 68, 70, 71, 73, 74, 75, 85, 89, 91, 93, 96, 98, 99, 101, 103, 104, 112, 113, 114, 117, 119) THEN 'adult_annual'
             WHEN mp.membership_type_id IN (4, 51, 54, 61, 94, 107) THEN 'youth_annual'
-            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115, 118) THEN 'one_day'
-            WHEN mp.membership_type_id IN (108, 109, 110) THEN 'one_day'
+            WHEN mp.membership_type_id IN (5, 46, 47, 72, 97, 100, 115, 118, 120) THEN 'one_day'
+            -- WHEN mp.membership_type_id IN (108, 109, 110) THEN 'one_day' -- not necessary per sam, never used
             WHEN mp.membership_type_id IN (56, 58, 81, 105) THEN 'club'
             WHEN mp.membership_type_id IN (83, 84, 86, 87, 88, 90, 102, 121) THEN 'elite'
             ELSE 'other'
@@ -155,7 +155,7 @@ const query_actual_membership_fee_6_logic = `
                 WHEN ma.membership_type_id = 118 THEN 0 -- bronze ao   
                 
                 -- BRONZE SINGLE SPORT
-                WHEN mp.membership_type_id IN (115) AND ma.race_type_id_ma IN (7, 8, 9) THEN 5 -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
+                WHEN mp.membership_type_id IN (115) AND ma.race_type_id IN (7, 8, 9) THEN 5 -- NOTE: NEW SINGLE SPORT CATEGORY 3/16/26
 
                 -- 1-Year
                 WHEN mp.membership_type_id IN (1, 60, 62, 64, 67, 71, 75, 104) AND mp.purchased_on < '2024-01-16 09:00:00' THEN 50 -- 1 Year
