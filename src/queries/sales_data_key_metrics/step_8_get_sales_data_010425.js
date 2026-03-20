@@ -245,26 +245,8 @@ function step_8_sales_key_stats_2015() {
                 am.name_events,
 
                 -- cleaned event name for comparison
-                REGEXP_REPLACE(
-                    LOWER(REPLACE(
-                        REGEXP_REPLACE(
-                            REGEXP_REPLACE(
-                                REGEXP_REPLACE(
-                                    REGEXP_REPLACE(
-                                        am.name_events, 
-                                        '^\\b[0-9]{4}\\s*|\\s*\\b[0-9]{4}\\b', ''  -- Remove year at start or end
-                                    ),  
-                                    'The\\s+\\b[0-9]{1,2}(st|nd|rd|th)\\s*', ''  -- Remove "The" followed by series number
-                                ), 
-                                '\\b[0-9]{1,2}(st|nd|rd|th)\\s*', ''  -- Remove series number
-                            ), 
-                            '-', '' -- Replace - with a single space
-                        ), 
-                        '/', ' ' -- Replace / with a single space
-                    )),
-                '\\s+', ' ' -- Replace multiple spaces with a single space
-                ) AS cleaned_name_events,
-                LOWER(am.name_events) AS name_events_lower, -- used to index & search efficiently
+                ec.cleaned_name_events,
+                ec.name_events_lower,
 
                 am.created_at_events,
                 am.created_at_month_events,
@@ -365,12 +347,15 @@ function step_8_sales_key_stats_2015() {
 
                 LEFT JOIN region_data AS ar -- address region
                     ON am.state_code_addresses = ar.state_code
+                    
+                LEFT JOIN step_7a_event_name_clean AS ec
+                    ON am.id_events = ec.id_events
 
             WHERE 1 = 1
                 AND am.purchased_on_year_adjusted_mp >= 2010
                 AND am.id_profiles IS NOT NULL
 
-            -- LIMIT 1000
+            -- LIMIT 100000
         ;
     `;
 }
