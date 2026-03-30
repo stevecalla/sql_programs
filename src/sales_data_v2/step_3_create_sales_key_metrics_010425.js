@@ -69,9 +69,9 @@ async function execute_create_sales_key_metrics() {
 
         // STEP #1: ITERATE THRU EACH QUERY & EXECUTE
             // EACH QUERY CONTAINS A TABLE DROP, TABLE CREATE, & INDEXES (IF APPLICABLE)
-        const is_test = true;
+        const is_test = false;
         const TABLE_NAME = is_test ? "sales_key_stats_2015_test" : "sales_key_stats_2015";
-        
+
         const query_list = await query_step_0_sales_key_metrics_master_logic(TABLE_NAME);
         const number_of_queries = query_list.length;
 
