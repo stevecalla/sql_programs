@@ -750,6 +750,20 @@ const members_schema = [
         "fields": []
     },
     {
+        "name": "check_number_rama",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": null,
+        "fields": []
+    },
+    {
+        "name": "bank_date_rama",
+        "mode": "NULLABLE",
+        "type": "DATE",
+        "description": "date '2024-02-12'",
+        "fields": []
+    },
+    {
         "name": "name_registration_companies",
         "mode": "NULLABLE",
         "type": "STRING",
