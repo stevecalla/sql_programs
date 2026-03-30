@@ -266,28 +266,34 @@ async function process_stream_parallel(
 }
 
 async function execute_transfer_usat_to_local_parallel(update_mode = 'updated_at') {
+  const is_test = false;
+  console.log(is_test ? "TEST MODE" : "NOT TEST MODE");
+  
+  // =========== VARIABLES ===============
   const BATCH_SIZE = 100;
   let TABLE_NAME = `all_membership_sales_data_2015_left`;
-  // TABLE_NAME = `all_membership_sales_data_2015_left_join_member_application`;
-  // TABLE_NAME = `all_membership_sales_data_2015_left_join_profiles`;
-  // TABLE_NAME = `all_membership_sales_data_2015_left_join_membership_periods`;
-  const TABLE_STRUCTURE = await query_create_all_membership_sales_table(TABLE_NAME);
-  let result = 'Transfer Failed';
-  let offset = 0;
 
   const membership_period_ends = '2008-01-01';
   let start_year_mtn = 2010; // Default = 2010
   let start_date_mtn = update_mode === 'partial' ? await get_first_day_of_prior_year() : '2010-01-01';
   let end_date_mtn = await get_last_day_of_year();
-  let updated_at_date_mtn = await get_yesterdays_date(); // Return yesterday in 'YYYY-MM-DD' format
+  let updated_at_date_mtn = await get_yesterdays_date(); // Return in 'YYYY-MM-DD' format
 
   // =========== TESTING VARIABLES ===============
-  // start_date_mtn = '2025-08-01';
+  TABLE_NAME = is_test ? `all_membership_sales_data_2015_left_test` : TABLE_NAME;
+  start_year_mtn = is_test ? 2025 : start_year_mtn;
+  start_date_mtn = is_test ? '2025-08-01' : start_date_mtn;
+  end_date_mtn = is_test ? '2025-08-08' : end_date_mtn;
   // updated_at_date_mtn = '2025-07-11';
-  // console.log(end_date_mtn);  // Logs the last day of the current year in YYYY-MM-DD format TODO: eliminate
-  // updated_at_date_mtn = await get_todays_date(); // Return today in 'YYYY-MM-DD' format
-  // end_date_mtn = '2025-08-08'; // testing comment out TODO: eliminate
+  updated_at_date_mtn = is_test ? await get_todays_date() : updated_at_date_mtn; // Return today in 'YYYY-MM-DD' format
+  // console.log(end_date_mtn);  // Logs the last day of the current year in YYYY-MM-DD format
 
+  // =========== CREATE TABLE ===============
+  const TABLE_STRUCTURE = await query_create_all_membership_sales_table(TABLE_NAME);
+  let result = 'Transfer Failed';
+  let offset = 0;
+
+  // =========== DB CONNECTIONS ===============
   const { src, sshClient } = await get_src_connection_and_ssh();
 
   // One connection for DDL/setup/create_table and similar queries
