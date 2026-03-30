@@ -206,6 +206,12 @@ const registration_audit_table = `
   processed_at_registration_audit DATETIME
 `;
 
+const registration_audit_membership_application_table = `
+    -- REGISTRATION AUDIT MEMBERSHIP APPLICATION
+	check_number_rama VARCHAR(255),
+  bank_date_rama DATE
+`;
+
 const registration_companies = `
     -- REGISTRATION COMPANY TABLE
     name_registration_companies VARCHAR(255)
@@ -273,6 +279,7 @@ async function query_create_all_membership_sales_table(table_name) {
       ${orders_products_table},
       ${races_table},
       ${registration_audit_table},
+      ${registration_audit_membership_application_table},
       ${registration_companies},
       ${users_table},
       ${select_fields},
