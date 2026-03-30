@@ -1,11 +1,15 @@
 // SOURCE?
 // C:\Users\calla\development\usat\sql_code\6_create_key_stats\key_stats_query_cte_create_table_100524.sql
 
-function step_8_sales_key_stats_2015() {
-    return `
-        DROP TABLE IF EXISTS sales_key_stats_2015;
+function step_8_sales_key_stats_2015(TABLE_NAME) {
+    console.log('=====================');
+    console.log('table name = ', TABLE_NAME);
+    console.log('=====================');
 
-        CREATE TABLE sales_key_stats_2015 AS
+    return `
+        DROP TABLE IF EXISTS ${TABLE_NAME};
+
+        CREATE TABLE ${TABLE_NAME} AS
             SELECT 
                 am.member_number_members_sa, 
                 am.id_profiles,
@@ -293,7 +297,7 @@ function step_8_sales_key_stats_2015() {
                 er.region_abbr AS region_abbr_events,
 
                 -- OTHER
-                am.gender_id_profiles, -- todo:
+                am.gender_id_profiles,
                 CASE
                     WHEN am.gender_id_profiles = 1 THEN 'm'
                     WHEN am.gender_id_profiles = 2 THEN 'f'
@@ -302,8 +306,13 @@ function step_8_sales_key_stats_2015() {
                 END AS gender_profiles,
                 am.created_at_ma,
                 am.order_id_orders_products,
+
                 am.id_registration_audit,
                 am.confirmation_number_registration_audit,
+
+                am.check_number_rama,
+                am.bank_date_rama,
+
                 am.name_registration_companies,
                 am.designation_races,
 
