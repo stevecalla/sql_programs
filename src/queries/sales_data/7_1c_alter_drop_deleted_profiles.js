@@ -4,22 +4,27 @@ const audit_table_name = 'all_membership_sales_deleted_profiles_audit';
 
 const query_alter_drop_deleted_profiles = `
         -- 0) Quick sanity check
-            SELECT 'staging_count' AS label, FORMAT(COUNT(*), 0) AS count_rows
+            SELECT 
+                'staging_count' AS label, FORMAT(COUNT(*), 0) AS count_rows
             FROM all_membership_sales_data_deleted_profiles;
 
         -- 2) Preview impact on sales table
-            SELECT 'candidate_sales_rows' AS label, FORMAT(COUNT(*), 0) AS rows_to_delete
+            SELECT 
+                'candidate_sales_rows' AS label, FORMAT(COUNT(*), 0) AS rows_to_delete
             FROM all_membership_sales_data_2015_left s
             JOIN all_membership_sales_data_deleted_profiles d ON d.id_profiles = s.id_profiles;
 
         -- Optional sample
-            SELECT 'sample_rows' AS label, s.id_profiles, s.id_membership_periods_sa, d.deleted_at_profile
+            SELECT 
+                'sample_rows' AS label, s.id_profiles, s.id_membership_periods_sa, d.deleted_at_profile
             FROM all_membership_sales_data_2015_left s
             JOIN all_membership_sales_data_deleted_profiles d ON d.id_profiles = s.id_profiles
             ORDER BY s.id_profiles
             LIMIT 5;
 
         -- 3) Create audit table mirroring SALES (not the staging table)
+            DROP TABLE IF EXISTS all_membership_sales_deleted_profiles_audit;
+            
             CREATE TABLE IF NOT EXISTS all_membership_sales_deleted_profiles_audit
             LIKE all_membership_sales_data_2015_left;
 
