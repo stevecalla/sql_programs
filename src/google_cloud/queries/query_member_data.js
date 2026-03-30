@@ -156,8 +156,13 @@ async function query_member_data(batch_size = 1000, last_seen_id = 0, offset) {
             gender_profiles,
             DATE_FORMAT(created_at_ma, '%Y-%m-%d %H:%i:%s') AS created_at_ma,
             order_id_orders_products,
+
             id_registration_audit,
             confirmation_number_registration_audit,
+            
+            check_number_rama,
+            DATE_FORMAT(bank_date_rama, '%Y-%m-%d') AS bank_date_rama, -- date '2024-02-12'        
+
             name_registration_companies,
 
             DATE_FORMAT(created_at_mtn, '%Y-%m-%d') AS created_at_mtn, -- date '2024-02-12'        
