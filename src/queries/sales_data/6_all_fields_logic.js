@@ -335,6 +335,12 @@ const registration_audit_table = `
     registration_audit.processed_at AS processed_at_registration_audit
 `;
 
+const registration_audit_membership_application_table = `
+    -- REGISTRATION AUDIT MEMBERSHIP APPLICATION
+	registration_audit_membership_application.check_number AS check_number_rama,
+    registration_audit_membership_application.bank_date AS bank_date_rama
+`;
+
 const registration_companies = `
     -- REGISTRATION COMPANY TABLE
     registration_companies.name AS name_registration_companies
@@ -397,6 +403,7 @@ const query_all_fields_logic = `
         ${orders_products_table},
         ${races_table},
         ${registration_audit_table},
+        ${registration_audit_membership_application_table},
         ${registration_companies},
         ${users_table},
         ${select_fields}
