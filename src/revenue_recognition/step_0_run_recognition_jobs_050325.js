@@ -93,7 +93,8 @@ async function execute_run_recognition_data_jobs() {
   const ends_year =
     mtn_month === 12
       ? mtn_year          // December: current year forward
-      : mtn_year - 1;     // Jan–Nov: include full prior year
+      // : mtn_year - 1;     // Jan–Nov: include full prior year
+      : mtn_year - 2;     // Jan–Nov: include full 2024 & 2025 (if mtn_year = 2026)
 
   // Quick examples (MTN)
   // 2025-11-15 → ends_mp = 2024-01-01
