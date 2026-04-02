@@ -120,7 +120,7 @@ async function execute_run_recognition_data_jobs() {
     const stepFunctions = [
       run_step_1 ? () => execute_create_recognition_base_data(QUERY_OPTIONS) : null,
       run_step_2 ? () => execute_load_big_query_recognition_base_data(QUERY_OPTIONS) : null,
-      
+
       run_step_3 ? () => execute_create_recognition_allocation_data(QUERY_OPTIONS) : null,
       run_step_4 ? () => execute_load_big_query_recognition_allocation_data(QUERY_OPTIONS) : null,
 
@@ -151,7 +151,15 @@ async function execute_run_recognition_data_jobs() {
   return elapsedTime;
 }
 
-// execute_run_recognition_data_jobs();
+if (require.main === module) {
+    try {
+        console.log('\nStarting data load.');
+        execute_run_recognition_data_jobs();
+    } catch (error) {
+        console.error("Error during data load:", error);
+        process.exit(1);
+    }
+}
 
 module.exports = {
   execute_run_recognition_data_jobs,
