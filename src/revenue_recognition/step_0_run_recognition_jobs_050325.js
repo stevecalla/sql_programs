@@ -69,7 +69,7 @@ async function executeSteps(stepFunctions, stepName) {
   }
 }
 
-async function execute_run_recognition_data_jobs() {
+async function main() {
   const startTime = performance.now();
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
@@ -154,7 +154,7 @@ async function execute_run_recognition_data_jobs() {
 if (require.main === module) {
     try {
         console.log('\nStarting data load.');
-        execute_run_recognition_data_jobs();
+        main();
     } catch (error) {
         console.error("Error during data load:", error);
         process.exit(1);
@@ -162,5 +162,5 @@ if (require.main === module) {
 }
 
 module.exports = {
-  execute_run_recognition_data_jobs,
+  execute_run_recognition_data_jobs: main,
 };
