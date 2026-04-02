@@ -11,6 +11,8 @@ const { execute_load_big_query_recognition_base_data } = require("./step_2_load_
 const { execute_create_recognition_allocation_data } = require("./step_3_create_recognition_allocation_data");
 const { execute_load_big_query_recognition_allocation_data } = require("./step_4_load_bq_recognition_allocation_data");
 
+const { execute_create_recognition_allocation_data_history } = require('./step_5_create_recognition_allocation_data_history')
+
 async function executeSteps(stepFunctions, stepName) {
   for (let i = 0; i < stepFunctions.length; i++) {
 
@@ -72,11 +74,14 @@ async function execute_run_recognition_data_jobs() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = true; // execute_create_recognition_base_data
-  const run_step_2 = true; // load recognition_base_data to BQ
+  const run_step_1 = false; // execute_create_recognition_base_data
+  const run_step_2 = false; // load recognition_base_data to BQ
 
-  const run_step_3 = true; // execute_create_recognition_allocation_data
-  const run_step_4 = true; // load recognition_allocation_data to BQ
+  const run_step_3 = false; // execute_create_recognition_allocation_data
+  const run_step_4 = false; // load recognition_allocation_data to BQ
+
+  // CREATE / MANAGE HISTORY
+  const run_step_5 = true; // create recognition_allocation_data_history
 
   // =============================
   // Resolve Mountain Time year + month reliably (works even if server is UTC)
@@ -115,17 +120,12 @@ async function execute_run_recognition_data_jobs() {
     const stepFunctions = [
       run_step_1 ? () => execute_create_recognition_base_data(QUERY_OPTIONS) : null,
       run_step_2 ? () => execute_load_big_query_recognition_base_data(QUERY_OPTIONS) : null,
+      
       run_step_3 ? () => execute_create_recognition_allocation_data(QUERY_OPTIONS) : null,
       run_step_4 ? () => execute_load_big_query_recognition_allocation_data(QUERY_OPTIONS) : null,
+
+      run_step_5 ? () => execute_create_recognition_allocation_data_history() : null,
     ];
-
-    // const stepFunctions = [
-    //   run_step_1 ? execute_create_recognition_base_data : null,
-    //   run_step_2 ? execute_load_big_query_recognition_base_data : null,
-
-    //   run_step_3 ? execute_create_recognition_allocation_data : null,
-    //   run_step_4 ? execute_load_big_query_recognition_allocation_data : null,
-    // ];
 
     const stepName = [
       `Step #1 - Create revenue recognition base data:`,
@@ -133,6 +133,7 @@ async function execute_run_recognition_data_jobs() {
 
       `Step #3 - Create revenue recognition allocation data:`,
       `Step #4 - Load recognition_allocation_data to BQ: `,
+      `Step #5 - Create revenue recognition allocation history data: `,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function
