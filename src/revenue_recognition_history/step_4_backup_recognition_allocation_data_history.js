@@ -75,7 +75,7 @@ async function main(QUERY_OPTIONS = {}) {
   const source_table = 'rev_recognition_allocation_data_history';
   const backup_table_prefix = 'rev_recognition_allocation_data_history_bck';
 
-  const backup_type = QUERY_OPTIONS.backup_type || process.argv[2] || 'user';
+  const backup_type = QUERY_OPTIONS.backup_type || 'user';
   const keep_system_backups_total = 7;
   const keep_user_backups_total = 3;
 
