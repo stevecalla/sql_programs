@@ -63,19 +63,15 @@ async function executeSteps(stepFunctions, stepName) {
   }
 }
 
-async function main() {
+async function main(history_year = null, history_month = null) {
+  console.log('hello');
   const startTime = performance.now();
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  // const run_step_1 = true; // execute_create_recognition_base_data
-  // const run_step_2 = true; // load recognition_base_data to BQ
-
-  // const run_step_3 = true; // execute_create_recognition_allocation_data
-  // const run_step_4 = true; // load recognition_allocation_data to BQ
-
   // CREATE / MANAGE HISTORY
   const run_step_1 = true; // create recognition_allocation_data_history
+  // const run_step_2 = true; // load recognition_allocation_data_history to BQ
 
   // =============================
   // Resolve Mountain Time year + month reliably (works even if server is UTC)
@@ -110,8 +106,8 @@ async function main() {
   const HISTORY_QUERY_OPTIONS = {
     ...QUERY_OPTIONS,
     is_history_table: true,
-    history_revenue_year: 2026, // options: 2026, null
-    history_revenue_month: 3, // options: 3, null
+    history_revenue_year: history_year, // options: 2026, null
+    history_revenue_month: history_month, // options: 3, null
     use_year_where_statement: false,
   };
 
@@ -126,13 +122,9 @@ async function main() {
     ];
 
     const stepName = [
-      // `Step #1 - Create revenue recognition base data:`,
-      // `Step #2 - Load recognition_base_data to BQ: `,
-
-      // `Step #3 - Create revenue recognition allocation data:`,
-      // `Step #4 - Load recognition_allocation_data to BQ: `,
-
       `Step #1 - Create revenue recognition allocation history data: `,
+      
+      // `Step #2 - Load recognition_base_data to BQ: `,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function
@@ -161,5 +153,5 @@ if (require.main === module) {
 }
 
 module.exports = {
-  execute_run_recognition_data_jobs: main,
+  execute_run_recognition_data_history_jobs: main,
 };
