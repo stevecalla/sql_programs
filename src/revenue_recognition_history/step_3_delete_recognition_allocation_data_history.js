@@ -6,10 +6,7 @@ const { local_usat_sales_db_config } = require('../../utilities/config');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
 async function main(passed_snapshot_version) {
-  const snapshot_version =
-    passed_snapshot_version ||
-    process.argv[2] ||
-    'revenue_month_2026_03';
+  const snapshot_version = passed_snapshot_version || 'revenue_month_2026_03';
 
   const connection_config = await local_usat_sales_db_config();
   const connection = await mysql.createConnection(connection_config);
