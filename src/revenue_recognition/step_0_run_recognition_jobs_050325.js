@@ -74,14 +74,14 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = false; // execute_create_recognition_base_data
-  const run_step_2 = false; // load recognition_base_data to BQ
+  const run_step_1 = true; // execute_create_recognition_base_data
+  const run_step_2 = true; // load recognition_base_data to BQ
 
-  const run_step_3 = false; // execute_create_recognition_allocation_data
-  const run_step_4 = false; // load recognition_allocation_data to BQ
+  const run_step_3 = true; // execute_create_recognition_allocation_data
+  const run_step_4 = true; // load recognition_allocation_data to BQ
 
   // CREATE / MANAGE HISTORY
-  const run_step_5 = true; // create recognition_allocation_data_history
+  const run_step_5 = false; // create recognition_allocation_data_history
 
   // =============================
   // Resolve Mountain Time year + month reliably (works even if server is UTC)
