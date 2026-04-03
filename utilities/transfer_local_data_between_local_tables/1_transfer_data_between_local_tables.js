@@ -109,7 +109,7 @@ async function main(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, 
     if (QUERY_OPTIONS?.is_create_table) // Only drop / create table the first time the function runs
       await create_target_table(dst, TABLE_NAME, CREATE_TABLE_QUERY, QUERY_OPTIONS); // 2) Create target table
 
-    // console.log(GET_DATA_QUERY(created_at_mtn, created_at_utc, QUERY_OPTIONS));
+    console.log(GET_DATA_QUERY(created_at_mtn, created_at_utc, QUERY_OPTIONS));
 
     const stream = src
       .query(GET_DATA_QUERY(created_at_mtn, created_at_utc, QUERY_OPTIONS))

@@ -111,8 +111,8 @@ async function main() {
     ...QUERY_OPTIONS,
     is_history_table: true,
     history_revenue_year: 2026, // options: 2026, null
-    history_revenue_month: 2, // options: 3, null
-    use_year_where_statement: true,
+    history_revenue_month: 3, // options: 3, null
+    use_year_where_statement: false,
   };
 
   console.log(
