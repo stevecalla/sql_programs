@@ -4,14 +4,8 @@ dotenv.config({ path: "./.env" });
 const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
-// GET & LOAD EVENT DATA
-const { execute_create_recognition_base_data } = require('./step_1_create_recognition_base_data');
-const { execute_load_big_query_recognition_base_data } = require("./step_2_load_bq_recognition_base_data");
-
-const { execute_create_recognition_allocation_data } = require("./step_3_create_recognition_allocation_data");
-const { execute_load_big_query_recognition_allocation_data } = require("./step_4_load_bq_recognition_allocation_data");
-
-const { execute_create_recognition_allocation_data_history } = require('./step_5_create_recognition_allocation_data_history')
+// GET & LOAD RECOGNIZED REVENUE HISTORY DATA
+const { execute_create_recognition_allocation_data_history } = require('./step_1_create_recognition_allocation_data_history')
 
 async function executeSteps(stepFunctions, stepName) {
   for (let i = 0; i < stepFunctions.length; i++) {
@@ -74,14 +68,14 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = true; // execute_create_recognition_base_data
-  const run_step_2 = true; // load recognition_base_data to BQ
+  // const run_step_1 = true; // execute_create_recognition_base_data
+  // const run_step_2 = true; // load recognition_base_data to BQ
 
-  const run_step_3 = true; // execute_create_recognition_allocation_data
-  const run_step_4 = true; // load recognition_allocation_data to BQ
+  // const run_step_3 = true; // execute_create_recognition_allocation_data
+  // const run_step_4 = true; // load recognition_allocation_data to BQ
 
   // CREATE / MANAGE HISTORY
-  const run_step_5 = false; // create recognition_allocation_data_history
+  const run_step_1 = true; // create recognition_allocation_data_history
 
   // =============================
   // Resolve Mountain Time year + month reliably (works even if server is UTC)
@@ -105,6 +99,7 @@ async function main() {
   // 2025-11-15 → ends_mp = 2024-01-01
   // 2025-12-10 → ends_mp = 2025-01-01
 
+  // NOTE: QUERY OPTIONS IS SIMILAR / OVERLAPS WITH src/revenue_recognition/step_0_run_recognition_jobs_050325.js
   let QUERY_OPTIONS = {
     ends_mp: `${ends_year}-01-01`,
     // ends_mp: '2025-01-01', // originally 2024-01-01 but changed to 2025-01-01 12/27/25 due to BigQuery costs
@@ -115,8 +110,9 @@ async function main() {
   const HISTORY_QUERY_OPTIONS = {
     ...QUERY_OPTIONS,
     is_history_table: true,
-    history_revenue_year: null, // options: 2026, null
-    history_revenue_month: null, // options: 3, null
+    history_revenue_year: 2026, // options: 2026, null
+    history_revenue_month: 2, // options: 3, null
+    use_year_where_statement: true,
   };
 
   console.log(
@@ -126,22 +122,17 @@ async function main() {
 
   try {
     const stepFunctions = [
-      run_step_1 ? () => execute_create_recognition_base_data(QUERY_OPTIONS) : null,
-      run_step_2 ? () => execute_load_big_query_recognition_base_data(QUERY_OPTIONS) : null,
-
-      run_step_3 ? () => execute_create_recognition_allocation_data(QUERY_OPTIONS) : null,
-      run_step_4 ? () => execute_load_big_query_recognition_allocation_data(QUERY_OPTIONS) : null,
-
-      run_step_5 ? () => execute_create_recognition_allocation_data_history(HISTORY_QUERY_OPTIONS) : null, // HISTORY_QUERY_OPTIONS IS USED TO ENSURE TABLE IS NOT DROPPED
+      run_step_1 ? () => execute_create_recognition_allocation_data_history(HISTORY_QUERY_OPTIONS) : null, // HISTORY_QUERY_OPTIONS IS USED TO ENSURE TABLE IS NOT DROPPED
     ];
 
     const stepName = [
-      `Step #1 - Create revenue recognition base data:`,
-      `Step #2 - Load recognition_base_data to BQ: `,
+      // `Step #1 - Create revenue recognition base data:`,
+      // `Step #2 - Load recognition_base_data to BQ: `,
 
-      `Step #3 - Create revenue recognition allocation data:`,
-      `Step #4 - Load recognition_allocation_data to BQ: `,
-      `Step #5 - Create revenue recognition allocation history data: `,
+      // `Step #3 - Create revenue recognition allocation data:`,
+      // `Step #4 - Load recognition_allocation_data to BQ: `,
+
+      `Step #1 - Create revenue recognition allocation history data: `,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function
