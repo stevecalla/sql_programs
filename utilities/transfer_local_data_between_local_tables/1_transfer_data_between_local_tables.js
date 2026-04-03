@@ -46,9 +46,19 @@ function get_created_at_utc() {
 }
   
 // schema.js
-async function create_target_table(dst, TABLE_NAME, TABLE_STRUCTURE) {
+async function create_target_table(dst, TABLE_NAME, CREATE_TABLE_QUERY) {
   await dst.execute(`DROP TABLE IF EXISTS \`${TABLE_NAME}\``);
-  await dst.execute(TABLE_STRUCTURE);
+  await dst.execute(CREATE_TABLE_QUERY);
+}
+
+async function create_target_table(dst, TABLE_NAME, CREATE_TABLE_QUERY, QUERY_OPTIONS) {
+  // DON'T DROP THE HISTORY TABLE
+  if (!QUERY_OPTIONS?.is_history_table) { 
+    await dst.execute(`DROP TABLE IF EXISTS \`${TABLE_NAME}\``);
+  }
+
+  // ONLY CREATE THE TABLE IF IT DOESN'T EXIST
+  await dst.execute(CREATE_TABLE_QUERY);
 }
 
 // Flushes one batch of rows into the target table via a single multi-row INSERT
@@ -78,7 +88,7 @@ async function flush_batch(dst, TABLE_NAME, rows) {
   await dst.execute(sql, values);
 }
 
-async function execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS) {
+async function main(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS) {
   const src = await get_src_connection();  // non‑promise, for .stream()
   const dst = await get_dst_connection();  // promise API, for transaction + execute()
 
@@ -97,7 +107,9 @@ async function execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREA
     await dst.beginTransaction(); // 1) Start transaction
 
     if (QUERY_OPTIONS?.is_create_table) // Only drop / create table the first time the function runs
-      await create_target_table(dst, TABLE_NAME, CREATE_TABLE_QUERY); // 2) Create target table
+      await create_target_table(dst, TABLE_NAME, CREATE_TABLE_QUERY, QUERY_OPTIONS); // 2) Create target table
+
+    // console.log(GET_DATA_QUERY(created_at_mtn, created_at_utc, QUERY_OPTIONS));
 
     const stream = src
       .query(GET_DATA_QUERY(created_at_mtn, created_at_utc, QUERY_OPTIONS))
@@ -176,12 +188,11 @@ async function execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREA
   return result;
 }
 
-
 // execute_transfer_data_between_tables().catch(err => {
 //     console.error('Stream failed:', err);
 //     process.exit(1);
 // });
 
 module.exports = {
-  execute_transfer_data_between_tables,
+  execute_transfer_data_between_tables: main,
 };

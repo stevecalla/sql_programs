@@ -117,4 +117,10 @@ async function query_create_rev_recognition_allocation_table(table_name) {
 
 module.exports = {
   query_create_rev_recognition_allocation_table,
+  id_fields,
+  member_origin_types,
+  key_dates,
+  recursion_info,
+  metrics,
+  created_at_dates,
 }
