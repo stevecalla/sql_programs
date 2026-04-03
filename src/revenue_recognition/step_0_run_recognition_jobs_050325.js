@@ -11,8 +11,6 @@ const { execute_load_big_query_recognition_base_data } = require("./step_2_load_
 const { execute_create_recognition_allocation_data } = require("./step_3_create_recognition_allocation_data");
 const { execute_load_big_query_recognition_allocation_data } = require("./step_4_load_bq_recognition_allocation_data");
 
-const { execute_create_recognition_allocation_data_history } = require('./step_5_create_recognition_allocation_data_history')
-
 async function executeSteps(stepFunctions, stepName) {
   for (let i = 0; i < stepFunctions.length; i++) {
 
@@ -80,9 +78,6 @@ async function main() {
   const run_step_3 = true; // execute_create_recognition_allocation_data
   const run_step_4 = true; // load recognition_allocation_data to BQ
 
-  // CREATE / MANAGE HISTORY
-  const run_step_5 = false; // create recognition_allocation_data_history
-
   // =============================
   // Resolve Mountain Time year + month reliably (works even if server is UTC)
   const mtn_parts = new Intl.DateTimeFormat("en-US", {
@@ -131,8 +126,6 @@ async function main() {
 
       run_step_3 ? () => execute_create_recognition_allocation_data(QUERY_OPTIONS) : null,
       run_step_4 ? () => execute_load_big_query_recognition_allocation_data(QUERY_OPTIONS) : null,
-
-      run_step_5 ? () => execute_create_recognition_allocation_data_history(HISTORY_QUERY_OPTIONS) : null, // HISTORY_QUERY_OPTIONS IS USED TO ENSURE TABLE IS NOT DROPPED
     ];
 
     const stepName = [
@@ -141,7 +134,6 @@ async function main() {
 
       `Step #3 - Create revenue recognition allocation data:`,
       `Step #4 - Load recognition_allocation_data to BQ: `,
-      `Step #5 - Create revenue recognition allocation history data: `,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function
