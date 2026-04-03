@@ -115,8 +115,8 @@ async function main() {
   const HISTORY_QUERY_OPTIONS = {
     ...QUERY_OPTIONS,
     is_history_table: true,
-    history_revenue_year: 2026, // 2026
-    history_revenue_month: 2, // 3
+    history_revenue_year: null, // options: 2026, null
+    history_revenue_month: null, // options: 3, null
   };
 
   console.log(
