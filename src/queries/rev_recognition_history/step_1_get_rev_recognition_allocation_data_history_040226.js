@@ -180,6 +180,7 @@ function step_1_query_insert_rev_rec_monthly_history_snapshot_v2(created_at_mtn,
             FROM rev_recognition_allocation_data AS t
             WHERE 1 = 1
                 ${where_statement}
+            -- LIMIT 10
         )
 
         -- Step 2: Only return rows if this snapshot does NOT already exist in history
