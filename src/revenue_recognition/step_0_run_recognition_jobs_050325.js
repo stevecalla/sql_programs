@@ -109,6 +109,14 @@ async function main() {
     ends_mp: `${ends_year}-01-01`,
     // ends_mp: '2025-01-01', // originally 2024-01-01 but changed to 2025-01-01 12/27/25 due to BigQuery costs
     is_create_table: true,
+    is_history_table: false,
+  };
+
+  const HISTORY_QUERY_OPTIONS = {
+    ...QUERY_OPTIONS,
+    is_history_table: true,
+    history_revenue_year: 2026, // 2026
+    history_revenue_month: 2, // 3
   };
 
   console.log(
@@ -124,7 +132,7 @@ async function main() {
       run_step_3 ? () => execute_create_recognition_allocation_data(QUERY_OPTIONS) : null,
       run_step_4 ? () => execute_load_big_query_recognition_allocation_data(QUERY_OPTIONS) : null,
 
-      run_step_5 ? () => execute_create_recognition_allocation_data_history() : null,
+      run_step_5 ? () => execute_create_recognition_allocation_data_history(HISTORY_QUERY_OPTIONS) : null, // HISTORY_QUERY_OPTIONS IS USED TO ENSURE TABLE IS NOT DROPPED
     ];
 
     const stepName = [
@@ -152,13 +160,13 @@ async function main() {
 }
 
 if (require.main === module) {
-    try {
-        console.log('\nStarting data load.');
-        main();
-    } catch (error) {
-        console.error("Error during data load:", error);
-        process.exit(1);
-    }
+  try {
+    console.log('\nStarting data load.');
+    main();
+  } catch (error) {
+    console.error("Error during data load:", error);
+    process.exit(1);
+  }
 }
 
 module.exports = {
