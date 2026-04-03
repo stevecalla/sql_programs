@@ -14,7 +14,7 @@
 // ============================================================
 // - Ensures source table can be queried
 
-function step_5_test_query() {
+function step_1_test_query() {
     return `
         SELECT
             *
@@ -32,7 +32,7 @@ function step_5_test_query() {
 // - Inspect rows before inserting into history
 // - Confirms snapshot_version and filters
 
-function step_5_query_rev_rec_2025_history_snapshot() {
+function step_1_query_rev_rec_2025_history_snapshot() {
     return `
         SELECT
             CURRENT_TIMESTAMP AS as_of_snapshot_date_mtn,
@@ -54,7 +54,7 @@ function step_5_query_rev_rec_2025_history_snapshot() {
 // - Replaces backup table with current history table
 // - Gives a restore point if user makes a mistake
 
-function step_5_query_backup_rev_rec_history_table() {
+function step_1_query_backup_rev_rec_history_table() {
     return `
         DROP TABLE IF EXISTS rev_recognition_allocation_data_history_backup;
 
@@ -72,11 +72,12 @@ function step_5_query_backup_rev_rec_history_table() {
 // - Removes one snapshot before rerun
 // - Prevents duplicate monthly loads
 
-function step_5_query_delete_rev_rec_history_snapshot(snapshot_version) {
+function step_1_query_delete_rev_rec_history_snapshot(snapshot_version) {
     return `
         DELETE FROM rev_recognition_allocation_data_history
         WHERE 1 = 1
             AND snapshot_version = '${snapshot_version}'
+            -- AND snapshot_version LIKE 'revenue_month_2025%'
         ;
     `;
 }
@@ -89,7 +90,7 @@ function step_5_query_delete_rev_rec_history_snapshot(snapshot_version) {
 // - Otherwise defaults to prior month
 // - snapshot_version is derived from revenue_year_month in source data
 
-function step_5_query_insert_rev_rec_monthly_history_snapshot(created_at_mtn, created_at_utc, QUERY_OPTIONS) {
+function step_1_query_insert_rev_rec_monthly_history_snapshot(created_at_mtn, created_at_utc, QUERY_OPTIONS) {
 
     const { history_revenue_year, history_revenue_month } = QUERY_OPTIONS;
 
@@ -121,12 +122,86 @@ function step_5_query_insert_rev_rec_monthly_history_snapshot(created_at_mtn, cr
 }
 
 // ============================================================
+// STEP 4 (v2): INSERT MONTHLY SNAPSHOT (SKIP IF EXISTS)
+// ============================================================
+// PURPOSE:
+// - Builds a monthly snapshot from rev_recognition_allocation_data
+// - Generates a consistent snapshot_version (e.g., revenue_month_2026_03)
+// - Checks if that snapshot_version already exists in history
+// - Returns rows ONLY if the snapshot does NOT already exist
+//
+// BEHAVIOR:
+// - If snapshot exists in history → returns 0 rows (skip load)
+// - If snapshot does not exist → returns full dataset for insert
+//
+// NOTE:
+// - Existence check is at the snapshot level (not row-level)
+// - Assumes snapshot_version is indexed in history for performance
+
+function step_1_query_insert_rev_rec_monthly_history_snapshot_v2(created_at_mtn, created_at_utc, QUERY_OPTIONS) {
+
+    const { history_revenue_year, history_revenue_month, use_year_where_statement } = QUERY_OPTIONS;
+
+    // Determine whether to use provided year/month or default to prior month
+    const use_provided_values =
+        history_revenue_year !== null &&
+        history_revenue_year !== undefined &&
+        history_revenue_month !== null &&
+        history_revenue_month !== undefined;
+
+    const snapshot_year = use_provided_values
+        ? history_revenue_year
+        : `YEAR(CURDATE() - INTERVAL 1 MONTH)`;
+
+    const snapshot_month = use_provided_values
+        ? history_revenue_month
+        : `MONTH(CURDATE() - INTERVAL 1 MONTH)`;
+
+    const where_statement_by_2025 = `AND t.revenue_year_date = 2025`;
+
+    const where_statement_by_month = `
+        AND t.revenue_year_date = ${snapshot_year}
+        AND t.revenue_month_date = ${snapshot_month}
+    `;
+
+    const where_statement = use_year_where_statement ? where_statement_by_2025 : where_statement_by_month;
+
+    return `
+        -- Step 1: Build the target snapshot for the given month
+        WITH target_snapshot AS (
+            SELECT
+                CURRENT_TIMESTAMP AS as_of_snapshot_date_mtn,
+
+                -- Standardized snapshot identifier (e.g., revenue_month_2026_03)
+                CONCAT('revenue_month_', REPLACE(t.revenue_year_month, '-', '_')) AS snapshot_version,
+
+                -- All source fields
+                t.*
+            FROM rev_recognition_allocation_data AS t
+            WHERE 1 = 1
+                ${where_statement}
+        )
+
+        -- Step 2: Only return rows if this snapshot does NOT already exist in history
+        SELECT
+            *
+        FROM target_snapshot ts
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM rev_recognition_allocation_data_history h
+            WHERE h.snapshot_version = ts.snapshot_version
+        )
+        ;
+    `;
+}
+
+// ============================================================
 // STEP 5: VALIDATE SOURCE & HISTORY SNAPSHOT
 // ============================================================
 // - Summarizes one snapshot in history
 // - Used after insert or restore
 
-function step_5_query_validate_rev_rec_history_snapshot() {
+function step_1_query_validate_rev_rec_history_snapshot() {
     return `
         SELECT 
             'rev_recognition_allocation_data' AS source,
@@ -168,7 +243,7 @@ function step_5_query_validate_rev_rec_history_snapshot() {
 // - Replaces current history table contents with backup table
 // - Use only if a full rollback is needed
 
-function step_5_query_restore_rev_rec_history_table_from_backup() {
+function step_1_query_restore_rev_rec_history_table_from_backup() {
     return `
         DELETE FROM rev_recognition_allocation_data_history;
 
@@ -186,7 +261,7 @@ function step_5_query_restore_rev_rec_history_table_from_backup() {
 // - Re-inserts that snapshot from backup
 // - Safer than restoring the full table when only one month is affected
 
-function step_5_query_restore_rev_rec_history_snapshot_from_backup(snapshot_version) {
+function step_1_query_restore_rev_rec_history_snapshot_from_backup(snapshot_version) {
     return `
         DELETE FROM rev_recognition_allocation_data_history
         WHERE 1 = 1
@@ -207,16 +282,17 @@ function step_5_query_restore_rev_rec_history_snapshot_from_backup(snapshot_vers
 // ============================================================
 
 module.exports = {
-    step_5_test_query,
-    step_5_query_rev_rec_2025_history_snapshot,
+    step_1_test_query,
+    step_1_query_rev_rec_2025_history_snapshot,
 
-    step_5_query_backup_rev_rec_history_table,
-    step_5_query_delete_rev_rec_history_snapshot,
+    step_1_query_backup_rev_rec_history_table,
+    step_1_query_delete_rev_rec_history_snapshot,
 
-    step_5_query_insert_rev_rec_monthly_history_snapshot,
+    step_1_query_insert_rev_rec_monthly_history_snapshot,
+    step_1_query_insert_rev_rec_monthly_history_snapshot_v2,
 
-    step_5_query_validate_rev_rec_history_snapshot,
+    step_1_query_validate_rev_rec_history_snapshot,
 
-    step_5_query_restore_rev_rec_history_table_from_backup,
-    step_5_query_restore_rev_rec_history_snapshot_from_backup,
+    step_1_query_restore_rev_rec_history_table_from_backup,
+    step_1_query_restore_rev_rec_history_snapshot_from_backup,
 };
