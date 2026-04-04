@@ -64,7 +64,6 @@ async function executeSteps(stepFunctions, stepName) {
 }
 
 async function main(history_year = null, history_month = null) {
-  console.log('hello');
   const startTime = performance.now();
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
