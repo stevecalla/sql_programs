@@ -39,7 +39,7 @@ function parse_history_params(req) {
                     break;
 
                 default:
-                    console.warn(`Unknown parameter: ${key}`);
+                    console.warn(`⚠️ [INSERT] Unknown parameter: ${key}`);
             }
         }
     }
@@ -59,7 +59,7 @@ function get_response_url(req) {
 }
 
 async function insert_recognition_history_controller(req, res) {
-    console.log('Received request for recognition history - /insert-recognition-history :', {
+    console.log('🚀 [INSERT] Request received - /insert-recognition-history', {
         body: req.body,
         headers: req.headers,
         query: req.query,
@@ -90,18 +90,24 @@ async function insert_recognition_history_controller(req, res) {
 
     if (!is_valid_year || !is_valid_month) {
         return res.status(200).json({
-            text: 'Invalid input. Use `/rec_history_insert` or `/rec_history_insert year=2026 month=3`.',
+            text: '⚠️ Invalid input. Use `/rec_history_insert` or `/rec_history_insert year=2026 month=3`.',
         });
     }
 
     try {
+        console.log(`⚙️ [INSERT] Starting job year=${history_year} month=${history_month}`);
+
         res.status(200).json({
-            text: `Recognition history job started for year=${history_year} month=${history_month}. Will respond shortly.`,
+            text: `🚀 Recognition history job started for year=${history_year} month=${history_month}. Will respond shortly.`,
         });
 
         await execute_run_recognition_data_history_jobs(history_year, history_month);
 
-        const slack_message = `Recognition history job complete for year=${history_year} month=${history_month}.`;
+        console.log(`✅ [INSERT] Completed year=${history_year} month=${history_month}`);
+
+        const slack_message = `📊 Recognition history job complete for year=${history_year} month=${history_month}. ✅`;
+
+        console.log('📣 [INSERT] Sending Slack follow-up message');
 
         await send_slack_followup_message(
             channel_id,
@@ -112,11 +118,13 @@ async function insert_recognition_history_controller(req, res) {
         );
 
     } catch (error) {
-        console.error('Error inserting recognition history data.', error);
+        console.error(`❌ [INSERT] Failed year=${history_year} month=${history_month}`, error);
 
-        const slack_message = `Recognition history job failed for year=${history_year} month=${history_month}. Error: ${error.message || 'Internal Server Error'}`;
+        const slack_message = `📊 Recognition history job failed for year=${history_year} month=${history_month}. ❌ Error: ${error.message || 'Internal Server Error'}`;
 
         try {
+            console.log('📣 [INSERT] Sending Slack failure message');
+
             await send_slack_followup_message(
                 channel_id,
                 channel_name,
@@ -125,7 +133,7 @@ async function insert_recognition_history_controller(req, res) {
                 slack_message
             );
         } catch (followup_error) {
-            console.error('Error sending slack follow-up message.', followup_error);
+            console.error('❌ [INSERT] Error sending slack follow-up message.', followup_error);
         }
     }
 }
