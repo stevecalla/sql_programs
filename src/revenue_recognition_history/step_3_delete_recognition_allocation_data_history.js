@@ -48,6 +48,8 @@ async function main(passed_snapshot_version) {
     console.log(`[SUCCESS] Snapshot deleted.`);
     console.log(`Affected rows: ${result.affectedRows}`);
 
+    return(result.affectedRows);
+
   } catch (error) {
     console.error('[ERROR] Delete failed:', error);
     throw error;
