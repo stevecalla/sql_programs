@@ -69,6 +69,16 @@ function sort_user_backup_names_oldest_to_newest(table_names) {
   });
 }
 
+function get_backup_date_mtn(QUERY_OPTIONS = {}) {
+  if (QUERY_OPTIONS.backup_date_override) {
+    return QUERY_OPTIONS.backup_date_override.replace(/-/g, '_');
+  }
+
+  return new Date()
+    .toLocaleDateString('en-CA', { timeZone: 'America/Denver' })
+    .replace(/-/g, '_');
+}
+
 async function main(QUERY_OPTIONS = {}) {
   // QUERY_OPTIONS = {...QUERY_OPTIONS, backup_type: 'system'};
 
@@ -91,10 +101,8 @@ async function main(QUERY_OPTIONS = {}) {
   runTimer('timer');
 
   try {
-    const backup_date = new Date()
-      .toISOString()
-      .slice(0, 10)
-      .replace(/-/g, '_');
+    const backup_date = get_backup_date_mtn(QUERY_OPTIONS);
+    console.log(`[INFO] backup_date used: ${backup_date}`);
 
     const preview_source_sql = `
       SELECT
@@ -349,10 +357,22 @@ async function main(QUERY_OPTIONS = {}) {
 }
 
 if (require.main === module) {
-  main().catch(error => {
-    console.error('Error during backup:', error);
-    process.exit(1);
-  });
+  (async () => {
+    try {
+      await main({ backup_type: 'system' });
+      await main({ backup_type: 'system', backup_date_override: '2026-04-01' });
+      await main({ backup_type: 'system', backup_date_override: '2026-04-02' });
+      await main({ backup_type: 'system', backup_date_override: '2026-04-03' });
+      await main({ backup_type: 'system', backup_date_override: '2026-04-04' });
+      await main({ backup_type: 'system', backup_date_override: '2026-04-05' });
+      await main({ backup_type: 'system', backup_date_override: '2026-04-06' });
+      await main({ backup_type: 'system', backup_date_override: '2026-04-07' });
+      await main({ backup_type: 'system', backup_date_override: '2026-04-08' });
+    } catch (error) {
+      console.error('Error during backup:', error);
+      process.exit(1);
+    }
+  })();
 }
 
 module.exports = {
