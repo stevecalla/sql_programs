@@ -51,7 +51,7 @@ async function backup_recognition_history_controller(req, res) {
 
         // 🚀 Immediate Slack response
         res.status(200).json({
-            text: `🚀 Backup job started (${backup_type.backup_type}).`,
+            text: `🚀 Rev recognition backup job started (${backup_type.backup_type}).`,
         });
 
         // Run job
@@ -59,7 +59,7 @@ async function backup_recognition_history_controller(req, res) {
 
         console.log(`✅ [BACKUP] Completed (${backup_type.backup_type})`);
 
-        const slack_message = `💾 Backup complete (${backup_type.backup_type}). ✅`;
+        const slack_message = `💾 Rev recognition backup job complete (${backup_type.backup_type}). ✅`;
 
         console.log('📣 [BACKUP] Sending Slack follow-up message');
 
