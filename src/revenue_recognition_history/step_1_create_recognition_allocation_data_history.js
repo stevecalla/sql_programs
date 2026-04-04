@@ -27,8 +27,8 @@ async function main(QUERY_OPTIONS) {
   // CREATE TABLE & GET / TRANSFER DATA
   const result = await execute_transfer_data_between_tables(BATCH_SIZE, TABLE_NAME, CREATE_TABLE_QUERY, GET_DATA_QUERY, QUERY_OPTIONS);
 
-  // return result;  
-  return;
+  return result;  
+  // return;
 }
 
 if (require.main === module) {
