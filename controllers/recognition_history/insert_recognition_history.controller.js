@@ -1,6 +1,8 @@
 const { execute_run_recognition_data_history_jobs } = require('../../src/revenue_recognition_history/step_0_run_recognition_history_jobs_050325');
 const { send_slack_followup_message } = require('../../utilities/slack_messaging/send_message_api_v2_followup');
 
+const { validate_command_password } = require('../../utilities/slack_messaging/parse_slack_command');
+
 function get_prior_month_year_month() {
     const now = new Date();
     const prior_month_date = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -11,38 +13,11 @@ function get_prior_month_year_month() {
     };
 }
 
-function parse_history_params(req) {
+function parse_history_params(parsed) {
     const default_date = get_prior_month_year_month();
 
-    let {
-        year: history_year = default_date.history_year,
-        month: history_month = default_date.history_month,
-    } = req.query;
-
-    if (req.body && Object.keys(req.body).length > 0 && req.body.text) {
-        const args = req.body.text.trim().split(/\s+/);
-
-        for (const arg of args) {
-            const [key, value] = arg.split('=');
-
-            if (!key || !value) continue;
-
-            const normalized_key = key.toLowerCase();
-
-            switch (normalized_key) {
-                case 'year':
-                    if (!req.query.year) history_year = value;
-                    break;
-
-                case 'month':
-                    if (!req.query.month) history_month = value;
-                    break;
-
-                default:
-                    console.warn(`⚠️ [INSERT] Unknown parameter: ${key}`);
-            }
-        }
-    }
+    const history_year = parsed.year ?? default_date.history_year;
+    const history_month = parsed.month ?? default_date.history_month;
 
     return {
         history_year: Number(history_year),
@@ -76,7 +51,19 @@ async function insert_recognition_history_controller(req, res) {
 
     const response_url = get_response_url(req);
 
-    let { history_year, history_month } = parse_history_params(req);
+    // 🔐 PASSWORD VALIDATION
+    const auth = validate_command_password(req);
+
+    if (!auth.is_valid) {
+        console.warn('⛔ [INSERT] Authorization failed:', auth.error);
+
+        return res.status(auth.status).json({
+            text: auth.error,
+        });
+    }
+
+    const parsed = auth.parsed;
+    const { history_year, history_month } = parse_history_params(parsed);
 
     const is_valid_year =
         Number.isInteger(history_year) &&
@@ -90,7 +77,7 @@ async function insert_recognition_history_controller(req, res) {
 
     if (!is_valid_year || !is_valid_month) {
         return res.status(200).json({
-            text: '⚠️ Invalid input. Use `/rec_history_insert` or `/rec_history_insert year=2026 month=3`.',
+            text: '⚠️ Invalid input. Use `/rec_history_insert password=xxx` or `/rec_history_insert password=xxx year=2026 month=3`.',
         });
     }
 

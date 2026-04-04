@@ -1,22 +1,10 @@
 const { execute_delete_recognition_allocation_data_history } = require('../../src/revenue_recognition_history/step_3_delete_recognition_allocation_data_history');
 const { send_slack_followup_message } = require('../../utilities/slack_messaging/send_message_api_v2_followup');
 
-function parse_snapshot(req) {
-    let { snapshot: history_snapshot } = req.query;
+const { validate_command_password } = require('../../utilities/slack_messaging/parse_slack_command');
 
-    if (req.body && Object.keys(req.body).length > 0 && req.body.text) {
-        const args = req.body.text.trim().split(/\s+/);
-
-        for (const arg of args) {
-            const [key, value] = arg.split('=');
-
-            if (key?.toLowerCase() === 'snapshot' && value && !req.query.snapshot) {
-                history_snapshot = value;
-            }
-        }
-    }
-
-    return history_snapshot;
+function parse_snapshot(parsed) {
+    return parsed.snapshot;
 }
 
 function get_response_url(req) {
@@ -36,13 +24,25 @@ async function delete_recognition_history_controller(req, res) {
     const { channel_id, channel_name, user_id } = req.body || {};
     const response_url = get_response_url(req);
 
-    const history_snapshot = parse_snapshot(req);
+    // 🔐 PASSWORD VALIDATION
+    const auth = validate_command_password(req);
+
+    if (!auth.is_valid) {
+        console.warn('⛔ [DELETE] Authorization failed:', auth.error);
+
+        return res.status(auth.status).json({
+            text: auth.error,
+        });
+    }
+
+    const parsed = auth.parsed;
+    const history_snapshot = parse_snapshot(parsed);
 
     if (!history_snapshot) {
         console.warn('⚠️ [DELETE] Invalid input - missing snapshot');
 
         return res.status(200).json({
-            text: '⚠️ Invalid input. Use `/rec_history_delete snapshot=revenue_month_2026_03`.',
+            text: '⚠️ Invalid input. Use `/rec_history_delete password=xxx snapshot=revenue_month_2026_03`.',
         });
     }
 
@@ -94,5 +94,3 @@ async function delete_recognition_history_controller(req, res) {
 module.exports = {
     delete_recognition_history_controller,
 };
-
-// we can add a pre-delete count preview (like “this will delete 1.2M rows — confirm?”) which is very useful for production safety.
