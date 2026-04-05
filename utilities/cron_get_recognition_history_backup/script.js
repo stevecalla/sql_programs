@@ -1,7 +1,10 @@
+const dotenv = require('dotenv');
+dotenv.config({ path: "../../.env" });
+
 console.log(`\nHELLO - RUN RECOGNITION HISTORY BACKUP JOB`);
 console.log("Current Date and Time:", new Date().toLocaleString());
 
-fetch('http://localhost:8006/backup-recognition-history?backup_type=system', { method: 'POST' })
+fetch(`http://localhost:8006/backup-recognition-history?password=${process.env.SLACK_COMMAND_PASSWORD}&backup_type=system`, { method: 'POST' })
 // fetch('http://localhost:8006/recognition-test')
     .then(response => {
         if (!response.ok) {
