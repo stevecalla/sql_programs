@@ -1,4 +1,4 @@
-const rev_recognition_allocation_allocation_schema = [
+const rev_recognition_allocation_schema = [
   // ID Fields
   {
     name: "id_profiles",
@@ -378,5 +378,5 @@ const rev_recognition_allocation_allocation_schema = [
 ];
 
 module.exports = {
-  rev_recognition_allocation_allocation_schema
+  rev_recognition_allocation_schema
 };
