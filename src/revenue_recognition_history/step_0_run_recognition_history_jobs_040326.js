@@ -5,7 +5,8 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 // GET & LOAD RECOGNIZED REVENUE HISTORY DATA
-const { execute_create_recognition_allocation_data_history } = require('./step_1_create_recognition_allocation_data_history')
+const { execute_create_recognition_allocation_data_history } = require('./step_1_create_recognition_allocation_data_history');
+const { execute_load_big_query_recognition_allocation_data_history } = require('./step_2_load_bq_recognition_allocation_data_history');
 
 async function executeSteps(stepFunctions, stepName) {
   for (let i = 0; i < stepFunctions.length; i++) {
@@ -70,7 +71,7 @@ async function main(history_year = null, history_month = null) {
 
   // CREATE / MANAGE HISTORY
   const run_step_1 = true; // create recognition_allocation_data_history
-  // const run_step_2 = true; // load recognition_allocation_data_history to BQ
+  const run_step_2 = true; // load recognition_allocation_data_history to BQ
 
   // =============================
   // Resolve Mountain Time year + month reliably (works even if server is UTC)
@@ -118,12 +119,12 @@ async function main(history_year = null, history_month = null) {
   try {
     const stepFunctions = [
       run_step_1 ? () => execute_create_recognition_allocation_data_history(HISTORY_QUERY_OPTIONS) : null, // HISTORY_QUERY_OPTIONS IS USED TO ENSURE TABLE IS NOT DROPPED
+      run_step_2 ? () => execute_load_big_query_recognition_allocation_data_history() : null,
     ];
 
     const stepName = [
       `Step #1 - Create revenue recognition allocation history data: `,
-      
-      // `Step #2 - Load recognition_base_data to BQ: `,
+      `Step #2 - Load recognition_base_data_history to BQ: `,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function
