@@ -10,7 +10,7 @@ const {rev_recognition_allocation_allocation_schema } = require('../google_cloud
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
 // EXECUTE LOAD BIQ QUERY
-async function execute_load_big_query_recognition_allocation_data() {
+async function main() {
     runTimer(`load_bigquery`);
 
     const app_name = "usat_sales";
@@ -44,16 +44,16 @@ async function execute_load_big_query_recognition_allocation_data() {
     return true; // placeholder to return to ensure success msg
 }
 
-// execute_load_big_query_recognition_allocation_data();
-// (async () => {
-//     try {
-//         console.log('\nStarting data load.');
-//         await execute_load_big_query_recognition_base_data();
-//     } catch (error) {
-//         console.error("Error during data load:", error);
-//     }
-// })();
+if (require.main === module) {
+  try {
+    console.log('\nStarting data load.');
+    main();
+  } catch (error) {
+    console.error("Error during data load:", error);
+    process.exit(1);
+  }
+}
 
 module.exports = {
-    execute_load_big_query_recognition_allocation_data,
+    execute_load_big_query_recognition_allocation_data: main,
 }
