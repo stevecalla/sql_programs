@@ -1,7 +1,7 @@
 const { execute_run_recognition_data_history_jobs } = require('../../src/revenue_recognition_history/step_0_run_recognition_history_jobs_040326');
-const { send_slack_followup_message } = require('../../utilities/slack_messaging/send_message_api_v2_followup');
 const { validate_command_password } = require('../../utilities/slack_messaging/parse_slack_command');
 const { start_delayed_still_working_timer, format_duration_ms } = require('../../utilities/slack_messaging/send_delayed_still_working_message');
+const { slack_message_api_v2_thread } = require('../../utilities/slack_messaging/slack_message_api_v2_thread');
 
 function get_prior_month_year_month() {
     const now = new Date();
@@ -25,14 +25,6 @@ function parse_history_params(parsed) {
     };
 }
 
-function get_response_url(req) {
-    if (req.body && Object.keys(req.body).length === 0) {
-        return process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL;
-    }
-
-    return req?.body?.response_url;
-}
-
 async function insert_recognition_history_controller(req, res) {
     console.log('🚀 [INSERT] Request received - /insert-recognition-history', {
         body: req.body,
@@ -48,8 +40,6 @@ async function insert_recognition_history_controller(req, res) {
         channel_name,
         user_id,
     } = req.body || {};
-
-    const response_url = get_response_url(req);
 
     // 🔐 PASSWORD VALIDATION
     const auth = validate_command_password(req);
@@ -83,21 +73,52 @@ async function insert_recognition_history_controller(req, res) {
 
     const start_time_ms = Date.now();
 
-    console.log(`⚙️ [INSERT] Starting job year=${history_year} month=${history_month}`);
-
-    res.status(200).json({
-        text: `🚀 Recognition history job started for year=${history_year} month=${history_month}. Will respond shortly.`,
+    console.log(`⚙️ [INSERT] Starting job year=${history_year} month=${history_month}`, {
+        channel_id,
+        channel_name,
+        user_id,
     });
 
-    const send_insert_followup_message = async (slack_message) => {
-        console.log('📣 [INSERT] Sending Slack follow-up message');
+    // Immediate slash-command acknowledgement (ephemeral / only visible to requesting user)
+    res.status(200).json({
+        text: `🚀 Recognition history job started for year=${history_year} month=${history_month}. Progress updates will be sent to you in a private bot thread.`,
+    });
 
-        await send_slack_followup_message(
-            channel_id,
-            channel_name,
-            user_id,
-            response_url,
-            slack_message
+    let parent_thread_ts = null;
+
+    try {
+        // IMPORTANT:
+        // Force the thread into the requesting user's private bot DM
+        // by passing blank channel_id and the user_id.
+        console.log('🧵 [INSERT] Creating private Slack parent thread message for requesting user');
+
+        parent_thread_ts = await slack_message_api_v2_thread(
+            '', // force DM instead of channel
+            user_id || '',
+            `🚀 Recognition history job started for year=${history_year} month=${history_month}.`,
+            undefined,
+            ''
+        );
+
+        console.log(`🧵 [INSERT] Parent thread ts=${parent_thread_ts || 'not returned'}`);
+    } catch (thread_init_error) {
+        console.error('❌ [INSERT] Failed to create private Slack parent thread message.', thread_init_error);
+    }
+
+    const send_insert_thread_message = async (slack_message) => {
+        if (!parent_thread_ts) {
+            console.log('ℹ️ [INSERT] No parent thread ts available. Skipping private thread message.');
+            return;
+        }
+
+        console.log('📣 [INSERT] Sending private Slack thread message');
+
+        await slack_message_api_v2_thread(
+            '', // force DM instead of channel
+            user_id || '',
+            slack_message,
+            undefined,
+            parent_thread_ts
         );
     };
 
@@ -105,7 +126,7 @@ async function insert_recognition_history_controller(req, res) {
         delay_ms: undefined,
         interval_ms: undefined,
         job_label: `Recognition history insert for year=${history_year} month=${history_month}`,
-        send_message_fn: send_insert_followup_message,
+        send_message_fn: send_insert_thread_message,
         start_time_ms,
     });
 
@@ -118,9 +139,9 @@ async function insert_recognition_history_controller(req, res) {
 
         console.log(`✅ [INSERT] Completed year=${history_year} month=${history_month} duration=${duration}`);
 
-        const slack_message = `📊 Recognition history job complete for year=${history_year} month=${history_month}. ✅\n⏱️ Duration: ${duration}`;
-
-        await send_insert_followup_message(slack_message);
+        await send_insert_thread_message(
+            `📊 Recognition history job complete for year=${history_year} month=${history_month}. ✅\n⏱️ Duration: ${duration}`
+        );
 
     } catch (error) {
         still_working_timer.finish();
@@ -129,12 +150,12 @@ async function insert_recognition_history_controller(req, res) {
 
         console.error(`❌ [INSERT] Failed year=${history_year} month=${history_month} duration=${duration}`, error);
 
-        const slack_message = `📊 Recognition history job failed for year=${history_year} month=${history_month}. ❌ Error: ${error.message || 'Internal Server Error'}\n⏱️ Duration: ${duration}`;
-
         try {
-            await send_insert_followup_message(slack_message);
-        } catch (followup_error) {
-            console.error('❌ [INSERT] Error sending slack follow-up message.', followup_error);
+            await send_insert_thread_message(
+                `📊 Recognition history job failed for year=${history_year} month=${history_month}. ❌ Error: ${error.message || 'Internal Server Error'}\n⏱️ Duration: ${duration}`
+            );
+        } catch (thread_error) {
+            console.error('❌ [INSERT] Error sending private Slack thread failure message.', thread_error);
         }
     }
 }

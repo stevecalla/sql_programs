@@ -1,18 +1,10 @@
 const { execute_delete_recognition_allocation_data_history } = require('../../src/revenue_recognition_history/step_3_delete_recognition_allocation_data_history');
-const { send_slack_followup_message } = require('../../utilities/slack_messaging/send_message_api_v2_followup');
-
 const { validate_command_password } = require('../../utilities/slack_messaging/parse_slack_command');
 const { start_delayed_still_working_timer, format_duration_ms } = require('../../utilities/slack_messaging/send_delayed_still_working_message');
+const { slack_message_api_v2_thread } = require('../../utilities/slack_messaging/slack_message_api_v2_thread');
 
 function parse_snapshot(parsed) {
     return parsed.snapshot;
-}
-
-function get_response_url(req) {
-    if (req.body && Object.keys(req.body).length === 0) {
-        return process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL;
-    }
-    return req?.body?.response_url;
 }
 
 async function delete_recognition_history_controller(req, res) {
@@ -20,10 +12,11 @@ async function delete_recognition_history_controller(req, res) {
         body: req.body,
         query: req.query,
         text: req?.body?.text,
+        response_url: req?.body?.response_url,
     });
 
     const { channel_id, channel_name, user_id } = req.body || {};
-    const response_url = get_response_url(req);
+    const DM_ONLY_CHANNEL_ID = ''; // intentionally blank to force private DM via user_id
 
     // 🔐 PASSWORD VALIDATION
     const auth = validate_command_password(req);
@@ -48,70 +41,92 @@ async function delete_recognition_history_controller(req, res) {
     }
 
     const start_time_ms = Date.now();
-    let still_working_timer;
+
+    console.log(`⚙️ [DELETE] Starting job for snapshot=${history_snapshot}`, {
+        channel_id,
+        channel_name,
+        user_id,
+    });
+
+    // Immediate slash-command acknowledgement (only visible to requesting user)
+    res.status(200).json({
+        text: `🗑️ Delete job started for snapshot=${history_snapshot}. Progress updates will be sent to you in a private bot thread.`,
+    });
+
+    let parent_thread_ts = null;
 
     try {
-        console.log(`⚙️ [DELETE] Starting job for snapshot=${history_snapshot}`);
+        console.log('🧵 [DELETE] Creating private Slack parent thread message for requesting user');
 
-        res.status(200).json({
-            text: `🚀 Delete job started for snapshot=${history_snapshot}.`,
-        });
+        parent_thread_ts = await slack_message_api_v2_thread(
+            DM_ONLY_CHANNEL_ID,
+            user_id || '',
+            `🗑️ Recognition history delete started for snapshot=${history_snapshot}.`,
+            undefined,
+            ''
+        );
 
-        const send_delete_followup_message = async (slack_message) => {
-            console.log('📣 [DELETE] Sending Slack follow-up message');
+        console.log(`🧵 [DELETE] Parent thread ts=${parent_thread_ts || 'not returned'}`);
+    } catch (thread_init_error) {
+        console.error('❌ [DELETE] Failed to create private Slack parent thread message.', thread_init_error);
+    }
 
-            await send_slack_followup_message(
-                channel_id,
-                channel_name,
-                user_id,
-                response_url,
-                slack_message
-            );
-        };
+    const send_delete_thread_message = async (slack_message) => {
+        if (!parent_thread_ts) {
+            console.log('ℹ️ [DELETE] No parent thread ts available. Skipping private thread message.');
+            return;
+        }
 
-        still_working_timer = start_delayed_still_working_timer({ 
-            delay_ms: undefined,
-            interval_ms: undefined,
-            job_label: `Recognition history delete for snapshot=${history_snapshot}`,
-            send_message_fn: send_delete_followup_message,
-            start_time_ms,
-        });
+        console.log('📣 [DELETE] Sending private Slack thread message');
 
+        await slack_message_api_v2_thread(
+            DM_ONLY_CHANNEL_ID,
+            user_id || '',
+            slack_message,
+            undefined,
+            parent_thread_ts
+        );
+    };
+
+    const still_working_timer = start_delayed_still_working_timer({
+        delay_ms: undefined,
+        interval_ms: undefined,
+        job_label: `Recognition history delete for snapshot=${history_snapshot}`,
+        send_message_fn: send_delete_thread_message,
+        start_time_ms,
+    });
+
+    try {
         const rows_deleted = await execute_delete_recognition_allocation_data_history(history_snapshot);
+
         still_working_timer.finish();
 
         const formatted_rows = Number(rows_deleted || 0).toLocaleString();
         const duration = format_duration_ms(Date.now() - start_time_ms);
 
-        console.log(`✅ [DELETE] Completed snapshot=${history_snapshot} | rows_deleted=${formatted_rows}`);
+        console.log(`✅ [DELETE] Completed snapshot=${history_snapshot} | rows_deleted=${formatted_rows} | duration=${duration}`);
 
-        const slack_message = `🗑️ Delete complete for snapshot=${history_snapshot}. Rows deleted: ${formatted_rows}. ✅\n⏱️ Duration: ${duration}`;
-
-        console.log('📣 [DELETE] Sending Slack follow-up message');
-
-        await send_delete_followup_message(slack_message);
+        await send_delete_thread_message(
+            `🗑️ Delete complete for snapshot=${history_snapshot}. ✅\n` +
+            `📌 Rows deleted: ${formatted_rows}\n` +
+            `⏱️ Duration: ${duration}`
+        );
 
     } catch (error) {
-        if (still_working_timer) still_working_timer.finish();
+        still_working_timer.finish();
 
         const duration = format_duration_ms(Date.now() - start_time_ms);
 
         console.error(`❌ [DELETE] Failed snapshot=${history_snapshot}`, error);
 
-        const slack_message = `🗑️ Delete failed for snapshot=${history_snapshot}. ❌ Error: ${error.message || 'Internal Server Error'}\n⏱️ Duration: ${duration}`;
-
         try {
-            console.log('📣 [DELETE] Sending Slack failure message');
-
-            await send_slack_followup_message(
-                channel_id,
-                channel_name,
-                user_id,
-                response_url,
-                slack_message
+            await send_delete_thread_message(
+                `🗑️ Delete failed for snapshot=${history_snapshot}. ❌ ` +
+                `Error: ${error.message || 'Internal Server Error'}\n` +
+                `⏱️ Duration: ${duration}`
             );
-        } catch (e) {
-            console.error('❌ [DELETE] Error sending Slack follow-up message.', e);
+        } catch (thread_error) {
+            console.error('❌ [DELETE] Error sending private Slack thread failure message.', thread_error);
         }
     }
 }
