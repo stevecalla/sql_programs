@@ -145,7 +145,11 @@ async function main(history_year = null, history_month = null) {
 if (require.main === module) {
   try {
     console.log('\nStarting data load.');
-    main();
+    
+    const history_year = 2026;
+    const history_month = 1;
+
+    main( history_year, history_month );
   } catch (error) {
     console.error("Error during data load:", error);
     process.exit(1);
