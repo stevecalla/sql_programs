@@ -46,13 +46,15 @@ async function main() {
 }
 
 if (require.main === module) {
-  try {
-    console.log('\nStarting data load.');
-    main();
-  } catch (error) {
-    console.error("Error during data load:", error);
-    process.exit(1);
-  }
+  (async () => {
+    try {
+      console.log('\nStarting insert job.');
+      await main();
+    } catch (error) {
+      console.error("Error during insert:", error);
+      process.exit(1);
+    }
+  })();
 }
 
 module.exports = {
