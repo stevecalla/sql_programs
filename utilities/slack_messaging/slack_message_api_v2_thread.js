@@ -1,3 +1,5 @@
+// C:\Users\calla\development\usat\sql_programs\utilities\slack_messaging\slack_message_api_v2_thread.js
+
 require('dotenv').config({ path: '../../.env' });
 const slackToken = process.env.SLACK_BOT_TOKEN;
 
