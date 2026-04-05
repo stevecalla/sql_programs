@@ -23,11 +23,6 @@
 // RETENTION:
 // - _sys backups: keep latest 7 total across all dates
 // - _usrN backups: keep latest 3 total across all dates
-//
-// IMPORTANT:
-// - User backup cleanup sorts by parsed date + parsed usr number in JavaScript
-//   so usr10 is treated as newer than usr9
-// - MySQL table name limit is 64 characters; this naming stays under the limit
 // ============================================================
 
 const dotenv = require('dotenv');
@@ -80,8 +75,6 @@ function get_backup_date_mtn(QUERY_OPTIONS = {}) {
 }
 
 async function main(QUERY_OPTIONS = {}) {
-  // QUERY_OPTIONS = {...QUERY_OPTIONS, backup_type: 'system'};
-
   const source_table = 'rev_recognition_allocation_data_history';
   const backup_table_prefix = 'rev_recognition_allocation_data_history_bck';
 
@@ -131,6 +124,8 @@ async function main(QUERY_OPTIONS = {}) {
     console.table(source_rows);
 
     let backup_table = null;
+    let removed_backups = 0;
+    let final_backup_count = 0;
 
     if (backup_type === 'system') {
       backup_table = `${backup_table_prefix}_${backup_date}_sys`;
@@ -274,6 +269,8 @@ async function main(QUERY_OPTIONS = {}) {
           await connection.execute(drop_old_backup_sql);
         }
 
+        removed_backups = system_backups_to_drop.length;
+
         console.log(
           `[SUCCESS] Removed ${system_backups_to_drop.length} old system backup table(s).`
         );
@@ -286,6 +283,8 @@ async function main(QUERY_OPTIONS = {}) {
 
       console.log('[INFO] Final system backup tables:');
       console.table(final_system_backup_rows);
+
+      final_backup_count = final_system_backup_rows.length;
     }
 
     if (backup_type === 'user') {
@@ -333,6 +332,8 @@ async function main(QUERY_OPTIONS = {}) {
           await connection.execute(drop_old_backup_sql);
         }
 
+        removed_backups = user_backups_to_drop.length;
+
         console.log(
           `[SUCCESS] Removed ${user_backups_to_drop.length} old user-generated backup table(s).`
         );
@@ -345,7 +346,19 @@ async function main(QUERY_OPTIONS = {}) {
 
       console.log('[INFO] Final user-generated backup tables:');
       console.table(final_user_backup_rows);
+
+      final_backup_count = final_user_backup_rows.length;
     }
+
+    return {
+      backup_type,
+      backup_table,
+      inserted_rows: insert_result.affectedRows,
+      backup_row_count: validate_rows?.[0]?.count_rows || 0,
+      removed_backups,
+      final_backup_count,
+      backup_date,
+    };
 
   } catch (error) {
     console.error('[ERROR] Backup failed:', error);
