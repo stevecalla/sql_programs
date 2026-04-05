@@ -1,3 +1,5 @@
+// C:\Users\calla\development\usat\sql_programs\utilities\slack_messaging\send_delayed_still_working_message.js
+
 function format_duration_ms(ms) {
     const total_seconds = Math.floor(ms / 1000);
     const hours = Math.floor(total_seconds / 3600);
