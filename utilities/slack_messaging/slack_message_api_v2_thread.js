@@ -1,107 +1,79 @@
 // C:\Users\calla\development\usat\sql_programs\utilities\slack_messaging\slack_message_api_v2_thread.js
 
 require('dotenv').config({ path: '../../.env' });
-const slackToken = process.env.SLACK_BOT_TOKEN;
 
 const { WebClient } = require('@slack/web-api');
-const { slack_message_api } = require('./slack_message_api');
+
+const slackToken = process.env.SLACK_BOT_TOKEN;
 const slack = new WebClient(slackToken);
 
-// async function slack_message_api_v2_thread(channelId, message, blocks, thread_ts) {
-//   try {
-//     const response = await slack.chat.postMessage({
-//       channel: channelId,
-//       text: message,
-//       // blocks,
-//       ...(thread_ts && { thread_ts }) // if replying in thread
-//     });
+function is_dm_channel(channelId = '') {
+  return typeof channelId === 'string' && channelId.startsWith('D');
+}
 
-//     console.log('Message sent. ts =', response.ts);
-//     console.log('response = ', response);
-//     console.log(`✅ Message posted${thread_ts ? ' in thread' : ''}:`, response.ts);
+function is_channel_like(channelId = '') {
+  return typeof channelId === 'string' && ['C', 'G'].includes(channelId.charAt(0));
+}
 
-//     return response.ts; // return for threading if needed
+async function resolve_slack_channel_id(channelId = '', userId = '') {
+  // If a normal public/private channel was provided, use it directly
+  if (is_channel_like(channelId)) {
+    return channelId;
+  }
 
-//   } catch (error) {
+  // If this is a DM or no usable channelId was passed, open DM via userId
+  if (userId) {
+    const dm = await slack.conversations.open({ users: userId });
+    const resolved_dm_channel_id = dm?.channel?.id;
 
-//     console.error(`❌ Failed to post message${thread_ts ? ' in thread' : ''}:`, error.data?.error || error.message);
-//   }
-// }
-
-async function slack_message_api_v2_thread(channelId, userId, message, blocks = {}, thread_ts = '') {
-  // const userInfo = await slack.users.info({ user: userId });
-  // console.log('👤 Sending message to user:', userId, userInfo.user.real_name, userInfo.user.name);
-
-  console.log('what does it look like = ', thread_ts);
-
-  try {
-    // If DM, open a conversation first
-    if (!channelId && userId) {
-      const dm = await slack.conversations.open({ users: userId });
-
-      console.log('dm =', dm);
-      channelId = dm.channel.id;
-      console.log('dm channel id = ', channelId);
+    if (!resolved_dm_channel_id) {
+      throw new Error(`Unable to open DM conversation for userId=${userId}`);
     }
 
-    const response = await slack.chat.postMessage({
-      channel: channelId,
-      text: message,
-      ...(blocks && Object.keys(blocks).length && { blocks }),
-      ...(thread_ts && { thread_ts }),
+    return resolved_dm_channel_id;
+  }
+
+  // Last fallback: if some other channelId was passed, try it as-is
+  if (channelId) {
+    return channelId;
+  }
+
+  throw new Error('No valid Slack destination provided. Expected channelId and/or userId.');
+}
+
+async function slack_message_api_v2_thread(
+  channelId = '',
+  userId = '',
+  message = '',
+  blocks = undefined,
+  thread_ts = ''
+) {
+  try {
+    const resolved_channel_id = await resolve_slack_channel_id(channelId, userId);
+
+    console.log('🧵 Slack message destination resolved =', {
+      original_channel_id: channelId || '(blank)',
+      user_id: userId || '(blank)',
+      resolved_channel_id,
+      thread_ts: thread_ts || '(none)',
     });
 
-    console.log(`Slack message sent. ts=${response.ts}`);
+    const response = await slack.chat.postMessage({
+      channel: resolved_channel_id,
+      text: message,
+      ...(blocks && Object.keys(blocks).length > 0 ? { blocks } : {}),
+      ...(thread_ts ? { thread_ts } : {}),
+    });
+
+    console.log(`✅ Slack message sent${thread_ts ? ' in thread' : ''}. ts=${response.ts}`);
     return response.ts;
 
   } catch (error) {
-
-    console.error('Slack post error:', error.data || error.message);
+    console.error('❌ Slack post error:', error?.data || error?.message || error);
+    return null;
   }
 }
-
-// 🟢 Run
-async function test() {
-
-  //NOTE: Initial message
-  const initial_message = await slack_message_api_v2_thread(
-    // NOTE: To send to Steve Calla (actually goes to membership sales bot)
-    channelId = '', // set channel id to blank
-    userId = 'U07GC601RPZ', // this is "steve_calla" slack channel; Find your Slack User ID: Click your profile picture → "View Profile" → click ••• → "Copy member ID".
-
-    // NOTE: To send to a channel
-    // channelId = 'C08TMBPTKEC', // this is "test_calla" slack channel; works
-    // channelId = 'C082FHT4G5D', // this is "daily-sales-bot" slack channel; works
-    // userId = '',
-
-    message = '📊 This is a test.',
-    blocks = {},
-    thread_ts = '',
-  );
-
-  const message_timestamp = initial_message;
-  console.log('message_timestamp = ', message_timestamp);
-
-  if (message_timestamp) {
-    slack_message_api_v2_thread(
-      // NOTE: To send to Steve Calla (actually goes to membership sales bot)
-      channelId = '', // set channel id to blank
-      userId = 'U07GC601RPZ', // this is "steve_calla" slack channel; Find your Slack User ID: Click your profile picture → "View Profile" → click ••• → "Copy member ID".
-
-      // NOTE: To send to a channel
-      // channelId = 'C08TMBPTKEC', // this is "test_calla" slack channel; works
-      // channelId = 'C082FHT4G5D', // this is "daily-sales-bot" slack channel; works
-      // userId = '',
-
-      message = '📊 This is a thread message.',
-      blocks = {},
-      thread_ts = `${message_timestamp}`,
-    );
-  }
-}
-
-test()
 
 module.exports = {
   slack_message_api_v2_thread,
-}
+};
