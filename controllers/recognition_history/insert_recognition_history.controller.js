@@ -109,4 +109,4 @@ async function insert_recognition_history_controller(req, res) {
 
 module.exports = {
     insert_recognition_history_controller,
-};
+}; 
