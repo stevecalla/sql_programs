@@ -26,7 +26,7 @@ const traceability_fields = `
 const race_fields = `
   -- RACE-LEVEL
   race_id BIGINT NULL,
-  race_name VARCHAR(255) NULL,
+  race_name TEXT NULL,
 
   is_registration_open TINYINT NULL,
   is_private_race TINYINT NULL,
