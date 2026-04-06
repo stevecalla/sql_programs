@@ -60,7 +60,7 @@ async function insert_recognition_history_controller(req, res) {
 
     if (!is_valid_year || !is_valid_month) {
         return res.status(200).json({
-            text: '⚠️ Invalid input. Use `/rec_history_insert password=xxx` or `/rec_history_insert password=xxx year=2026 month=3`.',
+            text: '⚠️ Invalid input. Use `/rec_history_insert password=` or `/rec_history_insert password= year=2026 month=3`.',
         });
     }
 
