@@ -12,7 +12,7 @@ const app = express();
 const PORT = process.env.PORT || 8006;
 
 // NGROK TUNNEL FOR TESTING
-const is_test_ngrok = true;
+const is_test_ngrok = false;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // Middleware - slack slash commands are form-encoded
