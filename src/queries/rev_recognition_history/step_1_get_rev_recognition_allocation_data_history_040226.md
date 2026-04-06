@@ -32,7 +32,7 @@ revenue_year_month
 ### Step 0: Test Query (optional)
 
 Function:
-step_5_test_query()
+step_1_test_query()
 
 Query:
 SELECT *
@@ -49,7 +49,7 @@ What it does:
 ### Step 1: Preview the source data
 
 Function:
-step_5_query_rev_rec_2025_history_snapshot()
+step_1_query_rev_rec_2025_history_snapshot()
 
 Query:
 SELECT
@@ -69,7 +69,7 @@ What it does:
 ### Step 2: Backup current history table (REQUIRED before changes)
 
 Function:
-step_5_query_backup_rev_rec_history_table()
+step_1_query_backup_rev_rec_history_table()
 
 Query:
 DROP TABLE IF EXISTS rev_recognition_allocation_data_history_backup;
@@ -88,7 +88,7 @@ What it does:
 ### Step 3: Delete the snapshot to reload
 
 Function:
-step_5_query_delete_rev_rec_history_snapshot(snapshot_version)
+step_1_query_delete_rev_rec_history_snapshot(snapshot_version)
 
 Query:
 DELETE FROM rev_recognition_allocation_data_history
@@ -104,7 +104,7 @@ What it does:
 ### Step 4: Insert monthly snapshot
 
 Function:
-step_5_query_insert_rev_rec_monthly_history_snapshot(revenue_year, revenue_month)
+step_1_query_insert_rev_rec_monthly_history_snapshot(revenue_year, revenue_month)
 
 Query:
 SELECT
@@ -129,7 +129,7 @@ What it does:
 ### Step 5: Validate history snapshot
 
 Function:
-step_5_query_validate_rev_rec_history_snapshot(snapshot_version, revenue_year_date)
+step_1_query_validate_rev_rec_history_snapshot(snapshot_version, revenue_year_date)
 
 Query:
 SELECT 
@@ -153,7 +153,7 @@ What it does:
 ### Step 6: Validate source data (compare)
 
 Function:
-step_5_query_validate_rev_rec_source_month(revenue_year, revenue_month)
+step_1_query_validate_rev_rec_source_month(revenue_year, revenue_month)
 
 Query:
 SELECT 
@@ -173,7 +173,7 @@ What it does:
 ### Step 7: Restore full history table (if needed)
 
 Function:
-step_5_query_restore_rev_rec_history_table_from_backup()
+step_1_query_restore_rev_rec_history_table_from_backup()
 
 Query:
 DELETE FROM rev_recognition_allocation_data_history;
@@ -191,7 +191,7 @@ What it does:
 ### Step 8: Restore one snapshot (preferred recovery)
 
 Function:
-step_5_query_restore_rev_rec_history_snapshot_from_backup(snapshot_version)
+step_1_query_restore_rev_rec_history_snapshot_from_backup(snapshot_version)
 
 Query:
 DELETE FROM rev_recognition_allocation_data_history

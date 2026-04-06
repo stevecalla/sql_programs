@@ -2,17 +2,33 @@ const express = require('express');
 const bodyParser = require('body-parser');
 
 // ALL - RECOGNITION DATA
-const { execute_run_recognition_data_jobs } = require('./src/revenue_recognition/step_0_run_recognition_jobs_050325');
+const { execute_run_recognition_data_jobs } = require('./src/revenue_recognition_history/step_0_run_recognition_history_jobs_040326');
+
+// ROUTES
+const recognition_history_routes = require('./routes/recognition_history/recognition_history.routes');
 
 // EXPRESS SERVER
 const app = express();
 const PORT = process.env.PORT || 8006;
 
-// Middleware
+// NGROK TUNNEL FOR TESTING
+const is_test_ngrok = true;
+const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
+
+// Middleware - slack slash commands are form-encoded
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
+// ROUTES FROM recognition_history_routes:
+    // Insert endpoint - insert recognition history by year & month
+    // Delete endpoint - delete recognition history by snapshot version
+    // Backup endpoint = backup recognition history by backup type
+    // See notes.txt for route & slash command examples
+app.use('/', recognition_history_routes);
+
 // Test endpoint
+// curl http://localhost:8006/recognition-test
+// https://usat-recognition.kidderwise.org/recognition-test
 app.get('/recognition-test', async (req, res) => {
     console.log('/recognition-test route req.rawHeaders = ', req.rawHeaders);
 
@@ -24,7 +40,7 @@ app.get('/recognition-test', async (req, res) => {
 
     } catch (error) {
         console.error('Error quering or sending recognition data:', error);
-        
+
         // Send an error response
         res.status(500).json({
             message: 'Error quering or sending recognition data.',
@@ -34,6 +50,8 @@ app.get('/recognition-test', async (req, res) => {
 });
 
 // Endpoint to handle crontab all usat recognition data job
+// curl http://localhost:8006/scheduled-recognition
+// https://usat-recognition.kidderwise.org/scheduled-recognition
 app.get('/scheduled-recognition', async (req, res) => {
     console.log('/scheduled-recognition route req.rawHeaders = ', req.rawHeaders);
 
@@ -48,7 +66,7 @@ app.get('/scheduled-recognition', async (req, res) => {
 
     } catch (error) {
         console.error('Error quering or sending recognition data:', error);
-        
+
         // Send an error response
         res.status(500).json({
             message: 'Error quering or sending recognition data.',
@@ -73,7 +91,12 @@ app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
     console.log(`Tunnel using cloudflare https://usat-recognition.kidderwise.org/scheduled-recognition`)
-    // 192.168.187:8005
+    // 192.168.187:8006
+
+    // NGROK TUNNEL
+    if (is_test_ngrok) {
+        create_ngrok_tunnel(PORT);
+    }
 });
 
 

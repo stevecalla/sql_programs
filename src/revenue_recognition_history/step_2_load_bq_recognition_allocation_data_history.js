@@ -4,12 +4,13 @@ dotenv.config({ path: "../../.env" });
 const { logPM2MemoryUsage } = require('../../utilities/pm2_scripts/pm2_log_memory_usage');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
-const { query_rev_recognition_allocation_data } = require('../google_cloud/queries/query_rev_recognition_allocation_data');
-const { rev_recognition_allocation_schema } = require('../google_cloud/schemas/schema_rev_recognition_allocation_data');
+const { query_rev_recognition_allocation_data_history } = require('../google_cloud/queries/query_rev_recognition_allocation_data_history');
+
+const { rev_recognition_allocation_history_schema } = require('../google_cloud/schemas/schema_rev_recognition_allocation_data_history');
 
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
-// EXECUTE LOAD BIQ QUERY
+// EXECUTE LOAD BIGQUERY
 async function main() {
     runTimer(`load_bigquery`);
 
@@ -18,19 +19,19 @@ async function main() {
 
     const options = [
         {
-            query: (retrieval_batch_size, offset) => query_rev_recognition_allocation_data(retrieval_batch_size, offset),
-            fileName: `rev_recognition_allocation_data`,
-            tableId: `rev_recognition_allocation_data`, // table name
+            query: (retrieval_batch_size, offset) => query_rev_recognition_allocation_data_history(retrieval_batch_size, offset),
+            fileName: `rev_recognition_allocation_data_history`,
+            tableId: `rev_recognition_allocation_data_history`, // table name
             
-            // fileName: 'rev_recognition_allocation_data_v2',
-            // tableId: 'rev_recognition_allocation_data_v2',
+            // fileName: 'rev_recognition_allocation_data_history_v2',
+            // tableId: 'rev_recognition_allocation_data_history_v2',
         }
     ];
 
     const directoryName = `usat_bigquery_${options[0].fileName}`;
     const datasetId = "membership_reporting"; // database name
     const bucketName = 'membership-reporting';
-    const schema = rev_recognition_allocation_schema;
+    const schema = rev_recognition_allocation_history_schema;
     
     await execute_load_data_to_bigquery(options, datasetId, bucketName, schema, directoryName);
 
@@ -45,15 +46,17 @@ async function main() {
 }
 
 if (require.main === module) {
-  try {
-    console.log('\nStarting data load.');
-    main();
-  } catch (error) {
-    console.error("Error during data load:", error);
-    process.exit(1);
-  }
+  (async () => {
+    try {
+      console.log('\nStarting insert job.');
+      await main();
+    } catch (error) {
+      console.error("Error during insert:", error);
+      process.exit(1);
+    }
+  })();
 }
 
 module.exports = {
-    execute_load_big_query_recognition_allocation_data: main,
+    execute_load_big_query_recognition_allocation_data_history: main,
 }

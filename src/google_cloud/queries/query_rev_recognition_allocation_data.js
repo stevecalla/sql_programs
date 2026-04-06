@@ -1,6 +1,4 @@
-async function query_rev_recognition_allocation_data(batch_size = 10, offset = 0) {
-    return `
-        SELECT
+const fields_recognition_allocation_data = `
             id_profiles,
             id_membership_periods_sa,
             
@@ -67,10 +65,19 @@ async function query_rev_recognition_allocation_data(batch_size = 10, offset = 0
 
             DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
             DATE_FORMAT(created_at_utc, '%Y-%m-%d %H:%i:%s') AS created_at_utc
+`;
+
+async function query_rev_recognition_allocation_data(batch_size = 10, offset = 0) {
+    return `
+        SELECT
+            ${fields}
                 
         FROM rev_recognition_allocation_data
         WHERE 1 = 1
-        ORDER BY id_profiles, id_membership_periods_sa, revenue_year_month
+        ORDER BY 
+            id_profiles, 
+            id_membership_periods_sa, 
+            revenue_year_month
         LIMIT ${batch_size} OFFSET ${offset}
         -- LIMIT 1 OFFSET 1
         ;
@@ -78,5 +85,6 @@ async function query_rev_recognition_allocation_data(batch_size = 10, offset = 0
 }
 
 module.exports = {
-    query_rev_recognition_allocation_data
+    query_rev_recognition_allocation_data,
+    fields_recognition_allocation_data,
 }
