@@ -1,5 +1,12 @@
+const path = require('path');
 const dotenv = require('dotenv');
-dotenv.config({ path: "../../.env" });
+
+dotenv.config({
+  path: path.resolve(__dirname, '../../.env')
+});
+
+console.log('SLACK_COMMAND_PASSWORD loaded?', !!process.env.SLACK_COMMAND_PASSWORD);
+console.log('password preview:', process.env.SLACK_COMMAND_PASSWORD ? '[loaded]' : '[missing]');
 
 console.log(`\nHELLO - RUN RECOGNITION HISTORY BACKUP JOB`);
 console.log("Current Date and Time:", new Date().toLocaleString());
