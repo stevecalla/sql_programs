@@ -1,5 +1,9 @@
+const path = require('path');
 const dotenv = require('dotenv');
-dotenv.config({ path: "../../.env" });
+
+dotenv.config({
+  path: path.resolve(__dirname, '../../.env')
+});
 
 console.log(`\nHELLO - RUN RECOGNITION HISTORY INSERT JOB`);
 console.log("Current Date and Time:", new Date().toLocaleString());
