@@ -1,4 +1,6 @@
 /**
+ * C:\Users\calla\development\usat\sql_programs\src\scraper_runsignup_api\step_1a_runsignup_api_stream.js
+
  * transfer_runsignup_api_to_local_mysql_streaming.js
  *
  * Stream RunSignup API -> batch insert into local MySQL
@@ -13,13 +15,9 @@ const { local_usat_sales_db_config } = require("../../utilities/config");
 const { runTimer, stopTimer } = require("../../utilities/timer");
 const { get_mountain_time_offset_hours, to_mysql_datetime } = require("../../utilities/date_time_tools/get_mountain_time_offset_hours");
 
-const {
-  query_create_runsignup_race_event_extract_table,
-} = require("../queries/create_drop_db_table/query_create_runsignup_table");
+const { query_create_runsignup_race_event_extract_table } = require("../queries/create_drop_db_table/query_create_runsignup_table");
 
-const {
-  generate_runsignup_rows_streaming,
-} = require("./step_1a_runsignup_api_stream");
+const { generate_runsignup_rows_streaming } = require("./step_1a_runsignup_api_stream");
 
 // ----------------------------------------
 // Config
@@ -29,7 +27,7 @@ const PRIOR_YEAR = CURRENT_YEAR - 1;
 const NEXT_YEAR = CURRENT_YEAR + 1;
 
 const TEST_YEARS = false; // controls time period to scrape 
-const YEARS_TO_LOAD = TEST_YEARS ? [NEXT_YEAR] : [CURRENT_YEAR, PRIOR_YEAR, NEXT_YEAR];
+const YEARS_TO_LOAD = TEST_YEARS ? [CURRENT_YEAR] : [CURRENT_YEAR, PRIOR_YEAR, NEXT_YEAR];
 
 const RUNSIGNUP_API_KEY = process.env.RUNSIGNUP_API_KEY || null;
 const RUNSIGNUP_API_SECRET = process.env.RUNSIGNUP_API_SECRET || null;
@@ -81,7 +79,7 @@ async function get_created_at_date() {
 
 async function main() {
   const BATCH_SIZE = 500;
-  const TABLE_NAME = "all_runsignup_data_raw";
+  const TABLE_NAME = "all_runsignup_data_raw"; // calendar data
   const TABLE_STRUCTURE = await query_create_runsignup_race_event_extract_table(
     TABLE_NAME
   );
