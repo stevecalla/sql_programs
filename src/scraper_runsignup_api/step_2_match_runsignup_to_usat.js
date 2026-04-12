@@ -308,7 +308,7 @@ async function count_runsignup_rows_for_year(connection, target_year) {
     SELECT COUNT(*) AS row_count
     FROM \`${RUNSIGNUP_TABLE}\`
     WHERE event_year = ?
-      AND COALESCE(LOWER(TRIM(event_type)), '') <> 'expo'
+      -- AND COALESCE(LOWER(TRIM(event_type)), '') <> 'expo'
   `;
 
   const params = [target_year];
@@ -318,7 +318,7 @@ async function count_runsignup_rows_for_year(connection, target_year) {
       SELECT LEAST(COUNT(*), ?) AS row_count
       FROM \`${RUNSIGNUP_TABLE}\`
       WHERE event_year = ?
-        AND COALESCE(LOWER(TRIM(event_type)), '') <> 'expo'
+        -- AND COALESCE(LOWER(TRIM(event_type)), '') <> 'expo'
     `;
     params.splice(0, params.length, Number(TEST_ROW_LIMIT), target_year);
   }
@@ -330,6 +330,32 @@ async function count_runsignup_rows_for_year(connection, target_year) {
 // ----------------------------------------
 // Load data
 // ----------------------------------------
+function map_runsignup_row(row) {
+  const event_date = to_nullable_mysql_date(row.event_start_time || row.race_next_date);
+
+  return {
+    id: row.id,
+    race_id: row.race_id,
+    event_id: row.event_id,
+    race_name: row.race_name,
+    event_name: row.event_name,
+    distance: row.distance,
+    address_city: row.address_city,
+    address_state: safe_string(row.address_state).toUpperCase(),
+    event_date,
+    event_month:
+      row.event_month === null || row.event_month === undefined
+        ? null
+        : Number(row.event_month),
+    event_year:
+      row.event_year === null || row.event_year === undefined
+        ? null
+        : Number(row.event_year),
+    race_name_norm: normalize_title(row.race_name),
+    city_norm: normalize_city(row.address_city),
+  };
+}
+
 async function load_runsignup_rows_page(connection, target_year, offset, limit) {
   const safe_limit = Math.max(0, Number.parseInt(limit, 10) || 0);
   const safe_offset = Math.max(0, Number.parseInt(offset, 10) || 0);
@@ -350,39 +376,70 @@ async function load_runsignup_rows_page(connection, target_year, offset, limit) 
       event_year
     FROM \`${RUNSIGNUP_TABLE}\`
     WHERE event_year = ?
-      AND COALESCE(LOWER(TRIM(event_type)), '') <> 'expo'
-    ORDER BY id
+      -- AND COALESCE(LOWER(TRIM(event_type)), '') <> 'expo'
+    ORDER BY race_id, id
     LIMIT ${safe_limit}
     OFFSET ${safe_offset}
   `;
 
   const [rows] = await connection.execute(sql, [target_year]);
+  return rows.map(map_runsignup_row);
+}
 
-  return rows.map((row) => {
-    const event_date = to_nullable_mysql_date(row.event_start_time || row.race_next_date);
+async function load_runsignup_rows_grouped_page(connection, target_year, offset, limit) {
+  const safe_limit = Math.max(0, Number.parseInt(limit, 10) || 0);
+  const safe_offset = Math.max(0, Number.parseInt(offset, 10) || 0);
 
-    return {
-      id: row.id,
-      race_id: row.race_id,
-      event_id: row.event_id,
-      race_name: row.race_name,
-      event_name: row.event_name,
-      distance: row.distance,
-      address_city: row.address_city,
-      address_state: safe_string(row.address_state).toUpperCase(),
-      event_date,
-      event_month:
-        row.event_month === null || row.event_month === undefined
-          ? null
-          : Number(row.event_month),
-      event_year:
-        row.event_year === null || row.event_year === undefined
-          ? null
-          : Number(row.event_year),
-      race_name_norm: normalize_title(row.race_name),
-      city_norm: normalize_city(row.address_city),
-    };
-  });
+  const initial_rows = await load_runsignup_rows_page(
+    connection,
+    target_year,
+    safe_offset,
+    safe_limit
+  );
+
+  if (!initial_rows.length) {
+    return [];
+  }
+
+  const last_row = initial_rows[initial_rows.length - 1];
+  const last_race_id = last_row.race_id;
+
+  if (last_race_id === null || last_race_id === undefined) {
+    return initial_rows;
+  }
+
+  const boundary_sql = `
+    SELECT
+      id,
+      race_id,
+      event_id,
+      race_name,
+      event_name,
+      distance,
+      address_city,
+      address_state,
+      race_next_date,
+      event_start_time,
+      event_month,
+      event_year
+    FROM \`${RUNSIGNUP_TABLE}\`
+    WHERE event_year = ?
+      AND race_id = ?
+      AND id > ?
+    ORDER BY race_id, id
+  `;
+
+  const [boundary_rows] = await connection.execute(boundary_sql, [
+    target_year,
+    last_race_id,
+    last_row.id,
+  ]);
+
+  if (!boundary_rows.length) {
+    return initial_rows;
+  }
+
+  return initial_rows.concat(boundary_rows.map(map_runsignup_row));
 }
 
 async function load_usat_event_rows(connection, target_year) {
@@ -646,6 +703,38 @@ function build_match_result(runsignup_row, lookup_maps) {
   };
 }
 
+function build_race_level_match_results(runsignup_rows_page, lookup_maps) {
+  const rows_by_race_id = new Map();
+
+  for (const row of runsignup_rows_page) {
+    const race_id_key = row.race_id === null || row.race_id === undefined
+      ? `__row_${row.id}`
+      : String(row.race_id);
+
+    if (!rows_by_race_id.has(race_id_key)) {
+      rows_by_race_id.set(race_id_key, []);
+    }
+
+    rows_by_race_id.get(race_id_key).push(row);
+  }
+
+  const pending_updates = [];
+
+  for (const race_rows of rows_by_race_id.values()) {
+    const representative_row = race_rows[0];
+    const race_level_match = build_match_result(representative_row, lookup_maps);
+
+    for (const row of race_rows) {
+      pending_updates.push({
+        ...race_level_match,
+        id: row.id,
+      });
+    }
+  }
+
+  return pending_updates;
+}
+
 // ----------------------------------------
 // Update
 // ----------------------------------------
@@ -776,7 +865,7 @@ async function main() {
         const remaining_count = year_row_count - processed_count;
         const page_size = Math.min(RUNSIGNUP_PAGE_SIZE, remaining_count);
 
-        const runsignup_rows_page = await load_runsignup_rows_page(
+        const runsignup_rows_page = await load_runsignup_rows_grouped_page(
           connection,
           target_year,
           processed_count,
@@ -787,12 +876,12 @@ async function main() {
           break;
         }
 
-        const pending_updates = [];
+        const pending_updates = build_race_level_match_results(
+          runsignup_rows_page,
+          lookup_maps
+        );
 
-        for (const runsignup_row of runsignup_rows_page) {
-          const match_result = build_match_result(runsignup_row, lookup_maps);
-          pending_updates.push(match_result);
-
+        for (const match_result of pending_updates) {
           if (match_result.matched_usat_sanctioned === 1) {
             year_matched_count += 1;
           }
