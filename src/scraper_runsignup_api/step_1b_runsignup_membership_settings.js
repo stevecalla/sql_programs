@@ -42,6 +42,8 @@ const mysqlP = require("mysql2/promise");
 const { local_usat_sales_db_config } = require("../../utilities/config");
 const { runTimer, stopTimer } = require("../../utilities/timer");
 
+const { get_mountain_time_offset_hours, to_mysql_datetime } = require("../../utilities/date_time_tools/get_mountain_time_offset_hours");
+
 // ----------------------------------------
 // Config
 // ----------------------------------------
@@ -52,13 +54,22 @@ const RUNSIGNUP_API_KEY = process.env.RUNSIGNUP_API_KEY || null;
 const RUNSIGNUP_API_SECRET = process.env.RUNSIGNUP_API_SECRET || null;
 
 // Test controls
-const TEST_SINGLE_RACE = true;
-const TEST_RACE_ID = 137876;
+const TEST_SINGLE_RACE = false;
+let TEST_RACE_ID;
+TEST_RACE_ID = 137876;
+TEST_RACE_ID = 125531;
+TEST_RACE_ID = 71789;
+TEST_RACE_ID = 8255;
+TEST_RACE_ID = 14439;
+
+// Limit number of race_ids processed
+const IS_TEST_LIMIT = false;
+const TEST_LIMIT_RACE_IDS = IS_TEST_LIMIT ? 10 : null; // set to null to disable
 
 // Optional narrowing by event type(s)
 // Example: ['triathlon'] or ['triathlon', 'duathlon']
 // Empty array means do not filter
-const EVENT_TYPES_TO_INCLUDE = ["triathlon"];
+const EVENT_TYPES_TO_INCLUDE = ['aqua_bike', 'duathlon', 'triathlon', 'Aquathlon'];
 
 // API pacing
 const THROTTLE_MS = 250;
@@ -85,6 +96,35 @@ async function get_connection() {
   return await mysqlP.createConnection(cfg);
 }
 
+async function get_modified_at_dates() {
+  // Batch timestamps (UTC → MTN via offset fn)
+  const now_utc = new Date();
+  const mtn_offset_hours = get_mountain_time_offset_hours(now_utc);
+  const now_mtn = new Date(now_utc.getTime() + mtn_offset_hours * 60 * 60 * 1000);
+
+  // IMPORTANT: strings for MySQL DATETIME columns
+  const last_modified_utc_member_settings = to_mysql_datetime(now_utc);
+  const last_modified_mtn_member_settings = to_mysql_datetime(now_mtn);
+
+  return {
+    last_modified_utc_member_settings,
+    last_modified_mtn_member_settings,
+  };
+}
+
+function format_duration_ms_local(ms) {
+  const total_seconds = Math.floor(ms / 1000);
+  const hours = Math.floor(total_seconds / 3600);
+  const minutes = Math.floor((total_seconds % 3600) / 60);
+  const seconds = total_seconds % 60;
+
+  return [
+    hours > 0 ? `${hours}h` : null,
+    minutes > 0 ? `${minutes}m` : null,
+    `${seconds}s`,
+  ].filter(Boolean).join(' ');
+}
+
 // ----------------------------------------
 // Schema setup
 // ----------------------------------------
@@ -103,20 +143,28 @@ async function column_exists(connection, tableName, columnName) {
   return rows.length > 0;
 }
 
-async function add_column_if_missing(connection, tableName, columnName, columnDefinition) {
+async function add_column_if_missing(connection, tableName, columnName, columnDefinition, afterColumn = null) {
   const exists = await column_exists(connection, tableName, columnName);
 
   if (exists) {
-    console.log(`Column already exists: ${columnName}`);
+    console.log("Column already exists: " + columnName);
     return;
   }
 
-  const sql = `
+  let sql = `
     ALTER TABLE \`${tableName}\`
     ADD COLUMN \`${columnName}\` ${columnDefinition}
   `;
 
-  console.log(`Adding column: ${columnName}`);
+  if (afterColumn) {
+    const after_exists = await column_exists(connection, tableName, afterColumn);
+
+    if (after_exists) {
+      sql += ` AFTER \`${afterColumn}\``;
+    }
+  }
+
+  console.log("Adding column: " + columnName + (afterColumn ? ` AFTER ${afterColumn}` : ""));
   await connection.execute(sql);
 }
 
@@ -135,11 +183,30 @@ async function ensure_membership_columns(connection, tableName) {
     ["ussa_specific_member_settings", "TINYINT NULL"],
     ["usac_specific_member_settings", "TINYINT NULL"],
 
+    // QA / diagnostic fields
+    ["membership_settings_count_member_settings", "INT NULL"],
+    ["has_multiple_membership_settings_member_settings", "TINYINT NULL"],
+    ["has_conflicting_usat_event_ids_member_settings", "TINYINT NULL"],
+    ["has_conflicting_usat_specific_flags_member_settings", "TINYINT NULL"],
+    ["distinct_usat_event_ids_csv_member_settings", "TEXT NULL"],
+    ["membership_settings_source_member_settings", "VARCHAR(50) NULL"],
+
     ["last_modified_utc_member_settings", "DATETIME NULL"],
+    ["last_modified_mtn_member_settings", "DATETIME NULL"],
   ];
 
+  let previousColumn = "event_registration_periods_json";
+
   for (const [columnName, columnDefinition] of columns) {
-    await add_column_if_missing(connection, tableName, columnName, columnDefinition);
+    await add_column_if_missing(
+      connection,
+      tableName,
+      columnName,
+      columnDefinition,
+      previousColumn
+    );
+
+    previousColumn = columnName;
   }
 }
 
@@ -176,6 +243,36 @@ async function get_target_race_ids(connection, tableName, event_types = [], test
   return rows
     .map((row) => row.race_id)
     .filter((race_id) => race_id !== null && race_id !== undefined);
+}
+
+async function get_query_counts_by_event_type(connection, tableName, event_types = []) {
+  let sql = `
+    SELECT
+      event_type,
+      COUNT(DISTINCT race_id) AS race_count
+    FROM \`${tableName}\`
+    WHERE 1 = 1
+      AND race_id IS NOT NULL
+  `;
+
+  const params = [];
+
+  if (Array.isArray(event_types) && event_types.length > 0) {
+    const placeholders = event_types.map(() => "?").join(",");
+    sql += `
+      AND event_type IN (${placeholders})
+    `;
+    params.push(...event_types);
+  }
+
+  sql += `
+    GROUP BY event_type
+    ORDER BY race_count DESC
+  `;
+
+  const [rows] = await connection.execute(sql, params);
+
+  return rows;
 }
 
 // ----------------------------------------
@@ -238,14 +335,80 @@ async function fetch_race_membership_settings({
 
 // ----------------------------------------
 // Transform
+// Here is the full updated extract_membership_payload() function with:
+// ✅ Race-level FIRST (only if valid USAT)
+// ✅ Fallback to event-level
+// ✅ Event-level dedupe
+// ✅ QA flags
+// ✅ membership_settings_source_member_settings
+// ✅ No undefined values (safe for SQL)
 // ----------------------------------------
 function extract_membership_payload(api_response) {
   const race = api_response?.race || null;
 
-  const membership_settings = Array.isArray(race?.membership_settings)
+  let membership_settings = [];
+  let membership_source = null;
+
+  // --------------------------------------------------
+  // 1) Check race-level FIRST (only if valid USAT)
+  // --------------------------------------------------
+  const race_level_settings = Array.isArray(race?.membership_settings)
     ? race.membership_settings
     : [];
 
+  const valid_race_level = race_level_settings.find(
+    (s) =>
+      (s?.usat_specific === "T" || s?.usat_specific === true) &&
+      s?.usat_event_id
+  );
+
+  if (valid_race_level) {
+    membership_settings = [valid_race_level];
+    membership_source = "race_level";
+  }
+
+  // --------------------------------------------------
+  // 2) Otherwise fallback to event-level
+  // --------------------------------------------------
+  else if (Array.isArray(race?.events)) {
+    const all_event_settings = race.events.flatMap((event) =>
+      Array.isArray(event?.membership_settings) ? event.membership_settings : []
+    );
+
+    if (all_event_settings.length > 0) {
+      // Dedupe event-level settings
+      const seen = new Map();
+
+      for (const s of all_event_settings) {
+        const dedupe_key = [
+          as_string(s?.membership_setting_name),
+          as_string(s?.usat_event_id),
+          as_bool_flag(s?.usat_specific),
+          as_bool_flag(s?.usatf_specific),
+          as_bool_flag(s?.ussa_specific),
+          as_bool_flag(s?.usac_specific),
+        ].join("|");
+
+        if (!seen.has(dedupe_key)) {
+          seen.set(dedupe_key, s);
+        }
+      }
+
+      membership_settings = Array.from(seen.values());
+      membership_source = "event_level";
+    }
+  }
+
+  // --------------------------------------------------
+  // 3) Final fallback (nothing found)
+  // --------------------------------------------------
+  if (membership_settings.length === 0) {
+    membership_source = "none";
+  }
+
+  // --------------------------------------------------
+  // 4) Select best setting
+  // --------------------------------------------------
   const selected_setting =
     membership_settings.find(
       (s) => s?.usat_specific === "T" || s?.usat_specific === true
@@ -253,6 +416,39 @@ function extract_membership_payload(api_response) {
     membership_settings[0] ||
     null;
 
+  // --------------------------------------------------
+  // 5) QA / diagnostics
+  // --------------------------------------------------
+  const distinct_usat_event_ids = [
+    ...new Set(
+      membership_settings
+        .map((s) => as_string(s?.usat_event_id))
+        .filter(Boolean)
+    ),
+  ];
+
+  const distinct_usat_specific_flags = [
+    ...new Set(
+      membership_settings
+        .map((s) => as_bool_flag(s?.usat_specific))
+        .filter((v) => v !== null)
+    ),
+  ];
+
+  const membership_settings_count = membership_settings.length;
+
+  const has_multiple_membership_settings =
+    membership_settings.length > 1 ? 1 : 0;
+
+  const has_conflicting_usat_event_ids =
+    distinct_usat_event_ids.length > 1 ? 1 : 0;
+
+  const has_conflicting_usat_specific_flags =
+    distinct_usat_specific_flags.length > 1 ? 1 : 0;
+
+  // --------------------------------------------------
+  // 6) Return payload (NO undefined values)
+  // --------------------------------------------------
   return {
     setting_id_member_settings: selected_setting?.membership_setting_id ?? null,
     setting_name_member_settings: as_string(selected_setting?.membership_setting_name),
@@ -266,6 +462,14 @@ function extract_membership_payload(api_response) {
     require_first_registrant_waiver_member_settings: as_bool_flag(selected_setting?.require_first_registrant_waiver),
     ussa_specific_member_settings: as_bool_flag(selected_setting?.ussa_specific),
     usac_specific_member_settings: as_bool_flag(selected_setting?.usac_specific),
+
+    // QA fields
+    membership_settings_count_member_settings: membership_settings_count,
+    has_multiple_membership_settings_member_settings: has_multiple_membership_settings,
+    has_conflicting_usat_event_ids_member_settings: has_conflicting_usat_event_ids,
+    has_conflicting_usat_specific_flags_member_settings: has_conflicting_usat_specific_flags,
+    distinct_usat_event_ids_csv_member_settings: distinct_usat_event_ids.join(", "),
+    membership_settings_source_member_settings: membership_source || "none",
   };
 }
 
@@ -273,6 +477,11 @@ function extract_membership_payload(api_response) {
 // DB update
 // ----------------------------------------
 async function update_race_membership_fields(connection, tableName, race_id, payload) {
+  const {
+    last_modified_utc_member_settings,
+    last_modified_mtn_member_settings,
+  } = await get_modified_at_dates();
+
   const sql = `
     UPDATE \`${tableName}\`
     SET
@@ -289,7 +498,15 @@ async function update_race_membership_fields(connection, tableName, race_id, pay
       ussa_specific_member_settings = ?,
       usac_specific_member_settings = ?,
 
-      last_modified_utc_member_settings = UTC_TIMESTAMP()
+      membership_settings_count_member_settings = ?,
+      has_multiple_membership_settings_member_settings = ?,
+      has_conflicting_usat_event_ids_member_settings = ?,
+      has_conflicting_usat_specific_flags_member_settings = ?,
+      distinct_usat_event_ids_csv_member_settings = ?,
+      membership_settings_source_member_settings = ?,
+
+      last_modified_utc_member_settings = ?,
+      last_modified_mtn_member_settings = ?
     WHERE race_id = ?
   `;
 
@@ -306,6 +523,16 @@ async function update_race_membership_fields(connection, tableName, race_id, pay
     payload.require_first_registrant_waiver_member_settings,
     payload.ussa_specific_member_settings,
     payload.usac_specific_member_settings,
+
+    payload.membership_settings_count_member_settings,
+    payload.has_multiple_membership_settings_member_settings,
+    payload.has_conflicting_usat_event_ids_member_settings,
+    payload.has_conflicting_usat_specific_flags_member_settings,
+    payload.distinct_usat_event_ids_csv_member_settings,
+    payload.membership_settings_source_member_settings,
+
+    last_modified_utc_member_settings,
+    last_modified_mtn_member_settings,
 
     race_id,
   ];
@@ -333,17 +560,63 @@ async function main(options = {}) {
   try {
     console.log("\nStarting step 1b - RunSignup membership enrichment.");
 
+    // ----------------------------------------
+    // PRE-FLIGHT: Query counts by event_type
+    // ----------------------------------------
+    const counts_by_event_type = await get_query_counts_by_event_type(
+      connection,
+      table_name,
+      event_types
+    );
+
+    console.log("\n----------------------------------------");
+    console.log("Planned API Calls (by event_type)");
+    console.log("----------------------------------------");
+
+    let total_queries = 0;
+
+    for (const row of counts_by_event_type) {
+      console.log(
+        `event_type=${row.event_type} | distinct_race_ids=${row.race_count}`
+      );
+      total_queries += row.race_count;
+    }
+
+    console.log("----------------------------------------");
+    console.log(`Total API Calls (distinct race_id): ${total_queries}`);
+    const estimated_ms = total_queries * throttle_ms;
+    console.log(`Estimated runtime: ${format_duration_ms_local(estimated_ms)}`);
+    console.log("----------------------------------------\n");
+
     await ensure_membership_columns(connection, table_name);
     console.log("✅ Membership columns ensured.");
 
-    const race_ids = await get_target_race_ids(
+    let race_ids = await get_target_race_ids(
       connection,
       table_name,
       event_types,
       test_race_id
     );
 
-    console.log(`Target race count: ${race_ids.length}`);
+    console.log(`Target race count (before limit): ${race_ids.length}`);
+
+    // ----------------------------------------
+    // TEST MODE: limit number of race_ids
+    // ----------------------------------------
+    // if (!test_race_id && TEST_LIMIT_RACE_IDS && TEST_LIMIT_RACE_IDS > 0) {
+    if (IS_TEST_LIMIT && !test_race_id) {
+      race_ids = race_ids
+        .sort(() => Math.random() - 0.5)   // 🔥 randomize
+        .slice(0, TEST_LIMIT_RACE_IDS);    // then limit
+
+      console.log(
+        `⚠️ TEST MODE ACTIVE → randomly sampling ${TEST_LIMIT_RACE_IDS} race_ids`
+      );
+
+      console.log("Sample race_ids:", race_ids.slice(0, 10));
+    }
+
+    console.log(`Final race_ids to process: ${race_ids.length}`);
 
     if (race_ids.length === 0) {
       console.log("No target race_ids found. Nothing to update.");
@@ -369,6 +642,12 @@ async function main(options = {}) {
         console.log(`race_id=${race_id} setting_id_member_settings=${payload.setting_id_member_settings}`);
         console.log(`race_id=${race_id} setting_name_member_settings=${payload.setting_name_member_settings}`);
         console.log(`race_id=${race_id} usat_event_id_member_settings=${payload.usat_event_id_member_settings}`);
+        console.log(`race_id=${race_id} membership_settings_count_member_settings=${payload.membership_settings_count_member_settings}`);
+        console.log(`race_id=${race_id} has_multiple_membership_settings_member_settings=${payload.has_multiple_membership_settings_member_settings}`);
+        console.log(`race_id=${race_id} has_conflicting_usat_event_ids_member_settings=${payload.has_conflicting_usat_event_ids_member_settings}`);
+        console.log(`race_id=${race_id} has_conflicting_usat_specific_flags_member_settings=${payload.has_conflicting_usat_specific_flags_member_settings}`);
+        console.log(`race_id=${race_id} distinct_usat_event_ids_csv_member_settings=${payload.distinct_usat_event_ids_csv_member_settings}`);
+        console.log(`race_id=${race_id} membership_settings_source_member_settings=${payload.membership_settings_source_member_settings}`);
 
         const update_result = await update_race_membership_fields(
           connection,
