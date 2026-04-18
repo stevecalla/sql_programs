@@ -71,33 +71,31 @@ const TEST_LIMIT_RACE_IDS = IS_TEST_LIMIT ? 5 : null; // set to null to disable
 // Example: ['triathlon'] or ['triathlon', 'duathlon']
 // Empty array means do not filter
 const EVENT_TYPES_TO_INCLUDE = [
-  // 'aqua_bike', 'duathlon', 'triathlon', 'Aquathlon',
-  'adventure_race',
-  'aqua_bike',
-  'bike_race',
-  'bike_ride',
-  'clinic',
-  'duathlon',
-  'expo',
-  'gravel_grinder',
-  'mountain_bike_race',
-  'nonprofit_event',
-  'other',
-  'paddle_sports',
-  'running_only',
-  'running_race',
-  'swim',
-  'swim_run',
-  'trail_race',
+  // 'adventure_race',
+  // 'aqua_bike',
+  // 'bike_race',
+  // 'bike_ride',
+  // 'clinic',
+  // 'duathlon',
+  // 'expo',
+  // 'gravel_grinder',
+  // 'mountain_bike_race',
+  // 'nonprofit_event',
+  // 'other',
+  // 'paddle_sports',
+  // 'running_only',
+  // 'running_race',
+  // 'swim',
+  // 'swim_run',
+  // 'trail_race',
   'triathlon',
-  'ultra',
-  'virtual_race',
-  'wheelchair',
+  // 'ultra',
+  // 'virtual_race',
+  // 'wheelchair',
 ];
 
 // API pacing
-const THROTTLE_MS = 250;
-const CONCURRENT_REQUESTS = 2;
+const THROTTLE_MS = 100;
 
 // ----------------------------------------
 // Helpers
@@ -147,7 +145,7 @@ function format_duration_ms_local(ms) {
     hours > 0 ? `${hours}h` : null,
     minutes > 0 ? `${minutes}m` : null,
     `${seconds}s`,
-  ].filter(Boolean).join(" ");
+  ].filter(Boolean).join(' ');
 }
 
 // ----------------------------------------
@@ -360,6 +358,13 @@ async function fetch_race_membership_settings({
 
 // ----------------------------------------
 // Transform
+// Here is the full updated extract_membership_payload() function with:
+// ✅ Race-level FIRST (only if valid USAT)
+// ✅ Fallback to event-level
+// ✅ Event-level dedupe
+// ✅ QA flags
+// ✅ membership_settings_source_member_settings
+// ✅ No undefined values (safe for SQL)
 // ----------------------------------------
 function extract_membership_payload(api_response) {
   const race = api_response?.race || null;
@@ -367,10 +372,14 @@ function extract_membership_payload(api_response) {
   let membership_settings = [];
   let membership_source = null;
 
+  // --------------------------------------------------
+  // 1) Check race-level FIRST (only if valid USAT)
+  // --------------------------------------------------
   const race_level_settings = Array.isArray(race?.membership_settings)
     ? race.membership_settings
     : [];
 
+  // 1A) Try to find valid USAT race-level
   const valid_usat_race_level = race_level_settings.find(
     (s) =>
       (s?.usat_specific === "T" || s?.usat_specific === true) &&
@@ -380,12 +389,20 @@ function extract_membership_payload(api_response) {
   if (valid_usat_race_level) {
     membership_settings = [valid_usat_race_level];
     membership_source = "race_level_usat";
-  } else if (Array.isArray(race?.events)) {
+  }
+
+  // 1B) Otherwise keep race-level for later fallback (DO NOT assign yet)
+
+  // --------------------------------------------------
+  // 2) Otherwise fallback to event-level
+  // --------------------------------------------------
+  else if (Array.isArray(race?.events)) {
     const all_event_settings = race.events.flatMap((event) =>
       Array.isArray(event?.membership_settings) ? event.membership_settings : []
     );
 
     if (all_event_settings.length > 0) {
+      // Dedupe event-level settings
       const seen = new Map();
 
       for (const s of all_event_settings) {
@@ -408,7 +425,11 @@ function extract_membership_payload(api_response) {
     }
   }
 
+  // --------------------------------------------------
+  // 3) Final fallback (nothing found)
+  // --------------------------------------------------
   if (membership_settings.length === 0) {
+    // Fallback to ANY race-level membership setting (e.g. USMS)
     if (race_level_settings.length > 0) {
       membership_settings = race_level_settings;
       membership_source = "race_level_non_usat";
@@ -417,6 +438,9 @@ function extract_membership_payload(api_response) {
     }
   }
 
+  // --------------------------------------------------
+  // 4) Select best setting
+  // --------------------------------------------------
   const selected_setting =
     membership_settings.find(
       (s) => s?.usat_specific === "T" || s?.usat_specific === true
@@ -424,6 +448,9 @@ function extract_membership_payload(api_response) {
     membership_settings[0] ||
     null;
 
+  // --------------------------------------------------
+  // 5) QA / diagnostics
+  // --------------------------------------------------
   const distinct_usat_event_ids = [
     ...new Set(
       membership_settings
@@ -451,6 +478,9 @@ function extract_membership_payload(api_response) {
   const has_conflicting_usat_specific_flags =
     distinct_usat_specific_flags.length > 1 ? 1 : 0;
 
+  // --------------------------------------------------
+  // 6) Return payload (NO undefined values)
+  // --------------------------------------------------
   return {
     setting_id_member_settings: selected_setting?.membership_setting_id ?? null,
     setting_name_member_settings: as_string(selected_setting?.membership_setting_name),
@@ -465,6 +495,7 @@ function extract_membership_payload(api_response) {
     ussa_specific_member_settings: as_bool_flag(selected_setting?.ussa_specific),
     usac_specific_member_settings: as_bool_flag(selected_setting?.usac_specific),
 
+    // QA fields
     membership_settings_count_member_settings: membership_settings_count,
     has_multiple_membership_settings_member_settings: has_multiple_membership_settings,
     has_conflicting_usat_event_ids_member_settings: has_conflicting_usat_event_ids,
@@ -562,6 +593,9 @@ async function main(options = {}) {
   try {
     console.log("\nStarting step 1b - RunSignup membership enrichment.");
 
+    // ----------------------------------------
+    // PRE-FLIGHT: Query counts by event_type
+    // ----------------------------------------
     const counts_by_event_type = await get_query_counts_by_event_type(connection, table_name, event_types);
 
     console.log("\n----------------------------------------");
@@ -579,7 +613,6 @@ async function main(options = {}) {
 
     console.log("----------------------------------------");
     console.log(`Total API Calls (distinct race_id): ${total_queries}`);
-    console.log(`Configured concurrency: ${CONCURRENT_REQUESTS}`);
     const estimated_ms = total_queries * throttle_ms;
     console.log(`Estimated runtime: ${format_duration_ms_local(estimated_ms)}`);
     console.log("----------------------------------------\n");
@@ -612,6 +645,9 @@ async function main(options = {}) {
       console.log(`Expected distinct race_ids from query counts: ${race_count_by_event_type.get(event_type) || 0}`);
       console.log(`========================================`);
 
+      // ----------------------------------------
+      // TEST MODE
+      // ----------------------------------------
       if (IS_TEST_LIMIT && !test_race_id) {
         race_ids = race_ids.sort(() => Math.random() - 0.5).slice(0, TEST_LIMIT_RACE_IDS);
         console.log(`⚠️ TEST MODE ACTIVE → randomly sampling ${TEST_LIMIT_RACE_IDS} race_ids`);
@@ -640,10 +676,57 @@ async function main(options = {}) {
       let success_count = 0;
       let error_count = 0;
       let updated_row_total = 0;
-      let next_index = 0;
       const total_for_event_type = race_ids.length;
 
-      async function process_one_race(race_id, progress_num) {
+      // for (let i = 0; i < race_ids.length; i++) {
+      //   const race_id = race_ids[i];
+      //   const progress_num = i + 1;
+
+      //   console.log(`\n[event_type=${event_type}] ${progress_num} of ${total_for_event_type} | race_id=${race_id}`);
+
+      //   try {
+      //     const api_response = await fetch_race_membership_settings({
+      //       race_id,
+      //       event_types: [event_type],
+      //       api_key: RUNSIGNUP_API_KEY,
+      //       api_secret: RUNSIGNUP_API_SECRET,
+      //     });
+
+      //     const payload = extract_membership_payload(api_response);
+
+      //     console.log(`race_id=${race_id} setting_id_member_settings=${payload.setting_id_member_settings}`);
+      //     console.log(`race_id=${race_id} setting_name_member_settings=${payload.setting_name_member_settings}`);
+      //     console.log(`race_id=${race_id} usat_event_id_member_settings=${payload.usat_event_id_member_settings}`);
+      //     console.log(`race_id=${race_id} membership_settings_count_member_settings=${payload.membership_settings_count_member_settings}`);
+      //     console.log(`race_id=${race_id} has_multiple_membership_settings_member_settings=${payload.has_multiple_membership_settings_member_settings}`);
+      //     console.log(`race_id=${race_id} has_conflicting_usat_event_ids_member_settings=${payload.has_conflicting_usat_event_ids_member_settings}`);
+      //     console.log(`race_id=${race_id} has_conflicting_usat_specific_flags_member_settings=${payload.has_conflicting_usat_specific_flags_member_settings}`);
+      //     console.log(`race_id=${race_id} distinct_usat_event_ids_csv_member_settings=${payload.distinct_usat_event_ids_csv_member_settings}`);
+      //     console.log(`race_id=${race_id} membership_settings_source_member_settings=${payload.membership_settings_source_member_settings}`);
+
+      //     const update_result = await update_race_membership_fields(connection, table_name, race_id, payload);
+
+      //     const affected_rows = update_result?.affectedRows || 0;
+      //     updated_row_total += affected_rows;
+      //     grand_updated_row_total += affected_rows;
+
+      //     success_count++;
+      //     grand_success_count++;
+
+      //     console.log(`✅ event_type=${event_type} | ${progress_num} of ${total_for_event_type} | Updated race_id=${race_id}, affected_rows=${affected_rows}`);
+      //   } catch (error) {
+      //     error_count++;
+      //     grand_error_count++;
+      //     console.error(`❌ event_type=${event_type} | ${progress_num} of ${total_for_event_type} | Failed for race_id=${race_id}: ${error.message}`);
+      //   }
+
+      //   await delay(throttle_ms);
+      // }
+
+      for (let i = 0; i < race_ids.length; i++) {
+        const race_id = race_ids[i];
+        const progress_num = i + 1;
+
         console.log(`\n[event_type=${event_type}] ${progress_num} of ${total_for_event_type} | race_id=${race_id}`);
 
         try {
@@ -682,38 +765,15 @@ async function main(options = {}) {
           console.error(`❌ event_type=${event_type} | ${progress_num} of ${total_for_event_type} | Failed for race_id=${race_id}: ${error.message}`);
         }
 
+        // 🚀 NEW: processing rate
         const processed_so_far = success_count + error_count;
         const elapsed_seconds = (Date.now() - event_type_start_time_ms) / 1000;
         const current_rate = elapsed_seconds > 0 ? processed_so_far / elapsed_seconds : 0;
 
         console.log(`🚀 rate=${current_rate.toFixed(2)} races/sec`);
 
-        if (throttle_ms > 0) {
-          await delay(throttle_ms);
-        }
+        await delay(throttle_ms);
       }
-
-      async function worker(worker_id) {
-        while (true) {
-          const current_index = next_index;
-          if (current_index >= race_ids.length) {
-            return;
-          }
-
-          next_index += 1;
-
-          const race_id = race_ids[current_index];
-          const progress_num = current_index + 1;
-
-          console.log(`worker=${worker_id} claimed race_index=${progress_num}`);
-          await process_one_race(race_id, progress_num);
-        }
-      }
-
-      const worker_count = Math.min(CONCURRENT_REQUESTS, race_ids.length);
-      await Promise.all(
-        Array.from({ length: worker_count }, (_, idx) => worker(idx + 1))
-      );
 
       const event_type_duration_ms = Date.now() - event_type_start_time_ms;
 
@@ -774,7 +834,7 @@ if (require.main === module) {
   main({
     event_types: EVENT_TYPES_TO_INCLUDE,
     test_race_id: TEST_SINGLE_RACE ? TEST_RACE_ID : null,
-    throttle_ms: 0,
+    throttle_ms: THROTTLE_MS,
   }).catch((error) => {
     console.error("Fatal error running step_1b_runsignup_membership_settings:", error);
     process.exit(1);
