@@ -64,14 +64,14 @@ TEST_RACE_ID = 14439;
 TEST_RACE_ID = 19385; // swim event
 
 // Limit number of race_ids processed
-const IS_TEST_LIMIT = true;
-const TEST_LIMIT_RACE_IDS = IS_TEST_LIMIT ? 5 : null; // set to null to disable
+const IS_TEST_LIMIT = false;
+const TEST_LIMIT_RACE_IDS = IS_TEST_LIMIT ? 500 : null; // set to null to disable
 
 // Optional narrowing by event type(s)
 // Example: ['triathlon'] or ['triathlon', 'duathlon']
 // Empty array means do not filter
 const EVENT_TYPES_TO_INCLUDE = [
-  // 'aqua_bike', 'duathlon', 'triathlon', 'Aquathlon',
+  'aqua_bike', 'duathlon', 'triathlon', 'Aquathlon',
   'adventure_race',
   'aqua_bike',
   'bike_race',
@@ -96,8 +96,8 @@ const EVENT_TYPES_TO_INCLUDE = [
 ];
 
 // API pacing
-const THROTTLE_MS = 250;
-const CONCURRENT_REQUESTS = 2;
+const THROTTLE_MS = 100;
+const CONCURRENT_REQUESTS = 3;
 
 // ----------------------------------------
 // Helpers
@@ -643,6 +643,8 @@ async function main(options = {}) {
       let next_index = 0;
       const total_for_event_type = race_ids.length;
 
+      const worker_stats = {};
+
       async function process_one_race(race_id, progress_num) {
         console.log(`\n[event_type=${event_type}] ${progress_num} of ${total_for_event_type} | race_id=${race_id}`);
 
@@ -694,9 +696,20 @@ async function main(options = {}) {
       }
 
       async function worker(worker_id) {
+        const worker_start_time_ms = Date.now();
+        worker_stats[worker_id] = {
+          processed_count: 0,
+          start_time_ms: worker_start_time_ms,
+          end_time_ms: null,
+          elapsed_ms: 0,
+        };
+
         while (true) {
           const current_index = next_index;
           if (current_index >= race_ids.length) {
+            worker_stats[worker_id].end_time_ms = Date.now();
+            worker_stats[worker_id].elapsed_ms =
+              worker_stats[worker_id].end_time_ms - worker_stats[worker_id].start_time_ms;
             return;
           }
 
@@ -707,6 +720,7 @@ async function main(options = {}) {
 
           console.log(`worker=${worker_id} claimed race_index=${progress_num}`);
           await process_one_race(race_id, progress_num);
+          worker_stats[worker_id].processed_count += 1;
         }
       }
 
@@ -724,6 +738,15 @@ async function main(options = {}) {
       console.log(`Error count: ${error_count}`);
       console.log(`Total rows updated: ${updated_row_total}`);
       console.log(`Processing time: ${format_duration_ms_local(event_type_duration_ms)}`);
+      console.log("Worker summary:");
+      Object.keys(worker_stats)
+        .sort((a, b) => Number(a) - Number(b))
+        .forEach((worker_id) => {
+          const stats = worker_stats[worker_id];
+          console.log(
+            `worker=${worker_id} | processed=${stats.processed_count} | processing_time=${format_duration_ms_local(stats.elapsed_ms)}`
+          );
+        });
 
       event_type_summary.push({
         event_type,
@@ -774,7 +797,8 @@ if (require.main === module) {
   main({
     event_types: EVENT_TYPES_TO_INCLUDE,
     test_race_id: TEST_SINGLE_RACE ? TEST_RACE_ID : null,
-    throttle_ms: 0,
+    // throttle_ms: 0,
+    throttle_ms: THROTTLE_MS,
   }).catch((error) => {
     console.error("Fatal error running step_1b_runsignup_membership_settings:", error);
     process.exit(1);
