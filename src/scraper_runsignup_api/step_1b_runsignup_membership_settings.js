@@ -61,15 +61,39 @@ TEST_RACE_ID = 125531;
 TEST_RACE_ID = 71789;
 TEST_RACE_ID = 8255;
 TEST_RACE_ID = 14439;
+TEST_RACE_ID = 19385; // swim event
 
 // Limit number of race_ids processed
 const IS_TEST_LIMIT = false;
-const TEST_LIMIT_RACE_IDS = IS_TEST_LIMIT ? 10 : null; // set to null to disable
+const TEST_LIMIT_RACE_IDS = IS_TEST_LIMIT ? 5 : null; // set to null to disable
 
 // Optional narrowing by event type(s)
 // Example: ['triathlon'] or ['triathlon', 'duathlon']
 // Empty array means do not filter
-const EVENT_TYPES_TO_INCLUDE = ['aqua_bike', 'duathlon', 'triathlon', 'Aquathlon'];
+const EVENT_TYPES_TO_INCLUDE = [
+  // 'aqua_bike', 'duathlon', 'triathlon', 'Aquathlon', 
+  'adventure_race',
+  'aqua_bike',
+  'bike_race',
+  'bike_ride',
+  'clinic',
+  'duathlon',
+  'expo',
+  'gravel_grinder',
+  'mountain_bike_race',
+  'nonprofit_event',
+  'other',
+  'paddle_sports',
+  'running_only',
+  'running_race',
+  'swim',
+  'swim_run',
+  'trail_race',
+  'triathlon',
+  'ultra',
+  'virtual_race',
+  'wheelchair',
+];
 
 // API pacing
 const THROTTLE_MS = 250;
@@ -356,16 +380,19 @@ function extract_membership_payload(api_response) {
     ? race.membership_settings
     : [];
 
-  const valid_race_level = race_level_settings.find(
+  // 1A) Try to find valid USAT race-level
+  const valid_usat_race_level = race_level_settings.find(
     (s) =>
       (s?.usat_specific === "T" || s?.usat_specific === true) &&
       s?.usat_event_id
   );
 
-  if (valid_race_level) {
-    membership_settings = [valid_race_level];
-    membership_source = "race_level";
+  if (valid_usat_race_level) {
+    membership_settings = [valid_usat_race_level];
+    membership_source = "race_level_usat";
   }
+
+  // 1B) Otherwise keep race-level for later fallback (DO NOT assign yet)
 
   // --------------------------------------------------
   // 2) Otherwise fallback to event-level
@@ -403,8 +430,14 @@ function extract_membership_payload(api_response) {
   // 3) Final fallback (nothing found)
   // --------------------------------------------------
   if (membership_settings.length === 0) {
+  // Fallback to ANY race-level membership setting (e.g. USMS)
+  if (race_level_settings.length > 0) {
+    membership_settings = race_level_settings;
+    membership_source = "race_level_non_usat";
+  } else {
     membership_source = "none";
   }
+}
 
   // --------------------------------------------------
   // 4) Select best setting
@@ -556,6 +589,7 @@ async function main(options = {}) {
   let result = "RunSignup membership enrichment failed";
 
   runTimer("timer");
+  const start_time_ms = Date.now();
 
   try {
     console.log("\nStarting step 1b - RunSignup membership enrichment.");
@@ -563,23 +597,19 @@ async function main(options = {}) {
     // ----------------------------------------
     // PRE-FLIGHT: Query counts by event_type
     // ----------------------------------------
-    const counts_by_event_type = await get_query_counts_by_event_type(
-      connection,
-      table_name,
-      event_types
-    );
+    const counts_by_event_type = await get_query_counts_by_event_type(connection, table_name, event_types);
 
     console.log("\n----------------------------------------");
     console.log("Planned API Calls (by event_type)");
     console.log("----------------------------------------");
 
     let total_queries = 0;
+    const race_count_by_event_type = new Map();
 
     for (const row of counts_by_event_type) {
-      console.log(
-        `event_type=${row.event_type} | distinct_race_ids=${row.race_count}`
-      );
+      console.log(`event_type=${row.event_type} | distinct_race_ids=${row.race_count}`);
       total_queries += row.race_count;
+      race_count_by_event_type.set(row.event_type, Number(row.race_count) || 0);
     }
 
     console.log("----------------------------------------");
@@ -591,90 +621,146 @@ async function main(options = {}) {
     await ensure_membership_columns(connection, table_name);
     console.log("✅ Membership columns ensured.");
 
-    let race_ids = await get_target_race_ids(
-      connection,
-      table_name,
-      event_types,
-      test_race_id
-    );
+    console.log(`Target event_types to process: ${event_types.join(", ")}`);
 
-    console.log(`Target race count (before limit): ${race_ids.length}`);
-
-    // ----------------------------------------
-    // TEST MODE: limit number of race_ids
-    // ----------------------------------------
-    // if (!test_race_id && TEST_LIMIT_RACE_IDS && TEST_LIMIT_RACE_IDS > 0) {
-    if (IS_TEST_LIMIT && !test_race_id) {
-      race_ids = race_ids
-        .sort(() => Math.random() - 0.5)   // 🔥 randomize
-        .slice(0, TEST_LIMIT_RACE_IDS);    // then limit
-
-      console.log(
-        `⚠️ TEST MODE ACTIVE → randomly sampling ${TEST_LIMIT_RACE_IDS} race_ids`
-      );
-
-      console.log("Sample race_ids:", race_ids.slice(0, 10));
-    }
-
-    console.log(`Final race_ids to process: ${race_ids.length}`);
-
-    if (race_ids.length === 0) {
-      console.log("No target race_ids found. Nothing to update.");
-      result = "No race_ids found";
+    if (!Array.isArray(event_types) || event_types.length === 0) {
+      console.log("No event_types provided. Nothing to update.");
+      result = "No event_types found";
       return result;
     }
 
-    let success_count = 0;
-    let error_count = 0;
-    let updated_row_total = 0;
+    let grand_success_count = 0;
+    let grand_error_count = 0;
+    let grand_updated_row_total = 0;
 
-    for (const race_id of race_ids) {
-      try {
-        const api_response = await fetch_race_membership_settings({
-          race_id,
-          event_types,
-          api_key: RUNSIGNUP_API_KEY,
-          api_secret: RUNSIGNUP_API_SECRET,
-        });
+    const event_type_summary = [];
 
-        const payload = extract_membership_payload(api_response);
+    for (const event_type of event_types) {
+      const event_type_start_time_ms = Date.now();
 
-        console.log(`race_id=${race_id} setting_id_member_settings=${payload.setting_id_member_settings}`);
-        console.log(`race_id=${race_id} setting_name_member_settings=${payload.setting_name_member_settings}`);
-        console.log(`race_id=${race_id} usat_event_id_member_settings=${payload.usat_event_id_member_settings}`);
-        console.log(`race_id=${race_id} membership_settings_count_member_settings=${payload.membership_settings_count_member_settings}`);
-        console.log(`race_id=${race_id} has_multiple_membership_settings_member_settings=${payload.has_multiple_membership_settings_member_settings}`);
-        console.log(`race_id=${race_id} has_conflicting_usat_event_ids_member_settings=${payload.has_conflicting_usat_event_ids_member_settings}`);
-        console.log(`race_id=${race_id} has_conflicting_usat_specific_flags_member_settings=${payload.has_conflicting_usat_specific_flags_member_settings}`);
-        console.log(`race_id=${race_id} distinct_usat_event_ids_csv_member_settings=${payload.distinct_usat_event_ids_csv_member_settings}`);
-        console.log(`race_id=${race_id} membership_settings_source_member_settings=${payload.membership_settings_source_member_settings}`);
+      let race_ids = await get_target_race_ids(connection, table_name, [event_type], test_race_id);
 
-        const update_result = await update_race_membership_fields(
-          connection,
-          table_name,
-          race_id,
-          payload
-        );
+      console.log(`\n========================================`);
+      console.log(`Starting event_type=${event_type}`);
+      console.log(`Target race count (before limit): ${race_ids.length}`);
+      console.log(`Expected distinct race_ids from query counts: ${race_count_by_event_type.get(event_type) || 0}`);
+      console.log(`========================================`);
 
-        const affected_rows = update_result?.affectedRows || 0;
-        updated_row_total += affected_rows;
-        success_count++;
-
-        console.log(`✅ Updated race_id=${race_id}, affected_rows=${affected_rows}`);
-      } catch (error) {
-        error_count++;
-        console.error(`❌ Failed for race_id=${race_id}:`, error.message);
+      // ----------------------------------------
+      // TEST MODE
+      // ----------------------------------------
+      if (IS_TEST_LIMIT && !test_race_id) {
+        race_ids = race_ids.sort(() => Math.random() - 0.5).slice(0, TEST_LIMIT_RACE_IDS);
+        console.log(`⚠️ TEST MODE ACTIVE → randomly sampling ${TEST_LIMIT_RACE_IDS} race_ids`);
+        console.log("Sample race_ids:", race_ids.slice(0, 10));
       }
 
-      await delay(throttle_ms);
+      console.log(`Final race_ids to process for event_type=${event_type}: ${race_ids.length}`);
+
+      if (race_ids.length === 0) {
+        const event_type_duration_ms = Date.now() - event_type_start_time_ms;
+
+        console.log(`No target race_ids found for event_type=${event_type}. Skipping.`);
+        console.log(`✅ event_type=${event_type} complete | success_count=0 | error_count=0 | total_rows_updated=0 | processing_time=${format_duration_ms_local(event_type_duration_ms)}`);
+
+        event_type_summary.push({
+          event_type,
+          success_count: 0,
+          error_count: 0,
+          total_rows_updated: 0,
+          processing_time: format_duration_ms_local(event_type_duration_ms),
+        });
+
+        continue;
+      }
+
+      let success_count = 0;
+      let error_count = 0;
+      let updated_row_total = 0;
+      const total_for_event_type = race_ids.length;
+
+      for (let i = 0; i < race_ids.length; i++) {
+        const race_id = race_ids[i];
+        const progress_num = i + 1;
+
+        console.log(`\n[event_type=${event_type}] ${progress_num} of ${total_for_event_type} | race_id=${race_id}`);
+
+        try {
+          const api_response = await fetch_race_membership_settings({
+            race_id,
+            event_types: [event_type],
+            api_key: RUNSIGNUP_API_KEY,
+            api_secret: RUNSIGNUP_API_SECRET,
+          });
+
+          const payload = extract_membership_payload(api_response);
+
+          console.log(`race_id=${race_id} setting_id_member_settings=${payload.setting_id_member_settings}`);
+          console.log(`race_id=${race_id} setting_name_member_settings=${payload.setting_name_member_settings}`);
+          console.log(`race_id=${race_id} usat_event_id_member_settings=${payload.usat_event_id_member_settings}`);
+          console.log(`race_id=${race_id} membership_settings_count_member_settings=${payload.membership_settings_count_member_settings}`);
+          console.log(`race_id=${race_id} has_multiple_membership_settings_member_settings=${payload.has_multiple_membership_settings_member_settings}`);
+          console.log(`race_id=${race_id} has_conflicting_usat_event_ids_member_settings=${payload.has_conflicting_usat_event_ids_member_settings}`);
+          console.log(`race_id=${race_id} has_conflicting_usat_specific_flags_member_settings=${payload.has_conflicting_usat_specific_flags_member_settings}`);
+          console.log(`race_id=${race_id} distinct_usat_event_ids_csv_member_settings=${payload.distinct_usat_event_ids_csv_member_settings}`);
+          console.log(`race_id=${race_id} membership_settings_source_member_settings=${payload.membership_settings_source_member_settings}`);
+
+          const update_result = await update_race_membership_fields(connection, table_name, race_id, payload);
+
+          const affected_rows = update_result?.affectedRows || 0;
+          updated_row_total += affected_rows;
+          grand_updated_row_total += affected_rows;
+
+          success_count++;
+          grand_success_count++;
+
+          console.log(`✅ event_type=${event_type} | ${progress_num} of ${total_for_event_type} | Updated race_id=${race_id}, affected_rows=${affected_rows}`);
+        } catch (error) {
+          error_count++;
+          grand_error_count++;
+          console.error(`❌ event_type=${event_type} | ${progress_num} of ${total_for_event_type} | Failed for race_id=${race_id}: ${error.message}`);
+        }
+
+        await delay(throttle_ms);
+      }
+
+      const event_type_duration_ms = Date.now() - event_type_start_time_ms;
+
+      console.log("\n----------------------------------------");
+      console.log(`✅ event_type=${event_type} complete`);
+      console.log("----------------------------------------");
+      console.log(`Success count: ${success_count}`);
+      console.log(`Error count: ${error_count}`);
+      console.log(`Total rows updated: ${updated_row_total}`);
+      console.log(`Processing time: ${format_duration_ms_local(event_type_duration_ms)}`);
+
+      event_type_summary.push({
+        event_type,
+        success_count,
+        error_count,
+        total_rows_updated: updated_row_total,
+        processing_time: format_duration_ms_local(event_type_duration_ms),
+      });
     }
 
-    console.log("\n----------------------------------------");
+    console.log("\n========================================");
     console.log("Step 1b complete");
+    console.log("========================================");
+
+    console.log("\nPer event_type summary:");
     console.log("----------------------------------------");
-    console.log(`Success count: ${success_count}`);
-    console.log(`Error count: ${error_count}`);
-    console.log(`Total rows updated: ${updated_row_total}`);
+
+    for (const row of event_type_summary) {
+      console.log(`event_type=${row.event_type} | success=${row.success_count} | errors=${row.error_count} | rows_updated=${row.total_rows_updated} | processing_time=${row.processing_time}`);
+    }
+
+    console.log("----------------------------------------");
+    console.log(`Grand success count: ${grand_success_count}`);
+    console.log(`Grand error count: ${grand_error_count}`);
+    console.log(`Grand total rows updated: ${grand_updated_row_total}`);
+
+    const total_duration_ms = Date.now() - start_time_ms;
+    console.log(`Total processing time: ${format_duration_ms_local(total_duration_ms)}`);
 
     result = "RunSignup membership enrichment successful";
     return result;
