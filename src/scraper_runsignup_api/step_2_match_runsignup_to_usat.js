@@ -443,9 +443,6 @@ async function load_runsignup_rows_grouped_page(connection, target_year, offset,
 }
 
 async function load_usat_event_rows(connection, target_year) {
-  const min_target_year = Number(target_year) - 1;
-  const max_target_year = Number(target_year) + 1;
-
   const sql = `
     WITH event_level AS (
       SELECT
@@ -460,7 +457,7 @@ async function load_usat_event_rows(connection, target_year) {
         GROUP_CONCAT(DISTINCT name_event_type ORDER BY name_event_type SEPARATOR ' | ') AS name_event_type,
         GROUP_CONCAT(DISTINCT name_race_type ORDER BY name_race_type SEPARATOR ' | ') AS name_race_type
       FROM \`${USAT_TABLE}\`
-      WHERE starts_year_events BETWEEN ? AND ?
+      WHERE starts_year_events = ?
       GROUP BY id_events
     )
     SELECT
@@ -480,7 +477,7 @@ async function load_usat_event_rows(connection, target_year) {
     ORDER BY starts_events, id_events
   `;
 
-  const [rows] = await connection.execute(sql, [min_target_year, max_target_year]);
+  const [rows] = await connection.execute(sql, [target_year]);
 
   return rows.map((row) => ({
     id_events: row.id_events,
@@ -629,6 +626,16 @@ function get_best_candidate(runsignup_row, candidates) {
 
   for (const candidate of candidates) {
     if (!candidate.name_norm) continue;
+
+    if (
+      runsignup_row.event_year === null ||
+      runsignup_row.event_year === undefined ||
+      candidate.usat_year === null ||
+      candidate.usat_year === undefined ||
+      Number(runsignup_row.event_year) !== Number(candidate.usat_year)
+    ) {
+      continue;
+    }
 
     const scored = score_candidate(runsignup_row, candidate);
 
