@@ -223,5 +223,5 @@ if (require.main === module) {
 }
 
 module.exports = {
-  execute_step_6_runsignup_affliate_url: main,
+  execute_step_6_runsignup_fuzzy_match_missing_id: main,
 };
