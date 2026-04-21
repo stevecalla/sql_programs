@@ -71,7 +71,6 @@ const TEST_LIMIT_RACE_IDS = IS_TEST_LIMIT ? 500 : null; // set to null to disabl
 // Example: ['triathlon'] or ['triathlon', 'duathlon']
 // Empty array means do not filter
 const EVENT_TYPES_TO_INCLUDE = [
-  'aqua_bike', 'duathlon', 'triathlon', 'Aquathlon',
   'adventure_race',
   'aqua_bike',
   'bike_race',
