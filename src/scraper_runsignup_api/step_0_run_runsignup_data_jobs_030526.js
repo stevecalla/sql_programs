@@ -12,10 +12,14 @@ const { execute_match_runsignup_to_usat } = require('./step_2_match_runsignup_to
 const { execute_load_big_query_runsignup_data } = require('./step_3_load_bq_runsignup_data'); // Step #3: Load runsignup data to BQ
 
 const { execute_step_4_runsignup_affliate_url } = require('./step_4_runsignup_affliate_url');
+const { execute_load_big_query_runsignup_affliate_url } = require('./step_5_load_bq_runsignup_affiliate_url');
 
 const { execute_step_6_runsignup_fuzzy_match_missing_id } = require('./step_6_runsignup_fuzzy_match_missing_id');
+const { execute_load_big_query_runsignup_fuzzy_match_missing_id } = require('./step_7_load_bq_runsignup_fuzzy_match_missing_id');
+
 
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
+
 async function executeSteps(stepFunctions, stepName) {
   for (let i = 0; i < stepFunctions.length; i++) {
     
@@ -77,14 +81,18 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1 = false;   // get runsignup "get_races" API calendar data
-  const run_step_1b = false;   // get runsignup "get_race" API sanction data
+  const run_step_1 = true;   // get runsignup "get_races" API calendar data
+  const run_step_1b = true;  // get runsignup "get_race" API sanction data
 
-  const run_step_2 = false;   // match_runsignup_to_usat
-  const run_step_3 = false;   // load runsignup to bigquery
+  const run_step_2 = true;   // match_runsignup_to_usat
+  const run_step_3 = true;   // load runsignup to bigquery
 
-  const run_step_4 = false;    // create step_4_runsignup_affliate_url
-  const run_step_6 = true;    // create step_6_runsignup_fuzzy_match_missing_id.js
+  const run_step_4 = true;   // create step_4_runsignup_affliate_url
+  const run_step_5 = true;   // load runsignup affiliate urls to bigquery
+
+  const run_step_6 = true;   // create step_6_runsignup_fuzzy_match_missing_id.js
+  const run_step_7 = true;   // load all_runsignup_data_raw_missing_id to bigquery
+
 
   try {
     const stepFunctions = [
@@ -95,8 +103,10 @@ async function main() {
       run_step_3 ? execute_load_big_query_runsignup_data : null,
 
       run_step_4 ? execute_step_4_runsignup_affliate_url : null,
+      run_step_5 ? execute_load_big_query_runsignup_affliate_url : null,
 
       run_step_6 ? execute_step_6_runsignup_fuzzy_match_missing_id : null,
+      run_step_7 ? execute_load_big_query_runsignup_fuzzy_match_missing_id : null,
     ];
 
     const stepName = [
@@ -106,10 +116,10 @@ async function main() {
       `Step #3 - Load runsignup data to BQ: `,
 
       `Step #4 - step_4_runsignup_affliate_url: `,
-      // `Step #5 - Load runsignup affiliate url data to BQ: `,
+      `Step #5 - Load runsignup affiliate url data to BQ: `,
 
       `Step #6 - execute_step_6_runsignup_fuzzy_match_missing_id `,
-      // `Step #7 - Load tbd data to BQ: `,
+      `Step #7 - Load all_runsignup_data_raw_missing_id data to BQ: `,
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function
