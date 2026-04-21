@@ -73,7 +73,7 @@ async function executeSteps(stepFunctions, stepName) {
   }
 }
 
-async function execute_run_event_data_jobs() {
+async function main() {
   const startTime = performance.now();
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
@@ -134,10 +134,13 @@ async function execute_run_event_data_jobs() {
   return elapsedTime;
 }
 
-// if (require.main === module) {
-//   execute_run_event_data_jobs();
-// }
+if (require.main === module) {
+  main().catch((error) => {
+    console.error("error during event load:", error);
+    process.exitCode = 1;
+  });
+}
 
 module.exports = {
-  execute_run_event_data_jobs,
+  execute_run_event_data_jobs: main,
 };
