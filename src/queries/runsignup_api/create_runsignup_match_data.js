@@ -73,7 +73,7 @@ async function main(TABLE_NAME, where_statement, affiliate_token) {
                 END AS registration_url_final,
                         
                 CASE
-                    WHEN ed.registration_url = rd.url THEN rd.url
+                    WHEN ed.registration_url = rd.url THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
                     WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) = LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
                     WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
                     WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
