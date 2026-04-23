@@ -70,7 +70,7 @@ const fields_recognition_allocation_data = `
 async function query_rev_recognition_allocation_data(batch_size = 10, offset = 0) {
     return `
         SELECT
-            ${fields}
+            ${fields_recognition_allocation_data}
                 
         FROM rev_recognition_allocation_data
         WHERE 1 = 1
