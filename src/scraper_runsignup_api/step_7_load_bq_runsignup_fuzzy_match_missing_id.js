@@ -5,7 +5,7 @@ const { logPM2MemoryUsage } = require('../../utilities/pm2_scripts/pm2_log_memor
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
 const { query_runsignup_affiliate_data } = require('../google_cloud/queries/query_runsignup_affiliate_data');
-const { all_runsignup_affiliate_match_schema } = require('../google_cloud/schemas/schema_runsignup_affiliate_datajs');
+const { all_runsignup_affiliate_match_schema } = require('../google_cloud/schemas/schema_runsignup_affiliate_data');
 
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
