@@ -100,18 +100,18 @@ async function main(TABLE_NAME, where_statement, affiliate_token) {
                 --     -- 'Race in the Clouds - Alma Dirt Festival 2026' 351149
                 --     --  'ALMAGEDDON Winter Triathlon presented by the Alma Foundation' 351812
                 --     --  'Festival in the Clouds Firefighter 5K, Fun Run and Doggie Dash' 358402
-                --     WHEN race_id IN ('187048', '190024', '203571' ) THEN CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX')
+                --     WHEN race_id IN ('187048', '190024', '203571' ) THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
                 -- END AS registration_url_affiliate_final,
                 
                 CASE
-                    WHEN race_id IN ('131115', '139628', '143649', '80325', '169435', '196250', '152896', '126993', '148084', '14601', '141220', '127748', '143542', '177339') THEN CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX')
+                    WHEN race_id IN ('131115', '139628', '143649', '80325', '169435', '196250', '152896', '126993', '148084', '14601', '141220', '127748', '143542', '177339') THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
                     WHEN race_id IN ('132516', '204160', '137786', '41261', '68046', '129393', '177905', '49243', '174223') THEN 0
 
-                    WHEN ed.registration_url = rd.url THEN CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX')
-                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) = LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) THEN CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX')
-                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX')
-                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX')
-                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX')
+                    WHEN ed.registration_url = rd.url THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
+                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) = LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
+                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
+                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
+                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CONCAT(rd.url, '?aflt_token=${affiliate_token}')
                     ELSE 0
                 END AS registration_url_affiliate_final,
                 
@@ -119,19 +119,19 @@ async function main(TABLE_NAME, where_statement, affiliate_token) {
                 --     -- 'Race in the Clouds - Alma Dirt Festival 2026' 351149
                 --     --  'ALMAGEDDON Winter Triathlon presented by the Alma Foundation' 351812
                 --     --  'Festival in the Clouds Firefighter 5K, Fun Run and Doggie Dash' 358402
-                    -- WHEN race_id IN ('187048', '190024', '203571' ) THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX'))
+                    -- WHEN race_id IN ('187048', '190024', '203571' ) THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=${affiliate_token}'))
                     -- 	ELSE NULL
                 -- END AS registration_url_affiliate_final_char_count,
                 
                 CASE
-                    WHEN race_id IN ('131115', '139628', '143649', '80325', '169435', '196250', '152896', '126993', '148084', '14601', '141220', '127748', '143542', '177339') THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX'))
+                    WHEN race_id IN ('131115', '139628', '143649', '80325', '169435', '196250', '152896', '126993', '148084', '14601', '141220', '127748', '143542', '177339') THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=${affiliate_token}'))
                     WHEN race_id IN ('132516', '204160', '137786', '41261', '68046', '129393', '177905', '49243', '174223') THEN 0
                 
-                    WHEN ed.registration_url = rd.url THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX'))
-                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) = LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX'))
-                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX'))
-                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX'))
-                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=01FyaaWPrCkItbiUqFusguggm9xpGVGX'))
+                    WHEN ed.registration_url = rd.url THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=${affiliate_token}'))
+                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) = LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=${affiliate_token}'))
+                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=${affiliate_token}'))
+                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=${affiliate_token}'))
+                    WHEN TRIM(CAST(rd.usat_event_id_member_settings AS CHAR)) <> LEFT(TRIM(CAST(rd.usat_sanction_id_internal AS CHAR)), 6) AND match_score_internal > 95 THEN CHAR_LENGTH(CONCAT(rd.url, '?aflt_token=${affiliate_token}'))
                     ELSE 0
                 END AS registration_url_affiliate_final_char_count,
                         
