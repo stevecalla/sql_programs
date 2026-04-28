@@ -163,6 +163,13 @@ const main = [
     fields: []
   },
   {
+    name: "registration_url_final_sanction_id",
+    mode: "NULLABLE",
+    type: "STRING",
+    description: "registration_url_final_sanction_id",
+    fields: []
+  },
+  {
     name: "usat_match_name",
     mode: "NULLABLE",
     type: "STRING",
