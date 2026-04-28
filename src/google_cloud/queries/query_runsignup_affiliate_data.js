@@ -32,6 +32,8 @@ async function main(batch_size = 10, offset = 0, TABLE_NAME) {
 
             usat_event_id_member_settings,
             usat_sanction_id_internal,
+            registration_url_final_sanction_id,
+
             usat_match_name,
             usat_match_state,
             usat_match_city,
