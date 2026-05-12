@@ -8,7 +8,8 @@ async function main(batch_size = 10000, offset = 0) {
             first_name_profiles,
             DATE_FORMAT(date_of_birth_profiles, '%Y-%m-%d') AS date_of_birth_profiles,
             email_users,
-            gender_code_race_results,
+            gender_code_race_results, 
+            state_profile_states,
 
             -- membership periods
             ids_membership_periods,
@@ -25,6 +26,7 @@ async function main(batch_size = 10000, offset = 0) {
             ids_events,
             starts_events, -- date but type varchar b/c it might include multiple
             names_events,
+            state_name_events,
 
             -- race results
             age_race_results,
@@ -58,6 +60,7 @@ async function main(batch_size = 10000, offset = 0) {
             score_ranking_list_period_entries,
             multiplier_score_ranking_list_period_entries,
             all_american_ranking_list_period_entries,
+            state_ranking_result_events,
 
             -- created at dates
             DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') AS created_at_mtn,

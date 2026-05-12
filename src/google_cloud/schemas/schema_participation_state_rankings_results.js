@@ -51,6 +51,13 @@ const main = [
         "description": "Race gender",
         "fields": []
     },
+    {
+        "name": "state_profile_states",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Profile / member state",
+        "fields": []
+    },
 
     // ***********************************
     // MEMBERSHIP PERIODS
@@ -127,6 +134,13 @@ const main = [
         "mode": "NULLABLE",
         "type": "STRING",
         "description": "Event names",
+        "fields": []
+    },
+    {
+        "name": "state_name_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Event states",
         "fields": []
     },
 
@@ -311,6 +325,13 @@ const main = [
         "mode": "NULLABLE",
         "type": "INTEGER",
         "description": "All American flag",
+        "fields": []
+    },
+    {
+        "name": "state_ranking_result_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "States used for ranking score",
         "fields": []
     },
 
