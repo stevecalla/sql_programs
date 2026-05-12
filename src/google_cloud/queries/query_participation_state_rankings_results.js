@@ -6,10 +6,9 @@ async function main(batch_size = 10000, offset = 0) {
             full_name_profiles,
             last_name_profiles,
             first_name_profiles,
-
             DATE_FORMAT(date_of_birth_profiles, '%Y-%m-%d') AS date_of_birth_profiles,
-            
             email_users,
+            gender_code_race_results,
 
             -- membership periods
             ids_membership_periods,
@@ -33,6 +32,8 @@ async function main(batch_size = 10000, offset = 0) {
             names_distance_types,
             names_race_types,
             ids_race_results,
+            milliseconds_race_results,
+            formatted_time_race_results,
 
             count_distinct_profiles,
             count_total_race_results,

@@ -44,6 +44,13 @@ const main = [
         "description": "User email",
         "fields": []
     },
+    {
+        "name": "gender_code_race_results",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Race gender",
+        "fields": []
+    },
 
     // ***********************************
     // MEMBERSHIP PERIODS
@@ -159,6 +166,20 @@ const main = [
         "mode": "NULLABLE",
         "type": "STRING",
         "description": "Race result IDs",
+        "fields": []
+    },
+    {
+        "name": "milliseconds_race_results",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Race results milliseconds",
+        "fields": []
+    },
+    {
+        "name": "formatted_time_race_results",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Race results formatted hh:mm:ss",
         "fields": []
     },
     {

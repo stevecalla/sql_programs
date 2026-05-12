@@ -239,6 +239,8 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
             fr.date_of_birth_profiles,
             fr.email_users,
 
+            fr.gender_code_race_results, -- new
+
             -- membership periods
             mpr.ids_membership_periods,
             mpr.ids_membership_type_membership_periods,
@@ -259,6 +261,10 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
             GROUP_CONCAT(fr.name_distance_types ORDER BY fr.starts_events SEPARATOR ' | ') AS names_distance_types,
             GROUP_CONCAT(fr.name_race_types ORDER BY fr.starts_events SEPARATOR ' | ') AS names_race_types,
             GROUP_CONCAT(fr.id_race_results ORDER BY fr.starts_events SEPARATOR ' | ') AS ids_race_results,
+        
+            -- NEW:
+            GROUP_CONCAT(fr.milliseconds_race_results ORDER BY fr.starts_events SEPARATOR ' | ') AS milliseconds_race_results,
+            GROUP_CONCAT(fr.formatted_time_race_results ORDER BY fr.starts_events SEPARATOR ' | ') AS formatted_time_race_results,
 
             COUNT(DISTINCT fr.id_profiles) AS count_distinct_profiles,
             COUNT(fr.id_race_results) AS count_total_race_results,
