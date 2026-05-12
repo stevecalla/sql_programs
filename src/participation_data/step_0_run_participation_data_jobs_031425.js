@@ -24,6 +24,10 @@ const { execute_load_big_query_participation_race_profile_metrics } = require('.
 // MATCH MEMBERSHIP & PARTICIPATION DATA
 const { execute_create_membership_with_participation_match } = require("./step_4_create_membership_with_participation_match");
 
+// STATE CHAMPIIONSHIP DATA
+const { execute_create_participation_state_championship_data } = require('./step_10_create_participation_state_championship_data');
+const { execute_load_big_query_all_participation_state_rankings_results } = require('./step_11_load_bq_create_participation_state_championship_data');
+
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 async function executeSteps(stepFunctions, stepName) {
@@ -82,7 +86,7 @@ async function executeSteps(stepFunctions, stepName) {
   }
 }
 
-async function execute_run_participation_data_jobs() {
+async function main() {
   const startTime = performance.now();
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
@@ -101,6 +105,9 @@ async function execute_run_participation_data_jobs() {
 
   // const run_step_4 = true; // create table membership with participation match
 
+  const run_step_10 = true; // create all_participation_state_rankings_results
+  const run_step_11 = true; // load all_participation_state_rankings_results to bigquery
+
   try {
     const stepFunctions = [
       run_step_1  ? execute_get_participation_data : null,
@@ -117,6 +124,10 @@ async function execute_run_participation_data_jobs() {
       run_step_3d ? execute_load_big_query_participation_race_profile_metrics : null,
 
       // run_step_4 ? execute_create_membership_with_participation_match : null,
+
+      run_step_10 ? execute_create_participation_state_championship_data : null,
+      run_step_11 ? execute_load_big_query_all_participation_state_rankings_results : null,
+
     ];
 
     const stepName = [
@@ -135,6 +146,9 @@ async function execute_run_participation_data_jobs() {
 
       // `Step #4 - Created membership data with participation match`,
 
+      `Step #10 - create all_participation_state_rankings_results`,
+      `Step #11 = load all_participation_state_rankings_results to bigquery`
+
     ];
 
     await executeSteps(stepFunctions, stepName); // Call the new function
@@ -152,8 +166,13 @@ async function execute_run_participation_data_jobs() {
   return elapsedTime;
 }
 
-// execute_run_participation_data_jobs();
+if (require.main === module) {
+  main().catch((error) => {
+    console.error("error during event load:", error);
+    process.exitCode = 1;
+  });
+}
 
 module.exports = {
-  execute_run_participation_data_jobs,
+  execute_run_participation_data_jobs: main,
 };
