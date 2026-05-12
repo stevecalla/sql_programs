@@ -4,10 +4,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Trophy favicon -->
+  <!-- <link
+    rel="icon"
+    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><text y=%2250%22 font-size=%2250%22>🏆</text></svg>"
+  /> -->
+
+  <!-- Barchart favicon -->
+  <link rel="icon" type="image/svg+xml"
+  href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>📊</text></svg>">
+
   <title>Looker Dashboard</title>
 
   <style>
     html,
+    
     body {
       margin: 0;
       width: 100%;
@@ -36,12 +48,15 @@
     ----------------------------------------------------- */
 
     const pages = [
+      "https://datastudio.google.com/embed/reporting/7f97c13e-287d-4bc0-bc70-969b5f3944be/page/p_6n4oht1k3d", // state championship url embed
+
       "https://lookerstudio.google.com/embed/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_1lfpxgtmzd", // member sales
       "https://lookerstudio.google.com/embed/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_h2wxc2blsd", // sanctioned events
       "https://lookerstudio.google.com/embed/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_h2wxc2blsd", // participation
       "https://lookerstudio.google.com/embed/reporting/7f97c13e-287d-4bc0-bc70-969b5f3944be/page/p_kn3r3e09zd", // membership base
       "https://datastudio.google.com/embed/reporting/7f97c13e-287d-4bc0-bc70-969b5f3944be/page/p_egv10bf40d", // auto renew
       "https://datastudio.google.com/embed/reporting/f457edb4-c842-4632-8844-4273ecf05da5/page/p_s91n1xclwd", // reporting events
+
     ];
 
     /* -----------------------------------------------------
@@ -137,6 +152,7 @@
   </script>
 
 </head>
+
 <body>
 
   <div
@@ -148,6 +164,16 @@
   </div>
 
   <iframe id="dashboard" allowfullscreen></iframe>
+
+  <!-- <div style="color: white;">testing iframe</div>
+
+  <iframe 
+    width="300" height="200" 
+    src="https://datastudio.google.com/embed/reporting/7f97c13e-287d-4bc0-bc70-969b5f3944be/page/p_6n4oht1k3d" frameborder="0" 
+    style="border:0" 
+    allowfullscreen 
+    sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox">
+  </iframe> -->
 
 </body>
 
