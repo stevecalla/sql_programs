@@ -1,7 +1,7 @@
 async function main(batch_size = 10000, offset = 0) {
     return `
         SELECT 
-            -- profile
+            -- profile info
             id_profiles,
             full_name_profiles,
             last_name_profiles,
@@ -20,6 +20,7 @@ async function main(batch_size = 10000, offset = 0) {
             ends_membership_periods, -- date but type varchar b/c it might include multiple
 
             groups_membership_types,
+            has_annual_membership_through_current_year_end,
             count_membership_periods,
 
             -- events
@@ -38,7 +39,8 @@ async function main(batch_size = 10000, offset = 0) {
             formatted_time_race_results,
 
             count_distinct_profiles,
-            count_total_race_results,
+            count_local_race_results,
+            count_local_race_results_flag,
 
             -- ranking period / list
             DATE_FORMAT(ranked_at_ranking_list_periods, '%Y-%m-%d') AS ranked_at_ranking_list_periods,

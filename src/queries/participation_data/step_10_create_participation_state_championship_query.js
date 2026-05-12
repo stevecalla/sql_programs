@@ -113,6 +113,16 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
                 GROUP_CONCAT(mp.starts ORDER BY mp.starts SEPARATOR ' | ') AS starts_membership_periods,
                 GROUP_CONCAT(mp.ends ORDER BY mp.starts SEPARATOR ' | ') AS ends_membership_periods,
                 GROUP_CONCAT(mt.group ORDER BY mp.starts SEPARATOR ' | ') AS groups_membership_types,
+                        
+                MAX(
+                    CASE
+                        WHEN mt.group IN ('adult_annual', 'youth_annual')
+                            AND mp.starts <= MAKEDATE(YEAR(CURDATE()), 1) + INTERVAL 1 YEAR - INTERVAL 1 DAY
+                            AND mp.ends >= MAKEDATE(YEAR(CURDATE()), 1) + INTERVAL 1 YEAR - INTERVAL 1 DAY
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS has_annual_membership_through_current_year_end,
 
                 COUNT(mp.id) AS count_membership_periods
 
@@ -273,6 +283,7 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
             mpr.starts_membership_periods,
             mpr.ends_membership_periods,
             mpr.groups_membership_types,
+            mpr.has_annual_membership_through_current_year_end,
             mpr.count_membership_periods,
 
             -- events
@@ -293,7 +304,11 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
             GROUP_CONCAT(fr.formatted_time_race_results ORDER BY fr.starts_events SEPARATOR ' | ') AS formatted_time_race_results,
 
             COUNT(DISTINCT fr.id_profiles) AS count_distinct_profiles,
-            COUNT(fr.id_race_results) AS count_total_race_results,
+            COUNT(fr.id_race_results) AS count_local_race_results,
+            CASE
+                WHEN COUNT(fr.id_race_results) >= 3 THEN '>= 3'
+                WHEN COUNT(fr.id_race_results) < 3 THEN '< 3'
+            END AS count_local_race_results_flag,
 
             -- ranking period / list
             rrnk.ranked_at_ranking_list_periods,

@@ -105,6 +105,13 @@ const main = [
         "fields": []
     },
     {
+        "name": "has_annual_membership_through_current_year_end",
+        "mode": "NULLABLE",
+        "type": "INTEGER",
+        "description": "Has annual membership active on 12/31 of the ranking year",
+        "fields": []
+    },
+    {
         "name": "count_membership_periods",
         "mode": "NULLABLE",
         "type": "INTEGER",
@@ -204,10 +211,17 @@ const main = [
         "fields": []
     },
     {
-        "name": "count_total_race_results",
+        "name": "count_local_race_results",
         "mode": "NULLABLE",
         "type": "INTEGER",
-        "description": "Total race result count",
+        "description": "Local (for the profile state) race result count",
+        "fields": []
+    },
+    {
+        "name": "count_local_race_results_flag",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Local (for the profile state) race result count flag",
         "fields": []
     },
 
