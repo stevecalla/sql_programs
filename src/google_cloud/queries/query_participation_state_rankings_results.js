@@ -59,10 +59,28 @@ async function main(batch_size = 10000, offset = 0) {
             first_name_ranking_list_period_entries,
             last_name_ranking_list_period_entries,
             rank_ranking_list_period_entries,
+            all_american_ranking_list_period_entries,
+
+            ids_race_results_used_for_ranking,
+            start_date_race_results_used_for_ranking,
+            scores_race_results_used_for_ranking,
+            state_ranking_result_events,
+            count_race_results_in_ranking_table,
+
             score_ranking_list_period_entries,
             multiplier_score_ranking_list_period_entries,
-            all_american_ranking_list_period_entries,
-            state_ranking_result_events,
+            
+            scores_top_three_used_for_avg,
+            scores_top_three_same_state_used_for_avg,
+            avg_top_three_score_all_states,
+            avg_top_three_score_same_state,
+
+            debug_calc_rows,
+            debug_top_three_rows_used,
+            debug_top_three_score_calc_detail,
+            debug_top_three_calc_final_score,
+            debug_entry_score_compare,
+            debug_top_three_calc_vs_entry_diff,
 
             -- created at dates
             DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') AS created_at_mtn,

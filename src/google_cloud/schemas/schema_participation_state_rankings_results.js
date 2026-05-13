@@ -214,14 +214,14 @@ const main = [
         "name": "count_local_race_results",
         "mode": "NULLABLE",
         "type": "INTEGER",
-        "description": "Local (for the profile state) race result count",
+        "description": "Local race result count",
         "fields": []
     },
     {
         "name": "count_local_race_results_flag",
         "mode": "NULLABLE",
         "type": "STRING",
-        "description": "Local (for the profile state) race result count flag",
+        "description": "Local race result count flag",
         "fields": []
     },
 
@@ -321,6 +321,56 @@ const main = [
         "fields": []
     },
     {
+        "name": "all_american_ranking_list_period_entries",
+        "mode": "NULLABLE",
+        "type": "INTEGER",
+        "description": "All American flag",
+        "fields": []
+    },
+
+    // ***********************************
+    // RANKING RESULT DETAIL
+    // ***********************************
+    {
+        "name": "ids_race_results_used_for_ranking",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Race result IDs used for ranking score",
+        "fields": []
+    },
+    {
+        "name": "start_date_race_results_used_for_ranking",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Race result start dates used for ranking score",
+        "fields": []
+    },
+    {
+        "name": "scores_race_results_used_for_ranking",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Race result scores used for ranking score",
+        "fields": []
+    },
+    {
+        "name": "state_ranking_result_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "States used for ranking score",
+        "fields": []
+    },
+    {
+        "name": "count_race_results_in_ranking_table",
+        "mode": "NULLABLE",
+        "type": "INTEGER",
+        "description": "Count of race results in ranking table",
+        "fields": []
+    },
+
+    // ***********************************
+    // RANKING SCORES / CALCS
+    // ***********************************
+    {
         "name": "score_ranking_list_period_entries",
         "mode": "NULLABLE",
         "type": "FLOAT",
@@ -335,17 +385,77 @@ const main = [
         "fields": []
     },
     {
-        "name": "all_american_ranking_list_period_entries",
+        "name": "scores_top_three_used_for_avg",
         "mode": "NULLABLE",
-        "type": "INTEGER",
-        "description": "All American flag",
+        "type": "STRING",
+        "description": "Top three scores used for average calculation",
         "fields": []
     },
     {
-        "name": "state_ranking_result_events",
+        "name": "scores_top_three_same_state_used_for_avg",
         "mode": "NULLABLE",
         "type": "STRING",
-        "description": "States used for ranking score",
+        "description": "Top three same-state scores used for average calculation",
+        "fields": []
+    },
+    {
+        "name": "avg_top_three_score_all_states",
+        "mode": "NULLABLE",
+        "type": "FLOAT",
+        "description": "Average top three score across all states",
+        "fields": []
+    },
+    {
+        "name": "avg_top_three_score_same_state",
+        "mode": "NULLABLE",
+        "type": "FLOAT",
+        "description": "Average top three same-state score",
+        "fields": []
+    },
+
+    // ***********************************
+    // DEBUG
+    // ***********************************
+    {
+        "name": "debug_calc_rows",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Debug calculation rows",
+        "fields": []
+    },
+    {
+        "name": "debug_top_three_rows_used",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Debug top three rows used",
+        "fields": []
+    },
+    {
+        "name": "debug_top_three_score_calc_detail",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Debug top three score calculation detail",
+        "fields": []
+    },
+    {
+        "name": "debug_top_three_calc_final_score",
+        "mode": "NULLABLE",
+        "type": "FLOAT",
+        "description": "Debug final calculated top three score",
+        "fields": []
+    },
+    {
+        "name": "debug_entry_score_compare",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Debug entry score comparison",
+        "fields": []
+    },
+    {
+        "name": "debug_top_three_calc_vs_entry_diff",
+        "mode": "NULLABLE",
+        "type": "FLOAT",
+        "description": "Debug difference between calculated and entry score",
         "fields": []
     },
 
