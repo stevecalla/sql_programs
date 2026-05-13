@@ -29,11 +29,13 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
     return `
         CREATE TABLE ${table_name} AS
 
+        USE vapor;
+
         WITH filtered_results AS (
             SELECT
                 -- PROFILE / USER
                 p.id AS id_profiles,
-                DATE_FORMAT(p.date_of_birth, '%Y-%m-%d') AS date_of_birth_profiles,
+                p.date_of_birth AS date_of_birth_profiles,
                 p.deleted_at AS deleted_at_profiles,
                 p.name AS full_name_profiles,
                 p.first_name AS first_name_profiles,
@@ -114,6 +116,18 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
                 GROUP_CONCAT(mp.ends ORDER BY mp.starts SEPARATOR ' | ') AS ends_membership_periods,
                 GROUP_CONCAT(mt.group ORDER BY mp.starts SEPARATOR ' | ') AS groups_membership_types,
 
+                -- That checks whether the member has an annual membership active on 12/31 of the ranking year
+                -- Does this person have at least one annual membership active through the end of the ranking year?”
+                MAX(
+                    CASE
+                        WHEN mt.group IN ('adult_annual', 'youth_annual')
+                            AND mp.starts <= MAKEDATE(YEAR(CURDATE()), 1) + INTERVAL 1 YEAR - INTERVAL 1 DAY
+                            AND mp.ends >= MAKEDATE(YEAR(CURDATE()), 1) + INTERVAL 1 YEAR - INTERVAL 1 DAY
+                        THEN 1
+                        ELSE 0
+                    END
+                ) AS has_annual_membership_through_current_year_end,
+
                 COUNT(mp.id) AS count_membership_periods
 
             FROM membership_periods AS mp
@@ -134,6 +148,155 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
                 )
 
             GROUP BY ma.profile_id
+        ),
+
+        ranking_score_detail AS (
+            SELECT
+                p.id AS id_profiles,
+                rlpe.id AS id_ranking_list_period_entries,
+                rt.name AS name_race_types,
+                CONCAT(ag.min, '-', ag.max) AS ranked_age_bin,
+                g.label AS label_genders,
+
+                rr.id AS id_race_results,
+                r.start_date AS start_date_race_results_used_for_ranking,
+                e.state AS state_ranking_result_events,
+                st.name AS name_member_states,
+                -- rlperr.score AS score_race_results_used_for_ranking,
+                CAST(rlperr.score AS DECIMAL(18,8)) AS score_race_results_used_for_ranking,
+
+            ROW_NUMBER() OVER (
+                PARTITION BY 
+                    p.id,
+                    rt.name,
+                    CONCAT(ag.min, '-', ag.max),
+                    g.label
+                ORDER BY rlperr.score DESC
+            ) AS score_rank,
+
+            ROW_NUMBER() OVER (
+                PARTITION BY 
+                    p.id,
+                    rt.name,
+                    CONCAT(ag.min, '-', ag.max),
+                    g.label,
+                    CASE 
+                        WHEN st.name = e.state THEN 1 
+                        ELSE 0 
+                    END
+                ORDER BY rlperr.score DESC
+            ) AS same_state_score_rank
+
+            FROM ranking_list_period_entries AS rlpe
+                INNER JOIN ranking_list_periods AS rlp ON rlpe.ranking_list_period_id = rlp.id
+                INNER JOIN profiles AS p ON rlpe.profile_id = p.id
+                INNER JOIN genders AS g ON p.gender_id = g.id
+                INNER JOIN users AS u ON p.user_id = u.id
+                LEFT JOIN addresses AS ad ON p.primary_address_id = ad.id
+                INNER JOIN members AS m ON p.id = m.memberable_id
+                LEFT JOIN states AS st ON ad.state_id = st.id
+                INNER JOIN ranking_lists AS rl ON rlp.ranking_list_id = rl.id
+                INNER JOIN ranking_configs AS rc ON rl.ranking_config_id = rc.id
+                INNER JOIN age_groups AS ag ON rc.age_group_id = ag.id
+                INNER JOIN race_types AS rt ON rc.race_type_id = rt.id
+                INNER JOIN ranking_series AS rs ON rc.ranking_series_id = rs.id
+                INNER JOIN ranking_list_period_entry_race_result AS rlperr ON rlperr.ranking_list_period_entry_id = rlpe.id
+                INNER JOIN race_results AS rr ON rr.id = rlperr.race_result_id
+                INNER JOIN races AS r ON r.id = rr.race_id
+                INNER JOIN events AS e ON e.id = r.event_id
+
+            WHERE 1 = 1
+                AND m.deleted_at IS NULL
+                AND u.deleted_at IS NULL
+                AND p.deleted_at IS NULL
+                AND m.memberable_type = 'profiles'
+                AND rs.name = 'National Rankings'
+                AND rlp.ranked_at = '2026-12-31'
+                AND st.name IN ('Florida', 'Massachusetts')
+                AND rt.name IN ('Triathlon', 'Triathlon Off-Road')
+        ),
+
+        ranking_score_calc AS (
+            SELECT
+                id_ranking_list_period_entries,
+
+                GROUP_CONCAT(
+                    CASE 
+                        WHEN score_rank <= 3 
+                        THEN FORMAT(score_race_results_used_for_ranking, 5)
+                    END
+                    ORDER BY score_rank SEPARATOR ' | '
+                ) AS calc_scores_top_three_used_for_avg,
+
+                ROUND(
+                    100 / AVG(
+                        CASE 
+                            WHEN score_rank <= 3
+                                AND score_race_results_used_for_ranking > 0
+                            THEN 1 / (ROUND(score_race_results_used_for_ranking, 5) / 100)
+                        END
+                    ),
+                    5
+                ) AS calc_avg_top_three_score_all_states,
+
+                GROUP_CONCAT(
+                    CASE 
+                        WHEN same_state_score_rank <= 3
+                            AND name_member_states = state_ranking_result_events
+                        THEN FORMAT(score_race_results_used_for_ranking, 5)
+                    END
+                    ORDER BY same_state_score_rank SEPARATOR ' | '
+                ) AS calc_scores_top_three_same_state_used_for_avg,
+
+                ROUND(
+                    100 / AVG(
+                        CASE 
+                            WHEN same_state_score_rank <= 3
+                                AND name_member_states = state_ranking_result_events
+                                AND score_race_results_used_for_ranking > 0
+                            THEN 1 / (ROUND(score_race_results_used_for_ranking, 5) / 100)
+                        END
+                    ),
+                    5
+                ) AS calc_avg_top_three_score_same_state,
+
+                COUNT(*) AS debug_calc_rows,
+                COUNT(
+                    CASE 
+                        WHEN score_rank <= 3 THEN 1
+                    END
+                ) AS debug_top_three_rows_used,
+                GROUP_CONCAT(
+                    CASE 
+                        WHEN score_rank <= 3 THEN
+                            CONCAT(
+                                'rank=', score_rank,
+                                ', rr_id=', id_race_results,
+                                ', score=', FORMAT(score_race_results_used_for_ranking, 5),
+                                ', inverted=', FORMAT(
+                                    1 / (ROUND(score_race_results_used_for_ranking, 5) / 100),
+                                    8
+                                )
+                            )
+                    END
+                    ORDER BY score_rank SEPARATOR ' | '
+                ) AS debug_top_three_score_calc_detail,
+                FORMAT(
+                    ROUND(
+                        100 / AVG(
+                            CASE 
+                                WHEN score_rank <= 3
+                                    AND score_race_results_used_for_ranking > 0
+                                THEN 1 / (ROUND(score_race_results_used_for_ranking, 5) / 100)
+                            END
+                        ),
+                        5
+                    ),
+                    5
+                ) AS debug_top_three_calc_final_score
+
+                    FROM ranking_score_detail
+                    GROUP BY id_ranking_list_period_entries
         ),
 
         ranking_base AS (
@@ -181,12 +344,35 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
                 rlpe.first_name AS first_name_ranking_list_period_entries,
                 rlpe.last_name AS last_name_ranking_list_period_entries,
                 rlpe.rank AS rank_ranking_list_period_entries,
-                rlpe.score AS score_ranking_list_period_entries,
-                rlpe.multiplier_score AS multiplier_score_ranking_list_period_entries,
                 rlpe.all_american AS all_american_ranking_list_period_entries,
 
                 -- RANKING SCORE STATE
-                GROUP_CONCAT(DISTINCT e.state ORDER BY e.state SEPARATOR ' | ') AS state_ranking_result_events
+                GROUP_CONCAT(rr.id ORDER BY r.start_date SEPARATOR ' | ') AS ids_race_results_used_for_ranking,
+                GROUP_CONCAT(r.start_date ORDER BY r.start_date SEPARATOR ' | ') AS start_date_race_results_used_for_ranking,
+                GROUP_CONCAT(rlperr.score ORDER BY r.start_date SEPARATOR ' | ') AS scores_race_results_used_for_ranking,
+                GROUP_CONCAT(e.state ORDER BY e.state SEPARATOR ' | ') AS state_ranking_result_events,
+                COUNT(DISTINCT rr.id) AS count_race_results_in_ranking_table,
+
+                rlpe.score AS score_ranking_list_period_entries,
+                rlpe.multiplier_score AS multiplier_score_ranking_list_period_entries,
+
+                FORMAT(rlpe.score, 5) AS debug_entry_score_compare,
+                FORMAT(
+                    MAX(rsc.calc_avg_top_three_score_all_states) - rlpe.score,
+                    5
+                ) AS debug_top_three_calc_vs_entry_diff,
+                MAX(rsc.debug_calc_rows) AS debug_calc_rows,
+                MAX(rsc.debug_top_three_rows_used) AS debug_top_three_rows_used,
+                MAX(rsc.debug_top_three_score_calc_detail) AS debug_top_three_score_calc_detail,
+                MAX(rsc.debug_top_three_calc_final_score) AS debug_top_three_calc_final_score,
+                
+                MAX(rsc.calc_scores_top_three_used_for_avg) AS scores_top_three_used_for_avg,
+
+                MAX(rsc.calc_scores_top_three_same_state_used_for_avg) AS scores_top_three_same_state_used_for_avg,
+
+                MAX(rsc.calc_avg_top_three_score_all_states) AS avg_top_three_score_all_states,
+
+                MAX(rsc.calc_avg_top_three_score_same_state) AS avg_top_three_score_same_state
 
             FROM ranking_list_period_entries AS rlpe
                 INNER JOIN ranking_list_periods AS rlp ON rlpe.ranking_list_period_id = rlp.id
@@ -207,6 +393,15 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
                 INNER JOIN race_results AS rr ON rr.id = rlperr.race_result_id
                 INNER JOIN races as r ON r.id = rr.race_id
                 INNER JOIN events AS e ON e.id = r.event_id
+                
+                LEFT JOIN ranking_score_detail AS rsd ON rsd.id_profiles = p.id
+                    AND rsd.id_ranking_list_period_entries = rlpe.id
+                    AND rsd.name_race_types = rt.name
+                    AND rsd.ranked_age_bin = CONCAT(ag.min, '-', ag.max)
+                    AND rsd.label_genders = g.label
+                    AND rsd.id_race_results = rr.id
+
+                LEFT JOIN ranking_score_calc AS rsc ON rsc.id_ranking_list_period_entries = rlpe.id
 
             WHERE 1 = 1
                 AND m.deleted_at IS NULL
@@ -215,7 +410,7 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
                 AND m.memberable_type = 'profiles'
                 AND rs.name = 'National Rankings'
                 AND rlp.ranked_at = '2026-12-31'
-                AND st.code IN ('FL', 'MA')
+                AND st.name IN ('Florida', 'Massachusetts')
                 AND rt.name IN ('Triathlon', 'Triathlon Off-Road')
                 -- AND rlpe.rank >= 1
             
@@ -246,11 +441,28 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
                 first_name_ranking_list_period_entries,
                 last_name_ranking_list_period_entries,
                 rank_ranking_list_period_entries,
+                all_american_ranking_list_period_entries,
+                
+                ids_race_results_used_for_ranking,
+                start_date_race_results_used_for_ranking,
+                scores_race_results_used_for_ranking,
+                state_ranking_result_events,
+                count_race_results_in_ranking_table,
+
                 score_ranking_list_period_entries,
                 multiplier_score_ranking_list_period_entries,
-                all_american_ranking_list_period_entries,
 
-                state_ranking_result_events
+                scores_top_three_used_for_avg,
+                scores_top_three_same_state_used_for_avg,
+                ROUND(avg_top_three_score_all_states, 5) AS avg_top_three_score_all_states,
+                ROUND(avg_top_three_score_same_state, 5) AS avg_top_three_score_same_state,
+                
+                debug_calc_rows,
+                debug_top_three_rows_used,
+                debug_top_three_score_calc_detail,
+                debug_top_three_calc_final_score,
+                debug_entry_score_compare,
+                debug_top_three_calc_vs_entry_diff
 
             FROM ranking_base
             -- GROUP BY id_profiles, name_race_types, ranked_age_bin, label_genders -- in ranking_base cte
@@ -270,9 +482,12 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
             mpr.ids_membership_periods,
             mpr.ids_membership_type_membership_periods,
             mpr.names_membership_types,
+
             mpr.starts_membership_periods,
             mpr.ends_membership_periods,
+            
             mpr.groups_membership_types,
+            mpr.has_annual_membership_through_current_year_end,
             mpr.count_membership_periods,
 
             -- events
@@ -287,51 +502,73 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
             GROUP_CONCAT(fr.name_distance_types ORDER BY fr.starts_events SEPARATOR ' | ') AS names_distance_types,
             GROUP_CONCAT(fr.name_race_types ORDER BY fr.starts_events SEPARATOR ' | ') AS names_race_types,
             GROUP_CONCAT(fr.id_race_results ORDER BY fr.starts_events SEPARATOR ' | ') AS ids_race_results,
-        
-            -- NEW:
+
             GROUP_CONCAT(fr.milliseconds_race_results ORDER BY fr.starts_events SEPARATOR ' | ') AS milliseconds_race_results,
             GROUP_CONCAT(fr.formatted_time_race_results ORDER BY fr.starts_events SEPARATOR ' | ') AS formatted_time_race_results,
 
             COUNT(DISTINCT fr.id_profiles) AS count_distinct_profiles,
-            COUNT(fr.id_race_results) AS count_total_race_results,
+            COUNT(fr.id_race_results) AS count_local_race_results,
+            CASE
+                WHEN COUNT(fr.id_race_results) >= 3 THEN '>= 3'
+                WHEN COUNT(fr.id_race_results) < 3 THEN '< 3'
+            END AS count_local_race_results_flag,
 
-            -- ranking period / list
+            -- RANKING PERIOD / LIST
             rrnk.ranked_at_ranking_list_periods,
             rrnk.id_ranking_lists,
 
-            -- ranking config
+            -- RANKING CONFIG
             rrnk.min_age_groups,
             rrnk.max_age_groups,
-            rrnk.ranked_age_bin,
+            CONCAT(min_age_groups, '-', max_age_groups) AS ranked_age_bin,
             rrnk.name_race_types AS ranked_name_race_types,
             rrnk.name_ranking_series,
 
-            -- ranking entry
+            -- RANKING ENTRY
             rrnk.id_ranking_list_period_entries,
             rrnk.member_number_ranking_list_period_entries,
             rrnk.first_name_ranking_list_period_entries,
             rrnk.last_name_ranking_list_period_entries,
             rrnk.rank_ranking_list_period_entries,
-            rrnk.score_ranking_list_period_entries,
-            rrnk.multiplier_score_ranking_list_period_entries,
             rrnk.all_american_ranking_list_period_entries,
-            rrnk.state_ranking_result_events,
 
-            -- created at dates
+            ids_race_results_used_for_ranking,
+            start_date_race_results_used_for_ranking,
+            scores_race_results_used_for_ranking,
+            state_ranking_result_events,
+            count_race_results_in_ranking_table,
+
+            score_ranking_list_period_entries,
+            multiplier_score_ranking_list_period_entries,
+            
+            scores_top_three_used_for_avg,
+            scores_top_three_same_state_used_for_avg,
+            FORMAT(avg_top_three_score_all_states, 5) AS avg_top_three_score_all_states,
+            FORMAT(avg_top_three_score_same_state, 5) AS avg_top_three_score_same_state,
+
+            debug_calc_rows,
+            debug_top_three_rows_used,
+            debug_top_three_score_calc_detail,
+            debug_top_three_calc_final_score,
+            debug_entry_score_compare,
+            debug_top_three_calc_vs_entry_diff,
+
+            -- created at dates -- for node/js code
             '${created_at_mtn}' AS created_at_mtn,
             '${created_at_utc}' AS created_at_utc
 
         FROM filtered_results AS fr
-            LEFT JOIN membership_period_results AS mpr 
-                ON fr.id_profiles = mpr.id_profiles_ma
-            LEFT JOIN ranking_results AS rrnk 
-                ON fr.id_profiles = rrnk.id_profiles
+            LEFT JOIN membership_period_results AS mpr ON fr.id_profiles = mpr.id_profiles_ma
+            LEFT JOIN ranking_results AS rrnk ON fr.id_profiles = rrnk.id_profiles
                 AND fr.name_race_types = rrnk.name_race_types
 
         GROUP BY
             fr.id_profiles,
             fr.name_race_types,
-            rrnk.name_race_types
+            rrnk.id_ranking_list_period_entries,
+            rrnk.name_race_types,
+            rrnk.ranked_age_bin,
+            rrnk.label_genders
 
         ORDER BY fr.id_profiles ASC
         ;

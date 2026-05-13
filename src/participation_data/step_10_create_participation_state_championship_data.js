@@ -203,12 +203,11 @@ function query_append_indexes(table_name) {
             ADD INDEX idx_id_profiles (id_profiles),
             ADD INDEX idx_ranked_name_race_types (ranked_name_race_types),
             ADD INDEX idx_profile_ranked_race_type (id_profiles, ranked_name_race_types),
-            ADD INDEX idx_ranking_lookup (
-                ranked_at_ranking_list_periods,
-                name_ranking_series,
-                ranked_name_race_types,
-                ranked_age_bin
-            ),
+            ADD INDEX idx_ranking_lookup (ranked_at_ranking_list_periods, name_ranking_series, ranked_name_race_types, ranked_age_bin),
+            ADD INDEX idx_ranking_entry_lookup (id_ranking_list_period_entries, id_profiles, ranked_name_race_types, ranked_age_bin),
+            ADD INDEX idx_score_compare (score_ranking_list_period_entries, avg_top_three_score_all_states, avg_top_three_score_same_state),
+            ADD INDEX idx_count_race_results (count_race_results_in_ranking_table, count_local_race_results),
+            ADD INDEX idx_state_profile_states (state_profile_states),
             ADD INDEX idx_created_at_mtn (created_at_mtn),
             ADD INDEX idx_created_at_utc (created_at_utc)
         ;
