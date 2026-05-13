@@ -130,6 +130,13 @@ const main = [
         "fields": []
     },
     {
+        "name": "ids_sanctioning_events",
+        "mode": "NULLABLE",
+        "type": "STRING",
+        "description": "Event sanction ids",
+        "fields": []
+    },
+    {
         "name": "starts_events",
         "mode": "NULLABLE",
         "type": "STRING",

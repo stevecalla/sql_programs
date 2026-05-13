@@ -25,6 +25,7 @@ async function main(batch_size = 10000, offset = 0) {
 
             -- events
             ids_events,
+            ids_sanctioning_events,
             starts_events, -- date but type varchar b/c it might include multiple
             names_events,
             state_name_events,

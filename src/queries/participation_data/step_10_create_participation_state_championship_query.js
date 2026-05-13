@@ -52,6 +52,7 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
 
                 -- EVENT / RACE
                 e.id AS id_events,
+                e.sanctioning_event_id AS id_sanctioning_events,
                 e.starts AS starts_events,
                 e.name AS name_events,
                 e.state_name AS state_name_events,
@@ -492,6 +493,7 @@ function query_step_10_create_participation_rankings_table(table_name, created_a
 
             -- events
             GROUP_CONCAT(fr.id_events ORDER BY fr.starts_events SEPARATOR ' | ') AS ids_events,
+            GROUP_CONCAT(fr.id_sanctioning_events ORDER BY fr.starts_events SEPARATOR ' | ') AS ids_sanctioning_events,
             GROUP_CONCAT(fr.starts_events ORDER BY fr.starts_events SEPARATOR ' | ') AS starts_events,
             GROUP_CONCAT(fr.name_events ORDER BY fr.starts_events SEPARATOR ' | ') AS names_events,
             GROUP_CONCAT(fr.state_name_events ORDER BY fr.starts_events SEPARATOR ' | ') AS state_name_events,
