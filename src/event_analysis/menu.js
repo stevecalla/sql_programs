@@ -164,6 +164,13 @@ const SECTIONS = [
       { id: 18, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme' },
     ],
   },
+  {
+    label: 'TESTING — verify the code is working',
+    color: WHITE,
+    items: [
+      { id: 19, label: 'Run test suite',             desc: 'Runs tests/ via node --test (schema, overrides DB chain)', action: 'run_tests' },
+    ],
+  },
 ];
 
 const ALL_ITEMS = SECTIONS.flatMap(s => s.items);
@@ -326,6 +333,29 @@ async function handle_action(action, rl) {
       break;
     }
 
+    case 'run_tests': {
+      // node --test runs every *.test.js it finds in the given path
+      // and exits non-zero on failure. Output is TAP-style.
+      const tests_dir = path.join(DIR, 'tests');
+      if (!fs.existsSync(tests_dir)) {
+        console.log(c(YELLOW, '  No tests/ directory found.'));
+        break;
+      }
+      // We can't use the existing run() helper because we need --test as a
+      // node flag, not a script argument. Spawn directly.
+      const code = await new Promise(resolve => {
+        const proc = spawn(process.execPath ?? 'node', ['--test', tests_dir], {
+          stdio: 'inherit',
+          cwd:   DIR,
+          shell: false,
+        });
+        proc.on('close', resolve);
+      });
+      if (code === 0) console.log(c(GREEN, '\n  ✓ All tests passed.'));
+      else            console.log(c(RED,   `\n  ✗ Test suite failed (exit code ${code}).`));
+      break;
+    }
+
     case 'view_readme': {
       const fp = path.join(DIR, 'README.md');
       if (!fs.existsSync(fp)) { console.log(c(YELLOW, '  README.md not found.')); break; }
@@ -364,7 +394,7 @@ async function main() {
   while (true) {
     print_menu();
 
-    const raw = (await prompt(rl, c(BOLD, '  Select (0–18): '))).trim();
+    const raw = (await prompt(rl, c(BOLD, '  Select (0–19): '))).trim();
     const num = parseInt(raw, 10);
 
     if (raw === '0' || raw.toLowerCase() === 'q' || raw.toLowerCase() === 'exit') {

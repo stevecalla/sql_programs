@@ -46,7 +46,11 @@ event_analysis/
 │           └── dashboard.html
 │
 ├── utilities/                  ← Setup helpers for this module
-│   └── ensure_overrides_table.js   ← Idempotent table creator (auto-runs on every build)
+│   ├── ensure_overrides_table.js   ← Idempotent table creator (auto-runs on every build)
+│   └── migrate_overrides_to_db.js  ← One-shot JSON → DB migration (idempotent)
+│
+├── tests/                     ← node:test suite for the overrides DB chain
+│   └── overrides.test.js
 │
 └── src/
     ├── fmt.js              ← Unicode formatters (− / — / ≥ / ⚠ / ✓ / full months)
@@ -129,7 +133,7 @@ Type a number and press Enter. For features that need input the menu prompts you
 
 The status bar at the top always shows: last build date, event totals, commentary mode (AI or rule-based), API key status, and active override count.
 
-### All 18 features — menu number + what it runs
+### All 19 features — menu number + what it runs
 
 | # | Menu label | Equivalent command |
 |---|---|---|
@@ -155,6 +159,8 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 16 | View changes since last build | `cat output/changes.txt` |
 | 17 | View notes.md | `cat notes.md` |
 | 18 | View README | Displays this file |
+| **TESTING** | | |
+| 19 | Run test suite | `node --test tests/` |
 | 0 | Exit | — |
 
 ---
@@ -628,6 +634,52 @@ Checks performed:
 - **Cross-override conflicts** — same sanction ID in multiple override types
 
 Exits with status 1 if errors are found (stopping a `check.js && build_all.js` pipeline). Warnings are informational — review and proceed if they're expected.
+
+---
+
+## Test suite — tests/
+
+> **Menu:** option **19** — or run directly:
+
+```bash
+node --test tests/                  # run the full suite
+node --test tests/overrides.test.js # run a single file
+```
+
+Uses Node's built-in `node:test` runner (Node 18+) — no extra dependencies. Output is TAP-style: green `ok` lines for passes, red `not ok` with a stack trace for failures. The runner exits non-zero on any failure, so it composes cleanly with `&&` or CI.
+
+### What's covered
+
+`tests/overrides.test.js` exercises the JSON-to-DB overrides chain (Steps 1 → 3 from the [Manual Event Overrides](#manual-event-overrides) section):
+
+| Group | What it verifies |
+|---|---|
+| **Step 1 — schema** | `event_analysis_overrides` exists in `usat_sales_db`; all required columns present (`sid_baseline`, `sid_analysis`, `baseline_year`, `analysis_year`, `approved`, `approval_state`, lifecycle + audit fields); `idx_year_pair` index exists; legacy `sid_25` / `sid_26` columns are gone. |
+| **Step 1 — `ensure_overrides_table()`** | Idempotent — a second call reports "already exists" and returns `false` (no fresh CREATE). |
+| **Step 2 — `migrate_overrides_to_db()`** | `--dry-run` does not insert rows or rename the JSON file. |
+| **Step 3 — `load_overrides()` year scoping** | Scoped rows return for matching year pair; excluded for mismatched year pair; global rows (`NULL`/`NULL`) return for every year pair; `stats` counts split globals vs scoped correctly; `active=0` rows are excluded; `approved` flag surfaces as a boolean. |
+| **Step 3 — `apply_overrides()`** | `force_match` same month → `Retained`; different month → `Shifted`. `force_no_match` with a baseline sid → `Lost`; with an analysis sid → `New`. `force_segment` moves a record between segment arrays. Invalid segment names produce a warning. `null` overrides argument is handled gracefully. |
+| **Step 3 — `summarise_overrides()`** | Returns `null` when there's nothing to report; returns a populated summary with `stats` when given input. |
+
+### Database safety
+
+Tests that need DB rows insert them with `created_by = 'test_suite'`. `before()` and `after()` both run `DELETE FROM event_analysis_overrides WHERE created_by = 'test_suite'`, so:
+
+- A previous crashed run leaves no debris — the next run cleans up first.
+- Real rows (with any other `created_by`) are never touched.
+- The table is in the same state after the suite as before.
+
+The suite needs a working `local_usat_sales_db_config()` — same credentials as `build_all.js`. If the DB isn't reachable, every test in the schema group fails fast with a clear MySQL error.
+
+### When to run it
+
+- After every change to `src/overrides.js`, `src/analysis.js`, `utilities/ensure_overrides_table.js`, or `utilities/migrate_overrides_to_db.js`.
+- Before committing changes to `query_create_event_analysis_overrides_table.js`.
+- As a smoke test after pulling new changes from another developer.
+
+### Adding new tests
+
+Drop additional `*.test.js` files into `tests/`. `node --test tests/` discovers them automatically. The existing file is the template — each `describe(...)` block groups related assertions, and `node:assert/strict` provides `equal`, `deepEqual`, `match`, `ok`, etc.
 
 ---
 
