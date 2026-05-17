@@ -45,6 +45,9 @@ event_analysis/
 │           ├── analysis_state.json
 │           └── dashboard.html
 │
+├── utilities/                  ← Setup helpers for this module
+│   └── ensure_overrides_table.js   ← Idempotent table creator (auto-runs on every build)
+│
 └── src/
     ├── fmt.js              ← Unicode formatters (− / — / ≥ / ⚠ / ✓ / full months)
     ├── db.js               ← usat_sales_db connection + event/pipeline queries
@@ -61,6 +64,13 @@ event_analysis/
         ├── builder.js      ← Assembles all 12 worksheet tabs in order
         ├── styles.js       ← Colour palette + ExcelJS cell helpers
         └── sheets/         ← One file per Excel tab (all snake_case)
+```
+
+The shared CREATE-TABLE DDL for the overrides table lives at the repo-wide location used by every other table in `sql_programs`:
+
+```
+sql_programs/src/queries/create_drop_db_table/
+└── query_create_event_analysis_overrides_table.js
 ```
 
 ---
@@ -410,9 +420,25 @@ The result: Claude's commentary and answers get better the longer you use the sy
 
 ---
 
-## Manual Event Overrides — data/overrides.json
+## Manual Event Overrides
 
 > **Menu:** options **6–11** — or run the `node ask.js --...` commands directly below
+
+### Storage — transitioning from JSON to MySQL
+
+Overrides are moving from `data/overrides.json` into a dedicated MySQL table (`usat_sales_db.event_analysis_overrides`) so they persist reliably and can be edited interactively. The migration is happening in small steps:
+
+| Step | Status |
+|---|---|
+| **1.** `event_analysis_overrides` table exists in `usat_sales_db` (auto-created on every `node build_all.js` via `ensure_overrides_table()` — idempotent `CREATE TABLE IF NOT EXISTS`) | ✓ done |
+| 2. One-shot import of existing `data/overrides.json` into the new table | pending |
+| 3. `analysis.js` reads overrides from DB instead of JSON | pending |
+| 4. `ask.js` CLI commands write to DB instead of JSON | pending |
+| 5. Add `--approve` / `--unapprove` CLI commands (locks segment + match) | pending |
+| 6. Stale-approval detection at build time | pending |
+| 7. Minimal Express server + interactive override editing in the dashboard | pending |
+
+Until Step 4 lands, the system still reads/writes the JSON file — the table is in place but unused for active matching. Once Step 4 is in, the JSON will be archived as `overrides.json.migrated`.
 
 The automatic matching algorithm gets ~85–90% of events right, but some cases require human judgment:
 

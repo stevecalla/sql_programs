@@ -53,6 +53,7 @@ const { generate_rule_based, generate_ai } = require('./src/commentary');
 const { generate_dashboard } = require('./src/dashboard');
 const { buildDeck } = require('./src/pptx/builder');
 const { determineOSPath } = require('../../utilities/determineOSPath');
+const { ensure_overrides_table } = require('./utilities/ensure_overrides_table');
 
 
 // ── Archive + export helpers ──────────────────────────────────────────────────
@@ -125,6 +126,11 @@ function save_json(fp, obj) {
 async function main() {
   const OUTPUT_DIR = await resolve_output_dir();
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+
+  // ── Schema check ──────────────────────────────────────────────────────────
+  // Idempotent — no-op when the table is already present.
+  await ensure_overrides_table({ silent: false });
+
   const out_xlsx = path.join(OUTPUT_DIR, `${YEAR_B}_event_calendar_analysis_${BUILD_TS}.xlsx`);
   const out_pptx = path.join(OUTPUT_DIR, `${YEAR_B}_event_trends_summary_${BUILD_TS}.pptx`);
 
