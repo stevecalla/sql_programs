@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USAT Override Editor</title>
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <header>
+    <div class="title-row">
+      <h1>USAT Override Editor</h1>
+      <a class="back-link" href="/">← API index</a>
+    </div>
+    <div class="status-bar">
+      <span class="status-chip" id="status-scope">Scope: loading…</span>
+      <span class="status-chip" id="status-counts">— overrides</span>
+      <span class="status-chip" id="status-server">● connecting</span>
+      <button class="btn btn-sm" id="btn-refresh" type="button">↻ Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ───── Active overrides ───── -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Active overrides</h2>
+        <span class="muted" id="overrides-summary"></span>
+      </div>
+      <div id="overrides-table">
+        <p class="muted">Loading…</p>
+      </div>
+    </section>
+
+    <!-- ───── Add override ───── -->
+    <section class="card">
+      <h2>Add override</h2>
+      <form id="add-form" class="add-form">
+        <div class="form-row">
+          <label class="form-label">
+            Type
+            <select id="f-type" name="type" required>
+              <option value="force_match">Force match (link two events)</option>
+              <option value="force_no_match">Force no-match (Lost / New)</option>
+              <option value="force_segment">Force segment</option>
+            </select>
+          </label>
+          <label class="form-label form-row-side" id="f-side-wrap">
+            Side
+            <select id="f-side" name="side">
+              <option value="baseline">baseline (older year)</option>
+              <option value="analysis">analysis (newer year)</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="form-row">
+          <label class="form-label" id="f-sid-baseline-wrap">
+            Baseline sanction ID
+            <input id="f-sid-baseline" name="sid_baseline" type="text" placeholder="e.g. 311655-Adult Race" autocomplete="off">
+          </label>
+          <label class="form-label" id="f-sid-analysis-wrap">
+            Analysis sanction ID
+            <input id="f-sid-analysis" name="sid_analysis" type="text" placeholder="e.g. 354307-Adult Race" autocomplete="off">
+          </label>
+        </div>
+
+        <div class="form-row" id="f-segment-wrap">
+          <label class="form-label">
+            Segment
+            <select id="f-segment" name="segment">
+              <option value="Retained">Retained</option>
+              <option value="Shifted">Shifted</option>
+              <option value="Lost">Lost</option>
+              <option value="New">New</option>
+              <option value="Recovered">Recovered</option>
+              <option value="Tried to Return">Tried to Return</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="form-row">
+          <label class="form-label form-row-grow">
+            Note (optional)
+            <input id="f-note" name="note" type="text" placeholder="Why this override exists — visible in --list-overrides">
+          </label>
+          <label class="form-label form-checkbox">
+            <input id="f-global" name="global" type="checkbox">
+            <span>Global (any year pair)</span>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">+ Add override</button>
+          <span class="muted form-hint">Submitting writes to <code>POST /api/overrides</code> immediately.</span>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="editor.js"></script>
+</body>
+</html>

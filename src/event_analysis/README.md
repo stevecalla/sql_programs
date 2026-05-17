@@ -160,9 +160,11 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 17 | View notes.md | `cat notes.md` |
 | 18 | View README | Displays this file |
 | **LOCAL SERVER** | | |
-| 19 | Start local server | `node server_event_analysis_8016.js` (from repo root, port 8016; `Ctrl-C` to stop) |
+| 19 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
 | **TESTING** | | |
-| 20 | Run test suite | `node --test tests/` |
+| 20 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
+| 21 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
+| 22 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
 | 0 | Exit | — |
 
 ---
@@ -447,6 +449,7 @@ Overrides live in `usat_sales_db.event_analysis_overrides`. The runtime — both
 | **6.** Stale-approval detection at build time. `apply_overrides()` recomputes event signatures and compares to the stored snapshot; on drift it flags `applied[].stale = true`, returns the override id in `stale_ids`, and the build calls `mark_overrides_stale()` to flip `approval_state='stale'` in the DB. Build emits a per-row `⚠ [stale approval]` warning showing what drifted (`baseline "Old"→"New"`). `--list-overrides` renders stale rows with `⚠ stale`. Re-approve via `--approve` refreshes the signature; unapprove clears it. | ✓ done |
 | **7.** Minimal Express server (`server_event_analysis_8016.js` at the repo root alongside the other `server_*.js` services, default port 8016) with read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params or env), `GET /api/events?year=YYYY` (with optional `&include=excluded`). HTML index at `/` lists endpoints with `curl` examples. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 19. | ✓ done |
 | **8.** Write endpoints — `POST /api/overrides` (typed dispatch over force_match / force_no_match / force_segment), `DELETE /api/overrides/:sid` (soft-delete), `POST /api/approve/:sid`, `POST /api/unapprove/:sid`. All wrap the existing `cmd_*` functions; tagged `created_by='server'` so HTTP writes are distinguishable from CLI writes. Stale Override Manager panel removed from `dashboard.html` — interactive editor lands in Step 9 on top of these endpoints. 16 new write tests in `tests/server.test.js` (validation + happy paths + DB-state assertions). | ✓ done |
+| **9.** Interactive override editor — plain HTML + vanilla JS SPA at `src/event_analysis/public/{index.html,editor.css,editor.js}`, served by the local server at `http://localhost:8016/editor/`. Shows active overrides with type pills, scope badges, approval state, and per-row Approve / Unapprove / Delete buttons. Add-override form with type-aware fields (force_match needs both sids; no-match / segment use a side selector). Toast feedback, auto-refresh after every mutation. Talks to the same write endpoints from Step 8 via fetch(). 6 new tests in `tests/server.test.js` covering static file serving + content-types + the index page link. | ✓ done |
 
 The DB is now the single source of truth for overrides. `data/overrides.json` is no longer read or written by the runtime — only the one-time migration script touches it, and it renames the file to `overrides.json.migrated` once entries are imported. You should never need to edit JSON by hand again.
 
@@ -793,7 +796,7 @@ npm run event_analysis_server                     # equivalent npm script
 PORT=9000 node server_event_analysis_8016.js      # custom port via env
 ```
 
-A minimal Express server exposing read-only endpoints for the event_analysis pipeline. Lives at the repo root alongside the other `server_*.js` services for naming consistency — port 8016 follows the sequence (8014 = auto_renew, 8015 = scraper). Starts in the foreground; `Ctrl-C` stops it cleanly. Foundation for the upcoming interactive dashboard (Step 9).
+A minimal Express server exposing read + write endpoints for the event_analysis pipeline, plus the interactive override editor SPA. Lives at the repo root alongside the other `server_*.js` services for naming consistency — port 8016 follows the sequence (8014 = auto_renew, 8015 = scraper). Starts in the foreground; `Ctrl-C` stops it cleanly. **Visit `/editor/` for the interactive UI.**
 
 ### Read endpoints
 
@@ -883,9 +886,31 @@ By default, `/api/status` and `/api/overrides` operate on the active year scope:
 
 CORS is enabled (`*`) so a future dashboard served from another origin (`file://`, a different port, etc.) can hit the API directly. Tighten this when production hosting becomes relevant.
 
-### What it doesn't do (yet)
+### Override editor SPA — `/editor/`
 
-The interactive event-detail editor in the browser is Step 9. The Override Manager panel that used to live in `dashboard.html` was removed in Step 8 because it was wired against a stale port/API; Step 9 will rebuild it as a proper SPA on top of the write endpoints above. For now, manage overrides via the CLI (`ask.js`) or `curl`. Cascade rules (pattern-based overrides) are Step 10.
+A small vanilla-JS UI for managing overrides in the browser. Visit `http://localhost:8016/editor/` while the server is running.
+
+What it shows:
+- **Status bar** — current year scope, total override count, server-connection indicator, refresh button
+- **Active overrides table** — type pill (match / no-match / segment), sanction IDs, scope (global or scoped), approval state (`◦ unapproved`, `✓ approved`, `⚠ stale`), action buttons
+- **Action buttons per row** — `✓ Approve` / `↶ Unapprove` (mutually exclusive based on state) and `✕ Delete` (soft-delete via `DELETE /api/overrides/:sid`)
+- **Add override form** — type selector with dynamic fields:
+  - `force_match` → both sanction IDs required
+  - `force_no_match` → side selector (`baseline` / `analysis`) + one sanction ID
+  - `force_segment` → side + sanction ID + segment selector
+  - Optional note and a `Global (any year pair)` checkbox (writes NULL/NULL year scope)
+- **Toast notifications** for every action's success or error
+- **Auto-refresh** after any mutation — the table always reflects current DB state
+
+Architecture: 3 files in `src/event_analysis/public/` (`index.html`, `editor.css`, `editor.js`), static-served by the local server at `/editor/`. No build step, no framework, no client-side dependencies — just `fetch()` against the same-origin write endpoints from Step 8.
+
+What's deliberately out of scope (punted to Step 10 or beyond):
+- Event search / browse — find sanction IDs by name. Use the CLI (`node ask.js --list-overrides`) or the build-time dashboard for now.
+- Bulk approve / bulk delete
+- History or audit-trail UI
+- Authentication (server is bound to localhost; not safe to expose)
+
+Cascade rules (pattern-based overrides like "every Adult Clinic in May named X → Lost") are Step 10.
 
 ---
 

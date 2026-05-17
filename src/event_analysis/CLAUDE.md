@@ -180,9 +180,11 @@ Lives at the repo root (`sql_programs/server_event_analysis_8016.js`) alongside 
 
 All write endpoints validate the request before invoking the underlying `cmd_*` function (so a bad request returns 400 cleanly without risking `process.exit(1)`). Rows are tagged `created_by='server'` so HTTP writes are distinguishable from CLI / migration / test writes at the SQL level.
 
-Importable: `const { create_app, start_server } = require('./server_event_analysis_8016')`. Tests use `create_app()` and `listen(0)` for ephemeral-port isolation. The full test suite covers ~75 cases now: 50 overrides + ~25 server (read + write).
+**Editor SPA (Step 9):** `/editor/` serves the interactive override editor — plain HTML + vanilla JS in `src/event_analysis/public/`. Talks to the write endpoints above via same-origin fetch. Active overrides table + approve/unapprove/delete + add form + toast feedback + auto-refresh.
 
-CORS is open (`*`) — fine for local dev, tighten before any production hosting. The Override Manager panel that used to live in `dashboard.html` is gone; Step 9 will rebuild it as a proper SPA hitting these endpoints.
+Importable: `const { create_app, start_server } = require('./server_event_analysis_8016')`. Tests use `create_app()` and `listen(0)` for ephemeral-port isolation. Test suite covers ~80 cases now: ~50 overrides + ~30 server (read + write + editor static files).
+
+CORS is open (`*`) — fine for local dev, tighten before any production hosting.
 
 ---
 
@@ -241,8 +243,8 @@ CORS is open (`*`) — fine for local dev, tighten before any production hosting
 | **5.** `--approve` / `--unapprove` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, captures event signatures. Unapprove clears approval + signatures (keeps audit fields). | ✓ done |
 | **6.** Stale-approval detection. `apply_overrides()` recomputes event signatures and compares to stored snapshot; on drift the build flips `approval_state='stale'`, emits `⚠ [stale approval]` warning, and `--list-overrides` renders the row with a `⚠ stale` badge. | ✓ done |
 | **7.** `server_event_analysis_8016.js` — minimal Express server at the repo root (port 8016, alongside the other `server_*.js` services). Read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params), `GET /api/events?year=YYYY`. HTML index at `/`. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 19. | ✓ done |
-| **8.** Write endpoints — `POST /api/overrides` (typed dispatch), `DELETE /api/overrides/:sid`, `POST /api/approve/:sid`, `POST /api/unapprove/:sid`. All wrap the existing `cmd_*` functions and tag rows `created_by='server'`. Stale Override Manager panel removed from `dashboard.html` (will be rebuilt fresh in Step 9 on the new API). 16 new tests in `tests/server.test.js`. | ✓ done |
-| 9. Interactive event-detail dashboard — edit and approve overrides in browser | pending |
+| **8.** Write endpoints — `POST /api/overrides` (typed dispatch), `DELETE /api/overrides/:sid`, `POST /api/approve/:sid`, `POST /api/unapprove/:sid`. All wrap the existing `cmd_*` functions and tag rows `created_by='server'`. Stale Override Manager panel removed from `dashboard.html`. 16 new tests. | ✓ done |
+| **9.** Override editor SPA — plain HTML + vanilla JS at `src/event_analysis/public/{index.html, editor.css, editor.js}`. Served by the local server at `/editor/`. Active overrides table with approval state, scope, and per-row Approve/Unapprove/Delete buttons; type-aware Add form; toast feedback; auto-refresh after every mutation. Talks to the Step 8 write endpoints over same-origin fetch. 6 new static-file tests in `tests/server.test.js`. Menu test runner split into 3 options: run all / overrides only / server only. | ✓ done |
 | 10. Cascade rules engine — pattern-based overrides ("all clinics in May named X → Lost") | pending |
 
 ## Suggested next steps (discussed but not yet built)

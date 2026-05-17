@@ -169,14 +169,16 @@ const SECTIONS = [
     label: 'LOCAL SERVER — http://localhost:8016',
     color: CYAN,
     items: [
-      { id: 19, label: 'Start local server',         desc: 'Read-only API + serves output/dashboard.html (Ctrl-C to stop)', action: 'start_server' },
+      { id: 19, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop)', action: 'start_server' },
     ],
   },
   {
     label: 'TESTING — verify the code is working',
     color: MAGENTA,
     items: [
-      { id: 20, label: 'Run test suite',             desc: 'Runs tests/ via node --test (schema, overrides DB chain, server)', action: 'run_tests' },
+      { id: 20, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all' },
+      { id: 21, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides' },
+      { id: 22, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server' },
     ],
   },
 ];
@@ -362,26 +364,39 @@ async function handle_action(action, rl) {
       break;
     }
 
-    case 'run_tests': {
+    case 'run_tests_all':
+    case 'run_tests_overrides':
+    case 'run_tests_server': {
       // node --test runs every *.test.js it finds in the given path
-      // and exits non-zero on failure. Output is TAP-style.
+      // and exits non-zero on failure. Output is TAP-style. We can't use
+      // the existing run() helper because we need --test as a node flag,
+      // not a script argument — so spawn directly.
       const tests_dir = path.join(DIR, 'tests');
       if (!fs.existsSync(tests_dir)) {
         console.log(c(YELLOW, '  No tests/ directory found.'));
         break;
       }
-      // We can't use the existing run() helper because we need --test as a
-      // node flag, not a script argument. Spawn directly.
+      const target = action === 'run_tests_overrides' ? path.join(tests_dir, 'overrides.test.js')
+                   : action === 'run_tests_server'    ? path.join(tests_dir, 'server.test.js')
+                   :                                     tests_dir;
+      if (action !== 'run_tests_all' && !fs.existsSync(target)) {
+        console.log(c(YELLOW, `  Test file not found: ${target}`));
+        break;
+      }
+      const label = action === 'run_tests_overrides' ? 'overrides tests'
+                  : action === 'run_tests_server'    ? 'server tests'
+                  :                                     'all tests';
+      console.log(c(DIM, `  Running ${label}: node --test ${path.relative(DIR, target) || 'tests/'}`));
       const code = await new Promise(resolve => {
-        const proc = spawn(process.execPath ?? 'node', ['--test', tests_dir], {
+        const proc = spawn(process.execPath ?? 'node', ['--test', target], {
           stdio: 'inherit',
           cwd:   DIR,
           shell: false,
         });
         proc.on('close', resolve);
       });
-      if (code === 0) console.log(c(GREEN, '\n  ✓ All tests passed.'));
-      else            console.log(c(RED,   `\n  ✗ Test suite failed (exit code ${code}).`));
+      if (code === 0) console.log(c(GREEN, `\n  ✓ ${label} passed.`));
+      else            console.log(c(RED,   `\n  ✗ ${label} failed (exit code ${code}).`));
       break;
     }
 

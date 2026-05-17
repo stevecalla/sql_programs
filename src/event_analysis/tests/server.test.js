@@ -527,3 +527,61 @@ describe('Step 8 — write endpoints', () => {
     assert.equal(res.status, 404);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Step 9 — Override editor SPA (static files)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// The editor itself is plain HTML + vanilla JS — it talks to the same API
+// that's already exercised above. These tests just confirm the server is
+// actually serving the three files with sensible content-types, and that
+// the API index page links to /editor/.
+
+describe('Step 9 — override editor static files', () => {
+
+  test('GET /editor/ serves the editor HTML', async () => {
+    const res = await fetch(`${base}/editor/`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') ?? '', /text\/html/);
+    const body = await res.text();
+    assert.match(body, /USAT Override Editor/);
+    assert.match(body, /editor\.css/, 'editor HTML should reference the CSS');
+    assert.match(body, /editor\.js/,  'editor HTML should reference the JS');
+  });
+
+  test('GET /editor/index.html serves the same page', async () => {
+    const res = await fetch(`${base}/editor/index.html`);
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.match(body, /USAT Override Editor/);
+  });
+
+  test('GET /editor/editor.css serves CSS', async () => {
+    const res = await fetch(`${base}/editor/editor.css`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') ?? '', /text\/css/);
+    const body = await res.text();
+    assert.match(body, /\.btn|\.card|\.toast/, 'CSS should contain known editor selectors');
+  });
+
+  test('GET /editor/editor.js serves JS', async () => {
+    const res = await fetch(`${base}/editor/editor.js`);
+    assert.equal(res.status, 200);
+    const ct = res.headers.get('content-type') ?? '';
+    assert.ok(/javascript/.test(ct) || /text\/plain/.test(ct), `unexpected content-type: ${ct}`);
+    const body = await res.text();
+    assert.match(body, /USAT Override Editor/, 'JS file-header comment should mention the editor');
+    assert.match(body, /\/api\/overrides/, 'JS should call the overrides API');
+  });
+
+  test('GET /editor/nope returns 404', async () => {
+    const res = await fetch(`${base}/editor/does-not-exist.html`);
+    assert.equal(res.status, 404);
+  });
+
+  test('API index at / links to the editor', async () => {
+    const res = await fetch(`${base}/`);
+    const body = await res.text();
+    assert.match(body, /href="\/editor\/"/, 'API index page should link to /editor/');
+  });
+});
