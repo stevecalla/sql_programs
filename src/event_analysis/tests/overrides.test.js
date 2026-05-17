@@ -1,12 +1,15 @@
 /**
  * overrides.test.js — End-to-end tests for the overrides DB chain.
  *
- * Verifies Steps 1 → 3 of the JSON-to-DB overrides migration:
+ * Verifies Steps 1 → 4 of the JSON-to-DB overrides migration:
  *   Step 1   — event_analysis_overrides table exists with correct schema
  *   Step 2   — migrate_overrides_to_db is idempotent
  *   Step 2.5 — year-scoping columns + index exist; sid_baseline/sid_analysis naming
  *   Step 3   — load_overrides() reads from DB with year-scope filter; apply_overrides()
  *              moves events between segments correctly
+ *   Step 4   — ask.js CLI write-path: cmd_add_match / cmd_add_no_match /
+ *              cmd_add_segment / cmd_remove_override write to DB with year
+ *              scoping, --global flag, duplicate-guard, and soft delete.
  *
  * Runs with Node's built-in test runner (Node 18+):
  *   node --test tests/overrides.test.js
@@ -32,6 +35,14 @@ const { local_usat_sales_db_config }    = require('../../../utilities/config');
 const { ensure_overrides_table }        = require('../utilities/ensure_overrides_table');
 const { migrate_overrides_json_to_db }  = require('../utilities/migrate_overrides_to_db');
 const { load_overrides, apply_overrides, summarise_overrides } = require('../src/overrides');
+const {
+  cmd_add_match,
+  cmd_add_no_match,
+  cmd_add_segment,
+  cmd_remove_override,
+  current_year_scope,
+  year_arg_to_column,
+} = require('../ask');
 
 const TABLE = 'event_analysis_overrides';
 const TEST_TAG = 'test_suite';
@@ -50,6 +61,7 @@ async function db() {
 }
 
 async function cleanup_test_rows() {
+  // return;  // DEBUG: skip cleanup so test rows persist
   const c = await db();
   await c.query(`DELETE FROM \`${TABLE}\` WHERE created_by = ?`, [TEST_TAG]);
 }
@@ -362,5 +374,260 @@ describe('Step 3 — summarise_overrides()', () => {
     );
     assert.equal(s.total_applied, 1);
     assert.equal(s.stats.unapproved, 1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Step 4 — ask.js CLI write-path
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Each test runs cmd_* with `created_by: 'test_suite'` so the existing
+// cleanup_test_rows() hook deletes the inserted rows on teardown.
+//
+// Year scope is pinned via BASELINE_YEAR / ANALYSIS_YEAR env vars at the top
+// of the describe block (and restored on teardown) so tests don't drift with
+// the calendar year.
+//
+// cmd_* functions in ask.js write to stdout/stderr by design (status lines
+// like "✓ Added force_match #42 [2025/2026]..."). We silence console.log /
+// console.error during these tests to keep the test output clean.
+
+describe('Step 4 — ask.js CLI write-path', () => {
+
+  const ORIG_BASELINE = process.env.BASELINE_YEAR;
+  const ORIG_ANALYSIS = process.env.ANALYSIS_YEAR;
+
+  console.log("TEST SUITE", ORIG_BASELINE, ORIG_ANALYSIS);
+
+  const ORIG_LOG  = console.log;
+  const ORIG_ERR  = console.error;
+  const noop = () => {};
+
+  before(() => {
+    process.env.BASELINE_YEAR = '2025';
+    process.env.ANALYSIS_YEAR = '2026';
+    // Silence cmd_* status lines so test output is readable.
+    console.log = noop;
+    console.error = noop;
+  });
+
+  after(() => {
+    if (ORIG_BASELINE === undefined) delete process.env.BASELINE_YEAR; else process.env.BASELINE_YEAR = ORIG_BASELINE;
+    if (ORIG_ANALYSIS === undefined) delete process.env.ANALYSIS_YEAR; else process.env.ANALYSIS_YEAR = ORIG_ANALYSIS;
+    console.log = ORIG_LOG;
+    console.error = ORIG_ERR;
+  });
+
+  beforeEach(async () => {
+    await cleanup_test_rows();
+  });
+
+  // ── current_year_scope + year_arg_to_column helpers ──────────────────────
+
+  test('current_year_scope reads env vars', () => {
+    const { baseline_year, analysis_year } = current_year_scope();
+    assert.equal(baseline_year, 2025, 'BASELINE_YEAR env should set baseline_year');
+    assert.equal(analysis_year, 2026, 'ANALYSIS_YEAR env should set analysis_year');
+  });
+
+  test('year_arg_to_column accepts baseline/analysis + legacy 25/26', () => {
+    assert.equal(year_arg_to_column('baseline'), 'sid_baseline');
+    assert.equal(year_arg_to_column('analysis'), 'sid_analysis');
+    assert.equal(year_arg_to_column('b'),        'sid_baseline');
+    assert.equal(year_arg_to_column('a'),        'sid_analysis');
+    assert.equal(year_arg_to_column('25'),       'sid_baseline');
+    assert.equal(year_arg_to_column('26'),       'sid_analysis');
+    assert.equal(year_arg_to_column('garbage'),  null);
+    assert.equal(year_arg_to_column(undefined),  null);
+  });
+
+  // ── cmd_add_match ────────────────────────────────────────────────────────
+
+  test('cmd_add_match inserts a scoped row by default', async () => {
+    const r = await cmd_add_match('STEP4-A-25', 'STEP4-A-26', 'scoped test', { created_by: TEST_TAG });
+    assert.equal(r.status, 'inserted');
+    assert.ok(r.id, 'inserted row should have an id');
+
+    // Verify the row is in the DB with the expected scope and provenance
+    const c = await db();
+    const [rows] = await c.query(
+      `SELECT override_type, sid_baseline, sid_analysis, baseline_year, analysis_year, active, created_by, note
+         FROM \`${TABLE}\` WHERE id = ?`,
+      [r.id]
+    );
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].override_type, 'force_match');
+    assert.equal(rows[0].sid_baseline,  'STEP4-A-25');
+    assert.equal(rows[0].sid_analysis,  'STEP4-A-26');
+    assert.equal(rows[0].baseline_year, 2025, 'scoped insert should populate baseline_year');
+    assert.equal(rows[0].analysis_year, 2026, 'scoped insert should populate analysis_year');
+    assert.equal(rows[0].active,        1);
+    assert.equal(rows[0].created_by,    TEST_TAG);
+    assert.equal(rows[0].note,          'scoped test');
+  });
+
+  test('cmd_add_match with --global writes NULL/NULL year scope', async () => {
+    const r = await cmd_add_match('STEP4-B-25', 'STEP4-B-26', 'global test', { global: true, created_by: TEST_TAG });
+    assert.equal(r.status, 'inserted');
+
+    const c = await db();
+    const [rows] = await c.query(`SELECT baseline_year, analysis_year FROM \`${TABLE}\` WHERE id = ?`, [r.id]);
+    assert.equal(rows[0].baseline_year, null, '--global should leave baseline_year NULL');
+    assert.equal(rows[0].analysis_year, null, '--global should leave analysis_year NULL');
+  });
+
+  test('cmd_add_match duplicate-guard returns status: exists', async () => {
+    const first  = await cmd_add_match('STEP4-DUP-25', 'STEP4-DUP-26', 'first',  { created_by: TEST_TAG });
+    const second = await cmd_add_match('STEP4-DUP-25', 'STEP4-DUP-26', 'second', { created_by: TEST_TAG });
+    assert.equal(first.status,  'inserted');
+    assert.equal(second.status, 'exists', 'second call with same sid pair + scope must not insert');
+    assert.equal(second.id, first.id, 'duplicate-guard should return the original id');
+
+    // And confirm only one row exists.
+    const c = await db();
+    const [rows] = await c.query(
+      `SELECT COUNT(*) AS n FROM \`${TABLE}\` WHERE sid_baseline = ? AND sid_analysis = ? AND active = 1`,
+      ['STEP4-DUP-25', 'STEP4-DUP-26']
+    );
+    assert.equal(rows[0].n, 1, 'only one active row should exist for this sid pair');
+  });
+
+  test('cmd_add_match: scoped + global rows are independent', async () => {
+    // Same sid pair, one scoped to 2025/2026, one global — should be two distinct rows.
+    const scoped = await cmd_add_match('STEP4-INDEP-25', 'STEP4-INDEP-26', 'scoped', { created_by: TEST_TAG });
+    const global = await cmd_add_match('STEP4-INDEP-25', 'STEP4-INDEP-26', 'global', { global: true, created_by: TEST_TAG });
+    assert.equal(scoped.status, 'inserted');
+    assert.equal(global.status, 'inserted');
+    assert.notEqual(scoped.id, global.id, 'scoped and global should not collide on the duplicate-guard');
+  });
+
+  // ── cmd_add_no_match ────────────────────────────────────────────────────
+
+  test('cmd_add_no_match with baseline arg sets sid_baseline', async () => {
+    const r = await cmd_add_no_match('baseline', 'STEP4-NM-B', 'baseline side', { created_by: TEST_TAG });
+    assert.equal(r.status, 'inserted');
+    const c = await db();
+    const [rows] = await c.query(`SELECT sid_baseline, sid_analysis FROM \`${TABLE}\` WHERE id = ?`, [r.id]);
+    assert.equal(rows[0].sid_baseline, 'STEP4-NM-B');
+    assert.equal(rows[0].sid_analysis, null);
+  });
+
+  test('cmd_add_no_match with analysis arg sets sid_analysis', async () => {
+    const r = await cmd_add_no_match('analysis', 'STEP4-NM-A', 'analysis side', { created_by: TEST_TAG });
+    assert.equal(r.status, 'inserted');
+    const c = await db();
+    const [rows] = await c.query(`SELECT sid_baseline, sid_analysis FROM \`${TABLE}\` WHERE id = ?`, [r.id]);
+    assert.equal(rows[0].sid_baseline, null);
+    assert.equal(rows[0].sid_analysis, 'STEP4-NM-A');
+  });
+
+  test('cmd_add_no_match accepts legacy 25 / 26 aliases', async () => {
+    const r25 = await cmd_add_no_match('25', 'STEP4-LEG-25', '25 alias', { created_by: TEST_TAG });
+    const r26 = await cmd_add_no_match('26', 'STEP4-LEG-26', '26 alias', { created_by: TEST_TAG });
+    const c = await db();
+    const [b] = await c.query(`SELECT sid_baseline, sid_analysis FROM \`${TABLE}\` WHERE id = ?`, [r25.id]);
+    const [a] = await c.query(`SELECT sid_baseline, sid_analysis FROM \`${TABLE}\` WHERE id = ?`, [r26.id]);
+    assert.equal(b[0].sid_baseline, 'STEP4-LEG-25', '25 should route to sid_baseline');
+    assert.equal(a[0].sid_analysis, 'STEP4-LEG-26', '26 should route to sid_analysis');
+  });
+
+  // ── cmd_add_segment ────────────────────────────────────────────────────
+
+  test('cmd_add_segment inserts a new row', async () => {
+    const r = await cmd_add_segment('baseline', 'STEP4-SEG-25', 'Lost', 'force-segment test', { created_by: TEST_TAG });
+    assert.equal(r.status, 'inserted');
+    const c = await db();
+    const [rows] = await c.query(`SELECT override_type, sid_baseline, segment FROM \`${TABLE}\` WHERE id = ?`, [r.id]);
+    assert.equal(rows[0].override_type, 'force_segment');
+    assert.equal(rows[0].sid_baseline,  'STEP4-SEG-25');
+    assert.equal(rows[0].segment,       'Lost');
+  });
+
+  test('cmd_add_segment UPDATES an existing row for the same sid + scope', async () => {
+    const first  = await cmd_add_segment('baseline', 'STEP4-UPD-25', 'Lost', 'before', { created_by: TEST_TAG });
+    const second = await cmd_add_segment('baseline', 'STEP4-UPD-25', 'New',  'after',  { created_by: TEST_TAG });
+    assert.equal(first.status,  'inserted');
+    assert.equal(second.status, 'updated', 'second call with same sid + scope should UPDATE, not INSERT');
+    assert.equal(second.id, first.id, 'UPDATE should target the original row id');
+
+    const c = await db();
+    const [rows] = await c.query(`SELECT segment, note FROM \`${TABLE}\` WHERE id = ?`, [first.id]);
+    assert.equal(rows[0].segment, 'New', 'segment should be overwritten by the second call');
+    assert.equal(rows[0].note,    'after');
+
+    // And confirm we still only have one row, not two.
+    const [count] = await c.query(
+      `SELECT COUNT(*) AS n FROM \`${TABLE}\` WHERE sid_baseline = ? AND override_type = 'force_segment'`,
+      ['STEP4-UPD-25']
+    );
+    assert.equal(count[0].n, 1, 'only one force_segment row should exist for this sid + scope');
+  });
+
+  test('cmd_add_segment accepts partial segment names (case-insensitive)', async () => {
+    const r = await cmd_add_segment('baseline', 'STEP4-PRT-25', 'lost', 'lowercase', { created_by: TEST_TAG });
+    assert.equal(r.status, 'inserted');
+    const c = await db();
+    const [rows] = await c.query(`SELECT segment FROM \`${TABLE}\` WHERE id = ?`, [r.id]);
+    assert.equal(rows[0].segment, 'Lost', '"lost" should map to canonical "Lost"');
+  });
+
+  // ── cmd_remove_override (soft delete) ──────────────────────────────────
+
+  test('cmd_remove_override soft-deletes within current scope', async () => {
+    // Insert a couple of scoped rows for the same sid.
+    const m = await cmd_add_match('STEP4-RM-25', 'STEP4-RM-26', 'will be removed', { created_by: TEST_TAG });
+    assert.equal(m.status, 'inserted');
+
+    // Sanity-check active=1 before remove.
+    const c = await db();
+    const [before] = await c.query(`SELECT active FROM \`${TABLE}\` WHERE id = ?`, [m.id]);
+    assert.equal(before[0].active, 1);
+
+    // Remove and verify active=0.
+    await cmd_remove_override('STEP4-RM-25');
+    const [after_remove] = await c.query(`SELECT active FROM \`${TABLE}\` WHERE id = ?`, [m.id]);
+    assert.equal(after_remove[0].active, 0, 'cmd_remove_override should set active = 0');
+
+    // Row still exists in the table (soft delete preserves audit trail).
+    const [count] = await c.query(`SELECT COUNT(*) AS n FROM \`${TABLE}\` WHERE id = ?`, [m.id]);
+    assert.equal(count[0].n, 1, 'row should not be deleted from the table — just deactivated');
+  });
+
+  test('cmd_remove_override leaves out-of-scope rows alone', async () => {
+    // One row scoped to 2025/2026 (current scope), one to a far-off year pair.
+    const c = await db();
+    const in_scope_id = await insert_test_row({
+      override_type: 'force_no_match',
+      sid_baseline:  'STEP4-SCP-25',
+      baseline_year: 2025, analysis_year: 2026,
+    });
+    const out_of_scope_id = await insert_test_row({
+      override_type: 'force_no_match',
+      sid_baseline:  'STEP4-SCP-25',  // same sid!
+      baseline_year: 1999, analysis_year: 2000,
+    });
+
+    await cmd_remove_override('STEP4-SCP-25');
+
+    const [in_scope]     = await c.query(`SELECT active FROM \`${TABLE}\` WHERE id = ?`, [in_scope_id]);
+    const [out_of_scope] = await c.query(`SELECT active FROM \`${TABLE}\` WHERE id = ?`, [out_of_scope_id]);
+    assert.equal(in_scope[0].active,     0, 'in-scope row should be deactivated');
+    assert.equal(out_of_scope[0].active, 1, 'out-of-scope row must NOT be touched');
+  });
+
+  test('cmd_remove_override also soft-deletes matching global rows', async () => {
+    // Globals (NULL/NULL) are intentionally swept up by remove since they
+    // always apply in every scope. Document and verify that behaviour.
+    const c = await db();
+    const global_id = await insert_test_row({
+      override_type: 'force_no_match',
+      sid_baseline:  'STEP4-GBL-RM',
+      baseline_year: null, analysis_year: null,
+    });
+
+    await cmd_remove_override('STEP4-GBL-RM');
+
+    const [rows] = await c.query(`SELECT active FROM \`${TABLE}\` WHERE id = ?`, [global_id]);
+    assert.equal(rows[0].active, 0, 'global row matching the sid should be deactivated');
   });
 });

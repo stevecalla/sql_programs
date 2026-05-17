@@ -16,10 +16,12 @@ Everything is generated dynamically from CSV data. With an Anthropic API key in 
 ```bash
 node check.js          # validate data quality before building (always run first)
 node build_all.js      # generate Excel + PowerPoint + dashboard (takes ~30s)
-node server.js         # start local server at localhost:7474 for live override writing
 node menu.js           # interactive feature launcher
-node ask.js            # Q&A + override management CLI
+node ask.js            # Q&A + override management CLI (DB-backed)
+node --test tests/     # run the overrides test suite
 ```
+
+> A local Express server with interactive dashboard editing is step 7 on the overrides ladder — not yet built.
 
 ---
 
@@ -39,44 +41,47 @@ node ask.js            # Q&A + override management CLI
 | Recovered | 30 | 2025 cancelled → 2026 active |
 | New | 266 | 2026 active, no 2025 equivalent |
 
-**Data files (in `data/`):**
-- `2025a_events_051526.csv` — 2025 active events
-- `2026_events_051526.csv` — 2026 active events
-- `2025_events_by_start_year_by_type.csv` — creation pipeline data
-- `2026_events_by_start_year_by_type.csv` — creation pipeline data
-- `overrides.json` — manual match/segment overrides (edit carefully)
+**Data source:** event data is pulled live from `usat_sales_db.event_data_metrics` at build time (no CSV fallback). Manual overrides live in the `usat_sales_db.event_analysis_overrides` MySQL table; `data/overrides.json.migrated` is the renamed historical JSON file and is no longer read at runtime.
 
 ---
 
 ## Folder structure
 
 ```
-event-analysis_v2/
+event_analysis/
 ├── CLAUDE.md                    ← this file
 ├── build_all.js                 ← master build entry point
 ├── check.js                     ← data quality + override validation
-├── server.js                    ← local Express server (localhost:7474)
-├── ask.js                       ← interactive CLI Q&A + overrides
+├── ask.js                       ← interactive CLI Q&A + DB-backed override commands
 ├── menu.js                      ← interactive feature launcher
 ├── package.json
-├── .env                         ← ANTHROPIC_API_KEY goes here
+├── .env                         ← ANTHROPIC_API_KEY + DB credentials
 ├── data/
-│   ├── *.csv                    ← input data files
-│   └── overrides.json           ← manual overrides
+│   ├── overrides.json.migrated  ← historical JSON, no longer read by runtime
+│   └── overrides_example.json   ← template for reference only
+├── tests/
+│   └── overrides.test.js        ← node:test suite for overrides DB chain
+├── utilities/
+│   ├── ensure_overrides_table.js   ← idempotent schema setup (auto-runs every build)
+│   └── migrate_overrides_to_db.js  ← one-shot JSON → DB migration (auto-runs every build)
 ├── output/
 │   ├── dashboard.html           ← interactive HTML dashboard
-│   ├── 2026_event_calendar_analysis_v9f.xlsx
-│   ├── event_trends_summary_v3.pptx
-│   └── analysis_results.json   ← cached analysis for fast rebuilds
+│   ├── <year>_event_calendar_analysis_<ts>.xlsx
+│   ├── <year>_event_trends_summary_<ts>.pptx
+│   ├── analysis_results.json    ← top-line summary
+│   ├── analysis_state.json      ← full state snapshot (consumed by ask.js)
+│   └── commentary.json          ← all generated narrative text
 └── src/
-    ├── loader.js                ← CSV parsing + status filtering
+    ├── loader.js                ← row → event-object parsing
     ├── normalizer.js            ← event name normalization
     ├── matcher.js               ← 3-pass fuzzy matching algorithm
     ├── analysis.js              ← derives all segment counts + metrics
     ├── calendar.js              ← calendar effect (Sat/Sun day shifts)
-    ├── commentary.js            ← rule-based insight generation
-    ├── overrides.js             ← override loading + application
+    ├── commentary.js            ← rule-based + AI commentary engine
+    ├── overrides.js             ← DB-backed override loading + application
+    ├── db.js                    ← usat_sales_db connection + queries
     ├── dashboard.js             ← generates dashboard.html
+    ├── pptx/builder.js
     └── excel/
         ├── builder.js           ← orchestrates all Excel sheets
         └── sheets/              ← one file per Excel tab (12 sheets)
@@ -103,22 +108,29 @@ After matching, `crossMatch()` finds:
 - `segments.attrited` = Lost events in code; `seg.Lost` = count in dashboard/KPIs
 - Recovered: 30 events (was 33, fixed — 3 false positives removed by type-matching tightening)
 
-### Overrides (`data/overrides.json`)
-Three types:
-```json
-{
-  "force_match":    [{ "sid_baseline": "...", "sid_analysis": "...", "note": "..." }],
-  "force_no_match": [{ "sid_baseline": "...", "note": "..." }],
-  "force_segment":  [{ "sid_baseline": "...", "segment": "Lost|New|Recovered|...", "note": "..." }]
-}
-```
-Applied after automatic matching. `node server.js` + dashboard Override Manager writes these live without terminal copy-paste.
+### Overrides — DB-backed (`usat_sales_db.event_analysis_overrides`)
+
+Three override types are applied after automatic matching:
+
+| Type | Effect |
+|---|---|
+| `force_match` | Pair two specific events → Retained (same month) or Shifted (different month) |
+| `force_no_match` | Prevent an event from matching → Lost (baseline sid) or New (analysis sid) |
+| `force_segment` | Force any event into a specific segment (`Retained` / `Shifted` / `Lost` / `New` / `Recovered` / `Tried to Return`) |
+
+**Read path:** `src/overrides.js → load_overrides()` is async, year-scoped, and queries the DB for `active = 1` rows matching the current `BASELINE_YEAR` / `ANALYSIS_YEAR` plus any globals (both year columns `NULL`). Unapproved rows still apply but emit a build-time warning.
+
+**Write path:** every `ask.js` CLI command (`--add-override match|no-match|segment`, `--remove-override`) writes the DB directly. `--remove-override` is a soft delete (sets `active = 0`) so the audit trail survives. New rows are tagged `created_by` = `cli` (CLI), `json_migration` (one-time import), or `test_suite` (auto-cleaned). Append `--global` to any `--add-override` to scope NULL/NULL.
+
+**Schema setup:** `utilities/ensure_overrides_table.js` runs at the top of every build — idempotent `CREATE TABLE IF NOT EXISTS` plus column/index upgrades for the year-scoping migration. `utilities/migrate_overrides_to_db.js` is the one-shot JSON importer; once the JSON has been migrated it's renamed `overrides.json.migrated` and ignored.
+
+The interactive dashboard override editor (over an Express server) is step 7 on the ladder and isn't built yet — manage overrides via `ask.js` for now.
 
 ---
 
 ## Dashboard features
 
-Open `output/dashboard.html` in a browser, or via `http://localhost:7474/dashboard` when server is running.
+Open `output/dashboard.html` in a browser (a hosted version is on the roadmap as step 7).
 
 | Feature | Details |
 |---|---|
@@ -127,31 +139,14 @@ Open `output/dashboard.html` in a browser, or via `http://localhost:7474/dashboa
 | 5 charts | Monthly count, Type count, Monthly delta, Segment donut, Weekend shifts |
 | Chart flip | ⇄ Table button on each chart — flips to data table with Δ abs + Δ % columns |
 | Chart expand | ⤢ Expand — opens modal; expands chart OR table depending on current view |
-| Event roster table | 1,474 rows (all matched pairs), sortable, filterable |
+| Event roster table | All matched pairs, sortable, filterable |
 | Multi-select filters | Segment / Type / Month dropdowns with color-coded checkboxes |
 | Active filter bar | Shows current filters as removable chips; ↺ Reset clears all |
 | Segment count bar | Dynamic chips above table — clickable to toggle segment filter |
 | Column picker | ⊞ Columns button — show/hide Sanction ID and Date columns |
 | Mobile responsive | Horizontal + vertical scroll, 60vh max-height on mobile, iOS touch scroll |
-| Override Manager | Collapsible panel — generates override commands; live-writes when server running |
-| Server detection | Auto-probes localhost:7474 on load; shows green badge when connected |
 
----
-
-## Local server (`server.js`)
-
-Runs at `http://localhost:7474`. Enables the dashboard to write overrides directly without copy-paste.
-
-| Endpoint | Description |
-|---|---|
-| `GET /api/status` | Health check |
-| `GET /api/overrides` | Read current overrides.json |
-| `POST /api/overrides/add` | Add a single override entry |
-| `POST /api/overrides/remove` | Remove an override entry |
-| `GET /api/rebuild` | Run build_all.js, stream output via SSE |
-| `GET /dashboard` | Serve dashboard.html |
-
-**Important:** Open the dashboard via `http://localhost:7474/dashboard` (not as a local file) for live override writing to work. Browsers block `fetch()` to localhost from `file://` pages.
+> Live override editing in the dashboard requires step 7 (Express server) and step 9 (interactive editor), both pending.
 
 ---
 
@@ -197,7 +192,24 @@ Runs at `http://localhost:7474`. Enables the dashboard to write overrides direct
 
 ---
 
+## Overrides ladder — what's done, what's next
+
+| Step | Status |
+|---|---|
+| 1. `event_analysis_overrides` table auto-created on every build | ✓ done |
+| 2. JSON → DB auto-migration on every build | ✓ done |
+| 2.5. Year scoping (`baseline_year` / `analysis_year` columns + index, sid_baseline/sid_analysis rename) | ✓ done |
+| 3. `analysis.js` reads from DB (async, year-scoped, surfaces unapproved warnings) | ✓ done |
+| 3.5. `tests/overrides.test.js` (`node --test tests/`, menu option 19) | ✓ done |
+| **4.** `ask.js` CLI writes to DB (add / remove / list / suggest), `--global` flag, `created_by` provenance | ✓ done |
+| 5. `--approve` / `--unapprove` CLI commands (locks segment + match, stops build-time warnings) | pending |
+| 6. Stale-approval detection at build time (flag if underlying events change after approval) | pending |
+| 7. Minimal Express server with read-only endpoints (`GET /overrides`, `GET /events`) | pending |
+| 8. Write endpoints + cascade rules engine + Approve/Unapprove API | pending |
+| 9. Interactive event-detail dashboard — edit and approve overrides in browser | pending |
+| 10. Cascade rules engine — pattern-based overrides ("all clinics in May named X → Lost") | pending |
+
 ## Suggested next steps (discussed but not yet built)
 
-- **Inline segment editor in table**: Click a segment badge to change it directly, generating the appropriate override. Design fully spec'd — see conversation history for the transition logic table.
-- **Auto-syntax check before copy**: Add `node --check` on generated dashboard.html as final build step to catch JS errors before they ship
+- **Inline segment editor in table**: Click a segment badge to change it directly, generating the appropriate override. Design fully spec'd — see conversation history for the transition logic table. Blocked on step 7/8/9.
+- **Auto-syntax check before copy**: Add `node --check` on generated dashboard.html as final build step to catch JS errors before they ship.

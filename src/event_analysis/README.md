@@ -430,9 +430,9 @@ The result: Claude's commentary and answers get better the longer you use the sy
 
 > **Menu:** options **6–11** — or run the `node ask.js --...` commands directly below
 
-### Storage — transitioning from JSON to MySQL
+### Storage — DB-backed (MySQL)
 
-Overrides are moving from `data/overrides.json` into a dedicated MySQL table (`usat_sales_db.event_analysis_overrides`) so they persist reliably and can be edited interactively. The migration is happening in small steps:
+Overrides live in `usat_sales_db.event_analysis_overrides`. The runtime — both the matcher (`src/analysis.js`) and every `ask.js` CLI write — reads and writes the DB directly. The original `data/overrides.json` is retained only as a one-time migration source; it's renamed to `overrides.json.migrated` after import. The build-out happened in small steps:
 
 | Step | Status |
 |---|---|
@@ -440,12 +440,12 @@ Overrides are moving from `data/overrides.json` into a dedicated MySQL table (`u
 | **2.** Active entries in `data/overrides.json` auto-import into the DB on every build via `migrate_overrides_json_to_db()` (idempotent; legacy `Attrited` → `Lost` mapping; once migrated, JSON is renamed `overrides.json.migrated`) | ✓ done |
 | **2.5.** Year scoping — `event_analysis_overrides` carries `baseline_year` + `analysis_year` columns so overrides apply only to the matching year-pair. `ensure_overrides_table()` adds the columns + `idx_year_pair` index idempotently if missing and backfills existing rows from current build env vars. | ✓ done |
 | **3.** `analysis.js` reads overrides from the DB. `src/overrides.js` `load_overrides()` is now async and queries `event_analysis_overrides` filtered by year scope (NULL/NULL globals + matching baseline/analysis pair). `runAnalysis()` is async; `build_all.js` and `ask.js` `await` it. Unapproved overrides emit a build-time warning but still apply. | ✓ done |
-| 4. `ask.js` CLI commands write to DB instead of JSON | pending |
+| **4.** `ask.js` CLI commands write to the DB. `--add-override match / no-match / segment` and `--remove-override` all read/write `event_analysis_overrides` directly (year-scoped by env vars; pass `--global` to scope NULL/NULL). New rows are tagged `created_by='cli'`. `--remove-override` is a soft delete (`active = 0`) so the audit trail survives. `--suggest-overrides` reads the DB to de-dup against existing overrides instead of the (now retired) JSON file. | ✓ done |
 | 5. Add `--approve` / `--unapprove` CLI commands (locks segment + match) | pending |
 | 6. Stale-approval detection at build time | pending |
 | 7. Minimal Express server + interactive override editing in the dashboard | pending |
 
-Until Step 4 lands, the `ask.js` CLI override commands (`--add-override`, `--remove-override`) still mutate the JSON file. The matcher itself now reads from the DB, so DB-only overrides will already be applied; JSON edits won't be picked up until you `node src/event_analysis/utilities/migrate_overrides_to_db.js`.
+The DB is now the single source of truth for overrides. `data/overrides.json` is no longer read or written by the runtime — only the one-time migration script touches it, and it renames the file to `overrides.json.migrated` once entries are imported. You should never need to edit JSON by hand again.
 
 #### Run the JSON → DB migration manually
 
@@ -500,31 +500,57 @@ Valid segments: `Retained`, `Shifted`, `Lost`, `New`, `Recovered`, `Tried to Ret
 
 ### Managing overrides from the command line
 
-You never need to edit `overrides.json` by hand. Use `ask.js` commands:
+Every override CLI command reads and writes the `event_analysis_overrides` MySQL table directly. There is no JSON file to edit.
 
 ```bash
-# See all active overrides
+# See all active overrides (year-scoped: current pair + globals)
 node ask.js --list-overrides
 
 # Force two events to match (→ Retained if same month, Shifted if different)
-node ask.js --add-override match <sid_2025> <sid_2026> "optional note"
+node ask.js --add-override match <sid_baseline> <sid_analysis> "optional note"
 
-# Prevent an event from matching (→ Lost for prior-year event, New for current-year event)
-node ask.js --add-override no-match 25 <sid_2025> "optional note"
-node ask.js --add-override no-match 26 <sid_2026> "optional note"
+# Prevent an event from matching (→ Lost for baseline event, New for analysis event)
+node ask.js --add-override no-match baseline <sid> "optional note"
+node ask.js --add-override no-match analysis <sid> "optional note"
+# Legacy aliases 25/26 are still accepted: --add-override no-match 25 <sid>
 
 # Override a segment classification
-node ask.js --add-override segment 25 <sid_2025> Lost "optional note"
-node ask.js --add-override segment 26 <sid_2026> New "optional note"
+node ask.js --add-override segment baseline <sid> Lost "optional note"
+node ask.js --add-override segment analysis <sid> New "optional note"
 
-# Remove all overrides for a sanction ID
+# Soft-delete all active overrides for a sanction ID (sets active = 0;
+# audit trail in the table is preserved)
 node ask.js --remove-override <sid>
 
-# Ask Claude to suggest likely missed matches (AI-powered, streaming)
+# Ask Claude to suggest likely missed matches (AI-powered, streaming).
+# Already-overridden sanction IDs are filtered out by reading the DB.
 node ask.js --suggest-overrides
 ```
 
 After any change run `node build_all.js` to apply. Partial segment names are accepted (`lost`, `Lost` both work).
+
+#### Year scoping at the CLI
+
+By default, new overrides are scoped to the active comparison — `BASELINE_YEAR` / `ANALYSIS_YEAR` env vars if set, otherwise current calendar year vs prior year. Only that specific year-pair (plus any global rows) will see the override.
+
+To create a global override that applies to **every** year comparison, append `--global` (the flag can appear anywhere after the subcommand):
+
+```bash
+# Scoped to current pair only
+node ask.js --add-override match 310628-Adult\ Race 352469-Adult\ Race "name change"
+
+# Global — applies to any year pair (baseline_year/analysis_year both NULL)
+node ask.js --add-override match 310628-Adult\ Race 352469-Adult\ Race "name change" --global
+
+# Explicit scope for a historical comparison
+ANALYSIS_YEAR=2025 BASELINE_YEAR=2024 node ask.js --add-override no-match baseline 287011-Adult\ Race "permanently cancelled"
+```
+
+`--remove-override` always operates within the active year scope plus globals — it's a soft delete (sets `active = 0`), so removed rows remain in the table for audit. Same row can be re-added; the duplicate-guard only fires on `active = 1` rows.
+
+#### Provenance
+
+Every new row records who wrote it via `created_by`: `cli` for `ask.js` commands, `json_migration` for the one-time JSON import, `test_suite` for `tests/overrides.test.js` (cleaned up automatically). Useful for future audit queries and for the upcoming approval workflow.
 
 ### AI-powered suggestions
 

@@ -396,110 +396,200 @@ Behavior rules:
   return full_response;
 }
 
-// ── Override management helpers ────────────────────────────────────────────
+// ── Override management helpers (DB-backed, Step 4) ───────────────────────
 
-const OVERRIDES_PATH = path.join(DIR, 'data', 'overrides.json');
+const mysqlP = require('mysql2/promise');
+const { local_usat_sales_db_config } = require('../../utilities/config');
+const { load_overrides } = require('./src/overrides');
+
 const VALID_SEGMENTS = ['Retained','Shifted','Lost','New','Recovered','Tried to Return'];
+const OV_TABLE = 'event_analysis_overrides';
 
-function load_overrides_file() {
-  const raw = load_json(OVERRIDES_PATH);
-  if (!raw) return { force_match: [], force_no_match: [], force_segment: [] };
-  // Strip comment-only entries (keys starting with _)
-  const clean = arr => (arr ?? []).filter(e => Object.keys(e).some(k => !k.startsWith('_')));
-  return {
-    force_match:    clean(raw.force_match),
-    force_no_match: clean(raw.force_no_match),
-    force_segment:  clean(raw.force_segment),
-    _readme:        raw._readme,
-    _schema:        raw._schema,
-  };
+/**
+ * The CLI scopes new overrides to the active comparison (env vars or current year)
+ * by default. Pass --global on any add command to leave both year columns NULL.
+ */
+function current_year_scope() {
+  const analysis_year = Number(process.env.ANALYSIS_YEAR) || new Date().getFullYear();
+  const baseline_year = Number(process.env.BASELINE_YEAR) || (analysis_year - 1);
+  return { baseline_year, analysis_year };
 }
 
-function save_overrides_file(ov) {
-  // Preserve _comment template entries when saving
-  const raw = load_json(OVERRIDES_PATH) ?? {};
-  const template_entries = type => (raw[type] ?? []).filter(e =>
-    Object.keys(e).every(k => k.startsWith('_'))
-  );
-  const out = {
-    _readme:  raw._readme  ?? 'Manual event matching overrides.',
-    _schema:  raw._schema  ?? {},
-    force_match:    [...template_entries('force_match'),    ...(ov.force_match    ?? [])],
-    force_no_match: [...template_entries('force_no_match'), ...(ov.force_no_match ?? [])],
-    force_segment:  [...template_entries('force_segment'),  ...(ov.force_segment  ?? [])],
-  };
-  fs.writeFileSync(OVERRIDES_PATH, JSON.stringify(out, null, 2), 'utf8');
+/**
+ * Translate the year argument into the matching DB column name.
+ * Accepts legacy "25"/"26" plus the newer "baseline"/"analysis" (or "b"/"a") aliases.
+ */
+function year_arg_to_column(arg) {
+  const a = String(arg ?? '').toLowerCase();
+  if (a === '25' || a === 'baseline' || a === 'b') return 'sid_baseline';
+  if (a === '26' || a === 'analysis' || a === 'a') return 'sid_analysis';
+  return null;
 }
 
-function cmd_list_overrides() {
-  const ov = load_overrides_file();
-  const results = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
-  const last_applied = results?.overrides;
+/** Run a function with a live DB connection, closing it on the way out. */
+async function with_db(fn) {
+  const cfg  = await local_usat_sales_db_config();
+  const conn = await mysqlP.createConnection(cfg);
+  try { return await fn(conn); } finally { await conn.end(); }
+}
 
-  console.log('\n=== Active overrides in data/overrides.json ===\n');
+async function cmd_list_overrides() {
+  const { baseline_year, analysis_year } = current_year_scope();
+  const rows = await with_db(async conn => {
+    const [r] = await conn.query(
+      `SELECT id, override_type, sid_baseline, sid_analysis, segment, note,
+              baseline_year, analysis_year, approved, approval_state, created_at
+         FROM \`${OV_TABLE}\`
+        WHERE active = 1
+          AND (
+                (baseline_year IS NULL AND analysis_year IS NULL)
+             OR (baseline_year = ? AND analysis_year = ?)
+          )
+        ORDER BY override_type, id`,
+      [baseline_year, analysis_year]
+    );
+    return r;
+  });
 
-  const total = ov.force_match.length + ov.force_no_match.length + ov.force_segment.length;
-  if (!total) {
-    console.log('  No active overrides. (All entries are commented out with _ prefixes.)');
+  console.log(`\n=== Active overrides in DB (scope: ${baseline_year} vs ${analysis_year} + globals) ===\n`);
+
+  if (!rows.length) {
+    console.log('  No active overrides for this year pair.');
     console.log('  Use --add-override commands to add new ones.\n');
-  } else {
-    if (ov.force_match.length) {
-      console.log(`Force matches (${ov.force_match.length}):`);
-      ov.force_match.forEach(e => console.log(`  ✓ ${e.sid_baseline} ↔ ${e.sid_analysis}${e.note ? '  — ' + e.note : ''}`));
-    }
-    if (ov.force_no_match.length) {
-      console.log(`Force no-match (${ov.force_no_match.length}):`);
-      ov.force_no_match.forEach(e => console.log(`  ✗ ${e.sid_baseline ?? e.sid_analysis}${e.note ? '  — ' + e.note : ''}`));
-    }
-    if (ov.force_segment.length) {
-      console.log(`Force segment (${ov.force_segment.length}):`);
-      ov.force_segment.forEach(e => console.log(`  → ${e.sid_baseline ?? e.sid_analysis}  =  ${e.segment}${e.note ? '  — ' + e.note : ''}`));
-    }
+    return;
   }
 
+  const fm  = rows.filter(r => r.override_type === 'force_match');
+  const fnm = rows.filter(r => r.override_type === 'force_no_match');
+  const fs2 = rows.filter(r => r.override_type === 'force_segment');
+
+  const scope_label = r => (r.baseline_year === null && r.analysis_year === null)
+    ? '[global]'
+    : `[${r.baseline_year}/${r.analysis_year}]`;
+  const approval_label = r => r.approved ? '✓ approved' : '◦ unapproved';
+
+  if (fm.length) {
+    console.log(`Force matches (${fm.length}):`);
+    fm.forEach(r => console.log(`  #${r.id} ${scope_label(r)} ${approval_label(r)}  ${r.sid_baseline} ↔ ${r.sid_analysis}${r.note ? '  — ' + r.note : ''}`));
+  }
+  if (fnm.length) {
+    console.log(`Force no-match (${fnm.length}):`);
+    fnm.forEach(r => console.log(`  #${r.id} ${scope_label(r)} ${approval_label(r)}  ${r.sid_baseline ?? r.sid_analysis}${r.note ? '  — ' + r.note : ''}`));
+  }
+  if (fs2.length) {
+    console.log(`Force segment (${fs2.length}):`);
+    fs2.forEach(r => console.log(`  #${r.id} ${scope_label(r)} ${approval_label(r)}  ${r.sid_baseline ?? r.sid_analysis}  =  ${r.segment}${r.note ? '  — ' + r.note : ''}`));
+  }
+
+  // Surface the most recent build's applied summary if available
+  const results = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
+  const last_applied = results?.overrides;
   if (last_applied?.total_applied) {
     console.log(`\nLast build applied: ${last_applied.total_applied} override(s)`);
     last_applied.applied.forEach(a =>
       console.log(`  ${a.type}: ${a.sid_baseline ?? ''}${a.sid_analysis ? ' / ' + a.sid_analysis : ''} → ${a.result}`)
     );
   }
-  console.log('\nRun: node build_all.js   to apply changes\n');
+  console.log('\nRun: node build_all.js   to re-apply\n');
 }
 
-function cmd_add_match(sid_baseline, sid_analysis, note) {
-  if (!sid_baseline || !sid_analysis) { console.error('Usage: --add-override match <sid_baseline> <sid_analysis> ["note"]'); process.exit(1); }
-  const ov = load_overrides_file();
-  const exists = ov.force_match.some(e => e.sid_baseline === sid_baseline && e.sid_analysis === sid_analysis);
-  if (exists) { console.log(`  Already exists: force_match ${sid_baseline} ↔ ${sid_analysis}`); return; }
-  const entry = { sid_baseline, sid_analysis };
-  if (note) entry.note = note;
-  ov.force_match.push(entry);
-  save_overrides_file(ov);
-  console.log(`✓ Added force_match: ${sid_baseline} ↔ ${sid_analysis}${note ? '  (' + note + ')' : ''}`);
-  console.log('  Run: node build_all.js   to apply\n');
-}
-
-function cmd_add_no_match(year, sid, note) {
-  if (!year || !sid || !['25','26'].includes(String(year))) {
-    console.error('Usage: --add-override no-match <25|26> <sanction_id> ["note"]');
+async function cmd_add_match(sid_baseline, sid_analysis, note, { global = false, created_by = 'cli' } = {}) {
+  if (!sid_baseline || !sid_analysis) {
+    console.error('Usage: --add-override match <sid_baseline> <sid_analysis> ["note"] [--global]');
     process.exit(1);
   }
-  const ov = load_overrides_file();
-  const key = String(year) === '25' ? 'sid_baseline' : 'sid_analysis';
-  const exists = ov.force_no_match.some(e => e[key] === sid);
-  if (exists) { console.log(`  Already exists: force_no_match ${sid}`); return; }
-  const entry = { [key]: sid };
-  if (note) entry.note = note;
-  ov.force_no_match.push(entry);
-  save_overrides_file(ov);
-  const result = String(year) === '25' ? 'Lost' : 'New';
-  console.log(`✓ Added force_no_match: ${sid}  →  ${result}${note ? '  (' + note + ')' : ''}`);
-  console.log('  Run: node build_all.js   to apply\n');
+  const { baseline_year, analysis_year } = current_year_scope();
+  const by = global ? null : baseline_year;
+  const ay = global ? null : analysis_year;
+
+  const result = await with_db(async conn => {
+    // Duplicate guard — same active force_match for the same year scope.
+    const [existing] = await conn.query(
+      `SELECT id FROM \`${OV_TABLE}\`
+        WHERE override_type = 'force_match'
+          AND sid_baseline = ? AND sid_analysis = ?
+          AND ${by === null ? 'baseline_year IS NULL' : 'baseline_year = ?'}
+          AND ${ay === null ? 'analysis_year IS NULL' : 'analysis_year = ?'}
+          AND active = 1
+        LIMIT 1`,
+      by === null && ay === null ? [sid_baseline, sid_analysis]
+        : by === null ? [sid_baseline, sid_analysis, ay]
+        : ay === null ? [sid_baseline, sid_analysis, by]
+        : [sid_baseline, sid_analysis, by, ay]
+    );
+    if (existing.length) return { status: 'exists', id: existing[0].id };
+
+    const [r] = await conn.query(
+      `INSERT INTO \`${OV_TABLE}\`
+        (override_type, sid_baseline, sid_analysis, baseline_year, analysis_year, note, created_by, active)
+        VALUES ('force_match', ?, ?, ?, ?, ?, ?, 1)`,
+      [sid_baseline, sid_analysis, by, ay, note ?? null, created_by]
+    );
+    return { status: 'inserted', id: r.insertId };
+  });
+
+  const scope = (by === null) ? 'global' : `${by}/${ay}`;
+  if (result.status === 'exists') {
+    console.log(`  Already exists (id ${result.id}): force_match ${sid_baseline} ↔ ${sid_analysis} [${scope}]`);
+  } else {
+    console.log(`✓ Added force_match #${result.id} [${scope}]: ${sid_baseline} ↔ ${sid_analysis}${note ? '  (' + note + ')' : ''}`);
+    console.log('  Run: node build_all.js   to apply\n');
+  }
+  return result;
 }
 
-function cmd_add_segment(year, sid, segment, note) {
-  if (!year || !sid || !segment) {
-    console.error(`Usage: --add-override segment <25|26> <sanction_id> <segment> ["note"]`);
+async function cmd_add_no_match(year_arg, sid, note, { global = false, created_by = 'cli' } = {}) {
+  const col = year_arg_to_column(year_arg);
+  if (!col || !sid) {
+    console.error('Usage: --add-override no-match <baseline|analysis|25|26> <sanction_id> ["note"] [--global]');
+    process.exit(1);
+  }
+  const { baseline_year, analysis_year } = current_year_scope();
+  const by = global ? null : baseline_year;
+  const ay = global ? null : analysis_year;
+  const sid_baseline = col === 'sid_baseline' ? sid : null;
+  const sid_analysis = col === 'sid_analysis' ? sid : null;
+
+  const result = await with_db(async conn => {
+    const [existing] = await conn.query(
+      `SELECT id FROM \`${OV_TABLE}\`
+        WHERE override_type = 'force_no_match'
+          AND ${col} = ?
+          AND ${by === null ? 'baseline_year IS NULL' : 'baseline_year = ?'}
+          AND ${ay === null ? 'analysis_year IS NULL' : 'analysis_year = ?'}
+          AND active = 1
+        LIMIT 1`,
+      by === null && ay === null ? [sid]
+        : by === null ? [sid, ay]
+        : ay === null ? [sid, by]
+        : [sid, by, ay]
+    );
+    if (existing.length) return { status: 'exists', id: existing[0].id };
+
+    const [r] = await conn.query(
+      `INSERT INTO \`${OV_TABLE}\`
+        (override_type, sid_baseline, sid_analysis, baseline_year, analysis_year, note, created_by, active)
+        VALUES ('force_no_match', ?, ?, ?, ?, ?, ?, 1)`,
+      [sid_baseline, sid_analysis, by, ay, note ?? null, created_by]
+    );
+    return { status: 'inserted', id: r.insertId };
+  });
+
+  const result_label = col === 'sid_baseline' ? 'Lost' : 'New';
+  const scope = (by === null) ? 'global' : `${by}/${ay}`;
+  if (result.status === 'exists') {
+    console.log(`  Already exists (id ${result.id}): force_no_match ${sid} [${scope}]`);
+  } else {
+    console.log(`✓ Added force_no_match #${result.id} [${scope}]: ${sid}  →  ${result_label}${note ? '  (' + note + ')' : ''}`);
+    console.log('  Run: node build_all.js   to apply\n');
+  }
+  return result;
+}
+
+async function cmd_add_segment(year_arg, sid, segment, note, { global = false, created_by = 'cli' } = {}) {
+  const col = year_arg_to_column(year_arg);
+  if (!col || !sid || !segment) {
+    console.error(`Usage: --add-override segment <baseline|analysis|25|26> <sanction_id> <segment> ["note"] [--global]`);
     console.error(`  Valid segments: ${VALID_SEGMENTS.join(', ')}`);
     process.exit(1);
   }
@@ -512,32 +602,76 @@ function cmd_add_segment(year, sid, segment, note) {
     console.error(`Invalid segment "${segment}". Valid: ${VALID_SEGMENTS.join(', ')}`);
     process.exit(1);
   }
-  const ov = load_overrides_file();
-  const key = String(year) === '25' ? 'sid_baseline' : 'sid_analysis';
-  const exists = ov.force_segment.findIndex(e => e[key] === sid);
-  if (exists >= 0) {
-    ov.force_segment[exists] = { [key]: sid, segment: matched_seg, ...(note ? { note } : {}) };
-    console.log(`✓ Updated force_segment: ${sid}  →  ${matched_seg}`);
-  } else {
-    const entry = { [key]: sid, segment: matched_seg };
-    if (note) entry.note = note;
-    ov.force_segment.push(entry);
-    console.log(`✓ Added force_segment: ${sid}  →  ${matched_seg}${note ? '  (' + note + ')' : ''}`);
-  }
-  save_overrides_file(ov);
+
+  const { baseline_year, analysis_year } = current_year_scope();
+  const by = global ? null : baseline_year;
+  const ay = global ? null : analysis_year;
+  const sid_baseline = col === 'sid_baseline' ? sid : null;
+  const sid_analysis = col === 'sid_analysis' ? sid : null;
+
+  // For force_segment we UPDATE the existing row if one is present for the
+  // same sid + scope, otherwise INSERT. (Matches the JSON behaviour.)
+  const result = await with_db(async conn => {
+    const [existing] = await conn.query(
+      `SELECT id FROM \`${OV_TABLE}\`
+        WHERE override_type = 'force_segment'
+          AND ${col} = ?
+          AND ${by === null ? 'baseline_year IS NULL' : 'baseline_year = ?'}
+          AND ${ay === null ? 'analysis_year IS NULL' : 'analysis_year = ?'}
+          AND active = 1
+        LIMIT 1`,
+      by === null && ay === null ? [sid]
+        : by === null ? [sid, ay]
+        : ay === null ? [sid, by]
+        : [sid, by, ay]
+    );
+    if (existing.length) {
+      await conn.query(
+        `UPDATE \`${OV_TABLE}\` SET segment = ?, note = ?, approved = 0, approval_state = NULL
+          WHERE id = ?`,
+        [matched_seg, note ?? null, existing[0].id]
+      );
+      return { status: 'updated', id: existing[0].id };
+    }
+    const [r] = await conn.query(
+      `INSERT INTO \`${OV_TABLE}\`
+        (override_type, sid_baseline, sid_analysis, segment, baseline_year, analysis_year, note, created_by, active)
+        VALUES ('force_segment', ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [sid_baseline, sid_analysis, matched_seg, by, ay, note ?? null, created_by]
+    );
+    return { status: 'inserted', id: r.insertId };
+  });
+
+  const scope = (by === null) ? 'global' : `${by}/${ay}`;
+  const verb = result.status === 'updated' ? 'Updated' : 'Added';
+  console.log(`✓ ${verb} force_segment #${result.id} [${scope}]: ${sid}  →  ${matched_seg}${note ? '  (' + note + ')' : ''}`);
   console.log('  Run: node build_all.js   to apply\n');
+  return result;
 }
 
-function cmd_remove_override(sid) {
+async function cmd_remove_override(sid) {
   if (!sid) { console.error('Usage: --remove-override <sanction_id>'); process.exit(1); }
-  const ov = load_overrides_file();
-  let removed = 0;
-  ov.force_match    = ov.force_match.filter(e => { const keep = e.sid_baseline !== sid && e.sid_analysis !== sid; if (!keep) removed++; return keep; });
-  ov.force_no_match = ov.force_no_match.filter(e => { const keep = e.sid_baseline !== sid && e.sid_analysis !== sid; if (!keep) removed++; return keep; });
-  ov.force_segment  = ov.force_segment.filter(e => { const keep = e.sid_baseline !== sid && e.sid_analysis !== sid; if (!keep) removed++; return keep; });
-  if (!removed) { console.log(`  No override found for: ${sid}`); return; }
-  save_overrides_file(ov);
-  console.log(`✓ Removed ${removed} override entry(s) for: ${sid}`);
+
+  const { baseline_year, analysis_year } = current_year_scope();
+  const removed = await with_db(async conn => {
+    // Soft-delete: set active=0 on every matching active row in the current
+    // year scope (and globals). Preserves the audit trail in the table.
+    const [r] = await conn.query(
+      `UPDATE \`${OV_TABLE}\`
+          SET active = 0
+        WHERE active = 1
+          AND (sid_baseline = ? OR sid_analysis = ?)
+          AND (
+                (baseline_year IS NULL AND analysis_year IS NULL)
+             OR (baseline_year = ? AND analysis_year = ?)
+          )`,
+      [sid, sid, baseline_year, analysis_year]
+    );
+    return r.affectedRows;
+  });
+
+  if (!removed) { console.log(`  No active override found for: ${sid} (scope: ${baseline_year} vs ${analysis_year} + globals)`); return; }
+  console.log(`✓ Soft-deleted ${removed} override row(s) for: ${sid}  (set active=0)`);
   console.log('  Run: node build_all.js   to apply\n');
 }
 
@@ -548,19 +682,23 @@ async function cmd_suggest_overrides() {
     process.exit(1);
   }
 
-  // Load raw event lists — needs the latest build output
-  // We'll derive from analysis_results if available, but ideally re-run analysis
-  const { loadBothYears: load_both_years } = require('./src/loader');
-  const { runAnalysis: run_analysis }       = require('./src/analysis');
+  // Pull live event rows from usat_sales_db (same path build_all.js uses).
+  // The legacy CSV loader is gone; everything now flows through fetch_events_for_years.
+  const { loadBothYearsFromRows: load_both_years_from_rows } = require('./src/loader');
+  const { fetch_events_for_years } = require('./src/db');
+  const { runAnalysis: run_analysis } = require('./src/analysis');
 
-  console.log('\nLoading event data for override suggestions...');
-  const loaded  = load_both_years(
-    path.join(DIR, 'data', '2025a_events_051526.csv'),
-    path.join(DIR, 'data', '2026_events_051526.csv')
-  );
+  const { baseline_year: BY, analysis_year: AY } = current_year_scope();
+  console.log(`\nFetching events from usat_sales_db (${BY} vs ${AY})...`);
+  const events_by_year = await fetch_events_for_years([BY, AY]);
+  console.log(`  ${BY} rows: ${events_by_year[BY]?.length ?? 0}  |  ${AY} rows: ${events_by_year[AY]?.length ?? 0}`);
+
+  const loaded = load_both_years_from_rows(events_by_year[BY], events_by_year[AY]);
+  loaded.BASELINE_YEAR = BY;
+  loaded.ANALYSIS_YEAR = AY;
   const results = await run_analysis(loaded);
-  const ya = results.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
-  const yb = results.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
+  const ya = results.years?.BASELINE_YEAR ?? BY;
+  const yb = results.years?.ANALYSIS_YEAR ?? AY;
 
   const attrited = (results.segments?.attrited ?? []).map(m => ({
     sid:   m.e25.sanctionId,
@@ -576,7 +714,13 @@ async function cmd_suggest_overrides() {
     month: ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m.e26.month],
   }));
 
-  const existing_ov = load_overrides_file();
+  // Pull active overrides from the DB (year-scoped + globals) so we don't
+  // re-suggest pairs that already have a manual decision. Safe-no-op if the
+  // DB read fails — we just won't filter, which is preferable to crashing.
+  const { baseline_year, analysis_year } = current_year_scope();
+  const existing_ov = (await load_overrides({ baseline_year, analysis_year, silent: true })) ?? {
+    force_match: [], force_no_match: [], force_segment: [],
+  };
   const already_overridden = new Set([
     ...existing_ov.force_match.flatMap(e => [e.sid_baseline, e.sid_analysis]),
     ...existing_ov.force_no_match.map(e => e.sid_baseline ?? e.sid_analysis),
@@ -646,18 +790,28 @@ For each suggestion output EXACTLY this JSON format (no other text):
     console.log(`   Add: node ask.js --add-override match ${s.sid_baseline} ${s.sid_analysis} "${s.reason}"\n`);
   });
 
-  // Offer to add all High confidence ones
+  // Offer to add all High confidence ones. Wrap the readline question in a
+  // promise so we can `await` the inserts sequentially — otherwise the
+  // success message prints before the DB writes finish, and rl.close()
+  // races the unawaited cmd_add_match calls.
   const high = suggestions.filter(s => s.confidence === 'High');
   if (high.length) {
     const readline = require('readline');
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(`Add all ${high.length} High-confidence suggestions to overrides.json? (y/n): `, ans => {
-      rl.close();
-      if (ans.trim().toLowerCase() === 'y') {
-        high.forEach(s => cmd_add_match(s.sid_baseline, s.sid_analysis, s.reason));
-        console.log(`\n✓ Added ${high.length} override(s). Run: node build_all.js   to apply`);
-      }
+    const answer = await new Promise(resolve => {
+      rl.question(`Add all ${high.length} High-confidence suggestions to the overrides DB? (y/n): `, ans => {
+        rl.close();
+        resolve(ans);
+      });
     });
+    if (answer.trim().toLowerCase() === 'y') {
+      let added = 0;
+      for (const s of high) {
+        const r = await cmd_add_match(s.sid_baseline, s.sid_analysis, s.reason);
+        if (r?.status === 'inserted') added++;
+      }
+      console.log(`\n✓ Added ${added} override(s) (${high.length - added} already present). Run: node build_all.js   to apply`);
+    }
   }
 }
 
@@ -754,21 +908,27 @@ async function main() {
   }
 
   if (args[0] === '--add-override') {
-    const sub = args[1];
+    // Pull --global out of the trailing args so it can appear anywhere after
+    // the positional values. Default is current-scope (year env vars); --global
+    // leaves both year columns NULL so the override applies to every pair.
+    const global = args.includes('--global');
+    const positional = args.filter(a => a !== '--global');
+    const sub = positional[1];
+
     if (sub === 'match') {
-      // --add-override match <sid_baseline> <sid_analysis> ["note"]
-      const note = args[4] || '';
-      cmd_add_match(args[2], args[3], note); return;
+      // --add-override match <sid_baseline> <sid_analysis> ["note"] [--global]
+      const note = positional[4] || '';
+      await cmd_add_match(positional[2], positional[3], note, { global }); return;
     }
     if (sub === 'no-match') {
-      // --add-override no-match <25|26> <sid> ["note"]
-      const note = args[4] || '';
-      cmd_add_no_match(args[2], args[3], note); return;
+      // --add-override no-match <baseline|analysis|25|26> <sid> ["note"] [--global]
+      const note = positional[4] || '';
+      await cmd_add_no_match(positional[2], positional[3], note, { global }); return;
     }
     if (sub === 'segment') {
-      // --add-override segment <25|26> <sid> <segment> ["note"]
-      const note = args[5] || '';
-      cmd_add_segment(args[2], args[3], args[4], note); return;
+      // --add-override segment <baseline|analysis|25|26> <sid> <segment> ["note"] [--global]
+      const note = positional[5] || '';
+      await cmd_add_segment(positional[2], positional[3], positional[4], note, { global }); return;
     }
     console.error('Unknown override type. Use: match | no-match | segment');
     process.exit(1);
@@ -858,8 +1018,23 @@ Model: claude-sonnet-4-6 (streaming for Q&A)
   await ask(question, opts);
 }
 
-main().catch(err => {
-  console.error('Error:', err.message);
-  if (process.env.DEBUG) console.error(err.stack);
-  process.exit(1);
-});
+// Only run main() when invoked as a script. When required as a module (by
+// tests/overrides.test.js) we expose the cmd_* functions instead so they can
+// be exercised directly against the DB.
+if (require.main === module) {
+  main().catch(err => {
+    console.error('Error:', err.message);
+    if (process.env.DEBUG) console.error(err.stack);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  cmd_add_match,
+  cmd_add_no_match,
+  cmd_add_segment,
+  cmd_remove_override,
+  cmd_list_overrides,
+  current_year_scope,
+  year_arg_to_column,
+};
