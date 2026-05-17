@@ -41,14 +41,15 @@ async function resolve_output_dir() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const RESET  = '\x1b[0m';
-const BOLD   = '\x1b[1m';
-const DIM    = '\x1b[2m';
-const RED    = '\x1b[31m';
-const GREEN  = '\x1b[32m';
-const YELLOW = '\x1b[33m';
-const BLUE   = '\x1b[34m';
-const CYAN   = '\x1b[36m';
-const WHITE  = '\x1b[37m';
+const BOLD    = '\x1b[1m';
+const DIM     = '\x1b[2m';
+const RED     = '\x1b[31m';
+const GREEN   = '\x1b[32m';
+const YELLOW  = '\x1b[33m';
+const BLUE    = '\x1b[34m';
+const MAGENTA = '\x1b[35m';
+const CYAN    = '\x1b[36m';
+const WHITE   = '\x1b[37m';
 const BG_DK  = '\x1b[40m';
 
 const c = (color, text) => `${color}${text}${RESET}`;
@@ -165,10 +166,17 @@ const SECTIONS = [
     ],
   },
   {
-    label: 'TESTING — verify the code is working',
-    color: WHITE,
+    label: 'LOCAL SERVER — http://localhost:8016',
+    color: CYAN,
     items: [
-      { id: 19, label: 'Run test suite',             desc: 'Runs tests/ via node --test (schema, overrides DB chain)', action: 'run_tests' },
+      { id: 19, label: 'Start local server',         desc: 'Read-only API + serves output/dashboard.html (Ctrl-C to stop)', action: 'start_server' },
+    ],
+  },
+  {
+    label: 'TESTING — verify the code is working',
+    color: MAGENTA,
+    items: [
+      { id: 20, label: 'Run test suite',             desc: 'Runs tests/ via node --test (schema, overrides DB chain, server)', action: 'run_tests' },
     ],
   },
 ];
@@ -333,6 +341,27 @@ async function handle_action(action, rl) {
       break;
     }
 
+    case 'start_server': {
+      // Foreground the local read-only API server. The server lives at the
+      // repo root alongside the other server_*.js services (port 8016 in
+      // its filename). We spawn it from there so its relative requires and
+      // .env lookup resolve correctly. Inherits stdio so Ctrl-C in the menu
+      // terminal stops it cleanly. Control returns to the menu loop once
+      // the server exits.
+      console.log(c(BOLD, '  Starting local server (http://localhost:8016, Ctrl-C to stop)\n'));
+      const root = path.join(DIR, '..', '..');
+      const code = await new Promise(resolve => {
+        const proc = spawn(process.execPath ?? 'node', ['server_event_analysis_8016.js'], {
+          stdio: 'inherit',
+          cwd:   root,
+          shell: false,
+        });
+        proc.on('close', resolve);
+      });
+      if (code !== 0 && code !== null) console.log(c(YELLOW, `\n  Server exited with code ${code}.`));
+      break;
+    }
+
     case 'run_tests': {
       // node --test runs every *.test.js it finds in the given path
       // and exits non-zero on failure. Output is TAP-style.
@@ -394,7 +423,11 @@ async function main() {
   while (true) {
     print_menu();
 
-    const raw = (await prompt(rl, c(BOLD, '  Select (0–19): '))).trim();
+    // Range is computed from ALL_ITEMS so the prompt automatically tracks
+    // the largest menu id — no need to remember to bump it when you add
+    // a new option.
+    const max_id = Math.max(...ALL_ITEMS.map(i => i.id));
+    const raw = (await prompt(rl, c(BOLD, `  Select (0–${max_id}): `))).trim();
     const num = parseInt(raw, 10);
 
     if (raw === '0' || raw.toLowerCase() === 'q' || raw.toLowerCase() === 'exit') {

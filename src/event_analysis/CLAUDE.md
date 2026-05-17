@@ -18,10 +18,11 @@ node check.js          # validate data quality before building (always run first
 node build_all.js      # generate Excel + PowerPoint + dashboard (takes ~30s)
 node menu.js           # interactive feature launcher
 node ask.js            # Q&A + override management CLI (DB-backed)
-node --test tests/     # run the overrides test suite
+node server_event_analysis_8016.js   # from repo root — local read-only API at http://localhost:8016
+node --test tests/     # run the overrides + server test suites
 ```
 
-> A local Express server with interactive dashboard editing is step 7 on the overrides ladder — not yet built.
+> Interactive override editing in the browser (Step 9) is still pending — for now the server is read-only and you manage overrides via `ask.js`.
 
 ---
 
@@ -150,7 +151,25 @@ Open `output/dashboard.html` in a browser (a hosted version is on the roadmap as
 | Column picker | ⊞ Columns button — show/hide Sanction ID and Date columns |
 | Mobile responsive | Horizontal + vertical scroll, 60vh max-height on mobile, iOS touch scroll |
 
-> Live override editing in the dashboard requires step 7 (Express server) and step 9 (interactive editor), both pending.
+> Live override editing in the dashboard requires step 9 (interactive editor), pending. Step 7 is done — `server.js` exposes a read-only API and serves `dashboard.html` over HTTP.
+
+---
+
+## Local server (`server_event_analysis_8016.js`)
+
+Lives at the repo root (`sql_programs/server_event_analysis_8016.js`) alongside the other `server_*.js` services. Default port 8016 (override via `PORT` env var). Read-only foundation for the dashboard arc.
+
+| Endpoint | Description |
+|---|---|
+| `GET /` | HTML index — endpoint reference + `curl` examples |
+| `GET /api/status` | `{ ok, baseline_year, analysis_year, output_dir, time }` |
+| `GET /api/overrides` | Current-scope + global overrides. Honours `?baseline_year=&analysis_year=` query params; defaults to env vars. |
+| `GET /api/events?year=YYYY` | Events from `usat_sales_db.event_data_metrics`. Add `&include=excluded` to include CANCELLED/DECLINED/DELETED. |
+| `GET /output/<file>` | Static-serves the analysis output dir (dashboard.html, JSON sidecars, archive folder) |
+
+Importable: `const { create_app, start_server } = require('./server')`. Tests use `create_app()` and `listen(0)` for ephemeral-port isolation.
+
+CORS is open (`*`) — fine for local dev, tighten before any production hosting. Write endpoints land in step 8.
 
 ---
 
@@ -208,7 +227,7 @@ Open `output/dashboard.html` in a browser (a hosted version is on the roadmap as
 | **4.** `ask.js` CLI writes to DB (add / remove / list / suggest), `--global` flag, `created_by` provenance | ✓ done |
 | **5.** `--approve` / `--unapprove` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, captures event signatures. Unapprove clears approval + signatures (keeps audit fields). | ✓ done |
 | **6.** Stale-approval detection. `apply_overrides()` recomputes event signatures and compares to stored snapshot; on drift the build flips `approval_state='stale'`, emits `⚠ [stale approval]` warning, and `--list-overrides` renders the row with a `⚠ stale` badge. | ✓ done |
-| 7. Minimal Express server with read-only endpoints (`GET /overrides`, `GET /events`) | pending |
+| **7.** `server_event_analysis_8016.js` — minimal Express server at the repo root (port 8016, alongside the other `server_*.js` services). Read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params), `GET /api/events?year=YYYY`. HTML index at `/`. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 19. | ✓ done |
 | 8. Write endpoints + Approve/Unapprove API (wraps the existing cmd_approve/cmd_unapprove) | pending |
 | 9. Interactive event-detail dashboard — edit and approve overrides in browser | pending |
 | 10. Cascade rules engine — pattern-based overrides ("all clinics in May named X → Lost") | pending |

@@ -159,8 +159,10 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 16 | View changes since last build | `cat output/changes.txt` |
 | 17 | View notes.md | `cat notes.md` |
 | 18 | View README | Displays this file |
+| **LOCAL SERVER** | | |
+| 19 | Start local server | `node server_event_analysis_8016.js` (from repo root, port 8016; `Ctrl-C` to stop) |
 | **TESTING** | | |
-| 19 | Run test suite | `node --test tests/` |
+| 20 | Run test suite | `node --test tests/` |
 | 0 | Exit | — |
 
 ---
@@ -443,7 +445,7 @@ Overrides live in `usat_sales_db.event_analysis_overrides`. The runtime — both
 | **4.** `ask.js` CLI commands write to the DB. `--add-override match / no-match / segment` and `--remove-override` all read/write `event_analysis_overrides` directly (year-scoped by env vars; pass `--global` to scope NULL/NULL). New rows are tagged `created_by='cli'`. `--remove-override` is a soft delete (`active = 0`) so the audit trail survives. `--suggest-overrides` reads the DB to de-dup against existing overrides instead of the (now retired) JSON file. | ✓ done |
 | **5.** `--approve <sid>` / `--unapprove <sid>` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, and captures `event_signature_{baseline,analysis}` snapshots of the current event state. Unapprove clears the approval columns + signatures (keeps `approved_by`/`approved_at` for audit). Build's unapproved-warning falls silent once a row is approved. | ✓ done |
 | **6.** Stale-approval detection at build time. `apply_overrides()` recomputes event signatures and compares to the stored snapshot; on drift it flags `applied[].stale = true`, returns the override id in `stale_ids`, and the build calls `mark_overrides_stale()` to flip `approval_state='stale'` in the DB. Build emits a per-row `⚠ [stale approval]` warning showing what drifted (`baseline "Old"→"New"`). `--list-overrides` renders stale rows with `⚠ stale`. Re-approve via `--approve` refreshes the signature; unapprove clears it. | ✓ done |
-| 7. Minimal Express server + interactive override editing in the dashboard | pending |
+| **7.** Minimal Express server (`server_event_analysis_8016.js` at the repo root alongside the other `server_*.js` services, default port 8016) with read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params or env), `GET /api/events?year=YYYY` (with optional `&include=excluded`). HTML index at `/` lists endpoints with `curl` examples. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 19. | ✓ done |
 
 The DB is now the single source of truth for overrides. `data/overrides.json` is no longer read or written by the runtime — only the one-time migration script touches it, and it renames the file to `overrides.json.migrated` once entries are imported. You should never need to edit JSON by hand again.
 
@@ -776,6 +778,63 @@ The suite needs a working `local_usat_sales_db_config()` — same credentials as
 ### Adding new tests
 
 Drop additional `*.test.js` files into `tests/`. `node --test tests/` discovers them automatically. The existing file is the template — each `describe(...)` block groups related assertions, and `node:assert/strict` provides `equal`, `deepEqual`, `match`, `ok`, etc.
+
+---
+
+## Local server — server_event_analysis_8016.js
+
+> **Menu:** option **19** — or run directly from the repo root:
+
+```bash
+cd /path/to/sql_programs                          # repo root
+node server_event_analysis_8016.js                # default port 8016
+npm run event_analysis_server                     # equivalent npm script
+PORT=9000 node server_event_analysis_8016.js      # custom port via env
+```
+
+A minimal Express server exposing read-only endpoints for the event_analysis pipeline. Lives at the repo root alongside the other `server_*.js` services for naming consistency — port 8016 follows the sequence (8014 = auto_renew, 8015 = scraper). Starts in the foreground; `Ctrl-C` stops it cleanly. Foundation for the upcoming interactive dashboard (Step 9).
+
+### Endpoints
+
+| Endpoint | Returns |
+|---|---|
+| `GET /` | HTML index — lists endpoints, shows `curl` examples, links to the dashboard |
+| `GET /api/status` | `{ ok, baseline_year, analysis_year, output_dir, time }` — health check |
+| `GET /api/overrides` | `{ scope, force_match[], force_no_match[], force_segment[], stats }` — current-scope + global overrides. Honours `?baseline_year=YYYY&analysis_year=YYYY` query params; defaults to env vars. |
+| `GET /api/events?year=YYYY` | `{ year, count, total_in_year, include_excluded, events[] }` — events from `usat_sales_db.event_data_metrics`. Returns 400 if `year` is missing or out of range. Add `&include=excluded` to include CANCELLED/DECLINED/DELETED rows. |
+| `GET /output/<file>` | Static-serves files from the analysis output directory (`dashboard.html`, `analysis_results.json`, `analysis_state.json`, `commentary.json`, the archive folder, etc.) |
+| (any other path) | `404 { error: 'not found', path }` |
+
+### Try it
+
+```bash
+# In one terminal (from sql_programs/):
+node server_event_analysis_8016.js
+
+# In another:
+curl http://localhost:8016/api/status
+curl http://localhost:8016/api/overrides
+curl "http://localhost:8016/api/overrides?baseline_year=2024&analysis_year=2025"
+curl "http://localhost:8016/api/events?year=2026"
+curl "http://localhost:8016/api/events?year=2026&include=excluded" | jq '.count'
+
+# Open the dashboard through the server (works even from file://-blocked browsers):
+open http://localhost:8016/output/dashboard.html       # macOS
+xdg-open http://localhost:8016/output/dashboard.html   # Linux
+start http://localhost:8016/output/dashboard.html      # Windows
+```
+
+### Year scoping
+
+By default, `/api/status` and `/api/overrides` operate on the active year scope: `BASELINE_YEAR` / `ANALYSIS_YEAR` env vars if set, otherwise current calendar year vs prior year — same convention as `ask.js` and `build_all.js`. Per-request scoping is supported via query params on `/api/overrides` (useful for the dashboard to switch year pairs without restarting the server).
+
+### CORS
+
+CORS is enabled (`*`) so a future dashboard served from another origin (`file://`, a different port, etc.) can hit the API directly. Tighten this when production hosting becomes relevant.
+
+### What it doesn't do (yet)
+
+Write endpoints (`POST /api/overrides`, `DELETE /api/overrides/:id`, `POST /api/approve/:sid`) and the cascade rules engine are Step 8. The interactive event-detail editor is Step 9.
 
 ---
 
