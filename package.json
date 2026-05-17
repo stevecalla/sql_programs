@@ -141,7 +141,13 @@
     "mysql2": "^3.19.0",
     "ssh2": "^1.15.0",
     "tinyurl": "^1.1.7",
-    "xpath": "^0.0.34"
+    "xpath": "^0.0.34",
+    "@anthropic-ai/sdk": "^0.96.0",
+    "chart.js": "^4.5.1",
+    "cors": "^2.8.6",
+    "csv-parse": "^5.5.3",
+    "pptxgenjs": "^3.12.0",
+    "yargs": "^17.7.2"
   },
   "devDependencies": {
     "pm2": "^5.4.3"
