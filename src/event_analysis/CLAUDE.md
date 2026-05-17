@@ -157,7 +157,9 @@ Open `output/dashboard.html` in a browser (a hosted version is on the roadmap as
 
 ## Local server (`server_event_analysis_8016.js`)
 
-Lives at the repo root (`sql_programs/server_event_analysis_8016.js`) alongside the other `server_*.js` services. Default port 8016 (override via `PORT` env var). Read-only foundation for the dashboard arc.
+Lives at the repo root (`sql_programs/server_event_analysis_8016.js`) alongside the other `server_*.js` services. Default port 8016 (override via `PORT` env var). Foundation for the dashboard arc.
+
+**Read endpoints:**
 
 | Endpoint | Description |
 |---|---|
@@ -167,9 +169,20 @@ Lives at the repo root (`sql_programs/server_event_analysis_8016.js`) alongside 
 | `GET /api/events?year=YYYY` | Events from `usat_sales_db.event_data_metrics`. Add `&include=excluded` to include CANCELLED/DECLINED/DELETED. |
 | `GET /output/<file>` | Static-serves the analysis output dir (dashboard.html, JSON sidecars, archive folder) |
 
-Importable: `const { create_app, start_server } = require('./server')`. Tests use `create_app()` and `listen(0)` for ephemeral-port isolation.
+**Write endpoints (Step 8):**
 
-CORS is open (`*`) — fine for local dev, tighten before any production hosting. Write endpoints land in step 8.
+| Endpoint | Body | Wraps |
+|---|---|---|
+| `POST /api/overrides` | `{ type: 'force_match' \| 'force_no_match' \| 'force_segment', sid_baseline?, sid_analysis?, side?, segment?, note?, global? }` | `cmd_add_match` / `cmd_add_no_match` / `cmd_add_segment` |
+| `DELETE /api/overrides/:sid` | — | `cmd_remove_override` (soft-delete) |
+| `POST /api/approve/:sid` | optional `{ approved_by }` | `cmd_approve` (captures event signatures) |
+| `POST /api/unapprove/:sid` | — | `cmd_unapprove` |
+
+All write endpoints validate the request before invoking the underlying `cmd_*` function (so a bad request returns 400 cleanly without risking `process.exit(1)`). Rows are tagged `created_by='server'` so HTTP writes are distinguishable from CLI / migration / test writes at the SQL level.
+
+Importable: `const { create_app, start_server } = require('./server_event_analysis_8016')`. Tests use `create_app()` and `listen(0)` for ephemeral-port isolation. The full test suite covers ~75 cases now: 50 overrides + ~25 server (read + write).
+
+CORS is open (`*`) — fine for local dev, tighten before any production hosting. The Override Manager panel that used to live in `dashboard.html` is gone; Step 9 will rebuild it as a proper SPA hitting these endpoints.
 
 ---
 
@@ -228,7 +241,7 @@ CORS is open (`*`) — fine for local dev, tighten before any production hosting
 | **5.** `--approve` / `--unapprove` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, captures event signatures. Unapprove clears approval + signatures (keeps audit fields). | ✓ done |
 | **6.** Stale-approval detection. `apply_overrides()` recomputes event signatures and compares to stored snapshot; on drift the build flips `approval_state='stale'`, emits `⚠ [stale approval]` warning, and `--list-overrides` renders the row with a `⚠ stale` badge. | ✓ done |
 | **7.** `server_event_analysis_8016.js` — minimal Express server at the repo root (port 8016, alongside the other `server_*.js` services). Read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params), `GET /api/events?year=YYYY`. HTML index at `/`. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 19. | ✓ done |
-| 8. Write endpoints + Approve/Unapprove API (wraps the existing cmd_approve/cmd_unapprove) | pending |
+| **8.** Write endpoints — `POST /api/overrides` (typed dispatch), `DELETE /api/overrides/:sid`, `POST /api/approve/:sid`, `POST /api/unapprove/:sid`. All wrap the existing `cmd_*` functions and tag rows `created_by='server'`. Stale Override Manager panel removed from `dashboard.html` (will be rebuilt fresh in Step 9 on the new API). 16 new tests in `tests/server.test.js`. | ✓ done |
 | 9. Interactive event-detail dashboard — edit and approve overrides in browser | pending |
 | 10. Cascade rules engine — pattern-based overrides ("all clinics in May named X → Lost") | pending |
 

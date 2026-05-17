@@ -446,6 +446,7 @@ Overrides live in `usat_sales_db.event_analysis_overrides`. The runtime — both
 | **5.** `--approve <sid>` / `--unapprove <sid>` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, and captures `event_signature_{baseline,analysis}` snapshots of the current event state. Unapprove clears the approval columns + signatures (keeps `approved_by`/`approved_at` for audit). Build's unapproved-warning falls silent once a row is approved. | ✓ done |
 | **6.** Stale-approval detection at build time. `apply_overrides()` recomputes event signatures and compares to the stored snapshot; on drift it flags `applied[].stale = true`, returns the override id in `stale_ids`, and the build calls `mark_overrides_stale()` to flip `approval_state='stale'` in the DB. Build emits a per-row `⚠ [stale approval]` warning showing what drifted (`baseline "Old"→"New"`). `--list-overrides` renders stale rows with `⚠ stale`. Re-approve via `--approve` refreshes the signature; unapprove clears it. | ✓ done |
 | **7.** Minimal Express server (`server_event_analysis_8016.js` at the repo root alongside the other `server_*.js` services, default port 8016) with read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params or env), `GET /api/events?year=YYYY` (with optional `&include=excluded`). HTML index at `/` lists endpoints with `curl` examples. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 19. | ✓ done |
+| **8.** Write endpoints — `POST /api/overrides` (typed dispatch over force_match / force_no_match / force_segment), `DELETE /api/overrides/:sid` (soft-delete), `POST /api/approve/:sid`, `POST /api/unapprove/:sid`. All wrap the existing `cmd_*` functions; tagged `created_by='server'` so HTTP writes are distinguishable from CLI writes. Stale Override Manager panel removed from `dashboard.html` — interactive editor lands in Step 9 on top of these endpoints. 16 new write tests in `tests/server.test.js` (validation + happy paths + DB-state assertions). | ✓ done |
 
 The DB is now the single source of truth for overrides. `data/overrides.json` is no longer read or written by the runtime — only the one-time migration script touches it, and it renames the file to `overrides.json.migrated` once entries are imported. You should never need to edit JSON by hand again.
 
@@ -794,7 +795,7 @@ PORT=9000 node server_event_analysis_8016.js      # custom port via env
 
 A minimal Express server exposing read-only endpoints for the event_analysis pipeline. Lives at the repo root alongside the other `server_*.js` services for naming consistency — port 8016 follows the sequence (8014 = auto_renew, 8015 = scraper). Starts in the foreground; `Ctrl-C` stops it cleanly. Foundation for the upcoming interactive dashboard (Step 9).
 
-### Endpoints
+### Read endpoints
 
 | Endpoint | Returns |
 |---|---|
@@ -804,6 +805,56 @@ A minimal Express server exposing read-only endpoints for the event_analysis pip
 | `GET /api/events?year=YYYY` | `{ year, count, total_in_year, include_excluded, events[] }` — events from `usat_sales_db.event_data_metrics`. Returns 400 if `year` is missing or out of range. Add `&include=excluded` to include CANCELLED/DECLINED/DELETED rows. |
 | `GET /output/<file>` | Static-serves files from the analysis output directory (`dashboard.html`, `analysis_results.json`, `analysis_state.json`, `commentary.json`, the archive folder, etc.) |
 | (any other path) | `404 { error: 'not found', path }` |
+
+### Write endpoints (Step 8)
+
+All write endpoints wrap the existing `cmd_*` functions in `ask.js` — same DB writes, same idempotent guards, same year-scope logic. Rows are tagged `created_by='server'` so you can tell from the DB which writes came in via HTTP vs CLI vs JSON migration. Validation runs before the wrapped `cmd_*` is invoked, so a 400 response never reaches the underlying function.
+
+| Endpoint | Body | Returns |
+|---|---|---|
+| `POST /api/overrides` | `{ type, sid_baseline?, sid_analysis?, side?, segment?, note?, global? }` | 201 with `{ ok, type, status: 'inserted', id }` on insert, 200 with `status: 'exists' / 'updated'` on idempotent re-write, 400 on validation failure |
+| `DELETE /api/overrides/:sid` | — | 200 with `{ ok, sid, removed }` (count) or 404 if nothing matched the current scope |
+| `POST /api/approve/:sid` | optional `{ approved_by }` | 200 with `{ ok, sid, approved, missing_events }` — captures event signatures at approval time. 404 if no active override for the sid. |
+| `POST /api/unapprove/:sid` | — | 200 with `{ ok, sid, unapproved }` — clears `approval_state` and signatures, keeps audit fields. 404 if no active override. |
+
+**Type dispatch on `POST /api/overrides`:**
+
+| `type` | Required body fields | Wraps |
+|---|---|---|
+| `force_match` | `sid_baseline`, `sid_analysis` | `cmd_add_match` |
+| `force_no_match` | `side: 'baseline'\|'analysis'`, `sid_<side>` | `cmd_add_no_match` |
+| `force_segment` | `side`, `sid_<side>`, `segment` (one of `Retained`, `Shifted`, `Lost`, `New`, `Recovered`, `Tried to Return`) | `cmd_add_segment` |
+
+`note` and `global` are optional on every type. `global: true` writes `baseline_year` / `analysis_year` as `NULL` so the override applies across every year comparison.
+
+**Curl examples:**
+
+```bash
+# Add a force-match override
+curl -X POST http://localhost:8016/api/overrides \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"force_match","sid_baseline":"311655-Adult Race","sid_analysis":"354307-Adult Race","note":"renamed"}'
+
+# Mark a 2025 event as Lost (no 2026 equivalent)
+curl -X POST http://localhost:8016/api/overrides \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"force_no_match","side":"baseline","sid_baseline":"311157-Adult Race","note":"confirmed cancelled"}'
+
+# Force a segment label
+curl -X POST http://localhost:8016/api/overrides \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"force_segment","side":"baseline","sid_baseline":"310379-Adult Race","segment":"Lost"}'
+
+# Approve + unapprove
+curl -X POST http://localhost:8016/api/approve/311655-Adult%20Race
+curl -X POST http://localhost:8016/api/approve/311655-Adult%20Race \
+  -H 'Content-Type: application/json' \
+  -d '{"approved_by":"skip@example.com"}'
+curl -X POST http://localhost:8016/api/unapprove/311655-Adult%20Race
+
+# Soft-delete (sets active=0)
+curl -X DELETE http://localhost:8016/api/overrides/311655-Adult%20Race
+```
 
 ### Try it
 
@@ -834,7 +885,7 @@ CORS is enabled (`*`) so a future dashboard served from another origin (`file://
 
 ### What it doesn't do (yet)
 
-Write endpoints (`POST /api/overrides`, `DELETE /api/overrides/:id`, `POST /api/approve/:sid`) and the cascade rules engine are Step 8. The interactive event-detail editor is Step 9.
+The interactive event-detail editor in the browser is Step 9. The Override Manager panel that used to live in `dashboard.html` was removed in Step 8 because it was wired against a stale port/API; Step 9 will rebuild it as a proper SPA on top of the write endpoints above. For now, manage overrides via the CLI (`ask.js`) or `curl`. Cascade rules (pattern-based overrides) are Step 10.
 
 ---
 

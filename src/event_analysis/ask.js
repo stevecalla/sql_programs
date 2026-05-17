@@ -679,9 +679,13 @@ async function cmd_remove_override(sid) {
     return r.affectedRows;
   });
 
-  if (!removed) { console.log(`  No active override found for: ${sid} (scope: ${baseline_year} vs ${analysis_year} + globals)`); return; }
+  if (!removed) {
+    console.log(`  No active override found for: ${sid} (scope: ${baseline_year} vs ${analysis_year} + globals)`);
+    return { removed: 0 };
+  }
   console.log(`✓ Soft-deleted ${removed} override row(s) for: ${sid}  (set active=0)`);
   console.log('  Run: node build_all.js   to apply\n');
+  return { removed };
 }
 
 // ── Approval commands (Step 5) ─────────────────────────────────────────────
