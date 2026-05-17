@@ -48,15 +48,6 @@ function warn(label, msg)  { console.log(`  ⚠  [${label}] ${msg}`); }
 function error(label, msg) { console.log(`  ✗  [${label}] ${msg}`); }
 function ok(label, msg)    { console.log(`  ✓  [${label}] ${msg}`); }
 
-// ── Load events directly from CSV ────────────────────────────────────────────
-
-function load_csv_basic(csv_path) {
-  if (!fs.existsSync(csv_path)) return null;
-  const { loadBothYears } = require('./src/loader');
-  // Use a dummy second path to just get one year — we'll call separately
-  return csv_path;
-}
-
 // ── Validation functions ──────────────────────────────────────────────────────
 
 function check_events(events, year_label, issues) {
@@ -159,32 +150,28 @@ async function main() {
   console.log('\nUSAT Event Analysis — Data & Override Health Check');
   console.log('==================================================');
 
-  // Load build_all.js paths
-  const build_src = fs.readFileSync(path.join(DIR, 'build_all.js'), 'utf8');
-  const csv_25_m = build_src.match(/const csv_25\s*=\s*path\.join\(DIR,\s*'data',\s*'([^']+)'\)/);
-  const csv_26_m = build_src.match(/const csv_26\s*=\s*path\.join\(DIR,\s*'data',\s*'([^']+)'\)/);
-  const csv_25 = csv_25_m ? path.join(DIR, 'data', csv_25_m[1]) : null;
-  const csv_26 = csv_26_m ? path.join(DIR, 'data', csv_26_m[1]) : null;
+  // Years and source: mirror build_all.js — pull from usat_sales_db.
+  const YEAR_B = Number(process.env.YEAR_B) || new Date().getFullYear();
+  const YEAR_A = Number(process.env.YEAR_A) || (YEAR_B - 1);
+  ya_label = String(YEAR_A);
+  yb_label = String(YEAR_B);
 
-  if (!csv_25 || !fs.existsSync(csv_25)) { console.error(`\n✗ Cannot find csv_25: ${csv_25}`); process.exit(1); }
-  if (!csv_26 || !fs.existsSync(csv_26)) { console.error(`\n✗ Cannot find csv_26: ${csv_26}`); process.exit(1); }
+  console.log(`\n  Source : usat_sales_db.event_data_metrics`);
+  console.log(`  Year A : ${ya_label}`);
+  console.log(`  Year B : ${yb_label}`);
 
-  // Extract years from filenames
-  const ya_m = path.basename(csv_25).match(/^(\d{4})/);
-  const yb_m = path.basename(csv_26).match(/^(\d{4})/);
-  ya_label = ya_m?.[1] ?? '2025';
-  yb_label = yb_m?.[1] ?? '2026';
-
-  console.log(`\n  Year A: ${ya_label} — ${path.basename(csv_25)}`);
-  console.log(`  Year B: ${yb_label} — ${path.basename(csv_26)}`);
-
-  // Load events
-  const { loadBothYears } = require('./src/loader');
+  // Fetch events from DB (same path as build_all.js).
+  const { fetch_events_for_years } = require('./src/db');
+  const { loadBothYearsFromRows } = require('./src/loader');
   let loaded;
   try {
-    loaded = loadBothYears(csv_25, csv_26);
+    console.log('\n  Fetching events from usat_sales_db...');
+    const events_by_year = await fetch_events_for_years([YEAR_A, YEAR_B]);
+    console.log(`  ${YEAR_A} rows fetched: ${events_by_year[YEAR_A].length}  |  ${YEAR_B} rows fetched: ${events_by_year[YEAR_B].length}`);
+    loaded = loadBothYearsFromRows(events_by_year[YEAR_A], events_by_year[YEAR_B]);
   } catch (err) {
-    console.error(`\n✗ Failed to load CSVs: ${err.message}`);
+    console.error(`\n✗ Failed to fetch events from DB: ${err.message}`);
+    if (process.env.DEBUG) console.error(err.stack);
     process.exit(1);
   }
 

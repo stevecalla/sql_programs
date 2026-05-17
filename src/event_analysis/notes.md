@@ -35,41 +35,41 @@ Claude will read this before answering questions or generating new insights.
 - Identified 49 July + 55 August attrited organizers for win-back campaign
 -->
 ---
-### Build run: May 16, 2026, 11:55 PM | mode: rule_based
-- Total: 1178 (prior) → 1166 (current), net -12
-- Segments: Retained 746, Shifted 124, Lost 295, New 266
-- Top issue: Adult Clinic -12.4%
-- Top growth: Youth Clinic +17.2%
-- Worst months: Aug (-18), Jul (-16)
+### Build run: May 17, 2026, 8:34 AM | mode: ai_claude
+- Total: 1178 (prior) → 1165 (current), net -13
+- Segments: Retained 746, Shifted 123, Lost 296, New 265
+- Top issue: Adult Clinic undefined%
+- Top growth: Youth Clinic +undefined%
+- Worst months: Aug (-19), Jul (-16)
 
 ---
-### Build run: May 16, 2026, 11:57 PM | mode: rule_based
-- Total: 1178 (prior) → 1166 (current), net -12
-- Segments: Retained 746, Shifted 124, Lost 295, New 266
-- Top issue: Adult Clinic -12.4%
-- Top growth: Youth Clinic +17.2%
-- Worst months: Aug (-18), Jul (-16)
+### Build run: May 17, 2026, 8:44 AM | mode: ai_claude
+- Total: 1178 (prior) → 1165 (current), net -13
+- Segments: Retained 746, Shifted 123, Lost 296, New 265
+- Top issue: Adult Clinic undefined%
+- Top growth: Youth Clinic +undefined%
+- Worst months: Aug (-19), Jul (-16)
 
 ---
-### Build run: May 17, 2026, 12:31 AM | mode: rule_based
-- Total: 1178 (prior) → 1166 (current), net -12
-- Segments: Retained 746, Shifted 124, Lost 295, New 266
-- Top issue: Adult Clinic -12.4%
-- Top growth: Youth Clinic +17.2%
-- Worst months: Aug (-18), Jul (-16)
+### Build run: May 17, 2026, 8:52 AM | mode: ai_claude
+- Total: 1178 (prior) → 1165 (current), net -13
+- Segments: Retained 746, Shifted 123, Lost 296, New 265
+- Top issue: Adult Clinic undefined%
+- Top growth: Youth Clinic +undefined%
+- Worst months: Aug (-19), Jul (-16)
 
 ---
-### Build run: May 17, 2026, 1:20 AM | mode: rule_based
-- Total: 1178 (prior) → 1166 (current), net -12
-- Segments: Retained 746, Shifted 124, Lost 295, New 266
-- Top issue: Adult Clinic -12.4%
-- Top growth: Youth Clinic +17.2%
-- Worst months: Aug (-18), Jul (-16)
+### Build run: May 17, 2026, 9:02 AM | mode: ai_claude
+- Total: 1178 (prior) → 1165 (current), net -13
+- Segments: Retained 746, Shifted 123, Lost 296, New 265
+- Top issue: Adult Clinic undefined%
+- Top growth: Youth Clinic +undefined%
+- Worst months: Aug (-19), Jul (-16)
 
 ---
-### Build run: May 17, 2026, 1:21 AM | mode: rule_based
-- Total: 1178 (prior) → 1166 (current), net -12
-- Segments: Retained 746, Shifted 124, Lost 295, New 266
-- Top issue: Adult Clinic -12.4%
-- Top growth: Youth Clinic +17.2%
-- Worst months: Aug (-18), Jul (-16)
+### Build run: May 17, 2026, 9:13 AM | mode: ai_claude
+- Total: 1178 (prior) → 1165 (current), net -13
+- Segments: Retained 746, Shifted 123, Lost 296, New 265
+- Top issue: Adult Clinic undefined%
+- Top growth: Youth Clinic +undefined%
+- Worst months: Aug (-19), Jul (-16)

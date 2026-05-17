@@ -33,6 +33,8 @@ const TYPE_INSIGHT = {
 };
 
 module.exports = function build_organic_performance(wb, results, cm = null) {
+  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.year_b ?? new Date().getFullYear();
   const { organicMonthly, organicByType } = results;
   const ws = wb.addWorksheet('step_3_organic_performance');
   ws.views = [{ state: 'frozen', ySplit: 5 }];
@@ -42,7 +44,7 @@ module.exports = function build_organic_performance(wb, results, cm = null) {
   // Title
   ws.mergeCells('A1:L1');
   Object.assign(ws.getCell('A1'), {
-    value:     'Calendar-Adjusted Organic Performance 2025→2026  |  Strips out weekend-day shifts to show true organic growth or decline',
+    value:     `Calendar-Adjusted Organic Performance ${YA}→${YB}  |  Strips out weekend-day shifts to show true organic growth or decline`,
     font:      font({ bold: true, sz: 12, color: C.WH }),
     fill:      fill(C.DR),
     alignment: align({ h: 'left' }),
@@ -68,7 +70,7 @@ module.exports = function build_organic_performance(wb, results, cm = null) {
   });
   ws.getRow(4).height = 20;
 
-  const hdrs5 = ['Month','2025','Cal\nExpected\n2026','Actual\n2026','Raw Δ\n(naive)','Calendar\nEffect','Organic Δ\nTOTAL','',
+  const hdrs5 = ['Month',String(YA),`Cal\nExpected\n${YB}`,`Actual\n${YB}`,'Raw Δ\n(naive)','Calendar\nEffect','Organic Δ\nTOTAL','',
                  'Adult Race\nOrganic Δ','Youth Race\nOrganic Δ','Adult Clinic\nOrganic Δ','Youth Clinic\nOrganic Δ'];
   hdrs5.forEach((h, i) => {
     const bg = i === 6 ? C.DK : i >= 8 ? '37474F' : '1A237E';
@@ -188,7 +190,7 @@ module.exports = function build_organic_performance(wb, results, cm = null) {
     alignment: align({ h: 'left' }),
   });
   ws.getRow(pcRow).height = 20;
-  const chdrs = ['Event Type','2025 Count','Actual Δ (Raw)','Calendar Effect','Organic Δ','Organic %\nvs 2025 base'];
+  const chdrs = ['Event Type',`${YA} Count`,'Actual Δ (Raw)','Calendar Effect','Organic Δ',`Organic %\nvs ${YA} base`];
   chdrs.forEach((h, i) => { th(ws.getCell(pcRow + 1, i + 1), h, { bg: C.MR, sz: 9 }); });
   ws.getRow(pcRow + 1).height = 28;
   for (let ti = 0; ti < TYPES.length; ti++) {

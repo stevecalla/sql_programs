@@ -36,12 +36,14 @@ const build_monthly_reconciliation = require('./sheets/monthly_reconciliation');
 
 /**
  * Build the complete workbook from analysis results.
- * @param {object} results       — output of run_analysis()
- * @param {string} out_path      — path for the saved .xlsx file
- * @param {string} [csv_25_path] — path to 2025_events_by_start_year_by_type.csv
- * @param {string} [csv_26_path] — path to 2026_events_by_start_year_by_type.csv
+ * @param {object}      results            — output of run_analysis()
+ * @param {string}      out_path           — path for the saved .xlsx file
+ * @param {Array|null}  creation_rows_25   — prior-year creation-pipeline rows
+ *                                            ({yr,type,mo,cnt}) from src/db.js
+ * @param {Array|null}  creation_rows_26   — current-year creation-pipeline rows
+ * @param {object|null} cm                 — commentary object
  */
-async function build_workbook(results, out_path, csv_25_path = null, csv_26_path = null, cm = null) {
+async function build_workbook(results, out_path, creation_rows_25 = null, creation_rows_26 = null, cm = null) {
   const wb = new ExcelJS.Workbook();
   wb.creator  = 'USAT Event Analysis';
   wb.created  = new Date();
@@ -51,7 +53,7 @@ async function build_workbook(results, out_path, csv_25_path = null, csv_26_path
   build_executive_summary(wb, results, cm);
 
   console.log('  Building step_0_calendar_structure ...');
-  build_calendar_structure(wb);
+  build_calendar_structure(wb, results);
 
   console.log('  Building step_1_event_type_by_month ...');
   build_event_type_by_month(wb, results);
@@ -77,9 +79,9 @@ async function build_workbook(results, out_path, csv_25_path = null, csv_26_path
   console.log('  Building step_4d_cancelled_cross_match ...');
   build_cancelled_cross_match(wb, results);
 
-  if (csv_25_path && csv_26_path) {
+  if (creation_rows_25 && creation_rows_26) {
     console.log('  Building step_5_creation_pipeline ...');
-    build_creation_pipeline(wb, csv_25_path, csv_26_path, cm);
+    build_creation_pipeline(wb, creation_rows_25, creation_rows_26, cm, results);
   }
 
   console.log('  Building monthly_reconciliation ...');

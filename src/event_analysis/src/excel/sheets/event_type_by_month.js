@@ -11,6 +11,8 @@ const MN     = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
                  7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec' };
 
 module.exports = function build_event_type_by_month(wb, results) {
+  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.year_b ?? new Date().getFullYear();
   const { c25, c26 } = results;
   const ws = wb.addWorksheet('step_1_event_type_by_month');
   ws.views = [{ state: 'frozen', ySplit: 4 }];
@@ -21,7 +23,7 @@ module.exports = function build_event_type_by_month(wb, results) {
   // Row 1: title
   ws.mergeCells('A1:K1');
   Object.assign(ws.getCell('A1'), {
-    value:     `Sanctioned Event Changes by Type — 2025 vs 2026  |  Excl. Cancelled, Declined & Deleted  |  "Other" folded into Adult Race`,
+    value:     `Sanctioned Event Changes by Type — ${YA} vs ${YB}  |  Excl. Cancelled, Declined & Deleted  |  "Other" folded into Adult Race`,
     font:      font({ bold: true, sz: 12, color: C.WH }),
     fill:      fill(C.DR),
     alignment: align({ h: 'left' }),
@@ -31,7 +33,7 @@ module.exports = function build_event_type_by_month(wb, results) {
   // Row 2: subtitle
   ws.mergeCells('A2:K2');
   Object.assign(ws.getCell('A2'), {
-    value:     'Net Change = 2025 Total + sum of all Δ columns = 2026 Total  |  ✓ column verifies arithmetic',
+    value:     `Net Change = ${YA} Total + sum of all Δ columns = ${YB} Total  |  ✓ column verifies arithmetic`,
     font:      font({ sz: 9, color: C.WH }),
     fill:      fill('444444'),
     alignment: align({ h: 'left' }),
@@ -40,7 +42,7 @@ module.exports = function build_event_type_by_month(wb, results) {
 
   // Row 3: header — matching reference v9f exactly (12 cols)
   // Other Δ col included (always 0; "Other" folded into Adult Race per subtitle)
-  const H3 = ['Month','2025\nTotal','Adult Race\nΔ','Youth Race\nΔ','Adult Clinic\nΔ','Youth Clinic\nΔ','Other\nΔ','Net Δ\n(formula)','2026\nTotal','✓ Check'];
+  const H3 = ['Month',`${YA}\nTotal`,'Adult Race\nΔ','Youth Race\nΔ','Adult Clinic\nΔ','Youth Clinic\nΔ','Other\nΔ','Net Δ\n(formula)',`${YB}\nTotal`,'✓ Check'];
   ws.getRow(3).height = 32;
   H3.forEach((h, i) => {
     const bg = i < 2 ? C.DK : i < 7 ? '1A237E' : i < 9 ? '006064' : C.DK;
@@ -82,7 +84,7 @@ module.exports = function build_event_type_by_month(wb, results) {
     netCell.fill      = fill(diff > 0 ? C.GBG : diff < 0 ? C.RBG : C.LG);
     netCell.alignment = align({ h: 'right' });
 
-    // Col 9: 2026 Total
+    // Col 9: year_b Total
     td(ws.getCell(rowNum, 9), n26, { bg, bold: true, fmt: '#,##0' });
 
     // Col 10: Check formula
@@ -99,7 +101,7 @@ module.exports = function build_event_type_by_month(wb, results) {
   fillRow(ws, tr, C.DK);
   th(ws.getCell(tr, 1), 'FULL YEAR', { bg: C.DK, sz: 10 });
 
-  // Col 2: 2025 total
+  // Col 2: year_a total
   const c2 = ws.getCell(tr, 2);
   c2.value = { formula: '=SUM(B4:B15)' }; c2.font = font({ bold:true, sz:10, color:C.WH }); c2.fill = fill(C.DK); c2.alignment = align({ h:'right' }); c2.numFmt = '#,##0';
 
@@ -115,7 +117,7 @@ module.exports = function build_event_type_by_month(wb, results) {
   const c8 = ws.getCell(tr, 8);
   c8.value = { formula: '=SUM(H4:H15)' }; c8.font = font({ bold:true, sz:10, color:C.WH }); c8.fill = fill(C.DK); c8.alignment = align({ h:'right' }); c8.numFmt = '+#,##0;-#,##0;"—"';
 
-  // Col 9: 2026 total
+  // Col 9: year_b total
   const c9 = ws.getCell(tr, 9);
   c9.value = { formula: '=SUM(I4:I15)' }; c9.font = font({ bold:true, sz:10, color:C.WH }); c9.fill = fill(C.DK); c9.alignment = align({ h:'right' }); c9.numFmt = '#,##0';
 
@@ -132,9 +134,9 @@ module.exports = function build_event_type_by_month(wb, results) {
   });
   ws.getRow(refStart).height = 20;
 
-  const refHdrs = ['Month','Adult Race 2025','Adult Race 2026','Youth Race 2025','Youth Race 2026',
-                   'Adult Clinic 2025','Adult Clinic 2026','Youth Clinic 2025','Youth Clinic 2026',
-                   'Total 2025','Total 2026'];
+  const refHdrs = ['Month',`Adult Race ${YA}`,`Adult Race ${YB}`,`Youth Race ${YA}`,`Youth Race ${YB}`,
+                   `Adult Clinic ${YA}`,`Adult Clinic ${YB}`,`Youth Clinic ${YA}`,`Youth Clinic ${YB}`,
+                   `Total ${YA}`,`Total ${YB}`];
   refHdrs.forEach((h, i) => {
     th(ws.getCell(refStart + 1, i + 1), h, { bg: C.MR, sz: 9 });
   });
@@ -187,7 +189,7 @@ module.exports = function build_event_type_by_month(wb, results) {
   ws.getRow(sumStart).height = 18;
 
   // Headers
-  ['Month','Total\n2025','Total\n2026','Var'].forEach((h, i) => {
+  ['Month',`Total\n${YA}`,`Total\n${YB}`,'Var'].forEach((h, i) => {
     th(ws.getCell(sumStart + 1, i + 1), h, { bg: C.MR, sz: 9 });
   });
   ws.getRow(sumStart + 1).height = 24;

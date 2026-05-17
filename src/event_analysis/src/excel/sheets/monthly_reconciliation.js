@@ -10,6 +10,8 @@ const MN = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
              7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec' };
 
 module.exports = function build_monthly_reconciliation(wb, results) {
+  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.year_b ?? new Date().getFullYear();
   const { monthly, c25, c26, retMt, saMt, suMt, ttrMt, attrMt, recMt, newMt, monthTotal } = results;
   const ws = wb.addWorksheet('monthly_reconciliation');
   ws.views = [{ state: 'frozen', ySplit: 4 }];
@@ -27,14 +29,14 @@ module.exports = function build_monthly_reconciliation(wb, results) {
 
   ws.mergeCells('A2:N2');
   Object.assign(ws.getCell('A2'), {
-    value:     'Retained + SA + Tried to Return + Lost = 2025 total  |  Retained + SU + Recovered + New = 2026 total  |  OK = checks balance',
+    value:     `Retained + SA + Tried to Return + Lost = ${YA} total  |  Retained + SU + Recovered + New = ${YB} total  |  OK = checks balance`,
     font:      font({ sz: 8, color: C.WH }),
     fill:      fill('444444'),
     alignment: align({ h: 'left' }),
   });
   ws.getRow(2).height = 18;
 
-  const hdrs = ['Month','2025','Retained','SA out','Tried\nReturn','Lost\n(true)','Check\n2025','2026','SU in','Recovered','New\n(true)','Check\n2026','Net Δ','Net Shift'];
+  const hdrs = ['Month',String(YA),'Retained','SA out','Tried\nReturn','Lost\n(true)',`Check\n${YA}`,String(YB),'SU in','Recovered','New\n(true)',`Check\n${YB}`,'Net Δ','Net Shift'];
   hdrs.forEach((h, i) => {
     ws.getCell(3, i + 1).value     = h;
     ws.getCell(3, i + 1).font      = font({ bold: true, sz: 8, color: C.WH });

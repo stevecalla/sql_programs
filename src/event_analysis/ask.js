@@ -57,9 +57,19 @@ function load_prior_run() {
 
 function build_context(question) {
   const results   = load_json(path.join(DIR, 'output', 'analysis_results.json'));
+  const state     = load_json(path.join(DIR, 'output', 'analysis_state.json'));
   const commentary = load_json(path.join(DIR, 'output', 'commentary.json'));
   const notes      = load_text(path.join(DIR, 'notes.md'));
   const prior      = load_prior_run();
+
+  // Consistency check: state and results must agree on top-line totals.
+  if (results && state) {
+    const r_a = results.totals?.year_a, r_b = results.totals?.year_b;
+    const s_a = state.build_meta?.totals?.year_a, s_b = state.build_meta?.totals?.year_b;
+    if ((r_a !== s_a || r_b !== s_b)) {
+      console.warn(`  ⚠  analysis_results.json (${r_a}/${r_b}) and analysis_state.json (${s_a}/${s_b}) disagree on totals. Rebuild recommended.`);
+    }
+  }
 
   const parts = [];
 
@@ -75,10 +85,25 @@ function build_context(question) {
     parts.push(`Total events: ${results.totals?.year_a} → ${results.totals?.year_b} (net ${results.totals?.net >= 0 ? '+' : ''}${results.totals?.net})`);
     parts.push(`\nSegments: ${JSON.stringify(results.segments ?? {})}`);
     if (results.by_type) {
-      parts.push('\nBy type:');
+      parts.push('\nBy type (raw counts):');
       Object.entries(results.by_type).forEach(([t, v]) => {
-        if (v.n25) parts.push(`  ${t}: ${v.n25} → ${v.n26 ?? '?'} (delta ${v.delta >= 0 ? '+' : ''}${v.delta ?? '?'})`);
+        // Field names from analysis_results.json export: tot25 / tot26 / actDelta.
+        // Fall back to n25/n26/delta for backwards-compat with older exports.
+        const a = v.tot25 ?? v.n25;
+        const b = v.tot26 ?? v.n26;
+        const d = v.actDelta ?? v.delta;
+        if (a !== undefined && b !== undefined) {
+          const pct = a ? ((b - a) / a * 100).toFixed(1) : '0.0';
+          parts.push(`  ${t}: ${a} → ${b} (delta ${d >= 0 ? '+' : ''}${d}, ${pct >= 0 ? '+' : ''}${pct}%)`);
+        }
       });
+      // Compute aggregate "Adult" and "Youth" totals as a convenience for questions.
+      const adult_25 = (results.by_type['Adult Race']?.tot25 ?? 0) + (results.by_type['Adult Clinic']?.tot25 ?? 0);
+      const adult_26 = (results.by_type['Adult Race']?.tot26 ?? 0) + (results.by_type['Adult Clinic']?.tot26 ?? 0);
+      const youth_25 = (results.by_type['Youth Race']?.tot25 ?? 0) + (results.by_type['Youth Clinic']?.tot25 ?? 0);
+      const youth_26 = (results.by_type['Youth Race']?.tot26 ?? 0) + (results.by_type['Youth Clinic']?.tot26 ?? 0);
+      parts.push(`  Adult total (Race + Clinic): ${adult_25} → ${adult_26} (delta ${adult_26 - adult_25 >= 0 ? '+' : ''}${adult_26 - adult_25})`);
+      parts.push(`  Youth total (Race + Clinic): ${youth_25} → ${youth_26} (delta ${youth_26 - youth_25 >= 0 ? '+' : ''}${youth_26 - youth_25})`);
     }
     if (results.monthly) {
       parts.push('\nMonthly net deltas:');
@@ -92,6 +117,136 @@ function build_context(question) {
       Object.entries(results.organic_by_type).forEach(([t, v]) => {
         if (v.orgTotal !== undefined) parts.push(`  ${t}: organic delta ${v.orgTotal >= 0 ? '+' : ''}${v.orgTotal?.toFixed(1)}`);
       });
+    }
+  }
+
+  // Question-aware detail slices from analysis_state.json. Only include
+  // tables that look relevant to keep the prompt within budget.
+  if (state) {
+    const q = (question || '').toLowerCase();
+    const wants_months    = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|month|monthly)\b/.test(q);
+    const wants_segments  = /\b(retained|shifted|lost|attrited|new|recovered|tried to return|attrition|segment)\b/.test(q);
+    const wants_shift     = /\b(shift|moved|relocate|migration)\b/.test(q);
+    const wants_pipeline  = /\b(application|applied|filed|pipeline|q4|in-year|prior-year)\b/.test(q);
+    const wants_organic   = /\b(organic|calendar|weekend|sat|sun)\b/.test(q);
+    const wants_eventnames = /\b(name|event named|race named|sanction|specifically|which event|list|show me)\b/.test(q);
+    const ya = state.build_meta?.years?.year_a, yb = state.build_meta?.years?.year_b;
+
+    parts.push('\n## Detail tables (snapshot from build, single source of truth)');
+    parts.push(`Build timestamp: ${state.build_meta?.build_ts ?? 'unknown'}`);
+
+    // Always include per-month per-type counts — small, broadly useful.
+    const fmt_mtype = (cx) => {
+      if (!cx) return '(none)';
+      const TYPES = ['Adult Race', 'Youth Race', 'Adult Clinic', 'Youth Clinic'];
+      const MN = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const rows = [];
+      rows.push('  Month  ' + TYPES.map(t => t.padEnd(13)).join(' '));
+      for (let m = 1; m <= 12; m++) {
+        const r = cx[m] ?? {};
+        rows.push(`  ${MN[m].padEnd(7)}` + TYPES.map(t => String(r[t] ?? 0).padEnd(13)).join(' '));
+      }
+      return rows.join('\n');
+    };
+    parts.push(`\nPer-month per-type counts (${ya}, "active" only):\n${fmt_mtype(state.counts_by_month_type?.year_a)}`);
+    parts.push(`\nPer-month per-type counts (${yb}, "active" only):\n${fmt_mtype(state.counts_by_month_type?.year_b)}`);
+
+    // Segment-by-month-type tables when the question is about disposition.
+    if (wants_segments || wants_months) {
+      const sbmt = state.segments_by_month_type ?? {};
+      const seg_keys = [
+        ['retained_by_year_a_month',  'Retained'],
+        ['attrited_by_year_a_month',  'Lost'],
+        ['new_by_year_b_month',       'New'],
+        ['recovered_by_year_b_month', 'Recovered'],
+        ['shifted_by_year_a_month',   'Shifted-out (from ' + ya + ' month)'],
+        ['shifted_by_year_b_month',   'Shifted-in (to ' + yb + ' month)'],
+        ['tried_to_return_by_year_a_month', 'Tried to Return'],
+      ];
+      for (const [k, label] of seg_keys) {
+        if (sbmt[k]) parts.push(`\n${label} per-month per-type:\n${fmt_mtype(sbmt[k])}`);
+      }
+    }
+
+    // Shift flow matrix.
+    if (wants_shift) {
+      const MN = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const sf = state.shift_flow ?? {};
+      const lines = [`\nShift flow matrix (rows = ${ya} origin month, cols = ${yb} destination month):`];
+      lines.push('  From\\To  ' + Array.from({length: 12}, (_, i) => MN[i+1].padStart(4)).join(' '));
+      for (let fm = 1; fm <= 12; fm++) {
+        const row = sf[fm] ?? {};
+        lines.push(`  ${MN[fm].padEnd(8)}` + Array.from({length: 12}, (_, i) => String(row[i+1] ?? 0).padStart(4)).join(' '));
+      }
+      parts.push(lines.join('\n'));
+    }
+
+    // Creation pipeline totals (per type) — if pipeline question.
+    if (wants_pipeline) {
+      const cp = state.creation_pipeline ?? {};
+      const TYPES = ['Adult Race', 'Youth Race', 'Adult Clinic', 'Youth Clinic'];
+      const sum_by = (rows, yr, type, mos) => (rows ?? [])
+        .filter(r => r.yr === yr && r.type === type && (mos === null || mos.includes(r.mo)))
+        .reduce((s, r) => s + (r.cnt ?? 0), 0);
+      const PRE_YA = ya - 1;
+      const lines = [`\nApplication pipeline (Q4 prior + Jan-current_mo in-yr):`];
+      lines.push(`  Type           Q4-${PRE_YA}  Jan-cur ${ya}  Total ${ya}    Q4-${ya}  Jan-cur ${yb}  Total ${yb}`);
+      for (const t of TYPES) {
+        const q4_a = sum_by(cp.year_a, PRE_YA, t, [10, 11, 12]);
+        const iy_a = sum_by(cp.year_a, ya,     t, null);  // any month in YA
+        const tot_a = (cp.year_a ?? []).filter(r => r.type === t).reduce((s, r) => s + (r.cnt ?? 0), 0);
+        const q4_b = sum_by(cp.year_b, ya,     t, [10, 11, 12]);
+        const iy_b = sum_by(cp.year_b, yb,     t, null);
+        const tot_b = (cp.year_b ?? []).filter(r => r.type === t).reduce((s, r) => s + (r.cnt ?? 0), 0);
+        lines.push(`  ${t.padEnd(14)} ${String(q4_a).padStart(5)} ${String(iy_a).padStart(13)} ${String(tot_a).padStart(11)}    ${String(q4_b).padStart(5)} ${String(iy_b).padStart(13)} ${String(tot_b).padStart(11)}`);
+      }
+      parts.push(lines.join('\n'));
+    }
+
+    // Calendar impact if organic question.
+    if (wants_organic) {
+      const ci = state.calendar_impact ?? [];
+      const MN = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const lines = [`\nCalendar impact by month:`];
+      lines.push('  Month  ΔWknd  CalExp   Actual  Organic');
+      for (const c of ci) {
+        if (!c.month) continue;
+        const dw = c.dw ?? 0, cal = (c.calTotal ?? 0).toFixed(1), act = c.actDelta ?? 0, org = (c.orgTotal ?? 0).toFixed(1);
+        lines.push(`  ${MN[c.month].padEnd(5)}  ${String(dw).padStart(5)}  ${String(cal).padStart(6)}  ${String(act).padStart(6)}  ${String(org).padStart(7)}`);
+      }
+      parts.push(lines.join('\n'));
+    }
+
+    // Event-level lists (sanction IDs, names) — only when question explicitly
+    // asks about specific events. Filter by month/type if possible to stay
+    // within token budget.
+    if (wants_eventnames) {
+      const seg = state.segments ?? {};
+      const MN_NUM = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, sept:9, oct:10, nov:11, dec:12,
+                       january:1, february:2, march:3, april:4, june:6, july:7, august:8, september:9, october:10, november:11, december:12 };
+      const target_month = Object.entries(MN_NUM).find(([k]) => q.includes(k))?.[1] ?? null;
+      const filter_match = (m) => {
+        const ev = m.e25 ?? m.e26;
+        if (!ev) return false;
+        if (target_month && ev.month !== target_month) return false;
+        return true;
+      };
+      const list_segment = (key, label, side) => {
+        const arr = (seg[key] ?? []).filter(filter_match).slice(0, 30);
+        if (!arr.length) return;
+        parts.push(`\n${label} events${target_month ? ' (filtered to month ' + target_month + ')' : ''} — showing up to 30:`);
+        arr.forEach(m => {
+          const ev = m[side] ?? m.e25 ?? m.e26;
+          if (!ev) return;
+          parts.push(`  - ${ev.sanction_id} | ${ev.name} | ${ev.type} | month ${ev.month} | ${ev.status}`);
+        });
+      };
+      if (q.includes('retained'))                 list_segment('retained',        'Retained',        'e25');
+      if (q.includes('lost') || q.includes('attrited')) list_segment('attrited', 'Lost (attrited)', 'e25');
+      if (q.includes('new'))                      list_segment('new',             'New',             'e26');
+      if (q.includes('shifted') || q.includes('shift')) list_segment('shifted',   'Shifted',         'e25');
+      if (q.includes('recovered'))                list_segment('recovered',       'Recovered',       'e26');
+      if (q.includes('tried to return') || q.includes('ttr')) list_segment('tried_to_return', 'Tried to Return', 'e25');
     }
   }
 
@@ -137,11 +292,16 @@ async function ask(question, opts = {}) {
 
   const context = build_context(question);
 
-  const system_prompt = `You are a senior sports-event analyst working with USAT (USA Triathlon) sanctioned event data. 
-You have access to the computed analysis results, current commentary, and the analyst's notes below.
-Be direct, specific, and use actual numbers from the data. Keep answers concise unless asked to expand.
-If asked to rewrite or update commentary, output only the new text — no preamble.
-If the data doesn't support a conclusion, say so clearly rather than speculating.`;
+  const system_prompt = `You are a senior sports-event analyst working with USAT (USA Triathlon) sanctioned event data.
+You have access to the computed analysis results, full state snapshot (every event, every segment match, every per-month-per-type count), current commentary, and the analyst's notes below.
+
+Behavior rules:
+1. Be direct, specific, and use actual numbers from the data. Keep answers concise unless asked to expand.
+2. Prefix EVERY answer with one short line: "Based on the build from <YYYY-MM-DD HH:MM>:" using the Build timestamp from the Detail tables section. This makes it clear which snapshot is being cited.
+3. Use ONLY numbers that appear in the context. Do not invent or extrapolate.
+4. If the question requires data not in the context (e.g. organizer emails, registration counts), say "That field isn't in the build snapshot" — do not guess.
+5. If asked to rewrite or update commentary, output only the new text — no preamble (and skip the build-timestamp line for those rewrites).
+6. If the data does not support a conclusion, say so clearly rather than speculating.`;
 
   const user_message = `Here is the full context for this analysis:\n\n${context}\n\n---\n\nQuestion: ${question}`;
 

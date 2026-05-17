@@ -13,17 +13,26 @@ const SEG_ORDER = { 'Retained':0,'Shifted':1,'Tried to Return':2,'Lost':3,'Recov
 
 module.exports = function build_event_detail(wb, results) {
   const { segments } = results;
+  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.year_b ?? new Date().getFullYear();
+  const N_A = results?.y25active?.length ?? 0;
+  const N_B = results?.y26active?.length ?? 0;
+  // Roster row count: count of segment match records that contain at least one event.
+  const roster_rows = [
+    ...segments.retained, ...segments.shifted, ...segments.triedToReturn,
+    ...segments.attrited, ...segments.recovered, ...segments.new,
+  ].length;
   const ws = wb.addWorksheet('step_4_event_detail');
   ws.views = [{ state: 'frozen', ySplit: 4 }];
 
   // 16 columns matching reference v9f exactly
   const COLS = [
     ['Segment',        12], ['Confidence',       14], ['Type',             14],
-    ['Month 2025',     10], ['2025 Sanction ID', 24], ['2025 Start Date',  13],
-    ['2025\nDay',       9], ['2025 Event Name',  50], ['2025 Status',      20],
+    [`Month ${YA}`,     10], [`${YA} Sanction ID`, 24], [`${YA} Start Date`,  13],
+    [`${YA}\nDay`,       9], [`${YA} Event Name`,  50], [`${YA} Status`,      20],
     ['→',               3],
-    ['Month 2026',     10], ['2026 Sanction ID', 24], ['2026 Start Date',  13],
-    ['2026\nDay',       9], ['2026 Event Name',  50], ['2026 Status',      20],
+    [`Month ${YB}`,     10], [`${YB} Sanction ID`, 24], [`${YB} Start Date`,  13],
+    [`${YB}\nDay`,       9], [`${YB} Event Name`,  50], [`${YB} Status`,      20],
   ];
   COLS.forEach(([, w], i) => { ws.getColumn(i + 1).width = w; });
 
@@ -34,7 +43,7 @@ module.exports = function build_event_detail(wb, results) {
   // Rows 1-2: title
   ws.mergeCells('A1:P1');
   Object.assign(ws.getCell('A1'), {
-    value:     `Event Detail Roster  |  1,477 roster rows  |  Note: roster row count (1,477) may differ from active event count (1,166/1,178) due to multi-type events`,
+    value:     `Event Detail Roster  |  ${roster_rows.toLocaleString()} roster rows  |  Note: roster row count may differ from active event count (${N_B}/${N_A}) due to multi-type events`,
     font:      font({ bold: true, sz: 11, color: C.WH }),
     fill:      fill(C.DR),
     alignment: align({ h: 'left' }),
@@ -43,7 +52,7 @@ module.exports = function build_event_detail(wb, results) {
 
   ws.mergeCells('A2:P2');
   Object.assign(ws.getCell('A2'), {
-    value:     'Green=Retained | Amber=Shifted | Orange=Tried to Return (2025 active → 2026 cancelled) | Red=Lost | Purple=Recovered (2025 cancelled → 2026 active) | Blue=New',
+    value:     `Green=Retained | Amber=Shifted | Orange=Tried to Return (${YA} active → ${YB} cancelled) | Red=Lost | Purple=Recovered (${YA} cancelled → ${YB} active) | Blue=New`,
     font:      font({ sz: 8, color: C.WH }),
     fill:      fill('444444'),
     alignment: align({ h: 'left' }),
@@ -107,7 +116,7 @@ module.exports = function build_event_detail(wb, results) {
     // Type
     td(ws.getCell(row, 3), e25?.type ?? e26?.type ?? '', { bg: sbg, hAlign: 'left', sz: 9 });
 
-    // 2025 columns (4-9)
+    // year_a columns (4-9)
     if (e25) {
       td(ws.getCell(row, 4), MN[e25.month],  { bg: sbg, bold: true, hAlign: 'center' });
       td(ws.getCell(row, 5), e25.sanctionId, { bg: sbg, hAlign: 'left',   sz: 8 });
@@ -131,7 +140,7 @@ module.exports = function build_event_detail(wb, results) {
     arrow.fill      = fill(C.WH);
     arrow.alignment = align({ h: 'center' });
 
-    // 2026 columns (11-16)
+    // year_b columns (11-16)
     if (e26) {
       const m26   = e26.month;
       const m25v  = e25?.month;
@@ -187,7 +196,7 @@ module.exports = function build_event_detail(wb, results) {
   ws.getRow(meta_row + 1).height = 13;
   ws.mergeCells(meta_row + 1, 1, meta_row + 1, 16);
   const mtc = ws.getCell(meta_row + 1, 1);
-  mtc.value = 'Event matching: (1) Exact sanction-ID match, (2) Exact name match after normalisation, (3) Fuzzy Jaccard similarity >= 0.55 with date-proximity weighting. Excl. Cancelled/Declined/Deleted. Cross-match: 2025 active -> 2026 cancelled = Tried to Return; 2025 cancelled -> 2026 active = Recovered.';
+  mtc.value = `Event matching: (1) Exact sanction-ID match, (2) Exact name match after normalisation, (3) Fuzzy Jaccard similarity >= 0.55 with date-proximity weighting. Excl. Cancelled/Declined/Deleted. Cross-match: ${YA} active -> ${YB} cancelled = Tried to Return; ${YA} cancelled -> ${YB} active = Recovered.`;
   mtc.font = font({ sz: 8.5, color: '444444', italic: true }); mtc.fill = fill('F5F5F5'); mtc.alignment = align({ h: 'left', wrap: true });
 
   return ws;

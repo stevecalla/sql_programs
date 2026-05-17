@@ -26,11 +26,17 @@ const { parse } = require('csv-parse/sync');
 const EXCLUDE_STATUSES = new Set(['CANCELLED', 'DECLINED', 'DELETED']);
 
 /**
- * Parse a date string like "Sat, 2025-07-05" → Date object (or null).
+ * Parse an event-start value into a UTC Date (or null).
+ *
+ * Handles all the shapes the data arrives in:
+ *   - "Sat, 2025-07-05"      (legacy CSV)
+ *   - "2025-07-05"           (DB with dateStrings: true)
+ *   - Date object            (DB without dateStrings)
  */
 function parseEventDate(s) {
-  if (!s) return null;
-  const parts = s.trim().split(', ');
+  if (s === null || s === undefined || s === '') return null;
+  if (s instanceof Date) return isNaN(s.getTime()) ? null : s;
+  const parts = String(s).trim().split(', ');
   const dateStr = parts[parts.length - 1];           // "2025-07-05"
   const d = new Date(dateStr + 'T00:00:00Z');
   return isNaN(d.getTime()) ? null : d;
@@ -45,11 +51,40 @@ function cleanType(t) {
 }
 
 /**
+ * Convert positional rows (CSV or DB) into event objects.
+ *
+ * `rows` must be an array of arrays — same shape csv-parse returns when
+ * `columns` is left off, and what mysql2 returns with `rowsAsArray: true`.
+ * Filters to active events (status NOT in EXCLUDE_STATUSES) unless
+ * includeExcluded is true.
+ */
+function parseRows(rows, { includeExcluded = false } = {}) {
+  const events = [];
+  for (const row of rows) {
+    const status = (row[4] || '').toString().trim();
+    if (!includeExcluded && EXCLUDE_STATUSES.has(status)) continue;
+
+    const startDate = parseEventDate(row[6]);
+    if (!startDate && !includeExcluded) continue;   // skip undatable active events
+
+    events.push({
+      name:        (row[1] || '').toString().trim(),
+      sanctionId:  (row[2] || '').toString().trim(),   // real ID at position 2
+      status,
+      type:        cleanType(row[5]),
+      startDate,
+      month:       startDate ? startDate.getUTCMonth() + 1 : null,  // 1–12
+    });
+  }
+  return events;
+}
+
+/**
  * Load and parse one CSV.
  * Returns an array of event objects, filtered to active events only
  * (status NOT in EXCLUDE_STATUSES), unless includeExcluded is true.
  */
-function loadCsv(filePath, { includeExcluded = false } = {}) {
+function loadCsv(filePath, opts = {}) {
   const raw = fs.readFileSync(filePath, 'utf8');
 
   // csv-parse returns arrays when we DON'T pass columns:true,
@@ -60,25 +95,7 @@ function loadCsv(filePath, { includeExcluded = false } = {}) {
     relax_column_count: true,
   });
 
-  const events = [];
-  for (const row of rows) {
-    const status = (row[4] || '').trim();
-    if (!includeExcluded && EXCLUDE_STATUSES.has(status)) continue;
-
-    const startDate = parseEventDate(row[6]);
-    if (!startDate && !includeExcluded) continue;   // skip undatable active events
-
-    events.push({
-      name:        (row[1] || '').trim(),
-      sanctionId:  (row[2] || '').trim(),   // real ID at position 2
-      status,
-      type:        cleanType(row[5]),
-      startDate,
-      month:       startDate ? startDate.getUTCMonth() + 1 : null,  // 1–12
-    });
-  }
-
-  return events;
+  return parseRows(rows, opts);
 }
 
 /**
@@ -95,4 +112,25 @@ function loadBothYears(csv2025Path, csv2026Path) {
   return { y25active, y26active, y25excluded, y26excluded };
 }
 
-module.exports = { loadBothYears, parseEventDate, cleanType, EXCLUDE_STATUSES };
+/**
+ * Same shape as loadBothYears, but driven by pre-fetched DB rows (positional
+ * arrays from mysql2 with `rowsAsArray: true`).
+ */
+function loadBothYearsFromRows(rows25, rows26) {
+  const y25active   = parseRows(rows25);
+  const y26active   = parseRows(rows26);
+  const y25excluded = parseRows(rows25, { includeExcluded: true })
+                        .filter(e => EXCLUDE_STATUSES.has(e.status));
+  const y26excluded = parseRows(rows26, { includeExcluded: true })
+                        .filter(e => EXCLUDE_STATUSES.has(e.status));
+  return { y25active, y26active, y25excluded, y26excluded };
+}
+
+module.exports = {
+  loadBothYears,
+  loadBothYearsFromRows,
+  parseRows,
+  parseEventDate,
+  cleanType,
+  EXCLUDE_STATUSES,
+};

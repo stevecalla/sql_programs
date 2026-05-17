@@ -64,6 +64,24 @@ function load_json(fp) {
   try { return JSON.parse(fs.readFileSync(fp, 'utf8')); } catch { return null; }
 }
 
+/**
+ * Return the absolute path of the most recently modified file in `dir`
+ * whose basename matches `regex` — or null if none exists.
+ */
+function find_latest(dir, regex) {
+  if (!fs.existsSync(dir)) return null;
+  const matches = fs.readdirSync(dir)
+    .filter(name => regex.test(name))
+    .map(name => {
+      const fp = path.join(dir, name);
+      const st = fs.statSync(fp);
+      return st.isFile() ? { fp, mtime: st.mtimeMs } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.mtime - a.mtime);
+  return matches.length ? matches[0].fp : null;
+}
+
 function status_line() {
   const cm  = load_json(path.join(DIR, 'output', 'commentary.json'));
   const res = load_json(path.join(DIR, 'output', 'analysis_results.json'));
@@ -94,8 +112,8 @@ const SECTIONS = [
       { id: 1,  label: 'Build everything',           desc: 'Excel + PowerPoint + Dashboard + JSON outputs',  action: 'build' },
       { id: 2,  label: 'Check data quality',         desc: 'Validate CSVs + override conflicts before building', action: 'check' },
       { id: 3,  label: 'Open dashboard in browser',  desc: 'Interactive charts (output/dashboard.html)',     action: 'open_dashboard' },
-      { id: 4,  label: 'Open Excel workbook',        desc: 'output/2026_event_calendar_analysis_v9f.xlsx',  action: 'open_excel' },
-      { id: 5,  label: 'Open PowerPoint deck',       desc: 'output/event_trends_summary_v3.pptx',           action: 'open_pptx' },
+      { id: 4,  label: 'Open Excel workbook',        desc: 'Most recent output/<year>_event_calendar_analysis_*.xlsx',  action: 'open_excel' },
+      { id: 5,  label: 'Open PowerPoint deck',       desc: 'Most recent output/<year>_event_trends_summary_*.pptx',           action: 'open_pptx' },
     ],
   },
   {
@@ -183,17 +201,17 @@ async function handle_action(action, rl) {
     }
 
     case 'open_excel': {
-      const fp = path.join(DIR, 'output', '2026_event_calendar_analysis_v9f.xlsx');
-      if (!fs.existsSync(fp)) { console.log(c(YELLOW, '  Run Build first.')); break; }
-      try { execSync(process.platform === 'win32' ? `start "" "${fp}"` : process.platform === 'darwin' ? `open "${fp}"` : `xdg-open "${fp}"`, { stdio: 'ignore' }); console.log(c(GREEN, '  ✓ Opened')); }
+      const fp = find_latest(path.join(DIR, 'output'), /^\d{4}_event_calendar_analysis_.+\.xlsx$/);
+      if (!fp) { console.log(c(YELLOW, '  No xlsx in output/ — run Build first.')); break; }
+      try { execSync(process.platform === 'win32' ? `start "" "${fp}"` : process.platform === 'darwin' ? `open "${fp}"` : `xdg-open "${fp}"`, { stdio: 'ignore' }); console.log(c(GREEN, `  ✓ Opened ${path.basename(fp)}`)); }
       catch { console.log(`  Path: ${fp}`); }
       break;
     }
 
     case 'open_pptx': {
-      const fp = path.join(DIR, 'output', 'event_trends_summary_v3.pptx');
-      if (!fs.existsSync(fp)) { console.log(c(YELLOW, '  Run Build first.')); break; }
-      try { execSync(process.platform === 'win32' ? `start "" "${fp}"` : process.platform === 'darwin' ? `open "${fp}"` : `xdg-open "${fp}"`, { stdio: 'ignore' }); console.log(c(GREEN, '  ✓ Opened')); }
+      const fp = find_latest(path.join(DIR, 'output'), /^\d{4}_event_trends_summary_.+\.pptx$/);
+      if (!fp) { console.log(c(YELLOW, '  No pptx in output/ — run Build first.')); break; }
+      try { execSync(process.platform === 'win32' ? `start "" "${fp}"` : process.platform === 'darwin' ? `open "${fp}"` : `xdg-open "${fp}"`, { stdio: 'ignore' }); console.log(c(GREEN, `  ✓ Opened ${path.basename(fp)}`)); }
       catch { console.log(`  Path: ${fp}`); }
       break;
     }

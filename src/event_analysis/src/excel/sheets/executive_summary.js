@@ -10,7 +10,9 @@ const MN = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
              7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec' };
 
 module.exports = function build_executive_summary(wb, results, cm = null) {
-  const { segSummary, organicByType, organicMonthly, calImpact, c25, c26 } = results;
+  const { segSummary, organicByType, organicMonthly, calImpact, c25, c26, monthly } = results;
+  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.year_b ?? new Date().getFullYear();
   const ws = wb.addWorksheet('executive_summary');
   ws.views = [{ state: 'frozen', ySplit: 3 }];
 
@@ -45,7 +47,7 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
   }
   function gap(row, h = 6) { ws.getRow(row).height = h; fillRow(ws, row, C.WH); }
 
-  H(1, `Sanctioned Events 2025 vs 2026 — Executive Summary  |  6-Segment Classification`, C.DR, 12, 30);
+  H(1, `Sanctioned Events ${YA} vs ${YB} — Executive Summary  |  6-Segment Classification`, C.DR, 12, 30);
   H(2, 'Steps follow the order the analysis was built: count → type shifts → calendar → organic → event-level', '444444', 9, 18);
   gap(3, 6);
 
@@ -62,11 +64,20 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
   const acOrgPct = (organicByType['Adult Clinic'].orgTotal / ac25 * 100).toFixed(1);
   const ycOrgPct = (organicByType['Youth Clinic'].orgTotal / yc25 * 100).toFixed(1);
   const junOrg   = organicMonthly.find(o=>o.month===6)?.orgTotal.toFixed(1);
+  // Worst and best months (by net delta) for use in narrative bullets.
+  const _M_arr = Object.entries(monthly ?? {}).map(([mo, d]) => ({ m: Number(mo), label: MN[Number(mo)], ...d }));
+  const _worst2 = [..._M_arr].sort((a, b) => (a.netDelta ?? 0) - (b.netDelta ?? 0)).slice(0, 2);
+  const _best2  = [..._M_arr].sort((a, b) => (b.netDelta ?? 0) - (a.netDelta ?? 0)).slice(0, 2);
+  // Find the top decliner and grower types from organicByType.
+  const _obt = Object.entries(organicByType ?? {}).map(([t, v]) => ({ type: t, ...v }));
+  const _lag = [..._obt].sort((a, b) => (a.orgTotal ?? 0) - (b.orgTotal ?? 0))[0];
+  const _lead = [..._obt].sort((a, b) => (b.orgTotal ?? 0) - (a.orgTotal ?? 0))[0];
+  const _fmt = n => n > 0 ? `+${n}` : `${n}`;
   const slacks = cm?.excel_slack_bullets ?? [
-    `${n26total} events in 2026 vs ${n25total} in 2025 (${n26total-n25total}, ${((n26total-n25total)/n25total*100).toFixed(1)}%). Adult Clinic accounts for the full net decline (${ac26-ac25}, organic ${acOrgPct}%); Adult Race essentially flat; Youth Race mildly soft; Youth Clinic the only growth story (+${ycOrgPct}% organic).`,
-    `Summer declines concentrated in races: July −16 (both types −8), August −18 (Youth Race −9 worst). Calendar provides zero alibi — July and August had identical weekend-day counts both years. May is most misleading: +3 raw but −13 organic (extra Sunday handed it +16 expected it failed to fill).`,
-    `Of ${n25total} 2025 active events: ${segSummary['Lost']} truly did not return; ${segSummary['Tried to Return']} tried to return but were cancelled in 2026 — actionable (specific race directors to follow up). ${segSummary['Recovered']} recovered from 2025 cancellations. July and August had the worst replacement rates.`,
-    `June is the standout: lost a Sunday (calendar headwind −23) but delivered organic +${junOrg} growth — strongest month. ${segSummary['New']} genuinely brand-new events joined 2026. October gain (+11) largely explained by calendar and shifted events; organic only +4.`,
+    `${n26total} events in ${YB} vs ${n25total} in ${YA} (${_fmt(n26total-n25total)}, ${((n26total-n25total)/n25total*100).toFixed(1)}%). ${_lag?.type} is the structural decliner (organic ${(_lag?.orgTotal/(_lag?.tot25||1)*100).toFixed(1)}%); ${_lead?.type} the only organic growth story (+${(_lead?.orgTotal/(_lead?.tot25||1)*100).toFixed(1)}%).`,
+    `Worst months by net change: ${_worst2.map(w => `${w.label} ${_fmt(w.netDelta)}`).join(', ')}. Best months: ${_best2.map(b => `${b.label} ${_fmt(b.netDelta)}`).join(', ')}.`,
+    `Of ${n25total} ${YA} active events: ${segSummary['Lost']} truly did not return; ${segSummary['Tried to Return']} tried to return but were cancelled in ${YB} — actionable. ${segSummary['Recovered']} recovered from ${YA} cancellations.`,
+    `${segSummary['New']} genuinely brand-new events joined ${YB}. See step_3_organic_performance and step_4_event_detail for the full picture.`,
   ];
   for (let i = 0; i < slacks.length; i++) {
     const row = 5 + i;
@@ -85,7 +96,7 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
   H(10, `  STEP 0 — Total Event Count  |  ${n26total} vs ${n25total}  (${n26total-n25total > 0 ? '+' : ''}${n26total-n25total}, ${((n26total-n25total)/n25total*100).toFixed(1)}%)`, C.DK, 11, 22);
   N(11, cm?.slide_2_narrative || 'Adult Clinic accounts for the full net decline. Races roughly flat. Youth Clinic the bright spot. See step_1_event_type_by_month tab.', C.LG, '333333', 20);
   fillRow(ws, 12, C.DK); ws.getRow(12).height = 20;
-  TC(12,1,'',C.DK); TC(12,2,'Type',C.DK); TC(12,3,'2025',C.DK); TC(12,4,'2026',C.DK); TC(12,5,'Δ',C.DK); TC(12,6,'Δ %',C.DK);
+  TC(12,1,'',C.DK); TC(12,2,'Type',C.DK); TC(12,3,String(YA),C.DK); TC(12,4,String(YB),C.DK); TC(12,5,'Δ',C.DK); TC(12,6,'Δ %',C.DK);
   ws.mergeCells('G12:H12');
   TC(12,9,'Key read',C.DK,6,C.WH,8);  // TC merges I12:N12 itself via span=6
   for (const [ri,[typ,n25,n26,bg,fg,obs]] of [
@@ -122,18 +133,65 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
     return startRow+2+rows.length+2;
   }
 
-  // Step 1 rows
-  const s1data=[
-    ['July',  -8,-8,  0,  0,-16,C.MRDBG,C.RD,'Both race types −8. Clinics flat. Broad organic decline.'],
-    ['August',-6,-9,  0, -3,-18,C.MRDBG,C.RD,'Youth Race worst (−9). Youth Clinic fell. Deeper.'],
-    ['June',  +1,+8, -3, +3,+10,C.MGBG, C.GD,'Youth Race best (+8). Youth Clinic up. Clinic drag.'],
-    ['Oct',   +7,+3, +2, -1,+11,C.GBG,  C.GD,'Broad gains. Adult Clinic positive.'],
-    ['Annual',-1,-4,-12, +5,-12,C.MG,   C.DK,'Races flat. Adult Clinic structural drag.'],
+  // Step 1 rows — pick the 2 worst + 2 best months by netDelta, plus an Annual
+  // row from typeAnnual. All numbers computed from results, no hardcoded values.
+  const _step1_months = (() => {
+    const arr = Object.entries(monthly ?? {}).map(([mo, d]) => ({ m: Number(mo), label: MN[Number(mo)], ...d }));
+    const worst = [...arr].sort((a, b) => (a.netDelta ?? 0) - (b.netDelta ?? 0)).slice(0, 2);
+    const best  = [...arr].sort((a, b) => (b.netDelta ?? 0) - (a.netDelta ?? 0)).slice(0, 2);
+    const seen = new Set();
+    return [...worst, ...best]
+      .filter(p => { if (seen.has(p.m)) return false; seen.add(p.m); return true; })
+      .sort((a, b) => a.m - b.m);
+  })();
+  const _typeAnnual = results.typeAnnual ?? {};
+  const _ar_d = _typeAnnual['Adult Race']?.actDelta ?? 0;
+  const _yr_d = _typeAnnual['Youth Race']?.actDelta ?? 0;
+  const _ac_d = _typeAnnual['Adult Clinic']?.actDelta ?? 0;
+  const _yc_d = _typeAnnual['Youth Clinic']?.actDelta ?? 0;
+  // Find the principal decliner / grower from the four type deltas.
+  const _type_movers = [
+    { type: 'Adult Race',   delta: _ar_d },
+    { type: 'Youth Race',   delta: _yr_d },
+    { type: 'Adult Clinic', delta: _ac_d },
+    { type: 'Youth Clinic', delta: _yc_d },
   ];
+  const top_decliner = [..._type_movers].sort((a, b) => a.delta - b.delta).find(d => d.delta < 0) ?? null;
+  const top_grower   = [..._type_movers].sort((a, b) => b.delta - a.delta).find(d => d.delta > 0) ?? null;
+  const _step1_make = (m) => {
+    const ar = (c26[m.m]?.['Adult Race'] ?? 0) - (c25[m.m]?.['Adult Race'] ?? 0);
+    const yr = (c26[m.m]?.['Youth Race'] ?? 0) - (c25[m.m]?.['Youth Race'] ?? 0);
+    const ac = (c26[m.m]?.['Adult Clinic'] ?? 0) - (c25[m.m]?.['Adult Clinic'] ?? 0);
+    const yc = (c26[m.m]?.['Youth Clinic'] ?? 0) - (c25[m.m]?.['Youth Clinic'] ?? 0);
+    const tot = ar + yr + ac + yc;
+    const decline = tot < 0;
+    const bg = decline ? C.MRDBG : C.MGBG, fg = decline ? C.RD : C.GD;
+    // Auto-generate an observation that names which types contributed most.
+    const parts = [
+      { t: 'Adult Race', v: ar }, { t: 'Youth Race', v: yr },
+      { t: 'Adult Clinic', v: ac }, { t: 'Youth Clinic', v: yc },
+    ].filter(p => p.v !== 0).sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
+    const obs = parts.length
+      ? `${parts.slice(0, 2).map(p => `${p.t} ${p.v >= 0 ? '+' : ''}${p.v}`).join(', ')}${parts.length > 2 ? ', other types small' : ''}.`
+      : 'No movement by type.';
+    return [m.label, ar, yr, ac, yc, tot, bg, fg, obs];
+  };
+  const s1data = [
+    ..._step1_months.map(_step1_make),
+    ['Annual', _ar_d, _yr_d, _ac_d, _yc_d, _ar_d + _yr_d + _ac_d + _yc_d, C.MG, C.DK,
+     `${top_decliner ? top_decliner.type + ' the principal mover' : 'Mixed type-level changes'}${top_grower ? '; ' + top_grower.type + ' is the growth story' : ''}.`],
+  ];
+
   let nextRow = 19;
+  // Auto-narrative for Step 1: name worst and best months from data.
+  const _w_lbl = _step1_months.filter(m => (m.netDelta ?? 0) < 0).slice(0, 2).map(m => m.label);
+  const _b_lbl = _step1_months.filter(m => (m.netDelta ?? 0) > 0).slice(0, 2).map(m => m.label);
+  const _step1_narr =
+    cm?.excel_step1_narrative
+    ?? `Worst months: ${_w_lbl.join(' & ') || 'none'}. Best months: ${_b_lbl.join(' & ') || 'none'}. See step_1_event_type_by_month for the full table.`;
   nextRow = stepTable(nextRow,
     '  STEP 1 — Event Type Changes by Month  |  raw YoY Δ per type', '1565C0', C.BBG, '0D1B5E',
-    'Both race types decline in summer; Adult Clinic year-round; Youth Clinic growing. See step_1_event_type_by_month.',
+    _step1_narr,
     [['',1],['Month',1],['Adult Race Δ',1],['Youth Race Δ',1],['Adult Clinic Δ',1],['Youth Clinic Δ',1],['Total Δ',1],['',2],['',1],['Observation',5]],
     s1data.map(([mon,ar,yr,ac,yc,tot,bg,fg,obs]) => (ws2, row) => {
       fillRow(ws2, row, bg); ws2.getCell(row,1).fill=fill('1565C0');
@@ -145,20 +203,54 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
     }),
   );
 
-  // Step 2 rows
-  const s2data=[
-    ['May','+1 Sun',+15.8,+3,-12.8,C.MRDBG,C.RD,'Extra Sunday gave +16 expected. Only +3 actual → −13 organic.'],
-    ['June','−1 Sun',-23.2,+10,+33.2,C.MGBG,C.GD,'Lost Sunday (−23 expected). Actual +10 → organic +33.'],
-    ['July','None',0,-16,-16,C.MRDBG,C.RD,'Zero calendar effect. Full −16 is organic. No alibi.'],
-    ['August','None',0,-18,-18,C.MRDBG,C.RD,'Zero calendar effect. Full −18 is organic. Worst month.'],
-  ];
+  // Step 2 rows — pick months with notable calendar effect (|cal| > 2) plus
+  // the 2 worst organic months. All values computed from results.calImpact.
+  const _step2_picks = (() => {
+    const arr = (calImpact ?? []).filter(ci => ci && ci.month >= 1 && ci.month <= 12);
+    const big_cal = arr.filter(ci => Math.abs(ci.calTotal ?? 0) > 2)
+      .sort((a, b) => Math.abs(b.calTotal) - Math.abs(a.calTotal)).slice(0, 2);
+    const worst_org = [...arr].sort((a, b) => (a.orgTotal ?? 0) - (b.orgTotal ?? 0)).slice(0, 2);
+    const seen = new Set();
+    return [...big_cal, ...worst_org]
+      .filter(ci => { if (seen.has(ci.month)) return false; seen.add(ci.month); return true; })
+      .sort((a, b) => a.month - b.month);
+  })();
+  const _wknd_label = (ci) => {
+    if (!ci.dw || ci.dw === 0) return 'None';
+    const parts = [];
+    if (ci.ds) parts.push(`${ci.ds > 0 ? '+' : ''}${ci.ds} Sat`);
+    if (ci.du) parts.push(`${ci.du > 0 ? '+' : ''}${ci.du} Sun`);
+    return parts.join(', ') || `${ci.dw > 0 ? '+' : ''}${ci.dw} day${Math.abs(ci.dw) === 1 ? '' : 's'}`;
+  };
+  const s2data = _step2_picks.map(ci => {
+    const cal = ci.calTotal ?? 0, act = ci.actDelta ?? 0, org = ci.orgTotal ?? 0;
+    const decline = org < 0;
+    const bg = decline ? C.MRDBG : C.MGBG, fg = decline ? C.RD : C.GD;
+    let obs;
+    if (Math.abs(cal) < 0.5) {
+      obs = `Zero calendar effect. Full ${act >= 0 ? '+' : ''}${act} is organic.`;
+    } else if (Math.sign(act) !== Math.sign(org) && Math.abs(cal) > 5) {
+      obs = `Calendar ${cal > 0 ? 'gave' : 'cost'} ${Math.abs(Math.round(cal))} expected. Actual ${act >= 0 ? '+' : ''}${act} → organic ${org >= 0 ? '+' : ''}${org.toFixed(1)}.`;
+    } else {
+      obs = `Cal ${cal >= 0 ? '+' : ''}${cal.toFixed(1)} → actual ${act >= 0 ? '+' : ''}${act} → organic ${org >= 0 ? '+' : ''}${org.toFixed(1)}.`;
+    }
+    return [MN[ci.month], _wknd_label(ci), cal, act, org, bg, fg, obs];
+  });
+  // Dynamic Step 2 narrative.
+  const _zero_cover_worst = _step2_picks.filter(ci => Math.abs(ci.calTotal ?? 0) < 0.5 && (ci.orgTotal ?? 0) < -5)
+    .map(ci => MN[ci.month]);
+  const _misleading = _step2_picks
+    .filter(ci => Math.abs(ci.calTotal ?? 0) > 5 && Math.sign(ci.actDelta ?? 0) !== Math.sign(ci.orgTotal ?? 0))
+    .map(ci => MN[ci.month]);
+  const _step2_narr = cm?.excel_step2_narrative
+    ?? (`${_zero_cover_worst.length ? _zero_cover_worst.join('/') + ' had zero weekend-day changes — declines are organic. ' : ''}${_misleading.length ? _misleading.join('/') + ' most distorted by calendar shifts. ' : ''}See step_2_calendar_impact.`);
   nextRow = stepTable(nextRow,
     '  STEP 2 — Calendar Impact by Type  |  weekend-day count shifts vs expected', '006064', C.TLBG, '003333',
-    'Jul/Aug had zero weekend-day changes — full declines are organic. May/June most distorted. See step_2_calendar_impact.',
+    _step2_narr,
     [['',1],['Month',1],['Δ Wknd',1],['Cal Expected',1],['Actual Δ',1],['Organic Δ',1],['',3],['',1],['Interpretation',5]],
     s2data.map(([mon,wch,cal,act,org,bg,fg,obs]) => (ws2, row) => {
       fillRow(ws2, row, bg); ws2.getCell(row,1).fill=fill('006064');
-      td(ws2.getCell(row,2),mon,{bg,fg,bold:'Jul'===mon||'Aug'===mon,hAlign:'left'});
+      td(ws2.getCell(row,2),mon,{bg,fg,bold:org<-5,hAlign:'left'});
       td(ws2.getCell(row,3),wch,{bg:wch!=='None'?C.TLBG:bg,fg:wch!=='None'?C.TL:fg,hAlign:'center',sz:8,italic:true});
       dv(ws2.getCell(row,4),Math.round(cal*10)/10,bg,{fmt:'+0.0;-0.0;"—"',bold:false});
       dv(ws2.getCell(row,5),act,bg); dv(ws2.getCell(row,6),Math.round(org*10)/10,bg,{fmt:'+0.0;-0.0;"—"',bold:true});
@@ -168,20 +260,51 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
     }),
   );
 
-  // Step 3 rows
-  const s3mdata=[
-    ['June',+10,-23.2,+33.2,C.MGBG,C.GD],['March',+8,-5.4,+13.4,C.MGBG,C.GD],
-    ['May',+3,+15.8,-12.8,C.MRDBG,C.RD],['July',-16,0,-16,C.MRDBG,C.RD],['August',-18,0,-18,C.MRDBG,C.RD],
-  ];
-  const s3tdata=[
-    ['Adult Race',+1.4,0.002,C.GBG,C.GD,'Flat +0.2%'],
-    ['Youth Race',-2.8,-0.012,C.LG,'555555','Mild −1.2%'],
-    ['Adult Clinic',-10.0,-0.103,C.MRDBG,C.RD,'Contraction −10.3%'],
-    ['Youth Clinic',+5.6,+0.193,C.MGBG,C.GD,'Growth +19.4%'],
-  ];
+  // Step 3 rows — pick 5 most extreme organic months (by |orgTotal|).
+  const _step3_months = (() => {
+    const arr = (calImpact ?? []).filter(ci => ci && ci.month >= 1 && ci.month <= 12);
+    return [...arr]
+      .sort((a, b) => Math.abs(b.orgTotal ?? 0) - Math.abs(a.orgTotal ?? 0))
+      .slice(0, 5)
+      .sort((a, b) => a.month - b.month);
+  })();
+  const s3mdata = _step3_months.map(ci => {
+    const cal = ci.calTotal ?? 0, raw = ci.actDelta ?? 0, org = ci.orgTotal ?? 0;
+    const decline = org < 0;
+    const bg = decline ? C.MRDBG : C.MGBG, fg = decline ? C.RD : C.GD;
+    return [MN[ci.month], raw, cal, org, bg, fg];
+  });
+  // Step 3 type rows — computed from organicByType.
+  const _obt_map = results.organicByType ?? {};
+  const _type_row = (t) => {
+    const v = _obt_map[t] ?? {};
+    const org = v.orgTotal ?? 0;
+    const pct = v.tot25 ? (org / v.tot25) : 0;
+    let bg, fg, read;
+    if (pct > 0.10)        { bg = C.MGBG; fg = C.GD; read = `Strong growth ${(pct*100).toFixed(1)}%`; }
+    else if (pct > 0.02)   { bg = C.GBG;  fg = C.GD; read = `Solid gain +${(pct*100).toFixed(1)}%`; }
+    else if (pct > -0.02)  { bg = C.LG;   fg = '555555'; read = `Flat ${pct >= 0 ? '+' : ''}${(pct*100).toFixed(1)}%`; }
+    else if (pct > -0.08)  { bg = C.LG;   fg = '555555'; read = `Mild softness ${(pct*100).toFixed(1)}%`; }
+    else                    { bg = C.MRDBG; fg = C.RD; read = `Contraction ${(pct*100).toFixed(1)}%`; }
+    return [t, org, pct, bg, fg, read];
+  };
+  const s3tdata = ['Adult Race','Youth Race','Adult Clinic','Youth Clinic'].map(_type_row);
+  // Dynamic Step 3 narrative.
+  const _best_org = _step3_months.filter(ci => (ci.orgTotal ?? 0) > 5)
+    .sort((a, b) => (b.orgTotal ?? 0) - (a.orgTotal ?? 0))[0];
+  const _worst_org_m = _step3_months.filter(ci => (ci.orgTotal ?? 0) < -5)
+    .sort((a, b) => (a.orgTotal ?? 0) - (b.orgTotal ?? 0))[0];
+  const _mislead_org = _step3_months.filter(ci => Math.abs(ci.calTotal ?? 0) > 5
+    && Math.sign(ci.actDelta ?? 0) !== Math.sign(ci.orgTotal ?? 0))[0];
+  const _step3_narr_parts = [];
+  if (_best_org)    _step3_narr_parts.push(`${MN[_best_org.month]} strongest organic (${(_best_org.orgTotal).toFixed(1)})${(_best_org.calTotal ?? 0) < -5 ? ' despite headwind' : ''}`);
+  if (_mislead_org) _step3_narr_parts.push(`${MN[_mislead_org.month]} most misleading (${(_mislead_org.actDelta) >= 0 ? '+' : ''}${_mislead_org.actDelta} raw, ${(_mislead_org.orgTotal).toFixed(1)} organic)`);
+  if (_worst_org_m) _step3_narr_parts.push(`${MN[_worst_org_m.month]} weakest organic (${(_worst_org_m.orgTotal).toFixed(1)})`);
+  const _step3_narr = cm?.excel_step3_narrative
+    ?? (_step3_narr_parts.join('. ') + (_step3_narr_parts.length ? '. ' : '') + 'See step_3_organic_performance.');
   nextRow = stepTable(nextRow,
     '  STEP 3 — Organic Performance  |  true signal after removing calendar noise', '4A148C', C.PBG, '4A148C',
-    'June strongest organic (+33 despite headwind). May most misleading (+3 raw, −13 organic). Jul/Aug zero cover. See step_3_organic_performance.',
+    _step3_narr,
     [['',1],['Month',1],['Raw Δ',1],['Cal Effect',1],['Organic Δ',1],['Type',3],['',1],['Org Δ',1],['Org %',1],['',1],['Read',3]],
     s3mdata.map(([mon,raw,cal,org,bg,fg], ri) => (ws2, row) => {
       fillRow(ws2, row, bg); ws2.getCell(row,1).fill=fill('4A148C');
@@ -203,17 +326,17 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
 
   // Step 4
   H(nextRow, '  STEP 4 — Event-Level Disposition  |  6 segments', '37474F', 11, 22);
-  const s4narr = `${segSummary.Retained} retained, ${segSummary.Shifted} shifted months, ${segSummary['Tried to Return']} tried to return (cancelled 2026 — actionable!), ${segSummary.Lost} truly gone. ${segSummary.Recovered} recovered from 2025 cancellations, ${segSummary.New} genuinely new. See step_4_event_detail & step_4_cancelled_cross_match tabs.`;
+  const s4narr = `${segSummary.Retained} retained, ${segSummary.Shifted} shifted months, ${segSummary['Tried to Return']} tried to return (cancelled ${YB} — actionable!), ${segSummary.Lost} truly gone. ${segSummary.Recovered} recovered from ${YA} cancellations, ${segSummary.New} genuinely new. See step_4_event_detail & step_4_cancelled_cross_match tabs.`;
   N(nextRow+1, s4narr, C.MG, '222222', 28); ws.getRow(nextRow+1).height=32;
 
   // 6 stat boxes
   const boxes=[
-    ['Retained',   segSummary.Retained,   `${Math.round(segSummary.Retained/n25total*100)}% of 2025`,C.GBG,C.GD],
-    ['Shifted',    segSummary.Shifted,    `${Math.round(segSummary.Shifted/n25total*100)}% of 2025`,C.ABG,C.AM],
-    ['Tried to Return',segSummary['Tried to Return'],`${Math.round(segSummary['Tried to Return']/n25total*100)}% of 2025`,C.TRBG,C.TRFG],
-    ['Lost (true)',segSummary.Lost,`${Math.round(segSummary.Lost/n25total*100)}% of 2025`,C.MRDBG,C.RD],
-    ['Recovered',  segSummary.Recovered,  `${Math.round(segSummary.Recovered/n26total*100)}% of 2026`,C.RECBG,C.RECFG],
-    ['New (true)', segSummary.New,         `${Math.round(segSummary.New/n26total*100)}% of 2026`,C.BBG,C.BD],
+    ['Retained',   segSummary.Retained,   `${Math.round(segSummary.Retained/n25total*100)}% of ${YA}`,C.GBG,C.GD],
+    ['Shifted',    segSummary.Shifted,    `${Math.round(segSummary.Shifted/n25total*100)}% of ${YA}`,C.ABG,C.AM],
+    ['Tried to Return',segSummary['Tried to Return'],`${Math.round(segSummary['Tried to Return']/n25total*100)}% of ${YA}`,C.TRBG,C.TRFG],
+    ['Lost (true)',segSummary.Lost,`${Math.round(segSummary.Lost/n25total*100)}% of ${YA}`,C.MRDBG,C.RD],
+    ['Recovered',  segSummary.Recovered,  `${Math.round(segSummary.Recovered/n26total*100)}% of ${YB}`,C.RECBG,C.RECFG],
+    ['New (true)', segSummary.New,         `${Math.round(segSummary.New/n26total*100)}% of ${YB}`,C.BBG,C.BD],
   ];
   const colMap=[[2,5],[6,9],[10,13],[2,5],[6,9],[10,13]];
   const rowMap=[[nextRow+2,nextRow+3,nextRow+4],[nextRow+2,nextRow+3,nextRow+4],[nextRow+2,nextRow+3,nextRow+4],
@@ -236,16 +359,34 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
   // Step 4 detail table
   const s4start = nextRow+9;
   fillRow(ws, s4start, '37474F'); ws.getRow(s4start).height=26;
-  ['','Month','2025','Retained','SA out','Tried Ret','Lost','SU in','Recovered','New','2026','Repl Rate','Key finding',''].forEach((h,i)=>{
+  ['',`Month`,String(YA),'Retained','SA out','Tried Ret','Lost','SU in','Recovered','New',String(YB),'Repl Rate','Key finding',''].forEach((h,i)=>{
     const c=ws.getCell(s4start,i+1); c.value=h; c.font=font({bold:true,sz:8,color:C.WH}); c.fill=fill('37474F'); c.alignment=align({h:'center',wrap:true});
   });
   ws.mergeCells(`M${s4start}:N${s4start}`); ws.getCell(s4start,13).value='Key finding'; ws.getCell(s4start,13).alignment=align({h:'left'});
-  const detail4=[
-    ['July',181,115,15,2,46,12,1,38,165,38/46,C.MRDBG,C.RD,'46 truly gone, 38 new (83%). 2 tried return. Youth Race worst.'],
-    ['August',220,148,15,2,53,15,4,40,202,40/53,C.MRDBG,C.RD,'53 truly gone. 4 recovered. Worst absolute attrition month.'],
-    ['June',209,125,26,4,49,18,10,63,219,63/49,C.MGBG,C.GD,'49 truly gone, 63 new + 10 recovered. Best acquisition. Organic +33.'],
-    ['October',60,41,1,1,17,10,5,21,71,21/17,C.MGBG,C.GD,'Only 17 truly gone. 21 new + 5 recovered. Best retention.'],
-  ];
+  // Pick the 4 most-impactful months: 2 worst and 2 best by net delta. Each
+  // row pulls counts from results.monthly[m] so this updates every build.
+  const _detail_picks = (() => {
+    const arr = Object.entries(monthly ?? {}).map(([mo, d]) => ({ m: Number(mo), ...d }));
+    const worst = [...arr].sort((a, b) => (a.netDelta ?? 0) - (b.netDelta ?? 0)).slice(0, 2);
+    const best  = [...arr].sort((a, b) => (b.netDelta ?? 0) - (a.netDelta ?? 0)).slice(0, 2);
+    // Avoid double-counting if a month qualifies as both extremes.
+    const seen = new Set();
+    return [...worst, ...best]
+      .filter(p => { if (seen.has(p.m)) return false; seen.add(p.m); return true; })
+      .sort((a, b) => a.m - b.m);
+  })();
+  const detail4 = _detail_picks.map(p => {
+    const repl = (p.attr ?? 0) > 0 ? (((p.new ?? 0) + (p.rec ?? 0)) / p.attr) : 0;
+    const decline = (p.netDelta ?? 0) < 0;
+    const bg = decline ? C.MRDBG : C.MGBG;
+    const fg = decline ? C.RD    : C.GD;
+    const obs = decline
+      ? `${p.attr ?? 0} truly lost, ${p.new ?? 0} new${(p.rec ?? 0) ? ` + ${p.rec} recovered` : ''}${(p.ttr ?? 0) ? `. ${p.ttr} tried to return.` : '.'}`
+      : `${p.attr ?? 0} truly lost, ${p.new ?? 0} new${(p.rec ?? 0) ? ` + ${p.rec} recovered` : ''}. Net ${(p.netDelta ?? 0) >= 0 ? '+' : ''}${p.netDelta ?? 0}.`;
+    return [MN[p.m], p.n25 ?? 0, p.ret ?? 0, p.sa ?? 0, p.ttr ?? 0,
+            p.attr ?? 0, p.su ?? 0, p.rec ?? 0, p.new ?? 0, p.n26 ?? 0,
+            repl, bg, fg, obs];
+  });
   for(let ri=0;ri<detail4.length;ri++){
     const[mon,n25t,ret,sa,ttr,attr,su,rec,newE,n26t,repl,bg,fg,obs]=detail4[ri];
     const row=s4start+1+ri; ws.getRow(row).height=22; fillRow(ws,row,bg); ws.getCell(row,1).fill=fill('37474F');
@@ -261,7 +402,7 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
   }
   applyBorders(ws,s4start,s4start+detail4.length,1,14); gap(s4start+detail4.length+1, 8);
 
-  H(s4start+detail4.length+2, '  Methodology: Excl. Cancelled/Declined/Deleted. Fuzzy Jaccard ≥0.55 + date-proximity weighting. Cross-match: 2025 active vs 2026 excluded = Tried to Return; 2025 excluded vs 2026 active = Recovered.', '607D8B', 8, 20);
+  H(s4start+detail4.length+2, `  Methodology: Excl. Cancelled/Declined/Deleted. Fuzzy Jaccard ≥0.55 + date-proximity weighting. Cross-match: ${YA} active vs ${YB} excluded = Tried to Return; ${YA} excluded vs ${YB} active = Recovered.`, '607D8B', 8, 20);
 
   return ws;
 };

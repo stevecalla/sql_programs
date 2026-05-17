@@ -9,6 +9,8 @@ const MN={1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',7:'Jul',8:'Aug',9:'Sep
 function colLet(n){let s='';while(n>0){s=String.fromCharCode(64+(n%26||26))+s;n=Math.floor((n-1)/26);}return s;}
 
 module.exports = function build_shift_flow_matrix(wb, results) {
+  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.year_b ?? new Date().getFullYear();
   const { monthly, shiftFlow, segments, c25, c26, retMt, saMt, suMt, attrMt, newMt } = results;
   const ws = wb.addWorksheet('step_4b_shift_flow_matrix');
   ws.views = [{ state: 'frozen', ySplit: 6 }];
@@ -20,12 +22,12 @@ module.exports = function build_shift_flow_matrix(wb, results) {
   Object.assign(ws.getCell('A1'),{value:'Event Shift Flow by Month & Type — Where Did Shifted Events Come From and Go?',fill:fill(C.DR),font:font({bold:true,sz:12,color:C.WH}),alignment:align({h:'left'})});
   ws.getRow(1).height=28;
   ws.mergeCells(`A2:${colLet(endCol)}2`);
-  Object.assign(ws.getCell('A2'),{value:'SA=Shifted Away (left this month in 2026) | SU=Shifted Into (arrived in 2026) | Net=SU−SA | Attr=truly lost | New=genuinely new | Retained=same month both years',fill:fill('444444'),font:font({sz:9,color:C.WH}),alignment:align({h:'left'})});
+  Object.assign(ws.getCell('A2'),{value:`SA=Shifted Away (left this month in ${YB}) | SU=Shifted Into (arrived in ${YB}) | Net=SU−SA | Attr=truly lost | New=genuinely new | Retained=same month both years`,fill:fill('444444'),font:font({sz:9,color:C.WH}),alignment:align({h:'left'})});
   ws.getRow(2).height=18;
 
   // ── PART A ─────────────────────────────────────────────────────
   ws.mergeCells(`A4:${colLet(endCol)}4`);
-  Object.assign(ws.getCell('A4'),{value:'PART A — Complete Month × Type Breakdown  (2025 → 2026)',fill:fill(C.DK),font:font({bold:true,sz:11,color:C.WH}),alignment:align({h:'left'})});
+  Object.assign(ws.getCell('A4'),{value:`PART A — Complete Month × Type Breakdown  (${YA} → ${YB})`,fill:fill(C.DK),font:font({bold:true,sz:11,color:C.WH}),alignment:align({h:'left'})});
   ws.getRow(4).height=20;
 
   const TYPE_BG={'Adult Race':'1A237E','Youth Race':'37474F','Adult Clinic':'455A64','Youth Clinic':'546E7A'};
@@ -43,7 +45,7 @@ module.exports = function build_shift_flow_matrix(wb, results) {
   col=2;
   for(const t of TYPES){
     const bg=TYPE_BG[t];
-    ['2025','SA\n(out)','SU\n(in)','Net\nShift','Attr\n(lost)','New\n(add)','2026'].forEach((h,i)=>{
+    [String(YA),'SA\n(out)','SU\n(in)','Net\nShift','Attr\n(lost)','New\n(add)',String(YB)].forEach((h,i)=>{
       th(ws.getCell(6,col+i),h,{bg,sz:9});
       ws.getColumn(col+i).width=i===0||i===6?9:8;
     });
@@ -88,10 +90,10 @@ module.exports = function build_shift_flow_matrix(wb, results) {
   // ── PART B ─────────────────────────────────────────────────────
   const bStart=tr+2;
   ws.mergeCells(`A${bStart}:N${bStart}`);
-  Object.assign(ws.getCell(`A${bStart}`),{value:'PART B — Shift Destination Matrix  (row = 2025 origin month, col = 2026 destination month)',fill:fill('1A237E'),font:font({bold:true,sz:11,color:C.WH}),alignment:align({h:'left'})});
+  Object.assign(ws.getCell(`A${bStart}`),{value:`PART B — Shift Destination Matrix  (row = ${YA} origin month, col = ${YB} destination month)`,fill:fill('1A237E'),font:font({bold:true,sz:11,color:C.WH}),alignment:align({h:'left'})});
   ws.getRow(bStart).height=20;
   const bHdr=bStart+1;
-  th(ws.getCell(bHdr,1),'2025 ↓\n2026 →',{bg:'37474F',sz:9});
+  th(ws.getCell(bHdr,1),`${YA} ↓\n${YB} →`,{bg:'37474F',sz:9});
   for(let m=1;m<=12;m++){ th(ws.getCell(bHdr,m+1),MN[m],{bg:'37474F',sz:9}); ws.getColumn(m+1).width=Math.max(ws.getColumn(m+1).width||0,7); }
   th(ws.getCell(bHdr,14),'Shifted In',{bg:'37474F',sz:9}); ws.getColumn(14).width=10;
   ws.getRow(bHdr).height=26;
@@ -124,9 +126,9 @@ module.exports = function build_shift_flow_matrix(wb, results) {
   // ── PART C ─────────────────────────────────────────────────────
   const cStart=suRow+2;
   ws.mergeCells(`A${cStart}:J${cStart}`);
-  Object.assign(ws.getCell(`A${cStart}`),{value:`PART C — All ${totalShifts} Shifted Events Detail  (sorted by 2025 month, then 2026 month, then type)`,fill:fill(C.DK),font:font({bold:true,sz:11,color:C.WH}),alignment:align({h:'left'})});
+  Object.assign(ws.getCell(`A${cStart}`),{value:`PART C — All ${totalShifts} Shifted Events Detail  (sorted by ${YA} month, then ${YB} month, then type)`,fill:fill(C.DK),font:font({bold:true,sz:11,color:C.WH}),alignment:align({h:'left'})});
   ws.getRow(cStart).height=20;
-  const cHdrs=[['2025\nMonth',12],['2026\nMonth',12],['Direction\n(months)',14],['Type',14],['2025 Sanctioning ID',24],['2025 Date',14],['2025 Event Name',46],['2026 Sanctioning ID',24],['2026 Date',14],['2026 Event Name',46]];
+  const cHdrs=[[`${YA}\nMonth`,12],[`${YB}\nMonth`,12],['Direction\n(months)',14],['Type',14],[`${YA} Sanctioning ID`,24],[`${YA} Date`,14],[`${YA} Event Name`,46],[`${YB} Sanctioning ID`,24],[`${YB} Date`,14],[`${YB} Event Name`,46]];
   cHdrs.forEach(([h,w],i)=>{ th(ws.getCell(cStart+1,i+1),h,{bg:C.MR,sz:9}); ws.getColumn(i+1).width=Math.max(ws.getColumn(i+1).width||0,w); });
   ws.getRow(cStart+1).height=28;
 

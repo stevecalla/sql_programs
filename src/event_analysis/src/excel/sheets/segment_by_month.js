@@ -1,6 +1,6 @@
 /**
  * step_4a_segment_by_month — Two-table segment summary matching reference v9f.
- *   TABLE 1: By 2026 month  TABLE 2: By 2025 month  SEGMENT KEY
+ *   TABLE 1: By year_b month  TABLE 2: By year_a month  SEGMENT KEY
  */
 'use strict';
 const { C, fill, font, align, applyBorders, th, td } = require('../styles');
@@ -8,6 +8,10 @@ const MN = {1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',7:'Jul',8:'Aug',9:'S
 
 module.exports = function build_segment_by_month(wb, results) {
   const { segments } = results;
+  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.year_b ?? new Date().getFullYear();
+  const N_A = results?.y25active?.length ?? 0;
+  const N_B = results?.y26active?.length ?? 0;
   const ws = wb.addWorksheet('step_4a_segment_by_month');
   ws.views = [{ state: 'frozen', ySplit: 5 }];
   [14,12,14,12,12,12,3,16,14].forEach((w,i)=>{ ws.getColumn(i+1).width=w; });
@@ -22,15 +26,15 @@ module.exports = function build_segment_by_month(wb, results) {
   Object.assign(ws.getCell('A1'),{value:'Step 4 — Segment Breakdown by Month  |  6 Segments: Retained, Shifted, Lost, Tried to Return, New, Recovered',fill:fill(C.DR),font:font({bold:true,sz:12,color:C.WH}),alignment:align({h:'left'})});
   ws.getRow(1).height=28;
   ws.mergeCells('A2:I2');
-  Object.assign(ws.getCell('A2'),{value:'Each event classified into one segment. Totals reconcile to 1,178 (2025) and 1,166 (2026).',fill:fill('444444'),font:font({sz:9,color:C.WH,italic:true}),alignment:align({h:'left'})});
+  Object.assign(ws.getCell('A2'),{value:`Each event classified into one segment. Totals reconcile to ${N_A.toLocaleString()} (${YA}) and ${N_B.toLocaleString()} (${YB}).`,fill:fill('444444'),font:font({sz:9,color:C.WH,italic:true}),alignment:align({h:'left'})});
   ws.getRow(2).height=15;
 
   let row=4;
   function sectionHdr(ws,row,txt,bg){ws.mergeCells(`A${row}:I${row}`);Object.assign(ws.getCell(`A${row}`),{value:txt,fill:fill(bg),font:font({bold:true,sz:10.5,color:C.WH}),alignment:align({h:'left'})});ws.getRow(row).height=19;}
 
   // TABLE 1
-  sectionHdr(ws,row,'TABLE 1 — By 2026 Month  |  Where did each 2026 event come from?','1A237E'); row++;
-  ['2026\nMonth','Retained','Shifted\n(SU in)','Recovered','New','Total\n2026','','Lost\n(no 2026 mo)','Tried to\nReturn'].forEach((h,i)=>{
+  sectionHdr(ws,row,`TABLE 1 — By ${YB} Month  |  Where did each ${YB} event come from?`,'1A237E'); row++;
+  [`${YB}\nMonth`,'Retained','Shifted\n(SU in)','Recovered','New',`Total\n${YB}`,'',`Lost\n(no ${YB} mo)`,'Tried to\nReturn'].forEach((h,i)=>{
     if(i===6){ws.getCell(row,7).fill=fill(C.LG);return;}
     th(ws.getCell(row,i+1),h,{bg:['1A237E','1E7D34','1565C0','6A1B9A','006064','222222','F5F5F5','C62828','BF360C'][i],sz:9});
   });
@@ -50,7 +54,7 @@ module.exports = function build_segment_by_month(wb, results) {
     row++;
   }
   ws.getRow(row).height=15;
-  td(ws.getCell(row,1),'No 2026\nMonth',{bg:C.RBG,bold:true,hAlign:'center'});
+  td(ws.getCell(row,1),`No ${YB}\nMonth`,{bg:C.RBG,bold:true,hAlign:'center'});
   [2,3,4,5,6].forEach(c=>td(ws.getCell(row,c),'—',{bg:C.RBG,fg:'999999',hAlign:'center'}));
   ws.getCell(row,7).fill=fill(C.LG);
   td(ws.getCell(row,8),segments.attrited.length,{bg:C.RBG,fg:C.RD,bold:true,hAlign:'center'});
@@ -66,8 +70,8 @@ module.exports = function build_segment_by_month(wb, results) {
   applyBorders(ws,5,row,1,9); row+=2;
 
   // TABLE 2
-  sectionHdr(ws,row,'TABLE 2 — By 2025 Month  |  Where did each 2025 event go?','37474F'); row++;
-  ['2025\nMonth','Retained','Shifted\n(SA out)','Lost\n(truly lost)','Tried to\nReturn','Total\n2025','','New\n(no 2025 mo)','Recovered\n(no 2025 mo)'].forEach((h,i)=>{
+  sectionHdr(ws,row,`TABLE 2 — By ${YA} Month  |  Where did each ${YA} event go?`,'37474F'); row++;
+  [`${YA}\nMonth`,'Retained','Shifted\n(SA out)','Lost\n(truly lost)','Tried to\nReturn',`Total\n${YA}`,'',`New\n(no ${YA} mo)`,`Recovered\n(no ${YA} mo)`].forEach((h,i)=>{
     if(i===6){ws.getCell(row,7).fill=fill(C.LG);return;}
     th(ws.getCell(row,i+1),h,{bg:['37474F','1E7D34','E65100','C62828','BF360C','222222','F5F5F5','006064','6A1B9A'][i],sz:9});
   });
@@ -87,7 +91,7 @@ module.exports = function build_segment_by_month(wb, results) {
     row++;
   }
   ws.getRow(row).height=15;
-  td(ws.getCell(row,1),'No 2025\nMonth',{bg:C.GBG,bold:true,hAlign:'center'});
+  td(ws.getCell(row,1),`No ${YA}\nMonth`,{bg:C.GBG,bold:true,hAlign:'center'});
   [2,3,4,5,6].forEach(c=>td(ws.getCell(row,c),'—',{bg:C.GBG,fg:'999999',hAlign:'center'}));
   ws.getCell(row,7).fill=fill(C.LG);
   td(ws.getCell(row,8),segments.new.length,{bg:C.GBG,fg:C.TL,bold:true,hAlign:'center'});
@@ -103,12 +107,12 @@ module.exports = function build_segment_by_month(wb, results) {
 
   // SEGMENT KEY
   th(ws.getCell(row,1),'SEGMENT KEY',{bg:C.DK,sz:10}); ws.mergeCells(row,2,row,9); ws.getRow(row).height=16; row++;
-  [['Retained','Same event, same month in both 2025 and 2026.',C.GBG,C.GD],
+  [['Retained',`Same event, same month in both ${YA} and ${YB}.`,C.GBG,C.GD],
    ['Shifted (SA/SU)','Same event but moved to a different calendar month.',C.ABG,C.AM],
-   ['Lost','2025 event with no 2026 match. Truly lost.',C.RBG,C.RD],
-   ['Tried to Return','2025 active event that re-filed for 2026 but was cancelled or declined.',C.TRBG,C.TRFG],
-   ['New','2026 event with no 2025 match. Genuinely new.',C.TLBG,C.TL],
-   ['Recovered','Was cancelled in 2025 but successfully ran in 2026.',C.RECBG,C.RECFG]
+   ['Lost',`${YA} event with no ${YB} match. Truly lost.`,C.RBG,C.RD],
+   ['Tried to Return',`${YA} active event that re-filed for ${YB} but was cancelled or declined.`,C.TRBG,C.TRFG],
+   ['New',`${YB} event with no ${YA} match. Genuinely new.`,C.TLBG,C.TL],
+   ['Recovered',`Was cancelled in ${YA} but successfully ran in ${YB}.`,C.RECBG,C.RECFG]
   ].forEach(([label,desc,bg,fg])=>{
     ws.getRow(row).height=13;
     td(ws.getCell(row,1),'',{bg}); td(ws.getCell(row,2),label,{bg,fg,bold:true,hAlign:'left'});

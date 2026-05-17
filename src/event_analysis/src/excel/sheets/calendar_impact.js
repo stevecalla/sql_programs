@@ -13,6 +13,8 @@ const MN    = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
 const TYPE_BG = { 'Adult Race':'37474F','Youth Race':'455A64','Adult Clinic':'546E7A','Youth Clinic':'607D8B' };
 
 module.exports = function build_calendar_impact(wb, results, cm = null) {
+  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.year_b ?? new Date().getFullYear();
   const { calImpact } = results;
   const ws = wb.addWorksheet('step_2_calendar_impact');
   ws.views = [{ state: 'frozen', ySplit: 5 }];
@@ -35,7 +37,7 @@ module.exports = function build_calendar_impact(wb, results, cm = null) {
   // Row 2
   ws.mergeCells('A2:T2');
   Object.assign(ws.getCell('A2'), {
-    value:     'Cal Exp Δ = Δ(Sat+Sun) × (2025 events ÷ 2025 weekend days, for that month & type).  May & June now correctly captured (Sunday shift).  Residual = Actual − Cal Exp.',
+    value:     `Cal Exp Δ = Δ(Sat+Sun) × (${YA} events ÷ ${YA} weekend days, for that month & type).  Residual = Actual − Cal Exp.`,
     font:      font({ sz: 9, color: C.WH }),
     fill:      fill('444444'),
     alignment: align({ h: 'left' }),
@@ -56,7 +58,7 @@ module.exports = function build_calendar_impact(wb, results, cm = null) {
   ws.getRow(3).height = 18;
 
   // Row 4: sub-headers
-  const sub4 = ['Month','Wknd\n2025','Wknd\n2026','Δ Wknd\n(Sat+Sun)','Cal\nExp Δ'];
+  const sub4 = ['Month',`Wknd\n${YA}`,`Wknd\n${YB}`,'Δ Wknd\n(Sat+Sun)','Cal\nExp Δ'];
   sub4.forEach((h, i) => { th(ws.getCell(4, i + 1), h, { bg: C.MR, sz: 9 }); });
   col = 6;
   for (const t of TYPES) {

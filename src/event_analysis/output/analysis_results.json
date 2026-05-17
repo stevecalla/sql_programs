@@ -1,21 +1,21 @@
 {
-  "generated_at": "2026-05-17T07:20:56.873Z",
+  "generated_at": "2026-05-17T15:12:10.976Z",
   "years": {
     "year_a": 2025,
     "year_b": 2026
   },
   "totals": {
     "year_a": 1178,
-    "year_b": 1166,
-    "net": -12
+    "year_b": 1165,
+    "net": -13
   },
   "segments": {
     "Retained": 746,
-    "Shifted": 124,
+    "Shifted": 123,
     "Tried to Return": 13,
-    "Lost": 295,
-    "Recovered": 30,
-    "New": 266
+    "Lost": 296,
+    "Recovered": 31,
+    "New": 265
   },
   "by_type": {
     "Adult Race": {
@@ -30,8 +30,8 @@
     },
     "Adult Clinic": {
       "tot25": 97,
-      "tot26": 85,
-      "actDelta": -12
+      "tot26": 84,
+      "actDelta": -13
     },
     "Youth Clinic": {
       "tot25": 29,
@@ -70,16 +70,16 @@
     },
     "5": {
       "n25": 142,
-      "n26": 145,
-      "net_delta": 3,
-      "net_shift": 1,
-      "organic_delta": -12.777777777777777
+      "n26": 146,
+      "net_delta": 4,
+      "net_shift": 2,
+      "organic_delta": -11.777777777777777
     },
     "6": {
       "n25": 209,
       "n26": 219,
       "net_delta": 10,
-      "net_shift": -8,
+      "net_shift": -9,
       "organic_delta": 33.22222222222222
     },
     "7": {
@@ -91,17 +91,17 @@
     },
     "8": {
       "n25": 220,
-      "n26": 202,
-      "net_delta": -18,
+      "n26": 201,
+      "net_delta": -19,
       "net_shift": 0,
-      "organic_delta": -18
+      "organic_delta": -19
     },
     "9": {
       "n25": 151,
-      "n26": 147,
-      "net_delta": -4,
+      "n26": 146,
+      "net_delta": -5,
       "net_shift": -2,
-      "organic_delta": -4
+      "organic_delta": -5
     },
     "10": {
       "n25": 60,
@@ -140,9 +140,9 @@
     },
     "Adult Clinic": {
       "tot25": 97,
-      "actDelta": -12,
+      "actDelta": -13,
       "calTotal": -2.038888888888889,
-      "orgTotal": -9.96111111111111
+      "orgTotal": -10.96111111111111
     },
     "Youth Clinic": {
       "tot25": 29,
@@ -214,7 +214,7 @@
       "3": 1,
       "4": 7,
       "5": 0,
-      "6": 9,
+      "6": 8,
       "7": 0,
       "8": 3,
       "9": 0,
@@ -454,10 +454,10 @@
       "ds": 0,
       "du": 1,
       "tot25": 142,
-      "tot26": 145,
-      "actDelta": 3,
+      "tot26": 146,
+      "actDelta": 4,
       "calTotal": 15.777777777777777,
-      "orgTotal": -12.777777777777777,
+      "orgTotal": -11.777777777777777,
       "calByType": {
         "Adult Race": 11.666666666666666,
         "Youth Race": 2.6666666666666665,
@@ -465,13 +465,13 @@
         "Youth Clinic": 0.1111111111111111
       },
       "actByType": {
-        "Adult Race": 4,
+        "Adult Race": 5,
         "Youth Race": 3,
         "Adult Clinic": -4,
         "Youth Clinic": 0
       },
       "orgByType": {
-        "Adult Race": -7.666666666666666,
+        "Adult Race": -6.666666666666666,
         "Youth Race": 0.3333333333333335,
         "Adult Clinic": -5.333333333333333,
         "Youth Clinic": -0.1111111111111111
@@ -547,10 +547,10 @@
       "ds": 0,
       "du": 0,
       "tot25": 220,
-      "tot26": 202,
-      "actDelta": -18,
+      "tot26": 201,
+      "actDelta": -19,
       "calTotal": 0,
-      "orgTotal": -18,
+      "orgTotal": -19,
       "calByType": {
         "Adult Race": 0,
         "Youth Race": 0,
@@ -560,13 +560,13 @@
       "actByType": {
         "Adult Race": -6,
         "Youth Race": -9,
-        "Adult Clinic": 0,
+        "Adult Clinic": -1,
         "Youth Clinic": -3
       },
       "orgByType": {
         "Adult Race": -6,
         "Youth Race": -9,
-        "Adult Clinic": 0,
+        "Adult Clinic": -1,
         "Youth Clinic": -3
       }
     },
@@ -578,10 +578,10 @@
       "ds": 0,
       "du": 0,
       "tot25": 151,
-      "tot26": 147,
-      "actDelta": -4,
+      "tot26": 146,
+      "actDelta": -5,
       "calTotal": 0,
-      "orgTotal": -4,
+      "orgTotal": -5,
       "calByType": {
         "Adult Race": 0,
         "Youth Race": 0,
@@ -589,13 +589,13 @@
         "Youth Clinic": 0
       },
       "actByType": {
-        "Adult Race": -2,
+        "Adult Race": -3,
         "Youth Race": -1,
         "Adult Clinic": -1,
         "Youth Clinic": 0
       },
       "orgByType": {
-        "Adult Race": -2,
+        "Adult Race": -3,
         "Youth Race": -1,
         "Adult Clinic": -1,
         "Youth Clinic": 0

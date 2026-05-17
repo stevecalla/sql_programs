@@ -10,13 +10,15 @@ const MN = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
              7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec' };
 
 module.exports = function build_cancelled_cross_match(wb, results) {
+  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.year_b ?? new Date().getFullYear();
   const { triedToReturn, recovered } = results;
   const ws = wb.addWorksheet('step_4d_cancelled_cross_match');
   ws.views = [{ state: 'frozen', ySplit: 5 }];
 
   const COLS = [
-    ['2025\nMonth',10],['Type',14],['2025 Sanction ID',24],['2025 Event Name',44],
-    ['2026\nMonth',10],['2026 Sanction ID',24],['2026 Status',16],['2026 Event Name',44],
+    [`${YA}\nMonth`,10],['Type',14],[`${YA} Sanction ID`,24],[`${YA} Event Name`,44],
+    [`${YB}\nMonth`,10],[`${YB} Sanction ID`,24],[`${YB} Status`,16],[`${YB} Event Name`,44],
   ];
   COLS.forEach(([, w], i) => { ws.getColumn(i + 1).width = w; });
 
@@ -64,8 +66,8 @@ module.exports = function build_cancelled_cross_match(wb, results) {
     return startRow + 2 + sortedData.length;
   }
 
-  const trTitle  = `TRIED TO RETURN (${triedToReturn.length}) — 2025 active events that re-filed in 2026 but were Cancelled / Declined`;
-  const recTitle = `RECOVERED (${recovered.length}) — 2025 Cancelled events that successfully sanctioned in 2026`;
+  const trTitle  = `TRIED TO RETURN (${triedToReturn.length}) — ${YA} active events that re-filed in ${YB} but were Cancelled / Declined`;
+  const recTitle = `RECOVERED (${recovered.length}) — ${YA} Cancelled events that successfully sanctioned in ${YB}`;
 
   let nextRow = writeSection(3, triedToReturn, C.TRBG, C.TRFG, trTitle);
   nextRow = writeSection(nextRow + 2, recovered, C.RECBG, C.RECFG, recTitle);

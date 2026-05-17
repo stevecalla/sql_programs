@@ -2,7 +2,7 @@
  * step_4c_shifted_events — Full shifted-event analysis matching reference v9f.
  *   Part A: Key statistics (Total, Later, Earlier, Avg Distance)
  *   Part B: Breakdown by type with top origin/destination months + interpretation
- *   Part C: Complete event roster (Direction, Type, 2025 details, 2026 details, Confidence)
+ *   Part C: Complete event roster (Direction, Type, prior-year details, current-year details, Confidence)
  */
 'use strict';
 
@@ -14,6 +14,9 @@ const MN = {1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
 module.exports = function build_shifted_events(wb, results) {
   const { segments } = results;
   const shifted = segments.shifted;
+  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.year_b ?? new Date().getFullYear();
+  const N_A = results?.y25active?.length ?? 0;
   const ws = wb.addWorksheet('step_4c_shifted_events');
   ws.views = [{ state: 'frozen', ySplit: 3 }];
 
@@ -39,7 +42,7 @@ module.exports = function build_shifted_events(wb, results) {
 
   ws.mergeCells('A2:M2');
   Object.assign(ws.getCell('A2'), {
-    value:     'Shifted = same event matched in both 2025 and 2026 but running in a different calendar month. SA = shifted away from 2025 month. SU = shifted into 2026 month.',
+    value:     `Shifted = same event matched in both ${YA} and ${YB} but running in a different calendar month. SA = shifted away from ${YA} month. SU = shifted into ${YB} month.`,
     fill:      fill('444444'),
     font:      font({ sz: 9, color: C.WH, italic: true }),
     alignment: align({ h: 'left' }),
@@ -77,7 +80,7 @@ module.exports = function build_shifted_events(wb, results) {
 
   // Pct/desc row
   const grp_pct = [
-    `${((total/1178)*100).toFixed(1)}% of 2025 events`,
+    `${N_A ? ((total/N_A)*100).toFixed(1) : '0.0'}% of ${YA} events`,
     `${((later/total)*100).toFixed(0)}% of all shifts`,
     `${((earlier/total)*100).toFixed(0)}% of all shifts`,
     'avg months between dates',
@@ -178,13 +181,13 @@ module.exports = function build_shifted_events(wb, results) {
   });
   ws.getRow(row).height = 18; row++;
 
-  // Headers matching reference: Direction | Months Shifted | Type | 2025 Month | 2025 Sanction ID | 2025 Start Date | 2025 Event Name | 2026 Month | 2026 Sanction ID | 2026 Start Date | 2026 Event Name | Confidence
-  const c_hdrs = ['Direction','Months\nShifted','Type','2025\nMonth','2025 Sanction ID','2025 Start Date',
-                  '2025 Event Name','2026\nMonth','2026 Sanction ID','2026 Start Date','2026 Event Name','Confidence'];
+  // Headers: Direction | Months Shifted | Type | year_a Month | year_a Sanction ID | year_a Start Date | year_a Event Name | year_b Month | year_b Sanction ID | year_b Start Date | year_b Event Name | Confidence
+  const c_hdrs = ['Direction',`Months\nShifted`,'Type',`${YA}\nMonth`,`${YA} Sanction ID`,`${YA} Start Date`,
+                  `${YA} Event Name`,`${YB}\nMonth`,`${YB} Sanction ID`,`${YB} Start Date`,`${YB} Event Name`,'Confidence'];
   c_hdrs.forEach((h, i) => th(ws.getCell(row, i + 1), h, { bg: C.MR, sz: 9 }));
   ws.getRow(row).height = 28; row++;
 
-  // Sort: → Later first, then by months shifted asc, then type, then 2025 month
+  // Sort: → Later first, then by months shifted asc, then type, then year_a month
   const sorted = [...shifted].sort((a, b) => {
     const a_dir = a.e26.month > a.e25.month ? 0 : 1;
     const b_dir = b.e26.month > b.e25.month ? 0 : 1;
