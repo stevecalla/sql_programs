@@ -79,8 +79,8 @@ function build_context(question) {
 
   // Consistency check: state and results must agree on top-line totals.
   if (results && state) {
-    const r_a = results.totals?.year_a, r_b = results.totals?.year_b;
-    const s_a = state.build_meta?.totals?.year_a, s_b = state.build_meta?.totals?.year_b;
+    const r_a = results.totals?.BASELINE_YEAR, r_b = results.totals?.ANALYSIS_YEAR;
+    const s_a = state.build_meta?.totals?.BASELINE_YEAR, s_b = state.build_meta?.totals?.ANALYSIS_YEAR;
     if ((r_a !== s_a || r_b !== s_b)) {
       console.warn(`  ⚠  analysis_results.json (${r_a}/${r_b}) and analysis_state.json (${s_a}/${s_b}) disagree on totals. Rebuild recommended.`);
     }
@@ -96,16 +96,16 @@ function build_context(question) {
         parts.push(`  - ${o.type}: ${o.sid_25 ?? ''}${o.sid_26 ? ' / ' + o.sid_26 : ''} → ${o.result}${o.note ? ' (' + o.note + ')' : ''}`);
       });
     }
-    parts.push(`Years: ${results.years?.year_a} vs ${results.years?.year_b}`);
-    parts.push(`Total events: ${results.totals?.year_a} → ${results.totals?.year_b} (net ${results.totals?.net >= 0 ? '+' : ''}${results.totals?.net})`);
+    parts.push(`Years: ${results.years?.BASELINE_YEAR} vs ${results.years?.ANALYSIS_YEAR}`);
+    parts.push(`Total events: ${results.totals?.BASELINE_YEAR} → ${results.totals?.ANALYSIS_YEAR} (net ${results.totals?.net >= 0 ? '+' : ''}${results.totals?.net})`);
     parts.push(`\nSegments: ${JSON.stringify(results.segments ?? {})}`);
     if (results.by_type) {
       parts.push('\nBy type (raw counts):');
       Object.entries(results.by_type).forEach(([t, v]) => {
         // Field names from analysis_results.json export: tot25 / tot26 / actDelta.
-        // Fall back to n25/n26/delta for backwards-compat with older exports.
-        const a = v.tot25 ?? v.n25;
-        const b = v.tot26 ?? v.n26;
+        // Fall back to n_baseline/n_analysis/delta for backwards-compat with older exports.
+        const a = v.tot25 ?? v.n_baseline;
+        const b = v.tot26 ?? v.n_analysis;
         const d = v.actDelta ?? v.delta;
         if (a !== undefined && b !== undefined) {
           const pct = a ? ((b - a) / a * 100).toFixed(1) : '0.0';
@@ -145,7 +145,7 @@ function build_context(question) {
     const wants_pipeline  = /\b(application|applied|filed|pipeline|q4|in-year|prior-year)\b/.test(q);
     const wants_organic   = /\b(organic|calendar|weekend|sat|sun)\b/.test(q);
     const wants_eventnames = /\b(name|event named|race named|sanction|specifically|which event|list|show me)\b/.test(q);
-    const ya = state.build_meta?.years?.year_a, yb = state.build_meta?.years?.year_b;
+    const ya = state.build_meta?.years?.BASELINE_YEAR, yb = state.build_meta?.years?.ANALYSIS_YEAR;
 
     parts.push('\n## Detail tables (snapshot from build, single source of truth)');
     parts.push(`Build timestamp: ${state.build_meta?.build_ts ?? 'unknown'}`);
@@ -163,8 +163,8 @@ function build_context(question) {
       }
       return rows.join('\n');
     };
-    parts.push(`\nPer-month per-type counts (${ya}, "active" only):\n${fmt_mtype(state.counts_by_month_type?.year_a)}`);
-    parts.push(`\nPer-month per-type counts (${yb}, "active" only):\n${fmt_mtype(state.counts_by_month_type?.year_b)}`);
+    parts.push(`\nPer-month per-type counts (${ya}, "active" only):\n${fmt_mtype(state.counts_by_month_type?.BASELINE_YEAR)}`);
+    parts.push(`\nPer-month per-type counts (${yb}, "active" only):\n${fmt_mtype(state.counts_by_month_type?.ANALYSIS_YEAR)}`);
 
     // Segment-by-month-type tables when the question is about disposition.
     if (wants_segments || wants_months) {
@@ -207,12 +207,12 @@ function build_context(question) {
       const lines = [`\nApplication pipeline (Q4 prior + Jan-current_mo in-yr):`];
       lines.push(`  Type           Q4-${PRE_YA}  Jan-cur ${ya}  Total ${ya}    Q4-${ya}  Jan-cur ${yb}  Total ${yb}`);
       for (const t of TYPES) {
-        const q4_a = sum_by(cp.year_a, PRE_YA, t, [10, 11, 12]);
-        const iy_a = sum_by(cp.year_a, ya,     t, null);  // any month in YA
-        const tot_a = (cp.year_a ?? []).filter(r => r.type === t).reduce((s, r) => s + (r.cnt ?? 0), 0);
-        const q4_b = sum_by(cp.year_b, ya,     t, [10, 11, 12]);
-        const iy_b = sum_by(cp.year_b, yb,     t, null);
-        const tot_b = (cp.year_b ?? []).filter(r => r.type === t).reduce((s, r) => s + (r.cnt ?? 0), 0);
+        const q4_a = sum_by(cp.BASELINE_YEAR, PRE_YA, t, [10, 11, 12]);
+        const iy_a = sum_by(cp.BASELINE_YEAR, ya,     t, null);  // any month in YA
+        const tot_a = (cp.BASELINE_YEAR ?? []).filter(r => r.type === t).reduce((s, r) => s + (r.cnt ?? 0), 0);
+        const q4_b = sum_by(cp.ANALYSIS_YEAR, ya,     t, [10, 11, 12]);
+        const iy_b = sum_by(cp.ANALYSIS_YEAR, yb,     t, null);
+        const tot_b = (cp.ANALYSIS_YEAR ?? []).filter(r => r.type === t).reduce((s, r) => s + (r.cnt ?? 0), 0);
         lines.push(`  ${t.padEnd(14)} ${String(q4_a).padStart(5)} ${String(iy_a).padStart(13)} ${String(tot_a).padStart(11)}    ${String(q4_b).padStart(5)} ${String(iy_b).padStart(13)} ${String(tot_b).padStart(11)}`);
       }
       parts.push(lines.join('\n'));
@@ -276,8 +276,8 @@ function build_context(question) {
 
   if (prior && prior.archive_date) {
     parts.push(`\n## Prior Run (${prior.archive_date})`);
-    if (prior.n25 && prior.n26) {
-      parts.push(`Prior totals: ${prior.n25} → ${prior.n26} (net ${prior.net >= 0 ? '+' : ''}${prior.net})`);
+    if (prior.n_baseline && prior.n_analysis) {
+      parts.push(`Prior totals: ${prior.n_baseline} → ${prior.n_analysis} (net ${prior.net >= 0 ? '+' : ''}${prior.net})`);
     }
     if (prior.seg) parts.push(`Prior segments: ${JSON.stringify(prior.seg)}`);
   }
@@ -399,7 +399,7 @@ Behavior rules:
 // ── Override management helpers ────────────────────────────────────────────
 
 const OVERRIDES_PATH = path.join(DIR, 'data', 'overrides.json');
-const VALID_SEGMENTS = ['Retained','Shifted','Attrited','New','Recovered','Tried to Return'];
+const VALID_SEGMENTS = ['Retained','Shifted','Lost','New','Recovered','Tried to Return'];
 
 function load_overrides_file() {
   const raw = load_json(OVERRIDES_PATH);
@@ -492,7 +492,7 @@ function cmd_add_no_match(year, sid, note) {
   if (note) entry.note = note;
   ov.force_no_match.push(entry);
   save_overrides_file(ov);
-  const result = String(year) === '25' ? 'Attrited' : 'New';
+  const result = String(year) === '25' ? 'Lost' : 'New';
   console.log(`✓ Added force_no_match: ${sid}  →  ${result}${note ? '  (' + note + ')' : ''}`);
   console.log('  Run: node build_all.js   to apply\n');
 }
@@ -559,6 +559,8 @@ async function cmd_suggest_overrides() {
     path.join(DIR, 'data', '2026_events_051526.csv')
   );
   const results = run_analysis(loaded);
+  const ya = results.years?.year_a ?? 2025;
+  const yb = results.years?.year_b ?? 2026;
 
   const attrited = (results.segments?.attrited ?? []).map(m => ({
     sid:   m.e25.sanctionId,
@@ -584,7 +586,7 @@ async function cmd_suggest_overrides() {
   const attrited_filtered = attrited.filter(e => !already_overridden.has(e.sid));
   const new_filtered      = new_ev.filter(e => !already_overridden.has(e.sid));
 
-  console.log(`\nAnalysing ${attrited_filtered.length} unmatched 2025 events and ${new_filtered.length} unmatched 2026 events...`);
+  console.log(`\nAnalysing ${attrited_filtered.length} unmatched ${ya} events and ${new_filtered.length} unmatched ${yb} events...`);
   console.log('Asking Claude to suggest likely missed matches...\n');
 
   const Anthropic = require('@anthropic-ai/sdk');
@@ -594,13 +596,13 @@ async function cmd_suggest_overrides() {
 
 The automatic matcher missed some events that may actually be the same event under a different name.
 
-Unmatched 2025 events (Attrited — did not return):
+Unmatched ${ya} events (Lost — did not return):
 ${JSON.stringify(attrited_filtered.slice(0, 80), null, 1)}
 
-Unmatched 2026 events (New — no 2025 match found):
+Unmatched ${yb} events (New — no ${ya} match found):
 ${JSON.stringify(new_filtered.slice(0, 80), null, 1)}
 
-Identify the TOP 10 most likely missed matches — pairs where a 2025 event and 2026 event are almost certainly the same event series despite name differences (sponsor changes, location updates, rebranding, year references removed, abbreviation changes, etc.).
+Identify the TOP 10 most likely missed matches — pairs where a ${ya} event and ${yb} event are almost certainly the same event series despite name differences (sponsor changes, location updates, rebranding, year references removed, abbreviation changes, etc.).
 
 For each suggestion output EXACTLY this JSON format (no other text):
 [
@@ -683,8 +685,8 @@ async function main() {
     }
 
     // Quick diff summary (non-AI)
-    const metric_keys = { n25: 'Prior-yr events', n26: 'Current-yr events', net: 'Net change',
-      attrited: 'Attrited', new_ev: 'New events', rec: 'Recovered', repl_rate: 'Replacement %' };
+    const metric_keys = { n_baseline: 'Prior-yr events', n_analysis: 'Current-yr events', net: 'Net change',
+      attrited: 'Lost', new_ev: 'New events', rec: 'Recovered', repl_rate: 'Replacement %' };
     const changed_metrics = Object.entries(metric_keys)
       .filter(([k]) => prior_cm[k] !== undefined && current_cm[k] !== undefined && prior_cm[k] !== current_cm[k])
       .map(([k, label]) => `  ${label.padEnd(22)} ${String(prior_cm[k]).padStart(6)} → ${String(current_cm[k]).padStart(6)}`);
@@ -795,6 +797,7 @@ Usage: node ask.js "<question>" [options]
        node ask.js --<command> [args]
 
 ── Q&A options ──────────────────────────────────────
+  --help                            List options and commands
   --save-notes                      Save answer to notes.md (auto-pruned)
   --update-commentary <key>         Rewrite a key in output/commentary.json
 
@@ -804,9 +807,9 @@ Usage: node ask.js "<question>" [options]
   --add-override match <s25> <s26> ["note"]
                                     Force two events to match
   --add-override no-match <25|26> <sid> ["note"]
-                                    Prevent an event from matching (→ Attrited or New)
+                                    Prevent an event from matching (→ Lost or New)
   --add-override segment <25|26> <sid> <segment> ["note"]
-                                    Override segment (Retained|Shifted|Attrited|New|...)
+                                    Override segment (Retained|Shifted|Lost|New|...)
   --remove-override <sid>           Remove all overrides for a sanction ID
   --suggest-overrides               Ask Claude to suggest likely missed matches (AI)
 
@@ -816,12 +819,13 @@ After any --add-override or --remove-override, run: node build_all.js
   node ask.js "Why did Adult Clinic decline so much?"
   node ask.js "Draft a Slack post on key findings" --save-notes
   node ask.js "Rewrite slide 8 narrative more urgently" --update-commentary slide_8_narrative
+  node ask.js "Rewrite slide 8 narrative with a more professional tone" --update-commentary slide_8_narrative
 
   node ask.js --list-overrides
   node ask.js --suggest-overrides
   node ask.js --add-override match 311655-Adult\\ Race 354307-Adult\\ Race "Same series, name changed"
   node ask.js --add-override no-match 25 311157-Adult\\ Race "Confirmed permanently cancelled"
-  node ask.js --add-override segment 25 310379-Adult\\ Race Attrited "Algorithm matched incorrectly"
+  node ask.js --add-override segment 25 310379-Adult\\ Race Lost "Algorithm matched incorrectly"
   node ask.js --remove-override 311157-Adult\\ Race
 
 Context loaded automatically:
@@ -842,7 +846,7 @@ Model: claude-sonnet-4-6 (streaming for Q&A)
       opts.update_key = args[++i];
     } else {
       question_parts.push(args[i]);
-    }
+     }
   }
 
   const question = question_parts.join(' ');
