@@ -111,7 +111,7 @@ Year selection is controlled by env vars at the call site:
 node build_all.js
 
 # Specific pair (e.g. when running historical comparisons)
-YEAR_B=2026 YEAR_A=2025 node build_all.js
+ANALYSIS_YEAR=2026 BASELINE_YEAR=2025 node build_all.js
 ```
 
 If the DB is unreachable the build fails fast with a clear error — there is no CSV fallback. To verify the connection without doing a full build, run option **2** (Check data quality) from the menu.
@@ -209,10 +209,10 @@ To compare a specific year-pair (historical or future), set environment variable
 
 ```bash
 # Compare 2024 vs 2025
-YEAR_B=2025 YEAR_A=2024 node build_all.js
+ANALYSIS_YEAR=2025 BASELINE_YEAR=2024 node build_all.js
 
-# Or set just YEAR_B and let YEAR_A default to YEAR_B - 1
-YEAR_B=2025 node build_all.js
+# Or set just ANALYSIS_YEAR and let BASELINE_YEAR default to ANALYSIS_YEAR - 1
+ANALYSIS_YEAR=2025 node build_all.js
 ```
 
 The DB queries, output filenames (e.g. `2025_event_calendar_analysis_*.xlsx`), slide headers, worst-month callouts, calendar tables, and all narratives update automatically. **No code edits required.**
@@ -541,12 +541,12 @@ All applied overrides are recorded in `output/analysis_results.json` under the `
 | Tab | Contents |
 |---|---|
 | executive_summary | 4-step briefing + Slack bullets (all dynamic, editorial voice) |
-| step_0_calendar_structure | Side-by-side year_a/year_b calendar grids (holiday cells highlighted in amber with hover-tooltip showing holiday name; per-month holiday list in Notes column) |
+| step_0_calendar_structure | Side-by-side BASELINE_YEAR/ANALYSIS_YEAR calendar grids (holiday cells highlighted in amber with hover-tooltip showing holiday name; per-month holiday list in Notes column) |
 | step_1_event_type_by_month | Raw delta by type × month |
 | step_2_calendar_impact | Weekend-day shift analysis + KEY FINDINGS (dynamic) |
 | step_3_organic_performance | Calendar-adjusted organic delta (month + type insights dynamic) |
 | step_4_event_detail | Full event roster (16 cols incl. Day of Week + Status) |
-| step_4a_segment_by_month | Two-table segment summary (by year_b month + by year_a month) |
+| step_4a_segment_by_month | Two-table segment summary (by ANALYSIS_YEAR month + by BASELINE_YEAR month) |
 | step_4b_shift_flow_matrix | Origin × destination flow matrix (all 3 parts combined) |
 | step_4c_shifted_events | Shifted event stats + roster (Avg Distance, Top Month) |
 | step_4d_cancelled_cross_match | Tried-to-Return + Recovered events |
