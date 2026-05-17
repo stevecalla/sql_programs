@@ -431,14 +431,29 @@ Overrides are moving from `data/overrides.json` into a dedicated MySQL table (`u
 | Step | Status |
 |---|---|
 | **1.** `event_analysis_overrides` table exists in `usat_sales_db` (auto-created on every `node build_all.js` via `ensure_overrides_table()` — idempotent `CREATE TABLE IF NOT EXISTS`) | ✓ done |
-| 2. One-shot import of existing `data/overrides.json` into the new table | pending |
+| **2.** Active entries in `data/overrides.json` auto-import into the DB on every build via `migrate_overrides_json_to_db()` (idempotent; legacy `Attrited` → `Lost` mapping; once migrated, JSON is renamed `overrides.json.migrated`) | ✓ done |
 | 3. `analysis.js` reads overrides from DB instead of JSON | pending |
 | 4. `ask.js` CLI commands write to DB instead of JSON | pending |
 | 5. Add `--approve` / `--unapprove` CLI commands (locks segment + match) | pending |
 | 6. Stale-approval detection at build time | pending |
 | 7. Minimal Express server + interactive override editing in the dashboard | pending |
 
-Until Step 4 lands, the system still reads/writes the JSON file — the table is in place but unused for active matching. Once Step 4 is in, the JSON will be archived as `overrides.json.migrated`.
+Until Step 4 lands, the system still reads/writes the JSON file — the table is in place and populated, but the matcher and CLI still consume the JSON. Once Step 4 is in, the JSON will be archived as `overrides.json.migrated`.
+
+#### Run the JSON → DB migration manually
+
+The build does this automatically, but you can also invoke it standalone:
+
+```bash
+# Apply (default behaviour) — inserts active entries and renames the JSON
+node src/event_analysis/utilities/migrate_overrides_to_db.js
+
+# Dry-run — report what would happen, no DB writes, no rename
+node src/event_analysis/utilities/migrate_overrides_to_db.js --dry-run
+
+# Apply but leave the JSON file in place (no rename)
+node src/event_analysis/utilities/migrate_overrides_to_db.js --no-rename
+```
 
 The automatic matching algorithm gets ~85–90% of events right, but some cases require human judgment:
 

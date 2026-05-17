@@ -54,6 +54,7 @@ const { generate_dashboard } = require('./src/dashboard');
 const { buildDeck } = require('./src/pptx/builder');
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { ensure_overrides_table } = require('./utilities/ensure_overrides_table');
+const { migrate_overrides_json_to_db } = require('./utilities/migrate_overrides_to_db');
 
 
 // ── Archive + export helpers ──────────────────────────────────────────────────
@@ -130,6 +131,10 @@ async function main() {
   // ── Schema check ──────────────────────────────────────────────────────────
   // Idempotent — no-op when the table is already present.
   await ensure_overrides_table({ silent: false });
+
+  // ── Migrate legacy JSON overrides into the DB (one-shot, idempotent) ─────
+  // Skipped silently after data/overrides.json is renamed to .migrated.
+  await migrate_overrides_json_to_db({ silent: false });
 
   const out_xlsx = path.join(OUTPUT_DIR, `${YEAR_B}_event_calendar_analysis_${BUILD_TS}.xlsx`);
   const out_pptx = path.join(OUTPUT_DIR, `${YEAR_B}_event_trends_summary_${BUILD_TS}.pptx`);
