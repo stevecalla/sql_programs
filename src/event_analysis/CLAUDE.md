@@ -201,9 +201,3 @@ Runs at `http://localhost:7474`. Enables the dashboard to write overrides direct
 
 - **Inline segment editor in table**: Click a segment badge to change it directly, generating the appropriate override. Design fully spec'd — see conversation history for the transition logic table.
 - **Auto-syntax check before copy**: Add `node --check` on generated dashboard.html as final build step to catch JS errors before they ship
-
----
-
-## User
-
-Steve Calla — `steve.calla@usatriathlon.org` — USAT staff
