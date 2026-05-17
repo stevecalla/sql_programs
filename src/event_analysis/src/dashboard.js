@@ -6,7 +6,7 @@
  *
  * Charts (matching PowerPoint data exactly):
  *   1. Monthly bar chart — raw delta bars + organic delta line
- *   2. Event type grouped bar — 2025 vs 2026 counts by type
+ *   2. Event type grouped bar — prior vs current year counts by type
  *   3. Segment donut — Retained / Shifted / Lost / New / Recovered
  *   4. Organic performance horizontal bar — raw % vs organic % by type
  *   5. Calendar impact scatter — calendar expected vs organic delta by month
@@ -522,11 +522,11 @@ canvas{width:100%!important;max-height:220px}
 
 <div class="row">
   <div class="card card-monthly">
-    <h3>Event count by month comparison <span class="note">bars = actual counts · variance Δ above 2026 bar</span><span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_organic')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_organic')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_organic')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_organic" class="chart-btn" onclick="flip_chart_table('c_organic')" title="Switch to table view">⇄ Table</button></span></h3>
+    <h3>Event count by month comparison <span class="note">bars = actual counts · variance Δ above ${yb} bar</span><span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_organic')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_organic')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_organic')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_organic" class="chart-btn" onclick="flip_chart_table('c_organic')" title="Switch to table view">⇄ Table</button></span></h3>
     <div style="position:relative;height:280px"><canvas id="c_organic"></canvas><div id="flip-tbl-c_organic" class="chart-flip-tbl"></div></div>
   </div>
   <div class="card card-segment">
-    <h3>Event counts by type <span class="note">${ya} vs ${yb} · variance above 2026 bar</span><span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_type')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_type')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_type')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_type" class="chart-btn" onclick="flip_chart_table('c_type')" title="Switch to table view">⇄ Table</button></span></h3>
+    <h3>Event counts by type <span class="note">${ya} vs ${yb} · variance above ${yb} bar</span><span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_type')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_type')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_type')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_type" class="chart-btn" onclick="flip_chart_table('c_type')" title="Switch to table view">⇄ Table</button></span></h3>
     <div style="position:relative;height:280px"><canvas id="c_type"></canvas><div id="flip-tbl-c_type" class="chart-flip-tbl"></div></div>
   </div>
 </div>
@@ -608,12 +608,12 @@ ${has_table ? `
       <div class="multi-drop" id="drop-cols">
         <button type="button" class="multi-drop-btn" onclick="toggle_drop('drop-cols')" title="Show/hide columns">⊞ Columns ▾</button>
         <div class="multi-drop-panel" id="panel-drop-cols" style="min-width:200px;right:0;left:auto">
-          <div class="col-pick-group">2025</div>
-          <label><input type="checkbox" id="col-sid25" onchange="toggle_col('sid25',this.checked)"><span class="lbl-text">Sanction ID 25</span></label>
-          <label><input type="checkbox" id="col-date25" onchange="toggle_col('date25',this.checked)"><span class="lbl-text">Date 25</span></label>
-          <div class="col-pick-group">2026</div>
-          <label><input type="checkbox" id="col-sid26" onchange="toggle_col('sid26',this.checked)"><span class="lbl-text">Sanction ID 26</span></label>
-          <label><input type="checkbox" id="col-date26" onchange="toggle_col('date26',this.checked)"><span class="lbl-text">Date 26</span></label>
+          <div class="col-pick-group">${ya}</div>
+          <label><input type="checkbox" id="col-sid25" onchange="toggle_col('sid25',this.checked)"><span class="lbl-text">Sanction ID ${ya}</span></label>
+          <label><input type="checkbox" id="col-date25" onchange="toggle_col('date25',this.checked)"><span class="lbl-text">Date ${ya}</span></label>
+          <div class="col-pick-group">${yb}</div>
+          <label><input type="checkbox" id="col-sid26" onchange="toggle_col('sid26',this.checked)"><span class="lbl-text">Sanction ID ${yb}</span></label>
+          <label><input type="checkbox" id="col-date26" onchange="toggle_col('date26',this.checked)"><span class="lbl-text">Date ${yb}</span></label>
         </div>
       </div>
       <button class="chart-btn" onclick="export_table_csv()" title="Download all visible rows as CSV">⬇ Export CSV</button>
@@ -631,16 +631,16 @@ ${has_table ? `
           <tr>
             <th style="width:42px;min-width:42px;cursor:default">#</th>
             <th data-col="seg">Segment</th><th data-col="conf">Conf</th><th data-col="type">Type</th>
-            <th data-col="m25">Mo 25</th>
-            <th class="col-sid25" data-col="sid25" style="font-size:.72rem">Sanction ID 25</th>
-            <th class="col-date25" data-col="date25" style="font-size:.72rem">Date 25</th>
+            <th data-col="m25">Mo ${ya}</th>
+            <th class="col-sid25" data-col="sid25" style="font-size:.72rem">Sanction ID ${ya}</th>
+            <th class="col-date25" data-col="date25" style="font-size:.72rem">Date ${ya}</th>
             <th data-col="name25">2025 Event Name</th>
-            <th data-col="day25">Day</th><th data-col="st25">Status 25</th>
-            <th data-col="m26">Mo 26</th>
-            <th class="col-sid26" data-col="sid26" style="font-size:.72rem">Sanction ID 26</th>
-            <th class="col-date26" data-col="date26" style="font-size:.72rem">Date 26</th>
+            <th data-col="day25">Day</th><th data-col="st25">Status ${ya}</th>
+            <th data-col="m26">Mo ${yb}</th>
+            <th class="col-sid26" data-col="sid26" style="font-size:.72rem">Sanction ID ${yb}</th>
+            <th class="col-date26" data-col="date26" style="font-size:.72rem">Date ${yb}</th>
             <th data-col="name26">2026 Event Name</th>
-            <th data-col="day26">Day</th><th data-col="st26">Status 26</th>
+            <th data-col="day26">Day</th><th data-col="st26">Status ${yb}</th>
           </tr>
         </thead>
         <tbody id="tbl-body"></tbody>
@@ -1256,7 +1256,7 @@ if(ROSTER && ROSTER.length > 0){
   }
 
   function export_table_csv(){
-    const headers = ['#','Segment','Confidence','Type','Month 2025','2025 Sanction ID','2025 Date','2025 Day','2025 Event Name','2025 Status','Month 2026','2026 Sanction ID','2026 Date','2026 Day','2026 Event Name','2026 Status'];
+    const headers = ['#','Segment','Confidence','Type','Month ${ya}','${ya} Sanction ID','${ya} Date','${ya} Day','${ya} Event Name','${ya} Status','Month ${yb}','${yb} Sanction ID','${yb} Date','${yb} Day','${yb} Event Name','${yb} Status'];
     const rows = [headers.join(',')];
     current_rows.forEach((r,i)=>{
       const q = v=>'"'+String(v||'').replace(/"/g,'""')+'"';
@@ -1500,15 +1500,15 @@ if(ROSTER && ROSTER.length > 0){
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <select id="ov-type" style="border:1px solid #ddd;border-radius:5px;padding:5px 8px;font-size:.78rem;font-family:inherit">
                 <option value="match">Force Match (link two events)</option>
-                <option value="no-match-25">Force Lost (2025 event → mark as Lost)</option>
-                <option value="no-match-26">Force New (2026 event → mark as New)</option>
+                <option value="no-match-25">Force Lost (${ya} event → mark as Lost)</option>
+                <option value="no-match-26">Force New (${yb} event → mark as New)</option>
                 <option value="segment">Override Segment label</option>
               </select>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap" id="ov-fields">
-              <input id="ov-sid25" type="text" placeholder="2025 Sanction ID (e.g. 311655-Adult Race)"
+              <input id="ov-sid25" type="text" placeholder="${ya} Sanction ID (e.g. 311655-Adult Race)"
                 style="flex:1;min-width:200px;border:1px solid #ddd;border-radius:5px;padding:5px 8px;font-size:.78rem;font-family:inherit">
-              <input id="ov-sid26" type="text" placeholder="2026 Sanction ID"
+              <input id="ov-sid26" type="text" placeholder="${yb} Sanction ID"
                 style="flex:1;min-width:200px;border:1px solid #ddd;border-radius:5px;padding:5px 8px;font-size:.78rem;font-family:inherit">
               <select id="ov-seg" style="display:none;border:1px solid #ddd;border-radius:5px;padding:5px 8px;font-size:.78rem;font-family:inherit">
                 <option value="Retained">Retained</option><option value="Shifted">Shifted</option>
@@ -1813,8 +1813,8 @@ document.getElementById('ov-type')?.addEventListener('change', function(){
   s26.style.display  = (t==='no-match-25') ? 'none' : '';
   s25.style.display  = (t==='no-match-26') ? 'none' : '';
   seg.style.display  = (t==='segment') ? '' : 'none';
-  s25.placeholder = t==='no-match-26' ? '' : '2025 Sanction ID (e.g. 311655-Adult Race)';
-  s26.placeholder = t==='no-match-25' ? '' : '2026 Sanction ID';
+  s25.placeholder = t==='no-match-26' ? '' : '${ya} Sanction ID (e.g. 311655-Adult Race)';
+  s26.placeholder = t==='no-match-25' ? '' : '${yb} Sanction ID';
 });
 
 function build_override_entry(){
@@ -1829,11 +1829,11 @@ function build_override_entry(){
     api_type='force_match'; entry={sid_25:sid25,sid_26:sid26};
     cmd='node ask.js --add-override match "'+sid25+'" "'+sid26+'"';
   } else if(ov_type==='no-match-25'){
-    if(!sid25){ alert('2025 Sanction ID required.'); return null; }
+    if(!sid25){ alert('${ya} Sanction ID required.'); return null; }
     api_type='force_no_match'; entry={sid_25:sid25};
     cmd='node ask.js --add-override no-match 25 "'+sid25+'"';
   } else if(ov_type==='no-match-26'){
-    if(!sid26){ alert('2026 Sanction ID required.'); return null; }
+    if(!sid26){ alert('${yb} Sanction ID required.'); return null; }
     api_type='force_no_match'; entry={sid_26:sid26};
     cmd='node ask.js --add-override no-match 26 "'+sid26+'"';
   } else if(ov_type==='segment'){
