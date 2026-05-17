@@ -86,24 +86,24 @@ function callout(prs, s, text, x, y, w, h, bg, fg, sz = 10) {
 
 // ── Data extraction from `results` ────────────────────────────────────────
 function compute_totals(r) {
-  const c25 = r?.c25 ?? {}, c26 = r?.c26 ?? {};
+  const c_baseline = r?.c_baseline ?? {}, c_analysis = r?.c_analysis ?? {};
   const sum_type = (cx, t) => Object.values(cx ?? {}).reduce((s, m) => s + (m[t] ?? 0), 0);
   const by_type = TYPES.map(t => ({
     type: t,
-    n25:  sum_type(c25, t),
-    n26:  sum_type(c26, t),
-    delta: sum_type(c26, t) - sum_type(c25, t),
-    pct_str: fmt_pct(sum_type(c25, t), sum_type(c26, t)),
+    n_baseline:  sum_type(c_baseline, t),
+    n_analysis:  sum_type(c_analysis, t),
+    delta: sum_type(c_analysis, t) - sum_type(c_baseline, t),
+    pct_str: fmt_pct(sum_type(c_baseline, t), sum_type(c_analysis, t)),
   }));
-  const n25 = r?.baseline_active?.length ?? by_type.reduce((s, b) => s + b.n25, 0);
-  const n26 = r?.analysis_active?.length ?? by_type.reduce((s, b) => s + b.n26, 0);
-  return { c25, c26, by_type, n25, n26, net: n26 - n25, pct: fmt_pct(n25, n26) };
+  const n_baseline = r?.baseline_active?.length ?? by_type.reduce((s, b) => s + b.n_baseline, 0);
+  const n_analysis = r?.analysis_active?.length ?? by_type.reduce((s, b) => s + b.n_analysis, 0);
+  return { c_baseline, c_analysis, by_type, n_baseline, n_analysis, net: n_analysis - n_baseline, pct: fmt_pct(n_baseline, n_analysis) };
 }
 function monthly_rows(r) {
   const out = [];
   for (let m = 1; m <= 12; m++) {
     const d = r?.monthly?.[m] ?? {};
-    out.push({ m, label: MN[m], n25: d.n25 ?? 0, n26: d.n26 ?? 0,
+    out.push({ m, label: MN[m], n_baseline: d.n_baseline ?? 0, n_analysis: d.n_analysis ?? 0,
                netDelta: d.netDelta ?? 0, netShift: d.netShift ?? 0,
                ret: d.ret ?? 0, sa: d.sa ?? 0, su: d.su ?? 0,
                attr: d.attr ?? 0, rec: d.rec ?? 0, new: d.new ?? 0, ttr: d.ttr ?? 0 });
@@ -158,9 +158,9 @@ function pipeline_get(rows, yr, type = null, months = null) {
               && (months === null || months.includes(r.mo)))
     .reduce((s, r) => s + (r.cnt ?? 0), 0);
 }
-function in_year_cutoff(year_b) {
+function in_year_cutoff(ANALYSIS_YEAR) {
   const now = new Date();
-  if (year_b === now.getFullYear()) {
+  if (ANALYSIS_YEAR === now.getFullYear()) {
     return Math.max(1, Math.min(12, now.getMonth() + 1));   // current month (1–12)
   }
   return 12;
@@ -175,7 +175,7 @@ function slide_1(prs, r, cm, T) {
   s.addShape(prs.ShapeType.rect, { x: 0, y: 0, w: 10, h: 1.0, fill: { color: 'AA1524' }, line: { color: 'AA1524' } });
   s.addText('USAT  |  Sanctioned Events Analysis', { x: 0.4, y: 0.15, w: 9, h: 0.55, fontSize: 12, color: 'FFAAAA', fontFace: 'Calibri' });
   s.addText('Sanctioned Events', { x: 0.4, y: 1.15, w: 9.2, h: 1.0, fontSize: 40, bold: true, color: WH, fontFace: 'Calibri' });
-  s.addText(cm.slide_1_subtitle || `${T.year_a} vs ${T.year_b}  |  Year-over-Year Analysis`,
+  s.addText(cm.slide_1_subtitle || `${T.BASELINE_YEAR} vs ${T.ANALYSIS_YEAR}  |  Year-over-Year Analysis`,
     { x: 0.4, y: 2.1, w: 9, h: 0.55, fontSize: 20, color: 'FFCCCC', fontFace: 'Calibri' });
 
   // Build default bullets dynamically from the data.
@@ -228,8 +228,8 @@ function slide_2(prs, r, cm, T) {
     const fg = big_neg ? RD  : big_pos ? GD  : DK;
     return [
       dc(b.type, bg, fg, big_neg || big_pos, 'left'),
-      dc(fmt_int(b.n25), bg),
-      dc(fmt_int(b.n26), bg),
+      dc(fmt_int(b.n_baseline), bg),
+      dc(fmt_int(b.n_analysis), bg),
       dv(fmt_delta(b.delta)),
       dv(b.pct_str),
       dc(read_as(b), bg, fg, big_neg || big_pos, 'left', 9.5),
@@ -237,10 +237,10 @@ function slide_2(prs, r, cm, T) {
   });
 
   s.addTable([
-    [hc('Event Type', '1A237E'), hc(String(T.year_a), '1A237E'), hc(String(T.year_b), '1A237E'),
+    [hc('Event Type', '1A237E'), hc(String(T.BASELINE_YEAR), '1A237E'), hc(String(T.ANALYSIS_YEAR), '1A237E'),
      hc('Delta Count', '1A237E'), hc('Delta %', '1A237E'), hc('Read as...', '1A237E')],
     ...rows,
-    [hc('TOTAL', DARK), hc(fmt_int(T.n25), DARK), hc(fmt_int(T.n26), DARK),
+    [hc('TOTAL', DARK), hc(fmt_int(T.n_baseline), DARK), hc(fmt_int(T.n_analysis), DARK),
      hc(fmt_delta(T.net), DARK), hc(T.pct, DARK),
      hc(total_read_as(T), DARK)],
   ], { x: 0.3, y: 0.76, w: 9.4, h: 2.72, rowH: 0.44, fontSize: 10.5, border: { type: 'solid', pt: 0.5, color: 'CCCCCC' } });
@@ -249,7 +249,7 @@ function slide_2(prs, r, cm, T) {
   s.addText([
     { text: 'Narrative:  ', options: { bold: true } },
     { text: cm.slide_2_narrative
-        || `Across the four event types, ${T.year_b} ended at ${fmt_int(T.n26)} (vs ${fmt_int(T.n25)} in ${T.year_a}), a net ${fmt_delta(T.net)} (${T.pct}).` }
+        || `Across the four event types, ${T.ANALYSIS_YEAR} ended at ${fmt_int(T.n_analysis)} (vs ${fmt_int(T.n_baseline)} in ${T.BASELINE_YEAR}), a net ${fmt_delta(T.net)} (${T.pct}).` }
   ], { x: 0.42, y: 3.67, w: 9.1, h: 1.0, fontSize: 10, color: DK, valign: 'middle', fontFace: 'Calibri' });
 
   s.addNotes(cm.notes?.slide_2 ?? '');
@@ -285,8 +285,8 @@ function slide_3(prs, r, cm, T) {
 
   // Left: 12-row monthly table + Full Year footer.
   const monthly_table = [
-    [hc('Month', '1A237E', WH, 10), hc(String(T.year_a), '1A237E', WH, 10),
-     hc(String(T.year_b), '1A237E', WH, 10), hc('Var', '1A237E', WH, 10)],
+    [hc('Month', '1A237E', WH, 10), hc(String(T.BASELINE_YEAR), '1A237E', WH, 10),
+     hc(String(T.ANALYSIS_YEAR), '1A237E', WH, 10), hc('Var', '1A237E', WH, 10)],
     ...M.map(row => {
       const is_worst = worst.some(w => w.m === row.m);
       const pos = row.netDelta > 0;
@@ -294,12 +294,12 @@ function slide_3(prs, r, cm, T) {
       const fg = is_worst ? RD : pos ? GD : DK;
       return [
         dc(row.label, bg, fg, is_worst || (pos && row.netDelta >= 8), 'left', 10),
-        dc(fmt_int(row.n25), bg, DK, false, 'center', 10),
-        dc(fmt_int(row.n26), bg, DK, false, 'center', 10),
+        dc(fmt_int(row.n_baseline), bg, DK, false, 'center', 10),
+        dc(fmt_int(row.n_analysis), bg, DK, false, 'center', 10),
         dv(fmt_delta(row.netDelta), 10),
       ];
     }),
-    [hc('Full Year', DARK), hc(fmt_int(T.n25), DARK), hc(fmt_int(T.n26), DARK), hc(fmt_delta(T.net), DARK)],
+    [hc('Full Year', DARK), hc(fmt_int(T.n_baseline), DARK), hc(fmt_int(T.n_analysis), DARK), hc(fmt_delta(T.net), DARK)],
   ];
   s.addTable(monthly_table, { x: 0.3, y: 0.76, w: 3.4, h: 3.82, rowH: 0.27, fontSize: 10, border: { type: 'solid', pt: 0.5, color: 'CCCCCC' } });
 
@@ -311,7 +311,7 @@ function slide_3(prs, r, cm, T) {
     return [
       dc(MN_LONG[w.m], MRDBG, RD, true, 'left', 10),
       ...TYPES.map(t => {
-        const d = (r.c26?.[w.m]?.[t] ?? 0) - (r.c25?.[w.m]?.[t] ?? 0);
+        const d = (r.c_analysis?.[w.m]?.[t] ?? 0) - (r.c_baseline?.[w.m]?.[t] ?? 0);
         return d === 0 ? dc('--', MRDBG, 'AAAAAA') : dv(fmt_delta(d));
       }),
       dv(fmt_delta(w.netDelta)),
@@ -380,7 +380,7 @@ function slide_4(prs, r, cm, T) {
     .sort((a, b) => a.orgTotal - b.orgTotal).slice(0, 2);
   const alert_text = cm.slide_4_alert
     || (zero_cover_decliners.length
-        ? `${zero_cover_decliners.map(o => o.label).join(' and ')} had ZERO change in weekend days between ${T.year_a} and ${T.year_b}. There is no calendar explanation for the decline -- it is fully organic.`
+        ? `${zero_cover_decliners.map(o => o.label).join(' and ')} had ZERO change in weekend days between ${T.BASELINE_YEAR} and ${T.ANALYSIS_YEAR}. There is no calendar explanation for the decline -- it is fully organic.`
         : 'Calendar pressure is muted this year -- raw deltas track organic deltas closely.');
   s.addShape(prs.ShapeType.rect, { x: 0.3, y: 0.76, w: 9.4, h: 0.62, fill: { color: RBG }, line: { color: RD, pt: 1.5 } });
   s.addText(alert_text,
@@ -409,7 +409,7 @@ function slide_4(prs, r, cm, T) {
 
   // Two info boxes — shifting impact and biggest "raw masks organic" example.
   const shifted_total = r?.segSummary?.Shifted ?? 0;
-  const shift_pct = T.n25 ? Math.round((shifted_total / T.n25) * 100) : 0;
+  const shift_pct = T.n_baseline ? Math.round((shifted_total / T.n_baseline) * 100) : 0;
   s.addShape(prs.ShapeType.rect, { x: 0.3, y: 4.02, w: 4.55, h: 0.62, fill: { color: BBG }, line: { color: BL, pt: 0.8 } });
   s.addText(`Event shifting (${fmt_int(shifted_total)} events, ${shift_pct}%) explains a small share of monthly net changes.`,
     { x: 0.42, y: 4.04, w: 4.3, h: 0.58, fontSize: 9.5, color: BL, valign: 'middle', fontFace: 'Calibri' });
@@ -472,7 +472,7 @@ function slide_5(prs, r, cm, T) {
   ], { x: 0.3, y: 1.06, w: 9.4, h: 2.00, rowH: 0.36, fontSize: 10.5, border: { type: 'solid', pt: 0.5, color: 'CCCCCC' } });
 
   s.addShape(prs.ShapeType.rect, { x: 0.3, y: 3.16, w: 9.4, h: 0.44, fill: { color: BBG }, line: { color: BL, pt: 0.8 } });
-  s.addText(`Organic Delta = Actual Delta - Calendar Expected Delta.   Calendar effect = Delta weekend days x ${T.year_a} events-per-weekend-day for that month & type.`,
+  s.addText(`Organic Delta = Actual Delta - Calendar Expected Delta.   Calendar effect = Delta weekend days x ${T.BASELINE_YEAR} events-per-weekend-day for that month & type.`,
     { x: 0.42, y: 3.18, w: 9.1, h: 0.40, fontSize: 9.5, color: BL, valign: 'middle', italic: true, fontFace: 'Calibri' });
 
   const obt_decliner = [...obt].sort((a, b) => a.org - b.org)[0];
@@ -519,19 +519,19 @@ function slide_6(prs, r, cm, T) {
   add_header(prs, s, 'Step 4', 'Did We Really Lose Events?  Event-Level Disposition', DARK, 6);
 
   const seg = r?.segSummary ?? {};
-  const denom = T.n25 || 1;
+  const denom = T.n_baseline || 1;
   const pct = v => `${Math.round(((v ?? 0) / denom) * 100)}%`;
   const boxes = [
     [seg.Retained ?? 0, pct(seg.Retained), 'Retained', `Same event, same month`,            GBG, GD],
     [seg.Shifted  ?? 0, pct(seg.Shifted),  'Shifted',  `Same event, diff month`,            ABG, AM],
-    [seg.Lost     ?? 0, pct(seg.Lost),     'Lost',     `Did not return to ${T.year_b}`,    MRDBG, RD],
-    [seg.New      ?? 0, pct(seg.New),      'New',      `Brand new to ${T.year_b}`,          BBG, BL],
+    [seg.Lost     ?? 0, pct(seg.Lost),     'Lost',     `Did not return to ${T.ANALYSIS_YEAR}`,    MRDBG, RD],
+    [seg.New      ?? 0, pct(seg.New),      'New',      `Brand new to ${T.ANALYSIS_YEAR}`,          BBG, BL],
   ];
   boxes.forEach(([n, pct_str, label, sub, bg, fg], i) => {
     const x = 0.3 + i * 2.38;
     s.addShape(prs.ShapeType.rect, { x, y: 0.76, w: 2.22, h: 1.26, fill: { color: bg }, line: { color: fg, pt: 1.2 } });
     s.addText(fmt_int(n), { x, y: 0.79, w: 2.22, h: 0.52, fontSize: 27, bold: true, color: fg, align: 'center', fontFace: 'Calibri' });
-    s.addText(`${pct_str} of ${T.year_a}`, { x, y: 1.27, w: 2.22, h: 0.22, fontSize: 9, color: fg, align: 'center', italic: true, fontFace: 'Calibri' });
+    s.addText(`${pct_str} of ${T.BASELINE_YEAR}`, { x, y: 1.27, w: 2.22, h: 0.22, fontSize: 9, color: fg, align: 'center', italic: true, fontFace: 'Calibri' });
     s.addText(label, { x, y: 1.47, w: 2.22, h: 0.22, fontSize: 10, bold: true, color: fg, align: 'center', fontFace: 'Calibri' });
     s.addText(sub, { x, y: 1.67, w: 2.22, h: 0.28, fontSize: 8.5, color: '555555', align: 'center', fontFace: 'Calibri' });
   });
@@ -544,23 +544,23 @@ function slide_6(prs, r, cm, T) {
 
   s.addText('Replacement Rates -- selected months:', { x: 0.3, y: 2.10, w: 9.4, h: 0.26, fontSize: 10.5, bold: true, color: DK, fontFace: 'Calibri' });
   s.addTable([
-    [hc('Month', DARK), hc(`${T.year_a}\nEvents`, DARK), hc('Retained', GD, WH, 10),
+    [hc('Month', DARK), hc(`${T.BASELINE_YEAR}\nEvents`, DARK), hc('Retained', GD, WH, 10),
      hc('Shifted\nOut', AM, WH, 10), hc('Lost\n(truly lost)', RD, WH, 10),
      hc('Shifted\nIn', BL, WH, 10), hc('New\nAdded', BL, WH, 10),
-     hc(`${T.year_b}\nTotal`, DARK), hc('Repl.\nRate', DARK)],
+     hc(`${T.ANALYSIS_YEAR}\nTotal`, DARK), hc('Repl.\nRate', DARK)],
     ...picks.map(p => {
       const repl_rate = p.attr > 0 ? Math.round(((p.new + p.rec) / p.attr) * 100) : 0;
       const bg = p.netDelta >= 0 ? GBG : MRDBG;
       const fg = p.netDelta >= 0 ? GD  : RD;
       return [
         dc(MN_LONG[p.m], bg, fg, true, 'left', 10),
-        dc(fmt_int(p.n25), bg),
+        dc(fmt_int(p.n_baseline), bg),
         dc(fmt_int(p.ret), GBG, GD),
         dc(fmt_int(p.sa), ABG, AM),
         dc(fmt_int(p.attr), MRDBG, RD, true),
         dc(fmt_int(p.su), BBG, BL),
         dc(fmt_int(p.new), BBG, BL, p.new >= 50),
-        dc(fmt_int(p.n26), bg),
+        dc(fmt_int(p.n_analysis), bg),
         dc(repl_rate >= 100 ? '>100%' : `${repl_rate}%`, bg, fg, true),
       ];
     }),
@@ -569,7 +569,7 @@ function slide_6(prs, r, cm, T) {
   const ttr = seg['Tried to Return'] ?? 0;
   const rec = seg.Recovered ?? 0;
   s.addShape(prs.ShapeType.rect, { x: 0.3, y: 3.88, w: 4.55, h: 0.60, fill: { color: 'F3E5F5' }, line: { color: '6A1B9A', pt: 0.8 } });
-  s.addText(`${fmt_int(ttr)} events Tried to Return -- filed a ${T.year_b} application but were cancelled/declined. ${fmt_int(rec)} events Recovered -- cancelled in ${T.year_a} but came back in ${T.year_b}.`,
+  s.addText(`${fmt_int(ttr)} events Tried to Return -- filed a ${T.ANALYSIS_YEAR} application but were cancelled/declined. ${fmt_int(rec)} events Recovered -- cancelled in ${T.BASELINE_YEAR} but came back in ${T.ANALYSIS_YEAR}.`,
     { x: 0.42, y: 3.90, w: 4.3, h: 0.56, fontSize: 9.5, color: '6A1B9A', valign: 'middle', fontFace: 'Calibri' });
 
   const new_plus_rec = (seg.New ?? 0) + (seg.Recovered ?? 0);
@@ -583,7 +583,7 @@ function slide_6(prs, r, cm, T) {
   s.addText([
     { text: 'Narrative:  ', options: { bold: true } },
     { text: cm.slide_6_narrative
-        || `Of ${fmt_int(T.n25)} ${T.year_a} events, ${pct(seg.Retained)} retained, ${pct(seg.Shifted)} shifted, ${pct(seg.Lost)} lost. ${fmt_int(seg.New ?? 0)} new events and ${fmt_int(rec)} recovered events drove ${T.year_b} composition.` }
+        || `Of ${fmt_int(T.n_baseline)} ${T.BASELINE_YEAR} events, ${pct(seg.Retained)} retained, ${pct(seg.Shifted)} shifted, ${pct(seg.Lost)} lost. ${fmt_int(seg.New ?? 0)} new events and ${fmt_int(rec)} recovered events drove ${T.ANALYSIS_YEAR} composition.` }
   ], { x: 0.42, y: 4.63, w: 9.1, h: 0.59, fontSize: 9.5, color: DK, valign: 'middle', fontFace: 'Calibri' });
 
   s.addNotes(cm.notes?.slide_6 ?? '');
@@ -597,12 +597,12 @@ function slide_7(prs, r, cm, T, rows25, rows26) {
   s.background = { color: LG };
   add_header(prs, s, 'Step 5', 'Application Pipeline -- Who Is Filing and When', '1B5E20', 7);
 
-  // For year_a events: pre-filing = Q4 of (year_a - 1), in-year = Jan-cutoff of year_a.
-  // For year_b events: pre-filing = Q4 of (year_a),     in-year = Jan-cutoff of year_b.
-  const cutoff = in_year_cutoff(T.year_b);
+  // For BASELINE_YEAR events: pre-filing = Q4 of (BASELINE_YEAR - 1), in-year = Jan-cutoff of BASELINE_YEAR.
+  // For ANALYSIS_YEAR events: pre-filing = Q4 of (BASELINE_YEAR),     in-year = Jan-cutoff of ANALYSIS_YEAR.
+  const cutoff = in_year_cutoff(T.ANALYSIS_YEAR);
   const months_q4    = [10, 11, 12];
   const months_in_yr = Array.from({ length: cutoff }, (_, i) => i + 1);
-  const ya = T.year_a, yb = T.year_b;
+  const ya = T.BASELINE_YEAR, yb = T.ANALYSIS_YEAR;
 
   function pipeline_row(type) {
     const pr25 = pipeline_get(rows25, ya - 1, type, months_q4);
@@ -722,7 +722,7 @@ function slide_8(prs, r, cm, T) {
     const colW = idx === 0 ? 4.55 : 4.65;
     const repl = w.attr > 0 ? Math.round(((w.new + w.rec) / w.attr) * 100) : 0;
     s.addTable([
-      [hc(MN_LONG[w.m], DARK, WH, 9.5), hc(String(T.year_a), '1A237E', WH, 9.5), hc(String(T.year_b), '1A237E', WH, 9.5)],
+      [hc(MN_LONG[w.m], DARK, WH, 9.5), hc(String(T.BASELINE_YEAR), '1A237E', WH, 9.5), hc(String(T.ANALYSIS_YEAR), '1A237E', WH, 9.5)],
       [dc('Retained', LG, DK, false, 'left', 9.5), dc(fmt_int(w.ret), LG, DK), dc(fmt_int(w.ret), GBG, GD, true)],
       [dc('Shifted Out', WH, DK, false, 'left', 9.5), dc('-' + fmt_int(w.sa), RBG, RD), dc('--', WH, 'AAAAAA')],
       [dc('Lost', MRDBG, RD, true, 'left', 9.5), dc('-' + fmt_int(w.attr), MRDBG, RD, true), dc('--', MRDBG, 'AAAAAA')],
@@ -730,7 +730,7 @@ function slide_8(prs, r, cm, T) {
       [dc("New / Rec'd", GBG, GD, false, 'left', 9.5), dc('--', GBG, 'AAAAAA'), dc('+' + fmt_int(w.new + w.rec), GBG, GD, true)],
     ], { x: x0, y: 1.00, w: colW, h: 1.46, rowH: 0.23, fontSize: 9.5, border: { type: 'solid', pt: 0.5, color: 'CCCCCC' } });
     s.addShape(prs.ShapeType.rect, { x: x0, y: 2.54, w: colW, h: 0.36, fill: { color: DARK }, line: { color: DARK } });
-    s.addText(`${T.year_a}: ${fmt_int(w.n25)} events  ->  ${T.year_b}: ${fmt_int(w.n26)}       Replacement: ${fmt_int(w.new + w.rec)}/${fmt_int(w.attr)} = ${repl}%`,
+    s.addText(`${T.BASELINE_YEAR}: ${fmt_int(w.n_baseline)} events  ->  ${T.ANALYSIS_YEAR}: ${fmt_int(w.n_analysis)}       Replacement: ${fmt_int(w.new + w.rec)}/${fmt_int(w.attr)} = ${repl}%`,
       { x: x0 + 0.02, y: 2.55, w: colW - 0.05, h: 0.34, fontSize: 9, color: GBG, bold: true, align: 'center', valign: 'middle', fontFace: 'Calibri' });
   });
 
@@ -773,14 +773,14 @@ function slide_8(prs, r, cm, T) {
   const act_now_winback = act_now.attr > 0 ? Math.round(act_now.attr * 0.20) : 0;
   s.addShape(prs.ShapeType.rect, { x: 0.3, y: 4.14, w: 4.55, h: 0.78, fill: { color: MRDBG }, line: { color: RD, pt: 1.2 } });
   s.addText([
-    { text: `${MN_LONG[act_now.m]} -- Act Now (${T.year_b} Window)\n`, options: { bold: true, fontSize: 10.5 } },
-    { text: `${fmt_int(act_now.attr)} lost in ${T.year_a}. Reach all known organizers; a 20% win-back recovers ~${fmt_int(act_now_winback)} events.`, options: { fontSize: 9.5 } }
+    { text: `${MN_LONG[act_now.m]} -- Act Now (${T.ANALYSIS_YEAR} Window)\n`, options: { bold: true, fontSize: 10.5 } },
+    { text: `${fmt_int(act_now.attr)} lost in ${T.BASELINE_YEAR}. Reach all known organizers; a 20% win-back recovers ~${fmt_int(act_now_winback)} events.`, options: { fontSize: 9.5 } }
   ], { x: 0.42, y: 4.17, w: 4.3, h: 0.72, color: RD, valign: 'middle', fontFace: 'Calibri' });
 
   s.addShape(prs.ShapeType.rect, { x: 5.05, y: 4.14, w: 4.65, h: 0.78, fill: { color: BBG }, line: { color: BL, pt: 1.2 } });
   s.addText([
-    { text: `${MN_LONG[diagnose.m]} -- Diagnose for ${T.year_b + 1}\n`, options: { bold: true, fontSize: 10.5 } },
-    { text: `${fmt_int(diagnose.attr)} lost in ${T.year_a}. Too late for ${T.year_b}; outreach to understand WHY is the highest-ROI ${T.year_b + 1} planning action.`, options: { fontSize: 9.5 } }
+    { text: `${MN_LONG[diagnose.m]} -- Diagnose for ${T.ANALYSIS_YEAR + 1}\n`, options: { bold: true, fontSize: 10.5 } },
+    { text: `${fmt_int(diagnose.attr)} lost in ${T.BASELINE_YEAR}. Too late for ${T.ANALYSIS_YEAR}; outreach to understand WHY is the highest-ROI ${T.ANALYSIS_YEAR + 1} planning action.`, options: { fontSize: 9.5 } }
   ], { x: 5.17, y: 4.17, w: 4.4, h: 0.72, color: BL, valign: 'middle', fontFace: 'Calibri' });
 
   s.addShape(prs.ShapeType.rect, { x: 0.3, y: 5.02, w: 9.4, h: 0.36, fill: { color: 'ECEFF1' }, line: { color: 'CCCCCC', pt: 0.5 } });
@@ -799,12 +799,12 @@ function slide_8(prs, r, cm, T) {
 async function buildDeck(outPath, results, commentary = null, rows25 = null, rows26 = null) {
   const cm = commentary ?? {};
   const T = compute_totals(results);
-  T.year_a = results?.years?.year_a ?? new Date().getFullYear() - 1;
-  T.year_b = results?.years?.year_b ?? new Date().getFullYear();
+  T.BASELINE_YEAR = results?.years?.BASELINE_YEAR ?? new Date().getFullYear() - 1;
+  T.ANALYSIS_YEAR = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
 
   const prs = new pptxgen();
   prs.layout = 'LAYOUT_16x9';
-  prs.title = `Sanctioned Events ${T.year_a} vs ${T.year_b}`;
+  prs.title = `Sanctioned Events ${T.BASELINE_YEAR} vs ${T.ANALYSIS_YEAR}`;
 
   slide_1(prs, results, cm, T);
   slide_2(prs, results, cm, T);

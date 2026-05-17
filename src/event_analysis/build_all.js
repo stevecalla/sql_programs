@@ -180,7 +180,7 @@ async function main() {
   loaded.BASELINE_YEAR = BASELINE_YEAR;
   loaded.ANALYSIS_YEAR = ANALYSIS_YEAR;
   console.log(`  ${BASELINE_YEAR} active: ${loaded.baseline_active.length}  |  ${ANALYSIS_YEAR} active: ${loaded.analysis_active.length}`);
-  const results = run_analysis(loaded);
+  const results = await run_analysis(loaded);
   results.years = { BASELINE_YEAR: BASELINE_YEAR, ANALYSIS_YEAR: ANALYSIS_YEAR };
   // Attach creation rows so commentary.js can build pipeline narratives.
   results.creation_rows = { BASELINE_YEAR: creation_by_year[BASELINE_YEAR], ANALYSIS_YEAR: creation_by_year[ANALYSIS_YEAR] };

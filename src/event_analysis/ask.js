@@ -558,9 +558,9 @@ async function cmd_suggest_overrides() {
     path.join(DIR, 'data', '2025a_events_051526.csv'),
     path.join(DIR, 'data', '2026_events_051526.csv')
   );
-  const results = run_analysis(loaded);
-  const ya = results.years?.year_a ?? 2025;
-  const yb = results.years?.year_b ?? 2026;
+  const results = await run_analysis(loaded);
+  const ya = results.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const yb = results.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
 
   const attrited = (results.segments?.attrited ?? []).map(m => ({
     sid:   m.e25.sanctionId,

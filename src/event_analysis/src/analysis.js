@@ -6,7 +6,6 @@
 
 'use strict';
 
-const path = require('path');
 const { matchEvents, crossMatch, reclassify } = require('./matcher');
 const { buildCalendarImpact } = require('./calendar');
 const { load_overrides, apply_overrides, summarise_overrides } = require('./overrides');
@@ -45,10 +44,12 @@ function segCounts(records, monthKey = 'e25') {
 
 /**
  * Run the complete analysis.
- * @param {object} loaded  — output of loadBothYears()
- * @returns {object}       — all computed data for Excel generation
+ * @param {object} loaded  — output of loadBothYears() / loadBothYearsFromRows().
+ *                           May also carry `BASELINE_YEAR` and `ANALYSIS_YEAR`
+ *                           when callers want year-scoped overrides.
+ * @returns {Promise<object>}  — all computed data for Excel generation
  */
-function runAnalysis(loaded) {
+async function runAnalysis(loaded) {
   const { baseline_active, analysis_active, baseline_excluded, analysis_excluded } = loaded;
 
   // ── 1. Match events ──────────────────────────────────────────────────
@@ -90,21 +91,31 @@ function runAnalysis(loaded) {
     }
   }
 
-  // ── 3. Apply manual overrides (data/overrides.json) ─────────────────
-  const overrides_path = path.join(__dirname, '..', 'data', 'overrides.json');
-  const overrides = load_overrides(overrides_path);
+  // ── 3. Apply manual overrides (loaded from event_analysis_overrides table) ──
+  const baseline_year = loaded.BASELINE_YEAR
+    ?? Number(process.env.BASELINE_YEAR)
+    ?? null;
+  const analysis_year = loaded.ANALYSIS_YEAR
+    ?? Number(process.env.ANALYSIS_YEAR)
+    ?? null;
+
+  const overrides = await load_overrides({ baseline_year, analysis_year });
   let override_summary = null;
   if (overrides && (overrides.force_match.length || overrides.force_no_match.length || overrides.force_segment.length)) {
-    const { applied, warnings } = apply_overrides(segments, baseline_active, analysis_active, overrides).applied
-      ? apply_overrides(segments, baseline_active, analysis_active, overrides)
-      : { applied: [], warnings: [] };
-    override_summary = summarise_overrides(applied, warnings);
+    const { applied, warnings } = apply_overrides(segments, baseline_active, analysis_active, overrides);
+    override_summary = summarise_overrides(applied, warnings, overrides.stats);
     if (override_summary?.total_applied) {
       console.log(`  Overrides applied: ${override_summary.total_applied} (${applied.map(a => a.type).join(', ')})`);
+    }
+    if (overrides.stats?.unapproved > 0) {
+      console.warn(`  ⚠ ${overrides.stats.unapproved} override(s) are unapproved (still applied; approve via ask.js).`);
     }
     if (override_summary?.warnings?.length) {
       override_summary.warnings.forEach(w => console.warn(`  [override warning] ${w}`));
     }
+  } else if (overrides) {
+    // No active overrides for this year scope — record stats so callers can report it.
+    override_summary = summarise_overrides([], [], overrides.stats);
   }
 
   // ── 3. Raw counts by month/type ──────────────────────────────────────

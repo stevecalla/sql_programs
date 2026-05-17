@@ -433,13 +433,13 @@ Overrides are moving from `data/overrides.json` into a dedicated MySQL table (`u
 | **1.** `event_analysis_overrides` table exists in `usat_sales_db` (auto-created on every `node build_all.js` via `ensure_overrides_table()` — idempotent `CREATE TABLE IF NOT EXISTS`) | ✓ done |
 | **2.** Active entries in `data/overrides.json` auto-import into the DB on every build via `migrate_overrides_json_to_db()` (idempotent; legacy `Attrited` → `Lost` mapping; once migrated, JSON is renamed `overrides.json.migrated`) | ✓ done |
 | **2.5.** Year scoping — `event_analysis_overrides` carries `baseline_year` + `analysis_year` columns so overrides apply only to the matching year-pair. `ensure_overrides_table()` adds the columns + `idx_year_pair` index idempotently if missing and backfills existing rows from current build env vars. | ✓ done |
-| 3. `analysis.js` reads overrides from DB instead of JSON | pending |
+| **3.** `analysis.js` reads overrides from the DB. `src/overrides.js` `load_overrides()` is now async and queries `event_analysis_overrides` filtered by year scope (NULL/NULL globals + matching baseline/analysis pair). `runAnalysis()` is async; `build_all.js` and `ask.js` `await` it. Unapproved overrides emit a build-time warning but still apply. | ✓ done |
 | 4. `ask.js` CLI commands write to DB instead of JSON | pending |
 | 5. Add `--approve` / `--unapprove` CLI commands (locks segment + match) | pending |
 | 6. Stale-approval detection at build time | pending |
 | 7. Minimal Express server + interactive override editing in the dashboard | pending |
 
-Until Step 4 lands, the system still reads/writes the JSON file — the table is in place and populated, but the matcher and CLI still consume the JSON. Once Step 4 is in, the JSON will be archived as `overrides.json.migrated`.
+Until Step 4 lands, the `ask.js` CLI override commands (`--add-override`, `--remove-override`) still mutate the JSON file. The matcher itself now reads from the DB, so DB-only overrides will already be applied; JSON edits won't be picked up until you `node src/event_analysis/utilities/migrate_overrides_to_db.js`.
 
 #### Run the JSON → DB migration manually
 
