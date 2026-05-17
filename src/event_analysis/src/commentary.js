@@ -302,7 +302,7 @@ function generate_rule_based(r) {
     const repls = worst_chrono.filter(m => m.repl_rate !== null).map(m => `${m.label} ${m.repl_rate}%`);
     let s = `${list_and(worst_labels_long)} each lose meaningful volume (combined ${fmt_delta(worst_combined)})`;
     if (repls.length) s += ` with partial replacement (${repls.join(', ')})`;
-    s += `. Net change is a volume problem, not a demand collapse. Action: outreach to ${worst_chrono[worst_chrono.length - 1].long} organizers while still recruitable.`;
+    s += `. The net change reflects volume rather than a broad shift in demand. Action: outreach to ${worst_chrono[worst_chrono.length - 1].long} organizers while still recruitable.`;
     return s;
   })();
 
@@ -330,7 +330,7 @@ function generate_rule_based(r) {
     const op = d.org_pct !== null ? `${fmt_pct_n(d.org_pct)} organic` : '';
     let editorial = '';
     if (Math.abs(d.delta) <= 2) editorial = 'essentially flat. No structural concern.';
-    else if (d.delta < -10)    editorial = `structural contraction. ${WARN} Key concern.`;
+    else if (d.delta < -10)    editorial = `material decline relative to year_a. ${WARN} Warrants follow-up.`;
     else if (d.delta < -3)     editorial = 'mild softness, within normal range.';
     else if (d.delta > 10)     editorial = `genuine organic growth. ${CHECK} Bright spot.`;
     else if (d.delta > 3)      editorial = 'mild gain.';
@@ -595,7 +595,7 @@ ${opportunities.join('\n')}`;
   notes.slide_8 = `SLIDE 8 ${EM_DASH} Step 6: ${worst_labels_long.join(' & ')} Win-Back Opportunity
 
 Key message: ${worst_chrono.length
-    ? `${list_and(worst_labels_long)} lose meaningful volume but the ecosystem replaces most of what it loses, just not all. The net change is a volume math problem, not a demand collapse. The immediate opportunity is ${act_now.long}; the strategic opportunity is diagnosing ${diagnose.long}.`
+    ? `${list_and(worst_labels_long)} account for the largest monthly losses, partially offset by new and recovered events. The net change reflects volume gaps rather than a broad shift in demand. The immediate opportunity is ${act_now.long}; the strategic opportunity is diagnosing ${diagnose.long}.`
     : 'Monitor replacement rates as the year progresses.'}
 
 Disposition:
@@ -665,7 +665,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
       if (d.type.includes('Race')) parts.push('Race product stable');
     } else if (d.delta < -10) {
       glyph = `${WARN} `;
-      parts = ['Full decline', `Organic ${op_str}`, 'Key concern'];
+      parts = ['Material decline', `Organic ${op_str}`, 'Warrants follow-up'];
     } else if (d.delta < -3) {
       parts = ['Mild softness', `Organic ${op_str}`, 'Monitor'];
     } else if (d.delta > 10) {
@@ -709,7 +709,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
     else if (op > 3)   excel_type_insights[d.type] = `Solid organic gain ${op_str}. Healthy trajectory.`;
     else if (op > -3)  excel_type_insights[d.type] = `Organic ${op_str}. Stable.`;
     else if (op > -8)  excel_type_insights[d.type] = `Mild softness ${op_str}. Watch item.`;
-    else                excel_type_insights[d.type] = `${WARN} Structural contraction ${op_str}. Key concern.`;
+    else                excel_type_insights[d.type] = `${WARN} Material organic decline ${op_str}. Warrants follow-up.`;
   });
 
   // ── Excel calendar findings ──────────────────────────────────────────────
@@ -752,7 +752,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
   const excel_pipeline_findings = {};
   by_type.forEach(d => {
     if (top_org_decliner && d.type === top_org_decliner.type) {
-      excel_pipeline_findings[d.type] = `${WARN} LARGEST GAP. Organic ${fmt_pct_n(d.org_pct ?? 0)}. Proactive outreach in the remaining window can recover events.`;
+      excel_pipeline_findings[d.type] = `${WARN} Largest organic gap (${fmt_pct_n(d.org_pct ?? 0)}). Proactive outreach in the remaining window can recover events.`;
     } else if (top_org_grower && d.type === top_org_grower.type) {
       excel_pipeline_findings[d.type] = `${CHECK} Pipeline expanding ${EM_DASH} organic ${fmt_pct_n(d.org_pct ?? 0)}. Growth is structural; reinforce, don't rescue.`;
     } else {
@@ -794,7 +794,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
     : 'Calendar effects explain some but not all of the monthly variance.';
 
   const slide_5_callout_left = top_org_decliner
-    ? `${top_org_decliner.type}: ${fmt_pct_n(top_org_decliner.org_pct ?? 0)} organic\nStructurally declining ${EM_DASH} the principal organic mover. Calendar noise cannot explain it.`
+    ? `${top_org_decliner.type}: ${fmt_pct_n(top_org_decliner.org_pct ?? 0)} organic\nLeading organic decliner. Calendar effects do not account for this change.`
     : 'No structural decliner identified.';
   const slide_5_callout_right = top_org_grower
     ? `${top_org_grower.type}: ${fmt_pct_n(top_org_grower.org_pct ?? 0)} organic\nOnly type genuinely growing on an organic basis. ${CHECK}`
@@ -953,6 +953,16 @@ FORMATTING RULES:
 9. Full month names ("July", "August") in narratives and notes. Short forms ("Jul") only inside tables/labels.
 10. Prefix the principal decliner with "${WARN}" in type-read / type-insight / pipeline cells. Prefix the principal grower with "${CHECK}".
 11. Use the EXACT month names from the data ${EM_DASH} do not invent "summer" or assume specific months.
+
+TONE RULES (very important — apply to ALL generated text):
+- Use measured, professional, fact-based language. The reader is a senior executive.
+- Forbidden vocabulary (do NOT use these words or close synonyms in any narrative, speaker note, bullet, key-read, or insight cell):
+  disaster, crisis, cratered, collapse, hemorrhaging, freefall, alarming, critical, catastrophic, bleed, bleeding, twin bleeds, war, battle, attack, destroyed, devastating, killed, killing, inferno, tragedy, devastating, plunged, plummeted, imploded.
+- Forbidden framings: "the funnel's break point", "the portfolio is inverting", "this is the crisis", "twin bleeds", "supply-side / demand-side death spiral", "the bleed continues", "X is finished", "X is dying".
+- Replace dramatic adjectives with quantified language: instead of "Adult Clinic cratered" say "Adult Clinic declined 13.4% (organic ${'-'}11.3%)". Instead of "alarming clinic-wide weakness" say "material clinic-wide decline that warrants follow-up".
+- Headlines may name a "principal decliner" or "leading grower"; they should NOT call anything an "engine firing", "growth engine", "bright spot's offset", or use stage-magic language.
+- Use "decline / decrease / contraction / softness / weakness" for negative movement; "growth / gain / increase / expansion" for positive movement. Use "material" or "meaningful" instead of "alarming / critical".
+- A professional analyst's voice: confident, specific, free of editorial drama. If a number is significant, let the number speak — do not amplify with emotive words.
 
 Return ONLY valid JSON (no markdown fence) with these keys:
 {

@@ -787,7 +787,7 @@ function slide_8(prs, r, cm, T) {
   s.addText([
     { text: 'Narrative:  ', options: { bold: true } },
     { text: cm.slide_8_narrative
-        || `${worst.map(w => w.label).join(' and ')} each lose meaningful event volume and only partially replace it. The net decline is a volume problem, not a demand collapse.` }
+        || `${worst.map(w => w.label).join(' and ')} account for the largest monthly losses, partially offset by new and recovered events. The net change reflects volume gaps rather than a broad shift in demand.` }
   ], { x: 0.42, y: 5.05, w: 9.1, h: 0.32, fontSize: 9.5, color: DK, valign: 'middle', fontFace: 'Calibri' });
 
   s.addNotes(cm.notes?.slide_8 ?? '');
