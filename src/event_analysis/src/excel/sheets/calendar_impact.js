@@ -13,8 +13,8 @@ const MN    = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
 const TYPE_BG = { 'Adult Race':'37474F','Youth Race':'455A64','Adult Clinic':'546E7A','Youth Clinic':'607D8B' };
 
 module.exports = function build_calendar_impact(wb, results, cm = null) {
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
   const { calImpact } = results;
   const ws = wb.addWorksheet('step_2_calendar_impact');
   ws.views = [{ state: 'frozen', ySplit: 5 }];

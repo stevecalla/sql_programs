@@ -13,12 +13,12 @@ const DOW_HDRS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const MN_SHORT = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 module.exports = function build_calendar_structure(wb, results) {
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
   const ws = wb.addWorksheet('step_0_calendar_structure');
   ws.views = [{ state: 'frozen', ySplit: 2 }];
 
-  // Column widths: A(wk label), B-H(year_a), I(spacer), J-P(year_b), Q(notes)
+  // Column widths: A(wk label), B-H(BASELINE_YEAR), I(spacer), J-P(ANALYSIS_YEAR), Q(notes)
   const colWidths = [10, 8,8,8,8,8,9,9, 2, 8,8,8,8,8,9,9, 36];
   colWidths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
@@ -99,11 +99,11 @@ module.exports = function build_calendar_structure(wb, results) {
     row++;
 
     // DOW header row
-    // Col 1: blank, cols 2-8: Mon→Sun for year_a, col 9: spacer, cols 10-16: Mon→Sun for year_b
+    // Col 1: blank, cols 2-8: Mon→Sun for BASELINE_YEAR, col 9: spacer, cols 10-16: Mon→Sun for ANALYSIS_YEAR
     ws.getCell(row, 1).fill = fill('37474F');
     DOW_HDRS.forEach((d, i) => {
-      th(ws.getCell(row, i + 2), d, { bg: '37474F', sz: 9 });   // year_a side
-      th(ws.getCell(row, i + 10), d, { bg: '37474F', sz: 9 });  // year_b side
+      th(ws.getCell(row, i + 2), d, { bg: '37474F', sz: 9 });   // BASELINE_YEAR side
+      th(ws.getCell(row, i + 10), d, { bg: '37474F', sz: 9 });  // ANALYSIS_YEAR side
     });
     ws.getCell(row, 9).fill = fill('EEEEEE');
     th(ws.getCell(row, 17), 'Notes', { bg: '555555', sz: 8 });
@@ -126,7 +126,7 @@ module.exports = function build_calendar_structure(wb, results) {
         alignment: align({ h: 'center' }),
       });
 
-      // year_a: cols 2-8 (dow 0=Mon → col 2)
+      // BASELINE_YEAR: cols 2-8 (dow 0=Mon → col 2)
       const week25 = grid25[wk] || new Array(7).fill(0);
       for (let d = 0; d < 7; d++) {
         const dn  = week25[d];
@@ -151,7 +151,7 @@ module.exports = function build_calendar_structure(wb, results) {
       // Spacer
       ws.getCell(row, 9).fill = fill('EEEEEE');
 
-      // year_b: cols 10-16 (dow 0=Mon → col 10)
+      // ANALYSIS_YEAR: cols 10-16 (dow 0=Mon → col 10)
       const week26 = grid26[wk] || new Array(7).fill(0);
       for (let d = 0; d < 7; d++) {
         const dn  = week26[d];

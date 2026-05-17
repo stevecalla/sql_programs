@@ -32,14 +32,14 @@ function compute_pipeline(r) {
   // Returns per-type pipeline totals for slide 7. Falls back to zeros if
   // creation_rows isn't attached to results.
   const TYPES = ['Adult Race', 'Youth Race', 'Adult Clinic', 'Youth Clinic'];
-  const ya = r.years?.year_a ?? (new Date().getFullYear() - 1);
-  const yb = r.years?.year_b ?? new Date().getFullYear();
+  const ya = r.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const yb = r.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
   const pre_ya = ya - 1;
   const now = new Date();
   const cutoff_mo = (yb === now.getFullYear()) ? Math.max(1, Math.min(12, now.getMonth() + 1)) : 12;
   const in_yr_mos = Array.from({ length: cutoff_mo }, (_, i) => i + 1);
-  const rows_a = r.creation_rows?.year_a ?? [];
-  const rows_b = r.creation_rows?.year_b ?? [];
+  const rows_a = r.creation_rows?.BASELINE_YEAR ?? [];
+  const rows_b = r.creation_rows?.ANALYSIS_YEAR ?? [];
   const get = (rows, yr, type, mos) =>
     rows.filter(rw => rw.yr === yr && rw.type === type && (mos === null || mos.includes(rw.mo)))
         .reduce((s, rw) => s + (rw.cnt ?? 0), 0);
@@ -64,21 +64,21 @@ function compute_pipeline(r) {
 }
 
 function compute_base(r) {
-  const c25 = r.c25 ?? {}, c26 = r.c26 ?? {};
-  const n25 = r.y25active?.length ?? 0;
-  const n26 = r.y26active?.length ?? 0;
-  const net = n26 - n25;
+  const c_baseline = r.c_baseline ?? {}, c_analysis = r.c_analysis ?? {};
+  const n_baseline = r.baseline_active?.length ?? 0;
+  const n_analysis = r.analysis_active?.length ?? 0;
+  const net = n_analysis - n_baseline;
   const TYPES = ['Adult Race', 'Youth Race', 'Adult Clinic', 'Youth Clinic'];
-  const year_a = r.years?.year_a ?? (new Date().getFullYear() - 1);
-  const year_b = r.years?.year_b ?? new Date().getFullYear();
+  const BASELINE_YEAR = r.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const ANALYSIS_YEAR = r.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
 
   const by_type = TYPES.map(t => ({
     type: t,
-    n25:  sum_type(c25, t),
-    n26:  sum_type(c26, t),
-    delta: sum_type(c26, t) - sum_type(c25, t),
+    n_baseline:  sum_type(c_baseline, t),
+    n_analysis:  sum_type(c_analysis, t),
+    delta: sum_type(c_analysis, t) - sum_type(c_baseline, t),
     pct_n: (() => {
-      const a = sum_type(c25, t), b = sum_type(c26, t);
+      const a = sum_type(c_baseline, t), b = sum_type(c_analysis, t);
       return a ? ((b - a) / a) * 100 : 0;
     })(),
     org:   r.organicByType?.[t]?.orgTotal ?? null,
@@ -105,7 +105,7 @@ function compute_base(r) {
     const org = ci?.orgTotal ?? d.netDelta ?? 0;
     return {
       m: mm, label: MN[mm], long: MN_FULL[mm],
-      n25: d.n25 ?? 0, n26: d.n26 ?? 0,
+      n_baseline: d.n_baseline ?? 0, n_analysis: d.n_analysis ?? 0,
       ret: d.ret ?? 0, sa: d.sa ?? 0, su: d.su ?? 0, ttr: d.ttr ?? 0,
       attr: d.attr ?? 0, rec: d.rec ?? 0, new: d.new ?? 0,
       delta: d.netDelta ?? 0, netDelta: d.netDelta ?? 0, netShift: d.netShift ?? 0,
@@ -133,7 +133,7 @@ function compute_base(r) {
   const repl_rate = attrited > 0 ? Math.round(((new_ev + rec) / attrited) * 100) : 0;
 
   return {
-    year_a, year_b, n25, n26, net,
+    BASELINE_YEAR, ANALYSIS_YEAR, n_baseline, n_analysis, net,
     by_type, sorted_delta, top_decliner, top_grower, top_org_decliner, top_org_grower,
     monthly_arr, worst_months, best_months, worst_organic, best_organic, worst_repl,
     misleading,
@@ -152,12 +152,12 @@ function format_dow(year, month, day) {
 function format_holiday(year, h) {
   return `${h.name}: ${MN_FULL[h.month]} ${h.day}, ${year} (${format_dow(year, h.month, h.day)})`;
 }
-function build_holiday_lists(year_a, year_b) {
-  const hols_a = usHolidays(year_a).sort((a, b) => a.month - b.month || a.day - b.day);
-  const hols_b = usHolidays(year_b).sort((a, b) => a.month - b.month || a.day - b.day);
+function build_holiday_lists(BASELINE_YEAR, ANALYSIS_YEAR) {
+  const hols_a = usHolidays(BASELINE_YEAR).sort((a, b) => a.month - b.month || a.day - b.day);
+  const hols_b = usHolidays(ANALYSIS_YEAR).sort((a, b) => a.month - b.month || a.day - b.day);
   return {
-    year_a_list: hols_a.map(h => format_holiday(year_a, h)),
-    year_b_list: hols_b.map(h => format_holiday(year_b, h)),
+    year_a_list: hols_a.map(h => format_holiday(BASELINE_YEAR, h)),
+    year_b_list: hols_b.map(h => format_holiday(ANALYSIS_YEAR, h)),
     raw_a: hols_a,
     raw_b: hols_b,
   };
@@ -169,7 +169,7 @@ function build_holiday_lists(year_a, year_b) {
 function generate_rule_based(r) {
   const b = compute_base(r);
   const {
-    year_a, year_b, n25, n26, net,
+    BASELINE_YEAR, ANALYSIS_YEAR, n_baseline, n_analysis, net,
     by_type, top_decliner, top_grower, top_org_decliner, top_org_grower,
     worst_months, best_months, worst_organic, best_organic, worst_repl,
     misleading, monthly_arr,
@@ -186,11 +186,11 @@ function generate_rule_based(r) {
   const worst_cal_total = worst_chrono.reduce((s, m) => s + Math.abs(m?.cal ?? 0), 0);
   const no_cal_cover = worst_cal_total < 1;
 
-  const hol = build_holiday_lists(year_a, year_b);
+  const hol = build_holiday_lists(BASELINE_YEAR, ANALYSIS_YEAR);
 
   // ── Slide 1 bullets — punchy editorial sub-lines ─────────────────────────
   const headline_sub = (() => {
-    const pct = fmt_pct(n25, n26);
+    const pct = fmt_pct(n_baseline, n_analysis);
     if (Math.abs(net) <= 20) return `${pct} ${EM_DASH} modest headline, but composition matters`;
     return `${pct} ${EM_DASH} significant change ${EM_DASH} review by type`;
   })();
@@ -230,8 +230,8 @@ function generate_rule_based(r) {
     if (top_decliner && Math.abs(top_decliner.delta) >= Math.abs(net) - 2)
       return `${top_decliner.type} accounts for the full net ${fmt_delta(net)} decline. Races roughly flat${top_grower ? `. ${top_grower.type} the bright spot` : ''}.`;
     if (top_decliner && top_grower)
-      return `Net ${fmt_delta(net)} (${fmt_pct(n25, n26)}): ${top_decliner.type} ${fmt_delta(top_decliner.delta)} drives the decline; ${top_grower.type} ${fmt_delta(top_grower.delta)} the offset.`;
-    return `Net ${fmt_delta(net)} (${fmt_pct(n25, n26)}). Review type composition for drivers.`;
+      return `Net ${fmt_delta(net)} (${fmt_pct(n_baseline, n_analysis)}): ${top_decliner.type} ${fmt_delta(top_decliner.delta)} drives the decline; ${top_grower.type} ${fmt_delta(top_grower.delta)} the offset.`;
+    return `Net ${fmt_delta(net)} (${fmt_pct(n_baseline, n_analysis)}). Review type composition for drivers.`;
   })();
 
   // ── Slide 3 narrative — worst-month takeaway ─────────────────────────────
@@ -276,9 +276,9 @@ function generate_rule_based(r) {
   })();
 
   // ── Slide 6 narrative — replacement story ────────────────────────────────
-  const att_pct = n25 ? Math.round((attrited / n25) * 100) : 0;
+  const att_pct = n_baseline ? Math.round((attrited / n_baseline) * 100) : 0;
   const slide_6_narrative = (() => {
-    let s = `Of ${fmt_int(n25)} ${year_a} active events, ${fmt_int(attrited)} (${att_pct}%) did not return. `;
+    let s = `Of ${fmt_int(n_baseline)} ${BASELINE_YEAR} active events, ${fmt_int(attrited)} (${att_pct}%) did not return. `;
     s += `${fmt_int(new_ev)} new + ${fmt_int(rec)} recovered = ${repl_rate}% gross replacement.`;
     if (worst_repl.length) s += ` Replacement weakest in ${list_and(worst_repl.map(m => `${m.label} (${m.repl_rate}%)`))}.`;
     return s;
@@ -307,10 +307,10 @@ function generate_rule_based(r) {
   })();
 
   // ── Speaker notes — all dynamic ──────────────────────────────────────────
-  const type_summary = by_type.map(d => `${d.type}: ${d.n25}→${d.n26} (${fmt_delta(d.delta)}, ${fmt_pct_n(d.pct_n)})`).join('\n- ');
+  const type_summary = by_type.map(d => `${d.type}: ${d.n_baseline}→${d.n_analysis} (${fmt_delta(d.delta)}, ${fmt_pct_n(d.pct_n)})`).join('\n- ');
   const holidays_text =
-    `Holidays in ${year_a}:\n- ${hol.year_a_list.join('\n- ')}\n\n` +
-    `Holidays in ${year_b}:\n- ${hol.year_b_list.join('\n- ')}`;
+    `Holidays in ${BASELINE_YEAR}:\n- ${hol.year_a_list.join('\n- ')}\n\n` +
+    `Holidays in ${ANALYSIS_YEAR}:\n- ${hol.year_b_list.join('\n- ')}`;
 
   // ── Rich structured speaker notes (mirror original format) ──────────────
   const notes = {};
@@ -330,12 +330,12 @@ function generate_rule_based(r) {
     const op = d.org_pct !== null ? `${fmt_pct_n(d.org_pct)} organic` : '';
     let editorial = '';
     if (Math.abs(d.delta) <= 2) editorial = 'essentially flat. No structural concern.';
-    else if (d.delta < -10)    editorial = `material decline relative to year_a. ${WARN} Warrants follow-up.`;
+    else if (d.delta < -10)    editorial = `material decline relative to BASELINE_YEAR. ${WARN} Warrants follow-up.`;
     else if (d.delta < -3)     editorial = 'mild softness, within normal range.';
     else if (d.delta > 10)     editorial = `genuine organic growth. ${CHECK} Bright spot.`;
     else if (d.delta > 3)      editorial = 'mild gain.';
     else                        editorial = 'stable.';
-    return `- ${d.type}: ${fmt_int(d.n25)} ${ARROW_R} ${fmt_int(d.n26)} (${fmt_delta(d.delta)}, ${fmt_pct_n(d.pct_n)}) ${EM_DASH} ${editorial}${op ? ' Organic ' + op + '.' : ''}`;
+    return `- ${d.type}: ${fmt_int(d.n_baseline)} ${ARROW_R} ${fmt_int(d.n_analysis)} (${fmt_delta(d.delta)}, ${fmt_pct_n(d.pct_n)}) ${EM_DASH} ${editorial}${op ? ' Organic ' + op + '.' : ''}`;
   };
 
   const monthly_top_list = (months, n) => months.slice(0, n).map(m => `${m.label} ${fmt_delta(m.delta)}`).join(', ');
@@ -344,10 +344,10 @@ function generate_rule_based(r) {
   // ── SLIDE 1 — Title / Overview ───────────────────────────────────────────
   notes.slide_1 = `SLIDE 1 ${EM_DASH} Title / Overview
 
-Context: This deck walks through a 6-step analysis of USAT sanctioned events: ${year_a} vs ${year_b} YoY.
+Context: This deck walks through a 6-step analysis of USAT sanctioned events: ${BASELINE_YEAR} vs ${ANALYSIS_YEAR} YoY.
 
 Headline numbers:
-- Net change: ${fmt_delta(net)} events (${fmt_int(n25)} to ${fmt_int(n26)}), ${fmt_pct(n25, n26)}
+- Net change: ${fmt_delta(net)} events (${fmt_int(n_baseline)} to ${fmt_int(n_analysis)}), ${fmt_pct(n_baseline, n_analysis)}
 - Composition matters more than the headline: ${top_decliner ? top_decliner.type + ' is the principal decliner (' + fmt_pct_n(top_decliner.pct_n) + ')' : 'no single type dominates the change'}
 - ${worst_chrono.length ? list_and(worst_labels_long) + ' are the worst months (' + worst_chrono.map(m => fmt_delta(m.delta)).join(' and ') + ')' + (no_cal_cover ? ' with zero calendar explanation ' + EM_DASH + ' fully organic' : '') : 'monthly distribution is broadly even'}
 - ${top_grower ? top_grower.type + ' is the only event type growing (' + fmt_pct_n(top_grower.pct_n) + ') ' + EM_DASH + ' a genuine bright spot' : 'no clear growth story'}
@@ -366,7 +366,7 @@ Key message: ${top_decliner
 
 By type:
 ${by_type.map(type_line).join('\n')}
-- TOTAL: ${fmt_int(n25)} ${ARROW_R} ${fmt_int(n26)} (${fmt_delta(net)}, ${fmt_pct(n25, n26)})
+- TOTAL: ${fmt_int(n_baseline)} ${ARROW_R} ${fmt_int(n_analysis)} (${fmt_delta(net)}, ${fmt_pct(n_baseline, n_analysis)})
 
 Talking point: ${top_decliner
     ? `If you set aside ${top_decliner.type}, the rest of the portfolio is comparatively stable. The question is whether the ${top_decliner.type} decline is a demand problem, a supply problem, or a structural shift.`
@@ -378,10 +378,10 @@ ${top_grower && top_grower.org_pct !== null && top_grower.org_pct > 15
   // ── SLIDE 3 — Step 1: Monthly Breakdown ──────────────────────────────────
   // Worst-month type detail
   const wm_typedetail = worst_chrono.map(m => {
-    const ar = (r.c26?.[m.m]?.['Adult Race'] ?? 0) - (r.c25?.[m.m]?.['Adult Race'] ?? 0);
-    const yr = (r.c26?.[m.m]?.['Youth Race'] ?? 0) - (r.c25?.[m.m]?.['Youth Race'] ?? 0);
-    const ac = (r.c26?.[m.m]?.['Adult Clinic'] ?? 0) - (r.c25?.[m.m]?.['Adult Clinic'] ?? 0);
-    const yc = (r.c26?.[m.m]?.['Youth Clinic'] ?? 0) - (r.c25?.[m.m]?.['Youth Clinic'] ?? 0);
+    const ar = (r.c_analysis?.[m.m]?.['Adult Race'] ?? 0) - (r.c_baseline?.[m.m]?.['Adult Race'] ?? 0);
+    const yr = (r.c_analysis?.[m.m]?.['Youth Race'] ?? 0) - (r.c_baseline?.[m.m]?.['Youth Race'] ?? 0);
+    const ac = (r.c_analysis?.[m.m]?.['Adult Clinic'] ?? 0) - (r.c_baseline?.[m.m]?.['Adult Clinic'] ?? 0);
+    const yc = (r.c_analysis?.[m.m]?.['Youth Clinic'] ?? 0) - (r.c_baseline?.[m.m]?.['Youth Clinic'] ?? 0);
     const parts = [];
     if (ar !== 0) parts.push(`Adult Race ${fmt_delta(ar)}`);
     if (yr !== 0) parts.push(`Youth Race ${fmt_delta(yr)}`);
@@ -401,7 +401,7 @@ Key message: ${worst_chrono.length
 Monthly highlights:
 - Best months: ${monthly_top_list(best_months, 3)}
 - Worst months: ${monthly_top_list(worst_months, 3)}
-- Full year: ${fmt_int(n25)} ${ARROW_R} ${fmt_int(n26)} = ${fmt_delta(net)}
+- Full year: ${fmt_int(n_baseline)} ${ARROW_R} ${fmt_int(n_analysis)} = ${fmt_delta(net)}
 
 ${worst_chrono.length ? `Type detail for ${list_and(worst_labels_long)}:\n${wm_typedetail.join('\n')}\n${races_dominate ? 'The worst-month problem is a RACE product issue, not a clinic issue.' : 'Losses are spread across event types in the worst months.'}` : ''}
 
@@ -429,18 +429,18 @@ Talking point: ${best_months[0]
 
   // Shift summary
   const total_shifted = shifted;
-  const shift_pct = n25 ? Math.round((total_shifted / n25) * 100) : 0;
+  const shift_pct = n_baseline ? Math.round((total_shifted / n_baseline) * 100) : 0;
   const shift_summary = worst_chrono.length
-    ? `${fmt_int(total_shifted)} events (${shift_pct}%) moved months in ${year_b}. Shifting explains a small share of monthly variance.`
+    ? `${fmt_int(total_shifted)} events (${shift_pct}%) moved months in ${ANALYSIS_YEAR}. Shifting explains a small share of monthly variance.`
     : `${fmt_int(total_shifted)} events (${shift_pct}%) moved months. Modest impact on monthly totals.`;
 
   notes.slide_4 = `SLIDE 4 ${EM_DASH} Step 2: Is This a Calendar Effect? ${no_cal_cover ? 'No.' : 'Partially.'}
 
 Key message: ${no_cal_cover && worst_chrono.length
-    ? `${list_and(worst_labels_long)} had ZERO change in weekend days between ${year_a} and ${year_b}. There is no calendar alibi for these declines ${EM_DASH} they are fully organic.`
+    ? `${list_and(worst_labels_long)} had ZERO change in weekend days between ${BASELINE_YEAR} and ${ANALYSIS_YEAR}. There is no calendar alibi for these declines ${EM_DASH} they are fully organic.`
     : `Calendar effects explain part but not all of the variance. Worst months: ${worst_chrono.map(m => m.long + ' organic ' + fmt_delta1(m.organic)).join('; ')}.`}
 
-Methodology: Counts Saturdays AND Sundays. Calendar Expected Delta = Δweekend days ${TIMES} ${year_a} events-per-weekend-day for that month/type. Organic Delta = Actual Delta minus Calendar Expected Delta.
+Methodology: Counts Saturdays AND Sundays. Calendar Expected Delta = Δweekend days ${TIMES} ${BASELINE_YEAR} events-per-weekend-day for that month/type. Organic Delta = Actual Delta minus Calendar Expected Delta.
 
 Key findings:
 ${cal_lines.join('\n')}
@@ -449,10 +449,10 @@ Event shifting note: ${shift_summary}
 
 ${misleading ? `Talking point: ${misleading.long} is the most counter-intuitive data point. Raw ${fmt_delta(misleading.delta)} looks like ${misleading.delta > 0 ? 'a win' : 'a loss'} but is actually ${fmt_delta1(misleading.organic)} organic ${EM_DASH} the calendar ${misleading.cal > 0 ? 'handed it ' + fmt_delta1(misleading.cal) + ' expected events that did not materialise' : 'cost it ' + fmt_delta1(Math.abs(misleading.cal)) + ' that organic demand more than overcame'}.` : 'Talking point: Calendar shifts are well-aligned with raw deltas this year; no major distortions to flag.'}
 
-Holidays in ${year_a}:
+Holidays in ${BASELINE_YEAR}:
 - ${hol.year_a_list.join('\n- ')}
 
-Holidays in ${year_b}:
+Holidays in ${ANALYSIS_YEAR}:
 - ${hol.year_b_list.join('\n- ')}`;
 
   // ── SLIDE 5 — Step 3: Organic Performance ────────────────────────────────
@@ -476,7 +476,7 @@ ${by_type.map(d => {
     return `- ${d.type}: Raw ${fmt_delta(raw)}, Calendar effect ${fmt_delta1(cal)}, Organic ${fmt_delta1(org)}, Organic % ${op} ${EM_DASH} ${editorial}`;
   }).join('\n')}
 
-Formula: Organic Delta = Actual Delta minus Calendar Expected Delta. Calendar effect = Δweekend days ${TIMES} ${year_a} events-per-weekend-day for that month and type.
+Formula: Organic Delta = Actual Delta minus Calendar Expected Delta. Calendar effect = Δweekend days ${TIMES} ${BASELINE_YEAR} events-per-weekend-day for that month and type.
 
 Best organic months (calendar-adjusted): ${best_organic.slice(0, 4).map(m => m.label + ' ' + fmt_delta1(m.organic)).join(', ')}
 Worst organic months: ${worst_organic.slice(0, 4).map(m => m.label + ' ' + fmt_delta1(m.organic)).join(', ')}
@@ -486,17 +486,17 @@ Talking point: ${top_org_decliner
     : 'No type shows structural organic decline this period.'}`;
 
   // ── SLIDE 6 — Step 4: Event-Level Disposition ────────────────────────────
-  const seg_pct = (v) => n25 ? Math.round((v / n25) * 100) : 0;
+  const seg_pct = (v) => n_baseline ? Math.round((v / n_baseline) * 100) : 0;
   const summer_repl_lines = worst_chrono.map(m => {
     const replaced = (m.new ?? 0) + (m.rec ?? 0);
     const rate = m.attr > 0 ? Math.round((replaced / m.attr) * 100) : 0;
-    return `- ${m.long}: ${fmt_int(m.n25)} events in ${year_a}, ${fmt_int(m.attr)} truly lost, ${fmt_int(replaced)} replaced, replacement rate ${rate}%. Net ${fmt_delta(m.delta)}.`;
+    return `- ${m.long}: ${fmt_int(m.n_baseline)} events in ${BASELINE_YEAR}, ${fmt_int(m.attr)} truly lost, ${fmt_int(replaced)} replaced, replacement rate ${rate}%. Net ${fmt_delta(m.delta)}.`;
   });
   const best_repl = best_months[0];
   if (best_repl && best_repl.attr > 0) {
     const br_replaced = (best_repl.new ?? 0) + (best_repl.rec ?? 0);
     const br_rate = Math.round((br_replaced / best_repl.attr) * 100);
-    summer_repl_lines.push(`- ${best_repl.long}: ${fmt_int(best_repl.n25)} events in ${year_a}, replacement rate ${br_rate >= 100 ? '>100%' : br_rate + '%'} ${EM_DASH} ${best_repl.long} is ${br_rate >= 100 ? 'gaining' : 'replacing'} events overall.`);
+    summer_repl_lines.push(`- ${best_repl.long}: ${fmt_int(best_repl.n_baseline)} events in ${BASELINE_YEAR}, replacement rate ${br_rate >= 100 ? '>100%' : br_rate + '%'} ${EM_DASH} ${best_repl.long} is ${br_rate >= 100 ? 'gaining' : 'replacing'} events overall.`);
   }
   const total_new_rec = new_ev + rec;
   const truly_lost = attrited;
@@ -505,16 +505,16 @@ Talking point: ${top_org_decliner
   notes.slide_6 = `SLIDE 6 ${EM_DASH} Step 4: Did We Really Lose Events? Event-Level Disposition
 
 Key message: ${attrited > 0
-    ? `Yes ${EM_DASH} ${fmt_int(attrited)} of ${fmt_int(n25)} ${year_a} events (${seg_pct(attrited)}%) did not return in any form. But ${fmt_int(new_ev)} new events and ${fmt_int(rec)} recovered events partially offset this. The replacement gap is widest in the peak demand months.`
+    ? `Yes ${EM_DASH} ${fmt_int(attrited)} of ${fmt_int(n_baseline)} ${BASELINE_YEAR} events (${seg_pct(attrited)}%) did not return in any form. But ${fmt_int(new_ev)} new events and ${fmt_int(rec)} recovered events partially offset this. The replacement gap is widest in the peak demand months.`
     : 'No notable attrition this period.'}
 
-Segment breakdown (of ${fmt_int(n25)} ${year_a} events):
-- Retained: ${fmt_int(retained)} (${seg_pct(retained)}%) ${EM_DASH} same event, same month in ${year_b}
-- Shifted: ${fmt_int(shifted)} (${seg_pct(shifted)}%) ${EM_DASH} same event, different month in ${year_b}
-- Lost: ${fmt_int(attrited)} (${seg_pct(attrited)}%) ${EM_DASH} did not return to ${year_b} in any form
-- New: ${fmt_int(new_ev)} (${n26 ? Math.round((new_ev / n26) * 100) : 0}% of ${year_b} total) ${EM_DASH} brand new events in ${year_b}
-- Recovered: ${fmt_int(rec)} ${EM_DASH} were cancelled in ${year_a} but came back in ${year_b}
-- Tried to Return: ${fmt_int(ttr)} ${EM_DASH} filed a ${year_b} application but were cancelled/declined
+Segment breakdown (of ${fmt_int(n_baseline)} ${BASELINE_YEAR} events):
+- Retained: ${fmt_int(retained)} (${seg_pct(retained)}%) ${EM_DASH} same event, same month in ${ANALYSIS_YEAR}
+- Shifted: ${fmt_int(shifted)} (${seg_pct(shifted)}%) ${EM_DASH} same event, different month in ${ANALYSIS_YEAR}
+- Lost: ${fmt_int(attrited)} (${seg_pct(attrited)}%) ${EM_DASH} did not return to ${ANALYSIS_YEAR} in any form
+- New: ${fmt_int(new_ev)} (${n_analysis ? Math.round((new_ev / n_analysis) * 100) : 0}% of ${ANALYSIS_YEAR} total) ${EM_DASH} brand new events in ${ANALYSIS_YEAR}
+- Recovered: ${fmt_int(rec)} ${EM_DASH} were cancelled in ${BASELINE_YEAR} but came back in ${ANALYSIS_YEAR}
+- Tried to Return: ${fmt_int(ttr)} ${EM_DASH} filed a ${ANALYSIS_YEAR} application but were cancelled/declined
 
 ${worst_chrono.length ? 'Replacement rates ' + EM_DASH + ' selected months:\n' + summer_repl_lines.join('\n') : ''}
 
@@ -526,7 +526,7 @@ Overall: ${fmt_int(total_new_rec)} new/recovered events vs ${fmt_int(truly_lost)
     ? pipeline.per_type.map(p => {
         const a_total = p.pre_a + p.iy_a;
         const b_total = p.pre_b + p.iy_b;
-        return `- ${p.type}: ${fmt_int(p.pre_a)} Q4 prior-yr + ${fmt_int(p.iy_a)} in-yr ${pipeline.cutoff_label} ${year_a} = ${fmt_int(a_total)} apps vs ${fmt_int(p.pre_b)} + ${fmt_int(p.iy_b)} = ${fmt_int(b_total)} in ${year_b}. ${
+        return `- ${p.type}: ${fmt_int(p.pre_a)} Q4 prior-yr + ${fmt_int(p.iy_a)} in-yr ${pipeline.cutoff_label} ${BASELINE_YEAR} = ${fmt_int(a_total)} apps vs ${fmt_int(p.pre_b)} + ${fmt_int(p.iy_b)} = ${fmt_int(b_total)} in ${ANALYSIS_YEAR}. ${
           p.pre_b - p.pre_a < -5 ? 'Q4 down ' + fmt_int(p.pre_a - p.pre_b) : (p.pre_b - p.pre_a > 5 ? 'Q4 up ' + fmt_int(p.pre_b - p.pre_a) : 'Q4 flat')
         }, in-yr ${fmt_delta(p.iy_b - p.iy_a)}.`;
       })
@@ -551,13 +551,13 @@ Overall: ${fmt_int(total_new_rec)} new/recovered events vs ${fmt_int(truly_lost)
   notes.slide_7 = `SLIDE 7 ${EM_DASH} Step 5: Application Pipeline and Opportunities
 
 Key message: ${pipeline.has_data
-    ? `The application pipeline for ${year_b} is running ${iy_pct >= 0 ? '+' : ''}${iy_pct}% vs ${year_a} pace through ${MN_SHORT[pipeline.cutoff_mo]} (${fmt_delta(iy_delta)} in-year applications). The year-end event count will likely be ${iy_delta >= 0 ? 'higher' : 'lower'} than the ${MN_SHORT[pipeline.cutoff_mo]} snapshot suggests.`
+    ? `The application pipeline for ${ANALYSIS_YEAR} is running ${iy_pct >= 0 ? '+' : ''}${iy_pct}% vs ${BASELINE_YEAR} pace through ${MN_SHORT[pipeline.cutoff_mo]} (${fmt_delta(iy_delta)} in-year applications). The year-end event count will likely be ${iy_delta >= 0 ? 'higher' : 'lower'} than the ${MN_SHORT[pipeline.cutoff_mo]} snapshot suggests.`
     : 'Application pipeline data shows when organizers are filing relative to prior year.'}
 
 Application totals (prior-year Q4 + in-year through ${MN_SHORT[pipeline.cutoff_mo]}):
 ${pipe_lines.join('\n')}
 
-In-year ${pipeline.cutoff_label} comparison: ${fmt_int(pipeline.totals.iy_a)} in ${year_a} vs ${fmt_int(pipeline.totals.iy_b)} in ${year_b} = ${fmt_delta(iy_delta)} (${iy_pct >= 0 ? '+' : ''}${iy_pct}%).
+In-year ${pipeline.cutoff_label} comparison: ${fmt_int(pipeline.totals.iy_a)} in ${BASELINE_YEAR} vs ${fmt_int(pipeline.totals.iy_b)} in ${ANALYSIS_YEAR} = ${fmt_delta(iy_delta)} (${iy_pct >= 0 ? '+' : ''}${iy_pct}%).
 
 Opportunities:
 ${opportunities.join('\n')}`;
@@ -567,7 +567,7 @@ ${opportunities.join('\n')}`;
   const wb_disposition = worst_chrono.map(m => {
     const new_rec = (m.new ?? 0) + (m.rec ?? 0);
     const rate = m.attr > 0 ? Math.round((new_rec / m.attr) * 100) : 0;
-    return `- ${m.long}: ${fmt_int(m.n25)} events, ${fmt_int(m.ret)} retained, ${fmt_int(m.sa)} shifted out, ${fmt_int(m.attr)} lost, ${fmt_int(m.su)} shifted in, ${fmt_int(new_rec)} new/recovered = ${fmt_int(m.n26)} total. Replacement rate ${rate}%.`;
+    return `- ${m.long}: ${fmt_int(m.n_baseline)} events, ${fmt_int(m.ret)} retained, ${fmt_int(m.sa)} shifted out, ${fmt_int(m.attr)} lost, ${fmt_int(m.su)} shifted in, ${fmt_int(new_rec)} new/recovered = ${fmt_int(m.n_analysis)} total. Replacement rate ${rate}%.`;
   });
 
   // Lost by type across the worst months
@@ -607,22 +607,22 @@ ${lbt_lines.join('\n')}
 Two-speed action plan:
 
 ${act_now.long.toUpperCase()} (act now ${EM_DASH} the later worst month):
-- ${fmt_int(act_now.attr)} attrited organizers are KNOWN contacts from ${year_a}
+- ${fmt_int(act_now.attr)} attrited organizers are KNOWN contacts from ${BASELINE_YEAR}
 - Reach all by end of ${MN_SHORT[(new Date()).getMonth() + 1] || 'May'}
 - 20% win-back rate = ~${Math.round(act_now.attr * 0.2)} events recovered, closing part of the ${act_now.long} gap
 - Focus on the top contributing types from the by-type list above
 
-${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
-- ${fmt_int(diagnose.attr)} attrited, too late for ${year_b}
-- Q3 ${year_b}: interview the attrited organizers to understand WHY they left
+${diagnose.long.toUpperCase()} (diagnose for ${ANALYSIS_YEAR + 1}):
+- ${fmt_int(diagnose.attr)} attrited, too late for ${ANALYSIS_YEAR}
+- Q3 ${ANALYSIS_YEAR}: interview the attrited organizers to understand WHY they left
   - Common reasons to probe: venue/permit issues, cost increase, organizer retirement, competition, USAT process friction
-- Use findings to inform ${year_b + 1} retention strategy before Q4 planning begins`;
+- Use findings to inform ${ANALYSIS_YEAR + 1} retention strategy before Q4 planning begins`;
 
 
   // ── Excel Slack bullets — original "headline + interpretation" pattern ───
   const excel_slack_bullets = [
     // Bullet 1 — total + principal mover narrative
-    `${fmt_int(n26)} events in ${year_b} vs ${fmt_int(n25)} in ${year_a} (${fmt_delta(net)}, ${fmt_pct(n25, n26)}).${
+    `${fmt_int(n_analysis)} events in ${ANALYSIS_YEAR} vs ${fmt_int(n_baseline)} in ${BASELINE_YEAR} (${fmt_delta(net)}, ${fmt_pct(n_baseline, n_analysis)}).${
       top_decliner ? ` ${top_decliner.type} accounts for the full net decline (${fmt_delta(top_decliner.delta)}, organic ${top_decliner.org_pct !== null ? fmt_pct_n(top_decliner.org_pct) : 'n/a'})` : ''
     }${
       top_grower ? `; ${top_grower.type} the only growth story (${top_grower.org_pct !== null ? fmt_pct_n(top_grower.org_pct) : fmt_pct_n(top_grower.pct_n)} organic).` : '.'
@@ -638,7 +638,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
       : 'Monthly distribution is broadly even.',
 
     // Bullet 3 — event-level disposition
-    `Of ${fmt_int(n25)} ${year_a} active events: ${fmt_int(attrited)} truly did not return; ${fmt_int(ttr)} tried to return but were cancelled in ${year_b} ${EM_DASH} actionable. ${fmt_int(rec)} recovered from prior cancellations.${
+    `Of ${fmt_int(n_baseline)} ${BASELINE_YEAR} active events: ${fmt_int(attrited)} truly did not return; ${fmt_int(ttr)} tried to return but were cancelled in ${ANALYSIS_YEAR} ${EM_DASH} actionable. ${fmt_int(rec)} recovered from prior cancellations.${
       worst_repl.length ? ` ${list_and(worst_repl.map(m => m.label))} had the worst replacement rates.` : ''
     }`,
 
@@ -646,7 +646,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
     (best_months[0]
       ? `${best_months[0].long} is the standout: ${best_months[0].cal < -5 ? `lost ${fmt_delta1(best_months[0].cal)} calendar but ` : ''}delivered ${fmt_delta1(best_months[0].organic)} organic growth ${EM_DASH} strongest month. `
       : '') +
-    `${fmt_int(new_ev)} genuinely brand-new events joined ${year_b}.${
+    `${fmt_int(new_ev)} genuinely brand-new events joined ${ANALYSIS_YEAR}.${
       best_months[1] && best_months[1].delta > 0
         ? ` ${best_months[1].long} (${fmt_delta(best_months[1].delta)}) ${best_months[1].cal > 5 ? 'largely calendar-driven' : 'organic gain'}.`
         : ''
@@ -766,7 +766,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
 
   // ── Dynamic slide headers / structural labels ────────────────────────────
   const data_as_of = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  const slide_1_subtitle = `${year_a} vs ${year_b}  |  Year-over-Year Analysis`;
+  const slide_1_subtitle = `${BASELINE_YEAR} vs ${ANALYSIS_YEAR}  |  Year-over-Year Analysis`;
   const slide_1_data_note = `Data as of ${data_as_of}  |  Excl. Cancelled / Declined / Deleted  |  ~85${EN_DASH}90% event-level match confidence`;
 
   const slide_3_header = worst_chrono.length
@@ -790,7 +790,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
     ? `Is This a Calendar Effect?  No ${EM_DASH} Not for ${list_and(worst_labels_long)}`
     : `Is This a Calendar Effect?  Partially ${EM_DASH} See Month Analysis`;
   const slide_4_alert = no_cal_cover && worst_chrono.length
-    ? `${list_and(worst_labels_long)} had ZERO change in weekend days (Sat or Sun) between ${year_a} and ${year_b}. There is no calendar explanation for the declines ${EM_DASH} they are fully organic.`
+    ? `${list_and(worst_labels_long)} had ZERO change in weekend days (Sat or Sun) between ${BASELINE_YEAR} and ${ANALYSIS_YEAR}. There is no calendar explanation for the declines ${EM_DASH} they are fully organic.`
     : 'Calendar effects explain some but not all of the monthly variance.';
 
   const slide_5_callout_left = top_org_decliner
@@ -808,7 +808,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
   ].filter(Boolean);
 
   const cur_month = MN[(new Date()).getMonth() + 1] || 'May';
-  const slide_7_opportunity_label = `Highest-Probability Opportunities ${EM_DASH} ${cur_month} through December ${year_b}`;
+  const slide_7_opportunity_label = `Highest-Probability Opportunities ${EM_DASH} ${cur_month} through December ${ANALYSIS_YEAR}`;
   const slide_7_callout_left_title = top_org_decliner
     ? `${top_org_decliner.type} ${EM_DASH} Highest ROI Opportunity`
     : `Application Pipeline ${EM_DASH} Focus Area`;
@@ -824,7 +824,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
     slide_1_bullets, slide_2_narrative, slide_3_narrative, slide_4_narrative,
     slide_5_narrative, slide_6_narrative, slide_7_narrative, slide_8_narrative,
     notes,
-    year_a, year_b, data_as_of,
+    BASELINE_YEAR, ANALYSIS_YEAR, data_as_of,
     slide_1_subtitle, slide_1_data_note,
     slide_3_header, slide_3_type_detail_label, slide_3_callout_left, slide_3_callout_right,
     slide_4_header, slide_4_alert,
@@ -834,7 +834,7 @@ ${diagnose.long.toUpperCase()} (diagnose for ${year_b + 1}):
     slide_8_header, slide_8_subtitle,
     excel_slack_bullets, excel_type_reads, excel_month_narratives,
     excel_type_insights, excel_calendar_findings, excel_pipeline_findings,
-    n25, n26, net, by_type, top_decliner, top_grower,
+    n_baseline, n_analysis, net, by_type, top_decliner, top_grower,
     worst_months, best_months, attrited, new_ev, rec, repl_rate, seg,
     holidays: hol,
     _ai_generated: false,
@@ -850,7 +850,7 @@ function TYPES_with_loss(r, month_nums) {
   for (const t of TYPES) totals[t] = 0;
   for (const m of month_nums) {
     for (const t of TYPES) {
-      const d = (r.c26?.[m]?.[t] ?? 0) - (r.c25?.[m]?.[t] ?? 0);
+      const d = (r.c_analysis?.[m]?.[t] ?? 0) - (r.c_baseline?.[m]?.[t] ?? 0);
       if (d < 0) totals[t] += d;
     }
   }
@@ -875,8 +875,8 @@ async function generate_ai(r, api_key) {
   const worst_labels = b.worst_months.slice(0, 2).filter(Boolean).sort((a, c) => a.m - c.m).map(m => m.long);
 
   const data_json = JSON.stringify({
-    overview: { year_a: b.year_a, year_b: b.year_b, total_a: b.n25, total_b: b.n26, net: b.net },
-    by_type:  b.by_type.map(d => ({ type: d.type, n25: d.n25, n26: d.n26, delta: d.delta, pct: d.pct_n, organic: d.org, organic_pct: d.org_pct })),
+    overview: { BASELINE_YEAR: b.BASELINE_YEAR, ANALYSIS_YEAR: b.ANALYSIS_YEAR, total_a: b.n_baseline, total_b: b.n_analysis, net: b.net },
+    by_type:  b.by_type.map(d => ({ type: d.type, n_baseline: d.n_baseline, n_analysis: d.n_analysis, delta: d.delta, pct: d.pct_n, organic: d.org, organic_pct: d.org_pct })),
     monthly_worst:   b.worst_months.map(m => ({ month: m.long, short: m.label, delta: m.delta, organic: m.organic, cal: m.cal })),
     monthly_best:    b.best_months.map(m => ({ month: m.long, short: m.label, delta: m.delta, organic: m.organic, cal: m.cal })),
     worst_organic:   b.worst_organic.map(m => ({ month: m.long, organic: m.organic, cal: m.cal })),
@@ -890,7 +890,7 @@ async function generate_ai(r, api_key) {
       new_events: b.new_ev, recovered: b.rec, tried_to_return: b.ttr,
       replacement_rate_pct: b.repl_rate,
     },
-    holidays: build_holiday_lists(b.year_a, b.year_b),
+    holidays: build_holiday_lists(b.BASELINE_YEAR, b.ANALYSIS_YEAR),
   });
 
   const fs_mod = require('fs'), path_mod = require('path');
@@ -910,7 +910,7 @@ SLIDE 2: "SLIDE 2 ${EM_DASH} Step 0: What Changed? Event Counts by Type" then: K
 
 SLIDE 3: "SLIDE 3 ${EM_DASH} Step 1: Monthly Breakdown" then: Key message: / Monthly highlights: (3 bullet items: Best months / Worst months / Full year) / Type detail for worst months: (1 bullet per worst month) / Talking point:.
 
-SLIDE 4: "SLIDE 4 ${EM_DASH} Step 2: Is This a Calendar Effect?" then: Key message: / Methodology: / Key findings: (5 bullet items, one per notable month) / Event shifting note: / Talking point: / Holidays in ${b.year_a}: (bulleted list) / Holidays in ${b.year_b}: (bulleted list).
+SLIDE 4: "SLIDE 4 ${EM_DASH} Step 2: Is This a Calendar Effect?" then: Key message: / Methodology: / Key findings: (5 bullet items, one per notable month) / Event shifting note: / Talking point: / Holidays in ${b.BASELINE_YEAR}: (bulleted list) / Holidays in ${b.ANALYSIS_YEAR}: (bulleted list).
 
 SLIDE 5: "SLIDE 5 ${EM_DASH} Step 3: Organic Performance" then: Key message: / Organic results by type: (4 bullet items, one per type with Raw/Calendar/Organic) / Formula: / Best organic months: / Worst organic months: / Talking point:.
 
@@ -922,7 +922,7 @@ SLIDE 8: "SLIDE 8 ${EM_DASH} Step 6: ${worst_labels.join(' & ')} Win-Back Opport
 
   const prompt = `You are a sports-event analyst writing punchy, structured speaker notes for a USAT sanctioned-events deck. The reader is an executive who needs both the numbers AND your editorial take.${analyst_notes ? '\n\nAdditional analyst context and notes:\n' + analyst_notes.slice(0, 800) + '\n\nFactor these notes where relevant.' : ''}
 
-Year-pair: ${b.year_a} vs ${b.year_b}
+Year-pair: ${b.BASELINE_YEAR} vs ${b.ANALYSIS_YEAR}
 
 Data:
 ${data_json}

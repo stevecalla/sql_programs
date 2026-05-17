@@ -151,10 +151,10 @@ async function main() {
   console.log('==================================================');
 
   // Years and source: mirror build_all.js — pull from usat_sales_db.
-  const YEAR_B = Number(process.env.YEAR_B) || new Date().getFullYear();
-  const YEAR_A = Number(process.env.YEAR_A) || (YEAR_B - 1);
-  ya_label = String(YEAR_A);
-  yb_label = String(YEAR_B);
+  const ANALYSIS_YEAR = Number(process.env.ANALYSIS_YEAR) || new Date().getFullYear();
+  const BASELINE_YEAR = Number(process.env.BASELINE_YEAR) || (ANALYSIS_YEAR - 1);
+  ya_label = String(BASELINE_YEAR);
+  yb_label = String(ANALYSIS_YEAR);
 
   console.log(`\n  Source : usat_sales_db.event_data_metrics`);
   console.log(`  Year A : ${ya_label}`);
@@ -166,27 +166,27 @@ async function main() {
   let loaded;
   try {
     console.log('\n  Fetching events from usat_sales_db...');
-    const events_by_year = await fetch_events_for_years([YEAR_A, YEAR_B]);
-    console.log(`  ${YEAR_A} rows fetched: ${events_by_year[YEAR_A].length}  |  ${YEAR_B} rows fetched: ${events_by_year[YEAR_B].length}`);
-    loaded = loadBothYearsFromRows(events_by_year[YEAR_A], events_by_year[YEAR_B]);
+    const events_by_year = await fetch_events_for_years([BASELINE_YEAR, ANALYSIS_YEAR]);
+    console.log(`  ${BASELINE_YEAR} rows fetched: ${events_by_year[BASELINE_YEAR].length}  |  ${ANALYSIS_YEAR} rows fetched: ${events_by_year[ANALYSIS_YEAR].length}`);
+    loaded = loadBothYearsFromRows(events_by_year[BASELINE_YEAR], events_by_year[ANALYSIS_YEAR]);
   } catch (err) {
     console.error(`\n✗ Failed to fetch events from DB: ${err.message}`);
     if (process.env.DEBUG) console.error(err.stack);
     process.exit(1);
   }
 
-  const { y25active, y25excluded, y26active, y26excluded } = loaded;
+  const { baseline_active, baseline_excluded, analysis_active, analysis_excluded } = loaded;
   const issues = [];
 
   // File stats
-  console.log(`\n  ${ya_label} active: ${y25active.length}  excluded: ${y25excluded.length}`);
-  console.log(`  ${yb_label} active: ${y26active.length}  excluded: ${y26excluded.length}`);
+  console.log(`\n  ${ya_label} active: ${baseline_active.length}  excluded: ${baseline_excluded.length}`);
+  console.log(`  ${yb_label} active: ${analysis_active.length}  excluded: ${analysis_excluded.length}`);
 
   // Run checks
   console.log('\nRunning checks...\n');
 
-  const stats_25 = check_events(y25active, ya_label, issues);
-  const stats_26 = check_events(y26active, yb_label, issues);
+  const stats_25 = check_events(baseline_active, ya_label, issues);
+  const stats_26 = check_events(analysis_active, yb_label, issues);
   check_counts_vs_prior(stats_25.count, stats_26.count, issues);
 
   // Override checks
@@ -197,8 +197,8 @@ async function main() {
     const overrides = { force_match: clean(raw_ov.force_match), force_no_match: clean(raw_ov.force_no_match), force_segment: clean(raw_ov.force_segment) };
     const total_active = overrides.force_match.length + overrides.force_no_match.length + overrides.force_segment.length;
     if (total_active > 0) {
-      const all_25 = new Set(y25active.map(e => e.sanctionId ?? e.sanction_id));
-      const all_26 = new Set(y26active.map(e => e.sanctionId ?? e.sanction_id));
+      const all_25 = new Set(baseline_active.map(e => e.sanctionId ?? e.sanction_id));
+      const all_26 = new Set(analysis_active.map(e => e.sanctionId ?? e.sanction_id));
       check_overrides(overrides, all_25, all_26, issues);
       console.log(`  Checking ${total_active} active override(s)...`);
     } else {
@@ -211,7 +211,7 @@ async function main() {
   const warnings = issues.filter(i => i.level === 'warn');
 
   if (!issues.length) {
-    ok('ALL', `No issues found. ${y25active.length} ${ya_label} events + ${y26active.length} ${yb_label} events look clean.`);
+    ok('ALL', `No issues found. ${baseline_active.length} ${ya_label} events + ${analysis_active.length} ${yb_label} events look clean.`);
   } else {
     if (errors.length)   { console.log(`\n  Errors (${errors.length}) — must fix before building:`); errors.forEach(i => error(i.check, i.msg)); }
     if (warnings.length) { console.log(`\n  Warnings (${warnings.length}) — review before building:`); warnings.forEach(i => warn(i.check, i.msg)); }
@@ -221,11 +221,11 @@ async function main() {
   console.log('\n  Month distribution:');
   ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach((mn, i) => {
     const m = i + 1;
-    const n25 = stats_25.by_month[m] ?? 0;
-    const n26 = stats_26.by_month[m] ?? 0;
-    const delta = n26 - n25;
+    const n_baseline = stats_25.by_month[m] ?? 0;
+    const n_analysis = stats_26.by_month[m] ?? 0;
+    const delta = n_analysis - n_baseline;
     const bar = delta > 0 ? '▲' : delta < 0 ? '▼' : '—';
-    console.log(`    ${mn.padEnd(4)} ${ya_label}: ${String(n25).padStart(4)}   ${yb_label}: ${String(n26).padStart(4)}   ${bar} ${delta > 0 ? '+' : ''}${delta}`);
+    console.log(`    ${mn.padEnd(4)} ${ya_label}: ${String(n_baseline).padStart(4)}   ${yb_label}: ${String(n_analysis).padStart(4)}   ${bar} ${delta > 0 ? '+' : ''}${delta}`);
   });
 
   console.log('');

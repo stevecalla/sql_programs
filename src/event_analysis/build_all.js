@@ -27,10 +27,10 @@ const fs = require('fs');
 const DIR = __dirname;
 
 // All inputs are now pulled live from usat_sales_db.event_data_metrics.
-// Default to comparing current year (YEAR_B) vs prior year (YEAR_A).
-// Override at the shell: YEAR_B=2027 YEAR_A=2026 node build_all.js
-const YEAR_B = Number(process.env.YEAR_B) || new Date().getFullYear();
-const YEAR_A = Number(process.env.YEAR_A) || (YEAR_B - 1);
+// Default to comparing current year (ANALYSIS_YEAR) vs prior year (BASELINE_YEAR).
+// Override at the shell: ANALYSIS_YEAR=2027 BASELINE_YEAR=2026 node build_all.js
+const ANALYSIS_YEAR = Number(process.env.ANALYSIS_YEAR) || new Date().getFullYear();
+const BASELINE_YEAR = Number(process.env.BASELINE_YEAR) || (ANALYSIS_YEAR - 1);
 
 // ── Output config ────────────────────────────────────────────────────────────
 // Timestamp captured once at script start so every artifact from this run
@@ -136,14 +136,14 @@ async function main() {
   // Skipped silently after data/overrides.json is renamed to .migrated.
   await migrate_overrides_json_to_db({ silent: false });
 
-  const out_xlsx = path.join(OUTPUT_DIR, `${YEAR_B}_event_calendar_analysis_${BUILD_TS}.xlsx`);
-  const out_pptx = path.join(OUTPUT_DIR, `${YEAR_B}_event_trends_summary_${BUILD_TS}.pptx`);
+  const out_xlsx = path.join(OUTPUT_DIR, `${ANALYSIS_YEAR}_event_calendar_analysis_${BUILD_TS}.xlsx`);
+  const out_pptx = path.join(OUTPUT_DIR, `${ANALYSIS_YEAR}_event_trends_summary_${BUILD_TS}.pptx`);
 
   console.log('');
   console.log('USAT Sanctioned Events -- Build All');
   console.log('====================================');
   console.log(`  Data source         : usat_sales_db.event_data_metrics`);
-  console.log(`  Years               : ${YEAR_A} vs ${YEAR_B}`);
+  console.log(`  Years               : ${BASELINE_YEAR} vs ${ANALYSIS_YEAR}`);
   console.log(`  Output directory    : ${OUTPUT_DIR}`);
   console.log(`  Excel output        : ${out_xlsx}`);
   console.log(`  PowerPoint output   : ${out_pptx}`);
@@ -167,34 +167,34 @@ async function main() {
 
   // ── Fetch from usat_sales_db ──────────────────────────────────────────────
   console.log('Fetching events from usat_sales_db...');
-  const events_by_year = await fetch_events_for_years([YEAR_A, YEAR_B]);
-  console.log(`  ${YEAR_A} rows fetched: ${events_by_year[YEAR_A].length}  |  ${YEAR_B} rows fetched: ${events_by_year[YEAR_B].length}`);
+  const events_by_year = await fetch_events_for_years([BASELINE_YEAR, ANALYSIS_YEAR]);
+  console.log(`  ${BASELINE_YEAR} rows fetched: ${events_by_year[BASELINE_YEAR].length}  |  ${ANALYSIS_YEAR} rows fetched: ${events_by_year[ANALYSIS_YEAR].length}`);
 
   console.log('Fetching creation pipeline from usat_sales_db...');
-  const creation_by_year = await fetch_creation_for_years([YEAR_A, YEAR_B]);
-  console.log(`  ${YEAR_A} creation rows: ${creation_by_year[YEAR_A].length}  |  ${YEAR_B} creation rows: ${creation_by_year[YEAR_B].length}`);
+  const creation_by_year = await fetch_creation_for_years([BASELINE_YEAR, ANALYSIS_YEAR]);
+  console.log(`  ${BASELINE_YEAR} creation rows: ${creation_by_year[BASELINE_YEAR].length}  |  ${ANALYSIS_YEAR} creation rows: ${creation_by_year[ANALYSIS_YEAR].length}`);
 
   // ── Excel ────────────────────────────────────────────────────────────────
   console.log('Building Excel workbook...');
-  const loaded = load_both_years_from_rows(events_by_year[YEAR_A], events_by_year[YEAR_B]);
-  loaded.year_a = YEAR_A;
-  loaded.year_b = YEAR_B;
-  console.log(`  ${YEAR_A} active: ${loaded.y25active.length}  |  ${YEAR_B} active: ${loaded.y26active.length}`);
+  const loaded = load_both_years_from_rows(events_by_year[BASELINE_YEAR], events_by_year[ANALYSIS_YEAR]);
+  loaded.BASELINE_YEAR = BASELINE_YEAR;
+  loaded.ANALYSIS_YEAR = ANALYSIS_YEAR;
+  console.log(`  ${BASELINE_YEAR} active: ${loaded.baseline_active.length}  |  ${ANALYSIS_YEAR} active: ${loaded.analysis_active.length}`);
   const results = run_analysis(loaded);
-  results.years = { year_a: YEAR_A, year_b: YEAR_B };
+  results.years = { BASELINE_YEAR: BASELINE_YEAR, ANALYSIS_YEAR: ANALYSIS_YEAR };
   // Attach creation rows so commentary.js can build pipeline narratives.
-  results.creation_rows = { year_a: creation_by_year[YEAR_A], year_b: creation_by_year[YEAR_B] };
+  results.creation_rows = { BASELINE_YEAR: creation_by_year[BASELINE_YEAR], ANALYSIS_YEAR: creation_by_year[ANALYSIS_YEAR] };
   console.log('  Segments:', JSON.stringify(results.segSummary));
 
   // Export analysis results dataset
   const out_results_json = path.join(OUTPUT_DIR, 'analysis_results.json');
   const results_export = {
     generated_at: new Date().toISOString(),
-    years: { year_a: YEAR_A, year_b: YEAR_B },
-    totals: { year_a: loaded.y25active.length, year_b: loaded.y26active.length, net: loaded.y26active.length - loaded.y25active.length },
+    years: { BASELINE_YEAR: BASELINE_YEAR, ANALYSIS_YEAR: ANALYSIS_YEAR },
+    totals: { BASELINE_YEAR: loaded.baseline_active.length, ANALYSIS_YEAR: loaded.analysis_active.length, net: loaded.analysis_active.length - loaded.baseline_active.length },
     segments: results.segSummary,
     by_type: results.typeAnnual ?? {},
-    monthly: Object.fromEntries(Object.entries(results.monthly ?? {}).map(([m, d]) => [m, { n25: d.n25, n26: d.n26, net_delta: d.netDelta, net_shift: d.netShift, organic_delta: results.calImpact?.[Number(m) - 1]?.orgTotal ?? null }])),
+    monthly: Object.fromEntries(Object.entries(results.monthly ?? {}).map(([m, d]) => [m, { n_baseline: d.n_baseline, n_analysis: d.n_analysis, net_delta: d.netDelta, net_shift: d.netShift, organic_delta: results.calImpact?.[Number(m) - 1]?.orgTotal ?? null }])),
     organic_by_type: results.organicByType ?? {},
     shift_flow: results.shiftFlow ?? {},
     calendar_impact: results.calImpact ?? {},
@@ -224,17 +224,17 @@ async function main() {
   const state_export = {
     build_meta: {
       build_ts: new Date().toISOString(),
-      years: { year_a: YEAR_A, year_b: YEAR_B },
-      totals: { year_a: loaded.y25active.length, year_b: loaded.y26active.length, net: loaded.y26active.length - loaded.y25active.length },
+      years: { BASELINE_YEAR: BASELINE_YEAR, ANALYSIS_YEAR: ANALYSIS_YEAR },
+      totals: { BASELINE_YEAR: loaded.baseline_active.length, ANALYSIS_YEAR: loaded.analysis_active.length, net: loaded.analysis_active.length - loaded.baseline_active.length },
       data_source: 'usat_sales_db.event_data_metrics',
       exclusion_filter: ['CANCELLED', 'DECLINED', 'DELETED'],
       overrides_applied: results.override_summary?.total_applied ?? 0,
     },
     events: {
-      year_a_active:   loaded.y25active.map(serialize_event),
-      year_b_active:   loaded.y26active.map(serialize_event),
-      year_a_excluded: loaded.y25excluded.map(serialize_event),
-      year_b_excluded: loaded.y26excluded.map(serialize_event),
+      year_a_active:   loaded.baseline_active.map(serialize_event),
+      year_b_active:   loaded.analysis_active.map(serialize_event),
+      year_a_excluded: loaded.baseline_excluded.map(serialize_event),
+      year_b_excluded: loaded.analysis_excluded.map(serialize_event),
     },
     segments: {
       retained:        results.segments.retained.map(serialize_match),
@@ -245,8 +245,8 @@ async function main() {
       tried_to_return: results.segments.triedToReturn.map(serialize_match),
     },
     counts_by_month_type: {
-      year_a: results.c25 ?? {},
-      year_b: results.c26 ?? {},
+      BASELINE_YEAR: results.c_baseline ?? {},
+      ANALYSIS_YEAR: results.c_analysis ?? {},
     },
     segments_by_month_type: {
       // Keys reflect which year's month is the index (e25.month vs e26.month).
@@ -263,8 +263,8 @@ async function main() {
     calendar_impact: results.calImpact ?? [],
     shift_flow: results.shiftFlow ?? {},
     creation_pipeline: {
-      year_a: creation_by_year[YEAR_A] ?? [],
-      year_b: creation_by_year[YEAR_B] ?? [],
+      BASELINE_YEAR: creation_by_year[BASELINE_YEAR] ?? [],
+      ANALYSIS_YEAR: creation_by_year[ANALYSIS_YEAR] ?? [],
     },
     overrides: results.override_summary ?? { total_applied: 0, applied: [], warnings: [] },
   };
@@ -302,7 +302,7 @@ async function main() {
   console.log(`  Commentary saved: output/commentary.json (mode: ${commentary._ai_generated ? 'ai_claude' : 'rule_based'})`);
 
   // ── Excel (receives commentary for dynamic narrative cells) ───────────────
-  await build_workbook(results, out_xlsx, creation_by_year[YEAR_A], creation_by_year[YEAR_B], commentary);
+  await build_workbook(results, out_xlsx, creation_by_year[BASELINE_YEAR], creation_by_year[ANALYSIS_YEAR], commentary);
   console.log('  Excel done.\n');
 
   // ── PowerPoint ────────────────────────────────────────────────────────────
@@ -320,7 +320,7 @@ async function main() {
         ? notes_content.indexOf('\n---\n### Build run:') : undefined);
 
     const new_build = `${BUILD_TAG} ${new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })} | mode: ${commentary._ai_generated ? 'ai_claude' : 'rule_based'}
-- Total: ${results.y25active.length} (prior) → ${results.y26active.length} (current), net ${results.y26active.length - results.y25active.length}
+- Total: ${results.baseline_active.length} (prior) → ${results.analysis_active.length} (current), net ${results.analysis_active.length - results.baseline_active.length}
 - Segments: Retained ${results.segSummary.Retained}, Shifted ${results.segSummary.Shifted}, Lost ${results.segSummary.Lost}, New ${results.segSummary.New}
 - Top issue: ${commentary.top_decliner ? commentary.top_decliner.type + ' ' + commentary.top_decliner.pct + '%' : 'No clear decliner'}
 - Top growth: ${commentary.top_grower ? commentary.top_grower.type + ' +' + commentary.top_grower.pct + '%' : 'None'}
@@ -338,7 +338,7 @@ async function main() {
   }
 
   console.log('Building PowerPoint deck...');
-  await buildDeck(out_pptx, results, commentary, creation_by_year[YEAR_A], creation_by_year[YEAR_B]);
+  await buildDeck(out_pptx, results, commentary, creation_by_year[BASELINE_YEAR], creation_by_year[ANALYSIS_YEAR]);
   console.log('  PowerPoint done.\n');
 
   // ── HTML dashboard ───────────────────────────────────────────────────────
@@ -363,9 +363,9 @@ async function main() {
       diff_lines.push('='.repeat(60));
 
       // Compare key metrics
-      const metric_keys = ['n25', 'n26', 'net', 'attrited', 'new_ev', 'rec', 'repl_rate'];
+      const metric_keys = ['n_baseline', 'n_analysis', 'net', 'attrited', 'new_ev', 'rec', 'repl_rate'];
       const metric_labels = {
-        n25: 'Prior-yr events', n26: 'Current-yr events', net: 'Net change',
+        n_baseline: 'Prior-yr events', n_analysis: 'Current-yr events', net: 'Net change',
         attrited: 'Lost', new_ev: 'New events', rec: 'Recovered', repl_rate: 'Replacement rate %'
       };
       let metrics_changed = 0;

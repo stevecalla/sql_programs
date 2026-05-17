@@ -9,9 +9,9 @@ const MN={1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',7:'Jul',8:'Aug',9:'Sep
 function colLet(n){let s='';while(n>0){s=String.fromCharCode(64+(n%26||26))+s;n=Math.floor((n-1)/26);}return s;}
 
 module.exports = function build_shift_flow_matrix(wb, results) {
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
-  const { monthly, shiftFlow, segments, c25, c26, retMt, saMt, suMt, attrMt, newMt } = results;
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
+  const { monthly, shiftFlow, segments, c_baseline, c_analysis, retMt, saMt, suMt, attrMt, newMt } = results;
   const ws = wb.addWorksheet('step_4b_shift_flow_matrix');
   ws.views = [{ state: 'frozen', ySplit: 6 }];
   ws.getColumn(1).width = 10;
@@ -61,7 +61,7 @@ module.exports = function build_shift_flow_matrix(wb, results) {
     td(ws.getCell(row,1),MN[m],{bg,bold:true,hAlign:'center'});
     col=2;
     for(const t of TYPES){
-      const n25t=c25[m]?.[t]??0, n26t=c26[m]?.[t]??0, rett=retMt[m]?.[t]??0,
+      const n25t=c_baseline[m]?.[t]??0, n26t=c_analysis[m]?.[t]??0, rett=retMt[m]?.[t]??0,
             sat=saMt[m]?.[t]??0, sut=suMt[m]?.[t]??0, attrt=attrMt[m]?.[t]??0,
             newt=newMt[m]?.[t]??0, net=sut-sat;
       const tbg=ri%2===0?C.LG:C.WH;

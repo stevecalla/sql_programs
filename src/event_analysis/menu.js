@@ -109,12 +109,12 @@ function status_line() {
   const has_api  = !!(process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'sk-ant-your-key-here');
   const mode     = cm?.mode ?? 'no build yet';
   const built    = res?.generated_at?.slice(0,10) ?? '—';
-  const n25      = res?.totals?.year_a ?? '?';
-  const n26      = res?.totals?.year_b ?? '?';
+  const n_baseline      = res?.totals?.BASELINE_YEAR ?? '?';
+  const n_analysis      = res?.totals?.ANALYSIS_YEAR ?? '?';
   const net      = res?.totals?.net;
 
   return [
-    `  Last build: ${built}   Events: ${n25} → ${n26}${net !== undefined ? `  (${net > 0 ? '+' : ''}${net})` : ''}`,
+    `  Last build: ${built}   Events: ${n_baseline} → ${n_analysis}${net !== undefined ? `  (${net > 0 ? '+' : ''}${net})` : ''}`,
     `  Commentary: ${mode}   AI key: ${has_api ? c(GREEN, 'set ✓') : c(YELLOW, 'not set')}   Active overrides: ${ov_count}`,
   ].join('\n');
 }

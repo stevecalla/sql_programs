@@ -13,10 +13,10 @@ const SEG_ORDER = { 'Retained':0,'Shifted':1,'Tried to Return':2,'Lost':3,'Recov
 
 module.exports = function build_event_detail(wb, results) {
   const { segments } = results;
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
-  const N_A = results?.y25active?.length ?? 0;
-  const N_B = results?.y26active?.length ?? 0;
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
+  const N_A = results?.baseline_active?.length ?? 0;
+  const N_B = results?.analysis_active?.length ?? 0;
   // Roster row count: count of segment match records that contain at least one event.
   const roster_rows = [
     ...segments.retained, ...segments.shifted, ...segments.triedToReturn,
@@ -116,7 +116,7 @@ module.exports = function build_event_detail(wb, results) {
     // Type
     td(ws.getCell(row, 3), e25?.type ?? e26?.type ?? '', { bg: sbg, hAlign: 'left', sz: 9 });
 
-    // year_a columns (4-9)
+    // BASELINE_YEAR columns (4-9)
     if (e25) {
       td(ws.getCell(row, 4), MN[e25.month],  { bg: sbg, bold: true, hAlign: 'center' });
       td(ws.getCell(row, 5), e25.sanctionId, { bg: sbg, hAlign: 'left',   sz: 8 });
@@ -140,7 +140,7 @@ module.exports = function build_event_detail(wb, results) {
     arrow.fill      = fill(C.WH);
     arrow.alignment = align({ h: 'center' });
 
-    // year_b columns (11-16)
+    // ANALYSIS_YEAR columns (11-16)
     if (e26) {
       const m26   = e26.month;
       const m25v  = e25?.month;

@@ -10,8 +10,8 @@ const MN = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
              7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec' };
 
 module.exports = function build_cancelled_cross_match(wb, results) {
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
   const { triedToReturn, recovered } = results;
   const ws = wb.addWorksheet('step_4d_cancelled_cross_match');
   ws.views = [{ state: 'frozen', ySplit: 5 }];

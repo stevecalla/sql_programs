@@ -35,9 +35,9 @@ function enrich(events) {
  *
  * matchDetails is an array of every match record with segment info.
  */
-function matchEvents(y25active, y26active) {
-  const ev25 = enrich(y25active);
-  const ev26 = enrich(y26active);
+function matchEvents(baseline_active, analysis_active) {
+  const ev25 = enrich(baseline_active);
+  const ev26 = enrich(analysis_active);
 
   const used25 = new Array(ev25.length).fill(false);
   const used26 = new Array(ev26.length).fill(false);
@@ -133,23 +133,23 @@ function fuzzySimpleMatch(nameA, nameB, threshold = 0.60) {
  *
  * After this, reclassify records in the main match output.
  */
-function crossMatch(y25active, y25excluded, y26active, y26excluded) {
+function crossMatch(baseline_active, baseline_excluded, analysis_active, analysis_excluded) {
   // Build norm indexes
   const normIdx26excl = new Map();
-  for (const e of y26excluded) {
+  for (const e of analysis_excluded) {
     const key = norm(e.name);
     if (!normIdx26excl.has(key)) normIdx26excl.set(key, e);
   }
 
   const normIdx26active = new Map();
-  for (const e of y26active) {
+  for (const e of analysis_active) {
     const key = norm(e.name);
     if (!normIdx26active.has(key)) normIdx26active.set(key, e);
   }
 
   // Scenario A
   const triedToReturn = [];
-  for (const e25 of y25active) {
+  for (const e25 of baseline_active) {
     const nm = norm(e25.name);
     let matched = normIdx26excl.get(nm) || null;
     if (!matched) {
@@ -169,7 +169,7 @@ function crossMatch(y25active, y25excluded, y26active, y26excluded) {
 
   // Scenario B
   const recovered = [];
-  for (const e25 of y25excluded) {
+  for (const e25 of baseline_excluded) {
     const nm = norm(e25.name);
     let matched = normIdx26active.get(nm) || null;
     if (!matched) {

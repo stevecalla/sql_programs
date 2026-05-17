@@ -14,9 +14,9 @@ const MN = {1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
 module.exports = function build_shifted_events(wb, results) {
   const { segments } = results;
   const shifted = segments.shifted;
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
-  const N_A = results?.y25active?.length ?? 0;
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
+  const N_A = results?.baseline_active?.length ?? 0;
   const ws = wb.addWorksheet('step_4c_shifted_events');
   ws.views = [{ state: 'frozen', ySplit: 3 }];
 
@@ -181,13 +181,13 @@ module.exports = function build_shifted_events(wb, results) {
   });
   ws.getRow(row).height = 18; row++;
 
-  // Headers: Direction | Months Shifted | Type | year_a Month | year_a Sanction ID | year_a Start Date | year_a Event Name | year_b Month | year_b Sanction ID | year_b Start Date | year_b Event Name | Confidence
+  // Headers: Direction | Months Shifted | Type | BASELINE_YEAR Month | BASELINE_YEAR Sanction ID | BASELINE_YEAR Start Date | BASELINE_YEAR Event Name | ANALYSIS_YEAR Month | ANALYSIS_YEAR Sanction ID | ANALYSIS_YEAR Start Date | ANALYSIS_YEAR Event Name | Confidence
   const c_hdrs = ['Direction',`Months\nShifted`,'Type',`${YA}\nMonth`,`${YA} Sanction ID`,`${YA} Start Date`,
                   `${YA} Event Name`,`${YB}\nMonth`,`${YB} Sanction ID`,`${YB} Start Date`,`${YB} Event Name`,'Confidence'];
   c_hdrs.forEach((h, i) => th(ws.getCell(row, i + 1), h, { bg: C.MR, sz: 9 }));
   ws.getRow(row).height = 28; row++;
 
-  // Sort: → Later first, then by months shifted asc, then type, then year_a month
+  // Sort: → Later first, then by months shifted asc, then type, then BASELINE_YEAR month
   const sorted = [...shifted].sort((a, b) => {
     const a_dir = a.e26.month > a.e25.month ? 0 : 1;
     const b_dir = b.e26.month > b.e25.month ? 0 : 1;

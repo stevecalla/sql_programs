@@ -95,8 +95,8 @@ function compute_totals(r) {
     delta: sum_type(c26, t) - sum_type(c25, t),
     pct_str: fmt_pct(sum_type(c25, t), sum_type(c26, t)),
   }));
-  const n25 = r?.y25active?.length ?? by_type.reduce((s, b) => s + b.n25, 0);
-  const n26 = r?.y26active?.length ?? by_type.reduce((s, b) => s + b.n26, 0);
+  const n25 = r?.baseline_active?.length ?? by_type.reduce((s, b) => s + b.n25, 0);
+  const n26 = r?.analysis_active?.length ?? by_type.reduce((s, b) => s + b.n26, 0);
   return { c25, c26, by_type, n25, n26, net: n26 - n25, pct: fmt_pct(n25, n26) };
 }
 function monthly_rows(r) {

@@ -121,15 +121,15 @@ const TYPE_FG = {
  * @param {Array<{yr:number,type:string,mo:number,cnt:number}>} rows25  prior-year events
  * @param {Array<{yr:number,type:string,mo:number,cnt:number}>} rows26  current-year events
  * @param {object|null} cm
- * @param {object|null} results  full analysis output (for year_a/year_b + typeAnnual)
+ * @param {object|null} results  full analysis output (for BASELINE_YEAR/ANALYSIS_YEAR + typeAnnual)
  */
 module.exports = function build_creation_pipeline(wb, rows25, rows26, cm = null, results = null) {
   const ev25 = rows25;
   const ev26 = rows26;
 
   // Year context — fall back to current/prior year if results isn't supplied.
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
   const PRE_YA = YA - 1;   // prior year before YA (Q4 pre-filing window for YA events)
   // In-year window: through current month when YB is the current year, else full year.
   const NOW = new Date();
@@ -137,7 +137,7 @@ module.exports = function build_creation_pipeline(wb, rows25, rows26, cm = null,
   const IN_YR_MOS = Array.from({ length: CUTOFF_MO }, (_, i) => i + 1);
   const cutoff_label = `Jan-${MO_LBL[CUTOFF_MO]}`;
 
-  // Active-event counts come from results.typeAnnual (computed from c25/c26),
+  // Active-event counts come from results.typeAnnual (computed from c_baseline/c_analysis),
   // not from a stale hardcoded map.
   const typeAnnual = results?.typeAnnual ?? {};
   const ACTIVE_A = Object.fromEntries(TYPES.map(t => [t, typeAnnual[t]?.tot25 ?? 0]));

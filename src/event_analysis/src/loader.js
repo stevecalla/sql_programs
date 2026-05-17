@@ -102,14 +102,14 @@ function loadCsv(filePath, opts = {}) {
  * Load both years, returning active and excluded pools separately.
  */
 function loadBothYears(csv2025Path, csv2026Path) {
-  const y25active   = loadCsv(csv2025Path);
-  const y26active   = loadCsv(csv2026Path);
-  const y25excluded = loadCsv(csv2025Path, { includeExcluded: true })
+  const baseline_active   = loadCsv(csv2025Path);
+  const analysis_active   = loadCsv(csv2026Path);
+  const baseline_excluded = loadCsv(csv2025Path, { includeExcluded: true })
                         .filter(e => EXCLUDE_STATUSES.has(e.status));
-  const y26excluded = loadCsv(csv2026Path, { includeExcluded: true })
+  const analysis_excluded = loadCsv(csv2026Path, { includeExcluded: true })
                         .filter(e => EXCLUDE_STATUSES.has(e.status));
 
-  return { y25active, y26active, y25excluded, y26excluded };
+  return { baseline_active, analysis_active, baseline_excluded, analysis_excluded };
 }
 
 /**
@@ -117,13 +117,13 @@ function loadBothYears(csv2025Path, csv2026Path) {
  * arrays from mysql2 with `rowsAsArray: true`).
  */
 function loadBothYearsFromRows(rows25, rows26) {
-  const y25active   = parseRows(rows25);
-  const y26active   = parseRows(rows26);
-  const y25excluded = parseRows(rows25, { includeExcluded: true })
+  const baseline_active   = parseRows(rows25);
+  const analysis_active   = parseRows(rows26);
+  const baseline_excluded = parseRows(rows25, { includeExcluded: true })
                         .filter(e => EXCLUDE_STATUSES.has(e.status));
-  const y26excluded = parseRows(rows26, { includeExcluded: true })
+  const analysis_excluded = parseRows(rows26, { includeExcluded: true })
                         .filter(e => EXCLUDE_STATUSES.has(e.status));
-  return { y25active, y26active, y25excluded, y26excluded };
+  return { baseline_active, analysis_active, baseline_excluded, analysis_excluded };
 }
 
 module.exports = {

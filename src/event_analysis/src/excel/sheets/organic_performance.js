@@ -33,8 +33,8 @@ const TYPE_INSIGHT = {
 };
 
 module.exports = function build_organic_performance(wb, results, cm = null) {
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
   const { organicMonthly, organicByType } = results;
   const ws = wb.addWorksheet('step_3_organic_performance');
   ws.views = [{ state: 'frozen', ySplit: 5 }];

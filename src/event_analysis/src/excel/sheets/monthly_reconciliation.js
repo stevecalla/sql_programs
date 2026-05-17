@@ -10,9 +10,9 @@ const MN = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
              7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec' };
 
 module.exports = function build_monthly_reconciliation(wb, results) {
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
-  const { monthly, c25, c26, retMt, saMt, suMt, ttrMt, attrMt, recMt, newMt, monthTotal } = results;
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
+  const { monthly, c_baseline, c_analysis, retMt, saMt, suMt, ttrMt, attrMt, recMt, newMt, monthTotal } = results;
   const ws = wb.addWorksheet('monthly_reconciliation');
   ws.views = [{ state: 'frozen', ySplit: 4 }];
 
@@ -48,8 +48,8 @@ module.exports = function build_monthly_reconciliation(wb, results) {
   for (let ri = 0; ri < 12; ri++) {
     const m   = ri + 1;
     const row = ri + 4;
-    const n25 = Object.values(c25[m] ?? {}).reduce((s, v) => s + v, 0);
-    const n26 = Object.values(c26[m] ?? {}).reduce((s, v) => s + v, 0);
+    const n_baseline = Object.values(c_baseline[m] ?? {}).reduce((s, v) => s + v, 0);
+    const n_analysis = Object.values(c_analysis[m] ?? {}).reduce((s, v) => s + v, 0);
     const ret  = monthTotal(retMt,  m);
     const sa   = monthTotal(saMt,   m);
     const su   = monthTotal(suMt,   m);
@@ -57,15 +57,15 @@ module.exports = function build_monthly_reconciliation(wb, results) {
     const attr = monthTotal(attrMt, m);
     const rec  = monthTotal(recMt,  m);
     const newE = monthTotal(newMt,  m);
-    const diff = n26 - n25;
+    const diff = n_analysis - n_baseline;
     const ns   = su - sa;
-    const ok25 = ret + sa + ttr + attr === n25 ? 'OK' : `!${ret+sa+ttr+attr}`;
-    const ok26 = ret + su + rec + newE === n26 ? 'OK' : `!${ret+su+rec+newE}`;
+    const ok25 = ret + sa + ttr + attr === n_baseline ? 'OK' : `!${ret+sa+ttr+attr}`;
+    const ok26 = ret + su + rec + newE === n_analysis ? 'OK' : `!${ret+su+rec+newE}`;
     const bg   = diff > 0 ? C.GBG : diff < 0 ? C.RBG : C.LG;
 
     ws.getRow(row).height = 18;
     td(ws.getCell(row, 1), MN[m], { bg, bold: true, hAlign: 'center' });
-    td(ws.getCell(row, 2), n25,   { bg, fmt: '#,##0' });
+    td(ws.getCell(row, 2), n_baseline,   { bg, fmt: '#,##0' });
     td(ws.getCell(row, 3), ret || null, { bg: ret ? C.GBG : bg, fg: ret ? C.GD : '888888', fmt: '#,##0' });
     td(ws.getCell(row, 4), sa || null,  { bg: sa ? C.ABG : bg,  fg: sa ? C.AM : '888888', fmt: '#,##0' });
     td(ws.getCell(row, 5), ttr || null, { bg: ttr ? C.TRBG : bg, fg: ttr ? C.TRFG : '888888', fmt: '#,##0', bold: !!ttr });
@@ -77,7 +77,7 @@ module.exports = function build_monthly_reconciliation(wb, results) {
     ck1.fill      = fill('EBF5EB');
     ck1.alignment = align({ h: 'center' });
 
-    td(ws.getCell(row, 8), n26, { bg, bold: true, fmt: '#,##0' });
+    td(ws.getCell(row, 8), n_analysis, { bg, bold: true, fmt: '#,##0' });
     td(ws.getCell(row, 9),  su || null,   { bg: su ? C.BBG : bg,   fg: su ? C.BD : '888888', fmt: '#,##0', bold: !!su });
     td(ws.getCell(row, 10), rec || null,  { bg: rec ? C.RECBG : bg, fg: rec ? C.RECFG : '888888', fmt: '#,##0', bold: !!rec });
     td(ws.getCell(row, 11), newE || null, { bg: newE > 5 ? C.BBG : bg, fg: newE > 5 ? C.BD : '555555', fmt: '#,##0' });

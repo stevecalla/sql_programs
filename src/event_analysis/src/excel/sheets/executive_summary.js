@@ -10,16 +10,16 @@ const MN = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
              7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec' };
 
 module.exports = function build_executive_summary(wb, results, cm = null) {
-  const { segSummary, organicByType, organicMonthly, calImpact, c25, c26, monthly } = results;
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
+  const { segSummary, organicByType, organicMonthly, calImpact, c_baseline, c_analysis, monthly } = results;
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
   const ws = wb.addWorksheet('executive_summary');
   ws.views = [{ state: 'frozen', ySplit: 3 }];
 
   [3,20,14,12,12,12,12,14,14,14,14,14,14,14].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-  const n25total = results.y25active.length;
-  const n26total = results.y26active.length;
+  const n25total = results.baseline_active.length;
+  const n26total = results.analysis_active.length;
 
   function H(row, text, bg, sz = 11, h = 24) {
     ws.mergeCells(`A${row}:N${row}`);
@@ -53,14 +53,14 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
 
   // Slack summary
   H(4, '  📋  Slack Summary — 4 bullets', C.SLACK, 10, 20);
-  const ar25 = Object.values(c25).reduce((s,m)=>s+(m['Adult Race']??0),0);
-  const ar26 = Object.values(c26).reduce((s,m)=>s+(m['Adult Race']??0),0);
-  const yr25 = Object.values(c25).reduce((s,m)=>s+(m['Youth Race']??0),0);
-  const yr26 = Object.values(c26).reduce((s,m)=>s+(m['Youth Race']??0),0);
-  const ac25 = Object.values(c25).reduce((s,m)=>s+(m['Adult Clinic']??0),0);
-  const ac26 = Object.values(c26).reduce((s,m)=>s+(m['Adult Clinic']??0),0);
-  const yc25 = Object.values(c25).reduce((s,m)=>s+(m['Youth Clinic']??0),0);
-  const yc26 = Object.values(c26).reduce((s,m)=>s+(m['Youth Clinic']??0),0);
+  const ar25 = Object.values(c_baseline).reduce((s,m)=>s+(m['Adult Race']??0),0);
+  const ar26 = Object.values(c_analysis).reduce((s,m)=>s+(m['Adult Race']??0),0);
+  const yr25 = Object.values(c_baseline).reduce((s,m)=>s+(m['Youth Race']??0),0);
+  const yr26 = Object.values(c_analysis).reduce((s,m)=>s+(m['Youth Race']??0),0);
+  const ac25 = Object.values(c_baseline).reduce((s,m)=>s+(m['Adult Clinic']??0),0);
+  const ac26 = Object.values(c_analysis).reduce((s,m)=>s+(m['Adult Clinic']??0),0);
+  const yc25 = Object.values(c_baseline).reduce((s,m)=>s+(m['Youth Clinic']??0),0);
+  const yc26 = Object.values(c_analysis).reduce((s,m)=>s+(m['Youth Clinic']??0),0);
   const acOrgPct = (organicByType['Adult Clinic'].orgTotal / ac25 * 100).toFixed(1);
   const ycOrgPct = (organicByType['Youth Clinic'].orgTotal / yc25 * 100).toFixed(1);
   const junOrg   = organicMonthly.find(o=>o.month===6)?.orgTotal.toFixed(1);
@@ -99,7 +99,7 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
   TC(12,1,'',C.DK); TC(12,2,'Type',C.DK); TC(12,3,String(YA),C.DK); TC(12,4,String(YB),C.DK); TC(12,5,'Δ',C.DK); TC(12,6,'Δ %',C.DK);
   ws.mergeCells('G12:H12');
   TC(12,9,'Key read',C.DK,6,C.WH,8);  // TC merges I12:N12 itself via span=6
-  for (const [ri,[typ,n25,n26,bg,fg,obs]] of [
+  for (const [ri,[typ,n_baseline,n_analysis,bg,fg,obs]] of [
     ['Adult Race',ar25,ar26,C.GBG,C.GD,(cm?.excel_type_reads?.['Adult Race'] || 'Flat. Organic +0.2%. Race product stable.')],
     ['Youth Race',yr25,yr26,C.LG,'555555',(cm?.excel_type_reads?.['Youth Race'] || 'Mild. Organic −1.2%. Monitor.')],
     ['Adult Clinic',ac25,ac26,C.MRDBG,C.RD,(cm?.excel_type_reads?.['Adult Clinic'] || 'Full decline. Organic −10.3%. Key concern.')],
@@ -109,8 +109,8 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
     const row = 13 + ri;
     ws.getRow(row).height = 18; fillRow(ws, row, bg); ws.getCell(row,1).fill=fill(C.DK);
     td(ws.getCell(row,2),typ,{bg,fg,bold:typ==='TOTAL',hAlign:'left'});
-    td(ws.getCell(row,3),n25,{bg,fg:'444444',fmt:'#,##0'}); td(ws.getCell(row,4),n26,{bg,fg,bold:typ==='TOTAL',fmt:'#,##0'});
-    dv(ws.getCell(row,5),n26-n25,bg); dv(ws.getCell(row,6),(n26-n25)/n25,bg,{fmt:'+0.0%;-0.0%;"—"'});
+    td(ws.getCell(row,3),n_baseline,{bg,fg:'444444',fmt:'#,##0'}); td(ws.getCell(row,4),n_analysis,{bg,fg,bold:typ==='TOTAL',fmt:'#,##0'});
+    dv(ws.getCell(row,5),n_analysis-n_baseline,bg); dv(ws.getCell(row,6),(n_analysis-n_baseline)/n_baseline,bg,{fmt:'+0.0%;-0.0%;"—"'});
     ws.mergeCells(`G${row}:H${row}`); ws.mergeCells(`I${row}:N${row}`);
     td(ws.getCell(row,9),obs,{bg,fg:'333333',hAlign:'left',bold:typ==='TOTAL'});
   }
@@ -159,10 +159,10 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
   const top_decliner = [..._type_movers].sort((a, b) => a.delta - b.delta).find(d => d.delta < 0) ?? null;
   const top_grower   = [..._type_movers].sort((a, b) => b.delta - a.delta).find(d => d.delta > 0) ?? null;
   const _step1_make = (m) => {
-    const ar = (c26[m.m]?.['Adult Race'] ?? 0) - (c25[m.m]?.['Adult Race'] ?? 0);
-    const yr = (c26[m.m]?.['Youth Race'] ?? 0) - (c25[m.m]?.['Youth Race'] ?? 0);
-    const ac = (c26[m.m]?.['Adult Clinic'] ?? 0) - (c25[m.m]?.['Adult Clinic'] ?? 0);
-    const yc = (c26[m.m]?.['Youth Clinic'] ?? 0) - (c25[m.m]?.['Youth Clinic'] ?? 0);
+    const ar = (c_analysis[m.m]?.['Adult Race'] ?? 0) - (c_baseline[m.m]?.['Adult Race'] ?? 0);
+    const yr = (c_analysis[m.m]?.['Youth Race'] ?? 0) - (c_baseline[m.m]?.['Youth Race'] ?? 0);
+    const ac = (c_analysis[m.m]?.['Adult Clinic'] ?? 0) - (c_baseline[m.m]?.['Adult Clinic'] ?? 0);
+    const yc = (c_analysis[m.m]?.['Youth Clinic'] ?? 0) - (c_baseline[m.m]?.['Youth Clinic'] ?? 0);
     const tot = ar + yr + ac + yc;
     const decline = tot < 0;
     const bg = decline ? C.MRDBG : C.MGBG, fg = decline ? C.RD : C.GD;
@@ -383,8 +383,8 @@ module.exports = function build_executive_summary(wb, results, cm = null) {
     const obs = decline
       ? `${p.attr ?? 0} truly lost, ${p.new ?? 0} new${(p.rec ?? 0) ? ` + ${p.rec} recovered` : ''}${(p.ttr ?? 0) ? `. ${p.ttr} tried to return.` : '.'}`
       : `${p.attr ?? 0} truly lost, ${p.new ?? 0} new${(p.rec ?? 0) ? ` + ${p.rec} recovered` : ''}. Net ${(p.netDelta ?? 0) >= 0 ? '+' : ''}${p.netDelta ?? 0}.`;
-    return [MN[p.m], p.n25 ?? 0, p.ret ?? 0, p.sa ?? 0, p.ttr ?? 0,
-            p.attr ?? 0, p.su ?? 0, p.rec ?? 0, p.new ?? 0, p.n26 ?? 0,
+    return [MN[p.m], p.n_baseline ?? 0, p.ret ?? 0, p.sa ?? 0, p.ttr ?? 0,
+            p.attr ?? 0, p.su ?? 0, p.rec ?? 0, p.new ?? 0, p.n_analysis ?? 0,
             repl, bg, fg, obs];
   });
   for(let ri=0;ri<detail4.length;ri++){

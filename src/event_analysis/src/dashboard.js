@@ -58,19 +58,19 @@ function generate_dashboard(results, cm, out_path, segments_raw = null) {
   const chartjs_src = get_chartjs_src();
 
   // ── Pull data using actual field names from analysis_results.json ──────────
-  const ya = results.years?.year_a ?? 2025;
-  const yb = results.years?.year_b ?? 2026;
-  const n25 = results.totals?.year_a ?? 0;
-  const n26 = results.totals?.year_b ?? 0;
-  const net = results.totals?.net ?? (n26 - n25);
+  const ya = results.years?.BASELINE_YEAR ?? 2025;
+  const yb = results.years?.ANALYSIS_YEAR ?? 2026;
+  const n_baseline = results.totals?.BASELINE_YEAR ?? 0;
+  const n_analysis = results.totals?.ANALYSIS_YEAR ?? 0;
+  const net = results.totals?.net ?? (n_analysis - n_baseline);
 
   // Segments (direct from results.segments which is the segSummary object)
   const seg = results.segments ?? {};
 
   // By-type data — field names are tot25/tot26/actDelta
   const by_type = results.by_type ?? {};
-  const type_n25    = TYPES.map(t => by_type[t]?.tot25     ?? by_type[t]?.n25 ?? 0);
-  const type_n26    = TYPES.map(t => by_type[t]?.tot26     ?? by_type[t]?.n26 ?? 0);
+  const type_n25    = TYPES.map(t => by_type[t]?.tot25     ?? by_type[t]?.n_baseline ?? 0);
+  const type_n26    = TYPES.map(t => by_type[t]?.tot26     ?? by_type[t]?.n_analysis ?? 0);
   const type_deltas = TYPES.map(t => by_type[t]?.actDelta  ?? by_type[t]?.delta ?? 0);
 
   // Organic by type
@@ -91,8 +91,8 @@ function generate_dashboard(results, cm, out_path, segments_raw = null) {
   const month_labels = MN_ARR.slice(1);  // Jan..Dec
   const raw_deltas  = month_labels.map((_, i) => monthly[i + 1]?.net_delta    ?? monthly[String(i+1)]?.net_delta    ?? 0);
   const org_deltas  = month_labels.map((_, i) => monthly[i + 1]?.organic_delta ?? monthly[String(i+1)]?.organic_delta ?? raw_deltas[i]);
-  const month_n25   = month_labels.map((_, i) => monthly[i + 1]?.n25           ?? monthly[String(i+1)]?.n25           ?? 0);
-  const month_n26   = month_labels.map((_, i) => monthly[i + 1]?.n26           ?? monthly[String(i+1)]?.n26           ?? 0);
+  const month_n25   = month_labels.map((_, i) => monthly[i + 1]?.n_baseline           ?? monthly[String(i+1)]?.n_baseline           ?? 0);
+  const month_n26   = month_labels.map((_, i) => monthly[i + 1]?.n_analysis           ?? monthly[String(i+1)]?.n_analysis           ?? 0);
 
   // Calendar impact — keys are 0-indexed (0=Jan..11=Dec)
   // Some data sets use 1-indexed, handle both
@@ -123,7 +123,7 @@ function generate_dashboard(results, cm, out_path, segments_raw = null) {
   const seg_labels = Object.keys(seg);
   const seg_values = seg_labels.map(k => seg[k]);
   const seg_colors = seg_labels.map(k => SEG_COLOR[k] ?? '#999');
-  const ret_pct    = n25 ? Math.round((seg.Retained ?? 0) / n25 * 100) : 0;
+  const ret_pct    = n_baseline ? Math.round((seg.Retained ?? 0) / n_baseline * 100) : 0;
 
   // ── Build HTML (Chart.js embedded inline — fully offline) ────────────────
   // Build Chart.js script tag via string concat — NOT template literal
@@ -185,7 +185,7 @@ function generate_dashboard(results, cm, out_path, segments_raw = null) {
 
   const bullets_html = bullets.length
     ? bullets.map(b => `<div class="bullet"><div class="dot"></div><div>${String(b).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div></div>`).join('\n')
-    : `<div class="bullet"><div class="dot"></div><div><strong>Net: ${sign(net)} events</strong> (${n25.toLocaleString()} → ${n26.toLocaleString()}, ${((net/n25)*100).toFixed(1)}%)</div></div>
+    : `<div class="bullet"><div class="dot"></div><div><strong>Net: ${sign(net)} events</strong> (${n_baseline.toLocaleString()} → ${n_analysis.toLocaleString()}, ${((net/n_baseline)*100).toFixed(1)}%)</div></div>
        <div class="bullet"><div class="dot"></div><div><strong>Worst months:</strong> ${worst_months.map(m => m.label + ' (' + sign(m.delta) + ')').join(', ')}</div></div>
        <div class="bullet"><div class="dot"></div><div><strong>Top issue:</strong> ${top_dec?.type ?? '?'} (${top_dec?.pct ?? 0}%)</div></div>
        ${top_gro ? `<div class="bullet"><div class="dot" style="background:#1E7D34"></div><div><strong>Top growth:</strong> ${top_gro.type} (+${top_gro.pct}%)</div></div>` : ''}`;
@@ -488,7 +488,7 @@ canvas{width:100%!important;max-height:220px}
       · Excl. Cancelled / Declined / Deleted · ~85–90% match confidence</div>
   </div>
   <div class="hdr-right">
-    ${n25.toLocaleString()} → ${n26.toLocaleString()}
+    ${n_baseline.toLocaleString()} → ${n_analysis.toLocaleString()}
     <span class="big">${sign(net)} net</span>
   </div>
 </div>
@@ -497,8 +497,8 @@ canvas{width:100%!important;max-height:220px}
 
 <div class="kpi-row">
   <div class="kpi ${net < 0 ? 'red' : 'grn'}">
-    <div style="font-size:.72rem;color:#999;margin-bottom:2px">${n25.toLocaleString()} → ${n26.toLocaleString()}</div>
-    <div class="val">${sign(net)} <span style="font-size:1rem;font-weight:500">(${((net/n25)*100).toFixed(1)}%)</span></div>
+    <div style="font-size:.72rem;color:#999;margin-bottom:2px">${n_baseline.toLocaleString()} → ${n_analysis.toLocaleString()}</div>
+    <div class="val">${sign(net)} <span style="font-size:1rem;font-weight:500">(${((net/n_baseline)*100).toFixed(1)}%)</span></div>
     <div class="lbl">Net change</div>
   </div>
   <div class="kpi ${ret_pct >= 60 ? 'grn' : 'amb'}">
@@ -506,15 +506,15 @@ canvas{width:100%!important;max-height:220px}
     <div class="lbl">Retained</div>
   </div>
   <div class="kpi red">
-    <div class="val">${(seg.Lost ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg.Lost??0)/n25*100)}%)</span></div>
+    <div class="val">${(seg.Lost ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg.Lost??0)/n_baseline*100)}%)</span></div>
     <div class="lbl">Lost</div>
   </div>
   <div class="kpi blu">
-    <div class="val">${(seg.New ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg.New??0)/n26*100)}%)</span></div>
+    <div class="val">${(seg.New ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg.New??0)/n_analysis*100)}%)</span></div>
     <div class="lbl">New events</div>
   </div>
   <div class="kpi pur">
-    <div class="val">${(seg.Recovered ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg.Recovered??0)/n26*100)}%)</span></div>
+    <div class="val">${(seg.Recovered ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg.Recovered??0)/n_analysis*100)}%)</span></div>
     <div class="lbl">Recovered</div>
   </div>
   <div class="kpi amb"><div class="val">${worst_months[0]?.label ?? '?'} ${worst_months[0]?.delta ?? ''}</div><div class="lbl">Worst month</div></div>
@@ -895,7 +895,7 @@ CHARTS['c_segment'] = new Chart(document.getElementById('c_segment'),{
           });
         }
       }},
-      tooltip:{callbacks:{label:ctx=>' '+ctx.label+': '+ctx.parsed+' ('+Math.round(ctx.parsed/${n25}*100)+'%)'}}
+      tooltip:{callbacks:{label:ctx=>' '+ctx.label+': '+ctx.parsed+' ('+Math.round(ctx.parsed/${n_baseline}*100)+'%)'}}
     }
   }
 });

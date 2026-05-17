@@ -169,7 +169,7 @@ function monthGrid(year, month) {
  * Compute calendar-impact analysis for all 12 months.
  * Returns array of { month, w25, w26, dw, ds, du, calByType, actByType, orgByType, calTotal, orgTotal, actDelta }.
  */
-function buildCalendarImpact(c25, c26) {
+function buildCalendarImpact(c_baseline, c_analysis) {
   const TYPES = ['Adult Race', 'Youth Race', 'Adult Clinic', 'Youth Clinic'];
   const months = [];
 
@@ -180,16 +180,16 @@ function buildCalendarImpact(c25, c26) {
     const { sats: s25, suns: u25 } = satSun(2025, m);
     const { sats: s26, suns: u26 } = satSun(2026, m);
 
-    const tot25 = TYPES.reduce((s, t) => s + (c25[m]?.[t] ?? 0), 0);
-    const tot26 = TYPES.reduce((s, t) => s + (c26[m]?.[t] ?? 0), 0);
+    const tot25 = TYPES.reduce((s, t) => s + (c_baseline[m]?.[t] ?? 0), 0);
+    const tot26 = TYPES.reduce((s, t) => s + (c_analysis[m]?.[t] ?? 0), 0);
     const actDelta = tot26 - tot25;
 
     const calByType = {}, actByType = {}, orgByType = {};
     let calTotal = 0;
 
     for (const t of TYPES) {
-      const v25 = c25[m]?.[t] ?? 0;
-      const v26 = c26[m]?.[t] ?? 0;
+      const v25 = c_baseline[m]?.[t] ?? 0;
+      const v26 = c_analysis[m]?.[t] ?? 0;
       const rate = w25 > 0 ? v25 / w25 : 0;
       const cal  = dw * rate;
       const act  = v26 - v25;

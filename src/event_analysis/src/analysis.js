@@ -49,14 +49,14 @@ function segCounts(records, monthKey = 'e25') {
  * @returns {object}       — all computed data for Excel generation
  */
 function runAnalysis(loaded) {
-  const { y25active, y26active, y25excluded, y26excluded } = loaded;
+  const { baseline_active, analysis_active, baseline_excluded, analysis_excluded } = loaded;
 
   // ── 1. Match events ──────────────────────────────────────────────────
-  const segments = matchEvents(y25active, y26active);
+  const segments = matchEvents(baseline_active, analysis_active);
 
   // ── 2. Cross-match cancelled events ─────────────────────────────────
   const { triedToReturn, recovered } = crossMatch(
-    y25active, y25excluded, y26active, y26excluded,
+    baseline_active, baseline_excluded, analysis_active, analysis_excluded,
   );
   reclassify(segments, triedToReturn, recovered);
 
@@ -95,8 +95,8 @@ function runAnalysis(loaded) {
   const overrides = load_overrides(overrides_path);
   let override_summary = null;
   if (overrides && (overrides.force_match.length || overrides.force_no_match.length || overrides.force_segment.length)) {
-    const { applied, warnings } = apply_overrides(segments, y25active, y26active, overrides).applied
-      ? apply_overrides(segments, y25active, y26active, overrides)
+    const { applied, warnings } = apply_overrides(segments, baseline_active, analysis_active, overrides).applied
+      ? apply_overrides(segments, baseline_active, analysis_active, overrides)
       : { applied: [], warnings: [] };
     override_summary = summarise_overrides(applied, warnings);
     if (override_summary?.total_applied) {
@@ -108,8 +108,8 @@ function runAnalysis(loaded) {
   }
 
   // ── 3. Raw counts by month/type ──────────────────────────────────────
-  const c25 = countByMonthType(y25active);
-  const c26 = countByMonthType(y26active);
+  const c_baseline = countByMonthType(baseline_active);
+  const c_analysis = countByMonthType(analysis_active);
 
   // ── 4. Segment counts by month/type ─────────────────────────────────
   const allMatches = [
@@ -129,8 +129,8 @@ function runAnalysis(loaded) {
   // ── 5. Monthly summary ───────────────────────────────────────────────
   const monthly = {};
   for (let m = 1; m <= 12; m++) {
-    const n25  = monthTotal(c25, m);
-    const n26  = monthTotal(c26, m);
+    const n_baseline  = monthTotal(c_baseline, m);
+    const n_analysis  = monthTotal(c_analysis, m);
     const ret  = monthTotal(retMt,  m);
     const sa   = monthTotal(saMt,   m);
     const su   = monthTotal(suMt,   m);
@@ -139,21 +139,21 @@ function runAnalysis(loaded) {
     const rec  = monthTotal(recMt,  m);
     const newE = monthTotal(newMt,  m);
 
-    monthly[m] = { n25, n26, ret, sa, su, ttr, attr, rec, new: newE,
-                   netDelta: n26 - n25, netShift: su - sa };
+    monthly[m] = { n_baseline, n_analysis, ret, sa, su, ttr, attr, rec, new: newE,
+                   netDelta: n_analysis - n_baseline, netShift: su - sa };
   }
 
   // ── 6. Annual totals by type ─────────────────────────────────────────
   const typeAnnual = {};
   for (const t of TYPES) {
-    const tot25  = Object.values(c25).reduce((s, mo) => s + (mo[t] ?? 0), 0);
-    const tot26  = Object.values(c26).reduce((s, mo) => s + (mo[t] ?? 0), 0);
+    const tot25  = Object.values(c_baseline).reduce((s, mo) => s + (mo[t] ?? 0), 0);
+    const tot26  = Object.values(c_analysis).reduce((s, mo) => s + (mo[t] ?? 0), 0);
     const actDelta = tot26 - tot25;
     typeAnnual[t] = { tot25, tot26, actDelta };
   }
 
   // ── 7. Calendar impact (Step 2) ──────────────────────────────────────
-  const calImpact = buildCalendarImpact(c25, c26);
+  const calImpact = buildCalendarImpact(c_baseline, c_analysis);
 
   // ── 8. Organic by month (Step 3) ─────────────────────────────────────
   const organicMonthly = calImpact.map(ci => ({
@@ -201,11 +201,11 @@ function runAnalysis(loaded) {
 
   return {
     // Raw
-    y25active, y26active, y25excluded, y26excluded,
+    baseline_active, analysis_active, baseline_excluded, analysis_excluded,
     // Segments
     segments, allMatches, triedToReturn, recovered,
     // Counts
-    c25, c26, monthly, typeAnnual,
+    c_baseline, c_analysis, monthly, typeAnnual,
     // Analysis
     calImpact, organicMonthly, organicByType, shiftFlow,
     retMt, attrMt, newMt, ttrMt, recMt, saMt, suMt,

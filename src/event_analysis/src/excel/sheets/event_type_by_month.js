@@ -11,9 +11,9 @@ const MN     = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
                  7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec' };
 
 module.exports = function build_event_type_by_month(wb, results) {
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
-  const { c25, c26 } = results;
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
+  const { c_baseline, c_analysis } = results;
   const ws = wb.addWorksheet('step_1_event_type_by_month');
   ws.views = [{ state: 'frozen', ySplit: 4 }];
 
@@ -56,19 +56,19 @@ module.exports = function build_event_type_by_month(wb, results) {
     const row = ws.getRow(rowNum);
     row.height = 20;
 
-    const n25  = Object.values(c25[m] ?? {}).reduce((s, v) => s + v, 0);
-    const n26  = Object.values(c26[m] ?? {}).reduce((s, v) => s + v, 0);
-    const diff = n26 - n25;
+    const n_baseline  = Object.values(c_baseline[m] ?? {}).reduce((s, v) => s + v, 0);
+    const n_analysis  = Object.values(c_analysis[m] ?? {}).reduce((s, v) => s + v, 0);
+    const diff = n_analysis - n_baseline;
     const bg   = diff > 0 ? C.GBG : diff < 0 ? C.RBG : C.LG;
 
     // Month label
     td(ws.getCell(rowNum, 1), MN[m], { bg, fg: diff > 0 ? C.GD : diff < 0 ? C.RD : C.DK, bold: true, hAlign: 'center' });
-    td(ws.getCell(rowNum, 2), n25,   { bg, fmt: '#,##0' });
+    td(ws.getCell(rowNum, 2), n_baseline,   { bg, fmt: '#,##0' });
 
     // Type deltas: cols 3-6 (Adult Race, Youth Race, Adult Clinic, Youth Clinic)
     let col = 3;
     for (const t of TYPES) {
-      const d = (c26[m]?.[t] ?? 0) - (c25[m]?.[t] ?? 0);
+      const d = (c_analysis[m]?.[t] ?? 0) - (c_baseline[m]?.[t] ?? 0);
       dv(ws.getCell(rowNum, col), d, d > 0 ? C.GBG : d < 0 ? C.RBG : C.LG);
       col++;
     }
@@ -84,8 +84,8 @@ module.exports = function build_event_type_by_month(wb, results) {
     netCell.fill      = fill(diff > 0 ? C.GBG : diff < 0 ? C.RBG : C.LG);
     netCell.alignment = align({ h: 'right' });
 
-    // Col 9: year_b Total
-    td(ws.getCell(rowNum, 9), n26, { bg, bold: true, fmt: '#,##0' });
+    // Col 9: ANALYSIS_YEAR Total
+    td(ws.getCell(rowNum, 9), n_analysis, { bg, bold: true, fmt: '#,##0' });
 
     // Col 10: Check formula
     const ck = ws.getCell(rowNum, 10);
@@ -101,7 +101,7 @@ module.exports = function build_event_type_by_month(wb, results) {
   fillRow(ws, tr, C.DK);
   th(ws.getCell(tr, 1), 'FULL YEAR', { bg: C.DK, sz: 10 });
 
-  // Col 2: year_a total
+  // Col 2: BASELINE_YEAR total
   const c2 = ws.getCell(tr, 2);
   c2.value = { formula: '=SUM(B4:B15)' }; c2.font = font({ bold:true, sz:10, color:C.WH }); c2.fill = fill(C.DK); c2.alignment = align({ h:'right' }); c2.numFmt = '#,##0';
 
@@ -117,7 +117,7 @@ module.exports = function build_event_type_by_month(wb, results) {
   const c8 = ws.getCell(tr, 8);
   c8.value = { formula: '=SUM(H4:H15)' }; c8.font = font({ bold:true, sz:10, color:C.WH }); c8.fill = fill(C.DK); c8.alignment = align({ h:'right' }); c8.numFmt = '+#,##0;-#,##0;"—"';
 
-  // Col 9: year_b total
+  // Col 9: ANALYSIS_YEAR total
   const c9 = ws.getCell(tr, 9);
   c9.value = { formula: '=SUM(I4:I15)' }; c9.font = font({ bold:true, sz:10, color:C.WH }); c9.fill = fill(C.DK); c9.alignment = align({ h:'right' }); c9.numFmt = '#,##0';
 
@@ -150,11 +150,11 @@ module.exports = function build_event_type_by_month(wb, results) {
     td(ws.getCell(rowNum, 1), MN[m], { bg, bold: true, hAlign: 'center' });
     let col = 2;
     for (const t of TYPES) {
-      td(ws.getCell(rowNum, col),     c25[m]?.[t] ?? 0, { bg, fmt: '#,##0' }); col++;
-      td(ws.getCell(rowNum, col),     c26[m]?.[t] ?? 0, { bg, fmt: '#,##0', bold: true }); col++;
+      td(ws.getCell(rowNum, col),     c_baseline[m]?.[t] ?? 0, { bg, fmt: '#,##0' }); col++;
+      td(ws.getCell(rowNum, col),     c_analysis[m]?.[t] ?? 0, { bg, fmt: '#,##0', bold: true }); col++;
     }
-    const t25 = Object.values(c25[m] ?? {}).reduce((s, v) => s + v, 0);
-    const t26 = Object.values(c26[m] ?? {}).reduce((s, v) => s + v, 0);
+    const t25 = Object.values(c_baseline[m] ?? {}).reduce((s, v) => s + v, 0);
+    const t26 = Object.values(c_analysis[m] ?? {}).reduce((s, v) => s + v, 0);
     td(ws.getCell(rowNum, 10), t25, { bg, bold: true, fmt: '#,##0' });
     td(ws.getCell(rowNum, 11), t26, { bg, bold: t26 !== t25, fmt: '#,##0',
       fg: t26 > t25 ? C.GD : t26 < t25 ? C.RD : C.DK,
@@ -198,8 +198,8 @@ module.exports = function build_event_type_by_month(wb, results) {
     const m      = ri + 1;
     const rowNum = sumStart + 2 + ri;
     const bg     = ri % 2 === 0 ? C.LG : C.WH;
-    const t25    = Object.values(c25[m] ?? {}).reduce((s, v) => s + v, 0);
-    const t26    = Object.values(c26[m] ?? {}).reduce((s, v) => s + v, 0);
+    const t25    = Object.values(c_baseline[m] ?? {}).reduce((s, v) => s + v, 0);
+    const t26    = Object.values(c_analysis[m] ?? {}).reduce((s, v) => s + v, 0);
     const varVal = t26 - t25;
     ws.getRow(rowNum).height = 15;
     td(ws.getCell(rowNum, 1), MN[m],   { bg, bold: true, hAlign: 'center' });
@@ -216,8 +216,8 @@ module.exports = function build_event_type_by_month(wb, results) {
   const sumTr = sumStart + 14;
   fillRow(ws, sumTr, C.DK);
   th(ws.getCell(sumTr, 1), 'FULL YEAR', { bg: C.DK, sz: 10 });
-  const tot25 = Object.values(c25).flatMap(o=>Object.values(o)).reduce((s,v)=>s+v,0);
-  const tot26 = Object.values(c26).flatMap(o=>Object.values(o)).reduce((s,v)=>s+v,0);
+  const tot25 = Object.values(c_baseline).flatMap(o=>Object.values(o)).reduce((s,v)=>s+v,0);
+  const tot26 = Object.values(c_analysis).flatMap(o=>Object.values(o)).reduce((s,v)=>s+v,0);
   td(ws.getCell(sumTr, 2), tot25, { bg: C.DK, fg: C.WH, bold: true, fmt: '#,##0' });
   td(ws.getCell(sumTr, 3), tot26, { bg: C.DK, fg: C.WH, bold: true, fmt: '#,##0' });
   td(ws.getCell(sumTr, 4), tot26 - tot25, { bg: C.DK, fg: C.WH, bold: true, fmt: '+#,##0;-#,##0;"—"' });

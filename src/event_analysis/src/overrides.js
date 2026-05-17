@@ -57,15 +57,15 @@ function load_overrides(overrides_path) {
 
 // ── Apply overrides to segments ───────────────────────────────────────────────
 
-function apply_overrides(segments, y25active, y26active, overrides) {
+function apply_overrides(segments, baseline_active, analysis_active, overrides) {
   if (!overrides) return { segments, applied: [], warnings: [] };
 
   const applied  = [];
   const warnings = [];
 
   // Helper: find event by sanction ID
-  const find_25 = sid => y25active.find(e => e.sanctionId === sid || e.sanction_id === sid);
-  const find_26 = sid => y26active.find(e => e.sanctionId === sid || e.sanction_id === sid);
+  const find_25 = sid => baseline_active.find(e => e.sanctionId === sid || e.sanction_id === sid);
+  const find_26 = sid => analysis_active.find(e => e.sanctionId === sid || e.sanction_id === sid);
 
   // Helper: remove an event from all segment arrays
   const remove_from_all = (sid_25, sid_26) => {

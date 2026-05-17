@@ -1,6 +1,6 @@
 /**
  * step_4a_segment_by_month — Two-table segment summary matching reference v9f.
- *   TABLE 1: By year_b month  TABLE 2: By year_a month  SEGMENT KEY
+ *   TABLE 1: By ANALYSIS_YEAR month  TABLE 2: By BASELINE_YEAR month  SEGMENT KEY
  */
 'use strict';
 const { C, fill, font, align, applyBorders, th, td } = require('../styles');
@@ -8,10 +8,10 @@ const MN = {1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',7:'Jul',8:'Aug',9:'S
 
 module.exports = function build_segment_by_month(wb, results) {
   const { segments } = results;
-  const YA = results?.years?.year_a ?? (new Date().getFullYear() - 1);
-  const YB = results?.years?.year_b ?? new Date().getFullYear();
-  const N_A = results?.y25active?.length ?? 0;
-  const N_B = results?.y26active?.length ?? 0;
+  const YA = results?.years?.BASELINE_YEAR ?? (new Date().getFullYear() - 1);
+  const YB = results?.years?.ANALYSIS_YEAR ?? new Date().getFullYear();
+  const N_A = results?.baseline_active?.length ?? 0;
+  const N_B = results?.analysis_active?.length ?? 0;
   const ws = wb.addWorksheet('step_4a_segment_by_month');
   ws.views = [{ state: 'frozen', ySplit: 5 }];
   [14,12,14,12,12,12,3,16,14].forEach((w,i)=>{ ws.getColumn(i+1).width=w; });
