@@ -120,9 +120,13 @@ Three override types are applied after automatic matching:
 
 **Read path:** `src/overrides.js → load_overrides()` is async, year-scoped, and queries the DB for `active = 1` rows matching the current `BASELINE_YEAR` / `ANALYSIS_YEAR` plus any globals (both year columns `NULL`). Unapproved rows still apply but emit a build-time warning.
 
-**Write path:** every `ask.js` CLI command (`--add-override match|no-match|segment`, `--remove-override`) writes the DB directly. `--remove-override` is a soft delete (sets `active = 0`) so the audit trail survives. New rows are tagged `created_by` = `cli` (CLI), `json_migration` (one-time import), or `test_suite` (auto-cleaned). Append `--global` to any `--add-override` to scope NULL/NULL.
+**Write path:** every `ask.js` CLI command (`--add-override match|no-match|segment`, `--remove-override`, `--approve`, `--unapprove`) writes the DB directly. `--remove-override` is a soft delete (sets `active = 0`) so the audit trail survives. New rows are tagged `created_by` = `cli` (CLI), `json_migration` (one-time import), or `test_suite` (auto-cleaned). Append `--global` to any `--add-override` to scope NULL/NULL.
 
-**Schema setup:** `utilities/ensure_overrides_table.js` runs at the top of every build — idempotent `CREATE TABLE IF NOT EXISTS` plus column/index upgrades for the year-scoping migration. `utilities/migrate_overrides_to_db.js` is the one-shot JSON importer; once the JSON has been migrated it's renamed `overrides.json.migrated` and ignored.
+**Approval lifecycle (Step 5):** un-approved overrides apply but emit a build-time warning. `--approve <sid>` flips `approved=1`, sets `approval_state='approved'` + `approved_by` + `approved_at`, and snapshots the current event(s) into `event_signature_baseline` / `event_signature_analysis`. `--unapprove <sid>` clears the approval columns + signatures (audit fields preserved).
+
+**Stale detection (Step 6):** every build, `apply_overrides()` recomputes `{name}|{month}|{type}|{status}` for each event referenced by an approved override and compares to the stored snapshot. On drift it flags the applied record, calls `mark_overrides_stale()` to flip `approval_state='stale'` in the DB, and emits a `⚠ [stale approval]` warning naming the changed fields. `--list-overrides` renders stale rows with a `⚠ stale` badge until re-approval (refreshes the signature) or removal.
+
+**Schema setup:** `utilities/ensure_overrides_table.js` runs at the top of every build — idempotent `CREATE TABLE IF NOT EXISTS` plus column/index upgrades for both year-scoping (Step 2.5) and signature columns (Step 6). `utilities/migrate_overrides_to_db.js` is the one-shot JSON importer; once the JSON has been migrated it's renamed `overrides.json.migrated` and ignored.
 
 The interactive dashboard override editor (over an Express server) is step 7 on the ladder and isn't built yet — manage overrides via `ask.js` for now.
 
@@ -202,10 +206,10 @@ Open `output/dashboard.html` in a browser (a hosted version is on the roadmap as
 | 3. `analysis.js` reads from DB (async, year-scoped, surfaces unapproved warnings) | ✓ done |
 | 3.5. `tests/overrides.test.js` (`node --test tests/`, menu option 19) | ✓ done |
 | **4.** `ask.js` CLI writes to DB (add / remove / list / suggest), `--global` flag, `created_by` provenance | ✓ done |
-| 5. `--approve` / `--unapprove` CLI commands (locks segment + match, stops build-time warnings) | pending |
-| 6. Stale-approval detection at build time (flag if underlying events change after approval) | pending |
+| **5.** `--approve` / `--unapprove` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, captures event signatures. Unapprove clears approval + signatures (keeps audit fields). | ✓ done |
+| **6.** Stale-approval detection. `apply_overrides()` recomputes event signatures and compares to stored snapshot; on drift the build flips `approval_state='stale'`, emits `⚠ [stale approval]` warning, and `--list-overrides` renders the row with a `⚠ stale` badge. | ✓ done |
 | 7. Minimal Express server with read-only endpoints (`GET /overrides`, `GET /events`) | pending |
-| 8. Write endpoints + cascade rules engine + Approve/Unapprove API | pending |
+| 8. Write endpoints + Approve/Unapprove API (wraps the existing cmd_approve/cmd_unapprove) | pending |
 | 9. Interactive event-detail dashboard — edit and approve overrides in browser | pending |
 | 10. Cascade rules engine — pattern-based overrides ("all clinics in May named X → Lost") | pending |
 

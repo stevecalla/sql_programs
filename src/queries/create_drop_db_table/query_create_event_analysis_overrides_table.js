@@ -25,6 +25,13 @@ const lifecycle_fields = `
   approval_state ENUM('approved', 'stale', 'revoked') NULL,
   approved_by VARCHAR(128) NULL,
   approved_at DATETIME NULL,
+  -- Snapshots of the targeted events at approval time. Used by step-6 stale
+  -- detection: at build time we recompute these from the current event state
+  -- and compare; a mismatch flips approval_state to 'stale'.
+  -- Format: \`{name}|{month}|{type}|{status}\` (pipe-delimited, human-readable
+  -- for debugging — short enough that a hash isn't worth the indirection).
+  event_signature_baseline VARCHAR(255) NULL,
+  event_signature_analysis VARCHAR(255) NULL,
 `;
 
 const audit_fields = `

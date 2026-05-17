@@ -127,6 +127,25 @@ async function ensure_overrides_table({ silent = false } = {}) {
       upgrades.push('+ index idx_year_pair');
     }
 
+    // ── Step 6: stale-approval signature columns ──────────────────────────
+    // Approve captures `{name}|{month}|{type}|{status}` for each side. The
+    // build recomputes these from current event state; a mismatch flips
+    // approval_state to 'stale' and emits a warning.
+    if (!await column_exists(conn, cfg.database, TABLE_NAME, 'event_signature_baseline')) {
+      await conn.query(
+        `ALTER TABLE \`${TABLE_NAME}\`
+           ADD COLUMN event_signature_baseline VARCHAR(255) NULL AFTER approved_at`
+      );
+      upgrades.push('+ column event_signature_baseline');
+    }
+    if (!await column_exists(conn, cfg.database, TABLE_NAME, 'event_signature_analysis')) {
+      await conn.query(
+        `ALTER TABLE \`${TABLE_NAME}\`
+           ADD COLUMN event_signature_analysis VARCHAR(255) NULL AFTER event_signature_baseline`
+      );
+      upgrades.push('+ column event_signature_analysis');
+    }
+
     if (upgrades.length && !silent) {
       console.log(`  ✓ Year-scoping upgrade applied: ${upgrades.join(', ')}`);
     }

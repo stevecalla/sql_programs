@@ -441,8 +441,8 @@ Overrides live in `usat_sales_db.event_analysis_overrides`. The runtime — both
 | **2.5.** Year scoping — `event_analysis_overrides` carries `baseline_year` + `analysis_year` columns so overrides apply only to the matching year-pair. `ensure_overrides_table()` adds the columns + `idx_year_pair` index idempotently if missing and backfills existing rows from current build env vars. | ✓ done |
 | **3.** `analysis.js` reads overrides from the DB. `src/overrides.js` `load_overrides()` is now async and queries `event_analysis_overrides` filtered by year scope (NULL/NULL globals + matching baseline/analysis pair). `runAnalysis()` is async; `build_all.js` and `ask.js` `await` it. Unapproved overrides emit a build-time warning but still apply. | ✓ done |
 | **4.** `ask.js` CLI commands write to the DB. `--add-override match / no-match / segment` and `--remove-override` all read/write `event_analysis_overrides` directly (year-scoped by env vars; pass `--global` to scope NULL/NULL). New rows are tagged `created_by='cli'`. `--remove-override` is a soft delete (`active = 0`) so the audit trail survives. `--suggest-overrides` reads the DB to de-dup against existing overrides instead of the (now retired) JSON file. | ✓ done |
-| 5. Add `--approve` / `--unapprove` CLI commands (locks segment + match) | pending |
-| 6. Stale-approval detection at build time | pending |
+| **5.** `--approve <sid>` / `--unapprove <sid>` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, and captures `event_signature_{baseline,analysis}` snapshots of the current event state. Unapprove clears the approval columns + signatures (keeps `approved_by`/`approved_at` for audit). Build's unapproved-warning falls silent once a row is approved. | ✓ done |
+| **6.** Stale-approval detection at build time. `apply_overrides()` recomputes event signatures and compares to the stored snapshot; on drift it flags `applied[].stale = true`, returns the override id in `stale_ids`, and the build calls `mark_overrides_stale()` to flip `approval_state='stale'` in the DB. Build emits a per-row `⚠ [stale approval]` warning showing what drifted (`baseline "Old"→"New"`). `--list-overrides` renders stale rows with `⚠ stale`. Re-approve via `--approve` refreshes the signature; unapprove clears it. | ✓ done |
 | 7. Minimal Express server + interactive override editing in the dashboard | pending |
 
 The DB is now the single source of truth for overrides. `data/overrides.json` is no longer read or written by the runtime — only the one-time migration script touches it, and it renames the file to `overrides.json.migrated` once entries are imported. You should never need to edit JSON by hand again.
@@ -522,6 +522,13 @@ node ask.js --add-override segment analysis <sid> New "optional note"
 # audit trail in the table is preserved)
 node ask.js --remove-override <sid>
 
+# Approve all active overrides for a sanction ID. Silences the build's
+# unapproved-warning and captures event signatures for stale detection.
+node ask.js --approve <sid>
+
+# Clear approval state + captured signatures (audit fields preserved)
+node ask.js --unapprove <sid>
+
 # Ask Claude to suggest likely missed matches (AI-powered, streaming).
 # Already-overridden sanction IDs are filtered out by reading the DB.
 node ask.js --suggest-overrides
@@ -550,7 +557,70 @@ ANALYSIS_YEAR=2025 BASELINE_YEAR=2024 node ask.js --add-override no-match baseli
 
 #### Provenance
 
-Every new row records who wrote it via `created_by`: `cli` for `ask.js` commands, `json_migration` for the one-time JSON import, `test_suite` for `tests/overrides.test.js` (cleaned up automatically). Useful for future audit queries and for the upcoming approval workflow.
+Every new row records who wrote it via `created_by`: `cli` for `ask.js` commands, `json_migration` for the one-time JSON import, `test_suite` for `tests/overrides.test.js` (cleaned up automatically). Useful for audit queries.
+
+### Approval workflow
+
+Newly-added overrides start un-approved. The build still applies them, but emits a warning:
+
+```
+⚠ 3 override(s) are unapproved (still applied; approve via ask.js).
+```
+
+To silence the warning, approve the override:
+
+```bash
+node ask.js --approve <sid>
+```
+
+Approve does three things atomically:
+
+1. Sets `approved = 1`, `approval_state = 'approved'`, `approved_by = 'cli'`, `approved_at = NOW()`.
+2. Fetches the current event(s) for `sid_baseline` and/or `sid_analysis` from `usat_sales_db`.
+3. Captures a signature of the current event state into `event_signature_baseline` / `event_signature_analysis`. Format: `{name}|{month}|{type}|{status}`.
+
+To withdraw approval (e.g. before re-running the matcher):
+
+```bash
+node ask.js --unapprove <sid>
+```
+
+Unapprove clears the approval columns and signatures. The audit fields `approved_by` and `approved_at` are kept so you can see who last touched the row and when.
+
+### Stale-approval detection (Step 6)
+
+The signatures captured at approval time let the build detect when the underlying events have drifted since approval. On every build, `apply_overrides()` recomputes each event's signature from the current `usat_sales_db` data and compares to the stored snapshot.
+
+If they differ, the build emits:
+
+```
+⚠ [stale approval] override #42 (310628-Adult Race) is stale: baseline "Old Name|7|Adult Race|Active" → "New Name|7|Adult Race|Active"
+```
+
+…and flips `approval_state` to `'stale'` in the DB. `--list-overrides` renders these rows with a `⚠ stale` badge instead of `✓ approved`. Until the analyst either re-approves (refreshes the signature) or removes the override, the warning keeps firing on every build.
+
+What counts as "drift": any change in **name**, **start month**, **event type**, or **status** of either event. Renaming a clinic, changing its month, or marking it `CANCELLED` will all trigger stale state.
+
+What doesn't count: changes to fields outside the signature (registration URL, organiser, race count). These can churn without triggering re-approval.
+
+### Override lifecycle
+
+```
+[ add (unapproved) ]           --add-override ...
+        │ build emits ⚠ unapproved warning
+        ▼
+[ approve (snapshots captured) ] --approve <sid>
+        │ build is quiet
+        ▼
+[ event drifts upstream ]
+        │ build emits ⚠ stale approval warning
+        │ DB row flipped to approval_state='stale'
+        ▼
+[ re-approve OR remove ]       --approve <sid>  (or --remove-override <sid>)
+        │
+        ▼
+[ approved again | inactive ]
+```
 
 ### AI-powered suggestions
 

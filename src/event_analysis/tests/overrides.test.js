@@ -34,12 +34,20 @@ const mysqlP = require('mysql2/promise');
 const { local_usat_sales_db_config }    = require('../../../utilities/config');
 const { ensure_overrides_table }        = require('../utilities/ensure_overrides_table');
 const { migrate_overrides_json_to_db }  = require('../utilities/migrate_overrides_to_db');
-const { load_overrides, apply_overrides, summarise_overrides } = require('../src/overrides');
+const {
+  load_overrides,
+  apply_overrides,
+  summarise_overrides,
+  mark_overrides_stale,
+  compute_event_signature,
+} = require('../src/overrides');
 const {
   cmd_add_match,
   cmd_add_no_match,
   cmd_add_segment,
   cmd_remove_override,
+  cmd_approve,
+  cmd_unapprove,
   current_year_scope,
   year_arg_to_column,
 } = require('../ask');
@@ -124,6 +132,8 @@ describe('Step 1 — event_analysis_overrides schema', () => {
       'id', 'override_type', 'baseline_year', 'analysis_year',
       'sid_baseline', 'sid_analysis', 'segment', 'note',
       'active', 'approved', 'approval_state', 'approved_by', 'approved_at',
+      // Step 6 — stale-detection signature columns
+      'event_signature_baseline', 'event_signature_analysis',
       'created_at', 'created_by', 'updated_at',
     ];
     for (const r of required) {
@@ -627,7 +637,305 @@ describe('Step 4 — ask.js CLI write-path', () => {
 
     await cmd_remove_override('STEP4-GBL-RM');
 
-    const [rows] = await c.query(`SELECT active FROM \`${TABLE}\` WHERE id = ?`, [global_id]);
+    const [rows] = await c.query(`SELECT active FROM `+'`'+`${TABLE}`+'`'+` WHERE id = ?`, [global_id]);
     assert.equal(rows[0].active, 0, 'global row matching the sid should be deactivated');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Step 5 — Approval CLI commands
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// cmd_approve fetches the current event lists from usat_sales_db so it can
+// capture signatures at approval time. Tests insert override rows that point
+// at fake sids (STEP5-*) — those won't be found in the real events table, so
+// signatures stay NULL but the approval flags still flip. That's the
+// documented "missing_events" path and lets the tests stay independent of
+// whatever real data happens to be in the events table today.
+
+describe('Step 5 — Approval CLI', () => {
+
+  const ORIG_BASELINE = process.env.BASELINE_YEAR;
+  const ORIG_ANALYSIS = process.env.ANALYSIS_YEAR;
+  const ORIG_LOG  = console.log;
+  const ORIG_ERR  = console.error;
+  const ORIG_WARN = console.warn;
+  const noop = () => {};
+
+  before(() => {
+    process.env.BASELINE_YEAR = '2025';
+    process.env.ANALYSIS_YEAR = '2026';
+    console.log = noop;
+    console.error = noop;
+    console.warn = noop;
+  });
+
+  after(() => {
+    if (ORIG_BASELINE === undefined) delete process.env.BASELINE_YEAR; else process.env.BASELINE_YEAR = ORIG_BASELINE;
+    if (ORIG_ANALYSIS === undefined) delete process.env.ANALYSIS_YEAR; else process.env.ANALYSIS_YEAR = ORIG_ANALYSIS;
+    console.log = ORIG_LOG;
+    console.error = ORIG_ERR;
+    console.warn = ORIG_WARN;
+  });
+
+  beforeEach(async () => {
+    await cleanup_test_rows();
+  });
+
+  test('cmd_approve flips approved + approval_state + approved_by + approved_at', async () => {
+    const id = await insert_test_row({
+      override_type: 'force_no_match',
+      sid_baseline:  'STEP5-APR-1',
+      baseline_year: 2025, analysis_year: 2026,
+      approved: 0,
+    });
+
+    const r = await cmd_approve('STEP5-APR-1');
+    assert.equal(r.approved, 1, 'cmd_approve should report 1 row approved');
+
+    const c = await db();
+    const [rows] = await c.query(
+      'SELECT approved, approval_state, approved_by, approved_at FROM `' + TABLE + '` WHERE id = ?',
+      [id]
+    );
+    assert.equal(rows[0].approved,       1,         'approved should flip to 1');
+    assert.equal(rows[0].approval_state, 'approved','approval_state should be "approved"');
+    assert.equal(rows[0].approved_by,    'cli',     'approved_by should default to "cli"');
+    assert.ok(rows[0].approved_at !== null,         'approved_at should be set');
+  });
+
+  test('cmd_approve on missing sid is a no-op', async () => {
+    const r = await cmd_approve('STEP5-DOES-NOT-EXIST');
+    assert.equal(r.approved, 0, 'no rows should be approved for an unknown sid');
+  });
+
+  test('cmd_unapprove clears approved + approval_state + signatures (keeps audit fields)', async () => {
+    // Hand-craft an already-approved row with signatures captured.
+    const c = await db();
+    const [insert] = await c.query(
+      'INSERT INTO `' + TABLE + '` ' +
+      '(override_type, sid_baseline, baseline_year, analysis_year, note, approved, approval_state, approved_by, approved_at, event_signature_baseline, created_by, active) ' +
+      'VALUES (?, ?, ?, ?, ?, 1, ?, ?, NOW(), ?, ?, 1)',
+      ['force_no_match', 'STEP5-UNAPR-1', 2025, 2026, 'pre-approved', 'approved', 'cli', 'old-sig|6|Adult Race|Active', TEST_TAG]
+    );
+    const id = insert.insertId;
+
+    const r = await cmd_unapprove('STEP5-UNAPR-1');
+    assert.equal(r.unapproved, 1, 'one row should be unapproved');
+
+    const [rows] = await c.query(
+      'SELECT approved, approval_state, event_signature_baseline, approved_by, approved_at FROM `' + TABLE + '` WHERE id = ?',
+      [id]
+    );
+    assert.equal(rows[0].approved,                 0,    'approved should reset to 0');
+    assert.equal(rows[0].approval_state,           null, 'approval_state should clear');
+    assert.equal(rows[0].event_signature_baseline, null, 'signature should clear');
+    // Audit trail preserved
+    assert.equal(rows[0].approved_by,              'cli','approved_by retained as audit');
+    assert.ok   (rows[0].approved_at !== null,           'approved_at retained as audit');
+  });
+
+  test('cmd_unapprove on missing sid is a no-op', async () => {
+    const r = await cmd_unapprove('STEP5-NOPE');
+    assert.equal(r.unapproved, 0);
+  });
+
+  test('approve → unapprove → re-approve round-trips cleanly', async () => {
+    const id = await insert_test_row({
+      override_type: 'force_no_match',
+      sid_baseline:  'STEP5-RT',
+      baseline_year: 2025, analysis_year: 2026,
+    });
+    const c = await db();
+
+    await cmd_approve('STEP5-RT');
+    const [after_a] = await c.query('SELECT approved, approval_state FROM `' + TABLE + '` WHERE id = ?', [id]);
+    assert.equal(after_a[0].approved, 1);
+    assert.equal(after_a[0].approval_state, 'approved');
+
+    await cmd_unapprove('STEP5-RT');
+    const [after_u] = await c.query('SELECT approved, approval_state FROM `' + TABLE + '` WHERE id = ?', [id]);
+    assert.equal(after_u[0].approved, 0);
+    assert.equal(after_u[0].approval_state, null);
+
+    await cmd_approve('STEP5-RT');
+    const [after_a2] = await c.query('SELECT approved, approval_state FROM `' + TABLE + '` WHERE id = ?', [id]);
+    assert.equal(after_a2[0].approved, 1);
+    assert.equal(after_a2[0].approval_state, 'approved');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Step 6 — Stale-approval detection
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Pure-function tests for apply_overrides(): we hand-craft events and
+// overrides with mismatched signatures and verify the stale_ids array, the
+// stale_warnings, and the applied[].stale flag. Then a DB test confirms
+// mark_overrides_stale() actually flips approval_state.
+
+describe('Step 6 — Stale-approval detection', () => {
+
+  // ── compute_event_signature helper ──────────────────────────────────────
+
+  test('compute_event_signature renders `{name}|{month}|{type}|{status}`', () => {
+    const e = { name: 'Test Race', month: 7, type: 'Adult Race', status: 'Active' };
+    assert.equal(compute_event_signature(e), 'Test Race|7|Adult Race|Active');
+  });
+
+  test('compute_event_signature returns null for missing event', () => {
+    assert.equal(compute_event_signature(null), null);
+    assert.equal(compute_event_signature(undefined), null);
+  });
+
+  // ── apply_overrides stale detection ────────────────────────────────────
+
+  function make_event(sid, month, name = 'Test Event', type = 'Adult Race', status = 'Active') {
+    return { sanctionId: sid, month, name, type, status };
+  }
+  const empty_segments = () => ({ retained: [], shifted: [], attrited: [], new: [], recovered: [], triedToReturn: [] });
+
+  test('approved override with matching signature is NOT stale', () => {
+    const e25 = make_event('SIG-OK-25', 6, 'Same Name');
+    const e26 = make_event('SIG-OK-26', 6, 'Same Name');
+    const overrides = {
+      force_match: [{
+        id: 101,
+        sid_baseline: 'SIG-OK-25', sid_analysis: 'SIG-OK-26',
+        approved: true,
+        event_signature_baseline: compute_event_signature(e25),
+        event_signature_analysis: compute_event_signature(e26),
+      }],
+      force_no_match: [], force_segment: [],
+    };
+    const { applied, stale_ids, stale_warnings } = apply_overrides(empty_segments(), [e25], [e26], overrides);
+    assert.equal(applied.length, 1);
+    assert.equal(applied[0].stale, undefined, 'matching signature → no stale flag');
+    assert.deepEqual(stale_ids, [],            'no stale ids');
+    assert.deepEqual(stale_warnings, [],       'no stale warnings');
+  });
+
+  test('approved override with drifted signature IS stale', () => {
+    const e25 = make_event('SIG-DRIFT-25', 6, 'New Name');   // was "Old Name"
+    const e26 = make_event('SIG-DRIFT-26', 6, 'Same Name');
+    const overrides = {
+      force_match: [{
+        id: 202,
+        sid_baseline: 'SIG-DRIFT-25', sid_analysis: 'SIG-DRIFT-26',
+        approved: true,
+        event_signature_baseline: 'Old Name|6|Adult Race|Active',   // stored at approve time
+        event_signature_analysis: compute_event_signature(e26),
+      }],
+      force_no_match: [], force_segment: [],
+    };
+    const { applied, stale_ids, stale_warnings } = apply_overrides(empty_segments(), [e25], [e26], overrides);
+    assert.equal(applied[0].stale, true,       'applied record should be tagged stale');
+    assert.deepEqual(stale_ids, [202],         'stale id captured');
+    assert.equal(stale_warnings.length, 1,     'one warning per stale override');
+    assert.match(stale_warnings[0], /Old Name/, 'warning should mention the stored value');
+    assert.match(stale_warnings[0], /New Name/, 'warning should mention the fresh value');
+  });
+
+  test('un-approved override is never stale (no baseline to drift from)', () => {
+    const e25 = make_event('SIG-UN-25', 6, 'Whatever');
+    const e26 = make_event('SIG-UN-26', 6, 'Whatever');
+    const overrides = {
+      force_match: [{
+        id: 303,
+        sid_baseline: 'SIG-UN-25', sid_analysis: 'SIG-UN-26',
+        approved: false,
+        event_signature_baseline: 'something-else|9|Youth Race|Active',
+        event_signature_analysis: null,
+      }],
+      force_no_match: [], force_segment: [],
+    };
+    const { applied, stale_ids } = apply_overrides(empty_segments(), [e25], [e26], overrides);
+    assert.equal(applied[0].stale, undefined, 'un-approved → never stale');
+    assert.deepEqual(stale_ids, []);
+  });
+
+  test('approved override with NULL stored signatures is NOT stale (first build after approve)', () => {
+    // cmd_approve always captures, but mid-migration rows or future force_no_match
+    // entries on a vanished event can have NULL signatures. Document that this
+    // path doesn't false-positive.
+    const e25 = make_event('SIG-NULL-25', 6, 'Whatever');
+    const overrides = {
+      force_no_match: [{
+        id: 404,
+        sid_baseline: 'SIG-NULL-25',
+        approved: true,
+        event_signature_baseline: null,
+        event_signature_analysis: null,
+      }],
+      force_match: [], force_segment: [],
+    };
+    const { stale_ids } = apply_overrides(empty_segments(), [e25], [], overrides);
+    assert.deepEqual(stale_ids, [], 'NULL sigs → no comparison → no stale');
+  });
+
+  test('force_no_match drift on baseline side is detected', () => {
+    // Only the baseline side has an event for force_no_match; only that
+    // signature should be compared.
+    const e25 = make_event('SIG-NM-25', 7, 'Renamed');
+    const overrides = {
+      force_no_match: [{
+        id: 505,
+        sid_baseline: 'SIG-NM-25',
+        approved: true,
+        event_signature_baseline: 'Original|7|Adult Race|Active',
+        event_signature_analysis: null,
+      }],
+      force_match: [], force_segment: [],
+    };
+    const { stale_ids, stale_warnings } = apply_overrides(empty_segments(), [e25], [], overrides);
+    assert.deepEqual(stale_ids, [505]);
+    assert.match(stale_warnings[0], /Original/);
+    assert.match(stale_warnings[0], /Renamed/);
+  });
+
+  // ── mark_overrides_stale (DB integration) ──────────────────────────────
+
+  test('mark_overrides_stale flips approval_state on listed ids', async () => {
+    const c = await db();
+    // Insert two approved rows; we'll mark one as stale.
+    const [r1] = await c.query(
+      'INSERT INTO `' + TABLE + '` ' +
+      '(override_type, sid_baseline, baseline_year, analysis_year, approved, approval_state, created_by, active) ' +
+      'VALUES (?, ?, ?, ?, 1, ?, ?, 1)',
+      ['force_no_match', 'STEP6-STALE-1', 2025, 2026, 'approved', TEST_TAG]
+    );
+    const [r2] = await c.query(
+      'INSERT INTO `' + TABLE + '` ' +
+      '(override_type, sid_baseline, baseline_year, analysis_year, approved, approval_state, created_by, active) ' +
+      'VALUES (?, ?, ?, ?, 1, ?, ?, 1)',
+      ['force_no_match', 'STEP6-STALE-2', 2025, 2026, 'approved', TEST_TAG]
+    );
+
+    const result = await mark_overrides_stale([r1.insertId], { silent: true });
+    assert.equal(result.updated, 1);
+
+    const [row1] = await c.query('SELECT approval_state FROM `' + TABLE + '` WHERE id = ?', [r1.insertId]);
+    const [row2] = await c.query('SELECT approval_state FROM `' + TABLE + '` WHERE id = ?', [r2.insertId]);
+    assert.equal(row1[0].approval_state, 'stale',    'listed id should be marked stale');
+    assert.equal(row2[0].approval_state, 'approved', 'un-listed id should be untouched');
+  });
+
+  test('mark_overrides_stale with empty array is a no-op', async () => {
+    const result = await mark_overrides_stale([], { silent: true });
+    assert.equal(result.updated, 0);
+  });
+
+  test('mark_overrides_stale skips inactive or un-approved rows', async () => {
+    const c = await db();
+    const [r] = await c.query(
+      'INSERT INTO `' + TABLE + '` ' +
+      '(override_type, sid_baseline, baseline_year, analysis_year, approved, approval_state, created_by, active) ' +
+      'VALUES (?, ?, ?, ?, 0, NULL, ?, 1)',
+      ['force_no_match', 'STEP6-UNAPR', 2025, 2026, TEST_TAG]
+    );
+    const result = await mark_overrides_stale([r.insertId], { silent: true });
+    assert.equal(result.updated, 0, 'un-approved rows are skipped by the WHERE clause');
+    const [row] = await c.query('SELECT approval_state FROM `' + TABLE + '` WHERE id = ?', [r.insertId]);
+    assert.equal(row[0].approval_state, null, 'state should remain NULL on un-approved row');
   });
 });

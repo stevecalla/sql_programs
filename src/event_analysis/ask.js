@@ -400,7 +400,7 @@ Behavior rules:
 
 const mysqlP = require('mysql2/promise');
 const { local_usat_sales_db_config } = require('../../utilities/config');
-const { load_overrides } = require('./src/overrides');
+const { load_overrides, compute_event_signature } = require('./src/overrides');
 
 const VALID_SEGMENTS = ['Retained','Shifted','Lost','New','Recovered','Tried to Return'];
 const OV_TABLE = 'event_analysis_overrides';
@@ -466,7 +466,16 @@ async function cmd_list_overrides() {
   const scope_label = r => (r.baseline_year === null && r.analysis_year === null)
     ? '[global]'
     : `[${r.baseline_year}/${r.analysis_year}]`;
-  const approval_label = r => r.approved ? '✓ approved' : '◦ unapproved';
+  // Three states the list-output needs to distinguish:
+  //   unapproved      — never approved (or unapproved later)
+  //   ✓ approved     — approved and the underlying events haven't drifted
+  //   ⚠ stale         — approved, but the build detected event drift
+  // approval_state = 'stale' is set by build_all.js via mark_overrides_stale().
+  const approval_label = r => {
+    if (r.approval_state === 'stale') return '⚠ stale';
+    if (r.approved) return '✓ approved';
+    return '◦ unapproved';
+  };
 
   if (fm.length) {
     console.log(`Force matches (${fm.length}):`);
@@ -673,6 +682,133 @@ async function cmd_remove_override(sid) {
   if (!removed) { console.log(`  No active override found for: ${sid} (scope: ${baseline_year} vs ${analysis_year} + globals)`); return; }
   console.log(`✓ Soft-deleted ${removed} override row(s) for: ${sid}  (set active=0)`);
   console.log('  Run: node build_all.js   to apply\n');
+}
+
+// ── Approval commands (Step 5) ─────────────────────────────────────────────
+//
+// Approval has three intertwined effects on a row:
+//   1. flips `approved = 1` so the build no longer warns about it
+//   2. records `approval_state = 'approved'`, `approved_by`, `approved_at`
+//   3. captures `event_signature_{baseline,analysis}` — a snapshot of the
+//      current event state. The next build compares fresh signatures against
+//      these; a mismatch flips approval_state to 'stale' (Step 6).
+//
+// `cmd_approve` therefore needs to look up the current events to capture the
+// signatures. It uses the same DB-backed loader build_all.js uses.
+
+async function _fetch_signatures_for_override(row, events_baseline, events_analysis) {
+  // Map sids → fresh event signature. Either side may be null/missing if the
+  // override only targets one side (force_no_match) or the event has been
+  // removed entirely since approval was granted (signature stays NULL → no
+  // false-positive "stale" on a vanished event; the matcher already flags it
+  // as a separate warning).
+  const find = (rows, sid) => sid ? rows.find(e => e.sanctionId === sid || e.sanction_id === sid) : null;
+  const e_b = find(events_baseline ?? [], row.sid_baseline);
+  const e_a = find(events_analysis ?? [], row.sid_analysis);
+  return {
+    sig_baseline: e_b ? compute_event_signature(e_b) : null,
+    sig_analysis: e_a ? compute_event_signature(e_a) : null,
+  };
+}
+
+async function cmd_approve(sid, { approved_by = 'cli' } = {}) {
+  if (!sid) { console.error('Usage: --approve <sanction_id>'); process.exit(1); }
+
+  // Look up the current events so we can capture signatures at approval time.
+  // Loaded lazily because this is the only command path that needs them.
+  const { fetch_events_for_years } = require('./src/db');
+  const { loadBothYearsFromRows } = require('./src/loader');
+  const { baseline_year, analysis_year } = current_year_scope();
+  const events_by_year = await fetch_events_for_years([baseline_year, analysis_year]);
+  const { baseline_active, analysis_active } = loadBothYearsFromRows(
+    events_by_year[baseline_year], events_by_year[analysis_year]
+  );
+
+  const result = await with_db(async conn => {
+    // Pull every active override targeting this sid in scope+globals.
+    const [rows] = await conn.query(
+      `SELECT id, override_type, sid_baseline, sid_analysis, baseline_year, analysis_year
+         FROM \`${OV_TABLE}\`
+        WHERE active = 1
+          AND (sid_baseline = ? OR sid_analysis = ?)
+          AND (
+                (baseline_year IS NULL AND analysis_year IS NULL)
+             OR (baseline_year = ? AND analysis_year = ?)
+          )`,
+      [sid, sid, baseline_year, analysis_year]
+    );
+    if (rows.length === 0) return { approved: 0, missing_events: [] };
+
+    let updated = 0;
+    const missing_events = [];
+    for (const r of rows) {
+      const { sig_baseline, sig_analysis } = await _fetch_signatures_for_override(
+        r, baseline_active, analysis_active
+      );
+      // Warn (but don't abort) if a side that was supposed to have an event
+      // doesn't — usually means the event was renamed past recognition or
+      // deleted. The override still gets approved; the build will surface
+      // the disconnect via its own warning chain.
+      if (r.sid_baseline && !sig_baseline) missing_events.push(`baseline sid "${r.sid_baseline}"`);
+      if (r.sid_analysis && !sig_analysis) missing_events.push(`analysis sid "${r.sid_analysis}"`);
+
+      await conn.query(
+        `UPDATE \`${OV_TABLE}\`
+            SET approved = 1,
+                approval_state = 'approved',
+                approved_by = ?,
+                approved_at = NOW(),
+                event_signature_baseline = ?,
+                event_signature_analysis = ?
+          WHERE id = ?`,
+        [approved_by, sig_baseline, sig_analysis, r.id]
+      );
+      updated++;
+    }
+    return { approved: updated, missing_events };
+  });
+
+  if (!result.approved) {
+    console.log(`  No active override found for: ${sid} (scope: ${baseline_year} vs ${analysis_year} + globals)`);
+    return result;
+  }
+  console.log(`✓ Approved ${result.approved} override row(s) for: ${sid}`);
+  if (result.missing_events.length) {
+    console.warn(`  ⚠ Could not capture signature for: ${result.missing_events.join(', ')} (event not found in current pull)`);
+  }
+  console.log('  Run: node build_all.js   to verify\n');
+  return result;
+}
+
+async function cmd_unapprove(sid) {
+  if (!sid) { console.error('Usage: --unapprove <sanction_id>'); process.exit(1); }
+
+  const { baseline_year, analysis_year } = current_year_scope();
+  const updated = await with_db(async conn => {
+    // Clear approval state and signatures; keep approved_by / approved_at as
+    // historical audit ("who last touched this and when"). Next approve
+    // overwrites them.
+    const [r] = await conn.query(
+      `UPDATE \`${OV_TABLE}\`
+          SET approved = 0,
+              approval_state = NULL,
+              event_signature_baseline = NULL,
+              event_signature_analysis = NULL
+        WHERE active = 1
+          AND (sid_baseline = ? OR sid_analysis = ?)
+          AND (
+                (baseline_year IS NULL AND analysis_year IS NULL)
+             OR (baseline_year = ? AND analysis_year = ?)
+          )`,
+      [sid, sid, baseline_year, analysis_year]
+    );
+    return r.affectedRows;
+  });
+
+  if (!updated) { console.log(`  No active override found for: ${sid} (scope: ${baseline_year} vs ${analysis_year} + globals)`); return { unapproved: 0 }; }
+  console.log(`✓ Unapproved ${updated} override row(s) for: ${sid}  (cleared approval state + signatures)`);
+  console.log('  Run: node build_all.js   to verify\n');
+  return { unapproved: updated };
 }
 
 async function cmd_suggest_overrides() {
@@ -900,7 +1036,15 @@ async function main() {
   }
 
   if (args[0] === '--remove-override') {
-    cmd_remove_override(args[1]); return;
+    await cmd_remove_override(args[1]); return;
+  }
+
+  if (args[0] === '--approve') {
+    await cmd_approve(args[1]); return;
+  }
+
+  if (args[0] === '--unapprove') {
+    await cmd_unapprove(args[1]); return;
   }
 
   if (args[0] === '--suggest-overrides') {
@@ -970,10 +1114,13 @@ Usage: node ask.js "<question>" [options]
                                     Prevent an event from matching (→ Lost or New)
   --add-override segment <25|26> <sid> <segment> ["note"]
                                     Override segment (Retained|Shifted|Lost|New|...)
-  --remove-override <sid>           Remove all overrides for a sanction ID
+  --remove-override <sid>           Remove all overrides for a sanction ID (soft-delete)
+  --approve <sid>                   Approve overrides for a sid — silences build warnings
+                                    and captures event signatures for stale-detection
+  --unapprove <sid>                 Clear approval + signatures for a sid
   --suggest-overrides               Ask Claude to suggest likely missed matches (AI)
 
-After any --add-override or --remove-override, run: node build_all.js
+After any --add-override / --remove-override / --approve / --unapprove, run: node build_all.js
 
 ── Examples ──────────────────────────────────────────
   node ask.js "Why did Adult Clinic decline so much?"
@@ -987,6 +1134,8 @@ After any --add-override or --remove-override, run: node build_all.js
   node ask.js --add-override no-match 25 311157-Adult\\ Race "Confirmed permanently cancelled"
   node ask.js --add-override segment 25 310379-Adult\\ Race Lost "Algorithm matched incorrectly"
   node ask.js --remove-override 311157-Adult\\ Race
+  node ask.js --approve 310628-Adult\\ Race
+  node ask.js --unapprove 310628-Adult\\ Race
 
 Context loaded automatically:
   output/analysis_results.json  output/commentary.json  notes.md  output/archive/
@@ -1035,6 +1184,8 @@ module.exports = {
   cmd_add_segment,
   cmd_remove_override,
   cmd_list_overrides,
+  cmd_approve,
+  cmd_unapprove,
   current_year_scope,
   year_arg_to_column,
 };

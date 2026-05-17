@@ -8,7 +8,7 @@
 
 const { matchEvents, crossMatch, reclassify } = require('./matcher');
 const { buildCalendarImpact } = require('./calendar');
-const { load_overrides, apply_overrides, summarise_overrides } = require('./overrides');
+const { load_overrides, apply_overrides, summarise_overrides, mark_overrides_stale } = require('./overrides');
 
 const TYPES = ['Adult Race', 'Youth Race', 'Adult Clinic', 'Youth Clinic'];
 const MN    = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
@@ -102,13 +102,24 @@ async function runAnalysis(loaded) {
   const overrides = await load_overrides({ baseline_year, analysis_year });
   let override_summary = null;
   if (overrides && (overrides.force_match.length || overrides.force_no_match.length || overrides.force_segment.length)) {
-    const { applied, warnings } = apply_overrides(segments, baseline_active, analysis_active, overrides);
-    override_summary = summarise_overrides(applied, warnings, overrides.stats);
+    const { applied, warnings, stale_ids, stale_warnings } =
+      apply_overrides(segments, baseline_active, analysis_active, overrides);
+    override_summary = summarise_overrides(applied, warnings, overrides.stats, stale_warnings);
     if (override_summary?.total_applied) {
       console.log(`  Overrides applied: ${override_summary.total_applied} (${applied.map(a => a.type).join(', ')})`);
     }
     if (overrides.stats?.unapproved > 0) {
       console.warn(`  ⚠ ${overrides.stats.unapproved} override(s) are unapproved (still applied; approve via ask.js).`);
+    }
+    // Step 6 — surface stale-approval drift and persist the state to the DB
+    // so list-overrides / dashboard see it without another build pass.
+    if (stale_ids.length > 0) {
+      stale_warnings.forEach(w => console.warn(`  ⚠ [stale approval] ${w}`));
+      try {
+        await mark_overrides_stale(stale_ids, { silent: true });
+      } catch (err) {
+        console.warn(`  ⚠ Failed to persist stale-approval state: ${err.message}`);
+      }
     }
     if (override_summary?.warnings?.length) {
       override_summary.warnings.forEach(w => console.warn(`  [override warning] ${w}`));
