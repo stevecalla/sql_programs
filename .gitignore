@@ -39,8 +39,9 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 
-# MAC
+# MAC / # OS files
 .DS_Store
+Thumbs.db
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
