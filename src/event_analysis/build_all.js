@@ -51,7 +51,7 @@ const { buildDeck } = require('./src/pptx/builder');
 
 // ── Archive + export helpers ──────────────────────────────────────────────────
 
-function archive_outputs(dir, { patterns = [], files = [] } = {}) {
+function archive_outputs(dir, { patterns = [], files = [], keep_last_n = 1 } = {}) {
   if (!fs.existsSync(dir)) return;
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19).replace('T', '_');
   const archive_dir = path.join(dir, 'archive', ts);
@@ -70,8 +70,9 @@ function archive_outputs(dir, { patterns = [], files = [] } = {}) {
     }
   }
 
-  // Copy any exact-path files (e.g. fixed-name artifacts) before the build
-  // overwrites them.
+  // Copy any exact-path files (commentary.json, analysis_*.json, dashboard.html)
+  // BEFORE the build overwrites them in output/. These give the diff report a
+  // prior snapshot to compare against.
   for (const fp of files) {
     if (fs.existsSync(fp)) {
       fs.mkdirSync(archive_dir, { recursive: true });
@@ -81,6 +82,25 @@ function archive_outputs(dir, { patterns = [], files = [] } = {}) {
   }
 
   if (archived > 0) console.log(`  Archived ${archived} prior file(s) to output/archive/${ts}/`);
+
+  // Prune older archive subfolders, keeping only the newest `keep_last_n`.
+  // Only timestamp-named folders are eligible for deletion — anything a
+  // human dropped in there (e.g. `manual_save/`) is left alone.
+  const archive_root = path.join(dir, 'archive');
+  if (fs.existsSync(archive_root)) {
+    const ts_re = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/;
+    const subfolders = fs.readdirSync(archive_root)
+      .filter(name => ts_re.test(name) && fs.statSync(path.join(archive_root, name)).isDirectory())
+      .sort()
+      .reverse();  // newest first (timestamps are ISO-like → lexical sort works)
+    const to_delete = subfolders.slice(keep_last_n);
+    for (const name of to_delete) {
+      fs.rmSync(path.join(archive_root, name), { recursive: true, force: true });
+    }
+    if (to_delete.length) {
+      console.log(`  Pruned ${to_delete.length} older archive folder(s); keeping the ${keep_last_n} most recent.`);
+    }
+  }
 }
 
 function save_json(fp, obj) {
@@ -112,6 +132,14 @@ async function main() {
       /^\d{4}_event_calendar_analysis_.+\.xlsx$/,
       /^\d{4}_event_trends_summary_.+\.pptx$/,
     ],
+    // JSON sidecars copied so the diff report has a prior snapshot.
+    files: [
+      path.join(DIR, 'output', 'commentary.json'),
+      path.join(DIR, 'output', 'analysis_results.json'),
+      path.join(DIR, 'output', 'analysis_state.json'),
+      path.join(DIR, 'output', 'dashboard.html'),
+    ],
+    keep_last_n: 1,
   });
 
   // ── Fetch from usat_sales_db ──────────────────────────────────────────────
