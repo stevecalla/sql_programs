@@ -1,10 +1,12 @@
 # USAT Sanctioned Event Analysis — event_analysis
 
-Generates two outputs from raw CSV event data:
-- **Excel workbook** (`output/2026_event_calendar_analysis_v9f.xlsx`) — 12-tab deep-dive
-- **PowerPoint deck** (`output/event_trends_summary_v3.pptx`) — 8-slide summary
+Generates four outputs from live USAT sanctioned-event data:
+- **Excel workbook** — `output/<year>_event_calendar_analysis_<timestamp>.xlsx` — 12-tab deep-dive
+- **PowerPoint deck** — `output/<year>_event_trends_summary_<timestamp>.pptx` — 8-slide summary with rich speaker notes
+- **HTML dashboard** — `output/dashboard.html` — self-contained interactive charts
+- **JSON state snapshot** — `output/analysis_state.json` — every event, every match, every count (powers consistent AI Q&A)
 
-Everything — data, commentary, slide headers, speaker notes, and Excel narratives — is generated dynamically from the CSV data. With an Anthropic API key, Claude writes all content; without one, a rule-based engine produces equivalent output.
+Data is pulled live from `usat_sales_db.event_data_metrics` at build time (year-over-year, current vs prior). Every number, label, narrative, and speaker note in all four outputs is computed dynamically — no hardcoded months, types, or counts. With an Anthropic API key, Claude writes the editorial commentary; without one, a rule-based engine produces equivalent output following the same template.
 
 ---
 
@@ -17,38 +19,44 @@ event_analysis/
 ├── ask.js                  ← Interactive Q&A + override management
 ├── check.js                ← Data quality + override conflict validation
 ├── package.json
-├── .env                    ← YOUR API KEY GOES HERE (copy from .env.example)
+├── .env                    ← API key + DB credentials (copy from .env.example)
 ├── .env.example            ← Template — safe to commit
 ├── .gitignore
 ├── notes.md                ← Analyst notes + prior context (feeds into Claude)
 ├── README.md
 │
-├── data/                   ← Input CSVs + override file
-│   ├── 2025a_events_051526.csv
-│   ├── 2026_events_051526.csv
-│   ├── 2025_events_by_start_year_by_type.csv
-│   ├── 2026_events_by_start_year_by_type.csv
-│   └── overrides.json          ← Manual matching overrides (edit via ask.js commands)
+├── data/                   ← Override file only (event data now lives in DB)
+│   └── overrides.json
 │
 ├── output/                 ← Generated files (rebuilt each run)
-│   ├── 2026_event_calendar_analysis_v9f.xlsx
-│   ├── event_trends_summary_v3.pptx
-│   ├── dashboard.html          ← Interactive browser dashboard
-│   ├── analysis_results.json   ← Full analysis dataset
-│   ├── commentary.json         ← All generated narrative text
-│   ├── changes.txt             ← Diff vs prior build
-│   └── archive/                ← Previous versions (timestamped automatically)
-│       └── 2026-05-16_143022/
-│           ├── 2026_event_calendar_analysis_v9f.xlsx
-│           └── event_trends_summary_v3.pptx
+│   ├── <year>_event_calendar_analysis_<ts>.xlsx
+│   ├── <year>_event_trends_summary_<ts>.pptx
+│   ├── dashboard.html               ← Interactive browser dashboard
+│   ├── analysis_results.json        ← Summary dataset (used by deck + diff report)
+│   ├── analysis_state.json          ← Full state for AI Q&A (every event + match)
+│   ├── commentary.json              ← All generated narrative text
+│   ├── changes.txt                  ← Diff vs prior build
+│   └── archive/                     ← ONLY the immediately prior build (older runs auto-pruned)
+│       └── 2026-05-17_14-33-46/
+│           ├── <year>_event_calendar_analysis_<ts>.xlsx
+│           ├── <year>_event_trends_summary_<ts>.pptx
+│           ├── commentary.json
+│           ├── analysis_results.json
+│           ├── analysis_state.json
+│           └── dashboard.html
 │
 └── src/
-    ├── loader.js           ← CSV parser
+    ├── fmt.js              ← Unicode formatters (− / — / ≥ / ⚠ / ✓ / full months)
+    ├── db.js               ← usat_sales_db connection + event/pipeline queries
+    ├── loader.js           ← Row → event-object parser (CSV + DB row inputs)
     ├── normalizer.js       ← Event name normalisation + fuzzy matching helpers
     ├── matcher.js          ← 3-pass event matching (exact → fuzzy → cross-match)
-    ├── calendar.js         ← Weekend-day calendar impact calculations
+    ├── calendar.js         ← Weekend-day calendar impact + US holiday lists
     ├── analysis.js         ← Orchestrates matching + segment classification
     ├── commentary.js       ← Dynamic commentary engine (rule-based + Claude AI)
+    ├── dashboard.js        ← Self-contained HTML dashboard generator
+    ├── pptx/
+    │   └── builder.js      ← PowerPoint deck builder (8 slides, fully dynamic)
     └── excel/
         ├── builder.js      ← Assembles all 12 worksheet tabs in order
         ├── styles.js       ← Colour palette + ExcelJS cell helpers
@@ -63,14 +71,40 @@ event_analysis/
 # 1. Install dependencies (once)
 npm install
 
-# 2. Copy env template and add your API key (optional but recommended)
+# 2. Copy env template and add required credentials
 cp .env.example .env
-# Edit .env — paste your key from https://console.anthropic.com/api-keys
+# Edit .env — required keys:
+#   ANTHROPIC_API_KEY=sk-ant-...          (optional; rule-based fallback if omitted)
+#   LOCAL_HOST=...                        (usat_sales_db host)
+#   LOCAL_MYSQL_USER=...
+#   LOCAL_MYSQL_PASSWORD=...
+#   LOCAL_USAT_SALES_DB=usat_sales_db
 
 # 3. Build
 node build_all.js
 # or: npm run build
 ```
+
+---
+
+## Data source — usat_sales_db
+
+All event data is pulled live from the `event_data_metrics` table in `usat_sales_db` via `src/db.js`. Two queries run per build:
+
+1. **Events query** — one row per event for each year (`starts_year_events = YA` and `= YB`), filtered downstream to drop `CANCELLED` / `DECLINED` / `DELETED`.
+2. **Creation pipeline query** — one row per `(creation_year, event_type, creation_month)` bucket for each year. Used by the `step_5_creation_pipeline` Excel sheet and PPT slide 7.
+
+Year selection is controlled by env vars at the call site:
+
+```bash
+# Default: current year vs prior year (derived from new Date())
+node build_all.js
+
+# Specific pair (e.g. when running historical comparisons)
+YEAR_B=2026 YEAR_A=2025 node build_all.js
+```
+
+If the DB is unreachable the build fails fast with a clear error — there is no CSV fallback. To verify the connection without doing a full build, run option **2** (Check data quality) from the menu.
 
 ---
 
@@ -93,8 +127,8 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 1 | Build everything | `node build_all.js` |
 | 2 | Check data quality | `node check.js` |
 | 3 | Open dashboard in browser | Opens `output/dashboard.html` |
-| 4 | Open Excel workbook | Opens `output/2026_event_calendar_analysis_v9f.xlsx` |
-| 5 | Open PowerPoint deck | Opens `output/event_trends_summary_v3.pptx` |
+| 4 | Open Excel workbook | Opens the newest `output/<year>_event_calendar_analysis_*.xlsx` |
+| 5 | Open PowerPoint deck | Opens the newest `output/<year>_event_trends_summary_*.pptx` |
 | **OVERRIDES — event matching** | | |
 | 6 | List active overrides | `node ask.js --list-overrides` |
 | 7 | Suggest overrides (AI) | `node ask.js --suggest-overrides` |
@@ -124,71 +158,83 @@ STEP 0 — Launch the interactive menu (easiest way to do everything)
 
 OR run individual steps manually:
 
-STEP 1 — Drop new CSVs into data/ (skip if CSVs haven't changed)
+STEP 1 — Validate data + DB connectivity
+  node check.js          # or: npm run check  |  menu option 2
+  → Connects to usat_sales_db, fetches events, surfaces duplicates,
+    unexpected statuses, missing months, override conflicts.
 
-STEP 2 — Validate data quality
-  node check.js          # or: npm run check
-  → Fix any errors. Review warnings. Safe to proceed if only warnings.
-
-STEP 3 — Review and manage overrides
+STEP 2 — Review and manage overrides
   node ask.js --list-overrides      # or: menu option 6
-  node ask.js --suggest-overrides   # or: menu option 7          (AI: finds likely missed matches)
+  node ask.js --suggest-overrides   # or: menu option 7   (AI: finds likely missed matches)
   node ask.js --add-override match ...     (add specific overrides if needed)
 
-STEP 4 — Build everything
+STEP 3 — Build everything
   node build_all.js          # or: npm run build  |  menu option 1
   → Outputs: Excel, PowerPoint, HTML dashboard, analysis_results.json,
-             commentary.json, changes.txt, updated notes.md build summary
+             analysis_state.json, commentary.json, changes.txt,
+             updated notes.md build summary
 
-STEP 5 — Review outputs
+STEP 4 — Review outputs
   Open output/dashboard.html in browser for a quick visual check
   Review output/changes.txt to see what shifted vs prior build
-  node ask.js --what-changed    # or: menu option 15              (AI summary of differences)
+  node ask.js --what-changed    # or: menu option 15   (AI summary of differences)
 
-STEP 6 — Ask questions / refine
+STEP 5 — Ask questions / refine
   node ask.js "Your question here"
   node ask.js "Rewrite slide 8 narrative more urgently" --update-commentary slide_8_narrative
   → Then re-run: node build_all.js        (picks up updated commentary)
 
-STEP 7 — Save useful insights
+STEP 6 — Save useful insights
   node ask.js "What to watch next month?" --save-notes
   → Adds answer to notes.md for future context
 ```
 
 ---
 
-## Adding a new year
+## Comparing different years
 
-1. Drop the new CSV files into `data/`
-2. Update the four `csv_*` constants at the top of `build_all.js`
-3. Update the output filename constants (`out_xlsx`, `out_pptx`) if needed
-4. Run `node build_all.js`
+Default behaviour compares the **current year vs prior year**, derived from `new Date()`. So in May 2026 it runs as 2025 vs 2026 automatically.
 
-The prior-year outputs are archived automatically. Year labels, slide headers, worst-month callouts, and calendar table rows all update automatically to match the new data — no manual edits needed.
+To compare a specific year-pair (historical or future), set environment variables at the command line:
+
+```bash
+# Compare 2024 vs 2025
+YEAR_B=2025 YEAR_A=2024 node build_all.js
+
+# Or set just YEAR_B and let YEAR_A default to YEAR_B - 1
+YEAR_B=2025 node build_all.js
+```
+
+The DB queries, output filenames (e.g. `2025_event_calendar_analysis_*.xlsx`), slide headers, worst-month callouts, calendar tables, and all narratives update automatically. **No code edits required.**
 
 ---
 
 ## What is fully dynamic
 
-Every element in both outputs recomputes from the CSVs each run:
+Every element in all four outputs recomputes from the DB each run:
 
 | Element | Dynamic? | Notes |
 |---|---|---|
-| All data tables and numbers | Yes | Computed from CSV |
-| Slide headers and titles | Yes | Uses actual worst months, top type |
-| Year labels ("2025 vs 2026") | Yes | Extracted from CSV filenames |
-| Data as-of date | Yes | Set to today's date at build time |
-| Calendar table rows (slide 4) | Yes | Selects most interesting months |
+| All data tables and numbers | Yes | Pulled from `usat_sales_db.event_data_metrics` |
+| Year labels (`{YA} vs {YB}`) | Yes | Default = current + prior year; env override |
+| Output filenames | Yes | `<year>_<artifact>_<YYYY-MM-DD_HH-MM-SS>.{xlsx,pptx}` |
+| Slide headers and titles | Yes | Names actual worst months and top decliner/grower |
+| Data as-of date | Yes | Build timestamp |
+| Calendar table rows (slide 4) | Yes | Picks the 5 most informative months |
 | Callout box texts | Yes | References actual top decliner/grower |
 | Slide narratives (slides 2–8) | Yes | Rule-based or Claude AI |
-| Speaker notes (all 8 slides) | Yes | Rule-based or Claude AI |
-| Excel Slack bullets | Yes | Rule-based or Claude AI |
-| Excel month narratives | Yes | Rule-based or Claude AI |
-| Excel type insights | Yes | Rule-based or Claude AI |
-| Excel KEY FINDINGS rows | Yes | Rule-based or Claude AI |
-| Excel pipeline findings | Yes | Rule-based or Claude AI |
+| Speaker notes (all 8 slides) | Yes | Structured with sections (Context / Key message / Methodology / Talking point / Two-speed action plan / Holiday lists) — rule-based or Claude AI |
+| Excel Slack bullets | Yes | Pattern: `<headline metric>. <interpretive sentence>.` |
+| Excel Step 0 "Key read" column | Yes | One short sentence with optional ⚠/✓ glyph |
+| Excel month narratives | Yes | Per-month organic interpretations |
+| Excel type insights | Yes | Per-type organic insights |
+| Excel KEY FINDINGS rows | Yes | Picks worst-organic months + misleading months |
+| Excel pipeline findings | Yes | Per-type Q4 / in-year / total |
+| Calendar Excel holiday highlighting | Yes | Amber-fill + hover tooltip with holiday name |
+| Speaker note holiday lists | Yes | US federal holidays for both years (with day-of-week) |
+| Typography | Yes | Unicode `−`, `—`, `≥`, `1,178` thousands, full month names |
 
-If you load 2027 data where September is the worst month and Youth Race is the top decliner, the slide 3 header will automatically say "Monthly Breakdown -- Sep & Oct Drive the Declines", the alert box will name those months, and all narratives will describe Youth Race as the concern.
+If you load 2027 data where September is the worst month and Youth Race is the top decliner, the slide 3 header will automatically say "Monthly Breakdown — Sep & Oct Drive the Declines", the alert box will name those months, and all narratives will describe Youth Race as the concern.
 
 ---
 
@@ -201,22 +247,29 @@ The build script integrates with the Claude API to generate all narrative conten
 ### What Claude generates
 
 ```
-slide_1_bullets            4 headline bullets (label + sub-text)
-slide_2_narrative          Type-level change summary (2–3 sentences)
-slide_3_narrative          Monthly breakdown narrative
-slide_4_narrative          Calendar impact assessment
-slide_5_narrative          Organic performance narrative
-slide_6_narrative          Event-level disposition narrative
-slide_7_narrative          Application pipeline narrative
-slide_8_narrative          Win-back opportunity narrative
-notes.slide_1..8           Speaker notes for all 8 slides
+slide_1_bullets            4 headline bullets (label + editorial sub-text)
+slide_2..8_narrative       Slide narrative paragraphs (2–3 sentences each)
+notes.slide_1..8           Structured speaker notes (150–300 words each)
+                              Sections: Context / Key message / Headline numbers /
+                              By type / Methodology / Key findings / Talking point /
+                              Two-speed action plan / Holiday lists (slide 4)
 excel_slack_bullets        4 Slack-ready summary bullets (executive_summary tab)
-excel_type_reads           Key-read column for type table
-excel_month_narratives     12 month interpretations (step_3 tab)
+excel_type_reads           One-sentence "Key read" per event type (with ⚠/✓ glyphs)
+excel_month_narratives     12 monthly organic interpretations (step_3 tab)
 excel_type_insights        4 type organic insights (step_3 tab)
 excel_calendar_findings    KEY FINDINGS rows (step_2 tab)
-excel_pipeline_findings    Pipeline opportunity text (step_5 tab)
+excel_pipeline_findings    Per-type pipeline status (step_5 tab)
 ```
+
+### Editorial style enforced
+
+The AI prompt locks the voice and formatting so output stays consistent run-to-run:
+
+- **Voice:** short, decisive, opinionated. Headlines lead with the takeaway, not a data dump.
+- **Pattern:** Slack bullets and type-reads follow `<headline metric> + <one interpretive sentence with the so-what>`.
+- **Severity glyphs:** `⚠` on the principal decliner row, `✓` on the principal grower row.
+- **Typography:** Unicode minus `−`, em-dash `—`, `≥`, thousands separators (`1,178`), full month names (`July` not `Jul`).
+- **No invention:** "Use ONLY numbers that appear in the context. If a field isn't in the snapshot, say so."
 
 ### Getting an API key
 
@@ -230,7 +283,7 @@ Uses **Claude Haiku** for the build (fast, < $0.01/run) and **Claude Sonnet** fo
 
 ### Fallback behaviour
 
-If the API key is absent or the call fails, the build falls back to rule-based commentary automatically. The `commentary.json` `mode` field records which was used.
+If the API key is absent or the call fails, the build falls back to rule-based commentary automatically. The rule-based engine produces the same structured output (same section headers in speaker notes, same `<metric> + <interpretation>` Slack-bullet pattern, same Unicode formatting). The `commentary.json` `mode` field records which path was used (`ai_claude` or `rule_based`).
 
 ---
 
@@ -243,7 +296,8 @@ Ask Claude questions about the analysis, request rewrites, or draft communicatio
 ```bash
 # Ask analytical questions
 node ask.js "Why did Adult Clinic decline but Youth Clinic grow?"
-node ask.js "How does July's replacement rate compare to a healthy benchmark?"
+node ask.js "How many Adult Race events were in August 2026?"
+node ask.js "Which Adult Race events were lost in July?"
 node ask.js "What does the creation pipeline data tell us about next year?"
 node ask.js "Which organizers should we prioritise for the August win-back campaign?"
 
@@ -262,11 +316,32 @@ node ask.js "Write talking points for a 5-minute standup on these results"
 node ask.js "What should we watch in the next data pull?" --save-notes
 ```
 
-**Context loaded automatically every call:**
-- `output/analysis_results.json` — full computed dataset
-- `output/commentary.json` — current narratives and slide text
-- `notes.md` — your analyst notes, prior build summaries, and saved Q&A
-- `output/archive/` — most recent prior run for trend comparison
+### Context loaded automatically every call
+
+- **`output/analysis_state.json`** — full state snapshot (every event, every segment match, per-month-per-type counts, shift flow, pipeline rows). **Single source of truth for Q&A — guaranteed to match what's in the deck.**
+- **`output/analysis_results.json`** — top-line summary (used for cross-check sanity validation on load)
+- **`output/commentary.json`** — current narratives and slide text
+- **`notes.md`** — your analyst notes, prior build summaries, and saved Q&A
+- **`output/archive/<prior>/commentary.json`** — most recent prior run for diffs
+
+### Question-aware context routing
+
+`ask.js` inspects your question for keywords and includes only the relevant detail tables in the Claude prompt (keeps the prompt within token budget while still being complete):
+
+| Keyword pattern | Tables added to prompt |
+|---|---|
+| month name (`January`, `Jul`, `august`…) | per-month per-type segment tables for every segment |
+| `retained` / `shifted` / `lost` / `new` / `recovered` / `tried to return` | matching segment counts per-month per-type |
+| `shift` / `moved` / `migration` | 12×12 shift flow matrix (origin × destination) |
+| `application` / `filed` / `pipeline` / `Q4` / `in-year` | creation pipeline rows per type |
+| `organic` / `calendar` / `weekend` / `Sat` / `Sun` | calendar-impact table by month |
+| `name` / `list` / `show me` / `which event` / `sanction` | event-level lists (sanction IDs, filtered by month if specified) |
+
+### Consistency guarantees
+
+1. **Every answer prefixes with the build timestamp** — e.g. *"Based on the build from 2026-05-17 14:33:"* — so you always know which snapshot is being cited.
+2. **Cross-check on load:** if `analysis_results.json` and `analysis_state.json` disagree on top-line totals, ask.js prints `⚠ Rebuild recommended` to console.
+3. **No invention:** if a field isn't in the snapshot (e.g. organizer email, registration count), Claude is instructed to say *"That field isn't in the build snapshot"* rather than guess.
 
 **Model:** Claude Sonnet (streaming — answers appear in real time as Claude writes them).
 
@@ -299,7 +374,7 @@ Add context Claude cannot derive from the data alone:
 
 ## Decisions made
 - Agreed to target Adult Clinic organizer outreach May–August 2026.
-- 49 July + 55 August attrited organizers identified for win-back campaign.
+- 49 July + 55 August lost organizers identified for win-back campaign.
 ```
 
 ### 2. Auto-build summaries (written by the build script)
@@ -308,12 +383,12 @@ Every `node build_all.js` run automatically appends a compact summary to `notes.
 
 ```
 ---
-### Build run: May 16, 2026, 7:00 PM | mode: rule_based
-- Total: 1,178 (prior) → 1,166 (current), net -12
-- Segments: Retained 746, Shifted 124, Attrited 295, New 263
-- Top issue: Adult Clinic -12.4%
+### Build run: May 17, 2026, 2:33 PM | mode: ai_claude
+- Total: 1,178 (prior) → 1,165 (current), net −13
+- Segments: Retained 746, Shifted 123, Lost 296, New 265
+- Top issue: Adult Clinic −13.4%
 - Top growth: Youth Clinic +17.2%
-- Worst months: Aug (-18), Jul (-16)
+- Worst months: Aug (−19), Jul (−16)
 ```
 
 Only the **5 most recent** build summaries are kept — older ones are pruned automatically so the file stays small.
@@ -363,17 +438,17 @@ Result: classified as **Retained** (if same month) or **Shifted** (if different 
 ```json
 { "sid_25": "311157-Adult Race", "note": "Confirmed permanently cancelled" }
 ```
-Result: 2025 event → **Attrited**. Use `sid_26` instead to force a 2026 event to **New**.
+Result: prior-year event → **Lost**. Use `sid_26` instead to force a current-year event to **New**.
 
 **`force_segment`** — override a segment classification on any event:
 ```json
 {
   "sid_25": "310379-Adult Race",
-  "segment": "Attrited",
+  "segment": "Lost",
   "note": "Algorithm fuzzy-matched incorrectly"
 }
 ```
-Valid segments: `Retained`, `Shifted`, `Attrited`, `New`, `Recovered`, `Tried to Return`
+Valid segments: `Retained`, `Shifted`, `Lost`, `New`, `Recovered`, `Tried to Return`
 
 ### Managing overrides from the command line
 
@@ -386,12 +461,12 @@ node ask.js --list-overrides
 # Force two events to match (→ Retained if same month, Shifted if different)
 node ask.js --add-override match <sid_2025> <sid_2026> "optional note"
 
-# Prevent an event from matching (→ Attrited for 2025 event, New for 2026 event)
+# Prevent an event from matching (→ Lost for prior-year event, New for current-year event)
 node ask.js --add-override no-match 25 <sid_2025> "optional note"
 node ask.js --add-override no-match 26 <sid_2026> "optional note"
 
 # Override a segment classification
-node ask.js --add-override segment 25 <sid_2025> Attrited "optional note"
+node ask.js --add-override segment 25 <sid_2025> Lost "optional note"
 node ask.js --add-override segment 26 <sid_2026> New "optional note"
 
 # Remove all overrides for a sanction ID
@@ -401,14 +476,14 @@ node ask.js --remove-override <sid>
 node ask.js --suggest-overrides
 ```
 
-After any change run `node build_all.js` to apply. Partial segment names are accepted (`attr`, `attrited`, `Attrited` all work).
+After any change run `node build_all.js` to apply. Partial segment names are accepted (`lost`, `Lost` both work).
 
 ### AI-powered suggestions
 
-`--suggest-overrides` sends all unmatched 2025 and 2026 events to Claude Sonnet and returns ranked suggestions with confidence levels and reasons. You can accept all High-confidence suggestions with a single `y` or add them individually. You can also ask targeted questions:
+`--suggest-overrides` sends all unmatched prior-year and current-year events to Claude Sonnet and returns ranked suggestions with confidence levels and reasons. You can accept all High-confidence suggestions with a single `y` or add them individually. You can also ask targeted questions:
 
 ```bash
-node ask.js "Which 2025 attrited Adult Race events in June most likely match a 2026 event under a different name?"
+node ask.js "Which 2025 lost Adult Race events in June most likely match a 2026 event under a different name?"
 node ask.js "Are there any 2026 new events that look like renamed 2025 events?"
 ```
 
@@ -424,13 +499,13 @@ All applied overrides are recorded in `output/analysis_results.json` under the `
 
 | Tab | Contents |
 |---|---|
-| executive_summary | 4-step briefing + Slack bullets (all dynamic) |
-| step_0_calendar_structure | Side-by-side 2025/2026 calendar grids |
+| executive_summary | 4-step briefing + Slack bullets (all dynamic, editorial voice) |
+| step_0_calendar_structure | Side-by-side year_a/year_b calendar grids (holiday cells highlighted in amber with hover-tooltip showing holiday name; per-month holiday list in Notes column) |
 | step_1_event_type_by_month | Raw delta by type × month |
 | step_2_calendar_impact | Weekend-day shift analysis + KEY FINDINGS (dynamic) |
 | step_3_organic_performance | Calendar-adjusted organic delta (month + type insights dynamic) |
 | step_4_event_detail | Full event roster (16 cols incl. Day of Week + Status) |
-| step_4a_segment_by_month | Two-table segment summary (by 2026 month + by 2025 month) |
+| step_4a_segment_by_month | Two-table segment summary (by year_b month + by year_a month) |
 | step_4b_shift_flow_matrix | Origin × destination flow matrix (all 3 parts combined) |
 | step_4c_shifted_events | Shifted event stats + roster (Avg Distance, Top Month) |
 | step_4d_cancelled_cross_match | Tried-to-Return + Recovered events |
@@ -443,17 +518,20 @@ All applied overrides are recorded in `output/analysis_results.json` under the `
 |---|---|---|
 | 1 | — | Title + 4 computed headline bullets |
 | 2 | 0 | What Changed? Event Counts by Type |
-| 3 | 1 | Monthly Breakdown -- {worst_month_1} & {worst_month_2} Drive the Declines |
-| 4 | 2 | Is This a Calendar Effect? No -- Not for {worst_month_1} or {worst_month_2} |
-| 5 | 3 | Organic Performance -- True Signal After Removing Calendar Noise |
+| 3 | 1 | Monthly Breakdown — {worst_month_1} & {worst_month_2} Drive the Declines |
+| 4 | 2 | Is This a Calendar Effect? No — Not for {worst_month_1} or {worst_month_2} |
+| 5 | 3 | Organic Performance — True Signal After Removing Calendar Noise |
 | 6 | 4 | Did We Really Lose Events? Event-Level Disposition |
-| 7 | 5 | Application Pipeline -- Who Is Filing, When, and Where the Opportunities Are |
+| 7 | 5 | Application Pipeline — Who Is Filing, When, and Where the Opportunities Are |
 | 8 | 6 | {worst_month_1} & {worst_month_2}: Organic Churn and the Win-Back Opportunity |
+
+Speaker notes for every slide are 150–300 words with structured sections (Context / Key message / Headline numbers / By type / Methodology / Key findings / Talking point / Two-speed action plan / Holiday lists on slide 4).
 
 ### JSON files
 
-- **`analysis_results.json`** — full computed dataset: segments, monthly deltas, organic performance, shift flow, calendar impact.
-- **`commentary.json`** — all generated text for PowerPoint and Excel, with mode indicator (`ai_claude` or `rule_based`).
+- **`analysis_results.json`** — top-line summary: totals, segments, by-type, monthly deltas, organic performance, shift flow, calendar impact, overrides. Read by the diff report and by Excel/PPT builders.
+- **`analysis_state.json`** — full state snapshot (~500 KB): every event with sanction ID/name/type/month/status, every segment match record (both sides), per-month per-type counts, segment counts by month×type, 12×12 shift flow matrix, raw creation pipeline rows, build metadata. **Read by `ask.js` so every Q&A answer is consistent with the deck by construction.** Written atomically.
+- **`commentary.json`** — all generated text for PowerPoint and Excel, with `mode` indicator (`ai_claude` or `rule_based`) and a `_ai_generated` boolean.
 
 ---
 
@@ -461,8 +539,28 @@ All applied overrides are recorded in `output/analysis_results.json` under the `
 
 > Auto-runs on every `node build_all.js` (menu option **1**)
 
-Every `node build_all.js` run automatically moves existing output files to `output/archive/YYYY-MM-DD_HH-MM-SS/` before rebuilding. Prior versions are preserved indefinitely.
+Every build moves the prior run's xlsx + pptx into `output/archive/<YYYY-MM-DD_HH-MM-SS>/` and copies the prior `commentary.json`, `analysis_results.json`, `analysis_state.json`, and `dashboard.html` into the same folder.
 
+**Only the immediately prior build is kept.** Older archive folders (anything matching the timestamp pattern) are auto-pruned. Folders with non-timestamp names (e.g. `manual_save/`) are left untouched so manual snapshots survive.
+
+The retained sidecar JSONs let the diff report (`changes.txt` / `node ask.js --what-changed`) compare the new build against the prior one. Without them, diffs would be skipped.
+
+End state of `output/` after every build:
+
+```
+output/
+  <year>_event_calendar_analysis_<NEW>.xlsx     ← just-built
+  <year>_event_trends_summary_<NEW>.pptx        ← just-built
+  analysis_results.json
+  analysis_state.json
+  commentary.json
+  dashboard.html
+  archive/
+    <PRIOR_TS>/
+      ...prior xlsx, pptx, and all four JSON/html sidecars...
+```
+
+To keep more history, raise the `keep_last_n` parameter in `archive_outputs()` from `1` to your preferred number.
 
 ---
 
@@ -471,12 +569,14 @@ Every `node build_all.js` run automatically moves existing output files to `outp
 > **Menu:** option **2** — or run directly:
 
 ```bash
-node check.js       # validate data before building
+node check.js       # validate data + DB connectivity before building
 npm run check       # same via npm
 ```
 
+Runs the same DB pipeline as `build_all.js` (fetches events from `usat_sales_db.event_data_metrics`, applies the active/excluded filter, then runs validation checks). Useful when you want to surface issues before committing to a full build.
+
 Checks performed:
-- **Duplicate sanction IDs** within each year's CSV
+- **Duplicate sanction IDs** within each year
 - **Unexpected status values** (e.g., `DRAFT`, `ADDITIONAL_ITEMS_NEEDED` — worth investigating)
 - **Unexpected event type values** (anything outside the 4 known types)
 - **Missing months** — calendar months with zero events in either year
@@ -498,12 +598,12 @@ Every build generates a self-contained HTML dashboard you can open in any browse
 
 **Charts included:**
 - Monthly event delta (raw Δ bar + organic Δ line overlay)
-- Segment breakdown donut (Retained / Shifted / Attrited / New / Recovered)
+- Segment breakdown donut (Retained / Shifted / Lost / New / Recovered)
 - Event counts by type — grouped bar comparing both years
 - Calendar expected vs organic delta scatter (labelled by month)
 - Key findings summary bullets (from commentary engine)
 
-**KPI header cards:** net change, current-year total, attrited count, new events added, retention rate.
+**KPI header cards:** net change, current-year total, lost count, new events added, retention rate.
 
 The dashboard shows a warning badge if manual overrides are active, and labels the commentary mode (AI or rule-based).
 
@@ -519,7 +619,7 @@ Every build that has a prior run in `output/archive/` generates a `changes.txt` 
 - Commentary mode changes (rule-based → AI or vice versa)
 - Active overrides applied
 
-Useful for: reviewing what changed after loading updated CSVs mid-cycle, verifying that override changes had the expected effect, or documenting analysis decisions over time.
+Useful for: reviewing what changed after re-running mid-cycle, verifying that override changes had the expected effect, or documenting analysis decisions over time.
 
 ```bash
 # View it directly
@@ -540,6 +640,6 @@ Events are matched across years using a 3-pass algorithm:
 2. **Exact-shifted** — same name, different month
 3. **Fuzzy** — Jaccard similarity ≥ 0.55 on normalised tokens + date-proximity weighting
 
-Segments: Retained | Shifted | Attrited | Tried to Return | Recovered | New
+Segments: `Retained` | `Shifted` | `Lost` | `Tried to Return` | `Recovered` | `New`
 
-Match confidence: ~85–90% at event level.
+Match confidence: ~85–90% at event level. Remaining mismatches can be corrected via `data/overrides.json` (see the Manual Event Overrides section).
