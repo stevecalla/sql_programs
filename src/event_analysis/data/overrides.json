@@ -1,0 +1,31 @@
+{
+  "_readme": "Manual event matching overrides. Takes precedence over automatic matching. Run 'node build_all.js' to apply.",
+  "_schema": {
+    "force_match": "Force two events to be matched. Both must exist in their respective year's active events.",
+    "force_no_match": "Prevent an event from matching anything. Use sid_25 to force Attrited, sid_26 to force New.",
+    "force_segment": "Override a matched or unmatched event's segment classification."
+  },
+  "force_match": [
+    {
+      "_comment_example": "Uncomment below to force a match. Remove leading _ from keys to activate.",
+      "_sid_25": "310628-Adult Race",
+      "_sid_26": "352469-Adult Race",
+      "_note": "Name changed significantly between years but confirmed same event series"
+    }
+  ],
+  "force_no_match": [
+    {
+      "_comment_example": "Uncomment to force an event to Attrited (sid_25) or New (sid_26)",
+      "_sid_25": "311157-Adult Race",
+      "_note": "Confirmed permanently cancelled — not a scheduling shift"
+    }
+  ],
+  "force_segment": [
+    {
+      "_comment_example": "Override a segment. Valid values: Retained, Shifted, Attrited, New, Recovered, Tried to Return",
+      "_sid_25": "310379-Adult Race",
+      "_segment": "Attrited",
+      "_note": "Algorithm fuzzy-matched incorrectly — this event is truly gone"
+    }
+  ]
+}

@@ -1,0 +1,292 @@
+{
+  "generated_at": "2026-05-17T07:21:21.704Z",
+  "mode": "rule_based",
+  "model": null,
+  "slide_1_bullets": [
+    {
+      "label": "-12 events overall",
+      "bg_type": "negative",
+      "sub": "-1.0% -- modest headline, but composition matters"
+    },
+    {
+      "label": "Adult Clinic -12.4%",
+      "bg_type": "negative",
+      "sub": "Sole driver of the net decline"
+    },
+    {
+      "label": "July & August -34",
+      "bg_type": "negative",
+      "sub": "Zero calendar cover -- purely organic losses"
+    },
+    {
+      "label": "Youth Clinic +17.2%",
+      "bg_type": "positive",
+      "sub": "Only type growing -- a genuine bright spot"
+    }
+  ],
+  "slide_2_narrative": "The overall -12 is a modest headline but the composition tells the real story. Adult Clinic is down 12 events (-12.4%). The genuine growth story: Youth Clinic is up 5 events (+17.2%).",
+  "slide_3_narrative": "Aug (-18) and Jul (-16) are the two biggest problem months. Meanwhile Oct (+11) and Jun (+10) are the standout performers. The pattern suggests summer peak season demand is softening while shoulder months hold or grow.",
+  "slide_4_narrative": "The calendar is not the explanation for July and August -- both had flat weekend-day counts. The summer declines (combined -34) are fully organic. No alibi.",
+  "slide_5_narrative": "Adult Clinic is contracting structurally (-12.4% organic). Adult Race and Youth Race are near-flat organically -- the race product is holding. Youth Clinic is growing organically at +17.2%.",
+  "slide_6_narrative": "Yes -- we really did lose events. 295 of 1,178 2025 events (25%) did not return in any form. The portfolio added 266 genuinely new events plus 30 recovered from cancellations -- 100% gross replacement. Replacement is weakest in the peak summer months, which is where the declines matter most.",
+  "slide_7_narrative": "The application pipeline is running ahead of last year's pace through May. The single highest-ROI action is Adult Clinic outreach (May-Aug) -- early signals are flat, not falling, but the late-year spontaneous apps that filled 2025 have not materialized yet. Youth Clinic and Adult Race pipelines are healthy and self-sustaining.",
+  "slide_8_narrative": "July and August each lose around 50 events but replace roughly 94-93% of them organically -- the ecosystem is self-replenishing but not fast enough to fully offset churn. The net decline is a volume problem, not a demand collapse. The immediate action is August win-back outreach. The strategic action is diagnosing July's churn before Q4 planning.",
+  "notes": {
+    "slide_1": "SLIDE 1 -- Title Overview\n\nYears: 2025 vs 2026  |  Total events: 1,178 vs 1,166  |  Net: -12\n\nBy type:\n- Adult Race: 823->822 (-1, -0.1%)\n- Youth Race: 229->225 (-4, -1.7%)\n- Adult Clinic: 97->85 (-12, -12.4%)\n- Youth Clinic: 29->34 (+5, 17.2%)\n\nKey theme: Adult Clinic accounts for the full net decline. Youth Clinic is the growth story.",
+    "slide_2": "SLIDE 2 -- Event Counts by Type\n\nKey message: The -12 net decline is entirely explained by Adult Clinic.\n\nBy type:\n- Adult Race: 823->822 (-1, -0.1%)\n- Youth Race: 229->225 (-4, -1.7%)\n- Adult Clinic: 97->85 (-12, -12.4%)\n- Youth Clinic: 29->34 (+5, 17.2%)\n\nTalking point: If you exclude Adult Clinic, the rest of the portfolio is flat.",
+    "slide_3": "SLIDE 3 -- Monthly Breakdown\n\nWorst months: Aug (-18), Jul (-16), Feb (-9)\nBest months:  Oct (+11), Jun (+10), Mar (+8)\n\nSummer total: -34  |  Calendar cover: zero",
+    "slide_4": "SLIDE 4 -- Calendar Impact\n\nJuly: cal expected 0.0, actual -16, organic -16\nAugust: cal expected 0.0, actual -18, organic -18\n\nNo calendar alibi for summer declines -- fully organic.",
+    "slide_5": "SLIDE 5 -- Organic Performance\n\nAfter stripping calendar noise:\n- Adult Race: organic -0.1%\n- Youth Race: organic -1.7%\n- Adult Clinic: organic -12.4%\n- Youth Clinic: organic 17.2%\n\nStructural decliners: Adult Clinic\nStructural growers: Youth Clinic",
+    "slide_6": "SLIDE 6 -- Event Disposition\n\nSegments (of 1,178 2025 events):\n- Retained: 746 (63%)\n- Shifted: 124\n- Lost (truly lost): 295 (25%)\n- New in 2026: 266\n- Recovered: 30\n\nReplacement rate: 100%",
+    "slide_7": "SLIDE 7 -- Application Pipeline\n\nIn-year applications through May are running ahead of last year.\nHighest priority: Adult Clinic (early pipeline flat, late-year spontaneous apps not materializing).\nSecond: Adult Race (already +34% ahead in-year).\nThird: Youth Clinic (fast-track approvals to maintain momentum).",
+    "slide_8": "SLIDE 8 -- Win-Back Opportunity\n\nJuly (49 lost): Too late for 2026. Q3 outreach to understand WHY they left -- diagnose the churn cycle.\nAugust (55 lost): 10-12 weeks away -- some still recruitable. Target by end of May.\n\nReplacement rate: July 94%, August 93%. Net decline is a VOLUME problem, not a demand collapse."
+  },
+  "year_label": "2025 vs 2026",
+  "ya": 2025,
+  "yb": 2026,
+  "data_as_of": "May 17, 2026",
+  "slide_1_subtitle": "2025 vs 2026  |  Year-over-Year Analysis",
+  "slide_1_data_note": "Data as of May 17, 2026  |  Excl. Cancelled / Declined / Deleted  |  ~85-90% event-level match confidence",
+  "slide_3_header": "Monthly Breakdown -- Jul & Aug Drive the Declines",
+  "slide_3_type_detail_label": "Type Detail -- Jul & Aug",
+  "slide_3_callout_left": "Jul and Aug are driven by races, not clinics. Clinic mix is flat or zero in both months.",
+  "slide_3_callout_right": "Oct (+11) and Jun (+10) are the two strongest months. Both show genuine organic strength plus new event additions.",
+  "slide_4_header": "Is This a Calendar Effect?  No -- Not for Jul or Aug",
+  "slide_4_alert": "Jul and Aug had ZERO change in weekend days (Sat or Sun) between 2025 and 2026. There is no calendar explanation for the declines -- they are fully organic.",
+  "slide_4_table_months": [
+    4,
+    5,
+    7,
+    8,
+    9
+  ],
+  "slide_4_table_rows": [
+    {
+      "month": "Apr",
+      "cal_change": "+16 day",
+      "cal_expected": "15.8",
+      "actual": "+5",
+      "organic": "-12.8",
+      "interpretation": "Calendar gifted it -- organic demand moved opposite direction"
+    },
+    {
+      "month": "May",
+      "cal_change": "-23 day",
+      "cal_expected": "-23.2",
+      "actual": "+3",
+      "organic": "+33.2",
+      "interpretation": "Calendar penalised it -- organic demand moved opposite direction"
+    },
+    {
+      "month": "Jul",
+      "cal_change": "None (0)",
+      "cal_expected": "0",
+      "actual": "-16",
+      "organic": "-18.0",
+      "interpretation": "Zero calendar cover -- full decline is organic"
+    },
+    {
+      "month": "Aug",
+      "cal_change": "None (0)",
+      "cal_expected": "0",
+      "actual": "-18",
+      "organic": "-4.0",
+      "interpretation": "Calendar and organic moving against each other"
+    },
+    {
+      "month": "Sep",
+      "cal_change": "+8 day",
+      "cal_expected": "7.5",
+      "actual": "-4",
+      "organic": "+3.5",
+      "interpretation": "Calendar and organic moving together"
+    }
+  ],
+  "slide_5_callout_left": "Adult Clinic: -12.4% organic\nStructurally declining -- the sole driver of the net -12. Calendar noise cannot explain it.",
+  "slide_5_callout_right": "Youth Clinic: +17.2% organic\nOnly type genuinely growing -- no calendar help. Other races near-flat after stripping noise.",
+  "slide_5_best_months": [
+    "Oct +11",
+    "Jun +10",
+    "Mar +8"
+  ],
+  "slide_5_worst_months": [
+    "Aug -18",
+    "Jul -16",
+    "Feb -9"
+  ],
+  "slide_6_highlight_months": [
+    "Aug",
+    "Jul",
+    "Oct"
+  ],
+  "slide_7_opportunity_label": "Highest-Probability Opportunities -- May through December 2026",
+  "slide_7_callout_left_title": "Adult Clinic -- Highest ROI Opportunity",
+  "slide_8_header": "Jul & Aug: Organic Churn and the Win-Back Opportunity",
+  "slide_8_subtitle": "Replacement is near-complete -- the net declines come from month-shifting, not failed attrition recovery. But the churn volume itself is the problem:",
+  "excel_slack_bullets": [
+    "1,166 events in 2026 vs 1,178 in 2025 (-12, -1.0%). Adult Clinic accounts for the full net decline (-12, organic -10.3%); adult race roughly flat; Youth Clinic the only growth story (+19.4% organic).",
+    "Summer declines concentrated in races: July -16 (both types ~8 each), August -18 (worst month). Calendar provides zero alibi -- July and August had identical weekend-day counts both years. May is most misleading: +3 raw but organic -13.",
+    "Of 1,178 2025 active events: 295 truly lost (did not return); 13 tried to return but were cancelled in the next year -- actionable. 30 recovered from prior cancellations. Aug and Jul had the worst replacement rates.",
+    "Oct is the standout: lost a Sunday (calendar headwind -23) but delivered organic +33.2 growth -- strongest month. 266 genuinely brand-new events joined. Jun gain (+10) driven by organic demand."
+  ],
+  "excel_type_reads": {
+    "Adult Race": "Flat. Organic +0.2%. Race product stable.",
+    "Youth Race": "Mild softness. Organic -1.2%. Monitor.",
+    "Adult Clinic": "Full decline. Organic -10.3%. Key concern.",
+    "Youth Clinic": "Only growth. Organic +19.4%."
+  },
+  "excel_month_narratives": {
+    "Jan": "Solid organic gain.",
+    "Feb": "Significant organic decline. Calendar effect -5.",
+    "Mar": "Solid organic gain.",
+    "Apr": "Solid organic gain. Calendar contributed +16.",
+    "May": "Modest organic gain. Calendar: -23.",
+    "Jun": "Strong organic growth. No calendar tailwind.",
+    "Jul": "Worst organic month. No calendar explanation -- fully organic attrition.",
+    "Aug": "Worst organic month. No calendar explanation -- fully organic attrition.",
+    "Sep": "Modest organic decline. Calendar expected +8. Watch item.",
+    "Oct": "Strong organic growth. Calendar effect: -2.",
+    "Nov": "Significant organic decline. Zero calendar cover -- fully organic.",
+    "Dec": "Roughly flat organically. No calendar noise."
+  },
+  "excel_type_insights": {
+    "Adult Race": "Organic +0.2%. Stable -- small numbers, monitor trend.",
+    "Youth Race": "Organic -1.2%. Stable -- small numbers, monitor trend.",
+    "Adult Clinic": "Structural contraction -10.3%. Key concern -- declining after removing all calendar effects.",
+    "Youth Clinic": "Strong organic growth +19.4%. Structural expansion."
+  },
+  "excel_calendar_findings": [
+    [
+      "Jul -16 / Aug -18:",
+      "ΔWknd=0 both months. Zero calendar explanation. Entire decline is organic attrition."
+    ],
+    [
+      "May +3:",
+      "Gains +16 expected from calendar. Actual +3 → organic -13. May underperformed its calendar opportunity."
+    ],
+    [
+      "Jun +10:",
+      "Loses 23 expected from calendar headwind. Actual +10 → organic +33. Strong organic growth overcame the headwind -- standout month."
+    ],
+    [
+      "Jan/Mar/Oct/Nov:",
+      "Saturday count changes (±1). Calendar explains a portion of those months' variance; residual reflects true organic change."
+    ]
+  ],
+  "excel_pipeline_findings": {
+    "Adult Race": "Prior-year Q4 apps trending slightly down but in-year applications are running ahead. Organizers are applying LATER, not less. No structural demand concern for races.",
+    "Youth Race": "Pipeline closely tracks active event count. Application flow is healthy. Holding steady.",
+    "Adult Clinic": "LARGEST GAP. Early pipeline identical to prior year but all the advantage came from late-year spontaneous apps (May-Dec) that haven't materialized yet. Proactive outreach May-Aug could recover events and close most of the net decline.",
+    "Youth Clinic": "Prior-year Q4 applications significantly ahead. In-year applications also well ahead. Both early and in-year pipelines expanding. Growth is structural and front-loaded.",
+    "Overall Pipeline": "Total in-year applications are running ahead of prior year pace through May. Year-end active event count will likely be higher than the May snapshot suggests."
+  },
+  "n25": 1178,
+  "n26": 1166,
+  "net": -12,
+  "by_type": [
+    {
+      "type": "Adult Race",
+      "n25": 823,
+      "n26": 822,
+      "delta": -1,
+      "pct": -0.1
+    },
+    {
+      "type": "Youth Race",
+      "n25": 229,
+      "n26": 225,
+      "delta": -4,
+      "pct": -1.7
+    },
+    {
+      "type": "Adult Clinic",
+      "n25": 97,
+      "n26": 85,
+      "delta": -12,
+      "pct": -12.4
+    },
+    {
+      "type": "Youth Clinic",
+      "n25": 29,
+      "n26": 34,
+      "delta": 5,
+      "pct": 17.2
+    }
+  ],
+  "top_decliner": {
+    "type": "Adult Clinic",
+    "n25": 97,
+    "n26": 85,
+    "delta": -12,
+    "pct": -12.4
+  },
+  "top_grower": {
+    "type": "Youth Clinic",
+    "n25": 29,
+    "n26": 34,
+    "delta": 5,
+    "pct": 17.2
+  },
+  "worst_months": [
+    {
+      "m": 8,
+      "label": "Aug",
+      "delta": -18,
+      "cal": 0,
+      "organic": -18
+    },
+    {
+      "m": 7,
+      "label": "Jul",
+      "delta": -16,
+      "cal": 0,
+      "organic": -16
+    },
+    {
+      "m": 2,
+      "label": "Feb",
+      "delta": -9,
+      "cal": 0,
+      "organic": -9
+    }
+  ],
+  "best_months": [
+    {
+      "m": 10,
+      "label": "Oct",
+      "delta": 11,
+      "cal": 0,
+      "organic": 11
+    },
+    {
+      "m": 6,
+      "label": "Jun",
+      "delta": 10,
+      "cal": 0,
+      "organic": 10
+    },
+    {
+      "m": 3,
+      "label": "Mar",
+      "delta": 8,
+      "cal": 0,
+      "organic": 8
+    }
+  ],
+  "summer_delta": -34,
+  "jul_delta": -16,
+  "aug_delta": -18,
+  "attrited": 295,
+  "new_ev": 266,
+  "rec": 30,
+  "repl_rate": 100,
+  "seg": {
+    "Retained": 746,
+    "Shifted": 124,
+    "Tried to Return": 13,
+    "Lost": 295,
+    "Recovered": 30,
+    "New": 266
+  },
+  "_ai_generated": false
+}

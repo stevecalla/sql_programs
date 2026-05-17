@@ -1,0 +1,703 @@
+{
+  "generated_at": "2026-05-17T07:20:56.873Z",
+  "years": {
+    "year_a": 2025,
+    "year_b": 2026
+  },
+  "totals": {
+    "year_a": 1178,
+    "year_b": 1166,
+    "net": -12
+  },
+  "segments": {
+    "Retained": 746,
+    "Shifted": 124,
+    "Tried to Return": 13,
+    "Lost": 295,
+    "Recovered": 30,
+    "New": 266
+  },
+  "by_type": {
+    "Adult Race": {
+      "tot25": 823,
+      "tot26": 822,
+      "actDelta": -1
+    },
+    "Youth Race": {
+      "tot25": 229,
+      "tot26": 225,
+      "actDelta": -4
+    },
+    "Adult Clinic": {
+      "tot25": 97,
+      "tot26": 85,
+      "actDelta": -12
+    },
+    "Youth Clinic": {
+      "tot25": 29,
+      "tot26": 34,
+      "actDelta": 5
+    }
+  },
+  "monthly": {
+    "1": {
+      "n25": 10,
+      "n26": 17,
+      "net_delta": 7,
+      "net_shift": 4,
+      "organic_delta": 5.75
+    },
+    "2": {
+      "n25": 43,
+      "n26": 34,
+      "net_delta": -9,
+      "net_shift": -7,
+      "organic_delta": -9
+    },
+    "3": {
+      "n25": 54,
+      "n26": 62,
+      "net_delta": 8,
+      "net_shift": 6,
+      "organic_delta": 13.399999999999999
+    },
+    "4": {
+      "n25": 76,
+      "n26": 81,
+      "net_delta": 5,
+      "net_shift": 4,
+      "organic_delta": 5
+    },
+    "5": {
+      "n25": 142,
+      "n26": 145,
+      "net_delta": 3,
+      "net_shift": 1,
+      "organic_delta": -12.777777777777777
+    },
+    "6": {
+      "n25": 209,
+      "n26": 219,
+      "net_delta": 10,
+      "net_shift": -8,
+      "organic_delta": 33.22222222222222
+    },
+    "7": {
+      "n25": 181,
+      "n26": 165,
+      "net_delta": -16,
+      "net_shift": -3,
+      "organic_delta": -16
+    },
+    "8": {
+      "n25": 220,
+      "n26": 202,
+      "net_delta": -18,
+      "net_shift": 0,
+      "organic_delta": -18
+    },
+    "9": {
+      "n25": 151,
+      "n26": 147,
+      "net_delta": -4,
+      "net_shift": -2,
+      "organic_delta": -4
+    },
+    "10": {
+      "n25": 60,
+      "n26": 71,
+      "net_delta": 11,
+      "net_shift": 9,
+      "organic_delta": 3.5
+    },
+    "11": {
+      "n25": 22,
+      "n26": 13,
+      "net_delta": -9,
+      "net_shift": -3,
+      "organic_delta": -6.8
+    },
+    "12": {
+      "n25": 10,
+      "n26": 10,
+      "net_delta": 0,
+      "net_shift": -1,
+      "organic_delta": 0
+    }
+  },
+  "organic_by_type": {
+    "Adult Race": {
+      "tot25": 823,
+      "actDelta": -1,
+      "calTotal": -2.4194444444444447,
+      "orgTotal": 1.4194444444444447
+    },
+    "Youth Race": {
+      "tot25": 229,
+      "actDelta": -4,
+      "calTotal": -1.2166666666666666,
+      "orgTotal": -2.783333333333333
+    },
+    "Adult Clinic": {
+      "tot25": 97,
+      "actDelta": -12,
+      "calTotal": -2.038888888888889,
+      "orgTotal": -9.96111111111111
+    },
+    "Youth Clinic": {
+      "tot25": 29,
+      "actDelta": 5,
+      "calTotal": -0.6194444444444445,
+      "orgTotal": 5.6194444444444445
+    }
+  },
+  "shift_flow": {
+    "1": {
+      "1": 0,
+      "2": 1,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 0,
+      "10": 0,
+      "11": 0,
+      "12": 0
+    },
+    "2": {
+      "1": 2,
+      "2": 0,
+      "3": 7,
+      "4": 0,
+      "5": 1,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 0,
+      "10": 0,
+      "11": 0,
+      "12": 0
+    },
+    "3": {
+      "1": 0,
+      "2": 2,
+      "3": 0,
+      "4": 3,
+      "5": 3,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 1,
+      "10": 1,
+      "11": 0,
+      "12": 0
+    },
+    "4": {
+      "1": 0,
+      "2": 0,
+      "3": 7,
+      "4": 0,
+      "5": 1,
+      "6": 2,
+      "7": 0,
+      "8": 0,
+      "9": 0,
+      "10": 0,
+      "11": 0,
+      "12": 0
+    },
+    "5": {
+      "1": 0,
+      "2": 0,
+      "3": 1,
+      "4": 7,
+      "5": 0,
+      "6": 9,
+      "7": 0,
+      "8": 3,
+      "9": 0,
+      "10": 1,
+      "11": 0,
+      "12": 0
+    },
+    "6": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 1,
+      "5": 14,
+      "6": 0,
+      "7": 7,
+      "8": 3,
+      "9": 0,
+      "10": 1,
+      "11": 0,
+      "12": 0
+    },
+    "7": {
+      "1": 1,
+      "2": 0,
+      "3": 1,
+      "4": 1,
+      "5": 0,
+      "6": 6,
+      "7": 0,
+      "8": 6,
+      "9": 0,
+      "10": 0,
+      "11": 0,
+      "12": 0
+    },
+    "8": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 2,
+      "5": 1,
+      "6": 1,
+      "7": 4,
+      "8": 0,
+      "9": 7,
+      "10": 0,
+      "11": 0,
+      "12": 0
+    },
+    "9": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 2,
+      "6": 0,
+      "7": 1,
+      "8": 3,
+      "9": 0,
+      "10": 5,
+      "11": 0,
+      "12": 0
+    },
+    "10": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 1,
+      "10": 0,
+      "11": 0,
+      "12": 0
+    },
+    "11": {
+      "1": 1,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 0,
+      "10": 2,
+      "11": 0,
+      "12": 0
+    },
+    "12": {
+      "1": 1,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 0,
+      "10": 0,
+      "11": 0,
+      "12": 0
+    }
+  },
+  "calendar_impact": [
+    {
+      "month": 1,
+      "w25": 8,
+      "w26": 9,
+      "dw": 1,
+      "ds": 1,
+      "du": 0,
+      "tot25": 10,
+      "tot26": 17,
+      "actDelta": 7,
+      "calTotal": 1.25,
+      "orgTotal": 5.75,
+      "calByType": {
+        "Adult Race": 0.375,
+        "Youth Race": 0.125,
+        "Adult Clinic": 0.75,
+        "Youth Clinic": 0
+      },
+      "actByType": {
+        "Adult Race": 5,
+        "Youth Race": -1,
+        "Adult Clinic": 1,
+        "Youth Clinic": 2
+      },
+      "orgByType": {
+        "Adult Race": 4.625,
+        "Youth Race": -1.125,
+        "Adult Clinic": 0.25,
+        "Youth Clinic": 2
+      }
+    },
+    {
+      "month": 2,
+      "w25": 8,
+      "w26": 8,
+      "dw": 0,
+      "ds": 0,
+      "du": 0,
+      "tot25": 43,
+      "tot26": 34,
+      "actDelta": -9,
+      "calTotal": 0,
+      "orgTotal": -9,
+      "calByType": {
+        "Adult Race": 0,
+        "Youth Race": 0,
+        "Adult Clinic": 0,
+        "Youth Clinic": 0
+      },
+      "actByType": {
+        "Adult Race": -3,
+        "Youth Race": -2,
+        "Adult Clinic": -4,
+        "Youth Clinic": 0
+      },
+      "orgByType": {
+        "Adult Race": -3,
+        "Youth Race": -2,
+        "Adult Clinic": -4,
+        "Youth Clinic": 0
+      }
+    },
+    {
+      "month": 3,
+      "w25": 10,
+      "w26": 9,
+      "dw": -1,
+      "ds": -1,
+      "du": 0,
+      "tot25": 54,
+      "tot26": 62,
+      "actDelta": 8,
+      "calTotal": -5.3999999999999995,
+      "orgTotal": 13.399999999999999,
+      "calByType": {
+        "Adult Race": -3,
+        "Youth Race": -0.5,
+        "Adult Clinic": -1.6,
+        "Youth Clinic": -0.3
+      },
+      "actByType": {
+        "Adult Race": 5,
+        "Youth Race": 3,
+        "Adult Clinic": -1,
+        "Youth Clinic": 1
+      },
+      "orgByType": {
+        "Adult Race": 8,
+        "Youth Race": 3.5,
+        "Adult Clinic": 0.6000000000000001,
+        "Youth Clinic": 1.3
+      }
+    },
+    {
+      "month": 4,
+      "w25": 8,
+      "w26": 8,
+      "dw": 0,
+      "ds": 0,
+      "du": 0,
+      "tot25": 76,
+      "tot26": 81,
+      "actDelta": 5,
+      "calTotal": 0,
+      "orgTotal": 5,
+      "calByType": {
+        "Adult Race": 0,
+        "Youth Race": 0,
+        "Adult Clinic": 0,
+        "Youth Clinic": 0
+      },
+      "actByType": {
+        "Adult Race": -1,
+        "Youth Race": 2,
+        "Adult Clinic": 0,
+        "Youth Clinic": 4
+      },
+      "orgByType": {
+        "Adult Race": -1,
+        "Youth Race": 2,
+        "Adult Clinic": 0,
+        "Youth Clinic": 4
+      }
+    },
+    {
+      "month": 5,
+      "w25": 9,
+      "w26": 10,
+      "dw": 1,
+      "ds": 0,
+      "du": 1,
+      "tot25": 142,
+      "tot26": 145,
+      "actDelta": 3,
+      "calTotal": 15.777777777777777,
+      "orgTotal": -12.777777777777777,
+      "calByType": {
+        "Adult Race": 11.666666666666666,
+        "Youth Race": 2.6666666666666665,
+        "Adult Clinic": 1.3333333333333333,
+        "Youth Clinic": 0.1111111111111111
+      },
+      "actByType": {
+        "Adult Race": 4,
+        "Youth Race": 3,
+        "Adult Clinic": -4,
+        "Youth Clinic": 0
+      },
+      "orgByType": {
+        "Adult Race": -7.666666666666666,
+        "Youth Race": 0.3333333333333335,
+        "Adult Clinic": -5.333333333333333,
+        "Youth Clinic": -0.1111111111111111
+      }
+    },
+    {
+      "month": 6,
+      "w25": 9,
+      "w26": 8,
+      "dw": -1,
+      "ds": 0,
+      "du": -1,
+      "tot25": 209,
+      "tot26": 219,
+      "actDelta": 10,
+      "calTotal": -23.22222222222222,
+      "orgTotal": 33.22222222222222,
+      "calByType": {
+        "Adult Race": -16.11111111111111,
+        "Youth Race": -4.333333333333333,
+        "Adult Clinic": -2.2222222222222223,
+        "Youth Clinic": -0.5555555555555556
+      },
+      "actByType": {
+        "Adult Race": 2,
+        "Youth Race": 8,
+        "Adult Clinic": -3,
+        "Youth Clinic": 3
+      },
+      "orgByType": {
+        "Adult Race": 18.11111111111111,
+        "Youth Race": 12.333333333333332,
+        "Adult Clinic": -0.7777777777777777,
+        "Youth Clinic": 3.5555555555555554
+      }
+    },
+    {
+      "month": 7,
+      "w25": 8,
+      "w26": 8,
+      "dw": 0,
+      "ds": 0,
+      "du": 0,
+      "tot25": 181,
+      "tot26": 165,
+      "actDelta": -16,
+      "calTotal": 0,
+      "orgTotal": -16,
+      "calByType": {
+        "Adult Race": 0,
+        "Youth Race": 0,
+        "Adult Clinic": 0,
+        "Youth Clinic": 0
+      },
+      "actByType": {
+        "Adult Race": -8,
+        "Youth Race": -8,
+        "Adult Clinic": 0,
+        "Youth Clinic": 0
+      },
+      "orgByType": {
+        "Adult Race": -8,
+        "Youth Race": -8,
+        "Adult Clinic": 0,
+        "Youth Clinic": 0
+      }
+    },
+    {
+      "month": 8,
+      "w25": 10,
+      "w26": 10,
+      "dw": 0,
+      "ds": 0,
+      "du": 0,
+      "tot25": 220,
+      "tot26": 202,
+      "actDelta": -18,
+      "calTotal": 0,
+      "orgTotal": -18,
+      "calByType": {
+        "Adult Race": 0,
+        "Youth Race": 0,
+        "Adult Clinic": 0,
+        "Youth Clinic": 0
+      },
+      "actByType": {
+        "Adult Race": -6,
+        "Youth Race": -9,
+        "Adult Clinic": 0,
+        "Youth Clinic": -3
+      },
+      "orgByType": {
+        "Adult Race": -6,
+        "Youth Race": -9,
+        "Adult Clinic": 0,
+        "Youth Clinic": -3
+      }
+    },
+    {
+      "month": 9,
+      "w25": 8,
+      "w26": 8,
+      "dw": 0,
+      "ds": 0,
+      "du": 0,
+      "tot25": 151,
+      "tot26": 147,
+      "actDelta": -4,
+      "calTotal": 0,
+      "orgTotal": -4,
+      "calByType": {
+        "Adult Race": 0,
+        "Youth Race": 0,
+        "Adult Clinic": 0,
+        "Youth Clinic": 0
+      },
+      "actByType": {
+        "Adult Race": -2,
+        "Youth Race": -1,
+        "Adult Clinic": -1,
+        "Youth Clinic": 0
+      },
+      "orgByType": {
+        "Adult Race": -2,
+        "Youth Race": -1,
+        "Adult Clinic": -1,
+        "Youth Clinic": 0
+      }
+    },
+    {
+      "month": 10,
+      "w25": 8,
+      "w26": 9,
+      "dw": 1,
+      "ds": 1,
+      "du": 0,
+      "tot25": 60,
+      "tot26": 71,
+      "actDelta": 11,
+      "calTotal": 7.5,
+      "orgTotal": 3.5,
+      "calByType": {
+        "Adult Race": 6.25,
+        "Youth Race": 1.125,
+        "Adult Clinic": 0,
+        "Youth Clinic": 0.125
+      },
+      "actByType": {
+        "Adult Race": 7,
+        "Youth Race": 3,
+        "Adult Clinic": 2,
+        "Youth Clinic": -1
+      },
+      "orgByType": {
+        "Adult Race": 0.75,
+        "Youth Race": 1.875,
+        "Adult Clinic": 2,
+        "Youth Clinic": -1.125
+      }
+    },
+    {
+      "month": 11,
+      "w25": 10,
+      "w26": 9,
+      "dw": -1,
+      "ds": -1,
+      "du": 0,
+      "tot25": 22,
+      "tot26": 13,
+      "actDelta": -9,
+      "calTotal": -2.2,
+      "orgTotal": -6.8,
+      "calByType": {
+        "Adult Race": -1.6,
+        "Youth Race": -0.3,
+        "Adult Clinic": -0.3,
+        "Youth Clinic": 0
+      },
+      "actByType": {
+        "Adult Race": -5,
+        "Youth Race": -2,
+        "Adult Clinic": -2,
+        "Youth Clinic": 0
+      },
+      "orgByType": {
+        "Adult Race": -3.4,
+        "Youth Race": -1.7,
+        "Adult Clinic": -1.7,
+        "Youth Clinic": 0
+      }
+    },
+    {
+      "month": 12,
+      "w25": 8,
+      "w26": 8,
+      "dw": 0,
+      "ds": 0,
+      "du": 0,
+      "tot25": 10,
+      "tot26": 10,
+      "actDelta": 0,
+      "calTotal": 0,
+      "orgTotal": 0,
+      "calByType": {
+        "Adult Race": 0,
+        "Youth Race": 0,
+        "Adult Clinic": 0,
+        "Youth Clinic": 0
+      },
+      "actByType": {
+        "Adult Race": 1,
+        "Youth Race": 0,
+        "Adult Clinic": 0,
+        "Youth Clinic": -1
+      },
+      "orgByType": {
+        "Adult Race": 1,
+        "Youth Race": 0,
+        "Adult Clinic": 0,
+        "Youth Clinic": -1
+      }
+    }
+  ],
+  "overrides": {
+    "total_applied": 0,
+    "applied": [],
+    "warnings": []
+  }
+}
