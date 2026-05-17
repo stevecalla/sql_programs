@@ -18,8 +18,25 @@ const path       = require('path');
 const fs         = require('fs');
 const readline   = require('readline');
 const { execSync, spawn } = require('child_process');
+const { determineOSPath } = require('../../utilities/determineOSPath');
 
 const DIR = __dirname;
+
+// OUTPUT_DIR is resolved once at startup inside main() so the rest of the
+// module (including sync helpers like status_line) can read it as a constant.
+// Override at the shell: EVENT_ANALYSIS_OUTPUT_DIR=/custom/path node menu.js
+let OUTPUT_DIR = null;
+async function resolve_output_dir() {
+  if (OUTPUT_DIR) return OUTPUT_DIR;
+  if (process.env.EVENT_ANALYSIS_OUTPUT_DIR) {
+    OUTPUT_DIR = process.env.EVENT_ANALYSIS_OUTPUT_DIR;
+  } else {
+    const os_path = await determineOSPath();
+    OUTPUT_DIR = require('path').join(os_path, 'usat_event_analysis_output');
+  }
+  require('fs').mkdirSync(OUTPUT_DIR, { recursive: true });
+  return OUTPUT_DIR;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -83,8 +100,8 @@ function find_latest(dir, regex) {
 }
 
 function status_line() {
-  const cm  = load_json(path.join(DIR, 'output', 'commentary.json'));
-  const res = load_json(path.join(DIR, 'output', 'analysis_results.json'));
+  const cm  = load_json(path.join(OUTPUT_DIR, 'commentary.json'));
+  const res = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
   const ov_raw = load_json(path.join(DIR, 'data', 'overrides.json')) ?? {};
   const clean  = arr => (arr ?? []).filter(e => Object.keys(e).some(k => !k.startsWith('_')));
   const ov_count = clean(ov_raw.force_match).length + clean(ov_raw.force_no_match).length + clean(ov_raw.force_segment).length;
@@ -193,7 +210,7 @@ async function handle_action(action, rl) {
       break;
 
     case 'open_dashboard': {
-      const fp = path.join(DIR, 'output', 'dashboard.html');
+      const fp = path.join(OUTPUT_DIR, 'dashboard.html');
       if (!fs.existsSync(fp)) { console.log(c(YELLOW, '  Run Build first to generate the dashboard.')); break; }
       open_browser(fp);
       console.log(c(GREEN, '  ✓ Dashboard opened in browser'));
@@ -201,7 +218,7 @@ async function handle_action(action, rl) {
     }
 
     case 'open_excel': {
-      const fp = find_latest(path.join(DIR, 'output'), /^\d{4}_event_calendar_analysis_.+\.xlsx$/);
+      const fp = find_latest(path.join(OUTPUT_DIR), /^\d{4}_event_calendar_analysis_.+\.xlsx$/);
       if (!fp) { console.log(c(YELLOW, '  No xlsx in output/ — run Build first.')); break; }
       try { execSync(process.platform === 'win32' ? `start "" "${fp}"` : process.platform === 'darwin' ? `open "${fp}"` : `xdg-open "${fp}"`, { stdio: 'ignore' }); console.log(c(GREEN, `  ✓ Opened ${path.basename(fp)}`)); }
       catch { console.log(`  Path: ${fp}`); }
@@ -209,7 +226,7 @@ async function handle_action(action, rl) {
     }
 
     case 'open_pptx': {
-      const fp = find_latest(path.join(DIR, 'output'), /^\d{4}_event_trends_summary_.+\.pptx$/);
+      const fp = find_latest(path.join(OUTPUT_DIR), /^\d{4}_event_trends_summary_.+\.pptx$/);
       if (!fp) { console.log(c(YELLOW, '  No pptx in output/ — run Build first.')); break; }
       try { execSync(process.platform === 'win32' ? `start "" "${fp}"` : process.platform === 'darwin' ? `open "${fp}"` : `xdg-open "${fp}"`, { stdio: 'ignore' }); console.log(c(GREEN, `  ✓ Opened ${path.basename(fp)}`)); }
       catch { console.log(`  Path: ${fp}`); }
@@ -296,7 +313,7 @@ async function handle_action(action, rl) {
       break;
 
     case 'view_changes': {
-      const fp = path.join(DIR, 'output', 'changes.txt');
+      const fp = path.join(OUTPUT_DIR, 'changes.txt');
       if (!fs.existsSync(fp)) { console.log(c(YELLOW, '  No changes.txt yet — run Build twice.')); break; }
       console.log(fs.readFileSync(fp, 'utf8'));
       break;
@@ -331,6 +348,7 @@ async function handle_action(action, rl) {
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
 async function main() {
+  await resolve_output_dir();
   const rl = readline.createInterface({
     input:  process.stdin,
     output: process.stdout,

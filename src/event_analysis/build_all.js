@@ -32,12 +32,17 @@ const DIR = __dirname;
 const YEAR_B = Number(process.env.YEAR_B) || new Date().getFullYear();
 const YEAR_A = Number(process.env.YEAR_A) || (YEAR_B - 1);
 
-// ── Output paths ─────────────────────────────────────────────────────────────
+// ── Output config ────────────────────────────────────────────────────────────
 // Timestamp captured once at script start so every artifact from this run
 // shares the same suffix (YYYY-MM-DD_HH-MM-SS, e.g. "2026-05-17_14-30-45").
 const BUILD_TS = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19).replace('T', '_');
-const out_xlsx = path.join(DIR, 'output', `${YEAR_B}_event_calendar_analysis_${BUILD_TS}.xlsx`);
-const out_pptx = path.join(DIR, 'output', `${YEAR_B}_event_trends_summary_${BUILD_TS}.pptx`);
+// OUTPUT_DIR is resolved inside main() because determineOSPath() is async.
+// Override at the shell: EVENT_ANALYSIS_OUTPUT_DIR=/custom/path node build_all.js
+async function resolve_output_dir() {
+  if (process.env.EVENT_ANALYSIS_OUTPUT_DIR) return process.env.EVENT_ANALYSIS_OUTPUT_DIR;
+  const os_path = await determineOSPath();
+  return path.join(os_path, 'usat_event_analysis_output');
+}
 
 // ── Source modules ────────────────────────────────────────────────────────────
 const { loadBothYearsFromRows: load_both_years_from_rows } = require('./src/loader');
@@ -47,6 +52,7 @@ const { build_workbook } = require('./src/excel/builder');
 const { generate_rule_based, generate_ai } = require('./src/commentary');
 const { generate_dashboard } = require('./src/dashboard');
 const { buildDeck } = require('./src/pptx/builder');
+const { determineOSPath } = require('../../utilities/determineOSPath');
 
 
 // ── Archive + export helpers ──────────────────────────────────────────────────
@@ -117,27 +123,33 @@ function save_json(fp, obj) {
 // ════════════════════════════════════════════════════════════════════════════
 
 async function main() {
+  const OUTPUT_DIR = await resolve_output_dir();
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  const out_xlsx = path.join(OUTPUT_DIR, `${YEAR_B}_event_calendar_analysis_${BUILD_TS}.xlsx`);
+  const out_pptx = path.join(OUTPUT_DIR, `${YEAR_B}_event_trends_summary_${BUILD_TS}.pptx`);
+
   console.log('');
   console.log('USAT Sanctioned Events -- Build All');
   console.log('====================================');
   console.log(`  Data source         : usat_sales_db.event_data_metrics`);
   console.log(`  Years               : ${YEAR_A} vs ${YEAR_B}`);
+  console.log(`  Output directory    : ${OUTPUT_DIR}`);
   console.log(`  Excel output        : ${out_xlsx}`);
   console.log(`  PowerPoint output   : ${out_pptx}`);
   console.log('');
 
   // ── Archive prior outputs ──────────────────────────────────────────────────
-  archive_outputs(path.join(DIR, 'output'), {
+  archive_outputs(path.join(OUTPUT_DIR), {
     patterns: [
       /^\d{4}_event_calendar_analysis_.+\.xlsx$/,
       /^\d{4}_event_trends_summary_.+\.pptx$/,
     ],
     // JSON sidecars copied so the diff report has a prior snapshot.
     files: [
-      path.join(DIR, 'output', 'commentary.json'),
-      path.join(DIR, 'output', 'analysis_results.json'),
-      path.join(DIR, 'output', 'analysis_state.json'),
-      path.join(DIR, 'output', 'dashboard.html'),
+      path.join(OUTPUT_DIR, 'commentary.json'),
+      path.join(OUTPUT_DIR, 'analysis_results.json'),
+      path.join(OUTPUT_DIR, 'analysis_state.json'),
+      path.join(OUTPUT_DIR, 'dashboard.html'),
     ],
     keep_last_n: 1,
   });
@@ -164,7 +176,7 @@ async function main() {
   console.log('  Segments:', JSON.stringify(results.segSummary));
 
   // Export analysis results dataset
-  const out_results_json = path.join(DIR, 'output', 'analysis_results.json');
+  const out_results_json = path.join(OUTPUT_DIR, 'analysis_results.json');
   const results_export = {
     generated_at: new Date().toISOString(),
     years: { year_a: YEAR_A, year_b: YEAR_B },
@@ -197,7 +209,7 @@ async function main() {
     confidence: m.confidence ?? null,
     match_type: m.matchType ?? m.match_type ?? null,
   });
-  const out_state_json = path.join(DIR, 'output', 'analysis_state.json');
+  const out_state_json = path.join(OUTPUT_DIR, 'analysis_state.json');
   const state_export = {
     build_meta: {
       build_ts: new Date().toISOString(),
@@ -269,7 +281,7 @@ async function main() {
   if (!commentary) commentary = generate_rule_based(results);
 
   // Export commentary dataset
-  const out_commentary_json = path.join(DIR, 'output', 'commentary.json');
+  const out_commentary_json = path.join(OUTPUT_DIR, 'commentary.json');
   save_json(out_commentary_json, {
     generated_at: new Date().toISOString(),
     mode: commentary._ai_generated ? 'ai_claude' : 'rule_based',
@@ -319,13 +331,13 @@ async function main() {
   console.log('  PowerPoint done.\n');
 
   // ── HTML dashboard ───────────────────────────────────────────────────────
-  const out_dashboard = path.join(DIR, 'output', 'dashboard.html');
+  const out_dashboard = path.join(OUTPUT_DIR, 'dashboard.html');
   generate_dashboard(results_export, commentary, out_dashboard, results.segments);
   console.log(`  Dashboard: ${out_dashboard}`);
 
   // ── Diff report ───────────────────────────────────────────────────────────
   try {
-    const archive_dir = path.join(DIR, 'output', 'archive');
+    const archive_dir = path.join(OUTPUT_DIR, 'archive');
     const prior_runs = fs.existsSync(archive_dir) ? fs.readdirSync(archive_dir).sort().reverse() : [];
     const prior_cm_path = prior_runs.length
       ? path.join(archive_dir, prior_runs[0], 'commentary.json')
@@ -385,7 +397,7 @@ async function main() {
 
       diff_lines.push('\n' + '='.repeat(60));
       const diff_text = diff_lines.join('\n');
-      fs.writeFileSync(path.join(DIR, 'output', 'changes.txt'), diff_text, 'utf8');
+      fs.writeFileSync(path.join(OUTPUT_DIR, 'changes.txt'), diff_text, 'utf8');
       console.log(`  Changes:   output/changes.txt (${metrics_changed} metric change(s), ${narr_changed} narrative change(s))`);
     }
   } catch (err) {

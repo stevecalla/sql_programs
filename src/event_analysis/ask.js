@@ -26,8 +26,23 @@ dotenv.config({ path: "../../.env" });
 
 const fs   = require('fs');
 const path = require('path');
+const { determineOSPath } = require('../../utilities/determineOSPath');
 
 const DIR = __dirname;
+
+// OUTPUT_DIR resolution — same pattern as build_all.js / menu.js. Cached
+// after first call so repeated context loads don't re-await.
+let OUTPUT_DIR = null;
+async function resolve_output_dir() {
+  if (OUTPUT_DIR) return OUTPUT_DIR;
+  if (process.env.EVENT_ANALYSIS_OUTPUT_DIR) {
+    OUTPUT_DIR = process.env.EVENT_ANALYSIS_OUTPUT_DIR;
+  } else {
+    const os_path = await determineOSPath();
+    OUTPUT_DIR = path.join(os_path, 'usat_event_analysis_output');
+  }
+  return OUTPUT_DIR;
+}
 
 // ── Load context files ─────────────────────────────────────────────────────
 
@@ -42,7 +57,7 @@ function load_text(fp) {
 }
 
 function load_prior_run() {
-  const archive_dir = path.join(DIR, 'output', 'archive');
+  const archive_dir = path.join(OUTPUT_DIR, 'archive');
   if (!fs.existsSync(archive_dir)) return null;
   const runs = fs.readdirSync(archive_dir).sort().reverse();
   if (!runs.length) return null;
@@ -56,9 +71,9 @@ function load_prior_run() {
 // ── Build context for Claude ──────────────────────────────────────────────
 
 function build_context(question) {
-  const results   = load_json(path.join(DIR, 'output', 'analysis_results.json'));
-  const state     = load_json(path.join(DIR, 'output', 'analysis_state.json'));
-  const commentary = load_json(path.join(DIR, 'output', 'commentary.json'));
+  const results   = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
+  const state     = load_json(path.join(OUTPUT_DIR, 'analysis_state.json'));
+  const commentary = load_json(path.join(OUTPUT_DIR, 'commentary.json'));
   const notes      = load_text(path.join(DIR, 'notes.md'));
   const prior      = load_prior_run();
 
@@ -281,6 +296,7 @@ function build_context(question) {
 // ── Ask Claude ────────────────────────────────────────────────────────────
 
 async function ask(question, opts = {}) {
+  await resolve_output_dir();
   const api_key = process.env.ANTHROPIC_API_KEY;
   if (!api_key || api_key === 'sk-ant-your-key-here') {
     console.error('Error: ANTHROPIC_API_KEY not set. Add it to your .env file.');
@@ -367,7 +383,7 @@ Behavior rules:
 
   // If --update-commentary flag, update that key in commentary.json
   if (opts.update_key) {
-    const cm_path = path.join(DIR, 'output', 'commentary.json');
+    const cm_path = path.join(OUTPUT_DIR, 'commentary.json');
     const cm = load_json(cm_path);
     if (cm) {
       cm[opts.update_key] = full_response.trim();
@@ -417,7 +433,7 @@ function save_overrides_file(ov) {
 
 function cmd_list_overrides() {
   const ov = load_overrides_file();
-  const results = load_json(path.join(DIR, 'output', 'analysis_results.json'));
+  const results = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
   const last_applied = results?.overrides;
 
   console.log('\n=== Active overrides in data/overrides.json ===\n');
@@ -646,16 +662,17 @@ For each suggestion output EXACTLY this JSON format (no other text):
 // ── CLI ────────────────────────────────────────────────────────────────────
 
 async function main() {
+  await resolve_output_dir();
   const args = process.argv.slice(2);
 
   // ── Override management commands ──────────────────────────────────────
   if (args[0] === '--what-changed') {
-    const current_cm  = load_json(path.join(DIR, 'output', 'commentary.json'));
-    const current_res = load_json(path.join(DIR, 'output', 'analysis_results.json'));
+    const current_cm  = load_json(path.join(OUTPUT_DIR, 'commentary.json'));
+    const current_res = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
     if (!current_cm) { console.error('Run node build_all.js first.'); process.exit(1); }
 
     // Find most recent archive
-    const archive_dir = path.join(DIR, 'output', 'archive');
+    const archive_dir = path.join(OUTPUT_DIR, 'archive');
     const prior_runs  = fs.existsSync(archive_dir) ? fs.readdirSync(archive_dir).sort().reverse() : [];
     const prior_cm_path = prior_runs.length ? path.join(archive_dir, prior_runs[0], 'commentary.json') : null;
     const prior_cm = prior_cm_path && fs.existsSync(prior_cm_path) ? load_json(prior_cm_path) : null;
@@ -715,7 +732,7 @@ async function main() {
       }
       console.log('\n');
     } else {
-      if (changes_txt_path = path.join(DIR, 'output', 'changes.txt'), fs.existsSync(changes_txt_path)) {
+      if (changes_txt_path = path.join(OUTPUT_DIR, 'changes.txt'), fs.existsSync(changes_txt_path)) {
         console.log('\nFull diff: output/changes.txt');
       }
     }
@@ -757,7 +774,7 @@ async function main() {
 
   // ── Legacy flag ───────────────────────────────────────────────────────
   if (args[0] === '--list-unmatched') {
-    const results = load_json(path.join(DIR, 'output', 'analysis_results.json'));
+    const results = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
     if (!results) { console.error('Run node build_all.js first.'); process.exit(1); }
     console.log('\nUse --suggest-overrides for AI-powered match suggestions.');
     console.log('Use --list-overrides to see active overrides.\n');
