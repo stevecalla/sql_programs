@@ -111,26 +111,26 @@ function check_overrides(overrides, all_25_ids, all_26_ids, issues) {
 
   // force_match
   for (const ov of (overrides.force_match ?? [])) {
-    if (!ov.sid_25 || !ov.sid_26) { issues.push({ level: 'error', check: 'override_malformed', msg: `force_match entry missing sid_25 or sid_26` }); continue; }
-    if (!all_25_ids.has(ov.sid_25)) issues.push({ level: 'error', check: 'override_not_found', msg: `force_match: sid_25 "${ov.sid_25}" not found in ${ya_label} active events` });
-    if (!all_26_ids.has(ov.sid_26)) issues.push({ level: 'error', check: 'override_not_found', msg: `force_match: sid_26 "${ov.sid_26}" not found in ${yb_label} active events` });
-    [ov.sid_25, ov.sid_26].forEach(s => all_ids_seen.set(s, (all_ids_seen.get(s) ?? 0) + 1));
+    if (!ov.sid_baseline || !ov.sid_analysis) { issues.push({ level: 'error', check: 'override_malformed', msg: `force_match entry missing sid_baseline or sid_analysis` }); continue; }
+    if (!all_25_ids.has(ov.sid_baseline)) issues.push({ level: 'error', check: 'override_not_found', msg: `force_match: sid_baseline "${ov.sid_baseline}" not found in ${ya_label} active events` });
+    if (!all_26_ids.has(ov.sid_analysis)) issues.push({ level: 'error', check: 'override_not_found', msg: `force_match: sid_analysis "${ov.sid_analysis}" not found in ${yb_label} active events` });
+    [ov.sid_baseline, ov.sid_analysis].forEach(s => all_ids_seen.set(s, (all_ids_seen.get(s) ?? 0) + 1));
   }
 
   // force_no_match
   for (const ov of (overrides.force_no_match ?? [])) {
-    if (!ov.sid_25 && !ov.sid_26) { issues.push({ level: 'error', check: 'override_malformed', msg: `force_no_match entry missing both sid_25 and sid_26` }); continue; }
-    if (ov.sid_25 && !all_25_ids.has(ov.sid_25)) issues.push({ level: 'error', check: 'override_not_found', msg: `force_no_match: sid_25 "${ov.sid_25}" not found in active events` });
-    if (ov.sid_26 && !all_26_ids.has(ov.sid_26)) issues.push({ level: 'error', check: 'override_not_found', msg: `force_no_match: sid_26 "${ov.sid_26}" not found in active events` });
-    [ov.sid_25, ov.sid_26].filter(Boolean).forEach(s => all_ids_seen.set(s, (all_ids_seen.get(s) ?? 0) + 1));
+    if (!ov.sid_baseline && !ov.sid_analysis) { issues.push({ level: 'error', check: 'override_malformed', msg: `force_no_match entry missing both sid_baseline and sid_analysis` }); continue; }
+    if (ov.sid_baseline && !all_25_ids.has(ov.sid_baseline)) issues.push({ level: 'error', check: 'override_not_found', msg: `force_no_match: sid_baseline "${ov.sid_baseline}" not found in active events` });
+    if (ov.sid_analysis && !all_26_ids.has(ov.sid_analysis)) issues.push({ level: 'error', check: 'override_not_found', msg: `force_no_match: sid_analysis "${ov.sid_analysis}" not found in active events` });
+    [ov.sid_baseline, ov.sid_analysis].filter(Boolean).forEach(s => all_ids_seen.set(s, (all_ids_seen.get(s) ?? 0) + 1));
   }
 
   // force_segment
   for (const ov of (overrides.force_segment ?? [])) {
     if (!ov.segment) { issues.push({ level: 'error', check: 'override_malformed', msg: `force_segment entry missing segment field` }); continue; }
     if (!VALID_SEGMENTS.has(ov.segment)) issues.push({ level: 'error', check: 'override_invalid_segment', msg: `force_segment: invalid segment "${ov.segment}". Valid: ${[...VALID_SEGMENTS].join(', ')}` });
-    const sid = ov.sid_25 ?? ov.sid_26;
-    const pool = ov.sid_25 ? all_25_ids : all_26_ids;
+    const sid = ov.sid_baseline ?? ov.sid_analysis;
+    const pool = ov.sid_baseline ? all_25_ids : all_26_ids;
     if (sid && !pool.has(sid)) issues.push({ level: 'error', check: 'override_not_found', msg: `force_segment: "${sid}" not found in active events` });
     if (sid) all_ids_seen.set(sid, (all_ids_seen.get(sid) ?? 0) + 1);
   }

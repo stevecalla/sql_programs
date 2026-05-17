@@ -49,8 +49,8 @@ function is_active_entry(entry) {
 /** Pull every active entry out of a JSON array, returning normalized objects. */
 function extract_active(arr) {
   return (arr ?? []).filter(is_active_entry).map(e => ({
-    sid_25:  e.sid_25  ?? null,
-    sid_26:  e.sid_26  ?? null,
+    sid_baseline:  e.sid_baseline  ?? null,
+    sid_analysis:  e.sid_analysis  ?? null,
     segment: normalize_segment(e.segment),
     note:    e.note    ?? null,
   }));
@@ -68,22 +68,30 @@ function normalize_segment(seg) {
  * Insert a single override into the DB if an equivalent active row doesn't
  * already exist. Returns 'inserted' or 'skipped'.
  */
-async function upsert_override(conn, override_type, sid_25, sid_26, segment, note) {
+async function upsert_override(conn, override_type, sid_baseline, sid_analysis, segment, note, baseline_year, analysis_year) {
   // Identity test: same override_type + sid pair (+ segment for force_segment)
-  // and currently active. Strict equality on NULLs.
+  // (+ year scope) and currently active. Year columns are part of the identity
+  // so the same pair can exist under different year comparisons.
   const conditions = ['override_type = ?', 'active = 1'];
   const args = [override_type];
 
-  if (sid_25 === null) conditions.push('sid_25 IS NULL');
-  else { conditions.push('sid_25 = ?'); args.push(sid_25); }
+  if (sid_baseline === null) conditions.push('sid_baseline IS NULL');
+  else { conditions.push('sid_baseline = ?'); args.push(sid_baseline); }
 
-  if (sid_26 === null) conditions.push('sid_26 IS NULL');
-  else { conditions.push('sid_26 = ?'); args.push(sid_26); }
+  if (sid_analysis === null) conditions.push('sid_analysis IS NULL');
+  else { conditions.push('sid_analysis = ?'); args.push(sid_analysis); }
 
   if (override_type === 'force_segment') {
     if (segment === null) conditions.push('segment IS NULL');
     else { conditions.push('segment = ?'); args.push(segment); }
   }
+
+  // Year scope — both null → "global" overrides; otherwise must match.
+  if (baseline_year === null) conditions.push('baseline_year IS NULL');
+  else { conditions.push('baseline_year = ?'); args.push(baseline_year); }
+
+  if (analysis_year === null) conditions.push('analysis_year IS NULL');
+  else { conditions.push('analysis_year = ?'); args.push(analysis_year); }
 
   const [rows] = await conn.query(
     `SELECT id FROM event_analysis_overrides WHERE ${conditions.join(' AND ')} LIMIT 1`,
@@ -93,9 +101,9 @@ async function upsert_override(conn, override_type, sid_25, sid_26, segment, not
 
   await conn.query(
     `INSERT INTO event_analysis_overrides
-       (override_type, sid_25, sid_26, segment, note, created_by)
-     VALUES (?, ?, ?, ?, ?, 'json_migration')`,
-    [override_type, sid_25, sid_26, segment, note]
+       (override_type, sid_baseline, sid_analysis, segment, note, baseline_year, analysis_year, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'json_migration')`,
+    [override_type, sid_baseline, sid_analysis, segment, note, baseline_year, analysis_year]
   );
   return 'inserted';
 }
@@ -149,21 +157,26 @@ async function migrate_overrides_json_to_db({
     console.log(`  Migrating overrides from JSON → DB${dry_run ? ' (DRY-RUN)' : ''}: ${found} active entries...`);
   }
 
+  // Year scope for newly-inserted rows comes from env vars set by build_all.js
+  // (or the current calendar year if run standalone).
+  const analysis_year = Number(process.env.ANALYSIS_YEAR) || new Date().getFullYear();
+  const baseline_year = Number(process.env.BASELINE_YEAR) || (analysis_year - 1);
+
   let inserted = 0, skipped = 0;
   if (!dry_run) {
     const cfg  = await local_usat_sales_db_config();
     const conn = await mysqlP.createConnection(cfg);
     try {
       for (const e of fm) {
-        const r = await upsert_override(conn, 'force_match',   e.sid_25, e.sid_26, null,     e.note);
+        const r = await upsert_override(conn, 'force_match',   e.sid_baseline, e.sid_analysis, null,     e.note, baseline_year, analysis_year);
         if (r === 'inserted') inserted++; else skipped++;
       }
       for (const e of fnm) {
-        const r = await upsert_override(conn, 'force_no_match', e.sid_25, e.sid_26, null,     e.note);
+        const r = await upsert_override(conn, 'force_no_match', e.sid_baseline, e.sid_analysis, null,     e.note, baseline_year, analysis_year);
         if (r === 'inserted') inserted++; else skipped++;
       }
       for (const e of fs2) {
-        const r = await upsert_override(conn, 'force_segment',  e.sid_25, e.sid_26, e.segment, e.note);
+        const r = await upsert_override(conn, 'force_segment',  e.sid_baseline, e.sid_analysis, e.segment, e.note, baseline_year, analysis_year);
         if (r === 'inserted') inserted++; else skipped++;
       }
     } finally {
@@ -185,7 +198,7 @@ async function migrate_overrides_json_to_db({
   }
 
   if (!silent) {
-    console.log(`  ✓ Migration${dry_run ? ' (dry-run)' : ''}: ${inserted} inserted, ${skipped} already in DB${dry_run ? '' : '.'}`);
+    console.log(`  ✓ Migration${dry_run ? ' (dry-run)' : ''}: ${inserted} inserted (scoped to baseline_year=${baseline_year}, analysis_year=${analysis_year}), ${skipped} already in DB${dry_run ? '' : '.'}`);
     if (renamed) console.log(`  ✓ Renamed data/overrides.json → data/overrides.json.migrated (JSON is now historical).`);
   }
 

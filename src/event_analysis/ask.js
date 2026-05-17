@@ -93,7 +93,7 @@ function build_context(question) {
     if (results.overrides?.total_applied) {
       parts.push(`\nManual overrides active: ${results.overrides.total_applied} override(s) applied`);
       results.overrides.applied.forEach(o => {
-        parts.push(`  - ${o.type}: ${o.sid_25 ?? ''}${o.sid_26 ? ' / ' + o.sid_26 : ''} → ${o.result}${o.note ? ' (' + o.note + ')' : ''}`);
+        parts.push(`  - ${o.type}: ${o.sid_baseline ?? ''}${o.sid_analysis ? ' / ' + o.sid_analysis : ''} → ${o.result}${o.note ? ' (' + o.note + ')' : ''}`);
       });
     }
     parts.push(`Years: ${results.years?.BASELINE_YEAR} vs ${results.years?.ANALYSIS_YEAR}`);
@@ -445,37 +445,37 @@ function cmd_list_overrides() {
   } else {
     if (ov.force_match.length) {
       console.log(`Force matches (${ov.force_match.length}):`);
-      ov.force_match.forEach(e => console.log(`  ✓ ${e.sid_25} ↔ ${e.sid_26}${e.note ? '  — ' + e.note : ''}`));
+      ov.force_match.forEach(e => console.log(`  ✓ ${e.sid_baseline} ↔ ${e.sid_analysis}${e.note ? '  — ' + e.note : ''}`));
     }
     if (ov.force_no_match.length) {
       console.log(`Force no-match (${ov.force_no_match.length}):`);
-      ov.force_no_match.forEach(e => console.log(`  ✗ ${e.sid_25 ?? e.sid_26}${e.note ? '  — ' + e.note : ''}`));
+      ov.force_no_match.forEach(e => console.log(`  ✗ ${e.sid_baseline ?? e.sid_analysis}${e.note ? '  — ' + e.note : ''}`));
     }
     if (ov.force_segment.length) {
       console.log(`Force segment (${ov.force_segment.length}):`);
-      ov.force_segment.forEach(e => console.log(`  → ${e.sid_25 ?? e.sid_26}  =  ${e.segment}${e.note ? '  — ' + e.note : ''}`));
+      ov.force_segment.forEach(e => console.log(`  → ${e.sid_baseline ?? e.sid_analysis}  =  ${e.segment}${e.note ? '  — ' + e.note : ''}`));
     }
   }
 
   if (last_applied?.total_applied) {
     console.log(`\nLast build applied: ${last_applied.total_applied} override(s)`);
     last_applied.applied.forEach(a =>
-      console.log(`  ${a.type}: ${a.sid_25 ?? ''}${a.sid_26 ? ' / ' + a.sid_26 : ''} → ${a.result}`)
+      console.log(`  ${a.type}: ${a.sid_baseline ?? ''}${a.sid_analysis ? ' / ' + a.sid_analysis : ''} → ${a.result}`)
     );
   }
   console.log('\nRun: node build_all.js   to apply changes\n');
 }
 
-function cmd_add_match(sid_25, sid_26, note) {
-  if (!sid_25 || !sid_26) { console.error('Usage: --add-override match <sid_25> <sid_26> ["note"]'); process.exit(1); }
+function cmd_add_match(sid_baseline, sid_analysis, note) {
+  if (!sid_baseline || !sid_analysis) { console.error('Usage: --add-override match <sid_baseline> <sid_analysis> ["note"]'); process.exit(1); }
   const ov = load_overrides_file();
-  const exists = ov.force_match.some(e => e.sid_25 === sid_25 && e.sid_26 === sid_26);
-  if (exists) { console.log(`  Already exists: force_match ${sid_25} ↔ ${sid_26}`); return; }
-  const entry = { sid_25, sid_26 };
+  const exists = ov.force_match.some(e => e.sid_baseline === sid_baseline && e.sid_analysis === sid_analysis);
+  if (exists) { console.log(`  Already exists: force_match ${sid_baseline} ↔ ${sid_analysis}`); return; }
+  const entry = { sid_baseline, sid_analysis };
   if (note) entry.note = note;
   ov.force_match.push(entry);
   save_overrides_file(ov);
-  console.log(`✓ Added force_match: ${sid_25} ↔ ${sid_26}${note ? '  (' + note + ')' : ''}`);
+  console.log(`✓ Added force_match: ${sid_baseline} ↔ ${sid_analysis}${note ? '  (' + note + ')' : ''}`);
   console.log('  Run: node build_all.js   to apply\n');
 }
 
@@ -485,7 +485,7 @@ function cmd_add_no_match(year, sid, note) {
     process.exit(1);
   }
   const ov = load_overrides_file();
-  const key = String(year) === '25' ? 'sid_25' : 'sid_26';
+  const key = String(year) === '25' ? 'sid_baseline' : 'sid_analysis';
   const exists = ov.force_no_match.some(e => e[key] === sid);
   if (exists) { console.log(`  Already exists: force_no_match ${sid}`); return; }
   const entry = { [key]: sid };
@@ -513,7 +513,7 @@ function cmd_add_segment(year, sid, segment, note) {
     process.exit(1);
   }
   const ov = load_overrides_file();
-  const key = String(year) === '25' ? 'sid_25' : 'sid_26';
+  const key = String(year) === '25' ? 'sid_baseline' : 'sid_analysis';
   const exists = ov.force_segment.findIndex(e => e[key] === sid);
   if (exists >= 0) {
     ov.force_segment[exists] = { [key]: sid, segment: matched_seg, ...(note ? { note } : {}) };
@@ -532,9 +532,9 @@ function cmd_remove_override(sid) {
   if (!sid) { console.error('Usage: --remove-override <sanction_id>'); process.exit(1); }
   const ov = load_overrides_file();
   let removed = 0;
-  ov.force_match    = ov.force_match.filter(e => { const keep = e.sid_25 !== sid && e.sid_26 !== sid; if (!keep) removed++; return keep; });
-  ov.force_no_match = ov.force_no_match.filter(e => { const keep = e.sid_25 !== sid && e.sid_26 !== sid; if (!keep) removed++; return keep; });
-  ov.force_segment  = ov.force_segment.filter(e => { const keep = e.sid_25 !== sid && e.sid_26 !== sid; if (!keep) removed++; return keep; });
+  ov.force_match    = ov.force_match.filter(e => { const keep = e.sid_baseline !== sid && e.sid_analysis !== sid; if (!keep) removed++; return keep; });
+  ov.force_no_match = ov.force_no_match.filter(e => { const keep = e.sid_baseline !== sid && e.sid_analysis !== sid; if (!keep) removed++; return keep; });
+  ov.force_segment  = ov.force_segment.filter(e => { const keep = e.sid_baseline !== sid && e.sid_analysis !== sid; if (!keep) removed++; return keep; });
   if (!removed) { console.log(`  No override found for: ${sid}`); return; }
   save_overrides_file(ov);
   console.log(`✓ Removed ${removed} override entry(s) for: ${sid}`);
@@ -578,9 +578,9 @@ async function cmd_suggest_overrides() {
 
   const existing_ov = load_overrides_file();
   const already_overridden = new Set([
-    ...existing_ov.force_match.flatMap(e => [e.sid_25, e.sid_26]),
-    ...existing_ov.force_no_match.map(e => e.sid_25 ?? e.sid_26),
-    ...existing_ov.force_segment.map(e => e.sid_25 ?? e.sid_26),
+    ...existing_ov.force_match.flatMap(e => [e.sid_baseline, e.sid_analysis]),
+    ...existing_ov.force_no_match.map(e => e.sid_baseline ?? e.sid_analysis),
+    ...existing_ov.force_segment.map(e => e.sid_baseline ?? e.sid_analysis),
   ].filter(Boolean));
 
   const attrited_filtered = attrited.filter(e => !already_overridden.has(e.sid));
@@ -607,9 +607,9 @@ Identify the TOP 10 most likely missed matches — pairs where a ${ya} event and
 For each suggestion output EXACTLY this JSON format (no other text):
 [
   {
-    "sid_25": "...",
+    "sid_baseline": "...",
     "name_25": "...",
-    "sid_26": "...",
+    "sid_analysis": "...",
     "name_26": "...",
     "confidence": "High|Medium",
     "reason": "brief explanation of why these match"
@@ -643,7 +643,7 @@ For each suggestion output EXACTLY this JSON format (no other text):
   suggestions.forEach((s, i) => {
     console.log(`${i + 1}. [${s.confidence}] ${s.name_25}  ↔  ${s.name_26}`);
     console.log(`   Reason: ${s.reason}`);
-    console.log(`   Add: node ask.js --add-override match ${s.sid_25} ${s.sid_26} "${s.reason}"\n`);
+    console.log(`   Add: node ask.js --add-override match ${s.sid_baseline} ${s.sid_analysis} "${s.reason}"\n`);
   });
 
   // Offer to add all High confidence ones
@@ -654,7 +654,7 @@ For each suggestion output EXACTLY this JSON format (no other text):
     rl.question(`Add all ${high.length} High-confidence suggestions to overrides.json? (y/n): `, ans => {
       rl.close();
       if (ans.trim().toLowerCase() === 'y') {
-        high.forEach(s => cmd_add_match(s.sid_25, s.sid_26, s.reason));
+        high.forEach(s => cmd_add_match(s.sid_baseline, s.sid_analysis, s.reason));
         console.log(`\n✓ Added ${high.length} override(s). Run: node build_all.js   to apply`);
       }
     });
@@ -756,7 +756,7 @@ async function main() {
   if (args[0] === '--add-override') {
     const sub = args[1];
     if (sub === 'match') {
-      // --add-override match <sid_25> <sid_26> ["note"]
+      // --add-override match <sid_baseline> <sid_analysis> ["note"]
       const note = args[4] || '';
       cmd_add_match(args[2], args[3], note); return;
     }
@@ -783,7 +783,7 @@ async function main() {
     if (results.overrides?.total_applied) {
       console.log(`Active overrides: ${results.overrides.total_applied}`);
       results.overrides.applied.forEach(o =>
-        console.log(`  ${o.type}: ${o.sid_25 ?? ''}${o.sid_26 ? ' / '+o.sid_26 : ''} → ${o.result}`)
+        console.log(`  ${o.type}: ${o.sid_baseline ?? ''}${o.sid_analysis ? ' / '+o.sid_analysis : ''} → ${o.result}`)
       );
     }
     return;

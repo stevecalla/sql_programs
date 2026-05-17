@@ -107,9 +107,9 @@ After matching, `crossMatch()` finds:
 Three types:
 ```json
 {
-  "force_match":    [{ "sid_25": "...", "sid_26": "...", "note": "..." }],
-  "force_no_match": [{ "sid_25": "...", "note": "..." }],
-  "force_segment":  [{ "sid_25": "...", "segment": "Lost|New|Recovered|...", "note": "..." }]
+  "force_match":    [{ "sid_baseline": "...", "sid_analysis": "...", "note": "..." }],
+  "force_no_match": [{ "sid_baseline": "...", "note": "..." }],
+  "force_segment":  [{ "sid_baseline": "...", "segment": "Lost|New|Recovered|...", "note": "..." }]
 }
 ```
 Applied after automatic matching. `node server.js` + dashboard Override Manager writes these live without terminal copy-paste.

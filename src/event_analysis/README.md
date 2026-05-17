@@ -142,7 +142,7 @@ The status bar at the top always shows: last build date, event totals, commentar
 | **OVERRIDES — event matching** | | |
 | 6 | List active overrides | `node ask.js --list-overrides` |
 | 7 | Suggest overrides (AI) | `node ask.js --suggest-overrides` |
-| 8 | Add force-match | `node ask.js --add-override match <sid_25> <sid_26> "note"` |
+| 8 | Add force-match | `node ask.js --add-override match <sid_baseline> <sid_analysis> "note"` |
 | 9 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
 | 10 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
 | 11 | Remove override | `node ask.js --remove-override <sid>` |
@@ -432,6 +432,7 @@ Overrides are moving from `data/overrides.json` into a dedicated MySQL table (`u
 |---|---|
 | **1.** `event_analysis_overrides` table exists in `usat_sales_db` (auto-created on every `node build_all.js` via `ensure_overrides_table()` — idempotent `CREATE TABLE IF NOT EXISTS`) | ✓ done |
 | **2.** Active entries in `data/overrides.json` auto-import into the DB on every build via `migrate_overrides_json_to_db()` (idempotent; legacy `Attrited` → `Lost` mapping; once migrated, JSON is renamed `overrides.json.migrated`) | ✓ done |
+| **2.5.** Year scoping — `event_analysis_overrides` carries `baseline_year` + `analysis_year` columns so overrides apply only to the matching year-pair. `ensure_overrides_table()` adds the columns + `idx_year_pair` index idempotently if missing and backfills existing rows from current build env vars. | ✓ done |
 | 3. `analysis.js` reads overrides from DB instead of JSON | pending |
 | 4. `ask.js` CLI commands write to DB instead of JSON | pending |
 | 5. Add `--approve` / `--unapprove` CLI commands (locks segment + match) | pending |
@@ -468,8 +469,8 @@ Edit `data/overrides.json` to add overrides. **Remove the leading `_` from keys 
 **`force_match`** — force two specific events to be matched:
 ```json
 {
-  "sid_25": "310628-Adult Race",
-  "sid_26": "352469-Adult Race",
+  "sid_baseline": "310628-Adult Race",
+  "sid_analysis": "352469-Adult Race",
   "note": "Name changed between years — confirmed same event series"
 }
 ```
@@ -477,14 +478,14 @@ Result: classified as **Retained** (if same month) or **Shifted** (if different 
 
 **`force_no_match`** — prevent an event from matching anything:
 ```json
-{ "sid_25": "311157-Adult Race", "note": "Confirmed permanently cancelled" }
+{ "sid_baseline": "311157-Adult Race", "note": "Confirmed permanently cancelled" }
 ```
-Result: prior-year event → **Lost**. Use `sid_26` instead to force a current-year event to **New**.
+Result: prior-year event → **Lost**. Use `sid_analysis` instead to force a current-year event to **New**.
 
 **`force_segment`** — override a segment classification on any event:
 ```json
 {
-  "sid_25": "310379-Adult Race",
+  "sid_baseline": "310379-Adult Race",
   "segment": "Lost",
   "note": "Algorithm fuzzy-matched incorrectly"
 }
@@ -683,4 +684,4 @@ Events are matched across years using a 3-pass algorithm:
 
 Segments: `Retained` | `Shifted` | `Lost` | `Tried to Return` | `Recovered` | `New`
 
-Match confidence: ~85–90% at event level. Remaining mismatches can be corrected via `data/overrides.json` (see the Manual Event Overrides section).
+Match confidence: ~85–90% at event level. Remaining mismatches c

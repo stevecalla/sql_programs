@@ -10,8 +10,10 @@ const identity_fields = `
 const payload_fields = `
   -- WHAT the override is and which event(s) it targets
   override_type ENUM('force_match', 'force_no_match', 'force_segment') NOT NULL,
-  sid_25 VARCHAR(64) NULL,
-  sid_26 VARCHAR(64) NULL,
+  baseline_year SMALLINT UNSIGNED NULL,
+  analysis_year SMALLINT UNSIGNED NULL,
+  sid_baseline VARCHAR(64) NULL,
+  sid_analysis VARCHAR(64) NULL,
   segment ENUM('Retained', 'Shifted', 'Lost', 'New', 'Recovered', 'Tried to Return') NULL,
   note TEXT NULL,
 `;
@@ -34,12 +36,13 @@ const audit_fields = `
 
 const indexes_and_constraints = `
   PRIMARY KEY (id),
-  INDEX idx_sid_25 (sid_25),
-  INDEX idx_sid_26 (sid_26),
+  INDEX idx_sid_baseline (sid_baseline),
+  INDEX idx_sid_analysis (sid_analysis),
   INDEX idx_type_active (override_type, active),
   INDEX idx_approved (approved),
+  INDEX idx_year_pair (baseline_year, analysis_year, active),
   CONSTRAINT chk_match_requires_pair CHECK (
-    override_type <> 'force_match' OR (sid_25 IS NOT NULL AND sid_26 IS NOT NULL)
+    override_type <> 'force_match' OR (sid_baseline IS NOT NULL AND sid_analysis IS NOT NULL)
   ),
   CONSTRAINT chk_segment_requires_value CHECK (
     override_type <> 'force_segment' OR segment IS NOT NULL

@@ -1765,9 +1765,9 @@ function render_server_overrides(ov){
   var list = document.getElementById('ov-list');
   if(!list) return;
   var all = [];
-  (ov.force_match||[]).forEach(function(e){ all.push({type:'force_match', label:'Force Match: '+e.sid_25+' ↔ '+e.sid_26, entry:e}); });
-  (ov.force_no_match||[]).forEach(function(e){ all.push({type:'force_no_match', label:'Force '+(e.sid_25?'Lost':'New')+': '+(e.sid_25||e.sid_26), entry:e}); });
-  (ov.force_segment||[]).forEach(function(e){ all.push({type:'force_segment', label:'Segment → '+e.segment+': '+(e.sid_25||e.sid_26), entry:e}); });
+  (ov.force_match||[]).forEach(function(e){ all.push({type:'force_match', label:'Force Match: '+e.sid_baseline+' ↔ '+e.sid_analysis, entry:e}); });
+  (ov.force_no_match||[]).forEach(function(e){ all.push({type:'force_no_match', label:'Force '+(e.sid_baseline?'Lost':'New')+': '+(e.sid_baseline||e.sid_analysis), entry:e}); });
+  (ov.force_segment||[]).forEach(function(e){ all.push({type:'force_segment', label:'Segment → '+e.segment+': '+(e.sid_baseline||e.sid_analysis), entry:e}); });
   if(!all.length){ list.innerHTML='<span style="color:#aaa">No active overrides</span>'; return; }
   list.innerHTML = all.map(function(item, i){
     return '<div style="display:flex;align-items:center;gap:8px;padding:2px 0;border-bottom:1px solid #eee">' +
@@ -1826,20 +1826,20 @@ function build_override_entry(){
   var api_type, entry, cmd;
   if(ov_type==='match'){
     if(!sid25||!sid26){ alert('Both Sanction IDs required for Force Match.'); return null; }
-    api_type='force_match'; entry={sid_25:sid25,sid_26:sid26};
+    api_type='force_match'; entry={sid_baseline:sid25,sid_analysis:sid26};
     cmd='node ask.js --add-override match "'+sid25+'" "'+sid26+'"';
   } else if(ov_type==='no-match-25'){
     if(!sid25){ alert('${ya} Sanction ID required.'); return null; }
-    api_type='force_no_match'; entry={sid_25:sid25};
+    api_type='force_no_match'; entry={sid_baseline:sid25};
     cmd='node ask.js --add-override no-match 25 "'+sid25+'"';
   } else if(ov_type==='no-match-26'){
     if(!sid26){ alert('${yb} Sanction ID required.'); return null; }
-    api_type='force_no_match'; entry={sid_26:sid26};
+    api_type='force_no_match'; entry={sid_analysis:sid26};
     cmd='node ask.js --add-override no-match 26 "'+sid26+'"';
   } else if(ov_type==='segment'){
     var yr=sid25?'25':'26', sid=sid25||sid26;
     if(!sid||!seg){ alert('Sanction ID and segment required.'); return null; }
-    api_type='force_segment'; entry=sid25?{sid_25:sid25,segment:seg}:{sid_26:sid26,segment:seg};
+    api_type='force_segment'; entry=sid25?{sid_baseline:sid25,segment:seg}:{sid_analysis:sid26,segment:seg};
     cmd='node ask.js --add-override segment '+yr+' "'+sid+'" "'+seg+'"';
   } else { return null; }
   if(note){ entry.note=note; cmd+=' "'+note+'"'; }

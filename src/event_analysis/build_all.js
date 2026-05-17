@@ -403,7 +403,7 @@ async function main() {
       const prior_ov = prior_cm._ai_generated !== undefined ? 0 : 0;
       if (results.override_summary?.total_applied) {
         diff_lines.push(`\nActive overrides: ${results.override_summary.total_applied}`);
-        results.override_summary.applied.forEach(a => diff_lines.push(`  ${a.type}: ${a.sid_25 ?? ''}${a.sid_26 ? '/' + a.sid_26 : ''} → ${a.result}`));
+        results.override_summary.applied.forEach(a => diff_lines.push(`  ${a.type}: ${a.sid_baseline ?? ''}${a.sid_analysis ? '/' + a.sid_analysis : ''} → ${a.result}`));
       }
 
       diff_lines.push('\n' + '='.repeat(60));
