@@ -120,9 +120,53 @@ async function fetch_creation_for_years(years) {
   }
 }
 
+/**
+ * Look up event names + start month for a small set of sanction IDs in a
+ * specific year. Used by /api/overrides to enrich each override row with
+ * the human-readable event name(s) so the editor can show "311655-Adult
+ * Race · Alpha Win Sarasota FL" instead of the bare sid.
+ *
+ * Returns a Map<sanction_id, { name, month }>. Sanction IDs not found in
+ * the DB are simply absent from the map (the caller renders a fallback).
+ *
+ * Designed for the override list — typically dozens of rows, never
+ * thousands — so a single IN (?) clause is fine. Skips silently when
+ * `sids` is empty so callers can do `if (!sids.length) return new Map()`
+ * without a special case at the call site.
+ */
+async function fetch_event_names_for_sids({ year, sids }) {
+  const map = new Map();
+  if (!year || !sids || !sids.length) return map;
+  const cfg  = await local_usat_sales_db_config();
+  const conn = await mysqlP.createConnection({ ...cfg, dateStrings: true });
+  try {
+    const [rows] = await conn.query(
+      `SELECT id_sanctioning_events AS sid,
+              REPLACE(name_events, '"', '') AS name,
+              MONTH(starts_events) AS m
+         FROM event_data_metrics
+        WHERE starts_year_events = ?
+          AND id_sanctioning_events IN (?)
+        GROUP BY 1, 2, 3`,
+      [Number(year), sids]
+    );
+    for (const r of rows) {
+      // First-seen wins — same sid can appear in multiple rows because of
+      // the duplicated id_sanctioning_events alias in events_sql(); the
+      // GROUP BY collapses most duplicates but a defensive Map.has() avoids
+      // a later row clobbering an earlier one with a stale value.
+      if (!map.has(r.sid)) map.set(r.sid, { name: r.name, month: r.m });
+    }
+    return map;
+  } finally {
+    await conn.end();
+  }
+}
+
 module.exports = {
   fetch_events_for_years,
   fetch_creation_for_years,
+  fetch_event_names_for_sids,
   events_sql,
   creation_sql,
 };

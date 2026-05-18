@@ -840,7 +840,7 @@ A minimal Express server exposing read + write endpoints for the event_analysis 
 |---|---|
 | `GET /` | HTML index — lists endpoints, shows `curl` examples, links to the dashboard |
 | `GET /api/status` | `{ ok, baseline_year, analysis_year, output_dir, time }` — health check |
-| `GET /api/overrides` | `{ scope, force_match[], force_no_match[], force_segment[], stats }` — current-scope + global overrides. Honours `?baseline_year=YYYY&analysis_year=YYYY` query params; defaults to env vars. |
+| `GET /api/overrides` | `{ scope, force_match[], force_no_match[], force_segment[], stats }` — current-scope + global overrides. Honours `?baseline_year=YYYY&analysis_year=YYYY` query params; defaults to env vars. **Each row is enriched with `name_baseline`, `name_analysis`, `month_baseline`, `month_analysis`** by joining `event_data_metrics` for the (sid, year) pair — `null` if the underlying event was deleted from source data. |
 | `GET /api/events?year=YYYY` | `{ year, count, total_in_year, include_excluded, events[] }` — events from `usat_sales_db.event_data_metrics`. Returns 400 if `year` is missing or out of range. Add `&include=excluded` to include CANCELLED/DECLINED/DELETED rows. |
 | `GET /output/<file>` | Static-serves files from the analysis output directory (`dashboard.html`, `analysis_results.json`, `analysis_state.json`, `commentary.json`, the archive folder, etc.) |
 | (any other path) | `404 { error: 'not found', path }` |
@@ -930,6 +930,8 @@ The editor exists in two places, both backed by the Step 8 API:
 2. **Standalone SPA at `/editor/`** — same logic, on its own page. Useful as a power-user view for scanning all overrides without scrolling through the roster, or when the build-time dashboard is stale.
 
 Both surfaces talk to the same write endpoints, so you can mix-and-match: edit in the dashboard, verify in `/editor/`, or vice versa.
+
+**Event names alongside sanction IDs.** Every override row in both surfaces shows the human-readable event name under each sid pill (e.g. `311655-Adult Race · Alpha Win Sarasota FL`). The names come from a server-side join in `/api/overrides` against `event_data_metrics` — when the underlying event has been deleted from source data, the UI shows `(event no longer in DB)` rather than hiding the row. No client-side state to keep in sync, no `/api/events` round-trip from the panel.
 
 #### `/editor/` standalone SPA
 

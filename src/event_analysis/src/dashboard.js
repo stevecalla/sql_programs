@@ -642,6 +642,8 @@ canvas{width:100%!important;max-height:220px}
 .dash-ov-list-item.dash-ov-selected-row{background:#e3f2fd;margin:0 -4px;padding:6px 8px;border-radius:4px}
 .dash-ov-list-item .sids{flex:1;font-family:ui-monospace,Menlo,monospace;font-size:.72rem;color:#444}
 .dash-ov-list-item .note{display:block;font-size:.7rem;color:#777;margin-top:.1rem;font-family:inherit}
+.dash-ov-list-item .ev-name{display:block;font-size:.7rem;color:#444;margin:1px 0 1px 2px;font-style:italic;font-family:inherit;line-height:1.3}
+.dash-ov-list-item .ev-name.muted{color:#999}
 .dash-ov-list-item .acts{display:flex;gap:4px;flex-shrink:0}
 .dash-ov-btn{font:inherit;font-size:.7rem;font-weight:500;padding:.2rem .55rem;border-radius:4px;border:1px solid #d1d9e0;background:#fff;color:#1f2328;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
 .dash-ov-btn:hover{background:#f3f4f6}
@@ -2214,6 +2216,15 @@ if(ROSTER && ROSTER.length > 0){
       return;
     }
 
+    // Render the event name (or a placeholder when the underlying event
+    // was removed from event_data_metrics) as a small italic line so the
+    // user can read "311655-Adult Race · Alpha Win Sarasota FL" at a
+    // glance instead of recognising bare sanction IDs.
+    function ev_name_line(name, sid_present){
+      if (!sid_present) return '';
+      if (name == null) return '<span class="ev-name muted">(event no longer in DB)</span>';
+      return '<span class="ev-name">' + esc(name) + '</span>';
+    }
     list.innerHTML = all.map(function(o){
       var sid = o.sid_baseline || o.sid_analysis;
       var label;
@@ -2233,6 +2244,8 @@ if(ROSTER && ROSTER.length > 0){
       return '<div class="dash-ov-list-item' + selected + '">' +
         '<div style="flex:0 0 auto">' + pill_for(o._type) + '</div>' +
         '<div class="sids">' + label +
+          ev_name_line(o.name_baseline, !!o.sid_baseline) +
+          ev_name_line(o.name_analysis, !!o.sid_analysis) +
           (o.note ? '<span class="note">' + esc(o.note) + '</span>' : '') +
           '<span class="note">' + state_for(o).replace(/<[^>]+>/g, '').trim() + '</span>' +
         '</div>' +

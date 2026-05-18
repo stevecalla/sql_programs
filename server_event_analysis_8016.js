@@ -44,7 +44,7 @@ const is_test_ngrok = true;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 const { load_overrides } = require('./src/event_analysis/src/overrides');
-const { fetch_events_for_years } = require('./src/event_analysis/src/db');
+const { fetch_events_for_years, fetch_event_names_for_sids } = require('./src/event_analysis/src/db');
 const { determineOSPath } = require('./utilities/determineOSPath');
 
 // CLI command implementations — the write endpoints (Step 8) are thin
@@ -78,6 +78,81 @@ function current_year_scope() {
   const analysis_year = Number(process.env.ANALYSIS_YEAR) || new Date().getFullYear();
   const baseline_year = Number(process.env.BASELINE_YEAR) || (analysis_year - 1);
   return { baseline_year, analysis_year };
+}
+
+/**
+ * Enrich each override row in `force_match` / `force_no_match` /
+ * `force_segment` with `name_baseline` / `name_analysis` / `month_baseline`
+ * / `month_analysis` by looking up sids in event_data_metrics.
+ *
+ * Why this lives in the route handler rather than in src/overrides.js:
+ * the build pipeline applies overrides against an in-memory event list
+ * that already carries names — it doesn't need this enrichment and would
+ * pay an unnecessary DB round-trip for it. The editor UI is the only
+ * caller that benefits, so the cost stays here.
+ *
+ * Global overrides (NULL baseline_year / analysis_year) resolve their
+ * names against whatever scope the request asked for. That's the right
+ * default: the user is looking at one specific year pair and wants names
+ * relevant to that view.
+ *
+ * Rows whose sids don't match anything in event_data_metrics (e.g. the
+ * underlying event was deleted from source data) end up with null names —
+ * the editor renders a "(event no longer in DB)" placeholder, which is
+ * more informative than silently hiding the override.
+ */
+async function enrich_overrides_with_names(overrides, scope) {
+  const ba = scope.baseline_year, an = scope.analysis_year;
+
+  // Collect unique (sid, year) pairs across all three override types.
+  // Use sets keyed by year so each year only fires one IN-clause query.
+  const sids_by_year = new Map();
+  const note_sid = (sid, year) => {
+    if (!sid || !year) return;
+    if (!sids_by_year.has(year)) sids_by_year.set(year, new Set());
+    sids_by_year.get(year).add(sid);
+  };
+
+  for (const arr_name of ['force_match', 'force_no_match', 'force_segment']) {
+    for (const ov of overrides[arr_name] || []) {
+      const year_b = ov.baseline_year ?? ba;
+      const year_a = ov.analysis_year ?? an;
+      note_sid(ov.sid_baseline, year_b);
+      note_sid(ov.sid_analysis, year_a);
+    }
+  }
+
+  if (sids_by_year.size === 0) return overrides;
+
+  // Two queries max (baseline year + analysis year), each with IN-clause.
+  const name_map = new Map();   // key: `${year}|${sid}` -> { name, month }
+  for (const [year, sid_set] of sids_by_year.entries()) {
+    const partial = await fetch_event_names_for_sids({ year, sids: [...sid_set] });
+    for (const [sid, info] of partial.entries()) {
+      name_map.set(`${year}|${sid}`, info);
+    }
+  }
+
+  // Fold the lookup back onto each override row. Returning a fresh object
+  // so we don't mutate the load_overrides() result the caller may hold a
+  // reference to elsewhere.
+  const out = { ...overrides };
+  for (const arr_name of ['force_match', 'force_no_match', 'force_segment']) {
+    out[arr_name] = (overrides[arr_name] || []).map(ov => {
+      const year_b = ov.baseline_year ?? ba;
+      const year_a = ov.analysis_year ?? an;
+      const lookup_b = ov.sid_baseline ? name_map.get(`${year_b}|${ov.sid_baseline}`) : null;
+      const lookup_a = ov.sid_analysis ? name_map.get(`${year_a}|${ov.sid_analysis}`) : null;
+      return {
+        ...ov,
+        name_baseline:  lookup_b ? lookup_b.name  : null,
+        month_baseline: lookup_b ? lookup_b.month : null,
+        name_analysis:  lookup_a ? lookup_a.name  : null,
+        month_analysis: lookup_a ? lookup_a.month : null,
+      };
+    });
+  }
+  return out;
 }
 
 // OUTPUT_DIR resolution mirrors build_all.js — used for static-serving
@@ -221,6 +296,13 @@ async function create_app() {
   // ── GET /api/overrides — current-scope overrides ─────────────────────
   // Default scope comes from BASELINE_YEAR / ANALYSIS_YEAR env vars but the
   // dashboard / curl can override per request via query params.
+  //
+  // Enrichment: every returned override row also gets `name_baseline` /
+  // `name_analysis` / `month_baseline` / `month_analysis`, looked up
+  // against `event_data_metrics` for the (sid, year) pair. This keeps the
+  // editor UI from showing bare sanction IDs that the user can't quickly
+  // recognise. Missing-from-DB events come back as `null` — the UI shows
+  // a "(event no longer in DB)" placeholder rather than hiding the row.
   app.get('/api/overrides', async (req, res) => {
     try {
       const default_scope = current_year_scope();
@@ -231,9 +313,12 @@ async function create_app() {
       if (!overrides) {
         return res.status(503).json({ error: 'load_overrides returned null — DB unreachable?' });
       }
+
+      const enriched = await enrich_overrides_with_names(overrides, { baseline_year, analysis_year });
+
       res.json({
         scope: { baseline_year, analysis_year },
-        ...overrides,
+        ...enriched,
       });
     } catch (err) {
       console.error('[GET /api/overrides] error:', err.message);

@@ -143,6 +143,19 @@ main {
   color: var(--muted);
   margin-top: 0.15rem;
 }
+/* Event-name annotation under each sid pill — populated server-side from
+   the /api/overrides enrichment join. Falls back to a muted placeholder
+   when the underlying event has been deleted from event_data_metrics. */
+.overrides-table .row-detail .ev-name {
+  font-size: 0.74rem;
+  color: #444;
+  margin: 1px 0 3px 2px;
+  font-style: italic;
+  line-height: 1.3;
+}
+.overrides-table .row-detail .ev-name.muted {
+  color: var(--muted);
+}
 .overrides-table .actions {
   display: flex;
   gap: 0.3rem;

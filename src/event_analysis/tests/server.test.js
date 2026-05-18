@@ -93,6 +93,37 @@ describe('Step 7 — server: read-only API', () => {
     assert.equal(body.scope.analysis_year, 2000, 'query param should override default analysis');
   });
 
+  test('GET /api/overrides enriches each row with name_baseline + name_analysis fields', async () => {
+    // Server-side enrichment joins event_data_metrics so the editor UI can
+    // show "311655-Adult Race · Alpha Win Sarasota FL" instead of bare
+    // sanction IDs. The fields must be present on every override row
+    // (value null when the underlying event has been deleted from source
+    // data — the UI handles that with a placeholder).
+    const res = await fetch(`${base}/api/overrides`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    const all = [...body.force_match, ...body.force_no_match, ...body.force_segment];
+
+    // Empty-overrides DB is acceptable for this assertion — just confirm
+    // the contract for any rows that DO exist.
+    for (const ov of all) {
+      assert.ok(Object.prototype.hasOwnProperty.call(ov, 'name_baseline'),
+        `override id=${ov.id} missing name_baseline field`);
+      assert.ok(Object.prototype.hasOwnProperty.call(ov, 'name_analysis'),
+        `override id=${ov.id} missing name_analysis field`);
+      assert.ok(Object.prototype.hasOwnProperty.call(ov, 'month_baseline'),
+        `override id=${ov.id} missing month_baseline field`);
+      assert.ok(Object.prototype.hasOwnProperty.call(ov, 'month_analysis'),
+        `override id=${ov.id} missing month_analysis field`);
+      // Values are either a string (joined) or null (deleted event /
+      // single-sided override) — never undefined.
+      assert.notEqual(typeof ov.name_baseline, 'undefined',
+        `name_baseline should be string or null, never undefined (id=${ov.id})`);
+      assert.notEqual(typeof ov.name_analysis, 'undefined',
+        `name_analysis should be string or null, never undefined (id=${ov.id})`);
+    }
+  });
+
   test('GET /api/events with no year param returns 400', async () => {
     const res = await fetch(`${base}/api/events`);
     assert.equal(res.status, 400);

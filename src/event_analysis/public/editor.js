@@ -116,16 +116,30 @@ function scope_badge(ov) {
   return '<span class="scope-tag">' + esc(ov.baseline_year + ' / ' + ov.analysis_year) + '</span>';
 }
 
+// Render an event name annotation under a sid pill. Falls back to a
+// muted "(event no longer in DB)" placeholder when the join returned
+// null — informative without hiding the override. Returns '' if no
+// name field is even present (older server versions don't enrich).
+function name_annotation(name, sid_present) {
+  if (!sid_present) return '';
+  if (name == null) return '<div class="ev-name muted">(event no longer in DB)</div>';
+  return '<div class="ev-name">' + esc(name) + '</div>';
+}
+
 function sid_cell(ov) {
   // Match + no-match show both sids; segment shows whichever is set.
   if (ov.sid_baseline && ov.sid_analysis) {
     const seg_hint = ov._type === 'force_no_match'
       ? ' <span class="muted">→ ' + esc(ov.segment_baseline ?? 'Lost') + ' / ' + esc(ov.segment_analysis ?? 'New') + '</span>'
       : '';
-    return '<span class="sid">' + esc(ov.sid_baseline) + ' ↔ ' + esc(ov.sid_analysis) + '</span>' + seg_hint;
+    return '<span class="sid">' + esc(ov.sid_baseline) + ' ↔ ' + esc(ov.sid_analysis) + '</span>' + seg_hint
+         + name_annotation(ov.name_baseline, true)
+         + name_annotation(ov.name_analysis, true);
   }
-  if (ov.sid_baseline) return '<span class="sid">' + esc(ov.sid_baseline) + '</span> <span class="muted">(baseline)</span>';
-  if (ov.sid_analysis) return '<span class="sid">' + esc(ov.sid_analysis) + '</span> <span class="muted">(analysis)</span>';
+  if (ov.sid_baseline) return '<span class="sid">' + esc(ov.sid_baseline) + '</span> <span class="muted">(baseline)</span>'
+                            + name_annotation(ov.name_baseline, true);
+  if (ov.sid_analysis) return '<span class="sid">' + esc(ov.sid_analysis) + '</span> <span class="muted">(analysis)</span>'
+                            + name_annotation(ov.name_analysis, true);
   return '<span class="muted">—</span>';
 }
 

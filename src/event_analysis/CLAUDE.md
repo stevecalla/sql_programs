@@ -176,7 +176,7 @@ Lives at the repo root (`sql_programs/server_event_analysis_8016.js`) alongside 
 |---|---|
 | `GET /` | HTML index — endpoint reference + `curl` examples |
 | `GET /api/status` | `{ ok, baseline_year, analysis_year, output_dir, time }` |
-| `GET /api/overrides` | Current-scope + global overrides. Honours `?baseline_year=&analysis_year=` query params; defaults to env vars. |
+| `GET /api/overrides` | Current-scope + global overrides. Honours `?baseline_year=&analysis_year=` query params; defaults to env vars. Rows are enriched with `name_baseline` / `name_analysis` / `month_baseline` / `month_analysis` via a server-side join against `event_data_metrics` (helper: `fetch_event_names_for_sids` in `src/event_analysis/src/db.js`). Both editor surfaces display these inline under each sid pill; deleted events render as `(event no longer in DB)`. |
 | `GET /api/events?year=YYYY` | Events from `usat_sales_db.event_data_metrics`. Add `&include=excluded` to include CANCELLED/DECLINED/DELETED. |
 | `GET /output/<file>` | Static-serves the analysis output dir (dashboard.html, JSON sidecars, archive folder) |
 
