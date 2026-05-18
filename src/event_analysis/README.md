@@ -133,38 +133,42 @@ Type a number and press Enter. For features that need input the menu prompts you
 
 The status bar at the top always shows: last build date, event totals, commentary mode (AI or rule-based), API key status, and active override count.
 
-### All 19 features — menu number + what it runs
+### All 26 features — menu number + what it runs
 
 | # | Menu label | Equivalent command |
 |---|---|---|
 | **BUILD & OUTPUT** | | |
 | 1 | Build everything | `node build_all.js` |
-| 2 | Check data quality | `node check.js` |
-| 3 | Open dashboard in browser | Opens `output/dashboard.html` |
-| 4 | Open Excel workbook | Opens the newest `output/<year>_event_calendar_analysis_*.xlsx` |
-| 5 | Open PowerPoint deck | Opens the newest `output/<year>_event_trends_summary_*.pptx` |
+| 2 | Build (rule-based only) | `NO_AI=1 node build_all.js` — forces rule-based commentary; no Claude tokens spent. Useful when iterating on dashboard / Excel / pptx formatting. |
+| 3 | Check data quality | `node check.js` |
+| 4 | Open dashboard in browser | Opens `output/dashboard.html` |
+| 5 | Open Excel workbook | Opens the newest `output/<year>_event_calendar_analysis_*.xlsx` |
+| 6 | Open PowerPoint deck | Opens the newest `output/<year>_event_trends_summary_*.pptx` |
 | **OVERRIDES — event matching** | | |
-| 6 | List active overrides | `node ask.js --list-overrides` |
-| 7 | Suggest overrides (AI) | `node ask.js --suggest-overrides` |
-| 8 | Add force-match | `node ask.js --add-override match <sid_baseline> <sid_analysis> "note"` |
-| 9 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
-| 10 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
-| 11 | Remove override | `node ask.js --remove-override <sid>` |
+| 7 | List active overrides | `node ask.js --list-overrides` |
+| 8 | Suggest overrides (AI) | `node ask.js --suggest-overrides` |
+| 9 | Add force-match | `node ask.js --add-override match <sid_baseline> <sid_analysis> "note"` |
+| 10 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
+| 11 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
+| 12 | Remove override | `node ask.js --remove-override <sid>` |
 | **Q&A & ANALYSIS** | | |
-| 12 | Ask a question | `node ask.js "your question"` |
-| 13 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
-| 14 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
-| 15 | What changed? | `node ask.js --what-changed` |
+| 13 | Ask a question | `node ask.js "your question"` |
+| 14 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
+| 15 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
+| 16 | What changed? | `node ask.js --what-changed` |
 | **INFORMATION** | | |
-| 16 | View changes since last build | `cat output/changes.txt` |
-| 17 | View notes.md | `cat notes.md` |
-| 18 | View README | Displays this file |
+| 17 | View changes since last build | `cat output/changes.txt` |
+| 18 | View notes.md | `cat notes.md` |
+| 19 | View README | Displays this file |
 | **LOCAL SERVER** | | |
-| 19 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
+| 20 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
 | **TESTING** | | |
-| 20 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
-| 21 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
-| 22 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
+| 21 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
+| 22 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
+| 23 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
+| 24 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
+| 25 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
+| 26 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
 | 0 | Exit | — |
 
 ---
@@ -304,6 +308,22 @@ Uses **Claude Haiku** for the build (fast, < $0.01/run) and **Claude Sonnet** fo
 ### Fallback behaviour
 
 If the API key is absent or the call fails, the build falls back to rule-based commentary automatically. The rule-based engine produces the same structured output (same section headers in speaker notes, same `<metric> + <interpretation>` Slack-bullet pattern, same Unicode formatting). The `commentary.json` `mode` field records which path was used (`ai_claude` or `rule_based`).
+
+### Force rule-based mode — skip the API call
+
+Set `NO_AI=1` (or `RULE_BASED_ONLY=1`) in the environment to force rule-based commentary even when the key is present. Menu option **2** ("Build (rule-based only)") wires this for you. Use when:
+
+- You're iterating on dashboard / Excel / pptx formatting and don't want to burn Claude tokens regenerating narratives you already have.
+- You want a deterministic build for diffing two consecutive runs (AI output can vary slightly between calls).
+- The API is rate-limited / unreachable and you want a clean build now.
+
+```bash
+# Manual invocation:
+NO_AI=1 node build_all.js                # bash / WSL / macOS
+$env:NO_AI = "1"; node build_all.js      # PowerShell
+```
+
+The build logs `NO_AI / RULE_BASED_ONLY set — skipping AI commentary, using rule-based.` so you can confirm at a glance which path ran.
 
 ---
 
@@ -741,14 +761,28 @@ Exits with status 1 if errors are found (stopping a `check.js && build_all.js` p
 
 ## Test suite — tests/
 
-> **Menu:** option **19** — or run directly:
+> **Menu:** options **21–26** (all / overrides / server / menu / smoke / glossary) — or run directly:
 
 ```bash
-node --test tests/                  # run the full suite
-node --test tests/overrides.test.js # run a single file
+node --test tests/                  # run every *.test.js
+node --test tests/overrides.test.js # run one file
+node --test tests/menu.test.js      # cheap: <1s, no DB needed
+node --test tests/smoke.test.js     # cheap: <1s, parses every source file
 ```
 
 Uses Node's built-in `node:test` runner (Node 18+) — no extra dependencies. Output is TAP-style: green `ok` lines for passes, red `not ok` with a stack trace for failures. The runner exits non-zero on any failure, so it composes cleanly with `&&` or CI.
+
+### Files in tests/
+
+| File | What it covers | DB needed? | Speed |
+|---|---|---|---|
+| `overrides.test.js` | Schema, migration, year scoping, apply, approve, stale (Steps 1 → 6 of the overrides ladder) | yes | seconds |
+| `server.test.js` | Local server read + write endpoints, `/editor/` static files, dashboard integration, `/api/build` SSE (Steps 7 → 9.5) | yes (server boot reads it) | seconds |
+| `menu.test.js` | Every menu item has id + label + action; ids are unique; actions are unique; the canonical action list is present; test-runner items point at real `tests/*.test.js` files | no | <1s |
+| `smoke.test.js` | Parse-check every major source file (CJS `vm.Script` — same engine as `node --check`), require-check each module's exports, sanity-check pure helpers | no | <1s |
+| `glossary.test.js` | Bottom-of-dashboard glossary is a default-closed `<details>` element and contains every required term (6 segments + 5 confidence values + calendar / organic + 7 other terms). Reads the most recent built `dashboard.html`. | no (reads built file) | <1s |
+
+The `menu.test.js` and `smoke.test.js` files are intentionally cheap — no DB, no network, no API key. Run them after any structural change (renaming a file, splitting a module, refactoring exports) to catch the easy regressions before the slow tests fire.
 
 ### What's covered
 
@@ -923,9 +957,13 @@ What's deliberately out of scope (punted to Step 10 or beyond):
 
 The build-time dashboard (`output/dashboard.html`) ships with the same editor embedded below the event roster. Things to know:
 
-- **Year-dynamic column headers.** All paired-year column labels (`Mo`, `Sanction ID`, `Date`, `Status`, `Event Name`) and chart dataset labels are rendered from the `ya` / `yb` template variables, which come from `results.years.BASELINE_YEAR` / `results.years.ANALYSIS_YEAR`. The Excel download link's filename (`./${yb}_event_calendar_analysis_v9f.xlsx`) is also year-dynamic. When the analysis years roll over (e.g. 2026 vs 2027), the dashboard adjusts automatically — no source edits required.
+- **Year-dynamic column headers.** All paired-year column labels (`Mo`, `Sanction ID`, `Date`, `Day`, `Event Name`, `Status`) and chart dataset labels are rendered from the `ya` / `yb` template variables, which come from `results.years.BASELINE_YEAR` / `results.years.ANALYSIS_YEAR`. The Excel download link's filename (`./${yb}_event_calendar_analysis_v9f.xlsx`) is also year-dynamic. When the analysis years roll over (e.g. 2026 vs 2027), the dashboard adjusts automatically — no source edits required.
+- **Column order per year:** `Mo · Sanction ID · Date · Day · Event Name · Status`. Date and Day sit adjacent so the weekday context is right next to the date.
 - **New "Override" column** in the roster. Shows `—` for events without overrides, or `match` / `no-match` / `seg` pill plus `✓ approved` / `◦ unapproved` / `⚠ stale` state. Populated by a `GET /api/overrides` call on page load; updates after every mutation.
 - **Roster filters.** Above the table: a search box (matches name OR sanction ID across either year, so a paste like `311655-Adult Race` or just `311655` works), plus four multi-select dropdowns — Segment, Type, Month, **Status** — that chip-render into a "Filters:" row below the toolbar. The Status dropdown is populated dynamically from the unique `Status YA` / `Status YB` values present in the roster. A Reset button next to the search clears everything.
+- **Three chip bars** above the table (Segment / Type / Month) with show/hide toggles. Each chip shows count + `% of N shown`, and clicking a chip toggles the matching dropdown filter. All percentages recompute against the visible total whenever the table is filtered — so the chips always describe what's actually in front of you. Month chips count a row once for the baseline month and once more for the analysis month only if the two months differ (shifted events get a foot in two months). A small **Show:** row of toggle pills above the bars lets you hide any of the three; defaults are **Segments + Types visible, Months hidden**. Choice persists in `localStorage` so the page remembers your preference.
+- **KPI cards in row 2** show count, percentage, AND the denominator (e.g. "of 1,178 2025 events") as an italic caption. Each card divides by its appropriate year total — `n_baseline` for Retained / Shifted / Lost / Tried to Return, `n_analysis` for New / Recovered.
+- **📖 Glossary card at the bottom of the page**, default-collapsed. Click to expand for plain-English definitions of every term the dashboard uses: the six segments, the five confidence values (Exact / Exact-Shifted / Cross / Override / N/A) with examples, calendar-expected vs organic delta (with a worked weekend-days example), plus net change, sanction ID, active event, override lifecycle (approved / unapproved / stale), and worst month. Aimed at readers who didn't build the model. Audited by `tests/glossary.test.js` (menu option **26**), so adding a new term means updating both the dashboard and the test's `REQUIRED_TERMS` list — a regression in either direction trips the test.
 - **Click any row** → highlights it, scrolls the editor panel into view, pre-fills the sanction ID(s) in the add-override form. Click the row again (or the "clear" link in the focused-event card) to deselect.
 - **Sticky "rebuild needed" banner** appears at the top of the page after any edit, since the charts/KPIs/segment counts are computed from `ROSTER` at build time and don't reflect new overrides until you rebuild. The banner has a **Rebuild now** button that streams `build_all.js` output into a collapsible log and auto-reloads the page on success.
 

@@ -7,19 +7,20 @@ Compares two years of USAT sanctioned event CSV data (2025 vs 2026) and produces
 - **PowerPoint deck** — 8-slide executive summary (`output/event_trends_summary_v3.pptx`)
 - **HTML dashboard** — interactive filterable roster + charts (`output/dashboard.html`)
 
-Everything is generated dynamically from CSV data. With an Anthropic API key in `.env`, Claude writes all commentary and insights; without one, a rule-based fallback produces equivalent output.
+Everything is generated dynamically from CSV data. With an Anthropic API key in `.env`, Claude writes all commentary and insights; without one, a rule-based fallback produces equivalent output. Set `NO_AI=1` (or `RULE_BASED_ONLY=1`) to force rule-based even when the key is set — handy for iterating on formatting without burning tokens. Menu option **2** ("Build (rule-based only)") wires that env var for you.
 
 ---
 
 ## How to run
 
 ```bash
-node check.js          # validate data quality before building (always run first)
-node build_all.js      # generate Excel + PowerPoint + dashboard (takes ~30s)
-node menu.js           # interactive feature launcher
-node ask.js            # Q&A + override management CLI (DB-backed)
+node check.js                   # validate data quality before building (always run first)
+node build_all.js               # generate Excel + PowerPoint + dashboard (takes ~30s)
+NO_AI=1 node build_all.js       # same as above, but force rule-based commentary (no Claude tokens)
+node menu.js                    # interactive feature launcher (25 options across 6 sections)
+node ask.js                     # Q&A + override management CLI (DB-backed)
 node server_event_analysis_8016.js   # from repo root — local read-only API at http://localhost:8016
-node --test tests/     # run the overrides + server test suites
+node --test tests/              # run every *.test.js (overrides + server + menu + smoke)
 ```
 
 > Interactive override editing in the browser (Step 9) is still pending — for now the server is read-only and you manage overrides via `ask.js`.
@@ -61,7 +62,11 @@ event_analysis/
 │   ├── overrides.json.migrated  ← historical JSON, no longer read by runtime
 │   └── overrides_example.json   ← template for reference only
 ├── tests/
-│   └── overrides.test.js        ← node:test suite for overrides DB chain
+│   ├── overrides.test.js        ← schema + apply + approve + stale (DB)
+│   ├── server.test.js           ← local server read/write API + /api/build SSE (DB)
+│   ├── menu.test.js             ← menu.js wiring: unique ids/actions, required actions present (cheap)
+│   ├── smoke.test.js            ← parse-check + require-check every major source file (cheap)
+│   └── glossary.test.js         ← dashboard glossary: <details> collapsed, every required term present (cheap)
 ├── utilities/
 │   ├── ensure_overrides_table.js   ← idempotent schema setup (auto-runs every build)
 │   └── migrate_overrides_to_db.js  ← one-shot JSON → DB migration (auto-runs every build)
@@ -145,11 +150,14 @@ Open `output/dashboard.html` in a browser (a hosted version is on the roadmap as
 | Chart flip | ⇄ Table button on each chart — flips to data table with Δ abs + Δ % columns |
 | Chart expand | ⤢ Expand — opens modal; expands chart OR table depending on current view |
 | Event roster table | All matched pairs, sortable, filterable |
-| Year-dynamic headers | All paired-year column labels (`Mo`, `Sanction ID`, `Date`, `Status`, `Event Name`) and chart dataset labels read from `ya`/`yb` (= `results.years.BASELINE_YEAR` / `ANALYSIS_YEAR`). Excel download link's filename also year-dynamic. Rolls over to e.g. 2026 vs 2027 without source edits. |
+| Year-dynamic headers | All paired-year column labels (`Mo`, `Sanction ID`, `Date`, `Day`, `Event Name`, `Status`) and chart dataset labels read from `ya`/`yb` (= `results.years.BASELINE_YEAR` / `ANALYSIS_YEAR`). Excel download link's filename also year-dynamic. Rolls over to e.g. 2026 vs 2027 without source edits. |
+| Column order (per year) | `Mo · Sanction ID · Date · Day · Event Name · Status` — Date and Day are now adjacent. |
+| KPI cards with denominators | Row-2 cards show count + % + italic "of N {year} events" caption so the denominator is explicit. Retained / Shifted / Lost / TTR divide by `n_baseline`; New / Recovered divide by `n_analysis`. |
 | Roster search | Matches name OR sanction ID across either year — partial-prefix paste (e.g. `311655` or `311655-Adult Race`) works |
 | Multi-select filters | Segment / Type / Month / **Status** dropdowns with color-coded checkboxes. Status options are populated dynamically from the unique `Status YA` / `Status YB` values present in the roster. |
 | Active filter bar | Shows current filters as removable chips; ↺ Reset clears all (including Status) |
-| Segment count bar | Dynamic chips above table — clickable to toggle segment filter |
+| Segment / Type / Month chip bars | Three clickable chip bars above the table. Each chip shows count + `% of N shown`; clicking toggles the matching dropdown filter. All chips recompute against the visible total on every filter. Month chips count rows once per distinct month they touch (shifted events count for both their baseline AND analysis month if those differ). Bars are individually toggleable via a "Show:" pill row above them — defaults: Segments + Types visible, Months hidden. Choice persists in `localStorage` (`chip_bar_visibility`). |
+| Bottom-of-page glossary | Native `<details id="dash-glossary">` element (no JS), default-collapsed. Defines: the 6 segments, 5 confidence values (Exact / Exact-Shifted / Cross / Override / N/A — each with a one-line example), calendar-expected + organic delta (with a worked weekend-days arithmetic example), net change, sanction ID, active event, override lifecycle (approved/unapproved/stale), worst month. Audited in `tests/glossary.test.js` (its own suite — menu option 26) — a `REQUIRED_TERMS` list checks each term is present inside the `<details>` block, so renaming or removing a definition breaks the test. |
 | Column picker | ⊞ Columns button — show/hide Sanction ID and Date columns |
 | Mobile responsive | Horizontal + vertical scroll, 60vh max-height on mobile, iOS touch scroll |
 
@@ -250,11 +258,11 @@ CORS is open (`*`) — fine for local dev, tighten before any production hosting
 | 2. JSON → DB auto-migration on every build | ✓ done |
 | 2.5. Year scoping (`baseline_year` / `analysis_year` columns + index, sid_baseline/sid_analysis rename) | ✓ done |
 | 3. `analysis.js` reads from DB (async, year-scoped, surfaces unapproved warnings) | ✓ done |
-| 3.5. `tests/overrides.test.js` (`node --test tests/`, menu option 19) | ✓ done |
+| 3.5. `tests/overrides.test.js` (`node --test tests/`, menu options 21–26) | ✓ done |
 | **4.** `ask.js` CLI writes to DB (add / remove / list / suggest), `--global` flag, `created_by` provenance | ✓ done |
 | **5.** `--approve` / `--unapprove` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, captures event signatures. Unapprove clears approval + signatures (keeps audit fields). | ✓ done |
 | **6.** Stale-approval detection. `apply_overrides()` recomputes event signatures and compares to stored snapshot; on drift the build flips `approval_state='stale'`, emits `⚠ [stale approval]` warning, and `--list-overrides` renders the row with a `⚠ stale` badge. | ✓ done |
-| **7.** `server_event_analysis_8016.js` — minimal Express server at the repo root (port 8016, alongside the other `server_*.js` services). Read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params), `GET /api/events?year=YYYY`. HTML index at `/`. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 19. | ✓ done |
+| **7.** `server_event_analysis_8016.js` — minimal Express server at the repo root (port 8016, alongside the other `server_*.js` services). Read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params), `GET /api/events?year=YYYY`. HTML index at `/`. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 20. | ✓ done |
 | **8.** Write endpoints — `POST /api/overrides` (typed dispatch), `DELETE /api/overrides/:sid`, `POST /api/approve/:sid`, `POST /api/unapprove/:sid`. All wrap the existing `cmd_*` functions and tag rows `created_by='server'`. Stale Override Manager panel removed from `dashboard.html`. 16 new tests. | ✓ done |
 | **9.** Override editor — two surfaces: (a) standalone SPA at `/editor/` (`public/{index.html,editor.css,editor.js}`); (b) dashboard-integrated panel embedded in `dashboard.html` with a new "Override" status column in the roster (click row → focus editor + prefill sid), a sticky "rebuild needed" banner that fires after edits, and a "Rebuild now" button. **Step 9.5: `GET /api/build`** streams `build_all.js` over SSE (events: `out`, `err`, `done`); 409 if a build is already running; client disconnect kills the child. Menu test runner split into 3 options. ~10 new tests covering dashboard markers + the SSE stream + the build-lock. | ✓ done |
 | 10. Cascade rules engine — pattern-based overrides ("all clinics in May named X → Lost") | pending |

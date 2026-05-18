@@ -704,6 +704,10 @@ describe('Step 9 integration — dashboard editor panel', () => {
     assert.deepEqual(parse_errors, [], 'all OUR inline <script> blocks in dashboard.html should parse as JS');
     assert.doesNotMatch(html, /SERVER_URL = 'http:/,  'old SERVER_URL global should be gone');
   });
+
+  // NOTE: glossary content is verified in tests/glossary.test.js — kept
+  // separate so the educational copy can be edited without touching the
+  // server/editor suite.
 });
 
 describe('Step 9.5 — /api/build SSE endpoint', () => {

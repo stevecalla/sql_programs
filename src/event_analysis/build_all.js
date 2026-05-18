@@ -272,9 +272,14 @@ async function main() {
   console.log(`  Analysis state saved:   output/analysis_state.json (${(JSON.stringify(state_export).length / 1024).toFixed(0)} KB)`);
 
   // ── Generate commentary (rule-based, upgraded to AI if key present) ────────
+  // NO_AI=1 or RULE_BASED_ONLY=1 forces rule-based even when the key is set.
+  // Used by the "Build (rule-based only)" menu option to avoid spending tokens.
+  const force_rule_based = !!(process.env.NO_AI || process.env.RULE_BASED_ONLY);
   const api_key = process.env.ANTHROPIC_API_KEY || null;
   let commentary = null;
-  if (api_key && api_key !== 'sk-ant-your-key-here') {
+  if (force_rule_based) {
+    console.log('  NO_AI / RULE_BASED_ONLY set — skipping AI commentary, using rule-based.');
+  } else if (api_key && api_key !== 'sk-ant-your-key-here') {
     console.log('  AI commentary enabled -- calling Claude API for insights...');
     try {
       commentary = await generate_ai(results, api_key);

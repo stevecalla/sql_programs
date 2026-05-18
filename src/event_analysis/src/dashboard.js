@@ -471,6 +471,41 @@ canvas{width:100%!important;max-height:220px}
   text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
 /* ── Segment summary bar above table ── */
 .seg-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center;min-height:28px}
+.chip-toggles{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.chip-toggles-lbl{font-size:.7rem;color:#777;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-right:2px}
+.chip-toggle{font-family:inherit;font-size:.7rem;padding:3px 10px;border-radius:11px;cursor:pointer;background:#fff;color:#777;border:1px solid #ddd;transition:all .15s}
+.chip-toggle:hover{background:#f5f5f5;color:#333;border-color:#bbb}
+.chip-toggle.on{background:#1565C0;color:#fff;border-color:#1565C0}
+.chip-toggle.on:hover{background:#0D47A1;border-color:#0D47A1}
+#dash-glossary{padding:0;overflow:hidden}
+#dash-glossary > summary{padding:14px 22px;cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;user-select:none;transition:background .15s}
+#dash-glossary > summary::-webkit-details-marker{display:none}
+#dash-glossary > summary:hover{background:#fafafa}
+#dash-glossary[open] > summary{background:#F5F8FB;border-bottom:1px solid #E3F2FD}
+#dash-glossary > summary::before{content:"▸";color:#1565C0;font-size:.9rem;transition:transform .2s;display:inline-block}
+#dash-glossary[open] > summary::before{transform:rotate(90deg)}
+#dash-glossary .gloss-title{font-weight:600;font-size:1.0rem;color:#222}
+#dash-glossary .gloss-hint{font-size:.74rem;color:#777;font-style:italic}
+#dash-glossary[open] .gloss-hint{display:none}
+#dash-glossary .gloss-body{padding:6px 22px 18px}
+#dash-glossary .gloss-h{margin:14px 0 8px;font-size:.82rem;text-transform:uppercase;letter-spacing:.06em;color:#1565C0;border-bottom:1px solid #E3F2FD;padding-bottom:4px}
+#dash-glossary .gloss-h:first-of-type{margin-top:4px}
+#dash-glossary .gloss-p{margin:0 0 8px;font-size:.82rem;color:#444;line-height:1.45}
+#dash-glossary .gloss-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px 16px;margin:0}
+#dash-glossary .gloss-grid > div{padding:8px 0}
+#dash-glossary .gloss-block{margin:0}
+#dash-glossary .gloss-block > div{padding:10px 0;border-bottom:1px solid #F1F3F5}
+#dash-glossary .gloss-block > div:last-child{border-bottom:none}
+#dash-glossary dt{font-weight:600;font-size:.82rem;color:#222;display:flex;align-items:center;gap:7px;margin-bottom:3px}
+#dash-glossary dt .dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0}
+#dash-glossary dd{margin:0;font-size:.78rem;color:#555;line-height:1.5}
+#dash-glossary dd strong{color:#222;font-weight:600}
+#dash-glossary dd em{color:#1565C0;font-style:normal;font-weight:500}
+#dash-glossary dd code{background:#f6f8fa;padding:1px 5px;border-radius:3px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;color:#24292f}
+#dash-glossary .gloss-eg{margin-top:6px;padding:7px 10px;background:#FFF8E1;border-left:3px solid #FFC107;border-radius:3px;font-size:.74rem;color:#5D4037;line-height:1.5}
+@media (max-width: 600px) {
+  #dash-glossary .gloss-grid{grid-template-columns:1fr}
+}
 .seg-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:12px;
   font-size:.73rem;font-weight:600;white-space:nowrap;cursor:pointer;
   border:1px solid transparent;transition:opacity .12s,box-shadow .12s,transform .1s;
@@ -810,8 +845,20 @@ ${has_table ? `
     <div class="filter-bar" id="filter-bar">
       <span class="filter-bar-lbl">Filters:</span>
     </div>
-    <!-- Dynamic segment count bar — updated by filter_and_sort() -->
+    <!-- Chip-bar visibility toggles. Defaults: Segments + Types visible,
+         Months hidden. Choice persists in localStorage. -->
+    <div class="chip-toggles" id="chip-toggles">
+      <span class="chip-toggles-lbl">Show:</span>
+      <button type="button" class="chip-toggle" data-bar="seg-bar"   onclick="toggle_chip_bar('seg-bar')">Segments</button>
+      <button type="button" class="chip-toggle" data-bar="type-bar"  onclick="toggle_chip_bar('type-bar')">Types</button>
+      <button type="button" class="chip-toggle" data-bar="month-bar" onclick="toggle_chip_bar('month-bar')">Months</button>
+    </div>
+    <!-- Dynamic count bars — updated by filter_and_sort(). Each chip
+         shows the count + %-of-shown for that value, and clicking it
+         toggles the matching dropdown filter. -->
     <div class="seg-bar" id="seg-bar"></div>
+    <div class="seg-bar" id="type-bar" style="margin-top:-4px"></div>
+    <div class="seg-bar" id="month-bar" style="margin-top:-4px"></div>
     <button id="tbl-more" onclick="load_all()" style="display:none;margin-bottom:8px;padding:6px 14px;border:1px solid #1565C0;border-radius:5px;background:#fff;color:#1565C0;font-size:.78rem;cursor:pointer;font-family:inherit">Show all events</button>
     <p class="muted" style="font-size:.72rem;color:#777;margin:0 0 6px;font-style:italic">
       Tip: click a row to focus the override editor below.
@@ -826,13 +873,15 @@ ${has_table ? `
             <th data-col="m25">Mo ${ya}</th>
             <th class="col-sid25" data-col="sid25" style="font-size:.72rem">Sanction ID ${ya}</th>
             <th class="col-date25" data-col="date25" style="font-size:.72rem">Date ${ya}</th>
+            <th data-col="day25">Day</th>
             <th data-col="name25">${ya} Event Name</th>
-            <th data-col="day25">Day</th><th data-col="st25">Status ${ya}</th>
+            <th data-col="st25">Status ${ya}</th>
             <th data-col="m26">Mo ${yb}</th>
             <th class="col-sid26" data-col="sid26" style="font-size:.72rem">Sanction ID ${yb}</th>
             <th class="col-date26" data-col="date26" style="font-size:.72rem">Date ${yb}</th>
+            <th data-col="day26">Day</th>
             <th data-col="name26">${yb} Event Name</th>
-            <th data-col="day26">Day</th><th data-col="st26">Status ${yb}</th>
+            <th data-col="st26">Status ${yb}</th>
           </tr>
         </thead>
         <tbody id="tbl-body"></tbody>
@@ -967,6 +1016,91 @@ ${has_table ? `
       📑 PowerPoint Deck</a>
     <span style="font-size:.72rem;color:#aaa;margin-left:auto">Both files are in the same folder as this dashboard</span>
   </div>
+</div>
+
+<!-- ── Definitions / glossary — bottom of dashboard ─────────────────────
+     Plain-English defs for the terms that show up in the KPI cards,
+     charts, and roster. Keep examples concrete; the audience is anyone
+     who didn't build the model.
+     Uses native <details>/<summary> so it collapses without any JS.
+     Default closed — click "What do these terms mean?" to expand. ──── -->
+<div class="row" style="margin-bottom:10px">
+  <details class="card card-full" id="dash-glossary">
+    <summary>
+      <span class="gloss-title">📖 What do these terms mean?</span>
+      <span class="gloss-hint">Click to expand · definitions for segments, confidence, calendar-expected, organic, and more</span>
+    </summary>
+    <div class="gloss-body">
+
+    <h4 class="gloss-h">Segments — the six buckets every event lands in</h4>
+    <dl class="gloss-grid">
+      <div><dt><span class="dot" style="background:#1E7D34"></span>Retained</dt>
+        <dd>Same event ran in <strong>both</strong> ${ya} and ${yb}, in the <strong>same month</strong>. The healthy core.</dd></div>
+      <div><dt><span class="dot" style="background:#E65100"></span>Shifted</dt>
+        <dd>Same event ran in both years but <strong>moved to a different month</strong>. The event is retained — the calendar slot changed.</dd></div>
+      <div><dt><span class="dot" style="background:#BF360C"></span>Tried to Return</dt>
+        <dd>Was active in ${ya}, the organizer <strong>tried to re-file for ${yb}</strong>, but the application was Cancelled or Declined. Actionable: these are known contacts who already raised their hand.</dd></div>
+      <div><dt><span class="dot" style="background:#C62828"></span>Lost</dt>
+        <dd>Active in ${ya}, <strong>no ${yb} equivalent at all</strong>. The organizer didn't even apply — a deeper churn signal than Tried to Return.</dd></div>
+      <div><dt><span class="dot" style="background:#6A1B9A"></span>Recovered</dt>
+        <dd>Was <strong>cancelled in ${ya}</strong>, <strong>successfully ran in ${yb}</strong>. A win-back.</dd></div>
+      <div><dt><span class="dot" style="background:#1565C0"></span>New</dt>
+        <dd>Active in ${yb} with <strong>no ${ya} equivalent</strong>. Brand-new events on the calendar.</dd></div>
+    </dl>
+
+    <h4 class="gloss-h">Confidence (Conf column) — how sure the matcher is about a pair</h4>
+    <p class="gloss-p">When two events line up across years, the matcher records how strong the match was. Useful when scanning the roster: high-confidence pairs need no review; low-confidence ones are worth a sanity check.</p>
+    <dl class="gloss-grid">
+      <div><dt>Exact</dt>
+        <dd>Event names are <strong>character-for-character identical</strong> and ran in the <strong>same month</strong> both years. The most confident match — no review needed.
+        <div class="gloss-eg">📌 <strong>Example:</strong> "Alpha Win — Sarasota FL" in January ${ya} ↔ "Alpha Win — Sarasota FL" in January ${yb}.</div>
+        </dd></div>
+      <div><dt>Exact-Shifted</dt>
+        <dd>Event names are <strong>character-for-character identical</strong>, but the event <strong>moved to a different month</strong>. Still confident on the pair — only the date changed.
+        <div class="gloss-eg">📌 <strong>Example:</strong> "Eighth Annual Du It By The Bay" in January ${ya} ↔ "Eighth Annual Du It By The Bay" in March ${yb}. Lands in the <em>Shifted</em> segment.</div>
+        </dd></div>
+      <div><dt>Cross</dt>
+        <dd><strong>Fuzzy name match</strong> across years — names aren't identical but token overlap is high enough (Jaccard ≥ 0.60) that the matcher thinks they're the same event under a slightly renamed banner. Worth a glance if anything looks off.
+        <div class="gloss-eg">📌 <strong>Example:</strong> "Sarasota Tri 2025" ↔ "Sarasota Triathlon Festival 2026". Same physical race, organizer renamed it.</div>
+        </dd></div>
+      <div><dt>Override</dt>
+        <dd>A <strong>manual decision</strong> overrode whatever the automatic matcher said. Either a force-match created a pair the matcher didn't find, a force-no-match split a pair it did, or a force-segment moved a record into a different segment bucket. May appear as <code>Override (was Retained)</code> when an override changed an existing match's segment.</dd></div>
+      <div><dt>N/A</dt>
+        <dd>The row is <strong>Lost</strong> or <strong>New</strong> — there's no pair to be confident about, only a single-year event. The Conf column shows N/A because confidence is only meaningful between two events.</dd></div>
+    </dl>
+
+    <h4 class="gloss-h">Calendar-expected vs Organic delta — why we adjust for the calendar</h4>
+    <p class="gloss-p">A month can gain or lose events just because the dates fell differently between years — same demand, different calendar. We separate the two effects:</p>
+    <dl class="gloss-block">
+      <div><dt>Calendar-expected change</dt>
+        <dd>The change we'd predict <strong>just from how the dates landed</strong>, before looking at actual events. If a month gained a weekend day this year vs last, we'd expect roughly that fraction more events even with zero new demand.
+        <div class="gloss-eg">📅 <strong>Example:</strong> May ${ya} has 4 Saturdays + 4 Sundays = 8 weekend days. May ${yb} has 5 Saturdays + 4 Sundays = 9 weekend days. That's +12.5% more weekend capacity. If May ${ya} hosted 80 events, the calendar alone predicts ~+10 events in May ${yb} (8 × 1.125 − 8 = 1 extra weekend × ~10 events per weekend day).</div>
+        </dd></div>
+      <div><dt>Organic delta</dt>
+        <dd><strong>Actual change minus calendar-expected change.</strong> This is the "real" signal after stripping out calendar noise. A month can have a flat raw delta but a strong negative organic delta — meaning demand actually fell, the calendar just bailed it out.
+        <div class="gloss-eg">📅 <strong>Continuing the example:</strong> Suppose May ${yb} actually ran 85 events. Raw delta = 85 − 80 = +5. Calendar-expected = +10. Organic = 5 − 10 = <strong>−5 events</strong>. Despite a positive raw count, the month underperformed what the calendar handed it.</div>
+        </dd></div>
+    </dl>
+
+    <h4 class="gloss-h">Other terms you'll see</h4>
+    <dl class="gloss-grid">
+      <div><dt>Net change</dt>
+        <dd>Total ${yb} active events minus total ${ya} active events. The headline number. Splits into the six segments above.</dd></div>
+      <div><dt>Active event</dt>
+        <dd>An event that wasn't cancelled, declined, or deleted in the source data. Cancelled/Declined/Deleted rows are dropped before any of these numbers are computed.</dd></div>
+      <div><dt>% of N shown</dt>
+        <dd>On chip bars and KPI cards: the count divided by a specific denominator (visible-rows for chips, ${ya}/${yb} year total for KPIs). Each percentage shows its denominator inline so the math is never ambiguous.</dd></div>
+      <div><dt>Sanction ID</dt>
+        <dd>USAT's unique identifier for a single sanctioned event, in the format <code>309965-Adult Race</code>. The same physical event in two years has different sanction IDs.</dd></div>
+      <div><dt>Override</dt>
+        <dd>A manual correction telling the matcher to force a pair (<em>match</em>), prevent a pair (<em>no-match</em>), or change a segment classification (<em>segment</em>). Edited from the panel below the roster or via <code>node ask.js</code>.</dd></div>
+      <div><dt>Approved / Unapproved / Stale</dt>
+        <dd>Override lifecycle: <strong>unapproved</strong> still applies but emits a build warning; <strong>approved</strong> is endorsed (snapshots the event signature at approval time); <strong>stale</strong> = the underlying event changed (name, month, status) since approval, so re-review is needed.</dd></div>
+      <div><dt>Worst month</dt>
+        <dd>The month with the most negative net delta (biggest decline). The dashboard highlights up to two worst months because action plans usually focus on the two largest gaps.</dd></div>
+    </dl>
+    </div>
+  </details>
 </div>
 
 <div class="footer">
@@ -1482,14 +1616,14 @@ if(ROSTER && ROSTER.length > 0){
       '<td>'+r.m25+'</td>' +
       '<td class="col-sid25" style="font-size:.7rem;color:#666;font-family:monospace">'+r.sid25+'</td>' +
       '<td class="col-date25" style="font-size:.7rem;color:#666;white-space:nowrap">'+r.date25+'</td>' +
-      '<td class="name-col">'+r.name25+'</td>' +
       '<td>'+r.day25+'</td>' +
+      '<td class="name-col">'+r.name25+'</td>' +
       '<td class="st-col">'+r.st25+'</td>' +
       '<td style="color:'+(r.m26&&r.m26!==r.m25?'#E65100':'inherit')+'">'+r.m26+'</td>' +
       '<td class="col-sid26" style="font-size:.7rem;color:#666;font-family:monospace">'+r.sid26+'</td>' +
       '<td class="col-date26" style="font-size:.7rem;color:#666;white-space:nowrap">'+r.date26+'</td>' +
-      '<td class="name-col">'+r.name26+'</td>' +
       '<td>'+r.day26+'</td>' +
+      '<td class="name-col">'+r.name26+'</td>' +
       '<td class="st-col">'+r.st26+'</td>' +
       '</tr>';
   }
@@ -1559,6 +1693,138 @@ if(ROSTER && ROSTER.length > 0){
     filter_and_sort();
   }
 
+  // ── Type + Month chip bars — same pattern as render_seg_summary ──────────
+  // Counts and percentages recompute against the visible total whenever
+  // filter_and_sort() runs, so the chips always describe the table state.
+  const TYPE_CHIP_STYLE = {
+    'Adult Race':   {color:'#1565C0', bg:'#E3F2FD'},
+    'Youth Race':   {color:'#00897B', bg:'#E0F2F1'},
+    'Adult Clinic': {color:'#F57C00', bg:'#FFF3E0'},
+    'Youth Clinic': {color:'#8E24AA', bg:'#F3E5F5'},
+  };
+  const TYPE_ORDER_LIST = ['Adult Race','Youth Race','Adult Clinic','Youth Clinic'];
+
+  function render_type_summary(rows){
+    const bar = document.getElementById('type-bar');
+    if(!bar) return;
+    const total = rows.length;
+    const counts = {};
+    TYPE_ORDER_LIST.forEach(function(t){ counts[t] = 0; });
+    rows.forEach(function(r){ if(counts[r.type] !== undefined) counts[r.type]++; });
+    const active = new Set(get_checked('panel-drop-type'));
+    bar.innerHTML = TYPE_ORDER_LIST.map(function(t){
+      const n = counts[t];
+      const pct = total ? Math.round(n/total*100) : 0;
+      const st  = TYPE_CHIP_STYLE[t] || {color:'#555',bg:'#eee'};
+      const is_active = active.has(t);
+      const classes = 'seg-chip'
+        + (n===0 && !is_active ? ' zero' : '')
+        + (is_active ? ' active' : '');
+      const border_col = is_active ? st.color : st.color+'33';
+      const bg_col     = is_active ? st.color+'22' : st.bg;
+      return '<span class="'+classes+'"'
+           + ' style="background:'+bg_col+';border-color:'+border_col+';color:'+st.color+'"'
+           + ' title="'+(is_active?'Remove filter: ':'Filter by: ')+t+'"'
+           + ' data-type="'+t+'" onclick="toggle_type_chip(this.dataset.type)">'
+           + '<span class="chip-dot" style="background:'+st.color+'"></span>'
+           + t+' <strong>'+n.toLocaleString()+'</strong>'
+           + '<span class="chip-pct">('+pct+'% of '+total.toLocaleString()+')</span>'
+           + (is_active ? '<span class="chip-x">✕</span>' : '')
+           + '</span>';
+    }).join('');
+  }
+  function toggle_type_chip(t) {
+    const cb = document.querySelector('#panel-drop-type input[value="'+t+'"]');
+    if (!cb) return;
+    cb.checked = !cb.checked;
+    update_drop_btn('drop-type');
+    filter_and_sort();
+  }
+
+  const MONTH_ORDER_LIST = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const MONTH_CHIP_STYLE_DEFAULT = {color:'#546E7A', bg:'#ECEFF1'};
+
+  function render_month_summary(rows){
+    const bar = document.getElementById('month-bar');
+    if(!bar) return;
+    // A row can have a baseline month, an analysis month, or both. The
+    // dropdown filter uses OR logic across the two — match the same here
+    // so the chip count and the filter agree. A Shifted row in Jan/Feb
+    // therefore counts toward BOTH the Jan and Feb chips.
+    const total = rows.length;
+    const counts = {};
+    MONTH_ORDER_LIST.forEach(function(m){ counts[m] = 0; });
+    rows.forEach(function(r){
+      if(r.m25 && counts[r.m25] !== undefined) counts[r.m25]++;
+      // Only count m26 if it differs from m25 — otherwise a Retained row
+      // (same month both years) would be double-counted.
+      if(r.m26 && r.m26 !== r.m25 && counts[r.m26] !== undefined) counts[r.m26]++;
+    });
+    const active = new Set(get_checked('panel-drop-month'));
+    bar.innerHTML = MONTH_ORDER_LIST.map(function(m){
+      const n = counts[m];
+      const pct = total ? Math.round(n/total*100) : 0;
+      const st  = MONTH_CHIP_STYLE_DEFAULT;
+      const is_active = active.has(m);
+      const classes = 'seg-chip'
+        + (n===0 && !is_active ? ' zero' : '')
+        + (is_active ? ' active' : '');
+      const border_col = is_active ? st.color : st.color+'33';
+      const bg_col     = is_active ? st.color+'22' : st.bg;
+      return '<span class="'+classes+'"'
+           + ' style="background:'+bg_col+';border-color:'+border_col+';color:'+st.color+'"'
+           + ' title="'+(is_active?'Remove filter: ':'Filter by: ')+m+'"'
+           + ' data-mon="'+m+'" onclick="toggle_month_chip(this.dataset.mon)">'
+           + '<span class="chip-dot" style="background:'+st.color+'"></span>'
+           + m+' <strong>'+n.toLocaleString()+'</strong>'
+           + '<span class="chip-pct">('+pct+'% of '+total.toLocaleString()+')</span>'
+           + (is_active ? '<span class="chip-x">✕</span>' : '')
+           + '</span>';
+    }).join('');
+  }
+  function toggle_month_chip(m) {
+    const cb = document.querySelector('#panel-drop-month input[value="'+m+'"]');
+    if (!cb) return;
+    cb.checked = !cb.checked;
+    update_drop_btn('drop-month');
+    filter_and_sort();
+  }
+
+  // ── Chip-bar visibility toggles ──────────────────────────────────────────
+  // Defaults: segments + types ON, months OFF. Choice persists in
+  // localStorage under 'chip_bar_visibility'. Hidden bars still get their
+  // innerHTML refreshed by filter_and_sort() — cheap, and the next time the
+  // user shows the bar it's already up to date.
+  const CHIP_BAR_LS_KEY = 'chip_bar_visibility';
+  const CHIP_BAR_DEFAULTS = { 'seg-bar': true, 'type-bar': true, 'month-bar': false };
+
+  function load_chip_bar_visibility(){
+    try {
+      const saved = JSON.parse(localStorage.getItem(CHIP_BAR_LS_KEY) || 'null');
+      if (saved && typeof saved === 'object') {
+        return { ...CHIP_BAR_DEFAULTS, ...saved };
+      }
+    } catch {}
+    return { ...CHIP_BAR_DEFAULTS };
+  }
+
+  function apply_chip_bar_visibility(){
+    const state = load_chip_bar_visibility();
+    Object.keys(state).forEach(function(bar_id){
+      const bar = document.getElementById(bar_id);
+      if (bar) bar.style.display = state[bar_id] ? '' : 'none';
+      const btn = document.querySelector('.chip-toggle[data-bar="'+bar_id+'"]');
+      if (btn) btn.classList.toggle('on', !!state[bar_id]);
+    });
+  }
+
+  function toggle_chip_bar(bar_id){
+    const state = load_chip_bar_visibility();
+    state[bar_id] = !state[bar_id];
+    try { localStorage.setItem(CHIP_BAR_LS_KEY, JSON.stringify(state)); } catch {}
+    apply_chip_bar_visibility();
+  }
+
   function render_table(rows){
     current_rows = rows;
     const tbody = document.getElementById('tbl-body');
@@ -1573,6 +1839,8 @@ if(ROSTER && ROSTER.length > 0){
       btn.textContent   = 'Show all '+rows.length.toLocaleString()+' events ↓';
     }
     render_seg_summary(rows);
+    render_type_summary(rows);
+    render_month_summary(rows);
   }
 
   function export_table_csv(){
@@ -1787,6 +2055,7 @@ if(ROSTER && ROSTER.length > 0){
   });
 
   filter_and_sort(); // initial render
+  apply_chip_bar_visibility(); // restore saved show/hide state for chip bars
   document.getElementById('tbl-more')?.addEventListener('click', load_all);
 
   // ── Wire row clicks → focus the inline override editor below ─────────
