@@ -124,7 +124,45 @@ function save_json(fp, obj) {
 // MAIN
 // ════════════════════════════════════════════════════════════════════════════
 
+// ── Build timing ────────────────────────────────────────────────────────────
+// Two-level instrumentation: a total wall-clock for the whole build, and a
+// list of stages so we can print a bar-chart breakdown at the end. Useful
+// both for "what's slow?" diagnosis and for showing the user, on every
+// build, how long the work actually took.
+//
+// `stage_done(label)` records elapsed time since the previous mark (or since
+// _build_t0 on the first call) and resets the stopwatch. Placement matters:
+// drop the call right after the work that produced the stage's output, so
+// the duration captured is what most people would intuitively attribute to
+// that step.
+const _stages = [];
+let _build_t0 = 0;
+let _stage_t0 = 0;
+function stage_done(label) {
+  _stages.push({ label, ms: Date.now() - _stage_t0 });
+  _stage_t0 = Date.now();
+}
+function print_timing_summary() {
+  const total = Date.now() - _build_t0;
+  console.log('');
+  console.log('──────────────────────────────────────────────────────');
+  console.log('Build timing (largest first):');
+  // Sort by descending duration so the hot spot is at the top — the most
+  // useful sort order for "where do I look first to make this faster?"
+  for (const s of [..._stages].sort((a, b) => b.ms - a.ms)) {
+    const bar_width = total > 0 ? Math.round((s.ms / total) * 28) : 0;
+    const bar = '█'.repeat(bar_width);
+    console.log(`  ${s.label.padEnd(24)} ${((s.ms / 1000).toFixed(2) + 's').padStart(7)}  ${bar}`);
+  }
+  console.log(`  ${'─'.repeat(24)} ${'─'.repeat(7)}`);
+  console.log(`  ${'TOTAL'.padEnd(24)} ${((total / 1000).toFixed(2) + 's').padStart(7)}`);
+  console.log('──────────────────────────────────────────────────────');
+}
+
 async function main() {
+  _build_t0 = Date.now();
+  _stage_t0 = _build_t0;
+
   const OUTPUT_DIR = await resolve_output_dir();
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
@@ -135,6 +173,7 @@ async function main() {
   // ── Migrate legacy JSON overrides into the DB (one-shot, idempotent) ─────
   // Skipped silently after data/overrides.json is renamed to .migrated.
   await migrate_overrides_json_to_db({ silent: false });
+  stage_done('schema + migrations');
 
   const out_xlsx = path.join(OUTPUT_DIR, `${ANALYSIS_YEAR}_event_calendar_analysis_${BUILD_TS}.xlsx`);
   const out_pptx = path.join(OUTPUT_DIR, `${ANALYSIS_YEAR}_event_trends_summary_${BUILD_TS}.pptx`);
@@ -164,6 +203,7 @@ async function main() {
     ],
     keep_last_n: 1,
   });
+  stage_done('archive prior outputs');
 
   // ── Fetch from usat_sales_db ──────────────────────────────────────────────
   console.log('Fetching events from usat_sales_db...');
@@ -173,6 +213,7 @@ async function main() {
   console.log('Fetching creation pipeline from usat_sales_db...');
   const creation_by_year = await fetch_creation_for_years([BASELINE_YEAR, ANALYSIS_YEAR]);
   console.log(`  ${BASELINE_YEAR} creation rows: ${creation_by_year[BASELINE_YEAR].length}  |  ${ANALYSIS_YEAR} creation rows: ${creation_by_year[ANALYSIS_YEAR].length}`);
+  stage_done('fetch from MySQL');
 
   // ── Excel ────────────────────────────────────────────────────────────────
   console.log('Building Excel workbook...');
@@ -185,6 +226,7 @@ async function main() {
   // Attach creation rows so commentary.js can build pipeline narratives.
   results.creation_rows = { BASELINE_YEAR: creation_by_year[BASELINE_YEAR], ANALYSIS_YEAR: creation_by_year[ANALYSIS_YEAR] };
   console.log('  Segments:', JSON.stringify(results.segSummary));
+  stage_done('analyze + segment');
 
   // Export analysis results dataset
   const out_results_json = path.join(OUTPUT_DIR, 'analysis_results.json');
@@ -312,10 +354,12 @@ async function main() {
     ...commentary,
   });
   console.log(`  Commentary saved: output/commentary.json (mode: ${commentary.mode})`);
+  stage_done(`commentary (${commentary.mode})`);
 
   // ── Excel (receives commentary for dynamic narrative cells) ───────────────
   await build_workbook(results, out_xlsx, creation_by_year[BASELINE_YEAR], creation_by_year[ANALYSIS_YEAR], commentary);
   console.log('  Excel done.\n');
+  stage_done('Excel workbook');
 
   // ── PowerPoint ────────────────────────────────────────────────────────────
   // ── Auto-append build summary to notes.md ───────────────────────────────────
@@ -352,6 +396,7 @@ async function main() {
   console.log('Building PowerPoint deck...');
   await buildDeck(out_pptx, results, commentary, creation_by_year[BASELINE_YEAR], creation_by_year[ANALYSIS_YEAR]);
   console.log('  PowerPoint done.\n');
+  stage_done('PowerPoint deck');
 
   // ── HTML dashboard ───────────────────────────────────────────────────────
   // Pass the actual built filenames so the dashboard's Download buttons
@@ -365,6 +410,7 @@ async function main() {
   };
   generate_dashboard(results_export, commentary, out_dashboard, results.segments);
   console.log(`  Dashboard: ${out_dashboard}`);
+  stage_done('dashboard.html');
 
   // ── Diff report ───────────────────────────────────────────────────────────
   try {
@@ -434,12 +480,18 @@ async function main() {
   } catch (err) {
     /* diff is non-fatal */
   }
+  stage_done('diff report + notes.md');
 
   console.log('Done!');
   console.log(`  Excel      : ${out_xlsx}`);
   console.log(`  PowerPoint : ${out_pptx}`);
   console.log(`  Results    : ${out_results_json}`);
   console.log(`  Commentary : ${out_commentary_json}`);
+
+  // ── Build timing summary ──────────────────────────────────────────────────
+  // Sorted descending by elapsed time so the biggest stage is at the top —
+  // useful for "where do I look first if I want to make this faster?"
+  print_timing_summary();
 }
 
 main().catch(err => {
