@@ -37,11 +37,6 @@ const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config();
 
-const test = process.env.ANTHROPIC_API_KEY ? true : false;
-console.log("*************************");
-console.log(`key is ${test}`);
-console.log("*************************");
-
 const express = require('express');
 const cors    = require('cors');
 
