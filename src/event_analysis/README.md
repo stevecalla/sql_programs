@@ -914,16 +914,18 @@ What it shows:
 Architecture: 3 files in `src/event_analysis/public/` (`index.html`, `editor.css`, `editor.js`), static-served by the local server at `/editor/`. No build step, no framework, no client-side dependencies — just `fetch()` against the same-origin write endpoints from Step 8.
 
 What's deliberately out of scope (punted to Step 10 or beyond):
-- Event search / browse — find sanction IDs by name. Use the CLI (`node ask.js --list-overrides`) or the build-time dashboard for now.
+- Event search / browse from the standalone SPA — find sanction IDs by name. Use the CLI (`node ask.js --list-overrides`) or the dashboard's roster filter (search box + Segment/Type/Month/Status dropdowns) for now.
 - Bulk approve / bulk delete
 - History or audit-trail UI
 - Authentication (server is bound to localhost; not safe to expose)
 
 #### Dashboard-integrated panel
 
-The build-time dashboard (`output/dashboard.html`) ships with the same editor embedded below the event roster. Three things to know:
+The build-time dashboard (`output/dashboard.html`) ships with the same editor embedded below the event roster. Things to know:
 
+- **Year-dynamic column headers.** All paired-year column labels (`Mo`, `Sanction ID`, `Date`, `Status`, `Event Name`) and chart dataset labels are rendered from the `ya` / `yb` template variables, which come from `results.years.BASELINE_YEAR` / `results.years.ANALYSIS_YEAR`. The Excel download link's filename (`./${yb}_event_calendar_analysis_v9f.xlsx`) is also year-dynamic. When the analysis years roll over (e.g. 2026 vs 2027), the dashboard adjusts automatically — no source edits required.
 - **New "Override" column** in the roster. Shows `—` for events without overrides, or `match` / `no-match` / `seg` pill plus `✓ approved` / `◦ unapproved` / `⚠ stale` state. Populated by a `GET /api/overrides` call on page load; updates after every mutation.
+- **Roster filters.** Above the table: a search box (matches name OR sanction ID across either year, so a paste like `311655-Adult Race` or just `311655` works), plus four multi-select dropdowns — Segment, Type, Month, **Status** — that chip-render into a "Filters:" row below the toolbar. The Status dropdown is populated dynamically from the unique `Status YA` / `Status YB` values present in the roster. A Reset button next to the search clears everything.
 - **Click any row** → highlights it, scrolls the editor panel into view, pre-fills the sanction ID(s) in the add-override form. Click the row again (or the "clear" link in the focused-event card) to deselect.
 - **Sticky "rebuild needed" banner** appears at the top of the page after any edit, since the charts/KPIs/segment counts are computed from `ROSTER` at build time and don't reflect new overrides until you rebuild. The banner has a **Rebuild now** button that streams `build_all.js` output into a collapsible log and auto-reloads the page on success.
 
@@ -959,7 +961,7 @@ es.addEventListener('done', e => {
 Concurrent build attempts return `409 Conflict`. The lock releases when the build finishes (or the client disconnects mid-build — the server kills the child process).
 
 What's deliberately out of scope (punted to Step 10 or beyond):
-- Event search / browse — find sanction IDs by name. Use the CLI (`node ask.js --list-overrides`) or the dashboard's roster filter for now.
+- Bulk approve / bulk delete from the UI (CLI `--approve` / `--unapprove` still works for one at a time).
 - Bulk approve / bulk delete
 - History or audit-trail UI
 - Authentication (server is bound to localhost; not safe to expose)

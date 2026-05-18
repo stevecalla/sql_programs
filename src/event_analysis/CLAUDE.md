@@ -145,8 +145,10 @@ Open `output/dashboard.html` in a browser (a hosted version is on the roadmap as
 | Chart flip | ⇄ Table button on each chart — flips to data table with Δ abs + Δ % columns |
 | Chart expand | ⤢ Expand — opens modal; expands chart OR table depending on current view |
 | Event roster table | All matched pairs, sortable, filterable |
-| Multi-select filters | Segment / Type / Month dropdowns with color-coded checkboxes |
-| Active filter bar | Shows current filters as removable chips; ↺ Reset clears all |
+| Year-dynamic headers | All paired-year column labels (`Mo`, `Sanction ID`, `Date`, `Status`, `Event Name`) and chart dataset labels read from `ya`/`yb` (= `results.years.BASELINE_YEAR` / `ANALYSIS_YEAR`). Excel download link's filename also year-dynamic. Rolls over to e.g. 2026 vs 2027 without source edits. |
+| Roster search | Matches name OR sanction ID across either year — partial-prefix paste (e.g. `311655` or `311655-Adult Race`) works |
+| Multi-select filters | Segment / Type / Month / **Status** dropdowns with color-coded checkboxes. Status options are populated dynamically from the unique `Status YA` / `Status YB` values present in the roster. |
+| Active filter bar | Shows current filters as removable chips; ↺ Reset clears all (including Status) |
 | Segment count bar | Dynamic chips above table — clickable to toggle segment filter |
 | Column picker | ⊞ Columns button — show/hide Sanction ID and Date columns |
 | Mobile responsive | Horizontal + vertical scroll, 60vh max-height on mobile, iOS touch scroll |

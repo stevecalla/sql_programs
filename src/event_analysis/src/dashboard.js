@@ -172,7 +172,29 @@ function generate_dashboard(results, cm, out_path, segments_raw = null) {
   }
   const has_table = roster.length > 0;
 
-  const type_cards_html = TYPES.map((t, i) => {
+  // First card: aggregate Total across all event types — gives a quick
+  // "is the calendar growing or shrinking" read alongside the per-type breakdowns.
+  const total_raw_pct = n_baseline ? parseFloat(((net / n_baseline) * 100).toFixed(1)) : 0;
+  const total_org_delta = type_org_pct.reduce((sum, op, i) => sum + (type_n25[i] * (op / 100)), 0);
+  const total_org_pct = n_baseline ? parseFloat(((total_org_delta / n_baseline) * 100).toFixed(1)) : 0;
+  const total_card_html = `<div class="type-card type-card-total" style="border-top:3px solid #37474F">
+      <div class="type-name">Total</div>
+      <div class="counts" style="color:#37474F">${n_baseline.toLocaleString()} → ${n_analysis.toLocaleString()}</div>
+      <div class="delta" style="color:${net < 0 ? '#C62828' : net > 0 ? '#1E7D34' : '#888'}">${sign(net)} (${sign(total_raw_pct)}%)</div>
+      <div class="org">Organic: ${sign(total_org_pct)}%</div>
+    </div>`;
+
+  // Collect unique event statuses across both years for the roster status
+  // filter dropdown. Sorted with COMPLETE/ACTIVE/etc. — whatever the live
+  // DB happens to surface — so the filter list mirrors actual data.
+  const status_set = new Set();
+  for (const r of roster) {
+    if (r.st25) status_set.add(r.st25);
+    if (r.st26) status_set.add(r.st26);
+  }
+  const all_statuses = [...status_set].sort();
+
+  const type_cards_html = total_card_html + '\n' + TYPES.map((t, i) => {
     const d = type_deltas[i], rp = type_raw_pct[i], op = type_org_pct[i];
     const col = TYPE_COLOR[t];
     return `<div class="type-card" style="border-top:3px solid ${col}">
@@ -274,11 +296,14 @@ body{font-family:'Segoe UI',system-ui,Arial,sans-serif;background:#F0F2F5;color:
      box-shadow:0 1px 3px rgba(0,0,0,.08);border-left:4px solid #ccc}
 .kpi .val{font-size:1.6rem;font-weight:700;line-height:1}
 .kpi .lbl{font-size:.68rem;color:#888;margin-top:4px;text-transform:uppercase;letter-spacing:.05em}
+.kpi .den{font-size:.66rem;color:#aaa;margin-top:2px;letter-spacing:.02em;font-style:italic}
 .kpi.red{border-color:#C62828} .kpi.red .val{color:#C62828}
 .kpi.grn{border-color:#1E7D34} .kpi.grn .val{color:#1E7D34}
 .kpi.blu{border-color:#1565C0} .kpi.blu .val{color:#1565C0}
 .kpi.amb{border-color:#E65100} .kpi.amb .val{color:#E65100}
 .kpi.pur{border-color:#6A1B9A} .kpi.pur .val{color:#6A1B9A}
+.kpi.brn{border-color:#BF360C} .kpi.brn .val{color:#BF360C}    /* Shifted */
+.kpi.dor{border-color:#8D6E63} .kpi.dor .val{color:#8D6E63}    /* Tried to Return */
 
 /* ── Type strip ── */
 .type-strip{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
@@ -641,26 +666,36 @@ canvas{width:100%!important;max-height:220px}
 <div class="type-strip">${type_cards_html}</div>
 
 <div class="kpi-row">
-  <div class="kpi ${net < 0 ? 'red' : 'grn'}">
-    <div style="font-size:.72rem;color:#999;margin-bottom:2px">${n_baseline.toLocaleString()} → ${n_analysis.toLocaleString()}</div>
-    <div class="val">${sign(net)} <span style="font-size:1rem;font-weight:500">(${((net/n_baseline)*100).toFixed(1)}%)</span></div>
-    <div class="lbl">Net change</div>
-  </div>
+  <!-- Net change is now shown in the Total card in the type-strip above. -->
   <div class="kpi ${ret_pct >= 60 ? 'grn' : 'amb'}">
     <div class="val">${(seg.Retained ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${ret_pct}%)</span></div>
     <div class="lbl">Retained</div>
+    <div class="den">of ${n_baseline.toLocaleString()} ${ya} events</div>
+  </div>
+  <div class="kpi amb">
+    <div class="val">${(seg.Shifted ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg.Shifted??0)/n_baseline*100)}%)</span></div>
+    <div class="lbl">Shifted</div>
+    <div class="den">of ${n_baseline.toLocaleString()} ${ya} events</div>
   </div>
   <div class="kpi red">
     <div class="val">${(seg.Lost ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg.Lost??0)/n_baseline*100)}%)</span></div>
     <div class="lbl">Lost</div>
+    <div class="den">of ${n_baseline.toLocaleString()} ${ya} events</div>
   </div>
   <div class="kpi blu">
     <div class="val">${(seg.New ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg.New??0)/n_analysis*100)}%)</span></div>
     <div class="lbl">New events</div>
+    <div class="den">of ${n_analysis.toLocaleString()} ${yb} events</div>
   </div>
   <div class="kpi pur">
     <div class="val">${(seg.Recovered ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg.Recovered??0)/n_analysis*100)}%)</span></div>
     <div class="lbl">Recovered</div>
+    <div class="den">of ${n_analysis.toLocaleString()} ${yb} events</div>
+  </div>
+  <div class="kpi dor">
+    <div class="val">${(seg['Tried to Return'] ?? 0).toLocaleString()} <span style="font-size:1rem;font-weight:500">(${Math.round((seg['Tried to Return']??0)/n_baseline*100)}%)</span></div>
+    <div class="lbl">Tried to Return</div>
+    <div class="den">of ${n_baseline.toLocaleString()} ${ya} events</div>
   </div>
   <div class="kpi amb"><div class="val">${worst_months[0]?.label ?? '?'} ${worst_months[0]?.delta ?? ''}</div><div class="lbl">Worst month</div></div>
 </div>
@@ -706,7 +741,7 @@ ${has_table ? `
   <div class="card card-full">
     <h3>Event roster <span class="note">Step 4 detail — ${roster.length} events · filterable + sortable</span></h3>
     <div class="tbl-toolbar">
-      <input id="tbl-search" type="search" placeholder="Search by event name or sanction ID…" autocomplete="off">
+      <input id="tbl-search" type="search" placeholder="Search name / sanction ID…" autocomplete="off" style="max-width:200px">
       <button id="tbl-reset-btn" class="chart-btn" onclick="clear_all_filters()" title="Clear all filters and reset table" style="display:none;color:#C62828;border-color:#FFCDD2;background:#FFF5F5">↺ Reset</button>
       <div class="multi-drop" id="drop-seg">
         <button type="button" class="multi-drop-btn" onclick="toggle_drop('drop-seg')">All segments ▾</button>
@@ -748,6 +783,14 @@ ${has_table ? `
           <label><input type="checkbox" value="Dec" onchange="update_drop_btn(\x27panel-drop-month\x27);filter_and_sort()"><span class="dot" style="background:#78909C;opacity:.6"></span><span class="lbl-text">Dec</span></label>
         </div>
       </div>
+      <!-- Status dropdown — values discovered from the roster at build time -->
+      <div class="multi-drop" id="drop-status">
+        <button type="button" class="multi-drop-btn" onclick="toggle_drop('drop-status')">All statuses ▾</button>
+        <div class="multi-drop-panel" id="panel-drop-status">
+          <div class="drop-actions"><button type="button" onclick="drop_all(\x27panel-drop-status\x27,true)">All</button><span>|</span><button type="button" onclick="drop_all(\x27panel-drop-status\x27,false)">None</button></div>
+          ${all_statuses.map(s => `<label><input type="checkbox" value="${s.replace(/"/g,'&quot;')}" onchange="update_drop_btn(\x27panel-drop-status\x27);filter_and_sort()"><span class="dot" style="background:#90A4AE;opacity:.6"></span><span class="lbl-text">${s}</span></label>`).join('')}
+        </div>
+      </div>
       <span id="tbl-count" style="margin-left:auto;font-size:.72rem;color:#999"></span>
       <!-- Column picker -->
       <div class="multi-drop" id="drop-cols">
@@ -783,12 +826,12 @@ ${has_table ? `
             <th data-col="m25">Mo ${ya}</th>
             <th class="col-sid25" data-col="sid25" style="font-size:.72rem">Sanction ID ${ya}</th>
             <th class="col-date25" data-col="date25" style="font-size:.72rem">Date ${ya}</th>
-            <th data-col="name25">2025 Event Name</th>
+            <th data-col="name25">${ya} Event Name</th>
             <th data-col="day25">Day</th><th data-col="st25">Status ${ya}</th>
             <th data-col="m26">Mo ${yb}</th>
             <th class="col-sid26" data-col="sid26" style="font-size:.72rem">Sanction ID ${yb}</th>
             <th class="col-date26" data-col="date26" style="font-size:.72rem">Date ${yb}</th>
-            <th data-col="name26">2026 Event Name</th>
+            <th data-col="name26">${yb} Event Name</th>
             <th data-col="day26">Day</th><th data-col="st26">Status ${yb}</th>
           </tr>
         </thead>
@@ -916,7 +959,7 @@ ${has_table ? `
 <div class="row" style="margin-bottom:10px">
   <div class="card card-full" style="display:flex;gap:12px;align-items:center;padding:12px 16px">
     <span style="font-size:.75rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">Download:</span>
-    <a href="./2026_event_calendar_analysis_v9f.xlsx" download
+    <a href="./${yb}_event_calendar_analysis_v9f.xlsx" download
        style="display:inline-flex;align-items:center;gap:6px;background:#1E7D34;color:#fff;padding:7px 14px;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none">
       📊 Excel Workbook</a>
     <a href="./event_trends_summary_v3.pptx" download
@@ -1195,18 +1238,18 @@ CHARTS['c_type'] = new Chart(document.getElementById('c_type'),{
   }
 });
 CHART_SNAP['c_type'] = { type:'bar', labels:TYPES_.slice(), datasets:[
-  {label:'2025',data:TN25.slice(),backgroundColor:'rgba(55,71,79,.55)',borderColor:'#37474F',borderWidth:1},
-  {label:'2026',data:TN26.slice(),backgroundColor:TCLR.map(function(col){return col+'CC';}),borderColor:TCLR,borderWidth:1}
+  {label:'${ya}',data:TN25.slice(),backgroundColor:'rgba(55,71,79,.55)',borderColor:'#37474F',borderWidth:1},
+  {label:'${yb}',data:TN26.slice(),backgroundColor:TCLR.map(function(col){return col+'CC';}),borderColor:TCLR,borderWidth:1}
 ]};
 
-// 4. Event count by month comparison: 2025 vs 2026 side-by-side bar
+// 4. Event count by month comparison: ${ya} vs ${yb} side-by-side bar
 CHARTS['c_organic'] = new Chart(document.getElementById('c_organic'),{
   type:'bar',
   data:{
     labels:MLBLS,
     datasets:[
-      {label:'2025',data:MONTH_N25,backgroundColor:'rgba(55,71,79,.55)',borderColor:'#37474F',borderWidth:1},
-      {label:'2026',data:MONTH_N26,
+      {label:'${ya}',data:MONTH_N25,backgroundColor:'rgba(55,71,79,.55)',borderColor:'#37474F',borderWidth:1},
+      {label:'${yb}',data:MONTH_N26,
        backgroundColor:MONTH_N26.map((v,i)=>v<MONTH_N25[i]?'rgba(198,40,40,.7)':v>MONTH_N25[i]?'rgba(30,125,52,.7)':'rgba(21,101,192,.55)'),
        borderColor:MONTH_N26.map((v,i)=>v<MONTH_N25[i]?'#C62828':v>MONTH_N25[i]?'#1E7D34':'#1565C0'),borderWidth:1}
     ]
@@ -1232,8 +1275,8 @@ CHARTS['c_organic'] = new Chart(document.getElementById('c_organic'),{
   }
 });
 CHART_SNAP['c_organic'] = { type:'bar', labels:MLBLS.slice(), datasets:[
-  {label:'2025',data:MONTH_N25.slice(),backgroundColor:'rgba(55,71,79,.55)',borderColor:'#37474F',borderWidth:1},
-  {label:'2026',data:MONTH_N26.slice(),backgroundColor:MONTH_N26.map(function(v,i){return v<MONTH_N25[i]?'rgba(198,40,40,.7)':v>MONTH_N25[i]?'rgba(30,125,52,.7)':'rgba(21,101,192,.55)';}),borderColor:MONTH_N26.map(function(v,i){return v<MONTH_N25[i]?'#C62828':v>MONTH_N25[i]?'#1E7D34':'#1565C0';}),borderWidth:1}
+  {label:'${ya}',data:MONTH_N25.slice(),backgroundColor:'rgba(55,71,79,.55)',borderColor:'#37474F',borderWidth:1},
+  {label:'${yb}',data:MONTH_N26.slice(),backgroundColor:MONTH_N26.map(function(v,i){return v<MONTH_N25[i]?'rgba(198,40,40,.7)':v>MONTH_N25[i]?'rgba(30,125,52,.7)':'rgba(21,101,192,.55)';}),borderColor:MONTH_N26.map(function(v,i){return v<MONTH_N25[i]?'#C62828':v>MONTH_N25[i]?'#1E7D34':'#1565C0';}),borderWidth:1}
 ]};
 
 // 5. Weekend day shifts: Saturday Δ and Sunday Δ per month
@@ -1300,7 +1343,7 @@ function _build_flip_html(id) {
   var datasets = chart.data.datasets || [];
   var is_donut   = (id === 'c_segment');
   var is_delta   = (id === 'c_monthly' || id === 'c_calendar');
-  // Count-compare charts: 2 bar datasets (2025 vs 2026) → add Δ and Δ% columns
+  // Count-compare charts: 2 bar datasets (${ya} vs ${yb}) → add Δ and Δ% columns
   var is_compare = (id === 'c_organic' || id === 'c_type');
 
   // Only include datasets that have values; skip invisible overlays
@@ -1340,7 +1383,7 @@ function _build_flip_html(id) {
   ds_shown.forEach(function(ds) { hdr += '<th>' + (ds.label || '—') + '</th>'; });
   if (is_compare)          hdr += '<th>Δ Abs</th><th>Δ %</th>';
   if (is_donut)            hdr += '<th>% of total</th>';
-  if (id === 'c_monthly')  hdr += '<th>% of 2025</th>';
+  if (id === 'c_monthly')  hdr += '<th>% of ${ya}</th>';
   hdr += '</tr>';
 
   // ── Dataset totals ────────────────────────────────────────────────────────
@@ -1356,7 +1399,7 @@ function _build_flip_html(id) {
     ds_shown.forEach(function(ds) { rows += val_cell(num(ds.data[i]), ds.type, false); });
 
     if (is_compare) {
-      // ds_shown[0] = 2025 (bar), ds_shown[1] = 2026 (bar)
+      // ds_shown[0] = baseline year (bar), ds_shown[1] = analysis year (bar)
       var v25 = num(ds_shown[0] && ds_shown[0].data[i]);
       var v26 = num(ds_shown[1] && ds_shown[1].data[i]);
       rows += delta_cell(v25 != null && v26 != null ? v26 - v25 : null, v25);
@@ -1367,7 +1410,7 @@ function _build_flip_html(id) {
       rows += '<td style="color:#888">' + pct + '%</td>';
     }
     if (id === 'c_monthly') {
-      // MONTH_N25 is a global array of 2025 counts per month
+      // MONTH_N25 is a global array of baseline-year counts per month
       var base = (typeof MONTH_N25 !== 'undefined') ? (MONTH_N25[i] || 0) : 0;
       var raw  = num(ds_shown[0] && ds_shown[0].data[i]); // Raw Δ is dataset 0
       var pct_val = (base && raw != null) ? parseFloat((raw / base * 100).toFixed(1)) : null;
@@ -1501,11 +1544,10 @@ if(ROSTER && ROSTER.length > 0){
            + ' data-seg="'+seg+'" onclick="toggle_seg_chip(this.dataset.seg)">'
            + '<span class="chip-dot" style="background:'+st.color+'"></span>'
            + seg+' <strong>'+n.toLocaleString()+'</strong>'
-           + '<span class="chip-pct">('+pct+'%)</span>'
+           + '<span class="chip-pct">('+pct+'% of '+total.toLocaleString()+')</span>'
            + (is_active ? '<span class="chip-x">✕</span>' : '')
            + '</span>';
-    }).join('')
-    + (total > 0 ? '<span class="seg-bar-total">'+total.toLocaleString()+' events shown</span>' : '');
+    }).join('');
   }
 
   // Toggle a segment chip: checks/unchecks it in the dropdown and re-filters
@@ -1598,7 +1640,8 @@ if(ROSTER && ROSTER.length > 0){
   const SEG_CHIP_COLORS  = {'Retained':'#2e7d32','Shifted':'#e65100','Tried to Return':'#bf360c','Lost':'#c62828','Recovered':'#6a1b9a','New':'#006064'};
   const TYPE_CHIP_COLORS = {'Adult Race':'#1565C0','Youth Race':'#00897B','Adult Clinic':'#F57C00','Youth Clinic':'#8E24AA'};
 
-  function render_active_filters(q, segs, typs, mons) {
+  function render_active_filters(q, segs, typs, mons, sts) {
+    sts = sts || [];
     var bar = document.getElementById('filter-bar');
     if (!bar) return;
     var chips = [];
@@ -1645,6 +1688,20 @@ if(ROSTER && ROSTER.length > 0){
         clear: function(){ drop_all('panel-drop-month', false); }});
     }
 
+    // Status chips — same compaction rule as months.
+    if (sts.length > 0 && sts.length <= 3) {
+      sts.forEach(function(s){
+        chips.push({label:'Status', value:s, color:'#37474F', bg:'#ECEFF1', border:'#B0BEC5',
+          clear: function(){
+            var cb=document.querySelector('#panel-drop-status input[value="'+s.replace(/"/g,'&quot;')+'"]');
+            if(cb){cb.checked=false;} update_drop_btn('drop-status'); filter_and_sort();
+          }});
+      });
+    } else if (sts.length > 3) {
+      chips.push({label:'Status', value:sts.length+' selected', color:'#37474F', bg:'#ECEFF1', border:'#B0BEC5',
+        clear: function(){ drop_all('panel-drop-status', false); }});
+    }
+
     var has = chips.length > 0;
     bar.className = 'filter-bar' + (has ? ' has-filters' : '');
     var rst = document.getElementById('tbl-reset-btn');
@@ -1666,10 +1723,10 @@ if(ROSTER && ROSTER.length > 0){
 
   function clear_all_filters() {
     var el = document.getElementById('tbl-search'); if(el) el.value='';
-    ['panel-drop-seg','panel-drop-type','panel-drop-month'].forEach(function(p){
+    ['panel-drop-seg','panel-drop-type','panel-drop-month','panel-drop-status'].forEach(function(p){
       document.querySelectorAll('#'+p+' input[type=checkbox]').forEach(function(cb){cb.checked=false;});
     });
-    ['drop-seg','drop-type','drop-month'].forEach(function(d){ update_drop_btn(d); });
+    ['drop-seg','drop-type','drop-month','drop-status'].forEach(function(d){ update_drop_btn(d); });
     filter_and_sort();
   }
 
@@ -1678,7 +1735,8 @@ if(ROSTER && ROSTER.length > 0){
     const segs = get_checked('panel-drop-seg');
     const typs = get_checked('panel-drop-type');
     const mons = get_checked('panel-drop-month');
-    render_active_filters(q, segs, typs, mons);
+    const sts  = get_checked('panel-drop-status');
+    render_active_filters(q, segs, typs, mons, sts);
     let rows = ROSTER.filter(r =>
       // Search matches across either year's event name OR sanction ID — so
       // a paste like "311655-Adult Race" filters down to that exact row,
@@ -1690,7 +1748,10 @@ if(ROSTER && ROSTER.length > 0){
           || (r.sid26  && r.sid26.toLowerCase().includes(q))) &&
       (!segs.length || segs.includes(r.seg)) &&
       (!typs.length || typs.includes(r.type)) &&
-      (!mons.length || mons.includes(r.m25) || mons.includes(r.m26))
+      (!mons.length || mons.includes(r.m25) || mons.includes(r.m26)) &&
+      // Status matches if either year's status is in the checked set.
+      // Lost/New rows only have one side populated; the OR handles that.
+      (!sts.length  || sts.includes(r.st25) || sts.includes(r.st26))
     );
     rows.sort((a,b) => {
       if(sort_col === '_excel'){
