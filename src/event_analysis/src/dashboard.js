@@ -2280,9 +2280,18 @@ function get_modal_plugin_opts(id) {
   const src_chart = CHARTS[id];
   if (!src_chart) return { plugin_opts: {}, inline_plugins: [] };
   const opts = src_chart.options?.plugins || {};
+  // Forward EVERY plugin's options block from the source chart so the modal
+  // renders identical data labels. The dashboard has several globally-
+  // registered plugins (value_labels, inside_labels, delta_labels) that only
+  // draw when opts.show === true — which lives in this options.plugins map.
+  // Previously we only forwarded datalabels + tooltip, which left the modal
+  // looking bare. We exclude 'legend' because expand_chart() builds a fresh
+  // legend with modal-appropriate positioning below.
   const modal_opts = {};
-  if (opts.datalabels) modal_opts.datalabels = opts.datalabels;
-  if (opts.tooltip)    modal_opts.tooltip    = opts.tooltip;
+  for (const key of Object.keys(opts)) {
+    if (key === 'legend') continue;
+    modal_opts[key] = opts[key];
+  }
   const inline = (src_chart.config.plugins || []).filter(p => p && p.id === 'org_pts');
   return { plugin_opts: modal_opts, inline_plugins: inline };
 }
