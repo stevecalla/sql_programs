@@ -22,6 +22,7 @@ dotenv.config({ path: "../../.env" });
 
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // ── Input config ────────────────────────────────────────────────────────────
 const DIR = __dirname;
@@ -157,6 +158,53 @@ function print_timing_summary() {
   console.log(`  ${'─'.repeat(24)} ${'─'.repeat(7)}`);
   console.log(`  ${'TOTAL'.padEnd(24)} ${((total / 1000).toFixed(2) + 's').padStart(7)}`);
   console.log('──────────────────────────────────────────────────────');
+}
+
+// ── Commentary cache helpers ───────────────────────────────────────────────
+// The AI commentary call is ~71s. The vast majority of rebuilds don't change
+// any number commentary reads (segment counts, type breakdown, monthly
+// aggregates), so we hash a curated whitelist of fields and reuse the prior
+// commentary.json when the hash matches. Override via FRESH_AI=1 (force
+// re-call) or STALE_AI=1 (use cache even if inputs drifted).
+//
+// What's IN the hash: aggregates commentary actually reads — years, segment
+// counts, per-type counts/deltas, per-month numeric aggregates, organic
+// breakdown, calendar impact, override count, and the rule-based flag.
+//
+// What's NOT in the hash: individual event names, sanction IDs, confidence
+// scores, day-of-week, override row contents, build timestamps, file paths.
+// A typo fix in source data won't invalidate the cache; a single event
+// flipping segments will.
+function compute_commentary_input_hash(results, force_rule_based) {
+  // Strip per-month numeric aggregates only — defends against future
+  // additions of non-numeric sub-fields that would cause false invalidation.
+  const monthly_aggregates = results.monthly
+    ? Object.fromEntries(Object.entries(results.monthly).map(([m, d]) => [
+        m,
+        Object.fromEntries(Object.entries(d).filter(([_, v]) => typeof v === 'number')),
+      ]))
+    : null;
+  const whitelist = {
+    years:            results.years,
+    segments:         results.segSummary,
+    by_type:          results.typeAnnual,
+    monthly:          monthly_aggregates,
+    organic_by_type:  results.organicByType,
+    cal_impact:       results.calImpact,
+    override_count:   results.override_summary?.total_applied ?? 0,
+    force_rule_based: !!force_rule_based,
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(whitelist)).digest('hex');
+}
+
+function try_load_cached_commentary(output_dir) {
+  try {
+    const fp = path.join(output_dir, 'commentary.json');
+    if (!fs.existsSync(fp)) return null;
+    return JSON.parse(fs.readFileSync(fp, 'utf8'));
+  } catch {
+    return null;
+  }
 }
 
 async function main() {
@@ -315,14 +363,37 @@ async function main() {
 
   // ── Generate commentary (rule-based, upgraded to AI if key present) ────────
   // NO_AI=1 or RULE_BASED_ONLY=1 forces rule-based even when the key is set.
-  // Used by the "Build (rule-based only)" menu option to avoid spending tokens.
+  // FRESH_AI=1 forces a fresh AI call, bypassing the input-hash cache.
+  // STALE_AI=1 forces using the cached commentary even when inputs drifted.
   const force_rule_based = !!(process.env.NO_AI || process.env.RULE_BASED_ONLY);
+  const force_fresh_ai   = !!process.env.FRESH_AI;
+  const force_stale_ai   = !!process.env.STALE_AI;
   const api_key = process.env.ANTHROPIC_API_KEY || null;
+
+  // Hash the inputs commentary actually reads. Used to decide whether the
+  // prior commentary.json is still good or needs re-running.
+  const cache_key = compute_commentary_input_hash(results, force_rule_based);
+  const cached    = try_load_cached_commentary(OUTPUT_DIR);
+  const cache_hit = !!cached && cached._input_hash === cache_key;
+
   let commentary = null;
-  if (force_rule_based) {
+
+  if (cache_hit && !force_fresh_ai) {
+    console.log(`  Commentary cache HIT (hash ${cache_key.slice(0,8)}…) — reusing prior commentary.json, no AI call.`);
+    commentary = cached;
+  } else if (force_stale_ai && cached) {
+    console.log('  STALE_AI=1 — reusing prior commentary.json even though inputs drifted (hash differs).');
+    commentary = cached;
+  } else if (force_rule_based) {
     console.log('  NO_AI / RULE_BASED_ONLY set — skipping AI commentary, using rule-based.');
   } else if (api_key && api_key !== 'sk-ant-your-key-here') {
-    console.log('  AI commentary enabled -- calling Claude API for insights...');
+    if (force_fresh_ai && cache_hit) {
+      console.log('  FRESH_AI=1 — bypassing cache, calling Claude even though inputs are unchanged...');
+    } else if (cached && !cache_hit) {
+      console.log(`  Commentary cache MISS (inputs drifted, hash ${cache_key.slice(0,8)}…) — calling Claude API for insights...`);
+    } else {
+      console.log('  AI commentary enabled -- calling Claude API for insights...');
+    }
     try {
       commentary = await generate_ai(results, api_key);
       if (commentary._ai_generated) {
@@ -337,6 +408,10 @@ async function main() {
   }
   // Ensure we always have commentary
   if (!commentary) commentary = generate_rule_based(results);
+
+  // Stamp the input hash so the next build can compare. Survives the
+  // commentary.json round-trip below.
+  commentary._input_hash = cache_key;
 
   // Mutate the in-memory commentary so EVERY downstream consumer
   // (dashboard, PowerPoint, Excel narratives) sees the same `mode` field
@@ -494,8 +569,15 @@ async function main() {
   print_timing_summary();
 }
 
-main().catch(err => {
-  console.error('Build failed:', err.message);
-  if (process.env.DEBUG) console.error(err.stack);
-  process.exit(1);
-});
+// Export the cache helpers so tests/build.test.js can verify hash stability,
+// hash sensitivity, and cache-loader behaviour without spawning a full build.
+// Same pattern as menu.js: only run main() when invoked directly.
+module.exports = { compute_commentary_input_hash, try_load_cached_commentary };
+
+if (require.main === module) {
+  main().catch(err => {
+    console.error('Build failed:', err.message);
+    if (process.env.DEBUG) console.error(err.stack);
+    process.exit(1);
+  });
+}

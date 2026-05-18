@@ -127,63 +127,65 @@ const SECTIONS = [
     label: 'BUILD & OUTPUT',
     color: BLUE,
     items: [
-      { id: 1,  label: 'Build everything',           desc: 'Excel + PowerPoint + Dashboard + JSON outputs',  action: 'build' },
+      { id: 1,  label: 'Build everything',           desc: 'Excel + PowerPoint + Dashboard + JSON outputs (reuses cached AI commentary when inputs unchanged)',  action: 'build' },
       { id: 2,  label: 'Build (rule-based only)',    desc: 'Same as Build, but forces NO_AI=1 — no Claude API tokens spent',   action: 'build_rule_based' },
-      { id: 3,  label: 'Check data quality',         desc: 'Validate CSVs + override conflicts before building', action: 'check' },
-      { id: 4,  label: 'Open dashboard in browser',  desc: 'Interactive charts (output/dashboard.html)',     action: 'open_dashboard' },
-      { id: 5,  label: 'Open Excel workbook',        desc: 'Most recent output/<year>_event_calendar_analysis_*.xlsx',  action: 'open_excel' },
-      { id: 6,  label: 'Open PowerPoint deck',       desc: 'Most recent output/<year>_event_trends_summary_*.pptx',           action: 'open_pptx' },
+      { id: 3,  label: 'Build (force fresh AI)',     desc: 'FRESH_AI=1 — bypasses commentary cache and calls Claude even when inputs are unchanged', action: 'build_fresh_ai' },
+      { id: 4,  label: 'Check data quality',         desc: 'Validate CSVs + override conflicts before building', action: 'check' },
+      { id: 5,  label: 'Open dashboard in browser',  desc: 'Interactive charts (output/dashboard.html)',     action: 'open_dashboard' },
+      { id: 6,  label: 'Open Excel workbook',        desc: 'Most recent output/<year>_event_calendar_analysis_*.xlsx',  action: 'open_excel' },
+      { id: 7,  label: 'Open PowerPoint deck',       desc: 'Most recent output/<year>_event_trends_summary_*.pptx',           action: 'open_pptx' },
     ],
   },
   {
     label: 'OVERRIDES — event matching',
     color: YELLOW,
     items: [
-      { id: 7,  label: 'List active overrides',      desc: 'Show all entries in data/overrides.json',        action: 'list_overrides' },
-      { id: 8,  label: 'Suggest overrides (AI)',     desc: 'Claude analyses unmatched events for likely pairs', action: 'suggest_overrides' },
-      { id: 9,  label: 'Add force-match',            desc: 'Force two events to be matched across years',    action: 'add_match' },
-      { id: 10, label: 'Add force-no-match',         desc: 'Prevent an event from matching (→ Attrited/New)', action: 'add_no_match' },
-      { id: 11, label: 'Add force-segment',          desc: 'Override a segment classification',              action: 'add_segment' },
-      { id: 12, label: 'Remove override',            desc: 'Remove all overrides for a sanction ID',        action: 'remove_override' },
+      { id: 8,  label: 'List active overrides',      desc: 'Show all entries in data/overrides.json',        action: 'list_overrides' },
+      { id: 9,  label: 'Suggest overrides (AI)',     desc: 'Claude analyses unmatched events for likely pairs', action: 'suggest_overrides' },
+      { id: 10, label: 'Add force-match',            desc: 'Force two events to be matched across years',    action: 'add_match' },
+      { id: 11, label: 'Add force-no-match',         desc: 'Prevent an event from matching (→ Attrited/New)', action: 'add_no_match' },
+      { id: 12, label: 'Add force-segment',          desc: 'Override a segment classification',              action: 'add_segment' },
+      { id: 13, label: 'Remove override',            desc: 'Remove all overrides for a sanction ID',        action: 'remove_override' },
     ],
   },
   {
     label: 'Q&A & ANALYSIS — powered by Claude',
     color: CYAN,
     items: [
-      { id: 13, label: 'Ask a question',             desc: 'Ask Claude anything about the analysis results', action: 'ask' },
-      { id: 14, label: 'Ask and save to notes.md',   desc: 'Answer is appended to notes.md for future context', action: 'ask_save' },
-      { id: 15, label: 'Rewrite a slide narrative',  desc: 'Update commentary.json directly with new text',  action: 'update_commentary' },
-      { id: 16, label: 'What changed?',              desc: 'Compare current build to prior (AI summary)',    action: 'what_changed' },
+      { id: 14, label: 'Ask a question',             desc: 'Ask Claude anything about the analysis results', action: 'ask' },
+      { id: 15, label: 'Ask and save to notes.md',   desc: 'Answer is appended to notes.md for future context', action: 'ask_save' },
+      { id: 16, label: 'Rewrite a slide narrative',  desc: 'Update commentary.json directly with new text',  action: 'update_commentary' },
+      { id: 17, label: 'What changed?',              desc: 'Compare current build to prior (AI summary)',    action: 'what_changed' },
     ],
   },
   {
     label: 'INFORMATION',
     color: GREEN,
     items: [
-      { id: 17, label: 'View changes since last build', desc: 'Show output/changes.txt',                    action: 'view_changes' },
-      { id: 18, label: 'View notes.md',              desc: 'Current analyst notes + build history',         action: 'view_notes' },
-      { id: 19, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme' },
+      { id: 18, label: 'View changes since last build', desc: 'Show output/changes.txt',                    action: 'view_changes' },
+      { id: 19, label: 'View notes.md',              desc: 'Current analyst notes + build history',         action: 'view_notes' },
+      { id: 20, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme' },
     ],
   },
   {
     label: 'LOCAL SERVER — http://localhost:8016',
     color: CYAN,
     items: [
-      { id: 20, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop)', action: 'start_server' },
+      { id: 21, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop)', action: 'start_server' },
     ],
   },
   {
     label: 'TESTING — verify the code is working',
     color: MAGENTA,
     items: [
-      { id: 21, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all' },
-      { id: 22, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides' },
-      { id: 23, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server' },
-      { id: 24, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu' },
-      { id: 25, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke' },
-      { id: 26, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary' },
-      { id: 27, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads' },
+      { id: 22, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all' },
+      { id: 23, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides' },
+      { id: 24, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server' },
+      { id: 25, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu' },
+      { id: 26, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke' },
+      { id: 27, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary' },
+      { id: 28, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads' },
+      { id: 29, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build' },
     ],
   },
 ];
@@ -239,6 +241,25 @@ async function handle_action(action, rl) {
           cwd:   DIR,
           shell: false,
           env:   { ...process.env, NO_AI: '1' },
+        });
+        proc.on('close', resolve);
+      });
+      if (code !== 0 && code !== null) console.log(c(YELLOW, `\n  Build exited with code ${code}.`));
+      break;
+    }
+
+    case 'build_fresh_ai': {
+      // Force a fresh Claude call by setting FRESH_AI=1 in the child env.
+      // Skips the input-hash cache check, so AI commentary is regenerated
+      // even when the underlying numbers haven't changed. Use when you've
+      // tweaked the AI prompt or just want new wording.
+      console.log(c(DIM, '  FRESH_AI=1 → bypass commentary cache, call Claude unconditionally.'));
+      const code = await new Promise(resolve => {
+        const proc = spawn(process.execPath ?? 'node', ['build_all.js'], {
+          stdio: 'inherit',
+          cwd:   DIR,
+          shell: false,
+          env:   { ...process.env, FRESH_AI: '1' },
         });
         proc.on('close', resolve);
       });
@@ -394,7 +415,8 @@ async function handle_action(action, rl) {
     case 'run_tests_menu':
     case 'run_tests_smoke':
     case 'run_tests_glossary':
-    case 'run_tests_downloads': {
+    case 'run_tests_downloads':
+    case 'run_tests_build': {
       // node --test runs every *.test.js it finds in the given path
       // and exits non-zero on failure. Output is TAP-style. We can't use
       // the existing run() helper because we need --test as a node flag,
@@ -410,6 +432,7 @@ async function handle_action(action, rl) {
                    : action === 'run_tests_smoke'     ? path.join(tests_dir, 'smoke.test.js')
                    : action === 'run_tests_glossary'  ? path.join(tests_dir, 'glossary.test.js')
                    : action === 'run_tests_downloads' ? path.join(tests_dir, 'downloads.test.js')
+                   : action === 'run_tests_build'     ? path.join(tests_dir, 'build.test.js')
                    :                                     tests_dir;
       if (action !== 'run_tests_all' && !fs.existsSync(target)) {
         console.log(c(YELLOW, `  Test file not found: ${target}`));
@@ -421,6 +444,7 @@ async function handle_action(action, rl) {
                   : action === 'run_tests_smoke'     ? 'smoke tests'
                   : action === 'run_tests_glossary'  ? 'glossary tests'
                   : action === 'run_tests_downloads' ? 'download tests'
+                  : action === 'run_tests_build'     ? 'build tests'
                   :                                     'all tests';
       console.log(c(DIM, `  Running ${label}: node --test ${path.relative(DIR, target) || 'tests/'}`));
       const code = await new Promise(resolve => {

@@ -9,18 +9,21 @@ Compares two years of USAT sanctioned event CSV data (2025 vs 2026) and produces
 
 Everything is generated dynamically from CSV data. With an Anthropic API key in `.env`, Claude writes all commentary and insights; without one, a rule-based fallback produces equivalent output. Set `NO_AI=1` (or `RULE_BASED_ONLY=1`) to force rule-based even when the key is set — handy for iterating on formatting without burning tokens. Menu option **2** ("Build (rule-based only)") wires that env var for you.
 
+The AI call (~70s) dominates build time, so `build_all.js` ships a **commentary cache**: it hashes a whitelist of fields commentary actually reads (years, segments, by-type counts, monthly aggregates, organic delta, calendar impact, override count) and stamps the hash onto `commentary.json` as `_input_hash`. Next build: hash match → reuse the prior commentary, no API call. Hash miss → fresh AI call. Manual overrides: `FRESH_AI=1` (menu option **3**) bypasses the cache; `STALE_AI=1` (env only) forces the cache even when the hash drifted. Excluded from the hash: event names, sanction IDs, confidence, override row contents — so source-data typo fixes don't burn tokens, but real aggregate shifts always do.
+
 ---
 
 ## How to run
 
 ```bash
 node check.js                   # validate data quality before building (always run first)
-node build_all.js               # generate Excel + PowerPoint + dashboard (takes ~30s)
+node build_all.js               # generate Excel + PowerPoint + dashboard (~80s w/ AI, ~7s cached, ~7s NO_AI)
 NO_AI=1 node build_all.js       # same as above, but force rule-based commentary (no Claude tokens)
-node menu.js                    # interactive feature launcher (25 options across 6 sections)
+FRESH_AI=1 node build_all.js    # bypass commentary cache, force a fresh Claude call
+node menu.js                    # interactive feature launcher (28 options across 6 sections)
 node ask.js                     # Q&A + override management CLI (DB-backed)
 node server_event_analysis_8016.js   # from repo root — local read-only API at http://localhost:8016
-node --test tests/              # run every *.test.js (overrides + server + menu + smoke)
+node --test tests/              # run every *.test.js (overrides + server + menu + smoke + glossary + downloads)
 ```
 
 > Interactive override editing in the browser (Step 9) is still pending — for now the server is read-only and you manage overrides via `ask.js`.
@@ -67,7 +70,8 @@ event_analysis/
 │   ├── menu.test.js             ← menu.js wiring: unique ids/actions, required actions present (cheap)
 │   ├── smoke.test.js            ← parse-check + require-check every major source file (cheap)
 │   ├── glossary.test.js         ← dashboard glossary: <details> collapsed, every required term present (cheap)
-│   └── downloads.test.js        ← dashboard Excel/PowerPoint Download buttons resolve to real files (cheap)
+│   ├── downloads.test.js        ← dashboard Excel/PowerPoint Download buttons resolve to real files (cheap)
+│   └── build.test.js            ← commentary cache: hash stability + sensitivity + insensitivity + loader (cheap)
 ├── utilities/
 │   ├── ensure_overrides_table.js   ← idempotent schema setup (auto-runs every build)
 │   └── migrate_overrides_to_db.js  ← one-shot JSON → DB migration (auto-runs every build)
@@ -259,11 +263,11 @@ CORS is open (`*`) — fine for local dev, tighten before any production hosting
 | 2. JSON → DB auto-migration on every build | ✓ done |
 | 2.5. Year scoping (`baseline_year` / `analysis_year` columns + index, sid_baseline/sid_analysis rename) | ✓ done |
 | 3. `analysis.js` reads from DB (async, year-scoped, surfaces unapproved warnings) | ✓ done |
-| 3.5. `tests/overrides.test.js` (`node --test tests/`, menu options 21–27) | ✓ done |
+| 3.5. `tests/overrides.test.js` (`node --test tests/`, menu options 22–29) | ✓ done |
 | **4.** `ask.js` CLI writes to DB (add / remove / list / suggest), `--global` flag, `created_by` provenance | ✓ done |
 | **5.** `--approve` / `--unapprove` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, captures event signatures. Unapprove clears approval + signatures (keeps audit fields). | ✓ done |
 | **6.** Stale-approval detection. `apply_overrides()` recomputes event signatures and compares to stored snapshot; on drift the build flips `approval_state='stale'`, emits `⚠ [stale approval]` warning, and `--list-overrides` renders the row with a `⚠ stale` badge. | ✓ done |
-| **7.** `server_event_analysis_8016.js` — minimal Express server at the repo root (port 8016, alongside the other `server_*.js` services). Read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params), `GET /api/events?year=YYYY`. HTML index at `/`. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 20. | ✓ done |
+| **7.** `server_event_analysis_8016.js` — minimal Express server at the repo root (port 8016, alongside the other `server_*.js` services). Read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params), `GET /api/events?year=YYYY`. HTML index at `/`. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 21. | ✓ done |
 | **8.** Write endpoints — `POST /api/overrides` (typed dispatch), `DELETE /api/overrides/:sid`, `POST /api/approve/:sid`, `POST /api/unapprove/:sid`. All wrap the existing `cmd_*` functions and tag rows `created_by='server'`. Stale Override Manager panel removed from `dashboard.html`. 16 new tests. | ✓ done |
 | **9.** Override editor — two surfaces: (a) standalone SPA at `/editor/` (`public/{index.html,editor.css,editor.js}`); (b) dashboard-integrated panel embedded in `dashboard.html` with a new "Override" status column in the roster (click row → focus editor + prefill sid), a sticky "rebuild needed" banner that fires after edits, and a "Rebuild now" button. **Step 9.5: `GET /api/build`** streams `build_all.js` over SSE (events: `out`, `err`, `done`); 409 if a build is already running; client disconnect kills the child. Menu test runner split into 3 options. ~10 new tests covering dashboard markers + the SSE stream + the build-lock. | ✓ done |
 | 10. Cascade rules engine — pattern-based overrides ("all clinics in May named X → Lost") | pending |

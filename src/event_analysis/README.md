@@ -133,43 +133,45 @@ Type a number and press Enter. For features that need input the menu prompts you
 
 The status bar at the top always shows: last build date, event totals, commentary mode (AI or rule-based), API key status, and active override count.
 
-### All 27 features — menu number + what it runs
+### All 29 features — menu number + what it runs
 
 | # | Menu label | Equivalent command |
 |---|---|---|
 | **BUILD & OUTPUT** | | |
-| 1 | Build everything | `node build_all.js` |
+| 1 | Build everything | `node build_all.js` (reuses cached AI commentary when commentary inputs haven't changed) |
 | 2 | Build (rule-based only) | `NO_AI=1 node build_all.js` — forces rule-based commentary; no Claude tokens spent. Useful when iterating on dashboard / Excel / pptx formatting. |
-| 3 | Check data quality | `node check.js` |
-| 4 | Open dashboard in browser | Opens `output/dashboard.html` |
-| 5 | Open Excel workbook | Opens the newest `output/<year>_event_calendar_analysis_*.xlsx` |
-| 6 | Open PowerPoint deck | Opens the newest `output/<year>_event_trends_summary_*.pptx` |
+| 3 | Build (force fresh AI) | `FRESH_AI=1 node build_all.js` — bypasses the commentary cache and calls Claude even when inputs haven't changed. Use when you tweaked the prompt or want new wording. |
+| 4 | Check data quality | `node check.js` |
+| 5 | Open dashboard in browser | Opens `output/dashboard.html` |
+| 6 | Open Excel workbook | Opens the newest `output/<year>_event_calendar_analysis_*.xlsx` |
+| 7 | Open PowerPoint deck | Opens the newest `output/<year>_event_trends_summary_*.pptx` |
 | **OVERRIDES — event matching** | | |
-| 7 | List active overrides | `node ask.js --list-overrides` |
-| 8 | Suggest overrides (AI) | `node ask.js --suggest-overrides` |
-| 9 | Add force-match | `node ask.js --add-override match <sid_baseline> <sid_analysis> "note"` |
-| 10 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
-| 11 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
-| 12 | Remove override | `node ask.js --remove-override <sid>` |
+| 8 | List active overrides | `node ask.js --list-overrides` |
+| 9 | Suggest overrides (AI) | `node ask.js --suggest-overrides` |
+| 10 | Add force-match | `node ask.js --add-override match <sid_baseline> <sid_analysis> "note"` |
+| 11 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
+| 12 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
+| 13 | Remove override | `node ask.js --remove-override <sid>` |
 | **Q&A & ANALYSIS** | | |
-| 13 | Ask a question | `node ask.js "your question"` |
-| 14 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
-| 15 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
-| 16 | What changed? | `node ask.js --what-changed` |
+| 14 | Ask a question | `node ask.js "your question"` |
+| 15 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
+| 16 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
+| 17 | What changed? | `node ask.js --what-changed` |
 | **INFORMATION** | | |
-| 17 | View changes since last build | `cat output/changes.txt` |
-| 18 | View notes.md | `cat notes.md` |
-| 19 | View README | Displays this file |
+| 18 | View changes since last build | `cat output/changes.txt` |
+| 19 | View notes.md | `cat notes.md` |
+| 20 | View README | Displays this file |
 | **LOCAL SERVER** | | |
-| 20 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
+| 21 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
 | **TESTING** | | |
-| 21 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
-| 22 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
-| 23 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
-| 24 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
-| 25 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
-| 26 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
-| 27 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
+| 22 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
+| 23 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
+| 24 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
+| 25 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
+| 26 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
+| 27 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
+| 28 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
+| 29 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
 | 0 | Exit | — |
 
 ---
@@ -325,6 +327,25 @@ $env:NO_AI = "1"; node build_all.js      # PowerShell
 ```
 
 The build logs `NO_AI / RULE_BASED_ONLY set — skipping AI commentary, using rule-based.` so you can confirm at a glance which path ran.
+
+### Commentary cache — reuse prior AI output when inputs haven't changed
+
+The AI commentary call takes ~70 seconds and dominates the build time when enabled. To avoid re-spending tokens on rebuilds where nothing material changed, `build_all.js` hashes a whitelist of fields that commentary actually reads — segments, by-type counts, monthly aggregates, organic delta, calendar impact, override count, years — and stamps the hash onto `commentary.json` as `_input_hash`. On the next build:
+
+- **Hash matches → cache HIT.** The prior `commentary.json` is reused as-is. No API call. Log line: `Commentary cache HIT (hash a3f5c8…) — reusing prior commentary.json, no AI call.`
+- **Hash differs → cache MISS.** Claude is called fresh; the new commentary is saved with the new hash.
+
+What's NOT in the hash (so a change here won't invalidate): individual event names, sanction IDs, confidence scores, day-of-week, override row contents, build timestamps, file paths. A source-data typo fix that doesn't move any aggregate → cache hit. A real segment-count shift, even by one event → cache miss.
+
+**Manual overrides:**
+
+| Flag | What it does | Menu |
+|---|---|---|
+| `FRESH_AI=1` | Bypass the cache and call Claude even when inputs are unchanged. Use when you've tweaked the prompt or want new wording. | Option **3** ("Build (force fresh AI)") |
+| `STALE_AI=1` | Use the cached `commentary.json` even when the hash differs. Use when you want zero AI cost and don't mind subtly out-of-date commentary. | (env var only — no menu entry; uncommon enough not to clutter the menu) |
+| `NO_AI=1` | Skip AI entirely; run rule-based. Cache is irrelevant — rule-based output is always fresh-computed (it's fast). | Option **2** |
+
+Together: option **1** (default) gives you the fastest correct build (cache when safe, fresh AI when needed). Option **2** is the cheapest. Option **3** is the "give me new wording" escape hatch.
 
 ---
 
@@ -762,7 +783,7 @@ Exits with status 1 if errors are found (stopping a `check.js && build_all.js` p
 
 ## Test suite — tests/
 
-> **Menu:** options **21–27** (all / overrides / server / menu / smoke / glossary / downloads) — or run directly:
+> **Menu:** options **22–29** (all / overrides / server / menu / smoke / glossary / downloads / build) — or run directly:
 
 ```bash
 node --test tests/                  # run every *.test.js
@@ -783,6 +804,7 @@ Uses Node's built-in `node:test` runner (Node 18+) — no extra dependencies. Ou
 | `smoke.test.js` | Parse-check every major source file (CJS `vm.Script` — same engine as `node --check`), require-check each module's exports, sanity-check pure helpers | no | <1s |
 | `glossary.test.js` | Bottom-of-dashboard glossary is a default-closed `<details>` element and contains every required term (6 segments + 5 confidence values + calendar / organic + 7 other terms). Reads the most recent built `dashboard.html`. | no (reads built file) | <1s |
 | `downloads.test.js` | The dashboard's Excel + PowerPoint Download buttons point at files that actually exist in the output dir, are same-directory paths (`./filename`), and follow the `<year>_event_calendar_analysis_*.xlsx` / `<year>_event_trends_summary_*.pptx` naming pattern. Also guards against the legacy `_v9f.xlsx` / `_v3.pptx` hardcoded names sneaking back in. | no (reads built file) | <1s |
+| `build.test.js` | Commentary cache logic: hash stability (same input → same hash), sensitivity to whitelisted fields (segments / by-type / monthly / organic / calendar / override count / year scope / NO_AI flag), insensitivity to non-whitelisted fields (event names / sanction IDs / confidence / day-of-week / timestamps), cache loader behavior (missing file, valid JSON, malformed JSON). Pure functions only — doesn't call Claude or run a real build. | no | <1s |
 
 The `menu.test.js` and `smoke.test.js` files are intentionally cheap — no DB, no network, no API key. Run them after any structural change (renaming a file, splitting a module, refactoring exports) to catch the easy regressions before the slow tests fire.
 
