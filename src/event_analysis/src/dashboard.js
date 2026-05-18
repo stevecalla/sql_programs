@@ -292,6 +292,14 @@ body{font-family:'Segoe UI',system-ui,Arial,sans-serif;background:#F0F2F5;color:
 .hdr-left .sub{font-size:.78rem;opacity:.75;margin-top:5px}
 .hdr-right{text-align:right;font-size:.82rem;opacity:.75;white-space:nowrap;flex-shrink:0}
 .hdr-right .big{font-size:1.3rem;font-weight:700;display:block}
+.snapshot-info{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;background:#FFF8E1;border:1px solid #FFE082;border-left:4px solid #FFA000;border-radius:6px;font-size:.84rem;color:#5D4037;line-height:1.4}
+.snapshot-info .snapshot-ico{font-size:1.1rem;flex-shrink:0}
+.snapshot-info .snapshot-text strong{color:#3E2723;font-weight:600}
+.snapshot-info .snapshot-hint{color:#795548;font-style:italic;margin-left:4px}
+@media (max-width: 600px){
+  .snapshot-info{flex-direction:column;align-items:flex-start;gap:4px}
+  .snapshot-info .snapshot-hint{margin-left:0;display:block;margin-top:2px}
+}
 .badge{display:inline-block;font-size:.68rem;padding:2px 7px;border-radius:10px;
        background:rgba(255,255,255,.2);color:#fff;margin-left:6px;vertical-align:middle}
 .badge.ai{background:rgba(30,125,52,.65)}
@@ -698,13 +706,27 @@ canvas{width:100%!important;max-height:220px}
       <span class="badge ${has_api ? 'ai' : ''}">${has_api ? '⚡ AI' : '📐 Rule-based'}</span>
       ${ov_count ? `<span class="badge warn">⚠ ${ov_count} override${ov_count > 1 ? 's' : ''}</span>` : ''}
     </h1>
-    <div class="sub">Built ${new Date(built_at).toLocaleDateString('en-US',{dateStyle:'long'})}
-      · Excl. Cancelled / Declined / Deleted · ~85–90% match confidence</div>
+    <div class="sub">Excl. Cancelled / Declined / Deleted · ~85–90% match confidence</div>
   </div>
   <div class="hdr-right">
     ${n_baseline.toLocaleString()} → ${n_analysis.toLocaleString()}
     <span class="big">${sign(net)} net</span>
   </div>
+</div>
+
+<!-- ── Snapshot timestamp — makes the "this is a frozen build" semantic
+     obvious to non-technical readers. Without this they tend to assume
+     the numbers are live and refresh on their own; this line is the
+     antidote. ─────────────────────────────────────────────────────── -->
+<div class="snapshot-info" id="snapshot-info">
+  <span class="snapshot-ico">📅</span>
+  <span class="snapshot-text">
+    <strong>Data as of ${new Date(built_at).toLocaleString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    })}</strong>
+    <span class="snapshot-hint">— This is a snapshot. Numbers don't change until the next rebuild.</span>
+  </span>
 </div>
 
 <div class="type-strip">${type_cards_html}</div>
