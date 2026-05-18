@@ -449,7 +449,7 @@ Overrides live in `usat_sales_db.event_analysis_overrides`. The runtime — both
 | **6.** Stale-approval detection at build time. `apply_overrides()` recomputes event signatures and compares to the stored snapshot; on drift it flags `applied[].stale = true`, returns the override id in `stale_ids`, and the build calls `mark_overrides_stale()` to flip `approval_state='stale'` in the DB. Build emits a per-row `⚠ [stale approval]` warning showing what drifted (`baseline "Old"→"New"`). `--list-overrides` renders stale rows with `⚠ stale`. Re-approve via `--approve` refreshes the signature; unapprove clears it. | ✓ done |
 | **7.** Minimal Express server (`server_event_analysis_8016.js` at the repo root alongside the other `server_*.js` services, default port 8016) with read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params or env), `GET /api/events?year=YYYY` (with optional `&include=excluded`). HTML index at `/` lists endpoints with `curl` examples. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 19. | ✓ done |
 | **8.** Write endpoints — `POST /api/overrides` (typed dispatch over force_match / force_no_match / force_segment), `DELETE /api/overrides/:sid` (soft-delete), `POST /api/approve/:sid`, `POST /api/unapprove/:sid`. All wrap the existing `cmd_*` functions; tagged `created_by='server'` so HTTP writes are distinguishable from CLI writes. Stale Override Manager panel removed from `dashboard.html` — interactive editor lands in Step 9 on top of these endpoints. 16 new write tests in `tests/server.test.js` (validation + happy paths + DB-state assertions). | ✓ done |
-| **9.** Interactive override editor — plain HTML + vanilla JS SPA at `src/event_analysis/public/{index.html,editor.css,editor.js}`, served by the local server at `http://localhost:8016/editor/`. Shows active overrides with type pills, scope badges, approval state, and per-row Approve / Unapprove / Delete buttons. Add-override form with type-aware fields (force_match needs both sids; no-match / segment use a side selector). Toast feedback, auto-refresh after every mutation. Talks to the same write endpoints from Step 8 via fetch(). 6 new tests in `tests/server.test.js` covering static file serving + content-types + the index page link. | ✓ done |
+| **9.** Interactive override editor — two surfaces sharing the Step 8 API. (a) Standalone SPA at `src/event_analysis/public/{index.html,editor.css,editor.js}`, served at `/editor/`. (b) **Dashboard-integrated panel** embedded in `dashboard.html` itself, below the event roster — a new "Override" column shows status per event, clicking a row focuses the editor + pre-fills the sid, plus a sticky "rebuild needed" banner that fires after any edit. **Step 9.5: `GET /api/build`** streams a `build_all.js` run over Server-Sent Events; the dashboard's "Rebuild now" button reads the stream and reloads on success. Concurrent builds blocked. ~10 new tests in `tests/server.test.js` covering dashboard panel markers, the SSE stream, and the build-lock. | ✓ done |
 
 The DB is now the single source of truth for overrides. `data/overrides.json` is no longer read or written by the runtime — only the one-time migration script touches it, and it renames the file to `overrides.json.migrated` once entries are imported. You should never need to edit JSON by hand again.
 
@@ -886,7 +886,16 @@ By default, `/api/status` and `/api/overrides` operate on the active year scope:
 
 CORS is enabled (`*`) so a future dashboard served from another origin (`file://`, a different port, etc.) can hit the API directly. Tighten this when production hosting becomes relevant.
 
-### Override editor SPA — `/editor/`
+### Override editor — two surfaces, one API
+
+The editor exists in two places, both backed by the Step 8 API:
+
+1. **Dashboard-integrated panel (default)** — embedded directly in `output/dashboard.html`. A new "Override" column in the event roster shows live status per event; clicking a row focuses the editor panel below the table and pre-fills the sanction ID. A sticky "rebuild needed" banner appears after any edit, with a "Rebuild now" button that streams `build_all.js` output and reloads on success.
+2. **Standalone SPA at `/editor/`** — same logic, on its own page. Useful as a power-user view for scanning all overrides without scrolling through the roster, or when the build-time dashboard is stale.
+
+Both surfaces talk to the same write endpoints, so you can mix-and-match: edit in the dashboard, verify in `/editor/`, or vice versa.
+
+#### `/editor/` standalone SPA
 
 A small vanilla-JS UI for managing overrides in the browser. Visit `http://localhost:8016/editor/` while the server is running.
 
@@ -906,6 +915,51 @@ Architecture: 3 files in `src/event_analysis/public/` (`index.html`, `editor.css
 
 What's deliberately out of scope (punted to Step 10 or beyond):
 - Event search / browse — find sanction IDs by name. Use the CLI (`node ask.js --list-overrides`) or the build-time dashboard for now.
+- Bulk approve / bulk delete
+- History or audit-trail UI
+- Authentication (server is bound to localhost; not safe to expose)
+
+#### Dashboard-integrated panel
+
+The build-time dashboard (`output/dashboard.html`) ships with the same editor embedded below the event roster. Three things to know:
+
+- **New "Override" column** in the roster. Shows `—` for events without overrides, or `match` / `no-match` / `seg` pill plus `✓ approved` / `◦ unapproved` / `⚠ stale` state. Populated by a `GET /api/overrides` call on page load; updates after every mutation.
+- **Click any row** → highlights it, scrolls the editor panel into view, pre-fills the sanction ID(s) in the add-override form. Click the row again (or the "clear" link in the focused-event card) to deselect.
+- **Sticky "rebuild needed" banner** appears at the top of the page after any edit, since the charts/KPIs/segment counts are computed from `ROSTER` at build time and don't reflect new overrides until you rebuild. The banner has a **Rebuild now** button that streams `build_all.js` output into a collapsible log and auto-reloads the page on success.
+
+The integrated panel only activates when the dashboard is opened *through the server* (`http://localhost:8016/output/dashboard.html`). Opening as `file://` shows the panel but with a "server offline" hint in the status chip; you can still see the build-time data, just no live editing.
+
+#### Step 9.5: `GET /api/build` — Server-Sent Events build stream
+
+Powers the dashboard's "Rebuild now" button. Spawns `node src/event_analysis/build_all.js`, streams stdout/stderr line-by-line as SSE events, and sends a final `done` event with the exit code.
+
+```
+event: out
+data: Fetching events from usat_sales_db...
+
+event: out
+data:   2025 rows fetched: 1178  |  2026 rows fetched: 1166
+
+event: done
+data: 0
+```
+
+Client usage:
+
+```js
+const es = new EventSource('/api/build');
+es.addEventListener('out',  e => log.append(e.data + '\n'));
+es.addEventListener('err',  e => log.append('[err] ' + e.data + '\n'));
+es.addEventListener('done', e => {
+  if (e.data === '0') location.reload();
+  es.close();
+});
+```
+
+Concurrent build attempts return `409 Conflict`. The lock releases when the build finishes (or the client disconnects mid-build — the server kills the child process).
+
+What's deliberately out of scope (punted to Step 10 or beyond):
+- Event search / browse — find sanction IDs by name. Use the CLI (`node ask.js --list-overrides`) or the dashboard's roster filter for now.
 - Bulk approve / bulk delete
 - History or audit-trail UI
 - Authentication (server is bound to localhost; not safe to expose)

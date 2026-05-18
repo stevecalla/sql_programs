@@ -585,3 +585,179 @@ describe('Step 9 — override editor static files', () => {
     assert.match(body, /href="\/editor\/"/, 'API index page should link to /editor/');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Step 9 integration + Step 9.5 — dashboard editor panel + /api/build
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// These tests confirm that:
+//   1. The freshly-built dashboard.html includes the editor panel + override
+//      status column + rebuild banner produced by dashboard.js's template.
+//   2. The new /api/build SSE endpoint streams the expected event names.
+//
+// The dashboard.html being tested is whatever exists in the output directory
+// at suite-run time (last successful build). If no dashboard.html exists, the
+// content tests skip gracefully.
+
+const fs_step9 = require('fs');
+const path_step9 = require('path');
+
+async function find_dashboard_html() {
+  // Resolve output dir the same way the server does.
+  const out_dir = process.env.EVENT_ANALYSIS_OUTPUT_DIR
+    || (await require('../../../utilities/determineOSPath').determineOSPath().then(p => path_step9.join(p, 'usat_event_analysis_output'))
+       .catch(() => null));
+  if (!out_dir) return null;
+  const fp = path_step9.join(out_dir, 'dashboard.html');
+  return fs_step9.existsSync(fp) ? fp : null;
+}
+
+describe('Step 9 integration — dashboard editor panel', () => {
+
+  test('dashboard.html contains the inline editor panel + status column', async (t) => {
+    const fp = await find_dashboard_html();
+    if (!fp) { t.skip('no dashboard.html found — run node build_all.js first'); return; }
+    const html = fs_step9.readFileSync(fp, 'utf8');
+
+    // Detect pre-step-9 dashboards (built before the integration). The fastest
+    // signal is the presence of any `dash-ov-` marker. If none → skip with a
+    // pointer to rebuild, rather than failing every assertion below.
+    if (!/dash-ov-editor|dash-ov-cell|dash-ov-rebuild/.test(html)) {
+      t.skip('dashboard.html predates Step 9 integration — run node build_all.js to regenerate, then re-run this test');
+      return;
+    }
+
+    // Editor panel markers
+    assert.match(html, /id="dash-ov-editor"/,         'editor panel container should be present');
+    assert.match(html, /id="dash-ov-form"/,           'add-override form should be present');
+    assert.match(html, /id="dash-ov-list"/,           'overrides list container should be present');
+    assert.match(html, /id="dash-ov-toast"/,          'toast element should be present');
+
+    // Override column markers — only meaningful when the roster has data
+    // (has_table === true at build time). When the dataset is empty the
+    // template skips the whole roster + editor block.
+    assert.match(html, /class="col-override"/,        'roster should have an Override column header');
+    assert.match(html, /dash-ov-cell/,                'each row should have an override status cell');
+    assert.match(html, /data-sid="/,                  'rows should carry data-sid for click delegation');
+
+    // Rebuild banner + button
+    assert.match(html, /id="dash-ov-rebuild-banner"/, 'rebuild banner should be present');
+    assert.match(html, /id="dash-ov-rebuild-btn"/,    'rebuild button should be present');
+    assert.match(html, /dash_ov_rebuild\(\)/,         'rebuild handler should be wired');
+
+    // Editor JS hooks the API
+    assert.match(html, /\/api\/overrides/,            'editor JS should call /api/overrides');
+    assert.match(html, /\/api\/approve\//,            'editor JS should call /api/approve/');
+    assert.match(html, /\/api\/build/,                'rebuild handler should call /api/build');
+
+    // Stale Override Manager markers should be gone
+    assert.doesNotMatch(html, /localhost:7474/,       'old port references should be gone');
+
+    // Every inline <script> block we GENERATE must parse as JS. Catches
+    // template-literal escape pitfalls (e.g. a stray \n inside a string that
+    // gets converted to a real newline by the outer dashboard.js template,
+    // breaking JS strings). We intentionally skip the embedded Chart.js
+    // library — it's third-party minified code that contains literal
+    // `</script>` substrings in error templates, which trip a simple regex.
+    const vm = require('node:vm');
+    const script_re = /<script>([\s\S]*?)<\/script>/g;
+    let m, idx = 0, parse_errors = [];
+    while ((m = script_re.exec(html)) !== null) {
+      idx++;
+      const body = m[1];
+      if (!body.trim()) continue;
+      // Heuristic: skip third-party minified library blocks. Chart.js
+      // identifies itself in its leading comment; minified IIFEs are
+      // typically dense and don't include our marker comments.
+      const is_third_party = /\/\*!\s*Chart\.js/.test(body) ||
+                              /Chart\.js v\d/.test(body.slice(0, 200)) ||
+                              body.length > 80000;  // Chart.js minified ~ 200KB
+      if (is_third_party) continue;
+      try { new vm.Script(body); }
+      catch (e) { parse_errors.push(`<script> #${idx}: ${e.message}`); }
+    }
+    assert.deepEqual(parse_errors, [], 'all OUR inline <script> blocks in dashboard.html should parse as JS');
+    assert.doesNotMatch(html, /SERVER_URL = 'http:/,  'old SERVER_URL global should be gone');
+  });
+});
+
+describe('Step 9.5 — /api/build SSE endpoint', () => {
+
+  test('GET /api/build is reachable and starts streaming SSE events', async () => {
+    // We use the raw stream (not EventSource — node:test runs in Node which
+    // doesn't have a built-in EventSource). Read enough bytes to confirm the
+    // content-type header and at least one event is emitted, then abort.
+    const ctrl = new AbortController();
+    let res;
+    try {
+      res = await fetch(`${base}/api/build`, { signal: ctrl.signal });
+    } catch (err) {
+      // If the build process can't even spawn (missing build script, DB
+      // unreachable), the endpoint still returns 200 + an err event before
+      // a done event — that's a valid pass. Hard failure here is unexpected.
+      throw err;
+    }
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/);
+
+    // Pull the first chunk so we know the connection is alive and streaming.
+    const reader = res.body.getReader();
+    const { value } = await Promise.race([
+      reader.read(),
+      new Promise(resolve => setTimeout(() => resolve({ value: new Uint8Array() }), 3000)),
+    ]);
+    // Abort so the server-side build process is killed and we don't block.
+    ctrl.abort();
+    try { reader.cancel(); } catch {}
+    // We don't assert on chunk contents (build_all.js prints variable output);
+    // reaching here without throwing is the contract this test cares about.
+    assert.ok(value !== undefined, 'should at least open the stream');
+  });
+
+  test('concurrent /api/build attempts trigger the build-lock', async () => {
+    // The previous test aborted its stream which spawns an async kill on
+    // the server side. _build_running may still be true for a few ms after
+    // the abort. Wait for it to actually clear by polling with retries.
+    // (We can't `await` a process.exit from here; this is the pragmatic fix.)
+    async function wait_for_lock_release(max_ms = 3000) {
+      const start = Date.now();
+      while (Date.now() - start < max_ms) {
+        // A non-streaming probe wouldn't be representative; instead, fire a
+        // throwaway build request. If it's 200 we got the lock — release it
+        // immediately by aborting. If 409, the previous build is still
+        // wrapping up; wait and retry.
+        const ctrl = new AbortController();
+        const res = await fetch(`${base}/api/build`, { signal: ctrl.signal });
+        if (res.status === 200) {
+          ctrl.abort();
+          try { await res.body?.cancel(); } catch {}
+          // Now wait once more for THIS aborted build to clear before the
+          // real test fires its concurrent pair.
+          await new Promise(r => setTimeout(r, 400));
+          return;
+        }
+        try { await res.body?.cancel(); } catch {}
+        await new Promise(r => setTimeout(r, 150));
+      }
+      throw new Error('lock never released — previous test leaked state');
+    }
+    await wait_for_lock_release();
+
+    // Fire two requests near-simultaneously. Node's single-threaded event
+    // loop makes the lock check + set atomic, so exactly one must win.
+    const ctrl1 = new AbortController();
+    const ctrl2 = new AbortController();
+    const [res1, res2] = await Promise.all([
+      fetch(`${base}/api/build`, { signal: ctrl1.signal }),
+      fetch(`${base}/api/build`, { signal: ctrl2.signal }),
+    ]);
+    const statuses = [res1.status, res2.status].sort();
+    assert.deepEqual(statuses, [200, 409],
+      `expected exactly one 200 + one 409 from concurrent /api/build, got ${statuses.join(', ')}`);
+
+    // Clean up both streams so the test runner exits cleanly.
+    ctrl1.abort(); ctrl2.abort();
+    try { await res1.body?.cancel(); } catch {}
+    try { await res2.body?.cancel(); } catch {}
+  });
+});

@@ -12,6 +12,15 @@
 
 'use strict';
 
+// jsonrepair fixes common AI-generated JSON problems (unescaped quotes inside
+// strings, embedded newlines, smart quotes, trailing commas, truncated
+// braces). Used as Layer 2 of the parse-recovery chain in generate_ai().
+// Loaded lazily — if the package isn't installed yet (`npm i` not run),
+// we fall through to the existing slice-based recovery instead of crashing.
+let jsonrepair = null;
+try { jsonrepair = require('jsonrepair').jsonrepair; }
+catch (e) { /* jsonrepair not installed — recovery falls back to slicing */ }
+
 const { usHolidays } = require('./calendar');
 const {
   MINUS, EM_DASH, EN_DASH, GE, WARN, CHECK, ARROW_R, TIMES,
@@ -1020,20 +1029,37 @@ Return ONLY valid JSON (no markdown fence) with these keys:
     if (!match) throw new Error('No JSON found in response');
     let ai;
     try {
+      // Layer 1 — clean JSON. Most common path when Claude behaves.
       ai = JSON.parse(match[0]);
     } catch (parse_err) {
-      const pos = parse_err.message.match(/position (\d+)/)?.[1];
-      if (!pos) throw parse_err;
-      const cutoff = Number(pos);
-      let trimmed = match[0].slice(0, cutoff);
-      const last_sep = Math.max(trimmed.lastIndexOf(','), trimmed.lastIndexOf('{'));
-      if (last_sep < 0) throw parse_err;
-      trimmed = trimmed.slice(0, last_sep) + '}';
-      const opens = (trimmed.match(/\{/g) || []).length;
-      const closes = (trimmed.match(/\}/g) || []).length;
-      if (opens > closes) trimmed += '}'.repeat(opens - closes);
-      ai = JSON.parse(trimmed);
-      console.warn(`  [AI commentary] Response truncated at pos ${cutoff}; recovered partial fields.`);
+      // Layer 2 — jsonrepair. Handles unescaped quotes/newlines, smart
+      // quotes, trailing commas, missing braces, and most truncation.
+      let repaired = false;
+      if (jsonrepair) {
+        try {
+          ai = JSON.parse(jsonrepair(match[0]));
+          repaired = true;
+          console.warn('  [AI commentary] JSON repaired via jsonrepair.');
+        } catch (repair_err) { /* fall through to layer 3 */ }
+      }
+      if (!repaired) {
+        // Layer 3 — slice back to the last clean separator and try again
+        // (original recovery). Works when the response was truncated mid-
+        // field; fails when corruption is in-string. jsonrepair above
+        // handles the in-string case so this is now a last-resort path.
+        const pos = parse_err.message.match(/position (\d+)/)?.[1];
+        if (!pos) throw parse_err;
+        const cutoff = Number(pos);
+        let trimmed = match[0].slice(0, cutoff);
+        const last_sep = Math.max(trimmed.lastIndexOf(','), trimmed.lastIndexOf('{'));
+        if (last_sep < 0) throw parse_err;
+        trimmed = trimmed.slice(0, last_sep) + '}';
+        const opens = (trimmed.match(/\{/g) || []).length;
+        const closes = (trimmed.match(/\}/g) || []).length;
+        if (opens > closes) trimmed += '}'.repeat(opens - closes);
+        ai = JSON.parse(trimmed);
+        console.warn(`  [AI commentary] Sliced recovery at pos ${cutoff}; partial fields.`);
+      }
     }
 
     return {

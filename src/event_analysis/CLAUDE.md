@@ -178,11 +178,21 @@ Lives at the repo root (`sql_programs/server_event_analysis_8016.js`) alongside 
 | `POST /api/approve/:sid` | optional `{ approved_by }` | `cmd_approve` (captures event signatures) |
 | `POST /api/unapprove/:sid` | — | `cmd_unapprove` |
 
+**Build stream (Step 9.5):**
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/build` | Spawns `node src/event_analysis/build_all.js`, streams stdout/stderr line-by-line as Server-Sent Events. Event names: `out`, `err`, `done` (with exit code). Module-level `_build_running` lock returns 409 on concurrent attempts. Client disconnect kills the child. Powers the dashboard's "Rebuild now" button. |
+
 All write endpoints validate the request before invoking the underlying `cmd_*` function (so a bad request returns 400 cleanly without risking `process.exit(1)`). Rows are tagged `created_by='server'` so HTTP writes are distinguishable from CLI / migration / test writes at the SQL level.
 
-**Editor SPA (Step 9):** `/editor/` serves the interactive override editor — plain HTML + vanilla JS in `src/event_analysis/public/`. Talks to the write endpoints above via same-origin fetch. Active overrides table + approve/unapprove/delete + add form + toast feedback + auto-refresh.
+**Editor (Step 9) — two surfaces:**
+- **Standalone SPA at `/editor/`** — plain HTML + vanilla JS in `src/event_analysis/public/`. Useful as a power-user view.
+- **Dashboard-integrated panel** — embedded in the generated `output/dashboard.html`. The roster gains an "Override" status column; clicking a row focuses the editor below and prefills the sid. A sticky banner appears after edits with a **Rebuild now** button (uses `GET /api/build`'s SSE stream + auto-reloads on success).
 
-Importable: `const { create_app, start_server } = require('./server_event_analysis_8016')`. Tests use `create_app()` and `listen(0)` for ephemeral-port isolation. Test suite covers ~80 cases now: ~50 overrides + ~30 server (read + write + editor static files).
+Both surfaces hit the same write endpoints. The dashboard panel detects same-origin and gracefully degrades to "server offline" on `file://`.
+
+Importable: `const { create_app, start_server } = require('./server_event_analysis_8016')`. Tests use `create_app()` and `listen(0)` for ephemeral-port isolation. Test suite covers ~90 cases now: ~50 overrides + ~40 server (read + write + editor static + dashboard markers + SSE stream).
 
 CORS is open (`*`) — fine for local dev, tighten before any production hosting.
 
@@ -244,7 +254,7 @@ CORS is open (`*`) — fine for local dev, tighten before any production hosting
 | **6.** Stale-approval detection. `apply_overrides()` recomputes event signatures and compares to stored snapshot; on drift the build flips `approval_state='stale'`, emits `⚠ [stale approval]` warning, and `--list-overrides` renders the row with a `⚠ stale` badge. | ✓ done |
 | **7.** `server_event_analysis_8016.js` — minimal Express server at the repo root (port 8016, alongside the other `server_*.js` services). Read-only endpoints: `GET /api/status`, `GET /api/overrides` (year-scoped via query params), `GET /api/events?year=YYYY`. HTML index at `/`. Static-serves `output/` so `dashboard.html` is reachable at `/output/dashboard.html`. CORS enabled. Smoke-tested in `tests/server.test.js`. Menu option 19. | ✓ done |
 | **8.** Write endpoints — `POST /api/overrides` (typed dispatch), `DELETE /api/overrides/:sid`, `POST /api/approve/:sid`, `POST /api/unapprove/:sid`. All wrap the existing `cmd_*` functions and tag rows `created_by='server'`. Stale Override Manager panel removed from `dashboard.html`. 16 new tests. | ✓ done |
-| **9.** Override editor SPA — plain HTML + vanilla JS at `src/event_analysis/public/{index.html, editor.css, editor.js}`. Served by the local server at `/editor/`. Active overrides table with approval state, scope, and per-row Approve/Unapprove/Delete buttons; type-aware Add form; toast feedback; auto-refresh after every mutation. Talks to the Step 8 write endpoints over same-origin fetch. 6 new static-file tests in `tests/server.test.js`. Menu test runner split into 3 options: run all / overrides only / server only. | ✓ done |
+| **9.** Override editor — two surfaces: (a) standalone SPA at `/editor/` (`public/{index.html,editor.css,editor.js}`); (b) dashboard-integrated panel embedded in `dashboard.html` with a new "Override" status column in the roster (click row → focus editor + prefill sid), a sticky "rebuild needed" banner that fires after edits, and a "Rebuild now" button. **Step 9.5: `GET /api/build`** streams `build_all.js` over SSE (events: `out`, `err`, `done`); 409 if a build is already running; client disconnect kills the child. Menu test runner split into 3 options. ~10 new tests covering dashboard markers + the SSE stream + the build-lock. | ✓ done |
 | 10. Cascade rules engine — pattern-based overrides ("all clinics in May named X → Lost") | pending |
 
 ## Suggested next steps (discussed but not yet built)

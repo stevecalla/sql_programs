@@ -291,15 +291,22 @@ async function main() {
   // Ensure we always have commentary
   if (!commentary) commentary = generate_rule_based(results);
 
+  // Mutate the in-memory commentary so EVERY downstream consumer
+  // (dashboard, PowerPoint, Excel narratives) sees the same `mode` field
+  // that gets written to commentary.json. Previously `mode` was set only
+  // in the saved-file object literal, leaving the in-memory commentary
+  // without a mode — which made the dashboard's `cm?.mode ?? 'rule_based'`
+  // check always fall back to "Rule-based" regardless of the actual run.
+  commentary.mode  = commentary._ai_generated ? 'ai_claude' : 'rule_based';
+  commentary.model = commentary._ai_generated ? 'claude-haiku-4-5-20251001' : null;
+
   // Export commentary dataset
   const out_commentary_json = path.join(OUTPUT_DIR, 'commentary.json');
   save_json(out_commentary_json, {
     generated_at: new Date().toISOString(),
-    mode: commentary._ai_generated ? 'ai_claude' : 'rule_based',
-    model: commentary._ai_generated ? 'claude-haiku-4-5-20251001' : null,
     ...commentary,
   });
-  console.log(`  Commentary saved: output/commentary.json (mode: ${commentary._ai_generated ? 'ai_claude' : 'rule_based'})`);
+  console.log(`  Commentary saved: output/commentary.json (mode: ${commentary.mode})`);
 
   // ── Excel (receives commentary for dynamic narrative cells) ───────────────
   await build_workbook(results, out_xlsx, creation_by_year[BASELINE_YEAR], creation_by_year[ANALYSIS_YEAR], commentary);

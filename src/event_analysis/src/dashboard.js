@@ -197,11 +197,61 @@ function generate_dashboard(results, cm, out_path, segments_raw = null) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>USAT ${ya} vs ${yb} — Event Analysis Dashboard</title>
 <link rel="icon" href="${FAVICON_SVG}">
+
+<!-- ── Rebuild overlay (must come BEFORE all other CSS so it paints first) ──
+     The overlay sits over the entire page until state restoration finishes,
+     covering the white-flash moment between unload + new paint. Visibility
+     is driven by the .dash-ov-rebuilding class on the html element, set by
+     the small inline script below as soon as the new document parses
+     (reading the sessionStorage flag that the rebuild handler set just
+     before reload). -->
+<style id="dash-ov-overlay-css">
+  #dash-ov-overlay {
+    position: fixed; inset: 0; z-index: 99999;
+    background: #F0F2F5;
+    display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 0.85rem;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: #555; font-size: 0.9rem;
+    opacity: 1; transition: opacity 280ms ease-out;
+  }
+  html.dash-ov-rebuilding #dash-ov-overlay { display: flex; }
+  #dash-ov-overlay.fade-out { opacity: 0; pointer-events: none; }
+  .dash-ov-overlay-spinner {
+    width: 30px; height: 30px;
+    border: 3px solid #d0d4da;
+    border-top-color: #BF1B2C;
+    border-radius: 50%;
+    animation: dash-ov-spin 0.8s linear infinite;
+  }
+  @keyframes dash-ov-spin { to { transform: rotate(360deg); } }
+</style>
+<script id="dash-ov-overlay-bootstrap">
+  // Reads the rebuild-pending flag set just before location.reload(). If
+  // set, we mark <html> with a class that makes the overlay div visible
+  // — this happens as soon as <head> is parsed, so the very first paint
+  // of the new document is the overlay (no white flash). The flag is
+  // single-use; a normal page load (no flag) sees nothing.
+  try {
+    if (sessionStorage.getItem('dash_ov_rebuilding') === '1') {
+      document.documentElement.classList.add('dash-ov-rebuilding');
+      sessionStorage.removeItem('dash_ov_rebuilding');
+    }
+  } catch (e) {}
+</script>
+
 ` + chartjs_tag + `
 <style>
 /* ── Reset ── */
 *{box-sizing:border-box;margin:0;padding:0}
-html{font-size:16px}
+html{font-size:16px;background:#F0F2F5}
+/* View Transitions opt-in — smooth crossfade on rebuild reload where supported.
+   Browsers that don't support it (Safari ≤17, older Firefox) silently ignore. */
+@supports (view-transition-name: none) {
+  html { view-transition-name: dashboard-root; }
+  ::view-transition-old(dashboard-root),
+  ::view-transition-new(dashboard-root) { animation-duration: 180ms; }
+}
 body{font-family:'Segoe UI',system-ui,Arial,sans-serif;background:#F0F2F5;color:#222;
      padding:12px 14px;min-height:100vh}
 
@@ -474,9 +524,104 @@ canvas{width:100%!important;max-height:220px}
   /* Type strip cards smaller */
   .type-card{min-width:100px;padding:8px 10px}
 }
+
+/* ── Override column in event roster ──────────────────────────────────── */
+#evt-tbl .col-override{display:none}
+#evt-tbl.show-override .col-override{display:table-cell}
+#evt-tbl tbody tr{cursor:default}
+#evt-tbl tbody tr.has-override{background:#fffaf2}
+#evt-tbl tbody tr.dash-ov-selected{background:#e3f2fd!important;outline:2px solid #1565c0;outline-offset:-2px}
+.dash-ov-pill{display:inline-block;padding:.05rem .42rem;border-radius:10px;font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;vertical-align:middle}
+.dash-ov-pill-match{background:#dbe7ff;color:#0a3069}
+.dash-ov-pill-no-match{background:#fff1e0;color:#8b3a00}
+.dash-ov-pill-segment{background:#f0e4ff;color:#4f237a}
+.dash-ov-state{display:inline-block;font-size:.68rem;font-weight:500;margin-left:.3rem;vertical-align:middle}
+.dash-ov-state-approved{color:#1a7f37}
+.dash-ov-state-unapproved{color:#656d76}
+.dash-ov-state-stale{color:#7d4e00}
+
+/* ── Rebuild-needed banner ────────────────────────────────────────────── */
+.dash-ov-rebuild-banner{position:sticky;top:0;z-index:50;display:none;align-items:center;gap:10px;padding:8px 14px;background:#fff8c5;border-bottom:1px solid #f6dc9d;color:#7d4e00;font-size:.82rem}
+.dash-ov-rebuild-banner.show{display:flex}
+.dash-ov-rebuild-banner code{background:rgba(0,0,0,0.07);padding:.05rem .35rem;border-radius:3px;font-family:ui-monospace,Menlo,monospace}
+.dash-ov-rebuild-banner-link{margin-left:auto;color:#7d4e00;font-weight:600;text-decoration:none;border-bottom:1px solid rgba(125,78,0,0.3);font-size:.78rem}
+.dash-ov-rebuild-banner-link:hover{border-bottom-color:#7d4e00}
+
+/* ── Rebuild card at the bottom of the page ──────────────────────────── */
+.dash-ov-rebuild-card{padding:14px 18px}
+.dash-ov-rebuild-card h3{margin:0 0 .5rem;font-size:1rem;display:flex;align-items:center;gap:10px}
+.dash-ov-rebuild-card h3 .muted{color:#656d76;font-size:.78rem;font-weight:400}
+.dash-ov-rebuild-card .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.dash-ov-rebuild-card .status-dot{display:inline-flex;align-items:center;gap:.35rem;font-size:.78rem;font-weight:500;padding:.18rem .55rem;border-radius:10px;background:#dafbe1;color:#1a7f37;border:1px solid #aceebb}
+.dash-ov-rebuild-card .status-dot.stale{background:#fff8c5;color:#7d4e00;border-color:#f6dc9d}
+.dash-ov-rebuild-card .status-dot.running{background:#dbe7ff;color:#0a3069;border-color:#a4c2fa}
+.dash-ov-rebuild-card .help{color:#656d76;font-size:.78rem}
+.dash-ov-rebuild-card .help code{background:#f6f8fa;padding:.05rem .35rem;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:.85em}
+#dash-ov-rebuild-log{display:none;background:#1c2526;color:#80cbc4;padding:10px 14px;font-family:ui-monospace,Menlo,monospace;font-size:.72rem;max-height:240px;overflow-y:auto;line-height:1.55;white-space:pre-wrap;border-radius:6px;margin-top:8px}
+
+/* ── Inline editor panel ──────────────────────────────────────────────── */
+.dash-ov-editor{padding:14px 18px}
+.dash-ov-editor h3{margin:0 0 .5rem;font-size:1rem;display:flex;align-items:center;gap:10px}
+.dash-ov-editor h3 .muted{color:#656d76;font-size:.78rem;font-weight:400}
+.dash-ov-editor .dash-ov-srv-status{font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:10px;background:#eee;color:#999}
+.dash-ov-editor .dash-ov-srv-status.ok   {background:#dafbe1;color:#1a7f37}
+.dash-ov-editor .dash-ov-srv-status.err  {background:#ffebe9;color:#82071e}
+.dash-ov-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:780px){.dash-ov-grid{grid-template-columns:1fr}}
+
+.dash-ov-list{font-size:.78rem;background:#f8f9fa;border-radius:6px;padding:10px;min-height:100px;max-height:340px;overflow-y:auto}
+.dash-ov-list-item{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #eaecef}
+.dash-ov-list-item:last-child{border-bottom:none}
+.dash-ov-list-item.dash-ov-selected-row{background:#e3f2fd;margin:0 -4px;padding:6px 8px;border-radius:4px}
+.dash-ov-list-item .sids{flex:1;font-family:ui-monospace,Menlo,monospace;font-size:.72rem;color:#444}
+.dash-ov-list-item .note{display:block;font-size:.7rem;color:#777;margin-top:.1rem;font-family:inherit}
+.dash-ov-list-item .acts{display:flex;gap:4px;flex-shrink:0}
+.dash-ov-btn{font:inherit;font-size:.7rem;font-weight:500;padding:.2rem .55rem;border-radius:4px;border:1px solid #d1d9e0;background:#fff;color:#1f2328;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+.dash-ov-btn:hover{background:#f3f4f6}
+.dash-ov-btn-primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
+.dash-ov-btn-primary:hover{background:#1158c7;border-color:#1158c7}
+.dash-ov-btn-danger{border-color:#cf222e;color:#cf222e}
+.dash-ov-btn-danger:hover{background:#cf222e;color:#fff}
+.dash-ov-btn-approve{border-color:#2da44e;color:#2da44e}
+.dash-ov-btn-approve:hover{background:#2da44e;color:#fff}
+.dash-ov-btn-unapprove{border-color:#656d76;color:#656d76}
+.dash-ov-btn-unapprove:hover{background:#656d76;color:#fff}
+
+.dash-ov-form{display:flex;flex-direction:column;gap:8px}
+.dash-ov-form .row{display:flex;gap:8px;flex-wrap:wrap}
+.dash-ov-form label{display:flex;flex-direction:column;gap:.18rem;font-size:.72rem;color:#656d76;font-weight:600;flex:1;min-width:120px}
+.dash-ov-form input[type="text"],.dash-ov-form select{font:inherit;padding:.32rem .5rem;border:1px solid #d1d9e0;border-radius:4px;background:#fff;color:#1f2328;font-size:.8rem}
+.dash-ov-form input[type="text"]:focus,.dash-ov-form select:focus{outline:none;border-color:#1f6feb;box-shadow:0 0 0 2px rgba(31,111,235,.18)}
+.dash-ov-form .check{flex-direction:row;align-items:center;flex:0 0 auto;min-width:auto;cursor:pointer}
+.dash-ov-form .check span{color:#1f2328;font-weight:500;margin-left:.3rem}
+.dash-ov-form .actions{display:flex;align-items:center;gap:8px;margin-top:.2rem}
+.dash-ov-toast{position:fixed;bottom:1.4rem;right:1.4rem;padding:.6rem .9rem;border-radius:6px;background:#1f2328;color:#fff;font-size:.82rem;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:400px;opacity:0;transform:translateY(.4rem);transition:opacity .18s,transform .18s;pointer-events:none;z-index:9999}
+.dash-ov-toast.show{opacity:1;transform:translateY(0)}
+.dash-ov-toast.err{background:#cf222e}
+.dash-ov-toast.ok {background:#2da44e}
+
+.dash-ov-empty{color:#999;font-size:.78rem;font-style:italic;text-align:center;padding:1.5rem .5rem}
+.dash-ov-selected-card{background:#e3f2fd;border:1px solid #bbdefb;border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:.76rem}
+.dash-ov-selected-card .sid{font-family:ui-monospace,Menlo,monospace;font-weight:600;color:#0a3069}
+.dash-ov-selected-card .clear{float:right;cursor:pointer;color:#1565c0;text-decoration:none}
+.dash-ov-selected-card .clear:hover{text-decoration:underline}
 </style>
 </head>
 <body>
+
+<!-- Rebuild overlay (visibility controlled by html.dash-ov-rebuilding). -->
+<div id="dash-ov-overlay" aria-hidden="true" role="status">
+  <div class="dash-ov-overlay-spinner"></div>
+  <div>Updating dashboard…</div>
+</div>
+
+<!-- ── Rebuild-needed banner (sticky; pure notification; shown after any
+     override edit). The button + log moved to the bottom of the page —
+     see #dash-ov-rebuild-card. ──────────────────────────────────────── -->
+<div class="dash-ov-rebuild-banner" id="dash-ov-rebuild-banner">
+  <span>⚠ Overrides changed since this build — analysis, charts, and segment counts are stale.</span>
+  <a class="dash-ov-rebuild-banner-link" href="#dash-ov-rebuild-card">Jump to Rebuild ↓</a>
+</div>
 
 <div class="hdr">
   <div class="hdr-left">
@@ -625,12 +770,16 @@ ${has_table ? `
     <!-- Dynamic segment count bar — updated by filter_and_sort() -->
     <div class="seg-bar" id="seg-bar"></div>
     <button id="tbl-more" onclick="load_all()" style="display:none;margin-bottom:8px;padding:6px 14px;border:1px solid #1565C0;border-radius:5px;background:#fff;color:#1565C0;font-size:.78rem;cursor:pointer;font-family:inherit">Show all events</button>
+    <p class="muted" style="font-size:.72rem;color:#777;margin:0 0 6px;font-style:italic">
+      Tip: click a row to focus the override editor below.
+    </p>
     <div class="tbl-wrap">
       <table id="evt-tbl">
         <thead>
           <tr>
             <th style="width:42px;min-width:42px;cursor:default">#</th>
             <th data-col="seg">Segment</th><th data-col="conf">Conf</th><th data-col="type">Type</th>
+            <th class="col-override" data-col="override" style="font-size:.72rem">Override</th>
             <th data-col="m25">Mo ${ya}</th>
             <th class="col-sid25" data-col="sid25" style="font-size:.72rem">Sanction ID ${ya}</th>
             <th class="col-date25" data-col="date25" style="font-size:.72rem">Date ${ya}</th>
@@ -646,6 +795,104 @@ ${has_table ? `
         <tbody id="tbl-body"></tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<!-- ── Inline override editor panel (Step 9 integration) ───────────────── -->
+<div class="row" style="margin-bottom:10px">
+  <div class="card card-full dash-ov-editor" id="dash-ov-editor">
+    <h3>
+      ⚙ Override editor
+      <span class="dash-ov-srv-status" id="dash-ov-srv-status">● checking server…</span>
+      <span class="muted">Edits write to the DB immediately; rebuild to apply to charts.</span>
+    </h3>
+
+    <div id="dash-ov-selected" style="display:none"></div>
+
+    <div class="dash-ov-grid">
+      <!-- Left column: list of active overrides -->
+      <div>
+        <div style="font-size:.78rem;font-weight:600;color:#555;margin-bottom:6px;display:flex;align-items:center;gap:8px">
+          Active overrides
+          <span class="muted" id="dash-ov-list-summary" style="font-weight:400"></span>
+          <button class="dash-ov-btn" type="button" style="margin-left:auto;font-size:.7rem"
+                  onclick="dash_ov_refresh()">↻ Refresh</button>
+        </div>
+        <div class="dash-ov-list" id="dash-ov-list">
+          <div class="dash-ov-empty">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Right column: add-override form -->
+      <div>
+        <div style="font-size:.78rem;font-weight:600;color:#555;margin-bottom:6px">Add override</div>
+        <form class="dash-ov-form" id="dash-ov-form" onsubmit="return dash_ov_submit(event);">
+          <div class="row">
+            <label>Type
+              <select id="dash-ov-type" name="type">
+                <option value="force_match">force_match — link two events</option>
+                <option value="force_no_match">force_no_match — break / mark Lost/New</option>
+                <option value="force_segment">force_segment — set segment label</option>
+              </select>
+            </label>
+            <label id="dash-ov-side-wrap">Side
+              <select id="dash-ov-side" name="side">
+                <option value="baseline">baseline (${ya})</option>
+                <option value="analysis">analysis (${yb})</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label id="dash-ov-sidB-wrap">Baseline sid
+              <input type="text" id="dash-ov-sidB" placeholder="e.g. 311655-Adult Race" autocomplete="off">
+            </label>
+            <label id="dash-ov-sidA-wrap">Analysis sid
+              <input type="text" id="dash-ov-sidA" placeholder="e.g. 354307-Adult Race" autocomplete="off">
+            </label>
+          </div>
+          <div class="row" id="dash-ov-segment-wrap" style="display:none">
+            <label>Segment
+              <select id="dash-ov-segment">
+                <option>Retained</option><option>Shifted</option>
+                <option>Lost</option><option>New</option>
+                <option>Recovered</option><option>Tried to Return</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label style="flex:2">Note (optional)
+              <input type="text" id="dash-ov-note" placeholder="Why this override exists">
+            </label>
+            <label class="check">
+              <input type="checkbox" id="dash-ov-global"><span>Global</span>
+            </label>
+          </div>
+          <div class="actions">
+            <button type="submit" class="dash-ov-btn dash-ov-btn-primary">+ Add override</button>
+            <span class="muted" id="dash-ov-server-hint" style="font-size:.7rem"></span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="dash-ov-toast" class="dash-ov-toast" role="status" aria-live="polite"></div>
+
+<!-- ── Rebuild dashboard (Step 9.5) — bottom anchor for the banner link ── -->
+<div class="row" style="margin-bottom:10px">
+  <div class="card card-full dash-ov-rebuild-card" id="dash-ov-rebuild-card">
+    <h3>
+      🔄 Rebuild dashboard
+      <span class="muted">Regenerates Excel, PowerPoint, dashboard, JSON outputs from the current overrides.</span>
+    </h3>
+    <div class="row">
+      <span class="status-dot" id="dash-ov-rebuild-status">✓ Up to date with current build</span>
+      <button class="dash-ov-btn dash-ov-btn-primary" id="dash-ov-rebuild-btn"
+              type="button" onclick="dash_ov_rebuild()">▶ Rebuild now</button>
+      <span class="help">Streams live build output from <code>build_all.js</code>. On success the dashboard auto-reloads with the new data.</span>
+    </div>
+    <div id="dash-ov-rebuild-log"></div>
   </div>
 </div>
 ` : ''}
@@ -1150,14 +1397,29 @@ if(ROSTER && ROSTER.length > 0){
   const PAGE_SIZE = 20;
   let current_rows = [];
 
+  // Minimal HTML attribute escape — sanction IDs are well-formed (digits +
+  // type name) but belt-and-suspenders since these end up in data attrs.
+  function escape_attr(s){
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
   let _row_num = 0;
   function row_html(r){
     const sc = SEG_CLS[r.seg] || r.seg.replace(/\s/g,'.');
     _row_num++;
-    return '<tr>' +
+    // Row identity for the inline editor — sid25 and/or sid26 are passed via
+    // data attrs so click-delegation can route the row to the panel below.
+    // data-sid is the canonical sid we use to look up overrides (prefer
+    // sid25 since most overrides target the baseline year; the editor
+    // handles either side from its lookup map).
+    const data_sid    = r.sid25 || r.sid26 || '';
+    const data_sid_b  = r.sid25 ? ' data-sid-baseline="'+escape_attr(r.sid25)+'"' : '';
+    const data_sid_a  = r.sid26 ? ' data-sid-analysis="'+escape_attr(r.sid26)+'"' : '';
+    return '<tr data-sid="'+escape_attr(data_sid)+'"'+data_sid_b+data_sid_a+'>' +
       '<td style="color:#bbb;text-align:right;font-size:.7rem;padding-right:8px;font-variant-numeric:tabular-nums">'+_row_num+'</td>' +
       '<td><span class="seg-'+sc+'">'+r.seg+'</span></td>' +
       '<td>'+r.conf+'</td><td>'+r.type+'</td>' +
+      '<td class="col-override dash-ov-cell">—</td>' +
       '<td>'+r.m25+'</td>' +
       '<td class="col-sid25" style="font-size:.7rem;color:#666;font-family:monospace">'+r.sid25+'</td>' +
       '<td class="col-date25" style="font-size:.7rem;color:#666;white-space:nowrap">'+r.date25+'</td>' +
@@ -1442,17 +1704,518 @@ if(ROSTER && ROSTER.length > 0){
 
   filter_and_sort(); // initial render
   document.getElementById('tbl-more')?.addEventListener('click', load_all);
+
+  // ── Wire row clicks → focus the inline override editor below ─────────
+  // Click delegation on tbody. Skip header rows / cells without a sid.
+  const _ov_tbody = document.getElementById('tbl-body');
+  if (_ov_tbody) {
+    _ov_tbody.addEventListener('click', function(e){
+      var tr = e.target.closest('tr');
+      if (!tr || !tr.dataset.sid) return;
+      var sid_b = tr.dataset.sidBaseline || '';
+      var sid_a = tr.dataset.sidAnalysis || '';
+      if (typeof dash_ov_focus_row === 'function') {
+        dash_ov_focus_row(tr.dataset.sid, sid_b, sid_a);
+      }
+    });
+  }
 }
 </script>
-<!--
-  Override Manager + Command Launcher panel was removed in Step 8.
-  The dashboard is now a read-only build-time snapshot. The interactive
-  override editor will be rebuilt in Step 9 on top of the new HTTP API
-  (POST /api/overrides, DELETE /api/overrides/:sid, POST /api/approve/:sid,
-   POST /api/unapprove/:sid). Manage overrides via:
-    - CLI: node ask.js --list-overrides / --add-override ... / --approve <sid>
-    - HTTP: http://localhost:8016/  (curl examples on the index page)
--->
+
+<!-- ─────────────────────────────────────────────────────────────────────
+     Inline override editor (Step 9 — integrated dashboard view)
+     Same API as the standalone /editor/ SPA — see public/editor.js.
+     Talks to the local server on the same origin. file:// degrades
+     gracefully: the panel renders but shows a "server offline" hint.
+     ───────────────────────────────────────────────────────────────────── -->
+<script>
+(function dash_ov_init(){
+  // No editor panel rendered (e.g. roster empty) → nothing to do.
+  if (!document.getElementById('dash-ov-editor')) return;
+
+  // Same-origin only — for file:// we skip the API calls and show a hint.
+  var IS_SERVED = location.protocol === 'http:' || location.protocol === 'https:';
+  var API_BASE  = IS_SERVED ? '' : null;
+
+  // ── State ───────────────────────────────────────────────────────────
+  var _overrides    = { force_match: [], force_no_match: [], force_segment: [], stats: { total: 0 } };
+  var _by_sid       = {};   // sid → array of override rows targeting it
+  var _selected_sid = null; // currently-selected sid (from row click)
+  var _dirty        = false;
+  var _toast_t      = null;
+
+  // ── Helpers ─────────────────────────────────────────────────────────
+  function $id(id){ return document.getElementById(id); }
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  function show_toast(msg, kind){
+    var t = $id('dash-ov-toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.className = 'dash-ov-toast show ' + (kind || '');
+    if (_toast_t) clearTimeout(_toast_t);
+    _toast_t = setTimeout(function(){ t.classList.remove('show'); }, 3200);
+  }
+  function set_srv_status(state, label){
+    var el = $id('dash-ov-srv-status');
+    if (!el) return;
+    el.className = 'dash-ov-srv-status ' + (state || '');
+    el.textContent = label;
+    var hint = $id('dash-ov-server-hint');
+    if (hint) hint.textContent = state === 'ok' ? 'POST /api/overrides' : 'server offline — start: node server_event_analysis_8016.js';
+  }
+  function mark_dirty(){
+    _dirty = true;
+    var banner = $id('dash-ov-rebuild-banner');
+    if (banner) banner.classList.add('show');
+    // Also flag the rebuild card at the bottom — both surfaces signal the
+    // same state so the operator sees it whether they're at the top or
+    // bottom of the page.
+    var status = $id('dash-ov-rebuild-status');
+    if (status) {
+      status.classList.remove('running');
+      status.classList.add('stale');
+      status.textContent = '⚠ Stale — rebuild to apply override changes';
+    }
+  }
+
+  // ── HTTP wrapper ────────────────────────────────────────────────────
+  function api(method, path, body){
+    if (!IS_SERVED) return Promise.reject(new Error('opened as file://; start the server to enable edits'));
+    var opts = { method: method, headers: { 'Content-Type': 'application/json' } };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    return fetch(path, opts).then(function(res){
+      return res.json().catch(function(){ return null; }).then(function(json){
+        if (!res.ok) {
+          var err = new Error((json && json.error) || ('HTTP ' + res.status));
+          err.status = res.status; err.body = json;
+          throw err;
+        }
+        return json;
+      });
+    });
+  }
+
+  // ── Override-status column updater ──────────────────────────────────
+  function pill_for(t){
+    if (t === 'force_match')    return '<span class="dash-ov-pill dash-ov-pill-match">match</span>';
+    if (t === 'force_no_match') return '<span class="dash-ov-pill dash-ov-pill-no-match">no-match</span>';
+    if (t === 'force_segment')  return '<span class="dash-ov-pill dash-ov-pill-segment">seg</span>';
+    return '';
+  }
+  function state_for(ov){
+    if (ov.approval_state === 'stale') return '<span class="dash-ov-state dash-ov-state-stale">⚠ stale</span>';
+    if (ov.approved)                   return '<span class="dash-ov-state dash-ov-state-approved">✓ approved</span>';
+    return '<span class="dash-ov-state dash-ov-state-unapproved">◦ unapproved</span>';
+  }
+  function refresh_status_column(){
+    document.querySelectorAll('#tbl-body tr').forEach(function(tr){
+      var sid_b = tr.dataset.sidBaseline || '';
+      var sid_a = tr.dataset.sidAnalysis || '';
+      var ov = (_by_sid[sid_b] && _by_sid[sid_b][0]) || (_by_sid[sid_a] && _by_sid[sid_a][0]);
+      var cell = tr.querySelector('.dash-ov-cell');
+      if (!cell) return;
+      if (!ov) {
+        cell.innerHTML = '<span style="color:#bbb">—</span>';
+        tr.classList.remove('has-override');
+      } else {
+        cell.innerHTML = pill_for(ov.override_type) + state_for(ov);
+        tr.classList.add('has-override');
+      }
+    });
+    var tbl = $id('evt-tbl');
+    if (tbl) tbl.classList.add('show-override');
+  }
+
+  // ── Render: active overrides list ───────────────────────────────────
+  function render_list(){
+    var list = $id('dash-ov-list');
+    var summary = $id('dash-ov-list-summary');
+    if (!list) return;
+
+    var all = []
+      .concat((_overrides.force_match || []).map(function(o){ return Object.assign({}, o, { _type: 'force_match' }); }))
+      .concat((_overrides.force_no_match || []).map(function(o){ return Object.assign({}, o, { _type: 'force_no_match' }); }))
+      .concat((_overrides.force_segment || []).map(function(o){ return Object.assign({}, o, { _type: 'force_segment' }); }))
+      .sort(function(a,b){ return a.id - b.id; });
+
+    var stats = _overrides.stats || {};
+    if (summary) {
+      summary.textContent = all.length
+        ? '· ' + all.length + ' total · ' + (stats.approved||0) + ' approved · ' + (stats.unapproved||0) + ' unapproved · ' + (stats.stale||0) + ' stale'
+        : '';
+    }
+
+    if (!all.length) {
+      list.innerHTML = '<div class="dash-ov-empty">No active overrides in this year scope.</div>';
+      return;
+    }
+
+    list.innerHTML = all.map(function(o){
+      var sid = o.sid_baseline || o.sid_analysis;
+      var label;
+      if (o._type === 'force_match' && o.sid_baseline && o.sid_analysis) {
+        label = esc(o.sid_baseline) + ' ↔ ' + esc(o.sid_analysis);
+      } else {
+        label = esc(sid) + (o._type === 'force_segment' ? ' → ' + esc(o.segment) : '');
+      }
+      var selected = (_selected_sid && (sid === _selected_sid || o.sid_baseline === _selected_sid || o.sid_analysis === _selected_sid))
+        ? ' dash-ov-selected-row' : '';
+      var approve_btn = (o.approved && o.approval_state !== 'stale')
+        ? '<button class="dash-ov-btn dash-ov-btn-unapprove" data-act="unapprove" data-sid="'+esc(sid)+'">↶</button>'
+        : '<button class="dash-ov-btn dash-ov-btn-approve" data-act="approve" data-sid="'+esc(sid)+'" title="Approve (refreshes signature)">✓</button>';
+      return '<div class="dash-ov-list-item' + selected + '">' +
+        '<div style="flex:0 0 auto">' + pill_for(o._type) + '</div>' +
+        '<div class="sids">' + label +
+          (o.note ? '<span class="note">' + esc(o.note) + '</span>' : '') +
+          '<span class="note">' + state_for(o).replace(/<[^>]+>/g, '').trim() + '</span>' +
+        '</div>' +
+        '<div class="acts">' +
+          approve_btn +
+          '<button class="dash-ov-btn dash-ov-btn-danger" data-act="delete" data-sid="'+esc(sid)+'" title="Soft-delete">✕</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ── Selected-event card ─────────────────────────────────────────────
+  function render_selected(){
+    var card = $id('dash-ov-selected');
+    if (!card) return;
+    if (!_selected_sid) {
+      card.style.display = 'none';
+      card.innerHTML = '';
+      return;
+    }
+    card.style.display = 'block';
+    card.innerHTML = '<div class="dash-ov-selected-card">' +
+      '<a class="clear" href="#" onclick="dash_ov_clear_selection();return false">clear</a>' +
+      'Focused on: <span class="sid">' + esc(_selected_sid) + '</span>' +
+    '</div>';
+  }
+
+  // ── Public action: focus a row ──────────────────────────────────────
+  window.dash_ov_focus_row = function(sid, sid_baseline, sid_analysis){
+    _selected_sid = sid || null;
+    document.querySelectorAll('#tbl-body tr.dash-ov-selected').forEach(function(el){ el.classList.remove('dash-ov-selected'); });
+    var row = document.querySelector('#tbl-body tr[data-sid="' + (sid || '').replace(/"/g,'\\"') + '"]');
+    if (row) row.classList.add('dash-ov-selected');
+    if (sid_baseline) $id('dash-ov-sidB').value = sid_baseline;
+    if (sid_analysis) $id('dash-ov-sidA').value = sid_analysis;
+    render_selected();
+    render_list();
+    var editor = $id('dash-ov-editor');
+    if (editor) editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  window.dash_ov_clear_selection = function(){
+    _selected_sid = null;
+    document.querySelectorAll('#tbl-body tr.dash-ov-selected').forEach(function(el){ el.classList.remove('dash-ov-selected'); });
+    render_selected();
+    render_list();
+  };
+
+  // ── Form visibility ─────────────────────────────────────────────────
+  function refresh_form_vis(){
+    var type = $id('dash-ov-type').value;
+    var side = $id('dash-ov-side').value;
+    var show_match   = type === 'force_match';
+    var show_segment = type === 'force_segment';
+    var need_side    = type !== 'force_match';
+    $id('dash-ov-side-wrap').style.display     = need_side ? '' : 'none';
+    $id('dash-ov-segment-wrap').style.display  = show_segment ? '' : 'none';
+    $id('dash-ov-sidB-wrap').style.display = (show_match || (need_side && side === 'baseline')) ? '' : 'none';
+    $id('dash-ov-sidA-wrap').style.display = (show_match || (need_side && side === 'analysis')) ? '' : 'none';
+  }
+
+  // ── Form submit ─────────────────────────────────────────────────────
+  window.dash_ov_submit = function(e){
+    if (e && e.preventDefault) e.preventDefault();
+    if (!IS_SERVED) { show_toast('Server offline. Start: node server_event_analysis_8016.js', 'err'); return false; }
+    var type = $id('dash-ov-type').value;
+    var body = {
+      type: type,
+      note:   ($id('dash-ov-note').value.trim() || undefined),
+      global: $id('dash-ov-global').checked || undefined,
+    };
+    if (type === 'force_match') {
+      body.sid_baseline = $id('dash-ov-sidB').value.trim();
+      body.sid_analysis = $id('dash-ov-sidA').value.trim();
+      if (!body.sid_baseline || !body.sid_analysis) { show_toast('force_match needs both sids', 'err'); return false; }
+    } else {
+      body.side = $id('dash-ov-side').value;
+      if (body.side === 'baseline') body.sid_baseline = $id('dash-ov-sidB').value.trim();
+      else                          body.sid_analysis = $id('dash-ov-sidA').value.trim();
+      if (!(body.sid_baseline || body.sid_analysis)) { show_toast('missing sid', 'err'); return false; }
+      if (type === 'force_segment') body.segment = $id('dash-ov-segment').value;
+    }
+    api('POST', '/api/overrides', body).then(function(res){
+      if (res.status === 'inserted')      show_toast('Inserted override #' + res.id, 'ok');
+      else if (res.status === 'exists')   show_toast('Override already existed (#' + res.id + ')', 'ok');
+      else if (res.status === 'updated')  show_toast('Updated override #' + res.id, 'ok');
+      else                                 show_toast('OK', 'ok');
+      mark_dirty();
+      $id('dash-ov-form').reset();
+      refresh_form_vis();
+      dash_ov_refresh();
+    }).catch(function(err){ show_toast('Add failed: ' + err.message, 'err'); });
+    return false;
+  };
+
+  // ── List action delegation ──────────────────────────────────────────
+  function wire_list_actions(){
+    var list = $id('dash-ov-list');
+    if (!list) return;
+    list.addEventListener('click', function(e){
+      var btn = e.target.closest('button[data-act]');
+      if (!btn) return;
+      var act = btn.dataset.act;
+      var sid = btn.dataset.sid;
+      if (!sid) return;
+      btn.disabled = true;
+      var p = null;
+      if (act === 'delete') {
+        if (!confirm('Soft-delete every active override for ' + sid + '?')) { btn.disabled = false; return; }
+        p = api('DELETE', '/api/overrides/' + encodeURIComponent(sid))
+          .then(function(r){ show_toast('Soft-deleted ' + r.removed + ' row(s)', 'ok'); });
+      } else if (act === 'approve') {
+        p = api('POST', '/api/approve/' + encodeURIComponent(sid))
+          .then(function(r){ show_toast('Approved ' + r.approved + ' row(s)', 'ok'); });
+      } else if (act === 'unapprove') {
+        p = api('POST', '/api/unapprove/' + encodeURIComponent(sid))
+          .then(function(r){ show_toast('Unapproved ' + r.unapproved + ' row(s)', 'ok'); });
+      }
+      if (p) p.then(function(){ mark_dirty(); dash_ov_refresh(); })
+              .catch(function(err){ show_toast(act + ' failed: ' + err.message, 'err'); btn.disabled = false; });
+    });
+  }
+
+  // ── Load + refresh ──────────────────────────────────────────────────
+  window.dash_ov_refresh = function(){
+    if (!IS_SERVED) {
+      set_srv_status('err', '● server offline (file://)');
+      var list = $id('dash-ov-list');
+      if (list) list.innerHTML = '<div class="dash-ov-empty">Open via <a href="http://localhost:8016/output/dashboard.html">http://localhost:8016/output/dashboard.html</a> to load overrides.</div>';
+      return Promise.resolve();
+    }
+    return api('GET', '/api/status').then(function(){
+      set_srv_status('ok', '● connected');
+      return api('GET', '/api/overrides');
+    }).then(function(data){
+      _overrides = data;
+      _by_sid = {};
+      ['force_match','force_no_match','force_segment'].forEach(function(t){
+        (data[t] || []).forEach(function(o){
+          var rec = Object.assign({ override_type: t }, o);
+          if (o.sid_baseline) (_by_sid[o.sid_baseline] = _by_sid[o.sid_baseline] || []).push(rec);
+          if (o.sid_analysis) (_by_sid[o.sid_analysis] = _by_sid[o.sid_analysis] || []).push(rec);
+        });
+      });
+      render_list();
+      refresh_status_column();
+    }).catch(function(err){
+      set_srv_status('err', '● ' + err.message);
+      show_toast('Load failed: ' + err.message, 'err');
+    });
+  };
+
+  // ── Rebuild trigger (Step 9.5) ──────────────────────────────────────
+  window.dash_ov_rebuild = function(){
+    if (!IS_SERVED) { show_toast('Server offline.', 'err'); return; }
+    var btn = $id('dash-ov-rebuild-btn');
+    var log = $id('dash-ov-rebuild-log');
+    var status = $id('dash-ov-rebuild-status');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Building…'; }
+    if (status) {
+      status.classList.remove('stale');
+      status.classList.add('running');
+      status.textContent = '⏳ Build in progress…';
+    }
+    if (log) { log.style.display = 'block'; log.textContent = '▶ Build starting…\\n'; }
+    // Scroll the rebuild card into view so the operator sees live output.
+    var card = $id('dash-ov-rebuild-card');
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    var es = new EventSource('/api/build');
+    es.addEventListener('out',  function(e){ if (log) { log.textContent += e.data + '\\n'; log.scrollTop = log.scrollHeight; } });
+    es.addEventListener('err',  function(e){ if (log) { log.textContent += e.data + '\\n'; log.scrollTop = log.scrollHeight; } });
+    es.addEventListener('done', function(e){
+      var code = parseInt(e.data, 10);
+      if (log) log.textContent += (code === 0 ? '\\n✔ Build complete.' : '\\n✗ Build failed (exit code ' + code + ').') + '\\n';
+      es.close();
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Rebuild now'; }
+      if (code === 0) {
+        show_toast('Build complete — reloading…', 'ok');
+        // Bridge the reload with a full-page overlay so the user never
+        // sees a white flash. The overlay shows on this page (final
+        // moments before unload) AND on the new page's first paint
+        // (via the sessionStorage flag read by the boot script in <head>).
+        setTimeout(function(){
+          try { _save_dashboard_state(); } catch (e) {}
+          try { sessionStorage.setItem('dash_ov_rebuilding', '1'); } catch (e) {}
+          // Show overlay on the current page so the transition is seamless
+          // between old-page-overlay → unload → new-page-overlay.
+          document.documentElement.classList.add('dash-ov-rebuilding');
+          // Give the overlay one frame to paint before triggering reload.
+          // Append a cache-busting query param so the browser is forced to
+          // re-fetch dashboard.html instead of serving from cache. (The
+          // server now sends no-cache headers too, but this is belt-and-
+          // suspenders for browsers that aggressively cache static HTML.)
+          var bust = '?v=' + Date.now();
+          requestAnimationFrame(function(){
+            requestAnimationFrame(function(){
+              location.href = location.pathname + bust + location.hash;
+            });
+          });
+        }, 1000);
+      } else {
+        show_toast('Build failed (code ' + code + ')', 'err');
+      }
+    });
+    es.onerror = function(){
+      if (log) log.textContent += '\\nConnection lost.\\n';
+      es.close();
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Rebuild now'; }
+    };
+  };
+
+  // ── State save / restore across rebuild reload ──────────────────────
+  // We can't avoid the reload (new build = new ROSTER + new chart data),
+  // but we CAN preserve the user's view state across it. sessionStorage
+  // persists across same-tab reloads. We save before reload, restore on
+  // page boot, then delete the key so stale state never leaks forward.
+  var STATE_KEY = 'dash_ov_state_v1';
+
+  function _collect_drop(panel_id) {
+    return Array.prototype.map.call(
+      document.querySelectorAll('#' + panel_id + ' input[type=checkbox]:checked'),
+      function(cb){ return cb.value; }
+    );
+  }
+  function _apply_drop(panel_id, values) {
+    if (!Array.isArray(values)) return;
+    var set = {};
+    values.forEach(function(v){ set[v] = true; });
+    document.querySelectorAll('#' + panel_id + ' input[type=checkbox]').forEach(function(cb){
+      cb.checked = !!set[cb.value];
+    });
+    if (typeof window.update_drop_btn === 'function') window.update_drop_btn(panel_id);
+  }
+  function _save_dashboard_state() {
+    try {
+      var search_el = $id('tbl-search');
+      var th_sorted = document.querySelector('#evt-tbl thead th.asc, #evt-tbl thead th.desc');
+      var more_btn  = $id('tbl-more');
+      var state = {
+        v: 1,
+        scroll:   window.scrollY,
+        search:   search_el ? search_el.value : '',
+        seg:      _collect_drop('panel-drop-seg'),
+        type:     _collect_drop('panel-drop-type'),
+        month:    _collect_drop('panel-drop-month'),
+        cols:     _collect_drop('panel-drop-cols'),
+        sort_col: th_sorted ? th_sorted.dataset.col : null,
+        sort_dir: th_sorted && th_sorted.classList.contains('desc') ? -1 : 1,
+        selected: _selected_sid,
+        show_all: more_btn ? (more_btn.style.display === 'none') : false,
+      };
+      sessionStorage.setItem(STATE_KEY, JSON.stringify(state));
+    } catch (e) { /* sessionStorage may be unavailable — silently skip */ }
+  }
+  window.dash_ov_save_state = _save_dashboard_state; // expose for rebuild handler
+
+  function _restore_dashboard_state() {
+    var raw = null;
+    try { raw = sessionStorage.getItem(STATE_KEY); } catch (e) { return; }
+    if (!raw) return;
+    try { sessionStorage.removeItem(STATE_KEY); } catch (e) {}
+
+    var state;
+    try { state = JSON.parse(raw); } catch (e) { return; }
+    if (!state || state.v !== 1) return;
+
+    // Apply filter inputs + dropdowns. The HTML inline handlers (onchange)
+    // won't fire when we set .value / .checked programmatically — we trigger
+    // a final filter_and_sort() after applying.
+    var search_el = $id('tbl-search');
+    if (search_el && typeof state.search === 'string') search_el.value = state.search;
+    _apply_drop('panel-drop-seg',   state.seg);
+    _apply_drop('panel-drop-type',  state.type);
+    _apply_drop('panel-drop-month', state.month);
+    _apply_drop('panel-drop-cols',  state.cols);
+
+    // The column-picker checkboxes drive a toggle_col() function that adds
+    // .show-* classes on the table. Trigger each restored col to apply.
+    (state.cols || []).forEach(function(col_id){
+      if (typeof window.toggle_col === 'function') {
+        // checkbox id format is "col-sid25" / "col-date25" / "col-sid26" / "col-date26"
+        window.toggle_col(col_id, true);
+      }
+    });
+
+    // Sort: simulate clicking the sorted header. Fresh load starts at
+    // sort_col='_excel'. One click → that col asc; two clicks → desc.
+    if (state.sort_col && state.sort_col !== '_excel') {
+      var th = document.querySelector('#evt-tbl thead th[data-col="' + state.sort_col + '"]');
+      if (th) {
+        th.click();                            // asc
+        if (state.sort_dir === -1) th.click(); // desc
+      }
+    } else if (typeof window.filter_and_sort === 'function') {
+      window.filter_and_sort();
+    }
+
+    // "Show all" — only meaningful when the table has paginated rows.
+    if (state.show_all && typeof window.load_all === 'function') window.load_all();
+
+    // Selected event in editor — defer until /api/overrides has loaded so
+    // the row is in the DOM and dash_ov_focus_row can pull sid_baseline /
+    // sid_analysis from its data attrs.
+    if (state.selected) {
+      var attempts = 0;
+      (function try_focus(){
+        attempts++;
+        var row = document.querySelector('#tbl-body tr[data-sid="' + state.selected.replace(/"/g, '\\"') + '"]');
+        if (row) {
+          window.dash_ov_focus_row(state.selected, row.dataset.sidBaseline || '', row.dataset.sidAnalysis || '');
+          return;
+        }
+        if (attempts < 30) setTimeout(try_focus, 100);
+      })();
+    }
+
+    // Scroll — defer until layout has settled so the position is accurate.
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        window.scrollTo(0, state.scroll || 0);
+      });
+    });
+  }
+
+  // ── Boot ────────────────────────────────────────────────────────────
+  $id('dash-ov-type').addEventListener('change', refresh_form_vis);
+  $id('dash-ov-side').addEventListener('change', refresh_form_vis);
+  refresh_form_vis();
+  wire_list_actions();
+  dash_ov_refresh();
+  _restore_dashboard_state();
+
+  // If we arrived here from a rebuild reload, the overlay is currently
+  // covering the page. Hold it briefly so charts have time to animate
+  // in (250ms entrance animation set on each Chart.js chart), then
+  // crossfade it out.
+  if (document.documentElement.classList.contains('dash-ov-rebuilding')) {
+    setTimeout(function(){
+      var ov = $id('dash-ov-overlay');
+      if (ov) ov.classList.add('fade-out');
+      setTimeout(function(){
+        document.documentElement.classList.remove('dash-ov-rebuilding');
+      }, 320); // slightly longer than the CSS transition (280ms)
+    }, 450);
+  }
+})();
+</script>
 
 <!-- Chart expand modal (shows chart OR table depending on current flip state) -->
 <div id="chart-modal">
@@ -1462,11 +2225,9 @@ if(ROSTER && ROSTER.length > 0){
       <span id="modal-mode-badge" style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:10px;background:#EEF4FD;color:#1565C0;margin-left:8px"></span>
       <button class="modal-close" onclick="close_modal()">✕ Close</button>
     </div>
-    <!-- Chart view -->
     <div class="modal-canvas-wrap" id="modal-canvas-wrap">
       <canvas id="modal-canvas"></canvas>
     </div>
-    <!-- Table view (shown when chart is in table mode) -->
     <div id="modal-tbl-wrap" class="chart-flip-tbl" style="display:none;max-height:460px;height:auto"></div>
     <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end" id="modal-btns">
       <button class="chart-btn" id="modal-png-btn" onclick="export_modal_png()">⬇ PNG</button>
@@ -1480,19 +2241,14 @@ if(ROSTER && ROSTER.length > 0){
 let _modal_chart = null;
 let _modal_chart_id = null;
 
-// Build plugin options for the modal from the source chart's registered options.
-// Also carries the inline org_pts plugin (c_monthly) so values appear in expand.
 function get_modal_plugin_opts(id) {
   const src_chart = CHARTS[id];
-  if (!src_chart) return { plugins: [] };
-  const src_opts = src_chart.config?.options?.plugins ?? {};
+  if (!src_chart) return { plugin_opts: {}, inline_plugins: [] };
+  const opts = src_chart.options?.plugins || {};
   const modal_opts = {};
-  // Globally-registered plugins — just carry their options object
-  ['inside_labels', 'delta_labels', 'value_labels'].forEach(function(k) {
-    if (src_opts[k]) modal_opts[k] = Object.assign({}, src_opts[k]);
-  });
-  // Inline plugins (e.g. org_pts on c_monthly) — pull from chart.config.plugins array
-  const inline = (src_chart.config?.plugins ?? []).filter(function(p) { return p && p.id; });
+  if (opts.datalabels) modal_opts.datalabels = opts.datalabels;
+  if (opts.tooltip)    modal_opts.tooltip    = opts.tooltip;
+  const inline = (src_chart.config.plugins || []).filter(p => p && p.id === 'org_pts');
   return { plugin_opts: modal_opts, inline_plugins: inline };
 }
 
@@ -1506,7 +2262,6 @@ function expand_chart(id) {
     ? (title_node.firstChild.textContent || title_node.textContent).trim().replace(/\s+/g,' ').split('  ')[0]
     : id;
 
-  // Detect whether the card is currently in table mode
   const is_table_mode = canvas_el && canvas_el.style.display === 'none';
 
   document.getElementById('modal-title').textContent = base_title;
@@ -1521,16 +2276,14 @@ function expand_chart(id) {
   const png_btn     = document.getElementById('modal-png-btn');
 
   if (is_table_mode) {
-    // ── Expand as table ────────────────────────────────────────────────────
     if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
     if (canvas_wrap) canvas_wrap.style.display = 'none';
     if (tbl_wrap) {
       tbl_wrap.style.display = 'block';
       tbl_wrap.innerHTML = _build_flip_html(id);
     }
-    if (png_btn) png_btn.style.display = 'none'; // no PNG for table view
+    if (png_btn) png_btn.style.display = 'none';
   } else {
-    // ── Expand as chart ────────────────────────────────────────────────────
     if (tbl_wrap)    { tbl_wrap.style.display = 'none'; tbl_wrap.innerHTML = ''; }
     if (canvas_wrap) canvas_wrap.style.display = '';
     if (png_btn)     png_btn.style.display = '';
@@ -1607,14 +2360,13 @@ function export_csv(id) {
     return [q(lbl)].concat(live.datasets.map(function(ds){return ds.data[i]??'';})).join(',');
   });
   const a = document.createElement('a');
-  a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent([header].concat(rows).join(nl));
+  a.href = 'data:text/csv;charset=utf-8,﻿'+encodeURIComponent([header].concat(rows).join(nl));
   a.download = (id||'chart')+'_data.csv'; a.click();
 }
 function export_modal_csv() { if (_modal_chart_id) export_csv(_modal_chart_id); }
 </script>
 </body>
 </html>`;
-  // Inject roster JSON after template is built (safe: JSON.stringify handles all chars)
   const html_final = has_table
     ? html.replace("ROSTER_PLACEHOLDER", JSON.stringify(roster))
     : html;
