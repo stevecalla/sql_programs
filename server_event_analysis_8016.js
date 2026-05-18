@@ -33,16 +33,19 @@
 'use strict';
 
 const path = require('path');
-
 const dotenv = require('dotenv');
 dotenv.config();
 
 const express = require('express');
-const cors    = require('cors');
+const cors = require('cors');
 
-const { load_overrides }      = require('./src/event_analysis/src/overrides');
+// NGROK TUNNEL FOR TESTING
+const is_test_ngrok = true;
+const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
+
+const { load_overrides } = require('./src/event_analysis/src/overrides');
 const { fetch_events_for_years } = require('./src/event_analysis/src/db');
-const { determineOSPath }     = require('./utilities/determineOSPath');
+const { determineOSPath } = require('./utilities/determineOSPath');
 
 // CLI command implementations — the write endpoints (Step 8) are thin
 // HTTP wrappers around these. Same DB writes, same idempotent guards, same
@@ -64,8 +67,8 @@ const HTTP_CREATED_BY = 'server';
 let _build_running = false;
 
 const VALID_OVERRIDE_TYPES = new Set(['force_match', 'force_no_match', 'force_segment']);
-const VALID_SEGMENTS       = new Set(['Retained', 'Shifted', 'Lost', 'New', 'Recovered', 'Tried to Return']);
-const VALID_SIDES          = new Set(['baseline', 'analysis']);
+const VALID_SEGMENTS = new Set(['Retained', 'Shifted', 'Lost', 'New', 'Recovered', 'Tried to Return']);
+const VALID_SIDES = new Set(['baseline', 'analysis']);
 
 const DEFAULT_PORT = Number(process.env.PORT) || Number(process.env.USAT_SERVER_PORT) || 8016;
 
@@ -493,6 +496,13 @@ async function create_app() {
 
 async function start_server({ port = DEFAULT_PORT, silent = false } = {}) {
   const app = await create_app();
+
+  // NGROK TUNNEL
+  // https://60ca-73-169-19-195.ngrok-free.app/output/dashboard.html
+  if (is_test_ngrok) {
+    create_ngrok_tunnel(port);
+  }
+
   return await new Promise((resolve, reject) => {
     const server = app.listen(port, () => {
       const actual = server.address().port;
