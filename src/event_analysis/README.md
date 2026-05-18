@@ -133,7 +133,7 @@ Type a number and press Enter. For features that need input the menu prompts you
 
 The status bar at the top always shows: last build date, event totals, commentary mode (AI or rule-based), API key status, and active override count.
 
-### All 26 features — menu number + what it runs
+### All 27 features — menu number + what it runs
 
 | # | Menu label | Equivalent command |
 |---|---|---|
@@ -169,6 +169,7 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 24 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
 | 25 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
 | 26 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
+| 27 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
 | 0 | Exit | — |
 
 ---
@@ -761,7 +762,7 @@ Exits with status 1 if errors are found (stopping a `check.js && build_all.js` p
 
 ## Test suite — tests/
 
-> **Menu:** options **21–26** (all / overrides / server / menu / smoke / glossary) — or run directly:
+> **Menu:** options **21–27** (all / overrides / server / menu / smoke / glossary / downloads) — or run directly:
 
 ```bash
 node --test tests/                  # run every *.test.js
@@ -781,6 +782,7 @@ Uses Node's built-in `node:test` runner (Node 18+) — no extra dependencies. Ou
 | `menu.test.js` | Every menu item has id + label + action; ids are unique; actions are unique; the canonical action list is present; test-runner items point at real `tests/*.test.js` files | no | <1s |
 | `smoke.test.js` | Parse-check every major source file (CJS `vm.Script` — same engine as `node --check`), require-check each module's exports, sanity-check pure helpers | no | <1s |
 | `glossary.test.js` | Bottom-of-dashboard glossary is a default-closed `<details>` element and contains every required term (6 segments + 5 confidence values + calendar / organic + 7 other terms). Reads the most recent built `dashboard.html`. | no (reads built file) | <1s |
+| `downloads.test.js` | The dashboard's Excel + PowerPoint Download buttons point at files that actually exist in the output dir, are same-directory paths (`./filename`), and follow the `<year>_event_calendar_analysis_*.xlsx` / `<year>_event_trends_summary_*.pptx` naming pattern. Also guards against the legacy `_v9f.xlsx` / `_v3.pptx` hardcoded names sneaking back in. | no (reads built file) | <1s |
 
 The `menu.test.js` and `smoke.test.js` files are intentionally cheap — no DB, no network, no API key. Run them after any structural change (renaming a file, splitting a module, refactoring exports) to catch the easy regressions before the slow tests fire.
 
@@ -957,7 +959,7 @@ What's deliberately out of scope (punted to Step 10 or beyond):
 
 The build-time dashboard (`output/dashboard.html`) ships with the same editor embedded below the event roster. Things to know:
 
-- **Year-dynamic column headers.** All paired-year column labels (`Mo`, `Sanction ID`, `Date`, `Day`, `Event Name`, `Status`) and chart dataset labels are rendered from the `ya` / `yb` template variables, which come from `results.years.BASELINE_YEAR` / `results.years.ANALYSIS_YEAR`. The Excel download link's filename (`./${yb}_event_calendar_analysis_v9f.xlsx`) is also year-dynamic. When the analysis years roll over (e.g. 2026 vs 2027), the dashboard adjusts automatically — no source edits required.
+- **Year-dynamic column headers.** All paired-year column labels (`Mo`, `Sanction ID`, `Date`, `Day`, `Event Name`, `Status`) and chart dataset labels are rendered from the `ya` / `yb` template variables, which come from `results.years.BASELINE_YEAR` / `results.years.ANALYSIS_YEAR`. The Download buttons read their target filenames from `results.downloads.xlsx` / `results.downloads.pptx`, populated by `build_all.js` with the actual timestamped basenames it writes, so the links always point at files that exist. When the analysis years roll over (e.g. 2026 vs 2027), the dashboard adjusts automatically — no source edits required.
 - **Column order per year:** `Mo · Sanction ID · Date · Day · Event Name · Status`. Date and Day sit adjacent so the weekday context is right next to the date.
 - **New "Override" column** in the roster. Shows `—` for events without overrides, or `match` / `no-match` / `seg` pill plus `✓ approved` / `◦ unapproved` / `⚠ stale` state. Populated by a `GET /api/overrides` call on page load; updates after every mutation.
 - **Roster filters.** Above the table: a search box (matches name OR sanction ID across either year, so a paste like `311655-Adult Race` or just `311655` works), plus four multi-select dropdowns — Segment, Type, Month, **Status** — that chip-render into a "Filters:" row below the toolbar. The Status dropdown is populated dynamically from the unique `Status YA` / `Status YB` values present in the roster. A Reset button next to the search clears everything.

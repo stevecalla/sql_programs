@@ -66,7 +66,8 @@ event_analysis/
 │   ├── server.test.js           ← local server read/write API + /api/build SSE (DB)
 │   ├── menu.test.js             ← menu.js wiring: unique ids/actions, required actions present (cheap)
 │   ├── smoke.test.js            ← parse-check + require-check every major source file (cheap)
-│   └── glossary.test.js         ← dashboard glossary: <details> collapsed, every required term present (cheap)
+│   ├── glossary.test.js         ← dashboard glossary: <details> collapsed, every required term present (cheap)
+│   └── downloads.test.js        ← dashboard Excel/PowerPoint Download buttons resolve to real files (cheap)
 ├── utilities/
 │   ├── ensure_overrides_table.js   ← idempotent schema setup (auto-runs every build)
 │   └── migrate_overrides_to_db.js  ← one-shot JSON → DB migration (auto-runs every build)
@@ -258,7 +259,7 @@ CORS is open (`*`) — fine for local dev, tighten before any production hosting
 | 2. JSON → DB auto-migration on every build | ✓ done |
 | 2.5. Year scoping (`baseline_year` / `analysis_year` columns + index, sid_baseline/sid_analysis rename) | ✓ done |
 | 3. `analysis.js` reads from DB (async, year-scoped, surfaces unapproved warnings) | ✓ done |
-| 3.5. `tests/overrides.test.js` (`node --test tests/`, menu options 21–26) | ✓ done |
+| 3.5. `tests/overrides.test.js` (`node --test tests/`, menu options 21–27) | ✓ done |
 | **4.** `ask.js` CLI writes to DB (add / remove / list / suggest), `--global` flag, `created_by` provenance | ✓ done |
 | **5.** `--approve` / `--unapprove` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, captures event signatures. Unapprove clears approval + signatures (keeps audit fields). | ✓ done |
 | **6.** Stale-approval detection. `apply_overrides()` recomputes event signatures and compares to stored snapshot; on drift the build flips `approval_state='stale'`, emits `⚠ [stale approval]` warning, and `--list-overrides` renders the row with a `⚠ stale` badge. | ✓ done |

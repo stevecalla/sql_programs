@@ -183,6 +183,7 @@ const SECTIONS = [
       { id: 24, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu' },
       { id: 25, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke' },
       { id: 26, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary' },
+      { id: 27, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads' },
     ],
   },
 ];
@@ -392,7 +393,8 @@ async function handle_action(action, rl) {
     case 'run_tests_server':
     case 'run_tests_menu':
     case 'run_tests_smoke':
-    case 'run_tests_glossary': {
+    case 'run_tests_glossary':
+    case 'run_tests_downloads': {
       // node --test runs every *.test.js it finds in the given path
       // and exits non-zero on failure. Output is TAP-style. We can't use
       // the existing run() helper because we need --test as a node flag,
@@ -407,6 +409,7 @@ async function handle_action(action, rl) {
                    : action === 'run_tests_menu'      ? path.join(tests_dir, 'menu.test.js')
                    : action === 'run_tests_smoke'     ? path.join(tests_dir, 'smoke.test.js')
                    : action === 'run_tests_glossary'  ? path.join(tests_dir, 'glossary.test.js')
+                   : action === 'run_tests_downloads' ? path.join(tests_dir, 'downloads.test.js')
                    :                                     tests_dir;
       if (action !== 'run_tests_all' && !fs.existsSync(target)) {
         console.log(c(YELLOW, `  Test file not found: ${target}`));
@@ -417,6 +420,7 @@ async function handle_action(action, rl) {
                   : action === 'run_tests_menu'      ? 'menu tests'
                   : action === 'run_tests_smoke'     ? 'smoke tests'
                   : action === 'run_tests_glossary'  ? 'glossary tests'
+                  : action === 'run_tests_downloads' ? 'download tests'
                   :                                     'all tests';
       console.log(c(DIM, `  Running ${label}: node --test ${path.relative(DIR, target) || 'tests/'}`));
       const code = await new Promise(resolve => {

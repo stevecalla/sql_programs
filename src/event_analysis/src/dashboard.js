@@ -64,6 +64,13 @@ function generate_dashboard(results, cm, out_path, segments_raw = null) {
   const n_analysis = results.totals?.ANALYSIS_YEAR ?? 0;
   const net = results.totals?.net ?? (n_analysis - n_baseline);
 
+  // Download filenames — build_all.js passes the real timestamped basenames
+  // through results.downloads so the buttons link to files that actually
+  // exist. Fallbacks keep the dashboard usable if someone calls
+  // generate_dashboard() directly without setting them.
+  const dl_xlsx = results.downloads?.xlsx || `${yb}_event_calendar_analysis.xlsx`;
+  const dl_pptx = results.downloads?.pptx || `${yb}_event_trends_summary.pptx`;
+
   // Segments (direct from results.segments which is the segSummary object)
   const seg = results.segments ?? {};
 
@@ -1008,10 +1015,10 @@ ${has_table ? `
 <div class="row" style="margin-bottom:10px">
   <div class="card card-full" style="display:flex;gap:12px;align-items:center;padding:12px 16px">
     <span style="font-size:.75rem;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">Download:</span>
-    <a href="./${yb}_event_calendar_analysis_v9f.xlsx" download
+    <a href="./${dl_xlsx}" download
        style="display:inline-flex;align-items:center;gap:6px;background:#1E7D34;color:#fff;padding:7px 14px;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none">
       📊 Excel Workbook</a>
-    <a href="./event_trends_summary_v3.pptx" download
+    <a href="./${dl_pptx}" download
        style="display:inline-flex;align-items:center;gap:6px;background:#BF1B2C;color:#fff;padding:7px 14px;border-radius:6px;font-size:.78rem;font-weight:600;text-decoration:none">
       📑 PowerPoint Deck</a>
     <span style="font-size:.72rem;color:#aaa;margin-left:auto">Both files are in the same folder as this dashboard</span>

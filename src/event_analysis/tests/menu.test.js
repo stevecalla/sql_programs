@@ -86,6 +86,7 @@ describe('menu.js — known actions', () => {
     'start_server',
     'run_tests_all', 'run_tests_overrides', 'run_tests_server',
     'run_tests_menu', 'run_tests_smoke', 'run_tests_glossary',
+    'run_tests_downloads',
   ];
 
   test('every REQUIRED_ACTIONS entry is present in the menu', () => {
@@ -106,7 +107,7 @@ describe('menu.js — known actions', () => {
     const testing = SECTIONS.find(s => s.label.startsWith('TESTING'));
     assert.ok(testing, 'TESTING section not found');
     const test_actions = testing.items.map(i => i.action);
-    for (const a of ['run_tests_all','run_tests_overrides','run_tests_server','run_tests_menu','run_tests_smoke','run_tests_glossary']) {
+    for (const a of ['run_tests_all','run_tests_overrides','run_tests_server','run_tests_menu','run_tests_smoke','run_tests_glossary','run_tests_downloads']) {
       assert.ok(test_actions.includes(a), `${a} not in TESTING section`);
     }
   });
@@ -123,6 +124,7 @@ describe('menu.js — test files exist', () => {
     { action: 'run_tests_menu',      file: 'menu.test.js' },
     { action: 'run_tests_smoke',     file: 'smoke.test.js' },
     { action: 'run_tests_glossary',  file: 'glossary.test.js' },
+    { action: 'run_tests_downloads', file: 'downloads.test.js' },
   ];
 
   for (const c of cases) {

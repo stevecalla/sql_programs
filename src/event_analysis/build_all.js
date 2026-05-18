@@ -354,7 +354,15 @@ async function main() {
   console.log('  PowerPoint done.\n');
 
   // ── HTML dashboard ───────────────────────────────────────────────────────
+  // Pass the actual built filenames so the dashboard's Download buttons
+  // link to files that exist. Previously the template had hardcoded names
+  // (`_v9f.xlsx` / `_v3.pptx`) that never matched the timestamped basenames
+  // build_all.js writes — every download attempt 404'd.
   const out_dashboard = path.join(OUTPUT_DIR, 'dashboard.html');
+  results_export.downloads = {
+    xlsx: path.basename(out_xlsx),
+    pptx: path.basename(out_pptx),
+  };
   generate_dashboard(results_export, commentary, out_dashboard, results.segments);
   console.log(`  Dashboard: ${out_dashboard}`);
 
