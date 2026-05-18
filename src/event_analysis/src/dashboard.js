@@ -706,7 +706,7 @@ ${has_table ? `
   <div class="card card-full">
     <h3>Event roster <span class="note">Step 4 detail — ${roster.length} events · filterable + sortable</span></h3>
     <div class="tbl-toolbar">
-      <input id="tbl-search" type="search" placeholder="Search event name…" autocomplete="off">
+      <input id="tbl-search" type="search" placeholder="Search by event name or sanction ID…" autocomplete="off">
       <button id="tbl-reset-btn" class="chart-btn" onclick="clear_all_filters()" title="Clear all filters and reset table" style="display:none;color:#C62828;border-color:#FFCDD2;background:#FFF5F5">↺ Reset</button>
       <div class="multi-drop" id="drop-seg">
         <button type="button" class="multi-drop-btn" onclick="toggle_drop('drop-seg')">All segments ▾</button>
@@ -1680,7 +1680,14 @@ if(ROSTER && ROSTER.length > 0){
     const mons = get_checked('panel-drop-month');
     render_active_filters(q, segs, typs, mons);
     let rows = ROSTER.filter(r =>
-      (!q          || r.name25.toLowerCase().includes(q) || r.name26.toLowerCase().includes(q)) &&
+      // Search matches across either year's event name OR sanction ID — so
+      // a paste like "311655-Adult Race" filters down to that exact row,
+      // and partial sid prefixes (e.g. "311655") also work. Each field is
+      // null-checked since unmatched rows have only one side populated.
+      (!q || (r.name25 && r.name25.toLowerCase().includes(q))
+          || (r.name26 && r.name26.toLowerCase().includes(q))
+          || (r.sid25  && r.sid25.toLowerCase().includes(q))
+          || (r.sid26  && r.sid26.toLowerCase().includes(q))) &&
       (!segs.length || segs.includes(r.seg)) &&
       (!typs.length || typs.includes(r.type)) &&
       (!mons.length || mons.includes(r.m25) || mons.includes(r.m26))
