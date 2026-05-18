@@ -831,7 +831,7 @@ ${has_table ? `
             <label>Type
               <select id="dash-ov-type" name="type">
                 <option value="force_match">force_match — link two events</option>
-                <option value="force_no_match">force_no_match — break / mark Lost/New</option>
+                <option value="force_no_match">force_no_match — unlink pair</option>
                 <option value="force_segment">force_segment — set segment label</option>
               </select>
             </label>
@@ -856,6 +856,22 @@ ${has_table ? `
                 <option>Retained</option><option>Shifted</option>
                 <option>Lost</option><option>New</option>
                 <option>Recovered</option><option>Tried to Return</option>
+              </select>
+            </label>
+          </div>
+          <div class="row" id="dash-ov-segB-wrap" style="display:none">
+            <label>Baseline event → segment
+              <select id="dash-ov-segB">
+                <option value="Lost" selected>Lost</option><option value="Retained">Retained</option>
+                <option value="Shifted">Shifted</option><option value="New">New</option>
+                <option value="Recovered">Recovered</option><option value="Tried to Return">Tried to Return</option>
+              </select>
+            </label>
+            <label>Analysis event → segment
+              <select id="dash-ov-segA">
+                <option value="New" selected>New</option><option value="Retained">Retained</option>
+                <option value="Shifted">Shifted</option><option value="Lost">Lost</option>
+                <option value="Recovered">Recovered</option><option value="Tried to Return">Tried to Return</option>
               </select>
             </label>
           </div>
@@ -1858,7 +1874,10 @@ if(ROSTER && ROSTER.length > 0){
       var sid = o.sid_baseline || o.sid_analysis;
       var label;
       if (o._type === 'force_match' && o.sid_baseline && o.sid_analysis) {
-        label = esc(o.sid_baseline) + ' ↔ ' + esc(o.sid_analysis);
+        label = esc(o.sid_baseline) + ' ↔ ' + esc(o.sid_analysis) + (o.segment_baseline ? ' → ' + esc(o.segment_baseline) : '');
+      } else if (o._type === 'force_no_match' && o.sid_baseline && o.sid_analysis) {
+        label = esc(o.sid_baseline) + ' → ' + esc(o.segment_baseline || 'Lost')
+          + ' ↔ ' + esc(o.sid_analysis) + ' → ' + esc(o.segment_analysis || 'New');
       } else {
         label = esc(sid) + (o._type === 'force_segment' ? ' → ' + esc(o.segment) : '');
       }
@@ -1921,13 +1940,16 @@ if(ROSTER && ROSTER.length > 0){
   function refresh_form_vis(){
     var type = $id('dash-ov-type').value;
     var side = $id('dash-ov-side').value;
-    var show_match   = type === 'force_match';
-    var show_segment = type === 'force_segment';
-    var need_side    = type !== 'force_match';
-    $id('dash-ov-side-wrap').style.display     = need_side ? '' : 'none';
-    $id('dash-ov-segment-wrap').style.display  = show_segment ? '' : 'none';
-    $id('dash-ov-sidB-wrap').style.display = (show_match || (need_side && side === 'baseline')) ? '' : 'none';
-    $id('dash-ov-sidA-wrap').style.display = (show_match || (need_side && side === 'analysis')) ? '' : 'none';
+    var show_both_sids = type === 'force_match' || type === 'force_no_match';
+    var show_segment   = type === 'force_segment' || type === 'force_match';
+    var show_unlink    = type === 'force_no_match';
+    var need_side      = type === 'force_segment';
+    $id('dash-ov-side-wrap').style.display     = need_side     ? '' : 'none';
+    $id('dash-ov-segment-wrap').style.display  = show_segment  ? '' : 'none';
+    var segBWrap = $id('dash-ov-segB-wrap');
+    if (segBWrap) segBWrap.style.display = show_unlink ? '' : 'none';
+    $id('dash-ov-sidB-wrap').style.display = (show_both_sids || (need_side && side === 'baseline')) ? '' : 'none';
+    $id('dash-ov-sidA-wrap').style.display = (show_both_sids || (need_side && side === 'analysis')) ? '' : 'none';
   }
 
   // ── Form submit ─────────────────────────────────────────────────────
@@ -1940,16 +1962,29 @@ if(ROSTER && ROSTER.length > 0){
       note:   ($id('dash-ov-note').value.trim() || undefined),
       global: $id('dash-ov-global').checked || undefined,
     };
-    if (type === 'force_match') {
+    if (type === 'force_match' || type === 'force_no_match') {
       body.sid_baseline = $id('dash-ov-sidB').value.trim();
       body.sid_analysis = $id('dash-ov-sidA').value.trim();
-      if (!body.sid_baseline || !body.sid_analysis) { show_toast('force_match needs both sids', 'err'); return false; }
+      if (!body.sid_baseline || !body.sid_analysis) {
+        show_toast(type === 'force_match' ? 'force_match needs both sids' : 'unlink needs both sids', 'err');
+        return false;
+      }
+      if (type === 'force_match') {
+        body.segment_baseline = $id('dash-ov-segment').value || undefined;
+      }
+      if (type === 'force_no_match') {
+        var segBEl = $id('dash-ov-segB');
+        var segAEl = $id('dash-ov-segA');
+        body.segment_baseline = segBEl ? segBEl.value : 'Lost';
+        body.segment_analysis = segAEl ? segAEl.value : 'New';
+      }
     } else {
+      // force_segment
       body.side = $id('dash-ov-side').value;
       if (body.side === 'baseline') body.sid_baseline = $id('dash-ov-sidB').value.trim();
       else                          body.sid_analysis = $id('dash-ov-sidA').value.trim();
       if (!(body.sid_baseline || body.sid_analysis)) { show_toast('missing sid', 'err'); return false; }
-      if (type === 'force_segment') body.segment = $id('dash-ov-segment').value;
+      body.segment = $id('dash-ov-segment').value;
     }
     api('POST', '/api/overrides', body).then(function(res){
       if (res.status === 'inserted')      show_toast('Inserted override #' + res.id, 'ok');

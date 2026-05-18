@@ -35,6 +35,10 @@ function init_refs() {
   els.fSidAWrap     = $('#f-sid-analysis-wrap');
   els.fSegment      = $('#f-segment');
   els.fSegmentWrap  = $('#f-segment-wrap');
+  els.fSegB         = $('#f-seg-baseline');
+  els.fSegBWrap     = $('#f-seg-baseline-wrap');
+  els.fSegA         = $('#f-seg-analysis');
+  els.fSegAWrap     = $('#f-seg-analysis-wrap');
   els.fNote         = $('#f-note');
   els.fGlobal       = $('#f-global');
   els.toast         = $('#toast');
@@ -69,22 +73,26 @@ async function api(method, path, body) {
 
 // ── Form-type visibility wiring ──────────────────────────────────────────
 //
-// force_match    needs both sids; no side; no segment
-// force_no_match needs side + the matching sid; no segment
-// force_segment  needs side + the matching sid + segment
+// force_match      needs both sids; optional segment (pair segment, default auto-detect)
+// force_no_match   needs both sids; per-side segment dropdowns
+// force_segment    needs side + the matching sid + segment
 function refresh_form_visibility() {
   const type = els.fType.value;
   const side = els.fSide.value;
 
-  const show_match    = type === 'force_match';
-  const show_segment  = type === 'force_segment';
-  const need_side     = type !== 'force_match';
+  const show_both_sids = type === 'force_match' || type === 'force_no_match';
+  const show_segment   = type === 'force_segment' || type === 'force_match';
+  const show_unlink    = type === 'force_no_match';
+  const need_side      = type === 'force_segment';
 
-  els.fSideWrap.style.display    = need_side                 ? '' : 'none';
-  els.fSegmentWrap.style.display = show_segment              ? '' : 'none';
-  // Sid fields: force_match shows both; otherwise show only the selected side.
-  els.fSidBWrap.style.display = (show_match || (need_side && side === 'baseline')) ? '' : 'none';
-  els.fSidAWrap.style.display = (show_match || (need_side && side === 'analysis')) ? '' : 'none';
+  els.fSideWrap.style.display    = need_side                     ? '' : 'none';
+  els.fSegmentWrap.style.display = show_segment                  ? '' : 'none';
+  // Per-side segment dropdowns for no-match unlink
+  if (els.fSegBWrap)  els.fSegBWrap.style.display  = show_unlink ? '' : 'none';
+  if (els.fSegAWrap)  els.fSegAWrap.style.display  = show_unlink ? '' : 'none';
+  // Sid fields: match + no-match show both; segment shows only selected side
+  els.fSidBWrap.style.display = (show_both_sids || (need_side && side === 'baseline')) ? '' : 'none';
+  els.fSidAWrap.style.display = (show_both_sids || (need_side && side === 'analysis')) ? '' : 'none';
 }
 
 // ── Render: overrides list ───────────────────────────────────────────────
@@ -109,9 +117,12 @@ function scope_badge(ov) {
 }
 
 function sid_cell(ov) {
-  // Match shows both; others show whichever is set + a tiny "(side)" hint.
+  // Match + no-match show both sids; segment shows whichever is set.
   if (ov.sid_baseline && ov.sid_analysis) {
-    return '<span class="sid">' + esc(ov.sid_baseline) + ' ↔ ' + esc(ov.sid_analysis) + '</span>';
+    const seg_hint = ov._type === 'force_no_match'
+      ? ' <span class="muted">→ ' + esc(ov.segment_baseline ?? 'Lost') + ' / ' + esc(ov.segment_analysis ?? 'New') + '</span>'
+      : '';
+    return '<span class="sid">' + esc(ov.sid_baseline) + ' ↔ ' + esc(ov.sid_analysis) + '</span>' + seg_hint;
   }
   if (ov.sid_baseline) return '<span class="sid">' + esc(ov.sid_baseline) + '</span> <span class="muted">(baseline)</span>';
   if (ov.sid_analysis) return '<span class="sid">' + esc(ov.sid_analysis) + '</span> <span class="muted">(analysis)</span>';
@@ -159,8 +170,8 @@ function render_overrides(data) {
       <div class="row-head" style="justify-content:flex-end">Actions</div>
   `;
   const body = all.map(ov => `
-      <div class="row-detail">${pill_for_type(ov._type)}${ov._type === 'force_segment' ? ' <span class="muted">→ ' + esc(ov.segment) + '</span>' : ''}</div>
-      <div class="row-detail">${sid_cell(ov)}${ov.note ? '<span class="note">' + esc(ov.note) + '</span>' : ''}</div>
+      <div class="row-detail">${pill_for_type(ov._type)}${ov._type === 'force_segment' ? ' <span class="muted">→ ' + esc(ov.segment) + '</span>' : ''}${ov._type === 'force_match' && ov.segment_baseline ? ' <span class="muted">→ ' + esc(ov.segment_baseline) + '</span>' : ''}</div>
+      <div class="row-detail">${sid_cell(ov)}</div>
       <div class="row-detail">${scope_badge(ov)}</div>
       <div class="row-detail">${state_badge(ov)}</div>
       <div class="row-detail actions">${row_actions(ov)}</div>
@@ -206,14 +217,23 @@ async function on_submit(e) {
     global: els.fGlobal.checked || undefined,
   };
 
-  if (type === 'force_match') {
+  if (type === 'force_match' || type === 'force_no_match') {
     body.sid_baseline = els.fSidB.value.trim();
     body.sid_analysis = els.fSidA.value.trim();
     if (!body.sid_baseline || !body.sid_analysis) {
-      toast('Force match needs both sanction IDs.', 'error');
+      toast(type === 'force_match' ? 'Force match needs both sanction IDs.' : 'Unlink needs both sanction IDs.', 'error');
       return;
     }
+    if (type === 'force_match') {
+      // Single segment for the pair (uses segment_baseline as carrier)
+      body.segment_baseline = els.fSegment.value || undefined;
+    }
+    if (type === 'force_no_match') {
+      body.segment_baseline = els.fSegB ? els.fSegB.value : 'Lost';
+      body.segment_analysis = els.fSegA ? els.fSegA.value : 'New';
+    }
   } else {
+    // force_segment
     body.side = els.fSide.value;
     if (body.side === 'baseline') body.sid_baseline = els.fSidB.value.trim();
     else                          body.sid_analysis = els.fSidA.value.trim();
@@ -221,9 +241,7 @@ async function on_submit(e) {
       toast('Missing sanction ID.', 'error');
       return;
     }
-    if (type === 'force_segment') {
-      body.segment = els.fSegment.value;
-    }
+    body.segment = els.fSegment.value;
   }
 
   try {

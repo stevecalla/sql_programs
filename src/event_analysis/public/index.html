@@ -42,7 +42,7 @@
             Type
             <select id="f-type" name="type" required>
               <option value="force_match">Force match (link two events)</option>
-              <option value="force_no_match">Force no-match (Lost / New)</option>
+              <option value="force_no_match">Force no-match (unlink pair)</option>
               <option value="force_segment">Force segment</option>
             </select>
           </label>
@@ -74,6 +74,33 @@
               <option value="Shifted">Shifted</option>
               <option value="Lost">Lost</option>
               <option value="New">New</option>
+              <option value="Recovered">Recovered</option>
+              <option value="Tried to Return">Tried to Return</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="form-row" id="f-seg-baseline-wrap" style="display:none">
+          <label class="form-label">
+            Baseline event → segment
+            <select id="f-seg-baseline" name="segment_baseline">
+              <option value="Lost" selected>Lost</option>
+              <option value="Retained">Retained</option>
+              <option value="Shifted">Shifted</option>
+              <option value="New">New</option>
+              <option value="Recovered">Recovered</option>
+              <option value="Tried to Return">Tried to Return</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row" id="f-seg-analysis-wrap" style="display:none">
+          <label class="form-label">
+            Analysis event → segment
+            <select id="f-seg-analysis" name="segment_analysis">
+              <option value="New" selected>New</option>
+              <option value="Retained">Retained</option>
+              <option value="Shifted">Shifted</option>
+              <option value="Lost">Lost</option>
               <option value="Recovered">Recovered</option>
               <option value="Tried to Return">Tried to Return</option>
             </select>

@@ -76,7 +76,8 @@ async function load_overrides({ baseline_year, analysis_year, silent = false } =
     const conn = await mysqlP.createConnection(cfg);
     try {
       const sql = `
-        SELECT id, override_type, sid_baseline, sid_analysis, segment, note,
+        SELECT id, override_type, sid_baseline, sid_analysis, segment,
+               segment_baseline, segment_analysis, note,
                baseline_year, analysis_year, approved, approval_state,
                event_signature_baseline, event_signature_analysis
           FROM \`${TABLE_NAME}\`
@@ -126,9 +127,17 @@ async function load_overrides({ baseline_year, analysis_year, silent = false } =
     else scoped_count++;
 
     if (r.override_type === 'force_match') {
-      force_match.push(common);
+      force_match.push({
+        ...common,
+        segment_baseline: r.segment_baseline ?? null,
+        segment_analysis: r.segment_analysis ?? null,
+      });
     } else if (r.override_type === 'force_no_match') {
-      force_no_match.push(common);
+      force_no_match.push({
+        ...common,
+        segment_baseline: r.segment_baseline ?? null,
+        segment_analysis: r.segment_analysis ?? null,
+      });
     } else if (r.override_type === 'force_segment') {
       force_segment.push({ ...common, segment: r.segment });
     }
@@ -196,6 +205,16 @@ function apply_overrides(segments, baseline_active, analysis_active, overrides) 
     stale_warnings.push(`override #${ov.id} (${sid_label}) is stale: ${details}`);
   };
 
+  // Shared segment key mapping (display name → internal key)
+  const seg_key_map = {
+    'Retained':        'retained',
+    'Shifted':         'shifted',
+    'Lost':            'attrited',
+    'New':             'new',
+    'Recovered':       'recovered',
+    'Tried to Return': 'triedToReturn',
+  };
+
   // Helper: remove an event from all segment arrays
   const remove_from_all = (sid_baseline, sid_analysis) => {
     const keys = ['retained','shifted','attrited','new','recovered','triedToReturn'];
@@ -209,6 +228,9 @@ function apply_overrides(segments, baseline_active, analysis_active, overrides) 
   };
 
   // ── 1. force_match ───────────────────────────────────────────────────────────
+  // Links two events as a pair. The `segment` column (via segment_baseline as
+  // the carrier) controls which bucket the pair lands in. Default: Retained.
+  // Valid pair segments: Retained, Shifted, Recovered, Tried to Return.
   for (const ov of (overrides.force_match ?? [])) {
     const e25 = find_25(ov.sid_baseline);
     const e26 = find_26(ov.sid_analysis);
@@ -219,59 +241,75 @@ function apply_overrides(segments, baseline_active, analysis_active, overrides) 
     // Remove both events from any existing segment
     remove_from_all(ov.sid_baseline, ov.sid_analysis);
 
-    // Determine segment: Retained (same month) or Shifted (different month)
-    const seg = e25.month === e26.month ? 'Retained' : 'Shifted';
+    // Segment for the pair: explicit override via segment_baseline column,
+    // otherwise auto-detect from month (same → Retained, different → Shifted)
+    const auto_seg = e25.month === e26.month ? 'Retained' : 'Shifted';
+    const seg = ov.segment_baseline ?? auto_seg;
     const conf = 'Override';
     const record = { e25, e26, seg, conf, note: ov.note ?? '', override_id: ov.id, approved: ov.approved };
 
-    if (seg === 'Retained') {
-      segments.retained = segments.retained ?? [];
-      segments.retained.push(record);
-    } else {
-      segments.shifted = segments.shifted ?? [];
-      segments.shifted.push(record);
-    }
+    const target_key = seg_key_map[seg] ?? 'retained';
+    segments[target_key] = segments[target_key] ?? [];
+    segments[target_key].push(record);
 
-    const applied_record = { type: 'force_match', sid_baseline: ov.sid_baseline, sid_analysis: ov.sid_analysis, result: seg, note: ov.note, approved: ov.approved, override_id: ov.id };
+    const applied_record = {
+      type: 'force_match', sid_baseline: ov.sid_baseline, sid_analysis: ov.sid_analysis,
+      result: seg,
+      note: ov.note, approved: ov.approved, override_id: ov.id,
+    };
     flag_stale(ov, applied_record, e25, e26);
     applied.push(applied_record);
   }
 
-  // ── 2. force_no_match ────────────────────────────────────────────────────────
+  // ── 2. force_no_match (unlink) ────────────────────────────────────────────────
+  //
+  // Always requires both sids — if you're unmatching, there's a pair to break.
+  // Each side gets its own segment assignment:
+  //   segment_baseline → where the baseline event lands (default Lost)
+  //   segment_analysis → where the analysis event lands (default New)
+
   for (const ov of (overrides.force_no_match ?? [])) {
     const sid_baseline = ov.sid_baseline ?? null;
     const sid_analysis = ov.sid_analysis ?? null;
 
-    if (!sid_baseline && !sid_analysis) { warnings.push('force_no_match entry has neither sid_baseline nor sid_analysis'); continue; }
+    if (!sid_baseline || !sid_analysis) {
+      warnings.push(`force_no_match requires both sid_baseline and sid_analysis (got baseline=${sid_baseline}, analysis=${sid_analysis})`);
+      continue;
+    }
 
-    // Remove from all segments
+    const e25 = find_25(sid_baseline);
+    const e26 = find_26(sid_analysis);
+
+    if (!e25) { warnings.push(`force_no_match: sid_baseline "${sid_baseline}" not found in baseline active events`); }
+    if (!e26) { warnings.push(`force_no_match: sid_analysis "${sid_analysis}" not found in analysis active events`); }
+    if (!e25 && !e26) continue;
+
+    // Remove both events from any existing segment
     remove_from_all(sid_baseline, sid_analysis);
 
-    // Re-add as Attrited (baseline event) or New (analysis-only event)
-    if (sid_baseline) {
-      const e25 = find_25(sid_baseline);
-      if (e25) {
-        segments.attrited = segments.attrited ?? [];
-        segments.attrited.push({ e25, e26: null, seg: 'Lost', conf: 'Override', note: ov.note ?? '', override_id: ov.id, approved: ov.approved });
-        const rec = { type: 'force_no_match', sid_baseline, result: 'Lost', note: ov.note, approved: ov.approved, override_id: ov.id };
-        flag_stale(ov, rec, e25, null);
-        applied.push(rec);
-      } else {
-        warnings.push(`force_no_match: sid_baseline "${sid_baseline}" not found in baseline active events`);
-      }
+    // Place each side into its designated segment
+    const seg_b = ov.segment_baseline ?? 'Lost';
+    const seg_a = ov.segment_analysis ?? 'New';
+
+    if (e25) {
+      const key_b = seg_key_map[seg_b] ?? 'attrited';
+      segments[key_b] = segments[key_b] ?? [];
+      segments[key_b].push({ e25, e26: null, seg: seg_b, conf: 'Override', note: ov.note ?? '', override_id: ov.id, approved: ov.approved });
     }
-    if (sid_analysis) {
-      const e26 = find_26(sid_analysis);
-      if (e26) {
-        segments.new = segments.new ?? [];
-        segments.new.push({ e25: null, e26, seg: 'New', conf: 'Override', note: ov.note ?? '', override_id: ov.id, approved: ov.approved });
-        const rec = { type: 'force_no_match', sid_analysis, result: 'New', note: ov.note, approved: ov.approved, override_id: ov.id };
-        flag_stale(ov, rec, null, e26);
-        applied.push(rec);
-      } else {
-        warnings.push(`force_no_match: sid_analysis "${sid_analysis}" not found in analysis active events`);
-      }
+    if (e26) {
+      const key_a = seg_key_map[seg_a] ?? 'new';
+      segments[key_a] = segments[key_a] ?? [];
+      segments[key_a].push({ e25: null, e26, seg: seg_a, conf: 'Override', note: ov.note ?? '', override_id: ov.id, approved: ov.approved });
     }
+
+    const rec = {
+      type: 'force_no_match', sid_baseline, sid_analysis,
+      result_baseline: seg_b, result_analysis: seg_a,
+      result: `${seg_b} / ${seg_a}`,
+      note: ov.note, approved: ov.approved, override_id: ov.id,
+    };
+    flag_stale(ov, rec, e25, e26);
+    applied.push(rec);
   }
 
   // ── 3. force_segment ─────────────────────────────────────────────────────────
@@ -322,14 +360,6 @@ function apply_overrides(segments, baseline_active, analysis_active, overrides) 
     match_record.override_id = ov.id;
     match_record.approved    = ov.approved;
 
-    const seg_key_map = {
-      'Retained':        'retained',
-      'Shifted':         'shifted',
-      'Lost':            'attrited',
-      'New':             'new',
-      'Recovered':       'recovered',
-      'Tried to Return': 'triedToReturn',
-    };
     const target_key = seg_key_map[target_seg];
     segments[target_key] = segments[target_key] ?? [];
     segments[target_key].push(match_record);
@@ -382,8 +412,6 @@ async function mark_overrides_stale(ids, { conn = null, silent = false } = {}) {
 
 function summarise_overrides(applied, warnings, stats, stale_warnings = []) {
   if (!applied.length && !warnings.length && !stats && !stale_warnings?.length) return null;
-  // Stats may not include the stale count yet — derive it from the applied
-  // records so callers always see a consistent total.
   const stale_count = applied.filter(a => a.stale).length;
   return {
     total_applied:  applied.length,

@@ -305,55 +305,80 @@ describe('Step 8 — write endpoints', () => {
     assert.equal(rows[0].analysis_year, null, 'global: true should produce NULL analysis_year');
   });
 
-  // ── POST /api/overrides force_no_match ─────────────────────────────────
+  // ── POST /api/overrides force_no_match (unlink) ──────────────────────────
 
-  test('POST /api/overrides force_no_match without side returns 400', async () => {
+  test('POST /api/overrides force_no_match without both sids returns 400', async () => {
     const res = await fetch(`${base}/api/overrides`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'force_no_match', sid_baseline: 'STEP8-NM-25' }),
     });
     assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /both/, 'should mention both sids required');
   });
 
-  test('POST /api/overrides force_no_match baseline-side inserts with sid_baseline only', async () => {
+  test('POST /api/overrides force_no_match inserts with both sids and default segments', async () => {
     const res = await fetch(`${base}/api/overrides`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'force_no_match',
-        side: 'baseline',
         sid_baseline: 'STEP8-NMB-25',
-        note: 'cancelled',
+        sid_analysis: 'STEP8-NMA-26',
+        note: 'unlinked pair',
       }),
     });
     assert.equal(res.status, 201);
     const body = await res.json();
-    assert.equal(body.side, 'baseline');
 
     const c = await step8_db();
-    const [rows] = await c.query('SELECT sid_baseline, sid_analysis FROM event_analysis_overrides WHERE id = ?', [body.id]);
+    const [rows] = await c.query(
+      'SELECT sid_baseline, sid_analysis, segment_baseline, segment_analysis FROM event_analysis_overrides WHERE id = ?',
+      [body.id]
+    );
     assert.equal(rows[0].sid_baseline, 'STEP8-NMB-25');
-    assert.equal(rows[0].sid_analysis, null);
+    assert.equal(rows[0].sid_analysis, 'STEP8-NMA-26');
+    assert.equal(rows[0].segment_baseline, 'Lost', 'default baseline segment');
+    assert.equal(rows[0].segment_analysis, 'New', 'default analysis segment');
   });
 
-  test('POST /api/overrides force_no_match analysis-side inserts with sid_analysis only', async () => {
+  test('POST /api/overrides force_no_match accepts custom per-side segments', async () => {
     const res = await fetch(`${base}/api/overrides`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'force_no_match',
-        side: 'analysis',
-        sid_analysis: 'STEP8-NMA-26',
+        sid_baseline: 'STEP8-NM2-25',
+        sid_analysis: 'STEP8-NM2-26',
+        segment_baseline: 'Tried to Return',
+        segment_analysis: 'Recovered',
       }),
     });
     assert.equal(res.status, 201);
     const body = await res.json();
 
     const c = await step8_db();
-    const [rows] = await c.query('SELECT sid_baseline, sid_analysis FROM event_analysis_overrides WHERE id = ?', [body.id]);
-    assert.equal(rows[0].sid_baseline, null);
-    assert.equal(rows[0].sid_analysis, 'STEP8-NMA-26');
+    const [rows] = await c.query(
+      'SELECT segment_baseline, segment_analysis FROM event_analysis_overrides WHERE id = ?',
+      [body.id]
+    );
+    assert.equal(rows[0].segment_baseline, 'Tried to Return');
+    assert.equal(rows[0].segment_analysis, 'Recovered');
+  });
+
+  test('POST /api/overrides force_no_match rejects invalid segment_baseline', async () => {
+    const res = await fetch(`${base}/api/overrides`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'force_no_match',
+        sid_baseline: 'STEP8-NM3-25',
+        sid_analysis: 'STEP8-NM3-26',
+        segment_baseline: 'NotReal',
+      }),
+    });
+    assert.equal(res.status, 400);
   });
 
   // ── POST /api/overrides force_segment ──────────────────────────────────
@@ -444,8 +469,8 @@ describe('Step 8 — write endpoints', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'force_no_match',
-        side: 'baseline',
         sid_baseline: 'STEP8-APR-25',
+        sid_analysis: 'STEP8-APR-26',
       }),
     });
     assert.equal(ins.status, 201);
@@ -474,8 +499,8 @@ describe('Step 8 — write endpoints', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'force_no_match',
-        side: 'baseline',
         sid_baseline: 'STEP8-APR-BY',
+        sid_analysis: 'STEP8-APR-BY-26',
       }),
     });
     const ins_body = await ins.json();
@@ -499,8 +524,8 @@ describe('Step 8 — write endpoints', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'force_no_match',
-        side: 'baseline',
         sid_baseline: 'STEP8-UNAPR-25',
+        sid_analysis: 'STEP8-UNAPR-26',
       }),
     });
     const ins_body = await ins.json();

@@ -488,11 +488,11 @@ Edit `data/overrides.json` to add overrides. **Remove the leading `_` from keys 
 ```
 Result: classified as **Retained** (if same month) or **Shifted** (if different month).
 
-**`force_no_match`** — prevent an event from matching anything:
+**`force_no_match`** — unlink a matched pair (requires both sids):
 ```json
-{ "sid_baseline": "311157-Adult Race", "note": "Confirmed permanently cancelled" }
+{ "sid_baseline": "311157-Adult Race", "sid_analysis": "354307-Adult Race", "note": "Not actually the same event" }
 ```
-Result: prior-year event → **Lost**. Use `sid_analysis` instead to force a current-year event to **New**.
+Result: baseline event → **Lost** (default), analysis event → **New** (default). Override per-side segments with `segment_baseline` / `segment_analysis`.
 
 **`force_segment`** — override a segment classification on any event:
 ```json
@@ -760,7 +760,7 @@ Uses Node's built-in `node:test` runner (Node 18+) — no extra dependencies. Ou
 | **Step 1 — `ensure_overrides_table()`** | Idempotent — a second call reports "already exists" and returns `false` (no fresh CREATE). |
 | **Step 2 — `migrate_overrides_to_db()`** | `--dry-run` does not insert rows or rename the JSON file. |
 | **Step 3 — `load_overrides()` year scoping** | Scoped rows return for matching year pair; excluded for mismatched year pair; global rows (`NULL`/`NULL`) return for every year pair; `stats` counts split globals vs scoped correctly; `active=0` rows are excluded; `approved` flag surfaces as a boolean. |
-| **Step 3 — `apply_overrides()`** | `force_match` same month → `Retained`; different month → `Shifted`. `force_no_match` with a baseline sid → `Lost`; with an analysis sid → `New`. `force_segment` moves a record between segment arrays. Invalid segment names produce a warning. `null` overrides argument is handled gracefully. |
+| **Step 3 — `apply_overrides()`** | `force_match` same month → `Retained`; different month → `Shifted`. `force_no_match` requires both sids — unlinks the pair with per-side segments (defaults: baseline → `Lost`, analysis → `New`). `force_segment` moves a record between segment arrays. Invalid segment names produce a warning. `null` overrides argument is handled gracefully. |
 | **Step 3 — `summarise_overrides()`** | Returns `null` when there's nothing to report; returns a populated summary with `stats` when given input. |
 
 ### Database safety
@@ -825,7 +825,7 @@ All write endpoints wrap the existing `cmd_*` functions in `ask.js` — same DB 
 | `type` | Required body fields | Wraps |
 |---|---|---|
 | `force_match` | `sid_baseline`, `sid_analysis` | `cmd_add_match` |
-| `force_no_match` | `side: 'baseline'\|'analysis'`, `sid_<side>` | `cmd_add_no_match` |
+| `force_no_match` | `sid_baseline`, `sid_analysis`; optional `segment_baseline` (default Lost), `segment_analysis` (default New) | `cmd_add_no_match` |
 | `force_segment` | `side`, `sid_<side>`, `segment` (one of `Retained`, `Shifted`, `Lost`, `New`, `Recovered`, `Tried to Return`) | `cmd_add_segment` |
 
 `note` and `global` are optional on every type. `global: true` writes `baseline_year` / `analysis_year` as `NULL` so the override applies across every year comparison.
@@ -841,7 +841,7 @@ curl -X POST http://localhost:8016/api/overrides \
 # Mark a 2025 event as Lost (no 2026 equivalent)
 curl -X POST http://localhost:8016/api/overrides \
   -H 'Content-Type: application/json' \
-  -d '{"type":"force_no_match","side":"baseline","sid_baseline":"311157-Adult Race","note":"confirmed cancelled"}'
+  -d '{"type":"force_no_match","sid_baseline":"311157-Adult Race","sid_analysis":"354307-Adult Race","note":"confirmed not same event"}'
 
 # Force a segment label
 curl -X POST http://localhost:8016/api/overrides \
@@ -905,7 +905,7 @@ What it shows:
 - **Action buttons per row** — `✓ Approve` / `↶ Unapprove` (mutually exclusive based on state) and `✕ Delete` (soft-delete via `DELETE /api/overrides/:sid`)
 - **Add override form** — type selector with dynamic fields:
   - `force_match` → both sanction IDs required
-  - `force_no_match` → side selector (`baseline` / `analysis`) + one sanction ID
+  - `force_no_match` → both sanction IDs required + per-side segment dropdowns (baseline → Lost, analysis → New defaults)
   - `force_segment` → side + sanction ID + segment selector
   - Optional note and a `Global (any year pair)` checkbox (writes NULL/NULL year scope)
 - **Toast notifications** for every action's success or error

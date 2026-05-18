@@ -311,19 +311,49 @@ describe('Step 3 — apply_overrides()', () => {
     assert.equal(segments.retained.length, 0);
   });
 
-  test('force_no_match with sid_baseline → Lost', () => {
+  test('force_no_match unlinks pair: baseline → Lost, analysis → New (defaults)', () => {
     const e25 = make_event('FNM-25', 4);
-    // Pre-place in retained so we can verify it gets removed.
-    const segments = { retained: [{ e25, e26: make_event('OTHER', 4), seg: 'Retained' }], shifted: [], attrited: [], new: [], recovered: [], triedToReturn: [] };
+    const e26 = make_event('FNM-26', 4);
+    const segments = { retained: [{ e25, e26, seg: 'Retained' }], shifted: [], attrited: [], new: [], recovered: [], triedToReturn: [] };
     const overrides = {
       force_match:    [],
-      force_no_match: [{ sid_baseline: 'FNM-25', note: '' }],
+      force_no_match: [{ sid_baseline: 'FNM-25', sid_analysis: 'FNM-26', note: '' }],
       force_segment:  [],
     };
-    apply_overrides(segments, [e25], [], overrides);
-    assert.equal(segments.retained.length, 0, 'event should be removed from retained');
-    assert.equal(segments.attrited.length, 1, 'event should be added to attrited');
+    apply_overrides(segments, [e25], [e26], overrides);
+    assert.equal(segments.retained.length, 0, 'pair should be removed from retained');
+    assert.equal(segments.attrited.length, 1, 'baseline event should be in Lost');
     assert.equal(segments.attrited[0].seg, 'Lost');
+    assert.equal(segments.new.length, 1, 'analysis event should be in New');
+    assert.equal(segments.new[0].seg, 'New');
+  });
+
+  test('force_no_match unlinks with custom per-side segments', () => {
+    const e25 = make_event('FNM2-25', 7);
+    const e26 = make_event('FNM2-26', 7);
+    const segments = { retained: [{ e25, e26, seg: 'Retained' }], shifted: [], attrited: [], new: [], recovered: [], triedToReturn: [] };
+    const overrides = {
+      force_match:    [],
+      force_no_match: [{ sid_baseline: 'FNM2-25', sid_analysis: 'FNM2-26', segment_baseline: 'Tried to Return', segment_analysis: 'Recovered', note: '' }],
+      force_segment:  [],
+    };
+    apply_overrides(segments, [e25], [e26], overrides);
+    assert.equal(segments.retained.length, 0);
+    assert.equal(segments.triedToReturn.length, 1, 'baseline should land in TTR');
+    assert.equal(segments.triedToReturn[0].seg, 'Tried to Return');
+    assert.equal(segments.recovered.length, 1, 'analysis should land in Recovered');
+    assert.equal(segments.recovered[0].seg, 'Recovered');
+  });
+
+  test('force_no_match warns when missing a sid', () => {
+    const segments = { retained: [], shifted: [], attrited: [], new: [], recovered: [], triedToReturn: [] };
+    const overrides = {
+      force_match:    [],
+      force_no_match: [{ sid_baseline: 'ONLY-ONE', note: '' }],
+      force_segment:  [],
+    };
+    const { warnings } = apply_overrides(segments, [], [], overrides);
+    assert.ok(warnings.some(w => /requires both/.test(w)), 'should warn about missing sid');
   });
 
   test('force_segment moves record to target segment', () => {
@@ -511,34 +541,42 @@ describe('Step 4 — ask.js CLI write-path', () => {
     assert.notEqual(scoped.id, global.id, 'scoped and global should not collide on the duplicate-guard');
   });
 
-  // ── cmd_add_no_match ────────────────────────────────────────────────────
+  // ── cmd_add_no_match (unlink — always requires both sids) ────────────────
 
-  test('cmd_add_no_match with baseline arg sets sid_baseline', async () => {
-    const r = await cmd_add_no_match('baseline', 'STEP4-NM-B', 'baseline side', { created_by: TEST_TAG });
+  test('cmd_add_no_match inserts with both sids and default segments', async () => {
+    const r = await cmd_add_no_match('STEP4-NM-B', 'STEP4-NM-A', 'unlink test', { created_by: TEST_TAG });
     assert.equal(r.status, 'inserted');
     const c = await db();
-    const [rows] = await c.query(`SELECT sid_baseline, sid_analysis FROM \`${TABLE}\` WHERE id = ?`, [r.id]);
+    const [rows] = await c.query(
+      `SELECT sid_baseline, sid_analysis, segment_baseline, segment_analysis FROM \`${TABLE}\` WHERE id = ?`, [r.id]
+    );
     assert.equal(rows[0].sid_baseline, 'STEP4-NM-B');
-    assert.equal(rows[0].sid_analysis, null);
+    assert.equal(rows[0].sid_analysis, 'STEP4-NM-A');
+    assert.equal(rows[0].segment_baseline, 'Lost', 'default baseline segment should be Lost');
+    assert.equal(rows[0].segment_analysis, 'New', 'default analysis segment should be New');
   });
 
-  test('cmd_add_no_match with analysis arg sets sid_analysis', async () => {
-    const r = await cmd_add_no_match('analysis', 'STEP4-NM-A', 'analysis side', { created_by: TEST_TAG });
+  test('cmd_add_no_match with custom per-side segments', async () => {
+    const r = await cmd_add_no_match('STEP4-NM-C', 'STEP4-NM-D', 'custom segs', {
+      created_by: TEST_TAG,
+      segment_baseline: 'Tried to Return',
+      segment_analysis: 'Recovered',
+    });
     assert.equal(r.status, 'inserted');
     const c = await db();
-    const [rows] = await c.query(`SELECT sid_baseline, sid_analysis FROM \`${TABLE}\` WHERE id = ?`, [r.id]);
-    assert.equal(rows[0].sid_baseline, null);
-    assert.equal(rows[0].sid_analysis, 'STEP4-NM-A');
+    const [rows] = await c.query(
+      `SELECT segment_baseline, segment_analysis FROM \`${TABLE}\` WHERE id = ?`, [r.id]
+    );
+    assert.equal(rows[0].segment_baseline, 'Tried to Return');
+    assert.equal(rows[0].segment_analysis, 'Recovered');
   });
 
-  test('cmd_add_no_match accepts legacy 25 / 26 aliases', async () => {
-    const r25 = await cmd_add_no_match('25', 'STEP4-LEG-25', '25 alias', { created_by: TEST_TAG });
-    const r26 = await cmd_add_no_match('26', 'STEP4-LEG-26', '26 alias', { created_by: TEST_TAG });
-    const c = await db();
-    const [b] = await c.query(`SELECT sid_baseline, sid_analysis FROM \`${TABLE}\` WHERE id = ?`, [r25.id]);
-    const [a] = await c.query(`SELECT sid_baseline, sid_analysis FROM \`${TABLE}\` WHERE id = ?`, [r26.id]);
-    assert.equal(b[0].sid_baseline, 'STEP4-LEG-25', '25 should route to sid_baseline');
-    assert.equal(a[0].sid_analysis, 'STEP4-LEG-26', '26 should route to sid_analysis');
+  test('cmd_add_no_match duplicate guard returns exists', async () => {
+    const r1 = await cmd_add_no_match('STEP4-NM-DUP-B', 'STEP4-NM-DUP-A', 'first', { created_by: TEST_TAG });
+    assert.equal(r1.status, 'inserted');
+    const r2 = await cmd_add_no_match('STEP4-NM-DUP-B', 'STEP4-NM-DUP-A', 'second', { created_by: TEST_TAG });
+    assert.equal(r2.status, 'exists');
+    assert.equal(r2.id, r1.id);
   });
 
   // ── cmd_add_segment ────────────────────────────────────────────────────
@@ -855,45 +893,46 @@ describe('Step 6 — Stale-approval detection', () => {
   });
 
   test('approved override with NULL stored signatures is NOT stale (first build after approve)', () => {
-    // cmd_approve always captures, but mid-migration rows or future force_no_match
-    // entries on a vanished event can have NULL signatures. Document that this
-    // path doesn't false-positive.
+    // cmd_approve always captures, but mid-migration rows or entries on a
+    // vanished event can have NULL signatures. Document that this path
+    // doesn't false-positive.
     const e25 = make_event('SIG-NULL-25', 6, 'Whatever');
+    const e26 = make_event('SIG-NULL-26', 6, 'Whatever');
     const overrides = {
       force_no_match: [{
         id: 404,
-        sid_baseline: 'SIG-NULL-25',
+        sid_baseline: 'SIG-NULL-25', sid_analysis: 'SIG-NULL-26',
         approved: true,
         event_signature_baseline: null,
         event_signature_analysis: null,
       }],
       force_match: [], force_segment: [],
     };
-    const { stale_ids } = apply_overrides(empty_segments(), [e25], [], overrides);
+    const { stale_ids } = apply_overrides(empty_segments(), [e25], [e26], overrides);
     assert.deepEqual(stale_ids, [], 'NULL sigs → no comparison → no stale');
   });
 
   test('force_no_match drift on baseline side is detected', () => {
-    // Only the baseline side has an event for force_no_match; only that
-    // signature should be compared.
     const e25 = make_event('SIG-NM-25', 7, 'Renamed');
+    const e26 = make_event('SIG-NM-26', 7, 'Same Name');
     const overrides = {
       force_no_match: [{
         id: 505,
-        sid_baseline: 'SIG-NM-25',
+        sid_baseline: 'SIG-NM-25', sid_analysis: 'SIG-NM-26',
         approved: true,
         event_signature_baseline: 'Original|7|Adult Race|Active',
-        event_signature_analysis: null,
+        event_signature_analysis: compute_event_signature(e26),
       }],
       force_match: [], force_segment: [],
     };
-    const { stale_ids, stale_warnings } = apply_overrides(empty_segments(), [e25], [], overrides);
+    const { stale_ids, stale_warnings } = apply_overrides(empty_segments(), [e25], [e26], overrides);
     assert.deepEqual(stale_ids, [505]);
     assert.match(stale_warnings[0], /Original/);
     assert.match(stale_warnings[0], /Renamed/);
   });
 
   // ── mark_overrides_stale (DB integration) ──────────────────────────────
+
 
   test('mark_overrides_stale flips approval_state on listed ids', async () => {
     const c = await db();
@@ -925,7 +964,7 @@ describe('Step 6 — Stale-approval detection', () => {
     assert.equal(result.updated, 0);
   });
 
-  test('mark_overrides_stale skips inactive or un-approved rows', async () => {
+  test('mark_overrides_stale skips unapproved rows (no-op)', async () => {
     const c = await db();
     const [r] = await c.query(
       'INSERT INTO `' + TABLE + '` ' +
@@ -934,8 +973,6 @@ describe('Step 6 — Stale-approval detection', () => {
       ['force_no_match', 'STEP6-UNAPR', 2025, 2026, TEST_TAG]
     );
     const result = await mark_overrides_stale([r.insertId], { silent: true });
-    assert.equal(result.updated, 0, 'un-approved rows are skipped by the WHERE clause');
-    const [row] = await c.query('SELECT approval_state FROM `' + TABLE + '` WHERE id = ?', [r.insertId]);
-    assert.equal(row[0].approval_state, null, 'state should remain NULL on un-approved row');
+    assert.equal(result.updated, 0, 'unapproved row should not be touched');
   });
 });

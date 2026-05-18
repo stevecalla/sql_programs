@@ -146,8 +146,26 @@ async function ensure_overrides_table({ silent = false } = {}) {
       upgrades.push('+ column event_signature_analysis');
     }
 
+    // ── Step 10: per-side segment columns for force_no_match unlink ────────
+    // When force_no_match carries both sids, these control which segment
+    // each side lands in (default Lost / New).
+    if (!await column_exists(conn, cfg.database, TABLE_NAME, 'segment_baseline')) {
+      await conn.query(
+        `ALTER TABLE \`${TABLE_NAME}\`
+           ADD COLUMN segment_baseline ENUM('Retained','Shifted','Lost','New','Recovered','Tried to Return') NULL AFTER segment`
+      );
+      upgrades.push('+ column segment_baseline');
+    }
+    if (!await column_exists(conn, cfg.database, TABLE_NAME, 'segment_analysis')) {
+      await conn.query(
+        `ALTER TABLE \`${TABLE_NAME}\`
+           ADD COLUMN segment_analysis ENUM('Retained','Shifted','Lost','New','Recovered','Tried to Return') NULL AFTER segment_baseline`
+      );
+      upgrades.push('+ column segment_analysis');
+    }
+
     if (upgrades.length && !silent) {
-      console.log(`  ✓ Year-scoping upgrade applied: ${upgrades.join(', ')}`);
+      console.log(`  ✓ Schema upgrade applied: ${upgrades.join(', ')}`);
     }
 
     // ── Step C: backfill year columns on any existing rows that are NULL ──

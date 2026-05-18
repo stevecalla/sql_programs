@@ -15,6 +15,12 @@ const payload_fields = `
   sid_baseline VARCHAR(64) NULL,
   sid_analysis VARCHAR(64) NULL,
   segment ENUM('Retained', 'Shifted', 'Lost', 'New', 'Recovered', 'Tried to Return') NULL,
+  -- Per-side segment assignment for force_no_match unlink (Step 10).
+  -- When force_no_match carries both sid_baseline AND sid_analysis,
+  -- segment_baseline controls where the baseline event lands (default Lost),
+  -- segment_analysis controls where the analysis event lands (default New).
+  segment_baseline ENUM('Retained', 'Shifted', 'Lost', 'New', 'Recovered', 'Tried to Return') NULL,
+  segment_analysis ENUM('Retained', 'Shifted', 'Lost', 'New', 'Recovered', 'Tried to Return') NULL,
   note TEXT NULL,
 `;
 

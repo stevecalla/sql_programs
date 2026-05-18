@@ -116,7 +116,7 @@ Three override types are applied after automatic matching:
 | Type | Effect |
 |---|---|
 | `force_match` | Pair two specific events → Retained (same month) or Shifted (different month) |
-| `force_no_match` | Prevent an event from matching → Lost (baseline sid) or New (analysis sid) |
+| `force_no_match` | Unlink a matched pair — requires both sids; assigns per-side segments (default: baseline → Lost, analysis → New) via `segment_baseline` / `segment_analysis` columns |
 | `force_segment` | Force any event into a specific segment (`Retained` / `Shifted` / `Lost` / `New` / `Recovered` / `Tried to Return`) |
 
 **Read path:** `src/overrides.js → load_overrides()` is async, year-scoped, and queries the DB for `active = 1` rows matching the current `BASELINE_YEAR` / `ANALYSIS_YEAR` plus any globals (both year columns `NULL`). Unapproved rows still apply but emit a build-time warning.
@@ -173,7 +173,7 @@ Lives at the repo root (`sql_programs/server_event_analysis_8016.js`) alongside 
 
 | Endpoint | Body | Wraps |
 |---|---|---|
-| `POST /api/overrides` | `{ type: 'force_match' \| 'force_no_match' \| 'force_segment', sid_baseline?, sid_analysis?, side?, segment?, note?, global? }` | `cmd_add_match` / `cmd_add_no_match` / `cmd_add_segment` |
+| `POST /api/overrides` | `{ type, sid_baseline?, sid_analysis?, side?, segment?, segment_baseline?, segment_analysis?, note?, global? }` — `force_no_match` requires both sids | `cmd_add_match` / `cmd_add_no_match` / `cmd_add_segment` |
 | `DELETE /api/overrides/:sid` | — | `cmd_remove_override` (soft-delete) |
 | `POST /api/approve/:sid` | optional `{ approved_by }` | `cmd_approve` (captures event signatures) |
 | `POST /api/unapprove/:sid` | — | `cmd_unapprove` |

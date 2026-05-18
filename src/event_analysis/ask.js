@@ -437,7 +437,8 @@ async function cmd_list_overrides() {
   const { baseline_year, analysis_year } = current_year_scope();
   const rows = await with_db(async conn => {
     const [r] = await conn.query(
-      `SELECT id, override_type, sid_baseline, sid_analysis, segment, note,
+      `SELECT id, override_type, sid_baseline, sid_analysis, segment,
+              segment_baseline, segment_analysis, note,
               baseline_year, analysis_year, approved, approval_state, created_at
          FROM \`${OV_TABLE}\`
         WHERE active = 1
@@ -482,8 +483,12 @@ async function cmd_list_overrides() {
     fm.forEach(r => console.log(`  #${r.id} ${scope_label(r)} ${approval_label(r)}  ${r.sid_baseline} ↔ ${r.sid_analysis}${r.note ? '  — ' + r.note : ''}`));
   }
   if (fnm.length) {
-    console.log(`Force no-match (${fnm.length}):`);
-    fnm.forEach(r => console.log(`  #${r.id} ${scope_label(r)} ${approval_label(r)}  ${r.sid_baseline ?? r.sid_analysis}${r.note ? '  — ' + r.note : ''}`));
+    console.log(`Force no-match / unlink (${fnm.length}):`);
+    fnm.forEach(r => {
+      const seg_b = r.segment_baseline ?? 'Lost';
+      const seg_a = r.segment_analysis ?? 'New';
+      console.log(`  #${r.id} ${scope_label(r)} ${approval_label(r)}  ${r.sid_baseline} → ${seg_b}  ↔  ${r.sid_analysis} → ${seg_a}${r.note ? '  — ' + r.note : ''}`);
+    });
   }
   if (fs2.length) {
     console.log(`Force segment (${fs2.length}):`);
@@ -502,7 +507,7 @@ async function cmd_list_overrides() {
   console.log('\nRun: node build_all.js   to re-apply\n');
 }
 
-async function cmd_add_match(sid_baseline, sid_analysis, note, { global = false, created_by = 'cli' } = {}) {
+async function cmd_add_match(sid_baseline, sid_analysis, note, { global = false, created_by = 'cli', segment = null } = {}) {
   if (!sid_baseline || !sid_analysis) {
     console.error('Usage: --add-override match <sid_baseline> <sid_analysis> ["note"] [--global]');
     process.exit(1);
@@ -530,11 +535,11 @@ async function cmd_add_match(sid_baseline, sid_analysis, note, { global = false,
 
     const [r] = await conn.query(
       `INSERT INTO \`${OV_TABLE}\`
-        (override_type, sid_baseline, sid_analysis, baseline_year, analysis_year, note, created_by, active)
-        VALUES ('force_match', ?, ?, ?, ?, ?, ?, 1)`,
-      [sid_baseline, sid_analysis, by, ay, note ?? null, created_by]
+        (override_type, sid_baseline, sid_analysis, segment_baseline, baseline_year, analysis_year, note, created_by, active)
+        VALUES ('force_match', ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [sid_baseline, sid_analysis, segment ?? null, by, ay, note ?? null, created_by]
     );
-    return { status: 'inserted', id: r.insertId };
+    return { status: 'inserted', id: r.insertId, segment: segment ?? null };
   });
 
   const scope = (by === null) ? 'global' : `${by}/${ay}`;
@@ -547,49 +552,73 @@ async function cmd_add_match(sid_baseline, sid_analysis, note, { global = false,
   return result;
 }
 
-async function cmd_add_no_match(year_arg, sid, note, { global = false, created_by = 'cli' } = {}) {
-  const col = year_arg_to_column(year_arg);
-  if (!col || !sid) {
-    console.error('Usage: --add-override no-match <baseline|analysis|25|26> <sanction_id> ["note"] [--global]');
+/**
+ * Add a force_no_match (unlink) override.
+ *
+ * Always requires both sids — if you're unmatching, there's a pair to break.
+ * Each side gets its own segment assignment:
+ *   segment_baseline → where the baseline event lands (default: Lost)
+ *   segment_analysis → where the analysis event lands (default: New)
+ *
+ * CLI:  --add-override no-match <sid_baseline> <sid_analysis> [--seg-baseline Lost] [--seg-analysis New] ["note"] [--global]
+ * API:  POST /api/overrides { type:'force_no_match', sid_baseline, sid_analysis, segment_baseline?, segment_analysis? }
+ */
+async function cmd_add_no_match(sid_baseline, sid_analysis, note, { global = false, created_by = 'cli', segment_baseline = null, segment_analysis = null } = {}) {
+  if (!sid_baseline || !sid_analysis) {
+    console.error('Usage: --add-override no-match <sid_baseline> <sid_analysis> [--seg-baseline Lost] [--seg-analysis New] ["note"] [--global]');
     process.exit(1);
   }
+
+  // Resolve + validate per-side segments (with partial-name matching)
+  let seg_b = segment_baseline ?? 'Lost';
+  let seg_a = segment_analysis ?? 'New';
+  for (const [label, val, setter] of [
+    ['seg-baseline', seg_b, v => { seg_b = v; }],
+    ['seg-analysis', seg_a, v => { seg_a = v; }],
+  ]) {
+    const matched = VALID_SEGMENTS.find(s =>
+      s.toLowerCase() === val.toLowerCase() || s.toLowerCase().startsWith(val.toLowerCase())
+    );
+    if (!matched) { console.error(`Invalid ${label} "${val}". Valid: ${VALID_SEGMENTS.join(', ')}`); process.exit(1); }
+    setter(matched);
+  }
+
   const { baseline_year, analysis_year } = current_year_scope();
   const by = global ? null : baseline_year;
   const ay = global ? null : analysis_year;
-  const sid_baseline = col === 'sid_baseline' ? sid : null;
-  const sid_analysis = col === 'sid_analysis' ? sid : null;
 
   const result = await with_db(async conn => {
+    // Duplicate guard
+    const scope_where = (by === null ? 'baseline_year IS NULL' : 'baseline_year = ?')
+      + ' AND ' + (ay === null ? 'analysis_year IS NULL' : 'analysis_year = ?');
+    const scope_params = [by, ay].filter(v => v !== null);
+
     const [existing] = await conn.query(
       `SELECT id FROM \`${OV_TABLE}\`
         WHERE override_type = 'force_no_match'
-          AND ${col} = ?
-          AND ${by === null ? 'baseline_year IS NULL' : 'baseline_year = ?'}
-          AND ${ay === null ? 'analysis_year IS NULL' : 'analysis_year = ?'}
+          AND sid_baseline = ? AND sid_analysis = ?
+          AND ${scope_where}
           AND active = 1
         LIMIT 1`,
-      by === null && ay === null ? [sid]
-        : by === null ? [sid, ay]
-        : ay === null ? [sid, by]
-        : [sid, by, ay]
+      [sid_baseline, sid_analysis, ...scope_params]
     );
     if (existing.length) return { status: 'exists', id: existing[0].id };
 
     const [r] = await conn.query(
       `INSERT INTO \`${OV_TABLE}\`
-        (override_type, sid_baseline, sid_analysis, baseline_year, analysis_year, note, created_by, active)
-        VALUES ('force_no_match', ?, ?, ?, ?, ?, ?, 1)`,
-      [sid_baseline, sid_analysis, by, ay, note ?? null, created_by]
+        (override_type, sid_baseline, sid_analysis, segment_baseline, segment_analysis,
+         baseline_year, analysis_year, note, created_by, active)
+        VALUES ('force_no_match', ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      [sid_baseline, sid_analysis, seg_b, seg_a, by, ay, note ?? null, created_by]
     );
     return { status: 'inserted', id: r.insertId };
   });
 
-  const result_label = col === 'sid_baseline' ? 'Lost' : 'New';
   const scope = (by === null) ? 'global' : `${by}/${ay}`;
   if (result.status === 'exists') {
-    console.log(`  Already exists (id ${result.id}): force_no_match ${sid} [${scope}]`);
+    console.log(`  Already exists (id ${result.id}): force_no_match [${scope}]`);
   } else {
-    console.log(`✓ Added force_no_match #${result.id} [${scope}]: ${sid}  →  ${result_label}${note ? '  (' + note + ')' : ''}`);
+    console.log(`✓ Added force_no_match #${result.id} [${scope}]: unlink ${sid_baseline} → ${seg_b}, ${sid_analysis} → ${seg_a}${note ? '  (' + note + ')' : ''}`);
     console.log('  Run: node build_all.js   to apply\n');
   }
   return result;
@@ -1064,14 +1093,31 @@ async function main() {
     const sub = positional[1];
 
     if (sub === 'match') {
-      // --add-override match <sid_baseline> <sid_analysis> ["note"] [--global]
-      const note = positional[4] || '';
-      await cmd_add_match(positional[2], positional[3], note, { global }); return;
+      // --add-override match <sid_baseline> <sid_analysis> ["note"] [--global] [--segment X]
+      const match_args = args.filter(a => a !== '--global');
+      let segment = null;
+      const match_clean = [];
+      for (let i = 0; i < match_args.length; i++) {
+        if (match_args[i] === '--segment' && i + 1 < match_args.length) { segment = match_args[++i]; }
+        else match_clean.push(match_args[i]);
+      }
+      const note = match_clean[4] || '';
+      await cmd_add_match(match_clean[2], match_clean[3], note, { global, segment }); return;
     }
     if (sub === 'no-match') {
-      // --add-override no-match <baseline|analysis|25|26> <sid> ["note"] [--global]
-      const note = positional[4] || '';
-      await cmd_add_no_match(positional[2], positional[3], note, { global }); return;
+      // --add-override no-match <sid_baseline> <sid_analysis> [--seg-baseline X] [--seg-analysis Y] ["note"] [--global]
+      // Extract --seg-baseline and --seg-analysis named flags
+      const all_args = args.filter(a => a !== '--global');
+      let segment_baseline = null, segment_analysis = null;
+      const clean = [];
+      for (let i = 0; i < all_args.length; i++) {
+        if (all_args[i] === '--seg-baseline' && i + 1 < all_args.length) { segment_baseline = all_args[++i]; }
+        else if (all_args[i] === '--seg-analysis' && i + 1 < all_args.length) { segment_analysis = all_args[++i]; }
+        else clean.push(all_args[i]);
+      }
+      // clean = ['--add-override', 'no-match', sid_baseline, sid_analysis, maybe_note]
+      const note = clean[4] || '';
+      await cmd_add_no_match(clean[2], clean[3], note, { global, segment_baseline, segment_analysis }); return;
     }
     if (sub === 'segment') {
       // --add-override segment <baseline|analysis|25|26> <sid> <segment> ["note"] [--global]
@@ -1134,12 +1180,12 @@ After any --add-override / --remove-override / --approve / --unapprove, run: nod
 
   node ask.js --list-overrides
   node ask.js --suggest-overrides
-  node ask.js --add-override match 311655-Adult\\ Race 354307-Adult\\ Race "Same series, name changed"
-  node ask.js --add-override no-match 25 311157-Adult\\ Race "Confirmed permanently cancelled"
-  node ask.js --add-override segment 25 310379-Adult\\ Race Lost "Algorithm matched incorrectly"
-  node ask.js --remove-override 311157-Adult\\ Race
-  node ask.js --approve 310628-Adult\\ Race
-  node ask.js --unapprove 310628-Adult\\ Race
+  node ask.js --add-override match 311655-Adult\ Race 354307-Adult\ Race "Same series, name changed"
+  node ask.js --add-override no-match 25 311157-Adult\ Race "Confirmed permanently cancelled"
+  node ask.js --add-override segment 25 310379-Adult\ Race Lost "Algorithm matched incorrectly"
+  node ask.js --remove-override 311157-Adult\ Race
+  node ask.js --approve 310628-Adult\ Race
+  node ask.js --unapprove 310628-Adult\ Race
 
 Context loaded automatically:
   output/analysis_results.json  output/commentary.json  notes.md  output/archive/

@@ -302,6 +302,11 @@ async function create_app() {
         if (!sid_baseline || !sid_analysis) {
           return res.status(400).json({ error: 'force_match requires both sid_baseline and sid_analysis' });
         }
+        const { segment_baseline } = req.body ?? {};
+        if (segment_baseline && !VALID_SEGMENTS.has(segment_baseline)) {
+          return res.status(400).json({ error: `invalid segment "${segment_baseline}"; expected one of ${[...VALID_SEGMENTS].join(', ')}` });
+        }
+        opts.segment = segment_baseline || null;
         const result = await cmd_add_match(sid_baseline, sid_analysis, note ?? '', opts);
         return res.status(result.status === 'inserted' ? 201 : 200).json({
           ok: true, type, ...result,
@@ -309,19 +314,26 @@ async function create_app() {
       }
 
       if (type === 'force_no_match') {
-        // Caller picks the side explicitly so the API is unambiguous about
-        // which year the sid belongs to. The CLI accepts year-alias positional
-        // args for backwards compat; the HTTP API is stricter.
-        if (!VALID_SIDES.has(side)) {
-          return res.status(400).json({ error: `force_no_match requires side: 'baseline' | 'analysis'` });
+        // Unlink: always requires both sids. Each side gets its own segment
+        // assignment (defaults: baseline → Lost, analysis → New).
+        if (!sid_baseline || !sid_analysis) {
+          return res.status(400).json({ error: 'force_no_match requires both sid_baseline and sid_analysis' });
         }
-        const sid = side === 'baseline' ? sid_baseline : sid_analysis;
-        if (!sid) {
-          return res.status(400).json({ error: `force_no_match needs sid_${side}` });
+        const { segment_baseline, segment_analysis } = req.body ?? {};
+        // Validate per-side segments if provided
+        if (segment_baseline && !VALID_SEGMENTS.has(segment_baseline)) {
+          return res.status(400).json({ error: `invalid segment_baseline "${segment_baseline}"; expected one of ${[...VALID_SEGMENTS].join(', ')}` });
         }
-        const result = await cmd_add_no_match(side, sid, note ?? '', opts);
+        if (segment_analysis && !VALID_SEGMENTS.has(segment_analysis)) {
+          return res.status(400).json({ error: `invalid segment_analysis "${segment_analysis}"; expected one of ${[...VALID_SEGMENTS].join(', ')}` });
+        }
+        const result = await cmd_add_no_match(sid_baseline, sid_analysis, note ?? '', {
+          ...opts,
+          segment_baseline: segment_baseline ?? null,
+          segment_analysis: segment_analysis ?? null,
+        });
         return res.status(result.status === 'inserted' ? 201 : 200).json({
-          ok: true, type, side, ...result,
+          ok: true, type, ...result,
         });
       }
 
@@ -507,6 +519,7 @@ async function start_server({ port = DEFAULT_PORT, silent = false } = {}) {
     const server = app.listen(port, () => {
       const actual = server.address().port;
       if (!silent) {
+        console.log(`\nUSAT Event Analysis — local server`);
         console.log(`\nUSAT Event Analysis — local server`);
         console.log(`  → http://localhost:${actual}                       (API index)`);
         console.log(`  → http://localhost:${actual}/editor/                (override editor — Step 9)`);
