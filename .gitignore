@@ -1,4 +1,5 @@
 # notes
+notes.md
 notes.txt
 notes_test_run.txt
 notes_venv_setup.txt
@@ -18,6 +19,9 @@ __pycache__/
 # cron_system_metrics runtime files
 utilities/cron_system_metrics/*.jsonl
 utilities/cron_system_metrics/*.log
+
+# event_analysis menu — per-user preferences (Show/hide CLI commands toggle, etc.)
+src/event_analysis/.menu_prefs.json
 
 # Ignore Python virtual environments
 venv/
@@ -39,8 +43,9 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 
-# MAC
+# MAC / # OS files
 .DS_Store
+Thumbs.db
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

@@ -10,7 +10,7 @@
     "pm2_restart_all": "npx pm2 restart all",
     "pm2_logs_all": "npx pm2 logs all",
     "pm2_delete_all": "npx pm2 delete all",
-    "pm2_run_all_servers": "echo '▶ (1 of 14) Starting pm2_start_slack' && npm run pm2_start_slack && echo '▶ (2 of 14) Starting pm2_start_sales_2200' && npm run pm2_start_sales_2200 && echo '▶ (3 of 14) Starting pm2_start_race_2200' && npm run pm2_start_race_2200 && echo '▶ (4 of 14) Starting pm2_start_recognition_2200' && npm run pm2_start_recognition_2200 && echo '▶ (5 of 14) Starting pm2_start_events_2200' && npm run pm2_start_events_2200 && echo '▶ (6 of 14) Starting pm2_start_revenue_2200' && npm run pm2_start_revenue_2200 && echo '▶ (7 of 14) Starting pm2_start_slack_events_2200' && npm run pm2_start_slack_events_2200 && echo '▶ (8 of 14) Starting pm2_start_slack_races_2200' && npm run pm2_start_slack_races_2200 && echo '▶ (9 of 14) Starting pm2_start_slack_news_2200' && npm run pm2_start_slack_news_2200 && echo '▶ (10 of 14) Starting pm2_start_org_chart_2200' && npm run pm2_start_org_chart_2200 && echo '▶ (11 of 14) Starting pm2_start_membership_base_2200' && npm run pm2_start_membership_base_2200 && echo '▶ (12 of 14) Starting pm2_start_slack_membership_base_2200' && npm run pm2_start_slack_membership_base_2200 && echo '▶ (13 of 14) Starting pm2_start_auto_renew_2200' && npm run pm2_start_auto_renew_2200 && echo '▶ (14 of 14) Starting pm2_start_scraper_2200' && npm run pm2_start_scraper_2200",
+    "pm2_run_all_servers": "echo '▶ (1 of 15) Starting pm2_start_slack' && npm run pm2_start_slack && echo '▶ (2 of 15) Starting pm2_start_sales_2200' && npm run pm2_start_sales_2200 && echo '▶ (3 of 15) Starting pm2_start_race_2200' && npm run pm2_start_race_2200 && echo '▶ (4 of 15) Starting pm2_start_recognition_2200' && npm run pm2_start_recognition_2200 && echo '▶ (5 of 15) Starting pm2_start_events_2200' && npm run pm2_start_events_2200 && echo '▶ (6 of 15) Starting pm2_start_revenue_2200' && npm run pm2_start_revenue_2200 && echo '▶ (7 of 15) Starting pm2_start_slack_events_2200' && npm run pm2_start_slack_events_2200 && echo '▶ (8 of 15) Starting pm2_start_slack_races_2200' && npm run pm2_start_slack_races_2200 && echo '▶ (9 of 15) Starting pm2_start_slack_news_2200' && npm run pm2_start_slack_news_2200 && echo '▶ (10 of 15) Starting pm2_start_org_chart_2200' && npm run pm2_start_org_chart_2200 && echo '▶ (11 of 15) Starting pm2_start_membership_base_2200' && npm run pm2_start_membership_base_2200 && echo '▶ (12 of 15) Starting pm2_start_slack_membership_base_2200' && npm run pm2_start_slack_membership_base_2200 && echo '▶ (13 of 15) Starting pm2_start_auto_renew_2200' && npm run pm2_start_auto_renew_2200 && echo '▶ (14 of 15) Starting pm2_start_scraper_2200' && npm run pm2_start_scraper_2200 && echo '▶ (15 of 15) Starting pm2_start_event_analysis' && npm run pm2_start_event_analysis",
 
     "get_date": "sh -c 'date \"+%Y-%m-%d %H:%M:%S\"'",
 
@@ -116,7 +116,15 @@
     "stop_scraper": "npx pm2 stop usat_scraper",
     "delete_scraper": "npx pm2 delete usat_scraper",
     "show_scraper": "npx pm2 show usat_scraper",
-    "restart_scraper": "npx pm2 restart usat_scraper"
+    "restart_scraper": "npx pm2 restart usat_scraper",
+
+    "event_analysis_server": "node server_event_analysis_8016.js",
+    "pm2_start_event_analysis": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_event_analysis_8016.js --name usat_event_analysis --no-autorestart --max-memory-restart 4G --node-args=\"--expose-gc\"",
+    "pm2_logs_event_analysis": "npx pm2 logs usat_event_analysis",
+    "stop_event_analysis": "npx pm2 stop usat_event_analysis",
+    "delete_event_analysis": "npx pm2 delete usat_event_analysis",
+    "show_event_analysis": "npx pm2 show usat_event_analysis",
+    "restart_event_analysis": "npx pm2 restart usat_event_analysis"
   },
   "keywords": [],
   "author": "",
@@ -141,7 +149,14 @@
     "mysql2": "^3.19.0",
     "ssh2": "^1.15.0",
     "tinyurl": "^1.1.7",
-    "xpath": "^0.0.34"
+    "xpath": "^0.0.34",
+    "@anthropic-ai/sdk": "^0.96.0",
+    "chart.js": "^4.5.1",
+    "cors": "^2.8.6",
+    "csv-parse": "^5.5.3",
+    "jsonrepair": "^3.13.1",
+    "pptxgenjs": "^3.12.0",
+    "yargs": "^17.7.2"
   },
   "devDependencies": {
     "pm2": "^5.4.3"

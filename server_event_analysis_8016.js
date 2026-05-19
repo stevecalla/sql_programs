@@ -1,0 +1,636 @@
+#!/usr/bin/env node
+/**
+ * server_event_analysis_8016.js — Local Express server for the event_analysis pipeline.
+ *
+ * Step 7 of the overrides ladder: read-only HTTP API exposing what already
+ * works through CLI + library code. The dashboard arc (step 9) will be
+ * built on top of these endpoints.
+ *
+ * Lives at the repo root alongside the other server_*.js services for naming
+ * consistency. Port 8016 follows the existing sequence (8014 = auto_renew,
+ * 8015 = scraper).
+ *
+ * Usage:
+ *   node server_event_analysis_8016.js     # default port 8016
+ *   PORT=9000 node server_event_analysis_8016.js   # override port via env
+ *
+ * Endpoints:
+ *   GET /                        — HTML index page with curl examples + dashboard link
+ *   GET /api/status              — { ok, baseline_year, analysis_year, time }
+ *   GET /api/overrides           — { force_match, force_no_match, force_segment, stats }
+ *                                  Query: ?baseline_year=YYYY&analysis_year=YYYY (defaults to current scope)
+ *   GET /api/events?year=YYYY    — array of event row objects from usat_sales_db
+ *                                  ?include=excluded to include CANCELLED/DECLINED/DELETED
+ *   GET /output/<file>           — static-serves files from the analysis output dir
+ *                                  (dashboard.html, analysis_results.json, commentary.json, ...)
+ *
+ * The server only does reads. Writes (POST /api/overrides etc.) land in step 8.
+ *
+ * Importable: tests use `create_app()` to spin up an instance on port 0
+ * (ephemeral) without binding to 8016.
+ */
+
+'use strict';
+
+const path = require('path');
+const dotenv = require('dotenv');
+dotenv.config();
+
+const express = require('express');
+const cors = require('cors');
+
+// NGROK TUNNEL FOR TESTING
+const is_test_ngrok = true;
+const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
+
+const { load_overrides } = require('./src/event_analysis/src/overrides');
+const { fetch_events_for_years, fetch_event_names_for_sids } = require('./src/event_analysis/src/db');
+const { determineOSPath } = require('./utilities/determineOSPath');
+
+// CLI command implementations — the write endpoints (Step 8) are thin
+// HTTP wrappers around these. Same DB writes, same idempotent guards, same
+// year-scope logic the CLI already exercises.
+const {
+  cmd_add_match,
+  cmd_add_no_match,
+  cmd_add_segment,
+  cmd_remove_override,
+  cmd_approve,
+  cmd_unapprove,
+} = require('./src/event_analysis/ask');
+
+// All HTTP-initiated DB writes get tagged with `created_by = 'server'` so
+// you can tell at a glance which rows came in over the API vs the CLI.
+const HTTP_CREATED_BY = 'server';
+
+// Module-level lock for /api/build (Step 9.5). Only one rebuild at a time.
+let _build_running = false;
+
+const VALID_OVERRIDE_TYPES = new Set(['force_match', 'force_no_match', 'force_segment']);
+const VALID_SEGMENTS = new Set(['Retained', 'Shifted', 'Lost', 'New', 'Recovered', 'Tried to Return']);
+const VALID_SIDES = new Set(['baseline', 'analysis']);
+
+const DEFAULT_PORT = Number(process.env.PORT) || Number(process.env.USAT_SERVER_PORT) || 8016;
+
+// Same env-var pattern as build_all.js / ask.js — keeps the server consistent
+// with whatever year the CLI / build is currently configured to use.
+function current_year_scope() {
+  const analysis_year = Number(process.env.ANALYSIS_YEAR) || new Date().getFullYear();
+  const baseline_year = Number(process.env.BASELINE_YEAR) || (analysis_year - 1);
+  return { baseline_year, analysis_year };
+}
+
+/**
+ * Enrich each override row in `force_match` / `force_no_match` /
+ * `force_segment` with `name_baseline` / `name_analysis` / `month_baseline`
+ * / `month_analysis` by looking up sids in event_data_metrics.
+ *
+ * Why this lives in the route handler rather than in src/overrides.js:
+ * the build pipeline applies overrides against an in-memory event list
+ * that already carries names — it doesn't need this enrichment and would
+ * pay an unnecessary DB round-trip for it. The editor UI is the only
+ * caller that benefits, so the cost stays here.
+ *
+ * Global overrides (NULL baseline_year / analysis_year) resolve their
+ * names against whatever scope the request asked for. That's the right
+ * default: the user is looking at one specific year pair and wants names
+ * relevant to that view.
+ *
+ * Rows whose sids don't match anything in event_data_metrics (e.g. the
+ * underlying event was deleted from source data) end up with null names —
+ * the editor renders a "(event no longer in DB)" placeholder, which is
+ * more informative than silently hiding the override.
+ */
+async function enrich_overrides_with_names(overrides, scope) {
+  const ba = scope.baseline_year, an = scope.analysis_year;
+
+  // Collect unique (sid, year) pairs across all three override types.
+  // Use sets keyed by year so each year only fires one IN-clause query.
+  const sids_by_year = new Map();
+  const note_sid = (sid, year) => {
+    if (!sid || !year) return;
+    if (!sids_by_year.has(year)) sids_by_year.set(year, new Set());
+    sids_by_year.get(year).add(sid);
+  };
+
+  for (const arr_name of ['force_match', 'force_no_match', 'force_segment']) {
+    for (const ov of overrides[arr_name] || []) {
+      const year_b = ov.baseline_year ?? ba;
+      const year_a = ov.analysis_year ?? an;
+      note_sid(ov.sid_baseline, year_b);
+      note_sid(ov.sid_analysis, year_a);
+    }
+  }
+
+  if (sids_by_year.size === 0) return overrides;
+
+  // Two queries max (baseline year + analysis year), each with IN-clause.
+  const name_map = new Map();   // key: `${year}|${sid}` -> { name, month }
+  for (const [year, sid_set] of sids_by_year.entries()) {
+    const partial = await fetch_event_names_for_sids({ year, sids: [...sid_set] });
+    for (const [sid, info] of partial.entries()) {
+      name_map.set(`${year}|${sid}`, info);
+    }
+  }
+
+  // Fold the lookup back onto each override row. Returning a fresh object
+  // so we don't mutate the load_overrides() result the caller may hold a
+  // reference to elsewhere.
+  const out = { ...overrides };
+  for (const arr_name of ['force_match', 'force_no_match', 'force_segment']) {
+    out[arr_name] = (overrides[arr_name] || []).map(ov => {
+      const year_b = ov.baseline_year ?? ba;
+      const year_a = ov.analysis_year ?? an;
+      const lookup_b = ov.sid_baseline ? name_map.get(`${year_b}|${ov.sid_baseline}`) : null;
+      const lookup_a = ov.sid_analysis ? name_map.get(`${year_a}|${ov.sid_analysis}`) : null;
+      return {
+        ...ov,
+        name_baseline:  lookup_b ? lookup_b.name  : null,
+        month_baseline: lookup_b ? lookup_b.month : null,
+        name_analysis:  lookup_a ? lookup_a.name  : null,
+        month_analysis: lookup_a ? lookup_a.month : null,
+      };
+    });
+  }
+  return out;
+}
+
+// OUTPUT_DIR resolution mirrors build_all.js — used for static-serving
+// dashboard.html and the sidecar JSON files.
+let OUTPUT_DIR_CACHE = null;
+async function resolve_output_dir() {
+  if (OUTPUT_DIR_CACHE) return OUTPUT_DIR_CACHE;
+  if (process.env.EVENT_ANALYSIS_OUTPUT_DIR) {
+    OUTPUT_DIR_CACHE = process.env.EVENT_ANALYSIS_OUTPUT_DIR;
+  } else {
+    const os_path = await determineOSPath();
+    OUTPUT_DIR_CACHE = path.join(os_path, 'usat_event_analysis_output');
+  }
+  return OUTPUT_DIR_CACHE;
+}
+
+// ── Index page ─────────────────────────────────────────────────────────────
+
+function render_index({ baseline_year, analysis_year, output_dir }) {
+  // Single-file HTML — no template engine, no client-side JS. The dashboard
+  // proper lives at /output/dashboard.html (generated by build_all.js).
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>USAT Event Analysis — Local Server</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #1f2328; line-height: 1.55; }
+    h1 { font-size: 1.6rem; margin-bottom: 0.2rem; }
+    .subtitle { color: #656d76; margin-top: 0; }
+    h2 { font-size: 1.05rem; margin-top: 2rem; border-bottom: 1px solid #d1d9e0; padding-bottom: 0.3rem; }
+    code { background: #f6f8fa; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.9em; }
+    pre { background: #f6f8fa; padding: 0.8rem; border-radius: 6px; overflow-x: auto; font-size: 0.85em; }
+    a { color: #0969da; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .badge { display: inline-block; background: #2da44e; color: white; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.75rem; vertical-align: middle; }
+    .scope { color: #656d76; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>USAT Event Analysis — Local Server <span class="badge">running</span></h1>
+  <p class="subtitle">Read-only API for the event_analysis pipeline. <span class="scope">Active scope: ${baseline_year} vs ${analysis_year}</span></p>
+
+  <h2>Override editor (Step 9)</h2>
+  <p>Interactive browser UI for editing and approving overrides on top of the API below:</p>
+  <p>→ <a href="/editor/"><strong>/editor/</strong></a></p>
+
+  <h2>Build-time dashboard</h2>
+  <p>Static snapshot generated by <code>node src/event_analysis/build_all.js</code>:</p>
+  <p>→ <a href="/output/dashboard.html">/output/dashboard.html</a></p>
+
+  <h2>Read endpoints</h2>
+  <p><a href="/api/status"><code>GET /api/status</code></a> — health check</p>
+  <p><a href="/api/overrides"><code>GET /api/overrides</code></a> — active overrides for the current year scope + globals
+    <br><span class="scope">Query params: <code>?baseline_year=YYYY&analysis_year=YYYY</code></span></p>
+  <p><a href="/api/events?year=${analysis_year}"><code>GET /api/events?year=${analysis_year}</code></a> — events for one year from usat_sales_db
+    <br><span class="scope">Add <code>&amp;include=excluded</code> to include CANCELLED/DECLINED/DELETED rows</span></p>
+
+  <h2>Write endpoints</h2>
+  <p><code>POST /api/overrides</code> — add a new override. Body:
+    <code>{ type: 'force_match' | 'force_no_match' | 'force_segment', sid_baseline?, sid_analysis?, side?, segment?, note?, global? }</code></p>
+  <p><code>DELETE /api/overrides/:sid</code> — soft-delete (sets <code>active = 0</code>) all active overrides for the sid in the current scope</p>
+  <p><code>POST /api/approve/:sid</code> — approve overrides for a sid; captures event signatures for stale detection.
+    Optional body: <code>{ approved_by }</code></p>
+  <p><code>POST /api/unapprove/:sid</code> — clear approval state and signatures (audit fields preserved)</p>
+  <p><code>GET /api/build</code> — Server-Sent Events stream of <code>build_all.js</code>. Listen for <code>out</code> / <code>err</code> / <code>done</code> events. Used by the dashboard's "Rebuild now" button. 409 if a build is already running.</p>
+
+  <h2>Try it from the terminal</h2>
+  <pre>curl http://localhost:${DEFAULT_PORT}/api/status
+curl http://localhost:${DEFAULT_PORT}/api/overrides
+curl "http://localhost:${DEFAULT_PORT}/api/events?year=${analysis_year}"
+
+# Add a force-match override
+curl -X POST http://localhost:${DEFAULT_PORT}/api/overrides \\
+  -H 'Content-Type: application/json' \\
+  -d '{"type":"force_match","sid_baseline":"311655-Adult Race","sid_analysis":"354307-Adult Race","note":"renamed"}'
+
+# Approve an override (captures current event signature)
+curl -X POST http://localhost:${DEFAULT_PORT}/api/approve/311655-Adult%20Race
+
+# Soft-delete an override
+curl -X DELETE http://localhost:${DEFAULT_PORT}/api/overrides/311655-Adult%20Race</pre>
+
+  <h2>Output directory</h2>
+  <p><code>${output_dir}</code></p>
+</body>
+</html>`;
+}
+
+// ── App factory ────────────────────────────────────────────────────────────
+
+/**
+ * Build the Express app without binding to a port. Tests use this to mount
+ * the app on an ephemeral port (`listen(0)`); `start_server` wraps it for
+ * the standard binding flow.
+ */
+async function create_app() {
+  const app = express();
+  const output_dir = await resolve_output_dir();
+
+  app.use(cors());
+  app.use(express.json());
+
+  // Static-serve the analysis output directory. dashboard.html, the sidecar
+  // JSON files, and the archive/ folder all flow through here.
+  // `Cache-Control: no-cache` forces the browser to revalidate every load —
+  // without it, the dashboard.html that gets regenerated by the rebuild
+  // button may serve from cache, and the user sees a stale badge / charts.
+  app.use('/output', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+  }, express.static(output_dir));
+
+  // ── Step 9 — interactive override editor SPA ─────────────────────────
+  // Static-serves src/event_analysis/public/. http://localhost:8016/editor/
+  // returns the editor HTML; the page uses fetch() against the same origin
+  // to hit /api/status, /api/overrides, /api/approve/:sid, etc.
+  const editor_dir = path.join(__dirname, 'src', 'event_analysis', 'public');
+  app.use('/editor', express.static(editor_dir));
+
+  // ── GET / — index page ────────────────────────────────────────────────
+  app.get('/', (req, res) => {
+    const { baseline_year, analysis_year } = current_year_scope();
+    res.type('html').send(render_index({ baseline_year, analysis_year, output_dir }));
+  });
+
+  // ── GET /api/status — health check ────────────────────────────────────
+  app.get('/api/status', (req, res) => {
+    const { baseline_year, analysis_year } = current_year_scope();
+    res.json({
+      ok: true,
+      baseline_year,
+      analysis_year,
+      output_dir,
+      time: new Date().toISOString(),
+    });
+  });
+
+  // ── GET /api/overrides — current-scope overrides ─────────────────────
+  // Default scope comes from BASELINE_YEAR / ANALYSIS_YEAR env vars but the
+  // dashboard / curl can override per request via query params.
+  //
+  // Enrichment: every returned override row also gets `name_baseline` /
+  // `name_analysis` / `month_baseline` / `month_analysis`, looked up
+  // against `event_data_metrics` for the (sid, year) pair. This keeps the
+  // editor UI from showing bare sanction IDs that the user can't quickly
+  // recognise. Missing-from-DB events come back as `null` — the UI shows
+  // a "(event no longer in DB)" placeholder rather than hiding the row.
+  app.get('/api/overrides', async (req, res) => {
+    try {
+      const default_scope = current_year_scope();
+      const baseline_year = Number(req.query.baseline_year) || default_scope.baseline_year;
+      const analysis_year = Number(req.query.analysis_year) || default_scope.analysis_year;
+
+      const overrides = await load_overrides({ baseline_year, analysis_year, silent: true });
+      if (!overrides) {
+        return res.status(503).json({ error: 'load_overrides returned null — DB unreachable?' });
+      }
+
+      const enriched = await enrich_overrides_with_names(overrides, { baseline_year, analysis_year });
+
+      res.json({
+        scope: { baseline_year, analysis_year },
+        ...enriched,
+      });
+    } catch (err) {
+      console.error('[GET /api/overrides] error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/events?year=YYYY — events for one year ──────────────────
+  app.get('/api/events', async (req, res) => {
+    try {
+      const year = Number(req.query.year);
+      if (!year || year < 2000 || year > 2100) {
+        return res.status(400).json({ error: 'year query param is required, e.g. ?year=2026' });
+      }
+      const events_by_year = await fetch_events_for_years([year]);
+      // fetch_events_for_years returns positional rows (rowsAsArray); convert
+      // them to objects keyed by column name for a more useful API response.
+      // Column order matches the events query in src/event_analysis/src/db.js.
+      const COLS = [
+        'created_at', 'name', 'sanction_id', 'starts_year',
+        'status', 'event_type', 'starts_on', 'registration_url',
+        'id_sanctioning_dup', 'id_races',
+      ];
+      const rows = events_by_year[year] ?? [];
+      const include_excluded = req.query.include === 'excluded';
+      const EXCLUDE_STATUSES = new Set(['CANCELLED', 'DECLINED', 'DELETED']);
+
+      const objects = rows.map(r => {
+        const o = {};
+        COLS.forEach((c, i) => { o[c] = r[i]; });
+        return o;
+      });
+      const filtered = include_excluded ? objects : objects.filter(e => !EXCLUDE_STATUSES.has(e.status));
+
+      res.json({
+        year,
+        count: filtered.length,
+        total_in_year: objects.length,
+        include_excluded,
+        include_excluded,
+        events: filtered,
+      });
+    } catch (err) {
+      console.error('[GET /api/events] error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/overrides — add a new override (Step 8 — write API) ─────
+  // Single endpoint that dispatches by body.type — mirrors how the CLI
+  // dispatcher in ask.js routes between cmd_add_match / cmd_add_no_match /
+  // cmd_add_segment. Validation happens here so we never invoke a cmd_*
+  // function with arguments that would make it call process.exit(1).
+  app.post('/api/overrides', async (req, res) => {
+    try {
+      const { type, sid_baseline, sid_analysis, segment, side, note, global } = req.body ?? {};
+
+      if (!VALID_OVERRIDE_TYPES.has(type)) {
+        return res.status(400).json({
+          error: `invalid type "${type}"; expected one of ${[...VALID_OVERRIDE_TYPES].join(', ')}`,
+        });
+      }
+      const opts = { global: !!global, created_by: HTTP_CREATED_BY };
+
+      if (type === 'force_match') {
+        if (!sid_baseline || !sid_analysis) {
+          return res.status(400).json({ error: 'force_match requires both sid_baseline and sid_analysis' });
+        }
+        const { segment_baseline } = req.body ?? {};
+        if (segment_baseline && !VALID_SEGMENTS.has(segment_baseline)) {
+          return res.status(400).json({ error: `invalid segment "${segment_baseline}"; expected one of ${[...VALID_SEGMENTS].join(', ')}` });
+        }
+        opts.segment = segment_baseline || null;
+        const result = await cmd_add_match(sid_baseline, sid_analysis, note ?? '', opts);
+        return res.status(result.status === 'inserted' ? 201 : 200).json({
+          ok: true, type, ...result,
+        });
+      }
+
+      if (type === 'force_no_match') {
+        // Unlink: always requires both sids. Each side gets its own segment
+        // assignment (defaults: baseline → Lost, analysis → New).
+        if (!sid_baseline || !sid_analysis) {
+          return res.status(400).json({ error: 'force_no_match requires both sid_baseline and sid_analysis' });
+        }
+        const { segment_baseline, segment_analysis } = req.body ?? {};
+        // Validate per-side segments if provided
+        if (segment_baseline && !VALID_SEGMENTS.has(segment_baseline)) {
+          return res.status(400).json({ error: `invalid segment_baseline "${segment_baseline}"; expected one of ${[...VALID_SEGMENTS].join(', ')}` });
+        }
+        if (segment_analysis && !VALID_SEGMENTS.has(segment_analysis)) {
+          return res.status(400).json({ error: `invalid segment_analysis "${segment_analysis}"; expected one of ${[...VALID_SEGMENTS].join(', ')}` });
+        }
+        const result = await cmd_add_no_match(sid_baseline, sid_analysis, note ?? '', {
+          ...opts,
+          segment_baseline: segment_baseline ?? null,
+          segment_analysis: segment_analysis ?? null,
+        });
+        return res.status(result.status === 'inserted' ? 201 : 200).json({
+          ok: true, type, ...result,
+        });
+      }
+
+      // force_segment — needs side + sid + segment
+      if (!VALID_SIDES.has(side)) {
+        return res.status(400).json({ error: `force_segment requires side: 'baseline' | 'analysis'` });
+      }
+      const sid = side === 'baseline' ? sid_baseline : sid_analysis;
+      if (!sid) {
+        return res.status(400).json({ error: `force_segment needs sid_${side}` });
+      }
+      if (!segment || !VALID_SEGMENTS.has(segment)) {
+        return res.status(400).json({
+          error: `force_segment requires segment in ${[...VALID_SEGMENTS].join(', ')}`,
+        });
+      }
+      const result = await cmd_add_segment(side, sid, segment, note ?? '', opts);
+      return res.status(result.status === 'inserted' ? 201 : 200).json({
+        ok: true, type, side, segment, ...result,
+      });
+    } catch (err) {
+      console.error('[POST /api/overrides] error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── DELETE /api/overrides/:sid — soft-delete (active = 0) ─────────────
+  // Mirrors cmd_remove_override — applies within the current year scope plus
+  // global rows. 404 if nothing matched; 200 with the count if it did.
+  app.delete('/api/overrides/:sid', async (req, res) => {
+    try {
+      const sid = req.params.sid;
+      if (!sid) return res.status(400).json({ error: 'sid path parameter required' });
+      const result = await cmd_remove_override(sid);
+      if (!result || result.removed === 0) {
+        return res.status(404).json({ ok: false, removed: 0, sid, message: 'no active override found for this sid in the current scope' });
+      }
+      res.json({ ok: true, sid, ...result });
+    } catch (err) {
+      console.error('[DELETE /api/overrides] error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/approve/:sid — approve override(s) for a sid ────────────
+  // Captures event signatures (Step 6) so stale detection can fire later.
+  // Optional body: { approved_by } — defaults to 'cli' inside cmd_approve.
+  app.post('/api/approve/:sid', async (req, res) => {
+    try {
+      const sid = req.params.sid;
+      if (!sid) return res.status(400).json({ error: 'sid path parameter required' });
+      const approved_by = req.body?.approved_by || 'server';
+      const result = await cmd_approve(sid, { approved_by });
+      if (!result || result.approved === 0) {
+        return res.status(404).json({ ok: false, approved: 0, sid, message: 'no active override found for this sid in the current scope' });
+      }
+      res.json({ ok: true, sid, ...result });
+    } catch (err) {
+      console.error('[POST /api/approve] error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/build — Server-Sent Events stream of a build_all.js run ──
+  // (Step 9.5) Used by the dashboard's "Rebuild now" button. Spawns
+  // `node src/event_analysis/build_all.js` and streams stdout/stderr back
+  // as SSE events. Client listens for "out", "err", "done".
+  //
+  // Concurrent builds are blocked — _build_running is a module-level lock.
+  // GET instead of POST because EventSource only supports GET.
+  app.get('/api/build', (req, res) => {
+    if (_build_running) {
+      res.status(409).json({ error: 'a build is already in progress' });
+      return;
+    }
+    _build_running = true;
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    // Send each line as an SSE event with the given event name.
+    const send = (event, data) => {
+      // SSE: each data line gets its own "data: " prefix; we keep messages
+      // single-line by replacing embedded newlines (chunks can be partial).
+      const safe = String(data).replace(/\r?\n/g, ' ');
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${safe}\n\n`);
+    };
+
+    const build_script = path.join(__dirname, 'src', 'event_analysis', 'build_all.js');
+    const { spawn } = require('child_process');
+    const proc = spawn(process.execPath, [build_script], {
+      cwd: path.join(__dirname, 'src', 'event_analysis'),
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    // Banner so the operator sees that a remote-triggered build started.
+    // (We can't use stdio:'inherit' because we also need to capture the
+    // output for the SSE stream — so we tee it manually below.)
+    const _build_started = new Date().toISOString();
+    process.stdout.write(`\n──────────── /api/build: remote build started at ${_build_started} ────────────\n`);
+
+    // Buffer partial lines so we send full lines as SSE events. We also tee
+    // every chunk to the server's stdout/stderr so operators watching the
+    // server terminal see live build output (same as if they ran
+    // `node build_all.js` directly).
+    const make_line_streamer = (event_name) => {
+      let buf = '';
+      return (chunk) => {
+        buf += chunk.toString('utf8');
+        let idx;
+        while ((idx = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, idx);
+          buf = buf.slice(idx + 1);
+          if (line.length) send(event_name, line);
+        }
+      };
+    };
+    // Mirror to server terminal AND stream as SSE.
+    proc.stdout.on('data', (chunk) => process.stdout.write(chunk));
+    proc.stdout.on('data', make_line_streamer('out'));
+    proc.stderr.on('data', (chunk) => process.stderr.write(chunk));
+    proc.stderr.on('data', make_line_streamer('err'));
+
+    proc.on('close', (code) => {
+      send('done', String(code ?? 0));
+      const banner = code === 0 ? '✔ exit 0' : `✗ exit ${code}`;
+      process.stdout.write(`──────────── /api/build: ${banner} (${new Date().toISOString()}) ─────────────\n\n`);
+      res.end();
+      _build_running = false;
+    });
+    proc.on('error', (err) => {
+      send('err', `spawn failed: ${err.message}`);
+      send('done', '1');
+      process.stderr.write(`──────────── /api/build: spawn failed — ${err.message} ────────────\n\n`);
+      res.end();
+      _build_running = false;
+    });
+
+    // If the client disconnects mid-build, kill the child to free resources.
+    req.on('close', () => {
+      if (!proc.killed) proc.kill();
+    });
+  });
+
+  // ── POST /api/unapprove/:sid — clear approval + signatures ────────────
+  app.post('/api/unapprove/:sid', async (req, res) => {
+    try {
+      const sid = req.params.sid;
+      if (!sid) return res.status(400).json({ error: 'sid path parameter required' });
+      const result = await cmd_unapprove(sid);
+      if (!result || result.unapproved === 0) {
+        return res.status(404).json({ ok: false, unapproved: 0, sid, message: 'no active override found for this sid in the current scope' });
+      }
+      res.json({ ok: true, sid, ...result });
+    } catch (err) {
+      console.error('[POST /api/unapprove] error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── 404 fallback ───────────────────────────────────────────────────────
+  app.use((req, res) => {
+    res.status(404).json({ error: 'not found', path: req.path });
+  });
+
+  return app;
+}
+
+async function start_server({ port = DEFAULT_PORT, silent = false } = {}) {
+  const app = await create_app();
+
+  // NGROK TUNNEL
+  // https://60ca-73-169-19-195.ngrok-free.app/output/dashboard.html
+  if (is_test_ngrok) {
+    create_ngrok_tunnel(port);
+  }
+
+  return await new Promise((resolve, reject) => {
+    const server = app.listen(port, () => {
+      const actual = server.address().port;
+      if (!silent) {
+        console.log(`\nUSAT Event Analysis — local server`);
+        console.log(`\nUSAT Event Analysis — local server`);
+        console.log(`  → http://localhost:${actual}                       (API index)`);
+        console.log(`  → http://localhost:${actual}/editor/                (override editor — Step 9)`);
+        console.log(`  → http://localhost:${actual}/output/dashboard.html  (build-time dashboard)`);
+        console.log(`  → http://localhost:${actual}/api/status             (health check)\n`);
+        console.log('  Press Ctrl-C to stop.\n');
+      }
+      resolve(server);
+    });
+    server.on('error', reject);
+  });
+}
+
+if (require.main === module) {
+  start_server().then(server => {
+    const cleanup = () => {
+      console.log('\nShutting down server...');
+      server.close(() => process.exit(0));
+    };
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
+  }).catch(err => {
+    console.error('Failed to start server:', err.message);
+    if (process.env.DEBUG) console.error(err.stack);
+    process.exit(1);
+  });
+}
+
+module.exports = { create_app, start_server, current_year_scope };
