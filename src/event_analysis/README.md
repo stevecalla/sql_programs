@@ -1045,6 +1045,26 @@ Cascade rules (pattern-based overrides like "every Adult Clinic in May named X �
 
 ---
 
+## Scheduled builds — utilities/cron_get_event_analysis_build/
+
+A thin cron-style wrapper that triggers the build on a schedule by calling the local server. Two files, mirroring the `cron_get_auto_renew` / `cron_get_events_data` / etc. pattern used by the other automation jobs in this repo:
+
+```
+utilities/cron_get_event_analysis_build/
+├── run_script.sh    # Detects OS user, resolves node + script paths, runs script.js, prints timing
+└── script.js        # fetch('http://localhost:8016/api/build') and log the response
+```
+
+**How it works.** `/api/build` is a Server-Sent Events endpoint — the server streams build-log lines over an open HTTP connection while `build_all.js` runs, then closes the connection when the build finishes (~80s with AI, ~7s cached or rule-based). The cron's `response.text()` patiently reads everything that streamed and resolves with the full log only when the server closes the stream. Net effect: **the cron blocks for the duration of the build, then logs and exits.** Exactly the semantics you'd want from a scheduled job.
+
+**Requires the server to be running.** Same prerequisite as the dashboard's "Rebuild now" button — `/api/build` is a server endpoint, not a direct invocation of `build_all.js`. Pair the cron with whatever launches `server_event_analysis_8016.js` on the target host (pm2, systemd, Task Scheduler with auto-start, etc.).
+
+**Registration.** Same as the other crons in `utilities/cron_*/`. On Linux: a crontab entry pointing at `run_script.sh`. On Windows: a Task Scheduler task pointing at `run_script.sh` (Git Bash) or a thin `.bat` wrapper. The shell script auto-detects the OS user (`steve-calla` / `usat-server` / `calla`) and picks the right node path + JS-file path. No code changes required between hosts.
+
+**The success/failure Slack notification fires from inside the build itself** (see "Slack notification on build complete" above), so the cron doesn't need any additional notification wiring — the existing build pipeline handles it. You'll see a `:white_check_mark: event_analysis build · …` (or `:x: … FAILED`) message in `#steve_calla_slack_channel` once the cron-triggered build completes.
+
+---
+
 ## HTML Dashboard — output/dashboard.html
 
 > **Menu:** option **3** (opens in browser automatically) — or open the file manually:
