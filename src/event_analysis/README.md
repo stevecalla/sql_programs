@@ -133,7 +133,7 @@ Type a number and press Enter. For features that need input the menu prompts you
 
 The status bar at the top always shows: last build date, event totals, commentary mode (AI or rule-based), API key status, and active override count.
 
-### All 29 features — menu number + what it runs
+### All 31 features — menu number + what it runs
 
 | # | Menu label | Equivalent command |
 |---|---|---|
@@ -141,37 +141,39 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 1 | Build everything | `node build_all.js` (reuses cached AI commentary when commentary inputs haven't changed) |
 | 2 | Build (rule-based only) | `NO_AI=1 node build_all.js` — forces rule-based commentary; no Claude tokens spent. Useful when iterating on dashboard / Excel / pptx formatting. |
 | 3 | Build (force fresh AI) | `FRESH_AI=1 node build_all.js` — bypasses the commentary cache and calls Claude even when inputs haven't changed. Use when you tweaked the prompt or want new wording. |
-| 4 | Check data quality | `node check.js` |
-| 5 | Open dashboard in browser | Opens `output/dashboard.html` |
-| 6 | Open Excel workbook | Opens the newest `output/<year>_event_calendar_analysis_*.xlsx` |
-| 7 | Open PowerPoint deck | Opens the newest `output/<year>_event_trends_summary_*.pptx` |
+| 4 | Build (skip roster DB write) | `NO_DB_ROSTER=1 node build_all.js` — same outputs (Excel / PowerPoint / dashboard / JSON), but does NOT write the roster snapshot to `event_analysis_roster` and skips retention pruning. Use for local iteration where you don't want every throwaway build in the historical record. |
+| 5 | Check data quality | `node check.js` |
+| 6 | Open dashboard in browser | Opens `output/dashboard.html` |
+| 7 | Open Excel workbook | Opens the newest `output/<year>_event_calendar_analysis_*.xlsx` |
+| 8 | Open PowerPoint deck | Opens the newest `output/<year>_event_trends_summary_*.pptx` |
 | **OVERRIDES — event matching** | | |
-| 8 | List active overrides | `node ask.js --list-overrides` |
-| 9 | Suggest overrides (AI) | `node ask.js --suggest-overrides` |
-| 10 | Add force-match | `node ask.js --add-override match <sid_baseline> <sid_analysis> "note"` |
-| 11 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
-| 12 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
-| 13 | Remove override | `node ask.js --remove-override <sid>` |
+| 9 | List active overrides | `node ask.js --list-overrides` |
+| 10 | Suggest overrides (AI) | `node ask.js --suggest-overrides` |
+| 11 | Add force-match | `node ask.js --add-override match <sid_baseline> <sid_analysis> "note"` |
+| 12 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
+| 13 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
+| 14 | Remove override | `node ask.js --remove-override <sid>` |
 | **Q&A & ANALYSIS** | | |
-| 14 | Ask a question | `node ask.js "your question"` |
-| 15 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
-| 16 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
-| 17 | What changed? | `node ask.js --what-changed` |
+| 15 | Ask a question | `node ask.js "your question"` |
+| 16 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
+| 17 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
+| 18 | What changed? | `node ask.js --what-changed` |
 | **INFORMATION** | | |
-| 18 | View changes since last build | `cat output/changes.txt` |
-| 19 | View notes.md | `cat notes.md` |
-| 20 | View README | Displays this file |
+| 19 | View changes since last build | `cat output/changes.txt` |
+| 20 | View notes.md | `cat notes.md` |
+| 21 | View README | Displays this file |
 | **LOCAL SERVER** | | |
-| 21 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
+| 22 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
 | **TESTING** | | |
-| 22 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
-| 23 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
-| 24 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
-| 25 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
-| 26 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
-| 27 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
-| 28 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
-| 29 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
+| 23 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
+| 24 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
+| 25 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
+| 26 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
+| 27 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
+| 28 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
+| 29 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
+| 30 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
+| 31 | Run roster tests only | `node --test tests/roster.test.js` (per-build roster snapshot: row-builder pure tests + DB insert + retention pruning) |
 | 0 | Exit | — |
 
 ---
@@ -794,7 +796,7 @@ Exits with status 1 if errors are found (stopping a `check.js && build_all.js` p
 
 ## Test suite — tests/
 
-> **Menu:** options **22–29** (all / overrides / server / menu / smoke / glossary / downloads / build) — or run directly:
+> **Menu:** options **23–31** (all / overrides / server / menu / smoke / glossary / downloads / build / roster) — or run directly:
 
 ```bash
 node --test tests/                  # run every *.test.js
@@ -816,6 +818,7 @@ Uses Node's built-in `node:test` runner (Node 18+) — no extra dependencies. Ou
 | `glossary.test.js` | Bottom-of-dashboard glossary is a default-closed `<details>` element and contains every required term (6 segments + 5 confidence values + calendar / organic + 7 other terms). Reads the most recent built `dashboard.html`. | no (reads built file) | <1s |
 | `downloads.test.js` | The dashboard's Excel + PowerPoint Download buttons point at files that actually exist in the output dir, are same-directory paths (`./filename`), and follow the `<year>_event_calendar_analysis_*.xlsx` / `<year>_event_trends_summary_*.pptx` naming pattern. Also guards against the legacy `_v9f.xlsx` / `_v3.pptx` hardcoded names sneaking back in. | no (reads built file) | <1s |
 | `build.test.js` | Commentary cache logic: hash stability (same input → same hash), sensitivity to whitelisted fields (segments / by-type / monthly / organic / calendar / override count / year scope / NO_AI flag), insensitivity to non-whitelisted fields (event names / sanction IDs / confidence / day-of-week / timestamps), cache loader behavior (missing file, valid JSON, malformed JSON). Also covers Slack-message formatters: success path labels (cache_hit / ai_fresh / rule_based / unknown), net sign handling (+/-/zero), missing-totals fallback, failure-message truncation (multi-line → first line only, 200-char cap). Pure functions only — doesn't call Claude, doesn't hit Slack, doesn't run a real build. | no | <1s |
+| `roster.test.js` | Per-build roster snapshot. Pure-function tests for `build_roster_rows` (row count per match record, NULL handling on Lost/New single-sided rows, build_at + year scope on every row, 21-column tuple shape). DB-backed tests for `ensure_roster_table` idempotence, `insert_roster_snapshot` insert + count, two-build distinct-partition behaviour, and `prune_roster_table` keeping recent rows intact. DB tests use sentinel `baseline_year=1999 / analysis_year=2000` so test rows never collide with production data, and `before()`/`after()` scrub them. Skips gracefully if MySQL is unreachable. | yes (DB-backed half) | seconds |
 
 The `menu.test.js` and `smoke.test.js` files are intentionally cheap — no DB, no network, no API key. Run them after any structural change (renaming a file, splitting a module, refactoring exports) to catch the easy regressions before the slow tests fire.
 
@@ -1062,6 +1065,57 @@ utilities/cron_get_event_analysis_build/
 **Registration.** Same as the other crons in `utilities/cron_*/`. On Linux: a crontab entry pointing at `run_script.sh`. On Windows: a Task Scheduler task pointing at `run_script.sh` (Git Bash) or a thin `.bat` wrapper. The shell script auto-detects the OS user (`steve-calla` / `usat-server` / `calla`) and picks the right node path + JS-file path. No code changes required between hosts.
 
 **The success/failure Slack notification fires from inside the build itself** (see "Slack notification on build complete" above), so the cron doesn't need any additional notification wiring — the existing build pipeline handles it. You'll see a `:white_check_mark: event_analysis build · …` (or `:x: … FAILED`) message in `#steve_calla_slack_channel` once the cron-triggered build completes.
+
+---
+
+## Historical roster snapshots — `event_analysis_roster` table
+
+Every build writes its full event roster to a MySQL table in `usat_sales_db`. Same shape as `dashboard.html`'s inlined `ROSTER` constant and the xlsx `step_4_event_detail` tab — one row per event, tagged with the build's timestamp. The table accumulates across builds so you can query trends, diff two consecutive builds in SQL, or feed BI tools (Tableau / Looker / Metabase) without parsing JSON files in the archive folder.
+
+**Schema** (21 columns, `event_analysis_roster`):
+
+| Column | Type | Purpose |
+|---|---|---|
+| `id` | BIGINT AUTO_INCREMENT PK | row id |
+| `build_at` | DATETIME | which build wrote this row (the partition key) |
+| `baseline_year` / `analysis_year` | SMALLINT | year scope at build time |
+| `seg` | ENUM | Retained / Shifted / Lost / New / Recovered / Tried to Return |
+| `conf` | VARCHAR(30) | Exact / Exact-Shifted / Cross / Override / N/A |
+| `type` | VARCHAR(20) | Adult Race / Youth Race / Adult Clinic / Youth Clinic |
+| `override_id` | INT NULL | FK → `event_analysis_overrides.id` when an override produced this row |
+| `sid_baseline` / `name_baseline` / `month_baseline` / `date_baseline` / `day_baseline` / `status_baseline` | VARCHAR / DATE | baseline-year event fields, NULL on New/single-sided rows |
+| `sid_analysis` / `name_analysis` / `month_analysis` / `date_analysis` / `day_analysis` / `status_analysis` | VARCHAR / DATE | analysis-year event fields, NULL on Lost/single-sided rows |
+| `schema_version` | TINYINT | starts at 1; bumped on column additions |
+| `extras_json` | JSON NULL | parks experimental fields without a migration |
+| `created_at` | TIMESTAMP | row write time |
+
+Indexes on `build_at`, `(baseline_year, analysis_year, build_at)`, and `(seg, build_at)`.
+
+**Write path.** At the top of `build_all.js`, `utilities/ensure_roster_table.js` creates the table if missing (idempotent — no-op on every subsequent build). After `run_analysis()` completes, `utilities/insert_roster_snapshot.js` bulk-inserts the full roster with the current `build_at`. Wrapped defensively — a DB outage logs a warning but doesn't fail the build, since the snapshot is a secondary historical record and the build's primary outputs (HTML / xlsx / pptx) don't depend on it.
+
+**Skip the DB write entirely** by setting `NO_DB_ROSTER=1` in the env (menu option **4** "Build (skip roster DB write)" wires this for you). The build runs exactly the same — same Excel, same PowerPoint, same dashboard, same Slack notification — but the `INSERT` + retention prune are bypassed and replaced with a single log line. Useful when you're iterating locally and don't want every test build to land in the historical record.
+
+**Tiered retention.** `utilities/prune_roster_table.js` runs after the insert and applies a four-tier retention policy so the table stays bounded over years of daily builds:
+
+| Age window | Granularity kept | Rationale |
+|---|---|---|
+| Last 48 hours | every build | Full fidelity during active iteration — captures override-tweak spikes (10+ builds in one afternoon) |
+| 48 hours – 30 days | one build per day (latest of each day) | Day-level snapshot once iteration cooled off |
+| 30 – 90 days | one build per week (latest of each ISO week) | Medium-term trend granularity |
+| Older than 90 days | one build per month (first of each month) | Permanent monthly archive |
+
+Steady-state size is **~150–200K rows**, regardless of how many years the table has been accumulating. The SQL uses `ROW_NUMBER() OVER (PARTITION BY ...)` per tier to compute the keep-set, then `DELETE` rows whose `build_at` isn't in it. Idempotent — re-running 5 seconds later is a no-op.
+
+**No read path yet.** Nothing in the dashboard or API queries this table. It's parked for future use:
+
+- Ad-hoc SQL trend queries (`SELECT seg, COUNT(*), build_at FROM event_analysis_roster GROUP BY ...`)
+- BI-tool integration (point Tableau / Looker at the table directly)
+- A future "compare two builds" UI that joins on `build_at` self-joins
+- Diff queries — "which events flipped segments since last week's build?"
+
+Building any of these is a separate, deferred step. For now the table is write-only; reads are SQL ad-hoc.
+
+**Tests** — see `tests/roster.test.js` (menu option **30**). Pure-function tests cover row construction without touching the DB; integration tests use a sentinel year (1999/2000) so fixture rows never collide with production data and get scrubbed by `before()`/`after()` hooks.
 
 ---
 

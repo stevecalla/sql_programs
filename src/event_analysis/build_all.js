@@ -56,6 +56,9 @@ const { buildDeck } = require('./src/pptx/builder');
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { ensure_overrides_table } = require('./utilities/ensure_overrides_table');
 const { migrate_overrides_json_to_db } = require('./utilities/migrate_overrides_to_db');
+const { ensure_roster_table } = require('./utilities/ensure_roster_table');
+const { insert_roster_snapshot } = require('./utilities/insert_roster_snapshot');
+const { prune_roster_table } = require('./utilities/prune_roster_table');
 const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 
@@ -291,6 +294,12 @@ async function main() {
   // ── Migrate legacy JSON overrides into the DB (one-shot, idempotent) ─────
   // Skipped silently after data/overrides.json is renamed to .migrated.
   await migrate_overrides_json_to_db({ silent: false });
+
+  // ── Ensure the per-build roster snapshot table exists ────────────────────
+  // Wrapped so a DB outage logs a warning but doesn't fail the build —
+  // the snapshot is a secondary historical record, not a build dependency.
+  try { await ensure_roster_table({ silent: false }); }
+  catch (e) { console.warn(`  ensure_roster_table failed (non-fatal): ${e.message}`); }
   stage_done('schema + migrations');
 
   const out_xlsx = path.join(OUTPUT_DIR, `${ANALYSIS_YEAR}_event_calendar_analysis_${BUILD_TS}.xlsx`);
@@ -640,6 +649,35 @@ async function main() {
   console.log(`  PowerPoint : ${out_pptx}`);
   console.log(`  Results    : ${out_results_json}`);
   console.log(`  Commentary : ${out_commentary_json}`);
+
+  // ── Roster snapshot to DB ────────────────────────────────────────────────
+  // Append-only historical record of every event in this build, tagged with
+  // build_at. Same shape as the dashboard's ROSTER. Wrapped helper is
+  // already defensive — never throws, returns 0 on any failure.
+  //
+  // NO_DB_ROSTER=1 skips the DB write entirely. Useful for:
+  //   - local iteration where you don't want to clutter the table
+  //   - one-off builds you don't want in the historical record
+  //   - dev environments without DB write access
+  // Wired by the "Build (skip roster DB write)" menu option.
+  if (process.env.NO_DB_ROSTER) {
+    console.log('  NO_DB_ROSTER=1 — skipping roster snapshot + retention pruning.');
+    stage_done('roster snapshot + prune (skipped)');
+  } else {
+    const build_at = new Date();
+    await insert_roster_snapshot({
+      results, build_at,
+      baseline_year: BASELINE_YEAR,
+      analysis_year: ANALYSIS_YEAR,
+      silent: false,
+    });
+
+    // ── Tiered retention pruning ───────────────────────────────────────────
+    // 48h full / 30d daily / 90d weekly / monthly forever. Idempotent — only
+    // deletes rows that just aged out. Also defensive — never throws.
+    await prune_roster_table({ silent: false });
+    stage_done('roster snapshot + prune');
+  }
 
   // ── Build timing summary ──────────────────────────────────────────────────
   // Sorted descending by elapsed time so the biggest stage is at the top —

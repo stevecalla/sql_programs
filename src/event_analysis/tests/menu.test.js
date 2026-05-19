@@ -77,7 +77,7 @@ describe('menu.js — known actions', () => {
   // Adding a NEW action? Add it here too so its disappearance becomes a
   // test failure rather than a silent break.
   const REQUIRED_ACTIONS = [
-    'build', 'build_rule_based', 'build_fresh_ai', 'check',
+    'build', 'build_rule_based', 'build_fresh_ai', 'build_no_roster', 'check',
     'open_dashboard', 'open_excel', 'open_pptx',
     'list_overrides', 'suggest_overrides',
     'add_match', 'add_no_match', 'add_segment', 'remove_override',
@@ -86,7 +86,7 @@ describe('menu.js — known actions', () => {
     'start_server',
     'run_tests_all', 'run_tests_overrides', 'run_tests_server',
     'run_tests_menu', 'run_tests_smoke', 'run_tests_glossary',
-    'run_tests_downloads', 'run_tests_build',
+    'run_tests_downloads', 'run_tests_build', 'run_tests_roster',
   ];
 
   test('every REQUIRED_ACTIONS entry is present in the menu', () => {
@@ -111,11 +111,19 @@ describe('menu.js — known actions', () => {
     assert.match(item.label, /fresh AI/i);
   });
 
+  test('Build (skip roster DB write) is wired and sits in BUILD section', () => {
+    const build_section = SECTIONS.find(s => s.label.startsWith('BUILD'));
+    assert.ok(build_section, 'BUILD section not found');
+    const item = build_section.items.find(i => i.action === 'build_no_roster');
+    assert.ok(item, 'build_no_roster action missing from BUILD section');
+    assert.match(item.label, /roster/i);
+  });
+
   test('Test-runner items live in TESTING section', () => {
     const testing = SECTIONS.find(s => s.label.startsWith('TESTING'));
     assert.ok(testing, 'TESTING section not found');
     const test_actions = testing.items.map(i => i.action);
-    for (const a of ['run_tests_all','run_tests_overrides','run_tests_server','run_tests_menu','run_tests_smoke','run_tests_glossary','run_tests_downloads','run_tests_build']) {
+    for (const a of ['run_tests_all','run_tests_overrides','run_tests_server','run_tests_menu','run_tests_smoke','run_tests_glossary','run_tests_downloads','run_tests_build','run_tests_roster']) {
       assert.ok(test_actions.includes(a), `${a} not in TESTING section`);
     }
   });
@@ -134,6 +142,7 @@ describe('menu.js — test files exist', () => {
     { action: 'run_tests_glossary',  file: 'glossary.test.js' },
     { action: 'run_tests_downloads', file: 'downloads.test.js' },
     { action: 'run_tests_build',     file: 'build.test.js' },
+    { action: 'run_tests_roster',    file: 'roster.test.js' },
   ];
 
   for (const c of cases) {
