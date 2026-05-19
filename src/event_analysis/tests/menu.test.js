@@ -77,7 +77,7 @@ describe('menu.js — known actions', () => {
   // Adding a NEW action? Add it here too so its disappearance becomes a
   // test failure rather than a silent break.
   const REQUIRED_ACTIONS = [
-    'build', 'build_rule_based', 'build_fresh_ai', 'build_no_roster', 'check',
+    'build', 'build_rule_based', 'build_fresh_ai', 'build_no_roster', 'build_custom_years', 'check',
     'open_dashboard', 'open_excel', 'open_pptx',
     'list_overrides', 'suggest_overrides',
     'add_match', 'add_no_match', 'add_segment', 'remove_override',
@@ -118,6 +118,17 @@ describe('menu.js — known actions', () => {
     const item = build_section.items.find(i => i.action === 'build_no_roster');
     assert.ok(item, 'build_no_roster action missing from BUILD section');
     assert.match(item.label, /roster/i);
+  });
+
+  test('Build (custom years) is wired and sits in BUILD section', () => {
+    const build_section = SECTIONS.find(s => s.label.startsWith('BUILD'));
+    assert.ok(build_section, 'BUILD section not found');
+    const item = build_section.items.find(i => i.action === 'build_custom_years');
+    assert.ok(item, 'build_custom_years action missing from BUILD section');
+    assert.match(item.label, /custom years/i);
+    // Sanity: the displayed cli template should reference both year flags.
+    assert.match(item.cli, /--baseline-year/);
+    assert.match(item.cli, /--analysis-year/);
   });
 
   test('Show/hide CLI commands toggle is wired and sits in PREFERENCES section', () => {

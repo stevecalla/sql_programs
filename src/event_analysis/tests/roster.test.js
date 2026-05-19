@@ -220,7 +220,10 @@ describe('roster DB: insert_roster_snapshot', () => {
 
   test('inserts N rows tagged with the same build_at', async (t) => {
     if (!db_ok) { t.skip('DB unreachable'); return; }
+    // Zero out ms — the DATETIME(0) column truncates them on insert,
+    // and we want the query-back comparison to use the same precision.
     const build_at = new Date();
+    build_at.setMilliseconds(0);
     const inserted = await insert_roster_snapshot({
       results:       fixture_for_year(5),
       build_at,

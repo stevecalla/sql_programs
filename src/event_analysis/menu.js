@@ -154,70 +154,71 @@ const SECTIONS = [
       { id: 2,  label: 'Build (rule-based only)',    desc: '--no-ai — forces rule-based commentary; no Claude API tokens spent',   action: 'build_rule_based', cli: 'node build_all.js --no-ai' },
       { id: 3,  label: 'Build (force fresh AI)',     desc: '--fresh-ai — bypasses commentary cache and calls Claude even when inputs are unchanged', action: 'build_fresh_ai', cli: 'node build_all.js --fresh-ai' },
       { id: 4,  label: 'Build (skip roster DB write)', desc: '--no-db-roster — same outputs, but does NOT write the roster snapshot to event_analysis_roster (no historical record + no pruning)', action: 'build_no_roster', cli: 'node build_all.js --no-db-roster' },
-      { id: 5,  label: 'Check data quality',         desc: 'Validate CSVs + override conflicts before building', action: 'check',          cli: 'node check.js' },
-      { id: 6,  label: 'Open dashboard in browser',  desc: 'Interactive charts (output/dashboard.html)',     action: 'open_dashboard' },
-      { id: 7,  label: 'Open Excel workbook',        desc: 'Most recent output/<year>_event_calendar_analysis_*.xlsx',  action: 'open_excel' },
-      { id: 8,  label: 'Open PowerPoint deck',       desc: 'Most recent output/<year>_event_trends_summary_*.pptx',           action: 'open_pptx' },
+      { id: 5,  label: 'Build (custom years — ad hoc)', desc: 'Prompts for baseline + analysis years; defaults to skipping DB write + Slack so the historical record stays clean', action: 'build_custom_years', cli: 'node build_all.js --baseline-year <YYYY> --analysis-year <YYYY> --no-db-roster --no-slack' },
+      { id: 6,  label: 'Check data quality',         desc: 'Validate CSVs + override conflicts before building', action: 'check',          cli: 'node check.js' },
+      { id: 7,  label: 'Open dashboard in browser',  desc: 'Interactive charts (output/dashboard.html)',     action: 'open_dashboard' },
+      { id: 8,  label: 'Open Excel workbook',        desc: 'Most recent output/<year>_event_calendar_analysis_*.xlsx',  action: 'open_excel' },
+      { id: 9,  label: 'Open PowerPoint deck',       desc: 'Most recent output/<year>_event_trends_summary_*.pptx',           action: 'open_pptx' },
     ],
   },
   {
     label: 'OVERRIDES — event matching',
     color: YELLOW,
     items: [
-      { id: 9,  label: 'List active overrides',      desc: 'Show all entries in data/overrides.json',        action: 'list_overrides',    cli: 'node ask.js --list-overrides' },
-      { id: 10, label: 'Suggest overrides (AI)',     desc: 'Claude analyses unmatched events for likely pairs', action: 'suggest_overrides', cli: 'node ask.js --suggest-overrides' },
-      { id: 11, label: 'Add force-match',            desc: 'Force two events to be matched across years',    action: 'add_match',         cli: 'node ask.js --add-override match <sid_baseline> <sid_analysis> "note"' },
-      { id: 12, label: 'Add force-no-match',         desc: 'Prevent an event from matching (→ Attrited/New)', action: 'add_no_match',     cli: 'node ask.js --add-override no-match <25|26> <sid> "note"' },
-      { id: 13, label: 'Add force-segment',          desc: 'Override a segment classification',              action: 'add_segment',       cli: 'node ask.js --add-override segment <25|26> <sid> <segment> "note"' },
-      { id: 14, label: 'Remove override',            desc: 'Remove all overrides for a sanction ID',        action: 'remove_override',    cli: 'node ask.js --remove-override <sid>' },
+      { id: 10, label: 'List active overrides',      desc: 'Show all entries in data/overrides.json',        action: 'list_overrides',    cli: 'node ask.js --list-overrides' },
+      { id: 11, label: 'Suggest overrides (AI)',     desc: 'Claude analyses unmatched events for likely pairs', action: 'suggest_overrides', cli: 'node ask.js --suggest-overrides' },
+      { id: 12, label: 'Add force-match',            desc: 'Force two events to be matched across years',    action: 'add_match',         cli: 'node ask.js --add-override match <sid_baseline> <sid_analysis> "note"' },
+      { id: 13, label: 'Add force-no-match',         desc: 'Prevent an event from matching (→ Attrited/New)', action: 'add_no_match',     cli: 'node ask.js --add-override no-match <25|26> <sid> "note"' },
+      { id: 14, label: 'Add force-segment',          desc: 'Override a segment classification',              action: 'add_segment',       cli: 'node ask.js --add-override segment <25|26> <sid> <segment> "note"' },
+      { id: 15, label: 'Remove override',            desc: 'Remove all overrides for a sanction ID',        action: 'remove_override',    cli: 'node ask.js --remove-override <sid>' },
     ],
   },
   {
     label: 'Q&A & ANALYSIS — powered by Claude',
     color: CYAN,
     items: [
-      { id: 15, label: 'Ask a question',             desc: 'Ask Claude anything about the analysis results', action: 'ask',                cli: 'node ask.js "your question"' },
-      { id: 16, label: 'Ask and save to notes.md',   desc: 'Answer is appended to notes.md for future context', action: 'ask_save',         cli: 'node ask.js "your question" --save-notes' },
-      { id: 17, label: 'Rewrite a slide narrative',  desc: 'Update commentary.json directly with new text',  action: 'update_commentary',   cli: 'node ask.js "instruction" --update-commentary <key>' },
-      { id: 18, label: 'What changed?',              desc: 'Compare current build to prior (AI summary)',    action: 'what_changed',        cli: 'node ask.js --what-changed' },
+      { id: 16, label: 'Ask a question',             desc: 'Ask Claude anything about the analysis results', action: 'ask',                cli: 'node ask.js "your question"' },
+      { id: 17, label: 'Ask and save to notes.md',   desc: 'Answer is appended to notes.md for future context', action: 'ask_save',         cli: 'node ask.js "your question" --save-notes' },
+      { id: 18, label: 'Rewrite a slide narrative',  desc: 'Update commentary.json directly with new text',  action: 'update_commentary',   cli: 'node ask.js "instruction" --update-commentary <key>' },
+      { id: 19, label: 'What changed?',              desc: 'Compare current build to prior (AI summary)',    action: 'what_changed',        cli: 'node ask.js --what-changed' },
     ],
   },
   {
     label: 'INFORMATION',
     color: GREEN,
     items: [
-      { id: 19, label: 'View changes since last build', desc: 'Show output/changes.txt',                    action: 'view_changes',      cli: 'cat output/changes.txt' },
-      { id: 20, label: 'View notes.md',              desc: 'Current analyst notes + build history',         action: 'view_notes',         cli: 'cat notes.md' },
-      { id: 21, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme',        cli: 'cat README.md' },
+      { id: 20, label: 'View changes since last build', desc: 'Show output/changes.txt',                    action: 'view_changes',      cli: 'cat output/changes.txt' },
+      { id: 21, label: 'View notes.md',              desc: 'Current analyst notes + build history',         action: 'view_notes',         cli: 'cat notes.md' },
+      { id: 22, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme',        cli: 'cat README.md' },
     ],
   },
   {
     label: 'LOCAL SERVER — http://localhost:8016',
     color: CYAN,
     items: [
-      { id: 22, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop)', action: 'start_server', cli: 'cd ../../ && node server_event_analysis_8016.js' },
+      { id: 23, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop)', action: 'start_server', cli: 'cd ../../ && node server_event_analysis_8016.js' },
     ],
   },
   {
     label: 'TESTING — verify the code is working',
     color: MAGENTA,
     items: [
-      { id: 23, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all',        cli: 'node --test tests/' },
-      { id: 24, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides', cli: 'node --test tests/overrides.test.js' },
-      { id: 25, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server',     cli: 'node --test tests/server.test.js' },
-      { id: 26, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu',     cli: 'node --test tests/menu.test.js' },
-      { id: 27, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke',      cli: 'node --test tests/smoke.test.js' },
-      { id: 28, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary', cli: 'node --test tests/glossary.test.js' },
-      { id: 29, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads', cli: 'node --test tests/downloads.test.js' },
-      { id: 30, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build', cli: 'node --test tests/build.test.js' },
-      { id: 31, label: 'Run roster tests only',      desc: 'tests/roster.test.js — roster snapshot insert + tiered retention (DB-backed; skips if DB unreachable)', action: 'run_tests_roster', cli: 'node --test tests/roster.test.js' },
+      { id: 24, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all',        cli: 'node --test tests/' },
+      { id: 25, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides', cli: 'node --test tests/overrides.test.js' },
+      { id: 26, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server',     cli: 'node --test tests/server.test.js' },
+      { id: 27, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu',     cli: 'node --test tests/menu.test.js' },
+      { id: 28, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke',      cli: 'node --test tests/smoke.test.js' },
+      { id: 29, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary', cli: 'node --test tests/glossary.test.js' },
+      { id: 30, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads', cli: 'node --test tests/downloads.test.js' },
+      { id: 31, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build', cli: 'node --test tests/build.test.js' },
+      { id: 32, label: 'Run roster tests only',      desc: 'tests/roster.test.js — roster snapshot insert + tiered retention (DB-backed; skips if DB unreachable)', action: 'run_tests_roster', cli: 'node --test tests/roster.test.js' },
     ],
   },
   {
     label: 'PREFERENCES',
     color: WHITE,
     items: [
-      { id: 32, label: 'Show/hide CLI commands',     desc: 'Toggle a dimmed "$ ..." line under each menu item. Choice persists in .menu_prefs.json next to menu.js.', action: 'toggle_commands' },
+      { id: 33, label: 'Show/hide CLI commands',     desc: 'Toggle a dimmed "$ ..." line under each menu item. Choice persists in .menu_prefs.json next to menu.js.', action: 'toggle_commands' },
     ],
   },
 ];
@@ -311,6 +312,58 @@ async function handle_action(action, rl) {
       console.log(c(DIM, '  --no-db-roster → roster snapshot will NOT be written to event_analysis_roster.'));
       const code = await new Promise(resolve => {
         const proc = spawn(process.execPath ?? 'node', ['build_all.js', '--no-db-roster'], {
+          stdio: 'inherit',
+          cwd:   DIR,
+          shell: false,
+        });
+        proc.on('close', resolve);
+      });
+      if (code !== 0 && code !== null) console.log(c(YELLOW, `\n  Build exited with code ${code}.`));
+      break;
+    }
+
+    case 'build_custom_years': {
+      // Ad-hoc: prompt for a year pair, then spawn build_all.js with the
+      // appropriate CLI flags. Defaults skip the DB roster write + Slack
+      // notification, since the typical reason to run this is "what would
+      // 2026-vs-2027 look like?" — a one-off exploration that shouldn't
+      // pollute the historical roster table or ping the team channel.
+      // The user can opt back in by answering 'n' to either prompt.
+      console.log(c(BOLD, '  Build with custom years (ad-hoc analysis)\n'));
+      console.log(c(DIM, '  Press Enter on any prompt to keep the suggested default.\n'));
+
+      // Read the current default scope from the env so the prompts have
+      // sensible suggestions (matches what `node build_all.js` would use
+      // with no flags).
+      const default_analysis = Number(process.env.ANALYSIS_YEAR) || new Date().getFullYear();
+      const default_baseline = Number(process.env.BASELINE_YEAR) || (default_analysis - 1);
+
+      const baseline_raw = (await prompt(rl, `  Baseline year (default ${default_baseline}): `)).trim();
+      const analysis_raw = (await prompt(rl, `  Analysis year (default ${default_analysis}): `)).trim();
+      const baseline = Number(baseline_raw) || default_baseline;
+      const analysis = Number(analysis_raw) || default_analysis;
+
+      if (!Number.isInteger(baseline) || !Number.isInteger(analysis) || baseline < 2000 || analysis < 2000 || baseline > 2100 || analysis > 2100) {
+        console.log(c(YELLOW, `  Cancelled — years must be 4-digit integers in [2000, 2100]. Got baseline=${baseline}, analysis=${analysis}.`));
+        break;
+      }
+      if (baseline === analysis) {
+        console.log(c(YELLOW, '  Cancelled — baseline and analysis years must differ.'));
+        break;
+      }
+
+      const skip_db_raw     = (await prompt(rl, `  Skip writing roster snapshot to DB? (Y/n): `)).trim().toLowerCase();
+      const skip_slack_raw  = (await prompt(rl, `  Skip Slack notification? (Y/n): `)).trim().toLowerCase();
+      const skip_db    = skip_db_raw    !== 'n';   // default Y
+      const skip_slack = skip_slack_raw !== 'n';   // default Y
+
+      const args = ['build_all.js', '--baseline-year', String(baseline), '--analysis-year', String(analysis)];
+      if (skip_db)    args.push('--no-db-roster');
+      if (skip_slack) args.push('--no-slack');
+
+      console.log(c(DIM, `\n  Running: node ${args.join(' ')}\n`));
+      const code = await new Promise(resolve => {
+        const proc = spawn(process.execPath ?? 'node', args, {
           stdio: 'inherit',
           cwd:   DIR,
           shell: false,

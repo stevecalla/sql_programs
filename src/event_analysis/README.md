@@ -108,15 +108,17 @@ All event data is pulled live from the `event_data_metrics` table in `usat_sales
 1. **Events query** — one row per event for each year (`starts_year_events = YA` and `= YB`), filtered downstream to drop `CANCELLED` / `DECLINED` / `DELETED`.
 2. **Creation pipeline query** — one row per `(creation_year, event_type, creation_month)` bucket for each year. Used by the `step_5_creation_pipeline` Excel sheet and PPT slide 7.
 
-Year selection is controlled by env vars at the call site:
+Year selection is controlled by CLI flags (universal across shells) — or persistent env vars in `.env` for project-wide defaults:
 
 ```bash
 # Default: current year vs prior year (derived from new Date())
 node build_all.js
 
-# Specific pair (e.g. when running historical comparisons)
-ANALYSIS_YEAR=2026 BASELINE_YEAR=2025 node build_all.js
+# Specific pair via CLI flags (e.g. for historical comparisons or testing future years)
+node build_all.js --baseline-year 2025 --analysis-year 2026
 ```
+
+`BASELINE_YEAR` / `ANALYSIS_YEAR` env vars (or `.env` entries) still work as defaults; CLI flags override them. Menu option **5** ("Build (custom years — ad hoc)") prompts you interactively and wires the flags into the spawn — handy for one-off "what would 2026 vs 2027 look like?" runs.
 
 If the DB is unreachable the build fails fast with a clear error — there is no CSV fallback. To verify the connection without doing a full build, run option **2** (Check data quality) from the menu.
 
@@ -133,7 +135,7 @@ Type a number and press Enter. For features that need input the menu prompts you
 
 The status bar at the top always shows: last build date, event totals, commentary mode (AI or rule-based), API key status, and active override count.
 
-### All 32 features — menu number + what it runs
+### All 33 features — menu number + what it runs
 
 | # | Menu label | Equivalent command |
 |---|---|---|
@@ -142,40 +144,41 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 2 | Build (rule-based only) | `node build_all.js --no-ai` — forces rule-based commentary; no Claude tokens spent. Useful when iterating on dashboard / Excel / pptx formatting. |
 | 3 | Build (force fresh AI) | `node build_all.js --fresh-ai` — bypasses the commentary cache and calls Claude even when inputs haven't changed. Use when you tweaked the prompt or want new wording. |
 | 4 | Build (skip roster DB write) | `node build_all.js --no-db-roster` — same outputs (Excel / PowerPoint / dashboard / JSON), but does NOT write the roster snapshot to `event_analysis_roster` and skips retention pruning. Use for local iteration where you don't want every throwaway build in the historical record. |
-| 5 | Check data quality | `node check.js` |
-| 6 | Open dashboard in browser | Opens `output/dashboard.html` |
-| 7 | Open Excel workbook | Opens the newest `output/<year>_event_calendar_analysis_*.xlsx` |
-| 8 | Open PowerPoint deck | Opens the newest `output/<year>_event_trends_summary_*.pptx` |
+| 5 | Build (custom years — ad hoc) | Prompts for `--baseline-year` and `--analysis-year`, defaults the other two prompts to skip the DB write + Slack notification. Useful for "what would 2026 vs 2027 look like?" exploration. CLI equivalent: `node build_all.js --baseline-year 2026 --analysis-year 2027 --no-db-roster --no-slack` |
+| 6 | Check data quality | `node check.js` |
+| 7 | Open dashboard in browser | Opens `output/dashboard.html` |
+| 8 | Open Excel workbook | Opens the newest `output/<year>_event_calendar_analysis_*.xlsx` |
+| 9 | Open PowerPoint deck | Opens the newest `output/<year>_event_trends_summary_*.pptx` |
 | **OVERRIDES — event matching** | | |
-| 9 | List active overrides | `node ask.js --list-overrides` |
-| 10 | Suggest overrides (AI) | `node ask.js --suggest-overrides` |
-| 11 | Add force-match | `node ask.js --add-override match <sid_baseline> <sid_analysis> "note"` |
-| 12 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
-| 13 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
-| 14 | Remove override | `node ask.js --remove-override <sid>` |
+| 10 | List active overrides | `node ask.js --list-overrides` |
+| 11 | Suggest overrides (AI) | `node ask.js --suggest-overrides` |
+| 12 | Add force-match | `node ask.js --add-override match <sid_baseline> <sid_analysis> "note"` |
+| 13 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
+| 14 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
+| 15 | Remove override | `node ask.js --remove-override <sid>` |
 | **Q&A & ANALYSIS** | | |
-| 15 | Ask a question | `node ask.js "your question"` |
-| 16 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
-| 17 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
-| 18 | What changed? | `node ask.js --what-changed` |
+| 16 | Ask a question | `node ask.js "your question"` |
+| 17 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
+| 18 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
+| 19 | What changed? | `node ask.js --what-changed` |
 | **INFORMATION** | | |
-| 19 | View changes since last build | `cat output/changes.txt` |
-| 20 | View notes.md | `cat notes.md` |
-| 21 | View README | Displays this file |
+| 20 | View changes since last build | `cat output/changes.txt` |
+| 21 | View notes.md | `cat notes.md` |
+| 22 | View README | Displays this file |
 | **LOCAL SERVER** | | |
-| 22 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
+| 23 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
 | **TESTING** | | |
-| 23 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
-| 24 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
-| 25 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
-| 26 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
-| 27 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
-| 28 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
-| 29 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
-| 30 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
-| 31 | Run roster tests only | `node --test tests/roster.test.js` (per-build roster snapshot: row-builder pure tests + DB insert + retention pruning) |
+| 24 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
+| 25 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
+| 26 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
+| 27 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
+| 28 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
+| 29 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
+| 30 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
+| 31 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
+| 32 | Run roster tests only | `node --test tests/roster.test.js` (per-build roster snapshot: row-builder pure tests + DB insert + retention pruning) |
 | **PREFERENCES** | | |
-| 32 | Show/hide CLI commands | Toggles a dimmed `$ ...` second line under each menu item. Choice persists in `.menu_prefs.json` next to `menu.js` (gitignored). |
+| 33 | Show/hide CLI commands | Toggles a dimmed `$ ...` second line under each menu item. Choice persists in `.menu_prefs.json` next to `menu.js` (gitignored). |
 | 0 | Exit | — |
 
 ---
@@ -226,15 +229,27 @@ STEP 6 — Save useful insights
 
 Default behaviour compares the **current year vs prior year**, derived from `new Date()`. So in May 2026 it runs as 2025 vs 2026 automatically.
 
-To compare a specific year-pair (historical or future), set environment variables at the command line:
+To compare a specific year-pair (historical or future), use the CLI flags (universal across shells — PowerShell / cmd / bash / Git Bash):
 
 ```bash
-# Compare 2024 vs 2025
-ANALYSIS_YEAR=2025 BASELINE_YEAR=2024 node build_all.js
+# Compare 2024 vs 2025 (ad-hoc — explicit on the command line)
+node build_all.js --baseline-year 2024 --analysis-year 2025
 
-# Or set just ANALYSIS_YEAR and let BASELINE_YEAR default to ANALYSIS_YEAR - 1
-ANALYSIS_YEAR=2025 node build_all.js
+# Or set just --analysis-year and let baseline default to analysis_year - 1
+node build_all.js --analysis-year 2025
+
+# Combine with other flags as needed
+node build_all.js --baseline-year 2026 --analysis-year 2027 --no-db-roster --no-slack
 ```
+
+For project-wide defaults (e.g. "this checkout always runs 2025 vs 2026"), set them in `.env` instead:
+
+```
+BASELINE_YEAR=2025
+ANALYSIS_YEAR=2026
+```
+
+CLI flags always win over env vars when both are set — so you can keep a persistent `.env` default and still override it for a one-off run. **Menu option 5** ("Build (custom years — ad hoc)") prompts you interactively, defaults to skipping the DB write + Slack notification, and spawns the build with the right flags. Useful for quick "what would 2026 vs 2027 look like?" exploration without editing `.env`.
 
 The DB queries, output filenames (e.g. `2025_event_calendar_analysis_*.xlsx`), slide headers, worst-month callouts, calendar tables, and all narratives update automatically. **No code edits required.**
 
@@ -797,7 +812,7 @@ Exits with status 1 if errors are found (stopping a `check.js && build_all.js` p
 
 ## Test suite — tests/
 
-> **Menu:** options **23–31** (all / overrides / server / menu / smoke / glossary / downloads / build / roster) — or run directly:
+> **Menu:** options **24–32** (all / overrides / server / menu / smoke / glossary / downloads / build / roster) — or run directly:
 
 ```bash
 node --test tests/                  # run every *.test.js

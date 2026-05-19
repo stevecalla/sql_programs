@@ -33,6 +33,16 @@ const crypto = require('crypto');
 function has_flag(...names) {
   return names.some(n => process.argv.includes(n));
 }
+/**
+ * Read a `--name VALUE` (or `--name=VALUE`) CLI option. Returns the string
+ * value or null when the flag isn't present. Caller decides type coercion.
+ */
+function get_arg_value(name) {
+  const i = process.argv.indexOf(name);
+  if (i >= 0 && process.argv[i + 1] !== undefined) return process.argv[i + 1];
+  const eq = process.argv.find(a => a.startsWith(name + '='));
+  return eq ? eq.slice(name.length + 1) : null;
+}
 const FORCE_RULE_BASED = has_flag('--no-ai', '--rule-based');
 const FORCE_FRESH_AI   = has_flag('--fresh-ai');
 const FORCE_STALE_AI   = has_flag('--stale-ai');
@@ -45,8 +55,16 @@ const DIR = __dirname;
 // All inputs are now pulled live from usat_sales_db.event_data_metrics.
 // Default to comparing current year (ANALYSIS_YEAR) vs prior year (BASELINE_YEAR).
 // Override at the shell: ANALYSIS_YEAR=2027 BASELINE_YEAR=2026 node build_all.js
-const ANALYSIS_YEAR = Number(process.env.ANALYSIS_YEAR) || new Date().getFullYear();
-const BASELINE_YEAR = Number(process.env.BASELINE_YEAR) || (ANALYSIS_YEAR - 1);
+// Year scope resolves in priority order: CLI flag → env var → current year.
+// CLI flags are the new canonical interface (universal across shells);
+// env vars are still honoured because `.env` is where persistent project
+// config lives, and the server / ask.js share that same env-var contract.
+const ANALYSIS_YEAR = Number(get_arg_value('--analysis-year'))
+                   || Number(process.env.ANALYSIS_YEAR)
+                   || new Date().getFullYear();
+const BASELINE_YEAR = Number(get_arg_value('--baseline-year'))
+                   || Number(process.env.BASELINE_YEAR)
+                   || (ANALYSIS_YEAR - 1);
 
 // ── Output config ────────────────────────────────────────────────────────────
 // Timestamp captured once at script start so every artifact from this run
