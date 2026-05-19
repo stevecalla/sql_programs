@@ -7,11 +7,11 @@ Compares two years of USAT sanctioned event CSV data (2025 vs 2026) and produces
 - **PowerPoint deck** — 8-slide executive summary (`output/event_trends_summary_v3.pptx`)
 - **HTML dashboard** — interactive filterable roster + charts (`output/dashboard.html`)
 
-Everything is generated dynamically from CSV data. With an Anthropic API key in `.env`, Claude writes all commentary and insights; without one, a rule-based fallback produces equivalent output. Set `NO_AI=1` (or `RULE_BASED_ONLY=1`) to force rule-based even when the key is set — handy for iterating on formatting without burning tokens. Menu option **2** ("Build (rule-based only)") wires that env var for you.
+Everything is generated dynamically from CSV data. With an Anthropic API key in `.env`, Claude writes all commentary and insights; without one, a rule-based fallback produces equivalent output. Pass `--no-ai` (or `--rule-based`) to force rule-based even when the key is set — handy for iterating on formatting without burning tokens. Menu option **2** ("Build (rule-based only)") wires that flag for you.
 
-The AI call (~70s) dominates build time, so `build_all.js` ships a **commentary cache**: it hashes a whitelist of fields commentary actually reads (years, segments, by-type counts, monthly aggregates, organic delta, calendar impact, override count) and stamps the hash onto `commentary.json` as `_input_hash`. Next build: hash match → reuse the prior commentary, no API call. Hash miss → fresh AI call. Manual overrides: `FRESH_AI=1` (menu option **3**) bypasses the cache; `STALE_AI=1` (env only) forces the cache even when the hash drifted. Excluded from the hash: event names, sanction IDs, confidence, override row contents — so source-data typo fixes don't burn tokens, but real aggregate shifts always do.
+The AI call (~70s) dominates build time, so `build_all.js` ships a **commentary cache**: it hashes a whitelist of fields commentary actually reads (years, segments, by-type counts, monthly aggregates, organic delta, calendar impact, override count) and stamps the hash onto `commentary.json` as `_input_hash`. Next build: hash match → reuse the prior commentary, no API call. Hash miss → fresh AI call. Manual overrides: `--fresh-ai` (menu option **3**) bypasses the cache; `--stale-ai` (CLI flag only) forces the cache even when the hash drifted. Excluded from the hash: event names, sanction IDs, confidence, override row contents — so source-data typo fixes don't burn tokens, but real aggregate shifts always do.
 
-Every build also posts a one-line status to `#steve_calla_slack_channel` via the shared `utilities/slack_messaging/slack_message_api.js` helper (same channel + same env var the participation-data and event-data jobs use: `SLACK_WEBHOOK_STEVE_CALLA_USAT_URL`). Success: `:white_check_mark: event_analysis build · 7.3s · ai_claude (cached) · 2025→2026 net -12`. Failure: `:x: event_analysis build FAILED · 12.1s · <first line of error>`. Suppress with `SLACK_OFF=1`. A failed Slack post is logged but never breaks the build.
+Every build also posts a one-line status to `#steve_calla_slack_channel` via the shared `utilities/slack_messaging/slack_message_api.js` helper (same channel + same env var the participation-data and event-data jobs use: `SLACK_WEBHOOK_STEVE_CALLA_USAT_URL`). Success: `:white_check_mark: event_analysis build · 7.3s · ai_claude (cached) · 2025→2026 net -12`. Failure: `:x: event_analysis build FAILED · 12.1s · <first line of error>`. Suppress with `--no-slack`. A failed Slack post is logged but never breaks the build.
 
 ---
 
@@ -20,10 +20,11 @@ Every build also posts a one-line status to `#steve_calla_slack_channel` via the
 ```bash
 node check.js                   # validate data quality before building (always run first)
 node build_all.js               # generate Excel + PowerPoint + dashboard (~80s w/ AI, ~7s cached, ~7s NO_AI)
-NO_AI=1 node build_all.js       # same as above, but force rule-based commentary (no Claude tokens)
-FRESH_AI=1 node build_all.js    # bypass commentary cache, force a fresh Claude call
-NO_DB_ROSTER=1 node build_all.js  # same outputs, but skip the event_analysis_roster INSERT + retention prune
-node menu.js                    # interactive feature launcher (31 options across 6 sections)
+node build_all.js --no-ai       # same as above, but force rule-based commentary (no Claude tokens)
+node build_all.js --fresh-ai    # bypass commentary cache, force a fresh Claude call
+node build_all.js --no-db-roster   # same outputs, but skip the event_analysis_roster INSERT + retention prune
+node build_all.js --no-slack    # suppress the Slack notification on completion
+node menu.js                    # interactive feature launcher (32 options across 7 sections — incl. PREFERENCES toggle for showing CLI equivalents)
 node ask.js                     # Q&A + override management CLI (DB-backed)
 node server_event_analysis_8016.js   # from repo root — local read-only API at http://localhost:8016
 node --test tests/              # run every *.test.js (overrides + server + menu + smoke + glossary + downloads + build + roster)
@@ -268,7 +269,7 @@ CORS is open (`*`) — fine for local dev, tighten before any production hosting
 | 2.5. Year scoping (`baseline_year` / `analysis_year` columns + index, sid_baseline/sid_analysis rename) | ✓ done |
 | 3. `analysis.js` reads from DB (async, year-scoped, surfaces unapproved warnings) | ✓ done |
 | 3.5. `tests/overrides.test.js` (`node --test tests/`, menu options 23–31) | ✓ done |
-| **11.** Per-build roster snapshot — `event_analysis_roster` table with full roster + `build_at` partitioning, populated by `insert_roster_snapshot.js` at the end of every build. Tiered retention via `prune_roster_table.js` (48h full / 30d daily / 90d weekly / monthly forever). Append-only historical record for trend queries and BI-tool integration. No read path yet — table is write-only. `NO_DB_ROSTER=1` skips the insert + prune (menu option 4 wires it). Tests in `tests/roster.test.js` (menu option 31). | ✓ done |
+| **11.** Per-build roster snapshot — `event_analysis_roster` table with full roster + `build_at` partitioning, populated by `insert_roster_snapshot.js` at the end of every build. Tiered retention via `prune_roster_table.js` (48h full / 30d daily / 90d weekly / monthly forever). Append-only historical record for trend queries and BI-tool integration. No read path yet — table is write-only. `--no-db-roster` skips the insert + prune (menu option 4 wires it). Tests in `tests/roster.test.js` (menu option 31). | ✓ done |
 | **4.** `ask.js` CLI writes to DB (add / remove / list / suggest), `--global` flag, `created_by` provenance | ✓ done |
 | **5.** `--approve` / `--unapprove` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, captures event signatures. Unapprove clears approval + signatures (keeps audit fields). | ✓ done |
 | **6.** Stale-approval detection. `apply_overrides()` recomputes event signatures and compares to stored snapshot; on drift the build flips `approval_state='stale'`, emits `⚠ [stale approval]` warning, and `--list-overrides` renders the row with a `⚠ stale` badge. | ✓ done |

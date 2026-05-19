@@ -87,6 +87,7 @@ describe('menu.js — known actions', () => {
     'run_tests_all', 'run_tests_overrides', 'run_tests_server',
     'run_tests_menu', 'run_tests_smoke', 'run_tests_glossary',
     'run_tests_downloads', 'run_tests_build', 'run_tests_roster',
+    'toggle_commands',
   ];
 
   test('every REQUIRED_ACTIONS entry is present in the menu', () => {
@@ -117,6 +118,26 @@ describe('menu.js — known actions', () => {
     const item = build_section.items.find(i => i.action === 'build_no_roster');
     assert.ok(item, 'build_no_roster action missing from BUILD section');
     assert.match(item.label, /roster/i);
+  });
+
+  test('Show/hide CLI commands toggle is wired and sits in PREFERENCES section', () => {
+    const prefs_section = SECTIONS.find(s => s.label === 'PREFERENCES');
+    assert.ok(prefs_section, 'PREFERENCES section not found');
+    const item = prefs_section.items.find(i => i.action === 'toggle_commands');
+    assert.ok(item, 'toggle_commands action missing from PREFERENCES section');
+    assert.match(item.label, /CLI commands/i);
+  });
+
+  test('every BUILD item has a cli field (so the toggle has something to show)', () => {
+    const build_section = SECTIONS.find(s => s.label.startsWith('BUILD'));
+    assert.ok(build_section);
+    const build_actions = ['build', 'build_rule_based', 'build_fresh_ai', 'build_no_roster', 'check'];
+    for (const a of build_actions) {
+      const item = build_section.items.find(i => i.action === a);
+      assert.ok(item, `${a} missing`);
+      assert.equal(typeof item.cli, 'string', `${a} missing cli field`);
+      assert.ok(item.cli.length > 0, `${a} has empty cli field`);
+    }
   });
 
   test('Test-runner items live in TESTING section', () => {
@@ -150,4 +171,35 @@ describe('menu.js — test files exist', () => {
       assert.ok(fs.existsSync(path.join(TESTS_DIR, c.file)), `missing ${c.file}`);
     });
   }
+});
+
+describe('menu.js — cli fields use universal CLI flag syntax (cross-shell)', () => {
+
+  // After the env-var → CLI-flag migration, displayed commands must work
+  // identically on PowerShell, cmd, bash, zsh, Git Bash. That means: no
+  // leading "KEY=VALUE" env-var-prefix syntax in any cli field. Catch
+  // accidental reintroductions.
+
+  test('no cli field starts with a bash-style env-var prefix', () => {
+    const offenders = ALL_ITEMS
+      .filter(i => i.cli && /^[A-Z_][A-Z0-9_]*=\S+\s+/.test(i.cli));
+    assert.deepEqual(offenders.map(i => `${i.id}: ${i.cli}`), [],
+      'cli fields must not use bash env-prefix syntax — use --flag instead');
+  });
+
+  test('build flag cli fields use --flag form, not env-var form', () => {
+    const expectations = [
+      { action: 'build_rule_based', flag: '--no-ai' },
+      { action: 'build_fresh_ai',   flag: '--fresh-ai' },
+      { action: 'build_no_roster',  flag: '--no-db-roster' },
+    ];
+    for (const e of expectations) {
+      const item = ALL_ITEMS.find(i => i.action === e.action);
+      assert.ok(item, `${e.action} not found`);
+      assert.match(item.cli, new RegExp(e.flag),
+        `${e.action} cli should contain ${e.flag}, got: ${item.cli}`);
+      assert.doesNotMatch(item.cli, /^[A-Z_]+=/,
+        `${e.action} cli should NOT start with env-var prefix, got: ${item.cli}`);
+    }
+  });
 });

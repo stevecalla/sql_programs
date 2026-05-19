@@ -100,6 +100,29 @@ function find_latest(dir, regex) {
   return matches.length ? matches[0].fp : null;
 }
 
+// ── Menu preferences ────────────────────────────────────────────────────────
+// User-toggled UI state, persisted to .menu_prefs.json next to menu.js so
+// the next launch remembers the choice. Currently only `show_cli` (the
+// "Show/hide CLI commands" toggle), but the shape is generic for future
+// preferences without needing a new file.
+const PREFS_FILE = path.join(DIR, '.menu_prefs.json');
+let _show_cli = false;   // updated by load_prefs() on startup + by toggle_commands
+
+function load_prefs() {
+  try {
+    const j = JSON.parse(fs.readFileSync(PREFS_FILE, 'utf8'));
+    if (typeof j.show_cli === 'boolean') _show_cli = j.show_cli;
+  } catch { /* file missing or malformed — fall back to defaults */ }
+}
+
+function save_prefs() {
+  try {
+    fs.writeFileSync(PREFS_FILE, JSON.stringify({ show_cli: _show_cli }, null, 2) + '\n');
+  } catch (err) {
+    console.warn(`  Could not save prefs (${err.message}) — toggle still applies for this session.`);
+  }
+}
+
 function status_line() {
   const cm  = load_json(path.join(OUTPUT_DIR, 'commentary.json'));
   const res = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
@@ -127,11 +150,11 @@ const SECTIONS = [
     label: 'BUILD & OUTPUT',
     color: BLUE,
     items: [
-      { id: 1,  label: 'Build everything',           desc: 'Excel + PowerPoint + Dashboard + JSON outputs (reuses cached AI commentary when inputs unchanged)',  action: 'build' },
-      { id: 2,  label: 'Build (rule-based only)',    desc: 'Same as Build, but forces NO_AI=1 — no Claude API tokens spent',   action: 'build_rule_based' },
-      { id: 3,  label: 'Build (force fresh AI)',     desc: 'FRESH_AI=1 — bypasses commentary cache and calls Claude even when inputs are unchanged', action: 'build_fresh_ai' },
-      { id: 4,  label: 'Build (skip roster DB write)', desc: 'NO_DB_ROSTER=1 — same outputs, but does NOT write the roster snapshot to event_analysis_roster (no historical record + no pruning)', action: 'build_no_roster' },
-      { id: 5,  label: 'Check data quality',         desc: 'Validate CSVs + override conflicts before building', action: 'check' },
+      { id: 1,  label: 'Build everything',           desc: 'Excel + PowerPoint + Dashboard + JSON outputs (reuses cached AI commentary when inputs unchanged)',  action: 'build',           cli: 'node build_all.js' },
+      { id: 2,  label: 'Build (rule-based only)',    desc: '--no-ai — forces rule-based commentary; no Claude API tokens spent',   action: 'build_rule_based', cli: 'node build_all.js --no-ai' },
+      { id: 3,  label: 'Build (force fresh AI)',     desc: '--fresh-ai — bypasses commentary cache and calls Claude even when inputs are unchanged', action: 'build_fresh_ai', cli: 'node build_all.js --fresh-ai' },
+      { id: 4,  label: 'Build (skip roster DB write)', desc: '--no-db-roster — same outputs, but does NOT write the roster snapshot to event_analysis_roster (no historical record + no pruning)', action: 'build_no_roster', cli: 'node build_all.js --no-db-roster' },
+      { id: 5,  label: 'Check data quality',         desc: 'Validate CSVs + override conflicts before building', action: 'check',          cli: 'node check.js' },
       { id: 6,  label: 'Open dashboard in browser',  desc: 'Interactive charts (output/dashboard.html)',     action: 'open_dashboard' },
       { id: 7,  label: 'Open Excel workbook',        desc: 'Most recent output/<year>_event_calendar_analysis_*.xlsx',  action: 'open_excel' },
       { id: 8,  label: 'Open PowerPoint deck',       desc: 'Most recent output/<year>_event_trends_summary_*.pptx',           action: 'open_pptx' },
@@ -141,53 +164,60 @@ const SECTIONS = [
     label: 'OVERRIDES — event matching',
     color: YELLOW,
     items: [
-      { id: 9,  label: 'List active overrides',      desc: 'Show all entries in data/overrides.json',        action: 'list_overrides' },
-      { id: 10, label: 'Suggest overrides (AI)',     desc: 'Claude analyses unmatched events for likely pairs', action: 'suggest_overrides' },
-      { id: 11, label: 'Add force-match',            desc: 'Force two events to be matched across years',    action: 'add_match' },
-      { id: 12, label: 'Add force-no-match',         desc: 'Prevent an event from matching (→ Attrited/New)', action: 'add_no_match' },
-      { id: 13, label: 'Add force-segment',          desc: 'Override a segment classification',              action: 'add_segment' },
-      { id: 14, label: 'Remove override',            desc: 'Remove all overrides for a sanction ID',        action: 'remove_override' },
+      { id: 9,  label: 'List active overrides',      desc: 'Show all entries in data/overrides.json',        action: 'list_overrides',    cli: 'node ask.js --list-overrides' },
+      { id: 10, label: 'Suggest overrides (AI)',     desc: 'Claude analyses unmatched events for likely pairs', action: 'suggest_overrides', cli: 'node ask.js --suggest-overrides' },
+      { id: 11, label: 'Add force-match',            desc: 'Force two events to be matched across years',    action: 'add_match',         cli: 'node ask.js --add-override match <sid_baseline> <sid_analysis> "note"' },
+      { id: 12, label: 'Add force-no-match',         desc: 'Prevent an event from matching (→ Attrited/New)', action: 'add_no_match',     cli: 'node ask.js --add-override no-match <25|26> <sid> "note"' },
+      { id: 13, label: 'Add force-segment',          desc: 'Override a segment classification',              action: 'add_segment',       cli: 'node ask.js --add-override segment <25|26> <sid> <segment> "note"' },
+      { id: 14, label: 'Remove override',            desc: 'Remove all overrides for a sanction ID',        action: 'remove_override',    cli: 'node ask.js --remove-override <sid>' },
     ],
   },
   {
     label: 'Q&A & ANALYSIS — powered by Claude',
     color: CYAN,
     items: [
-      { id: 15, label: 'Ask a question',             desc: 'Ask Claude anything about the analysis results', action: 'ask' },
-      { id: 16, label: 'Ask and save to notes.md',   desc: 'Answer is appended to notes.md for future context', action: 'ask_save' },
-      { id: 17, label: 'Rewrite a slide narrative',  desc: 'Update commentary.json directly with new text',  action: 'update_commentary' },
-      { id: 18, label: 'What changed?',              desc: 'Compare current build to prior (AI summary)',    action: 'what_changed' },
+      { id: 15, label: 'Ask a question',             desc: 'Ask Claude anything about the analysis results', action: 'ask',                cli: 'node ask.js "your question"' },
+      { id: 16, label: 'Ask and save to notes.md',   desc: 'Answer is appended to notes.md for future context', action: 'ask_save',         cli: 'node ask.js "your question" --save-notes' },
+      { id: 17, label: 'Rewrite a slide narrative',  desc: 'Update commentary.json directly with new text',  action: 'update_commentary',   cli: 'node ask.js "instruction" --update-commentary <key>' },
+      { id: 18, label: 'What changed?',              desc: 'Compare current build to prior (AI summary)',    action: 'what_changed',        cli: 'node ask.js --what-changed' },
     ],
   },
   {
     label: 'INFORMATION',
     color: GREEN,
     items: [
-      { id: 19, label: 'View changes since last build', desc: 'Show output/changes.txt',                    action: 'view_changes' },
-      { id: 20, label: 'View notes.md',              desc: 'Current analyst notes + build history',         action: 'view_notes' },
-      { id: 21, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme' },
+      { id: 19, label: 'View changes since last build', desc: 'Show output/changes.txt',                    action: 'view_changes',      cli: 'cat output/changes.txt' },
+      { id: 20, label: 'View notes.md',              desc: 'Current analyst notes + build history',         action: 'view_notes',         cli: 'cat notes.md' },
+      { id: 21, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme',        cli: 'cat README.md' },
     ],
   },
   {
     label: 'LOCAL SERVER — http://localhost:8016',
     color: CYAN,
     items: [
-      { id: 22, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop)', action: 'start_server' },
+      { id: 22, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop)', action: 'start_server', cli: 'cd ../../ && node server_event_analysis_8016.js' },
     ],
   },
   {
     label: 'TESTING — verify the code is working',
     color: MAGENTA,
     items: [
-      { id: 23, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all' },
-      { id: 24, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides' },
-      { id: 25, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server' },
-      { id: 26, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu' },
-      { id: 27, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke' },
-      { id: 28, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary' },
-      { id: 29, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads' },
-      { id: 30, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build' },
-      { id: 31, label: 'Run roster tests only',      desc: 'tests/roster.test.js — roster snapshot insert + tiered retention (DB-backed; skips if DB unreachable)', action: 'run_tests_roster' },
+      { id: 23, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all',        cli: 'node --test tests/' },
+      { id: 24, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides', cli: 'node --test tests/overrides.test.js' },
+      { id: 25, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server',     cli: 'node --test tests/server.test.js' },
+      { id: 26, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu',     cli: 'node --test tests/menu.test.js' },
+      { id: 27, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke',      cli: 'node --test tests/smoke.test.js' },
+      { id: 28, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary', cli: 'node --test tests/glossary.test.js' },
+      { id: 29, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads', cli: 'node --test tests/downloads.test.js' },
+      { id: 30, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build', cli: 'node --test tests/build.test.js' },
+      { id: 31, label: 'Run roster tests only',      desc: 'tests/roster.test.js — roster snapshot insert + tiered retention (DB-backed; skips if DB unreachable)', action: 'run_tests_roster', cli: 'node --test tests/roster.test.js' },
+    ],
+  },
+  {
+    label: 'PREFERENCES',
+    color: WHITE,
+    items: [
+      { id: 32, label: 'Show/hide CLI commands',     desc: 'Toggle a dimmed "$ ..." line under each menu item. Choice persists in .menu_prefs.json next to menu.js.', action: 'toggle_commands' },
     ],
   },
 ];
@@ -208,6 +238,14 @@ function print_menu() {
     for (const item of section.items) {
       const num = String(item.id).padStart(3);
       console.log(`  ${c(BOLD, num + '.')} ${item.label.padEnd(32)} ${c(DIM, item.desc)}`);
+      // Second dimmed line with the CLI equivalent — only when the user
+      // has flipped the "Show/hide CLI commands" toggle on. Items without
+      // a `cli` field (Open Excel, etc.) skip this line silently. CLI
+      // flags are universal across shells (PowerShell / cmd / bash / zsh
+      // / Git Bash), so no per-platform translation is needed.
+      if (_show_cli && item.cli) {
+        console.log(`        ${c(DIM, '$ ' + item.cli)}`);
+      }
     }
     console.log('');
   }
@@ -232,17 +270,15 @@ async function handle_action(action, rl) {
       break;
 
     case 'build_rule_based': {
-      // Force rule-based commentary by setting NO_AI=1 in the child env.
-      // Same script as 'build', just without the API call — useful when
-      // you're iterating on dashboard / Excel / PowerPoint formatting and
-      // don't want to burn Claude tokens regenerating slide narratives.
-      console.log(c(DIM, '  NO_AI=1 → rule-based commentary only.'));
+      // Pass --no-ai as a CLI flag — same effect as setting NO_AI used to
+      // have, but with a universal cross-shell syntax. Useful when iterating
+      // on dashboard / Excel / PowerPoint formatting without burning tokens.
+      console.log(c(DIM, '  --no-ai → rule-based commentary only.'));
       const code = await new Promise(resolve => {
-        const proc = spawn(process.execPath ?? 'node', ['build_all.js'], {
+        const proc = spawn(process.execPath ?? 'node', ['build_all.js', '--no-ai'], {
           stdio: 'inherit',
           cwd:   DIR,
           shell: false,
-          env:   { ...process.env, NO_AI: '1' },
         });
         proc.on('close', resolve);
       });
@@ -251,17 +287,15 @@ async function handle_action(action, rl) {
     }
 
     case 'build_fresh_ai': {
-      // Force a fresh Claude call by setting FRESH_AI=1 in the child env.
-      // Skips the input-hash cache check, so AI commentary is regenerated
-      // even when the underlying numbers haven't changed. Use when you've
-      // tweaked the AI prompt or just want new wording.
-      console.log(c(DIM, '  FRESH_AI=1 → bypass commentary cache, call Claude unconditionally.'));
+      // --fresh-ai skips the input-hash cache check, so AI commentary
+      // is regenerated even when the underlying numbers haven't changed.
+      // Use when you've tweaked the AI prompt or just want new wording.
+      console.log(c(DIM, '  --fresh-ai → bypass commentary cache, call Claude unconditionally.'));
       const code = await new Promise(resolve => {
-        const proc = spawn(process.execPath ?? 'node', ['build_all.js'], {
+        const proc = spawn(process.execPath ?? 'node', ['build_all.js', '--fresh-ai'], {
           stdio: 'inherit',
           cwd:   DIR,
           shell: false,
-          env:   { ...process.env, FRESH_AI: '1' },
         });
         proc.on('close', resolve);
       });
@@ -270,17 +304,16 @@ async function handle_action(action, rl) {
     }
 
     case 'build_no_roster': {
-      // Same build as 'build', but skip the event_analysis_roster INSERT +
-      // pruning. Useful when iterating locally and you don't want every
-      // throwaway build to land in the historical record (and trigger the
-      // retention prune that follows).
-      console.log(c(DIM, '  NO_DB_ROSTER=1 → roster snapshot will NOT be written to event_analysis_roster.'));
+      // --no-db-roster skips the event_analysis_roster INSERT + pruning.
+      // Useful when iterating locally and you don't want every throwaway
+      // build to land in the historical record (and trigger the retention
+      // prune that follows).
+      console.log(c(DIM, '  --no-db-roster → roster snapshot will NOT be written to event_analysis_roster.'));
       const code = await new Promise(resolve => {
-        const proc = spawn(process.execPath ?? 'node', ['build_all.js'], {
+        const proc = spawn(process.execPath ?? 'node', ['build_all.js', '--no-db-roster'], {
           stdio: 'inherit',
           cwd:   DIR,
           shell: false,
-          env:   { ...process.env, NO_DB_ROSTER: '1' },
         });
         proc.on('close', resolve);
       });
@@ -498,6 +531,17 @@ async function handle_action(action, rl) {
       break;
     }
 
+    case 'toggle_commands': {
+      // Flip the show-CLI toggle and persist. On the next print_menu()
+      // call, every item with a `cli` field gains/loses its dimmed
+      // "$ ..." second line. Choice survives across sessions via
+      // .menu_prefs.json.
+      _show_cli = !_show_cli;
+      save_prefs();
+      console.log(c(GREEN, `  ✓ CLI commands ${_show_cli ? 'shown' : 'hidden'} (saved to .menu_prefs.json).`));
+      break;
+    }
+
     default:
       console.log(c(YELLOW, `  Unknown action: ${action}`));
   }
@@ -507,6 +551,7 @@ async function handle_action(action, rl) {
 
 async function main() {
   await resolve_output_dir();
+  load_prefs();   // restore "show CLI commands" toggle from prior session, if any
   const rl = readline.createInterface({
     input:  process.stdin,
     output: process.stdout,

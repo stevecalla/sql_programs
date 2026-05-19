@@ -20,6 +20,9 @@ __pycache__/
 utilities/cron_system_metrics/*.jsonl
 utilities/cron_system_metrics/*.log
 
+# event_analysis menu — per-user preferences (Show/hide CLI commands toggle, etc.)
+src/event_analysis/.menu_prefs.json
+
 # Ignore Python virtual environments
 venv/
 .venv/

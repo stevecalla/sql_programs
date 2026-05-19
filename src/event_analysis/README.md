@@ -133,15 +133,15 @@ Type a number and press Enter. For features that need input the menu prompts you
 
 The status bar at the top always shows: last build date, event totals, commentary mode (AI or rule-based), API key status, and active override count.
 
-### All 31 features — menu number + what it runs
+### All 32 features — menu number + what it runs
 
 | # | Menu label | Equivalent command |
 |---|---|---|
 | **BUILD & OUTPUT** | | |
 | 1 | Build everything | `node build_all.js` (reuses cached AI commentary when commentary inputs haven't changed) |
-| 2 | Build (rule-based only) | `NO_AI=1 node build_all.js` — forces rule-based commentary; no Claude tokens spent. Useful when iterating on dashboard / Excel / pptx formatting. |
-| 3 | Build (force fresh AI) | `FRESH_AI=1 node build_all.js` — bypasses the commentary cache and calls Claude even when inputs haven't changed. Use when you tweaked the prompt or want new wording. |
-| 4 | Build (skip roster DB write) | `NO_DB_ROSTER=1 node build_all.js` — same outputs (Excel / PowerPoint / dashboard / JSON), but does NOT write the roster snapshot to `event_analysis_roster` and skips retention pruning. Use for local iteration where you don't want every throwaway build in the historical record. |
+| 2 | Build (rule-based only) | `node build_all.js --no-ai` — forces rule-based commentary; no Claude tokens spent. Useful when iterating on dashboard / Excel / pptx formatting. |
+| 3 | Build (force fresh AI) | `node build_all.js --fresh-ai` — bypasses the commentary cache and calls Claude even when inputs haven't changed. Use when you tweaked the prompt or want new wording. |
+| 4 | Build (skip roster DB write) | `node build_all.js --no-db-roster` — same outputs (Excel / PowerPoint / dashboard / JSON), but does NOT write the roster snapshot to `event_analysis_roster` and skips retention pruning. Use for local iteration where you don't want every throwaway build in the historical record. |
 | 5 | Check data quality | `node check.js` |
 | 6 | Open dashboard in browser | Opens `output/dashboard.html` |
 | 7 | Open Excel workbook | Opens the newest `output/<year>_event_calendar_analysis_*.xlsx` |
@@ -174,6 +174,8 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 29 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
 | 30 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
 | 31 | Run roster tests only | `node --test tests/roster.test.js` (per-build roster snapshot: row-builder pure tests + DB insert + retention pruning) |
+| **PREFERENCES** | | |
+| 32 | Show/hide CLI commands | Toggles a dimmed `$ ...` second line under each menu item. Choice persists in `.menu_prefs.json` next to `menu.js` (gitignored). |
 | 0 | Exit | — |
 
 ---
@@ -316,19 +318,18 @@ If the API key is absent or the call fails, the build falls back to rule-based c
 
 ### Force rule-based mode — skip the API call
 
-Set `NO_AI=1` (or `RULE_BASED_ONLY=1`) in the environment to force rule-based commentary even when the key is present. Menu option **2** ("Build (rule-based only)") wires this for you. Use when:
+Pass `--no-ai` (or `--rule-based`) to force rule-based commentary even when the key is present. Menu option **2** ("Build (rule-based only)") wires this for you. Use when:
 
 - You're iterating on dashboard / Excel / pptx formatting and don't want to burn Claude tokens regenerating narratives you already have.
 - You want a deterministic build for diffing two consecutive runs (AI output can vary slightly between calls).
 - The API is rate-limited / unreachable and you want a clean build now.
 
 ```bash
-# Manual invocation:
-NO_AI=1 node build_all.js                # bash / WSL / macOS
-$env:NO_AI = "1"; node build_all.js      # PowerShell
+# Manual invocation — works identically in PowerShell / cmd / bash / Git Bash:
+node build_all.js --no-ai
 ```
 
-The build logs `NO_AI / RULE_BASED_ONLY set — skipping AI commentary, using rule-based.` so you can confirm at a glance which path ran.
+The build logs `--no-ai (or --rule-based) — skipping AI commentary, using rule-based.` so you can confirm at a glance which path ran.
 
 ### Commentary cache — reuse prior AI output when inputs haven't changed
 
@@ -343,9 +344,9 @@ What's NOT in the hash (so a change here won't invalidate): individual event nam
 
 | Flag | What it does | Menu |
 |---|---|---|
-| `FRESH_AI=1` | Bypass the cache and call Claude even when inputs are unchanged. Use when you've tweaked the prompt or want new wording. | Option **3** ("Build (force fresh AI)") |
-| `STALE_AI=1` | Use the cached `commentary.json` even when the hash differs. Use when you want zero AI cost and don't mind subtly out-of-date commentary. | (env var only — no menu entry; uncommon enough not to clutter the menu) |
-| `NO_AI=1` | Skip AI entirely; run rule-based. Cache is irrelevant — rule-based output is always fresh-computed (it's fast). | Option **2** |
+| `--fresh-ai` | Bypass the cache and call Claude even when inputs are unchanged. Use when you've tweaked the prompt or want new wording. | Option **3** ("Build (force fresh AI)") |
+| `--stale-ai` | Use the cached `commentary.json` even when the hash differs. Use when you want zero AI cost and don't mind subtly out-of-date commentary. | (CLI only — no menu entry; uncommon enough not to clutter the menu) |
+| `--no-ai` (or `--rule-based`) | Skip AI entirely; run rule-based. Cache is irrelevant — rule-based output is always fresh-computed (it's fast). | Option **2** |
 
 Together: option **1** (default) gives you the fastest correct build (cache when safe, fresh AI when needed). Option **2** is the cheapest. Option **3** is the "give me new wording" escape hatch.
 
@@ -358,7 +359,7 @@ Every build posts a one-line summary to `#steve_calla_slack_channel` via the exi
 ❌ event_analysis build FAILED · 12.1s · TypeError: foo is undefined
 ```
 
-Reads `SLACK_WEBHOOK_STEVE_CALLA_USAT_URL` from `.env` — same env var the other automation jobs in this repo use. Set `SLACK_OFF=1` in the environment to suppress the notification (useful when iterating locally and you don't want every test rebuild pinging the channel). A failed Slack post never breaks the build — the build's exit code is governed by its own outcome, the notification is a side-effect.
+Reads `SLACK_WEBHOOK_STEVE_CALLA_USAT_URL` from `.env` — same env var the other automation jobs in this repo use. Pass `--no-slack` to suppress the notification (useful when iterating locally and you don't want every test rebuild pinging the channel). A failed Slack post never breaks the build — the build's exit code is governed by its own outcome, the notification is a side-effect.
 
 ---
 
@@ -1093,7 +1094,7 @@ Indexes on `build_at`, `(baseline_year, analysis_year, build_at)`, and `(seg, bu
 
 **Write path.** At the top of `build_all.js`, `utilities/ensure_roster_table.js` creates the table if missing (idempotent — no-op on every subsequent build). After `run_analysis()` completes, `utilities/insert_roster_snapshot.js` bulk-inserts the full roster with the current `build_at`. Wrapped defensively — a DB outage logs a warning but doesn't fail the build, since the snapshot is a secondary historical record and the build's primary outputs (HTML / xlsx / pptx) don't depend on it.
 
-**Skip the DB write entirely** by setting `NO_DB_ROSTER=1` in the env (menu option **4** "Build (skip roster DB write)" wires this for you). The build runs exactly the same — same Excel, same PowerPoint, same dashboard, same Slack notification — but the `INSERT` + retention prune are bypassed and replaced with a single log line. Useful when you're iterating locally and don't want every test build to land in the historical record.
+**Skip the DB write entirely** by passing `--no-db-roster` (menu option **4** "Build (skip roster DB write)" wires this for you). The build runs exactly the same — same Excel, same PowerPoint, same dashboard, same Slack notification — but the `INSERT` + retention prune are bypassed and replaced with a single log line. Useful when you're iterating locally and don't want every test build to land in the historical record.
 
 **Tiered retention.** `utilities/prune_roster_table.js` runs after the insert and applies a four-tier retention policy so the table stays bounded over years of daily builds:
 

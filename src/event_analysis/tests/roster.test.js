@@ -280,9 +280,13 @@ describe('roster DB: prune_roster_table', () => {
     // stays. We can't easily assert the older rows' fate without knowing
     // surrounding state — the safety check is "prune ran without
     // throwing AND recent rows are not deleted."
-    const t_now   = new Date();
-    const t_10d   = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
-    const t_100d  = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
+    //
+    // Strip milliseconds because the DATETIME(0) column truncates them
+    // on insert; comparing a query-back with the original ms-bearing
+    // Date object would otherwise miss the row even though it's present.
+    const t_now   = new Date();                                   t_now.setMilliseconds(0);
+    const t_10d   = new Date(Date.now() - 10  * 24 * 60 * 60 * 1000);  t_10d.setMilliseconds(0);
+    const t_100d  = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);  t_100d.setMilliseconds(0);
 
     for (const ts of [t_now, t_10d, t_100d]) {
       await insert_roster_snapshot({

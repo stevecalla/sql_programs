@@ -24,6 +24,21 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
+// ── CLI flags ───────────────────────────────────────────────────────────────
+// Universal across shells (PowerShell, cmd, bash, zsh, Git Bash) — no
+// shell-specific syntax. Pass as args: `node build_all.js --no-ai`.
+//
+// One small helper avoids reading process.argv directly in five different
+// places below.
+function has_flag(...names) {
+  return names.some(n => process.argv.includes(n));
+}
+const FORCE_RULE_BASED = has_flag('--no-ai', '--rule-based');
+const FORCE_FRESH_AI   = has_flag('--fresh-ai');
+const FORCE_STALE_AI   = has_flag('--stale-ai');
+const SKIP_ROSTER_DB   = has_flag('--no-db-roster');
+const SUPPRESS_SLACK   = has_flag('--no-slack');
+
 // ── Input config ────────────────────────────────────────────────────────────
 const DIR = __dirname;
 
@@ -205,10 +220,10 @@ function format_slack_failure({ total_ms, error_message }) {
 /**
  * Post a brief execution summary to Slack. Wrapped so a missing webhook
  * URL or a Slack outage never breaks the build — we just log a warning.
- * Skipped entirely when SLACK_OFF=1 is set (useful in tests / dev).
+ * Skipped entirely when --no-slack is passed (useful in tests / dev).
  */
 async function send_slack(message) {
-  if (process.env.SLACK_OFF) return;
+  if (SUPPRESS_SLACK) return;
   try {
     await slack_message_api(message, 'steve_calla_slack_channel');
   } catch (err) {
@@ -237,8 +252,8 @@ function print_timing_summary() {
 // The AI commentary call is ~71s. The vast majority of rebuilds don't change
 // any number commentary reads (segment counts, type breakdown, monthly
 // aggregates), so we hash a curated whitelist of fields and reuse the prior
-// commentary.json when the hash matches. Override via FRESH_AI=1 (force
-// re-call) or STALE_AI=1 (use cache even if inputs drifted).
+// commentary.json when the hash matches. Override via --fresh-ai (force
+// re-call) or --stale-ai (use cache even if inputs drifted).
 //
 // What's IN the hash: aggregates commentary actually reads — years, segment
 // counts, per-type counts/deltas, per-month numeric aggregates, organic
@@ -443,12 +458,12 @@ async function main() {
   console.log(`  Analysis state saved:   output/analysis_state.json (${(JSON.stringify(state_export).length / 1024).toFixed(0)} KB)`);
 
   // ── Generate commentary (rule-based, upgraded to AI if key present) ────────
-  // NO_AI=1 or RULE_BASED_ONLY=1 forces rule-based even when the key is set.
-  // FRESH_AI=1 forces a fresh AI call, bypassing the input-hash cache.
-  // STALE_AI=1 forces using the cached commentary even when inputs drifted.
-  const force_rule_based = !!(process.env.NO_AI || process.env.RULE_BASED_ONLY);
-  const force_fresh_ai   = !!process.env.FRESH_AI;
-  const force_stale_ai   = !!process.env.STALE_AI;
+  // --no-ai (or --rule-based) forces rule-based even when the key is set.
+  // --fresh-ai forces a fresh AI call, bypassing the input-hash cache.
+  // --stale-ai forces using the cached commentary even when inputs drifted.
+  const force_rule_based = FORCE_RULE_BASED;
+  const force_fresh_ai   = FORCE_FRESH_AI;
+  const force_stale_ai   = FORCE_STALE_AI;
   const api_key = process.env.ANTHROPIC_API_KEY || null;
 
   // Hash the inputs commentary actually reads. Used to decide whether the
@@ -464,15 +479,15 @@ async function main() {
     commentary = cached;
     _build_summary.commentary_path = 'cache_hit';
   } else if (force_stale_ai && cached) {
-    console.log('  STALE_AI=1 — reusing prior commentary.json even though inputs drifted (hash differs).');
+    console.log('  --stale-ai — reusing prior commentary.json even though inputs drifted (hash differs).');
     commentary = cached;
     _build_summary.commentary_path = 'cache_hit';
   } else if (force_rule_based) {
-    console.log('  NO_AI / RULE_BASED_ONLY set — skipping AI commentary, using rule-based.');
+    console.log('  --no-ai (or --rule-based) — skipping AI commentary, using rule-based.');
     _build_summary.commentary_path = 'rule_based';
   } else if (api_key && api_key !== 'sk-ant-your-key-here') {
     if (force_fresh_ai && cache_hit) {
-      console.log('  FRESH_AI=1 — bypassing cache, calling Claude even though inputs are unchanged...');
+      console.log('  --fresh-ai — bypassing cache, calling Claude even though inputs are unchanged...');
     } else if (cached && !cache_hit) {
       console.log(`  Commentary cache MISS (inputs drifted, hash ${cache_key.slice(0,8)}…) — calling Claude API for insights...`);
     } else {
@@ -655,13 +670,13 @@ async function main() {
   // build_at. Same shape as the dashboard's ROSTER. Wrapped helper is
   // already defensive — never throws, returns 0 on any failure.
   //
-  // NO_DB_ROSTER=1 skips the DB write entirely. Useful for:
+  // --no-db-roster skips the DB write entirely. Useful for:
   //   - local iteration where you don't want to clutter the table
   //   - one-off builds you don't want in the historical record
   //   - dev environments without DB write access
   // Wired by the "Build (skip roster DB write)" menu option.
-  if (process.env.NO_DB_ROSTER) {
-    console.log('  NO_DB_ROSTER=1 — skipping roster snapshot + retention pruning.');
+  if (SKIP_ROSTER_DB) {
+    console.log('  --no-db-roster — skipping roster snapshot + retention pruning.');
     stage_done('roster snapshot + prune (skipped)');
   } else {
     const build_at = new Date();
@@ -686,7 +701,7 @@ async function main() {
 
   // ── Slack notification ────────────────────────────────────────────────────
   // Brief one-line summary to #steve_calla — execution + timing + commentary
-  // path. Skipped when SLACK_OFF=1. Never breaks the build if Slack fails.
+  // path. Skipped when --no-slack is passed. Never breaks the build if Slack fails.
   await send_slack(format_slack_success({
     total_ms:         Date.now() - _build_t0,
     commentary_path:  _build_summary.commentary_path,

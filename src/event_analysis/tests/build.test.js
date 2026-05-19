@@ -188,7 +188,7 @@ describe('build: commentary hash — sensitivity to whitelisted fields', () => {
     assert.notEqual(
       compute_commentary_input_hash(fixture, false),
       compute_commentary_input_hash(fixture, true),
-      'NO_AI=1 must produce a different cache key than NO_AI off'
+      '--no-ai must produce a different cache key than --no-ai off'
     );
   });
 });
