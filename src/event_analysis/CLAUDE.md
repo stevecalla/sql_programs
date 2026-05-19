@@ -11,6 +11,8 @@ Everything is generated dynamically from CSV data. With an Anthropic API key in 
 
 The AI call (~70s) dominates build time, so `build_all.js` ships a **commentary cache**: it hashes a whitelist of fields commentary actually reads (years, segments, by-type counts, monthly aggregates, organic delta, calendar impact, override count) and stamps the hash onto `commentary.json` as `_input_hash`. Next build: hash match → reuse the prior commentary, no API call. Hash miss → fresh AI call. Manual overrides: `FRESH_AI=1` (menu option **3**) bypasses the cache; `STALE_AI=1` (env only) forces the cache even when the hash drifted. Excluded from the hash: event names, sanction IDs, confidence, override row contents — so source-data typo fixes don't burn tokens, but real aggregate shifts always do.
 
+Every build also posts a one-line status to `#steve_calla_slack_channel` via the shared `utilities/slack_messaging/slack_message_api.js` helper (same channel + same env var the participation-data and event-data jobs use: `SLACK_WEBHOOK_STEVE_CALLA_USAT_URL`). Success: `:white_check_mark: event_analysis build · 7.3s · ai_claude (cached) · 2025→2026 net -12`. Failure: `:x: event_analysis build FAILED · 12.1s · <first line of error>`. Suppress with `SLACK_OFF=1`. A failed Slack post is logged but never breaks the build.
+
 ---
 
 ## How to run

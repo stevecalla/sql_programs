@@ -56,6 +56,7 @@ const { buildDeck } = require('./src/pptx/builder');
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { ensure_overrides_table } = require('./utilities/ensure_overrides_table');
 const { migrate_overrides_json_to_db } = require('./utilities/migrate_overrides_to_db');
+const { slack_message_api } = require('../../utilities/slack_messaging/slack_message_api');
 
 
 // ── Archive + export helpers ──────────────────────────────────────────────────
@@ -143,6 +144,75 @@ function stage_done(label) {
   _stages.push({ label, ms: Date.now() - _stage_t0 });
   _stage_t0 = Date.now();
 }
+// Collected once at the end of main() (or in the catch block) and sent to
+// Slack. Lives at module scope so the cache decision in the commentary
+// block + the totals from the loader pass + the timing helper can all
+// contribute. Keys are filled in opportunistically; missing ones are
+// rendered as '?' in the message.
+const _build_summary = {
+  commentary_path: null,   // 'cache_hit' | 'ai_fresh' | 'rule_based'
+  baseline_total:  null,
+  analysis_total:  null,
+};
+
+/**
+ * Format a one-line success message for Slack. Pure function — pulled out
+ * so tests/build.test.js can assert the wire format without spawning the
+ * build. Inputs are all caller-supplied so the formatter has no
+ * dependency on module-scope state.
+ *
+ * Sample output:
+ *   :white_check_mark: event_analysis build · 7.3s · ai_claude (cached) · 2025→2026 net -12
+ */
+function format_slack_success({
+  total_ms,
+  commentary_path,    // 'cache_hit' | 'ai_fresh' | 'rule_based' | null
+  baseline_year,
+  analysis_year,
+  baseline_total,
+  analysis_total,
+}) {
+  const total_s = (Number(total_ms) / 1000).toFixed(1);
+  const path_label = commentary_path === 'cache_hit'  ? 'ai_claude (cached)'
+                   : commentary_path === 'ai_fresh'   ? 'ai_claude (fresh)'
+                   : commentary_path === 'rule_based' ? 'rule_based'
+                   :                                    '?';
+  const has_totals = baseline_total != null && analysis_total != null;
+  const net = has_totals ? analysis_total - baseline_total : null;
+  const net_str = !has_totals
+    ? ''
+    : ` · ${baseline_year}→${analysis_year} net ${net >= 0 ? '+' : ''}${net}`;
+  return `:white_check_mark: event_analysis build · ${total_s}s · ${path_label}${net_str}`;
+}
+
+/**
+ * Format a one-line failure message for Slack. Truncates the error to its
+ * first line (rest goes to stderr) and caps at 200 chars so a stack
+ * trace can't flood the channel.
+ *
+ * Sample output:
+ *   :x: event_analysis build FAILED · 12.1s · TypeError: foo is undefined
+ */
+function format_slack_failure({ total_ms, error_message }) {
+  const total_s = total_ms ? (Number(total_ms) / 1000).toFixed(1) : '?';
+  const first_line = (error_message || 'unknown error').split('\n')[0].slice(0, 200);
+  return `:x: event_analysis build FAILED · ${total_s}s · ${first_line}`;
+}
+
+/**
+ * Post a brief execution summary to Slack. Wrapped so a missing webhook
+ * URL or a Slack outage never breaks the build — we just log a warning.
+ * Skipped entirely when SLACK_OFF=1 is set (useful in tests / dev).
+ */
+async function send_slack(message) {
+  if (process.env.SLACK_OFF) return;
+  try {
+    await slack_message_api(message, 'steve_calla_slack_channel');
+  } catch (err) {
+    console.warn(`  (Slack notification failed: ${err.message})`);
+  }
+}
+
 function print_timing_summary() {
   const total = Date.now() - _build_t0;
   console.log('');
@@ -269,6 +339,8 @@ async function main() {
   loaded.BASELINE_YEAR = BASELINE_YEAR;
   loaded.ANALYSIS_YEAR = ANALYSIS_YEAR;
   console.log(`  ${BASELINE_YEAR} active: ${loaded.baseline_active.length}  |  ${ANALYSIS_YEAR} active: ${loaded.analysis_active.length}`);
+  _build_summary.baseline_total = loaded.baseline_active.length;
+  _build_summary.analysis_total = loaded.analysis_active.length;
   const results = await run_analysis(loaded);
   results.years = { BASELINE_YEAR: BASELINE_YEAR, ANALYSIS_YEAR: ANALYSIS_YEAR };
   // Attach creation rows so commentary.js can build pipeline narratives.
@@ -381,11 +453,14 @@ async function main() {
   if (cache_hit && !force_fresh_ai) {
     console.log(`  Commentary cache HIT (hash ${cache_key.slice(0,8)}…) — reusing prior commentary.json, no AI call.`);
     commentary = cached;
+    _build_summary.commentary_path = 'cache_hit';
   } else if (force_stale_ai && cached) {
     console.log('  STALE_AI=1 — reusing prior commentary.json even though inputs drifted (hash differs).');
     commentary = cached;
+    _build_summary.commentary_path = 'cache_hit';
   } else if (force_rule_based) {
     console.log('  NO_AI / RULE_BASED_ONLY set — skipping AI commentary, using rule-based.');
+    _build_summary.commentary_path = 'rule_based';
   } else if (api_key && api_key !== 'sk-ant-your-key-here') {
     if (force_fresh_ai && cache_hit) {
       console.log('  FRESH_AI=1 — bypassing cache, calling Claude even though inputs are unchanged...');
@@ -398,13 +473,16 @@ async function main() {
       commentary = await generate_ai(results, api_key);
       if (commentary._ai_generated) {
         console.log('  AI commentary generated successfully.');
+        _build_summary.commentary_path = 'ai_fresh';
       }
     } catch (err) {
       console.warn('  AI commentary failed:', err.message, '-- using rule-based fallback');
       commentary = null;
+      _build_summary.commentary_path = 'rule_based';
     }
   } else {
     console.log('  Using rule-based commentary (add ANTHROPIC_API_KEY to .env to enable AI insights)');
+    _build_summary.commentary_path = 'rule_based';
   }
   // Ensure we always have commentary
   if (!commentary) commentary = generate_rule_based(results);
@@ -567,17 +645,41 @@ async function main() {
   // Sorted descending by elapsed time so the biggest stage is at the top —
   // useful for "where do I look first if I want to make this faster?"
   print_timing_summary();
+
+  // ── Slack notification ────────────────────────────────────────────────────
+  // Brief one-line summary to #steve_calla — execution + timing + commentary
+  // path. Skipped when SLACK_OFF=1. Never breaks the build if Slack fails.
+  await send_slack(format_slack_success({
+    total_ms:         Date.now() - _build_t0,
+    commentary_path:  _build_summary.commentary_path,
+    baseline_year:    BASELINE_YEAR,
+    analysis_year:    ANALYSIS_YEAR,
+    baseline_total:   _build_summary.baseline_total,
+    analysis_total:   _build_summary.analysis_total,
+  }));
 }
 
-// Export the cache helpers so tests/build.test.js can verify hash stability,
-// hash sensitivity, and cache-loader behaviour without spawning a full build.
-// Same pattern as menu.js: only run main() when invoked directly.
-module.exports = { compute_commentary_input_hash, try_load_cached_commentary };
+// Export pure helpers so tests/build.test.js can verify hash stability,
+// hash sensitivity, cache-loader behaviour, and Slack message formatting
+// without spawning a full build. Same pattern as menu.js: only run main()
+// when invoked directly.
+module.exports = {
+  compute_commentary_input_hash,
+  try_load_cached_commentary,
+  format_slack_success,
+  format_slack_failure,
+};
 
 if (require.main === module) {
-  main().catch(err => {
+  main().catch(async err => {
     console.error('Build failed:', err.message);
     if (process.env.DEBUG) console.error(err.stack);
+    // Slack notification on failure. Brief — first line of error to the
+    // channel (capped at 200 chars), full stack to local stderr above.
+    await send_slack(format_slack_failure({
+      total_ms:      _build_t0 ? (Date.now() - _build_t0) : null,
+      error_message: err.message || String(err),
+    }));
     process.exit(1);
   });
 }

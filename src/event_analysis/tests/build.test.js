@@ -32,7 +32,12 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 
-const { compute_commentary_input_hash, try_load_cached_commentary } = require('../build_all');
+const {
+  compute_commentary_input_hash,
+  try_load_cached_commentary,
+  format_slack_success,
+  format_slack_failure,
+} = require('../build_all');
 
 // ── Fixture builder ─────────────────────────────────────────────────────────
 //
@@ -288,5 +293,109 @@ describe('build: try_load_cached_commentary', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// ── 5. Slack message formatters ────────────────────────────────────────────
+
+describe('build: format_slack_success', () => {
+
+  const base_inputs = {
+    total_ms:        7340,
+    commentary_path: 'cache_hit',
+    baseline_year:   2025,
+    analysis_year:   2026,
+    baseline_total:  1178,
+    analysis_total:  1166,
+  };
+
+  test('cache_hit produces "ai_claude (cached)" label', () => {
+    const msg = format_slack_success(base_inputs);
+    assert.match(msg, /^:white_check_mark: event_analysis build · /);
+    assert.match(msg, /7\.3s/);
+    assert.match(msg, /ai_claude \(cached\)/);
+    assert.match(msg, /2025→2026 net -12/);
+  });
+
+  test('ai_fresh produces "ai_claude (fresh)" label', () => {
+    const msg = format_slack_success({ ...base_inputs, commentary_path: 'ai_fresh' });
+    assert.match(msg, /ai_claude \(fresh\)/);
+  });
+
+  test('rule_based produces "rule_based" label (no AI suffix)', () => {
+    const msg = format_slack_success({ ...base_inputs, commentary_path: 'rule_based' });
+    assert.match(msg, /· rule_based/);
+    assert.doesNotMatch(msg, /ai_claude/);
+  });
+
+  test('unknown / null commentary_path renders as "?"', () => {
+    const msg = format_slack_success({ ...base_inputs, commentary_path: null });
+    assert.match(msg, /· \? /);
+  });
+
+  test('positive net is prefixed with +', () => {
+    const msg = format_slack_success({ ...base_inputs, baseline_total: 100, analysis_total: 115 });
+    assert.match(msg, /net \+15/);
+  });
+
+  test('negative net renders without an extra sign', () => {
+    const msg = format_slack_success({ ...base_inputs, baseline_total: 100, analysis_total: 85 });
+    assert.match(msg, /net -15/);
+  });
+
+  test('zero net is rendered as "+0" (treated as non-negative)', () => {
+    const msg = format_slack_success({ ...base_inputs, baseline_total: 100, analysis_total: 100 });
+    assert.match(msg, /net \+0/);
+  });
+
+  test('missing baseline / analysis totals → no net segment in the message', () => {
+    const msg = format_slack_success({ ...base_inputs, baseline_total: null, analysis_total: null });
+    assert.doesNotMatch(msg, /net/);
+    // …but the rest of the message still renders correctly.
+    assert.match(msg, /7\.3s/);
+    assert.match(msg, /ai_claude \(cached\)/);
+  });
+
+  test('total_ms is rendered to one decimal place', () => {
+    const ms = format_slack_success({ ...base_inputs, total_ms: 79634 });
+    assert.match(ms, /79\.6s/);
+  });
+});
+
+describe('build: format_slack_failure', () => {
+
+  test('produces the FAILED prefix with timing + error first-line', () => {
+    const msg = format_slack_failure({ total_ms: 12100, error_message: 'TypeError: foo is undefined' });
+    assert.match(msg, /^:x: event_analysis build FAILED · /);
+    assert.match(msg, /12\.1s/);
+    assert.match(msg, /TypeError: foo is undefined/);
+  });
+
+  test('multi-line error is truncated to first line only', () => {
+    const long = 'Error: top of stack\n    at someFunc (file.js:10:5)\n    at Object.<anonymous> (other.js:42:12)';
+    const msg = format_slack_failure({ total_ms: 1000, error_message: long });
+    assert.match(msg, /Error: top of stack/);
+    // Stack frames must NOT leak into the channel message
+    assert.doesNotMatch(msg, /at someFunc/);
+    assert.doesNotMatch(msg, /Object\.<anonymous>/);
+  });
+
+  test('very long single-line error is capped at 200 chars', () => {
+    const huge = 'Error: ' + 'x'.repeat(500);
+    const msg = format_slack_failure({ total_ms: 1000, error_message: huge });
+    // The full message has a fixed prefix + the truncated error; just
+    // assert the suffix length is bounded.
+    const tail = msg.split(' · ').pop();
+    assert.ok(tail.length <= 200, `error portion should be capped at 200 chars, got ${tail.length}`);
+  });
+
+  test('missing error_message defaults to "unknown error"', () => {
+    const msg = format_slack_failure({ total_ms: 1000, error_message: null });
+    assert.match(msg, /unknown error/);
+  });
+
+  test('missing total_ms renders timing as "?s"', () => {
+    const msg = format_slack_failure({ total_ms: null, error_message: 'boom' });
+    assert.match(msg, /· \?s · /);
   });
 });

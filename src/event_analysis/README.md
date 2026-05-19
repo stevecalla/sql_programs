@@ -347,6 +347,17 @@ What's NOT in the hash (so a change here won't invalidate): individual event nam
 
 Together: option **1** (default) gives you the fastest correct build (cache when safe, fresh AI when needed). Option **2** is the cheapest. Option **3** is the "give me new wording" escape hatch.
 
+### Slack notification on build complete
+
+Every build posts a one-line summary to `#steve_calla_slack_channel` via the existing `slack_message_api` utility. Success and failure are both reported:
+
+```
+✅ event_analysis build · 7.3s · ai_claude (cached) · 2025→2026 net -12
+❌ event_analysis build FAILED · 12.1s · TypeError: foo is undefined
+```
+
+Reads `SLACK_WEBHOOK_STEVE_CALLA_USAT_URL` from `.env` — same env var the other automation jobs in this repo use. Set `SLACK_OFF=1` in the environment to suppress the notification (useful when iterating locally and you don't want every test rebuild pinging the channel). A failed Slack post never breaks the build — the build's exit code is governed by its own outcome, the notification is a side-effect.
+
 ---
 
 ## Interactive Q&A — ask.js
@@ -804,7 +815,7 @@ Uses Node's built-in `node:test` runner (Node 18+) — no extra dependencies. Ou
 | `smoke.test.js` | Parse-check every major source file (CJS `vm.Script` — same engine as `node --check`), require-check each module's exports, sanity-check pure helpers | no | <1s |
 | `glossary.test.js` | Bottom-of-dashboard glossary is a default-closed `<details>` element and contains every required term (6 segments + 5 confidence values + calendar / organic + 7 other terms). Reads the most recent built `dashboard.html`. | no (reads built file) | <1s |
 | `downloads.test.js` | The dashboard's Excel + PowerPoint Download buttons point at files that actually exist in the output dir, are same-directory paths (`./filename`), and follow the `<year>_event_calendar_analysis_*.xlsx` / `<year>_event_trends_summary_*.pptx` naming pattern. Also guards against the legacy `_v9f.xlsx` / `_v3.pptx` hardcoded names sneaking back in. | no (reads built file) | <1s |
-| `build.test.js` | Commentary cache logic: hash stability (same input → same hash), sensitivity to whitelisted fields (segments / by-type / monthly / organic / calendar / override count / year scope / NO_AI flag), insensitivity to non-whitelisted fields (event names / sanction IDs / confidence / day-of-week / timestamps), cache loader behavior (missing file, valid JSON, malformed JSON). Pure functions only — doesn't call Claude or run a real build. | no | <1s |
+| `build.test.js` | Commentary cache logic: hash stability (same input → same hash), sensitivity to whitelisted fields (segments / by-type / monthly / organic / calendar / override count / year scope / NO_AI flag), insensitivity to non-whitelisted fields (event names / sanction IDs / confidence / day-of-week / timestamps), cache loader behavior (missing file, valid JSON, malformed JSON). Also covers Slack-message formatters: success path labels (cache_hit / ai_fresh / rule_based / unknown), net sign handling (+/-/zero), missing-totals fallback, failure-message truncation (multi-line → first line only, 200-char cap). Pure functions only — doesn't call Claude, doesn't hit Slack, doesn't run a real build. | no | <1s |
 
 The `menu.test.js` and `smoke.test.js` files are intentionally cheap — no DB, no network, no API key. Run them after any structural change (renaming a file, splitting a module, refactoring exports) to catch the easy regressions before the slow tests fire.
 
