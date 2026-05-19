@@ -761,14 +761,34 @@ describe('Step 9.5 — /api/build SSE endpoint', () => {
     assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/);
 
     // Pull the first chunk so we know the connection is alive and streaming.
+    // Crucial subtlety for cross-OS test stability: when we ctrl.abort() the
+    // request below, any in-flight `reader.read()` promise rejects with an
+    // AbortError. If that rejection happens AFTER the test function returns
+    // (race-condition territory — varies by OS, Linux exposes it more
+    // reliably than Windows), node:test's "async activity after end" guard
+    // flags it as an unhandledRejection and marks the test failed.
+    //
+    // To prevent that:
+    //   1. Wrap the read in `.then(ok, err)` so its rejection is consumed
+    //      INSIDE the promise — it can no longer leak past the test boundary.
+    //   2. After abort+cancel, `await` the wrapped promise so settlement
+    //      happens before the test function returns.
     const reader = res.body.getReader();
+    const safe_read = reader.read().then(
+      v => v,
+      () => ({ value: undefined, done: true })   // AbortError lands here
+    );
     const { value } = await Promise.race([
-      reader.read(),
+      safe_read,
       new Promise(resolve => setTimeout(() => resolve({ value: new Uint8Array() }), 3000)),
     ]);
     // Abort so the server-side build process is killed and we don't block.
     ctrl.abort();
-    try { reader.cancel(); } catch {}
+    try { await reader.cancel(); } catch {}
+    // Drain the wrapped read promise — if the timeout won the race above,
+    // safe_read is still pending and will settle (with AbortError caught)
+    // momentarily. Awaiting here ensures we don't return early.
+    await safe_read;
     // We don't assert on chunk contents (build_all.js prints variable output);
     // reaching here without throwing is the contract this test cares about.
     assert.ok(value !== undefined, 'should at least open the stream');
