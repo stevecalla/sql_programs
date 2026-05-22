@@ -108,7 +108,10 @@
     "stop_event_analysis": "npx pm2 stop usat_event_analysis",
     "delete_event_analysis": "npx pm2 delete usat_event_analysis",
     "show_event_analysis": "npx pm2 show usat_event_analysis",
-    "restart_event_analysis": "npx pm2 restart usat_event_analysis"
+    "restart_event_analysis": "npx pm2 restart usat_event_analysis",
+    "watch": "node utilities/setup_sfmc_sftp/src/watch_uploads.js",
+    "download_sfmc_exports": "node utilities/setup_sfmc_sftp/src/download_sfmc_exports.js",
+    "upload_sfmc_imports": "node utilities/setup_sfmc_sftp/src/upload_sfmc_imports.js"
   },
   "keywords": [],
   "author": "",
@@ -139,6 +142,7 @@
     "mysql2": "^3.19.0",
     "pptxgenjs": "^3.12.0",
     "ssh2": "^1.15.0",
+    "ssh2-sftp-client": "^12.1.1",
     "tinyurl": "^1.1.7",
     "xpath": "^0.0.34",
     "yargs": "^17.7.2"
