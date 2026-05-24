@@ -135,7 +135,7 @@ Type a number and press Enter. For features that need input the menu prompts you
 
 The status bar at the top always shows: last build date, event totals, commentary mode (AI or rule-based), API key status, and active override count.
 
-### All 33 features — menu number + what it runs
+### All 34 features — menu number + what it runs
 
 | # | Menu label | Equivalent command |
 |---|---|---|
@@ -167,18 +167,19 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 22 | View README | Displays this file |
 | **LOCAL SERVER** | | |
 | 23 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
+| 24 | Start local server (IP allowlist) | Prompts for a comma-separated list of allowed IPs (default `127.0.0.1`) and spawns the server with `ALLOWED_IPS` set so the middleware enforces the allowlist. Useful when you want a quick way to expose the dashboard to a known set of IPs (e.g. Looker Studio fetchers) without flipping config. CLI equivalent: `ALLOWED_IPS=127.0.0.1 node server_event_analysis_8016.js` (POSIX) / `$env:ALLOWED_IPS='127.0.0.1'; node server_event_analysis_8016.js` (PowerShell). |
 | **TESTING** | | |
-| 24 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
-| 25 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
-| 26 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
-| 27 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
-| 28 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
-| 29 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
-| 30 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
-| 31 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
-| 32 | Run roster tests only | `node --test tests/roster.test.js` (per-build roster snapshot: row-builder pure tests + DB insert + retention pruning) |
+| 25 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
+| 26 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
+| 27 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
+| 28 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
+| 29 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
+| 30 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
+| 31 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
+| 32 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
+| 33 | Run roster tests only | `node --test tests/roster.test.js` (per-build roster snapshot: row-builder pure tests + DB insert + retention pruning) |
 | **PREFERENCES** | | |
-| 33 | Show/hide CLI commands | Toggles a dimmed `$ ...` second line under each menu item. Choice persists in `.menu_prefs.json` next to `menu.js` (gitignored). |
+| 34 | Show/hide CLI commands | Toggles a dimmed `$ ...` second line under each menu item. Choice persists in `.menu_prefs.json` next to `menu.js` (gitignored). |
 | 0 | Exit | — |
 
 ---
@@ -812,7 +813,7 @@ Exits with status 1 if errors are found (stopping a `check.js && build_all.js` p
 
 ## Test suite — tests/
 
-> **Menu:** options **24–32** (all / overrides / server / menu / smoke / glossary / downloads / build / roster) — or run directly:
+> **Menu:** options **25–33** (all / overrides / server / menu / smoke / glossary / downloads / build / roster) — or run directly:
 
 ```bash
 node --test tests/                  # run every *.test.js
@@ -1022,6 +1023,10 @@ The build-time dashboard (`output/dashboard.html`) ships with the same editor em
 - **📖 Glossary card at the bottom of the page**, default-collapsed. Click to expand for plain-English definitions of every term the dashboard uses: the six segments, the five confidence values (Exact / Exact-Shifted / Cross / Override / N/A) with examples, calendar-expected vs organic delta (with a worked weekend-days example), plus net change, sanction ID, active event, override lifecycle (approved / unapproved / stale), and worst month. Aimed at readers who didn't build the model. Audited by `tests/glossary.test.js` (menu option **26**), so adding a new term means updating both the dashboard and the test's `REQUIRED_TERMS` list — a regression in either direction trips the test.
 - **Click any row** → highlights it, scrolls the editor panel into view, pre-fills the sanction ID(s) in the add-override form. Click the row again (or the "clear" link in the focused-event card) to deselect.
 - **Sticky "rebuild needed" banner** appears at the top of the page after any edit, since the charts/KPIs/segment counts are computed from `ROSTER` at build time and don't reflect new overrides until you rebuild. The banner has a **Rebuild now** button that streams `build_all.js` output into a collapsible log and auto-reloads the page on success.
+- **Ad-hoc year rebuild** — at the bottom of the rebuild card, a collapsed `⚙ Rebuild with custom years (ad hoc)` section expands to reveal two number inputs (baseline + analysis year) and a "Rebuild with these years" button. Sends the year pair to `/api/build?baseline_year=YYYY&analysis_year=YYYY`, which forwards them as CLI flags to the child process. No `.env` changes — subsequent default rebuilds revert to the project-wide scope.
+- **Reviewed? checkbox** in every row — quick way to mark a match (or non-match) as reviewed-and-correct. Creates an approved no-op override in `event_analysis_overrides` (`created_by = dashboard:review`); unchecking removes it. Visible across builds, persists in the same DB table as manual overrides, and shows up alongside everything else in the override list.
+- **Optional override-info columns** (toggle from ⊞ Columns): "Override type", "Approved", "Override note" appear after the Conf column when checked. Same toggle pattern as Sanction ID / Date.
+- **Optional Event Created columns** (toggle from ⊞ Columns): "Created YA" and "Created YB" show the source-system creation date for each side. The "Events by creation month" chart in the row above is sourced from the same data.
 
 The integrated panel only activates when the dashboard is opened *through the server* (`http://localhost:8016/output/dashboard.html`). Opening as `file://` shows the panel but with a "server offline" hint in the status chip; you can still see the build-time data, just no live editing.
 
@@ -1084,6 +1089,41 @@ utilities/cron_get_event_analysis_build/
 
 ---
 
+## Restricting access — `ALLOWED_IPS` middleware
+
+A single env var gates the local server with an IP allowlist. **Dormant by default** — when `ALLOWED_IPS` is empty or unset, the middleware is a no-op and every request proceeds (current behaviour, no regression).
+
+**Activate:**
+
+```bash
+# .env (or set in the shell before launching the server)
+ALLOWED_IPS=127.0.0.1,192.168.1.50
+```
+
+Restart the server. Now only those IPs reach any route on the server — `/api/*`, the dashboard, the editor SPA, everything. Other clients get `403 Forbidden` with a JSON body containing the rejected IP for debugging.
+
+**Implementation:**
+
+- Middleware lives at the top of `create_app()` in `server_event_analysis_8016.js` and runs before any route handler.
+- Reads `process.env.ALLOWED_IPS` once at app construction. Comma-separated list.
+- Normalises IPv6-mapped IPv4 (`::ffff:127.0.0.1` → `127.0.0.1`) so plain dotted-quad addresses match localhost connections.
+- Logs each rejection: `[allowlist] 403 — rejected <ip> for <METHOD> <path>`.
+- A one-time activation log fires at server startup: `IP allowlist ACTIVE — N address(es) allowed: ...`.
+
+**Looker Studio + production privacy:**
+
+For real production privacy, the recommended approach is **Cloudflare** at the edge — IP allowlist, Cloudflare Access policies, service tokens, etc. The Node server's `ALLOWED_IPS` is a backstop / dev-mode lever, not the main fence.
+
+For Looker Studio specifically, Google publishes the IP ranges its connectors operate from. Either:
+- Allow those ranges at the Cloudflare WAF level (recommended — Cloudflare auto-updates its understanding of Google ranges)
+- OR add Cloudflare's egress IP to `ALLOWED_IPS` on the Node server (so Looker → Cloudflare → origin succeeds even with the allowlist active)
+
+Either way, the server only needs to know about Cloudflare's IP (or your office's, etc.) — Cloudflare handles the upstream filtering.
+
+**Disable:** delete the `ALLOWED_IPS` line from `.env` (or `unset ALLOWED_IPS`) and restart. The middleware becomes a no-op again.
+
+---
+
 ## Historical roster snapshots — `event_analysis_roster` table
 
 Every build writes its full event roster to a MySQL table in `usat_sales_db`. Same shape as `dashboard.html`'s inlined `ROSTER` constant and the xlsx `step_4_event_detail` tab — one row per event, tagged with the build's timestamp. The table accumulates across builds so you can query trends, diff two consecutive builds in SQL, or feed BI tools (Tableau / Looker / Metabase) without parsing JSON files in the archive folder.
@@ -1131,7 +1171,7 @@ Steady-state size is **~150–200K rows**, regardless of how many years the tabl
 
 Building any of these is a separate, deferred step. For now the table is write-only; reads are SQL ad-hoc.
 
-**Tests** — see `tests/roster.test.js` (menu option **30**). Pure-function tests cover row construction without touching the DB; integration tests use a sentinel year (1999/2000) so fixture rows never collide with production data and get scrubbed by `before()`/`after()` hooks.
+**Tests** — see `tests/roster.test.js` (menu option **33**). Pure-function tests cover row construction without touching the DB; integration tests use a sentinel year (1999/2000) so fixture rows never collide with production data and get scrubbed by `before()`/`after()` hooks.
 
 ---
 

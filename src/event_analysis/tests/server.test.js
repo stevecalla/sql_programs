@@ -23,6 +23,34 @@ const assert = require('node:assert/strict');
 // From src/event_analysis/tests/ that's three levels up.
 const { create_app } = require('../../../server_event_analysis_8016');
 
+// ── Shared helpers ──────────────────────────────────────────────────────
+
+/**
+ * Wait until the /api/build lock has cleared, then return.
+ *
+ * The build endpoint is single-flight (returns 409 if one is already
+ * running). Tests that follow a build-stream test need to poll until the
+ * server reports the lock is free; otherwise their 200-expectation fails
+ * intermittently. Probe by firing a throwaway build and aborting on win.
+ */
+async function wait_for_build_lock(base_url, max_ms = 3000) {
+  const start = Date.now();
+  while (Date.now() - start < max_ms) {
+    const ctrl = new AbortController();
+    const res = await fetch(`${base_url}/api/build`, { signal: ctrl.signal });
+    if (res.status === 200) {
+      ctrl.abort();
+      try { await res.body?.cancel(); } catch {}
+      // Settle: the kill-on-abort path is async server-side.
+      await new Promise(r => setTimeout(r, 400));
+      return;
+    }
+    try { await res.body?.cancel(); } catch {}
+    await new Promise(r => setTimeout(r, 150));
+  }
+  throw new Error('lock never released — previous test leaked state');
+}
+
 // ── Shared server lifecycle ─────────────────────────────────────────────
 
 let server  = null;
@@ -797,31 +825,8 @@ describe('Step 9.5 — /api/build SSE endpoint', () => {
   test('concurrent /api/build attempts trigger the build-lock', async () => {
     // The previous test aborted its stream which spawns an async kill on
     // the server side. _build_running may still be true for a few ms after
-    // the abort. Wait for it to actually clear by polling with retries.
-    // (We can't `await` a process.exit from here; this is the pragmatic fix.)
-    async function wait_for_lock_release(max_ms = 3000) {
-      const start = Date.now();
-      while (Date.now() - start < max_ms) {
-        // A non-streaming probe wouldn't be representative; instead, fire a
-        // throwaway build request. If it's 200 we got the lock — release it
-        // immediately by aborting. If 409, the previous build is still
-        // wrapping up; wait and retry.
-        const ctrl = new AbortController();
-        const res = await fetch(`${base}/api/build`, { signal: ctrl.signal });
-        if (res.status === 200) {
-          ctrl.abort();
-          try { await res.body?.cancel(); } catch {}
-          // Now wait once more for THIS aborted build to clear before the
-          // real test fires its concurrent pair.
-          await new Promise(r => setTimeout(r, 400));
-          return;
-        }
-        try { await res.body?.cancel(); } catch {}
-        await new Promise(r => setTimeout(r, 150));
-      }
-      throw new Error('lock never released — previous test leaked state');
-    }
-    await wait_for_lock_release();
+    // the abort. Wait for it to clear before firing the concurrent pair.
+    await wait_for_build_lock(base);
 
     // Fire two requests near-simultaneously. Node's single-threaded event
     // loop makes the lock check + set atomic, so exactly one must win.
@@ -839,5 +844,105 @@ describe('Step 9.5 — /api/build SSE endpoint', () => {
     ctrl1.abort(); ctrl2.abort();
     try { await res1.body?.cancel(); } catch {}
     try { await res2.body?.cancel(); } catch {}
+  });
+
+  test('GET /api/build accepts baseline_year / analysis_year query params', async () => {
+    // The previous test holds the build lock across its concurrent pair;
+    // wait for it to clear before firing our own request, otherwise we'll
+    // get a 409 instead of the 200 we're asserting on.
+    await wait_for_build_lock(base);
+    const ctrl = new AbortController();
+    let res;
+    try {
+      res = await fetch(`${base}/api/build?baseline_year=2026&analysis_year=2027`, { signal: ctrl.signal });
+    } catch (err) {
+      ctrl.abort();
+      throw err;
+    }
+    assert.equal(res.status, 200, 'year params should not break the endpoint');
+    assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/);
+    // Same leak-prevention pattern as the main /api/build test above.
+    const reader = res.body.getReader();
+    const safe_read = reader.read().then(v => v, () => ({ value: undefined, done: true }));
+    await Promise.race([safe_read, new Promise(r => setTimeout(r, 800))]);
+    ctrl.abort();
+    try { await reader.cancel(); } catch {}
+    await safe_read;
+  });
+
+  test('GET /api/build silently ignores nonsense year params', async () => {
+    // Out-of-range / non-integer values must not cause a 4xx — the build
+    // just runs with default scope. The contract is "the endpoint is
+    // lenient about garbage."
+    await wait_for_build_lock(base);
+    const ctrl = new AbortController();
+    const res = await fetch(`${base}/api/build?baseline_year=abc&analysis_year=9999`, { signal: ctrl.signal });
+    assert.equal(res.status, 200, 'garbage year params should not 4xx');
+    const reader = res.body.getReader();
+    const safe_read = reader.read().then(v => v, () => ({ value: undefined, done: true }));
+    await Promise.race([safe_read, new Promise(r => setTimeout(r, 800))]);
+    ctrl.abort();
+    try { await reader.cancel(); } catch {}
+    await safe_read;
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ALLOWED_IPS allowlist middleware
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// The middleware is dormant unless the env var is set BEFORE create_app() runs.
+// Since the suite-level `before()` already created the app with no allowlist,
+// we spin up a SEPARATE app instance here with ALLOWED_IPS set to a sentinel
+// IP that won't match the test client. The outer suite's app stays as-is.
+
+describe('ALLOWED_IPS middleware', () => {
+
+  let restricted_server = null;
+  let restricted_base   = null;
+
+  before(async () => {
+    // Set the env var, build a fresh app, restore the env var after.
+    const prior = process.env.ALLOWED_IPS;
+    process.env.ALLOWED_IPS = '203.0.113.42';   // RFC 5737 reserved range — never us
+    try {
+      const { create_app } = require('../../../server_event_analysis_8016');
+      // Bust the require cache so create_app re-reads the env-derived
+      // closure inside.
+      delete require.cache[require.resolve('../../../server_event_analysis_8016')];
+      const fresh = require('../../../server_event_analysis_8016');
+      const app = await fresh.create_app();
+      await new Promise((resolve, reject) => {
+        restricted_server = app.listen(0, () => {
+          const port = restricted_server.address().port;
+          restricted_base = `http://localhost:${port}`;
+          resolve();
+        });
+        restricted_server.on('error', reject);
+      });
+    } finally {
+      if (prior == null) delete process.env.ALLOWED_IPS;
+      else process.env.ALLOWED_IPS = prior;
+    }
+  });
+
+  after(async () => {
+    if (restricted_server) await new Promise(r => restricted_server.close(r));
+  });
+
+  test('non-allowlisted client gets 403 with {error, ip}', async (t) => {
+    if (!restricted_base) { t.skip('restricted app failed to start'); return; }
+    const res = await fetch(`${restricted_base}/api/status`);
+    assert.equal(res.status, 403, 'localhost should be rejected when not on the allowlist');
+    const body = await res.json();
+    assert.equal(body.error, 'forbidden');
+    assert.ok(body.ip, 'response should include the rejected IP for debugging');
+  });
+
+  test('the empty allowlist (default app) still allows every request', async () => {
+    // The suite's outer `base` server has no ALLOWED_IPS set, so this is
+    // the regression guard that the dormant-by-default behaviour holds.
+    const res = await fetch(`${base}/api/status`);
+    assert.equal(res.status, 200, "unset ALLOWED_IPS must not block anything");
   });
 });

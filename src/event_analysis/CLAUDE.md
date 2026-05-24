@@ -24,7 +24,7 @@ node build_all.js --no-ai       # same as above, but force rule-based commentary
 node build_all.js --fresh-ai    # bypass commentary cache, force a fresh Claude call
 node build_all.js --no-db-roster   # same outputs, but skip the event_analysis_roster INSERT + retention prune
 node build_all.js --no-slack    # suppress the Slack notification on completion
-node menu.js                    # interactive feature launcher (33 options across 7 sections — incl. PREFERENCES toggle for showing CLI equivalents)
+node menu.js                    # interactive feature launcher (34 options across 7 sections — incl. PREFERENCES toggle for showing CLI equivalents)
 node build_all.js --baseline-year 2026 --analysis-year 2027   # ad-hoc: run a different year pair without editing .env
 node ask.js                     # Q&A + override management CLI (DB-backed)
 node server_event_analysis_8016.js   # from repo root — local read-only API at http://localhost:8016
@@ -168,7 +168,12 @@ Open `output/dashboard.html` in a browser (a hosted version is on the roadmap as
 | Multi-select filters | Segment / Type / Month / **Status** dropdowns with color-coded checkboxes. Status options are populated dynamically from the unique `Status YA` / `Status YB` values present in the roster. |
 | Active filter bar | Shows current filters as removable chips; ↺ Reset clears all (including Status) |
 | Segment / Type / Month chip bars | Three clickable chip bars above the table. Each chip shows count + `% of N shown`; clicking toggles the matching dropdown filter. All chips recompute against the visible total on every filter. Month chips count rows once per distinct month they touch (shifted events count for both their baseline AND analysis month if those differ). Bars are individually toggleable via a "Show:" pill row above them — defaults: Segments + Types visible, Months hidden. Choice persists in `localStorage` (`chip_bar_visibility`). |
-| Bottom-of-page glossary | Native `<details id="dash-glossary">` element (no JS), default-collapsed. Defines: the 6 segments, 5 confidence values (Exact / Exact-Shifted / Cross / Override / N/A — each with a one-line example), calendar-expected + organic delta (with a worked weekend-days arithmetic example), net change, sanction ID, active event, override lifecycle (approved/unapproved/stale), worst month. Audited in `tests/glossary.test.js` (its own suite — menu option 26) — a `REQUIRED_TERMS` list checks each term is present inside the `<details>` block, so renaming or removing a definition breaks the test. |
+| Bottom-of-page glossary | Native `<details id="dash-glossary">` element (no JS), default-collapsed. Defines: the 6 segments, 5 confidence values (Exact / Exact-Shifted / Cross / Override / N/A — each with a one-line example), calendar-expected + organic delta (with a worked weekend-days arithmetic example), net change, sanction ID, active event, override lifecycle (approved/unapproved/stale), worst month, Reviewed?, Event Created. Audited in `tests/glossary.test.js` (its own suite — menu option 27) — a `REQUIRED_TERMS` list checks each term is present inside the `<details>` block, so renaming or removing a definition breaks the test. |
+| Reviewed? checkbox | Row-level checkbox in the roster table. Checked → POSTs an "approved" no-op override (`force_match` for matched pairs / `force_no_match` for single-sided) tagged `created_by = 'dashboard:review'`. Unchecking DELETEs. Lives in the same `event_analysis_overrides` table as manual overrides — zero schema change, full audit trail / approval lifecycle for free. |
+| Override-info optional columns | Three optional columns after Conf (override type / approved / note), toggled from ⊞ Columns. Populated client-side from `/api/overrides` whenever the override-status column refreshes. |
+| Event Created optional columns | Two optional columns after Date YA / Date YB showing source-system creation date. Roster field comes from loader.js's `createdAt`, which strips `event_data_metrics.created_at_events` to YYYY-MM-DD. |
+| Events-by-creation-month chart | Stacked-bar chart sourced from the same `createdAt` fields, with a year-pair dropdown (baseline / analysis). Calendar chart pushed to a smaller right slot in the same row. |
+| Ad-hoc rebuild years | Collapsed `<details>` block inside `#dash-ov-rebuild-card` with baseline/analysis number inputs. Submits to `/api/build?baseline_year=Y&analysis_year=Y`, which forwards as `--baseline-year / --analysis-year` to the spawned build. Doesn't touch `.env`. |
 | Column picker | ⊞ Columns button — show/hide Sanction ID and Date columns |
 | Mobile responsive | Horizontal + vertical scroll, 60vh max-height on mobile, iOS touch scroll |
 
@@ -187,6 +192,8 @@ Lives at the repo root (`sql_programs/server_event_analysis_8016.js`) alongside 
 | `GET /` | HTML index — endpoint reference + `curl` examples |
 | `GET /api/status` | `{ ok, baseline_year, analysis_year, output_dir, time }` |
 | `GET /api/overrides` | Current-scope + global overrides. Honours `?baseline_year=&analysis_year=` query params; defaults to env vars. Rows are enriched with `name_baseline` / `name_analysis` / `month_baseline` / `month_analysis` via a server-side join against `event_data_metrics` (helper: `fetch_event_names_for_sids` in `src/event_analysis/src/db.js`). Both editor surfaces display these inline under each sid pill; deleted events render as `(event no longer in DB)`. |
+| `GET /api/build` | SSE stream of the spawned `build_all.js`. Now accepts `?baseline_year=YYYY&analysis_year=YYYY` query params (validated [2000, 2100]); forwards them as `--baseline-year / --analysis-year` CLI flags to the child. Garbage / out-of-range values are silently dropped (no 4xx) — the build just runs with default scope. |
+| `ALLOWED_IPS` middleware | Dormant by default. Env var comma-separated allowlist; when set, the server rejects every request whose client IP isn't in the list with `403 {error:"forbidden", ip:"..."}`. Logs a one-time activation banner at startup + per-rejection lines at runtime. IPv6-mapped IPv4 is normalised so `127.0.0.1` matches localhost connections. Production privacy is intended to live at Cloudflare edge — this is a backstop / dev lever. |
 | `GET /api/events?year=YYYY` | Events from `usat_sales_db.event_data_metrics`. Add `&include=excluded` to include CANCELLED/DECLINED/DELETED. |
 | `GET /output/<file>` | Static-serves the analysis output dir (dashboard.html, JSON sidecars, archive folder) |
 
@@ -269,7 +276,7 @@ CORS is open (`*`) — fine for local dev, tighten before any production hosting
 | 2. JSON → DB auto-migration on every build | ✓ done |
 | 2.5. Year scoping (`baseline_year` / `analysis_year` columns + index, sid_baseline/sid_analysis rename) | ✓ done |
 | 3. `analysis.js` reads from DB (async, year-scoped, surfaces unapproved warnings) | ✓ done |
-| 3.5. `tests/overrides.test.js` (`node --test tests/`, menu options 24–32) | ✓ done |
+| 3.5. `tests/overrides.test.js` (`node --test tests/`, menu options 25–33) | ✓ done |
 | **11.** Per-build roster snapshot — `event_analysis_roster` table with full roster + `build_at` partitioning, populated by `insert_roster_snapshot.js` at the end of every build. Tiered retention via `prune_roster_table.js` (48h full / 30d daily / 90d weekly / monthly forever). Append-only historical record for trend queries and BI-tool integration. No read path yet — table is write-only. `--no-db-roster` skips the insert + prune (menu option 4 wires it). Tests in `tests/roster.test.js` (menu option 31). | ✓ done |
 | **4.** `ask.js` CLI writes to DB (add / remove / list / suggest), `--global` flag, `created_by` provenance | ✓ done |
 | **5.** `--approve` / `--unapprove` CLI commands. Approve flips `approved=1` + `approval_state='approved'` + `approved_by` + `approved_at`, captures event signatures. Unapprove clears approval + signatures (keeps audit fields). | ✓ done |

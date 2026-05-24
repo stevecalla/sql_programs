@@ -976,3 +976,131 @@ describe('Step 6 — Stale-approval detection', () => {
     assert.equal(result.updated, 0, 'unapproved row should not be touched');
   });
 });
+
+
+// ── Invariant: not active ⇒ not approved ───────────────────────────────────
+//
+// Documented rule (added Step 11):
+//
+//   An override row with active = 0 (soft-deleted) MUST also have
+//     approved = 0
+//     approval_state IS NULL
+//
+//   Rationale: you cannot endorse a rule that no longer applies. An
+//   "approved-but-inactive" row would lie to the dashboard's Reviewed?
+//   checkbox + the build's approval-stats logic. The approved_by /
+//   approved_at audit fields ARE preserved (historical record of who
+//   endorsed it before it got removed).
+//
+// Enforced in two places:
+//   1. cmd_remove_override (ask.js)  -- the soft-delete path clears
+//      approved + approval_state in the same UPDATE.
+//   2. ensure_overrides_table (utilities) -- idempotent backfill on
+//      every build cleans up any historical violations.
+
+describe('Step 11 — invariant: not active ⇒ not approved', () => {
+
+  test('cmd_remove_override clears approved + approval_state on soft-delete', async () => {
+    const c = await db();
+    const [ins] = await c.query(
+      'INSERT INTO `' + TABLE + '` ' +
+      '(override_type, sid_baseline, sid_analysis, baseline_year, analysis_year, ' +
+      ' approved, approval_state, approved_by, approved_at, created_by, active) ' +
+      'VALUES (?, ?, ?, ?, ?, 1, ?, ?, NOW(), ?, 1)',
+      ['force_match', 'STEP11-RM-B', 'STEP11-RM-A', 2025, 2026, 'approved', 'invariant-test', TEST_TAG]
+    );
+    const id = ins.insertId;
+
+    await cmd_remove_override('STEP11-RM-B');
+
+    const [rows] = await c.query(
+      'SELECT active, approved, approval_state, approved_by, approved_at ' +
+      'FROM `' + TABLE + '` WHERE id = ?', [id]
+    );
+    const row = rows[0];
+    assert.ok(row, 'row should still exist (soft-delete preserves it)');
+    assert.equal(row.active,         0,    'active should be 0 after soft-delete');
+    assert.equal(row.approved,       0,    'approved must be 0 when active=0');
+    assert.equal(row.approval_state, null, 'approval_state must be NULL when active=0');
+    assert.equal(row.approved_by,    'invariant-test', 'approved_by audit preserved');
+    assert.ok(row.approved_at, 'approved_at audit preserved');
+  });
+
+  test('ensure_overrides_table backfills inactive+approved rows to approved=0', async () => {
+    const c = await db();
+    // force_match + force_no_match are guarded by check constraints
+    // (chk_match_requires_pair / chk_no_match_requires_pair) that require
+    // BOTH sids. Set sid_analysis on those two so the seed inserts pass
+    // the constraint. force_segment is single-sided.
+    const [v1] = await c.query(
+      'INSERT INTO `' + TABLE + '` ' +
+      '(override_type, sid_baseline, sid_analysis, baseline_year, analysis_year, ' +
+      ' approved, approval_state, created_by, active) ' +
+      'VALUES (?, ?, ?, ?, ?, 1, ?, ?, 0)',
+      ['force_match', 'STEP11-BF-A', 'STEP11-BF-A2', 2025, 2026, 'approved', TEST_TAG]
+    );
+    const [v2] = await c.query(
+      'INSERT INTO `' + TABLE + '` ' +
+      '(override_type, sid_baseline, sid_analysis, baseline_year, analysis_year, ' +
+      ' approved, approval_state, created_by, active) ' +
+      'VALUES (?, ?, ?, ?, ?, 1, NULL, ?, 0)',
+      ['force_no_match', 'STEP11-BF-B', 'STEP11-BF-B2', 2025, 2026, TEST_TAG]
+    );
+    // force_segment is guarded by chk_segment_requires_value -- it requires
+    // a non-null segment. 'Lost' is a valid VALID_SEGMENTS member.
+    const [v3] = await c.query(
+      'INSERT INTO `' + TABLE + '` ' +
+      '(override_type, sid_baseline, segment, baseline_year, analysis_year, ' +
+      ' approved, approval_state, created_by, active) ' +
+      'VALUES (?, ?, ?, ?, ?, 0, ?, ?, 0)',
+      ['force_segment', 'STEP11-BF-C', 'Lost', 2025, 2026, 'stale', TEST_TAG]
+    );
+
+    await ensure_overrides_table({ silent: true });
+
+    const [rows] = await c.query(
+      'SELECT id, active, approved, approval_state FROM `' + TABLE + '` ' +
+      'WHERE id IN (?, ?, ?) ORDER BY id',
+      [v1.insertId, v2.insertId, v3.insertId]
+    );
+    for (const r of rows) {
+      assert.equal(r.active,         0,    'id ' + r.id + ': active still 0');
+      assert.equal(r.approved,       0,    'id ' + r.id + ': approved cleared by backfill');
+      assert.equal(r.approval_state, null, 'id ' + r.id + ': approval_state cleared');
+    }
+  });
+
+  test('ensure_overrides_table backfill leaves valid active+approved rows alone', async () => {
+    const c = await db();
+    // force_match requires both sids (chk_match_requires_pair).
+    const [ins] = await c.query(
+      'INSERT INTO `' + TABLE + '` ' +
+      '(override_type, sid_baseline, sid_analysis, baseline_year, analysis_year, ' +
+      ' approved, approval_state, created_by, active) ' +
+      'VALUES (?, ?, ?, ?, ?, 1, ?, ?, 1)',
+      ['force_match', 'STEP11-IDM-OK', 'STEP11-IDM-OK2', 2025, 2026, 'approved', TEST_TAG]
+    );
+
+    await ensure_overrides_table({ silent: true });
+    await ensure_overrides_table({ silent: true });   // idempotent
+
+    const [rows] = await c.query(
+      'SELECT active, approved, approval_state FROM `' + TABLE + '` WHERE id = ?',
+      [ins.insertId]
+    );
+    assert.equal(rows[0].active,         1);
+    assert.equal(rows[0].approved,       1);
+    assert.equal(rows[0].approval_state, 'approved', 'valid row must NOT be cleared');
+  });
+
+  test('audit: no row currently violates the invariant (production-readiness gate)', async () => {
+    const c = await db();
+    const [rows] = await c.query(
+      'SELECT COUNT(*) AS n FROM `' + TABLE + '` ' +
+      'WHERE active = 0 AND (approved = 1 OR approval_state IS NOT NULL)'
+    );
+    assert.equal(rows[0].n, 0,
+      'invariant violated: ' + rows[0].n + ' row(s) have active=0 AND approved=1 (or approval_state set). ' +
+      'Run node build_all.js (or node utilities/ensure_overrides_table.js) to apply the backfill.');
+  });
+});

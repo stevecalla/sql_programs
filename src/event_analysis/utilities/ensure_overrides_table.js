@@ -164,6 +164,22 @@ async function ensure_overrides_table({ silent = false } = {}) {
       upgrades.push('+ column segment_analysis');
     }
 
+    // ── Invariant backfill: not active ⇒ not approved ───────────────────────
+    // An inactive override should never carry approved=1 -- that's a
+    // contradiction (you cannot endorse an override that no longer applies).
+    // Older soft-delete code only set active=0 and left approved=1 in place.
+    // This UPDATE cleans up any historical rows that violate the invariant.
+    // Idempotent: subsequent builds find 0 rows and noop.
+    const [inv_rows] = await conn.query(
+      `UPDATE \`${TABLE_NAME}\`
+          SET approved = 0, approval_state = NULL
+        WHERE active = 0
+          AND (approved = 1 OR approval_state IS NOT NULL)`
+    );
+    if (inv_rows.affectedRows > 0) {
+      upgrades.push(`backfilled ${inv_rows.affectedRows} inactive row(s) approved->0`);
+    }
+
     if (upgrades.length && !silent) {
       console.log(`  ✓ Schema upgrade applied: ${upgrades.join(', ')}`);
     }
