@@ -694,9 +694,19 @@ async function cmd_remove_override(sid) {
   const removed = await with_db(async conn => {
     // Soft-delete: set active=0 on every matching active row in the current
     // year scope (and globals). Preserves the audit trail in the table.
+    //
+    // Invariant: an inactive override must NOT carry an approved=1 flag --
+    // an "approved but inactive" row is semantically a contradiction (you
+    // cannot endorse an override that no longer applies). We clear approved
+    // + approval_state in the same UPDATE so soft-delete leaves the row in
+    // a consistent state. The approved_by / approved_at audit fields are
+    // intentionally KEPT (historical "who endorsed this and when, before
+    // it was removed").
     const [r] = await conn.query(
       `UPDATE \`${OV_TABLE}\`
-          SET active = 0
+          SET active         = 0,
+              approved       = 0,
+              approval_state = NULL
         WHERE active = 1
           AND (sid_baseline = ? OR sid_analysis = ?)
           AND (

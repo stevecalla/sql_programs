@@ -253,6 +253,52 @@ async function create_app() {
   const app = express();
   const output_dir = await resolve_output_dir();
 
+  // ── IP allowlist middleware (dormant by default) ──────────────────────
+  // Env var ALLOWED_IPS, comma-separated list, e.g. "127.0.0.1,192.168.1.50".
+  // Empty / unset → middleware is a no-op and every request proceeds
+  // (current behaviour). When set, every incoming request's client IP is
+  // checked; non-matches get 403.
+  //
+  // This is a backstop for local-network development. Production privacy
+  // is intended to live at the Cloudflare edge (WAF / Access policies);
+  // see README for the recipes and the Looker Studio guidance.
+  const _allowed_ips_raw = (process.env.ALLOWED_IPS || '').trim();
+  const _allowed_ips_set = new Set(
+    _allowed_ips_raw ? _allowed_ips_raw.split(',').map(s => s.trim()).filter(Boolean) : []
+  );
+  // Loopback symmetry: Node's HTTP server listens dual-stack on most
+  // platforms, so a client hitting http://localhost:8016 can land on
+  // either 127.0.0.1 or ::1 depending on OS DNS resolution. If the
+  // operator put one in the allowlist and the browser/curl uses the
+  // other, they'd get a confusing 403. Auto-add the missing twin so
+  // "I allowed localhost" actually means "I allowed localhost".
+  // Same friendliness as menu 24, applied to ANY path that sets the
+  // env var (.env, shell export, parent process, CI, etc.).
+  let _added_loopback_twin = null;
+  if (_allowed_ips_set.has('127.0.0.1') && !_allowed_ips_set.has('::1')) {
+    _allowed_ips_set.add('::1');
+    _added_loopback_twin = '::1';
+  } else if (_allowed_ips_set.has('::1') && !_allowed_ips_set.has('127.0.0.1')) {
+    _allowed_ips_set.add('127.0.0.1');
+    _added_loopback_twin = '127.0.0.1';
+  }
+  if (_allowed_ips_set.size > 0) {
+    console.log(`  IP allowlist ACTIVE — ${_allowed_ips_set.size} address(es) allowed: ${[..._allowed_ips_set].join(', ')}`);
+    if (_added_loopback_twin) {
+      console.log(`  (auto-added ${_added_loopback_twin} as the loopback twin so dual-stack localhost traffic is consistent)`);
+    }
+    app.use((req, res, next) => {
+      // Normalize IPv6-mapped IPv4 ("::ffff:127.0.0.1" → "127.0.0.1") so the
+      // user can put plain dotted-quad addresses in ALLOWED_IPS and have
+      // them match localhost connections.
+      const raw = req.ip || req.socket?.remoteAddress || '';
+      const ip  = raw.replace(/^::ffff:/, '');
+      if (_allowed_ips_set.has(ip) || _allowed_ips_set.has(raw)) return next();
+      console.warn(`  [allowlist] 403 — rejected ${ip} for ${req.method} ${req.path}`);
+      return res.status(403).json({ error: 'forbidden', ip });
+    });
+  }
+
   app.use(cors());
   app.use(express.json());
 
@@ -511,8 +557,21 @@ async function create_app() {
     };
 
     const build_script = path.join(__dirname, 'src', 'event_analysis', 'build_all.js');
+
+    // Optional ad-hoc year scope — accepts ?baseline_year=YYYY&analysis_year=YYYY
+    // and forwards them as CLI flags. Empty/missing/invalid → no flags →
+    // build uses its default scope. Both years must be 4-digit integers
+    // in [2000, 2100]; anything outside that range is silently ignored
+    // (no error response — the build just runs with the default scope).
+    const child_args = [build_script];
+    const _by = Number(req.query.baseline_year);
+    const _ay = Number(req.query.analysis_year);
+    const _year_ok = (y) => Number.isInteger(y) && y >= 2000 && y <= 2100;
+    if (_year_ok(_by)) child_args.push('--baseline-year', String(_by));
+    if (_year_ok(_ay)) child_args.push('--analysis-year', String(_ay));
+
     const { spawn } = require('child_process');
-    const proc = spawn(process.execPath, [build_script], {
+    const proc = spawn(process.execPath, child_args, {
       cwd: path.join(__dirname, 'src', 'event_analysis'),
       env: { ...process.env },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -605,32 +664,25 @@ async function start_server({ port = DEFAULT_PORT, silent = false } = {}) {
       const actual = server.address().port;
       if (!silent) {
         console.log(`\nUSAT Event Analysis — local server`);
-        console.log(`\nUSAT Event Analysis — local server`);
         console.log(`  → http://localhost:${actual}                       (API index)`);
         console.log(`  → http://localhost:${actual}/editor/                (override editor — Step 9)`);
         console.log(`  → http://localhost:${actual}/output/dashboard.html  (build-time dashboard)`);
-        console.log(`  → http://localhost:${actual}/api/status             (health check)\n`);
-        console.log('  Press Ctrl-C to stop.\n');
+        console.log(`  → http://localhost:${actual}/api/status             (health check)`);
+        console.log(`  Press Ctrl-C to stop.\n`);
       }
-      resolve(server);
+      if (typeof on_ready === 'function') on_ready({ port: actual, server });
+      resolve({ port: actual, server });
     });
     server.on('error', reject);
   });
 }
 
+// CLI entry: only run if invoked directly (not via require for tests).
 if (require.main === module) {
-  start_server().then(server => {
-    const cleanup = () => {
-      console.log('\nShutting down server...');
-      server.close(() => process.exit(0));
-    };
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
-  }).catch(err => {
-    console.error('Failed to start server:', err.message);
-    if (process.env.DEBUG) console.error(err.stack);
+  start_server({ port: Number(process.env.PORT) || DEFAULT_PORT }).catch(err => {
+    console.error('Server failed to start:', err);
     process.exit(1);
   });
 }
 
-module.exports = { create_app, start_server, current_year_scope };
+module.exports = { create_app, start_server, DEFAULT_PORT };

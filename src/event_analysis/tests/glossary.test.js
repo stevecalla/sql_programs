@@ -94,6 +94,8 @@ describe('dashboard glossary — required terms', () => {
     'Net change', 'Active event', 'Sanction ID',
     'Approved', 'Unapproved', 'Stale',
     'Worst month',
+    // Row-level review + creation-date column added in this iteration
+    'Reviewed?', 'Event Created',
   ];
 
   test('every required term appears inside the glossary <details> block', async (t) => {
@@ -106,9 +108,13 @@ describe('dashboard glossary — required terms', () => {
     }
 
     // Slice to glossary bounds so a term defined elsewhere on the page
-    // can't accidentally satisfy the check.
-    const open_idx  = html.indexOf('<details');
-    const close_idx = html.indexOf('</details>', open_idx);
+    // can't accidentally satisfy the check. Anchor on the glossary's id
+    // rather than the first <details> tag — the dashboard now has other
+    // <details> elements above the glossary (e.g. the ad-hoc-years
+    // rebuild card) and we don't want to accidentally slice into them.
+    const id_idx    = html.indexOf('id="dash-glossary"');
+    const open_idx  = html.lastIndexOf('<details', id_idx);
+    const close_idx = html.indexOf('</details>', id_idx);
     assert.ok(open_idx >= 0 && close_idx > open_idx, 'could not locate glossary boundaries');
     const glossary_html = html.slice(open_idx, close_idx);
 
@@ -130,8 +136,10 @@ describe('dashboard glossary — required terms', () => {
       return;
     }
 
-    const open_idx  = html.indexOf('<details');
-    const close_idx = html.indexOf('</details>', open_idx);
+    // Anchor on the glossary's id — see note in the prior test.
+    const id_idx    = html.indexOf('id="dash-glossary"');
+    const open_idx  = html.lastIndexOf('<details', id_idx);
+    const close_idx = html.indexOf('</details>', id_idx);
     const glossary_html = html.slice(open_idx, close_idx);
 
     assert.match(glossary_html, /weekend day/i,

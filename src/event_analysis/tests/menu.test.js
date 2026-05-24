@@ -83,10 +83,11 @@ describe('menu.js — known actions', () => {
     'add_match', 'add_no_match', 'add_segment', 'remove_override',
     'ask', 'ask_save', 'update_commentary', 'what_changed',
     'view_changes', 'view_notes', 'view_readme',
-    'start_server',
+    'start_server', 'start_server_restricted',
     'run_tests_all', 'run_tests_overrides', 'run_tests_server',
     'run_tests_menu', 'run_tests_smoke', 'run_tests_glossary',
     'run_tests_downloads', 'run_tests_build', 'run_tests_roster',
+    'run_tests_dashboard',
     'toggle_commands',
   ];
 
@@ -175,6 +176,7 @@ describe('menu.js — test files exist', () => {
     { action: 'run_tests_downloads', file: 'downloads.test.js' },
     { action: 'run_tests_build',     file: 'build.test.js' },
     { action: 'run_tests_roster',    file: 'roster.test.js' },
+    { action: 'run_tests_dashboard', file: 'dashboard.test.js' },
   ];
 
   for (const c of cases) {

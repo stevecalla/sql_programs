@@ -74,6 +74,10 @@ function parseRows(rows, { includeExcluded = false } = {}) {
       type:        cleanType(row[5]),
       startDate,
       month:       startDate ? startDate.getUTCMonth() + 1 : null,  // 1–12
+      // row[0] = created_at_events (YYYY-MM-DD string from dateStrings: true).
+      // Kept as a string for the dashboard's optional "Event Created" column
+      // and the creation-pipeline chart. Parsing happens at the display layer.
+      createdAt:   row[0] ? String(row[0]).slice(0, 10) : null,
     });
   }
   return events;

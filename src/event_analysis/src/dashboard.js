@@ -147,7 +147,18 @@ function generate_dashboard(results, cm, out_path, segments_raw = null) {
   // Keep only fields needed for display; strip normalizer internals
   const MN_MAP = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const DAY_MAP = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const day_of = d => { try { return DAY_MAP[new Date(d).getDay()]; } catch { return ''; } };
+  // Always interpret input as a UTC instant so the displayed weekday
+  // reflects the event/created date itself, not whatever local-time slice
+  // the builder/viewer happens to be in. `new Date('2025-05-10')` parses
+  // as 00:00 UTC; in a negative-offset TZ that's the previous calendar day,
+  // and getDay() (local) then returns Fri instead of Sat. Strings get a
+  // 'T00:00:00Z' suffix; Date objects already carry a UTC timestamp.
+  const day_of = d => {
+    try {
+      const dt = d instanceof Date ? d : new Date(String(d).slice(0, 10) + 'T00:00:00Z');
+      return isNaN(dt.getTime()) ? '' : DAY_MAP[dt.getUTCDay()];
+    } catch { return ''; }
+  };
   const SEGS = ['Retained','Shifted','Tried to Return','Lost','Recovered','New'];
   const roster = [];
   if (segments_raw) {
@@ -161,18 +172,27 @@ function generate_dashboard(results, cm, out_path, segments_raw = null) {
           seg:  m.seg ?? seg_key,
           conf: m.conf ?? '?',
           type: m.e25?.type ?? m.e26?.type ?? '',
-          m25:  m.e25?.month  ? MN_MAP[m.e25.month]  : '',
-          sid25: m.e25?.sanctionId ?? '',
-          name25: m.e25?.name ?? '',
-          date25: m.e25?.startDate ? m.e25.startDate instanceof Date ? m.e25.startDate.toISOString().slice(0,10) : String(m.e25.startDate).slice(0,10) : '',
-          day25:  m.e25?.startDate ? day_of(m.e25.startDate) : '',
-          st25:   m.e25?.status ?? '',
-          m26:   m.e26?.month  ? MN_MAP[m.e26.month]  : '',
-          sid26:  m.e26?.sanctionId ?? '',
-          name26: m.e26?.name ?? '',
-          date26: m.e26?.startDate ? m.e26.startDate instanceof Date ? m.e26.startDate.toISOString().slice(0,10) : String(m.e26.startDate).slice(0,10) : '',
-          day26:  m.e26?.startDate ? day_of(m.e26.startDate) : '',
-          st26:   m.e26?.status ?? '',
+          m_baseline:  m.e25?.month  ? MN_MAP[m.e25.month]  : '',
+          sid_baseline: m.e25?.sanctionId ?? '',
+          name_baseline: m.e25?.name ?? '',
+          date_baseline: m.e25?.startDate ? m.e25.startDate instanceof Date ? m.e25.startDate.toISOString().slice(0,10) : String(m.e25.startDate).slice(0,10) : '',
+          day_baseline:  m.e25?.startDate ? day_of(m.e25.startDate) : '',
+          status_baseline:   m.e25?.status ?? '',
+          // Optional column — populated when loader.js carried createdAt
+          // through (it strips to YYYY-MM-DD). Fallback to '' so the column
+          // renders cleanly even on older builds that didn't capture it.
+          // created_day_* is pre-computed so the client can render the
+          // same "Mon., YYYY-MM-DD" combined format used for event dates.
+          created_baseline:     m.e25?.createdAt ?? '',
+          created_day_baseline: m.e25?.createdAt ? day_of(m.e25.createdAt) : '',
+          m_analysis:   m.e26?.month  ? MN_MAP[m.e26.month]  : '',
+          sid_analysis:  m.e26?.sanctionId ?? '',
+          name_analysis: m.e26?.name ?? '',
+          date_analysis: m.e26?.startDate ? m.e26.startDate instanceof Date ? m.e26.startDate.toISOString().slice(0,10) : String(m.e26.startDate).slice(0,10) : '',
+          day_analysis:  m.e26?.startDate ? day_of(m.e26.startDate) : '',
+          status_analysis:   m.e26?.status ?? '',
+          created_analysis:     m.e26?.createdAt ?? '',
+          created_day_analysis: m.e26?.createdAt ? day_of(m.e26.createdAt) : '',
         });
       }
     }
@@ -196,8 +216,8 @@ function generate_dashboard(results, cm, out_path, segments_raw = null) {
   // DB happens to surface — so the filter list mirrors actual data.
   const status_set = new Set();
   for (const r of roster) {
-    if (r.st25) status_set.add(r.st25);
-    if (r.st26) status_set.add(r.st26);
+    if (r.status_baseline) status_set.add(r.status_baseline);
+    if (r.status_analysis) status_set.add(r.status_analysis);
   }
   const all_statuses = [...status_set].sort();
 
@@ -456,12 +476,18 @@ canvas{width:100%!important;max-height:220px}
   color:#999;text-transform:uppercase;letter-spacing:.06em;border-top:1px solid #f0f0f0;margin-top:4px}
 .col-pick-group:first-child{border-top:none;margin-top:0}
 /* Toggleable table columns — hidden by default, shown when table has class */
-#evt-tbl .col-sid25,#evt-tbl .col-date25,
-#evt-tbl .col-sid26,#evt-tbl .col-date26{display:none}
-#evt-tbl.show-sid25  .col-sid25 {display:table-cell}
-#evt-tbl.show-date25 .col-date25{display:table-cell}
-#evt-tbl.show-sid26  .col-sid26 {display:table-cell}
-#evt-tbl.show-date26 .col-date26{display:table-cell}
+#evt-tbl .col-sid_baseline,#evt-tbl .col-date_baseline,#evt-tbl .col-created_baseline,
+#evt-tbl .col-sid_analysis,#evt-tbl .col-date_analysis,#evt-tbl .col-created_analysis,
+#evt-tbl .col-ov-type,#evt-tbl .col-ov-approved,#evt-tbl .col-ov-note{display:none}
+#evt-tbl.show-sid_baseline     .col-sid_baseline      {display:table-cell}
+#evt-tbl.show-date_baseline    .col-date_baseline     {display:table-cell}
+#evt-tbl.show-created_baseline .col-created_baseline  {display:table-cell}
+#evt-tbl.show-sid_analysis     .col-sid_analysis      {display:table-cell}
+#evt-tbl.show-date_analysis    .col-date_analysis     {display:table-cell}
+#evt-tbl.show-created_analysis .col-created_analysis  {display:table-cell}
+#evt-tbl.show-ov-type     .col-ov-type     {display:table-cell}
+#evt-tbl.show-ov-approved .col-ov-approved {display:table-cell}
+#evt-tbl.show-ov-note     .col-ov-note     {display:table-cell}
 /* ── Event table ── */
 /* ── Active filter chips ── */
 .filter-bar{display:none;align-items:center;gap:6px;flex-wrap:wrap;
@@ -789,8 +815,35 @@ canvas{width:100%!important;max-height:220px}
 </div>
 
 <div class="row">
-  <div class="card card-full">
-    <h3>Weekend day shifts <span class="note">Sat Δ (green/red) · Sun Δ (blue/orange) vs prior year · shows which months gained or lost a weekend day</span><span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_calendar')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_calendar')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_calendar')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_calendar" class="chart-btn" onclick="flip_chart_table('c_calendar')" title="Switch to table view">⇄ Table</button></span></h3>
+  <!-- Creation-pipeline chart: stacked bars showing when events for a chosen
+       start year were created, broken down by event type. Source data is
+       the ROSTER's created_baseline / created_analysis fields (added when loader.js
+       started carrying createdAt). User toggles the start year via the
+       dropdown right next to the title. -->
+  <div class="card card-monthly">
+    <h3>Events by creation month
+      <span class="note">when events that started in
+        <select id="creation-year-pick" style="font-size:.85rem;padding:1px 4px;border:1px solid #ccc;border-radius:3px;background:#fff;cursor:pointer">
+          <option value="${yb}">${yb}</option>
+          <option value="${ya}">${ya}</option>
+        </select>
+        were created
+        <select id="creation-type-pick" title="Filter by event type" style="font-size:.85rem;padding:1px 4px;border:1px solid #ccc;border-radius:3px;background:#fff;cursor:pointer;margin-left:6px">
+          <option value="">All types</option>
+          <option value="Adult Race">Adult Race</option>
+          <option value="Youth Race">Youth Race</option>
+          <option value="Adult Clinic">Adult Clinic</option>
+          <option value="Youth Clinic">Youth Clinic</option>
+        </select>
+        — stacked by event type
+      </span>
+      <span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_creation')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_creation')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_creation')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_creation" class="chart-btn" onclick="flip_chart_table('c_creation')" title="Switch to table view">⇄ Table</button></span>
+    </h3>
+    <div style="position:relative;height:200px"><canvas id="c_creation"></canvas><div id="flip-tbl-c_creation" class="chart-flip-tbl"></div></div>
+  </div>
+  <!-- Calendar chart moved to the right slot per UI request. -->
+  <div class="card card-segment">
+    <h3>Weekend day shifts <span class="note">Sat Δ (green/red) · Sun Δ (blue/orange)</span><span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_calendar')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_calendar')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_calendar')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_calendar" class="chart-btn" onclick="flip_chart_table('c_calendar')" title="Switch to table view">⇄ Table</button></span></h3>
     <div style="position:relative;height:200px"><canvas id="c_calendar"></canvas><div id="flip-tbl-c_calendar" class="chart-flip-tbl"></div></div>
   </div>
 </div>
@@ -862,12 +915,23 @@ ${has_table ? `
       <div class="multi-drop" id="drop-cols">
         <button type="button" class="multi-drop-btn" onclick="toggle_drop('drop-cols')" title="Show/hide columns">⊞ Columns ▾</button>
         <div class="multi-drop-panel" id="panel-drop-cols" style="min-width:200px;right:0;left:auto">
+          <!-- All / None mirrors the other dropdowns (Segment / Type / Month / Status).
+               Walks every <input type=checkbox> in this panel and runs toggle_col
+               on each id (the input id format is col-<key>). -->
+          <div class="drop-actions"><button type="button" onclick="col_drop_all('panel-drop-cols',true)">All</button><span>|</span><button type="button" onclick="col_drop_all('panel-drop-cols',false)">None</button></div>
           <div class="col-pick-group">${ya}</div>
-          <label><input type="checkbox" id="col-sid25" onchange="toggle_col('sid25',this.checked)"><span class="lbl-text">Sanction ID ${ya}</span></label>
-          <label><input type="checkbox" id="col-date25" onchange="toggle_col('date25',this.checked)"><span class="lbl-text">Date ${ya}</span></label>
+          <label><input type="checkbox" id="col-sid_baseline" onchange="toggle_col('sid_baseline',this.checked)"><span class="lbl-text">Sanction ID ${ya}</span></label>
+          <label><input type="checkbox" id="col-date_baseline" onchange="toggle_col('date_baseline',this.checked)"><span class="lbl-text">Date ${ya}</span></label>
+          <label><input type="checkbox" id="col-created_baseline" onchange="toggle_col('created_baseline',this.checked)"><span class="lbl-text">Event Created ${ya}</span></label>
           <div class="col-pick-group">${yb}</div>
-          <label><input type="checkbox" id="col-sid26" onchange="toggle_col('sid26',this.checked)"><span class="lbl-text">Sanction ID ${yb}</span></label>
-          <label><input type="checkbox" id="col-date26" onchange="toggle_col('date26',this.checked)"><span class="lbl-text">Date ${yb}</span></label>
+          <label><input type="checkbox" id="col-sid_analysis" onchange="toggle_col('sid_analysis',this.checked)"><span class="lbl-text">Sanction ID ${yb}</span></label>
+          <label><input type="checkbox" id="col-date_analysis" onchange="toggle_col('date_analysis',this.checked)"><span class="lbl-text">Date ${yb}</span></label>
+          <label><input type="checkbox" id="col-created_analysis" onchange="toggle_col('created_analysis',this.checked)"><span class="lbl-text">Event Created ${yb}</span></label>
+          <div class="col-pick-group">Override info</div>
+          <label><input type="checkbox" id="col-override" onchange="toggle_col('override',this.checked)"><span class="lbl-text">Override</span></label>
+          <label><input type="checkbox" id="col-ov-type" onchange="toggle_col('ov-type',this.checked)"><span class="lbl-text">Override type</span></label>
+          <label><input type="checkbox" id="col-ov-approved" onchange="toggle_col('ov-approved',this.checked)"><span class="lbl-text">Approved</span></label>
+          <label><input type="checkbox" id="col-ov-note" onchange="toggle_col('ov-note',this.checked)"><span class="lbl-text">Override note</span></label>
         </div>
       </div>
       <button class="chart-btn" onclick="export_table_csv()" title="Download all visible rows as CSV">⬇ Export CSV</button>
@@ -899,20 +963,32 @@ ${has_table ? `
         <thead>
           <tr>
             <th style="width:42px;min-width:42px;cursor:default">#</th>
-            <th data-col="seg">Segment</th><th data-col="conf">Conf</th><th data-col="type">Type</th>
+            <th data-col="seg">Segment</th><th data-col="conf">Conf</th>
+            <!-- Always-visible Reviewed? checkbox — quick way to mark a row
+                 as reviewed-and-correct; creates an approved no-op override.
+                 Placed right after Conf so it's the first action column. -->
+            <th class="col-reviewed" data-col="reviewed" style="font-size:.72rem" title="Sort by reviewed state (ascending: unreviewed first; descending: reviewed first)">Reviewed?</th>
+            <!-- Optional Override pill column — toggle from ⊞ Columns. Sits
+                 directly after Reviewed? so the two override-related signals
+                 stay adjacent. -->
             <th class="col-override" data-col="override" style="font-size:.72rem">Override</th>
-            <th data-col="m25">Mo ${ya}</th>
-            <th class="col-sid25" data-col="sid25" style="font-size:.72rem">Sanction ID ${ya}</th>
-            <th class="col-date25" data-col="date25" style="font-size:.72rem">Date ${ya}</th>
-            <th data-col="day25">Day</th>
-            <th data-col="name25">${ya} Event Name</th>
-            <th data-col="st25">Status ${ya}</th>
-            <th data-col="m26">Mo ${yb}</th>
-            <th class="col-sid26" data-col="sid26" style="font-size:.72rem">Sanction ID ${yb}</th>
-            <th class="col-date26" data-col="date26" style="font-size:.72rem">Date ${yb}</th>
-            <th data-col="day26">Day</th>
-            <th data-col="name26">${yb} Event Name</th>
-            <th data-col="st26">Status ${yb}</th>
+            <!-- Optional override-info columns — toggle from ⊞ Columns -->
+            <th class="col-ov-type"     data-col="ov-type"     style="font-size:.72rem">Override type</th>
+            <th class="col-ov-approved" data-col="ov-approved" style="font-size:.72rem">Approved</th>
+            <th class="col-ov-note"     data-col="ov-note"     style="font-size:.72rem">Override note</th>
+            <th data-col="type">Type</th>
+            <th data-col="m_baseline">Mo ${ya}</th>
+            <th class="col-sid_baseline" data-col="sid_baseline" style="font-size:.72rem">Sanction ID ${ya}</th>
+            <th class="col-date_baseline" data-col="date_baseline" style="font-size:.72rem">Date ${ya}</th>
+            <th class="col-created_baseline" data-col="created_baseline" style="font-size:.72rem">Created ${ya}</th>
+            <th data-col="name_baseline">${ya} Event Name</th>
+            <th data-col="status_baseline">Status ${ya}</th>
+            <th data-col="m_analysis">Mo ${yb}</th>
+            <th class="col-sid_analysis" data-col="sid_analysis" style="font-size:.72rem">Sanction ID ${yb}</th>
+            <th class="col-date_analysis" data-col="date_analysis" style="font-size:.72rem">Date ${yb}</th>
+            <th class="col-created_analysis" data-col="created_analysis" style="font-size:.72rem">Created ${yb}</th>
+            <th data-col="name_analysis">${yb} Event Name</th>
+            <th data-col="status_analysis">Status ${yb}</th>
           </tr>
         </thead>
         <tbody id="tbl-body"></tbody>
@@ -1031,6 +1107,31 @@ ${has_table ? `
               type="button" onclick="dash_ov_rebuild()">▶ Rebuild now</button>
       <span class="help">Streams live build output from <code>build_all.js</code>. On success the dashboard auto-reloads with the new data.</span>
     </div>
+    <!-- Ad-hoc years — collapsed by default so the typical rebuild is one
+         click. Expand to run a different year pair through /api/build with
+         query-param flags. Same outputs (Excel / pptx / dashboard); these
+         flags do NOT touch .env, so subsequent default rebuilds revert to
+         the project-wide year scope. -->
+    <details id="dash-ov-rebuild-years" style="margin-top:6px">
+      <summary style="cursor:pointer;font-size:.82rem;color:#656d76;user-select:none">
+        ⚙ Rebuild with custom years (ad hoc)
+      </summary>
+      <div class="row" style="margin-top:6px">
+        <label style="font-size:.78rem;color:#656d76">
+          Baseline year
+          <input id="dash-ov-rebuild-baseline" type="number" min="2000" max="2100" placeholder="${ya}"
+                 style="width:80px;margin-left:4px;padding:3px 6px;font-size:.85rem;border:1px solid #ccc;border-radius:3px">
+        </label>
+        <label style="font-size:.78rem;color:#656d76">
+          Analysis year
+          <input id="dash-ov-rebuild-analysis" type="number" min="2000" max="2100" placeholder="${yb}"
+                 style="width:80px;margin-left:4px;padding:3px 6px;font-size:.85rem;border:1px solid #ccc;border-radius:3px">
+        </label>
+        <button class="dash-ov-btn" id="dash-ov-rebuild-years-btn"
+                type="button" onclick="dash_ov_rebuild_with_years()">▶ Rebuild with these years</button>
+        <span class="help">Year pair is sent to <code>/api/build</code> as query params — equivalent to <code>node build_all.js --baseline-year YYYY --analysis-year YYYY</code></span>
+      </div>
+    </details>
     <div id="dash-ov-rebuild-log"></div>
   </div>
 </div>
@@ -1129,6 +1230,10 @@ ${has_table ? `
         <dd>Override lifecycle: <strong>unapproved</strong> still applies but emits a build warning; <strong>approved</strong> is endorsed (snapshots the event signature at approval time); <strong>stale</strong> = the underlying event changed (name, month, status) since approval, so re-review is needed.</dd></div>
       <div><dt>Worst month</dt>
         <dd>The month with the most negative net delta (biggest decline). The dashboard highlights up to two worst months because action plans usually focus on the two largest gaps.</dd></div>
+      <div><dt>Reviewed?</dt>
+        <dd>Per-row checkbox that records "I've looked at this and the match (or non-match) is correct." Checking it creates an <strong>approved</strong> override in <code>event_analysis_overrides</code> with <code>created_by = dashboard:review</code> — a no-op for analysis but a durable signal across builds. Unchecking removes it. The Override column shows the resulting approval state alongside any existing override pill.</dd></div>
+      <div><dt>Event Created</dt>
+        <dd>The date the event was first entered into the source system, surfaced as an optional roster column (toggle from ⊞ Columns) and used as the data source for the "Events by creation month" chart.</dd></div>
     </dl>
     </div>
   </details>
@@ -1480,6 +1585,123 @@ CHART_SNAP['c_calendar'] = { type:'bar', labels:MLBLS.slice(), datasets:[
   {label:'Sunday Δ',data:SUN_D.slice(),backgroundColor:SUN_D.map(function(v){return v>0?'rgba(21,101,192,.75)':v<0?'rgba(230,81,0,.75)':'rgba(180,180,180,.2)';}),borderWidth:1.5}
 ]};
 
+// ── Creation-pipeline chart (sourced from ROSTER's createdAt fields) ───────
+// Aggregates: for each row that has a populated side for the picked year,
+// bucket the event's createdAt (YYYY-MM-DD) by month, and stack by event
+// type. The dropdown above the chart re-aggregates on change.
+const C_TYPES   = ['Adult Race', 'Youth Race', 'Adult Clinic', 'Youth Clinic'];
+const C_COLORS  = { 'Adult Race':'#1565C0', 'Youth Race':'#00897B', 'Adult Clinic':'#F57C00', 'Youth Clinic':'#8E24AA' };
+function _creation_aggregate(year, type_filter) {
+  // year ∈ { ya, yb }. For ya we read created_baseline (only when sid_baseline exists);
+  // for yb we read created_analysis (only when sid_analysis exists). Single-sided rows
+  // (Lost has only sid_baseline, New has only sid_analysis) are correctly attributed.
+  // type_filter is optional: '' / falsy means "all four types"; otherwise restricts
+  // the count to rows matching that type. The returned by_type still keys all four
+  // so the legend stays stable -- non-matching types are just all-zero arrays.
+  const baseline_year = ${ya};
+  const counts = {};   // { 'YYYY-MM': { type: count } }
+  if (typeof ROSTER === 'undefined' || !Array.isArray(ROSTER)) return { labels: [], by_type: {} };
+  for (const r of ROSTER) {
+    if (type_filter && r.type !== type_filter) continue;
+    let created, has_side;
+    if (year === baseline_year) { created = r.created_baseline; has_side = !!r.sid_baseline; }
+    else                        { created = r.created_analysis; has_side = !!r.sid_analysis; }
+    if (!created || !has_side) continue;
+    const ym = created.slice(0, 7);   // 'YYYY-MM'
+    if (!counts[ym]) counts[ym] = {};
+    counts[ym][r.type] = (counts[ym][r.type] || 0) + 1;
+  }
+  const labels = Object.keys(counts).sort();
+  const by_type = {};
+  C_TYPES.forEach(t => { by_type[t] = labels.map(l => counts[l][t] || 0); });
+  return { labels, by_type };
+}
+let _creation_chart = null;
+function _creation_render() {
+  const picker = document.getElementById('creation-year-pick');
+  const year = Number(picker?.value || ${yb});
+  // Type-filter picker is optional -- empty string means "all four types".
+  // When user picks a single type, only that dataset has non-zero data;
+  // legend still shows all four (stable color key for the reader).
+  const type_picker = document.getElementById('creation-type-pick');
+  const type_filter = (type_picker && type_picker.value) || '';
+  const { labels, by_type } = _creation_aggregate(year, type_filter);
+  const datasets = C_TYPES.map(t => ({
+    label: t, data: by_type[t],
+    backgroundColor: C_COLORS[t], borderColor: C_COLORS[t], borderWidth: 1,
+  }));
+  // Snapshot for the expand-modal + table-flip + CSV export. Mirrors the
+  // CHART_SNAP entries the other charts populate at construction time, but
+  // we refresh it on every render so type/year filter changes are reflected
+  // in the snapshot too.
+  CHART_SNAP['c_creation'] = {
+    type: 'bar',
+    labels: labels.slice(),
+    datasets: datasets.map(d => ({
+      label: d.label,
+      data: (d.data || []).slice(),
+      backgroundColor: d.backgroundColor,
+      borderColor: d.borderColor,
+      borderWidth: d.borderWidth,
+    })),
+  };
+  if (_creation_chart) {
+    _creation_chart.data.labels = labels;
+    _creation_chart.data.datasets = datasets;
+    _creation_chart.update();
+  } else {
+    const canvas = document.getElementById('c_creation');
+    if (!canvas) return;
+    _creation_chart = new Chart(canvas, {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 11 } },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            callbacks: {
+              // Footer line shows the column total across all visible
+              // stacked types -- saves the reader from mental-summing
+              // four numbers in the tooltip body.
+              footer: function(items) {
+                if (!items || !items.length) return '';
+                var total = 0;
+                for (var i = 0; i < items.length; i++) {
+                  var v = items[i].parsed && items[i].parsed.y;
+                  if (typeof v === 'number') total += v;
+                }
+                return 'Total: ' + total.toLocaleString();
+              },
+            },
+          },
+          // Inline data labels INSIDE each stacked segment. The plugin
+          // skips segments shorter than min_h pixels, so small slices
+          // stay clean automatically -- only segments tall enough to
+          // hold a 9px label get one. White text reads well against
+          // the four type colors (all mid-saturation).
+          inside_labels: { show: true, color: '#fff', size: 9, min_h: 16 },
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { autoSkip: true, maxRotation: 0 } },
+          y: { stacked: true, beginAtZero: true, grid: { color: '#eee' },
+               ticks: { callback: v => v.toLocaleString() } },
+        },
+      },
+    });
+    // Register in the global CHARTS map so the expand / PNG / CSV / Table
+    // action buttons can find this chart by id ('c_creation') the same way
+    // they do for the other six charts.
+    CHARTS['c_creation'] = _creation_chart;
+  }
+}
+// Initial render + dropdown wiring happen below, AFTER the ROSTER const
+// is initialized -- calling _creation_render() here would read ROSTER in
+// its temporal dead zone and throw ReferenceError, blocking every later
+// script (including the roster-table render).
+
 // ── Chart ↔ Table flip ───────────────────────────────────────────────────────
 // Toggle between canvas and a plain HTML data table. Fully reversible.
 function flip_chart_table(id) {
@@ -1612,6 +1834,15 @@ function _build_flip_html(id) {
 
 // ── Event roster table ────────────────────────────────────────────────────
 const ROSTER = ROSTER_PLACEHOLDER;
+
+// Initial render of the creation-pipeline chart + dropdown wiring.
+// MUST run after ROSTER is initialized -- the chart reads ROSTER for
+// per-row createdAt aggregation. Putting this call above the ROSTER
+// declaration would throw ReferenceError (TDZ), which blocks every
+// later inline script (including the roster-table render).
+_creation_render();
+document.getElementById('creation-year-pick')?.addEventListener('change', _creation_render);
+document.getElementById('creation-type-pick')?.addEventListener('change', _creation_render);
 if(ROSTER && ROSTER.length > 0){
   const SEG_CLS = {'Retained':'Retained','Shifted':'Shifted','Lost':'Lost',
     'New':'New','Recovered':'Recovered','Tried to Return':'TtR'};
@@ -1631,32 +1862,57 @@ if(ROSTER && ROSTER.length > 0){
   function row_html(r){
     const sc = SEG_CLS[r.seg] || r.seg.replace(/\s/g,'.');
     _row_num++;
-    // Row identity for the inline editor — sid25 and/or sid26 are passed via
+    // Row identity for the inline editor — sid_baseline and/or sid_analysis are passed via
     // data attrs so click-delegation can route the row to the panel below.
     // data-sid is the canonical sid we use to look up overrides (prefer
-    // sid25 since most overrides target the baseline year; the editor
+    // sid_baseline since most overrides target the baseline year; the editor
     // handles either side from its lookup map).
-    const data_sid    = r.sid25 || r.sid26 || '';
-    const data_sid_b  = r.sid25 ? ' data-sid-baseline="'+escape_attr(r.sid25)+'"' : '';
-    const data_sid_a  = r.sid26 ? ' data-sid-analysis="'+escape_attr(r.sid26)+'"' : '';
-    return '<tr data-sid="'+escape_attr(data_sid)+'"'+data_sid_b+data_sid_a+'>' +
+    const data_sid    = r.sid_baseline || r.sid_analysis || '';
+    const data_sid_b  = r.sid_baseline ? ' data-sid-baseline="'+escape_attr(r.sid_baseline)+'"' : '';
+    const data_sid_a  = r.sid_analysis ? ' data-sid-analysis="'+escape_attr(r.sid_analysis)+'"' : '';
+    // data-seg lets the Reviewed? toggle pick the right override type for
+    // single-sided rows (Lost / New) -- those need force_segment to lock
+    // the existing segment, not force_no_match (which requires both sids).
+    const data_seg    = ' data-seg="'+escape_attr(r.seg)+'"';
+    return '<tr data-sid="'+escape_attr(data_sid)+'"'+data_sid_b+data_sid_a+data_seg+'>' +
       '<td style="color:#bbb;text-align:right;font-size:.7rem;padding-right:8px;font-variant-numeric:tabular-nums">'+_row_num+'</td>' +
       '<td><span class="seg-'+sc+'">'+r.seg+'</span></td>' +
-      '<td>'+r.conf+'</td><td>'+r.type+'</td>' +
+      '<td>'+r.conf+'</td>' +
+      // Reviewed? checkbox -- onclick triggers POST or DELETE on /api/overrides.
+      // Lives right after Conf so the primary action sits next to the
+      // primary signal; column order must match the <th> row above.
+      '<td class="col-reviewed" style="text-align:center"><input type="checkbox" class="dash-ov-reviewed" title="Mark this match as reviewed (creates an approved override)"></td>' +
+      // Optional Override pill cell -- now sits directly after Reviewed?
+      // (was between Type and Mo). Same dash-ov-cell class as before so
+      // update_override_columns() finds + populates it.
       '<td class="col-override dash-ov-cell">—</td>' +
-      '<td>'+r.m25+'</td>' +
-      '<td class="col-sid25" style="font-size:.7rem;color:#666;font-family:monospace">'+r.sid25+'</td>' +
-      '<td class="col-date25" style="font-size:.7rem;color:#666;white-space:nowrap">'+r.date25+'</td>' +
-      '<td>'+r.day25+'</td>' +
-      '<td class="name-col">'+r.name25+'</td>' +
-      '<td class="st-col">'+r.st25+'</td>' +
-      '<td style="color:'+(r.m26&&r.m26!==r.m25?'#E65100':'inherit')+'">'+r.m26+'</td>' +
-      '<td class="col-sid26" style="font-size:.7rem;color:#666;font-family:monospace">'+r.sid26+'</td>' +
-      '<td class="col-date26" style="font-size:.7rem;color:#666;white-space:nowrap">'+r.date26+'</td>' +
-      '<td>'+r.day26+'</td>' +
-      '<td class="name-col">'+r.name26+'</td>' +
-      '<td class="st-col">'+r.st26+'</td>' +
+      // Optional override-info cells -- populated by update_override_columns()
+      // after /api/overrides loads. Empty by default so the row renders fast.
+      '<td class="col-ov-type     ov-cell-type"     style="font-size:.72rem;color:#555"></td>' +
+      '<td class="col-ov-approved ov-cell-approved" style="font-size:.72rem;color:#555"></td>' +
+      '<td class="col-ov-note     ov-cell-note"     style="font-size:.7rem;color:#666;font-style:italic"></td>' +
+      '<td>'+r.type+'</td>' +
+      '<td>'+r.m_baseline+'</td>' +
+      '<td class="col-sid_baseline" style="font-size:.7rem;color:#666;font-family:monospace">'+r.sid_baseline+'</td>' +
+      '<td class="col-date_baseline" style="font-size:.7rem;color:#666;white-space:nowrap">'+fmt_date_with_day(r.day_baseline, r.date_baseline)+'</td>' +
+      '<td class="col-created_baseline" style="font-size:.7rem;color:#666;white-space:nowrap">'+fmt_date_with_day(r.created_day_baseline, r.created_baseline)+'</td>' +
+      '<td class="name-col">'+r.name_baseline+'</td>' +
+      '<td class="st-col">'+r.status_baseline+'</td>' +
+      '<td style="color:'+(r.m_analysis&&r.m_analysis!==r.m_baseline?'#E65100':'inherit')+'">'+r.m_analysis+'</td>' +
+      '<td class="col-sid_analysis" style="font-size:.7rem;color:#666;font-family:monospace">'+r.sid_analysis+'</td>' +
+      '<td class="col-date_analysis" style="font-size:.7rem;color:#666;white-space:nowrap">'+fmt_date_with_day(r.day_analysis, r.date_analysis)+'</td>' +
+      '<td class="col-created_analysis" style="font-size:.7rem;color:#666;white-space:nowrap">'+fmt_date_with_day(r.created_day_analysis, r.created_analysis)+'</td>' +
+      '<td class="name-col">'+r.name_analysis+'</td>' +
+      '<td class="st-col">'+r.status_analysis+'</td>' +
       '</tr>';
+  }
+
+  // Render dates as "Mon., 2025-05-10". When the day or date is missing
+  // (single-sided rows have one whole side blank), fall back gracefully:
+  // both present -> combined; one present -> whichever is there; neither -> ''.
+  function fmt_date_with_day(day, date) {
+    if (day && date) return day + '., ' + date;
+    return date || day || '';
   }
 
   function load_all(){
@@ -1668,6 +1924,13 @@ if(ROSTER && ROSTER.length > 0){
     if(cnt) cnt.textContent = current_rows.length.toLocaleString()+' events shown';
     const btn = document.getElementById('tbl-more');
     if(btn) btn.style.display='none';
+    // Re-apply override-driven cell state -- same reason as render_table:
+    // tbody.innerHTML wipes every Reviewed?/Override/ov-info cell, and
+    // row_html emits them empty. Without this call, "Show all" reveals
+    // rows with all checkboxes unchecked even when overrides exist.
+    if (typeof window.dash_ov_refresh_status_column === 'function') {
+      window.dash_ov_refresh_status_column();
+    }
   }
 
   // Segment bar config: label → { color, bg }
@@ -1786,10 +2049,10 @@ if(ROSTER && ROSTER.length > 0){
     const counts = {};
     MONTH_ORDER_LIST.forEach(function(m){ counts[m] = 0; });
     rows.forEach(function(r){
-      if(r.m25 && counts[r.m25] !== undefined) counts[r.m25]++;
-      // Only count m26 if it differs from m25 — otherwise a Retained row
+      if(r.m_baseline && counts[r.m_baseline] !== undefined) counts[r.m_baseline]++;
+      // Only count m_analysis if it differs from m_baseline — otherwise a Retained row
       // (same month both years) would be double-counted.
-      if(r.m26 && r.m26 !== r.m25 && counts[r.m26] !== undefined) counts[r.m26]++;
+      if(r.m_analysis && r.m_analysis !== r.m_baseline && counts[r.m_analysis] !== undefined) counts[r.m_analysis]++;
     });
     const active = new Set(get_checked('panel-drop-month'));
     bar.innerHTML = MONTH_ORDER_LIST.map(function(m){
@@ -1872,14 +2135,33 @@ if(ROSTER && ROSTER.length > 0){
     render_seg_summary(rows);
     render_type_summary(rows);
     render_month_summary(rows);
+    // Re-apply override-driven cell state (Reviewed? checkbox, Override pill,
+    // optional override-info columns). row_html emits these cells empty;
+    // refresh_status_column reads _by_sid and fills them in. Without this
+    // call, any sort/search/filter/chip-toggle that re-runs render_table
+    // wipes the checkboxes -- they only get repainted when the editor's
+    // Approve button (or any other path) fires dash_ov_refresh().
+    if (typeof window.dash_ov_refresh_status_column === 'function') {
+      window.dash_ov_refresh_status_column();
+    }
   }
 
   function export_table_csv(){
-    const headers = ['#','Segment','Confidence','Type','Month ${ya}','${ya} Sanction ID','${ya} Date','${ya} Day','${ya} Event Name','${ya} Status','Month ${yb}','${yb} Sanction ID','${yb} Date','${yb} Day','${yb} Event Name','${yb} Status'];
+    // Export includes the optional Event Created columns. The override-info
+    // columns (type / approved / note) are intentionally omitted from CSV —
+    // they live in the DB and have their own export path via the editor.
+    // Date columns export the same "Mon., 2025-05-10" combined format the
+    // table now shows; the separate Day column was dropped on screen so we
+    // drop it here too to keep CSV + table aligned.
+    const headers = ['#','Segment','Confidence','Type','Month ${ya}','${ya} Sanction ID','${ya} Date','${ya} Created','${ya} Event Name','${ya} Status','Month ${yb}','${yb} Sanction ID','${yb} Date','${yb} Created','${yb} Event Name','${yb} Status'];
     const rows = [headers.join(',')];
     current_rows.forEach((r,i)=>{
       const q = v=>'"'+String(v||'').replace(/"/g,'""')+'"';
-      rows.push([i+1,q(r.seg),q(r.conf),q(r.type),r.m25,q(r.sid25),r.date25||'',r.day25||'',q(r.name25),r.st25||'',r.m26,q(r.sid26),r.date26||'',r.day26||'',q(r.name26),r.st26||''].join(','));
+      const date_b    = fmt_date_with_day(r.day_baseline, r.date_baseline);
+      const date_a    = fmt_date_with_day(r.day_analysis, r.date_analysis);
+      const created_b = fmt_date_with_day(r.created_day_baseline, r.created_baseline);
+      const created_a = fmt_date_with_day(r.created_day_analysis, r.created_analysis);
+      rows.push([i+1,q(r.seg),q(r.conf),q(r.type),r.m_baseline,q(r.sid_baseline),q(date_b),q(created_b),q(r.name_baseline),r.status_baseline||'',r.m_analysis,q(r.sid_analysis),q(date_a),q(created_a),q(r.name_analysis),r.status_analysis||''].join(','));
     });
     const a=document.createElement('a');
     a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.join('\\n'));
@@ -1895,6 +2177,18 @@ if(ROSTER && ROSTER.length > 0){
     update_drop_btn(drop_id);
     filter_and_sort();
   }
+  // Column-dropdown variant -- the inputs here use id col-KEY and the
+  // onchange wiring calls toggle_col(key, checked). drop_all above doesn't
+  // fire change events when it programmatically sets cb.checked, so we
+  // have to invoke toggle_col directly for each one to update the table CSS
+  // classes + persist the choice to localStorage.
+  function col_drop_all(panel_id, check){
+    document.querySelectorAll('#'+panel_id+' input[type=checkbox]').forEach(function(cb){
+      cb.checked = check;
+      var key = (cb.id || '').replace(/^col-/, '');
+      if (key) toggle_col(key, check);
+    });
+  }
   function toggle_col(col_name, visible){
     var tbl = document.getElementById('evt-tbl');
     if(!tbl) return;
@@ -1905,7 +2199,13 @@ if(ROSTER && ROSTER.length > 0){
   }
   // Restore saved column preferences on load
   (function restore_col_prefs(){
-    ['sid25','date25','sid26','date26'].forEach(function(col){
+    // Every optional column the user can toggle from ⊞ Columns. Order
+    // doesn't matter; keys are independent in localStorage.
+    [
+      'sid_baseline', 'date_baseline', 'created_baseline',
+      'sid_analysis', 'date_analysis', 'created_analysis',
+      'override', 'ov-type', 'ov-approved', 'ov-note',
+    ].forEach(function(col){
       var saved;
       try { saved = localStorage.getItem('col_'+col); } catch(e){}
       if(saved === '1'){
@@ -2041,16 +2341,16 @@ if(ROSTER && ROSTER.length > 0){
       // a paste like "311655-Adult Race" filters down to that exact row,
       // and partial sid prefixes (e.g. "311655") also work. Each field is
       // null-checked since unmatched rows have only one side populated.
-      (!q || (r.name25 && r.name25.toLowerCase().includes(q))
-          || (r.name26 && r.name26.toLowerCase().includes(q))
-          || (r.sid25  && r.sid25.toLowerCase().includes(q))
-          || (r.sid26  && r.sid26.toLowerCase().includes(q))) &&
+      (!q || (r.name_baseline && r.name_baseline.toLowerCase().includes(q))
+          || (r.name_analysis && r.name_analysis.toLowerCase().includes(q))
+          || (r.sid_baseline  && r.sid_baseline.toLowerCase().includes(q))
+          || (r.sid_analysis  && r.sid_analysis.toLowerCase().includes(q))) &&
       (!segs.length || segs.includes(r.seg)) &&
       (!typs.length || typs.includes(r.type)) &&
-      (!mons.length || mons.includes(r.m25) || mons.includes(r.m26)) &&
+      (!mons.length || mons.includes(r.m_baseline) || mons.includes(r.m_analysis)) &&
       // Status matches if either year's status is in the checked set.
       // Lost/New rows only have one side populated; the OR handles that.
-      (!sts.length  || sts.includes(r.st25) || sts.includes(r.st26))
+      (!sts.length  || sts.includes(r.status_baseline) || sts.includes(r.status_analysis))
     );
     rows.sort((a,b) => {
       if(sort_col === '_excel'){
@@ -2058,10 +2358,60 @@ if(ROSTER && ROSTER.length > 0){
         const so = (SEG_ORDER[a.seg]??99) - (SEG_ORDER[b.seg]??99);
         if(so!==0) return so;
         const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const mo = MONTHS.indexOf(a.m25) - MONTHS.indexOf(b.m25);
+        const mo = MONTHS.indexOf(a.m_baseline) - MONTHS.indexOf(b.m_baseline);
         if(mo!==0) return mo;
         if(a.type<b.type) return -1; if(a.type>b.type) return 1;
-        return a.name25 < b.name25 ? -1 : a.name25 > b.name25 ? 1 : 0;
+        return a.name_baseline < b.name_baseline ? -1 : a.name_baseline > b.name_baseline ? 1 : 0;
+      }
+      // Reviewed?: not on the row object (it lives in _by_sid via the API).
+      // Rank by approved-truthiness so ascending puts unreviewed at top,
+      // descending puts reviewed at top. Falls back gracefully when the
+      // override map isn't loaded yet (window._dash_ov_is_reviewed missing).
+      if(sort_col === 'reviewed'){
+        var is_rev = (window._dash_ov_is_reviewed || function(){ return 0; });
+        var ra = is_rev(a.sid_baseline, a.sid_analysis);
+        var rb = is_rev(b.sid_baseline, b.sid_analysis);
+        return (ra - rb) * sort_dir;
+      }
+      // Month columns are 3-letter strings ('Jan', 'Feb', ...). Default
+      // string sort gives Apr/Aug/Dec/Feb/Jan/... -- chronologically
+      // useless. Rank by month-number index instead.
+      if(sort_col === 'm_baseline' || sort_col === 'm_analysis'){
+        const MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var ai = MO.indexOf(a[sort_col] || '');   // -1 for blank/single-sided
+        var bi = MO.indexOf(b[sort_col] || '');
+        return (ai - bi) * sort_dir;
+      }
+      // Override-derived columns (data lives in _by_sid, not on the row).
+      // Resolve the override once per row, then pull the comparable field.
+      if(sort_col === 'override' || sort_col === 'ov-type' ||
+         sort_col === 'ov-approved' || sort_col === 'ov-note'){
+        var lookup = (window._dash_ov_lookup || function(){ return null; });
+        var oa = lookup(a.sid_baseline, a.sid_analysis);
+        var ob = lookup(b.sid_baseline, b.sid_analysis);
+        var key_a = '', key_b = '';
+        if (sort_col === 'override' || sort_col === 'ov-type') {
+          // Sort by override type ('force_match' / 'force_no_match' /
+          // 'force_segment'); rows with no override sink to the end of
+          // ascending order (empty string sorts first; we flip to put
+          // them last for ascending).
+          key_a = oa ? (oa.override_type || '') : '~';   // '~' sorts after letters
+          key_b = ob ? (ob.override_type || '') : '~';
+        } else if (sort_col === 'ov-approved') {
+          // Bucket order: stale -> unapproved -> approved -> (no override).
+          // Ascending puts trouble (stale) at top so reviewers can act.
+          var rank = function(o) {
+            if (!o) return 99;
+            if (o.approval_state === 'stale') return 0;
+            if (o.approved) return 2;
+            return 1;   // unapproved
+          };
+          return (rank(oa) - rank(ob)) * sort_dir;
+        } else if (sort_col === 'ov-note') {
+          key_a = oa ? (oa.note || '') : '';
+          key_b = ob ? (ob.note || '') : '';
+        }
+        return key_a < key_b ? -sort_dir : key_a > key_b ? sort_dir : 0;
       }
       const av = a[sort_col] ?? '', bv = b[sort_col] ?? '';
       return av < bv ? -sort_dir : av > bv ? sort_dir : 0;
@@ -2091,11 +2441,24 @@ if(ROSTER && ROSTER.length > 0){
 
   // ── Wire row clicks → focus the inline override editor below ─────────
   // Click delegation on tbody. Skip header rows / cells without a sid.
+  // Special case: clicking the Reviewed? checkbox dispatches to a
+  // dedicated handler instead of focusing the editor.
   const _ov_tbody = document.getElementById('tbl-body');
   if (_ov_tbody) {
     _ov_tbody.addEventListener('click', function(e){
       var tr = e.target.closest('tr');
       if (!tr || !tr.dataset.sid) return;
+
+      // Reviewed? checkbox click — handled separately so it doesn't also
+      // trigger the editor focus + scroll.
+      if (e.target && e.target.classList && e.target.classList.contains('dash-ov-reviewed')) {
+        e.stopPropagation();
+        if (typeof dash_ov_toggle_reviewed === 'function') {
+          dash_ov_toggle_reviewed(tr, e.target.checked);
+        }
+        return;
+      }
+
       var sid_b = tr.dataset.sidBaseline || '';
       var sid_a = tr.dataset.sidAnalysis || '';
       if (typeof dash_ov_focus_row === 'function') {
@@ -2195,6 +2558,26 @@ if(ROSTER && ROSTER.length > 0){
     if (ov.approved)                   return '<span class="dash-ov-state dash-ov-state-approved">✓ approved</span>';
     return '<span class="dash-ov-state dash-ov-state-unapproved">◦ unapproved</span>';
   }
+  // Exposed on window so render_table() (which lives in the outer roster
+  // IIFE) can re-apply override-driven cell state after any re-render --
+  // see the call at the end of render_table.
+  window.dash_ov_refresh_status_column = refresh_status_column;
+  // Used by filter_and_sort() to rank rows when sort_col === 'reviewed'.
+  // Returns 1 when an approved override exists for either sid, 0 otherwise.
+  // Same approved-truthiness rule refresh_status_column uses for the
+  // checkbox -- if a stale or unapproved override exists, the row counts
+  // as "not reviewed" for sort purposes.
+  window._dash_ov_is_reviewed = function(sid_b, sid_a) {
+    var ov = (_by_sid[sid_b] && _by_sid[sid_b][0]) || (_by_sid[sid_a] && _by_sid[sid_a][0]);
+    return ov && ov.approved ? 1 : 0;
+  };
+  // Generic override lookup -- returns the first override row matching
+  // either sid (or undefined). Same shape refresh_status_column reads, so
+  // sort comparators can use it for override-derived columns (override
+  // pill, ov-type, ov-approved, ov-note).
+  window._dash_ov_lookup = function(sid_b, sid_a) {
+    return (_by_sid[sid_b] && _by_sid[sid_b][0]) || (_by_sid[sid_a] && _by_sid[sid_a][0]) || null;
+  };
   function refresh_status_column(){
     document.querySelectorAll('#tbl-body tr').forEach(function(tr){
       var sid_b = tr.dataset.sidBaseline || '';
@@ -2209,9 +2592,35 @@ if(ROSTER && ROSTER.length > 0){
         cell.innerHTML = pill_for(ov.override_type) + state_for(ov);
         tr.classList.add('has-override');
       }
+
+      // ── Optional override-info columns (toggle from ⊞ Columns) ──────────
+      // type / approved / note are populated only when their column is
+      // showing; the CSS hides them when the corresponding show-ov-*
+      // class is absent on the table, so the innerHTML is harmless when
+      // they're off.
+      var cell_type     = tr.querySelector('.ov-cell-type');
+      var cell_approved = tr.querySelector('.ov-cell-approved');
+      var cell_note     = tr.querySelector('.ov-cell-note');
+      if (cell_type     != null) cell_type.textContent     = ov ? (ov.override_type || '') : '';
+      if (cell_approved != null) cell_approved.textContent = ov ? (ov.approval_state || (ov.approved ? 'approved' : 'unapproved')) : '';
+      if (cell_note     != null) cell_note.textContent     = ov ? (ov.note || '') : '';
+
+      // ── Reviewed? checkbox state ───────────────────────────────────────
+      // Checked when an approved override exists for this row's sid pair.
+      // The checkbox is wired in the global click delegate further down —
+      // here we only sync the visual state to whatever the API said.
+      var cb = tr.querySelector('.dash-ov-reviewed');
+      if (cb != null) {
+        cb.checked  = !!(ov && ov.approved);
+        cb.disabled = false;
+        cb.title    = ov && ov.approved
+          ? 'Reviewed — uncheck to remove the approved override'
+          : 'Mark this row as reviewed (creates an approved override)';
+      }
     });
-    var tbl = $id('evt-tbl');
-    if (tbl) tbl.classList.add('show-override');
+    // Override column visibility is now user-controlled via the
+    // ⊞ Columns dropdown (restore_col_prefs reads localStorage on load);
+    // do NOT auto-add show-override here.
   }
 
   // ── Render: active overrides list ───────────────────────────────────
@@ -2313,6 +2722,98 @@ if(ROSTER && ROSTER.length > 0){
     document.querySelectorAll('#tbl-body tr.dash-ov-selected').forEach(function(el){ el.classList.remove('dash-ov-selected'); });
     render_selected();
     render_list();
+  };
+
+  // ── Reviewed? checkbox handler ──────────────────────────────────────
+  // Clicking the row-level checkbox POSTs (or DELETEs) an "approved"
+  // override that semantically means "this row has been reviewed and is
+  // correct." For matched pairs (Retained / Shifted / Tried to Return /
+  // Recovered) we create a force_match — a no-op for an already-matched
+  // pair, just a record-of-review. For single-sided rows (Lost / New) we
+  // create a force_no_match, also a no-op for an already-unmatched event.
+  //
+  // The override gets created_by 'dashboard:review' so it shows up in
+  // the override list distinctly from CLI- or server-created ones. On
+  // uncheck, we DELETE the override (by sid_baseline if present, else
+  // sid_analysis). The server already supports DELETE by either sid.
+  window.dash_ov_toggle_reviewed = async function(tr, checked) {
+    if (!tr) return;
+    var sid_b = tr.dataset.sidBaseline || '';
+    var sid_a = tr.dataset.sidAnalysis || '';
+    var primary_sid = sid_b || sid_a;
+    if (!primary_sid) return;
+
+    var cb = tr.querySelector('.dash-ov-reviewed');
+    if (cb) cb.disabled = true;     // prevent double-clicks during request
+
+    try {
+      if (checked) {
+        // Choose override type by the row's segment + which sids are present.
+        //   Both sids (Retained / Shifted / TtR / Recovered) -> force_match
+        //   Single sid + Lost  -> force_segment side=baseline segment=Lost
+        //   Single sid + New   -> force_segment side=analysis segment=New
+        // force_no_match is NOT used here: the server's semantics for that
+        // type is "unlink two events that look matched", which always
+        // requires both sids and is the wrong shape for a row that's
+        // already single-sided.
+        var seg = tr.dataset.seg || '';
+        var body;
+        if (sid_b && sid_a) {
+          body = { type: 'force_match', sid_baseline: sid_b, sid_analysis: sid_a, note: 'Reviewed via dashboard', approved: true };
+        } else if (sid_b) {
+          // Lost-side review: lock the baseline-only event as Lost.
+          body = { type: 'force_segment', side: 'baseline', sid_baseline: sid_b, segment: seg || 'Lost', note: 'Reviewed via dashboard', approved: true };
+        } else {
+          // New-side review: lock the analysis-only event as New.
+          body = { type: 'force_segment', side: 'analysis', sid_analysis: sid_a, segment: seg || 'New', note: 'Reviewed via dashboard', approved: true };
+        }
+        var res = await fetch('/api/overrides', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+        if (!res.ok) {
+          var err = await res.json().catch(function(){ return { error: res.statusText }; });
+          throw new Error(err.error || ('HTTP ' + res.status));
+        }
+        // The POST above inserts the override as unapproved (server's
+        // cmd_add_* functions don't honor a body.approved flag). We follow
+        // up with POST /api/approve/:sid to flip it to approved -- which
+        // is what refresh_status_column() reads to decide if the Reviewed?
+        // checkbox should be ticked. If THIS call fails (404 because the
+        // year scope didn't match, 500 because something blew up, etc.)
+        // the override exists but stays unapproved, and the checkbox will
+        // un-tick on the next refresh -- a confusing UX. So we treat a
+        // non-2xx response as a hard failure and surface it loudly.
+        var ap = await fetch('/api/approve/' + encodeURIComponent(primary_sid), {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ approved_by: 'dashboard:review' }),
+        });
+        if (!ap.ok) {
+          var ap_err = await ap.json().catch(function(){ return { error: ap.statusText }; });
+          throw new Error('approve failed: ' + (ap_err.error || ap_err.message || ('HTTP ' + ap.status)));
+        }
+        if (typeof show_toast === 'function') show_toast('Marked reviewed', 'ok');
+      } else {
+        var del = await fetch('/api/overrides/' + encodeURIComponent(primary_sid), { method: 'DELETE' });
+        if (!del.ok && del.status !== 404) {
+          var derr = await del.json().catch(function(){ return { error: del.statusText }; });
+          throw new Error(derr.error || ('HTTP ' + del.status));
+        }
+        if (typeof show_toast === 'function') show_toast('Review removed', 'ok');
+      }
+      // Re-fetch overrides + repaint columns + the list. Same path the
+      // editor uses after add/delete; one source of truth.
+      if (typeof dash_ov_refresh === 'function') await dash_ov_refresh();
+    } catch (e) {
+      // Revert the checkbox to whatever the underlying truth is.
+      if (cb) cb.checked = !checked;
+      if (typeof show_toast === 'function') show_toast('Failed: ' + e.message, 'err');
+      console.error('[dash_ov_toggle_reviewed]', e);
+    } finally {
+      if (cb) cb.disabled = false;
+    }
   };
 
   // ── Form visibility ─────────────────────────────────────────────────
@@ -2436,12 +2937,18 @@ if(ROSTER && ROSTER.length > 0){
   };
 
   // ── Rebuild trigger (Step 9.5) ──────────────────────────────────────
-  window.dash_ov_rebuild = function(){
+  // Internal: kick off the SSE stream with an optional URL suffix (used
+  // by the ad-hoc-years variant below to append ?baseline_year=... etc).
+  // The single param means callers can stay as-is — dash_ov_rebuild()
+  // calls the no-arg form and behaves exactly like before.
+  window.dash_ov_rebuild = function(query_suffix){
     if (!IS_SERVED) { show_toast('Server offline.', 'err'); return; }
     var btn = $id('dash-ov-rebuild-btn');
+    var btn_years = $id('dash-ov-rebuild-years-btn');
     var log = $id('dash-ov-rebuild-log');
     var status = $id('dash-ov-rebuild-status');
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Building…'; }
+    if (btn_years) btn_years.disabled = true;
     if (status) {
       status.classList.remove('stale');
       status.classList.add('running');
@@ -2451,7 +2958,8 @@ if(ROSTER && ROSTER.length > 0){
     // Scroll the rebuild card into view so the operator sees live output.
     var card = $id('dash-ov-rebuild-card');
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    var es = new EventSource('/api/build');
+    var url = '/api/build' + (query_suffix || '');
+    var es = new EventSource(url);
     es.addEventListener('out',  function(e){ if (log) { log.textContent += e.data + '\\n'; log.scrollTop = log.scrollHeight; } });
     es.addEventListener('err',  function(e){ if (log) { log.textContent += e.data + '\\n'; log.scrollTop = log.scrollHeight; } });
     es.addEventListener('done', function(e){
@@ -2459,6 +2967,7 @@ if(ROSTER && ROSTER.length > 0){
       if (log) log.textContent += (code === 0 ? '\\n✔ Build complete.' : '\\n✗ Build failed (exit code ' + code + ').') + '\\n';
       es.close();
       if (btn) { btn.disabled = false; btn.textContent = '▶ Rebuild now'; }
+      if (btn_years) btn_years.disabled = false;
       if (code === 0) {
         show_toast('Build complete — reloading…', 'ok');
         // Bridge the reload with a full-page overlay so the user never
@@ -2491,7 +3000,35 @@ if(ROSTER && ROSTER.length > 0){
       if (log) log.textContent += '\\nConnection lost.\\n';
       es.close();
       if (btn) { btn.disabled = false; btn.textContent = '▶ Rebuild now'; }
+      if (btn_years) btn_years.disabled = false;
     };
+  };
+
+  // ── Rebuild with ad-hoc years (the collapsed details block) ─────────
+  // Reads the two number inputs, validates them, and dispatches to the
+  // same SSE rebuild pipeline with the years tacked onto the query
+  // string. Empty inputs → falls back to the default rebuild (no flags).
+  window.dash_ov_rebuild_with_years = function(){
+    var by_input = $id('dash-ov-rebuild-baseline');
+    var ay_input = $id('dash-ov-rebuild-analysis');
+    var by_str = (by_input && by_input.value || '').trim();
+    var ay_str = (ay_input && ay_input.value || '').trim();
+    var by = by_str ? Number(by_str) : null;
+    var ay = ay_str ? Number(ay_str) : null;
+    var ok = (y) => y == null || (Number.isInteger(y) && y >= 2000 && y <= 2100);
+    if (!ok(by) || !ok(ay)) {
+      show_toast('Years must be 4-digit integers in [2000, 2100]', 'err');
+      return;
+    }
+    if (by != null && ay != null && by === ay) {
+      show_toast('Baseline and analysis years must differ', 'err');
+      return;
+    }
+    var params = [];
+    if (by != null) params.push('baseline_year=' + by);
+    if (ay != null) params.push('analysis_year=' + ay);
+    var suffix = params.length ? ('?' + params.join('&')) : '';
+    window.dash_ov_rebuild(suffix);
   };
 
   // ── State save / restore across rebuild reload ──────────────────────
@@ -2563,7 +3100,7 @@ if(ROSTER && ROSTER.length > 0){
     // .show-* classes on the table. Trigger each restored col to apply.
     (state.cols || []).forEach(function(col_id){
       if (typeof window.toggle_col === 'function') {
-        // checkbox id format is "col-sid25" / "col-date25" / "col-sid26" / "col-date26"
+        // checkbox id format is "col-sid_baseline" / "col-date_baseline" / "col-sid_analysis" / "col-date_analysis"
         window.toggle_col(col_id, true);
       }
     });
@@ -2752,19 +3289,17 @@ function export_png(id) {
   const chart = CHARTS[id];
   if (!chart) return;
   const off = document.createElement('canvas');
-  off.width  = chart.canvas.width  * 2;
-  off.height = chart.canvas.height * 2;
+  off.width = chart.canvas.width * 2; off.height = chart.canvas.height * 2;
   const ctx = off.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, off.width, off.height);
-  ctx.drawImage(chart.canvas, 0, 0, off.width, off.height);
+  ctx.drawImage(chart.canvas, 0, 0);
   const a = document.createElement('a');
   a.href = off.toDataURL('image/png'); a.download = (id||'chart')+'.png'; a.click();
 }
 function export_modal_png() {
   if (!_modal_chart) return;
   const off = document.createElement('canvas');
-  off.width  = _modal_chart.canvas.width;
-  off.height = _modal_chart.canvas.height;
+  off.width = _modal_chart.canvas.width * 2; off.height = _modal_chart.canvas.height * 2;
   const ctx = off.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, off.width, off.height);
   ctx.drawImage(_modal_chart.canvas, 0, 0);

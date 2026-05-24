@@ -196,29 +196,31 @@ const SECTIONS = [
     label: 'LOCAL SERVER — http://localhost:8016',
     color: CYAN,
     items: [
-      { id: 23, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop)', action: 'start_server', cli: 'cd ../../ && node server_event_analysis_8016.js' },
+      { id: 23, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop). Uses ALLOWED_IPS from .env if set.', action: 'start_server', cli: 'cd ../../ && node server_event_analysis_8016.js' },
+      { id: 24, label: 'Start local server (IP allowlist)', desc: 'Prompts for allowed IPs (default 127.0.0.1) and starts the server with ALLOWED_IPS injected — always restricted regardless of .env', action: 'start_server_restricted', cli: 'cd ../../ && ALLOWED_IPS=127.0.0.1 node server_event_analysis_8016.js' },
     ],
   },
   {
     label: 'TESTING — verify the code is working',
     color: MAGENTA,
     items: [
-      { id: 24, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all',        cli: 'node --test tests/' },
-      { id: 25, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides', cli: 'node --test tests/overrides.test.js' },
-      { id: 26, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server',     cli: 'node --test tests/server.test.js' },
-      { id: 27, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu',     cli: 'node --test tests/menu.test.js' },
-      { id: 28, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke',      cli: 'node --test tests/smoke.test.js' },
-      { id: 29, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary', cli: 'node --test tests/glossary.test.js' },
-      { id: 30, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads', cli: 'node --test tests/downloads.test.js' },
-      { id: 31, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build', cli: 'node --test tests/build.test.js' },
-      { id: 32, label: 'Run roster tests only',      desc: 'tests/roster.test.js — roster snapshot insert + tiered retention (DB-backed; skips if DB unreachable)', action: 'run_tests_roster', cli: 'node --test tests/roster.test.js' },
+      { id: 25, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all',        cli: 'node --test tests/' },
+      { id: 26, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides', cli: 'node --test tests/overrides.test.js' },
+      { id: 27, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server',     cli: 'node --test tests/server.test.js' },
+      { id: 28, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu',     cli: 'node --test tests/menu.test.js' },
+      { id: 29, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke',      cli: 'node --test tests/smoke.test.js' },
+      { id: 30, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary', cli: 'node --test tests/glossary.test.js' },
+      { id: 31, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads', cli: 'node --test tests/downloads.test.js' },
+      { id: 32, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build', cli: 'node --test tests/build.test.js' },
+      { id: 33, label: 'Run roster tests only',      desc: 'tests/roster.test.js — roster snapshot insert + tiered retention (DB-backed; skips if DB unreachable)', action: 'run_tests_roster', cli: 'node --test tests/roster.test.js' },
+      { id: 34, label: 'Run dashboard tests only',   desc: 'tests/dashboard.test.js — date format + Day-column-collapsed regression guards', action: 'run_tests_dashboard', cli: 'node --test tests/dashboard.test.js' },
     ],
   },
   {
     label: 'PREFERENCES',
     color: WHITE,
     items: [
-      { id: 33, label: 'Show/hide CLI commands',     desc: 'Toggle a dimmed "$ ..." line under each menu item. Choice persists in .menu_prefs.json next to menu.js.', action: 'toggle_commands' },
+      { id: 35, label: 'Show/hide CLI commands',     desc: 'Toggle a dimmed "$ ..." line under each menu item. Choice persists in .menu_prefs.json next to menu.js.', action: 'toggle_commands' },
     ],
   },
 ];
@@ -516,6 +518,51 @@ async function handle_action(action, rl) {
       break;
     }
 
+    case 'start_server_restricted': {
+      // Same as 'start_server' but explicitly injects ALLOWED_IPS into the
+      // child env so the server's IP-allowlist middleware activates
+      // regardless of what's in .env. Useful for: "I want this locked down
+      // right now without editing config files."
+      console.log(c(BOLD, '  Start local server with IP allowlist\n'));
+      const existing_allowed = (process.env.ALLOWED_IPS || '').trim();
+      // Default includes BOTH IPv4 and IPv6 loopback. Node's HTTP server
+      // listens dual-stack by default on Windows + Linux, and a client
+      // hitting http://localhost:8016 can land on either depending on OS
+      // DNS resolution. Including ::1 prevents the surprise where the
+      // browser/curl comes in as ::1 and gets a confusing 403 even though
+      // the user typed 127.0.0.1.
+      const default_ips = existing_allowed || '127.0.0.1,::1';
+      const prompt_label = existing_allowed
+        ? `  Allowed IPs (default from .env: ${existing_allowed}): `
+        : `  Allowed IPs (default ${default_ips}): `;
+      const input = (await prompt(rl, prompt_label)).trim();
+      // If the user typed just '127.0.0.1' (or any list that omits ::1),
+      // be a friend and add the IPv6 loopback too -- otherwise local
+      // browser traffic gets bounced and the user has to debug why.
+      // The check only fires when the user clearly intended "this machine".
+      let ips_csv = input || default_ips;
+      const ips_arr = ips_csv.split(',').map(s => s.trim()).filter(Boolean);
+      if (ips_arr.includes('127.0.0.1') && !ips_arr.includes('::1')) {
+        ips_arr.push('::1');
+        ips_csv = ips_arr.join(',');
+        console.log(c(DIM, '  (auto-added ::1 so IPv6 localhost traffic is also allowed)'));
+      }
+      console.log(c(DIM, `  ALLOWED_IPS=${ips_csv} → middleware will reject any other source IP with 403.\n`));
+      console.log(c(BOLD, '  Starting local server (http://localhost:8016, Ctrl-C to stop)\n'));
+      const root = path.join(DIR, '..', '..');
+      const code = await new Promise(resolve => {
+        const proc = spawn(process.execPath ?? 'node', ['server_event_analysis_8016.js'], {
+          stdio: 'inherit',
+          cwd:   root,
+          shell: false,
+          env:   { ...process.env, ALLOWED_IPS: ips_csv },
+        });
+        proc.on('close', resolve);
+      });
+      if (code !== 0 && code !== null) console.log(c(YELLOW, `\n  Server exited with code ${code}.`));
+      break;
+    }
+
     case 'run_tests_all':
     case 'run_tests_overrides':
     case 'run_tests_server':
@@ -524,7 +571,8 @@ async function handle_action(action, rl) {
     case 'run_tests_glossary':
     case 'run_tests_downloads':
     case 'run_tests_build':
-    case 'run_tests_roster': {
+    case 'run_tests_roster':
+    case 'run_tests_dashboard': {
       // node --test runs every *.test.js it finds in the given path
       // and exits non-zero on failure. Output is TAP-style. We can't use
       // the existing run() helper because we need --test as a node flag,
@@ -542,6 +590,7 @@ async function handle_action(action, rl) {
                    : action === 'run_tests_downloads' ? path.join(tests_dir, 'downloads.test.js')
                    : action === 'run_tests_build'     ? path.join(tests_dir, 'build.test.js')
                    : action === 'run_tests_roster'    ? path.join(tests_dir, 'roster.test.js')
+                   : action === 'run_tests_dashboard' ? path.join(tests_dir, 'dashboard.test.js')
                    :                                     tests_dir;
       if (action !== 'run_tests_all' && !fs.existsSync(target)) {
         console.log(c(YELLOW, `  Test file not found: ${target}`));
@@ -555,6 +604,7 @@ async function handle_action(action, rl) {
                   : action === 'run_tests_downloads' ? 'download tests'
                   : action === 'run_tests_build'     ? 'build tests'
                   : action === 'run_tests_roster'    ? 'roster tests'
+                  : action === 'run_tests_dashboard' ? 'dashboard tests'
                   :                                     'all tests';
       console.log(c(DIM, `  Running ${label}: node --test ${path.relative(DIR, target) || 'tests/'}`));
       const code = await new Promise(resolve => {
@@ -628,19 +678,18 @@ async function main() {
     const num = parseInt(raw, 10);
 
     if (raw === '0' || raw.toLowerCase() === 'q' || raw.toLowerCase() === 'exit') {
-      console.log(c(DIM, '\n  Goodbye.\n'));
+      console.log(c(DIM, '\n  Bye!\n'));
       rl.close();
-      break;
+      return;
     }
-
-    const item = ALL_ITEMS.find(i => i.id === num);
-    if (!item) {
-      console.log(c(YELLOW, `\n  Invalid selection "${raw}". Press Enter to continue.`));
-      await prompt(rl, '');
+    if (Number.isNaN(num) || num < 1 || num > max_id) {
+      console.log(c(YELLOW, `  Invalid selection. Type 0 to exit, or 1–${max_id}.`));
       continue;
     }
-
-    console.log(c(DIM, `\n  Running: ${item.label}\n  ${'─'.repeat(50)}`));
+    const item = ALL_ITEMS.find(i => i.id === num);
+    if (!item) { console.log(c(YELLOW, '  Item not found.')); continue; }
+    console.log(c(DIM, `\n  Running: ${item.label}`));
+    console.log(c(DIM, `  ${'─'.repeat(50)}`));
     await handle_action(item.action, rl);
     console.log(c(DIM, `\n  ${'─'.repeat(50)}\n  Done. Press Enter to return to menu.`));
     await prompt(rl, '');
@@ -649,16 +698,10 @@ async function main() {
 
 // Tests import SECTIONS / ALL_ITEMS / handle_action to verify wiring
 // without spawning the interactive readline loop. main() is also exported
-// so a future programmatic launcher could call it, but currently only the
-// test suite consumes the introspection exports.
-module.exports = { SECTIONS, ALL_ITEMS, handle_action, NARRATIVE_KEYS };
+// so a future programmatic launcher could call it, but currently only
+// menu.js itself uses it.
+module.exports = { SECTIONS, ALL_ITEMS, handle_action, main };
 
-// Only run the interactive loop when this file is executed directly,
-// not when required by a test.
 if (require.main === module) {
-  main().catch(err => {
-    console.error('Menu error:', err.message);
-    if (process.env.DEBUG) console.error(err.stack);
-    process.exit(1);
-  });
+  main().catch(err => { console.error(err); process.exit(1); });
 }
