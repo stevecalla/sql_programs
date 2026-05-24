@@ -827,10 +827,19 @@ canvas{width:100%!important;max-height:220px}
           <option value="${yb}">${yb}</option>
           <option value="${ya}">${ya}</option>
         </select>
-        were created — stacked by event type
+        were created
+        <select id="creation-type-pick" title="Filter by event type" style="font-size:.85rem;padding:1px 4px;border:1px solid #ccc;border-radius:3px;background:#fff;cursor:pointer;margin-left:6px">
+          <option value="">All types</option>
+          <option value="Adult Race">Adult Race</option>
+          <option value="Youth Race">Youth Race</option>
+          <option value="Adult Clinic">Adult Clinic</option>
+          <option value="Youth Clinic">Youth Clinic</option>
+        </select>
+        — stacked by event type
       </span>
+      <span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_creation')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_creation')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_creation')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_creation" class="chart-btn" onclick="flip_chart_table('c_creation')" title="Switch to table view">⇄ Table</button></span>
     </h3>
-    <div style="position:relative;height:200px"><canvas id="c_creation"></canvas></div>
+    <div style="position:relative;height:200px"><canvas id="c_creation"></canvas><div id="flip-tbl-c_creation" class="chart-flip-tbl"></div></div>
   </div>
   <!-- Calendar chart moved to the right slot per UI request. -->
   <div class="card card-segment">
@@ -1582,14 +1591,18 @@ CHART_SNAP['c_calendar'] = { type:'bar', labels:MLBLS.slice(), datasets:[
 // type. The dropdown above the chart re-aggregates on change.
 const C_TYPES   = ['Adult Race', 'Youth Race', 'Adult Clinic', 'Youth Clinic'];
 const C_COLORS  = { 'Adult Race':'#1565C0', 'Youth Race':'#00897B', 'Adult Clinic':'#F57C00', 'Youth Clinic':'#8E24AA' };
-function _creation_aggregate(year) {
+function _creation_aggregate(year, type_filter) {
   // year ∈ { ya, yb }. For ya we read created_baseline (only when sid_baseline exists);
   // for yb we read created_analysis (only when sid_analysis exists). Single-sided rows
   // (Lost has only sid_baseline, New has only sid_analysis) are correctly attributed.
+  // type_filter is optional: '' / falsy means "all four types"; otherwise restricts
+  // the count to rows matching that type. The returned by_type still keys all four
+  // so the legend stays stable -- non-matching types are just all-zero arrays.
   const baseline_year = ${ya};
   const counts = {};   // { 'YYYY-MM': { type: count } }
   if (typeof ROSTER === 'undefined' || !Array.isArray(ROSTER)) return { labels: [], by_type: {} };
   for (const r of ROSTER) {
+    if (type_filter && r.type !== type_filter) continue;
     let created, has_side;
     if (year === baseline_year) { created = r.created_baseline; has_side = !!r.sid_baseline; }
     else                        { created = r.created_analysis; has_side = !!r.sid_analysis; }
@@ -1607,11 +1620,31 @@ let _creation_chart = null;
 function _creation_render() {
   const picker = document.getElementById('creation-year-pick');
   const year = Number(picker?.value || ${yb});
-  const { labels, by_type } = _creation_aggregate(year);
+  // Type-filter picker is optional -- empty string means "all four types".
+  // When user picks a single type, only that dataset has non-zero data;
+  // legend still shows all four (stable color key for the reader).
+  const type_picker = document.getElementById('creation-type-pick');
+  const type_filter = (type_picker && type_picker.value) || '';
+  const { labels, by_type } = _creation_aggregate(year, type_filter);
   const datasets = C_TYPES.map(t => ({
     label: t, data: by_type[t],
     backgroundColor: C_COLORS[t], borderColor: C_COLORS[t], borderWidth: 1,
   }));
+  // Snapshot for the expand-modal + table-flip + CSV export. Mirrors the
+  // CHART_SNAP entries the other charts populate at construction time, but
+  // we refresh it on every render so type/year filter changes are reflected
+  // in the snapshot too.
+  CHART_SNAP['c_creation'] = {
+    type: 'bar',
+    labels: labels.slice(),
+    datasets: datasets.map(d => ({
+      label: d.label,
+      data: (d.data || []).slice(),
+      backgroundColor: d.backgroundColor,
+      borderColor: d.borderColor,
+      borderWidth: d.borderWidth,
+    })),
+  };
   if (_creation_chart) {
     _creation_chart.data.labels = labels;
     _creation_chart.data.datasets = datasets;
@@ -1626,7 +1659,30 @@ function _creation_render() {
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { position: 'top', labels: { boxWidth: 11 } },
-          tooltip: { mode: 'index', intersect: false },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            callbacks: {
+              // Footer line shows the column total across all visible
+              // stacked types -- saves the reader from mental-summing
+              // four numbers in the tooltip body.
+              footer: function(items) {
+                if (!items || !items.length) return '';
+                var total = 0;
+                for (var i = 0; i < items.length; i++) {
+                  var v = items[i].parsed && items[i].parsed.y;
+                  if (typeof v === 'number') total += v;
+                }
+                return 'Total: ' + total.toLocaleString();
+              },
+            },
+          },
+          // Inline data labels INSIDE each stacked segment. The plugin
+          // skips segments shorter than min_h pixels, so small slices
+          // stay clean automatically -- only segments tall enough to
+          // hold a 9px label get one. White text reads well against
+          // the four type colors (all mid-saturation).
+          inside_labels: { show: true, color: '#fff', size: 9, min_h: 16 },
         },
         scales: {
           x: { stacked: true, grid: { display: false }, ticks: { autoSkip: true, maxRotation: 0 } },
@@ -1635,6 +1691,10 @@ function _creation_render() {
         },
       },
     });
+    // Register in the global CHARTS map so the expand / PNG / CSV / Table
+    // action buttons can find this chart by id ('c_creation') the same way
+    // they do for the other six charts.
+    CHARTS['c_creation'] = _creation_chart;
   }
 }
 // Initial render + dropdown wiring happen below, AFTER the ROSTER const
@@ -1782,6 +1842,7 @@ const ROSTER = ROSTER_PLACEHOLDER;
 // later inline script (including the roster-table render).
 _creation_render();
 document.getElementById('creation-year-pick')?.addEventListener('change', _creation_render);
+document.getElementById('creation-type-pick')?.addEventListener('change', _creation_render);
 if(ROSTER && ROSTER.length > 0){
   const SEG_CLS = {'Retained':'Retained','Shifted':'Shifted','Lost':'Lost',
     'New':'New','Recovered':'Recovered','Tried to Return':'TtR'};
