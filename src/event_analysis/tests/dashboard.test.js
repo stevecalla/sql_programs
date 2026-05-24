@@ -359,6 +359,87 @@ describe('dashboard renderer -- every interactive surface routes through the rep
     { label: 'creation chart tooltip footer emits "Total:" prefix', route: /'Total: '\s*\+\s*total\.toLocaleString\(\)/ },
     { label: 'creation chart is registered in CHARTS map (so action buttons find it)', route: /CHARTS\['c_creation'\]\s*=\s*_creation_chart/ },
     { label: 'creation chart snapshot is populated in CHART_SNAP (for expand modal)', route: /CHART_SNAP\['c_creation'\]\s*=/ },
+    // -- Year-over-year creation pace chart (#141) --------------------
+    { label: 'pace chart canvas is present', route: /id="c_pace"/ },
+    { label: 'pace chart has Expand button', route: /expand_chart\('c_pace'\)/ },
+    { label: 'pace chart has PNG export button', route: /export_png\('c_pace'\)/ },
+    { label: 'pace chart has CSV export button', route: /export_csv\('c_pace'\)/ },
+    { label: 'pace chart has table-flip button', route: /flip_chart_table\('c_pace'\)/ },
+    { label: 'pace chart has table-flip div', route: /id="flip-tbl-c_pace"/ },
+    { label: '_pace_aggregate accepts (year_filter, type_filter)', route: /function _pace_aggregate\(year_filter,\s*type_filter\)/ },
+    { label: 'pace chart has year-picker (Both / baseline / analysis)', route: /id="pace-year-pick"/ },
+    { label: 'pace chart has type-picker (All + 4 types)', route: /id="pace-type-pick"/ },
+    { label: 'pace year-picker wired to _pace_render', route: /pace-year-pick[\s\S]{0,100}addEventListener\('change',\s*_pace_render\)/ },
+    { label: 'pace type-picker wired to _pace_render', route: /pace-type-pick[\s\S]{0,100}addEventListener\('change',\s*_pace_render\)/ },
+    { label: '_pace_render function is defined', route: /function _pace_render\(\)/ },
+    { label: 'pace lead_days helper guards negative deltas', route: /days\s*>=\s*0\s*\?\s*Math\.min\(days,\s*MAX_LEAD_DAYS\)/ },
+    { label: '_pace_render is called once at boot', route: /\n_pace_render\(\);/ },
+    { label: 'pace chart is registered in CHARTS map', route: /CHARTS\['c_pace'\]\s*=\s*_pace_chart/ },
+    { label: 'pace chart snapshot populated in CHART_SNAP', route: /CHART_SNAP\['c_pace'\]\s*=/ },
+    { label: 'pace y-axis uses dynamic y_max (adapts to range picker)', route: /beginAtZero:\s*true,\s*max:\s*y_max/ },
+    { label: 'pace tidy_y_max helper rounds up to 5/10/25/50/100 buckets', route: /function tidy_y_max\(arrays\)[\s\S]{0,400}return 100/ },
+    { label: 'pace chart has range picker',  route: /id="pace-range-pick"/ },
+    { label: 'pace range picker wired to _pace_render', route: /pace-range-pick[\s\S]{0,100}addEventListener\('change',\s*_pace_render\)/ },
+    { label: 'timing chart has range picker', route: /id="timing-range-pick"/ },
+    { label: 'timing range default is -12 to +12 (selected)', route: /value="-12,12"\s+selected/ },
+    { label: 'timing range picker wired to _timing_render', route: /timing-range-pick[\s\S]{0,100}addEventListener\('change',\s*_timing_render\)/ },
+    // ── Pace chart: hover readout + median conclusion (#172) ──────────────
+    { label: 'pace chart has live hover-readout div', route: /id="pace-readout-text"/ },
+    { label: 'pace chart has median-conclusion div', route: /id="pace-conclusion"/ },
+    { label: '_pace_median helper is defined', route: /function _pace_median\(/ },
+    { label: '_pace_conclusion_text helper is defined', route: /function _pace_conclusion_text\(/ },
+    { label: 'pace conclusion explains MORE lead time (more runway)', route: /MORE days of lead time[\s\S]{0,120}more planning runway/ },
+    { label: 'pace conclusion explains FEWER lead time (less runway)', route: /FEWER days of lead time[\s\S]{0,120}less planning runway/ },
+    { label: 'pace conclusion handles SAME median branch (no shift)', route: /SAME median lead time[\s\S]{0,80}no shift in planning runway/ },
+    { label: 'timing chart x-axis ticks are 2-line array (sign over month)', route: /function _timing_tick_2line\(/ },
+    { label: 'timing chart NO LONGER stacks bars by type (simple grouped bars)', route: /backgroundColor:\s*'#1565C0'[\s\S]{0,400}backgroundColor:\s*'#E65100'/ },
+    { label: 'above_label_plugin draws data values above bars when there is space', route: /id:\s*'above_labels'/ },
+    { label: 'timing chart enables above_labels plugin', route: /above_labels:\s*\{\s*show:\s*true/ },
+    { label: 'timing tooltip per-bar line includes " events"', route: /' events'/ },
+    // Timing chart: stacked-by-type bars + dynamic conclusion + clearer x-axis
+    { label: 'timing chart has dynamic conclusion div', route: /id="timing-conclusion"/ },
+    { label: '_timing_conclusion_text helper is defined', route: /function _timing_conclusion_text\(/ },
+    { label: 'timing conclusion mentions biggest YoY swing', route: /Biggest YoY swing at/ },
+    { label: '_timing_label_long includes numeric offset for tooltip', route: /function _timing_label_long\(/ },
+    { label: 'pace chart wires onHover to update the readout div', route: /onHover:\s*function[\s\S]{0,500}pace-readout-text/ },
+    // -- Creation timing relative to event year (#173) ---------------
+    { label: 'timing chart canvas is present', route: /id="c_timing"/ },
+    { label: 'timing chart has Expand button', route: /expand_chart\('c_timing'\)/ },
+    { label: 'timing chart has PNG button',    route: /export_png\('c_timing'\)/ },
+    { label: 'timing chart has CSV button',    route: /export_csv\('c_timing'\)/ },
+    { label: 'timing chart has Table button',  route: /flip_chart_table\('c_timing'\)/ },
+    { label: 'timing chart has year-picker',   route: /id="timing-year-pick"/ },
+    { label: 'timing chart has type-picker',   route: /id="timing-type-pick"/ },
+    { label: 'timing type-picker lists all four event types', route: /id="timing-type-pick"[\s\S]{0,800}Adult Race[\s\S]{0,300}Youth Race[\s\S]{0,300}Adult Clinic[\s\S]{0,300}Youth Clinic/ },
+    { label: '_timing_offset helper is defined', route: /function _timing_offset\(/ },
+    { label: '_timing_offset same-year branch present', route: /created_year >= event_year/ },
+    { label: '_timing_offset prior-year branch present', route: /months_before = \(event_year - created_year - 1\) \* 12 \+ \(12 - created_month \+ 1\)/ },
+    { label: '_timing_label helper is defined', route: /function _timing_label\(/ },
+    { label: '_timing_aggregate accepts (year_filter, type_filter)', route: /function _timing_aggregate\(year_filter,\s*type_filter\)/ },
+    { label: '_timing_aggregate skips zero-offset slot', route: /if \(o === 0\) continue/ },
+    { label: '_timing_render function defined', route: /function _timing_render\(\)/ },
+    { label: '_timing_render is called at boot', route: /\n_timing_render\(\);/ },
+    { label: 'timing year-picker wired to _timing_render', route: /timing-year-pick[\s\S]{0,100}addEventListener\(\'change\',\s*_timing_render\)/ },
+    { label: 'timing type-picker wired to _timing_render', route: /timing-type-pick[\s\S]{0,100}addEventListener\(\'change\',\s*_timing_render\)/ },
+    { label: 'timing chart registered in CHARTS', route: /CHARTS\[\'c_timing\'\]\s*=\s*_timing_chart/ },
+    { label: 'timing chart snapshot in CHART_SNAP', route: /CHART_SNAP\[\'c_timing\'\]\s*=/ },
+    // Pace conclusion refinement + timing chart enhancements
+    { label: 'timing chart has dynamic conclusion div', route: /id="timing-conclusion"/ },
+    { label: '_timing_conclusion_text helper is defined', route: /function _timing_conclusion_text\(/ },
+    { label: 'timing conclusion mentions biggest YoY swing', route: /Biggest YoY swing at/ },
+    { label: '_timing_label_long helper is defined', route: /function _timing_label_long\(/ },
+    // ── Chart expand-modal: HTML class names must match CSS sizing rules ──
+    // History: a rebuild switched the modal HTML to .chart-modal-body /
+    // .chart-modal-head / .chart-modal-canvas-wrap, but the CSS defines
+    // .modal-box / .modal-hdr / .modal-canvas-wrap. The mismatch meant
+    // no width/height rules applied and the popout was unreadably small.
+    // These tests guard the contract going forward.
+    { label: 'modal HTML uses .modal-box wrapper',         route: /<div\s+class="modal-box">/ },
+    { label: 'modal HTML uses .modal-hdr header',          route: /<div\s+class="modal-hdr">/ },
+    { label: 'modal HTML uses .modal-canvas-wrap',         route: /<div\s+class="modal-canvas-wrap">/ },
+    { label: 'modal CSS sets explicit width in vw',        route: /\.modal-box\s*\{[\s\S]{0,200}width:\s*\d+vw/ },
+    { label: 'modal CSS sets explicit height in vh',       route: /\.modal-box\s*\{[\s\S]{0,200}height:\s*\d+vh/ },
+    { label: 'modal canvas wrap is flex:1 + min-height:0', route: /\.modal-canvas-wrap\s*\{[\s\S]{0,200}flex:\s*1[\s\S]{0,200}min-height:\s*0/ },
   ];
 
   for (const h of HANDLERS) {
@@ -368,4 +449,117 @@ describe('dashboard renderer -- every interactive surface routes through the rep
         'surface "' + h.label + '" does not route through the repaint contract');
     });
   }
+
+  // Negative guards: the broken modal class names must NOT appear.
+  test('rendered HTML does NOT contain the broken modal class names', () => {
+    const html = render_to_tmp();
+    assert.doesNotMatch(html, /chart-modal-body/,
+      'modal HTML must use .modal-box, not the broken .chart-modal-body');
+    assert.doesNotMatch(html, /chart-modal-head/,
+      'modal HTML must use .modal-hdr, not the broken .chart-modal-head');
+    assert.doesNotMatch(html, /chart-modal-canvas-wrap/,
+      'modal HTML must use .modal-canvas-wrap, not the broken .chart-modal-canvas-wrap');
+  });
+});
+
+
+// ── 6. Runtime guard: inline dashboard scripts execute without throwing ────
+//
+// Static parse-checks miss runtime errors (TDZ, undefined property reads,
+// missing function args, etc.) that halt the inline <script> block and
+// leave the page half-rendered (empty table, empty charts).
+//
+// This test renders generate_dashboard, extracts every inline script
+// (skipping any with src=), and executes each one in a Node vm sandbox
+// with stubbed DOM + Chart constructor + storage APIs. Any throw fails
+// the test. Catches the bug class behind "all unit tests pass but the
+// table is empty in the browser."
+//
+// The sandbox is intentionally permissive -- the goal is to surface
+// errors in OUR code, not to perfectly emulate a browser. Anything our
+// code depends on that ISN'T in the sandbox would surface as a real
+// runtime error in the browser too.
+
+const vm = require('node:vm');
+
+describe('dashboard renderer -- inline scripts execute without throwing', () => {
+
+  function stub_el() {
+    const el = {
+      style: {},
+      classList: { add(){}, remove(){}, contains(){return false}, toggle(){} },
+      addEventListener(){}, removeEventListener(){},
+      querySelector(){ return null; }, querySelectorAll(){ return []; },
+      getContext(){ return { fillStyle:'', fillRect(){}, drawImage(){}, save(){}, restore(){},
+        fillText(){}, strokeText(){}, font:'', textAlign:'', textBaseline:'',
+        measureText(){ return { width: 0 }; } }; },
+      appendChild(){}, removeChild(){}, dataset: {}, dispatchEvent(){},
+      setAttribute(){}, getAttribute(){ return null; }, value: '',
+      textContent: '', innerHTML: '',
+      toDataURL(){ return ''; }, click(){}, parentNode: null,
+      closest(){ return null; },
+      getBoundingClientRect(){ return { width: 100, height: 100 }; },
+      width: 100, height: 100,
+    };
+    el.childNodes = [{ nodeValue: '' }];
+    return el;
+  }
+
+  function make_sandbox() {
+    const Chart = class {
+      constructor(c, cfg) {
+        this.canvas = stub_el();
+        this.data = (cfg && cfg.data) || { labels: [], datasets: [] };
+        this.options = (cfg && cfg.options) || { plugins: {} };
+        this.config = cfg;
+      }
+      update(){} destroy(){}
+      getDatasetMeta(){ return { data: [], hidden: false }; }
+    };
+    Chart.register = () => {};
+    Chart.defaults = { font: { family: '', size: 12 }, color: '#000', plugins: {} };
+
+    const sb = {
+      console: { log(){}, warn(){}, error(){}, info(){} },
+      document: {
+        getElementById: () => stub_el(),
+        querySelector:  () => stub_el(),
+        querySelectorAll: () => [],
+        documentElement: { classList: { add(){}, remove(){}, contains(){return false}, toggle(){} } },
+        addEventListener: () => {},
+        createElement: () => stub_el(),
+        body: stub_el(), head: stub_el(),
+      },
+      location: { pathname: '/', hash: '', href: '' },
+      Chart,
+      setTimeout, clearTimeout, setInterval, clearInterval,
+      requestAnimationFrame: (cb) => setTimeout(cb, 0),
+      localStorage:   { getItem(){return null}, setItem(){}, removeItem(){} },
+      sessionStorage: { getItem(){return null}, setItem(){}, removeItem(){} },
+    };
+    sb.window = sb;
+    sb.globalThis = sb;
+    return sb;
+  }
+
+  test('every inline <script> in dashboard.html runs without throwing', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+    assert.ok(scripts.length >= 2, 'expected at least 2 inline <script> blocks (got ' + scripts.length + ')');
+
+    const ctx = vm.createContext(make_sandbox());
+    const errors = [];
+    for (let i = 0; i < scripts.length; i++) {
+      try {
+        vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 });
+      } catch (e) {
+        errors.push('script #' + (i + 1) + ' (' + scripts[i].length + ' chars): ' + e.message);
+      }
+    }
+    assert.deepEqual(errors, [],
+      'inline scripts threw at runtime -- browser would show empty table/charts:\n  ' + errors.join('\n  '));
+  });
 });
