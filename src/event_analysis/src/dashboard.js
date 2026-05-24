@@ -848,6 +848,84 @@ canvas{width:100%!important;max-height:220px}
   </div>
 </div>
 
+<!-- Year-over-year creation pace: two cumulative curves, one per year,
+     both indexed by days-before-event-start. Answers "are we creating
+     events earlier or later this year vs baseline?" A flatter-on-the-left
+     curve means events are booked further ahead; a steeper-on-the-left
+     curve means more events are last-minute.
+     Paired in a row with the calendar-relative timing chart on the right
+     for two complementary views of YoY pacing. -->
+<div class="row">
+  <div class="card card-monthly">
+    <h3>Creation pace
+      <span class="note">cumulative % of events created at or before each lead-time value
+        <select id="pace-year-pick" title="Filter by event year" style="font-size:.85rem;padding:1px 4px;border:1px solid #ccc;border-radius:3px;background:#fff;cursor:pointer;margin-left:6px">
+          <option value="">Both years</option>
+          <option value="${ya}">${ya}</option>
+          <option value="${yb}">${yb}</option>
+        </select>
+        <select id="pace-type-pick" title="Filter by event type" style="font-size:.85rem;padding:1px 4px;border:1px solid #ccc;border-radius:3px;background:#fff;cursor:pointer;margin-left:4px">
+          <option value="">All types</option>
+          <option value="Adult Race">Adult Race</option>
+          <option value="Youth Race">Youth Race</option>
+          <option value="Adult Clinic">Adult Clinic</option>
+          <option value="Youth Clinic">Youth Clinic</option>
+        </select>
+        <select id="pace-range-pick" title="Limit x-axis to last N days" style="font-size:.85rem;padding:1px 4px;border:1px solid #ccc;border-radius:3px;background:#fff;cursor:pointer;margin-left:4px">
+          <option value="365">0–365 days (all)</option>
+          <option value="180">0–180 days</option>
+          <option value="90">0–90 days</option>
+          <option value="60">0–60 days</option>
+          <option value="30">0–30 days</option>
+        </select>
+      </span>
+      <span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_pace')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_pace')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_pace')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_pace" class="chart-btn" onclick="flip_chart_table('c_pace')" title="Switch to table view">⇄ Table</button></span>
+    </h3>
+    <div style="position:relative;height:200px"><canvas id="c_pace"></canvas><div id="flip-tbl-c_pace" class="chart-flip-tbl"></div></div>
+    <!-- Live hover readout: updates as the user moves across the chart.
+         Static fallback shows the median-based conclusion when no hover. -->
+    <div id="pace-readout" style="font-size:.78rem;color:#37474F;margin-top:4px;min-height:1.4em;line-height:1.4">
+      <span id="pace-readout-text">Hover the chart to see the % created at any lead-time value.</span>
+    </div>
+    <div id="pace-conclusion" style="font-size:.78rem;color:#1f6feb;margin-top:2px;font-weight:600"></div>
+  </div>
+  <!-- Calendar-relative timing chart: bars per relative-month offset,
+       grouped by event year. Answers "in the Nth month before/of the
+       event year, did we create more or fewer events than the year
+       before?" Pairs with Creation pace on the left for two views of
+       the same underlying question. -->
+  <div class="card card-monthly">
+    <h3>Creation timing — relative to event year
+      <span class="note">events created in the same calendar month relative to event year start
+        <select id="timing-year-pick" title="Filter by event year" style="font-size:.85rem;padding:1px 4px;border:1px solid #ccc;border-radius:3px;background:#fff;cursor:pointer;margin-left:6px">
+          <option value="">Both years</option>
+          <option value="${ya}">${ya}</option>
+          <option value="${yb}">${yb}</option>
+        </select>
+        <select id="timing-type-pick" title="Filter by event type" style="font-size:.85rem;padding:1px 4px;border:1px solid #ccc;border-radius:3px;background:#fff;cursor:pointer;margin-left:4px">
+          <option value="">All types</option>
+          <option value="Adult Race">Adult Race</option>
+          <option value="Youth Race">Youth Race</option>
+          <option value="Adult Clinic">Adult Clinic</option>
+          <option value="Youth Clinic">Youth Clinic</option>
+        </select>
+        <select id="timing-range-pick" title="Limit x-axis to a calendar window" style="font-size:.85rem;padding:1px 4px;border:1px solid #ccc;border-radius:3px;background:#fff;cursor:pointer;margin-left:4px">
+          <option value="-12,12" selected>Event yr + prior yr (−12 to +12)</option>
+          <option value="-24,12">Full (−24 to +12)</option>
+          <option value="-6,12">Event yr + 6mo prior (−6 to +12)</option>
+          <option value="1,12">Event year only (+1 to +12)</option>
+          <option value="-12,-1">Prior year only (−12 to −1)</option>
+        </select>
+      </span>
+      <span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_timing')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_timing')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_timing')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_timing" class="chart-btn" onclick="flip_chart_table('c_timing')" title="Switch to table view">⇄ Table</button></span>
+    </h3>
+    <div style="position:relative;height:200px"><canvas id="c_timing"></canvas><div id="flip-tbl-c_timing" class="chart-flip-tbl"></div></div>
+    <!-- Dynamic conclusion (per-year totals + biggest YoY swing) so the
+         reader gets an instant takeaway without having to scan all bars. -->
+    <div id="timing-conclusion" style="font-size:.78rem;color:#1f6feb;margin-top:4px;font-weight:600;line-height:1.4"></div>
+  </div>
+</div>
+
 <div class="row">
   <div class="card card-full">
     <h3>Key findings <span class="note">${has_api ? 'Claude AI' : 'Rule-based'} · matches PowerPoint narratives</span></h3>
@@ -1697,6 +1775,629 @@ function _creation_render() {
     CHARTS['c_creation'] = _creation_chart;
   }
 }
+
+// ── Creation pace (year-over-year cumulative-curve chart) ──────────────────
+// For each event with both a createdAt and a startDate, compute lead_time
+// in days = (start - createdAt). Plot cumulative % of events with lead time
+// ≤ X for X in [0, MAX_LEAD_DAYS]. Two lines: one per year. Reading:
+//   - Same curves → both years pace identically.
+//   - Analysis curve above baseline → analysis events have shorter lead
+//     time on average (being created closer to event start, i.e. later).
+//   - Analysis curve below baseline → analysis events being created
+//     further ahead (more planning runway).
+const MAX_LEAD_DAYS = 365;   // cap; anything > 1 year sits at the right edge.
+
+function _pace_aggregate(year_filter, type_filter) {
+  const baseline_year = ${ya};
+  const analysis_year = ${yb};
+  if (typeof ROSTER === 'undefined' || !Array.isArray(ROSTER)) {
+    return { labels: [], baseline: [], analysis: [], n_baseline: 0, n_analysis: 0,
+             baseline_year, analysis_year };
+  }
+  const leads_b = [];
+  const leads_a = [];
+  // ms-per-day; both inputs are pre-stripped to YYYY-MM-DD strings, so a
+  // UTC anchor avoids local-TZ off-by-one (same fix as day_of).
+  const MS_PER_DAY = 86400000;
+  function lead_days(start_str, created_str) {
+    if (!start_str || !created_str) return null;
+    const start   = Date.parse(String(start_str).slice(0,10) + 'T00:00:00Z');
+    const created = Date.parse(String(created_str).slice(0,10) + 'T00:00:00Z');
+    if (!isFinite(start) || !isFinite(created)) return null;
+    const days = Math.round((start - created) / MS_PER_DAY);
+    return days >= 0 ? Math.min(days, MAX_LEAD_DAYS) : null;
+  }
+  for (const r of ROSTER) {
+    if (type_filter && r.type !== type_filter) continue;
+    if (r.sid_baseline && (!year_filter || year_filter === baseline_year)) {
+      const d = lead_days(r.date_baseline, r.created_baseline);
+      if (d != null) leads_b.push(d);
+    }
+    if (r.sid_analysis && (!year_filter || year_filter === analysis_year)) {
+      const d = lead_days(r.date_analysis, r.created_analysis);
+      if (d != null) leads_a.push(d);
+    }
+  }
+  leads_b.sort(function(a,b){ return a - b; });
+  leads_a.sort(function(a,b){ return a - b; });
+
+  const labels = [];
+  for (let i = 0; i <= MAX_LEAD_DAYS; i++) labels.push(i);
+
+  // Binary-search the sorted lead-time array for the count of values <= x.
+  function cum_pct(sorted, x) {
+    if (sorted.length === 0) return 0;
+    let lo = 0, hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (sorted[mid] <= x) lo = mid + 1; else hi = mid;
+    }
+    return Math.round((lo / sorted.length) * 1000) / 10;
+  }
+  const baseline = labels.map(x => cum_pct(leads_b, x));
+  const analysis = labels.map(x => cum_pct(leads_a, x));
+  return {
+    labels, baseline, analysis,
+    n_baseline: leads_b.length, n_analysis: leads_a.length,
+    baseline_year, analysis_year,
+  };
+}
+
+// Find the smallest X (lead-time days) where cumulative % >= 50% --
+// that's the median lead time for the series. Returns null when the
+// sample is empty.
+function _pace_median(cum_pct_arr) {
+  if (!cum_pct_arr || cum_pct_arr.length === 0) return null;
+  for (let i = 0; i < cum_pct_arr.length; i++) {
+    if (cum_pct_arr[i] >= 50) return i;
+  }
+  return cum_pct_arr.length - 1;
+}
+
+// Build the human-readable conclusion line below the chart.
+//
+// "Median lead time" = number of days between event start and creation
+// for the median event in that year. A LARGER median means events are
+// being created EARLIER (more lead time, more runway).
+//
+// Wording: phrased from the analysis year's perspective relative to
+// baseline. We spell out the direction in plain English so the reader
+// doesn't have to guess what "ahead" means -- "EARLIER" means more
+// planning runway, "LATER" means events are getting booked closer to
+// start (less runway, more last-minute).
+//
+// Cumulative-pace interpretation note: on the chart itself, a curve
+// LOWER on the left = events created earlier (fewer events have short
+// lead times). The conclusion sentence collapses that to the median.
+function _pace_conclusion_text(agg) {
+  const m_b = _pace_median(agg.baseline);
+  const m_a = _pace_median(agg.analysis);
+  if (m_b == null && m_a == null) return '';
+  if (m_b == null || m_a == null) {
+    // Single-year view: just state the median, skip the comparison.
+    const yr = m_b != null ? agg.baseline_year : agg.analysis_year;
+    const md = m_b != null ? m_b : m_a;
+    return 'Median lead time for ' + yr + ': ' + md + ' days between event creation and event start.';
+  }
+  // Median lead time = number of days between event creation and event
+  // start, for the median event in that year. A LARGER median means more
+  // lead time = more planning runway.
+  const diff = m_a - m_b;
+  const dir = diff === 0
+    ? agg.analysis_year + ' events have the SAME median lead time as ' + agg.baseline_year + ' (no shift in planning runway).'
+    : diff > 0
+      ? agg.analysis_year + ' events have ' + Math.abs(diff) + ' MORE days of lead time than ' + agg.baseline_year +
+        ' — booked further in advance of event start (more planning runway).'
+      : agg.analysis_year + ' events have ' + Math.abs(diff) + ' FEWER days of lead time than ' + agg.baseline_year +
+        ' — booked closer to event start (less planning runway, more last-minute).';
+  return 'Median lead time (days between event creation and event start): ' +
+         agg.baseline_year + ' = ' + m_b + ' days · ' +
+         agg.analysis_year + ' = ' + m_a + ' days. ' + dir;
+}
+
+let _pace_chart = null;
+function _pace_render() {
+  const year_picker = document.getElementById('pace-year-pick');
+  const type_picker = document.getElementById('pace-type-pick');
+  const range_picker = document.getElementById('pace-range-pick');
+  const year_filter = year_picker && year_picker.value ? Number(year_picker.value) : null;
+  const type_filter = (type_picker && type_picker.value) || '';
+  // Range is purely a display zoom -- we still aggregate over the full
+  // 0..365-day window so the conclusion median is correct, then slice
+  // the labels + per-series arrays for the chart. Default 365 = no slice.
+  const range_max = Math.max(1, Math.min(MAX_LEAD_DAYS,
+    Number(range_picker && range_picker.value) || MAX_LEAD_DAYS));
+  const full_agg = _pace_aggregate(year_filter, type_filter);
+  const agg = {
+    baseline_year: full_agg.baseline_year,
+    analysis_year: full_agg.analysis_year,
+    n_baseline: full_agg.n_baseline,
+    n_analysis: full_agg.n_analysis,
+    labels:   full_agg.labels.slice(0, range_max + 1),
+    baseline: full_agg.baseline.slice(0, range_max + 1),
+    analysis: full_agg.analysis.slice(0, range_max + 1),
+  };
+
+  // Y-axis cap: when the user zooms to a small lead-time window, the
+  // cumulative-% values stay low (e.g. 5% at day 30). A fixed 0-100%
+  // axis wastes vertical space and makes small differences invisible.
+  // Compute the max visible value across both series, round up to a
+  // tidy bucket (5/10/25/50/100), and use that as the y-axis max.
+  function tidy_y_max(arrays) {
+    let max = 0;
+    for (const a of arrays) for (const v of a) if (typeof v === 'number' && v > max) max = v;
+    if (max <= 5)   return 5;
+    if (max <= 10)  return 10;
+    if (max <= 25)  return 25;
+    if (max <= 50)  return 50;
+    return 100;
+  }
+  const y_max = tidy_y_max([agg.baseline, agg.analysis]);
+  const datasets = [
+    {
+      label: agg.baseline_year + ' (n=' + agg.n_baseline + ')',
+      data: agg.baseline,
+      borderColor: '#1565C0', backgroundColor: 'rgba(21,101,192,0.05)',
+      borderWidth: 2, pointRadius: 0, fill: false, tension: 0.1,
+    },
+    {
+      label: agg.analysis_year + ' (n=' + agg.n_analysis + ')',
+      data: agg.analysis,
+      borderColor: '#E65100', backgroundColor: 'rgba(230,81,0,0.05)',
+      borderWidth: 2, pointRadius: 0, fill: false, tension: 0.1,
+    },
+  ];
+  CHART_SNAP['c_pace'] = {
+    type: 'line',
+    labels: agg.labels.slice(),
+    datasets: datasets.map(function(d) {
+      return {
+        label: d.label, data: d.data.slice(),
+        borderColor: d.borderColor, backgroundColor: d.backgroundColor,
+        borderWidth: d.borderWidth, pointRadius: d.pointRadius,
+        fill: d.fill, tension: d.tension,
+      };
+    }),
+  };
+  // Conclusion line uses the FULL aggregate (not the zoomed slice) so the
+  // median lead time stays correct regardless of which range the user is
+  // viewing. Range is a display zoom only.
+  const conclusion_el = document.getElementById('pace-conclusion');
+  if (conclusion_el) conclusion_el.textContent = _pace_conclusion_text(full_agg);
+  if (_pace_chart) {
+    _pace_chart.data.labels = agg.labels;
+    _pace_chart.data.datasets = datasets;
+    // Update y-axis max in place so the chart adapts to the new zoom.
+    if (_pace_chart.options && _pace_chart.options.scales && _pace_chart.options.scales.y) {
+      _pace_chart.options.scales.y.max = y_max;
+    }
+    _pace_chart.update();
+  } else {
+    const canvas = document.getElementById('c_pace');
+    if (!canvas) return;
+    _pace_chart = new Chart(canvas, {
+      type: 'line',
+      data: { labels: agg.labels, datasets: datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        // onHover updates the readout div below the chart -- gives the
+        // reader a non-tooltip way to scan values without obscuring the
+        // chart. We resolve the X bin from the elements-under-cursor;
+        // if none (mouse moved off the line), reset to the static msg.
+        onHover: function(evt, active) {
+          var el = document.getElementById('pace-readout-text');
+          if (!el) return;
+          if (!active || !active.length) {
+            el.textContent = 'Hover the chart to see the % created at any lead-time value.';
+            return;
+          }
+          var x_idx = active[0].index;
+          var x_label = (this.data.labels || [])[x_idx];
+          var parts = (this.data.datasets || []).map(function(d) {
+            var v = d.data[x_idx];
+            return d.label + ': ' + (typeof v === 'number' ? v.toFixed(1) : '0') + '%';
+          });
+          el.textContent = 'At lead time ≤ ' + x_label + ' days → ' + parts.join(' · ');
+        },
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 11 } },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: {
+              title: function(items) {
+                if (!items || !items.length) return '';
+                return 'Lead time ≤ ' + items[0].label + ' days';
+              },
+              label: function(ctx) {
+                var v = (ctx.parsed && ctx.parsed.y);
+                return ctx.dataset.label + ': ' + (typeof v === 'number' ? v.toFixed(1) : '0') + '%';
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Days before event start (lead time)' },
+            ticks: { autoSkip: true, maxRotation: 0, maxTicksLimit: 12 },
+            grid: { display: false },
+          },
+          y: {
+            // y_max adapts to the visible range (5/10/25/50/100). When the
+            // user picks "0-30 days", the cumulative % stays small so the
+            // axis tightens to keep the curve readable. Default = 100%.
+            beginAtZero: true, max: y_max,
+            title: { display: true, text: 'Cumulative % of events' },
+            ticks: { callback: function(v) { return v + '%'; } },
+            grid: { color: '#eee' },
+          },
+        },
+      },
+    });
+    CHARTS['c_pace'] = _pace_chart;
+  }
+}
+
+// ── Creation timing — relative to event year (sibling of Pace chart) ──────
+// Bars per relative-month offset; one series per event year. The whole
+// point is direct YoY comparison at the same calendar position relative
+// to the event year. Examples:
+//   +3  = March of event year (Mar 2025 for 2025 events; Mar 2026 for 2026)
+//   -1  = December of prior year (Dec 2024 for 2025; Dec 2025 for 2026)
+//   -2  = November of prior year
+//   -12 = January of prior year
+// No "0" slot -- the convention skips it so +1 (Jan event-year) and -1
+// (Dec prior-year) are adjacent in calendar time but distinct in label.
+const TIMING_MIN_OFFSET = -24;   // 2 years before event year
+const TIMING_MAX_OFFSET = 12;    // through Dec of event year
+const TIMING_MONTH_NAMES = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Compute the relative-month offset for a created-at date relative to
+// the event year. Returns null when the inputs are unusable.
+function _timing_offset(created_year, created_month, event_year) {
+  if (!Number.isFinite(created_year) || !Number.isFinite(created_month) || !Number.isFinite(event_year)) return null;
+  if (created_year >= event_year) {
+    // Same or future year: month numbers, +12 per year delta.
+    return (created_year - event_year) * 12 + created_month;
+  }
+  // Created in a prior year: Dec prior = -1, Jan prior = -12, etc.
+  const months_before = (event_year - created_year - 1) * 12 + (12 - created_month + 1);
+  return -months_before;
+}
+
+// Pretty-print an offset for the x-axis tick. The +/- prefixes were
+// confusing readers, so the new format leans on plain month names:
+//   +1..+12  -> "Jan" .. "Dec"           (event year is the implicit base)
+//   -1..-12  -> "Jan (prior)" etc.       (prior calendar year)
+//   -13..-24 -> "Dec (2y prior)" etc.    (year before that)
+// The tooltip uses _timing_label_long which keeps the offset number for
+// reviewers who want it.
+function _timing_label(offset) {
+  if (offset > 0) {
+    const into_year = Math.floor((offset - 1) / 12);
+    const m = ((offset - 1) % 12) + 1;
+    return into_year > 0 ? TIMING_MONTH_NAMES[m] + ' (yr+' + into_year + ')'
+                         : TIMING_MONTH_NAMES[m];
+  }
+  const months_before = -offset;
+  const years_back   = Math.floor((months_before - 1) / 12) + 1;
+  const month_in_prior = 12 - ((months_before - 1) % 12);
+  if (years_back > 1) {
+    return TIMING_MONTH_NAMES[month_in_prior] + ' (' + years_back + 'y prior)';
+  }
+  return TIMING_MONTH_NAMES[month_in_prior] + ' (prior)';
+}
+// Long form for tooltip titles: includes the numeric offset for reviewers
+// who want to refer back to the chart definition ("+3 = Mar of event year").
+function _timing_label_long(offset) {
+  const base = _timing_label(offset);
+  const sign = offset > 0 ? '+' : '−';
+  return base + '  [' + sign + Math.abs(offset) + ']';
+}
+
+// Color palette per (year, type). Lighter shade = baseline, fuller = analysis.
+// Stays in sync with C_COLORS up top so the colors mean the same thing across
+// the dashboard.
+const TIMING_TYPE_COLORS_BASELINE = {
+  'Adult Race':   '#90CAF9', 'Youth Race':   '#80CBC4',
+  'Adult Clinic': '#FFCC80', 'Youth Clinic': '#CE93D8',
+};
+const TIMING_TYPE_COLORS_ANALYSIS = {
+  'Adult Race':   '#1565C0', 'Youth Race':   '#00897B',
+  'Adult Clinic': '#F57C00', 'Youth Clinic': '#8E24AA',
+};
+const TIMING_TYPES = ['Adult Race', 'Youth Race', 'Adult Clinic', 'Youth Clinic'];
+
+// Build x-axis labels as a 2-element array per offset so Chart.js
+// renders the tick on TWO lines: top = signed offset (+3 / -2),
+// bottom = month name (Mar / Nov). User feedback: signed prefix
+// inline with the month was confusing; stacking them is much clearer.
+function _timing_tick_2line(offset) {
+  const sign = offset > 0 ? '+' : '−';   // unicode minus
+  const month_label = _timing_label(offset).split(' ')[0];   // strip suffix
+  return [sign + Math.abs(offset), month_label];
+}
+
+function _timing_aggregate(year_filter, type_filter) {
+  const baseline_year = ${ya};
+  const analysis_year = ${yb};
+  const labels  = [];      // 2-line tick labels
+  const offsets = [];
+  const tt_labels = [];    // long-form labels used by tooltip title
+  for (let o = TIMING_MIN_OFFSET; o <= TIMING_MAX_OFFSET; o++) {
+    if (o === 0) continue;
+    offsets.push(o);
+    labels.push(_timing_tick_2line(o));
+    tt_labels.push(_timing_label_long(o));
+  }
+  const idx_of = {};
+  offsets.forEach((o, i) => { idx_of[o] = i; });
+
+  // Per-year totals (one bar per year per X). Visual stays simple --
+  // 2 plain bars per X -- but we ALSO accumulate per-type counts under
+  // the totals so the tooltip can show the breakdown without changing
+  // the bars. type_filter still narrows BOTH the totals AND the per-type
+  // arrays (so a single-type filter zeroes out the other three types).
+  const data_b = offsets.map(() => 0);
+  const data_a = offsets.map(() => 0);
+  // by_type[year][type] = array indexed by offset
+  function blank_per_type() {
+    const o = {};
+    TIMING_TYPES.forEach(t => { o[t] = offsets.map(() => 0); });
+    return o;
+  }
+  const by_type_b = blank_per_type();
+  const by_type_a = blank_per_type();
+
+  if (typeof ROSTER !== 'undefined' && Array.isArray(ROSTER)) {
+    for (const r of ROSTER) {
+      if (type_filter && r.type !== type_filter) continue;
+      const t = r.type;
+      if (r.sid_baseline && r.created_baseline && (!year_filter || year_filter === baseline_year)) {
+        const parts = String(r.created_baseline).slice(0, 7).split('-');
+        const y = Number(parts[0]), m = Number(parts[1]);
+        const off = _timing_offset(y, m, baseline_year);
+        if (off != null && off in idx_of) {
+          const i = idx_of[off];
+          data_b[i] += 1;
+          if (t && by_type_b[t]) by_type_b[t][i] += 1;
+        }
+      }
+      if (r.sid_analysis && r.created_analysis && (!year_filter || year_filter === analysis_year)) {
+        const parts = String(r.created_analysis).slice(0, 7).split('-');
+        const y = Number(parts[0]), m = Number(parts[1]);
+        const off = _timing_offset(y, m, analysis_year);
+        if (off != null && off in idx_of) {
+          const i = idx_of[off];
+          data_a[i] += 1;
+          if (t && by_type_a[t]) by_type_a[t][i] += 1;
+        }
+      }
+    }
+  }
+  return { labels, tt_labels, offsets, data_b, data_a, by_type_b, by_type_a,
+           baseline_year, analysis_year };
+}
+
+// Plugin: draw the bar value ABOVE each bar when there's space. Mirrors
+// the inside_labels plugin's "skip when too cramped" pattern but draws
+// above the bar top instead of inside (better for grouped bars where
+// each bar is narrow). Only fires when min_bar_width pixels are
+// available, so dense charts stay readable.
+const above_label_plugin = {
+  id: 'above_labels',
+  afterDatasetsDraw(chart, _, opts) {
+    if (!opts || !opts.show) return;
+    const ctx = chart.ctx;
+    ctx.save();
+    chart.data.datasets.forEach(function(ds, di) {
+      if (ds.type === 'line') return;
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden) return;
+      meta.data.forEach(function(bar, ji) {
+        const val = ds.data[ji];
+        if (val == null || val === 0) return;
+        const bar_w = (bar.width || 0);
+        if (bar_w < (opts.min_w || 10)) return;
+        ctx.fillStyle = opts.color || '#444';
+        ctx.font = (opts.size || 9) + 'px Segoe UI,Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(val.toLocaleString(), bar.x, bar.y - 2);
+      });
+    });
+    ctx.restore();
+  },
+};
+Chart.register(above_label_plugin);
+
+let _timing_chart = null;
+function _timing_render() {
+  const year_picker  = document.getElementById('timing-year-pick');
+  const type_picker  = document.getElementById('timing-type-pick');
+  const range_picker = document.getElementById('timing-range-pick');
+  const year_filter  = year_picker && year_picker.value ? Number(year_picker.value) : null;
+  const type_filter  = (type_picker && type_picker.value) || '';
+  // Range value is "min,max" (e.g. "-6,12" = event year + 6 months prior).
+  // Default = full -24..+12. Range is purely a display zoom; the
+  // conclusion below the chart still reads the FULL aggregate so YoY
+  // totals + biggest-swing don't shift with zoom.
+  let r_min = TIMING_MIN_OFFSET, r_max = TIMING_MAX_OFFSET;
+  if (range_picker && range_picker.value) {
+    const parts = range_picker.value.split(',').map(s => Number(s.trim()));
+    if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+      r_min = parts[0]; r_max = parts[1];
+    }
+  }
+  const full_agg = _timing_aggregate(year_filter, type_filter);
+  // Build the zoomed view by filtering offsets within [r_min, r_max].
+  const keep_idx = [];
+  for (let i = 0; i < full_agg.offsets.length; i++) {
+    const o = full_agg.offsets[i];
+    if (o >= r_min && o <= r_max) keep_idx.push(i);
+  }
+  function pick(arr) { return keep_idx.map(i => arr[i]); }
+  function pick_by_type(map) {
+    const o = {};
+    for (const t of TIMING_TYPES) o[t] = pick(map[t] || []);
+    return o;
+  }
+  const agg = {
+    baseline_year: full_agg.baseline_year,
+    analysis_year: full_agg.analysis_year,
+    offsets:   keep_idx.map(i => full_agg.offsets[i]),
+    labels:    pick(full_agg.labels),
+    tt_labels: pick(full_agg.tt_labels),
+    data_b:    pick(full_agg.data_b),
+    data_a:    pick(full_agg.data_a),
+    by_type_b: pick_by_type(full_agg.by_type_b),
+    by_type_a: pick_by_type(full_agg.by_type_a),
+  };
+
+  // Simple per-year bars (one bar per year per X). When year filter
+  // isolates one year, only that dataset shows.
+  const show_b = !year_filter || year_filter === agg.baseline_year;
+  const show_a = !year_filter || year_filter === agg.analysis_year;
+  const datasets = [];
+  if (show_b) {
+    datasets.push({
+      label: String(agg.baseline_year),
+      data: agg.data_b,
+      backgroundColor: '#1565C0', borderColor: '#1565C0', borderWidth: 1,
+    });
+  }
+  if (show_a) {
+    datasets.push({
+      label: String(agg.analysis_year),
+      data: agg.data_a,
+      backgroundColor: '#E65100', borderColor: '#E65100', borderWidth: 1,
+    });
+  }
+
+  CHART_SNAP['c_timing'] = {
+    type: 'bar',
+    labels: agg.labels.slice(),
+    datasets: datasets.map(function(d) {
+      return {
+        label: d.label, data: d.data.slice(),
+        backgroundColor: d.backgroundColor, borderColor: d.borderColor,
+        borderWidth: d.borderWidth,
+      };
+    }),
+  };
+
+  // Conclusion uses the FULL aggregate (not the zoomed slice) so per-year
+  // totals + biggest-swing-month stay anchored regardless of zoom.
+  const conc_el = document.getElementById('timing-conclusion');
+  if (conc_el) conc_el.textContent = _timing_conclusion_text(full_agg, year_filter, type_filter);
+
+  if (_timing_chart) {
+    _timing_chart.data.labels = agg.labels;
+    _timing_chart.data.datasets = datasets;
+    _timing_chart.update();
+  } else {
+    const canvas = document.getElementById('c_timing');
+    if (!canvas) return;
+    _timing_chart = new Chart(canvas, {
+      type: 'bar',
+      data: { labels: agg.labels, datasets: datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 11 } },
+          // Show value above each bar when width allows. With 36 X
+          // positions x 2 bars, individual bars are quite narrow (~5-7px
+          // in a half-width card), so the threshold has to be aggressive
+          // for labels to appear at all. Small font + tight min_w means
+          // labels show in the default view; they auto-skip when the
+          // chart is squeezed (e.g. mobile) or when bars are zero.
+          above_labels: { show: true, color: '#444', size: 8, min_w: 4 },
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: {
+              title: function(items) {
+                if (!items || !items.length) return '';
+                return (agg.tt_labels[items[0].dataIndex] || '');
+              },
+              // Multi-line per dataset: first line = year total, then one
+              // line per event type with its count. Returning an array
+              // makes Chart.js render each entry as its own tooltip row.
+              // The "by_type" maps are populated by _timing_aggregate.
+              label: function(ctx) {
+                const i = ctx.dataIndex;
+                const yr_label = ctx.dataset.label;       // '2025' or '2026'
+                const total = ctx.parsed.y || 0;
+                const by_type = (yr_label === String(agg.baseline_year)) ? agg.by_type_b : agg.by_type_a;
+                const lines = [yr_label + ' total: ' + total.toLocaleString()];
+                ['Adult Race','Youth Race','Adult Clinic','Youth Clinic'].forEach(function(t) {
+                  const v = (by_type[t] && by_type[t][i]) || 0;
+                  lines.push('  ' + t + ': ' + v.toLocaleString());
+                });
+                return lines;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { autoSkip: true, maxRotation: 0, maxTicksLimit: 18 } },
+          y: { beginAtZero: true, grid: { color: '#eee' },
+               ticks: { callback: v => v.toLocaleString() } },
+        },
+      },
+    });
+    CHARTS['c_timing'] = _timing_chart;
+  }
+}
+
+// Dynamic conclusion under the timing chart. Computes per-year totals,
+// finds the relative-month offset with the biggest YoY swing, and phrases
+// it in plain English. Helps the reader anchor on a takeaway.
+//
+// Operates on the simple per-year arrays (data_b / data_a) -- the
+// post-revert shape after we dropped the per-type stacking. If you
+// re-introduce stacking later, this needs to walk the type buckets
+// instead of these flat arrays.
+function _timing_conclusion_text(agg, year_filter, type_filter) {
+  const data_b = agg.data_b || [];
+  const data_a = agg.data_a || [];
+  function sum_arr(a) { let t = 0; for (let i = 0; i < a.length; i++) t += a[i]; return t; }
+  const tot_b = sum_arr(data_b);
+  const tot_a = sum_arr(data_a);
+
+  // Find the relative-month offset with the biggest absolute YoY delta.
+  let biggest_i = -1, biggest_abs = 0;
+  for (let i = 0; i < agg.offsets.length; i++) {
+    const delta = (data_a[i] || 0) - (data_b[i] || 0);
+    if (Math.abs(delta) > biggest_abs) { biggest_abs = Math.abs(delta); biggest_i = i; }
+  }
+
+  const filter_note = (year_filter ? ' (' + year_filter + ' only)' : '') +
+                      (type_filter ? ' \xb7 ' + type_filter : '');
+  if (year_filter || tot_b === 0 || tot_a === 0) {
+    // Single-year view (or one side empty) -- skip YoY framing.
+    return 'Totals' + filter_note + ': ' + agg.baseline_year + ' = ' + tot_b.toLocaleString() +
+           ' \xb7 ' + agg.analysis_year + ' = ' + tot_a.toLocaleString() + ' events.';
+  }
+  const yoy_total = tot_a - tot_b;
+  const yoy_pct = tot_b ? Math.round((yoy_total / tot_b) * 1000) / 10 : 0;
+  const dir = yoy_total === 0 ? 'flat'
+            : yoy_total  >  0 ? 'up ' + yoy_total.toLocaleString() + ' (+' + yoy_pct + '%)'
+            :                   'down ' + Math.abs(yoy_total).toLocaleString() + ' (' + yoy_pct + '%)';
+  let biggest_phrase = '';
+  if (biggest_i >= 0 && biggest_abs > 0) {
+    const off = agg.offsets[biggest_i];
+    const b_v = data_b[biggest_i] || 0;
+    const a_v = data_a[biggest_i] || 0;
+    const delta = a_v - b_v;
+    const label = _timing_label(off);   // plain month name (no +/- prefix)
+    biggest_phrase = ' Biggest YoY swing at ' + label +
+                     ': ' + agg.baseline_year + ' = ' + b_v + ' → ' + agg.analysis_year + ' = ' + a_v +
+                     ' (' + (delta > 0 ? '+' : '') + delta + ').';
+  }
+  return 'Totals' + filter_note + ': ' + agg.baseline_year + ' = ' + tot_b.toLocaleString() +
+         ' \xb7 ' + agg.analysis_year + ' = ' + tot_a.toLocaleString() +
+         ' (' + agg.analysis_year + ' is ' + dir + ' YoY).' + biggest_phrase;
+}
+
 // Initial render + dropdown wiring happen below, AFTER the ROSTER const
 // is initialized -- calling _creation_render() here would read ROSTER in
 // its temporal dead zone and throw ReferenceError, blocking every later
@@ -1843,6 +2544,18 @@ const ROSTER = ROSTER_PLACEHOLDER;
 _creation_render();
 document.getElementById('creation-year-pick')?.addEventListener('change', _creation_render);
 document.getElementById('creation-type-pick')?.addEventListener('change', _creation_render);
+// Pace chart is independent of the year/type pickers above -- it always
+// shows both years for full year-over-year comparison.
+_pace_render();
+document.getElementById('pace-year-pick')?.addEventListener('change', _pace_render);
+document.getElementById('pace-type-pick')?.addEventListener('change', _pace_render);
+document.getElementById('pace-range-pick')?.addEventListener('change', _pace_render);
+// Creation-timing chart has its own year + type pickers; default state
+// renders both years across the full -24..+12 relative-month range.
+_timing_render();
+document.getElementById('timing-year-pick')?.addEventListener('change', _timing_render);
+document.getElementById('timing-type-pick')?.addEventListener('change', _timing_render);
+document.getElementById('timing-range-pick')?.addEventListener('change', _timing_render);
 if(ROSTER && ROSTER.length > 0){
   const SEG_CLS = {'Retained':'Retained','Shifted':'Shifted','Lost':'Lost',
     'New':'New','Recovered':'Recovered','Tried to Return':'TtR'};
@@ -2931,8 +3644,25 @@ if(ROSTER && ROSTER.length > 0){
       render_list();
       refresh_status_column();
     }).catch(function(err){
+      // Update the status chip + toast like before, AND replace the
+      // list's "Loading…" placeholder with a clear error state so the
+      // user doesn't sit looking at a stale spinner forever. Without
+      // this branch, any fetch failure (network blip, server bounce,
+      // 4xx/5xx from /api/status or /api/overrides) leaves the panel
+      // stuck in the initial loading state.
       set_srv_status('err', '● ' + err.message);
       show_toast('Load failed: ' + err.message, 'err');
+      var list = $id('dash-ov-list');
+      if (list) {
+        var safe_msg = String(err.message || 'unknown error').replace(/[&<>]/g, function(c) {
+          return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;';
+        });
+        list.innerHTML =
+          '<div class="dash-ov-empty">' +
+          'Could not load overrides: ' + safe_msg + '.<br>' +
+          '<a href="javascript:dash_ov_refresh()" style="color:#1f6feb;text-decoration:underline">Retry</a>' +
+          '</div>';
+      }
     });
   };
 
@@ -3004,278 +3734,98 @@ if(ROSTER && ROSTER.length > 0){
     };
   };
 
-  // ── Rebuild with ad-hoc years (the collapsed details block) ─────────
-  // Reads the two number inputs, validates them, and dispatches to the
-  // same SSE rebuild pipeline with the years tacked onto the query
-  // string. Empty inputs → falls back to the default rebuild (no flags).
-  window.dash_ov_rebuild_with_years = function(){
-    var by_input = $id('dash-ov-rebuild-baseline');
-    var ay_input = $id('dash-ov-rebuild-analysis');
-    var by_str = (by_input && by_input.value || '').trim();
-    var ay_str = (ay_input && ay_input.value || '').trim();
-    var by = by_str ? Number(by_str) : null;
-    var ay = ay_str ? Number(ay_str) : null;
-    var ok = (y) => y == null || (Number.isInteger(y) && y >= 2000 && y <= 2100);
-    if (!ok(by) || !ok(ay)) {
-      show_toast('Years must be 4-digit integers in [2000, 2100]', 'err');
-      return;
-    }
-    if (by != null && ay != null && by === ay) {
-      show_toast('Baseline and analysis years must differ', 'err');
-      return;
-    }
+  // ── Rebuild with ad-hoc years (the collapsed details block) ───────────────
+  window.dash_ov_rebuild_with_years = function() {
+    var bp = $id('dash-ov-rebuild-baseline');
+    var ap = $id('dash-ov-rebuild-analysis');
+    var by = (bp && bp.value || '').trim();
+    var ay = (ap && ap.value || '').trim();
     var params = [];
-    if (by != null) params.push('baseline_year=' + by);
-    if (ay != null) params.push('analysis_year=' + ay);
-    var suffix = params.length ? ('?' + params.join('&')) : '';
-    window.dash_ov_rebuild(suffix);
+    if (by) params.push('baseline_year=' + encodeURIComponent(by));
+    if (ay) params.push('analysis_year=' + encodeURIComponent(ay));
+    var suffix = params.length ? '?' + params.join('&') : '';
+    if (typeof window.dash_ov_rebuild === 'function') window.dash_ov_rebuild(suffix);
   };
 
-  // ── State save / restore across rebuild reload ──────────────────────
-  // We can't avoid the reload (new build = new ROSTER + new chart data),
-  // but we CAN preserve the user's view state across it. sessionStorage
-  // persists across same-tab reloads. We save before reload, restore on
-  // page boot, then delete the key so stale state never leaks forward.
-  var STATE_KEY = 'dash_ov_state_v1';
-
-  function _collect_drop(panel_id) {
-    return Array.prototype.map.call(
-      document.querySelectorAll('#' + panel_id + ' input[type=checkbox]:checked'),
-      function(cb){ return cb.value; }
-    );
-  }
-  function _apply_drop(panel_id, values) {
-    if (!Array.isArray(values)) return;
-    var set = {};
-    values.forEach(function(v){ set[v] = true; });
-    document.querySelectorAll('#' + panel_id + ' input[type=checkbox]').forEach(function(cb){
-      cb.checked = !!set[cb.value];
-    });
-    if (typeof window.update_drop_btn === 'function') window.update_drop_btn(panel_id);
-  }
-  function _save_dashboard_state() {
-    try {
-      var search_el = $id('tbl-search');
-      var th_sorted = document.querySelector('#evt-tbl thead th.asc, #evt-tbl thead th.desc');
-      var more_btn  = $id('tbl-more');
-      var state = {
-        v: 1,
-        scroll:   window.scrollY,
-        search:   search_el ? search_el.value : '',
-        seg:      _collect_drop('panel-drop-seg'),
-        type:     _collect_drop('panel-drop-type'),
-        month:    _collect_drop('panel-drop-month'),
-        cols:     _collect_drop('panel-drop-cols'),
-        sort_col: th_sorted ? th_sorted.dataset.col : null,
-        sort_dir: th_sorted && th_sorted.classList.contains('desc') ? -1 : 1,
-        selected: _selected_sid,
-        show_all: more_btn ? (more_btn.style.display === 'none') : false,
-      };
-      sessionStorage.setItem(STATE_KEY, JSON.stringify(state));
-    } catch (e) { /* sessionStorage may be unavailable — silently skip */ }
-  }
-  window.dash_ov_save_state = _save_dashboard_state; // expose for rebuild handler
-
-  function _restore_dashboard_state() {
-    var raw = null;
-    try { raw = sessionStorage.getItem(STATE_KEY); } catch (e) { return; }
-    if (!raw) return;
-    try { sessionStorage.removeItem(STATE_KEY); } catch (e) {}
-
-    var state;
-    try { state = JSON.parse(raw); } catch (e) { return; }
-    if (!state || state.v !== 1) return;
-
-    // Apply filter inputs + dropdowns. The HTML inline handlers (onchange)
-    // won't fire when we set .value / .checked programmatically — we trigger
-    // a final filter_and_sort() after applying.
-    var search_el = $id('tbl-search');
-    if (search_el && typeof state.search === 'string') search_el.value = state.search;
-    _apply_drop('panel-drop-seg',   state.seg);
-    _apply_drop('panel-drop-type',  state.type);
-    _apply_drop('panel-drop-month', state.month);
-    _apply_drop('panel-drop-cols',  state.cols);
-
-    // The column-picker checkboxes drive a toggle_col() function that adds
-    // .show-* classes on the table. Trigger each restored col to apply.
-    (state.cols || []).forEach(function(col_id){
-      if (typeof window.toggle_col === 'function') {
-        // checkbox id format is "col-sid_baseline" / "col-date_baseline" / "col-sid_analysis" / "col-date_analysis"
-        window.toggle_col(col_id, true);
-      }
-    });
-
-    // Sort: simulate clicking the sorted header. Fresh load starts at
-    // sort_col='_excel'. One click → that col asc; two clicks → desc.
-    if (state.sort_col && state.sort_col !== '_excel') {
-      var th = document.querySelector('#evt-tbl thead th[data-col="' + state.sort_col + '"]');
-      if (th) {
-        th.click();                            // asc
-        if (state.sort_dir === -1) th.click(); // desc
-      }
-    } else if (typeof window.filter_and_sort === 'function') {
-      window.filter_and_sort();
-    }
-
-    // "Show all" — only meaningful when the table has paginated rows.
-    if (state.show_all && typeof window.load_all === 'function') window.load_all();
-
-    // Selected event in editor — defer until /api/overrides has loaded so
-    // the row is in the DOM and dash_ov_focus_row can pull sid_baseline /
-    // sid_analysis from its data attrs.
-    if (state.selected) {
-      var attempts = 0;
-      (function try_focus(){
-        attempts++;
-        var row = document.querySelector('#tbl-body tr[data-sid="' + state.selected.replace(/"/g, '\\"') + '"]');
-        if (row) {
-          window.dash_ov_focus_row(state.selected, row.dataset.sidBaseline || '', row.dataset.sidAnalysis || '');
-          return;
-        }
-        if (attempts < 30) setTimeout(try_focus, 100);
-      })();
-    }
-
-    // Scroll — defer until layout has settled so the position is accurate.
-    requestAnimationFrame(function(){
-      requestAnimationFrame(function(){
-        window.scrollTo(0, state.scroll || 0);
-      });
-    });
-  }
-
   // ── Boot ────────────────────────────────────────────────────────────
-  $id('dash-ov-type').addEventListener('change', refresh_form_vis);
-  $id('dash-ov-side').addEventListener('change', refresh_form_vis);
-  refresh_form_vis();
-  wire_list_actions();
-  dash_ov_refresh();
-  _restore_dashboard_state();
+  // Wire the list's delegated click handler (approve / unapprove /
+  // delete buttons inside each list row), seed the form's add/no-match/
+  // segment visibility based on the current type dropdown, and kick off
+  // the initial /api/status + /api/overrides fetch so the editor lands
+  // on data (or a clear error state) instead of sitting on the HTML
+  // "Loading…" placeholder. Without these calls the editor stayed in
+  // its initial state until the user clicked the Refresh button.
+  if (typeof wire_list_actions === 'function') wire_list_actions();
+  if (typeof refresh_form_vis  === 'function') refresh_form_vis();
+  if (typeof window.dash_ov_refresh === 'function') window.dash_ov_refresh();
 
-  // If we arrived here from a rebuild reload, the overlay is currently
-  // covering the page. Hold it briefly so charts have time to animate
-  // in (250ms entrance animation set on each Chart.js chart), then
-  // crossfade it out.
-  if (document.documentElement.classList.contains('dash-ov-rebuilding')) {
-    setTimeout(function(){
-      var ov = $id('dash-ov-overlay');
-      if (ov) ov.classList.add('fade-out');
-      setTimeout(function(){
-        document.documentElement.classList.remove('dash-ov-rebuilding');
-      }, 320); // slightly longer than the CSS transition (280ms)
-    }, 450);
-  }
 })();
 </script>
 
-<!-- Chart expand modal (shows chart OR table depending on current flip state) -->
+<!-- Chart expand modal (uses .modal-box / .modal-hdr / .modal-canvas-wrap CSS) -->
 <div id="chart-modal">
   <div class="modal-box">
     <div class="modal-hdr">
-      <span id="modal-title"></span>
-      <span id="modal-mode-badge" style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:10px;background:#EEF4FD;color:#1565C0;margin-left:8px"></span>
-      <button class="modal-close" onclick="close_modal()">✕ Close</button>
+      <h3 id="modal-title" style="margin:0">Chart</h3>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="chart-btn" onclick="export_modal_png()" title="Export PNG">⬇ PNG</button>
+        <button class="chart-btn" onclick="export_modal_csv()" title="Export CSV">⬇ CSV</button>
+        <button class="modal-close" onclick="close_modal()" title="Close">✕</button>
+      </div>
     </div>
-    <div class="modal-canvas-wrap" id="modal-canvas-wrap">
-      <canvas id="modal-canvas"></canvas>
-    </div>
-    <div id="modal-tbl-wrap" class="chart-flip-tbl" style="display:none;max-height:460px;height:auto"></div>
-    <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end" id="modal-btns">
-      <button class="chart-btn" id="modal-png-btn" onclick="export_modal_png()">⬇ PNG</button>
-      <button class="chart-btn" onclick="export_modal_csv()">⬇ CSV</button>
+    <div class="modal-canvas-wrap">
+      <canvas id="modal-chart"></canvas>
     </div>
   </div>
 </div>
-
 <script>
-// ── Chart expand + export ──────────────────────────────────────────────────
-let _modal_chart = null;
-let _modal_chart_id = null;
-
+var _modal_chart = null;
+var _modal_chart_id = null;
 function get_modal_plugin_opts(id) {
   const src_chart = CHARTS[id];
   if (!src_chart) return { plugin_opts: {}, inline_plugins: [] };
-  const opts = src_chart.options?.plugins || {};
-  // Forward EVERY plugin's options block from the source chart so the modal
-  // renders identical data labels. The dashboard has several globally-
-  // registered plugins (value_labels, inside_labels, delta_labels) that only
-  // draw when opts.show === true — which lives in this options.plugins map.
-  // Previously we only forwarded datalabels + tooltip, which left the modal
-  // looking bare. We exclude 'legend' because expand_chart() builds a fresh
-  // legend with modal-appropriate positioning below.
+  const src_opts = (src_chart.options && src_chart.options.plugins) || {};
   const modal_opts = {};
-  for (const key of Object.keys(opts)) {
-    if (key === 'legend') continue;
-    modal_opts[key] = opts[key];
+  for (const key of Object.keys(src_opts)) {
+    if (key === 'legend' || key === 'tooltip') continue;
+    modal_opts[key] = src_opts[key];
   }
-  const inline = (src_chart.config.plugins || []).filter(p => p && p.id === 'org_pts');
+  const inline = (src_chart.config && src_chart.config.plugins) || [];
   return { plugin_opts: modal_opts, inline_plugins: inline };
 }
-
 function expand_chart(id) {
-  if (!CHARTS[id]) { console.warn('expand_chart: no chart for', id); return; }
-  const modal      = document.getElementById('chart-modal');
-  const canvas_el  = document.getElementById(id);
-  const card       = canvas_el ? canvas_el.closest('.card') : null;
-  const title_node = card ? card.querySelector('h3') : null;
-  const base_title = title_node
-    ? (title_node.firstChild.textContent || title_node.textContent).trim().replace(/\s+/g,' ').split('  ')[0]
-    : id;
-
-  const is_table_mode = canvas_el && canvas_el.style.display === 'none';
-
-  document.getElementById('modal-title').textContent = base_title;
-  const badge = document.getElementById('modal-mode-badge');
-  if (badge) badge.textContent = is_table_mode ? '⊞ Table view' : '📊 Chart view';
-
-  modal.classList.add('open');
+  const snap   = CHART_SNAP[id];
+  const canvas = document.getElementById('modal-chart');
+  if (!snap || !canvas) return;
   _modal_chart_id = id;
-
-  const canvas_wrap = document.getElementById('modal-canvas-wrap');
-  const tbl_wrap    = document.getElementById('modal-tbl-wrap');
-  const png_btn     = document.getElementById('modal-png-btn');
-
-  if (is_table_mode) {
-    if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
-    if (canvas_wrap) canvas_wrap.style.display = 'none';
-    if (tbl_wrap) {
-      tbl_wrap.style.display = 'block';
-      tbl_wrap.innerHTML = _build_flip_html(id);
-    }
-    if (png_btn) png_btn.style.display = 'none';
-  } else {
-    if (tbl_wrap)    { tbl_wrap.style.display = 'none'; tbl_wrap.innerHTML = ''; }
-    if (canvas_wrap) canvas_wrap.style.display = '';
-    if (png_btn)     png_btn.style.display = '';
-
-    const canvas = document.getElementById('modal-canvas');
-    const snap   = CHART_SNAP[id];
-    if (!snap) { console.warn('No CHART_SNAP for', id); return; }
-    const { plugin_opts, inline_plugins } = get_modal_plugin_opts(id);
-    if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
-    try {
-      _modal_chart = new Chart(canvas, {
-        type: snap.type,
-        data: JSON.parse(JSON.stringify(snap)),
-        plugins: inline_plugins,
-        options: {
-          responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
-          plugins: Object.assign(
-            { legend: { position: snap.type === 'doughnut' ? 'bottom' : 'top',
-                        labels: { boxWidth: 12, padding: 10 } } },
-            plugin_opts
-          ),
-          scales: snap.type === 'doughnut' ? {} : {
-            y: { beginAtZero: snap.type === 'bar', grid: { color: '#eee' },
-                 ticks: { callback: function(v) { return v.toLocaleString(); } } },
-            x: { grid: { display: false } }
-          }
+  document.getElementById('chart-modal').classList.add('open');
+  var card = document.querySelector('#'+id);
+  var h3 = card && card.closest('.card') && card.closest('.card').querySelector('h3');
+  var title_el = document.getElementById('modal-title');
+  if (h3 && title_el) title_el.textContent = h3.childNodes[0].nodeValue.trim();
+  const { plugin_opts, inline_plugins } = get_modal_plugin_opts(id);
+  if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
+  try {
+    _modal_chart = new Chart(canvas, {
+      type: snap.type,
+      data: JSON.parse(JSON.stringify(snap)),
+      plugins: inline_plugins,
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+        plugins: Object.assign(
+          { legend: { position: snap.type === 'doughnut' ? 'bottom' : 'top',
+                      labels: { boxWidth: 12, padding: 10 } } },
+          plugin_opts
+        ),
+        scales: snap.type === 'doughnut' ? {} : {
+          y: { beginAtZero: snap.type === 'bar', grid: { color: '#eee' },
+               ticks: { callback: function(v) { return v.toLocaleString(); } } },
+          x: { grid: { display: false } }
         }
-      });
-    } catch(e) { console.error('expand_chart error:', e); }
-  }
+      }
+    });
+  } catch(e) { console.error('expand_chart error:', e); }
 }
-
 function close_modal() {
   document.getElementById('chart-modal').classList.remove('open');
   if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
@@ -3284,7 +3834,6 @@ document.getElementById('chart-modal').addEventListener('click', function(e) {
   if (e.target === this) close_modal();
 });
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close_modal(); });
-
 function export_png(id) {
   const chart = CHARTS[id];
   if (!chart) return;
@@ -3306,7 +3855,6 @@ function export_modal_png() {
   const a = document.createElement('a');
   a.href = off.toDataURL('image/png'); a.download = (_modal_chart_id||'chart')+'_expanded.png'; a.click();
 }
-
 function export_csv(id) {
   const chart = CHARTS[id];
   if (!chart) return;
