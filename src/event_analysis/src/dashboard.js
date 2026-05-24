@@ -3644,8 +3644,25 @@ if(ROSTER && ROSTER.length > 0){
       render_list();
       refresh_status_column();
     }).catch(function(err){
+      // Update the status chip + toast like before, AND replace the
+      // list's "Loading…" placeholder with a clear error state so the
+      // user doesn't sit looking at a stale spinner forever. Without
+      // this branch, any fetch failure (network blip, server bounce,
+      // 4xx/5xx from /api/status or /api/overrides) leaves the panel
+      // stuck in the initial loading state.
       set_srv_status('err', '● ' + err.message);
       show_toast('Load failed: ' + err.message, 'err');
+      var list = $id('dash-ov-list');
+      if (list) {
+        var safe_msg = String(err.message || 'unknown error').replace(/[&<>]/g, function(c) {
+          return c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;';
+        });
+        list.innerHTML =
+          '<div class="dash-ov-empty">' +
+          'Could not load overrides: ' + safe_msg + '.<br>' +
+          '<a href="javascript:dash_ov_refresh()" style="color:#1f6feb;text-decoration:underline">Retry</a>' +
+          '</div>';
+      }
     });
   };
 
@@ -3729,6 +3746,18 @@ if(ROSTER && ROSTER.length > 0){
     var suffix = params.length ? '?' + params.join('&') : '';
     if (typeof window.dash_ov_rebuild === 'function') window.dash_ov_rebuild(suffix);
   };
+
+  // ── Boot ────────────────────────────────────────────────────────────
+  // Wire the list's delegated click handler (approve / unapprove /
+  // delete buttons inside each list row), seed the form's add/no-match/
+  // segment visibility based on the current type dropdown, and kick off
+  // the initial /api/status + /api/overrides fetch so the editor lands
+  // on data (or a clear error state) instead of sitting on the HTML
+  // "Loading…" placeholder. Without these calls the editor stayed in
+  // its initial state until the user clicked the Refresh button.
+  if (typeof wire_list_actions === 'function') wire_list_actions();
+  if (typeof refresh_form_vis  === 'function') refresh_form_vis();
+  if (typeof window.dash_ov_refresh === 'function') window.dash_ov_refresh();
 
 })();
 </script>

@@ -383,6 +383,14 @@ describe('dashboard renderer -- every interactive surface routes through the rep
     { label: 'timing chart has range picker', route: /id="timing-range-pick"/ },
     { label: 'timing range default is -12 to +12 (selected)', route: /value="-12,12"\s+selected/ },
     { label: 'timing range picker wired to _timing_render', route: /timing-range-pick[\s\S]{0,100}addEventListener\('change',\s*_timing_render\)/ },
+    // ── Override editor: must boot itself (initial fetch on page load) ────
+    // Bug class: dash_ov_init defines window.dash_ov_refresh but never
+    // calls it at boot, so the page sits on the "● checking server…" +
+    // "Loading…" placeholders until the user clicks the Refresh button.
+    // Guard the boot calls so this can't silently break again.
+    { label: 'override editor boot calls dash_ov_refresh at IIFE end', route: /window\.dash_ov_refresh === 'function'\)\s*window\.dash_ov_refresh\(\)/ },
+    { label: 'override editor boot calls wire_list_actions at IIFE end', route: /wire_list_actions === 'function'\)\s*wire_list_actions\(\)/ },
+    { label: 'override editor boot calls refresh_form_vis at IIFE end', route: /refresh_form_vis\s*=== 'function'\)\s*refresh_form_vis\(\)/ },
     // ── Pace chart: hover readout + median conclusion (#172) ──────────────
     { label: 'pace chart has live hover-readout div', route: /id="pace-readout-text"/ },
     { label: 'pace chart has median-conclusion div', route: /id="pace-conclusion"/ },
@@ -561,5 +569,42 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
     }
     assert.deepEqual(errors, [],
       'inline scripts threw at runtime -- browser would show empty table/charts:\n  ' + errors.join('\n  '));
+  });
+
+  // Stronger guard: simulate http:// + stub fetch, then assert that the
+  // boot path actually CALLS /api/status and /api/overrides. The earlier
+  // bug class -- dash_ov_init defining dash_ov_refresh but never calling
+  // it at boot -- passes the "no throw" test but leaves the editor stuck
+  // on "Loading...". This test catches that.
+  test('inline scripts hit /api/status + /api/overrides on boot (http context)', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    const fetch_calls = [];
+    const sb = make_sandbox();
+    sb.location = { protocol: 'http:', pathname: '/output/dashboard.html', hash: '', href: 'http://localhost:8016/output/dashboard.html' };
+    sb.fetch = (path) => {
+      fetch_calls.push(path);
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: () => Promise.resolve({ force_match: [], force_no_match: [], force_segment: [], stats: {}, time: Date.now() }),
+      });
+    };
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow -- the no-throw test covers that contract */ }
+    }
+    // Wait one microtask tick so the promise chain in dash_ov_refresh runs.
+    return new Promise((resolve) => setTimeout(() => {
+      assert.ok(fetch_calls.includes('/api/status'),
+        '/api/status was never fetched on boot -- override editor will sit on "Loading..." forever. fetch_calls=' + JSON.stringify(fetch_calls));
+      assert.ok(fetch_calls.includes('/api/overrides'),
+        '/api/overrides was never fetched on boot. fetch_calls=' + JSON.stringify(fetch_calls));
+      resolve();
+    }, 100));
   });
 });
