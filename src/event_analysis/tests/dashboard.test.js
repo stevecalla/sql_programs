@@ -666,4 +666,643 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
       resolve();
     }, 1200));
   });
+
+  // ── Enhancement #1: ad-hoc rebuild year-input validation ──────────────────
+  // The years card in dash_ov_init exposes:
+  //   - HTML: <input type=number min=2000 max=2100> + an inline error div
+  //   - JS:   dash_ov_rebuild_with_years() refuses to kick off /api/build
+  //           when both inputs are blank, when either is non-integer, or
+  //           when either is outside [2000, current_year+5].
+  // These guards stop a bad-year rebuild from getting all the way to the
+  // backend (which only surfaces the error in the streaming log).
+
+  test('rebuild years inputs have type=number with min/max guards', () => {
+    const html = render_to_tmp();
+    assert.match(html, /id="dash-ov-rebuild-baseline"[^>]*type="number"/);
+    assert.match(html, /id="dash-ov-rebuild-analysis"[^>]*type="number"/);
+    assert.match(html, /id="dash-ov-rebuild-baseline"[^>]*min="2000"[^>]*max="2100"/);
+    assert.match(html, /id="dash-ov-rebuild-analysis"[^>]*min="2000"[^>]*max="2100"/);
+    assert.match(html, /id="dash-ov-rebuild-years-err"/);
+  });
+
+  // Tiny input-like stub with a working .value + .textContent + addEventListener.
+  function make_input(initial) {
+    const listeners = {};
+    return {
+      value: initial == null ? '' : String(initial),
+      textContent: '',
+      style: {},
+      classList: { add(){}, remove(){}, contains(){return false}, toggle(){} },
+      addEventListener(name, cb){ (listeners[name] = listeners[name] || []).push(cb); },
+      _fire(name){ (listeners[name] || []).forEach((cb) => cb({})); },
+    };
+  }
+
+  // Drive dash_ov_rebuild_with_years directly. Stubs the rebuild kickoff so
+  // we can assert whether the function tried to fire /api/build, and reads
+  // the err div's textContent so we can assert the user-visible message.
+  function run_with_years_harness({ baseline, analysis }) {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    const html_cl = { _set: new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)},
+                      contains(c){return this._set.has(c)}, toggle(c){this._set.has(c)?this._set.delete(c):this._set.add(c)} };
+
+    const bp_el = make_input(baseline);
+    const ap_el = make_input(analysis);
+    const err_el = make_input('');
+    const overlay_el = { style: {}, classList: { _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const sb = make_sandbox();
+    sb.document.documentElement = { classList: html_cl };
+    sb.document.getElementById = (id) => {
+      if (id === 'dash-ov-rebuild-baseline')  return bp_el;
+      if (id === 'dash-ov-rebuild-analysis')  return ap_el;
+      if (id === 'dash-ov-rebuild-years-err') return err_el;
+      if (id === 'dash-ov-overlay')           return overlay_el;
+      return stub_el();
+    };
+
+    const rebuild_calls = [];
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    // Stub the actual rebuild kickoff so we can observe whether validation
+    // let the call through. Must happen AFTER scripts load (the inline IIFE
+    // defines window.dash_ov_rebuild itself; we overwrite it for the test).
+    sb.dash_ov_rebuild = (suffix) => { rebuild_calls.push(suffix); };
+    if (typeof sb.dash_ov_rebuild_with_years !== 'function') {
+      throw new Error('dash_ov_rebuild_with_years was not defined after running inline scripts');
+    }
+    sb.dash_ov_rebuild_with_years();
+    return { rebuild_calls, err_text: err_el.textContent, bp_el, ap_el, err_el };
+  }
+
+  test('rebuild with both years blank shows error and does NOT call dash_ov_rebuild', () => {
+    const { rebuild_calls, err_text } = run_with_years_harness({ baseline: '', analysis: '' });
+    assert.equal(rebuild_calls.length, 0, 'rebuild should not fire with both years blank');
+    assert.match(err_text, /at least one year/i, 'err div should explain the blank-both case');
+  });
+
+  test('rebuild with non-integer year is rejected', () => {
+    const { rebuild_calls, err_text } = run_with_years_harness({ baseline: '20ab', analysis: '2026' });
+    assert.equal(rebuild_calls.length, 0, 'rebuild should not fire when a year is non-integer');
+    assert.match(err_text, /4-digit year/i);
+  });
+
+  test('rebuild with year before 2000 is rejected', () => {
+    const { rebuild_calls, err_text } = run_with_years_harness({ baseline: '1999', analysis: '2026' });
+    assert.equal(rebuild_calls.length, 0);
+    assert.match(err_text, /between 2000/);
+  });
+
+  test('rebuild with year far in the future is rejected', () => {
+    const future = new Date().getFullYear() + 50;
+    const { rebuild_calls, err_text } = run_with_years_harness({ baseline: '2025', analysis: String(future) });
+    assert.equal(rebuild_calls.length, 0);
+    assert.match(err_text, /between 2000/);
+  });
+
+  test('rebuild with valid years calls dash_ov_rebuild with both query params', () => {
+    const { rebuild_calls, err_text } = run_with_years_harness({ baseline: '2024', analysis: '2025' });
+    assert.equal(rebuild_calls.length, 1, 'rebuild should fire once with valid years');
+    assert.equal(rebuild_calls[0], '?baseline_year=2024&analysis_year=2025');
+    assert.equal(err_text, '', 'err div should be cleared on a valid submit');
+  });
+
+  test('rebuild with only one year filled still kicks off (other side defaults at server)', () => {
+    const { rebuild_calls } = run_with_years_harness({ baseline: '', analysis: '2025' });
+    assert.equal(rebuild_calls.length, 1);
+    assert.equal(rebuild_calls[0], '?analysis_year=2025');
+  });
+
+  test('editing the baseline input clears a previously-shown error', () => {
+    const ctx = run_with_years_harness({ baseline: '', analysis: '' });
+    assert.notEqual(ctx.err_text, '', 'pre-condition: error should be visible');
+    ctx.bp_el._fire('input');
+    assert.equal(ctx.err_el.textContent, '', 'editing baseline should clear the err div');
+  });
+
+  // ── Enhancement #2: collapsible override editor with persisted state ─────
+  // The editor is wrapped in a native <details> element, defaults to closed
+  // for first-time visitors, and persists open/closed state via localStorage
+  // ('dash_ov_editor_open' = '1' or '0'). Roster-row clicks auto-expand it.
+
+  test('override editor is rendered as a <details> element with a <summary>', () => {
+    const html = render_to_tmp();
+    // The opening tag carries the id we hook into for boot persistence.
+    assert.match(html, /<details[^>]*\bid="dash-ov-editor"/,
+      'override editor should be a <details id="dash-ov-editor">');
+    // The summary wraps the title bar so clicking the header toggles.
+    assert.match(html, /<summary\s+class="dash-ov-editor-summary"/,
+      '<summary> with class dash-ov-editor-summary should exist');
+    // The chevron span is present (CSS rotates it via [open]).
+    assert.match(html, /class="dash-ov-editor-chevron"/);
+  });
+
+  test('server-status pill lives inside the summary so it shows when collapsed', () => {
+    const html = render_to_tmp();
+    // Pull out the summary block by id-then-summary text.
+    const m = html.match(/<summary\s+class="dash-ov-editor-summary"[^>]*>([\s\S]*?)<\/summary>/);
+    assert.ok(m, 'could not isolate the editor summary block');
+    assert.ok(m[1].includes('id="dash-ov-srv-status"'),
+      'server-status pill should be inside <summary> so the connection state stays visible when the editor is collapsed');
+  });
+
+  // Runtime harness: simulate the page boot with a stateful localStorage
+  // and a stateful <details> stub, then assert what the boot code did.
+  function run_collapse_harness({ initial_storage, focus_row }) {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    // Tracked <details>-like element with open state + toggle listeners.
+    const details_listeners = {};
+    const details_el = {
+      tagName: 'DETAILS',
+      _open: false,
+      get open(){ return this._open; },
+      set open(v){
+        const was = this._open;
+        this._open = !!v;
+        if (was !== this._open) {
+          (details_listeners.toggle || []).forEach((cb) => cb({}));
+        }
+      },
+      style: {},
+      classList: { add(){}, remove(){}, contains(){return false}, toggle(){} },
+      addEventListener(name, cb){ (details_listeners[name] = details_listeners[name] || []).push(cb); },
+      scrollIntoView(){},
+    };
+
+    // Stateful localStorage so we can observe writes.
+    const storage = new Map();
+    if (initial_storage) for (const [k, v] of Object.entries(initial_storage)) storage.set(k, v);
+    const ls = {
+      getItem(k){ return storage.has(k) ? storage.get(k) : null; },
+      setItem(k, v){ storage.set(k, String(v)); },
+      removeItem(k){ storage.delete(k); },
+    };
+
+    const html_cl = { _set: new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)},
+                      contains(c){return this._set.has(c)}, toggle(){} };
+    const overlay_el = { style: {}, classList: { _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const sb = make_sandbox();
+    sb.document.documentElement = { classList: html_cl };
+    sb.localStorage = ls;
+    sb.document.getElementById = (id) => {
+      if (id === 'dash-ov-editor')  return details_el;
+      if (id === 'dash-ov-overlay') return overlay_el;
+      return stub_el();
+    };
+
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow -- no-throw test covers that contract */ }
+    }
+    // Optionally simulate a roster-row click after boot.
+    if (focus_row && typeof sb.dash_ov_focus_row === 'function') {
+      sb.dash_ov_focus_row('BL-1', 'BL-1', 'AN-1');
+    }
+    return { details_el, storage, _trigger_toggle: () => (details_listeners.toggle || []).forEach((cb) => cb({})) };
+  }
+
+  test('first-visit (no localStorage) leaves the editor closed', () => {
+    const { details_el } = run_collapse_harness({ initial_storage: {} });
+    assert.equal(details_el.open, false,
+      'with no dash_ov_editor_open entry, the editor should NOT auto-open on boot');
+  });
+
+  test('localStorage="1" re-opens the editor on boot', () => {
+    const { details_el } = run_collapse_harness({ initial_storage: { dash_ov_editor_open: '1' } });
+    assert.equal(details_el.open, true,
+      'a previously-open editor should restore its open state from localStorage');
+  });
+
+  test('localStorage="0" keeps the editor closed (explicit collapsed)', () => {
+    const { details_el } = run_collapse_harness({ initial_storage: { dash_ov_editor_open: '0' } });
+    assert.equal(details_el.open, false,
+      'a previously-closed editor should stay closed (no false-y vs missing distinction needed)');
+  });
+
+  test('toggling the details element persists the new state to localStorage', () => {
+    const { details_el, storage } = run_collapse_harness({ initial_storage: {} });
+    // Simulate the user expanding the panel.
+    details_el.open = true;
+    assert.equal(storage.get('dash_ov_editor_open'), '1',
+      'opening the editor should write "1" to localStorage');
+    // And collapsing it back.
+    details_el.open = false;
+    assert.equal(storage.get('dash_ov_editor_open'), '0',
+      'closing the editor should write "0" to localStorage');
+  });
+
+  test('clicking a roster row (dash_ov_focus_row) auto-expands a collapsed editor', () => {
+    const { details_el, storage } = run_collapse_harness({ initial_storage: {}, focus_row: true });
+    assert.equal(details_el.open, true,
+      'focus_row should force the editor open even when it was collapsed');
+    assert.equal(storage.get('dash_ov_editor_open'), '1',
+      'auto-expanding should also persist so subsequent reloads stay open');
+  });
+
+  // ── Enhancement #3: override-list filters ────────────────────────────────
+  // Three controls above the list: search input, type dropdown, status
+  // dropdown. State is persisted to localStorage('dash_ov_list_filters')
+  // and applied via window.dash_ov_apply_list_filters (a pure function
+  // exposed for testability). Status buckets are non-overlapping:
+  //   approved   = approved AND not stale
+  //   stale      = approved AND staleness flag set
+  //   unapproved = not approved at all
+
+  test('list filter row renders with search input + type/status selects + clear link', () => {
+    const html = render_to_tmp();
+    assert.match(html, /id="dash-ov-list-filters"/);
+    assert.match(html, /<input[^>]*\btype="text"[^>]*\bid="dash-ov-flt-search"/);
+    assert.match(html, /<select[^>]*\bid="dash-ov-flt-type"/);
+    assert.match(html, /<select[^>]*\bid="dash-ov-flt-status"/);
+    assert.match(html, /id="dash-ov-flt-clear"/);
+    // Type dropdown options
+    assert.match(html, /<option value="force_match">/);
+    assert.match(html, /<option value="force_no_match">/);
+    assert.match(html, /<option value="force_segment">/);
+    // Status dropdown options
+    assert.match(html, /<option value="approved">/);
+    assert.match(html, /<option value="unapproved">/);
+    assert.match(html, /<option value="stale">/);
+  });
+
+  // Harness that runs the inline scripts and exposes
+  // window.dash_ov_apply_list_filters for direct testing.
+  function load_inline_scripts(extra_sandbox) {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+    const sb = make_sandbox();
+    Object.assign(sb, extra_sandbox || {});
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    return sb;
+  }
+
+  // Fixture: 4 overrides covering each type + each status bucket.
+  const filter_fixture = [
+    { _type: 'force_match',    sid_baseline: 'BL-1', sid_analysis: 'AN-1', name_baseline: 'Alpha Race', name_analysis: 'Alpha Race 2026', note: 'merged duplicates', approved: true,  approval_state: null,        id: 1 },
+    { _type: 'force_no_match', sid_baseline: 'BL-2', sid_analysis: 'AN-2', name_baseline: 'Beta Race',  name_analysis: 'Different Beta', note: '',                  approved: false, approval_state: null,        id: 2 },
+    { _type: 'force_segment',  sid_baseline: 'BL-3', sid_analysis: null,   name_baseline: 'Gamma Race', name_analysis: null,            note: 'set to Lost',        approved: true,  approval_state: 'stale',     id: 3 },
+    { _type: 'force_match',    sid_baseline: 'BL-4', sid_analysis: 'AN-4', name_baseline: 'Delta Race', name_analysis: 'Delta Race',    note: 'reviewed',           approved: false, approval_state: 'unapproved', id: 4 },
+  ];
+
+  test('apply_list_filters: no filters returns all items', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: '', type: 'all', status: 'all' });
+    assert.equal(out.length, 4);
+  });
+
+  test('apply_list_filters: search matches sid', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: 'BL-2', type: 'all', status: 'all' });
+    assert.deepEqual(out.map((o) => o.id), [2]);
+  });
+
+  test('apply_list_filters: search matches event name (case-insensitive)', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: 'gamma', type: 'all', status: 'all' });
+    assert.deepEqual(out.map((o) => o.id), [3]);
+  });
+
+  test('apply_list_filters: search matches note', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: 'reviewed', type: 'all', status: 'all' });
+    assert.deepEqual(out.map((o) => o.id), [4]);
+  });
+
+  test('apply_list_filters: type filter narrows to one override kind', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: '', type: 'force_match', status: 'all' });
+    assert.deepEqual(out.map((o) => o.id).sort(), [1, 4]);
+  });
+
+  test('apply_list_filters: status="approved" excludes stale even if approved=true', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: '', type: 'all', status: 'approved' });
+    // id 1 is approved+fresh; id 3 is approved+stale (excluded)
+    assert.deepEqual(out.map((o) => o.id), [1]);
+  });
+
+  test('apply_list_filters: status="stale" returns only stale rows', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: '', type: 'all', status: 'stale' });
+    assert.deepEqual(out.map((o) => o.id), [3]);
+  });
+
+  test('apply_list_filters: status="unapproved" returns only !approved rows', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: '', type: 'all', status: 'unapproved' });
+    assert.deepEqual(out.map((o) => o.id).sort(), [2, 4]);
+  });
+
+  test('apply_list_filters: combined search + type + status narrows further', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: 'delta', type: 'force_match', status: 'unapproved' });
+    assert.deepEqual(out.map((o) => o.id), [4]);
+  });
+
+  // Runtime persistence: with a stateful localStorage carrying a saved
+  // filter state, the inputs should be populated at boot.
+  test('filter state restores from localStorage on boot', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    // Track values written to the three filter inputs.
+    const search_el = { value: '', style: {}, classList: { add(){}, remove(){}, contains(){return false}, toggle(){} }, addEventListener(){}, };
+    const type_el   = { value: 'all', style: {}, classList: { add(){}, remove(){}, contains(){return false}, toggle(){} }, addEventListener(){}, };
+    const status_el = { value: 'all', style: {}, classList: { add(){}, remove(){}, contains(){return false}, toggle(){} }, addEventListener(){}, };
+
+    const storage = new Map([['dash_ov_list_filters', JSON.stringify({ search: 'beta', type: 'force_no_match', status: 'unapproved' })]]);
+    const sb = make_sandbox();
+    sb.localStorage = {
+      getItem: (k) => storage.has(k) ? storage.get(k) : null,
+      setItem: (k, v) => storage.set(k, String(v)),
+      removeItem: (k) => storage.delete(k),
+    };
+    sb.document.getElementById = (id) => {
+      if (id === 'dash-ov-flt-search') return search_el;
+      if (id === 'dash-ov-flt-type')   return type_el;
+      if (id === 'dash-ov-flt-status') return status_el;
+      return stub_el();
+    };
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    assert.equal(search_el.value, 'beta',           'restore: search should be set from localStorage');
+    assert.equal(type_el.value,   'force_no_match', 'restore: type should be set from localStorage');
+    assert.equal(status_el.value, 'unapproved',     'restore: status should be set from localStorage');
+  });
+
+  // ── Enhancement #5: add-override form validation ─────────────────────────
+  // dash_ov_validate_add_form is a pure helper that takes opts.fields (a
+  // map of element id -> value) and returns { ok, problems: [...] }. It
+  // also reads BASELINE_SIDS / ANALYSIS_SIDS which are built at boot from
+  // ROSTER. The fixture roster has sid_baseline 'BL-1' / 'BL-LOST' and
+  // sid_analysis 'AN-1' / 'AN-NEW'.
+
+  test('add-override form err div is rendered (empty by default)', () => {
+    const html = render_to_tmp();
+    assert.match(html, /<div\s+id="dash-ov-form-err"[^>]*class="dash-ov-form-err"[^>]*><\/div>/);
+  });
+
+  test('CSS for .dash-ov-input-err is in the stylesheet', () => {
+    const html = render_to_tmp();
+    assert.match(html, /\.dash-ov-input-err\b/);
+  });
+
+  test('BASELINE_SIDS and ANALYSIS_SIDS are populated from ROSTER at boot', () => {
+    const sb = load_inline_scripts();
+    // The fixture's three rows:
+    //   Retained -> sid_baseline=BL-1,   sid_analysis=AN-1
+    //   Lost     -> sid_baseline=BL-LOST (no analysis)
+    //   New      -> sid_analysis=AN-NEW  (no baseline)
+    // The pure validator surfaces these via the wrong-box message.
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_match',
+      'dash-ov-sidB': 'AN-1',  // analysis sid in baseline box
+      'dash-ov-sidA': 'BL-1',  // baseline sid in analysis box
+    }});
+    assert.equal(r.ok, false);
+    // Both should be flagged as wrong-box.
+    var msgs = r.problems.map(function(p){ return p.msg; }).join(' | ');
+    assert.match(msgs, /'AN-1' is a analysis-year sid; move it to the Analysis box/);
+    assert.match(msgs, /'BL-1' is a baseline-year sid; move it to the Baseline box/);
+  });
+
+  test('force_match with missing sidA is rejected', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_match',
+      'dash-ov-sidB': 'BL-1',
+      'dash-ov-sidA': '',
+    }});
+    assert.equal(r.ok, false);
+    assert.equal(r.problems.length, 1);
+    assert.equal(r.problems[0].field, 'dash-ov-sidA');
+    assert.match(r.problems[0].msg, /needs an Analysis sid/);
+  });
+
+  test('force_no_match with missing sidB is rejected', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_no_match',
+      'dash-ov-sidB': '',
+      'dash-ov-sidA': 'AN-1',
+    }});
+    assert.equal(r.ok, false);
+    assert.equal(r.problems[0].field, 'dash-ov-sidB');
+    assert.match(r.problems[0].msg, /needs a Baseline sid/);
+  });
+
+  test('force_segment with side=baseline and empty sidB is rejected', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_segment',
+      'dash-ov-side': 'baseline',
+      'dash-ov-sidB': '',
+      'dash-ov-sidA': '',
+    }});
+    assert.equal(r.ok, false);
+    assert.equal(r.problems[0].field, 'dash-ov-sidB');
+  });
+
+  test('unknown sid (not in either pool) gets "no event" message', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_match',
+      'dash-ov-sidB': 'BL-1',
+      'dash-ov-sidA': 'TOTALLY-FAKE-SID',
+    }});
+    assert.equal(r.ok, false);
+    assert.equal(r.problems[0].field, 'dash-ov-sidA');
+    assert.match(r.problems[0].msg, /doesn't match any event in the current roster/);
+  });
+
+  test('same sid in both boxes is rejected', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_match',
+      'dash-ov-sidB': 'BL-1',
+      'dash-ov-sidA': 'BL-1',  // duplicate (and wrong-box)
+    }});
+    assert.equal(r.ok, false);
+    // We expect BOTH the wrong-box AND the self-link errors (the
+    // wrong-box check runs first; self-link is a defensive last check).
+    var msgs = r.problems.map(function(p){ return p.msg; }).join(' | ');
+    assert.match(msgs, /Baseline and Analysis sids must be different/);
+  });
+
+  test('valid force_match with correct-box sids passes', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_match',
+      'dash-ov-sidB': 'BL-1',
+      'dash-ov-sidA': 'AN-1',
+    }});
+    assert.equal(r.ok, true);
+    assert.equal(r.problems.length, 0);
+  });
+
+  test('valid force_segment with the right side filled passes', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_segment',
+      'dash-ov-side': 'baseline',
+      'dash-ov-sidB': 'BL-LOST',
+      'dash-ov-sidA': '',
+    }});
+    assert.equal(r.ok, true);
+  });
+
+  // ── Regression guard: expand modal mirrors source view (chart vs table) ─
+  // Before this fix, expand_chart(id) always rendered a Chart.js instance
+  // into <canvas id="modal-chart">, ignoring whether the source card was
+  // currently in table-flip mode. So clicking [Expand] after flipping to
+  // table view showed the chart anyway. The fix detects style.display on
+  // the source canvas and dispatches to _render_modal_chart or
+  // _render_modal_table accordingly.
+
+  test('expand modal HTML has both a chart canvas and a table div with a flip button', () => {
+    const html = render_to_tmp();
+    assert.match(html, /<canvas id="modal-chart">/);
+    assert.match(html, /id="modal-flip-tbl"[^>]*class="chart-flip-tbl[^"]*modal-flip-tbl/);
+    assert.match(html, /id="modal-flip-btn"[^>]*onclick="modal_flip\(\)"/);
+  });
+
+  test('expanding a chart in chart-mode shows the canvas, hides the modal table', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    // Source card: a chart with display in chart mode (no display:none).
+    const src_canvas = { style: { display: '' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_canvas = { style: { display: '' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_tbl    = { style: { display: 'none' }, innerHTML: '', classList:{ _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+    const modal_btn    = { textContent: '⇄ Table', title: '', classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const chart_modal_root = { classList: { _set: new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const sb = make_sandbox();
+    sb.document.getElementById = (id) => {
+      if (id === 'modal-chart')    return modal_canvas;
+      if (id === 'modal-flip-tbl') return modal_tbl;
+      if (id === 'modal-flip-btn') return modal_btn;
+      if (id === 'chart-modal')    return chart_modal_root;
+      if (id === 'modal-title')    return { textContent: '', childNodes: [{ nodeValue: '' }] };
+      if (id === 'c_segment')      return src_canvas;
+      return stub_el();
+    };
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    if (typeof sb.expand_chart !== 'function') throw new Error('expand_chart not defined');
+    sb.expand_chart('c_segment');
+    // Modal should show canvas, hide table.
+    assert.equal(modal_canvas.style.display, '',     'canvas should be visible in chart mode');
+    assert.equal(modal_tbl.style.display,    'none', 'table div should be hidden in chart mode');
+    assert.equal(modal_btn.textContent,      '⇄ Table', 'button should offer "switch to table" in chart mode');
+  });
+
+  test('expanding a chart in TABLE mode shows the modal table, hides the canvas', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    // Source card: in TABLE-flip mode (canvas display:none).
+    const src_canvas = { style: { display: 'none' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_canvas = { style: { display: '' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_tbl    = { style: { display: 'none' }, innerHTML: '', classList:{ _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+    const modal_btn    = { textContent: '⇄ Table', title: '', classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const chart_modal_root = { classList: { _set: new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const sb = make_sandbox();
+    sb.document.getElementById = (id) => {
+      if (id === 'modal-chart')    return modal_canvas;
+      if (id === 'modal-flip-tbl') return modal_tbl;
+      if (id === 'modal-flip-btn') return modal_btn;
+      if (id === 'chart-modal')    return chart_modal_root;
+      if (id === 'modal-title')    return { textContent: '', childNodes: [{ nodeValue: '' }] };
+      if (id === 'c_segment')      return src_canvas;
+      return stub_el();
+    };
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    sb.expand_chart('c_segment');
+    // The bug was: canvas would be visible, table div hidden. After fix:
+    // canvas display:none, table div display:block.
+    assert.equal(modal_canvas.style.display, 'none',  'canvas should be HIDDEN when source is in table mode -- this is the bug');
+    assert.equal(modal_tbl.style.display,    'block', 'table div should be visible when source is in table mode');
+    assert.equal(modal_btn.textContent,      '📊 Chart', 'button should offer "switch to chart" in table mode');
+  });
+
+  test('modal_flip toggles between chart and table view inside the modal', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    const src_canvas = { style: { display: '' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_canvas = { style: { display: '' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_tbl    = { style: { display: 'none' }, innerHTML: '', classList:{ _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+    const modal_btn    = { textContent: '⇄ Table', title: '', classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const chart_modal_root = { classList: { _set: new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const sb = make_sandbox();
+    sb.document.getElementById = (id) => {
+      if (id === 'modal-chart')    return modal_canvas;
+      if (id === 'modal-flip-tbl') return modal_tbl;
+      if (id === 'modal-flip-btn') return modal_btn;
+      if (id === 'chart-modal')    return chart_modal_root;
+      if (id === 'modal-title')    return { textContent: '', childNodes: [{ nodeValue: '' }] };
+      if (id === 'c_segment')      return src_canvas;
+      return stub_el();
+    };
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    sb.expand_chart('c_segment');  // starts in chart mode
+    assert.equal(modal_canvas.style.display, '');
+    sb.modal_flip();               // -> table mode
+    assert.equal(modal_canvas.style.display, 'none', 'first flip should hide canvas');
+    assert.equal(modal_tbl.style.display,    'block', 'first flip should show table');
+    sb.modal_flip();               // -> chart mode
+    assert.equal(modal_canvas.style.display, '',     'second flip should restore canvas');
+    assert.equal(modal_tbl.style.display,    'none', 'second flip should hide table');
+  });
 });

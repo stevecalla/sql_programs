@@ -415,6 +415,11 @@ canvas{width:100%!important;max-height:220px}
              cursor:pointer;font-size:1rem;color:#555}
 .modal-close:hover{background:#C62828;color:#fff}
 .modal-canvas-wrap{flex:1;position:relative;min-height:0}
+/* Modal table view: fills the canvas-wrap when the source card was
+   flipped to table mode. Same styling as the in-card table but allowed
+   to grow + scroll. */
+.modal-flip-tbl{flex:1;min-height:0;overflow:auto;display:none}
+.modal-flip-tbl.open{display:block}
 /* ── Panel ── */
 .panel-body{margin-top:12px}
 .panel-body.hidden{display:none}
@@ -662,8 +667,28 @@ canvas{width:100%!important;max-height:220px}
 
 /* ── Inline editor panel ──────────────────────────────────────────────── */
 .dash-ov-editor{padding:14px 18px}
-.dash-ov-editor h3{margin:0 0 .5rem;font-size:1rem;display:flex;align-items:center;gap:10px}
+.dash-ov-editor h3{margin:0;font-size:1rem;display:flex;align-items:center;gap:10px}
 .dash-ov-editor h3 .muted{color:#656d76;font-size:.78rem;font-weight:400}
+/* <details>/<summary> styling. Hide native disclosure triangle (both spec
+   names) and supply our own chevron that rotates when the panel is open.
+   The summary wraps the existing h3 so the title bar IS the click target. */
+.dash-ov-editor>summary.dash-ov-editor-summary{
+  cursor:pointer;list-style:none;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:0;margin:0;
+}
+.dash-ov-editor>summary.dash-ov-editor-summary::-webkit-details-marker{display:none}
+.dash-ov-editor>summary.dash-ov-editor-summary::marker{display:none;content:""}
+.dash-ov-editor>summary.dash-ov-editor-summary>h3{flex:1;min-width:0}
+.dash-ov-editor-chevron{
+  display:inline-block;color:#656d76;font-size:.85rem;
+  transition:transform 160ms ease-out;transform:rotate(-90deg);
+  user-select:none;
+}
+.dash-ov-editor[open]>summary.dash-ov-editor-summary .dash-ov-editor-chevron{transform:rotate(0deg)}
+/* When the panel is open, add a small gap between the summary and the
+   first child block so the layout matches what the old h3 margin gave us. */
+.dash-ov-editor[open]>summary.dash-ov-editor-summary{margin-bottom:.5rem}
 .dash-ov-editor .dash-ov-srv-status{font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:10px;background:#eee;color:#999}
 .dash-ov-editor .dash-ov-srv-status.ok   {background:#dafbe1;color:#1a7f37}
 .dash-ov-editor .dash-ov-srv-status.err  {background:#ffebe9;color:#82071e}
@@ -671,6 +696,15 @@ canvas{width:100%!important;max-height:220px}
 @media (max-width:780px){.dash-ov-grid{grid-template-columns:1fr}}
 
 .dash-ov-list{font-size:.78rem;background:#f8f9fa;border-radius:6px;padding:10px;min-height:100px;max-height:340px;overflow-y:auto}
+/* Filter row above the list. Three controls + a clear link. Wraps on
+   narrow viewports so the editor still works on mobile. */
+.dash-ov-list-filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.dash-ov-list-filters>input,
+.dash-ov-list-filters>select{font-size:.75rem;padding:4px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#333}
+.dash-ov-list-filters>input{flex:1;min-width:120px}
+.dash-ov-list-filters>select{cursor:pointer}
+.dash-ov-list-filters>#dash-ov-flt-clear{font-size:.72rem;color:#0969da;text-decoration:none;padding:2px 4px}
+.dash-ov-list-filters>#dash-ov-flt-clear:hover{text-decoration:underline}
 .dash-ov-list-item{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #eaecef}
 .dash-ov-list-item:last-child{border-bottom:none}
 .dash-ov-list-item.dash-ov-selected-row{background:#e3f2fd;margin:0 -4px;padding:6px 8px;border-radius:4px}
@@ -698,6 +732,11 @@ canvas{width:100%!important;max-height:220px}
 .dash-ov-form .check{flex-direction:row;align-items:center;flex:0 0 auto;min-width:auto;cursor:pointer}
 .dash-ov-form .check span{color:#1f2328;font-weight:500;margin-left:.3rem}
 .dash-ov-form .actions{display:flex;align-items:center;gap:8px;margin-top:.2rem}
+/* Add-override form validation. Red border + small message line below
+   the actions row. Both cleared by editing the offending field. */
+.dash-ov-form .dash-ov-input-err{border-color:#BF1B2C !important;box-shadow:0 0 0 2px rgba(191,27,44,0.12) !important}
+.dash-ov-form-err{font-size:.75rem;color:#BF1B2C;margin-top:6px;min-height:0;line-height:1.35}
+.dash-ov-form-err:empty{display:none}
 .dash-ov-toast{position:fixed;bottom:1.4rem;right:1.4rem;padding:.6rem .9rem;border-radius:6px;background:#1f2328;color:#fff;font-size:.82rem;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:400px;opacity:0;transform:translateY(.4rem);transition:opacity .18s,transform .18s;pointer-events:none;z-index:9999}
 .dash-ov-toast.show{opacity:1;transform:translateY(0)}
 .dash-ov-toast.err{background:#cf222e}
@@ -1075,14 +1114,25 @@ ${has_table ? `
   </div>
 </div>
 
-<!-- ── Inline override editor panel (Step 9 integration) ───────────────── -->
+<!-- ── Inline override editor panel (Step 9 integration) ─────────────────
+     Collapsible via native <details>. Default = closed for first-time
+     visitors (the editor is a power-user tool, most dashboard viewers
+     never touch it). Open/closed state is persisted to localStorage
+     ('dash_ov_editor_open' = '1' or '0') by the toggle listener in
+     dash_ov_init. Roster-row clicks force the panel open so the focus-
+     an-event flow still works when the user has it collapsed. The
+     server-status pill lives inside the <summary> so operators can
+     still see "checking / ok / err" without expanding the panel. -->
 <div class="row" style="margin-bottom:10px">
-  <div class="card card-full dash-ov-editor" id="dash-ov-editor">
-    <h3>
-      ⚙ Override editor
-      <span class="dash-ov-srv-status" id="dash-ov-srv-status">● checking server…</span>
-      <span class="muted">Edits write to the DB immediately; rebuild to apply to charts.</span>
-    </h3>
+  <details class="card card-full dash-ov-editor" id="dash-ov-editor">
+    <summary class="dash-ov-editor-summary">
+      <h3>
+        ⚙ Override editor
+        <span class="dash-ov-srv-status" id="dash-ov-srv-status">● checking server…</span>
+        <span class="muted">Edits write to the DB immediately; rebuild to apply to charts.</span>
+      </h3>
+      <span class="dash-ov-editor-chevron" aria-hidden="true">▾</span>
+    </summary>
 
     <div id="dash-ov-selected" style="display:none"></div>
 
@@ -1094,6 +1144,27 @@ ${has_table ? `
           <span class="muted" id="dash-ov-list-summary" style="font-weight:400"></span>
           <button class="dash-ov-btn" type="button" style="margin-left:auto;font-size:.7rem"
                   onclick="dash_ov_refresh()">↻ Refresh</button>
+        </div>
+        <!-- Filter row: search + type + status. State persists to
+             localStorage('dash_ov_list_filters'). The clear link is shown
+             only when at least one filter is non-default. -->
+        <div class="dash-ov-list-filters" id="dash-ov-list-filters">
+          <input type="text" id="dash-ov-flt-search" placeholder="🔍 search sid, name, note…"
+                 autocomplete="off" spellcheck="false">
+          <select id="dash-ov-flt-type" title="Filter by override type">
+            <option value="all">All types</option>
+            <option value="force_match">force_match</option>
+            <option value="force_no_match">force_no_match</option>
+            <option value="force_segment">force_segment</option>
+          </select>
+          <select id="dash-ov-flt-status" title="Filter by approval status">
+            <option value="all">All status</option>
+            <option value="approved">Approved</option>
+            <option value="unapproved">Unapproved</option>
+            <option value="stale">Stale</option>
+          </select>
+          <a href="#" id="dash-ov-flt-clear" style="display:none"
+             onclick="dash_ov_filters_clear();return false">× clear</a>
         </div>
         <div class="dash-ov-list" id="dash-ov-list">
           <div class="dash-ov-empty">Loading…</div>
@@ -1164,10 +1235,15 @@ ${has_table ? `
             <button type="submit" class="dash-ov-btn dash-ov-btn-primary">+ Add override</button>
             <span class="muted" id="dash-ov-server-hint" style="font-size:.7rem"></span>
           </div>
+          <!-- Aggregated validation messages for the add-override form.
+               Populated by validate_add_override_form() before the POST.
+               Bad inputs also get the .dash-ov-input-err class for a red
+               border. Both clear when the operator edits the field. -->
+          <div id="dash-ov-form-err" class="dash-ov-form-err"></div>
         </form>
       </div>
     </div>
-  </div>
+  </details>
 </div>
 
 <div id="dash-ov-toast" class="dash-ov-toast" role="status" aria-live="polite"></div>
@@ -1209,6 +1285,11 @@ ${has_table ? `
                 type="button" onclick="dash_ov_rebuild_with_years()">▶ Rebuild with these years</button>
         <span class="help">Year pair is sent to <code>/api/build</code> as query params — equivalent to <code>node build_all.js --baseline-year YYYY --analysis-year YYYY</code></span>
       </div>
+      <!-- Inline validation message. Populated by dash_ov_rebuild_with_years
+           when the operator hits the button with empty / non-integer / out-
+           of-range years. Stays empty (display:none via CSS) when valid. -->
+      <div id="dash-ov-rebuild-years-err"
+           style="margin-top:6px;font-size:.78rem;color:#BF1B2C;min-height:0"></div>
     </details>
     <div id="dash-ov-rebuild-log"></div>
   </div>
@@ -3203,6 +3284,30 @@ if(ROSTER && ROSTER.length > 0){
   var _selected_sid = null; // currently-selected sid (from row click)
   var _dirty        = false;
   var _toast_t      = null;
+  // Override-list filters. Restored from localStorage in the boot block;
+  // mutated by the input/change listeners wired in wire_list_filters().
+  // apply_list_filters() reads this and returns a narrowed array.
+  var _list_filters = { search: '', type: 'all', status: 'all' };
+  var _LIST_FILTERS_DEFAULTS = { search: '', type: 'all', status: 'all' };
+
+  // SID pools for add-override form validation. Built once at boot from
+  // the in-page ROSTER array. Each set has the sids that legitimately
+  // belong in that year's input box. Used by validate_add_override_form
+  // to flag wrong-box mistakes ("'BL-1' is a baseline-year sid; move it
+  // to the Baseline box") and totally-unknown sids before the POST.
+  var BASELINE_SIDS = new Set();
+  var ANALYSIS_SIDS = new Set();
+  // ROSTER is the top-level const declared by the renderer. It's in our
+  // closure (top-level const doesn't create a window property), so we
+  // reference it by name. typeof guard keeps this safe if a future
+  // refactor renames the binding.
+  if (typeof ROSTER !== 'undefined' && Array.isArray(ROSTER)) {
+    for (var _i = 0; _i < ROSTER.length; _i++) {
+      var _r = ROSTER[_i];
+      if (_r.sid_baseline) BASELINE_SIDS.add(_r.sid_baseline);
+      if (_r.sid_analysis) ANALYSIS_SIDS.add(_r.sid_analysis);
+    }
+  }
 
   // ── Helpers ─────────────────────────────────────────────────────────
   function $id(id){ return document.getElementById(id); }
@@ -3337,6 +3442,36 @@ if(ROSTER && ROSTER.length > 0){
   }
 
   // ── Render: active overrides list ───────────────────────────────────
+  // Pure filter helper. Exposed on window so the test harness can call it
+  // directly without going through the DOM. The four status buckets are
+  // intentionally non-overlapping: 'approved' = approved AND not stale,
+  // 'stale' = approved AND staleness flag set, 'unapproved' = not
+  // approved at all. This matches what the operator sees in the row's
+  // action button (↶ vs ✓) and what the badge color shows.
+  window.dash_ov_apply_list_filters = function(items, filters) {
+    if (!filters) return items;
+    var q = (filters.search || '').trim().toLowerCase();
+    var type = filters.type || 'all';
+    var status = filters.status || 'all';
+    return items.filter(function(o) {
+      if (type !== 'all' && o._type !== type) return false;
+      if (status !== 'all') {
+        var is_stale = o.approval_state === 'stale';
+        var is_approved_fresh = !!o.approved && !is_stale;
+        if (status === 'approved'   && !is_approved_fresh) return false;
+        if (status === 'stale'      && !is_stale)          return false;
+        if (status === 'unapproved' &&  o.approved)        return false;
+      }
+      if (q) {
+        var hay = [o.sid_baseline, o.sid_analysis, o.name_baseline, o.name_analysis, o.note]
+          .map(function(s){ return (s == null ? '' : String(s)).toLowerCase(); })
+          .join(' \\u241f ');  // unit separator — avoids cross-field matches
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+  };
+
   function render_list(){
     var list = $id('dash-ov-list');
     var summary = $id('dash-ov-list-summary');
@@ -3348,17 +3483,35 @@ if(ROSTER && ROSTER.length > 0){
       .concat((_overrides.force_segment || []).map(function(o){ return Object.assign({}, o, { _type: 'force_segment' }); }))
       .sort(function(a,b){ return a.id - b.id; });
 
+    var total = all.length;
+    var filtered = window.dash_ov_apply_list_filters(all, _list_filters);
+    var any_filter_active = _list_filters.search || _list_filters.type !== 'all' || _list_filters.status !== 'all';
+
     var stats = _overrides.stats || {};
     if (summary) {
-      summary.textContent = all.length
-        ? '· ' + all.length + ' total · ' + (stats.approved||0) + ' approved · ' + (stats.unapproved||0) + ' unapproved · ' + (stats.stale||0) + ' stale'
-        : '';
+      if (!total) {
+        summary.textContent = '';
+      } else if (any_filter_active) {
+        summary.textContent = '· Showing ' + filtered.length + ' of ' + total
+          + ' · ' + (stats.approved||0) + ' approved · ' + (stats.unapproved||0) + ' unapproved · ' + (stats.stale||0) + ' stale';
+      } else {
+        summary.textContent = '· ' + total + ' total · ' + (stats.approved||0) + ' approved · ' + (stats.unapproved||0) + ' unapproved · ' + (stats.stale||0) + ' stale';
+      }
     }
+    // Show/hide the clear link based on whether any filter is non-default.
+    var clear_el = $id('dash-ov-flt-clear');
+    if (clear_el) clear_el.style.display = any_filter_active ? '' : 'none';
 
-    if (!all.length) {
+    if (!total) {
       list.innerHTML = '<div class="dash-ov-empty">No active overrides in this year scope.</div>';
       return;
     }
+    if (!filtered.length) {
+      list.innerHTML = '<div class="dash-ov-empty">No overrides match the current filters.</div>';
+      return;
+    }
+    // Reassign 'all' so the existing render loop below uses the filtered set.
+    all = filtered;
 
     // Render the event name (or a placeholder when the underlying event
     // was removed from event_data_metrics) as a small italic line so the
@@ -3428,7 +3581,17 @@ if(ROSTER && ROSTER.length > 0){
     render_selected();
     render_list();
     var editor = $id('dash-ov-editor');
-    if (editor) editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (editor) {
+      // Auto-expand the collapsible <details> so the focused event is
+      // actually visible. Without this, clicking a roster row when the
+      // operator has the panel collapsed silently does nothing. Persist
+      // the open state so subsequent reloads stay expanded.
+      if (editor.tagName === 'DETAILS' && !editor.open) {
+        editor.open = true;
+        try { localStorage.setItem('dash_ov_editor_open', '1'); } catch (e) {}
+      }
+      editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
   window.dash_ov_clear_selection = function(){
     _selected_sid = null;
@@ -3545,10 +3708,83 @@ if(ROSTER && ROSTER.length > 0){
     $id('dash-ov-sidA-wrap').style.display = (show_both_sids || (need_side && side === 'analysis')) ? '' : 'none';
   }
 
+  // ── Add-override form validation (Step 5) ───────────────────────────
+  // Pure helper. Exposed on window so tests can call it directly without
+  // going through the DOM submit dance. Reads field values (either from
+  // an opts.fields override map for testing, or from the live form),
+  // returns { ok, problems: [{ field, msg }] }. Rules:
+  //   1. Required fields by type. force_match / force_no_match need both
+  //      sids; force_segment needs the sid matching the Side dropdown.
+  //   2. Each filled sid must exist in the right pool. If it's in the
+  //      OTHER pool, emit a specific "belongs in the X box" message;
+  //      otherwise "doesn't match any event in the current roster".
+  //   3. sidB !== sidA (defensive; they're drawn from disjoint pools).
+  window.dash_ov_validate_add_form = function(opts) {
+    opts = opts || {};
+    function get(id) {
+      if (opts.fields && opts.fields[id] != null) return String(opts.fields[id]).trim();
+      var el = $id(id);
+      return el ? String(el.value || '').trim() : '';
+    }
+    var type = get('dash-ov-type');
+    var side = get('dash-ov-side');
+    var sidB = get('dash-ov-sidB');
+    var sidA = get('dash-ov-sidA');
+    var problems = [];
+
+    if (type === 'force_match' || type === 'force_no_match') {
+      var label = (type === 'force_match' ? 'force_match' : 'force_no_match');
+      if (!sidB) problems.push({ field: 'dash-ov-sidB', msg: label + ' needs a Baseline sid' });
+      if (!sidA) problems.push({ field: 'dash-ov-sidA', msg: label + ' needs an Analysis sid' });
+    } else if (type === 'force_segment') {
+      if (side === 'baseline' && !sidB) problems.push({ field: 'dash-ov-sidB', msg: 'force_segment with side=baseline needs a Baseline sid' });
+      if (side === 'analysis' && !sidA) problems.push({ field: 'dash-ov-sidA', msg: 'force_segment with side=analysis needs an Analysis sid' });
+    }
+
+    function check(sid, expect_set, other_set, field, other_box) {
+      if (!sid) return;
+      if (expect_set.has(sid)) return;
+      if (other_set.has(sid)) {
+        problems.push({ field: field, msg: "'" + sid + "' is a " + other_box.toLowerCase() + "-year sid; move it to the " + other_box + " box" });
+      } else {
+        problems.push({ field: field, msg: "'" + sid + "' doesn't match any event in the current roster" });
+      }
+    }
+    check(sidB, BASELINE_SIDS, ANALYSIS_SIDS, 'dash-ov-sidB', 'Analysis');
+    check(sidA, ANALYSIS_SIDS, BASELINE_SIDS, 'dash-ov-sidA', 'Baseline');
+
+    if (sidB && sidA && sidB === sidA) {
+      problems.push({ field: 'dash-ov-sidA', msg: 'Baseline and Analysis sids must be different' });
+    }
+
+    return { ok: problems.length === 0, problems: problems };
+  };
+
+  // Apply validation results to the live form: mark bad inputs red,
+  // write aggregated messages into #dash-ov-form-err.
+  function paint_validation_problems(problems) {
+    var err_div = $id('dash-ov-form-err');
+    ['dash-ov-sidB', 'dash-ov-sidA', 'dash-ov-type', 'dash-ov-side'].forEach(function(id) {
+      var el = $id(id); if (el) el.classList.remove('dash-ov-input-err');
+    });
+    if (!problems.length) { if (err_div) err_div.textContent = ''; return; }
+    problems.forEach(function(p) {
+      var el = $id(p.field); if (el) el.classList.add('dash-ov-input-err');
+    });
+    if (err_div) err_div.textContent = problems.map(function(p){ return p.msg; }).join('. ') + '.';
+  }
+
   // ── Form submit ─────────────────────────────────────────────────────
   window.dash_ov_submit = function(e){
     if (e && e.preventDefault) e.preventDefault();
     if (!IS_SERVED) { show_toast('Server offline. Start: node server_event_analysis_8016.js', 'err'); return false; }
+
+    // Step 5 client-side validation: catches blank-required, sid-not-in-
+    // dataset, sid-in-wrong-box, and self-link mistakes BEFORE the POST.
+    var v = window.dash_ov_validate_add_form();
+    if (!v.ok) { paint_validation_problems(v.problems); return false; }
+    paint_validation_problems([]);
+
     var type = $id('dash-ov-type').value;
     var body = {
       type: type,
@@ -3735,16 +3971,156 @@ if(ROSTER && ROSTER.length > 0){
   };
 
   // ── Rebuild with ad-hoc years (the collapsed details block) ───────────────
+  // Validates input BEFORE kicking off /api/build, because the server returns
+  // a vague 500 on a bad year and the operator has to dig through the log to
+  // see why. Cheaper to refuse at the source.
+  //
+  // Rules:
+  //   - At least one of (baseline, analysis) must be filled (otherwise this
+  //     button is identical to the default "Rebuild now" -- redirect).
+  //   - Each filled value must be a whole integer in [2000, current+5]. The
+  //     HTML min/max already enforces this in well-behaved browsers, but a
+  //     paste or programmatic set can bypass the browser validator.
   window.dash_ov_rebuild_with_years = function() {
     var bp = $id('dash-ov-rebuild-baseline');
     var ap = $id('dash-ov-rebuild-analysis');
+    var err = $id('dash-ov-rebuild-years-err');
     var by = (bp && bp.value || '').trim();
     var ay = (ap && ap.value || '').trim();
+
+    var YEAR_MIN = 2000;
+    var YEAR_MAX = new Date().getFullYear() + 5;
+    var problems = [];
+
+    function valid_year(s, label) {
+      if (s === '') return true;             // empty is OK; server defaults from .env
+      if (!/^\\d{4}$/.test(s)) { problems.push(label + ' must be a 4-digit year'); return false; }
+      var n = parseInt(s, 10);
+      if (n < YEAR_MIN || n > YEAR_MAX) {
+        problems.push(label + ' must be between ' + YEAR_MIN + ' and ' + YEAR_MAX);
+        return false;
+      }
+      return true;
+    }
+
+    if (by === '' && ay === '') {
+      problems.push('Enter at least one year (or use the default "Rebuild now" button)');
+    }
+    valid_year(by, 'Baseline year');
+    valid_year(ay, 'Analysis year');
+
+    if (problems.length) {
+      if (err) err.textContent = problems.join('. ') + '.';
+      return;
+    }
+    if (err) err.textContent = '';
+
     var params = [];
     if (by) params.push('baseline_year=' + encodeURIComponent(by));
     if (ay) params.push('analysis_year=' + encodeURIComponent(ay));
     var suffix = params.length ? '?' + params.join('&') : '';
     if (typeof window.dash_ov_rebuild === 'function') window.dash_ov_rebuild(suffix);
+  };
+
+  // Clear the inline error as soon as the operator edits either field, so the
+  // message doesn't linger once they've started correcting the input.
+  (function wire_year_clear(){
+    var bp = $id('dash-ov-rebuild-baseline');
+    var ap = $id('dash-ov-rebuild-analysis');
+    var err = $id('dash-ov-rebuild-years-err');
+    function clear(){ if (err) err.textContent = ''; }
+    if (bp) bp.addEventListener('input', clear);
+    if (ap) ap.addEventListener('input', clear);
+  })();
+
+  // ── Clear add-override form validation as the operator edits ─────────
+  // When validation flags a field red, editing that field drops the red
+  // border. If it was the last flagged field, clear the aggregated
+  // message div too. Type/Side selectors change which fields are
+  // required, so they count as edits as well.
+  (function wire_form_clear(){
+    var ids = ['dash-ov-sidB', 'dash-ov-sidA', 'dash-ov-type', 'dash-ov-side'];
+    function on_edit(e){
+      var el = e.target;
+      if (el && el.classList) el.classList.remove('dash-ov-input-err');
+      var any_flagged = ids.some(function(id){
+        var x = $id(id);
+        return x && x.classList && x.classList.contains('dash-ov-input-err');
+      });
+      var err_div = $id('dash-ov-form-err');
+      if (!any_flagged && err_div) err_div.textContent = '';
+    }
+    ids.forEach(function(id){
+      var el = $id(id);
+      if (!el) return;
+      el.addEventListener('input',  on_edit);
+      el.addEventListener('change', on_edit);
+    });
+  })();
+
+  // ── Wire up the override-list filter controls ─────────────────────────
+  // Reads any previously-persisted filter state from localStorage, applies
+  // it to the inputs, and registers input/change listeners that update
+  // _list_filters + persist + re-render. The clear-link onclick is
+  // exposed on window so it can be called from the inline HTML attribute.
+  function persist_list_filters() {
+    try { localStorage.setItem('dash_ov_list_filters', JSON.stringify(_list_filters)); } catch (e) {}
+  }
+  function restore_list_filters() {
+    try {
+      var raw = localStorage.getItem('dash_ov_list_filters');
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      if (saved && typeof saved === 'object') {
+        _list_filters.search = String(saved.search || '');
+        _list_filters.type   = String(saved.type   || 'all');
+        _list_filters.status = String(saved.status || 'all');
+      }
+    } catch (e) {}
+  }
+  (function wire_list_filters(){
+    var search = $id('dash-ov-flt-search');
+    var type   = $id('dash-ov-flt-type');
+    var status = $id('dash-ov-flt-status');
+    restore_list_filters();
+    if (search) {
+      search.value = _list_filters.search;
+      search.addEventListener('input', function(){
+        _list_filters.search = search.value;
+        persist_list_filters();
+        render_list();
+      });
+    }
+    if (type) {
+      type.value = _list_filters.type;
+      type.addEventListener('change', function(){
+        _list_filters.type = type.value || 'all';
+        persist_list_filters();
+        render_list();
+      });
+    }
+    if (status) {
+      status.value = _list_filters.status;
+      status.addEventListener('change', function(){
+        _list_filters.status = status.value || 'all';
+        persist_list_filters();
+        render_list();
+      });
+    }
+  })();
+
+  window.dash_ov_filters_clear = function() {
+    _list_filters.search = _LIST_FILTERS_DEFAULTS.search;
+    _list_filters.type   = _LIST_FILTERS_DEFAULTS.type;
+    _list_filters.status = _LIST_FILTERS_DEFAULTS.status;
+    var search = $id('dash-ov-flt-search');
+    var type   = $id('dash-ov-flt-type');
+    var status = $id('dash-ov-flt-status');
+    if (search) search.value = '';
+    if (type)   type.value   = 'all';
+    if (status) status.value = 'all';
+    persist_list_filters();
+    render_list();
   };
 
   // ── Boot ────────────────────────────────────────────────────────────
@@ -3758,6 +4134,24 @@ if(ROSTER && ROSTER.length > 0){
   if (typeof wire_list_actions === 'function') wire_list_actions();
   if (typeof refresh_form_vis  === 'function') refresh_form_vis();
   if (typeof window.dash_ov_refresh === 'function') window.dash_ov_refresh();
+
+  // ── Collapsible editor: restore prior open/closed state ───────────────
+  // The editor wraps in a native <details>. We persist the open flag to
+  // localStorage so the same operator gets the same panel state next visit
+  // (closed by default for first-time visitors -- the editor is a power-
+  // user tool, most viewers don't need it open). The 'toggle' listener
+  // writes the new state whenever the user manually expands/collapses.
+  try {
+    var _editor = document.getElementById('dash-ov-editor');
+    if (_editor && _editor.tagName === 'DETAILS') {
+      if (localStorage.getItem('dash_ov_editor_open') === '1') {
+        _editor.open = true;
+      }
+      _editor.addEventListener('toggle', function(){
+        try { localStorage.setItem('dash_ov_editor_open', _editor.open ? '1' : '0'); } catch (e) {}
+      });
+    }
+  } catch (e) {}
 
   // ── Dismiss the rebuild overlay on the new page ───────────────────────
   // The bootstrap script in <head> adds .dash-ov-rebuilding to <html> when
@@ -3786,12 +4180,16 @@ if(ROSTER && ROSTER.length > 0){
 })();
 </script>
 
-<!-- Chart expand modal (uses .modal-box / .modal-hdr / .modal-canvas-wrap CSS) -->
+<!-- Chart expand modal (uses .modal-box / .modal-hdr / .modal-canvas-wrap CSS).
+     The modal can show either the chart (canvas) or a table view, mirroring
+     whichever mode the source card is in when ⤢ Expand is clicked. The
+     ⇄ button toggles between the two inside the modal without closing. -->
 <div id="chart-modal">
   <div class="modal-box">
     <div class="modal-hdr">
       <h3 id="modal-title" style="margin:0">Chart</h3>
       <div style="display:flex;gap:6px;align-items:center">
+        <button id="modal-flip-btn" class="chart-btn" onclick="modal_flip()" title="Switch view">⇄ Table</button>
         <button class="chart-btn" onclick="export_modal_png()" title="Export PNG">⬇ PNG</button>
         <button class="chart-btn" onclick="export_modal_csv()" title="Export CSV">⬇ CSV</button>
         <button class="modal-close" onclick="close_modal()" title="Close">✕</button>
@@ -3799,6 +4197,7 @@ if(ROSTER && ROSTER.length > 0){
     </div>
     <div class="modal-canvas-wrap">
       <canvas id="modal-chart"></canvas>
+      <div id="modal-flip-tbl" class="chart-flip-tbl modal-flip-tbl"></div>
     </div>
   </div>
 </div>
@@ -3817,16 +4216,16 @@ function get_modal_plugin_opts(id) {
   const inline = (src_chart.config && src_chart.config.plugins) || [];
   return { plugin_opts: modal_opts, inline_plugins: inline };
 }
-function expand_chart(id) {
+// Internal: render the chart view into the modal canvas, hide the table div.
+function _render_modal_chart(id) {
   const snap   = CHART_SNAP[id];
   const canvas = document.getElementById('modal-chart');
+  const tbl    = document.getElementById('modal-flip-tbl');
+  const btn    = document.getElementById('modal-flip-btn');
   if (!snap || !canvas) return;
-  _modal_chart_id = id;
-  document.getElementById('chart-modal').classList.add('open');
-  var card = document.querySelector('#'+id);
-  var h3 = card && card.closest('.card') && card.closest('.card').querySelector('h3');
-  var title_el = document.getElementById('modal-title');
-  if (h3 && title_el) title_el.textContent = h3.childNodes[0].nodeValue.trim();
+  if (tbl) { tbl.classList.remove('open'); tbl.style.display = 'none'; }
+  canvas.style.display = '';
+  if (btn) { btn.textContent = '⇄ Table'; btn.title = 'Switch to table view'; btn.classList.remove('flip-btn-active'); }
   const { plugin_opts, inline_plugins } = get_modal_plugin_opts(id);
   if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
   try {
@@ -3850,9 +4249,62 @@ function expand_chart(id) {
     });
   } catch(e) { console.error('expand_chart error:', e); }
 }
+// Internal: render the table view into the modal table div, hide the canvas.
+// Reuses the same _build_flip_html helper that powers the in-card table.
+function _render_modal_table(id) {
+  const canvas = document.getElementById('modal-chart');
+  const tbl    = document.getElementById('modal-flip-tbl');
+  const btn    = document.getElementById('modal-flip-btn');
+  if (!tbl) return;
+  if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
+  if (canvas) canvas.style.display = 'none';
+  tbl.innerHTML = (typeof _build_flip_html === 'function')
+    ? _build_flip_html(id)
+    : '<p style="padding:12px;color:#999">No data</p>';
+  tbl.style.display = 'block';
+  tbl.classList.add('open');
+  if (btn) { btn.textContent = '📊 Chart'; btn.title = 'Switch to chart view'; btn.classList.add('flip-btn-active'); }
+}
+
+// Public: open the expand modal. Decides chart-vs-table mode based on
+// whether the source card is currently in table mode (flip_chart_table
+// toggled). Without this check, expanding from a table view would
+// silently re-render the chart -- which is the bug this code prevents.
+function expand_chart(id) {
+  const snap = CHART_SNAP[id];
+  if (!snap) return;
+  _modal_chart_id = id;
+  document.getElementById('chart-modal').classList.add('open');
+  var card = document.querySelector('#'+id);
+  var h3 = card && card.closest('.card') && card.closest('.card').querySelector('h3');
+  var title_el = document.getElementById('modal-title');
+  if (h3 && title_el) title_el.textContent = h3.childNodes[0].nodeValue.trim();
+
+  // Mirror the source card's current view. The in-card canvas is set to
+  // display:none when the operator flipped to table mode, so check that.
+  var src_canvas = document.getElementById(id);
+  var src_in_table_mode = !!(src_canvas && src_canvas.style && src_canvas.style.display === 'none');
+  if (src_in_table_mode) _render_modal_table(id);
+  else                   _render_modal_chart(id);
+}
+
+// Toggle between chart and table inside the modal without closing it.
+function modal_flip() {
+  if (!_modal_chart_id) return;
+  var canvas = document.getElementById('modal-chart');
+  var in_table_mode = canvas && canvas.style.display === 'none';
+  if (in_table_mode) _render_modal_chart(_modal_chart_id);
+  else               _render_modal_table(_modal_chart_id);
+}
+
 function close_modal() {
   document.getElementById('chart-modal').classList.remove('open');
   if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
+  // Reset both views so the next open starts clean.
+  var canvas = document.getElementById('modal-chart');
+  var tbl    = document.getElementById('modal-flip-tbl');
+  if (canvas) canvas.style.display = '';
+  if (tbl) { tbl.classList.remove('open'); tbl.style.display = 'none'; tbl.innerHTML = ''; }
 }
 document.getElementById('chart-modal').addEventListener('click', function(e) {
   if (e.target === this) close_modal();
