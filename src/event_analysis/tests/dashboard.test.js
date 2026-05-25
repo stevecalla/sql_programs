@@ -607,4 +607,63 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
       resolve();
     }, 100));
   });
+
+  // Regression guard: the bootstrap script in <head> adds .dash-ov-rebuilding
+  // to <html> when sessionStorage carries the rebuild flag (so the new page's
+  // first paint is the overlay, no white flash). For a long time NOTHING in
+  // the page removed it -- the spinner stayed up until the user manually
+  // refreshed. The dash_ov_init boot block now schedules a fade-out + class
+  // removal; this test makes sure that code stays in place.
+  test('rebuild overlay class is removed on the new page after boot', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    // A real classList that tracks state, so the boot code's
+    // contains('dash-ov-rebuilding') check returns true and we can later
+    // verify the class is gone.
+    function real_class_list(seed) {
+      const set = new Set(seed || []);
+      return {
+        add(c){ set.add(c); },
+        remove(c){ set.delete(c); },
+        contains(c){ return set.has(c); },
+        toggle(c){ if (set.has(c)) set.delete(c); else set.add(c); },
+        _set: set,
+      };
+    }
+
+    const html_cl    = real_class_list(['dash-ov-rebuilding']);
+    const overlay_cl = real_class_list([]);
+    const overlay_el = { style: {}, classList: overlay_cl };
+
+    const sb = make_sandbox();
+    // documentElement.classList must track real state for this test, so
+    // the boot code's .contains('dash-ov-rebuilding') check returns true
+    // and we can later verify .remove() actually wiped the class.
+    sb.document.documentElement = { classList: html_cl };
+    // getElementById('dash-ov-overlay') must return our tracked element
+    // so the boot code's fade-out / cleanup hits a real classList.
+    const orig_get = sb.document.getElementById;
+    sb.document.getElementById = (id) => (id === 'dash-ov-overlay' ? overlay_el : orig_get(id));
+
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow -- no-throw test covers that contract */ }
+    }
+
+    // The boot schedules fade at +600ms and final class removal at +1000ms
+    // (600 + 400). Wait a bit longer than that to be safe.
+    return new Promise((resolve) => setTimeout(() => {
+      assert.ok(!html_cl.contains('dash-ov-rebuilding'),
+        'rebuild overlay class was never removed after boot -- spinner would stay up until manual refresh. html.classList=' + JSON.stringify([...html_cl._set]));
+      // By final cleanup the overlay element should no longer carry fade-out.
+      assert.ok(!overlay_cl.contains('fade-out'),
+        'overlay element still carries fade-out class after final cleanup. overlay.classList=' + JSON.stringify([...overlay_cl._set]));
+      resolve();
+    }, 1200));
+  });
 });

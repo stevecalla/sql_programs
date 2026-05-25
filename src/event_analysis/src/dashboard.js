@@ -3759,6 +3759,30 @@ if(ROSTER && ROSTER.length > 0){
   if (typeof refresh_form_vis  === 'function') refresh_form_vis();
   if (typeof window.dash_ov_refresh === 'function') window.dash_ov_refresh();
 
+  // ── Dismiss the rebuild overlay on the new page ───────────────────────
+  // The bootstrap script in <head> adds .dash-ov-rebuilding to <html> when
+  // the page is loaded after a rebuild (read from sessionStorage). Nothing
+  // here removes it — so without this code the overlay stays visible until
+  // the user manually refreshes. We wait a short beat for charts to render,
+  // then fade it out via the CSS opacity transition (280ms) and remove
+  // both classes so the overlay is fully gone.
+  try {
+    if (document.documentElement.classList.contains('dash-ov-rebuilding')) {
+      var _overlay = document.getElementById('dash-ov-overlay');
+      // Wait for the first paint of charts/table, then start the fade.
+      setTimeout(function(){
+        if (_overlay) _overlay.classList.add('fade-out');
+        // CSS transition is 280ms — give it 400ms then drop the class so
+        // display:none takes effect and the overlay no longer captures
+        // pointer events. Idempotent: re-running is harmless.
+        setTimeout(function(){
+          document.documentElement.classList.remove('dash-ov-rebuilding');
+          if (_overlay) _overlay.classList.remove('fade-out');
+        }, 400);
+      }, 600);
+    }
+  } catch (e) {}
+
 })();
 </script>
 
