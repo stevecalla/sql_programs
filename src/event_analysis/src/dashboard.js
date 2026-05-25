@@ -666,29 +666,17 @@ canvas{width:100%!important;max-height:220px}
 #dash-ov-rebuild-log{display:none;background:#1c2526;color:#80cbc4;padding:10px 14px;font-family:ui-monospace,Menlo,monospace;font-size:.72rem;max-height:240px;overflow-y:auto;line-height:1.55;white-space:pre-wrap;border-radius:6px;margin-top:8px}
 
 /* ── Inline editor panel ──────────────────────────────────────────────── */
-.dash-ov-editor{padding:14px 18px}
+/* No outer padding on the editor details -- the summary bar should sit
+   flush like other dash-section summaries. Inner content lives in a
+   .card div which provides its own padding + frame. */
+.dash-ov-editor{padding:0}
 .dash-ov-editor h3{margin:0;font-size:1rem;display:flex;align-items:center;gap:10px}
 .dash-ov-editor h3 .muted{color:#656d76;font-size:.78rem;font-weight:400}
-/* <details>/<summary> styling. Hide native disclosure triangle (both spec
-   names) and supply our own chevron that rotates when the panel is open.
-   The summary wraps the existing h3 so the title bar IS the click target. */
-.dash-ov-editor>summary.dash-ov-editor-summary{
-  cursor:pointer;list-style:none;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:0;margin:0;
-}
-.dash-ov-editor>summary.dash-ov-editor-summary::-webkit-details-marker{display:none}
-.dash-ov-editor>summary.dash-ov-editor-summary::marker{display:none;content:""}
-.dash-ov-editor>summary.dash-ov-editor-summary>h3{flex:1;min-width:0}
-.dash-ov-editor-chevron{
-  display:inline-block;color:#656d76;font-size:.85rem;
-  transition:transform 160ms ease-out;transform:rotate(-90deg);
-  user-select:none;
-}
-.dash-ov-editor[open]>summary.dash-ov-editor-summary .dash-ov-editor-chevron{transform:rotate(0deg)}
-/* When the panel is open, add a small gap between the summary and the
-   first child block so the layout matches what the old h3 margin gave us. */
-.dash-ov-editor[open]>summary.dash-ov-editor-summary{margin-bottom:.5rem}
+/* The editor's outer <details> now uses the shared .dash-section /
+   .dash-section-summary styling (gray-bar look that matches the other
+   collapsible page sections). The dash-ov-editor / dash-ov-editor-summary
+   / dash-ov-editor-chevron classes are still attached for back-compat with
+   tests and any external CSS hooks; no editor-specific overrides remain. */
 .dash-ov-editor .dash-ov-srv-status{font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:10px;background:#eee;color:#999}
 .dash-ov-editor .dash-ov-srv-status.ok   {background:#dafbe1;color:#1a7f37}
 .dash-ov-editor .dash-ov-srv-status.err  {background:#ffebe9;color:#82071e}
@@ -703,7 +691,7 @@ canvas{width:100%!important;max-height:220px}
 .dash-section>summary.dash-section-summary{
   cursor:pointer;list-style:none;
   display:flex;align-items:center;gap:8px;
-  padding:6px 12px;margin-bottom:6px;
+  padding:9px 12px;margin-bottom:6px;
   background:#f6f8fa;border:1px solid #d0d7de;border-radius:6px;
   font-size:.82rem;font-weight:600;color:#1f2328;
   user-select:none;
@@ -1168,17 +1156,15 @@ ${has_table ? `
      an-event flow still works when the user has it collapsed. The
      server-status pill lives inside the <summary> so operators can
      still see "checking / ok / err" without expanding the panel. -->
-<div class="row" style="margin-bottom:10px">
-  <details class="card card-full dash-ov-editor" id="dash-ov-editor">
-    <summary class="dash-ov-editor-summary">
-      <h3>
-        ⚙ Override editor
-        <span class="dash-ov-srv-status" id="dash-ov-srv-status">● checking server…</span>
-        <span class="muted">Edits write to the DB immediately; rebuild to apply to charts.</span>
-      </h3>
-      <span class="dash-ov-editor-chevron" aria-hidden="true">▾</span>
+<details class="dash-section dash-ov-editor" id="dash-ov-editor">
+    <summary class="dash-section-summary dash-ov-editor-summary">
+      <span class="dash-section-chevron dash-ov-editor-chevron" aria-hidden="true">▾</span>
+      ⚙ Override editor
+      <span class="dash-ov-srv-status" id="dash-ov-srv-status">● checking server…</span>
+      <span class="dash-section-count">Edits write to the DB immediately; rebuild to apply to charts.</span>
     </summary>
 
+    <div class="card card-full">
     <div id="dash-ov-selected" style="display:none"></div>
 
     <div class="dash-ov-grid">
@@ -1288,8 +1274,8 @@ ${has_table ? `
         </form>
       </div>
     </div>
+    </div>
   </details>
-</div>
 
 <div id="dash-ov-toast" class="dash-ov-toast" role="status" aria-live="polite"></div>
 

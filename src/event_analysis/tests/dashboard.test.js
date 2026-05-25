@@ -799,16 +799,16 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
     assert.match(html, /<details[^>]*\bid="dash-ov-editor"/,
       'override editor should be a <details id="dash-ov-editor">');
     // The summary wraps the title bar so clicking the header toggles.
-    assert.match(html, /<summary\s+class="dash-ov-editor-summary"/,
+    assert.match(html, /<summary[^>]*\bclass="[^"]*\bdash-ov-editor-summary\b/,
       '<summary> with class dash-ov-editor-summary should exist');
     // The chevron span is present (CSS rotates it via [open]).
-    assert.match(html, /class="dash-ov-editor-chevron"/);
+    assert.match(html, /\bdash-ov-editor-chevron\b/);
   });
 
   test('server-status pill lives inside the summary so it shows when collapsed', () => {
     const html = render_to_tmp();
     // Pull out the summary block by id-then-summary text.
-    const m = html.match(/<summary\s+class="dash-ov-editor-summary"[^>]*>([\s\S]*?)<\/summary>/);
+    const m = html.match(/<summary[^>]*\bclass="[^"]*\bdash-ov-editor-summary\b[^"]*"[^>]*>([\s\S]*?)<\/summary>/);
     assert.ok(m, 'could not isolate the editor summary block');
     assert.ok(m[1].includes('id="dash-ov-srv-status"'),
       'server-status pill should be inside <summary> so the connection state stays visible when the editor is collapsed');
