@@ -666,4 +666,125 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
       resolve();
     }, 1200));
   });
+
+  // ── Enhancement #1: ad-hoc rebuild year-input validation ──────────────────
+  // The years card in dash_ov_init exposes:
+  //   - HTML: <input type=number min=2000 max=2100> + an inline error div
+  //   - JS:   dash_ov_rebuild_with_years() refuses to kick off /api/build
+  //           when both inputs are blank, when either is non-integer, or
+  //           when either is outside [2000, current_year+5].
+  // These guards stop a bad-year rebuild from getting all the way to the
+  // backend (which only surfaces the error in the streaming log).
+
+  test('rebuild years inputs have type=number with min/max guards', () => {
+    const html = render_to_tmp();
+    assert.match(html, /id="dash-ov-rebuild-baseline"[^>]*type="number"/);
+    assert.match(html, /id="dash-ov-rebuild-analysis"[^>]*type="number"/);
+    assert.match(html, /id="dash-ov-rebuild-baseline"[^>]*min="2000"[^>]*max="2100"/);
+    assert.match(html, /id="dash-ov-rebuild-analysis"[^>]*min="2000"[^>]*max="2100"/);
+    assert.match(html, /id="dash-ov-rebuild-years-err"/);
+  });
+
+  // Tiny input-like stub with a working .value + .textContent + addEventListener.
+  function make_input(initial) {
+    const listeners = {};
+    return {
+      value: initial == null ? '' : String(initial),
+      textContent: '',
+      style: {},
+      classList: { add(){}, remove(){}, contains(){return false}, toggle(){} },
+      addEventListener(name, cb){ (listeners[name] = listeners[name] || []).push(cb); },
+      _fire(name){ (listeners[name] || []).forEach((cb) => cb({})); },
+    };
+  }
+
+  // Drive dash_ov_rebuild_with_years directly. Stubs the rebuild kickoff so
+  // we can assert whether the function tried to fire /api/build, and reads
+  // the err div's textContent so we can assert the user-visible message.
+  function run_with_years_harness({ baseline, analysis }) {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    const html_cl = { _set: new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)},
+                      contains(c){return this._set.has(c)}, toggle(c){this._set.has(c)?this._set.delete(c):this._set.add(c)} };
+
+    const bp_el = make_input(baseline);
+    const ap_el = make_input(analysis);
+    const err_el = make_input('');
+    const overlay_el = { style: {}, classList: { _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const sb = make_sandbox();
+    sb.document.documentElement = { classList: html_cl };
+    sb.document.getElementById = (id) => {
+      if (id === 'dash-ov-rebuild-baseline')  return bp_el;
+      if (id === 'dash-ov-rebuild-analysis')  return ap_el;
+      if (id === 'dash-ov-rebuild-years-err') return err_el;
+      if (id === 'dash-ov-overlay')           return overlay_el;
+      return stub_el();
+    };
+
+    const rebuild_calls = [];
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    // Stub the actual rebuild kickoff so we can observe whether validation
+    // let the call through. Must happen AFTER scripts load (the inline IIFE
+    // defines window.dash_ov_rebuild itself; we overwrite it for the test).
+    sb.dash_ov_rebuild = (suffix) => { rebuild_calls.push(suffix); };
+    if (typeof sb.dash_ov_rebuild_with_years !== 'function') {
+      throw new Error('dash_ov_rebuild_with_years was not defined after running inline scripts');
+    }
+    sb.dash_ov_rebuild_with_years();
+    return { rebuild_calls, err_text: err_el.textContent, bp_el, ap_el, err_el };
+  }
+
+  test('rebuild with both years blank shows error and does NOT call dash_ov_rebuild', () => {
+    const { rebuild_calls, err_text } = run_with_years_harness({ baseline: '', analysis: '' });
+    assert.equal(rebuild_calls.length, 0, 'rebuild should not fire with both years blank');
+    assert.match(err_text, /at least one year/i, 'err div should explain the blank-both case');
+  });
+
+  test('rebuild with non-integer year is rejected', () => {
+    const { rebuild_calls, err_text } = run_with_years_harness({ baseline: '20ab', analysis: '2026' });
+    assert.equal(rebuild_calls.length, 0, 'rebuild should not fire when a year is non-integer');
+    assert.match(err_text, /4-digit year/i);
+  });
+
+  test('rebuild with year before 2000 is rejected', () => {
+    const { rebuild_calls, err_text } = run_with_years_harness({ baseline: '1999', analysis: '2026' });
+    assert.equal(rebuild_calls.length, 0);
+    assert.match(err_text, /between 2000/);
+  });
+
+  test('rebuild with year far in the future is rejected', () => {
+    const future = new Date().getFullYear() + 50;
+    const { rebuild_calls, err_text } = run_with_years_harness({ baseline: '2025', analysis: String(future) });
+    assert.equal(rebuild_calls.length, 0);
+    assert.match(err_text, /between 2000/);
+  });
+
+  test('rebuild with valid years calls dash_ov_rebuild with both query params', () => {
+    const { rebuild_calls, err_text } = run_with_years_harness({ baseline: '2024', analysis: '2025' });
+    assert.equal(rebuild_calls.length, 1, 'rebuild should fire once with valid years');
+    assert.equal(rebuild_calls[0], '?baseline_year=2024&analysis_year=2025');
+    assert.equal(err_text, '', 'err div should be cleared on a valid submit');
+  });
+
+  test('rebuild with only one year filled still kicks off (other side defaults at server)', () => {
+    const { rebuild_calls } = run_with_years_harness({ baseline: '', analysis: '2025' });
+    assert.equal(rebuild_calls.length, 1);
+    assert.equal(rebuild_calls[0], '?analysis_year=2025');
+  });
+
+  test('editing the baseline input clears a previously-shown error', () => {
+    const ctx = run_with_years_harness({ baseline: '', analysis: '' });
+    assert.notEqual(ctx.err_text, '', 'pre-condition: error should be visible');
+    ctx.bp_el._fire('input');
+    assert.equal(ctx.err_el.textContent, '', 'editing baseline should clear the err div');
+  });
 });

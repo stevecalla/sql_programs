@@ -1209,6 +1209,11 @@ ${has_table ? `
                 type="button" onclick="dash_ov_rebuild_with_years()">▶ Rebuild with these years</button>
         <span class="help">Year pair is sent to <code>/api/build</code> as query params — equivalent to <code>node build_all.js --baseline-year YYYY --analysis-year YYYY</code></span>
       </div>
+      <!-- Inline validation message. Populated by dash_ov_rebuild_with_years
+           when the operator hits the button with empty / non-integer / out-
+           of-range years. Stays empty (display:none via CSS) when valid. -->
+      <div id="dash-ov-rebuild-years-err"
+           style="margin-top:6px;font-size:.78rem;color:#BF1B2C;min-height:0"></div>
     </details>
     <div id="dash-ov-rebuild-log"></div>
   </div>
@@ -3735,17 +3740,67 @@ if(ROSTER && ROSTER.length > 0){
   };
 
   // ── Rebuild with ad-hoc years (the collapsed details block) ───────────────
+  // Validates input BEFORE kicking off /api/build, because the server returns
+  // a vague 500 on a bad year and the operator has to dig through the log to
+  // see why. Cheaper to refuse at the source.
+  //
+  // Rules:
+  //   - At least one of (baseline, analysis) must be filled (otherwise this
+  //     button is identical to the default "Rebuild now" -- redirect).
+  //   - Each filled value must be a whole integer in [2000, current+5]. The
+  //     HTML min/max already enforces this in well-behaved browsers, but a
+  //     paste or programmatic set can bypass the browser validator.
   window.dash_ov_rebuild_with_years = function() {
     var bp = $id('dash-ov-rebuild-baseline');
     var ap = $id('dash-ov-rebuild-analysis');
+    var err = $id('dash-ov-rebuild-years-err');
     var by = (bp && bp.value || '').trim();
     var ay = (ap && ap.value || '').trim();
+
+    var YEAR_MIN = 2000;
+    var YEAR_MAX = new Date().getFullYear() + 5;
+    var problems = [];
+
+    function valid_year(s, label) {
+      if (s === '') return true;             // empty is OK; server defaults from .env
+      if (!/^\\d{4}$/.test(s)) { problems.push(label + ' must be a 4-digit year'); return false; }
+      var n = parseInt(s, 10);
+      if (n < YEAR_MIN || n > YEAR_MAX) {
+        problems.push(label + ' must be between ' + YEAR_MIN + ' and ' + YEAR_MAX);
+        return false;
+      }
+      return true;
+    }
+
+    if (by === '' && ay === '') {
+      problems.push('Enter at least one year (or use the default "Rebuild now" button)');
+    }
+    valid_year(by, 'Baseline year');
+    valid_year(ay, 'Analysis year');
+
+    if (problems.length) {
+      if (err) err.textContent = problems.join('. ') + '.';
+      return;
+    }
+    if (err) err.textContent = '';
+
     var params = [];
     if (by) params.push('baseline_year=' + encodeURIComponent(by));
     if (ay) params.push('analysis_year=' + encodeURIComponent(ay));
     var suffix = params.length ? '?' + params.join('&') : '';
     if (typeof window.dash_ov_rebuild === 'function') window.dash_ov_rebuild(suffix);
   };
+
+  // Clear the inline error as soon as the operator edits either field, so the
+  // message doesn't linger once they've started correcting the input.
+  (function wire_year_clear(){
+    var bp = $id('dash-ov-rebuild-baseline');
+    var ap = $id('dash-ov-rebuild-analysis');
+    var err = $id('dash-ov-rebuild-years-err');
+    function clear(){ if (err) err.textContent = ''; }
+    if (bp) bp.addEventListener('input', clear);
+    if (ap) ap.addEventListener('input', clear);
+  })();
 
   // ── Boot ────────────────────────────────────────────────────────────
   // Wire the list's delegated click handler (approve / unapprove /
