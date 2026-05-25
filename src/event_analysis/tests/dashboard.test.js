@@ -1057,4 +1057,125 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
     assert.equal(type_el.value,   'force_no_match', 'restore: type should be set from localStorage');
     assert.equal(status_el.value, 'unapproved',     'restore: status should be set from localStorage');
   });
+
+  // ── Enhancement #5: add-override form validation ─────────────────────────
+  // dash_ov_validate_add_form is a pure helper that takes opts.fields (a
+  // map of element id -> value) and returns { ok, problems: [...] }. It
+  // also reads BASELINE_SIDS / ANALYSIS_SIDS which are built at boot from
+  // ROSTER. The fixture roster has sid_baseline 'BL-1' / 'BL-LOST' and
+  // sid_analysis 'AN-1' / 'AN-NEW'.
+
+  test('add-override form err div is rendered (empty by default)', () => {
+    const html = render_to_tmp();
+    assert.match(html, /<div\s+id="dash-ov-form-err"[^>]*class="dash-ov-form-err"[^>]*><\/div>/);
+  });
+
+  test('CSS for .dash-ov-input-err is in the stylesheet', () => {
+    const html = render_to_tmp();
+    assert.match(html, /\.dash-ov-input-err\b/);
+  });
+
+  test('BASELINE_SIDS and ANALYSIS_SIDS are populated from ROSTER at boot', () => {
+    const sb = load_inline_scripts();
+    // The fixture's three rows:
+    //   Retained -> sid_baseline=BL-1,   sid_analysis=AN-1
+    //   Lost     -> sid_baseline=BL-LOST (no analysis)
+    //   New      -> sid_analysis=AN-NEW  (no baseline)
+    // The pure validator surfaces these via the wrong-box message.
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_match',
+      'dash-ov-sidB': 'AN-1',  // analysis sid in baseline box
+      'dash-ov-sidA': 'BL-1',  // baseline sid in analysis box
+    }});
+    assert.equal(r.ok, false);
+    // Both should be flagged as wrong-box.
+    var msgs = r.problems.map(function(p){ return p.msg; }).join(' | ');
+    assert.match(msgs, /'AN-1' is a analysis-year sid; move it to the Analysis box/);
+    assert.match(msgs, /'BL-1' is a baseline-year sid; move it to the Baseline box/);
+  });
+
+  test('force_match with missing sidA is rejected', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_match',
+      'dash-ov-sidB': 'BL-1',
+      'dash-ov-sidA': '',
+    }});
+    assert.equal(r.ok, false);
+    assert.equal(r.problems.length, 1);
+    assert.equal(r.problems[0].field, 'dash-ov-sidA');
+    assert.match(r.problems[0].msg, /needs an Analysis sid/);
+  });
+
+  test('force_no_match with missing sidB is rejected', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_no_match',
+      'dash-ov-sidB': '',
+      'dash-ov-sidA': 'AN-1',
+    }});
+    assert.equal(r.ok, false);
+    assert.equal(r.problems[0].field, 'dash-ov-sidB');
+    assert.match(r.problems[0].msg, /needs a Baseline sid/);
+  });
+
+  test('force_segment with side=baseline and empty sidB is rejected', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_segment',
+      'dash-ov-side': 'baseline',
+      'dash-ov-sidB': '',
+      'dash-ov-sidA': '',
+    }});
+    assert.equal(r.ok, false);
+    assert.equal(r.problems[0].field, 'dash-ov-sidB');
+  });
+
+  test('unknown sid (not in either pool) gets "no event" message', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_match',
+      'dash-ov-sidB': 'BL-1',
+      'dash-ov-sidA': 'TOTALLY-FAKE-SID',
+    }});
+    assert.equal(r.ok, false);
+    assert.equal(r.problems[0].field, 'dash-ov-sidA');
+    assert.match(r.problems[0].msg, /doesn't match any event in the current roster/);
+  });
+
+  test('same sid in both boxes is rejected', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_match',
+      'dash-ov-sidB': 'BL-1',
+      'dash-ov-sidA': 'BL-1',  // duplicate (and wrong-box)
+    }});
+    assert.equal(r.ok, false);
+    // We expect BOTH the wrong-box AND the self-link errors (the
+    // wrong-box check runs first; self-link is a defensive last check).
+    var msgs = r.problems.map(function(p){ return p.msg; }).join(' | ');
+    assert.match(msgs, /Baseline and Analysis sids must be different/);
+  });
+
+  test('valid force_match with correct-box sids passes', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_match',
+      'dash-ov-sidB': 'BL-1',
+      'dash-ov-sidA': 'AN-1',
+    }});
+    assert.equal(r.ok, true);
+    assert.equal(r.problems.length, 0);
+  });
+
+  test('valid force_segment with the right side filled passes', () => {
+    const sb = load_inline_scripts();
+    var r = sb.dash_ov_validate_add_form({ fields: {
+      'dash-ov-type': 'force_segment',
+      'dash-ov-side': 'baseline',
+      'dash-ov-sidB': 'BL-LOST',
+      'dash-ov-sidA': '',
+    }});
+    assert.equal(r.ok, true);
+  });
 });

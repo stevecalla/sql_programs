@@ -727,6 +727,11 @@ canvas{width:100%!important;max-height:220px}
 .dash-ov-form .check{flex-direction:row;align-items:center;flex:0 0 auto;min-width:auto;cursor:pointer}
 .dash-ov-form .check span{color:#1f2328;font-weight:500;margin-left:.3rem}
 .dash-ov-form .actions{display:flex;align-items:center;gap:8px;margin-top:.2rem}
+/* Add-override form validation. Red border + small message line below
+   the actions row. Both cleared by editing the offending field. */
+.dash-ov-form .dash-ov-input-err{border-color:#BF1B2C !important;box-shadow:0 0 0 2px rgba(191,27,44,0.12) !important}
+.dash-ov-form-err{font-size:.75rem;color:#BF1B2C;margin-top:6px;min-height:0;line-height:1.35}
+.dash-ov-form-err:empty{display:none}
 .dash-ov-toast{position:fixed;bottom:1.4rem;right:1.4rem;padding:.6rem .9rem;border-radius:6px;background:#1f2328;color:#fff;font-size:.82rem;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:400px;opacity:0;transform:translateY(.4rem);transition:opacity .18s,transform .18s;pointer-events:none;z-index:9999}
 .dash-ov-toast.show{opacity:1;transform:translateY(0)}
 .dash-ov-toast.err{background:#cf222e}
@@ -1225,6 +1230,11 @@ ${has_table ? `
             <button type="submit" class="dash-ov-btn dash-ov-btn-primary">+ Add override</button>
             <span class="muted" id="dash-ov-server-hint" style="font-size:.7rem"></span>
           </div>
+          <!-- Aggregated validation messages for the add-override form.
+               Populated by validate_add_override_form() before the POST.
+               Bad inputs also get the .dash-ov-input-err class for a red
+               border. Both clear when the operator edits the field. -->
+          <div id="dash-ov-form-err" class="dash-ov-form-err"></div>
         </form>
       </div>
     </div>
@@ -3275,6 +3285,25 @@ if(ROSTER && ROSTER.length > 0){
   var _list_filters = { search: '', type: 'all', status: 'all' };
   var _LIST_FILTERS_DEFAULTS = { search: '', type: 'all', status: 'all' };
 
+  // SID pools for add-override form validation. Built once at boot from
+  // the in-page ROSTER array. Each set has the sids that legitimately
+  // belong in that year's input box. Used by validate_add_override_form
+  // to flag wrong-box mistakes ("'BL-1' is a baseline-year sid; move it
+  // to the Baseline box") and totally-unknown sids before the POST.
+  var BASELINE_SIDS = new Set();
+  var ANALYSIS_SIDS = new Set();
+  // ROSTER is the top-level const declared by the renderer. It's in our
+  // closure (top-level const doesn't create a window property), so we
+  // reference it by name. typeof guard keeps this safe if a future
+  // refactor renames the binding.
+  if (typeof ROSTER !== 'undefined' && Array.isArray(ROSTER)) {
+    for (var _i = 0; _i < ROSTER.length; _i++) {
+      var _r = ROSTER[_i];
+      if (_r.sid_baseline) BASELINE_SIDS.add(_r.sid_baseline);
+      if (_r.sid_analysis) ANALYSIS_SIDS.add(_r.sid_analysis);
+    }
+  }
+
   // ── Helpers ─────────────────────────────────────────────────────────
   function $id(id){ return document.getElementById(id); }
   function esc(s){
@@ -3674,10 +3703,83 @@ if(ROSTER && ROSTER.length > 0){
     $id('dash-ov-sidA-wrap').style.display = (show_both_sids || (need_side && side === 'analysis')) ? '' : 'none';
   }
 
+  // ── Add-override form validation (Step 5) ───────────────────────────
+  // Pure helper. Exposed on window so tests can call it directly without
+  // going through the DOM submit dance. Reads field values (either from
+  // an opts.fields override map for testing, or from the live form),
+  // returns { ok, problems: [{ field, msg }] }. Rules:
+  //   1. Required fields by type. force_match / force_no_match need both
+  //      sids; force_segment needs the sid matching the Side dropdown.
+  //   2. Each filled sid must exist in the right pool. If it's in the
+  //      OTHER pool, emit a specific "belongs in the X box" message;
+  //      otherwise "doesn't match any event in the current roster".
+  //   3. sidB !== sidA (defensive; they're drawn from disjoint pools).
+  window.dash_ov_validate_add_form = function(opts) {
+    opts = opts || {};
+    function get(id) {
+      if (opts.fields && opts.fields[id] != null) return String(opts.fields[id]).trim();
+      var el = $id(id);
+      return el ? String(el.value || '').trim() : '';
+    }
+    var type = get('dash-ov-type');
+    var side = get('dash-ov-side');
+    var sidB = get('dash-ov-sidB');
+    var sidA = get('dash-ov-sidA');
+    var problems = [];
+
+    if (type === 'force_match' || type === 'force_no_match') {
+      var label = (type === 'force_match' ? 'force_match' : 'force_no_match');
+      if (!sidB) problems.push({ field: 'dash-ov-sidB', msg: label + ' needs a Baseline sid' });
+      if (!sidA) problems.push({ field: 'dash-ov-sidA', msg: label + ' needs an Analysis sid' });
+    } else if (type === 'force_segment') {
+      if (side === 'baseline' && !sidB) problems.push({ field: 'dash-ov-sidB', msg: 'force_segment with side=baseline needs a Baseline sid' });
+      if (side === 'analysis' && !sidA) problems.push({ field: 'dash-ov-sidA', msg: 'force_segment with side=analysis needs an Analysis sid' });
+    }
+
+    function check(sid, expect_set, other_set, field, other_box) {
+      if (!sid) return;
+      if (expect_set.has(sid)) return;
+      if (other_set.has(sid)) {
+        problems.push({ field: field, msg: "'" + sid + "' is a " + other_box.toLowerCase() + "-year sid; move it to the " + other_box + " box" });
+      } else {
+        problems.push({ field: field, msg: "'" + sid + "' doesn't match any event in the current roster" });
+      }
+    }
+    check(sidB, BASELINE_SIDS, ANALYSIS_SIDS, 'dash-ov-sidB', 'Analysis');
+    check(sidA, ANALYSIS_SIDS, BASELINE_SIDS, 'dash-ov-sidA', 'Baseline');
+
+    if (sidB && sidA && sidB === sidA) {
+      problems.push({ field: 'dash-ov-sidA', msg: 'Baseline and Analysis sids must be different' });
+    }
+
+    return { ok: problems.length === 0, problems: problems };
+  };
+
+  // Apply validation results to the live form: mark bad inputs red,
+  // write aggregated messages into #dash-ov-form-err.
+  function paint_validation_problems(problems) {
+    var err_div = $id('dash-ov-form-err');
+    ['dash-ov-sidB', 'dash-ov-sidA', 'dash-ov-type', 'dash-ov-side'].forEach(function(id) {
+      var el = $id(id); if (el) el.classList.remove('dash-ov-input-err');
+    });
+    if (!problems.length) { if (err_div) err_div.textContent = ''; return; }
+    problems.forEach(function(p) {
+      var el = $id(p.field); if (el) el.classList.add('dash-ov-input-err');
+    });
+    if (err_div) err_div.textContent = problems.map(function(p){ return p.msg; }).join('. ') + '.';
+  }
+
   // ── Form submit ─────────────────────────────────────────────────────
   window.dash_ov_submit = function(e){
     if (e && e.preventDefault) e.preventDefault();
     if (!IS_SERVED) { show_toast('Server offline. Start: node server_event_analysis_8016.js', 'err'); return false; }
+
+    // Step 5 client-side validation: catches blank-required, sid-not-in-
+    // dataset, sid-in-wrong-box, and self-link mistakes BEFORE the POST.
+    var v = window.dash_ov_validate_add_form();
+    if (!v.ok) { paint_validation_problems(v.problems); return false; }
+    paint_validation_problems([]);
+
     var type = $id('dash-ov-type').value;
     var body = {
       type: type,
@@ -3924,6 +4026,31 @@ if(ROSTER && ROSTER.length > 0){
     function clear(){ if (err) err.textContent = ''; }
     if (bp) bp.addEventListener('input', clear);
     if (ap) ap.addEventListener('input', clear);
+  })();
+
+  // ── Clear add-override form validation as the operator edits ─────────
+  // When validation flags a field red, editing that field drops the red
+  // border. If it was the last flagged field, clear the aggregated
+  // message div too. Type/Side selectors change which fields are
+  // required, so they count as edits as well.
+  (function wire_form_clear(){
+    var ids = ['dash-ov-sidB', 'dash-ov-sidA', 'dash-ov-type', 'dash-ov-side'];
+    function on_edit(e){
+      var el = e.target;
+      if (el && el.classList) el.classList.remove('dash-ov-input-err');
+      var any_flagged = ids.some(function(id){
+        var x = $id(id);
+        return x && x.classList && x.classList.contains('dash-ov-input-err');
+      });
+      var err_div = $id('dash-ov-form-err');
+      if (!any_flagged && err_div) err_div.textContent = '';
+    }
+    ids.forEach(function(id){
+      var el = $id(id);
+      if (!el) return;
+      el.addEventListener('input',  on_edit);
+      el.addEventListener('change', on_edit);
+    });
   })();
 
   // ── Wire up the override-list filter controls ─────────────────────────
