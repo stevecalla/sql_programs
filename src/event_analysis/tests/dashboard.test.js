@@ -787,4 +787,130 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
     ctx.bp_el._fire('input');
     assert.equal(ctx.err_el.textContent, '', 'editing baseline should clear the err div');
   });
+
+  // ── Enhancement #2: collapsible override editor with persisted state ─────
+  // The editor is wrapped in a native <details> element, defaults to closed
+  // for first-time visitors, and persists open/closed state via localStorage
+  // ('dash_ov_editor_open' = '1' or '0'). Roster-row clicks auto-expand it.
+
+  test('override editor is rendered as a <details> element with a <summary>', () => {
+    const html = render_to_tmp();
+    // The opening tag carries the id we hook into for boot persistence.
+    assert.match(html, /<details[^>]*\bid="dash-ov-editor"/,
+      'override editor should be a <details id="dash-ov-editor">');
+    // The summary wraps the title bar so clicking the header toggles.
+    assert.match(html, /<summary\s+class="dash-ov-editor-summary"/,
+      '<summary> with class dash-ov-editor-summary should exist');
+    // The chevron span is present (CSS rotates it via [open]).
+    assert.match(html, /class="dash-ov-editor-chevron"/);
+  });
+
+  test('server-status pill lives inside the summary so it shows when collapsed', () => {
+    const html = render_to_tmp();
+    // Pull out the summary block by id-then-summary text.
+    const m = html.match(/<summary\s+class="dash-ov-editor-summary"[^>]*>([\s\S]*?)<\/summary>/);
+    assert.ok(m, 'could not isolate the editor summary block');
+    assert.ok(m[1].includes('id="dash-ov-srv-status"'),
+      'server-status pill should be inside <summary> so the connection state stays visible when the editor is collapsed');
+  });
+
+  // Runtime harness: simulate the page boot with a stateful localStorage
+  // and a stateful <details> stub, then assert what the boot code did.
+  function run_collapse_harness({ initial_storage, focus_row }) {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    // Tracked <details>-like element with open state + toggle listeners.
+    const details_listeners = {};
+    const details_el = {
+      tagName: 'DETAILS',
+      _open: false,
+      get open(){ return this._open; },
+      set open(v){
+        const was = this._open;
+        this._open = !!v;
+        if (was !== this._open) {
+          (details_listeners.toggle || []).forEach((cb) => cb({}));
+        }
+      },
+      style: {},
+      classList: { add(){}, remove(){}, contains(){return false}, toggle(){} },
+      addEventListener(name, cb){ (details_listeners[name] = details_listeners[name] || []).push(cb); },
+      scrollIntoView(){},
+    };
+
+    // Stateful localStorage so we can observe writes.
+    const storage = new Map();
+    if (initial_storage) for (const [k, v] of Object.entries(initial_storage)) storage.set(k, v);
+    const ls = {
+      getItem(k){ return storage.has(k) ? storage.get(k) : null; },
+      setItem(k, v){ storage.set(k, String(v)); },
+      removeItem(k){ storage.delete(k); },
+    };
+
+    const html_cl = { _set: new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)},
+                      contains(c){return this._set.has(c)}, toggle(){} };
+    const overlay_el = { style: {}, classList: { _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const sb = make_sandbox();
+    sb.document.documentElement = { classList: html_cl };
+    sb.localStorage = ls;
+    sb.document.getElementById = (id) => {
+      if (id === 'dash-ov-editor')  return details_el;
+      if (id === 'dash-ov-overlay') return overlay_el;
+      return stub_el();
+    };
+
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow -- no-throw test covers that contract */ }
+    }
+    // Optionally simulate a roster-row click after boot.
+    if (focus_row && typeof sb.dash_ov_focus_row === 'function') {
+      sb.dash_ov_focus_row('BL-1', 'BL-1', 'AN-1');
+    }
+    return { details_el, storage, _trigger_toggle: () => (details_listeners.toggle || []).forEach((cb) => cb({})) };
+  }
+
+  test('first-visit (no localStorage) leaves the editor closed', () => {
+    const { details_el } = run_collapse_harness({ initial_storage: {} });
+    assert.equal(details_el.open, false,
+      'with no dash_ov_editor_open entry, the editor should NOT auto-open on boot');
+  });
+
+  test('localStorage="1" re-opens the editor on boot', () => {
+    const { details_el } = run_collapse_harness({ initial_storage: { dash_ov_editor_open: '1' } });
+    assert.equal(details_el.open, true,
+      'a previously-open editor should restore its open state from localStorage');
+  });
+
+  test('localStorage="0" keeps the editor closed (explicit collapsed)', () => {
+    const { details_el } = run_collapse_harness({ initial_storage: { dash_ov_editor_open: '0' } });
+    assert.equal(details_el.open, false,
+      'a previously-closed editor should stay closed (no false-y vs missing distinction needed)');
+  });
+
+  test('toggling the details element persists the new state to localStorage', () => {
+    const { details_el, storage } = run_collapse_harness({ initial_storage: {} });
+    // Simulate the user expanding the panel.
+    details_el.open = true;
+    assert.equal(storage.get('dash_ov_editor_open'), '1',
+      'opening the editor should write "1" to localStorage');
+    // And collapsing it back.
+    details_el.open = false;
+    assert.equal(storage.get('dash_ov_editor_open'), '0',
+      'closing the editor should write "0" to localStorage');
+  });
+
+  test('clicking a roster row (dash_ov_focus_row) auto-expands a collapsed editor', () => {
+    const { details_el, storage } = run_collapse_harness({ initial_storage: {}, focus_row: true });
+    assert.equal(details_el.open, true,
+      'focus_row should force the editor open even when it was collapsed');
+    assert.equal(storage.get('dash_ov_editor_open'), '1',
+      'auto-expanding should also persist so subsequent reloads stay open');
+  });
 });

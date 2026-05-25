@@ -662,8 +662,28 @@ canvas{width:100%!important;max-height:220px}
 
 /* ── Inline editor panel ──────────────────────────────────────────────── */
 .dash-ov-editor{padding:14px 18px}
-.dash-ov-editor h3{margin:0 0 .5rem;font-size:1rem;display:flex;align-items:center;gap:10px}
+.dash-ov-editor h3{margin:0;font-size:1rem;display:flex;align-items:center;gap:10px}
 .dash-ov-editor h3 .muted{color:#656d76;font-size:.78rem;font-weight:400}
+/* <details>/<summary> styling. Hide native disclosure triangle (both spec
+   names) and supply our own chevron that rotates when the panel is open.
+   The summary wraps the existing h3 so the title bar IS the click target. */
+.dash-ov-editor>summary.dash-ov-editor-summary{
+  cursor:pointer;list-style:none;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:0;margin:0;
+}
+.dash-ov-editor>summary.dash-ov-editor-summary::-webkit-details-marker{display:none}
+.dash-ov-editor>summary.dash-ov-editor-summary::marker{display:none;content:""}
+.dash-ov-editor>summary.dash-ov-editor-summary>h3{flex:1;min-width:0}
+.dash-ov-editor-chevron{
+  display:inline-block;color:#656d76;font-size:.85rem;
+  transition:transform 160ms ease-out;transform:rotate(-90deg);
+  user-select:none;
+}
+.dash-ov-editor[open]>summary.dash-ov-editor-summary .dash-ov-editor-chevron{transform:rotate(0deg)}
+/* When the panel is open, add a small gap between the summary and the
+   first child block so the layout matches what the old h3 margin gave us. */
+.dash-ov-editor[open]>summary.dash-ov-editor-summary{margin-bottom:.5rem}
 .dash-ov-editor .dash-ov-srv-status{font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:10px;background:#eee;color:#999}
 .dash-ov-editor .dash-ov-srv-status.ok   {background:#dafbe1;color:#1a7f37}
 .dash-ov-editor .dash-ov-srv-status.err  {background:#ffebe9;color:#82071e}
@@ -1075,14 +1095,25 @@ ${has_table ? `
   </div>
 </div>
 
-<!-- ── Inline override editor panel (Step 9 integration) ───────────────── -->
+<!-- ── Inline override editor panel (Step 9 integration) ─────────────────
+     Collapsible via native <details>. Default = closed for first-time
+     visitors (the editor is a power-user tool, most dashboard viewers
+     never touch it). Open/closed state is persisted to localStorage
+     ('dash_ov_editor_open' = '1' or '0') by the toggle listener in
+     dash_ov_init. Roster-row clicks force the panel open so the focus-
+     an-event flow still works when the user has it collapsed. The
+     server-status pill lives inside the <summary> so operators can
+     still see "checking / ok / err" without expanding the panel. -->
 <div class="row" style="margin-bottom:10px">
-  <div class="card card-full dash-ov-editor" id="dash-ov-editor">
-    <h3>
-      ⚙ Override editor
-      <span class="dash-ov-srv-status" id="dash-ov-srv-status">● checking server…</span>
-      <span class="muted">Edits write to the DB immediately; rebuild to apply to charts.</span>
-    </h3>
+  <details class="card card-full dash-ov-editor" id="dash-ov-editor">
+    <summary class="dash-ov-editor-summary">
+      <h3>
+        ⚙ Override editor
+        <span class="dash-ov-srv-status" id="dash-ov-srv-status">● checking server…</span>
+        <span class="muted">Edits write to the DB immediately; rebuild to apply to charts.</span>
+      </h3>
+      <span class="dash-ov-editor-chevron" aria-hidden="true">▾</span>
+    </summary>
 
     <div id="dash-ov-selected" style="display:none"></div>
 
@@ -1167,7 +1198,7 @@ ${has_table ? `
         </form>
       </div>
     </div>
-  </div>
+  </details>
 </div>
 
 <div id="dash-ov-toast" class="dash-ov-toast" role="status" aria-live="polite"></div>
@@ -3433,7 +3464,17 @@ if(ROSTER && ROSTER.length > 0){
     render_selected();
     render_list();
     var editor = $id('dash-ov-editor');
-    if (editor) editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (editor) {
+      // Auto-expand the collapsible <details> so the focused event is
+      // actually visible. Without this, clicking a roster row when the
+      // operator has the panel collapsed silently does nothing. Persist
+      // the open state so subsequent reloads stay expanded.
+      if (editor.tagName === 'DETAILS' && !editor.open) {
+        editor.open = true;
+        try { localStorage.setItem('dash_ov_editor_open', '1'); } catch (e) {}
+      }
+      editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
   window.dash_ov_clear_selection = function(){
     _selected_sid = null;
@@ -3813,6 +3854,24 @@ if(ROSTER && ROSTER.length > 0){
   if (typeof wire_list_actions === 'function') wire_list_actions();
   if (typeof refresh_form_vis  === 'function') refresh_form_vis();
   if (typeof window.dash_ov_refresh === 'function') window.dash_ov_refresh();
+
+  // ── Collapsible editor: restore prior open/closed state ───────────────
+  // The editor wraps in a native <details>. We persist the open flag to
+  // localStorage so the same operator gets the same panel state next visit
+  // (closed by default for first-time visitors -- the editor is a power-
+  // user tool, most viewers don't need it open). The 'toggle' listener
+  // writes the new state whenever the user manually expands/collapses.
+  try {
+    var _editor = document.getElementById('dash-ov-editor');
+    if (_editor && _editor.tagName === 'DETAILS') {
+      if (localStorage.getItem('dash_ov_editor_open') === '1') {
+        _editor.open = true;
+      }
+      _editor.addEventListener('toggle', function(){
+        try { localStorage.setItem('dash_ov_editor_open', _editor.open ? '1' : '0'); } catch (e) {}
+      });
+    }
+  } catch (e) {}
 
   // ── Dismiss the rebuild overlay on the new page ───────────────────────
   // The bootstrap script in <head> adds .dash-ov-rebuilding to <html> when
