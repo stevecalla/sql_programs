@@ -823,6 +823,103 @@ async function cmd_approve(sid, { approved_by = 'cli' } = {}) {
   return result;
 }
 
+/**
+ * cmd_mark_reviewed — mirror the dashboard's Reviewed? checkbox flow from
+ * the CLI. For each supplied sid, look up the latest roster snapshot for
+ * the current year scope, decide which override shape to create based on
+ * the row's segment, insert (or no-op if already there), and approve.
+ *
+ *   matched pair (Retained / Shifted / Tried to Return / Recovered)
+ *     → force_match(sid_baseline, sid_analysis) + approve
+ *   Lost (baseline-only)
+ *     → force_segment(side='baseline', sid, segment='Lost') + approve
+ *   New (analysis-only)
+ *     → force_segment(side='analysis', sid, segment='New') + approve
+ *
+ * Tagged created_by='cli:review' so audits can distinguish CLI reviews
+ * from dashboard:review reviews. Idempotent: re-running on an already-
+ * reviewed sid is a no-op (the underlying cmd_add_* returns
+ * {status:'exists'} and cmd_approve refreshes the signature).
+ *
+ * Returns { inserted, exists, skipped, errors } so callers (menu / tests)
+ * can summarise without parsing stdout.
+ */
+async function cmd_mark_reviewed(sids, { created_by = 'cli:review' } = {}) {
+  if (!Array.isArray(sids) || !sids.length) {
+    console.error('Usage: --mark-reviewed <sid> [<sid> ...]');
+    process.exit(1);
+  }
+  const { baseline_year, analysis_year } = current_year_scope();
+  const ROSTER_TABLE = 'event_analysis_roster';
+  const summary = { inserted: 0, exists: 0, skipped: 0, errors: [] };
+
+  for (const sid of sids) {
+    // Look up the row in the most recent snapshot for the current scope.
+    const row = await with_db(async conn => {
+      const [rows] = await conn.query(
+        `SELECT seg, sid_baseline, sid_analysis
+           FROM \`${ROSTER_TABLE}\`
+          WHERE baseline_year = ? AND analysis_year = ?
+            AND build_at = (
+              SELECT MAX(build_at) FROM \`${ROSTER_TABLE}\`
+               WHERE baseline_year = ? AND analysis_year = ?
+            )
+            AND (sid_baseline = ? OR sid_analysis = ?)
+          LIMIT 1`,
+        [baseline_year, analysis_year, baseline_year, analysis_year, sid, sid]
+      );
+      return rows[0] || null;
+    });
+
+    if (!row) {
+      console.warn(`  ⚠ '${sid}' not found in latest roster snapshot for ${baseline_year}/${analysis_year} — skipping`);
+      summary.skipped++;
+      continue;
+    }
+
+    // Matched pairs vs single-sided rows take different override shapes.
+    const matched_segs = ['Retained', 'Shifted', 'Tried to Return', 'Recovered'];
+    let add_result, approve_sid;
+    try {
+      if (matched_segs.includes(row.seg)) {
+        if (!row.sid_baseline || !row.sid_analysis) {
+          console.warn(`  ⚠ '${sid}' is segment '${row.seg}' but missing a side in the roster — skipping`);
+          summary.skipped++;
+          continue;
+        }
+        add_result = await cmd_add_match(row.sid_baseline, row.sid_analysis, 'reviewed via CLI',
+          { created_by, segment: row.seg === 'Retained' || row.seg === 'Shifted' ? row.seg : null });
+        approve_sid = row.sid_baseline;
+      } else if (row.seg === 'Lost') {
+        if (!row.sid_baseline) { summary.skipped++; continue; }
+        add_result = await cmd_add_segment('baseline', row.sid_baseline, 'Lost', 'reviewed via CLI', { created_by });
+        approve_sid = row.sid_baseline;
+      } else if (row.seg === 'New') {
+        if (!row.sid_analysis) { summary.skipped++; continue; }
+        add_result = await cmd_add_segment('analysis', row.sid_analysis, 'New', 'reviewed via CLI', { created_by });
+        approve_sid = row.sid_analysis;
+      } else {
+        console.warn(`  ⚠ '${sid}' has unexpected segment '${row.seg}' — skipping`);
+        summary.skipped++;
+        continue;
+      }
+
+      if (add_result && add_result.status === 'exists') summary.exists++;
+      else summary.inserted++;
+
+      // Approve always — refreshes the signature on existing rows.
+      await cmd_approve(approve_sid, { approved_by: created_by });
+    } catch (err) {
+      console.error(`  ✗ '${sid}': ${err.message}`);
+      summary.errors.push({ sid, message: err.message });
+    }
+  }
+
+  console.log(`\n✓ Mark-reviewed summary: ${summary.inserted} inserted, ${summary.exists} already existed, ${summary.skipped} skipped, ${summary.errors.length} errors`);
+  if (summary.inserted || summary.exists) console.log('  Run: node build_all.js   to apply\n');
+  return summary;
+}
+
 async function cmd_unapprove(sid) {
   if (!sid) { console.error('Usage: --unapprove <sanction_id>'); process.exit(1); }
 
@@ -1094,6 +1191,19 @@ async function main() {
     await cmd_suggest_overrides(); return;
   }
 
+  if (args[0] === '--mark-reviewed') {
+    // Accept either space-separated trailing args or a single comma-separated
+    // string. Filters empties so accidental double-spaces don't insert blanks.
+    const raw = args.slice(1).join(' ');
+    const sids = raw.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+    if (!sids.length) {
+      console.error('Usage: --mark-reviewed <sid> [<sid> ...]');
+      console.error('       --mark-reviewed "sid1, sid2, sid3"');
+      process.exit(1);
+    }
+    await cmd_mark_reviewed(sids); return;
+  }
+
   if (args[0] === '--add-override') {
     // Pull --global out of the trailing args so it can appear anywhere after
     // the positional values. Default is current-scope (year env vars); --global
@@ -1138,7 +1248,7 @@ async function main() {
     process.exit(1);
   }
 
-  // ── Legacy flag ───────────────────────────────────────────────────────
+  // ââ Legacy flag ââââââââââââââââââââââââââââââââââ
   if (args[0] === '--list-unmatched') {
     const results = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
     if (!results) { console.error('Run node build_all.js first.'); process.exit(1); }
@@ -1147,95 +1257,24 @@ async function main() {
     if (results.overrides?.total_applied) {
       console.log(`Active overrides: ${results.overrides.total_applied}`);
       results.overrides.applied.forEach(o =>
-        console.log(`  ${o.type}: ${o.sid_baseline ?? ''}${o.sid_analysis ? ' / '+o.sid_analysis : ''} → ${o.result}`)
+        console.log(`  ${o.type}: ${o.sid_baseline ?? ''}${o.sid_analysis ? ' / '+o.sid_analysis : ''} â ${o.result}`)
       );
     }
     return;
   }
 
   if (!args.length || args[0] === '--help') {
-    console.log(`
-USAT Analysis — Interactive Q&A & Override Management
-======================================================
-Usage: node ask.js "<question>" [options]
-       node ask.js --<command> [args]
-
-── Q&A options ──────────────────────────────────────
-  --help                            List options and commands
-  --save-notes                      Save answer to notes.md (auto-pruned)
-  --update-commentary <key>         Rewrite a key in output/commentary.json
-
-── Override commands ─────────────────────────────────
-  --list-overrides                  Show all active overrides
-  --what-changed                    Compare current build to prior (AI summary if key set)
-  --add-override match <s25> <s26> ["note"]
-                                    Force two events to match
-  --add-override no-match <25|26> <sid> ["note"]
-                                    Prevent an event from matching (→ Lost or New)
-  --add-override segment <25|26> <sid> <segment> ["note"]
-                                    Override segment (Retained|Shifted|Lost|New|...)
-  --remove-override <sid>           Remove all overrides for a sanction ID (soft-delete)
-  --approve <sid>                   Approve overrides for a sid — silences build warnings
-                                    and captures event signatures for stale-detection
-  --unapprove <sid>                 Clear approval + signatures for a sid
-  --suggest-overrides               Ask Claude to suggest likely missed matches (AI)
-
-After any --add-override / --remove-override / --approve / --unapprove, run: node build_all.js
-
-── Examples ──────────────────────────────────────────
-  node ask.js "Why did Adult Clinic decline so much?"
-  node ask.js "Draft a Slack post on key findings" --save-notes
-  node ask.js "Rewrite slide 8 narrative more urgently" --update-commentary slide_8_narrative
-  node ask.js "Rewrite slide 8 narrative with a more professional tone" --update-commentary slide_8_narrative
-
-  node ask.js --list-overrides
-  node ask.js --suggest-overrides
-  node ask.js --add-override match 311655-Adult\ Race 354307-Adult\ Race "Same series, name changed"
-  node ask.js --add-override no-match 25 311157-Adult\ Race "Confirmed permanently cancelled"
-  node ask.js --add-override segment 25 310379-Adult\ Race Lost "Algorithm matched incorrectly"
-  node ask.js --remove-override 311157-Adult\ Race
-  node ask.js --approve 310628-Adult\ Race
-  node ask.js --unapprove 310628-Adult\ Race
-
-Context loaded automatically:
-  output/analysis_results.json  output/commentary.json  notes.md  output/archive/
-
-Model: claude-sonnet-4-6 (streaming for Q&A)
-`);
+    console.log(`\nUSAT Analysis -- Q&A + Override Management\n\nUsage: node ask.js \"<question>\" [options]\n       node ask.js --<command> [args]\n\n-- Override commands ---------------------------------\n  --list-overrides                  Show all active overrides\n  --add-override match <sid_b> <sid_a> [\"note\"] [--global]\n  --add-override no-match <sid_b> <sid_a> [--seg-baseline X] [--seg-analysis Y] [\"note\"] [--global]\n  --add-override segment <baseline|analysis> <sid> <segment> [\"note\"] [--global]\n  --remove-override <sid>           Soft-delete all overrides for a sid\n  --approve <sid>                   Approve + capture signature for stale-detection\n  --unapprove <sid>                 Clear approval + signatures\n  --mark-reviewed <sid> [<sid> ...] Mark events reviewed-and-correct (CLI version of\n                                    the dashboard Reviewed? checkbox). Creates the\n                                    right override shape per segment and approves.\n                                    Tagged created_by='cli:review'.\n  --suggest-overrides               AI suggestions for likely missed matches\n\nAfter any override write, run: node build_all.js\n`);
     return;
   }
 
-  // ── Parse Q&A options ─────────────────────────────────────────────────
-  const opts = {};
-  const question_parts = [];
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--save-notes') {
-      opts.update_notes = true;
-    } else if (args[i] === '--update-commentary' && args[i+1]) {
-      opts.update_key = args[++i];
-    } else {
-      question_parts.push(args[i]);
-     }
-  }
-
-  const question = question_parts.join(' ');
-  if (!question.trim()) {
-    console.error('Error: Please provide a question or a -- command. Run --help for usage.');
-    process.exit(1);
-  }
-
-  await ask(question, opts);
+  console.error(`Unknown flag: ${args[0]}. Run with --help for usage.`);
+  process.exit(1);
 }
 
-// Only run main() when invoked as a script. When required as a module (by
-// tests/overrides.test.js) we expose the cmd_* functions instead so they can
-// be exercised directly against the DB.
+// Entry point
 if (require.main === module) {
-  main().catch(err => {
-    console.error('Error:', err.message);
-    if (process.env.DEBUG) console.error(err.stack);
-    process.exit(1);
-  });
+  main().catch(err => { console.error(err); process.exit(1); });
 }
 
 module.exports = {
@@ -1246,6 +1285,7 @@ module.exports = {
   cmd_list_overrides,
   cmd_approve,
   cmd_unapprove,
+  cmd_mark_reviewed,
   current_year_scope,
   year_arg_to_column,
 };

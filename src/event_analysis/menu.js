@@ -171,56 +171,57 @@ const SECTIONS = [
       { id: 13, label: 'Add force-no-match',         desc: 'Prevent an event from matching (→ Attrited/New)', action: 'add_no_match',     cli: 'node ask.js --add-override no-match <25|26> <sid> "note"' },
       { id: 14, label: 'Add force-segment',          desc: 'Override a segment classification',              action: 'add_segment',       cli: 'node ask.js --add-override segment <25|26> <sid> <segment> "note"' },
       { id: 15, label: 'Remove override',            desc: 'Remove all overrides for a sanction ID',        action: 'remove_override',    cli: 'node ask.js --remove-override <sid>' },
+      { id: 16, label: 'Mark events as reviewed',    desc: 'CLI version of the dashboard Reviewed? checkbox -- creates the right override per segment + approves it. Tagged created_by=cli:review.', action: 'mark_reviewed', cli: 'node ask.js --mark-reviewed <sid> [<sid> ...]' },
     ],
   },
   {
     label: 'Q&A & ANALYSIS — powered by Claude',
     color: CYAN,
     items: [
-      { id: 16, label: 'Ask a question',             desc: 'Ask Claude anything about the analysis results', action: 'ask',                cli: 'node ask.js "your question"' },
-      { id: 17, label: 'Ask and save to notes.md',   desc: 'Answer is appended to notes.md for future context', action: 'ask_save',         cli: 'node ask.js "your question" --save-notes' },
-      { id: 18, label: 'Rewrite a slide narrative',  desc: 'Update commentary.json directly with new text',  action: 'update_commentary',   cli: 'node ask.js "instruction" --update-commentary <key>' },
-      { id: 19, label: 'What changed?',              desc: 'Compare current build to prior (AI summary)',    action: 'what_changed',        cli: 'node ask.js --what-changed' },
+      { id: 17, label: 'Ask a question',             desc: 'Ask Claude anything about the analysis results', action: 'ask',                cli: 'node ask.js "your question"' },
+      { id: 18, label: 'Ask and save to notes.md',   desc: 'Answer is appended to notes.md for future context', action: 'ask_save',         cli: 'node ask.js "your question" --save-notes' },
+      { id: 19, label: 'Rewrite a slide narrative',  desc: 'Update commentary.json directly with new text',  action: 'update_commentary',   cli: 'node ask.js "instruction" --update-commentary <key>' },
+      { id: 20, label: 'What changed?',              desc: 'Compare current build to prior (AI summary)',    action: 'what_changed',        cli: 'node ask.js --what-changed' },
     ],
   },
   {
     label: 'INFORMATION',
     color: GREEN,
     items: [
-      { id: 20, label: 'View changes since last build', desc: 'Show output/changes.txt',                    action: 'view_changes',      cli: 'cat output/changes.txt' },
-      { id: 21, label: 'View notes.md',              desc: 'Current analyst notes + build history',         action: 'view_notes',         cli: 'cat notes.md' },
-      { id: 22, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme',        cli: 'cat README.md' },
+      { id: 21, label: 'View changes since last build', desc: 'Show output/changes.txt',                    action: 'view_changes',      cli: 'cat output/changes.txt' },
+      { id: 22, label: 'View notes.md',              desc: 'Current analyst notes + build history',         action: 'view_notes',         cli: 'cat notes.md' },
+      { id: 23, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme',        cli: 'cat README.md' },
     ],
   },
   {
     label: 'LOCAL SERVER — http://localhost:8016',
     color: CYAN,
     items: [
-      { id: 23, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop). Uses ALLOWED_IPS from .env if set.', action: 'start_server', cli: 'cd ../../ && node server_event_analysis_8016.js' },
-      { id: 24, label: 'Start local server (IP allowlist)', desc: 'Prompts for allowed IPs (default 127.0.0.1) and starts the server with ALLOWED_IPS injected — always restricted regardless of .env', action: 'start_server_restricted', cli: 'cd ../../ && ALLOWED_IPS=127.0.0.1 node server_event_analysis_8016.js' },
+      { id: 24, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop). Uses ALLOWED_IPS from .env if set.', action: 'start_server', cli: 'cd ../../ && node server_event_analysis_8016.js' },
+      { id: 25, label: 'Start local server (IP allowlist)', desc: 'Prompts for allowed IPs (default 127.0.0.1) and starts the server with ALLOWED_IPS injected — always restricted regardless of .env', action: 'start_server_restricted', cli: 'cd ../../ && ALLOWED_IPS=127.0.0.1 node server_event_analysis_8016.js' },
     ],
   },
   {
     label: 'TESTING — verify the code is working',
     color: MAGENTA,
     items: [
-      { id: 25, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all',        cli: 'node --test tests/' },
-      { id: 26, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides', cli: 'node --test tests/overrides.test.js' },
-      { id: 27, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server',     cli: 'node --test tests/server.test.js' },
-      { id: 28, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu',     cli: 'node --test tests/menu.test.js' },
-      { id: 29, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke',      cli: 'node --test tests/smoke.test.js' },
-      { id: 30, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary', cli: 'node --test tests/glossary.test.js' },
-      { id: 31, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads', cli: 'node --test tests/downloads.test.js' },
-      { id: 32, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build', cli: 'node --test tests/build.test.js' },
-      { id: 33, label: 'Run roster tests only',      desc: 'tests/roster.test.js — roster snapshot insert + tiered retention (DB-backed; skips if DB unreachable)', action: 'run_tests_roster', cli: 'node --test tests/roster.test.js' },
-      { id: 34, label: 'Run dashboard tests only',   desc: 'tests/dashboard.test.js — date format + Day-column-collapsed regression guards', action: 'run_tests_dashboard', cli: 'node --test tests/dashboard.test.js' },
+      { id: 26, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all',        cli: 'node --test tests/' },
+      { id: 27, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides', cli: 'node --test tests/overrides.test.js' },
+      { id: 28, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server',     cli: 'node --test tests/server.test.js' },
+      { id: 29, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu',     cli: 'node --test tests/menu.test.js' },
+      { id: 30, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke',      cli: 'node --test tests/smoke.test.js' },
+      { id: 31, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary', cli: 'node --test tests/glossary.test.js' },
+      { id: 32, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads', cli: 'node --test tests/downloads.test.js' },
+      { id: 33, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build', cli: 'node --test tests/build.test.js' },
+      { id: 34, label: 'Run roster tests only',      desc: 'tests/roster.test.js — roster snapshot insert + tiered retention (DB-backed; skips if DB unreachable)', action: 'run_tests_roster', cli: 'node --test tests/roster.test.js' },
+      { id: 35, label: 'Run dashboard tests only',   desc: 'tests/dashboard.test.js — date format + Day-column-collapsed regression guards', action: 'run_tests_dashboard', cli: 'node --test tests/dashboard.test.js' },
     ],
   },
   {
     label: 'PREFERENCES',
     color: WHITE,
     items: [
-      { id: 35, label: 'Show/hide CLI commands',     desc: 'Toggle a dimmed "$ ..." line under each menu item. Choice persists in .menu_prefs.json next to menu.js.', action: 'toggle_commands' },
+      { id: 36, label: 'Show/hide CLI commands',     desc: 'Toggle a dimmed "$ ..." line under each menu item. Choice persists in .menu_prefs.json next to menu.js.', action: 'toggle_commands' },
     ],
   },
 ];
@@ -452,6 +453,19 @@ async function handle_action(action, rl) {
       break;
     }
 
+    case 'mark_reviewed': {
+      console.log(c(BOLD, '  Mark events as reviewed\n'));
+      console.log(c(DIM, '  Enter one or more sanction IDs (comma- or space-separated).'));
+      console.log(c(DIM, '  Each sid is looked up in the latest roster snapshot for the current'));
+      console.log(c(DIM, '  year scope; the right override (force_match / force_segment) is'));
+      console.log(c(DIM, '  created + approved + tagged created_by=cli:review.\n'));
+      const raw = (await prompt(rl, '  Sanction IDs: ')).trim();
+      const sids = raw.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+      if (!sids.length) { console.log(c(YELLOW, '  Cancelled.')); break; }
+      await run('ask.js', ['--mark-reviewed', ...sids]);
+      break;
+    }
+
     case 'ask': {
       const q = (await prompt(rl, c(BOLD, '  Your question: '))).trim();
       if (!q) { console.log(c(YELLOW, '  Cancelled.')); break; }
@@ -678,30 +692,20 @@ async function main() {
     const num = parseInt(raw, 10);
 
     if (raw === '0' || raw.toLowerCase() === 'q' || raw.toLowerCase() === 'exit') {
-      console.log(c(DIM, '\n  Bye!\n'));
+      console.log(c(DIM, '\n  Bye.'));
       rl.close();
       return;
     }
-    if (Number.isNaN(num) || num < 1 || num > max_id) {
-      console.log(c(YELLOW, `  Invalid selection. Type 0 to exit, or 1–${max_id}.`));
-      continue;
-    }
+
     const item = ALL_ITEMS.find(i => i.id === num);
-    if (!item) { console.log(c(YELLOW, '  Item not found.')); continue; }
-    console.log(c(DIM, `\n  Running: ${item.label}`));
-    console.log(c(DIM, `  ${'─'.repeat(50)}`));
+    if (!item) { console.log(c(YELLOW, '  Invalid choice.')); continue; }
     await handle_action(item.action, rl);
-    console.log(c(DIM, `\n  ${'─'.repeat(50)}\n  Done. Press Enter to return to menu.`));
-    await prompt(rl, '');
   }
 }
 
 // Tests import SECTIONS / ALL_ITEMS / handle_action to verify wiring
-// without spawning the interactive readline loop. main() is also exported
-// so a future programmatic launcher could call it, but currently only
-// menu.js itself uses it.
-module.exports = { SECTIONS, ALL_ITEMS, handle_action, main };
-
 if (require.main === module) {
   main().catch(err => { console.error(err); process.exit(1); });
 }
+
+module.exports = { SECTIONS, ALL_ITEMS, handle_action, main };

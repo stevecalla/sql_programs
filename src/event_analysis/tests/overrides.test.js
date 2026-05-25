@@ -48,6 +48,7 @@ const {
   cmd_remove_override,
   cmd_approve,
   cmd_unapprove,
+  cmd_mark_reviewed,
   current_year_scope,
   year_arg_to_column,
 } = require('../ask');
@@ -1102,5 +1103,138 @@ describe('Step 11 — invariant: not active ⇒ not approved', () => {
     assert.equal(rows[0].n, 0,
       'invariant violated: ' + rows[0].n + ' row(s) have active=0 AND approved=1 (or approval_state set). ' +
       'Run node build_all.js (or node utilities/ensure_overrides_table.js) to apply the backfill.');
+  });
+});
+
+// ===========================================================================
+// Step 12 -- cmd_mark_reviewed (CLI mirror of the dashboard Reviewed? flow)
+// ===========================================================================
+describe('Step 12 -- cmd_mark_reviewed', () => {
+  const ROSTER_TABLE = 'event_analysis_roster';
+  const FIXTURE_BUILD_AT = new Date('1999-01-01T00:00:00Z');
+  const FIXTURE_NOTE_TAG = 'mark_reviewed_test_row';
+
+  const ORIG_BASELINE = process.env.BASELINE_YEAR;
+  const ORIG_ANALYSIS = process.env.ANALYSIS_YEAR;
+  const ORIG_LOG  = console.log;
+  const ORIG_WARN = console.warn;
+  const ORIG_ERR  = console.error;
+  const noop = () => {};
+
+  // Use sentinel years so we never collide with production roster rows.
+  before(async () => {
+    process.env.BASELINE_YEAR = '1999';
+    process.env.ANALYSIS_YEAR = '2000';
+    console.log = noop; console.warn = noop; console.error = noop;
+    // Make sure the roster table exists; insert one fixture row per
+    // segment shape (Retained pair, Lost, New) tagged via build_at +
+    // sentinel sids so cleanup is precise.
+    const { ensure_roster_table } = require('../utilities/ensure_roster_table');
+    await ensure_roster_table({ silent: true });
+    const c = await db();
+    // Clean any stale fixture rows from a prior crashed run.
+    await c.query(`DELETE FROM \`${ROSTER_TABLE}\` WHERE baseline_year = 1999 AND analysis_year = 2000`);
+    await c.query(
+      `INSERT INTO \`${ROSTER_TABLE}\`
+         (build_at, baseline_year, analysis_year, seg, conf, type,
+          sid_baseline, sid_analysis)
+       VALUES
+         (?, 1999, 2000, 'Retained', 'high', 'Adult Race', 'BL-MR-1', 'AN-MR-1'),
+         (?, 1999, 2000, 'Lost',     'high', 'Adult Race', 'BL-MR-LOST', NULL),
+         (?, 1999, 2000, 'New',      'high', 'Adult Race', NULL,         'AN-MR-NEW')`,
+      [FIXTURE_BUILD_AT, FIXTURE_BUILD_AT, FIXTURE_BUILD_AT]
+    );
+    await cleanup_test_rows();
+  });
+
+  after(async () => {
+    const c = await db();
+    await c.query(`DELETE FROM \`${ROSTER_TABLE}\` WHERE baseline_year = 1999 AND analysis_year = 2000`);
+    await cleanup_test_rows();
+    if (ORIG_BASELINE === undefined) delete process.env.BASELINE_YEAR; else process.env.BASELINE_YEAR = ORIG_BASELINE;
+    if (ORIG_ANALYSIS === undefined) delete process.env.ANALYSIS_YEAR; else process.env.ANALYSIS_YEAR = ORIG_ANALYSIS;
+    console.log = ORIG_LOG; console.warn = ORIG_WARN; console.error = ORIG_ERR;
+  });
+
+  beforeEach(async () => { await cleanup_test_rows(); });
+
+  test('Retained pair sid -> inserts force_match override, approved, cli:review tag', async () => {
+    const summary = await cmd_mark_reviewed(['BL-MR-1'], { created_by: 'cli:review' });
+    // Patch the row to test_suite so cleanup catches it (cmd_add_match
+    // sets created_by='cli:review'; we re-tag for predictable cleanup).
+    const c = await db();
+    await c.query(`UPDATE \`${TABLE}\` SET created_by = ? WHERE created_by = 'cli:review' AND baseline_year = 1999 AND analysis_year = 2000`, [TEST_TAG]);
+    const [rows] = await c.query(
+      `SELECT override_type, sid_baseline, sid_analysis, approved, approval_state
+         FROM \`${TABLE}\`
+        WHERE created_by = ? AND baseline_year = 1999 AND analysis_year = 2000`,
+      [TEST_TAG]
+    );
+    assert.equal(rows.length, 1, 'should insert exactly one row');
+    assert.equal(rows[0].override_type, 'force_match');
+    assert.equal(rows[0].sid_baseline, 'BL-MR-1');
+    assert.equal(rows[0].sid_analysis, 'AN-MR-1');
+    assert.equal(rows[0].approved, 1, 'should be auto-approved');
+    assert.equal(summary.inserted + summary.exists, 1);
+    assert.equal(summary.errors.length, 0);
+  });
+
+  test('Lost sid -> inserts force_segment(segment=Lost) on sid_baseline', async () => {
+    const summary = await cmd_mark_reviewed(['BL-MR-LOST'], { created_by: 'cli:review' });
+    const c = await db();
+    await c.query(`UPDATE \`${TABLE}\` SET created_by = ? WHERE created_by = 'cli:review' AND baseline_year = 1999 AND analysis_year = 2000`, [TEST_TAG]);
+    const [rows] = await c.query(
+      `SELECT override_type, sid_baseline, sid_analysis, segment, approved
+         FROM \`${TABLE}\` WHERE created_by = ? AND baseline_year = 1999`,
+      [TEST_TAG]
+    );
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].override_type, 'force_segment');
+    assert.equal(rows[0].sid_baseline, 'BL-MR-LOST');
+    assert.equal(rows[0].sid_analysis, null);
+    assert.equal(rows[0].segment, 'Lost');
+    assert.equal(rows[0].approved, 1);
+    assert.equal(summary.errors.length, 0);
+  });
+
+  test('New sid -> inserts force_segment(segment=New) on sid_analysis', async () => {
+    const summary = await cmd_mark_reviewed(['AN-MR-NEW'], { created_by: 'cli:review' });
+    const c = await db();
+    await c.query(`UPDATE \`${TABLE}\` SET created_by = ? WHERE created_by = 'cli:review' AND baseline_year = 1999 AND analysis_year = 2000`, [TEST_TAG]);
+    const [rows] = await c.query(
+      `SELECT override_type, sid_baseline, sid_analysis, segment, approved
+         FROM \`${TABLE}\` WHERE created_by = ?`,
+      [TEST_TAG]
+    );
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].override_type, 'force_segment');
+    assert.equal(rows[0].sid_baseline, null);
+    assert.equal(rows[0].sid_analysis, 'AN-MR-NEW');
+    assert.equal(rows[0].segment, 'New');
+    assert.equal(rows[0].approved, 1);
+    assert.equal(summary.errors.length, 0);
+  });
+
+  test('unknown sid is skipped, not errored', async () => {
+    const summary = await cmd_mark_reviewed(['TOTALLY-FAKE-SID-XYZ'], { created_by: 'cli:review' });
+    assert.equal(summary.inserted, 0);
+    assert.equal(summary.exists,   0);
+    assert.equal(summary.skipped,  1);
+    assert.equal(summary.errors.length, 0);
+  });
+
+  test('idempotent: second call on same sid does NOT duplicate', async () => {
+    const first  = await cmd_mark_reviewed(['BL-MR-1'], { created_by: 'cli:review' });
+    const second = await cmd_mark_reviewed(['BL-MR-1'], { created_by: 'cli:review' });
+    const c = await db();
+    await c.query(`UPDATE \`${TABLE}\` SET created_by = ? WHERE created_by = 'cli:review' AND baseline_year = 1999`, [TEST_TAG]);
+    const [rows] = await c.query(
+      `SELECT COUNT(*) AS n FROM \`${TABLE}\` WHERE created_by = ? AND sid_baseline = 'BL-MR-1'`,
+      [TEST_TAG]
+    );
+    assert.equal(rows[0].n, 1, 're-running should NOT create a duplicate');
+    assert.equal(first.inserted,  1, 'first call inserts');
+    assert.equal(second.exists,   1, 'second call sees existing');
+    assert.equal(second.inserted, 0);
   });
 });

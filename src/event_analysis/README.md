@@ -156,30 +156,32 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 13 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
 | 14 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
 | 15 | Remove override | `node ask.js --remove-override <sid>` |
+| 16 | Mark events as reviewed | `node ask.js --mark-reviewed <sid> [<sid> ...]` |
 | **Q&A & ANALYSIS** | | |
-| 16 | Ask a question | `node ask.js "your question"` |
-| 17 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
-| 18 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
-| 19 | What changed? | `node ask.js --what-changed` |
+| 17 | Ask a question | `node ask.js "your question"` |
+| 18 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
+| 19 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
+| 20 | What changed? | `node ask.js --what-changed` |
 | **INFORMATION** | | |
-| 20 | View changes since last build | `cat output/changes.txt` |
-| 21 | View notes.md | `cat notes.md` |
-| 22 | View README | Displays this file |
+| 21 | View changes since last build | `cat output/changes.txt` |
+| 22 | View notes.md | `cat notes.md` |
+| 23 | View README | Displays this file |
 | **LOCAL SERVER** | | |
-| 23 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
-| 24 | Start local server (IP allowlist) | Prompts for a comma-separated list of allowed IPs (default `127.0.0.1`) and spawns the server with `ALLOWED_IPS` set so the middleware enforces the allowlist. Useful when you want a quick way to expose the dashboard to a known set of IPs (e.g. Looker Studio fetchers) without flipping config. CLI equivalent: `ALLOWED_IPS=127.0.0.1 node server_event_analysis_8016.js` (POSIX) / `$env:ALLOWED_IPS='127.0.0.1'; node server_event_analysis_8016.js` (PowerShell). |
+| 24 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
+| 25 | Start local server (IP allowlist) | Prompts for a comma-separated list of allowed IPs (default `127.0.0.1`) and spawns the server with `ALLOWED_IPS` set so the middleware enforces the allowlist. Useful when you want a quick way to expose the dashboard to a known set of IPs (e.g. Looker Studio fetchers) without flipping config. CLI equivalent: `ALLOWED_IPS=127.0.0.1 node server_event_analysis_8016.js` (POSIX) / `$env:ALLOWED_IPS='127.0.0.1'; node server_event_analysis_8016.js` (PowerShell). |
 | **TESTING** | | |
-| 25 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
-| 26 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
-| 27 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
-| 28 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
-| 29 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
-| 30 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
-| 31 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
-| 32 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
-| 33 | Run roster tests only | `node --test tests/roster.test.js` (per-build roster snapshot: row-builder pure tests + DB insert + retention pruning) |
+| 26 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
+| 27 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
+| 28 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
+| 29 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
+| 30 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
+| 31 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
+| 32 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
+| 33 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
+| 34 | Run roster tests only | `node --test tests/roster.test.js` (per-build roster snapshot: row-builder pure tests + DB insert + retention pruning) |
+| 35 | Run dashboard tests only | `node --test tests/dashboard.test.js` (date format + Day-column-collapsed regression guards) |
 | **PREFERENCES** | | |
-| 34 | Show/hide CLI commands | Toggles a dimmed `$ ...` second line under each menu item. Choice persists in `.menu_prefs.json` next to `menu.js` (gitignored). |
+| 36 | Show/hide CLI commands | Toggles a dimmed `$ ...` second line under each menu item. Choice persists in `.menu_prefs.json` next to `menu.js` (gitignored). |
 | 0 | Exit | — |
 
 ---
@@ -664,6 +666,24 @@ node ask.js --unapprove <sid>
 ```
 
 Unapprove clears the approval columns and signatures. The audit fields `approved_by` and `approved_at` are kept so you can see who last touched the row and when.
+
+### Mark events as reviewed (CLI mirror of the dashboard Reviewed? checkbox)
+
+The dashboard roster table has a Reviewed? checkbox per row that creates an approved override tagged `created_by='dashboard:review'`. `--mark-reviewed` is the CLI version of the same flow:
+
+```bash
+node ask.js --mark-reviewed BL-1234 AN-5678 BL-9999
+```
+
+For each supplied sid, the command looks it up in the **latest `event_analysis_roster` snapshot** for the current year scope, decides the right override shape based on the row's segment, and inserts + approves it:
+
+- **Retained / Shifted / Tried to Return / Recovered** (matched pair) → `force_match(sid_baseline, sid_analysis)` + approve.
+- **Lost** (baseline-only row) → `force_segment(side='baseline', sid, segment='Lost')` + approve.
+- **New** (analysis-only row) → `force_segment(side='analysis', sid, segment='New')` + approve.
+
+Tagged `created_by='cli:review'` so audits can distinguish CLI reviews from dashboard reviews. Idempotent: re-running on an already-reviewed sid is a no-op. Sids not present in the latest roster snapshot are reported and skipped (one bad sid doesn't abort the rest). Returns a `{inserted, exists, skipped, errors}` summary. Also accessible interactively via menu option **36** ("Mark events as reviewed"), which prompts for comma- or space-separated sids.
+
+Because this reads from `event_analysis_roster`, you need at least one successful build to populate the snapshot. The dashboard's Reviewed? checkbox reads from the same place, so the two surfaces stay in sync.
 
 ### Stale-approval detection (Step 6)
 
