@@ -853,6 +853,34 @@ async function cmd_mark_reviewed(sids, { created_by = 'cli:review' } = {}) {
   const ROSTER_TABLE = 'event_analysis_roster';
   const summary = { inserted: 0, exists: 0, skipped: 0, errors: [] };
 
+  // Up-front diagnostic: how many rows exist in the latest snapshot for
+  // the current year scope? Zero rows means the operator either hasn't
+  // built yet OR the env-var year scope doesn't match any snapshot.
+  // Either way they'll be looking at "0 inserted, N skipped" and won't
+  // know why — print the scope + row count once at the top.
+  const scope_check = await with_db(async conn => {
+    const [[r]] = await conn.query(
+      `SELECT COUNT(*) AS n,
+              (SELECT MAX(build_at) FROM \`${ROSTER_TABLE}\`
+                WHERE baseline_year = ? AND analysis_year = ?) AS latest
+         FROM \`${ROSTER_TABLE}\`
+        WHERE baseline_year = ? AND analysis_year = ?
+          AND build_at = (
+            SELECT MAX(build_at) FROM \`${ROSTER_TABLE}\`
+             WHERE baseline_year = ? AND analysis_year = ?
+          )`,
+      [baseline_year, analysis_year, baseline_year, analysis_year, baseline_year, analysis_year]
+    );
+    return r;
+  });
+  console.log(`\nLooking up sids in roster snapshot for ${baseline_year}/${analysis_year}: ${scope_check.n} row(s)` +
+    (scope_check.latest ? ` (built ${new Date(scope_check.latest).toISOString().slice(0,16).replace('T',' ')})` : ''));
+  if (!scope_check.n) {
+    console.warn(`  ⚠ The roster snapshot for ${baseline_year}/${analysis_year} is empty.`);
+    console.warn(`     - If you haven't built yet: run \`node build_all.js\` (or menu option 1) and try again.`);
+    console.warn(`     - If your env scope is different: set BASELINE_YEAR/ANALYSIS_YEAR in .env to match the year pair you've built.`);
+  }
+
   for (const sid of sids) {
     // Look up the row in the most recent snapshot for the current scope.
     const row = await with_db(async conn => {
@@ -917,6 +945,67 @@ async function cmd_mark_reviewed(sids, { created_by = 'cli:review' } = {}) {
 
   console.log(`\n✓ Mark-reviewed summary: ${summary.inserted} inserted, ${summary.exists} already existed, ${summary.skipped} skipped, ${summary.errors.length} errors`);
   if (summary.inserted || summary.exists) console.log('  Run: node build_all.js   to apply\n');
+  return summary;
+}
+
+/**
+ * cmd_unmark_reviewed -- precise inverse of cmd_mark_reviewed. For each
+ * sid, soft-deletes ONLY the overrides tagged as review markers
+ * (created_by IN ('cli:review','dashboard:review')) -- so a manually-
+ * created force_match/force_segment on the same sid is left alone.
+ *
+ * Year scope: current scope (env vars) + globals, mirroring how the
+ * dashboard's Reviewed? un-check behaves. The active=0 + approved=0 +
+ * approval_state=NULL invariant we already enforce on soft-delete
+ * means the row stays in the table for audit but no longer applies.
+ *
+ * Returns { removed, missing, errors }:
+ *   - removed: count of rows that flipped active=1 -> active=0
+ *   - missing: sids that had no review-tagged override to remove
+ *   - errors: { sid, message }[] for unexpected failures
+ */
+async function cmd_unmark_reviewed(sids, { } = {}) {
+  if (!Array.isArray(sids) || !sids.length) {
+    console.error('Usage: --unmark-reviewed <sid> [<sid> ...]');
+    process.exit(1);
+  }
+  const { baseline_year, analysis_year } = current_year_scope();
+  const summary = { removed: 0, missing: 0, errors: [] };
+
+  for (const sid of sids) {
+    try {
+      const result = await with_db(async conn => {
+        // Year-scope filter: current pair OR globals (NULL/NULL), matching
+        // how cmd_remove_override and the dashboard checkbox-uncheck behave.
+        const [r] = await conn.query(
+          `UPDATE \`${OV_TABLE}\`
+              SET active = 0, approved = 0, approval_state = NULL
+            WHERE active = 1
+              AND created_by IN ('cli:review', 'dashboard:review')
+              AND (sid_baseline = ? OR sid_analysis = ?)
+              AND (
+                    (baseline_year IS NULL AND analysis_year IS NULL)
+                 OR (baseline_year = ? AND analysis_year = ?)
+              )`,
+          [sid, sid, baseline_year, analysis_year]
+        );
+        return r.affectedRows || 0;
+      });
+      if (result > 0) {
+        console.log(`✓ Unmarked '${sid}': ${result} review override row(s) soft-deleted`);
+        summary.removed += result;
+      } else {
+        console.warn(`  ⚠ '${sid}': no active review-tagged override found in ${baseline_year}/${analysis_year} (or globals) -- nothing to remove`);
+        summary.missing++;
+      }
+    } catch (err) {
+      console.error(`  ✗ '${sid}': ${err.message}`);
+      summary.errors.push({ sid, message: err.message });
+    }
+  }
+
+  console.log(`\n✓ Unmark-reviewed summary: ${summary.removed} rows removed, ${summary.missing} sids had no review marker, ${summary.errors.length} errors`);
+  if (summary.removed) console.log('  Run: node build_all.js   to apply\n');
   return summary;
 }
 
@@ -1192,16 +1281,37 @@ async function main() {
   }
 
   if (args[0] === '--mark-reviewed') {
-    // Accept either space-separated trailing args or a single comma-separated
-    // string. Filters empties so accidental double-spaces don't insert blanks.
-    const raw = args.slice(1).join(' ');
-    const sids = raw.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+    // Parsing strategy: each shell argv element is treated as ONE sid OR
+    // a comma-separated list of sids. We do NOT split on whitespace
+    // because real sids like '310631-Adult Clinic' contain spaces -- the
+    // shell already split argv by whitespace OUTSIDE quotes, so we just
+    // need to honour commas inside each remaining piece.
+    const sids = args.slice(1)
+      .flatMap(a => a.split(','))
+      .map(s => s.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean);
     if (!sids.length) {
-      console.error('Usage: --mark-reviewed <sid> [<sid> ...]');
+      console.error('Usage: --mark-reviewed "<sid>" ["<sid>" ...]');
       console.error('       --mark-reviewed "sid1, sid2, sid3"');
+      console.error('  Quote sids that contain spaces, e.g. "310631-Adult Clinic"');
       process.exit(1);
     }
     await cmd_mark_reviewed(sids); return;
+  }
+
+  if (args[0] === '--unmark-reviewed') {
+    // Inverse of --mark-reviewed. Same parsing rules (see comment there).
+    const sids = args.slice(1)
+      .flatMap(a => a.split(','))
+      .map(s => s.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean);
+    if (!sids.length) {
+      console.error('Usage: --unmark-reviewed "<sid>" ["<sid>" ...]');
+      console.error('       --unmark-reviewed "sid1, sid2, sid3"');
+      console.error('  Quote sids that contain spaces, e.g. "310631-Adult Clinic"');
+      process.exit(1);
+    }
+    await cmd_unmark_reviewed(sids); return;
   }
 
   if (args[0] === '--add-override') {
@@ -1248,7 +1358,7 @@ async function main() {
     process.exit(1);
   }
 
-  // ââ Legacy flag ââââââââââââââââââââââââââââââââââ
+  // Legacy flag
   if (args[0] === '--list-unmatched') {
     const results = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
     if (!results) { console.error('Run node build_all.js first.'); process.exit(1); }
@@ -1257,14 +1367,14 @@ async function main() {
     if (results.overrides?.total_applied) {
       console.log(`Active overrides: ${results.overrides.total_applied}`);
       results.overrides.applied.forEach(o =>
-        console.log(`  ${o.type}: ${o.sid_baseline ?? ''}${o.sid_analysis ? ' / '+o.sid_analysis : ''} â ${o.result}`)
+        console.log(`  ${o.type}: ${o.sid_baseline ?? ''}${o.sid_analysis ? ' / '+o.sid_analysis : ''} -> ${o.result}`)
       );
     }
     return;
   }
 
   if (!args.length || args[0] === '--help') {
-    console.log(`\nUSAT Analysis -- Q&A + Override Management\n\nUsage: node ask.js \"<question>\" [options]\n       node ask.js --<command> [args]\n\n-- Override commands ---------------------------------\n  --list-overrides                  Show all active overrides\n  --add-override match <sid_b> <sid_a> [\"note\"] [--global]\n  --add-override no-match <sid_b> <sid_a> [--seg-baseline X] [--seg-analysis Y] [\"note\"] [--global]\n  --add-override segment <baseline|analysis> <sid> <segment> [\"note\"] [--global]\n  --remove-override <sid>           Soft-delete all overrides for a sid\n  --approve <sid>                   Approve + capture signature for stale-detection\n  --unapprove <sid>                 Clear approval + signatures\n  --mark-reviewed <sid> [<sid> ...] Mark events reviewed-and-correct (CLI version of\n                                    the dashboard Reviewed? checkbox). Creates the\n                                    right override shape per segment and approves.\n                                    Tagged created_by='cli:review'.\n  --suggest-overrides               AI suggestions for likely missed matches\n\nAfter any override write, run: node build_all.js\n`);
+    console.log(`\nUSAT Analysis -- Q&A + Override Management\n\nUsage: node ask.js \"<question>\" [options]\n       node ask.js --<command> [args]\n\n-- Override commands ---------------------------------\n  --list-overrides                  Show all active overrides\n  --add-override match <sid_b> <sid_a> [\"note\"] [--global]\n  --add-override no-match <sid_b> <sid_a> [--seg-baseline X] [--seg-analysis Y] [\"note\"] [--global]\n  --add-override segment <baseline|analysis> <sid> <segment> [\"note\"] [--global]\n  --remove-override <sid>           Soft-delete all overrides for a sid\n  --approve <sid>                   Approve + capture signature for stale-detection\n  --unapprove <sid>                 Clear approval + signatures\n  --mark-reviewed <sid> [<sid> ...] Mark events reviewed-and-correct (CLI version of\n                                    the dashboard Reviewed? checkbox). Creates the\n                                    right override shape per segment and approves.\n                                    Tagged created_by='cli:review'.\n  --unmark-reviewed <sid> [<sid> ...] Inverse of --mark-reviewed: soft-delete only\n                                    the review-tagged overrides for the supplied\n                                    sids. Manual overrides on the same sid stay\n                                    intact.\n  --suggest-overrides               AI suggestions for likely missed matches\n\nAfter any override write, run: node build_all.js\n`);
     return;
   }
 
@@ -1272,7 +1382,6 @@ async function main() {
   process.exit(1);
 }
 
-// Entry point
 if (require.main === module) {
   main().catch(err => { console.error(err); process.exit(1); });
 }
@@ -1286,6 +1395,7 @@ module.exports = {
   cmd_approve,
   cmd_unapprove,
   cmd_mark_reviewed,
+  cmd_unmark_reviewed,
   current_year_scope,
   year_arg_to_column,
 };

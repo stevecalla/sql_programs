@@ -49,6 +49,7 @@ const {
   cmd_approve,
   cmd_unapprove,
   cmd_mark_reviewed,
+  cmd_unmark_reviewed,
   current_year_scope,
   year_arg_to_column,
 } = require('../ask');
@@ -1151,12 +1152,36 @@ describe('Step 12 -- cmd_mark_reviewed', () => {
     const c = await db();
     await c.query(`DELETE FROM \`${ROSTER_TABLE}\` WHERE baseline_year = 1999 AND analysis_year = 2000`);
     await cleanup_test_rows();
+    // Also purge any cli:review / dashboard:review / cli rows left at the
+    // sentinel year pair. cleanup_test_rows only deletes TEST_TAG rows;
+    // a mid-test crash (or simply tests that don't retag before they end)
+    // could leave a row with created_by='cli:review' at baseline_year=1999
+    // sitting in production. This DELETE is scoped to the sentinel pair so
+    // real production rows are never touched.
+    await c.query(
+      `DELETE FROM \`${TABLE}\`
+        WHERE created_by IN ('cli:review', 'dashboard:review', 'cli')
+          AND baseline_year = 1999 AND analysis_year = 2000`
+    );
     if (ORIG_BASELINE === undefined) delete process.env.BASELINE_YEAR; else process.env.BASELINE_YEAR = ORIG_BASELINE;
     if (ORIG_ANALYSIS === undefined) delete process.env.ANALYSIS_YEAR; else process.env.ANALYSIS_YEAR = ORIG_ANALYSIS;
     console.log = ORIG_LOG; console.warn = ORIG_WARN; console.error = ORIG_ERR;
   });
 
-  beforeEach(async () => { await cleanup_test_rows(); });
+  beforeEach(async () => {
+    await cleanup_test_rows();
+    // Defensive: also wipe any cli:review / dashboard:review rows on our
+    // sentinel-year fixtures. A crash mid-test (e.g. a missing import or
+    // a thrown assertion before the retag-to-TEST_TAG step) would otherwise
+    // leave orphans that trip the duplicate-guard in cmd_add_match on the
+    // next test. Scoped to baseline_year=1999 so production rows are safe.
+    const c = await db();
+    await c.query(
+      `DELETE FROM \`${TABLE}\`
+        WHERE created_by IN ('cli:review', 'dashboard:review', 'cli')
+          AND baseline_year = 1999 AND analysis_year = 2000`
+    );
+  });
 
   test('Retained pair sid -> inserts force_match override, approved, cli:review tag', async () => {
     const summary = await cmd_mark_reviewed(['BL-MR-1'], { created_by: 'cli:review' });
@@ -1236,5 +1261,83 @@ describe('Step 12 -- cmd_mark_reviewed', () => {
     assert.equal(first.inserted,  1, 'first call inserts');
     assert.equal(second.exists,   1, 'second call sees existing');
     assert.equal(second.inserted, 0);
+  });
+
+  // ── cmd_unmark_reviewed — inverse of mark_reviewed ───────────────────
+  // Adds a reviewed marker, then calls cmd_unmark_reviewed to make sure
+  // it gets soft-deleted (active=0, approved=0) without touching non-
+  // review overrides on the same sid.
+
+  test('unmark_reviewed soft-deletes a Retained marker created by mark_reviewed', async () => {
+    // Set up: mark the sid, then unmark it.
+    await cmd_mark_reviewed(['BL-MR-1'], { created_by: 'cli:review' });
+    const c = await db();
+    // Re-tag rows so cleanup gets them even if unmark misses something.
+    await c.query(`UPDATE \`${TABLE}\` SET created_by = ? WHERE created_by = 'cli:review' AND baseline_year = 1999 AND analysis_year = 2000`, [TEST_TAG]);
+    // Flip created_by BACK to cli:review on the row we want to unmark
+    // (cleanup tag would otherwise hide it from the unmark query).
+    const [[before_row]] = await c.query(
+      `SELECT id, active FROM \`${TABLE}\` WHERE created_by = ? AND sid_baseline = 'BL-MR-1'`,
+      [TEST_TAG]
+    );
+    assert.ok(before_row, 'mark-reviewed should have inserted a row');
+    assert.equal(before_row.active, 1, 'row should start active');
+    await c.query(`UPDATE \`${TABLE}\` SET created_by = 'cli:review' WHERE id = ?`, [before_row.id]);
+
+    const summary = await cmd_unmark_reviewed(['BL-MR-1']);
+    assert.equal(summary.removed, 1, 'should remove exactly one review-tagged row');
+    assert.equal(summary.missing, 0);
+    assert.equal(summary.errors.length, 0);
+
+    // Verify the soft-delete + invariant: active=0, approved=0, approval_state=NULL.
+    const [[after_row]] = await c.query(
+      `SELECT active, approved, approval_state FROM \`${TABLE}\` WHERE id = ?`,
+      [before_row.id]
+    );
+    assert.equal(after_row.active, 0, 'row should be soft-deleted (active=0)');
+    assert.equal(after_row.approved, 0, 'row should have approved=0 (invariant)');
+    assert.equal(after_row.approval_state, null, 'approval_state should be NULL');
+    // Re-tag for cleanup.
+    await c.query(`UPDATE \`${TABLE}\` SET created_by = ? WHERE id = ?`, [TEST_TAG, before_row.id]);
+  });
+
+  test('unmark_reviewed reports "missing" when no review marker exists for the sid', async () => {
+    const summary = await cmd_unmark_reviewed(['BL-MR-1']);
+    assert.equal(summary.removed, 0);
+    assert.equal(summary.missing, 1, 'sid with no review marker should bump missing count');
+    assert.equal(summary.errors.length, 0);
+  });
+
+  test('unmark_reviewed leaves non-review overrides on the same sid untouched', async () => {
+    // Use a force_segment as the "manual" override so it can coexist with
+    // the force_match that mark-reviewed creates (different override_type
+    // → no duplicate-guard collision). Real-world scenario: operator
+    // manually flagged a Retained event as Shifted via force_segment,
+    // then someone else clicks Reviewed? on the same row, creating a
+    // force_match. Unmarking should drop the force_match but leave the
+    // force_segment.
+    await cmd_add_segment('baseline', 'BL-MR-1', 'Shifted', 'manual override -- not a review', { created_by: 'cli' });
+    const c = await db();
+    // Re-tag so cleanup catches the manual row.
+    await c.query(`UPDATE \`${TABLE}\` SET created_by = ? WHERE created_by = 'cli' AND sid_baseline = 'BL-MR-1' AND override_type = 'force_segment' AND baseline_year = 1999`, [TEST_TAG]);
+    const [[manual_row]] = await c.query(
+      `SELECT id FROM \`${TABLE}\` WHERE created_by = ? AND sid_baseline = 'BL-MR-1' AND override_type = 'force_segment'`,
+      [TEST_TAG]
+    );
+    assert.ok(manual_row, 'manual force_segment override should have been created');
+
+    // Now mark-review the same sid (creates a force_match), then unmark.
+    // unmark only targets cli:review/dashboard:review rows, so the manual
+    // force_segment must survive untouched.
+    await cmd_mark_reviewed(['BL-MR-1'], { created_by: 'cli:review' });
+    const summary = await cmd_unmark_reviewed(['BL-MR-1']);
+    assert.ok(summary.removed >= 1, 'unmark should remove the cli:review force_match row');
+
+    // Manual force_segment must still be active.
+    const [[after_manual]] = await c.query(
+      `SELECT active FROM \`${TABLE}\` WHERE id = ?`,
+      [manual_row.id]
+    );
+    assert.equal(after_manual.active, 1, 'manual force_segment should remain active after unmark');
   });
 });

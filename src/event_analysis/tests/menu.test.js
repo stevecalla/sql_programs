@@ -80,7 +80,7 @@ describe('menu.js — known actions', () => {
     'build', 'build_rule_based', 'build_fresh_ai', 'build_no_roster', 'build_custom_years', 'check',
     'open_dashboard', 'open_excel', 'open_pptx',
     'list_overrides', 'suggest_overrides',
-    'add_match', 'add_no_match', 'add_segment', 'remove_override', 'mark_reviewed',
+    'add_match', 'add_no_match', 'add_segment', 'remove_override', 'mark_reviewed', 'unmark_reviewed',
     'ask', 'ask_save', 'update_commentary', 'what_changed',
     'view_changes', 'view_notes', 'view_readme',
     'start_server', 'start_server_restricted',
