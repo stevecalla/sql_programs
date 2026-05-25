@@ -691,6 +691,15 @@ canvas{width:100%!important;max-height:220px}
 @media (max-width:780px){.dash-ov-grid{grid-template-columns:1fr}}
 
 .dash-ov-list{font-size:.78rem;background:#f8f9fa;border-radius:6px;padding:10px;min-height:100px;max-height:340px;overflow-y:auto}
+/* Filter row above the list. Three controls + a clear link. Wraps on
+   narrow viewports so the editor still works on mobile. */
+.dash-ov-list-filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.dash-ov-list-filters>input,
+.dash-ov-list-filters>select{font-size:.75rem;padding:4px 7px;border:1px solid #ccc;border-radius:4px;background:#fff;color:#333}
+.dash-ov-list-filters>input{flex:1;min-width:120px}
+.dash-ov-list-filters>select{cursor:pointer}
+.dash-ov-list-filters>#dash-ov-flt-clear{font-size:.72rem;color:#0969da;text-decoration:none;padding:2px 4px}
+.dash-ov-list-filters>#dash-ov-flt-clear:hover{text-decoration:underline}
 .dash-ov-list-item{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #eaecef}
 .dash-ov-list-item:last-child{border-bottom:none}
 .dash-ov-list-item.dash-ov-selected-row{background:#e3f2fd;margin:0 -4px;padding:6px 8px;border-radius:4px}
@@ -1125,6 +1134,27 @@ ${has_table ? `
           <span class="muted" id="dash-ov-list-summary" style="font-weight:400"></span>
           <button class="dash-ov-btn" type="button" style="margin-left:auto;font-size:.7rem"
                   onclick="dash_ov_refresh()">↻ Refresh</button>
+        </div>
+        <!-- Filter row: search + type + status. State persists to
+             localStorage('dash_ov_list_filters'). The clear link is shown
+             only when at least one filter is non-default. -->
+        <div class="dash-ov-list-filters" id="dash-ov-list-filters">
+          <input type="text" id="dash-ov-flt-search" placeholder="🔍 search sid, name, note…"
+                 autocomplete="off" spellcheck="false">
+          <select id="dash-ov-flt-type" title="Filter by override type">
+            <option value="all">All types</option>
+            <option value="force_match">force_match</option>
+            <option value="force_no_match">force_no_match</option>
+            <option value="force_segment">force_segment</option>
+          </select>
+          <select id="dash-ov-flt-status" title="Filter by approval status">
+            <option value="all">All status</option>
+            <option value="approved">Approved</option>
+            <option value="unapproved">Unapproved</option>
+            <option value="stale">Stale</option>
+          </select>
+          <a href="#" id="dash-ov-flt-clear" style="display:none"
+             onclick="dash_ov_filters_clear();return false">× clear</a>
         </div>
         <div class="dash-ov-list" id="dash-ov-list">
           <div class="dash-ov-empty">Loading…</div>
@@ -3239,6 +3269,11 @@ if(ROSTER && ROSTER.length > 0){
   var _selected_sid = null; // currently-selected sid (from row click)
   var _dirty        = false;
   var _toast_t      = null;
+  // Override-list filters. Restored from localStorage in the boot block;
+  // mutated by the input/change listeners wired in wire_list_filters().
+  // apply_list_filters() reads this and returns a narrowed array.
+  var _list_filters = { search: '', type: 'all', status: 'all' };
+  var _LIST_FILTERS_DEFAULTS = { search: '', type: 'all', status: 'all' };
 
   // ── Helpers ─────────────────────────────────────────────────────────
   function $id(id){ return document.getElementById(id); }
@@ -3373,6 +3408,36 @@ if(ROSTER && ROSTER.length > 0){
   }
 
   // ── Render: active overrides list ───────────────────────────────────
+  // Pure filter helper. Exposed on window so the test harness can call it
+  // directly without going through the DOM. The four status buckets are
+  // intentionally non-overlapping: 'approved' = approved AND not stale,
+  // 'stale' = approved AND staleness flag set, 'unapproved' = not
+  // approved at all. This matches what the operator sees in the row's
+  // action button (↶ vs ✓) and what the badge color shows.
+  window.dash_ov_apply_list_filters = function(items, filters) {
+    if (!filters) return items;
+    var q = (filters.search || '').trim().toLowerCase();
+    var type = filters.type || 'all';
+    var status = filters.status || 'all';
+    return items.filter(function(o) {
+      if (type !== 'all' && o._type !== type) return false;
+      if (status !== 'all') {
+        var is_stale = o.approval_state === 'stale';
+        var is_approved_fresh = !!o.approved && !is_stale;
+        if (status === 'approved'   && !is_approved_fresh) return false;
+        if (status === 'stale'      && !is_stale)          return false;
+        if (status === 'unapproved' &&  o.approved)        return false;
+      }
+      if (q) {
+        var hay = [o.sid_baseline, o.sid_analysis, o.name_baseline, o.name_analysis, o.note]
+          .map(function(s){ return (s == null ? '' : String(s)).toLowerCase(); })
+          .join(' \\u241f ');  // unit separator — avoids cross-field matches
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+  };
+
   function render_list(){
     var list = $id('dash-ov-list');
     var summary = $id('dash-ov-list-summary');
@@ -3384,17 +3449,35 @@ if(ROSTER && ROSTER.length > 0){
       .concat((_overrides.force_segment || []).map(function(o){ return Object.assign({}, o, { _type: 'force_segment' }); }))
       .sort(function(a,b){ return a.id - b.id; });
 
+    var total = all.length;
+    var filtered = window.dash_ov_apply_list_filters(all, _list_filters);
+    var any_filter_active = _list_filters.search || _list_filters.type !== 'all' || _list_filters.status !== 'all';
+
     var stats = _overrides.stats || {};
     if (summary) {
-      summary.textContent = all.length
-        ? '· ' + all.length + ' total · ' + (stats.approved||0) + ' approved · ' + (stats.unapproved||0) + ' unapproved · ' + (stats.stale||0) + ' stale'
-        : '';
+      if (!total) {
+        summary.textContent = '';
+      } else if (any_filter_active) {
+        summary.textContent = '· Showing ' + filtered.length + ' of ' + total
+          + ' · ' + (stats.approved||0) + ' approved · ' + (stats.unapproved||0) + ' unapproved · ' + (stats.stale||0) + ' stale';
+      } else {
+        summary.textContent = '· ' + total + ' total · ' + (stats.approved||0) + ' approved · ' + (stats.unapproved||0) + ' unapproved · ' + (stats.stale||0) + ' stale';
+      }
     }
+    // Show/hide the clear link based on whether any filter is non-default.
+    var clear_el = $id('dash-ov-flt-clear');
+    if (clear_el) clear_el.style.display = any_filter_active ? '' : 'none';
 
-    if (!all.length) {
+    if (!total) {
       list.innerHTML = '<div class="dash-ov-empty">No active overrides in this year scope.</div>';
       return;
     }
+    if (!filtered.length) {
+      list.innerHTML = '<div class="dash-ov-empty">No overrides match the current filters.</div>';
+      return;
+    }
+    // Reassign 'all' so the existing render loop below uses the filtered set.
+    all = filtered;
 
     // Render the event name (or a placeholder when the underlying event
     // was removed from event_data_metrics) as a small italic line so the
@@ -3842,6 +3925,71 @@ if(ROSTER && ROSTER.length > 0){
     if (bp) bp.addEventListener('input', clear);
     if (ap) ap.addEventListener('input', clear);
   })();
+
+  // ── Wire up the override-list filter controls ─────────────────────────
+  // Reads any previously-persisted filter state from localStorage, applies
+  // it to the inputs, and registers input/change listeners that update
+  // _list_filters + persist + re-render. The clear-link onclick is
+  // exposed on window so it can be called from the inline HTML attribute.
+  function persist_list_filters() {
+    try { localStorage.setItem('dash_ov_list_filters', JSON.stringify(_list_filters)); } catch (e) {}
+  }
+  function restore_list_filters() {
+    try {
+      var raw = localStorage.getItem('dash_ov_list_filters');
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      if (saved && typeof saved === 'object') {
+        _list_filters.search = String(saved.search || '');
+        _list_filters.type   = String(saved.type   || 'all');
+        _list_filters.status = String(saved.status || 'all');
+      }
+    } catch (e) {}
+  }
+  (function wire_list_filters(){
+    var search = $id('dash-ov-flt-search');
+    var type   = $id('dash-ov-flt-type');
+    var status = $id('dash-ov-flt-status');
+    restore_list_filters();
+    if (search) {
+      search.value = _list_filters.search;
+      search.addEventListener('input', function(){
+        _list_filters.search = search.value;
+        persist_list_filters();
+        render_list();
+      });
+    }
+    if (type) {
+      type.value = _list_filters.type;
+      type.addEventListener('change', function(){
+        _list_filters.type = type.value || 'all';
+        persist_list_filters();
+        render_list();
+      });
+    }
+    if (status) {
+      status.value = _list_filters.status;
+      status.addEventListener('change', function(){
+        _list_filters.status = status.value || 'all';
+        persist_list_filters();
+        render_list();
+      });
+    }
+  })();
+
+  window.dash_ov_filters_clear = function() {
+    _list_filters.search = _LIST_FILTERS_DEFAULTS.search;
+    _list_filters.type   = _LIST_FILTERS_DEFAULTS.type;
+    _list_filters.status = _LIST_FILTERS_DEFAULTS.status;
+    var search = $id('dash-ov-flt-search');
+    var type   = $id('dash-ov-flt-type');
+    var status = $id('dash-ov-flt-status');
+    if (search) search.value = '';
+    if (type)   type.value   = 'all';
+    if (status) status.value = 'all';
+    persist_list_filters();
+    render_list();
+  };
 
   // ── Boot ────────────────────────────────────────────────────────────
   // Wire the list's delegated click handler (approve / unapprove /

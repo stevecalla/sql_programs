@@ -913,4 +913,148 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
     assert.equal(storage.get('dash_ov_editor_open'), '1',
       'auto-expanding should also persist so subsequent reloads stay open');
   });
+
+  // ── Enhancement #3: override-list filters ────────────────────────────────
+  // Three controls above the list: search input, type dropdown, status
+  // dropdown. State is persisted to localStorage('dash_ov_list_filters')
+  // and applied via window.dash_ov_apply_list_filters (a pure function
+  // exposed for testability). Status buckets are non-overlapping:
+  //   approved   = approved AND not stale
+  //   stale      = approved AND staleness flag set
+  //   unapproved = not approved at all
+
+  test('list filter row renders with search input + type/status selects + clear link', () => {
+    const html = render_to_tmp();
+    assert.match(html, /id="dash-ov-list-filters"/);
+    assert.match(html, /<input[^>]*\btype="text"[^>]*\bid="dash-ov-flt-search"/);
+    assert.match(html, /<select[^>]*\bid="dash-ov-flt-type"/);
+    assert.match(html, /<select[^>]*\bid="dash-ov-flt-status"/);
+    assert.match(html, /id="dash-ov-flt-clear"/);
+    // Type dropdown options
+    assert.match(html, /<option value="force_match">/);
+    assert.match(html, /<option value="force_no_match">/);
+    assert.match(html, /<option value="force_segment">/);
+    // Status dropdown options
+    assert.match(html, /<option value="approved">/);
+    assert.match(html, /<option value="unapproved">/);
+    assert.match(html, /<option value="stale">/);
+  });
+
+  // Harness that runs the inline scripts and exposes
+  // window.dash_ov_apply_list_filters for direct testing.
+  function load_inline_scripts(extra_sandbox) {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+    const sb = make_sandbox();
+    Object.assign(sb, extra_sandbox || {});
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    return sb;
+  }
+
+  // Fixture: 4 overrides covering each type + each status bucket.
+  const filter_fixture = [
+    { _type: 'force_match',    sid_baseline: 'BL-1', sid_analysis: 'AN-1', name_baseline: 'Alpha Race', name_analysis: 'Alpha Race 2026', note: 'merged duplicates', approved: true,  approval_state: null,        id: 1 },
+    { _type: 'force_no_match', sid_baseline: 'BL-2', sid_analysis: 'AN-2', name_baseline: 'Beta Race',  name_analysis: 'Different Beta', note: '',                  approved: false, approval_state: null,        id: 2 },
+    { _type: 'force_segment',  sid_baseline: 'BL-3', sid_analysis: null,   name_baseline: 'Gamma Race', name_analysis: null,            note: 'set to Lost',        approved: true,  approval_state: 'stale',     id: 3 },
+    { _type: 'force_match',    sid_baseline: 'BL-4', sid_analysis: 'AN-4', name_baseline: 'Delta Race', name_analysis: 'Delta Race',    note: 'reviewed',           approved: false, approval_state: 'unapproved', id: 4 },
+  ];
+
+  test('apply_list_filters: no filters returns all items', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: '', type: 'all', status: 'all' });
+    assert.equal(out.length, 4);
+  });
+
+  test('apply_list_filters: search matches sid', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: 'BL-2', type: 'all', status: 'all' });
+    assert.deepEqual(out.map((o) => o.id), [2]);
+  });
+
+  test('apply_list_filters: search matches event name (case-insensitive)', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: 'gamma', type: 'all', status: 'all' });
+    assert.deepEqual(out.map((o) => o.id), [3]);
+  });
+
+  test('apply_list_filters: search matches note', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: 'reviewed', type: 'all', status: 'all' });
+    assert.deepEqual(out.map((o) => o.id), [4]);
+  });
+
+  test('apply_list_filters: type filter narrows to one override kind', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: '', type: 'force_match', status: 'all' });
+    assert.deepEqual(out.map((o) => o.id).sort(), [1, 4]);
+  });
+
+  test('apply_list_filters: status="approved" excludes stale even if approved=true', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: '', type: 'all', status: 'approved' });
+    // id 1 is approved+fresh; id 3 is approved+stale (excluded)
+    assert.deepEqual(out.map((o) => o.id), [1]);
+  });
+
+  test('apply_list_filters: status="stale" returns only stale rows', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: '', type: 'all', status: 'stale' });
+    assert.deepEqual(out.map((o) => o.id), [3]);
+  });
+
+  test('apply_list_filters: status="unapproved" returns only !approved rows', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: '', type: 'all', status: 'unapproved' });
+    assert.deepEqual(out.map((o) => o.id).sort(), [2, 4]);
+  });
+
+  test('apply_list_filters: combined search + type + status narrows further', () => {
+    const sb = load_inline_scripts();
+    const out = sb.dash_ov_apply_list_filters(filter_fixture, { search: 'delta', type: 'force_match', status: 'unapproved' });
+    assert.deepEqual(out.map((o) => o.id), [4]);
+  });
+
+  // Runtime persistence: with a stateful localStorage carrying a saved
+  // filter state, the inputs should be populated at boot.
+  test('filter state restores from localStorage on boot', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    // Track values written to the three filter inputs.
+    const search_el = { value: '', style: {}, classList: { add(){}, remove(){}, contains(){return false}, toggle(){} }, addEventListener(){}, };
+    const type_el   = { value: 'all', style: {}, classList: { add(){}, remove(){}, contains(){return false}, toggle(){} }, addEventListener(){}, };
+    const status_el = { value: 'all', style: {}, classList: { add(){}, remove(){}, contains(){return false}, toggle(){} }, addEventListener(){}, };
+
+    const storage = new Map([['dash_ov_list_filters', JSON.stringify({ search: 'beta', type: 'force_no_match', status: 'unapproved' })]]);
+    const sb = make_sandbox();
+    sb.localStorage = {
+      getItem: (k) => storage.has(k) ? storage.get(k) : null,
+      setItem: (k, v) => storage.set(k, String(v)),
+      removeItem: (k) => storage.delete(k),
+    };
+    sb.document.getElementById = (id) => {
+      if (id === 'dash-ov-flt-search') return search_el;
+      if (id === 'dash-ov-flt-type')   return type_el;
+      if (id === 'dash-ov-flt-status') return status_el;
+      return stub_el();
+    };
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    assert.equal(search_el.value, 'beta',           'restore: search should be set from localStorage');
+    assert.equal(type_el.value,   'force_no_match', 'restore: type should be set from localStorage');
+    assert.equal(status_el.value, 'unapproved',     'restore: status should be set from localStorage');
+  });
 });
