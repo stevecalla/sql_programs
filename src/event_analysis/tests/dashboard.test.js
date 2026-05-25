@@ -1178,4 +1178,131 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
     }});
     assert.equal(r.ok, true);
   });
+
+  // ── Regression guard: expand modal mirrors source view (chart vs table) ─
+  // Before this fix, expand_chart(id) always rendered a Chart.js instance
+  // into <canvas id="modal-chart">, ignoring whether the source card was
+  // currently in table-flip mode. So clicking [Expand] after flipping to
+  // table view showed the chart anyway. The fix detects style.display on
+  // the source canvas and dispatches to _render_modal_chart or
+  // _render_modal_table accordingly.
+
+  test('expand modal HTML has both a chart canvas and a table div with a flip button', () => {
+    const html = render_to_tmp();
+    assert.match(html, /<canvas id="modal-chart">/);
+    assert.match(html, /id="modal-flip-tbl"[^>]*class="chart-flip-tbl[^"]*modal-flip-tbl/);
+    assert.match(html, /id="modal-flip-btn"[^>]*onclick="modal_flip\(\)"/);
+  });
+
+  test('expanding a chart in chart-mode shows the canvas, hides the modal table', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    // Source card: a chart with display in chart mode (no display:none).
+    const src_canvas = { style: { display: '' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_canvas = { style: { display: '' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_tbl    = { style: { display: 'none' }, innerHTML: '', classList:{ _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+    const modal_btn    = { textContent: '⇄ Table', title: '', classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const chart_modal_root = { classList: { _set: new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const sb = make_sandbox();
+    sb.document.getElementById = (id) => {
+      if (id === 'modal-chart')    return modal_canvas;
+      if (id === 'modal-flip-tbl') return modal_tbl;
+      if (id === 'modal-flip-btn') return modal_btn;
+      if (id === 'chart-modal')    return chart_modal_root;
+      if (id === 'modal-title')    return { textContent: '', childNodes: [{ nodeValue: '' }] };
+      if (id === 'c_segment')      return src_canvas;
+      return stub_el();
+    };
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    if (typeof sb.expand_chart !== 'function') throw new Error('expand_chart not defined');
+    sb.expand_chart('c_segment');
+    // Modal should show canvas, hide table.
+    assert.equal(modal_canvas.style.display, '',     'canvas should be visible in chart mode');
+    assert.equal(modal_tbl.style.display,    'none', 'table div should be hidden in chart mode');
+    assert.equal(modal_btn.textContent,      '⇄ Table', 'button should offer "switch to table" in chart mode');
+  });
+
+  test('expanding a chart in TABLE mode shows the modal table, hides the canvas', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    // Source card: in TABLE-flip mode (canvas display:none).
+    const src_canvas = { style: { display: 'none' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_canvas = { style: { display: '' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_tbl    = { style: { display: 'none' }, innerHTML: '', classList:{ _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+    const modal_btn    = { textContent: '⇄ Table', title: '', classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const chart_modal_root = { classList: { _set: new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const sb = make_sandbox();
+    sb.document.getElementById = (id) => {
+      if (id === 'modal-chart')    return modal_canvas;
+      if (id === 'modal-flip-tbl') return modal_tbl;
+      if (id === 'modal-flip-btn') return modal_btn;
+      if (id === 'chart-modal')    return chart_modal_root;
+      if (id === 'modal-title')    return { textContent: '', childNodes: [{ nodeValue: '' }] };
+      if (id === 'c_segment')      return src_canvas;
+      return stub_el();
+    };
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    sb.expand_chart('c_segment');
+    // The bug was: canvas would be visible, table div hidden. After fix:
+    // canvas display:none, table div display:block.
+    assert.equal(modal_canvas.style.display, 'none',  'canvas should be HIDDEN when source is in table mode -- this is the bug');
+    assert.equal(modal_tbl.style.display,    'block', 'table div should be visible when source is in table mode');
+    assert.equal(modal_btn.textContent,      '📊 Chart', 'button should offer "switch to chart" in table mode');
+  });
+
+  test('modal_flip toggles between chart and table view inside the modal', () => {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    const src_canvas = { style: { display: '' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_canvas = { style: { display: '' }, classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const modal_tbl    = { style: { display: 'none' }, innerHTML: '', classList:{ _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+    const modal_btn    = { textContent: '⇄ Table', title: '', classList:{ add(){}, remove(){}, contains(){return false}, toggle(){} } };
+    const chart_modal_root = { classList: { _set: new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const sb = make_sandbox();
+    sb.document.getElementById = (id) => {
+      if (id === 'modal-chart')    return modal_canvas;
+      if (id === 'modal-flip-tbl') return modal_tbl;
+      if (id === 'modal-flip-btn') return modal_btn;
+      if (id === 'chart-modal')    return chart_modal_root;
+      if (id === 'modal-title')    return { textContent: '', childNodes: [{ nodeValue: '' }] };
+      if (id === 'c_segment')      return src_canvas;
+      return stub_el();
+    };
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    sb.expand_chart('c_segment');  // starts in chart mode
+    assert.equal(modal_canvas.style.display, '');
+    sb.modal_flip();               // -> table mode
+    assert.equal(modal_canvas.style.display, 'none', 'first flip should hide canvas');
+    assert.equal(modal_tbl.style.display,    'block', 'first flip should show table');
+    sb.modal_flip();               // -> chart mode
+    assert.equal(modal_canvas.style.display, '',     'second flip should restore canvas');
+    assert.equal(modal_tbl.style.display,    'none', 'second flip should hide table');
+  });
 });

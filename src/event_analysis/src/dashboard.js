@@ -415,6 +415,11 @@ canvas{width:100%!important;max-height:220px}
              cursor:pointer;font-size:1rem;color:#555}
 .modal-close:hover{background:#C62828;color:#fff}
 .modal-canvas-wrap{flex:1;position:relative;min-height:0}
+/* Modal table view: fills the canvas-wrap when the source card was
+   flipped to table mode. Same styling as the in-card table but allowed
+   to grow + scroll. */
+.modal-flip-tbl{flex:1;min-height:0;overflow:auto;display:none}
+.modal-flip-tbl.open{display:block}
 /* ── Panel ── */
 .panel-body{margin-top:12px}
 .panel-body.hidden{display:none}
@@ -4175,12 +4180,16 @@ if(ROSTER && ROSTER.length > 0){
 })();
 </script>
 
-<!-- Chart expand modal (uses .modal-box / .modal-hdr / .modal-canvas-wrap CSS) -->
+<!-- Chart expand modal (uses .modal-box / .modal-hdr / .modal-canvas-wrap CSS).
+     The modal can show either the chart (canvas) or a table view, mirroring
+     whichever mode the source card is in when ⤢ Expand is clicked. The
+     ⇄ button toggles between the two inside the modal without closing. -->
 <div id="chart-modal">
   <div class="modal-box">
     <div class="modal-hdr">
       <h3 id="modal-title" style="margin:0">Chart</h3>
       <div style="display:flex;gap:6px;align-items:center">
+        <button id="modal-flip-btn" class="chart-btn" onclick="modal_flip()" title="Switch view">⇄ Table</button>
         <button class="chart-btn" onclick="export_modal_png()" title="Export PNG">⬇ PNG</button>
         <button class="chart-btn" onclick="export_modal_csv()" title="Export CSV">⬇ CSV</button>
         <button class="modal-close" onclick="close_modal()" title="Close">✕</button>
@@ -4188,6 +4197,7 @@ if(ROSTER && ROSTER.length > 0){
     </div>
     <div class="modal-canvas-wrap">
       <canvas id="modal-chart"></canvas>
+      <div id="modal-flip-tbl" class="chart-flip-tbl modal-flip-tbl"></div>
     </div>
   </div>
 </div>
@@ -4206,16 +4216,16 @@ function get_modal_plugin_opts(id) {
   const inline = (src_chart.config && src_chart.config.plugins) || [];
   return { plugin_opts: modal_opts, inline_plugins: inline };
 }
-function expand_chart(id) {
+// Internal: render the chart view into the modal canvas, hide the table div.
+function _render_modal_chart(id) {
   const snap   = CHART_SNAP[id];
   const canvas = document.getElementById('modal-chart');
+  const tbl    = document.getElementById('modal-flip-tbl');
+  const btn    = document.getElementById('modal-flip-btn');
   if (!snap || !canvas) return;
-  _modal_chart_id = id;
-  document.getElementById('chart-modal').classList.add('open');
-  var card = document.querySelector('#'+id);
-  var h3 = card && card.closest('.card') && card.closest('.card').querySelector('h3');
-  var title_el = document.getElementById('modal-title');
-  if (h3 && title_el) title_el.textContent = h3.childNodes[0].nodeValue.trim();
+  if (tbl) { tbl.classList.remove('open'); tbl.style.display = 'none'; }
+  canvas.style.display = '';
+  if (btn) { btn.textContent = '⇄ Table'; btn.title = 'Switch to table view'; btn.classList.remove('flip-btn-active'); }
   const { plugin_opts, inline_plugins } = get_modal_plugin_opts(id);
   if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
   try {
@@ -4239,9 +4249,62 @@ function expand_chart(id) {
     });
   } catch(e) { console.error('expand_chart error:', e); }
 }
+// Internal: render the table view into the modal table div, hide the canvas.
+// Reuses the same _build_flip_html helper that powers the in-card table.
+function _render_modal_table(id) {
+  const canvas = document.getElementById('modal-chart');
+  const tbl    = document.getElementById('modal-flip-tbl');
+  const btn    = document.getElementById('modal-flip-btn');
+  if (!tbl) return;
+  if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
+  if (canvas) canvas.style.display = 'none';
+  tbl.innerHTML = (typeof _build_flip_html === 'function')
+    ? _build_flip_html(id)
+    : '<p style="padding:12px;color:#999">No data</p>';
+  tbl.style.display = 'block';
+  tbl.classList.add('open');
+  if (btn) { btn.textContent = '📊 Chart'; btn.title = 'Switch to chart view'; btn.classList.add('flip-btn-active'); }
+}
+
+// Public: open the expand modal. Decides chart-vs-table mode based on
+// whether the source card is currently in table mode (flip_chart_table
+// toggled). Without this check, expanding from a table view would
+// silently re-render the chart -- which is the bug this code prevents.
+function expand_chart(id) {
+  const snap = CHART_SNAP[id];
+  if (!snap) return;
+  _modal_chart_id = id;
+  document.getElementById('chart-modal').classList.add('open');
+  var card = document.querySelector('#'+id);
+  var h3 = card && card.closest('.card') && card.closest('.card').querySelector('h3');
+  var title_el = document.getElementById('modal-title');
+  if (h3 && title_el) title_el.textContent = h3.childNodes[0].nodeValue.trim();
+
+  // Mirror the source card's current view. The in-card canvas is set to
+  // display:none when the operator flipped to table mode, so check that.
+  var src_canvas = document.getElementById(id);
+  var src_in_table_mode = !!(src_canvas && src_canvas.style && src_canvas.style.display === 'none');
+  if (src_in_table_mode) _render_modal_table(id);
+  else                   _render_modal_chart(id);
+}
+
+// Toggle between chart and table inside the modal without closing it.
+function modal_flip() {
+  if (!_modal_chart_id) return;
+  var canvas = document.getElementById('modal-chart');
+  var in_table_mode = canvas && canvas.style.display === 'none';
+  if (in_table_mode) _render_modal_chart(_modal_chart_id);
+  else               _render_modal_table(_modal_chart_id);
+}
+
 function close_modal() {
   document.getElementById('chart-modal').classList.remove('open');
   if (_modal_chart) { _modal_chart.destroy(); _modal_chart = null; }
+  // Reset both views so the next open starts clean.
+  var canvas = document.getElementById('modal-chart');
+  var tbl    = document.getElementById('modal-flip-tbl');
+  if (canvas) canvas.style.display = '';
+  if (tbl) { tbl.classList.remove('open'); tbl.style.display = 'none'; tbl.innerHTML = ''; }
 }
 document.getElementById('chart-modal').addEventListener('click', function(e) {
   if (e.target === this) close_modal();
