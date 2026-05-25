@@ -156,30 +156,33 @@ The status bar at the top always shows: last build date, event totals, commentar
 | 13 | Add force-no-match | `node ask.js --add-override no-match <25\|26> <sid> "note"` |
 | 14 | Add force-segment | `node ask.js --add-override segment <25\|26> <sid> <segment> "note"` |
 | 15 | Remove override | `node ask.js --remove-override <sid>` |
+| 16 | Mark events as reviewed | `node ask.js --mark-reviewed <sid> [<sid> ...]` |
+| 17 | Unmark events as reviewed | `node ask.js --unmark-reviewed <sid> [<sid> ...]` |
 | **Q&A & ANALYSIS** | | |
-| 16 | Ask a question | `node ask.js "your question"` |
-| 17 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
-| 18 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
-| 19 | What changed? | `node ask.js --what-changed` |
+| 18 | Ask a question | `node ask.js "your question"` |
+| 19 | Ask and save to notes.md | `node ask.js "your question" --save-notes` |
+| 20 | Rewrite a slide narrative | `node ask.js "instruction" --update-commentary <key>` |
+| 21 | What changed? | `node ask.js --what-changed` |
 | **INFORMATION** | | |
-| 20 | View changes since last build | `cat output/changes.txt` |
-| 21 | View notes.md | `cat notes.md` |
-| 22 | View README | Displays this file |
+| 22 | View changes since last build | `cat output/changes.txt` |
+| 23 | View notes.md | `cat notes.md` |
+| 24 | View README | Displays this file |
 | **LOCAL SERVER** | | |
-| 23 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
-| 24 | Start local server (IP allowlist) | Prompts for a comma-separated list of allowed IPs (default `127.0.0.1`) and spawns the server with `ALLOWED_IPS` set so the middleware enforces the allowlist. Useful when you want a quick way to expose the dashboard to a known set of IPs (e.g. Looker Studio fetchers) without flipping config. CLI equivalent: `ALLOWED_IPS=127.0.0.1 node server_event_analysis_8016.js` (POSIX) / `$env:ALLOWED_IPS='127.0.0.1'; node server_event_analysis_8016.js` (PowerShell). |
+| 25 | Start local server | `node server_event_analysis_8016.js` (API + `/editor/` SPA + dashboard at port 8016; `Ctrl-C` to stop) |
+| 26 | Start local server (IP allowlist) | Prompts for a comma-separated list of allowed IPs (default `127.0.0.1`) and spawns the server with `ALLOWED_IPS` set so the middleware enforces the allowlist. Useful when you want a quick way to expose the dashboard to a known set of IPs (e.g. Looker Studio fetchers) without flipping config. CLI equivalent: `ALLOWED_IPS=127.0.0.1 node server_event_analysis_8016.js` (POSIX) / `$env:ALLOWED_IPS='127.0.0.1'; node server_event_analysis_8016.js` (PowerShell). |
 | **TESTING** | | |
-| 25 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
-| 26 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
-| 27 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
-| 28 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
-| 29 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
-| 30 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
-| 31 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
-| 32 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
-| 33 | Run roster tests only | `node --test tests/roster.test.js` (per-build roster snapshot: row-builder pure tests + DB insert + retention pruning) |
+| 27 | Run ALL tests | `node --test tests/` (every `*.test.js` under `tests/`) |
+| 28 | Run overrides tests only | `node --test tests/overrides.test.js` (schema + year scoping + apply + approve + stale) |
+| 29 | Run server tests only | `node --test tests/server.test.js` (read/write API + editor static files) |
+| 30 | Run menu tests only | `node --test tests/menu.test.js` (every menu item is wired correctly — duplicate ids, missing actions, etc.) |
+| 31 | Run smoke tests only | `node --test tests/smoke.test.js` (parse-check + require-check on every major source file) |
+| 32 | Run glossary tests only | `node --test tests/glossary.test.js` (every term defined in the dashboard's bottom-of-page glossary) |
+| 33 | Run download tests only | `node --test tests/downloads.test.js` (Excel + PowerPoint Download buttons point at files that actually exist) |
+| 34 | Run build tests only | `node --test tests/build.test.js` (commentary cache: hash stability + sensitivity + insensitivity + loader behavior) |
+| 35 | Run roster tests only | `node --test tests/roster.test.js` (per-build roster snapshot: row-builder pure tests + DB insert + retention pruning) |
+| 36 | Run dashboard tests only | `node --test tests/dashboard.test.js` (date format + Day-column-collapsed regression guards) |
 | **PREFERENCES** | | |
-| 34 | Show/hide CLI commands | Toggles a dimmed `$ ...` second line under each menu item. Choice persists in `.menu_prefs.json` next to `menu.js` (gitignored). |
+| 37 | Show/hide CLI commands | Toggles a dimmed `$ ...` second line under each menu item. Choice persists in `.menu_prefs.json` next to `menu.js` (gitignored). |
 | 0 | Exit | — |
 
 ---
@@ -665,6 +668,32 @@ node ask.js --unapprove <sid>
 
 Unapprove clears the approval columns and signatures. The audit fields `approved_by` and `approved_at` are kept so you can see who last touched the row and when.
 
+### Mark events as reviewed (CLI mirror of the dashboard Reviewed? checkbox)
+
+The dashboard roster table has a Reviewed? checkbox per row that creates an approved override tagged `created_by='dashboard:review'`. `--mark-reviewed` is the CLI version of the same flow:
+
+```bash
+node ask.js --mark-reviewed BL-1234 AN-5678 BL-9999
+```
+
+For each supplied sid, the command looks it up in the **latest `event_analysis_roster` snapshot** for the current year scope, decides the right override shape based on the row's segment, and inserts + approves it:
+
+- **Retained / Shifted / Tried to Return / Recovered** (matched pair) → `force_match(sid_baseline, sid_analysis)` + approve.
+- **Lost** (baseline-only row) → `force_segment(side='baseline', sid, segment='Lost')` + approve.
+- **New** (analysis-only row) → `force_segment(side='analysis', sid, segment='New')` + approve.
+
+Tagged `created_by='cli:review'` so audits can distinguish CLI reviews from dashboard reviews. Idempotent: re-running on an already-reviewed sid is a no-op. Sids not present in the latest roster snapshot are reported and skipped (one bad sid doesn't abort the rest). Returns a `{inserted, exists, skipped, errors}` summary. Also accessible interactively via menu option **16** ("Mark events as reviewed"), which prompts for comma- or space-separated sids.
+
+Because this reads from `event_analysis_roster`, you need at least one successful build to populate the snapshot. The dashboard's Reviewed? checkbox reads from the same place, so the two surfaces stay in sync.
+
+The inverse is `--unmark-reviewed`:
+
+```bash
+node ask.js --unmark-reviewed BL-1234 AN-5678
+```
+
+This soft-deletes **only** the review-tagged overrides (`created_by IN ('cli:review', 'dashboard:review')`) for the supplied sids — any manually-created `force_match` / `force_segment` rows on the same sid are left intact. The `active=0 ⇒ approved=0` invariant we enforce on soft-delete keeps the audit trail clean. Sids with no review marker are reported as "missing" (not errored). Menu option **17** ("Unmark events as reviewed") prompts interactively.
+
 ### Stale-approval detection (Step 6)
 
 The signatures captured at approval time let the build detect when the underlying events have drifted since approval. On every build, `apply_overrides()` recomputes each event's signature from the current `usat_sales_db` data and compares to the stored snapshot.
@@ -1022,6 +1051,7 @@ The build-time dashboard (`output/dashboard.html`) ships with the same editor em
 - **KPI cards in row 2** show count, percentage, AND the denominator (e.g. "of 1,178 2025 events") as an italic caption. Each card divides by its appropriate year total — `n_baseline` for Retained / Shifted / Lost / Tried to Return, `n_analysis` for New / Recovered.
 - **📖 Glossary card at the bottom of the page**, default-collapsed. Click to expand for plain-English definitions of every term the dashboard uses: the six segments, the five confidence values (Exact / Exact-Shifted / Cross / Override / N/A) with examples, calendar-expected vs organic delta (with a worked weekend-days example), plus net change, sanction ID, active event, override lifecycle (approved / unapproved / stale), and worst month. Aimed at readers who didn't build the model. Audited by `tests/glossary.test.js` (menu option **26**), so adding a new term means updating both the dashboard and the test's `REQUIRED_TERMS` list — a regression in either direction trips the test.
 - **Override editor is collapsible** — the whole editor panel sits inside a native `<details>` element. Default = **closed** for first-time visitors (the editor is a power-user tool; most viewers don't need it open). Open/closed state persists across page reloads via `localStorage('dash_ov_editor_open')`. The server-status pill (`● checking server… / ● connected / ● error`) stays in the summary bar so the connection state is visible even when the editor is collapsed. Roster-row clicks auto-expand it so the focus-an-event flow still works.
+- **Four collapsible dashboard sections** — `<details class="dash-section">` wrappers around **Insights** (Key findings prose), **Charts** (all the chart cards as a group), **Roster table**, and **Rebuild dashboard**. Defaults: Charts and Roster table open; Insights and Rebuild closed (collapsed for the override-editor workflow). Each section's open/closed state persists per-key in `localStorage`: `dash_collapse_insights`, `dash_collapse_charts`, `dash_collapse_table`, `dash_collapse_rebuild`. Click any section header to toggle.
 - **Override list filters** — above the "Active overrides" list, a compact row of three controls: a free-text **search** input that matches across `sid_baseline`, `sid_analysis`, event names, and the note; a **type** dropdown (`All types / force_match / force_no_match / force_segment`); and a **status** dropdown with four non-overlapping buckets — `Approved` (approved AND not stale), `Unapproved`, `Stale` (approved AND staleness flag set), and `All`. Filters combine with AND semantics. When any filter is active, the summary line prefixes with "Showing X of Y" and an `× clear` link appears that resets all three to defaults. Filter state persists across page reloads via `localStorage('dash_ov_list_filters')`. The filtering logic lives in the pure `dash_ov_apply_list_filters(items, filters)` helper so it can be unit-tested directly.
 - **Add-override form validates client-side before POSTing** — three checks run in order: (1) **required fields by type** — `force_match` and `force_no_match` both need a baseline AND an analysis sid, `force_segment` needs the sid matching the Side dropdown; (2) **SID exists in the right pool** — at boot the page builds `BASELINE_SIDS` and `ANALYSIS_SIDS` from the rendered `ROSTER`; if a submitted sid is in the OTHER pool the error says "'354307-Adult Race' is an analysis-year sid; move it to the Analysis box", and if it's in neither pool the message is "doesn't match any event in the current roster"; (3) **same sid in both boxes** is rejected as a self-link. Bad inputs get a red border, aggregated messages appear in `#dash-ov-form-err` below the Add button, and editing any flagged field drops its border (and clears the message div when no fields remain flagged). The submit is blocked when validation fails. Validation lives in the pure `dash_ov_validate_add_form({fields})` helper so the rules can be unit-tested without driving the DOM.
 - **Click any row** → highlights it, scrolls the editor panel into view, pre-fills the sanction ID(s) in the add-override form. Click the row again (or the "clear" link in the focused-event card) to deselect.
@@ -1172,77 +1202,4 @@ Indexes on `build_at`, `(baseline_year, analysis_year, build_at)`, and `(seg, bu
 
 | Age window | Granularity kept | Rationale |
 |---|---|---|
-| Last 48 hours | every build | Full fidelity during active iteration — captures override-tweak spikes (10+ builds in one afternoon) |
-| 48 hours – 30 days | one build per day (latest of each day) | Day-level snapshot once iteration cooled off |
-| 30 – 90 days | one build per week (latest of each ISO week) | Medium-term trend granularity |
-| Older than 90 days | one build per month (first of each month) | Permanent monthly archive |
-
-Steady-state size is **~150–200K rows**, regardless of how many years the table has been accumulating. The SQL uses `ROW_NUMBER() OVER (PARTITION BY ...)` per tier to compute the keep-set, then `DELETE` rows whose `build_at` isn't in it. Idempotent — re-running 5 seconds later is a no-op.
-
-**No read path yet.** Nothing in the dashboard or API queries this table. It's parked for future use:
-
-- Ad-hoc SQL trend queries (`SELECT seg, COUNT(*), build_at FROM event_analysis_roster GROUP BY ...`)
-- BI-tool integration (point Tableau / Looker at the table directly)
-- A future "compare two builds" UI that joins on `build_at` self-joins
-- Diff queries — "which events flipped segments since last week's build?"
-
-Building any of these is a separate, deferred step. For now the table is write-only; reads are SQL ad-hoc.
-
-**Tests** — see `tests/roster.test.js` (menu option **33**). Pure-function tests cover row construction without touching the DB; integration tests use a sentinel year (1999/2000) so fixture rows never collide with production data and get scrubbed by `before()`/`after()` hooks.
-
----
-
-## HTML Dashboard — output/dashboard.html
-
-> **Menu:** option **3** (opens in browser automatically) — or open the file manually:
-> `output/dashboard.html`
-
-Every build generates a self-contained HTML dashboard you can open in any browser — no PowerPoint, no Excel needed. Useful for sharing a quick visual overview with people who don't need the full workbook.
-
-**Charts included:**
-- Monthly event delta (raw Δ bar + organic Δ line overlay)
-- Segment breakdown donut (Retained / Shifted / Lost / New / Recovered)
-- Event counts by type — grouped bar comparing both years
-- Calendar expected vs organic delta scatter (labelled by month)
-- Key findings summary bullets (from commentary engine)
-
-**KPI header cards:** net change, current-year total, lost count, new events added, retention rate.
-
-The dashboard shows a warning badge if manual overrides are active, and labels the commentary mode (AI or rule-based).
-
----
-
-## Diff report — output/changes.txt
-
-> **Menu:** option **16** to view  |  option **15** for AI summary (`node ask.js --what-changed`)
-
-Every build that has a prior run in `output/archive/` generates a `changes.txt` comparing:
-- Key metric changes (total events, segments, net)
-- Narrative changes (what text changed in each slide narrative)
-- Commentary mode changes (rule-based → AI or vice versa)
-- Active overrides applied
-
-Useful for: reviewing what changed after re-running mid-cycle, verifying that override changes had the expected effect, or documenting analysis decisions over time.
-
-```bash
-# View it directly
-cat output/changes.txt
-
-# Or ask Claude to explain the changes
-node ask.js --what-changed
-```
-
-`--what-changed` does the same comparison and streams an AI summary if the API key is present.
-
----
-
-## Matching methodology
-
-Events are matched across years using a 3-pass algorithm:
-1. **Exact** — sanction ID match
-2. **Exact-shifted** — same name, different month
-3. **Fuzzy** — Jaccard similarity ≥ 0.55 on normalised tokens + date-proximity weighting
-
-Segments: `Retained` | `Shifted` | `Lost` | `Tried to Return` | `Recovered` | `New`
-
-Match confidence: ~85–90% at event level. Remaining mismatches c
+| Last 48 hours | every bu

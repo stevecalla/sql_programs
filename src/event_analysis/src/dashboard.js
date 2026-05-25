@@ -666,34 +666,46 @@ canvas{width:100%!important;max-height:220px}
 #dash-ov-rebuild-log{display:none;background:#1c2526;color:#80cbc4;padding:10px 14px;font-family:ui-monospace,Menlo,monospace;font-size:.72rem;max-height:240px;overflow-y:auto;line-height:1.55;white-space:pre-wrap;border-radius:6px;margin-top:8px}
 
 /* ── Inline editor panel ──────────────────────────────────────────────── */
-.dash-ov-editor{padding:14px 18px}
+/* No outer padding on the editor details -- the summary bar should sit
+   flush like other dash-section summaries. Inner content lives in a
+   .card div which provides its own padding + frame. */
+.dash-ov-editor{padding:0}
 .dash-ov-editor h3{margin:0;font-size:1rem;display:flex;align-items:center;gap:10px}
 .dash-ov-editor h3 .muted{color:#656d76;font-size:.78rem;font-weight:400}
-/* <details>/<summary> styling. Hide native disclosure triangle (both spec
-   names) and supply our own chevron that rotates when the panel is open.
-   The summary wraps the existing h3 so the title bar IS the click target. */
-.dash-ov-editor>summary.dash-ov-editor-summary{
-  cursor:pointer;list-style:none;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:0;margin:0;
-}
-.dash-ov-editor>summary.dash-ov-editor-summary::-webkit-details-marker{display:none}
-.dash-ov-editor>summary.dash-ov-editor-summary::marker{display:none;content:""}
-.dash-ov-editor>summary.dash-ov-editor-summary>h3{flex:1;min-width:0}
-.dash-ov-editor-chevron{
-  display:inline-block;color:#656d76;font-size:.85rem;
-  transition:transform 160ms ease-out;transform:rotate(-90deg);
-  user-select:none;
-}
-.dash-ov-editor[open]>summary.dash-ov-editor-summary .dash-ov-editor-chevron{transform:rotate(0deg)}
-/* When the panel is open, add a small gap between the summary and the
-   first child block so the layout matches what the old h3 margin gave us. */
-.dash-ov-editor[open]>summary.dash-ov-editor-summary{margin-bottom:.5rem}
+/* The editor's outer <details> now uses the shared .dash-section /
+   .dash-section-summary styling (gray-bar look that matches the other
+   collapsible page sections). The dash-ov-editor / dash-ov-editor-summary
+   / dash-ov-editor-chevron classes are still attached for back-compat with
+   tests and any external CSS hooks; no editor-specific overrides remain. */
 .dash-ov-editor .dash-ov-srv-status{font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:10px;background:#eee;color:#999}
 .dash-ov-editor .dash-ov-srv-status.ok   {background:#dafbe1;color:#1a7f37}
 .dash-ov-editor .dash-ov-srv-status.err  {background:#ffebe9;color:#82071e}
 .dash-ov-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 @media (max-width:780px){.dash-ov-grid{grid-template-columns:1fr}}
+/* ── Collapsible dashboard sections (charts, table, insights) ──────
+   Native <details>/<summary> with a chevron that rotates on [open].
+   Default = open so first-time visitors see everything; operator can
+   collapse to shrink the page when working on overrides. Open/closed
+   state persists per-section in localStorage. */
+.dash-section{margin:0 0 10px 0}
+.dash-section>summary.dash-section-summary{
+  cursor:pointer;list-style:none;
+  display:flex;align-items:center;gap:8px;
+  padding:9px 12px;margin-bottom:6px;
+  background:#f6f8fa;border:1px solid #d0d7de;border-radius:6px;
+  font-size:.82rem;font-weight:600;color:#1f2328;
+  user-select:none;
+}
+.dash-section>summary.dash-section-summary::-webkit-details-marker{display:none}
+.dash-section>summary.dash-section-summary::marker{display:none;content:""}
+.dash-section>summary.dash-section-summary:hover{background:#eaeef2}
+.dash-section-chevron{
+  display:inline-block;color:#656d76;font-size:.85rem;
+  transition:transform 160ms ease-out;transform:rotate(-90deg);
+  user-select:none;width:1ch;
+}
+.dash-section[open]>summary.dash-section-summary .dash-section-chevron{transform:rotate(0deg)}
+.dash-section-count{color:#656d76;font-weight:400;font-size:.75rem;margin-left:auto}
 
 .dash-ov-list{font-size:.78rem;background:#f8f9fa;border-radius:6px;padding:10px;min-height:100px;max-height:340px;overflow-y:auto}
 /* Filter row above the list. Three controls + a clear link. Wraps on
@@ -831,6 +843,12 @@ canvas{width:100%!important;max-height:220px}
   <div class="kpi amb"><div class="val">${worst_months[0]?.label ?? '?'} ${worst_months[0]?.delta ?? ''}</div><div class="lbl">Worst month</div></div>
 </div>
 
+<details class="dash-section" id="dash-section-charts" open>
+  <summary class="dash-section-summary">
+    <span class="dash-section-chevron" aria-hidden="true">▾</span>
+    Charts
+    <span class="dash-section-count">7 visualizations</span>
+  </summary>
 <div class="row">
   <div class="card card-monthly">
     <h3>Event count by month comparison <span class="note">bars = actual counts · variance Δ above ${yb} bar</span><span class="chart-actions"><button class="chart-btn" onclick="expand_chart('c_organic')" title="Expand">⤢ Expand</button><button class="chart-btn" onclick="export_png('c_organic')" title="Export PNG">⬇ PNG</button><button class="chart-btn" onclick="export_csv('c_organic')" title="Export CSV">⬇ CSV</button><button id="flip-btn-c_organic" class="chart-btn" onclick="flip_chart_table('c_organic')" title="Switch to table view">⇄ Table</button></span></h3>
@@ -964,15 +982,29 @@ canvas{width:100%!important;max-height:220px}
     <div id="timing-conclusion" style="font-size:.78rem;color:#1f6feb;margin-top:4px;font-weight:600;line-height:1.4"></div>
   </div>
 </div>
+</details>
 
-<div class="row">
-  <div class="card card-full">
-    <h3>Key findings <span class="note">${has_api ? 'Claude AI' : 'Rule-based'} · matches PowerPoint narratives</span></h3>
-    <div class="bullets">${bullets_html}</div>
+<details class="dash-section" id="dash-section-insights">
+  <summary class="dash-section-summary">
+    <span class="dash-section-chevron" aria-hidden="true">▾</span>
+    Insights
+    <span class="dash-section-count">Key findings (${has_api ? 'Claude AI' : 'Rule-based'})</span>
+  </summary>
+  <div class="row">
+    <div class="card card-full">
+      <h3>Key findings <span class="note">${has_api ? 'Claude AI' : 'Rule-based'} · matches PowerPoint narratives</span></h3>
+      <div class="bullets">${bullets_html}</div>
+    </div>
   </div>
-</div>
+</details>
 
 ${has_table ? `
+<details class="dash-section" id="dash-section-table" open>
+  <summary class="dash-section-summary">
+    <span class="dash-section-chevron" aria-hidden="true">▾</span>
+    Roster table
+    <span class="dash-section-count">${roster.length} events</span>
+  </summary>
 <div class="row">
   <div class="card card-full">
     <h3>Event roster <span class="note">Step 4 detail — ${roster.length} events · filterable + sortable</span></h3>
@@ -1113,6 +1145,7 @@ ${has_table ? `
     </div>
   </div>
 </div>
+</details>
 
 <!-- ── Inline override editor panel (Step 9 integration) ─────────────────
      Collapsible via native <details>. Default = closed for first-time
@@ -1123,17 +1156,15 @@ ${has_table ? `
      an-event flow still works when the user has it collapsed. The
      server-status pill lives inside the <summary> so operators can
      still see "checking / ok / err" without expanding the panel. -->
-<div class="row" style="margin-bottom:10px">
-  <details class="card card-full dash-ov-editor" id="dash-ov-editor">
-    <summary class="dash-ov-editor-summary">
-      <h3>
-        ⚙ Override editor
-        <span class="dash-ov-srv-status" id="dash-ov-srv-status">● checking server…</span>
-        <span class="muted">Edits write to the DB immediately; rebuild to apply to charts.</span>
-      </h3>
-      <span class="dash-ov-editor-chevron" aria-hidden="true">▾</span>
+<details class="dash-section dash-ov-editor" id="dash-ov-editor">
+    <summary class="dash-section-summary dash-ov-editor-summary">
+      <span class="dash-section-chevron dash-ov-editor-chevron" aria-hidden="true">▾</span>
+      ⚙ Override editor
+      <span class="dash-ov-srv-status" id="dash-ov-srv-status">● checking server…</span>
+      <span class="dash-section-count">Edits write to the DB immediately; rebuild to apply to charts.</span>
     </summary>
 
+    <div class="card card-full">
     <div id="dash-ov-selected" style="display:none"></div>
 
     <div class="dash-ov-grid">
@@ -1243,12 +1274,18 @@ ${has_table ? `
         </form>
       </div>
     </div>
+    </div>
   </details>
-</div>
 
 <div id="dash-ov-toast" class="dash-ov-toast" role="status" aria-live="polite"></div>
 
 <!-- ── Rebuild dashboard (Step 9.5) — bottom anchor for the banner link ── -->
+<details class="dash-section" id="dash-section-rebuild">
+  <summary class="dash-section-summary">
+    <span class="dash-section-chevron" aria-hidden="true">▾</span>
+    Rebuild dashboard
+    <span class="dash-section-count">Default + ad-hoc years</span>
+  </summary>
 <div class="row" style="margin-bottom:10px">
   <div class="card card-full dash-ov-rebuild-card" id="dash-ov-rebuild-card">
     <h3>
@@ -1294,6 +1331,7 @@ ${has_table ? `
     <div id="dash-ov-rebuild-log"></div>
   </div>
 </div>
+</details>
 ` : ''}
 
 <div class="row" style="margin-bottom:10px">
@@ -4151,6 +4189,35 @@ if(ROSTER && ROSTER.length > 0){
         try { localStorage.setItem('dash_ov_editor_open', _editor.open ? '1' : '0'); } catch (e) {}
       });
     }
+  } catch (e) {}
+
+  // ── Collapsible page sections: insights / charts / table ──────────────
+  // Three top-level <details class="dash-section"> wrappers let the
+  // operator hide major chunks of the dashboard to reduce scrolling
+  // when working on overrides. Default state is open (HTML has the
+  // 'open' attribute) -- localStorage overrides per-section if the
+  // operator has previously collapsed any of them. Pattern mirrors
+  // the editor collapse wire-up above.
+  try {
+    var SECTION_KEYS = {
+      'dash-section-insights': 'dash_collapse_insights',
+      'dash-section-charts':   'dash_collapse_charts',
+      'dash-section-table':    'dash_collapse_table',
+      'dash-section-rebuild':  'dash_collapse_rebuild',
+    };
+    Object.keys(SECTION_KEYS).forEach(function(id){
+      var el = document.getElementById(id);
+      if (!el || el.tagName !== 'DETAILS') return;
+      var key = SECTION_KEYS[id];
+      var saved = null;
+      try { saved = localStorage.getItem(key); } catch (e) {}
+      // '0' = explicitly collapsed; '1' = explicitly open; null = default (HTML open)
+      if (saved === '0') el.open = false;
+      else if (saved === '1') el.open = true;
+      el.addEventListener('toggle', function(){
+        try { localStorage.setItem(key, el.open ? '1' : '0'); } catch (e) {}
+      });
+    });
   } catch (e) {}
 
   // ── Dismiss the rebuild overlay on the new page ───────────────────────

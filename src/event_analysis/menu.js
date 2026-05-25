@@ -123,12 +123,27 @@ function save_prefs() {
   }
 }
 
-function status_line() {
+// Override count comes from the DB (event_analysis_overrides), NOT the
+// long-gone data/overrides.json. Loaded async on each print_menu() so the
+// header reflects DB changes made by ask.js / dashboard / etc. since the
+// menu started. If the DB is unreachable the count shows '?' rather than
+// blocking the menu.
+async function fetch_override_stats() {
+  try {
+    const { load_overrides } = require('./src/overrides');
+    const analysis_year = Number(process.env.ANALYSIS_YEAR) || new Date().getFullYear();
+    const baseline_year = Number(process.env.BASELINE_YEAR) || (analysis_year - 1);
+    const { stats } = await load_overrides({ baseline_year, analysis_year, silent: true });
+    return { ok: true, ...stats, baseline_year, analysis_year };
+  } catch (e) {
+    return { ok: false };
+  }
+}
+
+async function status_line() {
   const cm  = load_json(path.join(OUTPUT_DIR, 'commentary.json'));
   const res = load_json(path.join(OUTPUT_DIR, 'analysis_results.json'));
-  const ov_raw = load_json(path.join(DIR, 'data', 'overrides.json')) ?? {};
-  const clean  = arr => (arr ?? []).filter(e => Object.keys(e).some(k => !k.startsWith('_')));
-  const ov_count = clean(ov_raw.force_match).length + clean(ov_raw.force_no_match).length + clean(ov_raw.force_segment).length;
+  const ov  = await fetch_override_stats();
 
   const has_api  = !!(process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'sk-ant-your-key-here');
   const mode     = cm?.mode ?? 'no build yet';
@@ -137,9 +152,13 @@ function status_line() {
   const n_analysis      = res?.totals?.ANALYSIS_YEAR ?? '?';
   const net      = res?.totals?.net;
 
+  const ov_str = ov.ok
+    ? `${ov.total} (${ov.approved} ✓ · ${ov.unapproved} ◦ · ${ov.stale ?? 0} ⚠)`
+    : c(DIM, '(DB unreachable)');
+
   return [
     `  Last build: ${built}   Events: ${n_baseline} → ${n_analysis}${net !== undefined ? `  (${net > 0 ? '+' : ''}${net})` : ''}`,
-    `  Commentary: ${mode}   AI key: ${has_api ? c(GREEN, 'set ✓') : c(YELLOW, 'not set')}   Active overrides: ${ov_count}`,
+    `  Commentary: ${mode}   AI key: ${has_api ? c(GREEN, 'set ✓') : c(YELLOW, 'not set')}   Active overrides: ${ov_str}`,
   ].join('\n');
 }
 
@@ -165,62 +184,64 @@ const SECTIONS = [
     label: 'OVERRIDES — event matching',
     color: YELLOW,
     items: [
-      { id: 10, label: 'List active overrides',      desc: 'Show all entries in data/overrides.json',        action: 'list_overrides',    cli: 'node ask.js --list-overrides' },
+      { id: 10, label: 'List active overrides',      desc: 'Show active overrides for current year scope (+ globals) from event_analysis_overrides (DB)', action: 'list_overrides',    cli: 'node ask.js --list-overrides' },
       { id: 11, label: 'Suggest overrides (AI)',     desc: 'Claude analyses unmatched events for likely pairs', action: 'suggest_overrides', cli: 'node ask.js --suggest-overrides' },
       { id: 12, label: 'Add force-match',            desc: 'Force two events to be matched across years',    action: 'add_match',         cli: 'node ask.js --add-override match <sid_baseline> <sid_analysis> "note"' },
       { id: 13, label: 'Add force-no-match',         desc: 'Prevent an event from matching (→ Attrited/New)', action: 'add_no_match',     cli: 'node ask.js --add-override no-match <25|26> <sid> "note"' },
       { id: 14, label: 'Add force-segment',          desc: 'Override a segment classification',              action: 'add_segment',       cli: 'node ask.js --add-override segment <25|26> <sid> <segment> "note"' },
       { id: 15, label: 'Remove override',            desc: 'Remove all overrides for a sanction ID',        action: 'remove_override',    cli: 'node ask.js --remove-override <sid>' },
+      { id: 16, label: 'Mark events as reviewed',    desc: 'CLI version of the dashboard Reviewed? checkbox -- creates the right override per segment + approves it. Tagged created_by=cli:review.', action: 'mark_reviewed', cli: 'node ask.js --mark-reviewed <sid> [<sid> ...]' },
+      { id: 17, label: 'Unmark events as reviewed',  desc: 'Inverse of #16 -- soft-deletes ONLY the review-tagged overrides (cli:review or dashboard:review). Manual overrides on the same sid stay intact.', action: 'unmark_reviewed', cli: 'node ask.js --unmark-reviewed <sid> [<sid> ...]' },
     ],
   },
   {
     label: 'Q&A & ANALYSIS — powered by Claude',
     color: CYAN,
     items: [
-      { id: 16, label: 'Ask a question',             desc: 'Ask Claude anything about the analysis results', action: 'ask',                cli: 'node ask.js "your question"' },
-      { id: 17, label: 'Ask and save to notes.md',   desc: 'Answer is appended to notes.md for future context', action: 'ask_save',         cli: 'node ask.js "your question" --save-notes' },
-      { id: 18, label: 'Rewrite a slide narrative',  desc: 'Update commentary.json directly with new text',  action: 'update_commentary',   cli: 'node ask.js "instruction" --update-commentary <key>' },
-      { id: 19, label: 'What changed?',              desc: 'Compare current build to prior (AI summary)',    action: 'what_changed',        cli: 'node ask.js --what-changed' },
+      { id: 18, label: 'Ask a question',             desc: 'Ask Claude anything about the analysis results', action: 'ask',                cli: 'node ask.js "your question"' },
+      { id: 19, label: 'Ask and save to notes.md',   desc: 'Answer is appended to notes.md for future context', action: 'ask_save',         cli: 'node ask.js "your question" --save-notes' },
+      { id: 20, label: 'Rewrite a slide narrative',  desc: 'Update commentary.json directly with new text',  action: 'update_commentary',   cli: 'node ask.js "instruction" --update-commentary <key>' },
+      { id: 21, label: 'What changed?',              desc: 'Compare current build to prior (AI summary)',    action: 'what_changed',        cli: 'node ask.js --what-changed' },
     ],
   },
   {
     label: 'INFORMATION',
     color: GREEN,
     items: [
-      { id: 20, label: 'View changes since last build', desc: 'Show output/changes.txt',                    action: 'view_changes',      cli: 'cat output/changes.txt' },
-      { id: 21, label: 'View notes.md',              desc: 'Current analyst notes + build history',         action: 'view_notes',         cli: 'cat notes.md' },
-      { id: 22, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme',        cli: 'cat README.md' },
+      { id: 22, label: 'View changes since last build', desc: 'Show output/changes.txt',                    action: 'view_changes',      cli: 'cat output/changes.txt' },
+      { id: 23, label: 'View notes.md',              desc: 'Current analyst notes + build history',         action: 'view_notes',         cli: 'cat notes.md' },
+      { id: 24, label: 'View README',                desc: 'Full documentation',                             action: 'view_readme',        cli: 'cat README.md' },
     ],
   },
   {
     label: 'LOCAL SERVER — http://localhost:8016',
     color: CYAN,
     items: [
-      { id: 23, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop). Uses ALLOWED_IPS from .env if set.', action: 'start_server', cli: 'cd ../../ && node server_event_analysis_8016.js' },
-      { id: 24, label: 'Start local server (IP allowlist)', desc: 'Prompts for allowed IPs (default 127.0.0.1) and starts the server with ALLOWED_IPS injected — always restricted regardless of .env', action: 'start_server_restricted', cli: 'cd ../../ && ALLOWED_IPS=127.0.0.1 node server_event_analysis_8016.js' },
+      { id: 25, label: 'Start local server',         desc: 'API + override editor (/editor/) + dashboard (Ctrl-C to stop). Uses ALLOWED_IPS from .env if set.', action: 'start_server', cli: 'cd ../../ && node server_event_analysis_8016.js' },
+      { id: 26, label: 'Start local server (IP allowlist)', desc: 'Prompts for allowed IPs (default 127.0.0.1) and starts the server with ALLOWED_IPS injected — always restricted regardless of .env', action: 'start_server_restricted', cli: 'cd ../../ && ALLOWED_IPS=127.0.0.1 node server_event_analysis_8016.js' },
     ],
   },
   {
     label: 'TESTING — verify the code is working',
     color: MAGENTA,
     items: [
-      { id: 25, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all',        cli: 'node --test tests/' },
-      { id: 26, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides', cli: 'node --test tests/overrides.test.js' },
-      { id: 27, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server',     cli: 'node --test tests/server.test.js' },
-      { id: 28, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu',     cli: 'node --test tests/menu.test.js' },
-      { id: 29, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke',      cli: 'node --test tests/smoke.test.js' },
-      { id: 30, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary', cli: 'node --test tests/glossary.test.js' },
-      { id: 31, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads', cli: 'node --test tests/downloads.test.js' },
-      { id: 32, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build', cli: 'node --test tests/build.test.js' },
-      { id: 33, label: 'Run roster tests only',      desc: 'tests/roster.test.js — roster snapshot insert + tiered retention (DB-backed; skips if DB unreachable)', action: 'run_tests_roster', cli: 'node --test tests/roster.test.js' },
-      { id: 34, label: 'Run dashboard tests only',   desc: 'tests/dashboard.test.js — date format + Day-column-collapsed regression guards', action: 'run_tests_dashboard', cli: 'node --test tests/dashboard.test.js' },
+      { id: 27, label: 'Run ALL tests',              desc: 'Runs every *.test.js under tests/ via node --test',               action: 'run_tests_all',        cli: 'node --test tests/' },
+      { id: 28, label: 'Run overrides tests only',   desc: 'tests/overrides.test.js — schema, year scoping, apply, approve, stale', action: 'run_tests_overrides', cli: 'node --test tests/overrides.test.js' },
+      { id: 29, label: 'Run server tests only',      desc: 'tests/server.test.js — read/write API + editor static files',     action: 'run_tests_server',     cli: 'node --test tests/server.test.js' },
+      { id: 30, label: 'Run menu tests only',        desc: 'tests/menu.test.js — verifies all menu options are wired correctly', action: 'run_tests_menu',     cli: 'node --test tests/menu.test.js' },
+      { id: 31, label: 'Run smoke tests only',       desc: 'tests/smoke.test.js — parse-checks every major source file',     action: 'run_tests_smoke',      cli: 'node --test tests/smoke.test.js' },
+      { id: 32, label: 'Run glossary tests only',    desc: 'tests/glossary.test.js — confirms dashboard glossary has every key term', action: 'run_tests_glossary', cli: 'node --test tests/glossary.test.js' },
+      { id: 33, label: 'Run download tests only',    desc: 'tests/downloads.test.js — Excel + PowerPoint Download buttons point at real files', action: 'run_tests_downloads', cli: 'node --test tests/downloads.test.js' },
+      { id: 34, label: 'Run build tests only',       desc: 'tests/build.test.js — commentary cache: hash stability + sensitivity + insensitivity + loader', action: 'run_tests_build', cli: 'node --test tests/build.test.js' },
+      { id: 35, label: 'Run roster tests only',      desc: 'tests/roster.test.js — roster snapshot insert + tiered retention (DB-backed; skips if DB unreachable)', action: 'run_tests_roster', cli: 'node --test tests/roster.test.js' },
+      { id: 36, label: 'Run dashboard tests only',   desc: 'tests/dashboard.test.js — date format + Day-column-collapsed regression guards', action: 'run_tests_dashboard', cli: 'node --test tests/dashboard.test.js' },
     ],
   },
   {
     label: 'PREFERENCES',
     color: WHITE,
     items: [
-      { id: 35, label: 'Show/hide CLI commands',     desc: 'Toggle a dimmed "$ ..." line under each menu item. Choice persists in .menu_prefs.json next to menu.js.', action: 'toggle_commands' },
+      { id: 37, label: 'Show/hide CLI commands',     desc: 'Toggle a dimmed "$ ..." line under each menu item. Choice persists in .menu_prefs.json next to menu.js.', action: 'toggle_commands' },
     ],
   },
 ];
@@ -229,11 +250,11 @@ const ALL_ITEMS = SECTIONS.flatMap(s => s.items);
 
 // ── Print menu ────────────────────────────────────────────────────────────────
 
-function print_menu() {
+async function print_menu() {
   console.clear();
   console.log(c(BOLD + RED, '\n  USAT Sanctioned Event Analysis'));
   console.log(c(DIM, '  ─────────────────────────────────────────────'));
-  console.log(status_line());
+  console.log(await status_line());
   console.log(c(DIM, '  ─────────────────────────────────────────────\n'));
 
   for (const section of SECTIONS) {
@@ -452,6 +473,46 @@ async function handle_action(action, rl) {
       break;
     }
 
+    case 'mark_reviewed': {
+      console.log(c(BOLD, '  Mark events as reviewed\n'));
+      console.log(c(DIM, '  Enter one or more sanction IDs separated by COMMAS.'));
+      console.log(c(DIM, '  Sids may contain spaces (e.g. "310631-Adult Clinic"); commas are'));
+      console.log(c(DIM, '  the only separator so spaces inside a sid are preserved.'));
+      console.log(c(DIM, '  Each sid is looked up in the latest roster snapshot for the current'));
+      console.log(c(DIM, '  year scope; the right override (force_match / force_segment) is'));
+      console.log(c(DIM, '  created + approved + tagged created_by=cli:review.\n'));
+      const raw = (await prompt(rl, '  Sanction IDs (comma-separated): ')).trim();
+      // Strip outer quotes (operators paste them sometimes) then split on
+      // commas only. Spaces inside a sid stay intact.
+      const sids = raw
+        .replace(/^["']|["']$/g, '')
+        .split(',')
+        .map(s => s.trim().replace(/^["']|["']$/g, ''))
+        .filter(Boolean);
+      if (!sids.length) { console.log(c(YELLOW, '  Cancelled.')); break; }
+      await run('ask.js', ['--mark-reviewed', ...sids]);
+      break;
+    }
+
+    case 'unmark_reviewed': {
+      console.log(c(BOLD, '  Unmark events as reviewed\n'));
+      console.log(c(DIM, '  Enter one or more sanction IDs separated by COMMAS.'));
+      console.log(c(DIM, '  Sids may contain spaces (e.g. "310631-Adult Clinic"); commas are'));
+      console.log(c(DIM, '  the only separator so spaces inside a sid are preserved.'));
+      console.log(c(DIM, '  Soft-deletes ONLY the review-tagged overrides (cli:review or'));
+      console.log(c(DIM, '  dashboard:review) for those sids. Manual force_match / force_segment'));
+      console.log(c(DIM, '  overrides on the same sid stay intact.\n'));
+      const raw = (await prompt(rl, '  Sanction IDs (comma-separated): ')).trim();
+      const sids = raw
+        .replace(/^["']|["']$/g, '')
+        .split(',')
+        .map(s => s.trim().replace(/^["']|["']$/g, ''))
+        .filter(Boolean);
+      if (!sids.length) { console.log(c(YELLOW, '  Cancelled.')); break; }
+      await run('ask.js', ['--unmark-reviewed', ...sids]);
+      break;
+    }
+
     case 'ask': {
       const q = (await prompt(rl, c(BOLD, '  Your question: '))).trim();
       if (!q) { console.log(c(YELLOW, '  Cancelled.')); break; }
@@ -663,45 +724,37 @@ async function main() {
 
   // Handle Ctrl+C gracefully
   rl.on('SIGINT', () => {
-    console.log(c(DIM, '\n  Goodbye.\n'));
+    console.log(c(DIM, '\n  Bye.'));
+    rl.close();
     process.exit(0);
   });
 
+  await resolve_output_dir();
+  load_prefs();
+
   while (true) {
-    print_menu();
-
-    // Range is computed from ALL_ITEMS so the prompt automatically tracks
-    // the largest menu id — no need to remember to bump it when you add
-    // a new option.
+    await print_menu();
     const max_id = Math.max(...ALL_ITEMS.map(i => i.id));
-    const raw = (await prompt(rl, c(BOLD, `  Select (0–${max_id}): `))).trim();
+    const raw = (await prompt(rl, c(BOLD, `  Select (0-${max_id}): `))).trim();
     const num = parseInt(raw, 10);
-
     if (raw === '0' || raw.toLowerCase() === 'q' || raw.toLowerCase() === 'exit') {
-      console.log(c(DIM, '\n  Bye!\n'));
+      console.log(c(DIM, '\n  Bye.'));
       rl.close();
       return;
     }
-    if (Number.isNaN(num) || num < 1 || num > max_id) {
-      console.log(c(YELLOW, `  Invalid selection. Type 0 to exit, or 1–${max_id}.`));
-      continue;
-    }
     const item = ALL_ITEMS.find(i => i.id === num);
-    if (!item) { console.log(c(YELLOW, '  Item not found.')); continue; }
-    console.log(c(DIM, `\n  Running: ${item.label}`));
-    console.log(c(DIM, `  ${'─'.repeat(50)}`));
+    if (!item) { console.log(c(YELLOW, '  Invalid choice.')); continue; }
     await handle_action(item.action, rl);
-    console.log(c(DIM, `\n  ${'─'.repeat(50)}\n  Done. Press Enter to return to menu.`));
-    await prompt(rl, '');
+    // Pause so the operator can review whatever the action just printed
+    // (override list, build log, test output, etc.) before print_menu()'s
+    // console.clear() wipes it on the next iteration. Without this, fast
+    // actions look like they did nothing.
+    await prompt(rl, c(DIM, '\n  Press Enter to continue\u2026'));
   }
 }
-
-// Tests import SECTIONS / ALL_ITEMS / handle_action to verify wiring
-// without spawning the interactive readline loop. main() is also exported
-// so a future programmatic launcher could call it, but currently only
-// menu.js itself uses it.
-module.exports = { SECTIONS, ALL_ITEMS, handle_action, main };
 
 if (require.main === module) {
   main().catch(err => { console.error(err); process.exit(1); });
 }
+
+module.exports = { SECTIONS, ALL_ITEMS, handle_action, main };

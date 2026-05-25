@@ -799,16 +799,16 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
     assert.match(html, /<details[^>]*\bid="dash-ov-editor"/,
       'override editor should be a <details id="dash-ov-editor">');
     // The summary wraps the title bar so clicking the header toggles.
-    assert.match(html, /<summary\s+class="dash-ov-editor-summary"/,
+    assert.match(html, /<summary[^>]*\bclass="[^"]*\bdash-ov-editor-summary\b/,
       '<summary> with class dash-ov-editor-summary should exist');
     // The chevron span is present (CSS rotates it via [open]).
-    assert.match(html, /class="dash-ov-editor-chevron"/);
+    assert.match(html, /\bdash-ov-editor-chevron\b/);
   });
 
   test('server-status pill lives inside the summary so it shows when collapsed', () => {
     const html = render_to_tmp();
     // Pull out the summary block by id-then-summary text.
-    const m = html.match(/<summary\s+class="dash-ov-editor-summary"[^>]*>([\s\S]*?)<\/summary>/);
+    const m = html.match(/<summary[^>]*\bclass="[^"]*\bdash-ov-editor-summary\b[^"]*"[^>]*>([\s\S]*?)<\/summary>/);
     assert.ok(m, 'could not isolate the editor summary block');
     assert.ok(m[1].includes('id="dash-ov-srv-status"'),
       'server-status pill should be inside <summary> so the connection state stays visible when the editor is collapsed');
@@ -1304,5 +1304,127 @@ describe('dashboard renderer -- inline scripts execute without throwing', () => 
     sb.modal_flip();               // -> chart mode
     assert.equal(modal_canvas.style.display, '',     'second flip should restore canvas');
     assert.equal(modal_tbl.style.display,    'none', 'second flip should hide table');
+  });
+
+  // ── Collapsible dashboard sections (insights / charts / table) ──────────
+  // Three top-level <details> wrappers on the dashboard. HTML default is
+  // `open`; localStorage 'dash_collapse_insights' / 'dash_collapse_charts' /
+  // 'dash_collapse_table' override per-section. Toggle writes the new
+  // state back. This block tests both the rendered HTML and the boot
+  // behavior under different localStorage values.
+
+  test('dashboard renders four section <details> wrappers with the right defaults', () => {
+    const html = render_to_tmp();
+    // Charts + Table default OPEN so first-time viewers see the dashboard
+    // in its full form. Insights + Rebuild default CLOSED to reduce scroll
+    // for the override-editor workflow.
+    assert.match(html, /<details[^>]*\bid="dash-section-charts"[^>]*\bopen/,
+      'Charts should default open');
+    assert.match(html, /<details[^>]*\bid="dash-section-table"[^>]*\bopen/,
+      'Roster table should default open');
+    assert.match(html, /<details[^>]*\bid="dash-section-insights"(?![^>]*\bopen)/,
+      'Insights should default closed (no open attribute)');
+    assert.match(html, /<details[^>]*\bid="dash-section-rebuild"(?![^>]*\bopen)/,
+      'Rebuild section should default closed (no open attribute)');
+    // Each has a summary with the right title.
+    assert.match(html, /<summary[^>]*class="dash-section-summary"[\s\S]*?Insights/);
+    assert.match(html, /<summary[^>]*class="dash-section-summary"[\s\S]*?Charts/);
+    assert.match(html, /<summary[^>]*class="dash-section-summary"[\s\S]*?Roster table/);
+    assert.match(html, /<summary[^>]*class="dash-section-summary"[\s\S]*?Rebuild dashboard/);
+  });
+
+  // Runtime harness: stub three stateful <details> elements + a tracked
+  // localStorage. Drive the inline scripts, then check that the boot
+  // applied the right open/closed state per section.
+  function run_sections_harness(storage_init) {
+    const html = render_to_tmp();
+    const scripts = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    let m;
+    while ((m = re.exec(html))) scripts.push(m[1]);
+
+    function make_details() {
+      const listeners = {};
+      const el = {
+        tagName: 'DETAILS',
+        _open: true,
+        get open(){ return this._open; },
+        set open(v){
+          const was = this._open;
+          this._open = !!v;
+          if (was !== this._open) (listeners.toggle || []).forEach((cb) => cb({}));
+        },
+        style: {},
+        classList: { add(){}, remove(){}, contains(){return false}, toggle(){} },
+        addEventListener(name, cb){ (listeners[name] = listeners[name] || []).push(cb); },
+        scrollIntoView(){},
+      };
+      return el;
+    }
+
+    const insights = make_details();
+    const charts   = make_details();
+    const table    = make_details();
+    const editor   = make_details();
+    editor._open = false;  // editor defaults to closed
+    const overlay_el = { style: {}, classList: { _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(c){return this._set.has(c)}, toggle(){} } };
+
+    const storage = new Map();
+    if (storage_init) for (const [k, v] of Object.entries(storage_init)) storage.set(k, v);
+    const ls = {
+      getItem(k){ return storage.has(k) ? storage.get(k) : null; },
+      setItem(k, v){ storage.set(k, String(v)); },
+      removeItem(k){ storage.delete(k); },
+    };
+
+    const sb = make_sandbox();
+    const html_cl = { _set:new Set(), add(c){this._set.add(c)}, remove(c){this._set.delete(c)}, contains(){return false}, toggle(){} };
+    sb.document.documentElement = { classList: html_cl };
+    sb.localStorage = ls;
+    sb.document.getElementById = (id) => {
+      if (id === 'dash-section-insights') return insights;
+      if (id === 'dash-section-charts')   return charts;
+      if (id === 'dash-section-table')    return table;
+      if (id === 'dash-ov-editor')        return editor;
+      if (id === 'dash-ov-overlay')       return overlay_el;
+      return stub_el();
+    };
+
+    const ctx = vm.createContext(sb);
+    for (let i = 0; i < scripts.length; i++) {
+      try { vm.runInContext(scripts[i], ctx, { filename: 'inline_' + (i + 1) + '.js', timeout: 5000 }); }
+      catch (e) { /* swallow */ }
+    }
+    return { insights, charts, table, storage };
+  }
+
+  test('sections respect HTML defaults when localStorage is empty', () => {
+    // The vm sandbox's stub details all start with _open=true so we can't
+    // directly observe the HTML default attribute from JS state alone.
+    // What we CAN observe: with no localStorage entries the boot code
+    // should NOT change any of them (it only flips state when localStorage
+    // says '0' or '1'). So all three keep their initial sandbox state.
+    const { insights, charts, table } = run_sections_harness({});
+    assert.equal(charts.open, true, 'charts default state should be preserved');
+    assert.equal(table.open,  true, 'table default state should be preserved');
+    assert.equal(insights.open, true, 'insights state preserved (sandbox default true)');
+  });
+
+  test("localStorage='0' collapses a section at boot", () => {
+    const { insights, charts, table } = run_sections_harness({
+      dash_collapse_charts: '0',
+      dash_collapse_table:  '0',
+    });
+    assert.equal(insights.open, true,  'insights still open (no localStorage entry)');
+    assert.equal(charts.open,   false, 'charts collapsed by localStorage');
+    assert.equal(table.open,    false, 'table collapsed by localStorage');
+  });
+
+  test('toggling a section writes the new state to localStorage', () => {
+    const { charts, storage } = run_sections_harness({});
+    charts.open = false;
+    assert.equal(storage.get('dash_collapse_charts'), '0', 'collapsing should persist 0');
+    charts.open = true;
+    assert.equal(storage.get('dash_collapse_charts'), '1', 're-opening should persist 1');
   });
 });
