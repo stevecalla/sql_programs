@@ -6,13 +6,47 @@ This process connects to Salesforce from Node.js, pulls records from the `Accoun
 
 The script is designed to mimic source-of-truth duplicate logic as closely as possible while working around Salesforce SOQL limitations.
 
-The process creates three output files:
+The process creates three output files (the names below are simplified; the
+actual files are written with a date/time stamp at the end, e.g.
+`account_duplicates_sf_import_2026-06-04_14-30-05.csv`):
 
 ```text
-account_duplicates.csv
-account_fuzzy_name_matches.csv
-account_fuzzy_name_groups.csv
+account_duplicates_sf_import.csv
+account_fuzzy_name_matches_sf_import.csv
+account_fuzzy_name_groups_sf_import.csv
 ```
+
+## Project Structure
+
+```text
+salesforce_duplicates/
+  sf_duplicates_060326.js   orchestrator (SF query, exact + fuzzy pipeline, output)
+  config.js                 IS_TEST/env flag, thresholds, output file + folder names
+  menu.js                   interactive launcher (node menu.js)
+  src/
+    fmt.js                  duration + timestamp formatting (pure)
+    log.js                  console logging + colors
+    normalize.js            field cleaning + key builders (pure)
+    matcher.js              levenshtein, similarity, rule flags, reasons (pure)
+    grouping.js             UnionFind + fuzzy group builder
+  tests/                    node:test unit tests (normalize, matcher, grouping, file output)
+  README.md / CLAUDE.md / schema.md
+```
+
+See `CLAUDE.md` for a quick orientation map of the modules.
+
+## Output Location and Archiving
+
+Output is written to the cross-platform `/data` path resolved by
+`utilities/determineOSPath.js` (not the code folder):
+
+```text
+usat_salesforce_duplicates/          most recent run's files
+usat_salesforce_duplicates_archive/  previous run's files
+```
+
+On each run the tool clears the archive, moves the prior run's CSVs into it, then
+writes the new timestamped files into `usat_salesforce_duplicates`.
 
 ## Output Files
 
@@ -529,37 +563,35 @@ Gender + Birthdate + Composite ZIP
 
 pair counts should usually stay manageable.
 
-## Current Hardcoded Settings
+## Settings
 
-The script currently uses:
+All tunable constants live in `config.js`:
 
 ```js
-const MAX_FETCH = 5000;
 const FUZZY_THRESHOLD = 90;
 const PROGRESS_LOG_EVERY_RECORDS = 1000;
 const PROGRESS_LOG_EVERY_PAIRS = 250000;
 ```
 
-### MAX_FETCH
+### Test vs. production mode (`MAX_FETCH`)
 
-Controls how many Salesforce records are fetched.
-
-For testing:
+`MAX_FETCH` is no longer hardcoded — it derives from `IS_TEST`, which reads the
+`SF_DUP_IS_TEST` environment variable (default `false` = production):
 
 ```js
-const MAX_FETCH = 5000;
+const IS_TEST = process.env.SF_DUP_IS_TEST !== undefined
+    ? process.env.SF_DUP_IS_TEST === "true"
+    : false;
+
+const MAX_FETCH = IS_TEST ? 5_000 : 1_000_000;
 ```
 
-For a larger test:
+`IS_TEST` also selects the Salesforce credentials (dev sandbox vs. production).
+Set it per run from the shell or the menu:
 
-```js
-const MAX_FETCH = 50000;
-```
-
-For a full run:
-
-```js
-const MAX_FETCH = 1000000;
+```bash
+SF_DUP_IS_TEST=true  node sf_duplicates_060326.js   # dev sandbox, 5,000 cap
+SF_DUP_IS_TEST=false node sf_duplicates_060326.js   # production, full fetch
 ```
 
 ### FUZZY_THRESHOLD
@@ -620,18 +652,34 @@ npm install dotenv jsforce fast-csv
 
 ## Run the Script
 
-From the script folder:
+From the script folder, either use the interactive menu (recommended):
 
 ```bash
-node sf_duplicates_060326.js
+node menu.js
 ```
 
-Example:
+The menu can run the tests, do a syntax check, run the finder in TEST or
+PRODUCTION mode, and open the output/archive folders.
+
+Or run the script directly:
 
 ```bash
-calla@LAPTOP-3NGPLS93 MINGW64 ~/development/usat/sql_programs/src/salesforce
-$ node sf_duplicates_060326.js
+SF_DUP_IS_TEST=true  node sf_duplicates_060326.js   # test (dev sandbox, 5,000 cap)
+SF_DUP_IS_TEST=false node sf_duplicates_060326.js   # production (full fetch)
+node sf_duplicates_060326.js                          # defaults to production
 ```
+
+## Testing
+
+The `src/` modules are pure and unit-tested with Node's built-in test runner.
+Tests never log into Salesforce or touch the production output folders.
+
+```bash
+node --test tests/                 # run every suite
+node --test tests/matcher.test.js  # run one suite
+```
+
+Or use menu item 1 (all tests) / 2 (file output tests).
 
 ## Console Logging
 
@@ -809,9 +857,9 @@ This is usually helpful, but reviewers should still inspect groups before taking
 Potential improvements:
 
 ```text
-1. Add timestamped output folders.
+1. [done] Timestamped output files written to /data with archive rotation.
 2. Add a raw Salesforce export CSV.
-3. Add config options for MAX_FETCH and FUZZY_THRESHOLD.
+3. [partial] MAX_FETCH is now env-driven (SF_DUP_IS_TEST); FUZZY_THRESHOLD still in config.js.
 4. Add separate rule-based-only output:
    same gender + birthdate + ZIP, regardless of name score.
 5. Add ZIP normalization to compare only first 5 digits.

@@ -11,24 +11,37 @@ const { determineOSPath } = require("../../utilities/determineOSPath");
 const { create_directory } = require("../../utilities/createDirectory");
 const { getCurrentDateTimeForFileNaming } = require("../../utilities/getCurrentDate");
 
-// Defaults to false (production). The menu / shell can override per run by
-// setting SF_DUP_IS_TEST="true" (dev sandbox, capped fetch) or "false".
-const IS_TEST = process.env.SF_DUP_IS_TEST !== undefined
-    ? process.env.SF_DUP_IS_TEST === "true"
-    : false;
+const {
+    IS_TEST,
+    MAX_FETCH,
+    FUZZY_THRESHOLD,
+    PROGRESS_LOG_EVERY_RECORDS,
+    PROGRESS_LOG_EVERY_PAIRS,
+    EXACT_OUTPUT_FILE,
+    FUZZY_PAIR_OUTPUT_FILE,
+    FUZZY_GROUP_OUTPUT_FILE,
+    OUTPUT_DIR_NAME,
+    ARCHIVE_DIR_NAME,
+    REVIEW_STATUS_DEFAULT,
+} = require("./config");
 
-    
-const MAX_FETCH = IS_TEST ? 5_000 : 1_000_000;
-const FUZZY_THRESHOLD = 90;
-const PROGRESS_LOG_EVERY_RECORDS = 1_000;
-const PROGRESS_LOG_EVERY_PAIRS = 25_0000;
-
-const EXACT_OUTPUT_FILE = "account_duplicates_sf_import.csv";
-const FUZZY_PAIR_OUTPUT_FILE = "account_fuzzy_name_matches_sf_import.csv";
-const FUZZY_GROUP_OUTPUT_FILE = "account_fuzzy_name_groups_sf_import.csv";
-
-const OUTPUT_DIR_NAME = "usat_salesforce_duplicates";
-const ARCHIVE_DIR_NAME = "usat_salesforce_duplicates_archive";
+const { colorize, log_info, log_success, log_warn, log_error } = require("./src/log");
+const { format_duration, format_timestamp_utc, format_timestamp_mtn } = require("./src/fmt");
+const {
+    unique_join,
+    composite_zip,
+    make_full_name,
+    make_clean_full_name,
+    make_exact_duplicate_key,
+    make_rule_key,
+    has_required_rule_fields,
+} = require("./src/normalize");
+const {
+    similarity_score,
+    get_rule_flags,
+    get_fuzzy_match_reason,
+} = require("./src/matcher");
+const { build_fuzzy_groups } = require("./src/grouping");
 
 // Append a date/time stamp to the end of a file name, before its extension.
 // e.g. ("account_duplicates_sf_import.csv", "2026-06-04_14-30-05")
@@ -37,54 +50,6 @@ function add_timestamp_to_filename(file_name, timestamp) {
     const ext = path.extname(file_name);
     const base = path.basename(file_name, ext);
     return `${base}_${timestamp}${ext}`;
-}
-
-const REVIEW_STATUS_DEFAULT = "New";
-
-const COLORS = {
-    reset: "\x1b[0m",
-    bright: "\x1b[1m",
-    red: "\x1b[31m",
-    green: "\x1b[32m",
-    yellow: "\x1b[33m",
-    cyan: "\x1b[36m",
-    gray: "\x1b[90m",
-};
-
-function colorize(color, value) {
-    return `${COLORS[color] || ""}${value}${COLORS.reset}`;
-}
-
-function format_duration(ms) {
-    const total_seconds = Math.floor(ms / 1000);
-    const hours = Math.floor(total_seconds / 3600);
-    const minutes = Math.floor((total_seconds % 3600) / 60);
-    const seconds = total_seconds % 60;
-    const parts = [];
-
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0 || hours > 0) parts.push(`${minutes}m`);
-    parts.push(`${seconds}s`);
-
-    return parts.join(" ");
-}
-
-function format_timestamp_utc(date = new Date()) {
-    return date.toISOString();
-}
-
-function format_timestamp_mtn(date = new Date()) {
-    return new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/Denver",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-        timeZoneName: "short",
-    }).format(date).replace(",", "");
 }
 
 function make_run_id(date = new Date()) {
@@ -104,241 +69,6 @@ function make_hash(value) {
 
 function make_external_id(run_id, match_type, unique_value) {
     return `${run_id}|${match_type}|${make_hash(unique_value)}`;
-}
-
-function log_info(message, start_ms = null) {
-    const elapsed = start_ms
-        ? colorize("gray", ` | elapsed: ${format_duration(Date.now() - start_ms)}`)
-        : "";
-
-    console.log(
-        `${colorize("cyan", "[INFO]")} ${colorize("gray", format_timestamp_utc())} ${message}${elapsed}`
-    );
-}
-
-function log_success(message, start_ms = null) {
-    const elapsed = start_ms
-        ? colorize("gray", ` | elapsed: ${format_duration(Date.now() - start_ms)}`)
-        : "";
-
-    console.log(
-        `${colorize("green", "[OK]")} ${colorize("gray", format_timestamp_utc())} ${message}${elapsed}`
-    );
-}
-
-function log_warn(message) {
-    console.warn(
-        `${colorize("yellow", "[WARN]")} ${colorize("gray", format_timestamp_utc())} ${message}`
-    );
-}
-
-function log_error(message) {
-    console.error(
-        `${colorize("red", "[ERROR]")} ${colorize("gray", format_timestamp_utc())} ${message}`
-    );
-}
-
-function norm(value) {
-    return (value || "").trim().toUpperCase();
-}
-
-function clean_name(value) {
-    return norm(value).replace(/[^A-Z0-9]/g, "").trim();
-}
-
-function unique_join(values) {
-    return [...new Set(values.filter((value) => value !== null && value !== undefined && String(value).trim() !== ""))]
-        .join(";");
-}
-
-function composite_zip(row) {
-    const billing_zip = (row.BillingPostalCode || "").trim();
-    const mailing_zip = (row.PersonMailingPostalCode || "").trim();
-
-    return billing_zip !== "" ? billing_zip : mailing_zip;
-}
-
-function make_full_name(row) {
-    return `${row.FirstName || ""} ${row.LastName || ""}`.trim();
-}
-
-function make_clean_full_name(row) {
-    return `${clean_name(row.FirstName)} ${clean_name(row.LastName)}`.trim();
-}
-
-function make_exact_duplicate_key(row) {
-    return [
-        norm(row.LastName),
-        norm(row.FirstName),
-        norm(row.cfg_Gender_Identity__pc),
-        norm(row.PersonBirthdate),
-        norm(composite_zip(row)),
-    ].join("|");
-}
-
-function make_rule_key(row) {
-    return [
-        norm(row.cfg_Gender_Identity__pc),
-        norm(row.PersonBirthdate),
-        norm(composite_zip(row)),
-    ].join("|");
-}
-
-function has_required_rule_fields(row) {
-    return (
-        norm(row.cfg_Gender_Identity__pc) !== "" &&
-        norm(row.PersonBirthdate) !== "" &&
-        norm(composite_zip(row)) !== ""
-    );
-}
-
-function levenshtein_distance(a, b) {
-    if (a === b) return 0;
-    if (!a) return b.length;
-    if (!b) return a.length;
-
-    const matrix = [];
-
-    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-
-    for (let i = 1; i <= b.length; i++) {
-        for (let j = 1; j <= a.length; j++) {
-            if (b.charAt(i - 1) === a.charAt(j - 1)) {
-                matrix[i][j] = matrix[i - 1][j - 1];
-            } else {
-                matrix[i][j] = Math.min(
-                    matrix[i - 1][j - 1] + 1,
-                    matrix[i][j - 1] + 1,
-                    matrix[i - 1][j] + 1
-                );
-            }
-        }
-    }
-
-    return matrix[b.length][a.length];
-}
-
-function similarity_score(a, b) {
-    const left = clean_name(a);
-    const right = clean_name(b);
-
-    if (!left || !right) return 0;
-    if (left === right) return 100;
-
-    const max_length = Math.max(left.length, right.length);
-    const distance = levenshtein_distance(left, right);
-
-    return Math.round((1 - distance / max_length) * 100);
-}
-
-function get_rule_flags(row_a, row_b) {
-    const same_gender_flag =
-        norm(row_a.cfg_Gender_Identity__pc) !== "" &&
-        norm(row_a.cfg_Gender_Identity__pc) === norm(row_b.cfg_Gender_Identity__pc)
-            ? 1
-            : 0;
-
-    const same_birthdate_flag =
-        norm(row_a.PersonBirthdate) !== "" &&
-        norm(row_a.PersonBirthdate) === norm(row_b.PersonBirthdate)
-            ? 1
-            : 0;
-
-    const same_composite_zip_flag =
-        norm(composite_zip(row_a)) !== "" &&
-        norm(composite_zip(row_a)) === norm(composite_zip(row_b))
-            ? 1
-            : 0;
-
-    const strict_rule_match_flag =
-        same_gender_flag === 1 &&
-        same_birthdate_flag === 1 &&
-        same_composite_zip_flag === 1
-            ? 1
-            : 0;
-
-    return {
-        same_gender_flag,
-        same_birthdate_flag,
-        same_composite_zip_flag,
-        strict_rule_match_flag,
-        rule_match_count: same_gender_flag + same_birthdate_flag + same_composite_zip_flag,
-    };
-}
-
-function get_name_difference_reason(row_a, row_b, first_name_score, last_name_score) {
-    const first_a = clean_name(row_a.FirstName);
-    const first_b = clean_name(row_b.FirstName);
-    const last_a = clean_name(row_a.LastName);
-    const last_b = clean_name(row_b.LastName);
-
-    const reasons = [];
-
-    let first_reason = "First names are exact after cleaning.";
-    let last_reason = "Last names are exact after cleaning.";
-
-    if (first_a !== first_b) {
-        first_reason = `First names differ after cleaning: "${first_a}" vs "${first_b}" with score ${first_name_score}.`;
-        reasons.push(first_reason);
-    }
-
-    if (last_a !== last_b) {
-        last_reason = `Last names differ after cleaning: "${last_a}" vs "${last_b}" with score ${last_name_score}.`;
-        reasons.push(last_reason);
-    }
-
-    if (reasons.length === 0) {
-        reasons.push("Names are exact after cleaning; this pair should normally be skipped by fuzzy logic.");
-    }
-
-    return {
-        first_name_difference_reason: first_reason,
-        last_name_difference_reason: last_reason,
-        name_difference_reason: reasons.join(" "),
-    };
-}
-
-function get_rule_match_reason(row_a, rule_flags) {
-    const gender = norm(row_a.cfg_Gender_Identity__pc);
-    const birthdate = norm(row_a.PersonBirthdate);
-    const zip = norm(composite_zip(row_a));
-
-    if (rule_flags.strict_rule_match_flag === 1) {
-        return `Strict rule match: same gender "${gender}", same birthdate "${birthdate}", and same composite ZIP "${zip}".`;
-    }
-
-    return [
-        "Rule check failed or partial match.",
-        `same_gender_flag=${rule_flags.same_gender_flag}`,
-        `same_birthdate_flag=${rule_flags.same_birthdate_flag}`,
-        `same_composite_zip_flag=${rule_flags.same_composite_zip_flag}`,
-    ].join(" ");
-}
-
-function get_fuzzy_match_reason({
-    row_a,
-    row_b,
-    first_name_score,
-    last_name_score,
-    combined_name_score,
-    rule_flags,
-}) {
-    const name_reasons = get_name_difference_reason(row_a, row_b, first_name_score, last_name_score);
-    const rule_match_reason = get_rule_match_reason(row_a, rule_flags);
-
-    const fuzzy_match_reason = [
-        `Fuzzy match because the combined name score ${combined_name_score} is >= threshold ${FUZZY_THRESHOLD}.`,
-        name_reasons.name_difference_reason,
-        rule_match_reason,
-        "This pair was not included in the exact duplicate file because the cleaned first and/or last name was not an exact match.",
-    ].join(" ");
-
-    return {
-        fuzzy_match_reason,
-        rule_match_reason,
-        ...name_reasons,
-    };
 }
 
 async function write_csv(output_dir, file_name, rows) {
@@ -383,57 +113,6 @@ async function archive_previous_output_files(output_dir_name = OUTPUT_DIR_NAME, 
     }
 
     return output_dir;
-}
-
-class UnionFind {
-    constructor() {
-        this.parent = new Map();
-    }
-
-    add(x) {
-        if (!this.parent.has(x)) {
-            this.parent.set(x, x);
-        }
-    }
-
-    find(x) {
-        this.add(x);
-
-        const parent = this.parent.get(x);
-
-        if (parent !== x) {
-            const root = this.find(parent);
-            this.parent.set(x, root);
-            return root;
-        }
-
-        return parent;
-    }
-
-    union(a, b) {
-        const root_a = this.find(a);
-        const root_b = this.find(b);
-
-        if (root_a !== root_b) {
-            this.parent.set(root_b, root_a);
-        }
-    }
-
-    groups() {
-        const out = new Map();
-
-        for (const item of this.parent.keys()) {
-            const root = this.find(item);
-
-            if (!out.has(root)) {
-                out.set(root, []);
-            }
-
-            out.get(root).push(item);
-        }
-
-        return out;
-    }
 }
 
 function log_exact_duplicate_exclusion_summary(exact_duplicate_groups, exact_duplicate_record_ids) {
@@ -489,95 +168,6 @@ function log_rule_block_summary(rule_blocks) {
 
     log_info("Top fuzzy rule blocks by estimated pair comparisons:");
     console.table(summary);
-}
-
-function build_fuzzy_groups(fuzzy_matches, record_lookup) {
-    const uf = new UnionFind();
-
-    for (const match of fuzzy_matches) {
-        uf.union(match.record_id_1, match.record_id_2);
-    }
-
-    const raw_groups = [...uf.groups().values()].filter((ids) => ids.length > 1);
-    const pair_stats_by_group_key = new Map();
-
-    for (const ids of raw_groups) {
-        const sorted_ids = [...ids].sort();
-        const group_key = sorted_ids.join("|");
-
-        pair_stats_by_group_key.set(group_key, {
-            best_pair_score: 0,
-            lowest_pair_score: 100,
-            pair_count: 0,
-            pair_reasons: [],
-        });
-    }
-
-    for (const match of fuzzy_matches) {
-        const root_ids = raw_groups.find(
-            (ids) => ids.includes(match.record_id_1) && ids.includes(match.record_id_2)
-        );
-
-        if (!root_ids) continue;
-
-        const group_key = [...root_ids].sort().join("|");
-        const stats = pair_stats_by_group_key.get(group_key);
-
-        stats.best_pair_score = Math.max(stats.best_pair_score, match.match_score_combined_name);
-        stats.lowest_pair_score = Math.min(stats.lowest_pair_score, match.match_score_combined_name);
-        stats.pair_count += 1;
-        stats.pair_reasons.push(
-            `${match.full_name_1} <-> ${match.full_name_2}: score ${match.match_score_combined_name}`
-        );
-    }
-
-    return raw_groups
-        .map((ids) => {
-            const sorted_ids = [...ids].sort();
-            const group_key = sorted_ids.join("|");
-            const stats = pair_stats_by_group_key.get(group_key);
-
-            const rows = sorted_ids
-                .map((id) => record_lookup.get(id))
-                .filter(Boolean);
-
-            const first_row = rows[0] || {};
-
-            return {
-                fuzzy_group_key: group_key,
-                group_record_count: rows.length,
-                shared_gender: first_row.cfg_Gender_Identity__pc || "",
-                shared_birthdate: first_row.PersonBirthdate || "",
-                shared_composite_zip: composite_zip(first_row),
-                names_in_group: rows.map(make_full_name).join(";"),
-                clean_names_in_group: rows.map(make_clean_full_name).join(";"),
-                record_ids: rows.map((r) => r.Id).join(";"),
-                member_numbers: rows
-                    .map((r) => r.cfg_Member_Number__pc)
-                    .filter(Boolean)
-                    .join(";"),
-                foundation_constituents: unique_join(
-                    rows.map((r) => r.usat_Foundation_Constituent__c)
-                ),
-                best_pair_score: stats?.best_pair_score || "",
-                lowest_pair_score: stats?.lowest_pair_score || "",
-                fuzzy_pair_count_in_group: stats?.pair_count || 0,
-                fuzzy_pair_summary: stats?.pair_reasons.join(" | ") || "",
-                fuzzy_group_logic:
-                    "connected group built from fuzzy pair matches sharing same gender, birthdate, and composite ZIP",
-            };
-        })
-        .sort((a, b) => {
-            if (b.group_record_count !== a.group_record_count) {
-                return b.group_record_count - a.group_record_count;
-            }
-
-            if (b.best_pair_score !== a.best_pair_score) {
-                return b.best_pair_score - a.best_pair_score;
-            }
-
-            return String(a.names_in_group || "").localeCompare(String(b.names_in_group || ""));
-        });
 }
 
 function to_sf_exact_row({
