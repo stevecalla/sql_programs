@@ -20,16 +20,21 @@ account_fuzzy_name_groups_sf_import.csv
 
 ```text
 salesforce_duplicates/
-  sf_duplicates_060326.js   orchestrator (SF query, exact + fuzzy pipeline, output)
-  config.js                 IS_TEST/env flag, thresholds, output file + folder names
+  sf_duplicates_060326.js   orchestrator (exact + fuzzy pipeline + run summary)
+  config.js                 run-mode flag resolver, thresholds, output file + folder names
   menu.js                   interactive launcher (node menu.js)
   src/
     fmt.js                  duration + timestamp formatting (pure)
     log.js                  console logging + colors
+    ids.js                  run id, hashing, external id (pure)
     normalize.js            field cleaning + key builders (pure)
     matcher.js              levenshtein, similarity, rule flags, reasons (pure)
     grouping.js             UnionFind + fuzzy group builder
-  tests/                    node:test unit tests (normalize, matcher, grouping, file output)
+    sf_rows.js              maps result rows to the Salesforce import schema
+    output_files.js         CSV write + output/archive rotation
+    salesforce.js           jsforce connect + Account query (only networked module)
+  tests/                    node:test unit tests (normalize, matcher, grouping,
+                            ids, sf_rows, file output)
   README.md / CLAUDE.md / schema.md
 ```
 

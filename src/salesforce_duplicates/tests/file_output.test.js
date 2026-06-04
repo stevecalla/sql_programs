@@ -1,11 +1,10 @@
 /**
  * file_output.test.js — Verifies the CSV output + archive rotation logic.
  *
- * This suite covers ONLY the file-handling changes added to
- * sf_duplicates_060326.js (it never logs into Salesforce, so it's fast and
+ * Covers src/output_files.js (it never logs into Salesforce, so it's fast and
  * free to run). Specifically it asserts:
  *
- *   1. The module loads and exports the file helpers.
+ *   1. The module exports the file helpers.
  *   2. add_timestamp_to_filename() puts the date/time stamp at the END of
  *      the name, just before the .csv extension.
  *   3. write_csv() writes a real CSV into the directory it's given and
@@ -17,13 +16,10 @@
  *
  * The rotation test runs against isolated *_test folders inside the /data
  * path (passed in via the function's optional args), so it never touches
- * the real usat_salesforce_duplicates output. The folders are removed in
- * the cleanup hook.
+ * the real usat_salesforce_duplicates output.
  *
  * Run from src/salesforce_duplicates via:
  *   node --test tests/file_output.test.js
- * Or run every suite in this folder:
- *   node --test tests/
  */
 
 'use strict';
@@ -34,8 +30,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const sf = require('../sf_duplicates_060326.js');
+const sf = require('../src/output_files.js');
 const { create_directory } = require('../../../utilities/createDirectory');
+const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME } = require('../config');
 
 // Isolated folder names so the test never touches real production output.
 const TEST_OUTPUT_DIR_NAME = 'usat_salesforce_duplicates__test';
@@ -46,12 +43,12 @@ function list_csvs(dir) {
 }
 
 describe('exports', () => {
-    test('module exposes the file helpers', () => {
+    test('module exposes the file helpers + config dir names', () => {
         assert.equal(typeof sf.add_timestamp_to_filename, 'function');
         assert.equal(typeof sf.write_csv, 'function');
         assert.equal(typeof sf.archive_previous_output_files, 'function');
-        assert.equal(typeof sf.OUTPUT_DIR_NAME, 'string');
-        assert.equal(typeof sf.ARCHIVE_DIR_NAME, 'string');
+        assert.equal(typeof OUTPUT_DIR_NAME, 'string');
+        assert.equal(typeof ARCHIVE_DIR_NAME, 'string');
     });
 });
 
@@ -111,27 +108,22 @@ describe('archive_previous_output_files rotation', () => {
             for (const f of list_csvs(dir)) fs.rmSync(path.join(dir, f));
         }
 
-        // ── RUN 1 ────────────────────────────────────────────────────────
+        // RUN 1
         await sf.archive_previous_output_files(TEST_OUTPUT_DIR_NAME, TEST_ARCHIVE_DIR_NAME);
         await sf.write_csv(output_dir, 'run1.csv', [{ k: 'run1' }]);
-
         assert.deepEqual(list_csvs(output_dir), ['run1.csv']);
         assert.deepEqual(list_csvs(archive_dir), []);
 
-        // ── RUN 2 ────────────────────────────────────────────────────────
+        // RUN 2 — run1 moves to archive; output cleared.
         await sf.archive_previous_output_files(TEST_OUTPUT_DIR_NAME, TEST_ARCHIVE_DIR_NAME);
-
-        // run1 moved to archive; output cleared, ready for the new run.
         assert.deepEqual(list_csvs(archive_dir), ['run1.csv']);
         assert.deepEqual(list_csvs(output_dir), []);
 
         await sf.write_csv(output_dir, 'run2.csv', [{ k: 'run2' }]);
         assert.deepEqual(list_csvs(output_dir), ['run2.csv']);
 
-        // ── RUN 3 ────────────────────────────────────────────────────────
+        // RUN 3 — archive cleared first, so only the most recent run survives.
         await sf.archive_previous_output_files(TEST_OUTPUT_DIR_NAME, TEST_ARCHIVE_DIR_NAME);
-
-        // Archive was cleared first, so only the most recent run survives there.
         assert.deepEqual(list_csvs(archive_dir), ['run2.csv']);
         assert.deepEqual(list_csvs(output_dir), []);
 
