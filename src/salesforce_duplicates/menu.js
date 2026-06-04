@@ -24,7 +24,7 @@ const { determineOSPath } = require('../../utilities/determineOSPath');
 const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME } = require('./config');
 
 const DIR = __dirname;
-const MAIN_SCRIPT = 'find_duplicates.js';
+const MAIN_SCRIPT = 'step_1_find_duplicates.js';
 
 // ── Colors ────────────────────────────────────────────────────────────────
 const RESET = '\x1b[0m';

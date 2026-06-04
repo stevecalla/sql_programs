@@ -20,7 +20,7 @@ account_fuzzy_name_groups_sf_import.csv
 
 ```text
 salesforce_duplicates/
-  find_duplicates.js   orchestrator (exact + fuzzy pipeline + run summary)
+  step_1_find_duplicates.js   orchestrator (exact + fuzzy pipeline + run summary)
   config.js                 run-mode flag resolver, thresholds, output file + folder names
   menu.js                   interactive launcher (node menu.js)
   src/
@@ -40,7 +40,7 @@ salesforce_duplicates/
   README.md / CLAUDE.md / schema.md
 ```
 
-`main()` in `find_duplicates.js` is now a thin orchestrator that calls
+`main()` in `step_1_find_duplicates.js` is now a thin orchestrator that calls
 `detect_exact_duplicates` (exact.js) and `run_fuzzy_matching` (fuzzy.js).
 
 See `CLAUDE.md` for a quick orientation map of the modules.
@@ -603,8 +603,8 @@ function resolve_is_test(argv = process.argv) {
 fetch limit (`MAX_FETCH` = 5,000 test / 1,000,000 prod). Set it per run:
 
 ```bash
-node find_duplicates.js --test   # dev sandbox, 5,000 cap
-node find_duplicates.js --prod   # production, full fetch
+node step_1_find_duplicates.js --test   # dev sandbox, 5,000 cap
+node step_1_find_duplicates.js --prod   # production, full fetch
 ```
 
 ### FUZZY_THRESHOLD
@@ -677,9 +677,9 @@ PRODUCTION mode, and open the output/archive folders.
 Or run the script directly:
 
 ```bash
-node find_duplicates.js --test   # test (dev sandbox, 5,000 cap)
-node find_duplicates.js --prod   # production (full fetch)
-node find_duplicates.js          # defaults to production
+node step_1_find_duplicates.js --test   # test (dev sandbox, 5,000 cap)
+node step_1_find_duplicates.js --prod   # production (full fetch)
+node step_1_find_duplicates.js          # defaults to production
 ```
 
 ## Testing
