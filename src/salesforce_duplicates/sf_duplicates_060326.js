@@ -3,11 +3,21 @@ dotenv.config({ path: "../../.env" });
 
 const jsforce = require("jsforce");
 const fs = require("fs");
+const path = require("path");
 const csv = require("fast-csv");
 const crypto = require("crypto");
 
-const IS_TEST = false;
+const { determineOSPath } = require("../../utilities/determineOSPath");
+const { create_directory } = require("../../utilities/createDirectory");
+const { getCurrentDateTimeForFileNaming } = require("../../utilities/getCurrentDate");
 
+// Defaults to false (production). The menu / shell can override per run by
+// setting SF_DUP_IS_TEST="true" (dev sandbox, capped fetch) or "false".
+const IS_TEST = process.env.SF_DUP_IS_TEST !== undefined
+    ? process.env.SF_DUP_IS_TEST === "true"
+    : false;
+
+    
 const MAX_FETCH = IS_TEST ? 5_000 : 1_000_000;
 const FUZZY_THRESHOLD = 90;
 const PROGRESS_LOG_EVERY_RECORDS = 1_000;
@@ -16,6 +26,18 @@ const PROGRESS_LOG_EVERY_PAIRS = 25_0000;
 const EXACT_OUTPUT_FILE = "account_duplicates_sf_import.csv";
 const FUZZY_PAIR_OUTPUT_FILE = "account_fuzzy_name_matches_sf_import.csv";
 const FUZZY_GROUP_OUTPUT_FILE = "account_fuzzy_name_groups_sf_import.csv";
+
+const OUTPUT_DIR_NAME = "usat_salesforce_duplicates";
+const ARCHIVE_DIR_NAME = "usat_salesforce_duplicates_archive";
+
+// Append a date/time stamp to the end of a file name, before its extension.
+// e.g. ("account_duplicates_sf_import.csv", "2026-06-04_14-30-05")
+//   -> "account_duplicates_sf_import_2026-06-04_14-30-05.csv"
+function add_timestamp_to_filename(file_name, timestamp) {
+    const ext = path.extname(file_name);
+    const base = path.basename(file_name, ext);
+    return `${base}_${timestamp}${ext}`;
+}
 
 const REVIEW_STATUS_DEFAULT = "New";
 
@@ -319,16 +341,48 @@ function get_fuzzy_match_reason({
     };
 }
 
-async function write_csv(output_file, rows) {
+async function write_csv(output_dir, file_name, rows) {
+    const full_path = path.join(output_dir, file_name);
+
     await new Promise((resolve, reject) => {
-        const ws = fs.createWriteStream(output_file);
+        const ws = fs.createWriteStream(full_path);
+
+        ws.on("error", reject);
+        ws.on("finish", resolve);
 
         csv
             .write(rows, { headers: true })
             .on("error", reject)
-            .on("finish", resolve)
             .pipe(ws);
     });
+
+    return full_path;
+}
+
+// Archive prior run output before writing new files.
+// Mirrors the usat_sales_data convention (see src/sales_data/step_1_get_sales_data.js):
+// 1. delete existing csvs in the archive folder
+// 2. move existing csvs from the output folder into the archive folder
+// Returns the output directory path for the current run's files.
+async function archive_previous_output_files(output_dir_name = OUTPUT_DIR_NAME, archive_dir_name = ARCHIVE_DIR_NAME) {
+    const output_dir = await create_directory(output_dir_name);
+    const archive_dir = await create_directory(archive_dir_name);
+
+    // 1. DELETE EXISTING FILES IN ARCHIVE
+    for (const file of fs.readdirSync(archive_dir)) {
+        if (file.endsWith(".csv")) {
+            fs.rmSync(path.join(archive_dir, file));
+        }
+    }
+
+    // 2. MOVE CURRENT OUTPUT FILES TO ARCHIVE
+    for (const file of fs.readdirSync(output_dir)) {
+        if (file.endsWith(".csv")) {
+            fs.renameSync(path.join(output_dir, file), path.join(archive_dir, file));
+        }
+    }
+
+    return output_dir;
 }
 
 class UnionFind {
@@ -536,12 +590,13 @@ function to_sf_exact_row({
     query_start_date,
     query_end_date,
     query_duration_ms,
+    source_file_name,
 }) {
     return {
         Run_Id__c: run_id,
         External_Id__c: make_external_id(run_id, "exact_group", row.duplicate_key),
         Match_Type__c: "exact_group",
-        Source_File_Name__c: EXACT_OUTPUT_FILE,
+        Source_File_Name__c: source_file_name,
         Review_Status__c: REVIEW_STATUS_DEFAULT,
 
         Row_Number__c: row_number,
@@ -581,12 +636,13 @@ function to_sf_fuzzy_pair_row({
     fuzzy_start_date,
     fuzzy_end_date,
     fuzzy_duration_ms,
+    source_file_name,
 }) {
     return {
         Run_Id__c: run_id,
         External_Id__c: make_external_id(run_id, "fuzzy_pair", `${row.record_id_1}|${row.record_id_2}`),
         Match_Type__c: "fuzzy_pair",
-        Source_File_Name__c: FUZZY_PAIR_OUTPUT_FILE,
+        Source_File_Name__c: source_file_name,
         Review_Status__c: REVIEW_STATUS_DEFAULT,
 
         Row_Number__c: row_number,
@@ -666,12 +722,13 @@ function to_sf_fuzzy_group_row({
     fuzzy_start_date,
     fuzzy_end_date,
     fuzzy_duration_ms,
+    source_file_name,
 }) {
     return {
         Run_Id__c: run_id,
         External_Id__c: make_external_id(run_id, "fuzzy_group", row.fuzzy_group_key),
         Match_Type__c: "fuzzy_group",
-        Source_File_Name__c: FUZZY_GROUP_OUTPUT_FILE,
+        Source_File_Name__c: source_file_name,
         Review_Status__c: REVIEW_STATUS_DEFAULT,
 
         Row_Number__c: row_number,
@@ -720,6 +777,15 @@ async function main() {
     log_info(`Hardcoded FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
     log_info(`created_at_mtn: ${created_at_mtn}`);
     log_info(`created_at_utc: ${created_at_utc}`);
+
+    // ARCHIVE PRIOR OUTPUT AND PREPARE THIS RUN'S TIMESTAMPED FILE NAMES
+    log_info("Archiving previous output files...", script_start_ms);
+    const output_dir = await archive_previous_output_files();
+    const file_timestamp = getCurrentDateTimeForFileNaming();
+    const exact_output_file = add_timestamp_to_filename(EXACT_OUTPUT_FILE, file_timestamp);
+    const fuzzy_pair_output_file = add_timestamp_to_filename(FUZZY_PAIR_OUTPUT_FILE, file_timestamp);
+    const fuzzy_group_output_file = add_timestamp_to_filename(FUZZY_GROUP_OUTPUT_FILE, file_timestamp);
+    log_success(`Output directory ready: ${output_dir}`, script_start_ms);
 
     const conn = new jsforce.Connection({
         loginUrl: IS_TEST ? process.env.SF_DEV_LOGIN_URL : process.env.SF_PROD_LOGIN_URL,
@@ -867,12 +933,13 @@ async function main() {
             query_start_date,
             query_end_date,
             query_duration_ms,
+            source_file_name: exact_output_file,
         })
     );
 
-    log_info(`Writing Salesforce exact duplicate import file to ${EXACT_OUTPUT_FILE}...`, script_start_ms);
-    await write_csv(EXACT_OUTPUT_FILE, exact_duplicates_sf_import);
-    log_success(`Salesforce exact duplicate import file written: ${EXACT_OUTPUT_FILE}`, script_start_ms);
+    log_info(`Writing Salesforce exact duplicate import file to ${exact_output_file}...`, script_start_ms);
+    const exact_output_path = await write_csv(output_dir, exact_output_file, exact_duplicates_sf_import);
+    log_success(`Salesforce exact duplicate import file written: ${exact_output_path}`, script_start_ms);
 
     const fuzzy_start_date = new Date();
     const fuzzy_start_ms = Date.now();
@@ -1078,12 +1145,13 @@ async function main() {
             fuzzy_start_date,
             fuzzy_end_date,
             fuzzy_duration_ms,
+            source_file_name: fuzzy_pair_output_file,
         })
     );
 
-    log_info(`Writing Salesforce fuzzy pair import file to ${FUZZY_PAIR_OUTPUT_FILE}...`, script_start_ms);
-    await write_csv(FUZZY_PAIR_OUTPUT_FILE, fuzzy_pair_sf_import);
-    log_success(`Salesforce fuzzy pair import file written: ${FUZZY_PAIR_OUTPUT_FILE}`, script_start_ms);
+    log_info(`Writing Salesforce fuzzy pair import file to ${fuzzy_pair_output_file}...`, script_start_ms);
+    const fuzzy_pair_output_path = await write_csv(output_dir, fuzzy_pair_output_file, fuzzy_pair_sf_import);
+    log_success(`Salesforce fuzzy pair import file written: ${fuzzy_pair_output_path}`, script_start_ms);
 
     log_info("Building fuzzy grouped duplicate file...", script_start_ms);
 
@@ -1103,14 +1171,15 @@ async function main() {
             fuzzy_start_date,
             fuzzy_end_date,
             fuzzy_duration_ms,
+            source_file_name: fuzzy_group_output_file,
         })
     );
 
     log_success(`Fuzzy groups built. Groups found: ${fuzzy_group_sf_import.length.toLocaleString()}`, script_start_ms);
 
-    log_info(`Writing Salesforce fuzzy group import file to ${FUZZY_GROUP_OUTPUT_FILE}...`, script_start_ms);
-    await write_csv(FUZZY_GROUP_OUTPUT_FILE, fuzzy_group_sf_import);
-    log_success(`Salesforce fuzzy group import file written: ${FUZZY_GROUP_OUTPUT_FILE}`, script_start_ms);
+    log_info(`Writing Salesforce fuzzy group import file to ${fuzzy_group_output_file}...`, script_start_ms);
+    const fuzzy_group_output_path = await write_csv(output_dir, fuzzy_group_output_file, fuzzy_group_sf_import);
+    log_success(`Salesforce fuzzy group import file written: ${fuzzy_group_output_path}`, script_start_ms);
 
     const script_end_date = new Date();
     const script_duration_ms = Date.now() - script_start_ms;
@@ -1147,9 +1216,9 @@ async function main() {
     console.log(`Fuzzy pairs skipped - not strict gender/birthdate/zip rule: ${pairs_skipped_not_strict_rule.toLocaleString()}`);
     console.log(colorize("green", `Fuzzy pair matches found: ${fuzzy_pair_sf_import.length.toLocaleString()}`));
     console.log(colorize("green", `Fuzzy groups found: ${fuzzy_group_sf_import.length.toLocaleString()}`));
-    console.log(`Exact duplicate Salesforce import output written to: ${EXACT_OUTPUT_FILE}`);
-    console.log(`Fuzzy pair Salesforce import output written to: ${FUZZY_PAIR_OUTPUT_FILE}`);
-    console.log(`Fuzzy group Salesforce import output written to: ${FUZZY_GROUP_OUTPUT_FILE}`);
+    console.log(`Exact duplicate Salesforce import output written to: ${exact_output_path}`);
+    console.log(`Fuzzy pair Salesforce import output written to: ${fuzzy_pair_output_path}`);
+    console.log(`Fuzzy group Salesforce import output written to: ${fuzzy_group_output_path}`);
 }
 
 if (require.main === module) {
@@ -1168,4 +1237,9 @@ if (require.main === module) {
 
 module.exports = {
     execute_get_salesforce_duplicates_data: main,
+    add_timestamp_to_filename,
+    write_csv,
+    archive_previous_output_files,
+    OUTPUT_DIR_NAME,
+    ARCHIVE_DIR_NAME,
 };
