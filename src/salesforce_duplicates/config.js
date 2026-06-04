@@ -14,9 +14,9 @@ const PROD_MAX_FETCH = 1_000_000;
 // Resolve the run mode from command-line flags. This is cross-platform — it
 // works identically in PowerShell, cmd, and bash because the flag is passed
 // as a normal process argument (no shell-specific env-var syntax needed):
-//   node sf_duplicates_060326.js --test   -> true  (dev sandbox, capped fetch)
-//   node sf_duplicates_060326.js --prod   -> false (production, full fetch)
-//   node sf_duplicates_060326.js          -> false (defaults to production)
+//   node find_duplicates.js --test   -> true  (dev sandbox, capped fetch)
+//   node find_duplicates.js --prod   -> false (production, full fetch)
+//   node find_duplicates.js          -> false (defaults to production)
 // The resolved boolean is passed into main(is_test); nothing reads process.env
 // for mode selection.
 function resolve_is_test(argv = process.argv) {

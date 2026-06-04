@@ -10,11 +10,9 @@ as the structure changes.
 
 ## Entry points
 
-- `sf_duplicates_060326.js` — main orchestrator. `main()` runs the full pipeline;
+- `find_duplicates.js` — main orchestrator. `main()` runs the full pipeline;
   exported as `execute_get_salesforce_duplicates_data`. Guarded by
   `require.main === module`, so requiring it does not run it.
-  (Recommended future rename to a stable name like `find_duplicates.js`; if renamed,
-  update `menu.js` and the `tests/*.test.js` requires.)
 - `menu.js` — interactive launcher (`node menu.js`): run tests, syntax check, run
   the finder in TEST or PRODUCTION mode, open the output/archive folders.
 
@@ -22,7 +20,7 @@ as the structure changes.
 
 ```
 salesforce_duplicates/
-  sf_duplicates_060326.js   orchestrator: exact + fuzzy pipeline + run summary
+  find_duplicates.js   orchestrator: exact + fuzzy pipeline + run summary
   config.js                 run-mode flag resolver, thresholds, output filenames, dir names
   menu.js                   interactive CLI launcher
   src/
@@ -61,9 +59,9 @@ the resolved boolean is passed into `main(is_test)`, which selects SF credential
 `process.env` for mode selection.
 
 ```bash
-node sf_duplicates_060326.js --test    # dev sandbox, capped fetch
-node sf_duplicates_060326.js --prod    # production, full fetch
-node sf_duplicates_060326.js           # defaults to production
+node find_duplicates.js --test    # dev sandbox, capped fetch
+node find_duplicates.js --prod    # production, full fetch
+node find_duplicates.js           # defaults to production
 ```
 
 Or use the menu (items 7 = TEST, 8 = PRODUCTION).

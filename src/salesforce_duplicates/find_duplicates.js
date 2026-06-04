@@ -14,7 +14,7 @@ const {
 } = require("./config");
 
 const { colorize, log_info, log_success, log_warn, log_error } = require("./src/log");
-const { format_duration, format_timestamp_utc, format_timestamp_mtn } = require("./src/fmt");
+const { format_timestamp_utc, format_timestamp_mtn } = require("./src/fmt");
 const { build_fuzzy_groups } = require("./src/grouping");
 const { make_run_id } = require("./src/ids");
 const { add_timestamp_to_filename, write_csv, archive_previous_output_files } = require("./src/output_files");
@@ -22,6 +22,7 @@ const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row } = require
 const { fetch_salesforce_accounts } = require("./src/salesforce");
 const { detect_exact_duplicates } = require("./src/exact");
 const { run_fuzzy_matching } = require("./src/fuzzy");
+const { log_run_summary } = require("./src/summaries");
 
 async function main(is_test = resolve_is_test()) {
     const script_start_date = new Date();
@@ -175,42 +176,41 @@ async function main(is_test = resolve_is_test()) {
     const script_end_date = new Date();
     const script_duration_ms = Date.now() - script_start_ms;
 
-    console.log("");
-    console.log(colorize("bright", "Summary"));
-    console.log(colorize("bright", "-------"));
-    console.log(`run_id: ${run_id}`);
-    console.log(`Script start time: ${format_timestamp_utc(script_start_date)}`);
-    console.log(`Script end time: ${format_timestamp_utc(script_end_date)}`);
-    console.log(`Script duration: ${format_duration(script_duration_ms)}`);
-    console.log(`Query start time: ${format_timestamp_utc(query_start_date)}`);
-    console.log(`Query end time: ${format_timestamp_utc(query_end_date)}`);
-    console.log(`Query duration: ${format_duration(query_duration_ms)}`);
-    console.log(`Fuzzy start time: ${format_timestamp_utc(fuzzy_start_date)}`);
-    console.log(`Fuzzy end time: ${format_timestamp_utc(fuzzy_end_date)}`);
-    console.log(`Fuzzy duration: ${format_duration(fuzzy_duration_ms)}`);
-    console.log(`created_at_mtn: ${created_at_mtn}`);
-    console.log(`created_at_utc: ${created_at_utc}`);
-    console.log(`Total records scanned: ${result.records.length}`);
-    console.log(`Salesforce total matching records: ${result.totalSize}`);
-    console.log(`Run mode: ${is_test ? "TEST (dev sandbox)" : "PRODUCTION"}`);
-    console.log(`MAX_FETCH: ${max_fetch}`);
-    console.log(`FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
-    console.log(`Unique exact duplicate-check groups: ${exact_groups_size}`);
-    console.log(`Exact duplicate groups found: ${exact_duplicates_sf_import.length}`);
-    console.log(`Exact duplicate record IDs excluded from fuzzy files: ${exact_duplicate_record_ids.size}`);
-    console.log(`Records after exact duplicate exclusion: ${records_after_exact_exclusion.length}`);
-    console.log(`Records excluded from fuzzy because missing gender/birthdate/zip: ${records_excluded_missing_rule_fields}`);
-    console.log(`Fuzzy candidate records scanned after exact exclusion and required-rule filters: ${fuzzy_candidate_records.length}`);
-    console.log(`Fuzzy rule blocks created: ${rule_blocks.size}`);
-    console.log(`Fuzzy pairs compared: ${pairs_compared.toLocaleString()}`);
-    console.log(`Fuzzy pairs skipped - exact cleaned first/last name: ${pairs_skipped_exact_clean_name.toLocaleString()}`);
-    console.log(`Fuzzy pairs skipped - below threshold: ${pairs_skipped_below_threshold.toLocaleString()}`);
-    console.log(`Fuzzy pairs skipped - not strict gender/birthdate/zip rule: ${pairs_skipped_not_strict_rule.toLocaleString()}`);
-    console.log(colorize("green", `Fuzzy pair matches found: ${fuzzy_pair_sf_import.length.toLocaleString()}`));
-    console.log(colorize("green", `Fuzzy groups found: ${fuzzy_group_sf_import.length.toLocaleString()}`));
-    console.log(`Exact duplicate Salesforce import output written to: ${exact_output_path}`);
-    console.log(`Fuzzy pair Salesforce import output written to: ${fuzzy_pair_output_path}`);
-    console.log(`Fuzzy group Salesforce import output written to: ${fuzzy_group_output_path}`);
+    log_run_summary({
+        run_id,
+        script_start_date,
+        script_end_date,
+        script_duration_ms,
+        query_start_date,
+        query_end_date,
+        query_duration_ms,
+        fuzzy_start_date,
+        fuzzy_end_date,
+        fuzzy_duration_ms,
+        created_at_mtn,
+        created_at_utc,
+        total_records_scanned: result.records.length,
+        salesforce_total_size: result.totalSize,
+        is_test,
+        max_fetch,
+        fuzzy_threshold: FUZZY_THRESHOLD,
+        exact_groups_size,
+        exact_duplicate_groups_found: exact_duplicates_sf_import.length,
+        exact_duplicate_record_ids_excluded: exact_duplicate_record_ids.size,
+        records_after_exact_exclusion_count: records_after_exact_exclusion.length,
+        records_excluded_missing_rule_fields,
+        fuzzy_candidate_records_count: fuzzy_candidate_records.length,
+        rule_blocks_created: rule_blocks.size,
+        pairs_compared,
+        pairs_skipped_exact_clean_name,
+        pairs_skipped_below_threshold,
+        pairs_skipped_not_strict_rule,
+        fuzzy_pair_matches_found: fuzzy_pair_sf_import.length,
+        fuzzy_groups_found: fuzzy_group_sf_import.length,
+        exact_output_path,
+        fuzzy_pair_output_path,
+        fuzzy_group_output_path,
+    });
 }
 
 if (require.main === module) {
