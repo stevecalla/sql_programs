@@ -6,8 +6,9 @@
  *   node menu.js
  *
  * Shows a numbered list. Type the number and press Enter. Uses only the
- * Node.js built-in readline — no extra packages. Mirrors the style of
- * src/event_analysis/menu.js.
+ * Node.js built-in readline — no extra packages. Includes a "Show/hide CLI
+ * commands" toggle that prints the equivalent "$ ..." command under each item
+ * (in-session only — it resets when the menu restarts).
  */
 
 'use strict';
@@ -20,7 +21,7 @@ const readline = require('readline');
 const { execSync, spawn } = require('child_process');
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
-const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME } = require('./sf_duplicates_060326.js');
+const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME } = require('./config');
 
 const DIR = __dirname;
 const MAIN_SCRIPT = 'sf_duplicates_060326.js';
@@ -32,8 +33,12 @@ const DIM = '\x1b[2m';
 const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
+const MAGENTA = '\x1b[35m';
 const CYAN = '\x1b[36m';
 const c = (color, text) => `${color}${text}${RESET}`;
+
+// ── CLI-command toggle (in-session only; resets when the menu restarts) ─────
+let _show_cli = false;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function prompt(rl, question) {
@@ -41,7 +46,7 @@ function prompt(rl, question) {
 }
 
 // Spawn `node <args>` from this directory, streaming output to the console,
-// and resolve with the exit code. Used for both the real script and tests
+// and resolve with the exit code. Used for the real script and tests
 // (tests need `--test` as a node flag, so we spawn node directly).
 function run_node(args, label, env = {}) {
   console.log(c(DIM, `  Running ${label}: node ${args.join(' ')}\n`));
@@ -70,30 +75,41 @@ function open_path(p) {
 }
 
 // ── Menu definition ─────────────────────────────────────────────────────────
+// Test items carry `target` (path passed to `node --test`) + `test_label`.
 const SECTIONS = [
   {
     label: 'TESTING — verify the code is working',
     color: CYAN,
     items: [
-      { id: 1, label: 'Run ALL tests',         desc: 'Every *.test.js under tests/ via node --test', action: 'run_tests_all',  cli: 'node --test tests/' },
-      { id: 2, label: 'Run file output tests',  desc: 'tests/file_output.test.js — CSV write + archive rotation', action: 'run_tests_file', cli: 'node --test tests/file_output.test.js' },
-      { id: 3, label: 'Syntax check',           desc: `Parse-check ${MAIN_SCRIPT} (no run)`, action: 'syntax_check', cli: `node --check ${MAIN_SCRIPT}` },
+      { id: 1, label: 'Run ALL tests',     desc: 'Every suite under tests/ at once', action: 'run_tests', target: 'tests/',                        test_label: 'all tests',        cli: 'node --test tests/' },
+      { id: 2, label: 'normalize tests',   desc: 'Field cleaning + key builders',     action: 'run_tests', target: 'tests/normalize.test.js',       test_label: 'normalize tests',  cli: 'node --test tests/normalize.test.js' },
+      { id: 3, label: 'matcher tests',     desc: 'Levenshtein, similarity, rule flags', action: 'run_tests', target: 'tests/matcher.test.js',       test_label: 'matcher tests',    cli: 'node --test tests/matcher.test.js' },
+      { id: 4, label: 'grouping tests',    desc: 'UnionFind + fuzzy group builder',   action: 'run_tests', target: 'tests/grouping.test.js',        test_label: 'grouping tests',   cli: 'node --test tests/grouping.test.js' },
+      { id: 5, label: 'file output tests', desc: 'CSV write + archive rotation',       action: 'run_tests', target: 'tests/file_output.test.js',     test_label: 'file output tests', cli: 'node --test tests/file_output.test.js' },
+      { id: 6, label: 'Syntax check',      desc: `Parse-check ${MAIN_SCRIPT} (no run)`, action: 'syntax_check',                                       cli: `node --check ${MAIN_SCRIPT}` },
     ],
   },
   {
     label: 'RUN — the real duplicate finder',
     color: YELLOW,
     items: [
-      { id: 4, label: 'Find duplicates — TEST',       desc: 'IS_TEST=true: dev sandbox, fetch capped at 5,000', action: 'run_test', cli: `SF_DUP_IS_TEST=true node ${MAIN_SCRIPT}` },
-      { id: 5, label: 'Find duplicates — PRODUCTION', desc: 'IS_TEST=false: prod login, full fetch, writes CSVs to /data', action: 'run_prod', cli: `SF_DUP_IS_TEST=false node ${MAIN_SCRIPT}` },
+      { id: 7, label: 'Find duplicates — TEST',       desc: '--test: dev sandbox, fetch capped at 5,000', action: 'run_test', cli: `node ${MAIN_SCRIPT} --test` },
+      { id: 8, label: 'Find duplicates — PRODUCTION', desc: '--prod: prod login, full fetch, writes CSVs to /data', action: 'run_prod', cli: `node ${MAIN_SCRIPT} --prod` },
     ],
   },
   {
     label: 'OUTPUT',
     color: GREEN,
     items: [
-      { id: 6, label: 'Open output folder',  desc: `Most recent files (${OUTPUT_DIR_NAME})`, action: 'open_output' },
-      { id: 7, label: 'Open archive folder', desc: `Previous run (${ARCHIVE_DIR_NAME})`, action: 'open_archive' },
+      { id: 9,  label: 'Open output folder',  desc: `Most recent files (${OUTPUT_DIR_NAME})`, action: 'open_output' },
+      { id: 10, label: 'Open archive folder', desc: `Previous run (${ARCHIVE_DIR_NAME})`, action: 'open_archive' },
+    ],
+  },
+  {
+    label: 'PREFERENCES',
+    color: MAGENTA,
+    items: [
+      { id: 11, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
     ],
   },
 ];
@@ -109,6 +125,11 @@ function print_menu() {
     for (const item of section.items) {
       const num = String(item.id).padStart(3);
       console.log(`  ${c(BOLD, num + '.')} ${item.label.padEnd(28)} ${c(DIM, item.desc)}`);
+      // Second dimmed line with the CLI equivalent — only when the toggle is on.
+      // Items without a `cli` field (Open folders, the toggle itself) skip it.
+      if (_show_cli && item.cli) {
+        console.log(`        ${c(DIM, '$ ' + item.cli)}`);
+      }
     }
     console.log('');
   }
@@ -116,22 +137,17 @@ function print_menu() {
 }
 
 // ── Actions ─────────────────────────────────────────────────────────────────
-async function handle_action(action, rl) {
+async function handle_action(item, rl) {
   console.log('');
-  switch (action) {
-    case 'run_tests_all': {
-      const code = await run_node(['--test', 'tests/'], 'all tests');
-      report(code, 'all tests');
-      break;
-    }
-    case 'run_tests_file': {
-      const target = path.join('tests', 'file_output.test.js');
-      if (!fs.existsSync(path.join(DIR, target))) {
-        console.log(c(YELLOW, `  Test file not found: ${target}`));
+  switch (item.action) {
+    case 'run_tests': {
+      const is_dir = item.target.endsWith('/');
+      if (!fs.existsSync(path.join(DIR, item.target))) {
+        console.log(c(YELLOW, `  ${is_dir ? 'tests/ directory' : 'Test file'} not found: ${item.target}`));
         break;
       }
-      const code = await run_node(['--test', target], 'file output tests');
-      report(code, 'file output tests');
+      const code = await run_node(['--test', item.target], item.test_label);
+      report(code, item.test_label);
       break;
     }
     case 'syntax_check': {
@@ -141,7 +157,7 @@ async function handle_action(action, rl) {
     }
     case 'run_test': {
       const label = 'duplicate finder (TEST)';
-      const code = await run_node([MAIN_SCRIPT], label, { SF_DUP_IS_TEST: 'true' });
+      const code = await run_node([MAIN_SCRIPT, '--test'], label);
       report(code, label);
       break;
     }
@@ -149,13 +165,13 @@ async function handle_action(action, rl) {
       const answer = (await prompt(rl, c(YELLOW, '  PRODUCTION run — logs into prod Salesforce and writes files. Continue? (y/N): '))).trim().toLowerCase();
       if (answer !== 'y' && answer !== 'yes') { console.log(c(DIM, '  Cancelled.')); break; }
       const label = 'duplicate finder (PRODUCTION)';
-      const code = await run_node([MAIN_SCRIPT], label, { SF_DUP_IS_TEST: 'false' });
+      const code = await run_node([MAIN_SCRIPT, '--prod'], label);
       report(code, label);
       break;
     }
     case 'open_output':
     case 'open_archive': {
-      const name = action === 'open_output' ? OUTPUT_DIR_NAME : ARCHIVE_DIR_NAME;
+      const name = item.action === 'open_output' ? OUTPUT_DIR_NAME : ARCHIVE_DIR_NAME;
       const os_path = await determineOSPath();
       const folder = path.join(os_path, name);
       fs.mkdirSync(folder, { recursive: true });
@@ -163,8 +179,13 @@ async function handle_action(action, rl) {
       open_path(folder);
       break;
     }
+    case 'toggle_cli': {
+      _show_cli = !_show_cli;
+      console.log(c(GREEN, `  ✓ CLI commands ${_show_cli ? 'shown' : 'hidden'}.`));
+      break;
+    }
     default:
-      console.log(c(YELLOW, `  Unknown action: ${action}`));
+      console.log(c(YELLOW, `  Unknown action: ${item.action}`));
   }
 }
 
@@ -184,7 +205,7 @@ async function main() {
     }
     const item = ALL_ITEMS.find((i) => i.id === parseInt(raw, 10));
     if (!item) { console.log(c(YELLOW, '  Invalid choice.')); }
-    else { await handle_action(item.action, rl); }
+    else { await handle_action(item, rl); }
     await prompt(rl, c(DIM, '\n  Press Enter to continue…'));
   }
 }

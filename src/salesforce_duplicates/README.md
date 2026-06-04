@@ -575,23 +575,26 @@ const PROGRESS_LOG_EVERY_PAIRS = 250000;
 
 ### Test vs. production mode (`MAX_FETCH`)
 
-`MAX_FETCH` is no longer hardcoded — it derives from `IS_TEST`, which reads the
-`SF_DUP_IS_TEST` environment variable (default `false` = production):
+The run mode is chosen with a **cross-platform command-line flag** (it works the
+same in PowerShell, cmd, and bash because it's a normal process argument — no
+shell-specific environment-variable syntax). `config.js` resolves it and the
+result is passed into `main(is_test)`:
 
 ```js
-const IS_TEST = process.env.SF_DUP_IS_TEST !== undefined
-    ? process.env.SF_DUP_IS_TEST === "true"
-    : false;
-
-const MAX_FETCH = IS_TEST ? 5_000 : 1_000_000;
+// config.js — --test => true, --prod/--production => false, default false (prod)
+function resolve_is_test(argv = process.argv) {
+    if (argv.includes("--test")) return true;
+    if (argv.includes("--prod") || argv.includes("--production")) return false;
+    return false;
+}
 ```
 
-`IS_TEST` also selects the Salesforce credentials (dev sandbox vs. production).
-Set it per run from the shell or the menu:
+`is_test` selects the Salesforce credentials (dev sandbox vs. production) and the
+fetch limit (`MAX_FETCH` = 5,000 test / 1,000,000 prod). Set it per run:
 
 ```bash
-SF_DUP_IS_TEST=true  node sf_duplicates_060326.js   # dev sandbox, 5,000 cap
-SF_DUP_IS_TEST=false node sf_duplicates_060326.js   # production, full fetch
+node sf_duplicates_060326.js --test   # dev sandbox, 5,000 cap
+node sf_duplicates_060326.js --prod   # production, full fetch
 ```
 
 ### FUZZY_THRESHOLD
@@ -664,9 +667,9 @@ PRODUCTION mode, and open the output/archive folders.
 Or run the script directly:
 
 ```bash
-SF_DUP_IS_TEST=true  node sf_duplicates_060326.js   # test (dev sandbox, 5,000 cap)
-SF_DUP_IS_TEST=false node sf_duplicates_060326.js   # production (full fetch)
-node sf_duplicates_060326.js                          # defaults to production
+node sf_duplicates_060326.js --test   # test (dev sandbox, 5,000 cap)
+node sf_duplicates_060326.js --prod   # production (full fetch)
+node sf_duplicates_060326.js          # defaults to production
 ```
 
 ## Testing

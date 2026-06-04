@@ -48,17 +48,20 @@ fuzzy candidate/pairwise blocks inside `main()`, the SF connect/query, and
 
 ## Run modes
 
-`IS_TEST` (in `config.js`) reads the `SF_DUP_IS_TEST` env var, defaulting to
-`false` (production). It controls SF credentials (dev vs prod) and `MAX_FETCH`
-(5,000 in test, 1,000,000 in prod).
+Run mode is chosen with a cross-platform CLI flag — it works identically in
+PowerShell, cmd, and bash because it's passed as a normal process argument (no
+shell-specific env-var syntax). `config.js` exposes `resolve_is_test(argv)`, and
+the resolved boolean is passed into `main(is_test)`, which selects SF credentials
+(dev vs prod) and `MAX_FETCH` (5,000 test / 1,000,000 prod). Nothing reads
+`process.env` for mode selection.
 
 ```bash
-SF_DUP_IS_TEST=true  node sf_duplicates_060326.js   # dev sandbox, capped fetch
-SF_DUP_IS_TEST=false node sf_duplicates_060326.js   # production, full fetch
-node sf_duplicates_060326.js                         # defaults to production
+node sf_duplicates_060326.js --test    # dev sandbox, capped fetch
+node sf_duplicates_060326.js --prod    # production, full fetch
+node sf_duplicates_060326.js           # defaults to production
 ```
 
-Or use the menu (items 4 = TEST, 5 = PRODUCTION).
+Or use the menu (items 7 = TEST, 8 = PRODUCTION).
 
 ## Output + archiving
 

@@ -12,11 +12,13 @@ const { create_directory } = require("../../utilities/createDirectory");
 const { getCurrentDateTimeForFileNaming } = require("../../utilities/getCurrentDate");
 
 const {
-    IS_TEST,
-    MAX_FETCH,
+    resolve_is_test,
+    TEST_MAX_FETCH,
+    PROD_MAX_FETCH,
     FUZZY_THRESHOLD,
     PROGRESS_LOG_EVERY_RECORDS,
     PROGRESS_LOG_EVERY_PAIRS,
+    
     EXACT_OUTPUT_FILE,
     FUZZY_PAIR_OUTPUT_FILE,
     FUZZY_GROUP_OUTPUT_FILE,
@@ -353,9 +355,11 @@ function to_sf_fuzzy_group_row({
     };
 }
 
-async function main() {
+async function main(is_test = resolve_is_test()) {
     const script_start_date = new Date();
     const script_start_ms = Date.now();
+
+    const max_fetch = is_test ? TEST_MAX_FETCH : PROD_MAX_FETCH;
 
     const run_id = make_run_id(script_start_date);
     const created_at_mtn = format_timestamp_mtn(script_start_date);
@@ -363,8 +367,9 @@ async function main() {
 
     log_info("Script started.");
     log_info(`run_id: ${run_id}`);
-    log_info(`Hardcoded MAX_FETCH: ${MAX_FETCH}`);
-    log_info(`Hardcoded FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
+    log_info(`Run mode: ${is_test ? "TEST (dev sandbox)" : "PRODUCTION"}`);
+    log_info(`MAX_FETCH: ${max_fetch}`);
+    log_info(`FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
     log_info(`created_at_mtn: ${created_at_mtn}`);
     log_info(`created_at_utc: ${created_at_utc}`);
 
@@ -378,14 +383,14 @@ async function main() {
     log_success(`Output directory ready: ${output_dir}`, script_start_ms);
 
     const conn = new jsforce.Connection({
-        loginUrl: IS_TEST ? process.env.SF_DEV_LOGIN_URL : process.env.SF_PROD_LOGIN_URL,
+        loginUrl: is_test ? process.env.SF_DEV_LOGIN_URL : process.env.SF_PROD_LOGIN_URL,
     });
 
     log_info("Logging into Salesforce...", script_start_ms);
 
     await conn.login(
-        IS_TEST ? process.env.SF_DEV_USERNAME : process.env.SF_PROD_USERNAME,
-        IS_TEST ?
+        is_test ? process.env.SF_DEV_USERNAME : process.env.SF_PROD_USERNAME,
+        is_test ?
             process.env.SF_DEV_PASSWORD + process.env.SF_DEV_SECURITY_TOKEN :
             process.env.SF_PROD_PASSWORD + process.env.SF_PROD_SECURITY_TOKEN
     );
@@ -415,7 +420,7 @@ async function main() {
 
     const result = await conn.query(soql).execute({
         autoFetch: true,
-        maxFetch: MAX_FETCH,
+        maxFetch: max_fetch,
     });
 
     const query_end_date = new Date();
@@ -434,8 +439,8 @@ async function main() {
         return;
     }
 
-    if (result.records.length >= MAX_FETCH) {
-        log_warn(`Test run stopped at MAX_FETCH=${MAX_FETCH}. Increase MAX_FETCH for a full run.`);
+    if (result.records.length >= max_fetch) {
+        log_warn(`Run stopped at MAX_FETCH=${max_fetch}. Use --prod (or increase the limit) for a full run.`);
     }
 
     const record_lookup = new Map();
@@ -791,8 +796,9 @@ async function main() {
     console.log(`created_at_utc: ${created_at_utc}`);
     console.log(`Total records scanned: ${result.records.length}`);
     console.log(`Salesforce total matching records: ${result.totalSize}`);
-    console.log(`Hardcoded MAX_FETCH: ${MAX_FETCH}`);
-    console.log(`Hardcoded FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
+    console.log(`Run mode: ${is_test ? "TEST (dev sandbox)" : "PRODUCTION"}`);
+    console.log(`MAX_FETCH: ${max_fetch}`);
+    console.log(`FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
     console.log(`Unique exact duplicate-check groups: ${exact_groups.size}`);
     console.log(`Exact duplicate groups found: ${exact_duplicates_sf_import.length}`);
     console.log(`Exact duplicate record IDs excluded from fuzzy files: ${exact_duplicate_record_ids.size}`);
