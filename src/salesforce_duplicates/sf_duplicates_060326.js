@@ -8,8 +8,6 @@ const {
     TEST_MAX_FETCH,
     PROD_MAX_FETCH,
     FUZZY_THRESHOLD,
-    PROGRESS_LOG_EVERY_RECORDS,
-    PROGRESS_LOG_EVERY_PAIRS,
     EXACT_OUTPUT_FILE,
     FUZZY_PAIR_OUTPUT_FILE,
     FUZZY_GROUP_OUTPUT_FILE,
@@ -17,79 +15,13 @@ const {
 
 const { colorize, log_info, log_success, log_warn, log_error } = require("./src/log");
 const { format_duration, format_timestamp_utc, format_timestamp_mtn } = require("./src/fmt");
-const {
-    composite_zip,
-    make_full_name,
-    make_clean_full_name,
-    make_exact_duplicate_key,
-    make_rule_key,
-    has_required_rule_fields,
-} = require("./src/normalize");
-const {
-    similarity_score,
-    get_rule_flags,
-    get_fuzzy_match_reason,
-} = require("./src/matcher");
 const { build_fuzzy_groups } = require("./src/grouping");
 const { make_run_id } = require("./src/ids");
 const { add_timestamp_to_filename, write_csv, archive_previous_output_files } = require("./src/output_files");
 const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row } = require("./src/sf_rows");
 const { fetch_salesforce_accounts } = require("./src/salesforce");
-
-function log_exact_duplicate_exclusion_summary(exact_duplicate_groups, exact_duplicate_record_ids) {
-    const duplicate_group_size_summary = exact_duplicate_groups.reduce((acc, group) => {
-        const size = group.record_ids.length;
-        acc[size] = (acc[size] || 0) + 1;
-        return acc;
-    }, {});
-
-    log_info("Exact duplicate exclusion summary:");
-
-    console.table({
-        exact_duplicate_groups: exact_duplicate_groups.length,
-        exact_duplicate_record_ids_excluded_from_fuzzy: exact_duplicate_record_ids.size,
-    });
-
-    console.table(
-        Object.entries(duplicate_group_size_summary).map(([duplicate_count, group_count]) => ({
-            duplicate_count: Number(duplicate_count),
-            group_count,
-            total_records: Number(duplicate_count) * group_count,
-        }))
-    );
-}
-
-function log_fuzzy_candidate_filter_summary({
-    base_records_fetched,
-    exact_duplicate_record_ids_excluded,
-    records_after_exact_exclusion,
-    records_excluded_missing_rule_fields,
-    final_fuzzy_candidate_records,
-}) {
-    log_info("Fuzzy candidate filter summary:");
-
-    console.table({
-        base_records_fetched,
-        exact_duplicate_record_ids_excluded,
-        records_after_exact_exclusion,
-        records_excluded_missing_gender_birthdate_or_zip: records_excluded_missing_rule_fields,
-        final_fuzzy_candidate_records,
-    });
-}
-
-function log_rule_block_summary(rule_blocks) {
-    const summary = [...rule_blocks.entries()]
-        .map(([rule_key, rows]) => ({
-            rule_key,
-            record_count: rows.length,
-            estimated_pair_comparisons: (rows.length * (rows.length - 1)) / 2,
-        }))
-        .sort((a, b) => b.estimated_pair_comparisons - a.estimated_pair_comparisons)
-        .slice(0, 20);
-
-    log_info("Top fuzzy rule blocks by estimated pair comparisons:");
-    console.table(summary);
-}
+const { detect_exact_duplicates } = require("./src/exact");
+const { run_fuzzy_matching } = require("./src/fuzzy");
 
 async function main(is_test = resolve_is_test()) {
     const script_start_date = new Date();
@@ -136,73 +68,8 @@ async function main(is_test = resolve_is_test()) {
         record_lookup.set(row.Id, row);
     }
 
-    const exact_start_ms = Date.now();
-    const exact_groups = new Map();
-
-    log_info("Grouping records for exact duplicate detection...", script_start_ms);
-
-    for (let i = 0; i < result.records.length; i++) {
-        const row = result.records[i];
-        const key = make_exact_duplicate_key(row);
-
-        if (!exact_groups.has(key)) {
-            exact_groups.set(key, {
-                duplicate_key: key,
-                last_name: row.LastName,
-                first_name: row.FirstName,
-                gender: row.cfg_Gender_Identity__pc,
-                birthdate: row.PersonBirthdate,
-                composite_zip: composite_zip(row),
-                duplicate_count: 0,
-                record_ids: [],
-                member_numbers: [],
-                foundation_constituents: [],
-            });
-        }
-
-        const group = exact_groups.get(key);
-
-        group.duplicate_count += 1;
-        group.record_ids.push(row.Id);
-
-        if (row.cfg_Member_Number__pc) {
-            group.member_numbers.push(row.cfg_Member_Number__pc);
-        }
-
-        if (row.usat_Foundation_Constituent__c) {
-            group.foundation_constituents.push(row.usat_Foundation_Constituent__c);
-        }
-
-        if ((i + 1) % PROGRESS_LOG_EVERY_RECORDS === 0) {
-            const pct = (((i + 1) / result.records.length) * 100).toFixed(1);
-            log_info(`Exact grouping progress: ${i + 1}/${result.records.length} records (${pct}%)`, exact_start_ms);
-        }
-    }
-
-    log_success("Exact duplicate grouping complete.", exact_start_ms);
-
-    const exact_duplicate_groups = [...exact_groups.values()]
-        .filter((g) => g.duplicate_count > 1)
-        .sort((a, b) => {
-            if (b.duplicate_count !== a.duplicate_count) {
-                return b.duplicate_count - a.duplicate_count;
-            }
-
-            const last_name_compare = String(a.last_name || "").localeCompare(String(b.last_name || ""));
-            if (last_name_compare !== 0) return last_name_compare;
-
-            return String(a.first_name || "").localeCompare(String(b.first_name || ""));
-        });
-
-    const exact_duplicate_record_ids = new Set();
-
-    for (const group of exact_duplicate_groups) {
-        for (const record_id of group.record_ids) {
-            exact_duplicate_record_ids.add(record_id);
-        }
-    }
-
-    log_exact_duplicate_exclusion_summary(exact_duplicate_groups, exact_duplicate_record_ids);
+    const { exact_groups_size, exact_duplicate_groups, exact_duplicate_record_ids } =
+        detect_exact_duplicates(result.records, { script_start_ms });
 
     const exact_duplicates_sf_import = exact_duplicate_groups.map((row, index) =>
         to_sf_exact_row({
@@ -228,175 +95,17 @@ async function main(is_test = resolve_is_test()) {
 
     log_info("Building fuzzy + strict rule-based match file...", script_start_ms);
 
-    const records_after_exact_exclusion = result.records.filter(
-        (row) => !exact_duplicate_record_ids.has(row.Id)
-    );
-
-    const fuzzy_candidate_records = records_after_exact_exclusion.filter((row) => {
-        return has_required_rule_fields(row);
-    });
-
-    const records_excluded_missing_rule_fields =
-        records_after_exact_exclusion.length - fuzzy_candidate_records.length;
-
-    log_fuzzy_candidate_filter_summary({
-        base_records_fetched: result.records.length,
-        exact_duplicate_record_ids_excluded: exact_duplicate_record_ids.size,
-        records_after_exact_exclusion: records_after_exact_exclusion.length,
+    const {
+        records_after_exact_exclusion,
+        fuzzy_candidate_records,
         records_excluded_missing_rule_fields,
-        final_fuzzy_candidate_records: fuzzy_candidate_records.length,
-    });
-
-    const rule_blocks = new Map();
-
-    for (let i = 0; i < fuzzy_candidate_records.length; i++) {
-        const row = fuzzy_candidate_records[i];
-        const rule_key = make_rule_key(row);
-
-        if (!rule_blocks.has(rule_key)) {
-            rule_blocks.set(rule_key, []);
-        }
-
-        rule_blocks.get(rule_key).push(row);
-
-        if ((i + 1) % PROGRESS_LOG_EVERY_RECORDS === 0) {
-            const pct = (((i + 1) / fuzzy_candidate_records.length) * 100).toFixed(1);
-            log_info(
-                `Fuzzy rule block build progress: ${i + 1}/${fuzzy_candidate_records.length} records (${pct}%)`,
-                fuzzy_start_ms
-            );
-        }
-    }
-
-    log_success(`Fuzzy rule block build complete. Blocks created: ${rule_blocks.size}`, fuzzy_start_ms);
-    log_rule_block_summary(rule_blocks);
-
-    const fuzzy_matches = [];
-    const seen_fuzzy_pairs = new Set();
-
-    let pairs_compared = 0;
-    let pairs_skipped_exact_clean_name = 0;
-    let pairs_skipped_below_threshold = 0;
-    let pairs_skipped_not_strict_rule = 0;
-    let blocks_processed = 0;
-
-    log_info("Starting fuzzy comparisons...", fuzzy_start_ms);
-
-    for (const [rule_key, block_rows] of rule_blocks.entries()) {
-        blocks_processed += 1;
-
-        if (block_rows.length < 2) continue;
-
-        for (let i = 0; i < block_rows.length; i++) {
-            for (let j = i + 1; j < block_rows.length; j++) {
-                pairs_compared += 1;
-
-                const row_a = block_rows[i];
-                const row_b = block_rows[j];
-
-                const pair_key = [row_a.Id, row_b.Id].sort().join("|");
-                if (seen_fuzzy_pairs.has(pair_key)) continue;
-                seen_fuzzy_pairs.add(pair_key);
-
-                const first_name_score = similarity_score(row_a.FirstName, row_b.FirstName);
-                const last_name_score = similarity_score(row_a.LastName, row_b.LastName);
-
-                const exact_clean_first_name_match = first_name_score === 100;
-                const exact_clean_last_name_match = last_name_score === 100;
-
-                if (exact_clean_first_name_match && exact_clean_last_name_match) {
-                    pairs_skipped_exact_clean_name += 1;
-                    continue;
-                }
-
-                const match_score_combined_name = Math.round(
-                    first_name_score * 0.45 + last_name_score * 0.55
-                );
-
-                if (match_score_combined_name < FUZZY_THRESHOLD) {
-                    pairs_skipped_below_threshold += 1;
-                    continue;
-                }
-
-                const rule_flags = get_rule_flags(row_a, row_b);
-
-                if (rule_flags.strict_rule_match_flag !== 1) {
-                    pairs_skipped_not_strict_rule += 1;
-                    continue;
-                }
-
-                const fuzzy_reasons = get_fuzzy_match_reason({
-                    row_a,
-                    row_b,
-                    first_name_score,
-                    last_name_score,
-                    combined_name_score: match_score_combined_name,
-                    rule_flags,
-                });
-
-                fuzzy_matches.push({
-                    rule_key,
-                    fuzzy_threshold: FUZZY_THRESHOLD,
-
-                    fuzzy_match_reason: fuzzy_reasons.fuzzy_match_reason,
-                    name_difference_reason: fuzzy_reasons.name_difference_reason,
-                    first_name_difference_reason: fuzzy_reasons.first_name_difference_reason,
-                    last_name_difference_reason: fuzzy_reasons.last_name_difference_reason,
-                    rule_match_reason: fuzzy_reasons.rule_match_reason,
-
-                    match_score_combined_name,
-                    match_score_first_name: first_name_score,
-                    match_score_last_name: last_name_score,
-                    exact_clean_first_name_match_flag: exact_clean_first_name_match ? 1 : 0,
-                    exact_clean_last_name_match_flag: exact_clean_last_name_match ? 1 : 0,
-                    ...rule_flags,
-
-                    record_id_1: row_a.Id,
-                    member_number_1: row_a.cfg_Member_Number__pc,
-                    first_name_1: row_a.FirstName,
-                    last_name_1: row_a.LastName,
-                    full_name_1: make_full_name(row_a),
-                    clean_full_name_1: make_clean_full_name(row_a),
-                    gender_1: row_a.cfg_Gender_Identity__pc,
-                    birthdate_1: row_a.PersonBirthdate,
-                    composite_zip_1: composite_zip(row_a),
-                    billing_zip_1: row_a.BillingPostalCode,
-                    mailing_zip_1: row_a.PersonMailingPostalCode,
-                    foundation_constituent_1: row_a.usat_Foundation_Constituent__c,
-
-                    record_id_2: row_b.Id,
-                    member_number_2: row_b.cfg_Member_Number__pc,
-                    first_name_2: row_b.FirstName,
-                    last_name_2: row_b.LastName,
-                    full_name_2: make_full_name(row_b),
-                    clean_full_name_2: make_clean_full_name(row_b),
-                    gender_2: row_b.cfg_Gender_Identity__pc,
-                    birthdate_2: row_b.PersonBirthdate,
-                    composite_zip_2: composite_zip(row_b),
-                    billing_zip_2: row_b.BillingPostalCode,
-                    mailing_zip_2: row_b.PersonMailingPostalCode,
-                    foundation_constituent_2: row_b.usat_Foundation_Constituent__c,
-
-                    not_in_exact_duplicate_file_flag: 1,
-                    fuzzy_match_logic:
-                        "fuzzy first/last name score >= threshold AND same gender AND same birthdate AND same composite_zip AND not exact same cleaned name",
-                });
-
-                if (fuzzy_matches.length % 100 === 0) {
-                    log_info(`Fuzzy matches found so far: ${fuzzy_matches.length.toLocaleString()}`, fuzzy_start_ms);
-                }
-
-                if (pairs_compared % PROGRESS_LOG_EVERY_PAIRS === 0) {
-                    log_info(
-                        `Fuzzy compare progress: ${pairs_compared.toLocaleString()} pairs compared, ${fuzzy_matches.length.toLocaleString()} matches found, ${blocks_processed}/${rule_blocks.size} blocks processed`,
-                        fuzzy_start_ms
-                    );
-                }
-            }
-        }
-    }
-
-    log_success(`Fuzzy comparison complete. Pair matches found: ${fuzzy_matches.length.toLocaleString()}`, fuzzy_start_ms);
+        rule_blocks,
+        fuzzy_matches,
+        pairs_compared,
+        pairs_skipped_exact_clean_name,
+        pairs_skipped_below_threshold,
+        pairs_skipped_not_strict_rule,
+    } = run_fuzzy_matching(result.records, exact_duplicate_record_ids, { script_start_ms, fuzzy_start_ms });
 
     const fuzzy_end_date = new Date();
     const fuzzy_duration_ms = Date.now() - fuzzy_start_ms;
@@ -486,7 +195,7 @@ async function main(is_test = resolve_is_test()) {
     console.log(`Run mode: ${is_test ? "TEST (dev sandbox)" : "PRODUCTION"}`);
     console.log(`MAX_FETCH: ${max_fetch}`);
     console.log(`FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
-    console.log(`Unique exact duplicate-check groups: ${exact_groups.size}`);
+    console.log(`Unique exact duplicate-check groups: ${exact_groups_size}`);
     console.log(`Exact duplicate groups found: ${exact_duplicates_sf_import.length}`);
     console.log(`Exact duplicate record IDs excluded from fuzzy files: ${exact_duplicate_record_ids.size}`);
     console.log(`Records after exact duplicate exclusion: ${records_after_exact_exclusion.length}`);

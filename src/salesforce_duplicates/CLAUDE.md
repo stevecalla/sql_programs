@@ -32,24 +32,24 @@ salesforce_duplicates/
     normalize.js            field cleaning + key builders (pure)
     matcher.js              levenshtein, similarity, rule flags, reason strings (pure)
     grouping.js             UnionFind + build_fuzzy_groups
+    exact.js                detect_exact_duplicates (+ its summary logger)
+    fuzzy.js                run_fuzzy_matching: candidate filter, rule blocks,
+                            pairwise compare (+ its two summary loggers)
     sf_rows.js              to_sf_exact/pair/group_row — Salesforce import schema mapping
     output_files.js         add_timestamp_to_filename, write_csv, archive rotation
     salesforce.js           jsforce connect + Account query (only networked module)
   tests/                    node:test unit tests:
-    normalize.test.js
-    matcher.test.js
-    grouping.test.js
-    ids.test.js
-    sf_rows.test.js
+    normalize.test.js  matcher.test.js  grouping.test.js  ids.test.js
+    sf_rows.test.js  exact.test.js  fuzzy.test.js
     file_output.test.js     CSV write + archive rotation
   README.md                 algorithm + field reference
   schema.md                 Salesforce custom-object/import schema notes
 ```
 
-Still living inside the orchestrator (candidates for future extraction into
-`src/`): the exact-detection block and the fuzzy candidate/rule-block/pairwise
-blocks inside `main()` (the `exact.js` / `fuzzy.js` seam), and the `log_*_summary`
-helpers (a `summaries.js` seam).
+`main()` is now a thin orchestrator (~230 lines): resolve mode -> archive ->
+fetch -> `detect_exact_duplicates` -> write -> `run_fuzzy_matching` -> write ->
+`build_fuzzy_groups` -> write -> run summary. The only remaining extraction
+candidate is the final run-summary `console.log` block (a `summaries.js` seam).
 
 ## Run modes
 

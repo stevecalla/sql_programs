@@ -30,13 +30,18 @@ salesforce_duplicates/
     normalize.js            field cleaning + key builders (pure)
     matcher.js              levenshtein, similarity, rule flags, reasons (pure)
     grouping.js             UnionFind + fuzzy group builder
+    exact.js                exact-duplicate detection
+    fuzzy.js                fuzzy candidate filter + rule blocks + pairwise compare
     sf_rows.js              maps result rows to the Salesforce import schema
     output_files.js         CSV write + output/archive rotation
     salesforce.js           jsforce connect + Account query (only networked module)
   tests/                    node:test unit tests (normalize, matcher, grouping,
-                            ids, sf_rows, file output)
+                            ids, sf_rows, exact, fuzzy, file output)
   README.md / CLAUDE.md / schema.md
 ```
+
+`main()` in `sf_duplicates_060326.js` is now a thin orchestrator that calls
+`detect_exact_duplicates` (exact.js) and `run_fuzzy_matching` (fuzzy.js).
 
 See `CLAUDE.md` for a quick orientation map of the modules.
 
