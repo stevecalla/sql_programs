@@ -29,6 +29,11 @@ const FUZZY_THRESHOLD = 90;
 const PROGRESS_LOG_EVERY_RECORDS = 1_000;
 const PROGRESS_LOG_EVERY_PAIRS = 25_0000;
 
+// When a reporting request asks to "run" but the most recent output files are
+// younger than this many minutes, the server returns the latest files instead
+// of re-running the full Salesforce pipeline (avoids hammering Salesforce).
+const FRESH_OUTPUT_WINDOW_MINUTES = 30;
+
 const EXACT_OUTPUT_FILE = "account_duplicates_sf_import.csv";
 const FUZZY_PAIR_OUTPUT_FILE = "account_fuzzy_name_matches_sf_import.csv";
 const FUZZY_GROUP_OUTPUT_FILE = "account_fuzzy_name_groups_sf_import.csv";
@@ -45,6 +50,7 @@ module.exports = {
     FUZZY_THRESHOLD,
     PROGRESS_LOG_EVERY_RECORDS,
     PROGRESS_LOG_EVERY_PAIRS,
+    FRESH_OUTPUT_WINDOW_MINUTES,
     EXACT_OUTPUT_FILE,
     FUZZY_PAIR_OUTPUT_FILE,
     FUZZY_GROUP_OUTPUT_FILE,

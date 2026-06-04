@@ -14,14 +14,20 @@ as the structure changes.
   exported as `execute_get_salesforce_duplicates_data`. Guarded by
   `require.main === module`, so requiring it does not run it.
 - `menu.js` — interactive launcher (`node menu.js`): run tests, syntax check, run
-  the finder in TEST or PRODUCTION mode, open the output/archive folders.
+  the finder in TEST or PRODUCTION mode, open the output/archive folders, start
+  the Slack server.
+- `../../server_salesforce_duplicates_8017.js` — Slack slash-command server (lives
+  at the repo root with the other `server_*.js`). See "Slack server" below.
 
 ## File structure
 
 ```
 salesforce_duplicates/
   step_1_find_duplicates.js   orchestrator: exact + fuzzy pipeline + run summary
-  config.js                 run-mode flag resolver, thresholds, output filenames, dir names
+  step_2_get_duplicate_report.js   locate latest output CSVs + counts (for the server)
+  step_2a_create_duplicate_message.js   build the Slack summary text
+  config.js                 run-mode flag resolver, thresholds, freshness window,
+                            output filenames, dir names
   menu.js                   interactive CLI launcher
   src/
     fmt.js                  format_duration, format_timestamp_utc/mtn (pure)
@@ -36,18 +42,37 @@ salesforce_duplicates/
     sf_rows.js              to_sf_exact/pair/group_row — Salesforce import schema mapping
     output_files.js         add_timestamp_to_filename, write_csv, archive rotation
     salesforce.js           jsforce connect + Account query (only networked module)
+    summaries.js            log_run_summary (final run summary block)
   tests/                    node:test unit tests:
     normalize.test.js  matcher.test.js  grouping.test.js  ids.test.js
     sf_rows.test.js  exact.test.js  fuzzy.test.js
     file_output.test.js     CSV write + archive rotation
+    step_2_report.test.js   report module (counts + latest-file selection)
   README.md                 algorithm + field reference
   schema.md                 Salesforce custom-object/import schema notes
 ```
 
-`main()` is now a thin orchestrator (~230 lines): resolve mode -> archive ->
-fetch -> `detect_exact_duplicates` -> write -> `run_fuzzy_matching` -> write ->
-`build_fuzzy_groups` -> write -> run summary. The only remaining extraction
-candidate is the final run-summary `console.log` block (a `summaries.js` seam).
+`main()` is a thin orchestrator (~230 lines): resolve mode -> archive -> fetch ->
+`detect_exact_duplicates` -> write -> `run_fuzzy_matching` -> write ->
+`build_fuzzy_groups` -> write -> `log_run_summary`.
+
+## Slack server
+
+`server_salesforce_duplicates_8017.js` (repo root, port 8017) mirrors
+`server_slack_events.js`. Endpoints:
+
+- `GET  /salesforce-duplicates-test` — health check.
+- `POST /salesforce-duplicates-stats` — slash command; posts the latest run's counts.
+- `GET  /scheduled-salesforce-duplicates` — cron; regenerates then posts the files to
+  `SF_DUP_CHANNEL_ID` (guarded by an `isRunning` lock).
+- `POST /salesforce-duplicates-reporting` — slash `/reporting`; DMs the CSV file(s) + counts.
+
+Slash args (in the command `text`, `key=value`): `mode=latest|run` (default `latest`),
+`file=all|exact|fuzzy_pair|fuzzy_group` (default `all`), `env=test|prod` (default `prod`).
+`mode=run` regenerates via `execute_get_salesforce_duplicates_data` UNLESS the newest
+output file is younger than `FRESH_OUTPUT_WINDOW_MINUTES` (config), in which case it
+returns the latest instead. Run it from the repo root (`node server_salesforce_duplicates_8017.js`)
+or menu item 11.
 
 ## Run modes
 

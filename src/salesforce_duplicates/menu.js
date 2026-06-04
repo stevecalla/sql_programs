@@ -17,6 +17,7 @@ dotenv.config({ path: '../../.env' });
 
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 const readline = require('readline');
 const { execSync, spawn } = require('child_process');
 
@@ -25,6 +26,7 @@ const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME } = require('./config');
 
 const DIR = __dirname;
 const MAIN_SCRIPT = 'step_1_find_duplicates.js';
+const SERVER_PORT = 8017;
 
 // ── Colors ────────────────────────────────────────────────────────────────
 const RESET = '\x1b[0m';
@@ -74,6 +76,36 @@ function open_path(p) {
   catch { console.log(`\n  Open this folder manually:\n  ${p}\n`); }
 }
 
+// Hit a server endpoint on localhost:SERVER_PORT and print the response.
+// Requires the server to already be running (menu item 11, in another terminal).
+function hit_endpoint(method, route, body = null) {
+  console.log(c(DIM, `  ${method} http://localhost:${SERVER_PORT}${route}`));
+  return new Promise((resolve) => {
+    const headers = body
+      ? { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) }
+      : {};
+    const req = http.request(
+      { host: '127.0.0.1', port: SERVER_PORT, path: route, method, headers },
+      (res) => {
+        let chunks = '';
+        res.on('data', (d) => { chunks += d; });
+        res.on('end', () => {
+          console.log(c(res.statusCode < 400 ? GREEN : YELLOW, `  HTTP ${res.statusCode}`));
+          if (chunks) console.log(`  ${chunks}`);
+          resolve();
+        });
+      }
+    );
+    req.on('error', (e) => {
+      console.log(c(YELLOW, `  Could not reach the server on port ${SERVER_PORT} — is it running? (menu item 11, in another terminal)`));
+      console.log(c(DIM, `  ${e.code || e.message}`));
+      resolve();
+    });
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
 // ── Menu definition ─────────────────────────────────────────────────────────
 // Test items carry `target` (path passed to `node --test`) + `test_label`.
 const SECTIONS = [
@@ -106,10 +138,20 @@ const SECTIONS = [
     ],
   },
   {
+    label: 'SERVER — Slack slash-command server (start, then hit from another terminal)',
+    color: CYAN,
+    items: [
+      { id: 11, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
+      { id: 12, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
+      { id: 13, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
+      { id: 14, label: 'Hit /scheduled', desc: 'GET regenerate + post (env=test to use dev sandbox)', action: 'hit_scheduled', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?env=test"` },
+    ],
+  },
+  {
     label: 'PREFERENCES',
     color: MAGENTA,
     items: [
-      { id: 11, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
+      { id: 15, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
     ],
   },
 ];
@@ -177,6 +219,33 @@ async function handle_action(item, rl) {
       fs.mkdirSync(folder, { recursive: true });
       console.log(c(DIM, `  Opening ${folder}`));
       open_path(folder);
+      break;
+    }
+    case 'start_server': {
+      // The server lives at the repo root and loads .env from there, so spawn
+      // it with cwd = repo root (two levels up from this menu).
+      const repo_root = path.resolve(DIR, '..', '..');
+      console.log(c(DIM, `  Starting server from ${repo_root} (Ctrl-C to stop)...\n`));
+      await new Promise((resolve) => {
+        const proc = spawn(process.execPath ?? 'node', ['server_salesforce_duplicates_8017.js'], {
+          stdio: 'inherit',
+          cwd: repo_root,
+          shell: false,
+        });
+        proc.on('close', resolve);
+      });
+      break;
+    }
+    case 'hit_test': {
+      await hit_endpoint('GET', '/salesforce-duplicates-test');
+      break;
+    }
+    case 'hit_stats': {
+      await hit_endpoint('POST', '/salesforce-duplicates-stats', 'text=mode=latest file=all');
+      break;
+    }
+    case 'hit_scheduled': {
+      await hit_endpoint('GET', '/scheduled-salesforce-duplicates?env=test');
       break;
     }
     case 'toggle_cli': {

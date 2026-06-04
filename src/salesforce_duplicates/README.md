@@ -694,6 +694,47 @@ node --test tests/matcher.test.js  # run one suite
 
 Or use menu item 1 (all tests) / 2 (file output tests).
 
+## Slack Server
+
+`server_salesforce_duplicates_8017.js` (at the repo root, alongside the other
+`server_*.js`, port 8017) exposes the duplicate output over Slack slash commands.
+It mirrors `server_slack_events.js` and reuses the shared Slack upload utilities.
+
+Run it from the repo root (or menu item 11):
+
+```bash
+node server_salesforce_duplicates_8017.js
+```
+
+Endpoints (hit directly from the CLI, or wire to Slack slash commands):
+
+```text
+GET  /salesforce-duplicates-test          health check
+POST /salesforce-duplicates-stats         posts the latest run's counts
+GET  /scheduled-salesforce-duplicates     cron: regenerate + post files to a channel
+POST /salesforce-duplicates-reporting     /reporting: DM the CSV file(s) + counts
+```
+
+Slash arguments (passed in the command `text` as `key=value`):
+
+```text
+mode=latest|run                 latest (default) returns existing files; run regenerates
+file=all|exact|fuzzy_pair|fuzzy_group   which file(s) to return (default all)
+env=test|prod                   data source when regenerating (default prod)
+```
+
+`mode=run` regenerates the report by running the finder — unless the most recent
+output file is younger than `FRESH_OUTPUT_WINDOW_MINUTES` (config, default 30), in
+which case it returns the latest files instead of re-querying Salesforce.
+
+CLI examples:
+
+```bash
+curl http://localhost:8017/salesforce-duplicates-test
+curl "http://localhost:8017/scheduled-salesforce-duplicates?env=test"
+curl -X POST http://localhost:8017/salesforce-duplicates-reporting -d "text=mode=latest file=exact"
+```
+
 ## Console Logging
 
 The script logs useful run details, including:
