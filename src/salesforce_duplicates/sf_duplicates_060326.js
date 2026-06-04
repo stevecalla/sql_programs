@@ -69,6 +69,27 @@ function formatTimestamp(date = new Date()) {
     return date.toISOString().replace("T", " ").replace("Z", " UTC");
 }
 
+function formatCreatedAtUtc(date = new Date()) {
+    return date.toISOString().replace("T", " ").replace("Z", " UTC");
+}
+
+function formatCreatedAtMtn(date = new Date()) {
+    return (
+        new Intl.DateTimeFormat("en-US", {
+            timeZone: "America/Denver",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+        })
+            .format(date)
+            .replace(",", "") + " MT"
+    );
+}
+
 function logInfo(message, startMs = null) {
     const elapsed = startMs
         ? colorize("gray", ` | elapsed: ${formatDuration(Date.now() - startMs)}`)
@@ -516,9 +537,14 @@ async function main() {
     const scriptStartDate = new Date();
     const scriptStartMs = Date.now();
 
+    const createdAtMtn = formatCreatedAtMtn(scriptStartDate);
+    const createdAtUtc = formatCreatedAtUtc(scriptStartDate);
+
     logInfo("Script started.");
     logInfo(`Hardcoded MAX_FETCH: ${MAX_FETCH}`);
     logInfo(`Hardcoded FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
+    logInfo(`created_at_mtn: ${createdAtMtn}`);
+    logInfo(`created_at_utc: ${createdAtUtc}`);
 
     const conn = new jsforce.Connection({
         loginUrl: process.env.SF_LOGIN_URL || "https://test.salesforce.com",
@@ -672,6 +698,8 @@ async function main() {
         duplicate_count: g.duplicate_count,
         record_ids: g.record_ids.join(";"),
         member_numbers: g.member_numbers.join(";"),
+        created_at_mtn: createdAtMtn,
+        created_at_utc: createdAtUtc,
     }));
 
     logInfo(`Writing exact duplicates to ${EXACT_OUTPUT_FILE}...`, scriptStartMs);
@@ -884,6 +912,8 @@ async function main() {
             fuzzy_end_time: formatTimestamp(fuzzyEndDate),
             fuzzy_duration: formatDuration(fuzzyDurationMs),
             ...row,
+            created_at_mtn: createdAtMtn,
+            created_at_utc: createdAtUtc,
         }));
 
     logInfo(`Writing fuzzy pair matches to ${FUZZY_PAIR_OUTPUT_FILE}...`, scriptStartMs);
@@ -906,6 +936,8 @@ async function main() {
         fuzzy_end_time: formatTimestamp(fuzzyEndDate),
         fuzzy_duration: formatDuration(fuzzyDurationMs),
         ...group,
+        created_at_mtn: createdAtMtn,
+        created_at_utc: createdAtUtc,
     }));
 
     logSuccess(`Fuzzy groups built. Groups found: ${fuzzyGroupsFinal.length.toLocaleString()}`, scriptStartMs);
@@ -930,6 +962,8 @@ async function main() {
     console.log(`Fuzzy start time: ${formatTimestamp(fuzzyStartDate)}`);
     console.log(`Fuzzy end time: ${formatTimestamp(fuzzyEndDate)}`);
     console.log(`Fuzzy duration: ${formatDuration(fuzzyDurationMs)}`);
+    console.log(`Created at MTN: ${createdAtMtn}`);
+    console.log(`Created at UTC: ${createdAtUtc}`);
     console.log(`Total records scanned: ${result.records.length}`);
     console.log(`Salesforce total matching records: ${result.totalSize}`);
     console.log(`Hardcoded MAX_FETCH: ${MAX_FETCH}`);
