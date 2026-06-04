@@ -1,5 +1,5 @@
 /**
- * output_files.js — CSV writing + output/archive folder rotation.
+ * output_files.js — CSV writing + output/archive folder rotation + run summary.
  *
  * Files land in the cross-platform /data path resolved by
  * utilities/determineOSPath.js (via createDirectory), not the code folder.
@@ -12,7 +12,12 @@ const path = require('path');
 const csv = require('fast-csv');
 
 const { create_directory } = require('../../../utilities/createDirectory');
-const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME } = require('../config');
+const {
+    OUTPUT_DIR_NAME,
+    ARCHIVE_DIR_NAME,
+    META_DIR_NAME,
+    RUN_SUMMARY_FILE,
+} = require('../config');
 
 // Append a date/time stamp to the end of a file name, before its extension.
 // e.g. ("account_duplicates_sf_import.csv", "2026-06-04_14-30-05")
@@ -67,8 +72,19 @@ async function archive_previous_output_files(output_dir_name = OUTPUT_DIR_NAME, 
     return output_dir;
 }
 
+// Write the per-run summary JSON (total records scanned, counts, timestamps)
+// into the meta folder — a sibling of the output folder, so it is never swept
+// into the Slack file uploads. Overwritten each run (reflects the latest run).
+async function write_run_summary(summary, meta_dir_name = META_DIR_NAME, file_name = RUN_SUMMARY_FILE) {
+    const meta_dir = await create_directory(meta_dir_name);
+    const full_path = path.join(meta_dir, file_name);
+    fs.writeFileSync(full_path, JSON.stringify(summary, null, 2));
+    return full_path;
+}
+
 module.exports = {
     add_timestamp_to_filename,
     write_csv,
     archive_previous_output_files,
+    write_run_summary,
 };

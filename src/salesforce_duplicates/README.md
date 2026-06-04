@@ -710,29 +710,52 @@ Endpoints (hit directly from the CLI, or wire to Slack slash commands):
 
 ```text
 GET  /salesforce-duplicates-test          health check
-POST /salesforce-duplicates-stats         posts the latest run's counts
+POST /salesforce-duplicates-stats         posts the latest run's counts (+ total records scanned)
 GET  /scheduled-salesforce-duplicates     cron: regenerate + post files to a channel
-POST /salesforce-duplicates-reporting     /reporting: DM the CSV file(s) + counts
+POST /salesforce-duplicates-reporting     /reporting: DM the CSV file(s) + stats
 ```
+
+The returned stats include the **total records scanned** from the latest run (read
+from a small per-run summary file the finder writes to a meta folder).
 
 Slash arguments (passed in the command `text` as `key=value`):
 
 ```text
 mode=latest|run                 latest (default) returns existing files; run regenerates
+force=true                      with mode=run, bypass the freshness window (always regenerate)
 file=all|exact|fuzzy_pair|fuzzy_group   which file(s) to return (default all)
-env=test|prod                   data source when regenerating (default prod)
 ```
 
-`mode=run` regenerates the report by running the finder — unless the most recent
-output file is younger than `FRESH_OUTPUT_WINDOW_MINUTES` (config, default 30), in
-which case it returns the latest files instead of re-querying Salesforce.
+`mode=run` (slash commands) regenerates against **production** — but only if the
+most recent output file is older than `FRESH_OUTPUT_WINDOW_MINUTES` (config,
+default 30). **Within that window `mode=run` returns the latest files instead** of
+re-querying Salesforce (so rapid repeat calls don't hammer it). When that happens
+the Slack reply says so and points you to the override.
+
+To regenerate anyway, add **`force=true`**:
+
+```text
+/duplicates mode=run              -> regenerate only if older than 30 min, else latest
+/duplicates mode=run force=true   -> always regenerate (ignores the window)
+```
+
+The `/scheduled` endpoint additionally accepts `?is_test=true|false` (default
+`false` = production), so you can drive a full server → Slack run against the dev
+sandbox without touching production:
+
+```text
+GET /scheduled-salesforce-duplicates?is_test=true    # dev sandbox
+GET /scheduled-salesforce-duplicates?is_test=false   # production (default)
+```
 
 CLI examples:
 
 ```bash
 curl http://localhost:8017/salesforce-duplicates-test
-curl "http://localhost:8017/scheduled-salesforce-duplicates?env=test"
+curl "http://localhost:8017/scheduled-salesforce-duplicates?is_test=true"   # sandbox regenerate + post
+curl "http://localhost:8017/scheduled-salesforce-duplicates?is_test=false"  # production
 curl -X POST http://localhost:8017/salesforce-duplicates-reporting -d "text=mode=latest file=exact"
+curl -X POST http://localhost:8017/salesforce-duplicates-reporting -d "text=mode=run force=true"  # force a regenerate
 ```
 
 ## Console Logging

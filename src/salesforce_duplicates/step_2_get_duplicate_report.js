@@ -3,8 +3,9 @@
  * summarize them, for the Slack server's stats / reporting endpoints.
  *
  * Returns the same { file_directory, file_path, ... } shape the Slack upload
- * utilities expect, plus row counts and the age (in minutes) of the newest
- * output file (used by the server's "run vs. latest" freshness logic).
+ * utilities expect, plus row counts, the age (in minutes) of the newest output
+ * file (used by the server's "run vs. latest" freshness logic), and the total
+ * records scanned from the latest run (read from the meta run-summary file).
  */
 
 'use strict';
@@ -15,6 +16,8 @@ const path = require('path');
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const {
     OUTPUT_DIR_NAME,
+    META_DIR_NAME,
+    RUN_SUMMARY_FILE,
     EXACT_OUTPUT_FILE,
     FUZZY_PAIR_OUTPUT_FILE,
     FUZZY_GROUP_OUTPUT_FILE,
@@ -50,6 +53,17 @@ function count_data_rows(full_path) {
     return Math.max(0, lines.length - 1);
 }
 
+// Read the per-run summary JSON from the meta dir (or null if absent).
+function read_run_summary(meta_dir) {
+    const full = path.join(meta_dir, RUN_SUMMARY_FILE);
+    if (!fs.existsSync(full)) return null;
+    try {
+        return JSON.parse(fs.readFileSync(full, 'utf8'));
+    } catch {
+        return null;
+    }
+}
+
 const SELECTORS = {
     exact: EXACT_OUTPUT_FILE,
     fuzzy_pair: FUZZY_PAIR_OUTPUT_FILE,
@@ -58,13 +72,15 @@ const SELECTORS = {
 
 // Gather the latest report.
 //   file_selector  - 'all' (default) | 'exact' | 'fuzzy_pair' | 'fuzzy_group'
-//   file_directory - optional override (defaults to the /data output dir);
-//                    mainly for tests.
-// Returns { file_directory, file_path, counts, age_minutes, has_output, latest_names }.
-async function execute_get_duplicate_report(file_selector = 'all', file_directory = null) {
-    if (!file_directory) {
+//   file_directory - optional override for the CSV output dir (tests)
+//   meta_dir       - optional override for the run-summary dir (tests)
+// Returns { file_directory, file_path, counts, age_minutes, has_output,
+//           latest_names, total_records_scanned, salesforce_total_size }.
+async function execute_get_duplicate_report(file_selector = 'all', file_directory = null, meta_dir = null) {
+    if (!file_directory || !meta_dir) {
         const os_path = await determineOSPath();
-        file_directory = path.join(os_path, OUTPUT_DIR_NAME);
+        if (!file_directory) file_directory = path.join(os_path, OUTPUT_DIR_NAME);
+        if (!meta_dir) meta_dir = path.join(os_path, META_DIR_NAME);
     }
 
     const latest = {
@@ -96,11 +112,25 @@ async function execute_get_duplicate_report(file_selector = 'all', file_director
         fuzzy_group: latest.fuzzy_group ? latest.fuzzy_group.name : null,
     };
 
-    return { file_directory, file_path, counts, age_minutes, has_output, latest_names };
+    const summary = read_run_summary(meta_dir);
+    const total_records_scanned = summary?.total_records_scanned ?? null;
+    const salesforce_total_size = summary?.salesforce_total_size ?? null;
+
+    return {
+        file_directory,
+        file_path,
+        counts,
+        age_minutes,
+        has_output,
+        latest_names,
+        total_records_scanned,
+        salesforce_total_size,
+    };
 }
 
 module.exports = {
     execute_get_duplicate_report,
     find_latest_by_base,
     count_data_rows,
+    read_run_summary,
 };

@@ -63,8 +63,8 @@ function run_node(args, label, env = {}) {
   });
 }
 
-function report(code, label) {
-  if (code === 0) console.log(c(GREEN, `\n  ✓ ${label} passed.`));
+function report(code, label, verb = 'passed') {
+  if (code === 0) console.log(c(GREEN, `\n  ✓ ${label} ${verb}.`));
   else console.log(c(RED, `\n  ✗ ${label} failed (exit code ${code}).`));
 }
 
@@ -144,14 +144,15 @@ const SECTIONS = [
       { id: 11, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
       { id: 12, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
       { id: 13, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
-      { id: 14, label: 'Hit /scheduled', desc: 'GET regenerate + post (env=test to use dev sandbox)', action: 'hit_scheduled', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?env=test"` },
+      { id: 14, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
+      { id: 15, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
     ],
   },
   {
     label: 'PREFERENCES',
     color: MAGENTA,
     items: [
-      { id: 15, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
+      { id: 16, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
     ],
   },
 ];
@@ -198,18 +199,19 @@ async function handle_action(item, rl) {
       break;
     }
     case 'run_test': {
-      const label = 'duplicate finder (TEST)';
+      const label = 'duplicate finder run (dev sandbox)';
       const code = await run_node([MAIN_SCRIPT, '--test'], label);
-      report(code, label);
+      report(code, label, 'completed');
       break;
     }
     case 'run_prod': {
       const answer = (await prompt(rl, c(YELLOW, '  PRODUCTION run — logs into prod Salesforce and writes files. Continue? (y/N): '))).trim().toLowerCase();
       if (answer !== 'y' && answer !== 'yes') { console.log(c(DIM, '  Cancelled.')); break; }
-      const label = 'duplicate finder (PRODUCTION)';
+      const label = 'duplicate finder run (production)';
       const code = await run_node([MAIN_SCRIPT, '--prod'], label);
-      report(code, label);
+      report(code, label, 'completed');
       break;
+
     }
     case 'open_output':
     case 'open_archive': {
@@ -244,8 +246,15 @@ async function handle_action(item, rl) {
       await hit_endpoint('POST', '/salesforce-duplicates-stats', 'text=mode=latest file=all');
       break;
     }
-    case 'hit_scheduled': {
-      await hit_endpoint('GET', '/scheduled-salesforce-duplicates?env=test');
+    case 'hit_scheduled_test': {
+      // Dev sandbox — safe to fire without confirmation.
+      await hit_endpoint('GET', '/scheduled-salesforce-duplicates?is_test=true');
+      break;
+    }
+    case 'hit_scheduled_prod': {
+      const answer = (await prompt(rl, c(YELLOW, '  This triggers a PRODUCTION run + Slack post on the running server. Continue? (y/N): '))).trim().toLowerCase();
+      if (answer !== 'y' && answer !== 'yes') { console.log(c(DIM, '  Cancelled.')); break; }
+      await hit_endpoint('GET', '/scheduled-salesforce-duplicates?is_test=false');
       break;
     }
     case 'toggle_cli': {

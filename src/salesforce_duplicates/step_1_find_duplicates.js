@@ -17,7 +17,7 @@ const { colorize, log_info, log_success, log_warn, log_error } = require("./src/
 const { format_timestamp_utc, format_timestamp_mtn } = require("./src/fmt");
 const { build_fuzzy_groups } = require("./src/grouping");
 const { make_run_id } = require("./src/ids");
-const { add_timestamp_to_filename, write_csv, archive_previous_output_files } = require("./src/output_files");
+const { add_timestamp_to_filename, write_csv, archive_previous_output_files, write_run_summary } = require("./src/output_files");
 const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row } = require("./src/sf_rows");
 const { fetch_salesforce_accounts } = require("./src/salesforce");
 const { detect_exact_duplicates } = require("./src/exact");
@@ -172,6 +172,19 @@ async function main(is_test = resolve_is_test()) {
     log_info(`Writing Salesforce fuzzy group import file to ${fuzzy_group_output_file}...`, script_start_ms);
     const fuzzy_group_output_path = await write_csv(output_dir, fuzzy_group_output_file, fuzzy_group_sf_import);
     log_success(`Salesforce fuzzy group import file written: ${fuzzy_group_output_path}`, script_start_ms);
+
+    // Persist a small run summary (read back by the Slack server's report).
+    await write_run_summary({
+        run_id,
+        created_at_utc,
+        created_at_mtn,
+        is_test,
+        total_records_scanned: result.records.length,
+        salesforce_total_size: result.totalSize,
+        exact_duplicate_groups: exact_duplicates_sf_import.length,
+        fuzzy_pair_matches: fuzzy_pair_sf_import.length,
+        fuzzy_groups: fuzzy_group_sf_import.length,
+    });
 
     const script_end_date = new Date();
     const script_duration_ms = Date.now() - script_start_ms;

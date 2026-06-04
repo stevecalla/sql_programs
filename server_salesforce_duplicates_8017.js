@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 8017;
 
 // NGROK TUNNEL FOR TESTING
-const is_test_ngrok = false;
+const is_test_ngrok = true;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 // SALESFORCE DUPLICATES PIPELINE + REPORT
@@ -33,12 +33,44 @@ const SF_DUP_CHANNEL_ID = process.env.SF_DUP_CHANNEL_ID || 'C08TMBPTKEC';
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-// Parse the slash-command "text" (key=value pairs) into { mode, file, env }.
+// ─────────────────────────────────────────────────────────────────────────────
+// SLASH COMMAND OPTIONS  (used by /salesforce-duplicates-stats and
+// /salesforce-duplicates-reporting)
+//
+// Pass options in the slash command `text` as space-separated key=value pairs
+// (they also work as ?query params when hitting the route directly with curl):
+//
+//   mode=latest | run
+//       latest (DEFAULT) — return the most recent CSV(s) already on disk, no
+//                          Salesforce pull. Fast.
+//       run            — regenerate against PRODUCTION first, then return — BUT
+//                          only if the newest output file is older than
+//                          FRESH_OUTPUT_WINDOW_MINUTES (config, currently
+//                          ${FRESH_OUTPUT_WINDOW_MINUTES} min). Inside that window it
+//                          returns the latest instead, so rapid repeat calls
+//                          don't hammer Salesforce.
+//
+//   force=true
+//       Bypass the freshness window. `mode=run force=true` ALWAYS regenerates,
+//       even if the latest output is brand new. (Ignored unless mode=run.)
+//
+//   file=all | exact | fuzzy_pair | fuzzy_group
+//       Which file(s) to return (DEFAULT all). 'all' returns every CSV in the
+//       output folder; a specific value returns just that one.
+//
+// Examples:
+//   /duplicates                      -> latest, all files
+//   /duplicates mode=run             -> regenerate if older than the window, else latest
+//   /duplicates mode=run force=true  -> always regenerate
+//   /duplicates file=exact           -> latest exact-duplicates file only
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Parse the slash-command "text" (key=value pairs) into { mode, file, force }.
 // Mirrors the arg-parsing pattern in server_slack_events.js.
 function parse_report_args(req) {
-    let mode = req.query?.mode ?? null;   // 'latest' | 'run'
-    let file = req.query?.file ?? null;   // 'all' | 'exact' | 'fuzzy_pair' | 'fuzzy_group'
-    let env = req.query?.env ?? null;     // 'test' | 'prod'
+    let mode = req.query?.mode ?? null;     // 'latest' | 'run'
+    let file = req.query?.file ?? null;     // 'all' | 'exact' | 'fuzzy_pair' | 'fuzzy_group'
+    let force = req.query?.force ?? null;   // 'true' bypasses the freshness window
 
     if (req.body && Object.keys(req.body).length > 0 && req.body.text) {
         const args = req.body.text.trim().split(/\s+/);
@@ -53,8 +85,8 @@ function parse_report_args(req) {
                     case 'file':
                         if (!file) file = value;
                         break;
-                    case 'env':
-                        if (!env) env = value;
+                    case 'force':
+                        if (!force) force = value;
                         break;
                     default:
                         console.warn(`Unknown parameter: ${key}`);
@@ -63,24 +95,26 @@ function parse_report_args(req) {
         }
     }
 
-    // Defaults: latest (no Salesforce pull), all files, production data on run.
+    // Defaults: latest (no Salesforce pull), all files, no force.
     mode = (mode ?? '').trim() || 'latest';
     file = (file ?? '').trim() || 'all';
-    env = (env ?? '').trim() || 'prod';
-    return { mode, file, is_test: env === 'test' };
+    const force_bool = String(force ?? '').trim().toLowerCase() === 'true';
+    return { mode, file, force: force_bool };
 }
 
-// Resolve the report. If mode=run AND the latest output is older than the
-// freshness window (or there is none), re-run the full pipeline, then re-read.
-async function resolve_report({ mode, file, is_test }) {
+// Resolve the report. mode=run regenerates against production when the latest
+// output is older than the freshness window — OR whenever force=true is set
+// (which bypasses the window). Otherwise it returns the latest files as-is.
+async function resolve_report({ mode, file, force = false }) {
     let report = await execute_get_duplicate_report(file);
     let regenerated = false;
 
     const stale = report.age_minutes == null || report.age_minutes > FRESH_OUTPUT_WINDOW_MINUTES;
 
-    if (mode === 'run' && stale) {
-        console.log(`mode=run and output is stale (age=${report.age_minutes}) — regenerating...`);
-        await execute_get_salesforce_duplicates_data(is_test);
+    if (mode === 'run' && (force || stale)) {
+        const why = force ? 'force=true (bypassing freshness window)' : `output stale (age=${report.age_minutes})`;
+        console.log(`mode=run — regenerating (production); ${why}...`);
+        await execute_get_salesforce_duplicates_data(false); // server always regenerates against production
         report = await execute_get_duplicate_report(file);
         regenerated = true;
     }
@@ -89,7 +123,9 @@ async function resolve_report({ mode, file, is_test }) {
 }
 
 // ===========================
-// Test endpoint
+// GET /salesforce-duplicates-test  — health check
+//   curl        curl http://localhost:8017/salesforce-duplicates-test
+//   cloudflare  https://usat-salesforce-duplicates.kidderwise.org/salesforce-duplicates-test
 // ===========================
 app.get('/salesforce-duplicates-test', async (req, res) => {
     console.log('/salesforce-duplicates-test route req.rawHeaders = ', req.rawHeaders);
@@ -108,7 +144,10 @@ app.get('/salesforce-duplicates-test', async (req, res) => {
 });
 
 // ===========================
-// Slash "/duplicates-stats" — return the latest run's counts (no files)
+// POST /salesforce-duplicates-stats  — slash command; return latest run's counts (no files)
+//   options: mode=latest|run  force=true  file=all|exact|fuzzy_pair|fuzzy_group  (see SLASH COMMAND OPTIONS above)
+//   curl        curl -X POST http://localhost:8017/salesforce-duplicates-stats -d "text=mode=latest file=all"
+//   cloudflare  https://usat-salesforce-duplicates.kidderwise.org/salesforce-duplicates-stats
 // ===========================
 app.post('/salesforce-duplicates-stats', async (req, res) => {
     console.log('Received request for salesforce duplicates - /salesforce-duplicates-stats :', {
@@ -125,15 +164,15 @@ app.post('/salesforce-duplicates-stats', async (req, res) => {
     else
         response_url = req.body.response_url;
 
-    const { mode, file, is_test } = parse_report_args(req);
+    const { mode, file, force } = parse_report_args(req);
 
     try {
         res.status(200).json({
-            text: `Retrieving Salesforce duplicate stats. Will respond shortly.\nMode=${mode}, File=${file}`,
+            text: `Retrieving Salesforce duplicate stats. Will respond shortly.\nMode=${mode}, File=${file}${force ? ', Force=true' : ''}`,
         });
 
         // STEP 1: GET REPORT (optionally regenerate)
-        const report = await resolve_report({ mode, file, is_test });
+        const report = await resolve_report({ mode, file, force });
 
         // STEP 2: CREATE SLACK MESSAGE
         const { main_message_text } = create_duplicate_message(report.counts, {
@@ -142,6 +181,8 @@ app.post('/salesforce-duplicates-stats', async (req, res) => {
             mode,
             regenerated: report.regenerated,
             has_output: report.has_output,
+            total_records_scanned: report.total_records_scanned,
+            fresh_window_minutes: FRESH_OUTPUT_WINDOW_MINUTES,
         });
 
         // STEP 3: SEND SLACK MESSAGE (text only, no files)
@@ -160,7 +201,10 @@ let isRunning = false;
 let lockTimeout;
 
 // ===========================
-// Scheduled (cron) — regenerate the report and post files to a channel
+// GET /scheduled-salesforce-duplicates  — cron; regenerate + post files to a channel
+//   drive with ?is_test=true (dev sandbox) or ?is_test=false (production, default)
+//   curl        curl "http://localhost:8017/scheduled-salesforce-duplicates?is_test=false"
+//   cloudflare  https://usat-salesforce-duplicates.kidderwise.org/scheduled-salesforce-duplicates
 // ===========================
 app.get('/scheduled-salesforce-duplicates', async (req, res) => {
     const { v4: uuidv4 } = require('uuid');
@@ -187,8 +231,9 @@ app.get('/scheduled-salesforce-duplicates', async (req, res) => {
     }, TIMEOUT_MS);
 
     try {
-        // Allow ?env=test to use the dev sandbox; defaults to production.
-        const is_test = (req.query?.env ?? '').trim() === 'test';
+        // Drive the run with ?is_test=true|false (default false = production).
+        const is_test = String(req.query?.is_test ?? '').toLowerCase() === 'true';
+        console.log(`Scheduled run mode: ${is_test ? 'TEST (dev sandbox)' : 'PRODUCTION'}`);
 
         // STEP 1: REGENERATE THE DUPLICATE FILES
         await execute_get_salesforce_duplicates_data(is_test);
@@ -203,10 +248,23 @@ app.get('/scheduled-salesforce-duplicates', async (req, res) => {
             mode: 'run',
             regenerated: true,
             has_output: report.has_output,
+            total_records_scanned: report.total_records_scanned,
+            fresh_window_minutes: FRESH_OUTPUT_WINDOW_MINUTES,
         });
 
         // STEP 4: POST FILES TO CHANNEL
-        await upload_single_file_to_thread_scheduled(report.file_directory, report.file_path, SF_DUP_CHANNEL_ID, main_message_text);
+        // (pass null for month/type/is_reported — not relevant to duplicates)
+        await upload_single_file_to_thread_scheduled(
+            report.file_directory,
+            report.file_path,
+            SF_DUP_CHANNEL_ID,
+            main_message_text,
+            undefined,
+            undefined,
+            null,
+            null,
+            null,
+        );
 
         res.status(200).json({
             message: 'Salesforce duplicates queried & sent successfully.',
@@ -225,7 +283,10 @@ app.get('/scheduled-salesforce-duplicates', async (req, res) => {
 });
 
 // ===========================
-// Slash "/reporting" — return the duplicate CSV file(s) + stats to the user
+// POST /salesforce-duplicates-reporting  — slash /duplicates; DM the CSV file(s) + stats to the user
+//   options: mode=latest|run  force=true  file=all|exact|fuzzy_pair|fuzzy_group  (see SLASH COMMAND OPTIONS above)
+//   curl        curl -X POST http://localhost:8017/salesforce-duplicates-reporting -d "text=mode=run force=true file=all"
+//   cloudflare  https://usat-salesforce-duplicates.kidderwise.org/salesforce-duplicates-reporting
 // ===========================
 app.post('/salesforce-duplicates-reporting', async (req, res) => {
     console.log('Received request for salesforce duplicates - /salesforce-duplicates-reporting :', {
@@ -242,15 +303,15 @@ app.post('/salesforce-duplicates-reporting', async (req, res) => {
     else
         response_url = req.body.response_url;
 
-    const { mode, file, is_test } = parse_report_args(req);
+    const { mode, file, force } = parse_report_args(req);
 
     try {
         res.status(200).json({
-            text: `Retrieving Salesforce duplicate report. Will respond shortly.\nMode=${mode}, File=${file}`,
+            text: `Retrieving Salesforce duplicate report. Will respond shortly.\nMode=${mode}, File=${file}${force ? ', Force=true' : ''}`,
         });
 
-        // STEP 1: GET REPORT (optionally regenerate when mode=run and stale)
-        const report = await resolve_report({ mode, file, is_test });
+        // STEP 1: GET REPORT (optionally regenerate when mode=run and stale, or force=true)
+        const report = await resolve_report({ mode, file, force });
 
         // STEP 2: CREATE SLACK MESSAGE (stats summary travels with the files)
         const { main_message_text } = create_duplicate_message(report.counts, {
@@ -259,9 +320,12 @@ app.post('/salesforce-duplicates-reporting', async (req, res) => {
             mode,
             regenerated: report.regenerated,
             has_output: report.has_output,
+            total_records_scanned: report.total_records_scanned,
+            fresh_window_minutes: FRESH_OUTPUT_WINDOW_MINUTES,
         });
 
         // STEP 3: SEND FILE(S) + STATS TO THE USER (DM)
+        // (pass null for month/type/is_reported — not relevant to duplicates)
         await upload_single_file_to_thread_user(
             report.file_directory,
             report.file_path,
@@ -269,9 +333,9 @@ app.post('/salesforce-duplicates-reporting', async (req, res) => {
             main_message_text,
             channel_name,
             user_id,
-            mode,
-            file,
-            report.regenerated ? 'regenerated' : 'latest',
+            null,
+            null,
+            null,
         );
     } catch (error) {
         console.error('Error querying or sending salesforce duplicate report.', error);

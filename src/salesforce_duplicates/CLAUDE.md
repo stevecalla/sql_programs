@@ -62,17 +62,28 @@ salesforce_duplicates/
 `server_slack_events.js`. Endpoints:
 
 - `GET  /salesforce-duplicates-test` — health check.
-- `POST /salesforce-duplicates-stats` — slash command; posts the latest run's counts.
+- `POST /salesforce-duplicates-stats` — slash command; posts the latest run's counts
+  (incl. total records scanned).
 - `GET  /scheduled-salesforce-duplicates` — cron; regenerates then posts the files to
-  `SF_DUP_CHANNEL_ID` (guarded by an `isRunning` lock).
-- `POST /salesforce-duplicates-reporting` — slash `/reporting`; DMs the CSV file(s) + counts.
+  `SF_DUP_CHANNEL_ID` (guarded by an `isRunning` lock). Drive the run with
+  `?is_test=true` (dev sandbox) or `?is_test=false` (production, default).
+- `POST /salesforce-duplicates-reporting` — slash `/reporting`; DMs the CSV file(s) + stats.
 
 Slash args (in the command `text`, `key=value`): `mode=latest|run` (default `latest`),
-`file=all|exact|fuzzy_pair|fuzzy_group` (default `all`), `env=test|prod` (default `prod`).
-`mode=run` regenerates via `execute_get_salesforce_duplicates_data` UNLESS the newest
-output file is younger than `FRESH_OUTPUT_WINDOW_MINUTES` (config), in which case it
-returns the latest instead. Run it from the repo root (`node server_salesforce_duplicates_8017.js`)
-or menu item 11.
+`file=all|exact|fuzzy_pair|fuzzy_group` (default `all`), `force=true` (with `mode=run`,
+bypass the freshness window). The slash commands always regenerate against production;
+only `/scheduled` accepts `?is_test`.
+`mode=run` regenerates via `execute_get_salesforce_duplicates_data(false)` (production)
+UNLESS the newest output file is younger than `FRESH_OUTPUT_WINDOW_MINUTES` (config) —
+within that window it returns the latest instead (the Slack reply explains this and
+points to `force=true`). `mode=run force=true` always regenerates. Run it from the repo
+root (`node server_salesforce_duplicates_8017.js`) or menu item 11; hit it with menu
+items 12–15.
+
+Each run persists a small summary (total records scanned + counts) to
+`META_DIR_NAME/RUN_SUMMARY_FILE` (a sibling of the output folder, so it is never
+swept into the Slack uploads); `step_2_get_duplicate_report` reads it so the stats
+message can report the total records scanned even on a `mode=latest` read.
 
 ## Run modes
 

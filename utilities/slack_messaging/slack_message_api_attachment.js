@@ -10,7 +10,7 @@ const web = new WebClient(slackToken);
 const { determineOSPath } = require('../../utilities/determineOSPath');
 
 async function get_upload_files(directory_path, file_path) {
-  const file_blocks = [];
+  let file_blocks = [];
 
   // If a single file is provided, short-circuit
   if (file_path) {
@@ -58,10 +58,17 @@ async function file_upload_to_slack(file_directory, file_path, channelId, thread
   const { file_blocks } = await get_upload_files(file_directory, file_path);
 
   if (file_blocks.length > 0) {
+    // Only append the Month/Type/Reported detail when those values are
+    // provided (the event-analysis server passes them; the duplicates server
+    // does not). Avoids an irrelevant "Month=, Type=, Reported=" line.
+    const has_detail = [month, type, is_reported].some((v) => v != null && v !== '');
+    const initial_comment = has_detail
+      ? `🧾 Attached file(s):\nMonth=${month}, Type=${type}, Reported=${is_reported}`
+      : '🧾 Attached file(s):';
     await web.filesUploadV2({
       channel_id: channelId,
       thread_ts,
-      initial_comment: `🧾 Attached file(s):\nMonth=${month}, Type=${type}, Reported=${is_reported}`,
+      initial_comment,
       file_uploads: file_blocks,
     });
     console.log('\n✅ File(s) posted to thread');
@@ -81,7 +88,13 @@ async function upload_single_file_to_thread_scheduled(
   channelId = 'C08TMBPTKEC', // channel = test_calla
   mainMessageText = '📊 Here is the latest batch of reports:',
   channel_name,
-  user_id,) {
+  user_id,
+  // Default these so the helper no longer relies on caller-leaked globals.
+  // server_slack_events.js calls with the first 4 args, so these fall back to
+  // 'all' — the same values it used to leak — keeping its behavior unchanged.
+  month = 'all',
+  type = 'all',
+  is_reported = 'all',) {
 
   // console.log('========= channel id =', channelId);
   // console.log('========= channel name = ', channel_name);

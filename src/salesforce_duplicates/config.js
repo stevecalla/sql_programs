@@ -41,6 +41,12 @@ const FUZZY_GROUP_OUTPUT_FILE = "account_fuzzy_name_groups_sf_import.csv";
 const OUTPUT_DIR_NAME = "usat_salesforce_duplicates";
 const ARCHIVE_DIR_NAME = "usat_salesforce_duplicates_archive";
 
+// Per-run summary (total records scanned, counts, timestamps) lives in its own
+// meta folder — NOT the output folder — so it is never swept into the Slack
+// file uploads, and is overwritten each run (always reflects the latest run).
+const META_DIR_NAME = "usat_salesforce_duplicates_meta";
+const RUN_SUMMARY_FILE = "run_summary.json";
+
 const REVIEW_STATUS_DEFAULT = "New";
 
 module.exports = {
@@ -56,5 +62,7 @@ module.exports = {
     FUZZY_GROUP_OUTPUT_FILE,
     OUTPUT_DIR_NAME,
     ARCHIVE_DIR_NAME,
+    META_DIR_NAME,
+    RUN_SUMMARY_FILE,
     REVIEW_STATUS_DEFAULT,
 };
