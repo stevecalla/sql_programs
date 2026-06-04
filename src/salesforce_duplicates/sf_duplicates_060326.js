@@ -8,7 +8,7 @@ const crypto = require("crypto");
 
 const IS_TEST = false;
 
-const MAX_FETCH = IS_TEST ? 5_000: 1_000_000;
+const MAX_FETCH = IS_TEST ? 5_000 : 1_000_000;
 const FUZZY_THRESHOLD = 90;
 const PROGRESS_LOG_EVERY_RECORDS = 1_000;
 const PROGRESS_LOG_EVERY_PAIRS = 25_0000;
@@ -122,6 +122,11 @@ function norm(value) {
 
 function clean_name(value) {
     return norm(value).replace(/[^A-Z0-9]/g, "").trim();
+}
+
+function unique_join(values) {
+    return [...new Set(values.filter((value) => value !== null && value !== undefined && String(value).trim() !== ""))]
+        .join(";");
 }
 
 function composite_zip(row) {
@@ -497,6 +502,9 @@ function build_fuzzy_groups(fuzzy_matches, record_lookup) {
                     .map((r) => r.cfg_Member_Number__pc)
                     .filter(Boolean)
                     .join(";"),
+                foundation_constituents: unique_join(
+                    rows.map((r) => r.usat_Foundation_Constituent__c)
+                ),
                 best_pair_score: stats?.best_pair_score || "",
                 lowest_pair_score: stats?.lowest_pair_score || "",
                 fuzzy_pair_count_in_group: stats?.pair_count || 0,
@@ -553,6 +561,7 @@ function to_sf_exact_row({
         Duplicate_Count__c: row.duplicate_count,
         Record_Ids__c: row.record_ids.join(";"),
         Member_Numbers__c: row.member_numbers.join(";"),
+        Foundation_Constituent_Values__c: unique_join(row.foundation_constituents),
 
         Created_At_Mtn__c: created_at_mtn,
         Created_At_Utc__c: created_at_utc,
@@ -621,6 +630,7 @@ function to_sf_fuzzy_pair_row({
         Composite_Zip_1__c: row.composite_zip_1,
         Billing_Zip_1__c: row.billing_zip_1,
         Mailing_Zip_1__c: row.mailing_zip_1,
+        Foundation_Constituent_1__c: row.foundation_constituent_1,
 
         Account_2__c: row.record_id_2,
         Member_Number_2__c: row.member_number_2,
@@ -633,6 +643,7 @@ function to_sf_fuzzy_pair_row({
         Composite_Zip_2__c: row.composite_zip_2,
         Billing_Zip_2__c: row.billing_zip_2,
         Mailing_Zip_2__c: row.mailing_zip_2,
+        Foundation_Constituent_2__c: row.foundation_constituent_2,
 
         Not_In_Exact_Duplicate_File_Flag__c: row.not_in_exact_duplicate_file_flag,
         Fuzzy_Match_Logic__c: row.fuzzy_match_logic,
@@ -682,6 +693,7 @@ function to_sf_fuzzy_group_row({
         Clean_Names_In_Group__c: row.clean_names_in_group,
         Record_Ids__c: row.record_ids,
         Member_Numbers__c: row.member_numbers,
+        Foundation_Constituents__c: row.foundation_constituents,
 
         Best_Pair_Score__c: row.best_pair_score,
         Lowest_Pair_Score__c: row.lowest_pair_score,
@@ -717,11 +729,9 @@ async function main() {
 
     await conn.login(
         IS_TEST ? process.env.SF_DEV_USERNAME : process.env.SF_PROD_USERNAME,
-        IS_TEST ? 
-            process.env.SF_DEV_PASSWORD + process.env.SF_DEV_SECURITY_TOKEN  : 
-            process.env.SF_PROD_PASSWORD + process.env.SF_PROD_SECURITY_TOKEN,
-        // process.env.SF_USERNAME,
-        // process.env.SF_PASSWORD + process.env.SF_SECURITY_TOKEN
+        IS_TEST ?
+            process.env.SF_DEV_PASSWORD + process.env.SF_DEV_SECURITY_TOKEN :
+            process.env.SF_PROD_PASSWORD + process.env.SF_PROD_SECURITY_TOKEN
     );
 
     log_success("Login successful.", script_start_ms);
@@ -732,6 +742,7 @@ async function main() {
             FirstName,
             cfg_Member_Number__pc,
             cfg_Gender_Identity__pc,
+            usat_Foundation_Constituent__c,
             PersonBirthdate,
             BillingPostalCode,
             PersonMailingPostalCode
@@ -797,6 +808,7 @@ async function main() {
                 duplicate_count: 0,
                 record_ids: [],
                 member_numbers: [],
+                foundation_constituents: [],
             });
         }
 
@@ -807,6 +819,10 @@ async function main() {
 
         if (row.cfg_Member_Number__pc) {
             group.member_numbers.push(row.cfg_Member_Number__pc);
+        }
+
+        if (row.usat_Foundation_Constituent__c) {
+            group.foundation_constituents.push(row.usat_Foundation_Constituent__c);
         }
 
         if ((i + 1) % PROGRESS_LOG_EVERY_RECORDS === 0) {
@@ -997,6 +1013,7 @@ async function main() {
                     composite_zip_1: composite_zip(row_a),
                     billing_zip_1: row_a.BillingPostalCode,
                     mailing_zip_1: row_a.PersonMailingPostalCode,
+                    foundation_constituent_1: row_a.usat_Foundation_Constituent__c,
 
                     record_id_2: row_b.Id,
                     member_number_2: row_b.cfg_Member_Number__pc,
@@ -1009,6 +1026,7 @@ async function main() {
                     composite_zip_2: composite_zip(row_b),
                     billing_zip_2: row_b.BillingPostalCode,
                     mailing_zip_2: row_b.PersonMailingPostalCode,
+                    foundation_constituent_2: row_b.usat_Foundation_Constituent__c,
 
                     not_in_exact_duplicate_file_flag: 1,
                     fuzzy_match_logic:
