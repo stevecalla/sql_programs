@@ -4,38 +4,22 @@ dotenv.config({ path: "../../.env" });
 const jsforce = require("jsforce");
 const fs = require("fs");
 const csv = require("fast-csv");
+const crypto = require("crypto");
 
-const MAX_FETCH = 1000000;
+const IS_TEST = false;
+
+const MAX_FETCH = IS_TEST ? 5_000: 1_000_000;
 const FUZZY_THRESHOLD = 90;
-const PROGRESS_LOG_EVERY_RECORDS = 1000;
-const PROGRESS_LOG_EVERY_PAIRS = 250000;
+const PROGRESS_LOG_EVERY_RECORDS = 1_000;
+const PROGRESS_LOG_EVERY_PAIRS = 25_0000;
 
-const EXACT_OUTPUT_FILE = "account_duplicates.csv";
-const FUZZY_PAIR_OUTPUT_FILE = "account_fuzzy_name_matches.csv";
-const FUZZY_GROUP_OUTPUT_FILE = "account_fuzzy_name_groups.csv";
+const EXACT_OUTPUT_FILE = "account_duplicates_sf_import.csv";
+const FUZZY_PAIR_OUTPUT_FILE = "account_fuzzy_name_matches_sf_import.csv";
+const FUZZY_GROUP_OUTPUT_FILE = "account_fuzzy_name_groups_sf_import.csv";
 
-/*
-    OUTPUTS
+const REVIEW_STATUS_DEFAULT = "New";
 
-    1. account_duplicates.csv
-       Exact duplicate groups:
-       exact FirstName + exact LastName + exact Gender + exact Birthdate + exact Composite ZIP
-
-    2. account_fuzzy_name_matches.csv
-       Pair-by-pair fuzzy matches:
-       fuzzy FirstName/LastName
-       AND same Gender
-       AND same Birthdate
-       AND same Composite ZIP
-       AND not already in exact duplicate output
-       AND not exact same cleaned first/last name
-
-    3. account_fuzzy_name_groups.csv
-       Grouped fuzzy clusters:
-       combines connected fuzzy pairs into grouped duplicate candidates
-*/
-
-const colors = {
+const COLORS = {
     reset: "\x1b[0m",
     bright: "\x1b[1m",
     red: "\x1b[31m",
@@ -46,79 +30,89 @@ const colors = {
 };
 
 function colorize(color, value) {
-    return `${colors[color] || ""}${value}${colors.reset}`;
+    return `${COLORS[color] || ""}${value}${COLORS.reset}`;
 }
 
-function formatDuration(ms) {
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
+function format_duration(ms) {
+    const total_seconds = Math.floor(ms / 1000);
+    const hours = Math.floor(total_seconds / 3600);
+    const minutes = Math.floor((total_seconds % 3600) / 60);
+    const seconds = total_seconds % 60;
     const parts = [];
 
     if (hours > 0) parts.push(`${hours}h`);
     if (minutes > 0 || hours > 0) parts.push(`${minutes}m`);
-
     parts.push(`${seconds}s`);
 
     return parts.join(" ");
 }
 
-function formatTimestamp(date = new Date()) {
-    return date.toISOString().replace("T", " ").replace("Z", " UTC");
+function format_timestamp_utc(date = new Date()) {
+    return date.toISOString();
 }
 
-function formatCreatedAtUtc(date = new Date()) {
-    return date.toISOString().replace("T", " ").replace("Z", " UTC");
+function format_timestamp_mtn(date = new Date()) {
+    return new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Denver",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+        timeZoneName: "short",
+    }).format(date).replace(",", "");
 }
 
-function formatCreatedAtMtn(date = new Date()) {
-    return (
-        new Intl.DateTimeFormat("en-US", {
-            timeZone: "America/Denver",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-        })
-            .format(date)
-            .replace(",", "") + " MT"
-    );
+function make_run_id(date = new Date()) {
+    const yyyy = date.getUTCFullYear();
+    const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(date.getUTCDate()).padStart(2, "0");
+    const hh = String(date.getUTCHours()).padStart(2, "0");
+    const mi = String(date.getUTCMinutes()).padStart(2, "0");
+    const ss = String(date.getUTCSeconds()).padStart(2, "0");
+
+    return `duplicate_run_${yyyy}_${mm}_${dd}_${hh}${mi}${ss}`;
 }
 
-function logInfo(message, startMs = null) {
-    const elapsed = startMs
-        ? colorize("gray", ` | elapsed: ${formatDuration(Date.now() - startMs)}`)
+function make_hash(value) {
+    return crypto.createHash("sha1").update(String(value || "")).digest("hex");
+}
+
+function make_external_id(run_id, match_type, unique_value) {
+    return `${run_id}|${match_type}|${make_hash(unique_value)}`;
+}
+
+function log_info(message, start_ms = null) {
+    const elapsed = start_ms
+        ? colorize("gray", ` | elapsed: ${format_duration(Date.now() - start_ms)}`)
         : "";
 
     console.log(
-        `${colorize("cyan", "[INFO]")} ${colorize("gray", formatTimestamp())} ${message}${elapsed}`
+        `${colorize("cyan", "[INFO]")} ${colorize("gray", format_timestamp_utc())} ${message}${elapsed}`
     );
 }
 
-function logSuccess(message, startMs = null) {
-    const elapsed = startMs
-        ? colorize("gray", ` | elapsed: ${formatDuration(Date.now() - startMs)}`)
+function log_success(message, start_ms = null) {
+    const elapsed = start_ms
+        ? colorize("gray", ` | elapsed: ${format_duration(Date.now() - start_ms)}`)
         : "";
 
     console.log(
-        `${colorize("green", "[OK]")} ${colorize("gray", formatTimestamp())} ${message}${elapsed}`
+        `${colorize("green", "[OK]")} ${colorize("gray", format_timestamp_utc())} ${message}${elapsed}`
     );
 }
 
-function logWarn(message) {
+function log_warn(message) {
     console.warn(
-        `${colorize("yellow", "[WARN]")} ${colorize("gray", formatTimestamp())} ${message}`
+        `${colorize("yellow", "[WARN]")} ${colorize("gray", format_timestamp_utc())} ${message}`
     );
 }
 
-function logError(message) {
+function log_error(message) {
     console.error(
-        `${colorize("red", "[ERROR]")} ${colorize("gray", formatTimestamp())} ${message}`
+        `${colorize("red", "[ERROR]")} ${colorize("gray", format_timestamp_utc())} ${message}`
     );
 }
 
@@ -126,67 +120,60 @@ function norm(value) {
     return (value || "").trim().toUpperCase();
 }
 
-function cleanName(value) {
-    return norm(value)
-        .replace(/[^A-Z0-9]/g, "")
-        .trim();
+function clean_name(value) {
+    return norm(value).replace(/[^A-Z0-9]/g, "").trim();
 }
 
-function compositeZip(row) {
-    const billing = (row.BillingPostalCode || "").trim();
-    const mailing = (row.PersonMailingPostalCode || "").trim();
+function composite_zip(row) {
+    const billing_zip = (row.BillingPostalCode || "").trim();
+    const mailing_zip = (row.PersonMailingPostalCode || "").trim();
 
-    return billing !== "" ? billing : mailing;
+    return billing_zip !== "" ? billing_zip : mailing_zip;
 }
 
-function makeFullName(row) {
+function make_full_name(row) {
     return `${row.FirstName || ""} ${row.LastName || ""}`.trim();
 }
 
-function makeCleanFullName(row) {
-    return `${cleanName(row.FirstName)} ${cleanName(row.LastName)}`.trim();
+function make_clean_full_name(row) {
+    return `${clean_name(row.FirstName)} ${clean_name(row.LastName)}`.trim();
 }
 
-function makeExactDuplicateKey(row) {
+function make_exact_duplicate_key(row) {
     return [
         norm(row.LastName),
         norm(row.FirstName),
         norm(row.cfg_Gender_Identity__pc),
         norm(row.PersonBirthdate),
-        norm(compositeZip(row)),
+        norm(composite_zip(row)),
     ].join("|");
 }
 
-function makeRuleKey(row) {
+function make_rule_key(row) {
     return [
         norm(row.cfg_Gender_Identity__pc),
         norm(row.PersonBirthdate),
-        norm(compositeZip(row)),
+        norm(composite_zip(row)),
     ].join("|");
 }
 
-function hasRequiredRuleFields(row) {
+function has_required_rule_fields(row) {
     return (
         norm(row.cfg_Gender_Identity__pc) !== "" &&
         norm(row.PersonBirthdate) !== "" &&
-        norm(compositeZip(row)) !== ""
+        norm(composite_zip(row)) !== ""
     );
 }
 
-function levenshteinDistance(a, b) {
+function levenshtein_distance(a, b) {
     if (a === b) return 0;
     if (!a) return b.length;
     if (!b) return a.length;
 
     const matrix = [];
 
-    for (let i = 0; i <= b.length; i++) {
-        matrix[i] = [i];
-    }
-
-    for (let j = 0; j <= a.length; j++) {
-        matrix[0][j] = j;
-    }
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
 
     for (let i = 1; i <= b.length; i++) {
         for (let j = 1; j <= a.length; j++) {
@@ -205,73 +192,73 @@ function levenshteinDistance(a, b) {
     return matrix[b.length][a.length];
 }
 
-function similarityScore(a, b) {
-    const left = cleanName(a);
-    const right = cleanName(b);
+function similarity_score(a, b) {
+    const left = clean_name(a);
+    const right = clean_name(b);
 
     if (!left || !right) return 0;
     if (left === right) return 100;
 
-    const maxLength = Math.max(left.length, right.length);
-    const distance = levenshteinDistance(left, right);
+    const max_length = Math.max(left.length, right.length);
+    const distance = levenshtein_distance(left, right);
 
-    return Math.round((1 - distance / maxLength) * 100);
+    return Math.round((1 - distance / max_length) * 100);
 }
 
-function getRuleFlags(rowA, rowB) {
-    const sameGenderFlag =
-        norm(rowA.cfg_Gender_Identity__pc) !== "" &&
-        norm(rowA.cfg_Gender_Identity__pc) === norm(rowB.cfg_Gender_Identity__pc)
+function get_rule_flags(row_a, row_b) {
+    const same_gender_flag =
+        norm(row_a.cfg_Gender_Identity__pc) !== "" &&
+        norm(row_a.cfg_Gender_Identity__pc) === norm(row_b.cfg_Gender_Identity__pc)
             ? 1
             : 0;
 
-    const sameBirthdateFlag =
-        norm(rowA.PersonBirthdate) !== "" &&
-        norm(rowA.PersonBirthdate) === norm(rowB.PersonBirthdate)
+    const same_birthdate_flag =
+        norm(row_a.PersonBirthdate) !== "" &&
+        norm(row_a.PersonBirthdate) === norm(row_b.PersonBirthdate)
             ? 1
             : 0;
 
-    const sameCompositeZipFlag =
-        norm(compositeZip(rowA)) !== "" &&
-        norm(compositeZip(rowA)) === norm(compositeZip(rowB))
+    const same_composite_zip_flag =
+        norm(composite_zip(row_a)) !== "" &&
+        norm(composite_zip(row_a)) === norm(composite_zip(row_b))
             ? 1
             : 0;
 
-    const strictRuleMatchFlag =
-        sameGenderFlag === 1 &&
-        sameBirthdateFlag === 1 &&
-        sameCompositeZipFlag === 1
+    const strict_rule_match_flag =
+        same_gender_flag === 1 &&
+        same_birthdate_flag === 1 &&
+        same_composite_zip_flag === 1
             ? 1
             : 0;
 
     return {
-        same_gender_flag: sameGenderFlag,
-        same_birthdate_flag: sameBirthdateFlag,
-        same_composite_zip_flag: sameCompositeZipFlag,
-        strict_rule_match_flag: strictRuleMatchFlag,
-        rule_match_count: sameGenderFlag + sameBirthdateFlag + sameCompositeZipFlag,
+        same_gender_flag,
+        same_birthdate_flag,
+        same_composite_zip_flag,
+        strict_rule_match_flag,
+        rule_match_count: same_gender_flag + same_birthdate_flag + same_composite_zip_flag,
     };
 }
 
-function getNameDifferenceReason(rowA, rowB, firstNameScore, lastNameScore) {
-    const firstA = cleanName(rowA.FirstName);
-    const firstB = cleanName(rowB.FirstName);
-    const lastA = cleanName(rowA.LastName);
-    const lastB = cleanName(rowB.LastName);
+function get_name_difference_reason(row_a, row_b, first_name_score, last_name_score) {
+    const first_a = clean_name(row_a.FirstName);
+    const first_b = clean_name(row_b.FirstName);
+    const last_a = clean_name(row_a.LastName);
+    const last_b = clean_name(row_b.LastName);
 
     const reasons = [];
 
-    let firstReason = "First names are exact after cleaning.";
-    let lastReason = "Last names are exact after cleaning.";
+    let first_reason = "First names are exact after cleaning.";
+    let last_reason = "Last names are exact after cleaning.";
 
-    if (firstA !== firstB) {
-        firstReason = `First names differ after cleaning: "${firstA}" vs "${firstB}" with score ${firstNameScore}.`;
-        reasons.push(firstReason);
+    if (first_a !== first_b) {
+        first_reason = `First names differ after cleaning: "${first_a}" vs "${first_b}" with score ${first_name_score}.`;
+        reasons.push(first_reason);
     }
 
-    if (lastA !== lastB) {
-        lastReason = `Last names differ after cleaning: "${lastA}" vs "${lastB}" with score ${lastNameScore}.`;
-        reasons.push(lastReason);
+    if (last_a !== last_b) {
+        last_reason = `Last names differ after cleaning: "${last_a}" vs "${last_b}" with score ${last_name_score}.`;
+        reasons.push(last_reason);
     }
 
     if (reasons.length === 0) {
@@ -279,57 +266,57 @@ function getNameDifferenceReason(rowA, rowB, firstNameScore, lastNameScore) {
     }
 
     return {
-        first_name_difference_reason: firstReason,
-        last_name_difference_reason: lastReason,
+        first_name_difference_reason: first_reason,
+        last_name_difference_reason: last_reason,
         name_difference_reason: reasons.join(" "),
     };
 }
 
-function getRuleMatchReason(rowA, ruleFlags) {
-    const gender = norm(rowA.cfg_Gender_Identity__pc);
-    const birthdate = norm(rowA.PersonBirthdate);
-    const zip = norm(compositeZip(rowA));
+function get_rule_match_reason(row_a, rule_flags) {
+    const gender = norm(row_a.cfg_Gender_Identity__pc);
+    const birthdate = norm(row_a.PersonBirthdate);
+    const zip = norm(composite_zip(row_a));
 
-    if (ruleFlags.strict_rule_match_flag === 1) {
+    if (rule_flags.strict_rule_match_flag === 1) {
         return `Strict rule match: same gender "${gender}", same birthdate "${birthdate}", and same composite ZIP "${zip}".`;
     }
 
     return [
         "Rule check failed or partial match.",
-        `same_gender_flag=${ruleFlags.same_gender_flag}`,
-        `same_birthdate_flag=${ruleFlags.same_birthdate_flag}`,
-        `same_composite_zip_flag=${ruleFlags.same_composite_zip_flag}`,
+        `same_gender_flag=${rule_flags.same_gender_flag}`,
+        `same_birthdate_flag=${rule_flags.same_birthdate_flag}`,
+        `same_composite_zip_flag=${rule_flags.same_composite_zip_flag}`,
     ].join(" ");
 }
 
-function getFuzzyMatchReason({
-    rowA,
-    rowB,
-    firstNameScore,
-    lastNameScore,
-    combinedNameScore,
-    ruleFlags,
+function get_fuzzy_match_reason({
+    row_a,
+    row_b,
+    first_name_score,
+    last_name_score,
+    combined_name_score,
+    rule_flags,
 }) {
-    const nameReasons = getNameDifferenceReason(rowA, rowB, firstNameScore, lastNameScore);
-    const ruleMatchReason = getRuleMatchReason(rowA, ruleFlags);
+    const name_reasons = get_name_difference_reason(row_a, row_b, first_name_score, last_name_score);
+    const rule_match_reason = get_rule_match_reason(row_a, rule_flags);
 
-    const fuzzyMatchReason = [
-        `Fuzzy match because the combined name score ${combinedNameScore} is >= threshold ${FUZZY_THRESHOLD}.`,
-        nameReasons.name_difference_reason,
-        ruleMatchReason,
+    const fuzzy_match_reason = [
+        `Fuzzy match because the combined name score ${combined_name_score} is >= threshold ${FUZZY_THRESHOLD}.`,
+        name_reasons.name_difference_reason,
+        rule_match_reason,
         "This pair was not included in the exact duplicate file because the cleaned first and/or last name was not an exact match.",
     ].join(" ");
 
     return {
-        fuzzy_match_reason: fuzzyMatchReason,
-        rule_match_reason: ruleMatchReason,
-        ...nameReasons,
+        fuzzy_match_reason,
+        rule_match_reason,
+        ...name_reasons,
     };
 }
 
-async function writeCsv(outputFile, rows) {
+async function write_csv(output_file, rows) {
     await new Promise((resolve, reject) => {
-        const ws = fs.createWriteStream(outputFile);
+        const ws = fs.createWriteStream(output_file);
 
         csv
             .write(rows, { headers: true })
@@ -365,11 +352,11 @@ class UnionFind {
     }
 
     union(a, b) {
-        const rootA = this.find(a);
-        const rootB = this.find(b);
+        const root_a = this.find(a);
+        const root_b = this.find(b);
 
-        if (rootA !== rootB) {
-            this.parent.set(rootB, rootA);
+        if (root_a !== root_b) {
+            this.parent.set(root_b, root_a);
         }
     }
 
@@ -390,22 +377,22 @@ class UnionFind {
     }
 }
 
-function logExactDuplicateExclusionSummary(exactDuplicateGroups, exactDuplicateRecordIds) {
-    const duplicateGroupSizeSummary = exactDuplicateGroups.reduce((acc, group) => {
+function log_exact_duplicate_exclusion_summary(exact_duplicate_groups, exact_duplicate_record_ids) {
+    const duplicate_group_size_summary = exact_duplicate_groups.reduce((acc, group) => {
         const size = group.record_ids.length;
         acc[size] = (acc[size] || 0) + 1;
         return acc;
     }, {});
 
-    logInfo("Exact duplicate exclusion summary:");
+    log_info("Exact duplicate exclusion summary:");
 
     console.table({
-        exact_duplicate_groups: exactDuplicateGroups.length,
-        exact_duplicate_record_ids_excluded_from_fuzzy: exactDuplicateRecordIds.size,
+        exact_duplicate_groups: exact_duplicate_groups.length,
+        exact_duplicate_record_ids_excluded_from_fuzzy: exact_duplicate_record_ids.size,
     });
 
     console.table(
-        Object.entries(duplicateGroupSizeSummary).map(([duplicate_count, group_count]) => ({
+        Object.entries(duplicate_group_size_summary).map(([duplicate_count, group_count]) => ({
             duplicate_count: Number(duplicate_count),
             group_count,
             total_records: Number(duplicate_count) * group_count,
@@ -413,26 +400,26 @@ function logExactDuplicateExclusionSummary(exactDuplicateGroups, exactDuplicateR
     );
 }
 
-function logFuzzyCandidateFilterSummary({
-    baseRecordsFetched,
-    exactDuplicateRecordIdsExcluded,
-    recordsAfterExactExclusion,
-    recordsExcludedMissingRuleFields,
-    finalFuzzyCandidateRecords,
+function log_fuzzy_candidate_filter_summary({
+    base_records_fetched,
+    exact_duplicate_record_ids_excluded,
+    records_after_exact_exclusion,
+    records_excluded_missing_rule_fields,
+    final_fuzzy_candidate_records,
 }) {
-    logInfo("Fuzzy candidate filter summary:");
+    log_info("Fuzzy candidate filter summary:");
 
     console.table({
-        base_records_fetched: baseRecordsFetched,
-        exact_duplicate_record_ids_excluded: exactDuplicateRecordIdsExcluded,
-        records_after_exact_exclusion: recordsAfterExactExclusion,
-        records_excluded_missing_gender_birthdate_or_zip: recordsExcludedMissingRuleFields,
-        final_fuzzy_candidate_records: finalFuzzyCandidateRecords,
+        base_records_fetched,
+        exact_duplicate_record_ids_excluded,
+        records_after_exact_exclusion,
+        records_excluded_missing_gender_birthdate_or_zip: records_excluded_missing_rule_fields,
+        final_fuzzy_candidate_records,
     });
 }
 
-function logRuleBlockSummary(ruleBlocks) {
-    const summary = [...ruleBlocks.entries()]
+function log_rule_block_summary(rule_blocks) {
+    const summary = [...rule_blocks.entries()]
         .map(([rule_key, rows]) => ({
             rule_key,
             record_count: rows.length,
@@ -441,26 +428,25 @@ function logRuleBlockSummary(ruleBlocks) {
         .sort((a, b) => b.estimated_pair_comparisons - a.estimated_pair_comparisons)
         .slice(0, 20);
 
-    logInfo("Top fuzzy rule blocks by estimated pair comparisons:");
+    log_info("Top fuzzy rule blocks by estimated pair comparisons:");
     console.table(summary);
 }
 
-function buildFuzzyGroups(fuzzyMatches, recordLookup) {
+function build_fuzzy_groups(fuzzy_matches, record_lookup) {
     const uf = new UnionFind();
 
-    for (const match of fuzzyMatches) {
+    for (const match of fuzzy_matches) {
         uf.union(match.record_id_1, match.record_id_2);
     }
 
-    const rawGroups = [...uf.groups().values()].filter((ids) => ids.length > 1);
+    const raw_groups = [...uf.groups().values()].filter((ids) => ids.length > 1);
+    const pair_stats_by_group_key = new Map();
 
-    const pairStatsByGroupKey = new Map();
+    for (const ids of raw_groups) {
+        const sorted_ids = [...ids].sort();
+        const group_key = sorted_ids.join("|");
 
-    for (const ids of rawGroups) {
-        const sortedIds = [...ids].sort();
-        const groupKey = sortedIds.join("|");
-
-        pairStatsByGroupKey.set(groupKey, {
+        pair_stats_by_group_key.set(group_key, {
             best_pair_score: 0,
             lowest_pair_score: 100,
             pair_count: 0,
@@ -468,45 +454,44 @@ function buildFuzzyGroups(fuzzyMatches, recordLookup) {
         });
     }
 
-    for (const match of fuzzyMatches) {
-        const rootIds = rawGroups.find(
+    for (const match of fuzzy_matches) {
+        const root_ids = raw_groups.find(
             (ids) => ids.includes(match.record_id_1) && ids.includes(match.record_id_2)
         );
 
-        if (!rootIds) continue;
+        if (!root_ids) continue;
 
-        const groupKey = [...rootIds].sort().join("|");
-        const stats = pairStatsByGroupKey.get(groupKey);
+        const group_key = [...root_ids].sort().join("|");
+        const stats = pair_stats_by_group_key.get(group_key);
 
         stats.best_pair_score = Math.max(stats.best_pair_score, match.match_score_combined_name);
         stats.lowest_pair_score = Math.min(stats.lowest_pair_score, match.match_score_combined_name);
         stats.pair_count += 1;
-
         stats.pair_reasons.push(
             `${match.full_name_1} <-> ${match.full_name_2}: score ${match.match_score_combined_name}`
         );
     }
 
-    return rawGroups
+    return raw_groups
         .map((ids) => {
-            const sortedIds = [...ids].sort();
-            const groupKey = sortedIds.join("|");
-            const stats = pairStatsByGroupKey.get(groupKey);
+            const sorted_ids = [...ids].sort();
+            const group_key = sorted_ids.join("|");
+            const stats = pair_stats_by_group_key.get(group_key);
 
-            const rows = sortedIds
-                .map((id) => recordLookup.get(id))
+            const rows = sorted_ids
+                .map((id) => record_lookup.get(id))
                 .filter(Boolean);
 
-            const firstRow = rows[0] || {};
+            const first_row = rows[0] || {};
 
             return {
-                fuzzy_group_key: groupKey,
+                fuzzy_group_key: group_key,
                 group_record_count: rows.length,
-                shared_gender: firstRow.cfg_Gender_Identity__pc || "",
-                shared_birthdate: firstRow.PersonBirthdate || "",
-                shared_composite_zip: compositeZip(firstRow),
-                names_in_group: rows.map(makeFullName).join(";"),
-                clean_names_in_group: rows.map(makeCleanFullName).join(";"),
+                shared_gender: first_row.cfg_Gender_Identity__pc || "",
+                shared_birthdate: first_row.PersonBirthdate || "",
+                shared_composite_zip: composite_zip(first_row),
+                names_in_group: rows.map(make_full_name).join(";"),
+                clean_names_in_group: rows.map(make_clean_full_name).join(";"),
                 record_ids: rows.map((r) => r.Id).join(";"),
                 member_numbers: rows
                     .map((r) => r.cfg_Member_Number__pc)
@@ -533,31 +518,213 @@ function buildFuzzyGroups(fuzzyMatches, recordLookup) {
         });
 }
 
+function to_sf_exact_row({
+    row,
+    row_number,
+    run_id,
+    created_at_mtn,
+    created_at_utc,
+    script_start_date,
+    query_start_date,
+    query_end_date,
+    query_duration_ms,
+}) {
+    return {
+        Run_Id__c: run_id,
+        External_Id__c: make_external_id(run_id, "exact_group", row.duplicate_key),
+        Match_Type__c: "exact_group",
+        Source_File_Name__c: EXACT_OUTPUT_FILE,
+        Review_Status__c: REVIEW_STATUS_DEFAULT,
+
+        Row_Number__c: row_number,
+        Run_Start_Time__c: format_timestamp_utc(script_start_date),
+        Query_Start_Time__c: format_timestamp_utc(query_start_date),
+        Query_End_Time__c: format_timestamp_utc(query_end_date),
+        Query_Duration__c: format_duration(query_duration_ms),
+
+        Duplicate_Logic__c:
+            "exact first_name + exact last_name + exact gender + exact birthdate + exact composite_zip",
+
+        Last_Name__c: row.last_name,
+        First_Name__c: row.first_name,
+        Gender__c: row.gender,
+        Birthdate__c: row.birthdate,
+        Composite_Zip__c: row.composite_zip,
+        Duplicate_Count__c: row.duplicate_count,
+        Record_Ids__c: row.record_ids.join(";"),
+        Member_Numbers__c: row.member_numbers.join(";"),
+
+        Created_At_Mtn__c: created_at_mtn,
+        Created_At_Utc__c: created_at_utc,
+    };
+}
+
+function to_sf_fuzzy_pair_row({
+    row,
+    row_number,
+    run_id,
+    created_at_mtn,
+    created_at_utc,
+    script_start_date,
+    query_start_date,
+    query_end_date,
+    query_duration_ms,
+    fuzzy_start_date,
+    fuzzy_end_date,
+    fuzzy_duration_ms,
+}) {
+    return {
+        Run_Id__c: run_id,
+        External_Id__c: make_external_id(run_id, "fuzzy_pair", `${row.record_id_1}|${row.record_id_2}`),
+        Match_Type__c: "fuzzy_pair",
+        Source_File_Name__c: FUZZY_PAIR_OUTPUT_FILE,
+        Review_Status__c: REVIEW_STATUS_DEFAULT,
+
+        Row_Number__c: row_number,
+        Run_Start_Time__c: format_timestamp_utc(script_start_date),
+        Query_Start_Time__c: format_timestamp_utc(query_start_date),
+        Query_End_Time__c: format_timestamp_utc(query_end_date),
+        Query_Duration__c: format_duration(query_duration_ms),
+        Fuzzy_Start_Time__c: format_timestamp_utc(fuzzy_start_date),
+        Fuzzy_End_Time__c: format_timestamp_utc(fuzzy_end_date),
+        Fuzzy_Duration__c: format_duration(fuzzy_duration_ms),
+
+        Rule_Key__c: row.rule_key,
+        Fuzzy_Threshold__c: row.fuzzy_threshold,
+
+        Fuzzy_Match_Reason__c: row.fuzzy_match_reason,
+        Name_Difference_Reason__c: row.name_difference_reason,
+        First_Name_Difference_Reason__c: row.first_name_difference_reason,
+        Last_Name_Difference_Reason__c: row.last_name_difference_reason,
+        Rule_Match_Reason__c: row.rule_match_reason,
+
+        Match_Score_Combined_Name__c: row.match_score_combined_name,
+        Match_Score_First_Name__c: row.match_score_first_name,
+        Match_Score_Last_Name__c: row.match_score_last_name,
+
+        Exact_Clean_First_Name_Match_Flag__c: row.exact_clean_first_name_match_flag,
+        Exact_Clean_Last_Name_Match_Flag__c: row.exact_clean_last_name_match_flag,
+        Same_Gender_Flag__c: row.same_gender_flag,
+        Same_Birthdate_Flag__c: row.same_birthdate_flag,
+        Same_Composite_Zip_Flag__c: row.same_composite_zip_flag,
+        Strict_Rule_Match_Flag__c: row.strict_rule_match_flag,
+        Rule_Match_Count__c: row.rule_match_count,
+
+        Account_1__c: row.record_id_1,
+        Member_Number_1__c: row.member_number_1,
+        First_Name_1__c: row.first_name_1,
+        Last_Name_1__c: row.last_name_1,
+        Full_Name_1__c: row.full_name_1,
+        Clean_Full_Name_1__c: row.clean_full_name_1,
+        Gender_1__c: row.gender_1,
+        Birthdate_1__c: row.birthdate_1,
+        Composite_Zip_1__c: row.composite_zip_1,
+        Billing_Zip_1__c: row.billing_zip_1,
+        Mailing_Zip_1__c: row.mailing_zip_1,
+
+        Account_2__c: row.record_id_2,
+        Member_Number_2__c: row.member_number_2,
+        First_Name_2__c: row.first_name_2,
+        Last_Name_2__c: row.last_name_2,
+        Full_Name_2__c: row.full_name_2,
+        Clean_Full_Name_2__c: row.clean_full_name_2,
+        Gender_2__c: row.gender_2,
+        Birthdate_2__c: row.birthdate_2,
+        Composite_Zip_2__c: row.composite_zip_2,
+        Billing_Zip_2__c: row.billing_zip_2,
+        Mailing_Zip_2__c: row.mailing_zip_2,
+
+        Not_In_Exact_Duplicate_File_Flag__c: row.not_in_exact_duplicate_file_flag,
+        Fuzzy_Match_Logic__c: row.fuzzy_match_logic,
+
+        Created_At_Mtn__c: created_at_mtn,
+        Created_At_Utc__c: created_at_utc,
+    };
+}
+
+function to_sf_fuzzy_group_row({
+    row,
+    row_number,
+    run_id,
+    created_at_mtn,
+    created_at_utc,
+    script_start_date,
+    query_start_date,
+    query_end_date,
+    query_duration_ms,
+    fuzzy_start_date,
+    fuzzy_end_date,
+    fuzzy_duration_ms,
+}) {
+    return {
+        Run_Id__c: run_id,
+        External_Id__c: make_external_id(run_id, "fuzzy_group", row.fuzzy_group_key),
+        Match_Type__c: "fuzzy_group",
+        Source_File_Name__c: FUZZY_GROUP_OUTPUT_FILE,
+        Review_Status__c: REVIEW_STATUS_DEFAULT,
+
+        Row_Number__c: row_number,
+        Run_Start_Time__c: format_timestamp_utc(script_start_date),
+        Query_Start_Time__c: format_timestamp_utc(query_start_date),
+        Query_End_Time__c: format_timestamp_utc(query_end_date),
+        Query_Duration__c: format_duration(query_duration_ms),
+        Fuzzy_Start_Time__c: format_timestamp_utc(fuzzy_start_date),
+        Fuzzy_End_Time__c: format_timestamp_utc(fuzzy_end_date),
+        Fuzzy_Duration__c: format_duration(fuzzy_duration_ms),
+
+        Fuzzy_Group_Key__c: row.fuzzy_group_key,
+        Group_Record_Count__c: row.group_record_count,
+        Shared_Gender__c: row.shared_gender,
+        Shared_Birthdate__c: row.shared_birthdate,
+        Shared_Composite_Zip__c: row.shared_composite_zip,
+
+        Names_In_Group__c: row.names_in_group,
+        Clean_Names_In_Group__c: row.clean_names_in_group,
+        Record_Ids__c: row.record_ids,
+        Member_Numbers__c: row.member_numbers,
+
+        Best_Pair_Score__c: row.best_pair_score,
+        Lowest_Pair_Score__c: row.lowest_pair_score,
+        Fuzzy_Pair_Count_In_Group__c: row.fuzzy_pair_count_in_group,
+        Fuzzy_Pair_Summary__c: row.fuzzy_pair_summary,
+        Fuzzy_Group_Logic__c: row.fuzzy_group_logic,
+
+        Created_At_Mtn__c: created_at_mtn,
+        Created_At_Utc__c: created_at_utc,
+    };
+}
+
 async function main() {
-    const scriptStartDate = new Date();
-    const scriptStartMs = Date.now();
+    const script_start_date = new Date();
+    const script_start_ms = Date.now();
 
-    const createdAtMtn = formatCreatedAtMtn(scriptStartDate);
-    const createdAtUtc = formatCreatedAtUtc(scriptStartDate);
+    const run_id = make_run_id(script_start_date);
+    const created_at_mtn = format_timestamp_mtn(script_start_date);
+    const created_at_utc = format_timestamp_utc(script_start_date);
 
-    logInfo("Script started.");
-    logInfo(`Hardcoded MAX_FETCH: ${MAX_FETCH}`);
-    logInfo(`Hardcoded FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
-    logInfo(`created_at_mtn: ${createdAtMtn}`);
-    logInfo(`created_at_utc: ${createdAtUtc}`);
+    log_info("Script started.");
+    log_info(`run_id: ${run_id}`);
+    log_info(`Hardcoded MAX_FETCH: ${MAX_FETCH}`);
+    log_info(`Hardcoded FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
+    log_info(`created_at_mtn: ${created_at_mtn}`);
+    log_info(`created_at_utc: ${created_at_utc}`);
 
     const conn = new jsforce.Connection({
-        loginUrl: process.env.SF_LOGIN_URL || "https://test.salesforce.com",
+        loginUrl: IS_TEST ? process.env.SF_DEV_LOGIN_URL : process.env.SF_PROD_LOGIN_URL,
     });
 
-    logInfo("Logging into Salesforce...", scriptStartMs);
+    log_info("Logging into Salesforce...", script_start_ms);
 
     await conn.login(
-        process.env.SF_USERNAME,
-        process.env.SF_PASSWORD + process.env.SF_SECURITY_TOKEN
+        IS_TEST ? process.env.SF_DEV_USERNAME : process.env.SF_PROD_USERNAME,
+        IS_TEST ? 
+            process.env.SF_DEV_PASSWORD + process.env.SF_DEV_SECURITY_TOKEN  : 
+            process.env.SF_PROD_PASSWORD + process.env.SF_PROD_SECURITY_TOKEN,
+        // process.env.SF_USERNAME,
+        // process.env.SF_PASSWORD + process.env.SF_SECURITY_TOKEN
     );
 
-    logSuccess("Login successful.", scriptStartMs);
+    log_success("Login successful.", script_start_ms);
 
     const soql = `
         SELECT Id,
@@ -574,68 +741,66 @@ async function main() {
         ORDER BY LastName, FirstName, Id
     `;
 
-    const queryStartDate = new Date();
-    const queryStartMs = Date.now();
+    const query_start_date = new Date();
+    const query_start_ms = Date.now();
 
-    logInfo("Running Salesforce query...", scriptStartMs);
+    log_info("Running Salesforce query...", script_start_ms);
 
     const result = await conn.query(soql).execute({
         autoFetch: true,
         maxFetch: MAX_FETCH,
     });
 
-    const queryEndDate = new Date();
-    const queryDurationMs = Date.now() - queryStartMs;
+    const query_end_date = new Date();
+    const query_duration_ms = Date.now() - query_start_ms;
 
-    logSuccess("Salesforce query complete.", queryStartMs);
+    log_success("Salesforce query complete.", query_start_ms);
 
-    console.log(`Query start time: ${formatTimestamp(queryStartDate)}`);
-    console.log(`Query end time: ${formatTimestamp(queryEndDate)}`);
-    console.log(`Query duration: ${formatDuration(queryDurationMs)}`);
+    console.log(`Query start time: ${format_timestamp_utc(query_start_date)}`);
+    console.log(`Query end time: ${format_timestamp_utc(query_end_date)}`);
+    console.log(`Query duration: ${format_duration(query_duration_ms)}`);
     console.log(`Salesforce total matching records: ${result.totalSize}`);
     console.log(`Records actually fetched: ${result.records.length}`);
 
     if (result.records.length === 0) {
-        logWarn("No records returned. Ending script.");
+        log_warn("No records returned. Ending script.");
         return;
     }
 
     if (result.records.length >= MAX_FETCH) {
-        logWarn(
-            `Test run stopped at MAX_FETCH=${MAX_FETCH}. Increase MAX_FETCH for a full run.`
-        );
+        log_warn(`Test run stopped at MAX_FETCH=${MAX_FETCH}. Increase MAX_FETCH for a full run.`);
     }
 
-    const recordLookup = new Map();
+    const record_lookup = new Map();
 
     for (const row of result.records) {
-        recordLookup.set(row.Id, row);
+        record_lookup.set(row.Id, row);
     }
 
-    const exactStartMs = Date.now();
-    const exactGroups = new Map();
+    const exact_start_ms = Date.now();
+    const exact_groups = new Map();
 
-    logInfo("Grouping records for exact duplicate detection...", scriptStartMs);
+    log_info("Grouping records for exact duplicate detection...", script_start_ms);
 
     for (let i = 0; i < result.records.length; i++) {
         const row = result.records[i];
-        const key = makeExactDuplicateKey(row);
+        const key = make_exact_duplicate_key(row);
 
-        if (!exactGroups.has(key)) {
-            exactGroups.set(key, {
+        if (!exact_groups.has(key)) {
+            exact_groups.set(key, {
                 duplicate_key: key,
-                LastName: row.LastName,
-                FirstName: row.FirstName,
-                cfg_Gender_Identity__pc: row.cfg_Gender_Identity__pc,
-                PersonBirthdate: row.PersonBirthdate,
-                CompositeZip: compositeZip(row),
+                last_name: row.LastName,
+                first_name: row.FirstName,
+                gender: row.cfg_Gender_Identity__pc,
+                birthdate: row.PersonBirthdate,
+                composite_zip: composite_zip(row),
                 duplicate_count: 0,
                 record_ids: [],
                 member_numbers: [],
             });
         }
 
-        const group = exactGroups.get(key);
+        const group = exact_groups.get(key);
 
         group.duplicate_count += 1;
         group.record_ids.push(row.Id);
@@ -646,344 +811,327 @@ async function main() {
 
         if ((i + 1) % PROGRESS_LOG_EVERY_RECORDS === 0) {
             const pct = (((i + 1) / result.records.length) * 100).toFixed(1);
-
-            logInfo(
-                `Exact grouping progress: ${i + 1}/${result.records.length} records (${pct}%)`,
-                exactStartMs
-            );
+            log_info(`Exact grouping progress: ${i + 1}/${result.records.length} records (${pct}%)`, exact_start_ms);
         }
     }
 
-    logSuccess("Exact duplicate grouping complete.", exactStartMs);
+    log_success("Exact duplicate grouping complete.", exact_start_ms);
 
-    const exactDuplicateGroups = [...exactGroups.values()]
+    const exact_duplicate_groups = [...exact_groups.values()]
         .filter((g) => g.duplicate_count > 1)
         .sort((a, b) => {
             if (b.duplicate_count !== a.duplicate_count) {
                 return b.duplicate_count - a.duplicate_count;
             }
 
-            const lastNameCompare = String(a.LastName || "").localeCompare(
-                String(b.LastName || "")
-            );
+            const last_name_compare = String(a.last_name || "").localeCompare(String(b.last_name || ""));
+            if (last_name_compare !== 0) return last_name_compare;
 
-            if (lastNameCompare !== 0) return lastNameCompare;
-
-            return String(a.FirstName || "").localeCompare(String(b.FirstName || ""));
+            return String(a.first_name || "").localeCompare(String(b.first_name || ""));
         });
 
-    const exactDuplicateRecordIds = new Set();
+    const exact_duplicate_record_ids = new Set();
 
-    for (const group of exactDuplicateGroups) {
-        for (const recordId of group.record_ids) {
-            exactDuplicateRecordIds.add(recordId);
+    for (const group of exact_duplicate_groups) {
+        for (const record_id of group.record_ids) {
+            exact_duplicate_record_ids.add(record_id);
         }
     }
 
-    logExactDuplicateExclusionSummary(exactDuplicateGroups, exactDuplicateRecordIds);
+    log_exact_duplicate_exclusion_summary(exact_duplicate_groups, exact_duplicate_record_ids);
 
-    const exactDuplicates = exactDuplicateGroups.map((g, index) => ({
-        row_number: index + 1,
-        run_start_time: formatTimestamp(scriptStartDate),
-        query_start_time: formatTimestamp(queryStartDate),
-        query_end_time: formatTimestamp(queryEndDate),
-        query_duration: formatDuration(queryDurationMs),
-        duplicate_logic:
-            "exact FirstName + exact LastName + exact Gender + exact Birthdate + exact Composite ZIP",
-        LastName: g.LastName,
-        FirstName: g.FirstName,
-        cfg_Gender_Identity__pc: g.cfg_Gender_Identity__pc,
-        PersonBirthdate: g.PersonBirthdate,
-        CompositeZip: g.CompositeZip,
-        duplicate_count: g.duplicate_count,
-        record_ids: g.record_ids.join(";"),
-        member_numbers: g.member_numbers.join(";"),
-        created_at_mtn: createdAtMtn,
-        created_at_utc: createdAtUtc,
-    }));
-
-    logInfo(`Writing exact duplicates to ${EXACT_OUTPUT_FILE}...`, scriptStartMs);
-
-    await writeCsv(EXACT_OUTPUT_FILE, exactDuplicates);
-
-    logSuccess(`Exact duplicate file written: ${EXACT_OUTPUT_FILE}`, scriptStartMs);
-
-    const fuzzyStartDate = new Date();
-    const fuzzyStartMs = Date.now();
-
-    logInfo("Building fuzzy + strict rule-based match file...", scriptStartMs);
-
-    const recordsAfterExactExclusion = result.records.filter(
-        (row) => !exactDuplicateRecordIds.has(row.Id)
+    const exact_duplicates_sf_import = exact_duplicate_groups.map((row, index) =>
+        to_sf_exact_row({
+            row,
+            row_number: index + 1,
+            run_id,
+            created_at_mtn,
+            created_at_utc,
+            script_start_date,
+            query_start_date,
+            query_end_date,
+            query_duration_ms,
+        })
     );
 
-    const fuzzyCandidateRecords = recordsAfterExactExclusion.filter((row) => {
-        return hasRequiredRuleFields(row);
+    log_info(`Writing Salesforce exact duplicate import file to ${EXACT_OUTPUT_FILE}...`, script_start_ms);
+    await write_csv(EXACT_OUTPUT_FILE, exact_duplicates_sf_import);
+    log_success(`Salesforce exact duplicate import file written: ${EXACT_OUTPUT_FILE}`, script_start_ms);
+
+    const fuzzy_start_date = new Date();
+    const fuzzy_start_ms = Date.now();
+
+    log_info("Building fuzzy + strict rule-based match file...", script_start_ms);
+
+    const records_after_exact_exclusion = result.records.filter(
+        (row) => !exact_duplicate_record_ids.has(row.Id)
+    );
+
+    const fuzzy_candidate_records = records_after_exact_exclusion.filter((row) => {
+        return has_required_rule_fields(row);
     });
 
-    const recordsExcludedMissingRuleFields =
-        recordsAfterExactExclusion.length - fuzzyCandidateRecords.length;
+    const records_excluded_missing_rule_fields =
+        records_after_exact_exclusion.length - fuzzy_candidate_records.length;
 
-    logFuzzyCandidateFilterSummary({
-        baseRecordsFetched: result.records.length,
-        exactDuplicateRecordIdsExcluded: exactDuplicateRecordIds.size,
-        recordsAfterExactExclusion: recordsAfterExactExclusion.length,
-        recordsExcludedMissingRuleFields,
-        finalFuzzyCandidateRecords: fuzzyCandidateRecords.length,
+    log_fuzzy_candidate_filter_summary({
+        base_records_fetched: result.records.length,
+        exact_duplicate_record_ids_excluded: exact_duplicate_record_ids.size,
+        records_after_exact_exclusion: records_after_exact_exclusion.length,
+        records_excluded_missing_rule_fields,
+        final_fuzzy_candidate_records: fuzzy_candidate_records.length,
     });
 
-    const ruleBlocks = new Map();
+    const rule_blocks = new Map();
 
-    for (let i = 0; i < fuzzyCandidateRecords.length; i++) {
-        const row = fuzzyCandidateRecords[i];
-        const ruleKey = makeRuleKey(row);
+    for (let i = 0; i < fuzzy_candidate_records.length; i++) {
+        const row = fuzzy_candidate_records[i];
+        const rule_key = make_rule_key(row);
 
-        if (!ruleBlocks.has(ruleKey)) {
-            ruleBlocks.set(ruleKey, []);
+        if (!rule_blocks.has(rule_key)) {
+            rule_blocks.set(rule_key, []);
         }
 
-        ruleBlocks.get(ruleKey).push(row);
+        rule_blocks.get(rule_key).push(row);
 
         if ((i + 1) % PROGRESS_LOG_EVERY_RECORDS === 0) {
-            const pct = (((i + 1) / fuzzyCandidateRecords.length) * 100).toFixed(1);
-
-            logInfo(
-                `Fuzzy rule block build progress: ${i + 1}/${fuzzyCandidateRecords.length} records (${pct}%)`,
-                fuzzyStartMs
+            const pct = (((i + 1) / fuzzy_candidate_records.length) * 100).toFixed(1);
+            log_info(
+                `Fuzzy rule block build progress: ${i + 1}/${fuzzy_candidate_records.length} records (${pct}%)`,
+                fuzzy_start_ms
             );
         }
     }
 
-    logSuccess(`Fuzzy rule block build complete. Blocks created: ${ruleBlocks.size}`, fuzzyStartMs);
-    logRuleBlockSummary(ruleBlocks);
+    log_success(`Fuzzy rule block build complete. Blocks created: ${rule_blocks.size}`, fuzzy_start_ms);
+    log_rule_block_summary(rule_blocks);
 
-    const fuzzyMatches = [];
-    const seenFuzzyPairs = new Set();
+    const fuzzy_matches = [];
+    const seen_fuzzy_pairs = new Set();
 
-    let pairsCompared = 0;
-    let pairsSkippedExactCleanName = 0;
-    let pairsSkippedBelowThreshold = 0;
-    let pairsSkippedNotStrictRule = 0;
-    let blocksProcessed = 0;
+    let pairs_compared = 0;
+    let pairs_skipped_exact_clean_name = 0;
+    let pairs_skipped_below_threshold = 0;
+    let pairs_skipped_not_strict_rule = 0;
+    let blocks_processed = 0;
 
-    logInfo("Starting fuzzy comparisons...", fuzzyStartMs);
+    log_info("Starting fuzzy comparisons...", fuzzy_start_ms);
 
-    for (const [ruleKey, blockRows] of ruleBlocks.entries()) {
-        blocksProcessed += 1;
+    for (const [rule_key, block_rows] of rule_blocks.entries()) {
+        blocks_processed += 1;
 
-        if (blockRows.length < 2) continue;
+        if (block_rows.length < 2) continue;
 
-        for (let i = 0; i < blockRows.length; i++) {
-            for (let j = i + 1; j < blockRows.length; j++) {
-                pairsCompared += 1;
+        for (let i = 0; i < block_rows.length; i++) {
+            for (let j = i + 1; j < block_rows.length; j++) {
+                pairs_compared += 1;
 
-                const rowA = blockRows[i];
-                const rowB = blockRows[j];
+                const row_a = block_rows[i];
+                const row_b = block_rows[j];
 
-                const pairKey = [rowA.Id, rowB.Id].sort().join("|");
+                const pair_key = [row_a.Id, row_b.Id].sort().join("|");
+                if (seen_fuzzy_pairs.has(pair_key)) continue;
+                seen_fuzzy_pairs.add(pair_key);
 
-                if (seenFuzzyPairs.has(pairKey)) continue;
+                const first_name_score = similarity_score(row_a.FirstName, row_b.FirstName);
+                const last_name_score = similarity_score(row_a.LastName, row_b.LastName);
 
-                seenFuzzyPairs.add(pairKey);
+                const exact_clean_first_name_match = first_name_score === 100;
+                const exact_clean_last_name_match = last_name_score === 100;
 
-                const firstNameScore = similarityScore(rowA.FirstName, rowB.FirstName);
-                const lastNameScore = similarityScore(rowA.LastName, rowB.LastName);
-
-                const exactCleanFirstNameMatch = firstNameScore === 100;
-                const exactCleanLastNameMatch = lastNameScore === 100;
-
-                if (exactCleanFirstNameMatch && exactCleanLastNameMatch) {
-                    pairsSkippedExactCleanName += 1;
+                if (exact_clean_first_name_match && exact_clean_last_name_match) {
+                    pairs_skipped_exact_clean_name += 1;
                     continue;
                 }
 
-                const combinedNameScore = Math.round(
-                    firstNameScore * 0.45 + lastNameScore * 0.55
+                const match_score_combined_name = Math.round(
+                    first_name_score * 0.45 + last_name_score * 0.55
                 );
 
-                if (combinedNameScore < FUZZY_THRESHOLD) {
-                    pairsSkippedBelowThreshold += 1;
+                if (match_score_combined_name < FUZZY_THRESHOLD) {
+                    pairs_skipped_below_threshold += 1;
                     continue;
                 }
 
-                const ruleFlags = getRuleFlags(rowA, rowB);
+                const rule_flags = get_rule_flags(row_a, row_b);
 
-                if (ruleFlags.strict_rule_match_flag !== 1) {
-                    pairsSkippedNotStrictRule += 1;
+                if (rule_flags.strict_rule_match_flag !== 1) {
+                    pairs_skipped_not_strict_rule += 1;
                     continue;
                 }
 
-                const fuzzyReasons = getFuzzyMatchReason({
-                    rowA,
-                    rowB,
-                    firstNameScore,
-                    lastNameScore,
-                    combinedNameScore,
-                    ruleFlags,
+                const fuzzy_reasons = get_fuzzy_match_reason({
+                    row_a,
+                    row_b,
+                    first_name_score,
+                    last_name_score,
+                    combined_name_score: match_score_combined_name,
+                    rule_flags,
                 });
 
-                fuzzyMatches.push({
-                    rule_key: ruleKey,
+                fuzzy_matches.push({
+                    rule_key,
                     fuzzy_threshold: FUZZY_THRESHOLD,
 
-                    fuzzy_match_reason: fuzzyReasons.fuzzy_match_reason,
-                    name_difference_reason: fuzzyReasons.name_difference_reason,
-                    first_name_difference_reason: fuzzyReasons.first_name_difference_reason,
-                    last_name_difference_reason: fuzzyReasons.last_name_difference_reason,
-                    rule_match_reason: fuzzyReasons.rule_match_reason,
+                    fuzzy_match_reason: fuzzy_reasons.fuzzy_match_reason,
+                    name_difference_reason: fuzzy_reasons.name_difference_reason,
+                    first_name_difference_reason: fuzzy_reasons.first_name_difference_reason,
+                    last_name_difference_reason: fuzzy_reasons.last_name_difference_reason,
+                    rule_match_reason: fuzzy_reasons.rule_match_reason,
 
-                    match_score_combined_name: combinedNameScore,
-                    match_score_first_name: firstNameScore,
-                    match_score_last_name: lastNameScore,
-                    exact_clean_first_name_match_flag: exactCleanFirstNameMatch ? 1 : 0,
-                    exact_clean_last_name_match_flag: exactCleanLastNameMatch ? 1 : 0,
-                    ...ruleFlags,
+                    match_score_combined_name,
+                    match_score_first_name: first_name_score,
+                    match_score_last_name: last_name_score,
+                    exact_clean_first_name_match_flag: exact_clean_first_name_match ? 1 : 0,
+                    exact_clean_last_name_match_flag: exact_clean_last_name_match ? 1 : 0,
+                    ...rule_flags,
 
-                    record_id_1: rowA.Id,
-                    member_number_1: rowA.cfg_Member_Number__pc,
-                    first_name_1: rowA.FirstName,
-                    last_name_1: rowA.LastName,
-                    full_name_1: makeFullName(rowA),
-                    clean_full_name_1: makeCleanFullName(rowA),
-                    gender_1: rowA.cfg_Gender_Identity__pc,
-                    birthdate_1: rowA.PersonBirthdate,
-                    composite_zip_1: compositeZip(rowA),
-                    billing_zip_1: rowA.BillingPostalCode,
-                    mailing_zip_1: rowA.PersonMailingPostalCode,
+                    record_id_1: row_a.Id,
+                    member_number_1: row_a.cfg_Member_Number__pc,
+                    first_name_1: row_a.FirstName,
+                    last_name_1: row_a.LastName,
+                    full_name_1: make_full_name(row_a),
+                    clean_full_name_1: make_clean_full_name(row_a),
+                    gender_1: row_a.cfg_Gender_Identity__pc,
+                    birthdate_1: row_a.PersonBirthdate,
+                    composite_zip_1: composite_zip(row_a),
+                    billing_zip_1: row_a.BillingPostalCode,
+                    mailing_zip_1: row_a.PersonMailingPostalCode,
 
-                    record_id_2: rowB.Id,
-                    member_number_2: rowB.cfg_Member_Number__pc,
-                    first_name_2: rowB.FirstName,
-                    last_name_2: rowB.LastName,
-                    full_name_2: makeFullName(rowB),
-                    clean_full_name_2: makeCleanFullName(rowB),
-                    gender_2: rowB.cfg_Gender_Identity__pc,
-                    birthdate_2: rowB.PersonBirthdate,
-                    composite_zip_2: compositeZip(rowB),
-                    billing_zip_2: rowB.BillingPostalCode,
-                    mailing_zip_2: rowB.PersonMailingPostalCode,
+                    record_id_2: row_b.Id,
+                    member_number_2: row_b.cfg_Member_Number__pc,
+                    first_name_2: row_b.FirstName,
+                    last_name_2: row_b.LastName,
+                    full_name_2: make_full_name(row_b),
+                    clean_full_name_2: make_clean_full_name(row_b),
+                    gender_2: row_b.cfg_Gender_Identity__pc,
+                    birthdate_2: row_b.PersonBirthdate,
+                    composite_zip_2: composite_zip(row_b),
+                    billing_zip_2: row_b.BillingPostalCode,
+                    mailing_zip_2: row_b.PersonMailingPostalCode,
 
                     not_in_exact_duplicate_file_flag: 1,
                     fuzzy_match_logic:
-                        "fuzzy first/last name score >= threshold AND same gender AND same birthdate AND same composite zip AND not exact same cleaned name",
+                        "fuzzy first/last name score >= threshold AND same gender AND same birthdate AND same composite_zip AND not exact same cleaned name",
                 });
 
-                if (fuzzyMatches.length % 100 === 0) {
-                    logInfo(
-                        `Fuzzy matches found so far: ${fuzzyMatches.length.toLocaleString()}`,
-                        fuzzyStartMs
-                    );
+                if (fuzzy_matches.length % 100 === 0) {
+                    log_info(`Fuzzy matches found so far: ${fuzzy_matches.length.toLocaleString()}`, fuzzy_start_ms);
                 }
 
-                if (pairsCompared % PROGRESS_LOG_EVERY_PAIRS === 0) {
-                    logInfo(
-                        `Fuzzy compare progress: ${pairsCompared.toLocaleString()} pairs compared, ${fuzzyMatches.length.toLocaleString()} matches found, ${blocksProcessed}/${ruleBlocks.size} blocks processed`,
-                        fuzzyStartMs
+                if (pairs_compared % PROGRESS_LOG_EVERY_PAIRS === 0) {
+                    log_info(
+                        `Fuzzy compare progress: ${pairs_compared.toLocaleString()} pairs compared, ${fuzzy_matches.length.toLocaleString()} matches found, ${blocks_processed}/${rule_blocks.size} blocks processed`,
+                        fuzzy_start_ms
                     );
                 }
             }
         }
     }
 
-    logSuccess(`Fuzzy comparison complete. Pair matches found: ${fuzzyMatches.length.toLocaleString()}`, fuzzyStartMs);
+    log_success(`Fuzzy comparison complete. Pair matches found: ${fuzzy_matches.length.toLocaleString()}`, fuzzy_start_ms);
 
-    const fuzzyEndDate = new Date();
-    const fuzzyDurationMs = Date.now() - fuzzyStartMs;
+    const fuzzy_end_date = new Date();
+    const fuzzy_duration_ms = Date.now() - fuzzy_start_ms;
 
-    const fuzzyMatchesFinal = fuzzyMatches
-        .sort((a, b) => {
-            if (b.match_score_combined_name !== a.match_score_combined_name) {
-                return b.match_score_combined_name - a.match_score_combined_name;
-            }
+    const fuzzy_matches_sorted = fuzzy_matches.sort((a, b) => {
+        if (b.match_score_combined_name !== a.match_score_combined_name) {
+            return b.match_score_combined_name - a.match_score_combined_name;
+        }
 
-            if (b.match_score_last_name !== a.match_score_last_name) {
-                return b.match_score_last_name - a.match_score_last_name;
-            }
+        if (b.match_score_last_name !== a.match_score_last_name) {
+            return b.match_score_last_name - a.match_score_last_name;
+        }
 
-            return String(a.full_name_1 || "").localeCompare(String(b.full_name_1 || ""));
-        })
-        .map((row, index) => ({
+        return String(a.full_name_1 || "").localeCompare(String(b.full_name_1 || ""));
+    });
+
+    const fuzzy_pair_sf_import = fuzzy_matches_sorted.map((row, index) =>
+        to_sf_fuzzy_pair_row({
+            row,
             row_number: index + 1,
-            run_start_time: formatTimestamp(scriptStartDate),
-            query_start_time: formatTimestamp(queryStartDate),
-            query_end_time: formatTimestamp(queryEndDate),
-            query_duration: formatDuration(queryDurationMs),
-            fuzzy_start_time: formatTimestamp(fuzzyStartDate),
-            fuzzy_end_time: formatTimestamp(fuzzyEndDate),
-            fuzzy_duration: formatDuration(fuzzyDurationMs),
-            ...row,
-            created_at_mtn: createdAtMtn,
-            created_at_utc: createdAtUtc,
-        }));
+            run_id,
+            created_at_mtn,
+            created_at_utc,
+            script_start_date,
+            query_start_date,
+            query_end_date,
+            query_duration_ms,
+            fuzzy_start_date,
+            fuzzy_end_date,
+            fuzzy_duration_ms,
+        })
+    );
 
-    logInfo(`Writing fuzzy pair matches to ${FUZZY_PAIR_OUTPUT_FILE}...`, scriptStartMs);
+    log_info(`Writing Salesforce fuzzy pair import file to ${FUZZY_PAIR_OUTPUT_FILE}...`, script_start_ms);
+    await write_csv(FUZZY_PAIR_OUTPUT_FILE, fuzzy_pair_sf_import);
+    log_success(`Salesforce fuzzy pair import file written: ${FUZZY_PAIR_OUTPUT_FILE}`, script_start_ms);
 
-    await writeCsv(FUZZY_PAIR_OUTPUT_FILE, fuzzyMatchesFinal);
+    log_info("Building fuzzy grouped duplicate file...", script_start_ms);
 
-    logSuccess(`Fuzzy pair match file written: ${FUZZY_PAIR_OUTPUT_FILE}`, scriptStartMs);
+    const fuzzy_groups_raw = build_fuzzy_groups(fuzzy_matches_sorted, record_lookup);
 
-    logInfo("Building fuzzy grouped duplicate file...", scriptStartMs);
+    const fuzzy_group_sf_import = fuzzy_groups_raw.map((row, index) =>
+        to_sf_fuzzy_group_row({
+            row,
+            row_number: index + 1,
+            run_id,
+            created_at_mtn,
+            created_at_utc,
+            script_start_date,
+            query_start_date,
+            query_end_date,
+            query_duration_ms,
+            fuzzy_start_date,
+            fuzzy_end_date,
+            fuzzy_duration_ms,
+        })
+    );
 
-    const fuzzyGroupsRaw = buildFuzzyGroups(fuzzyMatchesFinal, recordLookup);
+    log_success(`Fuzzy groups built. Groups found: ${fuzzy_group_sf_import.length.toLocaleString()}`, script_start_ms);
 
-    const fuzzyGroupsFinal = fuzzyGroupsRaw.map((group, index) => ({
-        row_number: index + 1,
-        run_start_time: formatTimestamp(scriptStartDate),
-        query_start_time: formatTimestamp(queryStartDate),
-        query_end_time: formatTimestamp(queryEndDate),
-        query_duration: formatDuration(queryDurationMs),
-        fuzzy_start_time: formatTimestamp(fuzzyStartDate),
-        fuzzy_end_time: formatTimestamp(fuzzyEndDate),
-        fuzzy_duration: formatDuration(fuzzyDurationMs),
-        ...group,
-        created_at_mtn: createdAtMtn,
-        created_at_utc: createdAtUtc,
-    }));
+    log_info(`Writing Salesforce fuzzy group import file to ${FUZZY_GROUP_OUTPUT_FILE}...`, script_start_ms);
+    await write_csv(FUZZY_GROUP_OUTPUT_FILE, fuzzy_group_sf_import);
+    log_success(`Salesforce fuzzy group import file written: ${FUZZY_GROUP_OUTPUT_FILE}`, script_start_ms);
 
-    logSuccess(`Fuzzy groups built. Groups found: ${fuzzyGroupsFinal.length.toLocaleString()}`, scriptStartMs);
-    logInfo(`Writing fuzzy groups to ${FUZZY_GROUP_OUTPUT_FILE}...`, scriptStartMs);
-
-    await writeCsv(FUZZY_GROUP_OUTPUT_FILE, fuzzyGroupsFinal);
-
-    logSuccess(`Fuzzy group file written: ${FUZZY_GROUP_OUTPUT_FILE}`, scriptStartMs);
-
-    const scriptEndDate = new Date();
-    const scriptDurationMs = Date.now() - scriptStartMs;
+    const script_end_date = new Date();
+    const script_duration_ms = Date.now() - script_start_ms;
 
     console.log("");
     console.log(colorize("bright", "Summary"));
     console.log(colorize("bright", "-------"));
-    console.log(`Script start time: ${formatTimestamp(scriptStartDate)}`);
-    console.log(`Script end time: ${formatTimestamp(scriptEndDate)}`);
-    console.log(`Script duration: ${formatDuration(scriptDurationMs)}`);
-    console.log(`Query start time: ${formatTimestamp(queryStartDate)}`);
-    console.log(`Query end time: ${formatTimestamp(queryEndDate)}`);
-    console.log(`Query duration: ${formatDuration(queryDurationMs)}`);
-    console.log(`Fuzzy start time: ${formatTimestamp(fuzzyStartDate)}`);
-    console.log(`Fuzzy end time: ${formatTimestamp(fuzzyEndDate)}`);
-    console.log(`Fuzzy duration: ${formatDuration(fuzzyDurationMs)}`);
-    console.log(`Created at MTN: ${createdAtMtn}`);
-    console.log(`Created at UTC: ${createdAtUtc}`);
+    console.log(`run_id: ${run_id}`);
+    console.log(`Script start time: ${format_timestamp_utc(script_start_date)}`);
+    console.log(`Script end time: ${format_timestamp_utc(script_end_date)}`);
+    console.log(`Script duration: ${format_duration(script_duration_ms)}`);
+    console.log(`Query start time: ${format_timestamp_utc(query_start_date)}`);
+    console.log(`Query end time: ${format_timestamp_utc(query_end_date)}`);
+    console.log(`Query duration: ${format_duration(query_duration_ms)}`);
+    console.log(`Fuzzy start time: ${format_timestamp_utc(fuzzy_start_date)}`);
+    console.log(`Fuzzy end time: ${format_timestamp_utc(fuzzy_end_date)}`);
+    console.log(`Fuzzy duration: ${format_duration(fuzzy_duration_ms)}`);
+    console.log(`created_at_mtn: ${created_at_mtn}`);
+    console.log(`created_at_utc: ${created_at_utc}`);
     console.log(`Total records scanned: ${result.records.length}`);
     console.log(`Salesforce total matching records: ${result.totalSize}`);
     console.log(`Hardcoded MAX_FETCH: ${MAX_FETCH}`);
     console.log(`Hardcoded FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
-    console.log(`Unique exact duplicate-check groups: ${exactGroups.size}`);
-    console.log(`Exact duplicate groups found: ${exactDuplicates.length}`);
-    console.log(`Exact duplicate record IDs excluded from fuzzy files: ${exactDuplicateRecordIds.size}`);
-    console.log(`Records after exact duplicate exclusion: ${recordsAfterExactExclusion.length}`);
-    console.log(`Records excluded from fuzzy because missing gender/birthdate/zip: ${recordsExcludedMissingRuleFields}`);
-    console.log(`Fuzzy candidate records scanned after exact exclusion and required-rule filters: ${fuzzyCandidateRecords.length}`);
-    console.log(`Fuzzy rule blocks created: ${ruleBlocks.size}`);
-    console.log(`Fuzzy pairs compared: ${pairsCompared.toLocaleString()}`);
-    console.log(`Fuzzy pairs skipped - exact cleaned first/last name: ${pairsSkippedExactCleanName.toLocaleString()}`);
-    console.log(`Fuzzy pairs skipped - below threshold: ${pairsSkippedBelowThreshold.toLocaleString()}`);
-    console.log(`Fuzzy pairs skipped - not strict gender/birthdate/zip rule: ${pairsSkippedNotStrictRule.toLocaleString()}`);
-    console.log(colorize("green", `Fuzzy pair matches found: ${fuzzyMatchesFinal.length.toLocaleString()}`));
-    console.log(colorize("green", `Fuzzy groups found: ${fuzzyGroupsFinal.length.toLocaleString()}`));
-    console.log(`Exact duplicate output written to: ${EXACT_OUTPUT_FILE}`);
-    console.log(`Fuzzy pair output written to: ${FUZZY_PAIR_OUTPUT_FILE}`);
-    console.log(`Fuzzy group output written to: ${FUZZY_GROUP_OUTPUT_FILE}`);
+    console.log(`Unique exact duplicate-check groups: ${exact_groups.size}`);
+    console.log(`Exact duplicate groups found: ${exact_duplicates_sf_import.length}`);
+    console.log(`Exact duplicate record IDs excluded from fuzzy files: ${exact_duplicate_record_ids.size}`);
+    console.log(`Records after exact duplicate exclusion: ${records_after_exact_exclusion.length}`);
+    console.log(`Records excluded from fuzzy because missing gender/birthdate/zip: ${records_excluded_missing_rule_fields}`);
+    console.log(`Fuzzy candidate records scanned after exact exclusion and required-rule filters: ${fuzzy_candidate_records.length}`);
+    console.log(`Fuzzy rule blocks created: ${rule_blocks.size}`);
+    console.log(`Fuzzy pairs compared: ${pairs_compared.toLocaleString()}`);
+    console.log(`Fuzzy pairs skipped - exact cleaned first/last name: ${pairs_skipped_exact_clean_name.toLocaleString()}`);
+    console.log(`Fuzzy pairs skipped - below threshold: ${pairs_skipped_below_threshold.toLocaleString()}`);
+    console.log(`Fuzzy pairs skipped - not strict gender/birthdate/zip rule: ${pairs_skipped_not_strict_rule.toLocaleString()}`);
+    console.log(colorize("green", `Fuzzy pair matches found: ${fuzzy_pair_sf_import.length.toLocaleString()}`));
+    console.log(colorize("green", `Fuzzy groups found: ${fuzzy_group_sf_import.length.toLocaleString()}`));
+    console.log(`Exact duplicate Salesforce import output written to: ${EXACT_OUTPUT_FILE}`);
+    console.log(`Fuzzy pair Salesforce import output written to: ${FUZZY_PAIR_OUTPUT_FILE}`);
+    console.log(`Fuzzy group Salesforce import output written to: ${FUZZY_GROUP_OUTPUT_FILE}`);
 }
 
 if (require.main === module) {
@@ -991,10 +1139,10 @@ if (require.main === module) {
 
     main()
         .then(() => {
-            logSuccess("Done.");
+            log_success("Done.");
         })
         .catch((error) => {
-            logError("Error during data load:");
+            log_error("Error during data load:");
             console.error(error);
             process.exit(1);
         });
