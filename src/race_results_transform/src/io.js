@@ -55,33 +55,56 @@
     return wb;
   }
 
+  function worksheet_rows(ws) {
+    var rows = [];
+    if (!ws) return rows;
+    var max_col = ws.columnCount || 0;
+    ws.eachRow({ includeEmpty: true }, function (row) {
+      var arr = [];
+      for (var c = 1; c <= max_col; c++) arr.push(flatten_cell(row.getCell(c).value));
+      rows.push(arr);
+    });
+    return rows;
+  }
+
+  // Single (first) sheet -> IR. Unchanged contract; used by the CLI/tests.
   async function read_to_ir(input) {
     var wb = await load_workbook(input);
     var ws = wb.worksheets[0];
-    var rows = [];
-    if (ws) {
-      var max_col = ws.columnCount || 0;
-      ws.eachRow({ includeEmpty: true }, function (row) {
-        var arr = [];
-        for (var c = 1; c <= max_col; c++) {
-          arr.push(flatten_cell(row.getCell(c).value));
-        }
-        rows.push(arr);
-      });
-    }
-    return { sheet_name: ws ? ws.name : 'Sheet1', rows: rows };
+    return { sheet_name: ws ? ws.name : 'Sheet1', rows: worksheet_rows(ws) };
   }
 
-  // Build an .xlsx (all cells written as text) from header + string rows.
-  async function grid_to_buffer(headers, rows) {
-    var wb = new ExcelJS.Workbook();
-    wb.creator = 'race_results_transform';
-    wb.created = new Date();
-    var ws = wb.addWorksheet('Rankings');
+  // Every non-empty worksheet -> IR[]. Used by the web app for multi-tab files.
+  async function read_to_irs(input) {
+    var wb = await load_workbook(input);
+    var out = [];
+    wb.worksheets.forEach(function (ws) {
+      var rows = worksheet_rows(ws);
+      var has_data = rows.some(function (r) { return r.some(function (v) { return v !== null && v !== undefined && String(v).trim() !== ''; }); });
+      if (has_data) out.push({ sheet_name: ws.name, rows: rows });
+    });
+    if (!out.length) { var w0 = wb.worksheets[0]; out.push({ sheet_name: w0 ? w0.name : 'Sheet1', rows: w0 ? worksheet_rows(w0) : [] }); }
+    return out;
+  }
+
+  var COL_WIDTHS = { 'Member Number': 16, 'Last Name': 18, 'First Name': 18, 'Gender': 10,
+    'DOB': 14, 'Email': 30, 'Address': 28, 'City': 18, 'State': 10, 'Zip': 12,
+    'Category': 15, 'Recorded Time': 18 };
+
+  // Excel sheet-name rules: <=31 chars, none of []:*?/\\, non-empty, unique.
+  function sanitize_sheet_name(name, used) {
+    var n = String(name == null ? '' : name).replace(/[\[\]:*?/\\]/g, ' ').trim().slice(0, 31);
+    if (!n) n = 'Sheet';
+    var base = n, i = 2;
+    while (used[n.toLowerCase()]) { var suffix = ' (' + (i++) + ')'; n = base.slice(0, 31 - suffix.length) + suffix; }
+    used[n.toLowerCase()] = true;
+    return n;
+  }
+
+  // Write one formatted worksheet (all cells as centred text, bold frozen header).
+  function format_sheet(ws, headers, rows) {
     ws.addRow(headers);
     rows.forEach(function (r) { ws.addRow(r); });
-    // Force text format (member #s / times not reinterpreted by Excel) and
-    // centre every cell.
     ws.eachRow(function (row) {
       row.eachCell({ includeEmpty: true }, function (cell) {
         cell.numFmt = '@';
@@ -89,16 +112,29 @@
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
       });
     });
-    // bold, centred, frozen header row + comfortable column widths
     ws.getRow(1).font = { bold: true };
     ws.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
     ws.views = [{ state: 'frozen', ySplit: 1 }];
-    var WIDTHS = { 'Member Number': 16, 'Last Name': 18, 'First Name': 18, 'Gender': 10,
-      'DOB': 14, 'Email': 30, 'Address': 28, 'City': 18, 'State': 10, 'Zip': 12,
-      'Category': 15, 'Recorded Time': 18 };
-    ws.columns.forEach(function (c, i) { c.width = WIDTHS[headers[i]] || 16; });
-    var out = await wb.xlsx.writeBuffer();
-    return out; // Node: Buffer-like; Browser: ArrayBuffer
+    ws.columns.forEach(function (c, i) { c.width = COL_WIDTHS[headers[i]] || 16; });
+  }
+
+  // Build a single-sheet .xlsx (all cells written as text).
+  async function grid_to_buffer(headers, rows) {
+    return grids_to_buffer([{ name: 'Rankings', headers: headers, rows: rows }]);
+  }
+
+  // Build a multi-sheet .xlsx — one worksheet per { name, headers, rows }.
+  async function grids_to_buffer(sheets) {
+    var wb = new ExcelJS.Workbook();
+    wb.creator = 'race_results_transform';
+    wb.created = new Date();
+    var used = {};
+    sheets.forEach(function (sh) {
+      var ws = wb.addWorksheet(sanitize_sheet_name(sh.name || 'Rankings', used));
+      format_sheet(ws, sh.headers, sh.rows);
+    });
+    if (!sheets.length) wb.addWorksheet('Rankings');
+    return wb.xlsx.writeBuffer(); // Node: Buffer-like; Browser: ArrayBuffer
   }
 
   // ---- CSV support (RFC-4180-ish; handles quoted fields with embedded
@@ -143,5 +179,17 @@
     return read_to_ir(filepath);
   }
 
-  return { read_to_ir: read_to_ir, csv_to_ir: csv_to_ir, read_file_to_ir: read_file_to_ir, parse_csv: parse_csv, grid_to_buffer: grid_to_buffer, _flattenCell: flatten_cell };
+  // Same, but returns every sheet (CSV -> single-element array).
+  async function read_file_to_irs(filepath) {
+    if (/\.csv$/i.test(filepath)) {
+      var fs = require('fs');
+      return [csv_to_ir(fs.readFileSync(filepath, 'utf8'))];
+    }
+    return read_to_irs(filepath);
+  }
+
+  return { read_to_ir: read_to_ir, read_to_irs: read_to_irs, csv_to_ir: csv_to_ir,
+    read_file_to_ir: read_file_to_ir, read_file_to_irs: read_file_to_irs,
+    parse_csv: parse_csv, grid_to_buffer: grid_to_buffer, grids_to_buffer: grids_to_buffer,
+    sanitize_sheet_name: sanitize_sheet_name, _flattenCell: flatten_cell };
 }));

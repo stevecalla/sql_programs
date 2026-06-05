@@ -376,3 +376,20 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 /* filter ("Showing only…") chip sits on its own row above the search bar so both
    tables' toolbars stay one line and line up */
 .tv-filter{display:inline-flex;align-items:center;gap:6px;margin:0 0 8px}
+
+/* multi-sheet (multi-tab workbook) bar */
+.sheet-bar{margin:0 0 14px}
+.sheet-note{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber);
+  border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:10px}
+.sheet-tabs{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;
+  border-bottom:2px solid var(--line);padding-bottom:0}
+.sheet-tab{position:relative;appearance:none;cursor:pointer;border:1px solid var(--line);
+  background:var(--bg);color:var(--dim);border-radius:9px 9px 0 0;padding:9px 18px;
+  font-size:13px;font-weight:700;letter-spacing:.01em;margin-bottom:-2px;
+  transition:background .12s,color .12s,box-shadow .12s}
+.sheet-tab:hover{color:var(--ink);background:var(--card);border-color:var(--brand)}
+.sheet-tab.active{color:var(--brand-ink);background:var(--brand);border-color:var(--brand);
+  box-shadow:0 -2px 0 var(--accent) inset,0 2px 8px rgba(21,40,78,.22);z-index:1}
+.sheet-tab.active::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;
+  background:var(--accent);border-radius:9px 9px 0 0}
+.sheet-tab .dim{font-weight:500;opacity:.8;color:inherit}

@@ -32,7 +32,7 @@ node ../../server_race_results_transform_8018.js        # http://localhost:8018/
 
 # command line
 node src/cli.js inspect "<file>.xlsx|.csv"    # show headers + auto-mapping, no write
-node src/cli.js convert "<file>"  [-o out]    # write a reformatted .xlsx
+node src/cli.js convert "<file>"  [-o out]    # write a reformatted .xlsx (one sheet per source sheet)
 node src/cli.js batch   <folder>  [-o dir]    # convert a whole folder
 node menu.js                                  # sectioned interactive menu (pauses after each command)
 
@@ -45,6 +45,9 @@ npm test            # or: node --test tests/*.test.js
 - A light/dark **theme toggle** (top-right). It follows your OS setting until you pick one.
 - One **Compare** card with tabs: **Tables · Mapping · Scorecard · Integrity · Field reference ·
   How it works**, plus a summary bar (score %, file name, flagged-value count, skipped rows).
+- **Multi-sheet workbooks:** if an uploaded `.xlsx` has more than one sheet, a notice and a
+  **sheet tab bar** appear; each sheet is converted independently (its own mapping, flags and
+  edits) and the download is a single `.xlsx` with one converted sheet per source sheet.
 - **Tables** side-by-side / stacked / tabs (switcher, remembered). Each table is searchable and
   sortable (case-insensitive), with a frozen header row and a friendly empty-state. **Link tables** (on by default)
   syncs search, sort, vertical scroll and the "Show rows" filter across both.

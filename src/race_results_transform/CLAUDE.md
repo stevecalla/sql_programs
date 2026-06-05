@@ -43,7 +43,9 @@ src/race_results_transform/
     reconcile.js       integrity readout + per-column scorecard
     mapping.js         editable mapping helpers + saved profiles (localStorage / in-mem)
     pipeline.js        convenience wiring (parse -> match -> transform -> reconcile)
-    io.js              Excel + CSV <-> IR adapter (exceljs); output is centered, wide cols, frozen header
+    io.js              Excel + CSV <-> IR adapter (exceljs). read_to_ir (first sheet) / read_to_irs
+                       (every sheet) ; grid_to_buffer / grids_to_buffer (one worksheet per group,
+                       names sanitized to <=31 chars, unique); output centered, wide, frozen header
     cli.js             scriptable converter (inspect / convert / batch)
   public/            web app: index.html, css/app.css, js/app.js, favicon.svg, vendor/exceljs.min.js
   menu.js            interactive launcher (pauses after each command)
@@ -88,6 +90,10 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 
 - Light/dark **theme toggle** (`#themeToggle`); follows OS via `prefers-color-scheme` unless a
   `theme` pref is set (`data-theme` on `<html>`). USAT navy `#15284e` + red `#e4002b`.
+- **Multi-sheet**: `io.read_to_irs` yields one IR per non-empty worksheet; `app.js` keeps a
+  per-sheet state bundle (mapping/overrides/approvals/edits/computed result) and a **sheet tab
+  bar** (`#sheetBar`) switches the active bundle. Download computes any unvisited sheet and calls
+  `io.grids_to_buffer` -> one workbook, a converted worksheet per source sheet. CSV = single sheet.
 - One **Compare** card with tabs (Tables/Mapping/Scorecard/Integrity/Field reference/How it works)
   + summary bar. Layout switch side/stacked/tabs. **Link tables** (default ON) syncs search, sort
   and vertical scroll across both `TableView`s.
@@ -114,7 +120,4 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 ## Full-name split
 
 When a source has no First/Last column but a single full-name column (`Name`, `Athlete Name`, …),
-`match.auto_map` claims it up front and marks `first_name`/`last_name` with `split:'first'|'last'`
-(confidence `split`). `transform.run` then derives each via `normalize.split_name` (handles
-`Last, First` and `First Middle Last`). `reconcile` skips the pass-through preservation check for
-split-derived columns since their values are computed, not copied.
+`match.a

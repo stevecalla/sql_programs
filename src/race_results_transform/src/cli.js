@@ -82,18 +82,24 @@ async function default_out_name(input) {
 }
 
 async function convert_one(input, out_path, opts) {
-  const ir = await io.read_file_to_ir(input);
+  const irs = await io.read_file_to_irs(input);   // every worksheet (CSV -> one)
   let mapping_override_text = null, value_overrides = null;
   if (opts.profile && fs.existsSync(opts.profile)) {
     const prof = JSON.parse(fs.readFileSync(opts.profile, 'utf8'));
     mapping_override_text = prof.mapping || null;
     value_overrides = prof.value_overrides || null;
   }
-  const res = pipe.convert(ir, { mapping_override_text: mapping_override_text, value_overrides: value_overrides });
-  const buf = await io.grid_to_buffer(res.result.headers, res.result.rows);
+  const results = irs.map(function (ir) {
+    return { ir: ir, res: pipe.convert(ir, { mapping_override_text: mapping_override_text, value_overrides: value_overrides }) };
+  });
+  const sheets = results.map(function (r) { return { name: r.ir.sheet_name, headers: r.res.result.headers, rows: r.res.result.rows }; });
+  const buf = await io.grids_to_buffer(sheets);
   fs.writeFileSync(out_path, Buffer.from(buf));
-  if (!opts.quiet) print_scorecard(res.report, path.basename(input) + '  ->  ' + path.basename(out_path));
-  return res.report;
+  if (!opts.quiet) {
+    const suffix = results.length > 1 ? '  (' + results.length + ' sheets)' : '';
+    results.forEach(function (r) { print_scorecard(r.res.report, path.basename(input) + ' [' + r.ir.sheet_name + ']  ->  ' + path.basename(out_path) + suffix); });
+  }
+  return results[0].res.report;
 }
 
 function print_inspect(input) {

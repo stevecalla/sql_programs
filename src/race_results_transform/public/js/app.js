@@ -33,7 +33,8 @@
   var S = {
     file_name: 'results', ir: null, parsed: null, mapping: null, value_overrides: {},
     result: null, report: null, work_rows: null, store: null, sig: null,
-    orig_table: null, conv_table: null, vm_expanded: {}, approved: {}, flag_info: null, link_tables: false
+    orig_table: null, conv_table: null, vm_expanded: {}, approved: {}, flag_info: null, link_tables: false,
+    sheets: null, active: null, first_render: true
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -204,32 +205,97 @@
     var is_csv = /\.csv$/i.test(file.name);
     var reader = new FileReader();
     reader.onload = function () {
-      var p = is_csv ? Promise.resolve(io.csv_to_ir(reader.result)) : io.read_to_ir(reader.result);
-      p.then(function (ir) { on_ir(ir); }).catch(function (e) { alert('Could not read file: ' + e.message); });
+      var p = is_csv ? Promise.resolve([io.csv_to_ir(reader.result)]) : io.read_to_irs(reader.result);
+      p.then(function (irs) { on_workbook(irs); }).catch(function (e) { alert('Could not read file: ' + e.message); });
     };
     if (is_csv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
 
-  function on_ir(ir) {
-    S.ir = ir;
-    S.parsed = parse.detect_table(ir);
-    S.sig = mapper.header_signature(S.parsed.headers);
-    S.value_overrides = {}; S.vm_expanded = {}; S.approved = {};
-    var prof = S.store.get(S.sig);
+  // Build a per-sheet state bundle (one per worksheet / the single CSV).
+  function make_bundle(ir) {
+    var parsed = parse.detect_table(ir);
+    var sig = mapper.header_signature(parsed.headers);
+    var b = { name: ir.sheet_name, ir: ir, parsed: parsed, sig: sig,
+      value_overrides: {}, vm_expanded: {}, approved: {}, computed: false,
+      mapping: null, used_profile: false, result: null, report: null, work_rows: null };
+    var prof = S.store.get(sig);
     if (prof && prof.mapping) {
-      S.mapping = mapper.text_to_mapping(prof.mapping, S.parsed.headers);
-      S.value_overrides = prof.value_overrides || {}; show_profile_bar(true);
-    } else { S.mapping = match.auto_map(S.parsed.headers).mapping; show_profile_bar(false); }
-    recompute(true);
+      b.mapping = mapper.text_to_mapping(prof.mapping, parsed.headers);
+      b.value_overrides = prof.value_overrides || {}; b.used_profile = true;
+    } else { b.mapping = match.auto_map(parsed.headers).mapping; }
+    return b;
+  }
+
+  function on_workbook(irs) {
+    S.sheets = irs.map(make_bundle);
+    S.active = null; S.first_render = true;
+    render_sheet_bar();
     hide('uploadCard'); hide('introCard'); show('clearBtn');
+    activate_sheet(0);
     $('summaryBar').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // Compute a bundle's converted output without disturbing the active S.* view.
+  function compute_bundle(b) {
+    if (b.computed) return;
+    var res = transform.run(b.parsed, b.mapping, { value_overrides: b.value_overrides });
+    b.result = res;
+    b.report = reconcile.build(b.parsed, b.mapping, res);
+    b.work_rows = res.rows.map(function (r) { return r.slice(); });
+    b.computed = true;
+  }
+
+  // Persist the live S.* working fields back into the active bundle.
+  function save_active() {
+    if (S.active == null || !S.sheets || !S.sheets[S.active]) return;
+    var b = S.sheets[S.active];
+    b.mapping = S.mapping; b.value_overrides = S.value_overrides; b.vm_expanded = S.vm_expanded;
+    b.approved = S.approved; b.result = S.result; b.report = S.report; b.work_rows = S.work_rows;
+    b.computed = true;
+  }
+
+  function activate_sheet(i) {
+    if (i === S.active) return;
+    save_active();
+    var b = S.sheets && S.sheets[i]; if (!b) return;
+    S.active = i;
+    S.ir = b.ir; S.parsed = b.parsed; S.sig = b.sig; S.mapping = b.mapping;
+    S.value_overrides = b.value_overrides; S.vm_expanded = b.vm_expanded; S.approved = b.approved;
+    show_profile_bar(b.used_profile);
+    if (!b.computed) { compute(); b.result = S.result; b.report = S.report; b.work_rows = S.work_rows; b.computed = true; }
+    else { S.result = b.result; S.report = b.report; S.work_rows = b.work_rows; S.flag_info = build_flag_info(); }
+    render_all(S.first_render);
+    S.first_render = false;
+    update_sheet_bar();
+  }
+
+  function render_sheet_bar() {
+    var bar = $('sheetBar'); if (!bar) return;
+    if (!S.sheets || S.sheets.length < 2) { hide('sheetBar'); bar.innerHTML = ''; return; }
+    var tabs = S.sheets.map(function (b, i) {
+      return '<button class="sheet-tab" data-i="' + i + '" title="' + esc(b.name) + '">' +
+        esc(b.name) + ' <span class="dim">(' + b.parsed.data_rows.length + ')</span></button>';
+    }).join('');
+    bar.innerHTML = '<div class="sheet-note">\uD83D\uDCD1 This workbook has <b>' + S.sheets.length +
+      '</b> sheets — each is converted separately and saved as its own sheet when you download.</div>' +
+      '<div class="sheet-tabs">' + tabs + '</div>';
+    show('sheetBar');
+    bar.querySelectorAll('.sheet-tab').forEach(function (btn) {
+      btn.addEventListener('click', function () { activate_sheet(+btn.dataset.i); });
+    });
+    update_sheet_bar();
+  }
+  function update_sheet_bar() {
+    var bar = $('sheetBar'); if (!bar) return;
+    bar.querySelectorAll('.sheet-tab').forEach(function (btn) { btn.classList.toggle('active', +btn.dataset.i === S.active); });
   }
 
   function clear_all() {
     S.ir = S.parsed = S.mapping = S.result = S.report = S.work_rows = null;
     S.value_overrides = {}; S.vm_expanded = {}; S.approved = {}; S.orig_table = S.conv_table = null;
+    S.sheets = null; S.active = null; S.first_render = true;
     $('fileInput').value = '';
-    ['summaryBar', 'compareCard', 'profileBar', 'clearBtn', 'flagLegend'].forEach(hide);
+    ['summaryBar', 'compareCard', 'profileBar', 'clearBtn', 'flagLegend', 'sheetBar'].forEach(hide);
     show('uploadCard'); show('introCard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -285,15 +351,18 @@
   }
 
   // ---------- recompute ----------
-  function recompute(first_time) {
+  function compute() {
     S.result = transform.run(S.parsed, S.mapping, { value_overrides: S.value_overrides });
     S.report = reconcile.build(S.parsed, S.mapping, S.result);
     S.work_rows = S.result.rows.map(function (r) { return r.slice(); });
     S.flag_info = build_flag_info();
+  }
+  function render_all(first_time) {
     render_summary(); render_compare(first_time); render_scorecard(); render_mapping(); render_integrity();
     ['summaryBar', 'compareCard'].forEach(show);
     if (first_time) apply_collapse_defaults();
   }
+  function recompute(first_time) { compute(); render_all(first_time); }
 
   function render_summary() {
     var sc = S.report.scorecard, rep = S.report, n = function (x) { return x.toLocaleString(); };
@@ -614,13 +683,22 @@
   }
 
     // ---------- download ----------
+  function save_blob(buf, name) {
+    var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
   function download() {
-    io.grid_to_buffer(S.result.headers, S.conv_table.export_rows()).then(function (buf) {
-      var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = S.file_name + ' - formatted.xlsx';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-    });
+    save_active();
+    var name = S.file_name + ' - formatted.xlsx';
+    if (S.sheets && S.sheets.length > 1) {
+      S.sheets.forEach(compute_bundle);
+      var payload = S.sheets.map(function (b) { return { name: b.name, headers: b.result.headers, rows: b.work_rows }; });
+      io.grids_to_buffer(payload).then(function (buf) { save_blob(buf, name); });
+    } else {
+      io.grids_to_buffer([{ name: 'Rankings', headers: S.result.headers, rows: S.conv_table.export_rows() }]).then(function (buf) { save_blob(buf, name); });
+    }
   }
   function save_profile() {
     if (!S.sig) return;
