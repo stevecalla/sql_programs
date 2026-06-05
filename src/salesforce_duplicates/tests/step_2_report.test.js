@@ -94,7 +94,7 @@ describe('execute_get_duplicate_report', () => {
 });
 
 describe('create_duplicate_message', () => {
-    test('includes total records scanned, counts, and a freshness note', () => {
+    test('includes total records scanned, counts, and the generated-ago line', () => {
         const { main_message_text } = create_duplicate_message(
             { exact: 2, fuzzy_pair: 1, fuzzy_group: 0 },
             { file_selector: 'all', age_minutes: 3, mode: 'latest', regenerated: false, total_records_scanned: 695827 }
@@ -105,26 +105,31 @@ describe('create_duplicate_message', () => {
         assert.ok(main_message_text.includes('Generated 3 min ago'));
     });
 
-    test('mode=run that returned latest explains the freshness guard + force option', () => {
-        const { main_message_text } = create_duplicate_message(
+    test('mode=run that returned latest -> clear ⚠️ warning + force option', () => {
+        const { main_message_text, warning } = create_duplicate_message(
             { exact: 2, fuzzy_pair: 1, fuzzy_group: 0 },
             { mode: 'run', regenerated: false, age_minutes: 5, fresh_window_minutes: 30 }
         );
-        assert.ok(main_message_text.includes('newer than 30 minutes'));
-        assert.ok(main_message_text.includes('force=true'));
+        assert.ok(warning, 'warning should be set');
+        assert.ok(warning.startsWith('⚠️'), 'warning should lead with ⚠️');
+        assert.ok(warning.includes('30 min'), 'warning mentions the window');
+        assert.ok(warning.includes('mode=run force=true'), 'warning shows the force option');
+        assert.ok(main_message_text.includes('EXISTING files'), 'warning is in the message body');
     });
 
-    test('freshly regenerated -> no force note', () => {
-        const { main_message_text } = create_duplicate_message(
+    test('freshly regenerated -> no warning', () => {
+        const { main_message_text, warning } = create_duplicate_message(
             { exact: 2, fuzzy_pair: 1, fuzzy_group: 0 },
             { mode: 'run', regenerated: true, fresh_window_minutes: 30 }
         );
+        assert.equal(warning, null);
         assert.ok(main_message_text.includes('Freshly regenerated'));
         assert.ok(!main_message_text.includes('force=true'));
     });
 
-    test('no output -> guidance message', () => {
-        const { main_message_text } = create_duplicate_message({}, { has_output: false });
+    test('no output -> guidance message, null warning', () => {
+        const { main_message_text, warning } = create_duplicate_message({}, { has_output: false });
+        assert.equal(warning, null);
         assert.ok(main_message_text.includes('No Salesforce duplicate output'));
     });
 });

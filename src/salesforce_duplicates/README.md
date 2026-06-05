@@ -21,6 +21,8 @@ account_fuzzy_name_groups_sf_import.csv
 ```text
 salesforce_duplicates/
   step_1_find_duplicates.js   orchestrator (exact + fuzzy pipeline + run summary)
+  step_2_get_duplicate_report.js / step_2a_create_duplicate_message.js   server report + message
+  report_service.js         server glue (slash-arg parsing + freshness/force logic; tested)
   config.js                 run-mode flag resolver, thresholds, output file + folder names
   menu.js                   interactive launcher (node menu.js)
   src/
@@ -30,13 +32,16 @@ salesforce_duplicates/
     normalize.js            field cleaning + key builders (pure)
     matcher.js              levenshtein, similarity, rule flags, reasons (pure)
     grouping.js             UnionFind + fuzzy group builder
+    step_timer.js           per-step stopwatch: live [STEP] lines + end timeline
     exact.js                exact-duplicate detection
     fuzzy.js                fuzzy candidate filter + rule blocks + pairwise compare
     sf_rows.js              maps result rows to the Salesforce import schema
     output_files.js         CSV write + output/archive rotation
-    salesforce.js           jsforce connect + Account query (only networked module)
-  tests/                    node:test unit tests (normalize, matcher, grouping,
-                            ids, sf_rows, exact, fuzzy, file output)
+    salesforce.js           jsforce connect + Account query (--test=REST/ordered,
+                            --prod=Bulk API/unordered)
+  tests/                    node:test unit tests (normalize, matcher, grouping, ids,
+                            sf_rows, exact, fuzzy, file output, step_2 report,
+                            report_service, step_timer)
   README.md / CLAUDE.md / schema.md
 ```
 
@@ -161,18 +166,37 @@ SELECT Id,
 FROM Account
 WHERE FirstName != null
 AND LastName != null
-ORDER BY LastName, FirstName, Id
+-- ORDER BY LastName, FirstName, Id   (added only for the --test pull)
 ```
 
-The `ORDER BY` makes test runs deterministic.
+**`ORDER BY` is applied to the `--test` pull only.** The duplicate detection never
+needs sorted input — exact matching uses a hash Map, fuzzy matching uses rule-block
+buckets, and all three output files are sorted in code afterward. So:
 
-For example, if `MAX_FETCH = 5000`, the script pulls the first 5,000 records ordered by:
+- **`--test`** uses the **ordered** query (`ACCOUNT_SOQL_ORDERED`). With
+  `MAX_FETCH = 5000`, the script pulls the first 5,000 records ordered by
+  `LastName, FirstName, Id` — a stable, deterministic sample (not random), so repeat
+  test runs see the same rows.
+- **`--prod`** uses the **unordered** query (`ACCOUNT_SOQL_BASE`). On the full
+  ~700k-record extract, forcing Salesforce to sort the entire result set before
+  sending it is the slowest part of the fetch; dropping `ORDER BY` lets Salesforce
+  stream records as it finds them. Output ordering is unaffected (sorted in code).
+
+## Fetch Method (REST vs. Bulk API)
+
+The download method depends on the run mode (see `src/salesforce.js`):
 
 ```text
-LastName, FirstName, Id
+--test (dev sandbox)  REST autoFetch, capped at MAX_FETCH (5,000). Fast for a
+                      small pull; Bulk's job-startup overhead would be slower here.
+--prod (full run)     Bulk API query (conn.bulk2.query). Pulls the whole result
+                      set in a few large transfers instead of REST paging 2,000 at
+                      a time (~350 round-trips for ~700k records) — much faster.
 ```
 
-This is not a random sample.
+Both paths return the same shape to the rest of the pipeline, so nothing
+downstream changes. Bulk jobs run asynchronously server-side, so the poll timeout
+is set generously (20 min) to allow a large extract to finish.
 
 ## Composite ZIP Logic
 
@@ -760,7 +784,40 @@ curl -X POST http://localhost:8017/salesforce-duplicates-reporting -d "text=mode
 
 ## Console Logging
 
-The script logs useful run details, including:
+### Step timing (live + end-of-run timeline)
+
+As each major step finishes, the script prints a live one-line marker so you can
+watch progress and see exactly when each stage completes:
+
+```text
+[STEP] archive prior outputs           0.1s
+[STEP] fetch from Salesforce           107.0s
+[STEP] exact duplicates                3.2s
+[STEP] fuzzy matching                  6.8s
+[STEP] fuzzy groups                    0.4s
+```
+
+Just before the run summary, it prints a timeline sorted largest-first (with bars)
+so the slow stage is obvious at a glance:
+
+```text
+──────────────────────────────────────────────────────
+Run timing (largest first):
+  fetch from Salesforce            107.00s  ████████████████████████████
+  fuzzy matching                     6.80s  ██
+  exact duplicates                   3.20s  █
+  fuzzy groups                       0.40s
+  ────────────────────────────── ────────
+  TOTAL                            117.40s
+──────────────────────────────────────────────────────
+```
+
+This mirrors the stage timer in `event_analysis/build_all.js`. Implemented in
+`src/step_timer.js` (`create_step_timer`).
+
+### Run summary
+
+The script also logs the full run summary, including:
 
 ```text
 Script start time
@@ -899,21 +956,17 @@ const MAX_FETCH = 1000000;
 
 ## Known Limitations
 
-### Salesforce fetch order is deterministic, not random
+### The `--test` sample is deterministic, not random
 
-With:
-
-```sql
-ORDER BY LastName, FirstName, Id
-```
-
-and:
+The `--test` pull applies `ORDER BY LastName, FirstName, Id`, so with:
 
 ```js
 const MAX_FETCH = 5000;
 ```
 
-the script gets the first 5,000 records alphabetically by last name, first name, and ID.
+it gets the first 5,000 records alphabetically by last name, first name, and ID —
+the same rows on every test run. (The `--prod` pull is unordered for speed; on a full
+run every record is fetched, so order doesn't matter.)
 
 ### Formula fields are handled in Node.js
 

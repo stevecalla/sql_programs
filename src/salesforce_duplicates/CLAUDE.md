@@ -26,6 +26,8 @@ salesforce_duplicates/
   step_1_find_duplicates.js   orchestrator: exact + fuzzy pipeline + run summary
   step_2_get_duplicate_report.js   locate latest output CSVs + counts (for the server)
   step_2a_create_duplicate_message.js   build the Slack summary text
+  report_service.js         server glue: parse_report_args + resolve_report
+                            (slash-arg parsing + freshness/force logic; testable)
   config.js                 run-mode flag resolver, thresholds, freshness window,
                             output filenames, dir names
   menu.js                   interactive CLI launcher
@@ -36,25 +38,44 @@ salesforce_duplicates/
     normalize.js            field cleaning + key builders (pure)
     matcher.js              levenshtein, similarity, rule flags, reason strings (pure)
     grouping.js             UnionFind + build_fuzzy_groups
+    step_timer.js           create_step_timer: live [STEP] lines + end-of-run
+                            timeline (mirrors event_analysis stage timer)
     exact.js                detect_exact_duplicates (+ its summary logger)
     fuzzy.js                run_fuzzy_matching: candidate filter, rule blocks,
                             pairwise compare (+ its two summary loggers)
     sf_rows.js              to_sf_exact/pair/group_row — Salesforce import schema mapping
     output_files.js         add_timestamp_to_filename, write_csv, archive rotation
-    salesforce.js           jsforce connect + Account query (only networked module)
+    salesforce.js           jsforce connect + Account query (only networked module);
+                            --test uses REST autoFetch (ORDERED SOQL, for a stable
+                            capped subset), --prod uses the Bulk API (UNORDERED SOQL
+                            so SF doesn't sort ~700k rows before streaming)
     summaries.js            log_run_summary (final run summary block)
   tests/                    node:test unit tests:
     normalize.test.js  matcher.test.js  grouping.test.js  ids.test.js
     sf_rows.test.js  exact.test.js  fuzzy.test.js
     file_output.test.js     CSV write + archive rotation
     step_2_report.test.js   report module (counts + latest-file selection)
+    report_service.test.js  slash-arg parsing + freshness/force (injected deps)
   README.md                 algorithm + field reference
   schema.md                 Salesforce custom-object/import schema notes
 ```
 
 `main()` is a thin orchestrator (~230 lines): resolve mode -> archive -> fetch ->
 `detect_exact_duplicates` -> write -> `run_fuzzy_matching` -> write ->
-`build_fuzzy_groups` -> write -> `log_run_summary`.
+`build_fuzzy_groups` -> write -> `log_run_summary`. A `create_step_timer()` runs
+alongside it: `timer.stage_done(label)` after each big step prints a live
+`[STEP] <label> — <Xs>` line, and `timer.print_summary()` prints a sorted
+(largest-first) timeline just before the run summary.
+
+## Performance notes
+
+- **Fetch (the dominant cost at full scale).** `--prod` uses the Bulk API with the
+  UNORDERED query (`ACCOUNT_SOQL_BASE`). Dedup never needs sorted input (exact uses a
+  Map, fuzzy uses rule-block buckets, outputs are sorted in code), so dropping
+  `ORDER BY` lets Salesforce stream rows without sorting the whole ~700k set first.
+  `--test` keeps the ORDERED query so the capped 5,000-row sample is deterministic.
+- **Where the time goes** is visible at a glance in the step-timer timeline at the end
+  of each run; the run summary still prints the precise Query/Fuzzy/Script durations.
 
 ## Slack server
 

@@ -1,0 +1,17 @@
+{
+  "name": "race_results_transform",
+  "version": "1.0.0",
+  "description": "Reformat race-results spreadsheets to the USAT rankings template — browser app + CLI sharing one isomorphic engine.",
+  "private": true,
+  "bin": {
+    "race-results-transform": "src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "cli": "node src/cli.js",
+    "menu": "node menu.js",
+    "convert:examples": "node src/cli.js batch data/inputs -o data/outputs",
+    "start": "node ../../server_race_results_transform_8018.js"
+  },
+  "engines": { "node": ">=18" }
+}

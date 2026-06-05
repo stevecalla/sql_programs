@@ -17,6 +17,7 @@ const { colorize, log_info, log_success, log_warn, log_error } = require("./src/
 const { format_timestamp_utc, format_timestamp_mtn } = require("./src/fmt");
 const { build_fuzzy_groups } = require("./src/grouping");
 const { make_run_id } = require("./src/ids");
+const { create_step_timer } = require("./src/step_timer");
 const { add_timestamp_to_filename, write_csv, archive_previous_output_files, write_run_summary } = require("./src/output_files");
 const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row } = require("./src/sf_rows");
 const { fetch_salesforce_accounts } = require("./src/salesforce");
@@ -27,6 +28,7 @@ const { log_run_summary } = require("./src/summaries");
 async function main(is_test = resolve_is_test()) {
     const script_start_date = new Date();
     const script_start_ms = Date.now();
+    const timer = create_step_timer(); // per-step stopwatch (live + end timeline)
 
     const max_fetch = is_test ? TEST_MAX_FETCH : PROD_MAX_FETCH;
 
@@ -50,9 +52,11 @@ async function main(is_test = resolve_is_test()) {
     const fuzzy_pair_output_file = add_timestamp_to_filename(FUZZY_PAIR_OUTPUT_FILE, file_timestamp);
     const fuzzy_group_output_file = add_timestamp_to_filename(FUZZY_GROUP_OUTPUT_FILE, file_timestamp);
     log_success(`Output directory ready: ${output_dir}`, script_start_ms);
+    timer.stage_done("archive prior outputs");
 
     const { result, query_start_date, query_end_date, query_duration_ms } =
         await fetch_salesforce_accounts({ is_test, max_fetch, script_start_ms });
+    timer.stage_done("fetch from Salesforce");
 
     if (result.records.length === 0) {
         log_warn("No records returned. Ending script.");
@@ -90,6 +94,7 @@ async function main(is_test = resolve_is_test()) {
     log_info(`Writing Salesforce exact duplicate import file to ${exact_output_file}...`, script_start_ms);
     const exact_output_path = await write_csv(output_dir, exact_output_file, exact_duplicates_sf_import);
     log_success(`Salesforce exact duplicate import file written: ${exact_output_path}`, script_start_ms);
+    timer.stage_done("exact duplicates");
 
     const fuzzy_start_date = new Date();
     const fuzzy_start_ms = Date.now();
@@ -144,6 +149,7 @@ async function main(is_test = resolve_is_test()) {
     log_info(`Writing Salesforce fuzzy pair import file to ${fuzzy_pair_output_file}...`, script_start_ms);
     const fuzzy_pair_output_path = await write_csv(output_dir, fuzzy_pair_output_file, fuzzy_pair_sf_import);
     log_success(`Salesforce fuzzy pair import file written: ${fuzzy_pair_output_path}`, script_start_ms);
+    timer.stage_done("fuzzy matching");
 
     log_info("Building fuzzy grouped duplicate file...", script_start_ms);
 
@@ -172,6 +178,7 @@ async function main(is_test = resolve_is_test()) {
     log_info(`Writing Salesforce fuzzy group import file to ${fuzzy_group_output_file}...`, script_start_ms);
     const fuzzy_group_output_path = await write_csv(output_dir, fuzzy_group_output_file, fuzzy_group_sf_import);
     log_success(`Salesforce fuzzy group import file written: ${fuzzy_group_output_path}`, script_start_ms);
+    timer.stage_done("fuzzy groups");
 
     // Persist a small run summary (read back by the Slack server's report).
     await write_run_summary({
@@ -188,6 +195,9 @@ async function main(is_test = resolve_is_test()) {
 
     const script_end_date = new Date();
     const script_duration_ms = Date.now() - script_start_ms;
+
+    // Step-by-step timeline (largest first) — quick read on where the time went.
+    timer.print_summary();
 
     log_run_summary({
         run_id,

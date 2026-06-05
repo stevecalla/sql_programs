@@ -54,17 +54,20 @@ async function post_slack_message({ channelId, text, thread_ts }) {
   }
 }
 
-async function file_upload_to_slack(file_directory, file_path, channelId, thread_ts, month, type, is_reported) {
+async function file_upload_to_slack(file_directory, file_path, channelId, thread_ts, month, type, is_reported, initial_comment_override) {
   const { file_blocks } = await get_upload_files(file_directory, file_path);
 
   if (file_blocks.length > 0) {
-    // Only append the Month/Type/Reported detail when those values are
-    // provided (the event-analysis server passes them; the duplicates server
-    // does not). Avoids an irrelevant "Month=, Type=, Reported=" line.
+    // Use an explicit override when the caller provides one; otherwise only
+    // append the Month/Type/Reported detail when those values are provided
+    // (the event-analysis server passes them; the duplicates server does not).
     const has_detail = [month, type, is_reported].some((v) => v != null && v !== '');
-    const initial_comment = has_detail
-      ? `🧾 Attached file(s):\nMonth=${month}, Type=${type}, Reported=${is_reported}`
-      : '🧾 Attached file(s):';
+    const initial_comment =
+      (initial_comment_override != null && initial_comment_override !== '')
+        ? initial_comment_override
+        : has_detail
+          ? `🧾 Attached file(s):\nMonth=${month}, Type=${type}, Reported=${is_reported}`
+          : '🧾 Attached file(s):';
     await web.filesUploadV2({
       channel_id: channelId,
       thread_ts,
@@ -94,7 +97,8 @@ async function upload_single_file_to_thread_scheduled(
   // 'all' — the same values it used to leak — keeping its behavior unchanged.
   month = 'all',
   type = 'all',
-  is_reported = 'all',) {
+  is_reported = 'all',
+  initial_comment_override,) {
 
   // console.log('========= channel id =', channelId);
   // console.log('========= channel name = ', channel_name);
@@ -116,7 +120,7 @@ async function upload_single_file_to_thread_scheduled(
   // });
 
   // 3. Post a single reply in the thread with all files
-  await file_upload_to_slack(file_directory, file_path, channelId, thread_ts, month, type, is_reported);
+  await file_upload_to_slack(file_directory, file_path, channelId, thread_ts, month, type, is_reported, initial_comment_override);
 }
 
 async function upload_single_file_to_thread_user(
@@ -126,9 +130,10 @@ async function upload_single_file_to_thread_user(
   mainMessageText = '📊 Here is the latest batch of reports:',
   channel_name,
   user_id,
-  month, 
+  month,
   type,
   is_reported,
+  initial_comment_override,
 ) {
   // console.log('========= channel id =', channelId);
   console.log('========= channel name = ', channel_name);
@@ -143,7 +148,7 @@ async function upload_single_file_to_thread_user(
   const thread_ts = parent.ts;
 
   // 3. Post a single reply in the thread with all files
-  await file_upload_to_slack(file_directory, file_path, channelId, thread_ts, month, type, is_reported);
+  await file_upload_to_slack(file_directory, file_path, channelId, thread_ts, month, type, is_reported, initial_comment_override);
 
   // 4) get a permalink to the parent message
   const { permalink } = await web.chat.getPermalink({ channel: channelId, message_ts: parent.ts });

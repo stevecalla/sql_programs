@@ -17,6 +17,7 @@ const { execute_get_salesforce_duplicates_data } = require('./src/salesforce_dup
 const { execute_get_duplicate_report } = require('./src/salesforce_duplicates/step_2_get_duplicate_report');
 const { create_duplicate_message } = require('./src/salesforce_duplicates/step_2a_create_duplicate_message');
 const { FRESH_OUTPUT_WINDOW_MINUTES } = require('./src/salesforce_duplicates/config');
+const { parse_report_args, resolve_report } = require('./src/salesforce_duplicates/report_service');
 
 // SLACK MESSAGING UTILITIES (shared with the other servers)
 const { send_slack_followup_message } = require('./utilities/slack_messaging/send_message_api_v2_followup');
@@ -65,62 +66,9 @@ app.use(bodyParser.json());
 //   /duplicates file=exact           -> latest exact-duplicates file only
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Parse the slash-command "text" (key=value pairs) into { mode, file, force }.
-// Mirrors the arg-parsing pattern in server_slack_events.js.
-function parse_report_args(req) {
-    let mode = req.query?.mode ?? null;     // 'latest' | 'run'
-    let file = req.query?.file ?? null;     // 'all' | 'exact' | 'fuzzy_pair' | 'fuzzy_group'
-    let force = req.query?.force ?? null;   // 'true' bypasses the freshness window
-
-    if (req.body && Object.keys(req.body).length > 0 && req.body.text) {
-        const args = req.body.text.trim().split(/\s+/);
-        for (const arg of args) {
-            const [key, value] = arg.split('=');
-            if (key && value) {
-                const normalizedKey = key.toLowerCase();
-                switch (normalizedKey) {
-                    case 'mode':
-                        if (!mode) mode = value;
-                        break;
-                    case 'file':
-                        if (!file) file = value;
-                        break;
-                    case 'force':
-                        if (!force) force = value;
-                        break;
-                    default:
-                        console.warn(`Unknown parameter: ${key}`);
-                }
-            }
-        }
-    }
-
-    // Defaults: latest (no Salesforce pull), all files, no force.
-    mode = (mode ?? '').trim() || 'latest';
-    file = (file ?? '').trim() || 'all';
-    const force_bool = String(force ?? '').trim().toLowerCase() === 'true';
-    return { mode, file, force: force_bool };
-}
-
-// Resolve the report. mode=run regenerates against production when the latest
-// output is older than the freshness window — OR whenever force=true is set
-// (which bypasses the window). Otherwise it returns the latest files as-is.
-async function resolve_report({ mode, file, force = false }) {
-    let report = await execute_get_duplicate_report(file);
-    let regenerated = false;
-
-    const stale = report.age_minutes == null || report.age_minutes > FRESH_OUTPUT_WINDOW_MINUTES;
-
-    if (mode === 'run' && (force || stale)) {
-        const why = force ? 'force=true (bypassing freshness window)' : `output stale (age=${report.age_minutes})`;
-        console.log(`mode=run — regenerating (production); ${why}...`);
-        await execute_get_salesforce_duplicates_data(false); // server always regenerates against production
-        report = await execute_get_duplicate_report(file);
-        regenerated = true;
-    }
-
-    return { ...report, mode, regenerated };
-}
+// parse_report_args + resolve_report now live in
+// ./src/salesforce_duplicates/report_service (imported above) so the slash-arg
+// parsing + freshness/force logic can be unit-tested without Salesforce.
 
 // ===========================
 // GET /salesforce-duplicates-test  — health check
@@ -314,7 +262,7 @@ app.post('/salesforce-duplicates-reporting', async (req, res) => {
         const report = await resolve_report({ mode, file, force });
 
         // STEP 2: CREATE SLACK MESSAGE (stats summary travels with the files)
-        const { main_message_text } = create_duplicate_message(report.counts, {
+        const { main_message_text, warning } = create_duplicate_message(report.counts, {
             file_selector: file,
             age_minutes: report.age_minutes,
             mode,
@@ -325,7 +273,9 @@ app.post('/salesforce-duplicates-reporting', async (req, res) => {
         });
 
         // STEP 3: SEND FILE(S) + STATS TO THE USER (DM)
-        // (pass null for month/type/is_reported — not relevant to duplicates)
+        // (null month/type/is_reported — not relevant to duplicates; surface the
+        //  freshness warning on the file-attachment comment too when present)
+        const file_comment = warning ? `${warning}\n\n🧾 Attached file(s):` : undefined;
         await upload_single_file_to_thread_user(
             report.file_directory,
             report.file_path,
@@ -336,6 +286,7 @@ app.post('/salesforce-duplicates-reporting', async (req, res) => {
             null,
             null,
             null,
+            file_comment,
         );
     } catch (error) {
         console.error('Error querying or sending salesforce duplicate report.', error);
