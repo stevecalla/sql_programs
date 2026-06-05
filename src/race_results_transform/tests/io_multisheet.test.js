@@ -1,5 +1,5 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const ExcelJS = require('exceljs');
 const io = require('../src/io');
@@ -16,6 +16,7 @@ async function two_sheet_book() {
   return wb.xlsx.writeBuffer();
 }
 
+describe('io_multisheet', () => {
 test('read_to_irs returns one IR per non-empty worksheet (empty skipped)', async () => {
   const irs = await io.read_to_irs(await two_sheet_book());
   assert.equal(irs.length, 2);
@@ -55,4 +56,5 @@ test('grid_to_buffer (single sheet) still works via grids_to_buffer', async () =
   await wb.xlsx.load(buf);
   assert.equal(wb.worksheets.length, 1);
   assert.equal(wb.worksheets[0].getRow(2).getCell(1).value, 'Smith');
+});
 });

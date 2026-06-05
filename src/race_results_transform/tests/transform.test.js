@@ -1,11 +1,12 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const pipe = require('../src/pipeline');
 
 function ir(headers, rows) { return { sheet_name: 'S', rows: [headers].concat(rows) }; }
 const HEAD = ['Last Name', 'First Name', 'Gender', 'DOB', 'Email', 'City', 'State', 'Zip', 'Category', 'Final Time', 'USAT membership'];
 
+describe('transform', () => {
 test('value override changes output and clears that cell flag', () => {
   const rows = [['Smith', 'Al', 'M', '1990-01-01', 'a@b.com', 'Reno', 'NV', '89501', 'Alpha Sprint', '01:00:00', 'Valid']];
   const base = pipe.convert(ir(HEAD, rows), {});
@@ -29,4 +30,5 @@ test('member distinct exposes non-numeric values; override sets a real number', 
   const ov = pipe.convert(ir(HEAD, rows), { value_overrides: { member_number: { 'valid': '12345' } } });
   const mi = ov.result.headers.indexOf('Member Number');
   assert.equal(ov.result.rows[0][mi], '12345');
+});
 });

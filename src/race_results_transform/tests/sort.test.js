@@ -1,10 +1,11 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const sort = require('../src/sort');
 
 function ordered(arr) { return arr.slice().sort(sort.compare_text); }
 
+describe('sort', () => {
 test('sort is case-insensitive (caps do not cluster first)', () => {
   assert.deepEqual(
     ordered(['Zebra', 'alice', 'Bob', 'apple', 'Banana']),
@@ -33,4 +34,5 @@ test('embedded numbers sort naturally', () => {
 test('blanks and null sort to the top, no throw', () => {
   assert.equal(sort.compare_text(null, ''), 0);
   assert.ok(sort.compare_text('', 'anything') < 0);
+});
 });

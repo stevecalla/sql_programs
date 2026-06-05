@@ -1,11 +1,12 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const parse = require('../src/parse');
 const pipe = require('../src/pipeline');
 
 function ir_from(headers, rows) { return { sheet_name: 'S', rows: [headers].concat(rows) }; }
 
+describe('reconcile', () => {
 test('row count ties out and dividers are skipped', () => {
   const headers = ['USAT Member #', 'Last Name', 'First Name', 'Gender', 'DOB', 'Email', 'State', 'Zip', 'Category', 'Final Time'];
   const data = [
@@ -51,4 +52,5 @@ test('schema-complete output even when columns are missing', () => {
   assert.equal(result.rows[0].length, 12);
   // member defaults to 1-day when no source
   assert.equal(result.rows[0][0], '1-day');
+});
 });

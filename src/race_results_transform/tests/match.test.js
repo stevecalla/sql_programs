@@ -1,8 +1,9 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const match = require('../src/match');
 
+describe('match', () => {
 test('finish time wins over split columns', () => {
   const headers = ['Place', 'USAT Member #', 'Last Name', 'First Name', 'Gender', 'DOB',
     'Email', 'Address', 'City', 'State', 'Zip', 'Leg 1 Time', 'Transition 1 Time',
@@ -51,4 +52,5 @@ test('dedicated First/Last columns are not treated as a split', () => {
   assert.ok(!m.first_name.split);
   assert.ok(!m.last_name.split);
   assert.equal(m.last_name.source, 'Last Name');
+});
 });

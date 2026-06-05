@@ -1,5 +1,5 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const fs = require('fs');
@@ -10,6 +10,7 @@ const data_dir = require('../data_dir');
 
 async function inputs_dir() { try { return await data_dir.inputs(); } catch (e) { return null; } }
 
+describe('display', () => {
 test('Excel time values render as times, not dates', () => {
   assert.equal(display.cell_text(new Date(Date.UTC(1899, 11, 30, 1, 41, 53, 240))), '01:41:53.240');
   assert.equal(display.cell_text(new Date(Date.UTC(1899, 11, 30, 0, 49, 29, 300))), '00:49:29.300');
@@ -61,4 +62,5 @@ test('finish-time columns display in time format', async () => {
       if (++checked >= 20) break;
     }
   }
+});
 });

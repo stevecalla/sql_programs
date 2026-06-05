@@ -1,5 +1,5 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -22,6 +22,7 @@ function list_inputs(INPUTS) {
 const TIME_RE = /^\d{2}:\d{2}:\d{2}\.\d{3}$/;
 const DOB_RE = /^\d{2}\/\d{2}\/\d{4}$/;
 
+describe('fixtures', () => {
 test('data dir reachable', async () => {
   const d = await dirs();
   if (!d) { console.log('  (data dir not creatable here — skipping fixtures)'); return; }
@@ -59,4 +60,5 @@ test('convert + invariants + golden snapshots', async () => {
     if (!fs.existsSync(gp)) { fs.writeFileSync(gp, JSON.stringify(snap, null, 2)); console.log('  (created golden ' + path.basename(gp) + ')'); }
     else assert.deepEqual(snap, JSON.parse(fs.readFileSync(gp, 'utf8')), 'drift: ' + f);
   }
+});
 });

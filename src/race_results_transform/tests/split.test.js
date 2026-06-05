@@ -1,8 +1,9 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const split = require('../src/split');
 
+describe('split', () => {
 test('groups in first-appearance order with counts and indices', () => {
   const g = split.group_by_key(['Elite', 'Age Group', 'Elite', 'Open', 'Age Group', 'Elite']);
   assert.deepEqual(g.map((x) => x.value), ['Elite', 'Age Group', 'Open']);
@@ -52,4 +53,5 @@ test('merge_named trims names and skips blank group names', () => {
   ]);
   assert.equal(out.length, 1);
   assert.deepEqual(out[0].indices, [0, 1]);
+});
 });

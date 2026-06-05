@@ -1,5 +1,5 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const fs = require('fs');
@@ -8,6 +8,7 @@ const vm = require('vm');
 const ENGINE = path.join(__dirname, '..', 'src');
 const MODS = ['schema', 'normalize', 'display', 'parse', 'match', 'transform', 'reconcile', 'mapping', 'pipeline', 'io'];
 
+describe('smoke', () => {
 test('every engine file parses as valid JS', () => {
   MODS.forEach((m) => {
     const src = fs.readFileSync(path.join(ENGINE, m + '.js'), 'utf8');
@@ -31,4 +32,5 @@ test('schema has all 12 template columns in order', () => {
   ]);
   // exactly one finish-time column
   assert.equal(schema.TEMPLATE_SCHEMA.filter((c) => c.is_time_total).length, 1);
+});
 });

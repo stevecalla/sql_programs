@@ -3,7 +3,7 @@
 // public/index.html (dropping the closing <script>/app.js + </body>) and app.css
 // (cut mid-rule), which silently broke the whole UI. These checks fail loudly if
 // a file is truncated, a script is unclosed, or a referenced file goes missing.
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -20,6 +20,7 @@ const REQUIRED = ['vendor/exceljs.min.js', 'src/schema.js', 'src/normalize.js', 
   'src/sort.js', 'src/split.js', 'src/parse.js', 'src/match.js', 'src/transform.js',
   'src/reconcile.js', 'src/mapping.js', 'src/pipeline.js', 'src/io.js', 'js/app.js'];
 
+describe('web_assets', () => {
 test('index.html is not truncated (ends with </body></html>)', () => {
   assert.match(html, /<\/body>\s*<\/html>\s*$/,
     'index.html is truncated — missing closing </body></html>');
@@ -62,4 +63,5 @@ test('app.css has balanced braces and ends on a complete rule', () => {
   const close = (css.match(/}/g) || []).length;
   assert.equal(open, close, 'app.css has unbalanced { } — truncated mid-rule');
   assert.match(css, /}\s*$/, 'app.css does not end on a closing } — truncated');
+});
 });

@@ -57,7 +57,7 @@ const SECTIONS = [
     { id: 4, label: 'Inspect headers + auto-mapping', desc: 'Show detected headers and how each maps to the template; no file written.', cli: 'node src/cli.js inspect <file>', action: 'inspect' }
   ] },
   { label: 'Tests  (each group explains what it checks)', color: MAGENTA, items: [
-    { id: 5, label: 'Run ALL tests', desc: 'Every suite below — ~30 checks across the engine, I/O, and real files.', cli: 'node --test tests/*.test.js', action: 'test_all' },
+    { id: 5, label: 'Run ALL tests', desc: 'Runs every test file in tests/, each printed under its own labeled section, with a pass/fail tally.', cli: 'node --test tests/*.test.js', action: 'test_all' },
     { id: 6, label: 'Smoke — modules load', desc: 'Each engine module parses + exports; schema has all 12 columns in order.', cli: 'node --test tests/smoke.test.js', action: 'test_smoke' },
     { id: 7, label: 'Value normalization', desc: 'Gender→M/F/NB · DOB→mm/dd/yyyy · times incl. DNS/DNF · state abbrev · member→1-day · category buckets.', cli: 'node --test tests/normalize.test.js', action: 'test_normalize' },
     { id: 8, label: 'Column matching', desc: 'Finish time beats splits · "Age Group" beats "Race / Division" · name-order independence.', cli: 'node --test tests/match.test.js', action: 'test_match' },
@@ -106,10 +106,11 @@ async function handle(item) {
     case 'examples': await run('node', ['src/cli.js', 'batch', await data_dir.inputs(), '-o', await data_dir.outputs()]); break;
     case 'test_all': {
       const tdir = path.join(DIR, 'tests');
-      const files = fs.readdirSync(tdir).filter(function (f) { return /\.test\.js$/.test(f); }).map(function (f) { return path.join('tests', f); });
-      console.log(c(DIM, '\n  running all ' + files.length + ' test files…\n'));
+      const files = fs.readdirSync(tdir).filter(function (f) { return /\.test\.js$/.test(f); }).sort()
+        .map(function (f) { return path.join('tests', f); });
+      console.log(c(DIM, '\n  Running all ' + files.length + ' test files: node --test tests/\n'));
       const code = await run('node', ['--test'].concat(files));
-      console.log(code === 0 ? c(GREEN, '\n  ✓ all tests passed') : c(YELLOW, '\n  ✗ some tests failed'));
+      console.log(code === 0 ? c(GREEN, '\n  \u2713 all tests passed') : c(YELLOW, '\n  \u2717 some tests failed'));
       break;
     }
     case 'test_smoke': await run_test('tests/smoke.test.js', 'smoke tests'); break;

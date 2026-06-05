@@ -1,8 +1,9 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const N = require('../src/normalize');
 
+describe('normalize', () => {
 test('gender normalizes case and words', () => {
   assert.equal(N.n_gender('m').value, 'M');
   assert.equal(N.n_gender('Female').value, 'F');
@@ -82,4 +83,5 @@ test('member trims surrounding text and keeps the number', () => {
   assert.equal(N.n_member('210-001-3891').flag, null);
   assert.equal(N.n_member('Member 12345').value, '12345');
   assert.equal(N.n_member('Valid').value, '1-day');               // no usable number
+});
 });

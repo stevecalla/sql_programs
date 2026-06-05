@@ -1,7 +1,7 @@
 'use strict';
 // Regression fixtures using SYNTHETIC, committed data (examples/sample) so the suite runs on any
 // clone / CI without the machine-local usat/data directory. See examples/sample/README.md.
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -15,6 +15,7 @@ const TIME = /^\d{2}:\d{2}:\d{2}\.\d{3}$/;
 const DOB = /^\d{2}\/\d{2}\/\d{4}$/;
 const files = fs.readdirSync(DIR).filter(function (f) { return /\.(xlsx|csv)$/i.test(f); }).sort();
 
+describe('sample', () => {
 test('synthetic sample fixtures are present', function () { assert.ok(files.length >= 2, 'expected a .csv and a .xlsx sample'); });
 
 files.forEach(function (f) {
@@ -45,4 +46,5 @@ files.forEach(function (f) {
     if (!fs.existsSync(gp)) { fs.writeFileSync(gp, JSON.stringify(snap, null, 2)); console.log('  created golden ' + path.basename(gp)); }
     else assert.deepEqual(snap, JSON.parse(fs.readFileSync(gp, 'utf8')), 'output drifted from golden for ' + f);
   });
+});
 });

@@ -2,7 +2,7 @@
 // Guardrail: our own identifiers must be snake_case. Scans source (with comments
 // and string literals stripped) for camelCase tokens and fails on any that isn't
 // a known DOM/library API, an UPPER_SNAKE constant, or a DOM element id.
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -46,6 +46,7 @@ function strip(code) {
     .replace(/"(?:\\.|[^"\\])*"/g, ' ');
 }
 
+describe('lint_snake_case', () => {
 test('all our identifiers are snake_case', () => {
   const offenders = {};
   for (const rel of FILES) {
@@ -59,4 +60,5 @@ test('all our identifiers are snake_case', () => {
   const lines = Object.keys(offenders).map((f) => '\n  ' + f + ': ' + [...offenders[f]].sort().join(', '));
   assert.equal(lines.length, 0,
     'Found camelCase identifiers (rename to snake_case, or add a genuine DOM/library name to ALLOWED):' + lines.join(''));
+});
 });

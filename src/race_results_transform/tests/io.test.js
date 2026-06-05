@@ -1,8 +1,9 @@
 'use strict';
-const { test } = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const io = require('../src/io');
 
+describe('io', () => {
 test('grid_to_buffer -> read_to_ir round-trips text cells', async () => {
   const headers = ['Member Number', 'Recorded Time'];
   const rows = [['1-day', '01:04:28.000'], ['2100013891', '01:12:57.000']];
@@ -13,4 +14,5 @@ test('grid_to_buffer -> read_to_ir round-trips text cells', async () => {
   assert.deepEqual(ir.rows[2], rows[1]);
   // member number preserved as text (no scientific notation / number coercion)
   assert.equal(ir.rows[2][0], '2100013891');
+});
 });
