@@ -6,7 +6,7 @@
   var RRT = window.RRT || {};
   var io = RRT.io, parse = RRT.parse, match = RRT.match, transform = RRT.transform,
       reconcile = RRT.reconcile, mapper = RRT.mapping, schema = RRT.schema,
-      normalize = RRT.normalize, display = RRT.display, sort = RRT.sort;
+      normalize = RRT.normalize, display = RRT.display, sort = RRT.sort, split = RRT.split;
 
   var ENUM_BUCKETS = { category: ['Age Group', 'Elite', 'Para', 'Relay', 'Open'], gender: ['M', 'F', 'NB', 'Open'] };
   var PREF_KEY = 'rrt_ui_v1';
@@ -34,7 +34,7 @@
     file_name: 'results', ir: null, parsed: null, mapping: null, value_overrides: {},
     result: null, report: null, work_rows: null, store: null, sig: null,
     orig_table: null, conv_table: null, vm_expanded: {}, approved: {}, flag_info: null, link_tables: false,
-    sheets: null, active: null, first_render: true
+    sheets: null, active: null, first_render: true, split_col: null, split_basis: null, split_manual: {}
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -61,7 +61,7 @@
       current_source: opts.current_source || null, on_remap: opts.on_remap || null, on_edit: opts.on_edit || null,
       on_search: opts.on_search || null, on_sort: opts.on_sort || null, on_filter: opts.on_filter || null,
       headers: [], data: [], order: [], query: '', sort_col: null, sort_dir: 1,
-      cap: opts.cap || 500, show_all: false, filter_set: null, filter_label: ''
+      cap: opts.cap || 500, show_all: false, filter_set: null, filter_label: '', search_index: []
     };
 
     function compare(a, b, c) {
@@ -72,7 +72,8 @@
       T.order = T.data.map(function (_, i) { return i; });
       if (T.sort_col != null) T.order.sort(function (a, b) { return compare(a, b, T.sort_col); });
     };
-    T.set_data = function (headers, data) { T.headers = headers; T.data = data; T.sort_col = null; T.filter_set = null; T.filter_label = ''; T.apply_sort(); mount(); render_body(); };
+    function row_text(row) { var t = ''; for (var c = 0; c < row.length; c++) t += cell_text(row[c]) + '\u0001'; return t.toLowerCase(); }
+    T.set_data = function (headers, data) { T.headers = headers; T.data = data; T.sort_col = null; T.filter_set = null; T.filter_label = ''; T.search_index = data.map(row_text); T.apply_sort(); mount(); render_body(); };
     T.export_rows = function () { return T.order.map(function (i) { return T.data[i]; }); };
     T.set_query = function (q) { T.query = q; var sb = T.el.querySelector('.tv-search'); if (sb) sb.value = q; render_body(); };
     T.set_order = function (order) { T.order = order.slice(); T.sort_col = null; render_body(); };
@@ -89,11 +90,7 @@
       for (var k = 0; k < T.order.length; k++) {
         var i = T.order[k];
         if (T.filter_set && !T.filter_set[i]) continue;
-        if (q) {
-          var row = T.data[i], hit = false;
-          for (var c = 0; c < T.headers.length; c++) { if (cell_text(row[c]).toLowerCase().indexOf(q) >= 0) { hit = true; break; } }
-          if (!hit) continue;
-        }
+        if (q && (T.search_index[i] || '').indexOf(q) < 0) continue;
         out.push(i);
       }
       return out;
@@ -123,8 +120,8 @@
       head += '</tr></thead><tbody></tbody></table></div>';
       T.el.innerHTML = tools + head;
 
-      var search = T.el.querySelector('.tv-search');
-      search.addEventListener('input', function () { T.query = search.value; render_body(); if (T.on_search) T.on_search(T.query); });
+      var search = T.el.querySelector('.tv-search'); var search_timer;
+      search.addEventListener('input', function () { T.query = search.value; clearTimeout(search_timer); search_timer = setTimeout(function () { render_body(); if (T.on_search) T.on_search(T.query); }, 90); });
       T.el.querySelector('.tv-reset').addEventListener('click', function () { T.sort_col = null; T.apply_sort(); mount(); render_body(); });
       var all = T.el.querySelector('.tv-all');
       if (all) all.addEventListener('click', function () { T.show_all = !T.show_all; render_body(); });
@@ -147,6 +144,7 @@
         T.el.querySelector('tbody').addEventListener('input', function (e) {
           var td = e.target.closest('td[data-i]'); if (!td) return;
           T.data[+td.dataset.i][+td.dataset.c] = td.textContent;
+          T.search_index[+td.dataset.i] = row_text(T.data[+td.dataset.i]);
           if (T.on_edit) T.on_edit(+td.dataset.i, +td.dataset.c, td);
         });
       }
@@ -528,6 +526,7 @@
       });
     });
     render_value_map();
+    render_split();
   }
 
   function render_value_map() {
@@ -576,7 +575,7 @@
     }
     var reset = has_ov ? '<button class="vm-reset" data-key="' + key + '" data-src="' + esc(e.src_key) + '" title="Reset to the original / auto value">↺</button>' : '';
     var label = e.info.sample === '' ? '(blank)' : e.info.sample;
-    return '<div class="vm-item"><span class="' + src_cls + '" title="' + esc(label) + '">' + esc(label) + ' <span class="dim">×' + e.info.count + '</span></span>' + control + reset + '</div>';
+    return '<div class="vm-item"><span class="' + src_cls + '" title="' + esc(label) + '">' + esc(label) + '</span><span class="vm-count dim">×' + e.info.count + '</span>' + control + reset + '</div>';
   }
 
   function wire_value_map(box) {
@@ -665,6 +664,179 @@
     $('integrityBody').innerHTML = html + '</div>';
   }
 
+  // ---------- split & download by column ----------
+  function field_for(bundle, header) {
+    var f = null;
+    schema.TEMPLATE_SCHEMA.forEach(function (c) { if (bundle.mapping[c.key] && bundle.mapping[c.key].source === header) f = c; });
+    return f;
+  }
+  // Per-output-row grouping key for a chosen SOURCE column in a given sheet bundle.
+  // Converted basis uses the mapped template field's value; otherwise the raw cell.
+  function split_keys_for(bundle, header, basis) {
+    var hi = bundle.parsed.headers.indexOf(header);
+    if (hi < 0) return null; // this sheet has no such column
+    if (basis === 'converted') {
+      var field = field_for(bundle, header);
+      if (field) { compute_bundle(bundle); var ci = schema.TEMPLATE_SCHEMA.indexOf(field); return bundle.work_rows.map(function (r) { return display.cell_text(r[ci]); }); }
+    }
+    return bundle.parsed.data_rows.map(function (dr) { return display.cell_text(dr.cells[hi]); });
+  }
+  function manual_name(raw) { return Object.prototype.hasOwnProperty.call(S.split_manual, raw) ? S.split_manual[raw] : raw; }
+
+  function split_item(i, value, count) {
+    var label = value === '' ? '(blank)' : value;
+    return '<label class="split-item"><input type="checkbox" class="s-on" value="' + i + '" checked>' +
+      '<span class="s-name">' + esc(label) + '</span><span class="s-count">' + count + ' rows</span></label>';
+  }
+  function split_manual_item(i, g) {
+    var label = g.value === '' ? '(blank)' : g.value;
+    var grp = manual_name(g.value);
+    return '<div class="split-item"><input type="checkbox" class="s-on" value="' + i + '" checked>' +
+      '<span class="s-name" title="' + esc(label) + '">' + esc(label) + ' <span class="s-count">×' + g.count + '</span></span>' +
+      '<span class="m-arrow">→</span>' +
+      '<input class="m-grp" data-raw="' + esc(g.value) + '" value="' + esc(grp) + '" placeholder="group name" aria-label="group name for ' + esc(label) + '"></div>';
+  }
+
+  function render_split() {
+    var box = document.querySelector('.rrt-split'); if (!box || !S.sheets || S.active == null) return;
+    save_active();
+    var active = S.sheets[S.active];
+    var headers = active.parsed.headers;
+    if (!headers.length) { box.innerHTML = '<span class="dim">No columns to split on.</span>'; return; }
+    if (S.split_col == null || headers.indexOf(S.split_col) < 0) { S.split_col = (active.mapping.category && active.mapping.category.source) || headers[0]; S.split_manual = {}; S.split_basis = null; }
+    var field = field_for(active, S.split_col);
+    if (S.split_basis !== 'converted' && S.split_basis !== 'original') S.split_basis = 'original';
+    if (S.split_basis === 'converted' && !field) S.split_basis = 'original';
+    var manual = S.split_basis === 'original';
+    var multi = S.sheets.length > 1;
+
+    var opts = headers.map(function (h) {
+      var mt = field_for(active, h);
+      var lbl = h + (mt ? ' → ' + mt.target : ' (not in template)');
+      return '<option value="' + esc(h) + '"' + (h === S.split_col ? ' selected' : '') + '>' + esc(lbl) + '</option>';
+    }).join('');
+
+    var toggle = field
+      ? '<div class="seg split-seg"><button type="button" data-basis="converted"' + (manual ? '' : ' class="active"') + '>Converted ' + esc(field.target) + '</button>' +
+        '<button type="button" data-basis="original"' + (manual ? ' class="active"' : '') + '>Original value</button></div>'
+      : '';
+    var hint = manual
+      ? 'Each original value is its own file — give two values the same <b>group name</b> to combine them.'
+      : 'Groups are the cleaned <b>' + esc(field ? field.target : '') + '</b> values (your value-mapping applies).';
+
+    var groups = split.group_by_key(split_keys_for(active, S.split_col, S.split_basis) || []);
+    var items = groups.map(function (g, i) { return manual ? split_manual_item(i, g) : split_item(i, g.value, g.count); }).join('');
+
+    box.innerHTML =
+      '<p class="dim split-intro">Pick a column from your <b>original</b> file. Each group becomes its own reformatted <code>.xlsx</code> (full 12-column template, only that group’s rows)' + (multi ? ' — the <b>Download</b> button lets you apply it across some or all sheets.' : '.') + '</p>' +
+      '<div class="split-row"><label class="split-lbl">Split on</label><select class="split-col">' + opts + '</select></div>' +
+      '<div class="split-row">' + toggle + '<span class="dim split-hint">' + hint + '</span></div>' +
+      '<div class="dl-tools"><button type="button" class="btn sm" data-all="1">Select all</button>' +
+      '<button type="button" class="btn sm" data-all="0">Clear</button>' +
+      (manual ? '<button type="button" class="btn sm" data-reset-groups="1" title="Reset every group name back to its original value">↺ Reset groups</button>' : '') +
+      '</div>' +
+      (manual
+        ? '<div class="split-head"><span class="sh-box"></span><span class="s-name">Original value <span class="dim">(rows)</span></span><span class="m-arrow"></span><span class="sh-grp">Download group / file name</span></div>'
+        : '<div class="split-head"><span class="sh-box"></span><span class="s-name">Value</span><span class="s-count">Rows</span></div>') +
+      '<div class="split-list">' + items + '</div>' +
+      '<div class="dl-foot"><button type="button" class="btn primary sm split-go">Download</button></div>';
+    wire_split(box, groups, manual, multi);
+  }
+
+  function split_checked_count(box, manual) {
+    var checked = Array.prototype.slice.call(box.querySelectorAll('.split-list input.s-on:checked'));
+    if (!manual) return checked.length;
+    var names = {};
+    checked.forEach(function (c) { var nm = (c.closest('.split-item').querySelector('.m-grp').value || '').trim(); if (nm) names[nm] = true; });
+    return Object.keys(names).length;
+  }
+  function wire_split(box, groups, manual, multi) {
+    var sel = box.querySelector('.split-col');
+    function update_go() {
+      var n = split_checked_count(box, manual);
+      var go = box.querySelector('.split-go'); go.disabled = !n;
+      go.textContent = !n ? 'Select values' : (multi ? '⤓ Download…' : '⤓ Download ' + n + ' file' + (n > 1 ? 's' : ''));
+    }
+    sel.addEventListener('change', function () { S.split_col = sel.value; S.split_manual = {}; S.split_basis = null; render_split(); });
+    box.querySelectorAll('[data-basis]').forEach(function (b) { b.addEventListener('click', function () { S.split_basis = b.dataset.basis; render_split(); }); });
+    box.querySelectorAll('[data-all]').forEach(function (tb) { tb.addEventListener('click', function () { var on = tb.dataset.all === '1'; box.querySelectorAll('.split-list input.s-on').forEach(function (c) { c.checked = on; }); update_go(); }); });
+    var rg = box.querySelector('[data-reset-groups]'); if (rg) rg.addEventListener('click', function () { S.split_manual = {}; render_split(); });
+    box.querySelectorAll('.split-list input.s-on').forEach(function (c) { c.addEventListener('change', update_go); });
+    box.querySelectorAll('.m-grp').forEach(function (inp) { inp.addEventListener('input', function () { S.split_manual[inp.dataset.raw] = inp.value; update_go(); }); });
+    box.querySelector('.split-go').addEventListener('click', function () {
+      var checked = Array.prototype.slice.call(box.querySelectorAll('.split-list input.s-on:checked')).map(function (c) { return groups[+c.value]; });
+      if (!checked.length) return;
+      if (multi) open_split_picker(box, checked, manual);
+      else run_split([S.active], checked, manual);
+    });
+    update_go();
+  }
+
+  // Sheet picker for the split download — mirrors the top Download button.
+  function close_split_picker() {
+    var p = $('splitPop'); if (p) p.remove();
+    document.removeEventListener('mousedown', sp_outside); document.removeEventListener('keydown', sp_esc);
+  }
+  function sp_outside(e) { var p = $('splitPop'); if (!p) return; if (!p.contains(e.target)) close_split_picker(); }
+  function sp_esc(e) { if (e.key === 'Escape') close_split_picker(); }
+  function open_split_picker(box, checked, manual) {
+    close_split_picker();
+    var btn = box.querySelector('.split-go');
+    var pop = document.createElement('div'); pop.className = 'dl-pop'; pop.id = 'splitPop';
+    var items = S.sheets.map(function (b, i) {
+      var has = b.parsed.headers.indexOf(S.split_col) >= 0;
+      return '<label class="dl-item' + (has ? '' : ' off') + '"><input type="checkbox" value="' + i + '"' + (has ? ' checked' : ' disabled') + '>' +
+        '<span class="dl-name">' + esc(b.name) + '</span><span class="dim">' + (has ? b.parsed.data_rows.length + ' rows' : 'no column') + '</span></label>';
+    }).join('');
+    pop.innerHTML =
+      '<div class="dl-head">Apply split to sheets <span class="dim">— one file per group, per sheet</span></div>' +
+      '<div class="dl-tools"><button type="button" class="btn sm" data-all="1">Select all</button>' +
+      '<button type="button" class="btn sm" data-all="0">Clear</button></div>' +
+      '<div class="dl-list">' + items + '</div>' +
+      '<div class="dl-foot"><button type="button" class="btn primary sm" id="splitGo2">Download</button></div>';
+    document.body.appendChild(pop);
+    var r = btn.getBoundingClientRect();
+    pop.style.position = 'fixed';
+    pop.style.top = (r.bottom + 6) + 'px';
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 300)) + 'px';
+    function update_go() { var n = pop.querySelectorAll('.dl-list input:checked').length; var go = pop.querySelector('#splitGo2'); go.disabled = !n; go.textContent = n ? ('⤓ Download ' + n + ' sheet' + (n > 1 ? 's' : '')) : 'Select sheets'; }
+    pop.querySelectorAll('[data-all]').forEach(function (tb) { tb.addEventListener('click', function () { var on = tb.dataset.all === '1'; pop.querySelectorAll('.dl-list input:not([disabled])').forEach(function (c) { c.checked = on; }); update_go(); }); });
+    pop.querySelectorAll('.dl-list input').forEach(function (c) { c.addEventListener('change', update_go); });
+    pop.querySelector('#splitGo2').addEventListener('click', function () {
+      var idxs = Array.prototype.slice.call(pop.querySelectorAll('.dl-list input:checked')).map(function (c) { return +c.value; });
+      close_split_picker(); if (idxs.length) run_split(idxs, checked, manual);
+    });
+    update_go();
+    setTimeout(function () { document.addEventListener('mousedown', sp_outside); document.addEventListener('keydown', sp_esc); }, 0);
+  }
+
+  // Build & download one file per group, for each chosen sheet.
+  function run_split(idxs, checked, manual) {
+    var sel_vals = {}; checked.forEach(function (g) { sel_vals[g.value] = true; });
+    var multi = idxs.length > 1;
+    var jobs = [];
+    idxs.forEach(function (si) {
+      var b = S.sheets[si];
+      var keys = split_keys_for(b, S.split_col, S.split_basis); if (!keys) return;
+      compute_bundle(b);
+      var gs = split.group_by_key(keys);
+      if (manual) {
+        var entries = gs.filter(function (g) { return sel_vals[g.value]; }).map(function (g) { return { name: manual_name(g.value), indices: g.indices }; });
+        split.merge_named(entries).forEach(function (m) { jobs.push({ b: b, label: m.value, indices: m.indices }); });
+      } else {
+        gs.filter(function (g) { return sel_vals[g.value]; }).forEach(function (g) { jobs.push({ b: b, label: (g.value === '' ? 'blank' : g.value), indices: g.indices }); });
+      }
+    });
+    jobs.forEach(function (job, k) {
+      setTimeout(function () {
+        var rows = job.indices.map(function (i) { return job.b.work_rows[i]; });
+        var parts = [S.file_name]; if (multi) parts.push(job.b.name); parts.push(S.split_col); parts.push(job.label);
+        io.grids_to_buffer([{ name: job.label, headers: job.b.result.headers, rows: rows }])
+          .then(function (buf) { save_blob(buf, safe_filename(parts.join(' - ')) + '.xlsx'); });
+      }, k * 250);
+    });
+  }
+
   // ---------- collapse ----------
   function apply_collapse_defaults() {
     document.querySelectorAll('.collapse-card').forEach(function (card) {
@@ -689,16 +861,74 @@
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
   }
+  function safe_filename(s) {
+    return String(s == null ? '' : s).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'sheet';
+  }
+  // Single sheet / CSV: keep the one-file behaviour (honours on-screen sort/filter).
+  function download_single() {
+    io.grids_to_buffer([{ name: 'Rankings', headers: S.result.headers, rows: S.conv_table.export_rows() }])
+      .then(function (buf) { save_blob(buf, safe_filename(S.file_name) + ' - formatted.xlsx'); });
+  }
+  // One sheet -> its own single-sheet .xlsx file.
+  function download_one_sheet(b) {
+    compute_bundle(b);
+    return io.grids_to_buffer([{ name: b.name, headers: b.result.headers, rows: b.work_rows }])
+      .then(function (buf) { save_blob(buf, safe_filename(S.file_name + ' - ' + b.name) + '.xlsx'); });
+  }
+  // Each selected sheet downloads as its own file (staggered so the browser keeps them all).
+  function download_selected(idx) {
+    save_active();
+    idx.forEach(function (i, k) { var b = S.sheets[i]; setTimeout(function () { download_one_sheet(b); }, k * 300); });
+  }
   function download() {
     save_active();
-    var name = S.file_name + ' - formatted.xlsx';
-    if (S.sheets && S.sheets.length > 1) {
-      S.sheets.forEach(compute_bundle);
-      var payload = S.sheets.map(function (b) { return { name: b.name, headers: b.result.headers, rows: b.work_rows }; });
-      io.grids_to_buffer(payload).then(function (buf) { save_blob(buf, name); });
-    } else {
-      io.grids_to_buffer([{ name: 'Rankings', headers: S.result.headers, rows: S.conv_table.export_rows() }]).then(function (buf) { save_blob(buf, name); });
+    if (S.sheets && S.sheets.length > 1) open_download_picker();
+    else download_single();
+  }
+  function close_download_picker() {
+    var p = $('dlPop'); if (p) p.remove();
+    document.removeEventListener('mousedown', dl_outside); document.removeEventListener('keydown', dl_esc);
+  }
+  function dl_outside(e) {
+    var p = $('dlPop'); if (!p) return;
+    if (!p.contains(e.target) && !$('downloadBtn').contains(e.target)) close_download_picker();
+  }
+  function dl_esc(e) { if (e.key === 'Escape') close_download_picker(); }
+  function open_download_picker() {
+    close_download_picker();
+    var btn = $('downloadBtn');
+    var pop = document.createElement('div'); pop.className = 'dl-pop'; pop.id = 'dlPop';
+    var items = S.sheets.map(function (b, i) {
+      return '<label class="dl-item"><input type="checkbox" value="' + i + '" checked>' +
+        '<span class="dl-name">' + esc(b.name) + '</span>' +
+        '<span class="dim">' + b.parsed.data_rows.length + ' rows</span></label>';
+    }).join('');
+    pop.innerHTML =
+      '<div class="dl-head">Download sheets <span class="dim">— each saves as its own file</span></div>' +
+      '<div class="dl-tools"><button type="button" class="btn sm" data-all="1">Select all</button>' +
+      '<button type="button" class="btn sm" data-all="0">Clear</button></div>' +
+      '<div class="dl-list">' + items + '</div>' +
+      '<div class="dl-foot"><button type="button" class="btn primary sm" id="dlGo">Download</button></div>';
+    document.body.appendChild(pop);
+    var r = btn.getBoundingClientRect();
+    pop.style.position = 'fixed';
+    pop.style.top = (r.bottom + 6) + 'px';
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 300)) + 'px';
+    function update_go() {
+      var n = pop.querySelectorAll('.dl-list input:checked').length;
+      var go = pop.querySelector('#dlGo'); go.disabled = !n;
+      go.textContent = n ? ('\u2913 Download ' + n + ' sheet' + (n > 1 ? 's' : '')) : 'Select sheets';
     }
+    pop.querySelectorAll('[data-all]').forEach(function (tb) {
+      tb.addEventListener('click', function () { var on = tb.dataset.all === '1'; pop.querySelectorAll('.dl-list input').forEach(function (c) { c.checked = on; }); update_go(); });
+    });
+    pop.querySelectorAll('.dl-list input').forEach(function (c) { c.addEventListener('change', update_go); });
+    pop.querySelector('#dlGo').addEventListener('click', function () {
+      var sel = Array.prototype.slice.call(pop.querySelectorAll('.dl-list input:checked')).map(function (c) { return +c.value; });
+      close_download_picker(); if (sel.length) download_selected(sel);
+    });
+    update_go();
+    setTimeout(function () { document.addEventListener('mousedown', dl_outside); document.addEventListener('keydown', dl_esc); }, 0);
   }
   function save_profile() {
     if (!S.sig) return;
@@ -718,6 +948,7 @@
     $('compareSeg').addEventListener('click', function (e) {
       var b = e.target.closest('button[data-view]'); if (!b) return;
       set_compare_view(b.dataset.view);
+      if (b.dataset.view === 'mapping' && S.result) render_split();
       var p = prefs(); p.compare_view = b.dataset.view; save_prefs(p);
     });
   }

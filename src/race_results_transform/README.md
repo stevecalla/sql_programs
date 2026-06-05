@@ -47,10 +47,19 @@ npm test            # or: node --test tests/*.test.js
   How it works**, plus a summary bar (score %, file name, flagged-value count, skipped rows).
 - **Multi-sheet workbooks:** if an uploaded `.xlsx` has more than one sheet, a notice and a
   **sheet tab bar** appear; each sheet is converted independently (its own mapping, flags and
-  edits) and the download is a single `.xlsx` with one converted sheet per source sheet.
+  edits). **Download** opens a checklist so you pick which sheets to save — each selected sheet
+  downloads as its own `.xlsx` file.
 - **Tables** side-by-side / stacked / tabs (switcher, remembered). Each table is searchable and
   sortable (case-insensitive), with a frozen header row and a friendly empty-state. **Link tables** (on by default)
   syncs search, sort, vertical scroll and the "Show rows" filter across both.
+- **Split & download by column:** in the **Mapping** tab, pick any column from your *original*
+  file (including extras not in the template) and save a **separate `.xlsx` per value** — only
+  that value’s rows, full 12-column template. Mapped fields default to grouping by the converted
+  value (value-mapping merges apply); switch the **Converted / Original value** toggle to group by
+  the raw values and **define your own groups** (give two values the same group name to combine
+  them). Extra columns always group by their raw value. For multi-sheet workbooks the **Download**
+  button opens a sheet picker (like the top one) so you can run the split across some or all sheets
+  at once — each sheet’s groups download as their own files.
 - **Inline remap:** every reformatted column header has a dropdown (in a top header row, so the
   two tables line up) to re-point that field; same controls live in the **Mapping** tab.
 - **Highlights:** changed/guessed cells are highlighted; the legend is collapsible, resizable and

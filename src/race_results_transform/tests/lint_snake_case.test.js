@@ -22,7 +22,7 @@ flatMap forEach getAttribute getBoundingClientRect getCell getElementById getIte
 getUTCDate getUTCFullYear getUTCMonth getUTCHours getUTCMinutes getUTCSeconds getUTCMilliseconds
 getUTCDay hasOwnProperty includeEmpty indexOf innerHTML insertBefore isArray isNaN isInteger isTTY
 lastIndexOf localStorage mkdirSync notEqual numFmt padEnd padStart parentNode parseFloat parseInt
-preventDefault querySelector querySelectorAll readAsArrayBuffer readAsText readFile readFileSync
+preventDefault removeEventListener querySelector querySelectorAll readAsArrayBuffer readAsText readFile readFileSync
 readdirSync readyState removeAttribute removeChild revokeObjectURL richText runInContext
 createContext compileFunction scrollIntoView scrollTo scrollTop setAttribute setItem setTimeout
 sessionStorage startsWith stopPropagation strictEqual textContent toFixed toISOString

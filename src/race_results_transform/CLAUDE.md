@@ -37,6 +37,7 @@ src/race_results_transform/
     normalize.js       value normalizers (gender/dob/state/time incl. DNS/DNF, category, member)
     display.js         how a cell renders in the tables (Excel time -> time, not date) — TESTED
     sort.js            table-sort comparator (case/accent-insensitive, natural numbers) — TESTED
+    split.js           group row indices by a per-row key (split & download by column) — TESTED
     parse.js           header detection + divider/blank-row skipping
     match.js           column auto-matching (alias scoring + greedy assignment)
     transform.js       apply mapping -> output grid + stats + flags + distinct enum values
@@ -92,8 +93,18 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   `theme` pref is set (`data-theme` on `<html>`). USAT navy `#15284e` + red `#e4002b`.
 - **Multi-sheet**: `io.read_to_irs` yields one IR per non-empty worksheet; `app.js` keeps a
   per-sheet state bundle (mapping/overrides/approvals/edits/computed result) and a **sheet tab
-  bar** (`#sheetBar`) switches the active bundle. Download computes any unvisited sheet and calls
-  `io.grids_to_buffer` -> one workbook, a converted worksheet per source sheet. CSV = single sheet.
+  bar** (`#sheetBar`) switches the active bundle. In the web app **Download** opens a checklist
+  (`open_download_picker`) and each selected sheet saves as its own single-sheet `.xlsx`
+  (`download_one_sheet` -> `io.grids_to_buffer` with one group). Single sheet / CSV = direct
+  one-file download. The CLI still writes one combined workbook (one tab per source sheet).
+- **Split & download by column** (Mapping tab, `render_split`): pick any *source* header. A mapped
+  column offers a **Converted / Original** basis toggle (`S.split_basis`); converted groups by the
+  output field value, original groups by the raw cell and lets the user edit a per-value **group
+  name** (`S.split_manual`) so values merge (`split.merge_named`). `split.group_by_key` builds the
+  distinct groups; each -> its own single-sheet `.xlsx` via `io.grids_to_buffer` (`download_groups`).
+  Multi-sheet: the split Download button opens a sheet picker (`open_split_picker`) and `run_split`
+  emits one file per group for each chosen sheet (filename includes the sheet name). The inline
+  value list reflects the active sheet.
 - One **Compare** card with tabs (Tables/Mapping/Scorecard/Integrity/Field reference/How it works)
   + summary bar. Layout switch side/stacked/tabs. **Link tables** (default ON) syncs search, sort
   and vertical scroll across both `TableView`s.
