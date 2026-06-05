@@ -1,0 +1,64 @@
+{
+  "headers": [
+    "Member Number",
+    "Last Name",
+    "First Name",
+    "Gender",
+    "DOB",
+    "Email",
+    "Address",
+    "City",
+    "State",
+    "Zip",
+    "Category",
+    "Recorded Time"
+  ],
+  "row_count": 12,
+  "rows_in": 12,
+  "band": "amber",
+  "pct": 100,
+  "first3": [
+    [
+      "2100000001",
+      "Doe",
+      "Jane",
+      "M",
+      "05/12/1990",
+      "jane.doe@example.com",
+      "",
+      "Denver",
+      "CO",
+      "80014",
+      "Age Group",
+      "01:05:30.000"
+    ],
+    [
+      "1-day",
+      "Smith",
+      "John",
+      "F",
+      "06/15/1985",
+      "john.smith@example.com",
+      "",
+      "Reno",
+      "NV",
+      "89501",
+      "Age Group",
+      "01:12:45.000"
+    ],
+    [
+      "1-day",
+      "Stone",
+      "Alex",
+      "M",
+      "11/30/2001",
+      "alex.stone@example.com",
+      "",
+      "Austin",
+      "TX",
+      "73301",
+      "Elite",
+      "00:58:10.000"
+    ]
+  ]
+}

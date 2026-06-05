@@ -61,6 +61,7 @@
     PASSTHROUGH.forEach(function (key) {
       var m = mapping[key];
       if (!m || m.source_index < 0) { out.push({ key: key, mapped: false }); return; }
+      if (m.split) { out.push({ key: key, target: schema.by_key(key).target, mapped: true, split: true, ok: true, missing: 0 }); return; }
       var col = schema.by_key(key);
       var col_idx = result.headers.indexOf(col.target);
       var src_vals = parsed.data_rows.map(function (dr) { return dr.cells[m.source_index]; });

@@ -46,11 +46,11 @@ test('convert + invariants + golden snapshots', async () => {
     const idx = (name) => result.headers.indexOf(name);
     const gi = idx('Gender'), di = idx('DOB'), ti = idx('Recorded Time'), mi = idx('Member Number'), ci = idx('Category');
     result.rows.forEach((r) => {
-      if (r[gi] !== '') assert.ok(['M', 'F', 'NB'].includes(r[gi]) || /^[A-Z]+$/.test(r[gi]), 'gender ' + r[gi]);
+      if (r[gi] !== '') assert.ok(['M', 'F', 'NB', 'Open'].includes(r[gi]) || /^[A-Z]+$/.test(r[gi]), 'gender ' + r[gi]);
       if (r[di] !== '') assert.ok(DOB_RE.test(r[di]), 'dob ' + r[di]);
       if (r[ti] !== '') assert.ok(TIME_RE.test(r[ti]) || /^(DNS|DNF|DQ|DSQ|DNC|NT|W\/D|WD)$/.test(r[ti]), 'time ' + r[ti]);
       assert.ok(r[mi] === '1-day' || /^\d+$/.test(r[mi]), 'member ' + r[mi]);
-      assert.ok(['Age Group', 'Elite', 'Para', 'Relay', ''].includes(r[ci]), 'category ' + r[ci]);
+      assert.ok(['Age Group', 'Elite', 'Para', 'Relay', 'Open', ''].includes(r[ci]), 'category ' + r[ci]);
     });
 
     const snap = { headers: result.headers, row_count: result.row_count, rows_in: report.rows.in,

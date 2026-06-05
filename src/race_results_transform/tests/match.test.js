@@ -37,3 +37,18 @@ test('name order independence', () => {
   assert.equal(b.first_name.source, 'First Name');
   assert.equal(b.last_name.source, 'Last Name');
 });
+
+test('a single full-name column splits into First + Last', () => {
+  const m = match.auto_map(['Name', 'Gender', 'DOB', 'Category', 'Finish Time']).mapping;
+  assert.equal(m.first_name.split, 'first');
+  assert.equal(m.last_name.split, 'last');
+  assert.equal(m.first_name.source, 'Name');
+  assert.equal(m.last_name.source, 'Name');
+});
+
+test('dedicated First/Last columns are not treated as a split', () => {
+  const m = match.auto_map(['First Name', 'Last Name', 'Gender']).mapping;
+  assert.ok(!m.first_name.split);
+  assert.ok(!m.last_name.split);
+  assert.equal(m.last_name.source, 'Last Name');
+});

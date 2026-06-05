@@ -26,7 +26,7 @@ preventDefault querySelector querySelectorAll readAsArrayBuffer readAsText readF
 readdirSync readyState removeAttribute removeChild revokeObjectURL richText runInContext
 createContext compileFunction scrollIntoView scrollTo scrollTop setAttribute setItem setTimeout
 sessionStorage startsWith stopPropagation strictEqual textContent toFixed toISOString
-toLocaleString toLowerCase toString toUpperCase writeBuffer writeFileSync fromCharCode ySplit xSplit matchMedia documentElement getAttribute clientX innerWidth scrollLeft
+localeCompare toLocaleString toLowerCase toString toUpperCase writeBuffer writeFileSync fromCharCode ySplit xSplit matchMedia documentElement getAttribute clientX innerWidth scrollLeft
 determineOSPath
 `).trim().split(/\s+/));
 

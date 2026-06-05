@@ -48,6 +48,7 @@
       cols.forEach(function (col) {
         var m = mapping[col.key];
         var src_val = (m && m.source_index >= 0) ? dr.cells[m.source_index] : null;
+        if (m && m.split) { src_val = normalize.split_name(src_val)[m.split]; }
         var ov = overrides[col.key];
         var key = value_key(src_val);
         var result;

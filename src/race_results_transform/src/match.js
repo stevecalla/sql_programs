@@ -82,11 +82,37 @@
 
   function confidence(score) { return score >= 82 ? 'high' : (score >= 64 ? 'medium' : 'low'); }
 
+  function is_name_col(header_norm) {
+    if (!header_norm) return false;
+    for (var i = 0; i < schema.NAME_ALIASES.length; i++) {
+      if (header_norm === schema.NAME_ALIASES[i]) return true;
+    }
+    // a bare "...name..." column (but not first/last/nick/user/file/club/team)
+    if (/(^| )name( |$)/.test(header_norm) &&
+        !/first|last|nick|user|file|club|team|event|race/.test(header_norm)) return true;
+    return false;
+  }
+  function is_first_or_last_col(header_norm) {
+    return /first|last|surname|given|forename|family/.test(header_norm);
+  }
+
   function auto_map(headers) {
     var h_info = headers.map(function (h, i) {
       var n = norm(h);
       return { header: h, index: i, n: n, tokens: tokens(h), used: false, split: is_split(n) };
     });
+
+    // If there is no dedicated First/Last column but a single full-name column
+    // exists, claim it up front and split it into First + Last (so it can't be
+    // swallowed whole by the Last Name target via a substring match).
+    var has_first_last = h_info.some(function (h) { return is_first_or_last_col(h.n); });
+    if (!has_first_last) {
+      for (var si = 0; si < h_info.length; si++) {
+        var sh = h_info[si];
+        if (sh.used || sh.split) continue;
+        if (is_name_col(sh.n)) { sh.used = true; sh.name_split = true; break; }
+      }
+    }
 
     var pairs = [];
     schema.TEMPLATE_SCHEMA.forEach(function (col) {
@@ -102,6 +128,12 @@
     var mapping = {};
     schema.TEMPLATE_SCHEMA.forEach(function (col) {
       mapping[col.key] = { source: null, source_index: -1, score: 0, confidence: 'none' };
+    });
+
+    h_info.forEach(function (h) {
+      if (!h.name_split) return;
+      mapping.first_name = { source: h.header, source_index: h.index, score: 70, confidence: 'split', split: 'first' };
+      mapping.last_name = { source: h.header, source_index: h.index, score: 70, confidence: 'split', split: 'last' };
     });
 
     pairs.forEach(function (p) {

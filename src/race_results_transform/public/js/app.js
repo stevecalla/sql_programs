@@ -8,13 +8,14 @@
       reconcile = RRT.reconcile, mapper = RRT.mapping, schema = RRT.schema,
       normalize = RRT.normalize, display = RRT.display;
 
-  var ENUM_BUCKETS = { category: ['Age Group', 'Elite', 'Para', 'Relay'], gender: ['M', 'F', 'NB'] };
+  var ENUM_BUCKETS = { category: ['Age Group', 'Elite', 'Para', 'Relay', 'Open'], gender: ['M', 'F', 'NB', 'Open'] };
   var PREF_KEY = 'rrt_ui_v1';
   var DEFAULT_COLLAPSED = { scorecard: true, mapping: true, integrity: true };
 
   var FLAG_LABELS = {
     'member-default': 'Member # was blank → set to 1-day',
     'member-nonnumeric': 'No numeric member # (e.g. “Valid”) → set to 1-day',
+    'member-trimmed': 'Stripped text from member # — kept the number',
     'gender-missing': 'Gender was blank',
     'gender-unknown': 'Unrecognized gender value',
     'dob-missing': 'Date of birth was blank',
@@ -65,7 +66,9 @@
     function compare(a, b, c) {
       var va = cell_text(T.data[a][c]), vb = cell_text(T.data[b][c]), num = /^-?\d+(\.\d+)?$/, cmp;
       if (num.test(va) && num.test(vb)) cmp = parseFloat(va) - parseFloat(vb);
-      else if (va === vb) cmp = 0; else cmp = va < vb ? -1 : 1;
+      // Case-insensitive, accent-insensitive, natural-number-aware string sort,
+      // so "alice" and "Alice" land together instead of upper-case-first.
+      else cmp = va.localeCompare(vb, undefined, { sensitivity: 'base', numeric: true });
       return cmp * T.sort_dir;
     }
     T.apply_sort = function () {

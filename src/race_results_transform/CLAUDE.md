@@ -46,10 +46,13 @@ src/race_results_transform/
     cli.js             scriptable converter (inspect / convert / batch)
   public/            web app: index.html, css/app.css, js/app.js, favicon.svg, vendor/exceljs.min.js
   menu.js            interactive launcher (pauses after each command)
-  data_dir.js        cross-platform data dir via utilities/determineOSPath (usat/data/race_results_transform)
+  data_dir.js        data dir via utilities/determineOSPath (…/usat/data on linux/mac; configured
+                       uploads path on Windows) + /race_results_transform; CLI + tests only
   package.json       scripts + bin (no deps block — exceljs lives in the root package)
   examples/template/ the target-format template (no PII)
-  tests/             node:test suites incl. lint_snake_case.test.js
+  examples/sample/   SYNTHETIC committed fixtures (fake CSV + xlsx + build_sample.js + goldens) for tests
+  tests/             node:test suites: engine + lint_snake_case + sample.test.js (always-on,
+                     committed synthetic data) + fixtures.test.js (optional real usat/data tier)
 ../../server_race_results_transform_8018.js   thin express.static host + ngrok (repo root)
 ```
 
@@ -75,7 +78,7 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 - Output ALWAYS has all 12 columns in order; only **Address** is optional.
 - Member #: numeric kept; blank / "Valid" / non-numeric → `1-day` (flagged).
 - Gender M/F/NB · DOB `mm/dd/yyyy` · State 2-letter (foreign flagged) ·
-  Category Age Group/Elite/Para/Relay · Recorded Time `hh:mm:ss.000`.
+  Category Age Group/Elite/Para/Relay/Open · Recorded Time `hh:mm:ss.000`.
 - Race statuses (DNS/DNF/DQ/DSQ/DNC/NT) preserved verbatim, flagged `time-status`.
 - exceljs reads dates/times as UTC on the 1899-12-30 epoch — normalizers use getUTC*/epoch-diff.
 
@@ -103,3 +106,11 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 
 - Confirm the canonical Category rule for bare division names with the events team.
 - Optional: apply USAT theme to a print/export stylesheet; export/import mapping profiles as JSON.
+
+## Full-name split
+
+When a source has no First/Last column but a single full-name column (`Name`, `Athlete Name`, …),
+`match.auto_map` claims it up front and marks `first_name`/`last_name` with `split:'first'|'last'`
+(confidence `split`). `transform.run` then derives each via `normalize.split_name` (handles
+`Last, First` and `First Middle Last`). `reconcile` skips the pass-through preservation check for
+split-derived columns since their values are computed, not copied.

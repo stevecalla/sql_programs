@@ -4,8 +4,9 @@ Turn any race-results spreadsheet (`.xlsx` or `.csv`) into the fixed **USA Triat
 template** — entirely in your browser, with a human review step before you download.
 
 > **Privacy:** the conversion runs client-side. Race files contain member PII (DOB, email,
-> address); with this tool that data never leaves the machine it's opened on, and the example
-> data lives outside the repo (see "Data" below), so it never reaches git/GitHub.
+> address); with this tool that data never leaves the machine it's opened on. The web app writes
+> nothing to disk, and the CLI/test data folder lives outside the repo (see "Data"), so race data
+> is never committed.
 
 ## What it does
 
@@ -16,8 +17,9 @@ highlighted cells (values it changed or guessed), fix anything, then download a 
 Recorded Time` — even when the source was missing some. Per the template, only **Address** is
 optional.
 
-Value rules: Member # kept if numeric, else `1-day`; Gender → M/F/NB; DOB → `mm/dd/yyyy`;
-State → 2-letter (foreign flagged); Category → Age Group / Elite / Para / Relay; Recorded Time →
+Value rules: when there's no separate First/Last column but a single full **Name** column, it's
+split into First + Last (handling `Last, First` and `First Middle Last`); Member # kept if numeric (text around a number is trimmed, e.g. `USAT-12345` → `12345`), else `1-day`; Gender → M/F/NB/Open; DOB → `mm/dd/yyyy`;
+State → 2-letter (foreign flagged); Category → Age Group / Elite / Para / Relay / Open; Recorded Time →
 `hh:mm:ss.000` (finish time only, never a split); race statuses (DNS/DNF/DQ…) are preserved.
 
 ## Run it
@@ -44,8 +46,8 @@ npm test            # or: node --test tests/*.test.js
 - One **Compare** card with tabs: **Tables · Mapping · Scorecard · Integrity · Field reference ·
   How it works**, plus a summary bar (score %, file name, flagged-value count, skipped rows).
 - **Tables** side-by-side / stacked / tabs (switcher, remembered). Each table is searchable and
-  sortable, with a frozen header row and a friendly empty-state. **Link tables** (on by default)
-  syncs search, sort and vertical scroll across both.
+  sortable (case-insensitive), with a frozen header row and a friendly empty-state. **Link tables** (on by default)
+  syncs search, sort, vertical scroll and the "Show rows" filter across both.
 - **Inline remap:** every reformatted column header has a dropdown (in a top header row, so the
   two tables line up) to re-point that field; same controls live in the **Mapping** tab.
 - **Highlights:** changed/guessed cells are highlighted; the legend is collapsible, resizable and
@@ -58,15 +60,26 @@ npm test            # or: node --test tests/*.test.js
 
 ## Data
 
-All race data and generated files live **outside the repo**, in
-`usat/data/race_results_transform/` (resolved cross-platform via `utilities/determineOSPath`,
-created automatically on first run):
+The **web app writes nothing to disk** — it converts in memory and downloads through the browser,
+so it has no data folder. Only the **CLI and fixture tests** use a data directory, resolved by
+`utilities/determineOSPath` (the same per-machine location the repo's other tools use) under a
+`race_results_transform/` subfolder, created automatically on first use:
 
 ```
-inputs/    source files to convert (place your files here for the CLI / fixture tests)
-outputs/   reformatted .xlsx the CLI writes
-expected/  golden snapshots for the fixture tests
+<determineOSPath()>/race_results_transform/
+  inputs/    source files to convert (put your files here for the CLI / fixture tests)
+  outputs/   reformatted .xlsx the CLI writes
+  expected/  golden snapshots for the fixture tests
 ```
+
+`determineOSPath()` returns `…/usat/data/` on Linux/Mac; on **Windows** it currently resolves to
+the configured uploads path (`C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/data/`). Either way
+it's outside the repo, so race data is never committed.
+
+For regression testing **without** that folder, a committed **synthetic** fixture lives in
+`examples/sample/` (clearly-fake data — fake names, `@example.com` emails). `tests/sample.test.js`
+converts it and checks committed golden snapshots, so `node --test tests/*.test.js` passes on any
+clone / CI. `tests/fixtures.test.js` is the optional real-data tier (skips when the data dir is empty).
 
 ## Architecture
 

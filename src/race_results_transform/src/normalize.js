@@ -112,14 +112,20 @@
   }
 
   function n_member(value) {
-    var s = as_text(value);
-    var digits = s.replace(/\D/g, '');
-    // Treat a real numeric membership id (>= 4 digits) as the member number.
-    if (digits.length >= 4 && /^[\d\s-]+$/.test(s)) {
-      return { value: digits, flag: null };
+    if (is_blank(value)) return { value: '1-day', flag: 'member-default' };
+    var s = as_text(value).trim();
+    // Clean numeric id (digits, spaces, dashes only) — strip separators, keep digits.
+    if (/^[\d\s-]+$/.test(s)) {
+      var digits = s.replace(/\D/g, '');
+      return digits.length >= 4 ? { value: digits, flag: null }
+                                : { value: '1-day', flag: 'member-nonnumeric' };
     }
-    // blank, "Valid", "1-day", or anything non-numeric -> one-day default.
-    return { value: '1-day', flag: is_blank(value) ? 'member-default' : 'member-nonnumeric' };
+    // Mixed number + text (e.g. "USAT-2100013891", "2100013891 (expired 2024)"):
+    // drop parenthetical notes and letters, then keep the remaining digit run.
+    var trimmed = s.replace(/\([^)]*\)/g, ' ').replace(/[A-Za-z]+/g, ' ').replace(/\D/g, '');
+    if (trimmed.length >= 4) return { value: trimmed, flag: 'member-trimmed' };
+    // "Valid", "1-day", or anything else with no usable number -> one-day default.
+    return { value: '1-day', flag: 'member-nonnumeric' };
   }
 
   function n_gender(value) {
@@ -129,6 +135,7 @@
     if (s === 'f' || s === 'female' || s === 'woman' || s === 'girl') return { value: 'F', flag: null };
     if (s === 'nb' || s === 'non-binary' || s === 'nonbinary' || s === 'non binary' || s === 'x' || s === 'other' || s === 'enby')
       return { value: 'NB', flag: null };
+    if (s === 'open') return { value: 'Open', flag: null };
     if (s[0] === 'm') return { value: 'M', flag: null };
     if (s[0] === 'f') return { value: 'F', flag: null };
     return { value: s.toUpperCase(), flag: 'gender-unknown' };
@@ -164,6 +171,7 @@
     if (/\d{1,2}\s*[-–to]+\s*\d{1,2}/.test(l)) return { value: 'Age Group', flag: null }; // 30-34
     if (/\b(m|f|male|female)?\s*\d{2}\s*(\+|and over|over)?\b/.test(l) && /\d{2}/.test(l))
       return { value: 'Age Group', flag: null };
+    if (/\bopen\b/.test(l)) return { value: 'Open', flag: null };
     // unrecognized division name -> assume Age Group, flag for confirmation
     return { value: 'Age Group', flag: 'category-assumed' };
   }
@@ -185,6 +193,24 @@
     return { value: pad(h, 2) + ':' + pad(mi, 2) + ':' + pad(s, 2) + '.' + pad(ms_part, 3), flag: null };
   }
 
+  // Split a single full-name field into { first, last }.
+  //   "Last, First [Middle]"  -> comma form: last = before comma, first = after
+  //   "First [Middle] Last"   -> first = first token, last = the rest
+  //   single token            -> first only
+  function split_name(value) {
+    var s = as_text(value).replace(/\s+/g, ' ').trim();
+    if (!s) return { first: '', last: '' };
+    if (s.indexOf(',') >= 0) {
+      var parts = s.split(',');
+      var last = parts[0].trim();
+      var first = parts.slice(1).join(' ').trim();
+      return { first: first, last: last };
+    }
+    var t = s.split(' ').filter(Boolean);
+    if (t.length === 1) return { first: t[0], last: '' };
+    return { first: t[0], last: t.slice(1).join(' ') };
+  }
+
   var REGISTRY = {
     text: n_text, member: n_member, gender: n_gender, dob: n_dob,
     state: n_state, category: n_category, time: n_time
@@ -198,7 +224,7 @@
   return {
     run: run, registry: REGISTRY,
     is_blank: is_blank, as_text: as_text, pad: pad,
-    to_ymd: to_ymd, to_duration_ms: to_duration_ms,
+    to_ymd: to_ymd, to_duration_ms: to_duration_ms, split_name: split_name,
     STATE_ABBR: STATE_ABBR, VALID_ABBR: VALID_ABBR,
     // expose individual normalizers for unit tests
     n_text: n_text, n_member: n_member, n_gender: n_gender, n_dob: n_dob,
