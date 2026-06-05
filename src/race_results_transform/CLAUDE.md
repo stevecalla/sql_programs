@@ -36,6 +36,7 @@ src/race_results_transform/
     schema.js          TEMPLATE_SCHEMA — the ONLY place domain knowledge lives (aliases, rules)
     normalize.js       value normalizers (gender/dob/state/time incl. DNS/DNF, category, member)
     display.js         how a cell renders in the tables (Excel time -> time, not date) — TESTED
+    sort.js            table-sort comparator (case/accent-insensitive, natural numbers) — TESTED
     parse.js           header detection + divider/blank-row skipping
     match.js           column auto-matching (alias scoring + greedy assignment)
     transform.js       apply mapping -> output grid + stats + flags + distinct enum values
@@ -76,8 +77,9 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 ## Key rules
 
 - Output ALWAYS has all 12 columns in order; only **Address** is optional.
-- Member #: numeric kept; blank / "Valid" / non-numeric → `1-day` (flagged).
-- Gender M/F/NB · DOB `mm/dd/yyyy` · State 2-letter (foreign flagged) ·
+- Member #: clean numeric kept (separators stripped); number embedded in text is trimmed out
+  (`USAT-12345` → `12345`, flagged `member-trimmed`); blank / "Valid" / no usable number → `1-day`.
+- Gender M/F/NB/Open · DOB `mm/dd/yyyy` · State 2-letter (foreign flagged) ·
   Category Age Group/Elite/Para/Relay/Open · Recorded Time `hh:mm:ss.000`.
 - Race statuses (DNS/DNF/DQ/DSQ/DNC/NT) preserved verbatim, flagged `time-status`.
 - exceljs reads dates/times as UTC on the 1899-12-30 epoch — normalizers use getUTC*/epoch-diff.
@@ -89,7 +91,9 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 - One **Compare** card with tabs (Tables/Mapping/Scorecard/Integrity/Field reference/How it works)
   + summary bar. Layout switch side/stacked/tabs. **Link tables** (default ON) syncs search, sort
   and vertical scroll across both `TableView`s.
-- `TableView`: searchable, sortable, frozen header, empty-state, `show_all`, `set_filter`,
+- `TableView`: searchable, sortable (comparator is `src/sort.js` — case/accent-insensitive,
+  natural-number ordering — so the browser sort is unit-tested), frozen header, empty-state,
+  `show_all`, `set_filter`,
   two-row header (control row of remap selects on top so the two tables align), `on_search`/
   `on_sort`/`set_query`/`set_order` hooks for linking.
 - Highlight legend: collapsible + resizable; per-reason **Show rows** (`filter_by_code`) +

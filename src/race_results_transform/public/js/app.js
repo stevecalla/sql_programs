@@ -6,7 +6,7 @@
   var RRT = window.RRT || {};
   var io = RRT.io, parse = RRT.parse, match = RRT.match, transform = RRT.transform,
       reconcile = RRT.reconcile, mapper = RRT.mapping, schema = RRT.schema,
-      normalize = RRT.normalize, display = RRT.display;
+      normalize = RRT.normalize, display = RRT.display, sort = RRT.sort;
 
   var ENUM_BUCKETS = { category: ['Age Group', 'Elite', 'Para', 'Relay', 'Open'], gender: ['M', 'F', 'NB', 'Open'] };
   var PREF_KEY = 'rrt_ui_v1';
@@ -64,12 +64,8 @@
     };
 
     function compare(a, b, c) {
-      var va = cell_text(T.data[a][c]), vb = cell_text(T.data[b][c]), num = /^-?\d+(\.\d+)?$/, cmp;
-      if (num.test(va) && num.test(vb)) cmp = parseFloat(va) - parseFloat(vb);
-      // Case-insensitive, accent-insensitive, natural-number-aware string sort,
-      // so "alice" and "Alice" land together instead of upper-case-first.
-      else cmp = va.localeCompare(vb, undefined, { sensitivity: 'base', numeric: true });
-      return cmp * T.sort_dir;
+      // Comparator lives in the isomorphic core (src/sort.js) so it's unit-tested.
+      return sort.compare_text(cell_text(T.data[a][c]), cell_text(T.data[b][c])) * T.sort_dir;
     }
     T.apply_sort = function () {
       T.order = T.data.map(function (_, i) { return i; });
