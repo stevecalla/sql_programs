@@ -114,6 +114,13 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   Multi-sheet: the split Download button opens a sheet picker (`open_split_picker`) and `run_split`
   emits one file per group for each chosen sheet (filename includes the sheet name). The inline
   value list reflects the active sheet.
+- **Group-name helpers** (`SPLIT_FEATURES` flags at the top of `app.js`, each independently
+  revertable): `group_picker` makes each Original-value group field a pick-or-type box (a
+  `<datalist id="split-groups">` of the group names you've already typed → dropdown + autocomplete,
+  still free-text for new groups); `remember_grouping` persists the value→group map per
+  `signature|column` in prefs (`split_groups`) and re-applies it on the next same-layout file
+  (`load_saved_groups`/`save_groups`; **Reset groups** also forgets the saved copy). Flip either flag
+  to `false` to disable; `git checkout public/js/app.js public/css/app.css` reverts everything.
 - One **Compare** card with tabs (Tables/Mapping/Scorecard/Integrity/Field reference/How it works)
   + summary bar. Layout switch side/stacked/tabs. **Link tables** (default ON) syncs search, sort
   and vertical scroll across both `TableView`s.
