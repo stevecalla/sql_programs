@@ -36,10 +36,10 @@ const mysql = require('mysql2/promise');
 const { local_usat_sales_db_config } = require('./utilities/config');
 const { make_event_ingest, fmt_in_tz } = require('./utilities/analytics/event_ingest');
 const { ensure_table, ensure_columns } = require('./utilities/analytics/ensure_table');
-const metrics_config = require('./src/race_results_transform/metrics_config');
+const metrics_config = require('./src/race_results_transform/metrics/metrics_config');
 const { query_create_race_results_transform_events_table } =
   require('./src/queries/create_drop_db_table/query_create_race_results_transform_events_table');
-const metrics_report = require('./src/race_results_transform/metrics_report');
+const metrics_report = require('./src/race_results_transform/metrics/metrics_report');
 const { slack_message_api } = require('./utilities/slack_messaging/slack_message_api');
 
 const METRICS_ON = String(process.env.METRICS_OFF).toLowerCase() !== 'true';
@@ -109,7 +109,7 @@ function create_app() {
     }
     res.set('WWW-Authenticate', 'Basic realm="race_results_metrics"').status(401).send('Authentication required.');
   }
-  const DASHBOARD_HTML = path.join(__dirname, 'src', 'race_results_transform', 'metrics_dashboard.html');
+  const DASHBOARD_HTML = path.join(__dirname, 'src', 'race_results_transform', 'metrics', 'metrics_dashboard.html');
   app.get('/metrics', basic_auth, function (req, res) {
     // record one dashboard_view per page open (best-effort; excluded from "visits")
     if (metrics_pool && !req.headers['x-metrics-test']) {

@@ -20,8 +20,8 @@ const path = require('path');
 const io = require('./io');
 const pipe = require('./pipeline');
 const mapping = require('./mapping');
-const data_dir = require('../data_dir');
-const metrics = require('../metrics_report');   // usage analytics (stats/size/cleanup)
+const data_dir = require('./data_dir');
+const metrics = require('../metrics/metrics_report');   // usage analytics (stats/size/cleanup)
 
 // ---- tiny ANSI helpers (match menu.js house style) ------------------------
 const C = {

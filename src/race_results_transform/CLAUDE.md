@@ -62,11 +62,13 @@ src/race_results_transform/
                        (every sheet) ; grid_to_buffer / grids_to_buffer (one worksheet per group,
                        names sanitized to <=31 chars, unique); output centered, wide, frozen header
     cli.js             scriptable converter (inspect / convert / batch)
+    data_dir.js        data dir via utilities/determineOSPath (…/usat/data on linux/mac); CLI + tests only
   public/            web app: index.html, css/app.css, js/app.js, favicon.svg, vendor/exceljs.min.js
   menu.js            interactive launcher (pauses after each command); item numbers are sequential
                      1..N in display order, guarded by tests/menu_ids.test.js
-  data_dir.js        data dir via utilities/determineOSPath (…/usat/data on linux/mac; configured
-                       uploads path on Windows) + /race_results_transform; CLI + tests only
+  metrics/           usage-analytics server modules + the Basic-Auth dashboard view (kept OUT of
+                       public/ and src/ so it isn't statically served): metrics_config.js,
+                       metrics_report.js, metrics_dashboard.html
   package.json       scripts + bin (no deps block — exceljs lives in the root package)
   examples/template/ the target-format template (no PII)
   examples/sample/   SYNTHETIC committed fixtures (fake CSV + xlsx + build_sample.js + goldens) for tests

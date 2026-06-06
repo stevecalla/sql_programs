@@ -10,7 +10,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const FILES = []
   .concat(fs.readdirSync(path.join(ROOT, 'src')).filter((f) => f.endsWith('.js')).map((f) => 'src/' + f))
-  .concat(['public/js/app.js', 'menu.js', 'data_dir.js'])
+  .concat(['public/js/app.js', 'menu.js'])
   .concat(fs.readdirSync(__dirname).filter((f) => /\.test\.js$/.test(f) && f !== 'lint_snake_case.test.js').map((f) => 'tests/' + f));
 
 // DOM / Node / ExcelJS / stdlib camelCase APIs + the one external util — these are not ours.

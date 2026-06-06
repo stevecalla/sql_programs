@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const { spawn, execSync } = require('child_process');
-const data_dir = require('./data_dir');
+const data_dir = require('./src/data_dir');
 
 const DIR = __dirname;
 const SERVER = path.join(DIR, '..', '..', 'server_race_results_transform_8018.js');

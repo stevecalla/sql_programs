@@ -427,11 +427,11 @@ The code is built and the dep-free tests pass. To run it in production:
 ## Files delivered
 - Core: `utilities/analytics/{event_ingest,ensure_table,retention,metrics_client,report_render}.js`
 - Table DDL: `src/queries/create_drop_db_table/query_create_race_results_transform_events_table.js`
-- App config + aggregation: `src/race_results_transform/{metrics_config.js, metrics_report.js}`
+- App config + aggregation: `src/race_results_transform/metrics/{metrics_config.js, metrics_report.js}`
 - Client init: `public/js/metrics.js` (+ index.html script tags); track() wired into app.js
 - Server: ingest + dashboard + report + digest routes in `server_race_results_transform_8018.js`
   (+ `race_results_slack_channel` added to `utilities/slack_messaging/slack_message_api.js`)
-- Dashboard page: `src/race_results_transform/metrics_dashboard.html`
+- Dashboard page: `src/race_results_transform/metrics/metrics_dashboard.html` (gated; not under public/)
 - CLI: `stats` / `metrics:size` / `metrics:cleanup` in `src/cli.js` (+ menu.js "Usage analytics" items)
 - Crons: `utilities/cron_get_slack_race_results_transform/`, `utilities/cron_get_purge_race_results_transform/`
 - Tests: `tests/metrics_ingest.test.js` (dep-free) + `e2e/metrics_beacon.spec.js` (beacon fires)

@@ -7,11 +7,11 @@ const path = require('path');
 // Load the repo-root .env by absolute path BEFORE requiring config (which reads
 // process.env). The CLI runs from the project subfolder, so a CWD-relative dotenv
 // would miss it (-> empty DB user). Same approach as the server + purge cron.
-require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '..', '.env') });
 const mysql = require('mysql2/promise');
-const { local_usat_sales_db_config } = require('../../utilities/config');
-const retention = require('../../utilities/analytics/retention');
-const render = require('../../utilities/analytics/report_render');
+const { local_usat_sales_db_config } = require('../../../utilities/config');
+const retention = require('../../../utilities/analytics/retention');
+const render = require('../../../utilities/analytics/report_render');
 const cfg = require('./metrics_config');
 
 const T = cfg.TABLE;

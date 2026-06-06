@@ -19,7 +19,7 @@
 'use strict';
 const path = require('path');
 const fs = require('fs');
-const { determineOSPath } = require('../../utilities/determineOSPath');
+const { determineOSPath } = require('../../../utilities/determineOSPath');
 
 async function base() {
   const root = await determineOSPath();          // e.g. .../usat/data/

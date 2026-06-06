@@ -215,3 +215,6 @@ dist
 build/Release
 .tern-port
 web_modules/
+# race_results_transform — generated artifacts (not source)
+src/race_results_transform/test-results/
+src/race_results_transform/.menu_prefs.json

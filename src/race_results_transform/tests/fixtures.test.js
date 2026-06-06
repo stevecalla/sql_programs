@@ -7,7 +7,7 @@ const io = require('../src/io');
 const pipe = require('../src/pipeline');
 const schema = require('../src/schema');
 
-const data_dir = require('../data_dir');
+const data_dir = require('../src/data_dir');
 
 // Resolve the data dir lazily; skip gracefully where it can't be created
 // (e.g. CI without the usat/data tree). PII never lives in the repo.

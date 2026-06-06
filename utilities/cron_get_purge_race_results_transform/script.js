@@ -4,7 +4,7 @@
 const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });   // repo-root .env, CWD-independent
-const metrics = require('../../src/race_results_transform/metrics_report');
+const metrics = require('../../src/race_results_transform/metrics/metrics_report');
 
 (async function () {
   console.log(`\nHello - RUN RACE RESULTS TRANSFORM RETENTION PURGE JOB`);
