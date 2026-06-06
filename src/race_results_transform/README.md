@@ -40,7 +40,7 @@ npm run pm2_start_race_results_transform   # pm2-managed as usat_race_results_tr
 node src/cli.js inspect "<file>.xlsx|.csv"    # show headers + auto-mapping, no write
 node src/cli.js convert "<file>"  [-o out]    # write a reformatted .xlsx (one sheet per source sheet)
 node src/cli.js batch   <folder>  [-o dir]    # convert a whole folder
-node menu.js                                  # sectioned interactive menu (pauses after each command)
+node menu.js                                  # sectioned interactive menu (incl. a Config-wiring check); pauses after each command
 
 # tests
 npm test            # or: node --test tests/*.test.js

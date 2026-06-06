@@ -62,8 +62,10 @@ src/race_results_transform/
   package.json       scripts + bin (no deps block — exceljs lives in the root package)
   examples/template/ the target-format template (no PII)
   examples/sample/   SYNTHETIC committed fixtures (fake CSV + xlsx + build_sample.js + goldens) for tests
-  tests/             node:test suites: engine + lint_snake_case + sample.test.js (always-on,
-                     committed synthetic data) + fixtures.test.js (optional real usat/data tier)
+  tests/             node:test suites (each wrapped in describe(); runnable via menu.js or
+                     node --test): engine + lint_snake_case + web_assets (static-asset integrity)
+                     + config_wiring (repo-root package.json + .vscode/tasks.json) + sample.test.js
+                     (always-on synthetic data) + fixtures.test.js (optional real usat/data tier)
 ../../server_race_results_transform_8018.js   thin express.static host + ngrok (repo root)
 ```
 
