@@ -62,4 +62,14 @@ test.describe('race_results_transform — metrics dashboard', () => {
     await expect(page.locator('#themeToggle')).toBeVisible();
     await expect(page.locator('#periods button').first()).toBeVisible();
   });
+
+  test('mints a session cookie and logout clears it (#7)', async ({ page, context }) => {
+    await page.goto('/metrics');
+    let cookies = await context.cookies();
+    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'session cookie set after auth').toBe(true);
+    const resp = await page.goto('/metrics/logout');
+    expect(resp.status()).toBe(200);
+    cookies = await context.cookies();
+    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'session cookie cleared on logout').toBe(false);
+  });
 });

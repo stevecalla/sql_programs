@@ -30,6 +30,7 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 
 // ---- Usage analytics (best-effort; PII never leaves the browser) -----------
 const mysql = require('mysql2/promise');
@@ -98,19 +99,59 @@ function create_app() {
 
   // Slack usage digest — hit by the cron_get_slack_race_results_transform job.
   // Same cron -> route -> slack_message_api convention as the other slack jobs.
-  // ---- Read-only metrics dashboard (Basic Auth; fail-closed if unconfigured) --
-  function basic_auth(req, res, next) {
-    const user = process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_USER, pass = process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_PASS;
-    if (!user || !pass) { res.status(503).send('Dashboard not configured (set RACE_RESULTS_CONVERTER_METRICS_DASH_USER / RACE_RESULTS_CONVERTER_METRICS_DASH_PASS).'); return; }
+  // ---- Read-only metrics dashboard auth -------------------------------------
+  // HTTP Basic bootstraps the login (browser dialog / httpCredentials in tests);
+  // on success we mint a short-lived SIGNED session cookie so access EXPIRES and
+  // can be revoked via /metrics/logout. The signing key is derived from the
+  // configured password (HMAC), so no extra env var is required. Fail-closed if the
+  // dashboard user/pass aren't set. NOTE: browsers cache Basic creds, so a *full*
+  // sign-out can still require closing the browser — the cookie + TTL add server-side
+  // revocation and an absolute session lifetime on top of Basic.
+  const SESSION_COOKIE = 'mx_session';
+  const SESSION_TTL_MS = 12 * 60 * 60 * 1000;   // 12h absolute expiry
+  function dash_creds() {
+    return { user: process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_USER, pass: process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_PASS };
+  }
+  function sign_session(exp) {
+    return exp + '.' + crypto.createHmac('sha256', 'mx|' + (dash_creds().pass || '')).update(String(exp)).digest('base64url');
+  }
+  function valid_session(token) {
+    if (!token) return false;
+    const dot = token.indexOf('.'); if (dot < 0) return false;
+    const exp = Number(token.slice(0, dot));
+    if (!exp || Date.now() > exp) return false;
+    const want = sign_session(exp);
+    return token.length === want.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(want));
+  }
+  function read_cookie(req, name) {
+    const m = (req.headers.cookie || '').match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  function basic_ok(req) {
+    const c = dash_creds();
     const m = (req.headers.authorization || '').match(/^Basic (.+)$/);
-    if (m) {
-      const parts = Buffer.from(m[1], 'base64').toString().split(':');
-      if (parts[0] === user && parts.slice(1).join(':') === pass) return next();
+    if (!m) return false;
+    const parts = Buffer.from(m[1], 'base64').toString().split(':');
+    return parts[0] === c.user && parts.slice(1).join(':') === c.pass;
+  }
+  function require_dash_auth(req, res, next) {
+    const c = dash_creds();
+    if (!c.user || !c.pass) { res.status(503).send('Dashboard not configured (set RACE_RESULTS_CONVERTER_METRICS_DASH_USER / RACE_RESULTS_CONVERTER_METRICS_DASH_PASS).'); return; }
+    if (valid_session(read_cookie(req, SESSION_COOKIE))) return next();   // unexpired session cookie
+    if (basic_ok(req)) {                                                  // bootstrap via Basic -> mint a session
+      res.cookie(SESSION_COOKIE, sign_session(Date.now() + SESSION_TTL_MS), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_MS });
+      return next();
     }
     res.set('WWW-Authenticate', 'Basic realm="race_results_metrics"').status(401).send('Authentication required.');
   }
+  app.get('/metrics/logout', function (req, res) {
+    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.type('html').send('<!doctype html><meta charset="utf-8"><title>Signed out</title>'
+      + '<p style="font:16px system-ui;margin:2rem">Signed out of the metrics dashboard. <a href="/metrics">Sign back in</a>.</p>'
+      + '<p style="font:13px system-ui;color:#888;margin:0 2rem">Your browser may have cached the login; fully signing out can require closing the browser.</p>');
+  });
   const DASHBOARD_HTML = path.join(__dirname, 'src', 'race_results_transform', 'metrics', 'metrics_dashboard.html');
-  app.get('/metrics', basic_auth, function (req, res) {
+  app.get('/metrics', require_dash_auth, function (req, res) {
     // record one dashboard_view per page open (best-effort; excluded from "visits")
     if (metrics_pool && !req.headers['x-metrics-test']) {
       const now = new Date();
@@ -121,7 +162,7 @@ function create_app() {
     }
     res.type('html').sendFile(DASHBOARD_HTML);
   });
-  app.get('/api/metrics-report', basic_auth, async function (req, res) {
+  app.get('/api/metrics-report', require_dash_auth, async function (req, res) {
     try {
       if (!metrics_pool) return res.status(503).json({ ok: false, error: 'analytics DB not available' });
       const days = Number(req.query.days) || 7;

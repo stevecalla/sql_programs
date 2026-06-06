@@ -18,6 +18,14 @@
   }
   function ls_get(k) { try { return global.localStorage.getItem(k); } catch (e) { return null; } }
   function ls_set(k, v) { try { global.localStorage.setItem(k, v); } catch (e) { /* private mode */ } }
+  function ck_get(k) {
+    try { var m = (global.document && global.document.cookie || '').match(new RegExp('(?:^|; )' + k + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : null; }
+    catch (e) { return null; }
+  }
+  function ck_set(k, v) {
+    try { global.document.cookie = k + '=' + encodeURIComponent(v) + '; Max-Age=' + (60 * 60 * 24 * 730) + '; Path=/; SameSite=Lax'; }
+    catch (e) { /* no document */ }
+  }
   function dnt() {
     var v = global.navigator && (global.navigator.doNotTrack || global.doNotTrack);
     return v === '1' || v === 'yes';
@@ -53,9 +61,13 @@
     cfg.endpoint = opts.endpoint || cfg.endpoint;
     cfg.allowList = opts.allowList || [];
     if (off()) return;
-    var vid = ls_get('um_visitor_id');
+    // Durable anonymous id: prefer cookie, then localStorage, else mint. Persist to BOTH
+    // so the id survives if either store is cleared (cookie also lasts ~2 years).
+    var vid = ck_get('um_visitor_id') || ls_get('um_visitor_id');
     ids.is_returning = vid ? 1 : 0;
-    if (!vid) { vid = uuid(); ls_set('um_visitor_id', vid); }
+    if (!vid) vid = uuid();
+    ls_set('um_visitor_id', vid);
+    ck_set('um_visitor_id', vid);
     ids.visitor_id = vid;
     ids.session_id = uuid();
     track('page_view', {});

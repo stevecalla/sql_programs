@@ -169,14 +169,15 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 
 - Confirm the canonical Category rule for bare division names with the events team.
 - Optional: apply USAT theme to a print/export stylesheet; export/import mapping profiles as JSON.
-- **Metrics dashboard auth**: `/metrics` uses HTTP Basic Auth, which has NO server-side
-  session/expiry — the browser caches the credentials per origin until it closes. Potential
-  improvement: add a signed, time-limited token (configurable expiry) for a real timeout.
-- **Anonymous visitor_id durability**: the analytics `visitor_id` lives in `localStorage`
-  (durable across restarts, but lost on clear-site-data / incognito / a different browser or
-  device). Potential improvement: also write it to a long-lived first-party cookie and restore
-  from whichever survives, to reduce false "new user" counts. (True cross-device unification
-  would require a login/account, which is intentionally avoided.)
+- **Metrics dashboard auth** (#7, built): `/metrics` + `/api/metrics-report` use HTTP Basic to
+  bootstrap, then a signed `mx_session` cookie (HMAC keyed off the dashboard pass, 12h absolute
+  TTL) gates access; `GET /metrics/logout` clears it. Adds server-side expiry + revocation on top
+  of Basic. Caveat: browsers cache Basic creds, so a *full* sign-out can still require closing the
+  browser. No new env var (key derived from `_PASS`).
+- **Anonymous visitor_id durability** (#6, built): `visitor_id` is written to BOTH a long-lived
+  first-party cookie (~2yr, SameSite=Lax) AND `localStorage`, and restored from whichever survives,
+  so it persists if one store is cleared. (True cross-device unification would require a
+  login/account, which is intentionally avoided.)
 
 ## Full-name split
 

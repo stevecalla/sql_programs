@@ -19,7 +19,7 @@ no third-party trackers, **no new npm dependencies, no external license**.
 | Reporting | One shared aggregation → **Slack digest** (cron→route→`sendSlackMessage`) + **CLI `stats`** + **Basic-Auth dashboard** |
 | Slack cron | We ship `cron_get_slack_race_results_transform/` (mirrors `cron_get_slack_membership_base`); **you own the schedule** |
 | CLI | `node src/cli.js stats` · `metrics:size` · `metrics:cleanup` (+ menu items) |
-| Dashboard | `http://localhost:8018/metrics` (or ngrok), **HTTP Basic Auth** (`.env` creds), read-only Chart.js page |
+| Dashboard | `http://localhost:8018/metrics` (or ngrok), **HTTP Basic Auth + signed `mx_session` cookie (12h expiry, `/metrics/logout`)**, read-only Chart.js page |
 | Cron setup | **You add** the crontab lines on the server (we ship `run_script.sh`); recommended: digest Mon 8:00a, purge Sun 2:30a MTN |
 | Retention | Keep current + prior calendar year, **purge only (no scrub)**; **automatic** purge cron + CLI `metrics:size` / `metrics:cleanup` |
 | Growth | Bounded (~2 yrs of rows); tiny — likely single-digit MB |
@@ -53,7 +53,7 @@ Identity / session
 - `created_at_utc` DATETIME — canonical instant, generated like your other tables (`UTC_TIMESTAMP()`)
 - `created_at_mtn` DATETIME — same instant in Mountain time (`CONVERT_TZ(UTC_TIMESTAMP(),'UTC','America/Denver')`); calendar/day/week buckets group on this directly — matches the repo convention
 - `session_id` CHAR(36) — random per page load
-- `visitor_id` CHAR(36) — **anonymous, persistent per-browser id (localStorage)**; the "which user, not who" key
+- `visitor_id` CHAR(36) — **anonymous, persistent per-browser id (cookie + localStorage)**; the "which user, not who" key
 - `is_returning` TINYINT(1) — new vs repeat (localStorage first-seen flag)
 - `upload_id` CHAR(36) NULL — **correlation id**: minted when a file is loaded; stamped on the upload event AND every download/split event from that load → join "upload → download" for a completion/abandonment funnel
 - `event_name` VARCHAR(40) — page_view / file_uploaded / conversion_completed / download / split_download_used / mapping_saved / mapping_loaded / manual_remap / value_override / error / start_over / theme_changed / dashboard_view
@@ -92,7 +92,7 @@ is server-side off the user's path. Fallback: `fetch(..., {keepalive:true})`.
 New `public/js/metrics.js` (UMD like the other modules, `window.RRT.metrics`):
 - `track(event_name, props)` builds a payload from a **hard allow-list** (only the
   columns above) so a future caller can't leak a value by accident.
-- Mints `visitor_id` once (localStorage) + `is_returning`; mints `upload_id` per file load.
+- Mints `visitor_id` once (cookie + localStorage, restored from whichever survives) + `is_returning`; mints `upload_id` per file load.
 - Gated by `METRICS_OFF` flag and honors `navigator.doNotTrack`.
 - One-line UI/README notice: anonymous usage counts + filename; no member data leaves the browser.
 

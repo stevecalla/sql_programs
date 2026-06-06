@@ -32,4 +32,19 @@ test.describe('race_results_transform — usage beacon', () => {
     await page.waitForTimeout(1500);   // give any (unwanted) beacon time to fire
     expect(hits.length, 'automated runs must not emit analytics unless allowed').toBe(0);
   });
+
+  test('visitor_id persists via cookie even if localStorage is cleared (#6)', async ({ page }) => {
+    reset_steps();
+    await page.addInitScript(() => { window.METRICS_TEST_ALLOW = true; });
+    await capture(page, []);   // swallow beacons so this never touches the DB
+    await page.goto('/');
+    const id1 = await page.evaluate(function () { try { return localStorage.getItem('um_visitor_id'); } catch (e) { return null; } });
+    expect(id1, 'an anonymous id is minted').toBeTruthy();
+    expect(await page.evaluate(function () { return document.cookie; }), 'id also written to a cookie').toContain('um_visitor_id');
+    // wipe localStorage but keep the cookie -> reload should recover the SAME id from the cookie
+    await page.evaluate(function () { try { localStorage.clear(); } catch (e) {} });
+    await page.reload();
+    const id2 = await page.evaluate(function () { try { return localStorage.getItem('um_visitor_id'); } catch (e) { return null; } });
+    expect(id2, 'id recovered from cookie after localStorage cleared').toBe(id1);
+  });
 });
