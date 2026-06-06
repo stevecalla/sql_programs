@@ -4,9 +4,14 @@
 // suite and is never installed in the locked-down production/server environment.
 // Run it on a normal dev machine:
 //   cd src/race_results_transform
-//   npm run e2e:install     # one-time: installs Playwright + a Chromium binary
-//   npm run e2e             # boots the real server and drives a real browser
-const { defineConfig } = require('@playwright/test');
+//   npm run e2e:install     # one-time: Playwright + axe-core + chromium/firefox/webkit
+//   npm run e2e             # boots the real server and drives real browsers
+//   npm run e2e:chromium    # just chromium (fast); npm run e2e:snap = refresh visual baselines
+//
+// Projects: the Tier 1/2 specs run on chromium + firefox + webkit. mobile.spec.js
+// runs ONLY in the phone-sized "mobile" project; visual.spec.js (screenshot
+// baselines) runs ONLY on chromium so we keep a single committed baseline set.
+const { defineConfig, devices } = require('@playwright/test');
 const path = require('path');
 
 const PORT = process.env.E2E_PORT || 8018;
@@ -14,7 +19,13 @@ const HEADED = process.argv.includes('--headed');
 // HEADED_SLOWMO: ms paused between each action in --headed runs, so you can watch.
 // Bump this number for a slower run (env E2E_SLOWMO overrides it on bash, but not Windows cmd).
 const HEADED_SLOWMO = 1500;
+const SLOWMO = Number(process.env.E2E_SLOWMO) || (HEADED ? HEADED_SLOWMO : 0);
 const SERVER = path.join(__dirname, '..', '..', '..', 'server_race_results_transform_8018.js');
+
+// --no-sandbox lets Chromium-family browsers run on the Linux server (often as root).
+// Firefox/WebKit don't take that arg, so they get a plain launch.
+const chromium_launch = { args: ['--no-sandbox'], slowMo: SLOWMO };
+const plain_launch = { slowMo: SLOWMO };
 
 module.exports = defineConfig({
   testDir: __dirname,
@@ -25,11 +36,18 @@ module.exports = defineConfig({
     baseURL: 'http://localhost:' + PORT,
     headless: true,
     acceptDownloads: true,
-    trace: 'on-first-retry',
-    // --no-sandbox so headless Chromium also runs on the Linux server (often as root).
-    // slowMo (ms) makes headed runs watchable; 0 = full speed (headless default).
-    launchOptions: { args: ['--no-sandbox'], slowMo: Number(process.env.E2E_SLOWMO) || (HEADED ? HEADED_SLOWMO : 0) }
+    trace: 'on-first-retry'
   },
+  projects: [
+    { name: 'chromium', testIgnore: /mobile\.spec\.js/,
+      use: Object.assign({}, devices['Desktop Chrome'], { launchOptions: chromium_launch }) },
+    { name: 'firefox', testIgnore: /(mobile|visual|a11y)\.spec\.js/,
+      use: Object.assign({}, devices['Desktop Firefox'], { launchOptions: plain_launch }) },
+    { name: 'webkit', testIgnore: /(mobile|visual|a11y)\.spec\.js/,
+      use: Object.assign({}, devices['Desktop Safari'], { launchOptions: plain_launch }) },
+    { name: 'mobile', testMatch: /mobile\.spec\.js/,
+      use: Object.assign({}, devices['Pixel 5'], { launchOptions: chromium_launch }) }
+  ],
   // Auto-start the actual static host (serves public/ + /src). ngrok is off by
   // default in the server, so this is a clean local listen.
   webServer: {

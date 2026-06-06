@@ -63,4 +63,16 @@ Chrome window?". To change the pace, edit `HEADED_SLOWMO` (ms per step) in `e2e/
 
 - **convert_flow.spec.js** — load → convert → download (12-col), split-by-column, multi-sheet Combined, + theme/clock canaries.
 - **ui_interactions.spec.js** — theme persistence, CSV input, Approve all, edit-clears-a-flag, value-map override, inline header remap.
+- **linking_flow.spec.js** — Link tables mirrors search ON / stays independent OFF.
+- **table_view.spec.js** — search filter + clear, header sort (▲/▼ + Reset), legend “Show rows” filter.
+- **layout_sheets.spec.js** — layout side/stacked/tabs, sheet-tab data switching, drag-and-drop upload.
+- **split_presets.spec.js** — split group-name preset: Save preset (status) then Clear entries.
+- **a11y.spec.js** — axe-core scan (no critical violations) on home + Tables + Mapping.
+- **visual.spec.js** — screenshot baselines (chromium only): upload light/dark + compare card. `npm run e2e:snap` to (re)generate.
+- **mobile.spec.js** — Pixel-5 viewport: no horizontal overflow + convert works (runs in the `mobile` project only).
+- **errors.spec.js** — unreadable file → graceful error, page doesn't blank.
 - **helpers.js** — shared step()/highlight()/fixtures (not a test file).
+
+### Cross-browser, mobile, a11y, visual
+
+`npm run e2e` runs every spec on **chromium + firefox + webkit**, plus a phone-sized **mobile** project (`mobile.spec.js`). `npm run e2e:install` now also installs axe-core and the firefox/webkit engines. First time for visual tests, run `npm run e2e:snap` to create the committed PNG baselines under `e2e/visual.spec.js-snapshots/`. Fast path: `npm run e2e:chromium` (chromium only). Scope to one engine any time with `-- --project=firefox`.

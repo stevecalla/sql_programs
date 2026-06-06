@@ -49,20 +49,36 @@ npm test            # or: node --test tests/*.test.js
 ## End-to-end tests (Playwright — opt-in, run from the CLI)
 
 The `node --test` suite above is dependency-free and checks the engine + that the served
-*files* are intact. For a real-browser check of the **served app** (load → convert → download →
-split → combine, plus the theme/clock canaries), there's a Playwright suite in `e2e/`. It is
-**not** part of `npm test` and never enters the locked-down production install.
+*files* are intact. For a real-browser check of the **served app**, there's a Playwright suite
+in `e2e/` (10 spec files). It is **not** part of `npm test` and never enters the locked-down
+production install. It runs every functional spec on **chromium, firefox and webkit**, plus a
+phone-sized **mobile** project, and adds accessibility, visual-snapshot, and error-handling
+coverage:
+
+- **convert_flow / ui_interactions / linking_flow / table_view / layout_sheets / split_presets** —
+  load → convert → download, split-by-column, multi-sheet Combined, theme persistence, CSV input,
+  approve-all, edit-clears-a-flag, value-map override, inline header remap, link-tables sync,
+  search/sort/flag-filter, layout switch, sheet-tab data, drag-and-drop, split presets.
+- **a11y.spec.js** — axe-core scan (no critical violations) on home / Tables / Mapping.
+- **visual.spec.js** — screenshot baselines (chromium only): upload light/dark + compare card.
+- **mobile.spec.js** — Pixel-5 viewport: no horizontal overflow + convert works.
+- **errors.spec.js** — an unreadable file warns and the page survives.
 
 ```
-# one-time install (needs open npm + Playwright CDN access)
-npm run e2e:install              # dev machine (macOS/Windows): Chromium only
+# one-time install (open npm + Playwright CDN access) — adds axe-core + 3 browser engines
+npm run e2e:install              # dev machine (macOS/Windows)
 npm run e2e:install:server       # Linux server: adds --with-deps for system libs (root/sudo)
 
-# run (auto-starts server_race_results_transform_8018.js, drives headless Chromium)
-npm run e2e                      # E2E_PORT=8019 npm run e2e  to use another port
+# run (auto-starts server_race_results_transform_8018.js)
+npm run e2e                      # all browsers; E2E_PORT=8019 npm run e2e to use another port
+npm run e2e:chromium             # fast path — chromium only
+npm run e2e:headed               # visible Chrome, slowed + narrated (banner per step)
+npm run e2e:step                 # Inspector: PAUSE on every step, click Resume to advance
+npm run e2e:snap                 # (re)generate the visual baselines after intended UI changes
 ```
-The config passes `--no-sandbox` so it also runs headless as root on the Linux server.
-See `e2e/README.md` for details.
+The config passes `--no-sandbox` so chromium also runs headless as root on the Linux server.
+Visual baselines live in `e2e/visual.spec.js-snapshots/` and are committed. All the spec files
+share `e2e/helpers.js` (narrated step banner + click highlighting + fixtures). See `e2e/README.md`.
 
 ## The app at a glance
 

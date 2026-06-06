@@ -95,12 +95,12 @@
       var opt_html = '<option value="">(blank)</option>' + T.source_headers.map(function (sh) {
         return '<option value="' + esc(sh) + '"' + (sh === cur ? ' selected' : '') + '>' + esc(sh) + '</option>';
       }).join('');
-      return '<th class="hctl-c"><select class="hmap" data-c="' + c + '" title="Source column for ' + esc(h) + '">' + opt_html + '</select></th>';
+      return '<th class="hctl-c"><select class="hmap" data-c="' + c + '" title="Source column for ' + esc(h) + '" aria-label="Source column for ' + esc(h) + '">' + opt_html + '</select></th>';
     }
 
     function mount() {
       var tools = '<div class="tv-filter hidden"></div><div class="tv-toolbar">' +
-        '<input class="tv-search" type="search" placeholder="Search rows…" value="' + esc(T.query) + '">' +
+        '<input class="tv-search" type="search" placeholder="Search rows…" aria-label="Search table rows" value="' + esc(T.query) + '">' +
         '<button class="btn sm tv-reset"' + (T.sort_col == null ? ' disabled' : '') + '>Reset order</button>' +
         (T.data.length > T.cap ? '<button class="btn sm tv-all"></button>' : '') +
         (T.show_flag_filter ? '<label class="tv-flagonly"><input type="checkbox" class="tv-flagchk"' + (T.filter_set === T.flagged_rows ? ' checked' : '') + '> Only rows to review</label>' : '') +
@@ -509,7 +509,7 @@
       var m = S.mapping[col.key], opts = '<option value="">(leave blank)</option>';
       headers.forEach(function (h) { opts += '<option value="' + esc(h) + '"' + (m.source === h ? ' selected' : '') + '>' + esc(h) + '</option>'; });
       var conf = m.source ? m.confidence : 'none';
-      html += '<div class="map-row"><span class="tgt">' + esc(col.target) + '</span><select data-key="' + col.key + '">' + opts + '</select><span class="conf ' + conf + '">' + conf + '</span></div>';
+      html += '<div class="map-row"><span class="tgt">' + esc(col.target) + '</span><select data-key="' + col.key + '" aria-label="Source column for ' + esc(col.target) + '">' + opts + '</select><span class="conf ' + conf + '">' + conf + '</span></div>';
     });
     document.querySelectorAll('.rrt-colmap').forEach(function (box) {
       box.innerHTML = html;
@@ -546,7 +546,7 @@
   function vm_bulk(key) {
     var b = '<div class="vm-bulk">';
     if (ENUM_BUCKETS[key]) {
-      b += '<select class="vm-setall" data-key="' + key + '" title="Set every value in this field at once">' +
+      b += '<select class="vm-setall" data-key="' + key + '" title="Set every value in this field at once" aria-label="Set all values for this field">' +
         '<option value="">Set all to…</option>' +
         ENUM_BUCKETS[key].map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('') + '</select>';
     } else if (key === 'member_number') {
@@ -560,10 +560,10 @@
     var src_cls = e.info.flag ? 'src flagged' : 'src', control;
     if (ENUM_BUCKETS[key]) {
       var opts = ENUM_BUCKETS[key].map(function (b) { return '<option value="' + esc(b) + '"' + (b === cur ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('');
-      control = '<select data-key="' + key + '" data-src="' + esc(e.src_key) + '">' + opts + '</select>';
+      control = '<select data-key="' + key + '" data-src="' + esc(e.src_key) + '" aria-label="Mapped value for ' + esc(e.src_key) + '">' + opts + '</select>';
     } else {
       var ml = key === 'state' ? ' maxlength="2"' : '';
-      control = '<input data-key="' + key + '" data-src="' + esc(e.src_key) + '"' + ml + ' value="' + esc(cur) + '">';
+      control = '<input data-key="' + key + '" data-src="' + esc(e.src_key) + '" aria-label="Mapped value for ' + esc(e.src_key) + '"' + ml + ' value="' + esc(cur) + '">';
     }
     var reset = has_ov ? '<button class="vm-reset" data-key="' + key + '" data-src="' + esc(e.src_key) + '" title="Reset to the original / auto value">↺</button>' : '';
     var label = e.info.sample === '' ? '(blank)' : e.info.sample;
@@ -687,7 +687,7 @@
   function split_manual_item(i, g) {
     var label = g.value === '' ? '(blank)' : g.value;
     var ov = Object.prototype.hasOwnProperty.call(S.split_manual, g.value) ? (S.split_manual[g.value] || '') : '';
-    return '<div class="split-item"><input type="checkbox" class="s-on" value="' + i + '" checked>' +
+    return '<div class="split-item"><input type="checkbox" class="s-on" value="' + i + '" checked aria-label="Include ' + esc(label) + ' in the download">' +
       '<span class="s-name" title="' + esc(label) + '">' + esc(label) + ' <span class="s-count">×' + g.count + '</span></span>' +
       '<span class="m-arrow">→</span>' +
       '<input class="m-grp"' + (SPLIT_FEATURES.group_picker ? ' list="split-groups"' : '') + ' data-raw="' + esc(g.value) + '" value="' + esc(ov) + '" placeholder="' + esc(label) + '" title="Leave blank for its own file; type/pick a group name to combine values" aria-label="group name for ' + esc(label) + '"></div>';
@@ -770,7 +770,7 @@
 
     box.innerHTML =
       '<p class="dim split-intro">Pick a column from your <b>original</b> file. Each group becomes its own reformatted <code>.xlsx</code> (full 12-column template, only that group’s rows)' + (multi ? ' — the <b>Download</b> button lets you apply it across some or all sheets.' : '.') + '</p>' +
-      '<div class="split-row"><label class="split-lbl">Split on</label><select class="split-col">' + opts + '</select></div>' +
+      '<div class="split-row"><label class="split-lbl">Split on</label><select class="split-col" aria-label="Split on column">' + opts + '</select></div>' +
       '<div class="split-row">' + toggle + '<span class="dim split-hint">' + hint + '</span></div>' +
       '<div class="dl-tools split-tools"><label class="split-allbox" title="Select / deselect all"><input type="checkbox" class="s-all" checked> <b>Download</b></label>' +
       '<span class="dim split-allhint">— check each value to save it as its own .xlsx</span>' +
