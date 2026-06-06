@@ -44,11 +44,11 @@ module.exports = defineConfig({
   projects: [
     { name: 'chromium', testIgnore: /mobile\.spec\.js/,
       use: Object.assign({}, devices['Desktop Chrome'], { launchOptions: chromium_launch }) },
-    { name: 'firefox', testIgnore: /(mobile|visual|a11y)\.spec\.js/,
+    { name: 'firefox', testIgnore: /(mobile|visual|a11y|metrics_db|metrics_dashboard)\.spec\.js/,
       use: Object.assign({}, devices['Desktop Firefox'], { launchOptions: plain_launch }) },
-    { name: 'webkit', testIgnore: /(mobile|visual|a11y)\.spec\.js/,
+    { name: 'webkit', testIgnore: /(mobile|visual|a11y|metrics_db|metrics_dashboard)\.spec\.js/,
       use: Object.assign({}, devices['Desktop Safari'], { launchOptions: plain_launch }) },
-    { name: 'mobile', testMatch: /mobile\.spec\.js/,
+    { name: 'mobile', testMatch: /(mobile|metrics_dashboard)\.spec\.js/,
       use: Object.assign({}, devices['Pixel 5'], { launchOptions: chromium_launch }) }
   ],
   // Auto-start the actual static host (serves public/ + /src). ngrok is off by

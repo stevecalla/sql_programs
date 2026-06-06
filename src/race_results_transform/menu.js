@@ -72,11 +72,18 @@ const SECTIONS = [
     { id: 17, label: 'Browser E2E — step through (pause each step)', desc: 'Headed Chrome that PAUSES on every step via the Playwright Inspector; click Resume to advance one step at a time. Desktop only.', cli: 'npm run e2e:step', action: 'e2e_step' },
     { id: 18, label: 'Install browser E2E (one-time)', desc: 'Dev: npm run e2e:install (axe-core + chromium/firefox/webkit). Linux server: npm run e2e:install:server (adds --with-deps; root).', cli: 'npm run e2e:install', action: 'e2e_install' },
     { id: 23, label: 'Browser E2E — chromium only (fast)', desc: 'Runs the suite on just chromium, skipping firefox/webkit/mobile projects.', cli: 'npm run e2e:chromium', action: 'e2e_chromium' },
-    { id: 24, label: 'Refresh visual snapshot baselines', desc: 'Regenerate the committed screenshot baselines (e2e/visual.spec.js-snapshots). Run after intended UI changes.', cli: 'npm run e2e:snap', action: 'e2e_snap' }
+    { id: 24, label: 'Refresh visual snapshot baselines', desc: 'Regenerate the committed screenshot baselines (e2e/visual.spec.js-snapshots). Run after intended UI changes.', cli: 'npm run e2e:snap', action: 'e2e_snap' },
+    { id: 28, label: 'Browser E2E — analytics DB round-trip (chromium)', desc: 'Drives the app, then checks MySQL received the events and the table schema exists. Skips if no DB.', cli: 'npm run e2e:db', action: 'e2e_db' }
   ] },
   { label: 'Server & app', color: GREEN, items: [
     { id: 19, label: 'Start the web app server (port 8018)', desc: 'Serve public/ at http://localhost:8018; also opens a public ngrok URL if NGROK_AUTHTOKEN is set (otherwise it just notes that and keeps running). Ctrl-C to stop.', cli: 'node ../../server_race_results_transform_8018.js', action: 'server' },
     { id: 20, label: 'Open the web app in a browser', desc: 'Open http://localhost:8018 (start the server first).', cli: 'open http://localhost:8018', action: 'open' }
+  ] },
+  { label: 'Usage analytics', color: CYAN, items: [
+    { id: 25, label: 'Usage stats (last 7 days)', desc: 'Print the usage summary (same as the Slack digest): visits, new/repeat, uploads, conversions, downloads by mode, completion, auto-map accuracy, top files.', cli: 'node src/cli.js stats', action: 'metrics_stats' },
+    { id: 26, label: 'Usage data — size', desc: 'Events table size (MB), row count, date range, and rows per year.', cli: 'node src/cli.js metrics:size', action: 'metrics_size' },
+    { id: 27, label: 'Usage data — cleanup (purge old years)', desc: 'Keep current + prior calendar year; preview, confirm, then purge older rows.', cli: 'node src/cli.js metrics:cleanup', action: 'metrics_cleanup' },
+    { id: 29, label: 'Usage data — PURGE ALL (danger)', desc: 'Delete every analytics row regardless of date (asks to confirm). For clearing test data.', cli: 'node src/cli.js metrics:purge-all', action: 'metrics_purge_all' }
   ] },
   { label: 'Settings', color: GRAY, items: [
     { id: 21, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
@@ -147,6 +154,11 @@ async function handle(item) {
     case 'e2e_install': console.log(c(DIM, '\n  installing Playwright + Chromium (one-time)…\n')); await run('npm', ['run', 'e2e:install']); break;
     case 'e2e_chromium': console.log(c(DIM, '\n  running browser tests on chromium only…\n')); await run('npm', ['run', 'e2e:chromium']); break;
     case 'e2e_snap': console.log(c(DIM, '\n  refreshing visual snapshot baselines…\n')); await run('npm', ['run', 'e2e:snap']); break;
+    case 'e2e_db': console.log(c(DIM, '\n  browser→MySQL round-trip (needs local DB)…\n')); await run('npm', ['run', 'e2e:db']); break;
+    case 'metrics_stats': await run('node', ['src/cli.js', 'stats']); break;
+    case 'metrics_size': await run('node', ['src/cli.js', 'metrics:size']); break;
+    case 'metrics_cleanup': await run('node', ['src/cli.js', 'metrics:cleanup']); break;
+    case 'metrics_purge_all': await run('node', ['src/cli.js', 'metrics:purge-all']); break;
     case 'server': console.log(c(DIM, 'Starting server… Ctrl-C to stop.')); await run('node', [SERVER]); break;
     case 'open': {
       const url = 'http://localhost:8018';

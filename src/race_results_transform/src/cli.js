@@ -21,6 +21,7 @@ const io = require('./io');
 const pipe = require('./pipeline');
 const mapping = require('./mapping');
 const data_dir = require('../data_dir');
+const metrics = require('../metrics_report');   // usage analytics (stats/size/cleanup)
 
 // ---- tiny ANSI helpers (match menu.js house style) ------------------------
 const C = {
@@ -62,6 +63,13 @@ function print_scorecard(report, label) {
   }
 }
 
+function confirm(prompt) {
+  return new Promise(function (resolve) {
+    const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(prompt, function (ans) { rl.close(); resolve(/^y(es)?$/i.test(String(ans).trim())); });
+  });
+}
+
 function parse_args(argv) {
   const out = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -69,6 +77,8 @@ function parse_args(argv) {
     if (a === '-o' || a === '--out') out.out = argv[++i];
     else if (a === '--profile') out.profile = argv[++i];
     else if (a === '--quiet') out.quiet = true;
+    else if (a === '--days') out.days = argv[++i];
+    else if (a === '--yes' || a === '-y') out.yes = true;
     else if (a === '--strict') out.strict = true;
     else out._.push(a);
   }
@@ -129,6 +139,10 @@ function help() {
     '  node cli.js convert <input.xlsx> [-o out.xlsx] [--profile p.json] [--quiet]',
     '  node cli.js inspect <input.xlsx>',
     '  node cli.js batch   <folder> [-o outdir]',
+    '  node cli.js stats          [--days 7]      # usage analytics summary',
+    '  node cli.js metrics:size                   # events table size + rows/year',
+    '  node cli.js metrics:cleanup [--yes]        # purge years beyond current+prior',
+    '  node cli.js metrics:purge-all [--yes]      # delete ALL rows (confirm) — clears test data',
     '  node cli.js help',
     ''
   ].join('\n'));
@@ -166,6 +180,53 @@ async function main() {
       }
       console.log('\nProcessed ' + files.length + ' file(s) into ' + outdir);
       process.exit(worst);
+    }
+    if (cmd === 'stats') {
+      const pool = await metrics.get_pool();
+      try { console.log(await metrics.report_text(pool, { days: args.days ? Number(args.days) : 7 })); }
+      finally { await pool.end(); }
+      return;
+    }
+    if (cmd === 'metrics:size') {
+      const pool = await metrics.get_pool();
+      try {
+        const sz = await metrics.size(pool);
+        console.log('');
+        console.log(col(C.bold, metrics.TABLE));
+        console.log('  rows: ' + sz.rows + '    size: ' + sz.mb + ' MB');
+        console.log('  range: ' + (sz.min_utc || 'n/a') + '  ->  ' + (sz.max_utc || 'n/a') + '  (UTC)');
+        (sz.by_year || []).forEach(function (y) { console.log('  ' + y.yr + ': ' + y.n + ' rows'); });
+      } finally { await pool.end(); }
+      return;
+    }
+    if (cmd === 'metrics:cleanup') {
+      const pool = await metrics.get_pool();
+      const sz = await metrics.size(pool);
+      const keep = metrics.cfg.KEEP_YEARS;
+      const cutoff = new Date().getFullYear() - (keep - 1);
+      const doomed = (sz.by_year || []).filter(function (y) { return y.yr != null && Number(y.yr) < cutoff; });
+      const total = doomed.reduce(function (a, y) { return a + Number(y.n); }, 0);
+      console.log('');
+      console.log(col(C.bold, 'Retention: keep ' + keep + ' calendar years (>= ' + cutoff + '); purge older.'));
+      if (!total) { console.log('  Nothing to purge.'); await pool.end(); process.exit(0); }
+      console.log('  Will purge ' + total + ' row(s): ' + doomed.map(function (y) { return y.yr + ' (' + y.n + ')'; }).join(', '));
+      if (!args.yes && !(await confirm('  Proceed? [y/N] '))) { console.log('  Cancelled.'); await pool.end(); process.exit(0); }
+      const r = await metrics.cleanup(pool, {});
+      console.log(col(C.green, '  Purged ' + r.deleted + ' row(s).'));
+      await pool.end();
+      process.exit(0);   // confirm()'s readline can otherwise keep the process alive
+    }
+    if (cmd === 'metrics:purge-all') {
+      const pool = await metrics.get_pool();
+      const sz = await metrics.size(pool);
+      console.log('');
+      if (!sz.rows) { console.log('  Table is already empty.'); await pool.end(); process.exit(0); }
+      console.log(col(C.red + C.bold, 'DANGER: deletes ALL ' + sz.rows + ' row(s) from ' + metrics.TABLE + ' — no date filter.'));
+      if (!args.yes && !(await confirm('  Type y to delete EVERYTHING [y/N] '))) { console.log('  Cancelled.'); await pool.end(); process.exit(0); }
+      const r = await metrics.purge_all(pool);
+      console.log(col(C.green, '  Deleted ' + r.deleted + ' row(s). Table is now empty.'));
+      await pool.end();
+      process.exit(0);
     }
     console.log('Unknown command: ' + cmd);
     help();

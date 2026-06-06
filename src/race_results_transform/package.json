@@ -18,7 +18,8 @@
     "e2e:headed": "playwright test -c e2e/playwright.config.js --headed",
     "e2e:step": "playwright test -c e2e/playwright.config.js --debug",
     "e2e:snap": "playwright test -c e2e/playwright.config.js --update-snapshots",
-    "e2e:chromium": "playwright test -c e2e/playwright.config.js --project=chromium"
+    "e2e:chromium": "playwright test -c e2e/playwright.config.js --project=chromium",
+    "e2e:db": "playwright test -c e2e/playwright.config.js --project=chromium e2e/metrics_db.spec.js"
   },
   "engines": {
     "node": ">=18"

@@ -172,3 +172,26 @@ When a source has no First/Last column but a single full-name column (`Name`, `A
 (confidence `split`). `transform.run` derives each via `normalize.split_name` (handles `Last, First`
 and `First Middle Last`); `reconcile` skips the pass-through preservation check for these (computed,
 not copied).
+
+## Usage analytics (anonymous)
+
+Built on a reusable core in `utilities/analytics/` (page-agnostic): `event_ingest.js`
+(`make_event_ingest` — whitelist + stamp `created_at_utc`/`created_at_mtn` + insert),
+`ensure_table.js`, `retention.js` (`size`, `purge_keep_years`), `metrics_client.js`
+(browser `UsageMetrics`, served at `/analytics/metrics_client.js`), `report_render.js`
+(report contract → Slack blocks / text / dashboard JSON). Per-app inputs live here:
+`metrics_config.js` (table `race_results_transform_events`, app id, KEEP_YEARS=2, column
+whitelist), DDL in `src/queries/create_drop_db_table/query_create_race_results_transform_events_table.js`,
+aggregation in `metrics_report.js`, and `public/js/metrics.js` (thin init).
+
+Server (`server_race_results_transform_8018.js`): best-effort mysql2/promise pool via
+`local_usat_sales_db_config()`, `ensure_table` at startup, `POST /api/event` ingest,
+`/metrics` dashboard + `/api/metrics-report` (Basic Auth: `RACE_RESULTS_CONVERTER_METRICS_DASH_USER`/`_PASS`),
+and `/scheduled-slack-race-results-metrics` (cron → `slack_message_api`). Analytics is
+fire-and-forget: if the DB is down the converter still serves normally. PII never leaves
+the browser — events carry counts/enums + filename only. CLI: `stats`, `metrics:size`,
+`metrics:cleanup`. Crons: `utilities/cron_get_slack_race_results_transform/`,
+`cron_get_purge_race_results_transform/`. Reuse the core for other pages (e.g. 8016) by
+supplying a new config + DDL + report. Verified by `tests/metrics_ingest.test.js` (dep-free whitelist/timestamp unit test) and
+`e2e/metrics_db.spec.js` (browser→MySQL round-trip + table-schema check; chromium-only,
+auto-skips without a DB — `npm run e2e:db`). Full design + Linux setup: `ANALYTICS_PLAN.md`.

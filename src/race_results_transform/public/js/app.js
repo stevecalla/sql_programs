@@ -189,14 +189,37 @@
     dz.addEventListener('drop', function (e) { var f = e.dataTransfer.files[0]; if (f) handle_file(f); });
   }
 
+  // ---- usage analytics (fire-and-forget; counts/enums + filename only) -------
+  function um() { return (typeof window !== 'undefined') && window.UsageMetrics; }
+  function track(name, props) { try { var m = um(); if (m) m.track(name, props || {}); } catch (e) { /* never break the app */ } }
+  function map_match_counts() {
+    var matched = 0, total = (schema.TEMPLATE_SCHEMA ? schema.TEMPLATE_SCHEMA.length : 12);
+    try { Object.keys(S.mapping || {}).forEach(function (k) { if (S.mapping[k] && S.mapping[k].source) matched++; }); } catch (e) { /* pre-map */ }
+    return { cols_matched: matched, cols_unmatched: Math.max(0, total - matched) };
+  }
+  function conversion_props() {
+    var sc = (S.report && S.report.scorecard) || {};
+    var mc = map_match_counts();
+    return {
+      sheet_count: (S.sheets || []).length,
+      row_count: (S.result && S.result.row_count) || 0,
+      col_count: (S.result && S.result.headers) ? S.result.headers.length : 12,
+      cols_matched: mc.cols_matched, cols_unmatched: mc.cols_unmatched,
+      scorecard_band: sc.band || null, scorecard_pct: (sc.pct != null ? sc.pct : null),
+      flag_count: (S.result && S.result.flags) ? S.result.flags.length : 0
+    };
+  }
+
   function handle_file(file) {
     S.file_name = file.name.replace(/\.(xlsx|xls|csv)$/i, '');
     S.file_display = file.name;
     var is_csv = /\.csv$/i.test(file.name);
+    var m = um(); if (m) m.new_upload();
+    track('file_uploaded', { file_name: file.name, file_type: is_csv ? 'csv' : 'xlsx', size_bytes: file.size || null });
     var reader = new FileReader();
     reader.onload = function () {
       var p = is_csv ? Promise.resolve([io.csv_to_ir(reader.result)]) : io.read_to_irs(reader.result);
-      p.then(function (irs) { on_workbook(irs); }).catch(function (e) { alert('Could not read file: ' + e.message); });
+      p.then(function (irs) { on_workbook(irs); }).catch(function (e) { track('error', { error_type: 'unreadable_file' }); alert('Could not read file: ' + e.message); });
     };
     if (is_csv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
@@ -222,6 +245,7 @@
     render_sheet_bar();
     hide('uploadCard'); hide('introCard'); show('clearBtn');
     activate_sheet(0);
+    track('conversion_completed', conversion_props());
     $('summaryBar').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -391,7 +415,7 @@
       S.conv_table = TableView($('resultGrid'), {
         editable: true, show_flag_filter: true, col_menu: true, top_header: true,
         current_source: function (c) { var m = S.mapping[schema.TEMPLATE_SCHEMA[c].key]; return m && m.source; },
-        on_remap: function (c, val) { mapper.set_mapping(S.mapping, schema.TEMPLATE_SCHEMA[c].key, val, S.parsed.headers); recompute(false); },
+        on_remap: function (c, val) { mapper.set_mapping(S.mapping, schema.TEMPLATE_SCHEMA[c].key, val, S.parsed.headers); track('manual_remap', { target_key: schema.TEMPLATE_SCHEMA[c].key }); recompute(false); },
         on_edit: on_conv_edit
       });
     }
@@ -826,6 +850,7 @@
     box.querySelector('.split-go').addEventListener('click', function () {
       var checked = Array.prototype.slice.call(box.querySelectorAll('.split-list input.s-on:checked')).map(function (c) { return groups[+c.value]; });
       if (!checked.length) return;
+      track('split_used', { download_mode: 'split', split_basis: S.split_basis, selected_count: checked.length });
       if (multi) open_split_picker(box, checked, manual);
       else run_split([S.active], checked, manual);
     });
@@ -927,6 +952,7 @@
   }
   // Single sheet / CSV: keep the one-file behaviour (honours on-screen sort/filter).
   function download_single() {
+    track('download', { download_mode: 'single', file_out_count: 1, selected_count: 1 });
     io.grids_to_buffer([{ name: 'Rankings', headers: S.result.headers, rows: S.conv_table.export_rows() }])
       .then(function (buf) { save_blob(buf, safe_filename(S.file_name) + ' - formatted.xlsx'); });
   }
@@ -939,11 +965,13 @@
   // Each selected sheet downloads as its own file (staggered so the browser keeps them all).
   function download_selected(idx) {
     save_active();
+    track('download', { download_mode: 'separate', file_out_count: idx.length, selected_count: idx.length });
     idx.forEach(function (i, k) { var b = S.sheets[i]; setTimeout(function () { download_one_sheet(b); }, k * 300); });
   }
   // Combine the chosen sheets into ONE .xlsx — their converted rows stacked in tab order.
   function download_combined(idx) {
     save_active();
+    track('download', { download_mode: 'combined', file_out_count: 1, selected_count: idx.length });
     var rows = [];
     idx.forEach(function (i) { var b = S.sheets[i]; compute_bundle(b); rows = rows.concat(b.work_rows); });
     var headers = S.sheets[idx[0]].result.headers;
@@ -1023,6 +1051,7 @@
   function save_profile() {
     if (!S.sig) return;
     S.store.save(S.sig, { mapping: mapper.mapping_to_text(S.mapping), value_overrides: S.value_overrides, saved_at: Date.now() });
+    track('mapping_saved', {});
     var lbl = document.querySelector('#saveProfileBtn .lbl'); if (!lbl) return;
     var t = lbl.textContent; lbl.textContent = 'Saved ✓'; setTimeout(function () { lbl.textContent = t; }, 1600);
   }

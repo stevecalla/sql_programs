@@ -31,6 +31,38 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 
+// ---- Usage analytics (best-effort; PII never leaves the browser) -----------
+const mysql = require('mysql2/promise');
+const { local_usat_sales_db_config } = require('./utilities/config');
+const { make_event_ingest } = require('./utilities/analytics/event_ingest');
+const { ensure_table } = require('./utilities/analytics/ensure_table');
+const metrics_config = require('./src/race_results_transform/metrics_config');
+const { query_create_race_results_transform_events_table } =
+  require('./src/queries/create_drop_db_table/query_create_race_results_transform_events_table');
+const metrics_report = require('./src/race_results_transform/metrics_report');
+const { slack_message_api } = require('./utilities/slack_messaging/slack_message_api');
+
+const METRICS_ON = String(process.env.METRICS_OFF).toLowerCase() !== 'true';
+let metrics_pool = null;
+// Proxy so the ingest handler always reads the current pool (created async at startup).
+const pool_proxy = { query: function () {
+  if (!metrics_pool) return Promise.reject(new Error('analytics pool not ready'));
+  return metrics_pool.query.apply(metrics_pool, arguments);
+} };
+async function init_metrics() {
+  if (!METRICS_ON) { console.log('  [analytics] disabled via METRICS_OFF'); return; }
+  try {
+    const cfg = await local_usat_sales_db_config();
+    metrics_pool = mysql.createPool(cfg);
+    const ddl = await query_create_race_results_transform_events_table(metrics_config.TABLE);
+    await ensure_table(metrics_pool, ddl);
+    console.log('  [analytics] events table ready (' + metrics_config.TABLE + ')');
+  } catch (e) {
+    console.log('  [analytics] disabled — DB not available: ' + e.message);
+    metrics_pool = null;
+  }
+}
+
 // NGROK TUNNEL — exposes a real public URL for testing/sharing, exactly like
 // the other server_*.js services (e.g. 8017). Set false to run local-only.
 // Needs NGROK_AUTHTOKEN in the environment (authtoken_from_env).
@@ -54,6 +86,55 @@ function create_app() {
     res.json({ ok: true, app: 'race_results_transform', time: new Date().toISOString() });
   });
 
+  // Usage analytics — fire-and-forget. Counts/enums only; no-ops if no DB pool.
+  app.use(express.json({ limit: '16kb' }));
+  app.post('/api/event', make_event_ingest({ pool: pool_proxy, table: metrics_config.TABLE, columns: metrics_config.COLUMNS, reporting_tz: metrics_config.REPORTING_TZ }));
+  // Serve the shared generic analytics browser client (UsageMetrics) as a static asset.
+  app.use('/analytics', express.static(path.join(__dirname, 'utilities', 'analytics')));
+
+  // Slack usage digest — hit by the cron_get_slack_race_results_transform job.
+  // Same cron -> route -> slack_message_api convention as the other slack jobs.
+  // ---- Read-only metrics dashboard (Basic Auth; fail-closed if unconfigured) --
+  function basic_auth(req, res, next) {
+    const user = process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_USER, pass = process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_PASS;
+    if (!user || !pass) { res.status(503).send('Dashboard not configured (set RACE_RESULTS_CONVERTER_METRICS_DASH_USER / RACE_RESULTS_CONVERTER_METRICS_DASH_PASS).'); return; }
+    const m = (req.headers.authorization || '').match(/^Basic (.+)$/);
+    if (m) {
+      const parts = Buffer.from(m[1], 'base64').toString().split(':');
+      if (parts[0] === user && parts.slice(1).join(':') === pass) return next();
+    }
+    res.set('WWW-Authenticate', 'Basic realm="race_results_metrics"').status(401).send('Authentication required.');
+  }
+  const DASHBOARD_HTML = path.join(__dirname, 'src', 'race_results_transform', 'metrics_dashboard.html');
+  app.get('/metrics', basic_auth, function (req, res) {
+    res.type('html').sendFile(DASHBOARD_HTML);
+  });
+  app.get('/api/metrics-report', basic_auth, async function (req, res) {
+    try {
+      if (!metrics_pool) return res.status(503).json({ ok: false, error: 'analytics DB not available' });
+      const days = Number(req.query.days) || 7;
+      const report = await metrics_report.build_report(metrics_pool, { days: days });
+      res.json(report.data);
+    } catch (e) {
+      console.error('[analytics] report error:', e.message);
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get('/scheduled-slack-race-results-metrics', async function (req, res) {
+    try {
+      if (!metrics_pool) return res.status(503).json({ ok: false, error: 'analytics DB not available' });
+      const days = Number(req.query.days) || 7;
+      const blocks = await metrics_report.report_blocks(metrics_pool, { days: days });
+      const text = await metrics_report.report_text(metrics_pool, { days: days });
+      await slack_message_api(text, 'race_results_slack_channel', blocks);
+      res.json({ ok: true, sent: true, days: days });
+    } catch (e) {
+      console.error('[analytics] slack digest error:', e.message);
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   // Serve the shared core modules (src/, single source of truth, also used by
   // the CLI + tests) so the browser <script> tags can load them.
   app.use('/src', express.static(path.join(__dirname, 'src', 'race_results_transform', 'src')));
@@ -72,6 +153,7 @@ function start_server(opts) {
   opts = opts || {};
   const port = opts.port || DEFAULT_PORT;
   const app = create_app();
+  if (require.main === module) { init_metrics(); }   // skip DB in unit tests that import create_app
   return new Promise(function (resolve, reject) {
     const server = app.listen(port, function () {
       const actual = server.address().port;
@@ -109,4 +191,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { create_app: create_app, start_server: start_server, DEFAULT_PORT: DEFAULT_PORT };
+module.ex

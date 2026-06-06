@@ -143,4 +143,27 @@ A small **isomorphic core** in `src/` (pure, no-DOM modules) runs identically in
 CLI (`src/cli.js`), and the tests — so what you test on the command line is exactly what the
 browser does. Excel/CSV I/O uses `exceljs` (declared in the repo-root `package.json`). All domain
 knowledge lives in `src/schema.js` (column aliases) and `src/normalize.js` (value rules) — to
-teach the tool a new file layout, add an alias or tweak a normalizer. 
+teach the tool a new file layout, add an alias or tweak a normalizer.
+
+## Usage analytics (anonymous) + Slack digest + dashboard
+
+The served app records **anonymous** usage events (counts/enums + the filename — never
+member data) to the local MySQL table `race_results_transform_events`. It is built on a
+reusable core in `utilities/analytics/` (ingest / ensure-table / retention / browser
+client / report render); the 8018 server **auto-creates the table at startup**
+(`CREATE TABLE IF NOT EXISTS`).
+
+- **Capture**: `public/js/metrics.js` → `POST /api/event` via `navigator.sendBeacon`
+  (non-blocking; honors `METRICS_OFF` + Do-Not-Track).
+- **See it**: `node src/cli.js stats [--days 7]`, the dashboard at `/metrics`
+  (Basic Auth — `RACE_RESULTS_CONVERTER_METRICS_DASH_USER` / `RACE_RESULTS_CONVERTER_METRICS_DASH_PASS`), or the weekly Slack digest.
+- **Size / cleanup**: `node src/cli.js metrics:size` and `node src/cli.js metrics:cleanup`
+  (retention: keep current + prior calendar year).
+- **Cron**: `utilities/cron_get_slack_race_results_transform/` (digest) and
+  `utilities/cron_get_purge_race_results_transform/` (purge) — you set the schedule.
+
+**Tests**: `tests/metrics_ingest.test.js` (dep-free unit — whitelist + timestamps) and
+`e2e/metrics_db.spec.js` (browser→MySQL round-trip — asserts the events landed with the
+right columns AND that the table was created; chromium-only, skips with no DB: `npm run e2e:db`).
+
+No new dependencies. See `ANALYTICS_PLAN.md` for the full design, schema, and Linux setup.

@@ -19,7 +19,7 @@ addEventListener addRow addWorksheet appendChild after before charCodeAt classLi
 clearTimeout clientY closest columnCount createElement createInterface createObjectURL dataset
 dataTransfer deepEqual doesNotThrow eachCell eachRow effectAllowed execSync existsSync findIndex
 flatMap forEach getAttribute getBoundingClientRect getCell getColumn getElementById getItem getRow getTime rowCount
-getUTCDate getUTCFullYear getUTCMonth getUTCHours getUTCMinutes getUTCSeconds getUTCMilliseconds
+getUTCDate getUTCFullYear getFullYear getUTCMonth getUTCHours getUTCMinutes getUTCSeconds getUTCMilliseconds
 getUTCDay hasOwnProperty includeEmpty indexOf innerHTML insertBefore isArray isNaN isInteger isTTY
 lastIndexOf localStorage mkdirSync notEqual numFmt padEnd padStart parentNode parseFloat parseInt
 dayPeriod formatToParts preventDefault removeEventListener setInterval timeZone querySelector querySelectorAll readAsArrayBuffer readAsText readFile readFileSync

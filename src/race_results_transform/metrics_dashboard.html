@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Race Results Converter — Usage</title>
+<link rel="stylesheet" href="/css/app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  .mx-wrap { max-width:1100px; margin:0 auto; padding:18px 16px 40px; }
+  .mx-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+  .mx-title { font-size:clamp(20px,3.6vw,28px); letter-spacing:-.01em; font-weight:800; color:var(--ink); margin:0; display:flex; align-items:center; gap:8px; }
+  .mx-spacer { margin-left:auto; }
+  .mx-periods { display:flex; gap:6px; flex-wrap:wrap; }
+  .mx-periods button { border:1px solid var(--line); background:var(--card); color:var(--dim); border-radius:8px;
+    padding:7px 12px; font:inherit; font-weight:600; cursor:pointer; }
+  .mx-periods button.active { background:var(--accent); color:#fff; border-color:transparent; }
+  .mx-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
+  .mx-card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px 16px; }
+  .mx-card .k { font-size:11.5px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; }
+  .mx-card .v { font-size:26px; font-weight:800; color:var(--ink); line-height:1.2; }
+  .mx-card .s { font-size:12px; color:var(--dim); }
+  .mx-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .mx-panel { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px 16px; margin-bottom:16px; }
+  .mx-panel h2 { font-size:12px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.5px; color:var(--dim); }
+  .mx-panel table { width:100%; border-collapse:collapse; font-size:14px; }
+  .mx-panel td, .mx-panel th { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); color:var(--ink); }
+  .mx-panel th { color:var(--dim); font-weight:600; }
+  .mx-canvas-wrap { position:relative; width:100%; height:200px; }
+  .mx-canvas-wrap canvas { position:absolute; inset:0; }
+  .mx-foot { text-align:center; color:var(--dim); font-size:12px; padding:14px; }
+  .tag { font-size:11px; padding:1px 7px; border-radius:20px; background:var(--accent-soft); color:var(--accent); }
+  @media (max-width:720px){ .mx-grid2 { grid-template-columns:1fr; } }
+  @media (max-width:520px){
+    .mx-wrap { padding:14px 12px 32px; }
+    .mx-title { font-size:17px; }
+    .mx-periods { order:3; width:100%; }
+    .mx-periods button { flex:1 1 auto; padding:8px 6px; }
+    #themeToggle { order:2; }
+    .mx-card .v { font-size:22px; }
+  }
+</style>
+</head>
+<body>
+<div class="mx-wrap">
+  <div class="mx-head">
+    <h1 class="mx-title"><span class="arrow">📊</span> Race Results Converter — Usage</h1>
+    <div class="mx-spacer"></div>
+    <div class="mx-periods" id="periods">
+      <button data-days="1">Today</button>
+      <button data-days="7" class="active">7 days</button>
+      <button data-days="30">30 days</button>
+      <button data-days="90">90 days</button>
+      <button data-days="365">1 year</button>
+    </div>
+    <button id="themeToggle" class="btn ghost" title="Toggle light or dark theme" aria-label="Toggle light or dark theme">☾ Dark</button>
+  </div>
+
+  <div class="mx-cards" id="cards"></div>
+
+  <div class="mx-panel"><h2>Activity by day — visits · uploads · downloads</h2>
+    <div class="mx-canvas-wrap"><canvas id="chart_days" height="150"></canvas></div></div>
+
+  <div class="mx-grid2">
+    <div class="mx-panel"><h2>Downloads by type</h2>
+      <div class="mx-canvas-wrap"><canvas id="chart_modes" height="170"></canvas></div></div>
+    <div class="mx-panel"><h2>Uploads by hour (user-local)</h2>
+      <div class="mx-canvas-wrap"><canvas id="chart_hours" height="170"></canvas></div></div>
+  </div>
+
+  <div class="mx-grid2">
+    <div class="mx-panel"><h2>Top users <span class="tag">anonymous</span></h2>
+      <table id="tbl_users"><thead><tr><th>Visitor</th><th>Uploads</th><th>Downloads</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="mx-panel"><h2>Top files</h2>
+      <table id="tbl_files"><tbody></tbody></table></div>
+  </div>
+
+  <div class="mx-grid2">
+    <div class="mx-panel"><h2>Columns most often fixed</h2><table id="tbl_fixed"><tbody></tbody></table></div>
+    <div class="mx-panel"><h2>Errors</h2><table id="tbl_errors"><tbody></tbody></table></div>
+  </div>
+
+  <div class="mx-foot" id="foot">Loading…</div>
+</div>
+
+<script>
+  // ---- theme: mirror the app (shares the rrt_ui_v1 pref so / and /metrics match) ----
+  var PREF_KEY = 'rrt_ui_v1';
+  function prefs(){ try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}'); } catch(e){ return {}; } }
+  function save_prefs(p){ try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch(e){} }
+  function effective_dark(){ var t = prefs().theme; if (t==='dark') return true; if (t==='light') return false;
+    return !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches); }
+  function apply_theme(){
+    var t = prefs().theme, el = document.documentElement;
+    if (t==='dark' || t==='light') el.setAttribute('data-theme', t); else el.removeAttribute('data-theme');
+    var b = document.getElementById('themeToggle');
+    if (b){ var d = effective_dark(); b.textContent = d ? '☀ Light' : '☾ Dark'; b.title = 'Switch to ' + (d?'light':'dark') + ' theme'; }
+    if (last_data) render(last_data);
+  }
+  function toggle_theme(){ var p = prefs(); p.theme = effective_dark() ? 'light' : 'dark'; save_prefs(p); apply_theme(); }
+
+  // ---- charts + data ----
+  var charts = {}, last_data = null;
+  var MODE_LABEL = { single:'single', separate:'separate files', combined:'combined', split:'split (groups)' };
+  function el(id){ return document.getElementById(id); }
+  function cssvar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888'; }
+  function card(k,v,s){ return '<div class="mx-card"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="s">'+(s||'')+'</div></div>'; }
+  function fill(tbl,data,render){ var b = el(tbl).querySelector('tbody'); b.innerHTML = data.length ? data.map(render).join('') : '<tr><td class="dim">none</td></tr>'; }
+  function bar(id, labels, values, color){
+    if (charts[id]) charts[id].destroy();
+    var ink = cssvar('--dim'), grid = cssvar('--line');
+    charts[id] = new Chart(el(id), { type:'bar',
+      data:{ labels:labels, datasets:[{ data:values, backgroundColor:color, borderRadius:4 }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } },
+        scales:{ x:{ ticks:{ color:ink }, grid:{ color:grid } }, y:{ beginAtZero:true, ticks:{ color:ink, precision:0 }, grid:{ color:grid } } } } });
+  }
+  function line(id, labels, series){
+    if (charts[id]) charts[id].destroy();
+    var ink = cssvar('--dim'), grid = cssvar('--line');
+    charts[id] = new Chart(el(id), { type:'line',
+      data:{ labels:labels, datasets: series.map(function(s){ return { label:s.label, data:s.data, borderColor:s.color, backgroundColor:s.color, tension:.3, pointRadius:2 }; }) },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:true, labels:{ color:ink, boxWidth:12 } } },
+        scales:{ x:{ ticks:{ color:ink }, grid:{ color:grid } }, y:{ beginAtZero:true, ticks:{ color:ink, precision:0 }, grid:{ color:grid } } } } });
+  }
+  function render(d){
+    last_data = d;
+    var compRate = d.completion_uploads ? Math.round(100*d.completion_downloaded/d.completion_uploads) : 0;
+    el('cards').innerHTML =
+      card('Visits', d.visits, d.unique_users+' users · '+d.new_users+' new / '+d.repeat_users+' return') +
+      card('Uploads', d.uploads, 'avg '+d.avg_rows+' rows') +
+      card('Conversions', d.conversions, '') +
+      card('Downloads', d.downloads, '') +
+      card('Completion', compRate+'%', d.completion_downloaded+'/'+d.completion_uploads+' uploads→dl') +
+      card('Auto-map', d.automap_pct+'%', 'cols matched, no fix');
+    line('chart_days', (d.by_day||[]).map(function(x){return x.day.slice(5);}),
+      [ { label:'Visits', data:(d.by_day||[]).map(function(x){return x.visits;}), color:cssvar('--dim') },
+        { label:'Uploads', data:(d.by_day||[]).map(function(x){return x.uploads;}), color:cssvar('--brand') },
+        { label:'Downloads', data:(d.by_day||[]).map(function(x){return x.downloads;}), color:cssvar('--accent') } ]);
+    bar('chart_modes', d.download_modes.map(function(m){return MODE_LABEL[m.mode]||m.mode;}), d.download_modes.map(function(m){return m.n;}), cssvar('--accent'));
+    var hours=[], hv=[];
+    for (var h=0; h<24; h++){ hours.push(h); var f = d.by_hour.filter(function(x){return x.hour===h;})[0]; hv.push(f?f.n:0); }
+    bar('chart_hours', hours, hv, cssvar('--brand'));
+    fill('tbl_users', d.top_users||[], function(u){ return '<tr><td>'+u.id+'…</td><td>'+u.uploads+'</td><td>'+u.downloads+'</td><td>'+(u.returning?'<span class="tag">returning</span>':'new')+'</td></tr>'; });
+    fill('tbl_files', d.top_files, function(f){ return '<tr><td>'+f.name+'</td><td>'+f.n+'</td></tr>'; });
+    fill('tbl_fixed', d.fixed_columns, function(c){ return '<tr><td>'+c.key+'</td><td>'+c.n+'</td></tr>'; });
+    fill('tbl_errors', d.errors, function(e){ return '<tr><td>'+e.type+'</td><td>'+e.n+'</td></tr>'; });
+    el('foot').textContent = 'Last ' + d.days + ' days · anonymous usage analytics · refreshed ' + new Date().toLocaleString();
+  }
+  function load(days){
+    el('foot').textContent = 'Loading…';
+    fetch('/api/metrics-report?days='+days, { credentials:'same-origin' })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(render)
+      .catch(function(e){ el('foot').textContent = 'Could not load metrics: ' + e.message; });
+  }
+  el('periods').addEventListener('click', function(ev){
+    var b = ev.target.closest('button[data-days]'); if(!b) return;
+    [].forEach.call(el('periods').children, function(x){ x.classList.toggle('active', x===b); });
+    load(b.dataset.days);
+  });
+  el('themeToggle').addEventListener('click', toggle_theme);
+  if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', apply_theme);
+  apply_theme();
+  load(7);
+</script>
+</body>
+</html>
