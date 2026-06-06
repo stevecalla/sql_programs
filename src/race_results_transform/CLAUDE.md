@@ -44,6 +44,7 @@ src/race_results_transform/
     normalize.js       value normalizers (gender/dob/state/time incl. DNS/DNF, category, member)
     display.js         how a cell renders in the tables (Excel time -> time, not date) — TESTED
     sort.js            table-sort comparator (case/accent-insensitive, natural numbers) — TESTED
+    view_logic.js      pure TableView helpers: search index, visible-row filtering, render cap — TESTED
     split.js           group row indices by a per-row key (split & download by column) — TESTED
     parse.js           header detection + divider/blank-row skipping
     match.js           column auto-matching (alias scoring + greedy assignment)
@@ -152,4 +153,7 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 ## Full-name split
 
 When a source has no First/Last column but a single full-name column (`Name`, `Athlete Name`, …),
-`match.a
+`match.auto_map` claims it up front and marks `first_name`/`last_name` with `split:'first'|'last'`
+(confidence `split`). `transform.run` derives each via `normalize.split_name` (handles `Last, First`
+and `First Middle Last`); `reconcile` skips the pass-through preservation check for these (computed,
+not copied).

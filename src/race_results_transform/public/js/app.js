@@ -6,7 +6,7 @@
   var RRT = window.RRT || {};
   var io = RRT.io, parse = RRT.parse, match = RRT.match, transform = RRT.transform,
       reconcile = RRT.reconcile, mapper = RRT.mapping, schema = RRT.schema,
-      normalize = RRT.normalize, display = RRT.display, sort = RRT.sort, split = RRT.split;
+      normalize = RRT.normalize, display = RRT.display, sort = RRT.sort, split = RRT.split, view = RRT.view_logic;
 
   var ENUM_BUCKETS = { category: ['Age Group', 'Elite', 'Para', 'Relay', 'Open'], gender: ['M', 'F', 'NB', 'Open'] };
   // Split group-naming helpers — set either to false to disable that feature (see CLAUDE.md).
@@ -74,8 +74,7 @@
       T.order = T.data.map(function (_, i) { return i; });
       if (T.sort_col != null) T.order.sort(function (a, b) { return compare(a, b, T.sort_col); });
     };
-    function row_text(row) { var t = ''; for (var c = 0; c < row.length; c++) t += cell_text(row[c]) + '\u0001'; return t.toLowerCase(); }
-    T.set_data = function (headers, data) { T.headers = headers; T.data = data; T.sort_col = null; T.filter_set = null; T.filter_label = ''; T.search_index = data.map(row_text); T.apply_sort(); mount(); render_body(); };
+    T.set_data = function (headers, data) { T.headers = headers; T.data = data; T.sort_col = null; T.filter_set = null; T.filter_label = ''; T.search_index = view.build_search_index(data, cell_text); T.apply_sort(); mount(); render_body(); };
     T.export_rows = function () { return T.order.map(function (i) { return T.data[i]; }); };
     T.set_query = function (q) { T.query = q; var sb = T.el.querySelector('.tv-search'); if (sb) sb.value = q; render_body(); };
     T.set_order = function (order) { T.order = order.slice(); T.sort_col = null; render_body(); };
@@ -87,16 +86,7 @@
     T.set_filter = function (set, label) { apply_filter(set, label); if (T.on_filter) T.on_filter(set, label); };
     T.set_filter_quiet = function (set, label) { apply_filter(set, label); };
 
-    function visible_indices() {
-      var q = T.query.toLowerCase(), out = [];
-      for (var k = 0; k < T.order.length; k++) {
-        var i = T.order[k];
-        if (T.filter_set && !T.filter_set[i]) continue;
-        if (q && (T.search_index[i] || '').indexOf(q) < 0) continue;
-        out.push(i);
-      }
-      return out;
-    }
+    function visible_indices() { return view.visible_indices(T.order, T.query, T.search_index, T.filter_set); }
 
     function name_th(h, c) { return '<th data-c="' + c + '">' + esc(h) + '<span class="ind"></span></th>'; }
     function ctrl_th(h, c) {
@@ -146,7 +136,7 @@
         T.el.querySelector('tbody').addEventListener('input', function (e) {
           var td = e.target.closest('td[data-i]'); if (!td) return;
           T.data[+td.dataset.i][+td.dataset.c] = td.textContent;
-          T.search_index[+td.dataset.i] = row_text(T.data[+td.dataset.i]);
+          T.search_index[+td.dataset.i] = view.row_text(T.data[+td.dataset.i], cell_text);
           if (T.on_edit) T.on_edit(+td.dataset.i, +td.dataset.c, td);
         });
       }
@@ -154,7 +144,7 @@
 
     function render_body() {
       var vis = visible_indices();
-      var limit = T.show_all ? vis.length : Math.min(vis.length, T.cap), html = '';
+      var limit = view.page_limit(vis.length, T.cap, T.show_all), html = '';
       if (vis.length === 0) {
         html = '<tr><td class="tv-empty" colspan="' + (T.headers.length + 1) + '">No rows match the current search or filter. <button class="btn sm tv-clear-search">Show all rows</button></td></tr>';
       } else {
