@@ -34,7 +34,7 @@ const cors = require('cors');
 // NGROK TUNNEL — exposes a real public URL for testing/sharing, exactly like
 // the other server_*.js services (e.g. 8017). Set false to run local-only.
 // Needs NGROK_AUTHTOKEN in the environment (authtoken_from_env).
-const is_test_ngrok = true;
+const is_test_ngrok = false;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 const DEFAULT_PORT = Number(process.env.PORT) || Number(process.env.RACE_RESULTS_PORT) || 8018;

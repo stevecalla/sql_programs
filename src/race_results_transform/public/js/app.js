@@ -9,6 +9,8 @@
       normalize = RRT.normalize, display = RRT.display, sort = RRT.sort, split = RRT.split;
 
   var ENUM_BUCKETS = { category: ['Age Group', 'Elite', 'Para', 'Relay', 'Open'], gender: ['M', 'F', 'NB', 'Open'] };
+  // Split group-naming helpers — set either to false to disable that feature (see CLAUDE.md).
+  var SPLIT_FEATURES = { group_picker: true, remember_grouping: true };
   var PREF_KEY = 'rrt_ui_v1';
   var DEFAULT_COLLAPSED = { scorecard: true, mapping: true, integrity: true };
 
@@ -34,7 +36,7 @@
     file_name: 'results', ir: null, parsed: null, mapping: null, value_overrides: {},
     result: null, report: null, work_rows: null, store: null, sig: null,
     orig_table: null, conv_table: null, vm_expanded: {}, approved: {}, flag_info: null, link_tables: false,
-    sheets: null, active: null, first_render: true, split_col: null, split_basis: null, split_manual: {}
+    sheets: null, active: null, first_render: true, split_col: null, split_basis: null, split_manual: {}, split_loaded_key: null
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -681,7 +683,11 @@
     }
     return bundle.parsed.data_rows.map(function (dr) { return display.cell_text(dr.cells[hi]); });
   }
-  function manual_name(raw) { return Object.prototype.hasOwnProperty.call(S.split_manual, raw) ? S.split_manual[raw] : raw; }
+  function manual_name(raw) {
+    var v = Object.prototype.hasOwnProperty.call(S.split_manual, raw) ? S.split_manual[raw] : raw;
+    v = (v == null ? '' : String(v)).trim();
+    return v || raw;
+  }
 
   function split_item(i, value, count) {
     var label = value === '' ? '(blank)' : value;
@@ -690,13 +696,45 @@
   }
   function split_manual_item(i, g) {
     var label = g.value === '' ? '(blank)' : g.value;
-    var grp = manual_name(g.value);
+    var ov = Object.prototype.hasOwnProperty.call(S.split_manual, g.value) ? (S.split_manual[g.value] || '') : '';
     return '<div class="split-item"><input type="checkbox" class="s-on" value="' + i + '" checked>' +
       '<span class="s-name" title="' + esc(label) + '">' + esc(label) + ' <span class="s-count">×' + g.count + '</span></span>' +
       '<span class="m-arrow">→</span>' +
-      '<input class="m-grp" data-raw="' + esc(g.value) + '" value="' + esc(grp) + '" placeholder="group name" aria-label="group name for ' + esc(label) + '"></div>';
+      '<input class="m-grp"' + (SPLIT_FEATURES.group_picker ? ' list="split-groups"' : '') + ' data-raw="' + esc(g.value) + '" value="' + esc(ov) + '" placeholder="' + esc(label) + '" title="Leave blank for its own file; type/pick a group name to combine values" aria-label="group name for ' + esc(label) + '"></div>';
   }
 
+  function split_store_key() { return (S.sig || '') + '|' + (S.split_col || ''); }
+  function load_saved_groups() {
+    if (!SPLIT_FEATURES.remember_grouping) return null;
+    var all = get_pref('split_groups') || {};
+    return all[split_store_key()] || null;
+  }
+  function save_groups() {
+    if (!SPLIT_FEATURES.remember_grouping) return;
+    var pp = prefs(); pp.split_groups = pp.split_groups || {};
+    var key = split_store_key();
+    if (Object.keys(S.split_manual).length) pp.split_groups[key] = S.split_manual; else delete pp.split_groups[key];
+    save_prefs(pp);
+  }
+  function forget_saved_groups() {
+    var pp = prefs(); if (pp.split_groups) { delete pp.split_groups[split_store_key()]; save_prefs(pp); }
+  }
+  function autosave_on() { return get_pref('split_autosave') !== false; }   // default ON
+  function persistent_preset_status(box) {
+    var el = box.querySelector('.split-preset-status'); if (!el) return;
+    el.textContent = load_saved_groups() ? '\u00b7 preset saved \u2713' : '';
+  }
+  function flash_preset_status(box, msg) {
+    var el = box.querySelector('.split-preset-status'); if (!el) return;
+    el.textContent = '\u00b7 ' + msg; clearTimeout(el.status_timer);
+    el.status_timer = setTimeout(function () { persistent_preset_status(box); }, 1600);
+  }
+  function refresh_group_datalist(box) {
+    var dl = box.querySelector('#split-groups'); if (!dl) return;
+    var names = {};
+    Object.keys(S.split_manual).forEach(function (raw) { var n = (S.split_manual[raw] || '').trim(); if (n) names[n] = true; });
+    dl.innerHTML = Object.keys(names).map(function (n) { return '<option value="' + esc(n) + '"></option>'; }).join('');
+  }
   function render_split() {
     var box = document.querySelector('.rrt-split'); if (!box || !S.sheets || S.active == null) return;
     save_active();
@@ -709,6 +747,14 @@
     if (S.split_basis === 'converted' && !field) S.split_basis = 'original';
     var manual = S.split_basis === 'original';
     var multi = S.sheets.length > 1;
+    if (manual && SPLIT_FEATURES.remember_grouping) {
+      var lk = split_store_key();
+      if (S.split_loaded_key !== lk) {
+        var saved_g = load_saved_groups();
+        if (saved_g && Object.keys(S.split_manual).length === 0) S.split_manual = Object.assign({}, saved_g);
+        S.split_loaded_key = lk;
+      }
+    }
 
     var opts = headers.map(function (h) {
       var mt = field_for(active, h);
@@ -726,6 +772,11 @@
 
     var groups = split.group_by_key(split_keys_for(active, S.split_col, S.split_basis) || []);
     var items = groups.map(function (g, i) { return manual ? split_manual_item(i, g) : split_item(i, g.value, g.count); }).join('');
+    var dl_html = '';
+    if (SPLIT_FEATURES.group_picker && manual) {
+      var gset = {}; Object.keys(S.split_manual).forEach(function (raw) { var n = (S.split_manual[raw] || '').trim(); if (n) gset[n] = true; });
+      dl_html = '<datalist id="split-groups">' + Object.keys(gset).map(function (n) { return '<option value="' + esc(n) + '"></option>'; }).join('') + '</datalist>';
+    }
 
     box.innerHTML =
       '<p class="dim split-intro">Pick a column from your <b>original</b> file. Each group becomes its own reformatted <code>.xlsx</code> (full 12-column template, only that group’s rows)' + (multi ? ' — the <b>Download</b> button lets you apply it across some or all sheets.' : '.') + '</p>' +
@@ -733,11 +784,19 @@
       '<div class="split-row">' + toggle + '<span class="dim split-hint">' + hint + '</span></div>' +
       '<div class="dl-tools split-tools"><label class="split-allbox" title="Select / deselect all"><input type="checkbox" class="s-all" checked> <b>Download</b></label>' +
       '<span class="dim split-allhint">— check each value to save it as its own .xlsx</span>' +
-      (manual ? '<button type="button" class="btn sm" data-reset-groups="1" title="Reset every group name back to its original value">↺ Reset groups</button>' : '') +
       '</div>' +
+      (manual ? ('<div class="split-presets">' +
+        '<button type="button" class="btn sm" data-clear-entries title="Reset all group boxes to default (one file per value); keeps the saved preset">↺ Clear entries</button>' +
+        (SPLIT_FEATURES.remember_grouping ?
+          '<button type="button" class="btn sm" data-save-preset title="Save this grouping to reuse on the next same-layout file">\uD83D\uDCBE Save preset</button>' +
+          '<button type="button" class="btn sm" data-forget-preset title="Delete the saved grouping for this file layout + column">\uD83D\uDDD1 Forget preset</button>' +
+          '<label class="split-autosave" title="Save the grouping automatically as you type"><input type="checkbox" class="split-autosave-chk"' + (autosave_on() ? ' checked' : '') + '> Auto-save</label>' +
+          '<span class="split-preset-status dim"></span>' : '') +
+        '</div>') : '') +
       (manual
         ? '<div class="split-head"><span class="sh-box"></span><span class="s-name">Original value <span class="dim">(rows)</span></span><span class="m-arrow"></span><span class="sh-grp">Download group / file name</span></div>'
         : '<div class="split-head"><span class="sh-box"></span><span class="s-name">Value</span><span class="s-count">Rows</span></div>') +
+      dl_html +
       '<div class="split-list">' + items + '</div>' +
       '<div class="dl-foot"><button type="button" class="btn primary sm split-go">Download</button></div>';
     wire_split(box, groups, manual, multi);
@@ -747,7 +806,7 @@
     var checked = Array.prototype.slice.call(box.querySelectorAll('.split-list input.s-on:checked'));
     if (!manual) return checked.length;
     var names = {};
-    checked.forEach(function (c) { var nm = (c.closest('.split-item').querySelector('.m-grp').value || '').trim(); if (nm) names[nm] = true; });
+    checked.forEach(function (c) { var inp = c.closest('.split-item').querySelector('.m-grp'); var nm = (inp.value || '').trim() || inp.dataset.raw; if (nm) names[nm] = true; });
     return Object.keys(names).length;
   }
   function wire_split(box, groups, manual, multi) {
@@ -768,9 +827,12 @@
     box.querySelectorAll('[data-basis]').forEach(function (b) { b.addEventListener('click', function () { S.split_basis = b.dataset.basis; render_split(); }); });
     var s_all = box.querySelector('.s-all');
     if (s_all) s_all.addEventListener('change', function () { box.querySelectorAll('.split-list input.s-on').forEach(function (c) { c.checked = s_all.checked; }); update_go(); });
-    var rg = box.querySelector('[data-reset-groups]'); if (rg) rg.addEventListener('click', function () { S.split_manual = {}; render_split(); });
+    var ce = box.querySelector('[data-clear-entries]'); if (ce) ce.addEventListener('click', function () { S.split_manual = {}; render_split(); });
+    var sp = box.querySelector('[data-save-preset]'); if (sp) sp.addEventListener('click', function () { save_groups(); flash_preset_status(box, 'preset saved \u2713'); });
+    var fp = box.querySelector('[data-forget-preset]'); if (fp) fp.addEventListener('click', function () { forget_saved_groups(); flash_preset_status(box, 'saved preset cleared'); });
+    var as = box.querySelector('.split-autosave-chk'); if (as) as.addEventListener('change', function () { var pp = prefs(); pp.split_autosave = as.checked; save_prefs(pp); if (as.checked) save_groups(); flash_preset_status(box, as.checked ? 'auto-save on' : 'auto-save off'); });
     box.querySelectorAll('.split-list input.s-on').forEach(function (c) { c.addEventListener('change', update_go); });
-    box.querySelectorAll('.m-grp').forEach(function (inp) { inp.addEventListener('input', function () { S.split_manual[inp.dataset.raw] = inp.value; update_go(); }); });
+    box.querySelectorAll('.m-grp').forEach(function (inp) { inp.addEventListener('input', function () { S.split_manual[inp.dataset.raw] = inp.value; refresh_group_datalist(box); if (autosave_on()) save_groups(); update_go(); }); });
     box.querySelector('.split-go').addEventListener('click', function () {
       var checked = Array.prototype.slice.call(box.querySelectorAll('.split-list input.s-on:checked')).map(function (c) { return groups[+c.value]; });
       if (!checked.length) return;
@@ -778,6 +840,7 @@
       else run_split([S.active], checked, manual);
     });
     update_go();
+    persistent_preset_status(box);
   }
 
   // Sheet picker for the split download — mirrors the top Download button.
