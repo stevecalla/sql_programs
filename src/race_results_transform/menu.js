@@ -66,15 +66,17 @@ const SECTIONS = [
     { id: 11, label: 'Integrity & reconciliation', desc: 'Row counts tie out · dividers skipped · column ledger · Name/Email/Zip preserved · always 12-col output.', cli: 'node --test tests/reconcile.test.js', action: 'test_reconcile' },
     { id: 12, label: 'Golden fixtures (real files)', desc: 'Convert the 2 xlsx + 2 csv examples and compare to the checked-in expected snapshots.', cli: 'node --test tests/fixtures.test.js', action: 'test_fixtures' },
     { id: 13, label: 'Lint — snake_case', desc: 'Fail if any of our identifiers are camelCase (DOM/library names + UPPER_SNAKE constants + element ids are allowed).', cli: 'node --test tests/lint_snake_case.test.js', action: 'test_lint' },
-    { id: 14, label: 'Config wiring (package + tasks)', desc: 'repo-root package.json scripts + .vscode/tasks.json register this tool (step 16/16) like the other servers.', cli: 'node --test tests/config_wiring.test.js', action: 'test_config' }
+    { id: 14, label: 'Config wiring (package + tasks)', desc: 'repo-root package.json scripts + .vscode/tasks.json register this tool (step 16/16) like the other servers.', cli: 'node --test tests/config_wiring.test.js', action: 'test_config' },
+    { id: 15, label: 'Browser E2E tests (Playwright)', desc: 'Real-browser convert/download/split/combine against the served app. Run install (16) once first.', cli: 'npm run e2e', action: 'e2e_run' },
+    { id: 16, label: 'Install browser E2E (one-time)', desc: 'Dev: npm run e2e:install (Chromium). Linux server: npm run e2e:install:server (adds --with-deps; root).', cli: 'npm run e2e:install', action: 'e2e_install' }
   ] },
   { label: 'Server & app', color: GREEN, items: [
-    { id: 15, label: 'Start the web app server (port 8018)', desc: 'Serve public/ at http://localhost:8018; also opens a public ngrok URL if NGROK_AUTHTOKEN is set (otherwise it just notes that and keeps running). Ctrl-C to stop.', cli: 'node ../../server_race_results_transform_8018.js', action: 'server' },
-    { id: 16, label: 'Open the web app in a browser', desc: 'Open http://localhost:8018 (start the server first).', cli: 'open http://localhost:8018', action: 'open' }
+    { id: 17, label: 'Start the web app server (port 8018)', desc: 'Serve public/ at http://localhost:8018; also opens a public ngrok URL if NGROK_AUTHTOKEN is set (otherwise it just notes that and keeps running). Ctrl-C to stop.', cli: 'node ../../server_race_results_transform_8018.js', action: 'server' },
+    { id: 18, label: 'Open the web app in a browser', desc: 'Open http://localhost:8018 (start the server first).', cli: 'open http://localhost:8018', action: 'open' }
   ] },
   { label: 'Settings', color: GRAY, items: [
-    { id: 17, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 18, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
+    { id: 19, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
+    { id: 20, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
@@ -123,6 +125,13 @@ async function handle(item) {
     case 'test_fixtures': await run_test('tests/fixtures.test.js', 'golden-fixture tests'); break;
     case 'test_lint': await run_test('tests/lint_snake_case.test.js', 'snake_case lint'); break;
     case 'test_config': await run_test('tests/config_wiring.test.js', 'config-wiring checks'); break;
+    case 'e2e_run': {
+      const watch = clean(await ask('  Watch it run in a visible Chrome window? (y/N): ')).toLowerCase().indexOf('y') === 0;
+      console.log(c(DIM, watch ? '\n  opening Chrome (headed, slowed so you can watch)…\n' : '\n  running headless… (install first if this fails)\n'));
+      await run('npm', ['run', watch ? 'e2e:headed' : 'e2e']);
+      break;
+    }
+    case 'e2e_install': console.log(c(DIM, '\n  installing Playwright + Chromium (one-time)…\n')); await run('npm', ['run', 'e2e:install']); break;
     case 'server': console.log(c(DIM, 'Starting server… Ctrl-C to stop.')); await run('node', [SERVER]); break;
     case 'open': {
       const url = 'http://localhost:8018';

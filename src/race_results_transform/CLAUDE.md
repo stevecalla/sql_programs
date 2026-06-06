@@ -26,7 +26,9 @@ node --test tests/*.test.js                          # tests (node:test, no deps
 ```
 
 Excel/CSV I/O uses **exceljs** (declared in the repo-root `package.json`; the browser uses the
-vendored `public/vendor/exceljs.min.js`). The npm registry is locked down — do NOT `npm install`.
+vendored `public/vendor/exceljs.min.js`). The npm registry is locked down — do NOT `npm install`
+for the engine. (The opt-in `e2e/` Playwright suite is the one exception: install it deliberately
+on a dev box or the Linux server via `npm run e2e:install` / `e2e:install:server`, then `npm run e2e`.)
 
 Wired into the monorepo like the other servers: repo-root `package.json` has the standard
 `race_results_transform_server` + `pm2_start/logs/stop/delete/show/restart_race_results_transform`
@@ -63,6 +65,8 @@ src/race_results_transform/
   package.json       scripts + bin (no deps block — exceljs lives in the root package)
   examples/template/ the target-format template (no PII)
   examples/sample/   SYNTHETIC committed fixtures (fake CSV + xlsx + build_sample.js + goldens) for tests
+  e2e/               OPT-IN Playwright browser tests (server-served convert/download/split/combine
+                     + theme/clock canaries); dev/CI only, NOT in `npm test`, never in prod install
   tests/             node:test suites (each wrapped in describe(); runnable via menu.js or
                      node --test): engine + lint_snake_case + web_assets (static-asset integrity)
                      + config_wiring (repo-root package.json + .vscode/tasks.json) + sample.test.js
