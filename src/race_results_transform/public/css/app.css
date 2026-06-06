@@ -465,3 +465,9 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 .dl-mode{margin:0 0 6px;width:100%}
 .dl-mode button{flex:1}
 .dl-hint{font-size:11.5px;margin:0 0 8px}
+
+/* split list: labeled "Download" select-all checkbox (column header for the checkboxes) */
+.split-tools{align-items:center}
+.split-allbox{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--ink)}
+.split-allbox input{accent-color:var(--brand);width:16px;height:16px}
+.split-allhint{font-size:11.5px}

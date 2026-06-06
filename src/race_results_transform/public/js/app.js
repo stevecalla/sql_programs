@@ -731,8 +731,8 @@
       '<p class="dim split-intro">Pick a column from your <b>original</b> file. Each group becomes its own reformatted <code>.xlsx</code> (full 12-column template, only that group’s rows)' + (multi ? ' — the <b>Download</b> button lets you apply it across some or all sheets.' : '.') + '</p>' +
       '<div class="split-row"><label class="split-lbl">Split on</label><select class="split-col">' + opts + '</select></div>' +
       '<div class="split-row">' + toggle + '<span class="dim split-hint">' + hint + '</span></div>' +
-      '<div class="dl-tools"><button type="button" class="btn sm" data-all="1">Select all</button>' +
-      '<button type="button" class="btn sm" data-all="0">Clear</button>' +
+      '<div class="dl-tools split-tools"><label class="split-allbox" title="Select / deselect all"><input type="checkbox" class="s-all" checked> <b>Download</b></label>' +
+      '<span class="dim split-allhint">— check each value to save it as its own .xlsx</span>' +
       (manual ? '<button type="button" class="btn sm" data-reset-groups="1" title="Reset every group name back to its original value">↺ Reset groups</button>' : '') +
       '</div>' +
       (manual
@@ -752,14 +752,22 @@
   }
   function wire_split(box, groups, manual, multi) {
     var sel = box.querySelector('.split-col');
+    function sync_all() {
+      var all = box.querySelectorAll('.split-list input.s-on');
+      var on = box.querySelectorAll('.split-list input.s-on:checked').length;
+      var sa = box.querySelector('.s-all');
+      if (sa) { sa.checked = on > 0 && on === all.length; sa.indeterminate = on > 0 && on < all.length; }
+    }
     function update_go() {
       var n = split_checked_count(box, manual);
       var go = box.querySelector('.split-go'); go.disabled = !n;
       go.textContent = !n ? 'Select values' : (multi ? '⤓ Download…' : '⤓ Download ' + n + ' file' + (n > 1 ? 's' : ''));
+      sync_all();
     }
     sel.addEventListener('change', function () { S.split_col = sel.value; S.split_manual = {}; S.split_basis = null; render_split(); });
     box.querySelectorAll('[data-basis]').forEach(function (b) { b.addEventListener('click', function () { S.split_basis = b.dataset.basis; render_split(); }); });
-    box.querySelectorAll('[data-all]').forEach(function (tb) { tb.addEventListener('click', function () { var on = tb.dataset.all === '1'; box.querySelectorAll('.split-list input.s-on').forEach(function (c) { c.checked = on; }); update_go(); }); });
+    var s_all = box.querySelector('.s-all');
+    if (s_all) s_all.addEventListener('change', function () { box.querySelectorAll('.split-list input.s-on').forEach(function (c) { c.checked = s_all.checked; }); update_go(); });
     var rg = box.querySelector('[data-reset-groups]'); if (rg) rg.addEventListener('click', function () { S.split_manual = {}; render_split(); });
     box.querySelectorAll('.split-list input.s-on').forEach(function (c) { c.addEventListener('change', update_go); });
     box.querySelectorAll('.m-grp').forEach(function (inp) { inp.addEventListener('input', function () { S.split_manual[inp.dataset.raw] = inp.value; update_go(); }); });
