@@ -6,7 +6,14 @@ const { test, expect } = require('@playwright/test');
 const { reset_steps, SINGLE_XLSX } = require('./helpers');
 
 test.describe('race_results_transform — visual', () => {
-  test.beforeEach(async ({ page }) => { reset_steps(); await page.goto('/'); });
+  // Snapshot baselines are committed for win32 only (font rendering is platform-
+  // specific). On other OSes, skip rather than fail — run `npm run e2e:snap` there
+  // to generate + commit native baselines if you want visual coverage too.
+  test.beforeEach(async ({ page }) => {
+    test.skip(process.platform !== 'win32', 'visual baselines are win32-only on this repo');
+    reset_steps();
+    await page.goto('/');
+  });
 
   test('upload card — light theme', async ({ page }) => {
     await expect(page.locator('#uploadCard')).toBeVisible();
