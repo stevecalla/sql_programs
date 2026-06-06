@@ -8,6 +8,22 @@ The process creates **one Salesforce-import-compatible version** of each output 
 
 The files are intended to be loaded into Salesforce custom objects for duplicate review, reporting, and workflow management.
 
+## Source data fetch
+
+The `Account` records the detection runs on are read from Salesforce by
+`src/salesforce.js`. The method depends on run mode: `--test` uses a REST
+`autoFetch` query (capped at `MAX_FETCH`, for a quick dev-sandbox pull), and
+`--prod` uses the **Bulk API** (`conn.bulk2.query`) to pull the full ~700k-record
+set in a few large transfers rather than REST paging 2,000 at a time.
+
+The `--test` query is **ordered** (`ORDER BY LastName, FirstName, Id`) so the capped
+sample is deterministic; the `--prod` query is **unordered** so Salesforce streams
+records without sorting the whole result set first (the slowest part of a full
+fetch). Detection needs no particular input order — exact matching uses a hash Map,
+fuzzy matching uses rule-block buckets, and outputs are sorted in code.
+
+The fetch is read-only — it never updates, merges, or deletes anything in Salesforce.
+
 ## Output Files
 
 | File | Purpose | Suggested Salesforce Use |

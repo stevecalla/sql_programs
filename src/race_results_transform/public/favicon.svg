@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="12" fill="#0e1b3a"/>
+  <!-- deep water at the bottom -->
+  <path d="M0 46c5 0 7 3 12 3s8-3 13-3 8 3 13 3 8-3 14-3v18H0z" fill="#1b4a8a"/>
+  <path d="M0 49c5 0 7 3 12 3s8-3 13-3 8 3 13 3 8-3 14-3v15H0z" fill="#15284e" opacity=".7"/>
+  <!-- splash droplets around the entry point -->
+  <g fill="#bfe0ff">
+    <circle cx="22" cy="40" r="2"/>
+    <circle cx="30" cy="44" r="1.6"/>
+    <circle cx="17" cy="44" r="1.4"/>
+    <circle cx="26" cy="36" r="1.3"/>
+    <circle cx="13" cy="40" r="1.1"/>
+  </g>
+  <!-- shark breaching diagonally up-right -->
+  <g transform="rotate(-34 34 34)">
+    <!-- tail -->
+    <path d="M6 32l7 4-4 6c-3-1.5-5.5-4-6.5-7z" fill="#dCEBFb"/>
+    <!-- body -->
+    <path d="M10 36c12-2 20-3 28-12 3-3.5 7.5-6.5 14-6.5-1.7 3-2.3 5.4-2.2 7.6 4.2.2 7.6 1.8 10 4.7-2.3 1-4.7 1.5-7.2 1.5 1.3 1.9 1.8 3.9 1.7 5.9-3.6-2.2-6.8-3.2-10.9-3.2-8 0-13.5 3.4-20.5 3.4-4.8 0-9-1.5-12.6-3.6z" fill="#eaf2ff"/>
+    <!-- dorsal fin -->
+    <path d="M30 26c2.8-5.5 6.8-9 12.4-10-2.3 3.8-3 7.2-2.9 10.6-3.4.2-6.5.2-9.5-.6z" fill="#cfe0f5"/>
+    <!-- pectoral fin -->
+    <path d="M36 38c-1 5 0 8 3 11-4-1-7-3.5-8.5-7z" fill="#cfe0f5"/>
+    <!-- gills -->
+    <path d="M44 34c-1 2-1 4 0 6.2M47 34.4c-1 1.9-1 3.8 0 5.7" fill="none" stroke="#8fb4e0" stroke-width="1.1" stroke-linecap="round"/>
+    <!-- eye -->
+    <circle cx="55" cy="32" r="1.7" fill="#0e1b3a"/>
+    <!-- open mouth with teeth -->
+    <path d="M62 35c-4 2.5-8 3-13 1.8l1.6-2.2 1.8 1.4 1.7-1.7 1.8 1.4 1.7-1.6 1.8 1.3z" fill="#0e1b3a"/>
+  </g>
+</svg>

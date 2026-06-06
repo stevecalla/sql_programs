@@ -6,13 +6,62 @@ This process connects to Salesforce from Node.js, pulls records from the `Accoun
 
 The script is designed to mimic source-of-truth duplicate logic as closely as possible while working around Salesforce SOQL limitations.
 
-The process creates three output files:
+The process creates three output files (the names below are simplified; the
+actual files are written with a date/time stamp at the end, e.g.
+`account_duplicates_sf_import_2026-06-04_14-30-05.csv`):
 
 ```text
-account_duplicates.csv
-account_fuzzy_name_matches.csv
-account_fuzzy_name_groups.csv
+account_duplicates_sf_import.csv
+account_fuzzy_name_matches_sf_import.csv
+account_fuzzy_name_groups_sf_import.csv
 ```
+
+## Project Structure
+
+```text
+salesforce_duplicates/
+  step_1_find_duplicates.js   orchestrator (exact + fuzzy pipeline + run summary)
+  step_2_get_duplicate_report.js / step_2a_create_duplicate_message.js   server report + message
+  report_service.js         server glue (slash-arg parsing + freshness/force logic; tested)
+  config.js                 run-mode flag resolver, thresholds, output file + folder names
+  menu.js                   interactive launcher (node menu.js)
+  src/
+    fmt.js                  duration + timestamp formatting (pure)
+    log.js                  console logging + colors
+    ids.js                  run id, hashing, external id (pure)
+    normalize.js            field cleaning + key builders (pure)
+    matcher.js              levenshtein, similarity, rule flags, reasons (pure)
+    grouping.js             UnionFind + fuzzy group builder
+    step_timer.js           per-step stopwatch: live [STEP] lines + end timeline
+    exact.js                exact-duplicate detection
+    fuzzy.js                fuzzy candidate filter + rule blocks + pairwise compare
+    sf_rows.js              maps result rows to the Salesforce import schema
+    output_files.js         CSV write + output/archive rotation
+    salesforce.js           jsforce connect + Account query (--test=REST/ordered,
+                            --prod=Bulk API/unordered)
+  tests/                    node:test unit tests (normalize, matcher, grouping, ids,
+                            sf_rows, exact, fuzzy, file output, step_2 report,
+                            report_service, step_timer)
+  README.md / CLAUDE.md / schema.md
+```
+
+`main()` in `step_1_find_duplicates.js` is now a thin orchestrator that calls
+`detect_exact_duplicates` (exact.js) and `run_fuzzy_matching` (fuzzy.js).
+
+See `CLAUDE.md` for a quick orientation map of the modules.
+
+## Output Location and Archiving
+
+Output is written to the cross-platform `/data` path resolved by
+`utilities/determineOSPath.js` (not the code folder):
+
+```text
+usat_salesforce_duplicates/          most recent run's files
+usat_salesforce_duplicates_archive/  previous run's files
+```
+
+On each run the tool clears the archive, moves the prior run's CSVs into it, then
+writes the new timestamped files into `usat_salesforce_duplicates`.
 
 ## Output Files
 
@@ -117,18 +166,37 @@ SELECT Id,
 FROM Account
 WHERE FirstName != null
 AND LastName != null
-ORDER BY LastName, FirstName, Id
+-- ORDER BY LastName, FirstName, Id   (added only for the --test pull)
 ```
 
-The `ORDER BY` makes test runs deterministic.
+**`ORDER BY` is applied to the `--test` pull only.** The duplicate detection never
+needs sorted input — exact matching uses a hash Map, fuzzy matching uses rule-block
+buckets, and all three output files are sorted in code afterward. So:
 
-For example, if `MAX_FETCH = 5000`, the script pulls the first 5,000 records ordered by:
+- **`--test`** uses the **ordered** query (`ACCOUNT_SOQL_ORDERED`). With
+  `MAX_FETCH = 5000`, the script pulls the first 5,000 records ordered by
+  `LastName, FirstName, Id` — a stable, deterministic sample (not random), so repeat
+  test runs see the same rows.
+- **`--prod`** uses the **unordered** query (`ACCOUNT_SOQL_BASE`). On the full
+  ~700k-record extract, forcing Salesforce to sort the entire result set before
+  sending it is the slowest part of the fetch; dropping `ORDER BY` lets Salesforce
+  stream records as it finds them. Output ordering is unaffected (sorted in code).
+
+## Fetch Method (REST vs. Bulk API)
+
+The download method depends on the run mode (see `src/salesforce.js`):
 
 ```text
-LastName, FirstName, Id
+--test (dev sandbox)  REST autoFetch, capped at MAX_FETCH (5,000). Fast for a
+                      small pull; Bulk's job-startup overhead would be slower here.
+--prod (full run)     Bulk API query (conn.bulk2.query). Pulls the whole result
+                      set in a few large transfers instead of REST paging 2,000 at
+                      a time (~350 round-trips for ~700k records) — much faster.
 ```
 
-This is not a random sample.
+Both paths return the same shape to the rest of the pipeline, so nothing
+downstream changes. Bulk jobs run asynchronously server-side, so the poll timeout
+is set generously (20 min) to allow a large extract to finish.
 
 ## Composite ZIP Logic
 
@@ -529,37 +597,38 @@ Gender + Birthdate + Composite ZIP
 
 pair counts should usually stay manageable.
 
-## Current Hardcoded Settings
+## Settings
 
-The script currently uses:
+All tunable constants live in `config.js`:
 
 ```js
-const MAX_FETCH = 5000;
 const FUZZY_THRESHOLD = 90;
 const PROGRESS_LOG_EVERY_RECORDS = 1000;
 const PROGRESS_LOG_EVERY_PAIRS = 250000;
 ```
 
-### MAX_FETCH
+### Test vs. production mode (`MAX_FETCH`)
 
-Controls how many Salesforce records are fetched.
-
-For testing:
+The run mode is chosen with a **cross-platform command-line flag** (it works the
+same in PowerShell, cmd, and bash because it's a normal process argument — no
+shell-specific environment-variable syntax). `config.js` resolves it and the
+result is passed into `main(is_test)`:
 
 ```js
-const MAX_FETCH = 5000;
+// config.js — --test => true, --prod/--production => false, default false (prod)
+function resolve_is_test(argv = process.argv) {
+    if (argv.includes("--test")) return true;
+    if (argv.includes("--prod") || argv.includes("--production")) return false;
+    return false;
+}
 ```
 
-For a larger test:
+`is_test` selects the Salesforce credentials (dev sandbox vs. production) and the
+fetch limit (`MAX_FETCH` = 5,000 test / 1,000,000 prod). Set it per run:
 
-```js
-const MAX_FETCH = 50000;
-```
-
-For a full run:
-
-```js
-const MAX_FETCH = 1000000;
+```bash
+node step_1_find_duplicates.js --test   # dev sandbox, 5,000 cap
+node step_1_find_duplicates.js --prod   # production, full fetch
 ```
 
 ### FUZZY_THRESHOLD
@@ -620,22 +689,135 @@ npm install dotenv jsforce fast-csv
 
 ## Run the Script
 
-From the script folder:
+From the script folder, either use the interactive menu (recommended):
 
 ```bash
-node sf_duplicates_060326.js
+node menu.js
 ```
 
-Example:
+The menu can run the tests, do a syntax check, run the finder in TEST or
+PRODUCTION mode, and open the output/archive folders.
+
+Or run the script directly:
 
 ```bash
-calla@LAPTOP-3NGPLS93 MINGW64 ~/development/usat/sql_programs/src/salesforce
-$ node sf_duplicates_060326.js
+node step_1_find_duplicates.js --test   # test (dev sandbox, 5,000 cap)
+node step_1_find_duplicates.js --prod   # production (full fetch)
+node step_1_find_duplicates.js          # defaults to production
+```
+
+## Testing
+
+The `src/` modules are pure and unit-tested with Node's built-in test runner.
+Tests never log into Salesforce or touch the production output folders.
+
+```bash
+node --test tests/                 # run every suite
+node --test tests/matcher.test.js  # run one suite
+```
+
+Or use menu item 1 (all tests) / 2 (file output tests).
+
+## Slack Server
+
+`server_salesforce_duplicates_8017.js` (at the repo root, alongside the other
+`server_*.js`, port 8017) exposes the duplicate output over Slack slash commands.
+It mirrors `server_slack_events.js` and reuses the shared Slack upload utilities.
+
+Run it from the repo root (or menu item 11):
+
+```bash
+node server_salesforce_duplicates_8017.js
+```
+
+Endpoints (hit directly from the CLI, or wire to Slack slash commands):
+
+```text
+GET  /salesforce-duplicates-test          health check
+POST /salesforce-duplicates-stats         posts the latest run's counts (+ total records scanned)
+GET  /scheduled-salesforce-duplicates     cron: regenerate + post files to a channel
+POST /salesforce-duplicates-reporting     /reporting: DM the CSV file(s) + stats
+```
+
+The returned stats include the **total records scanned** from the latest run (read
+from a small per-run summary file the finder writes to a meta folder).
+
+Slash arguments (passed in the command `text` as `key=value`):
+
+```text
+mode=latest|run                 latest (default) returns existing files; run regenerates
+force=true                      with mode=run, bypass the freshness window (always regenerate)
+file=all|exact|fuzzy_pair|fuzzy_group   which file(s) to return (default all)
+```
+
+`mode=run` (slash commands) regenerates against **production** — but only if the
+most recent output file is older than `FRESH_OUTPUT_WINDOW_MINUTES` (config,
+default 30). **Within that window `mode=run` returns the latest files instead** of
+re-querying Salesforce (so rapid repeat calls don't hammer it). When that happens
+the Slack reply says so and points you to the override.
+
+To regenerate anyway, add **`force=true`**:
+
+```text
+/duplicates mode=run              -> regenerate only if older than 30 min, else latest
+/duplicates mode=run force=true   -> always regenerate (ignores the window)
+```
+
+The `/scheduled` endpoint additionally accepts `?is_test=true|false` (default
+`false` = production), so you can drive a full server → Slack run against the dev
+sandbox without touching production:
+
+```text
+GET /scheduled-salesforce-duplicates?is_test=true    # dev sandbox
+GET /scheduled-salesforce-duplicates?is_test=false   # production (default)
+```
+
+CLI examples:
+
+```bash
+curl http://localhost:8017/salesforce-duplicates-test
+curl "http://localhost:8017/scheduled-salesforce-duplicates?is_test=true"   # sandbox regenerate + post
+curl "http://localhost:8017/scheduled-salesforce-duplicates?is_test=false"  # production
+curl -X POST http://localhost:8017/salesforce-duplicates-reporting -d "text=mode=latest file=exact"
+curl -X POST http://localhost:8017/salesforce-duplicates-reporting -d "text=mode=run force=true"  # force a regenerate
 ```
 
 ## Console Logging
 
-The script logs useful run details, including:
+### Step timing (live + end-of-run timeline)
+
+As each major step finishes, the script prints a live one-line marker so you can
+watch progress and see exactly when each stage completes:
+
+```text
+[STEP] archive prior outputs           0.1s
+[STEP] fetch from Salesforce           107.0s
+[STEP] exact duplicates                3.2s
+[STEP] fuzzy matching                  6.8s
+[STEP] fuzzy groups                    0.4s
+```
+
+Just before the run summary, it prints a timeline sorted largest-first (with bars)
+so the slow stage is obvious at a glance:
+
+```text
+──────────────────────────────────────────────────────
+Run timing (largest first):
+  fetch from Salesforce            107.00s  ████████████████████████████
+  fuzzy matching                     6.80s  ██
+  exact duplicates                   3.20s  █
+  fuzzy groups                       0.40s
+  ────────────────────────────── ────────
+  TOTAL                            117.40s
+──────────────────────────────────────────────────────
+```
+
+This mirrors the stage timer in `event_analysis/build_all.js`. Implemented in
+`src/step_timer.js` (`create_step_timer`).
+
+### Run summary
+
+The script also logs the full run summary, including:
 
 ```text
 Script start time
@@ -774,21 +956,17 @@ const MAX_FETCH = 1000000;
 
 ## Known Limitations
 
-### Salesforce fetch order is deterministic, not random
+### The `--test` sample is deterministic, not random
 
-With:
-
-```sql
-ORDER BY LastName, FirstName, Id
-```
-
-and:
+The `--test` pull applies `ORDER BY LastName, FirstName, Id`, so with:
 
 ```js
 const MAX_FETCH = 5000;
 ```
 
-the script gets the first 5,000 records alphabetically by last name, first name, and ID.
+it gets the first 5,000 records alphabetically by last name, first name, and ID —
+the same rows on every test run. (The `--prod` pull is unordered for speed; on a full
+run every record is fetched, so order doesn't matter.)
 
 ### Formula fields are handled in Node.js
 
@@ -809,9 +987,9 @@ This is usually helpful, but reviewers should still inspect groups before taking
 Potential improvements:
 
 ```text
-1. Add timestamped output folders.
+1. [done] Timestamped output files written to /data with archive rotation.
 2. Add a raw Salesforce export CSV.
-3. Add config options for MAX_FETCH and FUZZY_THRESHOLD.
+3. [partial] MAX_FETCH is now env-driven (SF_DUP_IS_TEST); FUZZY_THRESHOLD still in config.js.
 4. Add separate rule-based-only output:
    same gender + birthdate + ZIP, regardless of name score.
 5. Add ZIP normalization to compare only first 5 digits.
