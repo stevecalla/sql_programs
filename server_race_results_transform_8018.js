@@ -79,7 +79,7 @@ function start_server(opts) {
         console.log('\nRace Results Transform — local server');
         console.log('  -> http://localhost:' + actual + '/                 (web app)');
         console.log('  -> http://localhost:' + actual + '/api/status       (health check)');
-        console.log('  -> https://usat-converter.kidderwise.org' + '(internet access)');
+        console.log('  -> https://usat-converter.kidderwise.org' + '       (internet access)');
         console.log('  Serving: ' + PUBLIC_DIR);
         console.log('  Press Ctrl-C to stop.\n');
       }
