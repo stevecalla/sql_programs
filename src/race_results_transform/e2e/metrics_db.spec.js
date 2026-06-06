@@ -40,6 +40,7 @@ test.describe('race_results_transform — analytics DB round-trip', () => {
   test('upload → convert → download writes the expected rows to MySQL', async ({ page }) => {
     test.skip(!db_ok, 'local analytics DB not reachable (set LOCAL_* env + run the server once)');
     reset_steps();
+    await page.addInitScript(() => { window.METRICS_TEST_ALLOW = true; });   // muted under automation by default — opt in
     await page.goto('/');
     // capture THIS run's anonymous id so we only read/clean our own rows
     const visitor = await page.evaluate(function () { try { return localStorage.getItem('um_visitor_id'); } catch (e) { return null; } });
@@ -76,6 +77,9 @@ test.describe('race_results_transform — analytics DB round-trip', () => {
 
       const dl = rs.find(function (r) { return r.event_name === 'download'; });
       expect(dl.download_mode).toBe('single');
+      // filename now travels to every post-upload event, so each row traces back to its sheet
+      expect(String(conv.file_name)).toContain('sample_race_results_FAKE');
+      expect(String(dl.file_name)).toContain('sample_race_results_FAKE');
 
       // PII guard: no raw cell/header data should ever be a column on the row
       expect(Object.keys(up).indexOf('email')).toBe(-1);

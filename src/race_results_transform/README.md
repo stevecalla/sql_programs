@@ -41,6 +41,7 @@ node src/cli.js inspect "<file>.xlsx|.csv"    # show headers + auto-mapping, no 
 node src/cli.js convert "<file>"  [-o out]    # write a reformatted .xlsx (one sheet per source sheet)
 node src/cli.js batch   <folder>  [-o dir]    # convert a whole folder
 node menu.js                                  # sectioned interactive menu (incl. a Config-wiring check); pauses after each command
+                                              # menu item numbers are sequential 1..N (guarded by tests/menu_ids.test.js)
 
 # tests
 npm test            # or: node --test tests/*.test.js
@@ -157,13 +158,19 @@ client / report render); the 8018 server **auto-creates the table at startup**
   (non-blocking; honors `METRICS_OFF` + Do-Not-Track).
 - **See it**: `node src/cli.js stats [--days 7]`, the dashboard at `/metrics`
   (Basic Auth — `RACE_RESULTS_CONVERTER_METRICS_DASH_USER` / `RACE_RESULTS_CONVERTER_METRICS_DASH_PASS`), or the weekly Slack digest.
-- **Size / cleanup**: `node src/cli.js metrics:size` and `node src/cli.js metrics:cleanup`
-  (retention: keep current + prior calendar year).
+- **Size / cleanup**: `node src/cli.js metrics:size`, `metrics:cleanup` (keep current + prior
+  calendar year), and `metrics:purge-all` (delete every row — confirms first; for clearing test data).
 - **Cron**: `utilities/cron_get_slack_race_results_transform/` (digest) and
   `utilities/cron_get_purge_race_results_transform/` (purge) — you set the schedule.
 
-**Tests**: `tests/metrics_ingest.test.js` (dep-free unit — whitelist + timestamps) and
-`e2e/metrics_db.spec.js` (browser→MySQL round-trip — asserts the events landed with the
-right columns AND that the table was created; chromium-only, skips with no DB: `npm run e2e:db`).
+- **Privacy/automation**: the client mutes itself under automated browsers (`navigator.webdriver`)
+  unless `window.METRICS_TEST_ALLOW` is set, so the e2e suite never writes to the table. The uploaded
+  **file name** rides along on every post-upload event (conversion / download / split / error) for
+  traceability (also linkable via `upload_id`).
 
-No new dependencies. See `ANALYTICS_PLAN.md` for the full design, schema, and Linux setup.
+**Tests**: `tests/metrics_ingest.test.js` + `tests/metrics_retention.test.js` (dep-free units —
+whitelist/timestamps, purge-by-year + purge-all), `e2e/metrics_beacon.spec.js` (fires when allowed /
+muted under automation), and `e2e/metrics_db.spec.js` (browser→MySQL round-trip — events landed with
+the right columns incl. file_name, + the table schema; chromium-only, skips with no DB: `npm run e2e:db`).
+
+No new dependencies. See `ANALYTICS_PLAN.md` 

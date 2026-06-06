@@ -44,9 +44,9 @@ module.exports = defineConfig({
   projects: [
     { name: 'chromium', testIgnore: /mobile\.spec\.js/,
       use: Object.assign({}, devices['Desktop Chrome'], { launchOptions: chromium_launch }) },
-    { name: 'firefox', testIgnore: /(mobile|visual|a11y|metrics_db|metrics_dashboard)\.spec\.js/,
+    { name: 'firefox', testIgnore: /(mobile|visual|a11y|metrics_db|metrics_dashboard|metrics_beacon)\.spec\.js/,
       use: Object.assign({}, devices['Desktop Firefox'], { launchOptions: plain_launch }) },
-    { name: 'webkit', testIgnore: /(mobile|visual|a11y|metrics_db|metrics_dashboard)\.spec\.js/,
+    { name: 'webkit', testIgnore: /(mobile|visual|a11y|metrics_db|metrics_dashboard|metrics_beacon)\.spec\.js/,
       use: Object.assign({}, devices['Desktop Safari'], { launchOptions: plain_launch }) },
     { name: 'mobile', testMatch: /(mobile|metrics_dashboard)\.spec\.js/,
       use: Object.assign({}, devices['Pixel 5'], { launchOptions: chromium_launch }) }

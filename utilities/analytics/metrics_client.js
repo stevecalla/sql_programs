@@ -22,7 +22,11 @@
     var v = global.navigator && (global.navigator.doNotTrack || global.doNotTrack);
     return v === '1' || v === 'yes';
   }
-  function off() { return !!global.METRICS_OFF || dnt(); }
+  function automated() {
+    try { return !!(global.navigator && global.navigator.webdriver) && !global.METRICS_TEST_ALLOW; }
+    catch (e) { return false; }
+  }
+  function off() { return !!global.METRICS_OFF || dnt() || automated(); }
 
   function two(n) { return (n < 10 ? '0' : '') + n; }
   function fmt_local(d) {
@@ -37,6 +41,7 @@
       app: cfg.app, visitor_id: ids.visitor_id, session_id: ids.session_id,
       is_returning: ids.is_returning, upload_id: ids.upload_id || null,
       client_tz: tz, local_hour: d.getHours(), local_dow: d.getDay(), event_at_local: fmt_local(d),
+      file_name: ids.file_name || null,
       viewport: (global.innerWidth && global.innerWidth < 768) ? 'mobile' : 'desktop',
       theme: (global.document && document.documentElement.getAttribute('data-theme')) || 'auto'
     };
@@ -57,6 +62,7 @@
   function new_upload() { ids.upload_id = uuid(); return ids.upload_id; }
   function track(event_name, props) {
     if (off()) return;
+    if (props && props.file_name) ids.file_name = props.file_name;   // remember for later events
     var merged = {}, src = base_props(), k;
     for (k in src) if (Object.prototype.hasOwnProperty.call(src, k)) merged[k] = src[k];
     if (props) for (k in props) if (Object.prototype.hasOwnProperty.call(props, k)) merged[k] = props[k];

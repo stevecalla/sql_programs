@@ -63,7 +63,8 @@ src/race_results_transform/
                        names sanitized to <=31 chars, unique); output centered, wide, frozen header
     cli.js             scriptable converter (inspect / convert / batch)
   public/            web app: index.html, css/app.css, js/app.js, favicon.svg, vendor/exceljs.min.js
-  menu.js            interactive launcher (pauses after each command)
+  menu.js            interactive launcher (pauses after each command); item numbers are sequential
+                     1..N in display order, guarded by tests/menu_ids.test.js
   data_dir.js        data dir via utilities/determineOSPath (…/usat/data on linux/mac; configured
                        uploads path on Windows) + /race_results_transform; CLI + tests only
   package.json       scripts + bin (no deps block — exceljs lives in the root package)
@@ -74,11 +75,13 @@ src/race_results_transform/
                      split/combine, theme/CSV/approve/edit/value-map/remap/link/sort/filter/layout/
                      sheet-tabs/drag-drop/split-presets, + a11y (axe-core), visual snapshots, mobile
                      viewport, error handling; runs on chromium/firefox/webkit + a mobile project.
-                     dev/CI only, NOT in `npm test`, never in prod install. (menu.js items 15-17, 23-24)
+                     dev/CI only, NOT in `npm test`, never in prod install. (menu.js items 15-21)
   tests/             node:test suites (each wrapped in describe(); runnable via menu.js or
                      node --test): engine + lint_snake_case + web_assets (static-asset integrity)
                      + config_wiring (repo-root package.json + .vscode/tasks.json) + sample.test.js
                      (always-on synthetic data) + fixtures.test.js (optional real usat/data tier)
+                     + metrics_ingest + metrics_retention (analytics whitelist/timestamps + purge)
+                     + menu_ids (menu item numbers stay sequential 1..N)
 ../../server_race_results_transform_8018.js   thin express.static host + ngrok (repo root)
 ```
 
@@ -189,9 +192,13 @@ Server (`server_race_results_transform_8018.js`): best-effort mysql2/promise poo
 `/metrics` dashboard + `/api/metrics-report` (Basic Auth: `RACE_RESULTS_CONVERTER_METRICS_DASH_USER`/`_PASS`),
 and `/scheduled-slack-race-results-metrics` (cron → `slack_message_api`). Analytics is
 fire-and-forget: if the DB is down the converter still serves normally. PII never leaves
-the browser — events carry counts/enums + filename only. CLI: `stats`, `metrics:size`,
-`metrics:cleanup`. Crons: `utilities/cron_get_slack_race_results_transform/`,
+the browser — events carry counts/enums + filename only. The client mutes itself under
+automated browsers (`navigator.webdriver`) unless `window.METRICS_TEST_ALLOW` is set, so e2e
+runs don't pollute the table; the uploaded filename is remembered and attached to every
+post-upload event for traceability (plus the `upload_id` correlation). CLI: `stats`, `metrics:size`,
+`metrics:cleanup`, `metrics:purge-all`. Crons: `utilities/cron_get_slack_race_results_transform/`,
 `cron_get_purge_race_results_transform/`. Reuse the core for other pages (e.g. 8016) by
-supplying a new config + DDL + report. Verified by `tests/metrics_ingest.test.js` (dep-free whitelist/timestamp unit test) and
+supplying a new config + DDL + report. Verified by `tests/metrics_ingest.test.js` + `tests/metrics_retention.test.js` (dep-free unit tests:
+whitelist/timestamps, purge-by-year + purge-all) and
 `e2e/metrics_db.spec.js` (browser→MySQL round-trip + table-schema check; chromium-only,
-auto-skips without a DB — `npm run e2e:db`). Full design + Linux setup: `ANALYTICS_PLAN.md`.
+auto-skips without a DB — `npm run e2e:db`). Full design + Linux setup
