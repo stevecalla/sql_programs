@@ -18,7 +18,7 @@ const ALLOWED = new Set((`
 addEventListener addRow addWorksheet appendChild after before charCodeAt classList className
 clearTimeout clientY closest columnCount createElement createInterface createObjectURL dataset
 dataTransfer deepEqual doesNotThrow eachCell eachRow effectAllowed execSync existsSync findIndex
-flatMap forEach getAttribute getBoundingClientRect getCell getElementById getItem getRow getTime
+flatMap forEach getAttribute getBoundingClientRect getCell getColumn getElementById getItem getRow getTime rowCount
 getUTCDate getUTCFullYear getUTCMonth getUTCHours getUTCMinutes getUTCSeconds getUTCMilliseconds
 getUTCDay hasOwnProperty includeEmpty indexOf innerHTML insertBefore isArray isNaN isInteger isTTY
 lastIndexOf localStorage mkdirSync notEqual numFmt padEnd padStart parentNode parseFloat parseInt

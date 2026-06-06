@@ -57,4 +57,20 @@ test('grid_to_buffer (single sheet) still works via grids_to_buffer', async () =
   assert.equal(wb.worksheets.length, 1);
   assert.equal(wb.worksheets[0].getRow(2).getCell(1).value, 'Smith');
 });
+test('sheets can be combined into one worksheet (rows stacked in order)', async () => {
+  const pipe = require('../src/pipeline');
+  const irs = await io.read_to_irs(await two_sheet_book());
+  let rows = [], headers = null;
+  for (const ir of irs) { const out = pipe.convert(ir, {}); headers = out.result.headers; rows = rows.concat(out.result.rows); }
+  const buf = await io.grids_to_buffer([{ name: 'Combined', headers: headers, rows: rows }]);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  assert.equal(wb.worksheets.length, 1, 'combine = single worksheet');
+  assert.equal(rows.length, 2, 'one athlete row per sheet in the fixture');
+  assert.equal(wb.worksheets[0].rowCount, 1 + rows.length, 'header + all stacked rows');
+  // last/first from each source sheet are both present
+  const lastnames = wb.worksheets[0].getColumn(2).values.slice(2);
+  assert.deepEqual(lastnames, ['Smith', 'Doe']);
+});
+
 });

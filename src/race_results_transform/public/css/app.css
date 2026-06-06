@@ -460,3 +460,8 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 .split-head .sh-grp{width:160px;flex:0 0 auto;text-transform:none;letter-spacing:0}
 .split-item .m-arrow{width:14px;text-align:center;flex:none}
 .split-head .m-arrow{width:14px;flex:none}
+
+/* download popover: Separate / Combined mode toggle */
+.dl-mode{margin:0 0 6px;width:100%}
+.dl-mode button{flex:1}
+.dl-hint{font-size:11.5px;margin:0 0 8px}

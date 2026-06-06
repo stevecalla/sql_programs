@@ -880,6 +880,15 @@
     save_active();
     idx.forEach(function (i, k) { var b = S.sheets[i]; setTimeout(function () { download_one_sheet(b); }, k * 300); });
   }
+  // Combine the chosen sheets into ONE .xlsx — their converted rows stacked in tab order.
+  function download_combined(idx) {
+    save_active();
+    var rows = [];
+    idx.forEach(function (i) { var b = S.sheets[i]; compute_bundle(b); rows = rows.concat(b.work_rows); });
+    var headers = S.sheets[idx[0]].result.headers;
+    io.grids_to_buffer([{ name: 'Combined', headers: headers, rows: rows }])
+      .then(function (buf) { save_blob(buf, safe_filename(S.file_name) + ' - combined.xlsx'); });
+  }
   function download() {
     save_active();
     if (S.sheets && S.sheets.length > 1) open_download_picker();
@@ -898,13 +907,17 @@
     close_download_picker();
     var btn = $('downloadBtn');
     var pop = document.createElement('div'); pop.className = 'dl-pop'; pop.id = 'dlPop';
+    var mode = 'separate';
     var items = S.sheets.map(function (b, i) {
       return '<label class="dl-item"><input type="checkbox" value="' + i + '" checked>' +
         '<span class="dl-name">' + esc(b.name) + '</span>' +
         '<span class="dim">' + b.parsed.data_rows.length + ' rows</span></label>';
     }).join('');
     pop.innerHTML =
-      '<div class="dl-head">Download sheets <span class="dim">— each saves as its own file</span></div>' +
+      '<div class="dl-head">Download multi-sheet workbook</div>' +
+      '<div class="seg dl-mode"><button type="button" data-mode="separate" class="active">Separate files</button>' +
+      '<button type="button" data-mode="combined">Combined (one file)</button></div>' +
+      '<p class="dim dl-hint">Each selected sheet saves as its own .xlsx.</p>' +
       '<div class="dl-tools"><button type="button" class="btn sm" data-all="1">Select all</button>' +
       '<button type="button" class="btn sm" data-all="0">Clear</button></div>' +
       '<div class="dl-list">' + items + '</div>' +
@@ -917,15 +930,31 @@
     function update_go() {
       var n = pop.querySelectorAll('.dl-list input:checked').length;
       var go = pop.querySelector('#dlGo'); go.disabled = !n;
-      go.textContent = n ? ('\u2913 Download ' + n + ' sheet' + (n > 1 ? 's' : '')) : 'Select sheets';
+      if (!n) { go.textContent = 'Select sheets'; return; }
+      go.textContent = mode === 'combined'
+        ? ('\u2913 Download 1 combined file (' + n + ' sheet' + (n > 1 ? 's' : '') + ')')
+        : ('\u2913 Download ' + n + ' file' + (n > 1 ? 's' : ''));
     }
+    pop.querySelectorAll('[data-mode]').forEach(function (mb) {
+      mb.addEventListener('click', function () {
+        mode = mb.dataset.mode;
+        pop.querySelectorAll('[data-mode]').forEach(function (x) { x.classList.toggle('active', x === mb); });
+        var hint = pop.querySelector('.dl-hint');
+        if (hint) hint.textContent = mode === 'combined'
+          ? 'All selected sheets are stacked into one .xlsx (rows in tab order).'
+          : 'Each selected sheet saves as its own .xlsx.';
+        update_go();
+      });
+    });
     pop.querySelectorAll('[data-all]').forEach(function (tb) {
       tb.addEventListener('click', function () { var on = tb.dataset.all === '1'; pop.querySelectorAll('.dl-list input').forEach(function (c) { c.checked = on; }); update_go(); });
     });
     pop.querySelectorAll('.dl-list input').forEach(function (c) { c.addEventListener('change', update_go); });
     pop.querySelector('#dlGo').addEventListener('click', function () {
       var sel = Array.prototype.slice.call(pop.querySelectorAll('.dl-list input:checked')).map(function (c) { return +c.value; });
-      close_download_picker(); if (sel.length) download_selected(sel);
+      close_download_picker();
+      if (!sel.length) return;
+      if (mode === 'combined') download_combined(sel); else download_selected(sel);
     });
     update_go();
     setTimeout(function () { document.addEventListener('mousedown', dl_outside); document.addEventListener('keydown', dl_esc); }, 0);
