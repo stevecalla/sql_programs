@@ -109,4 +109,10 @@ test.describe('race_results_transform — analytics DB round-trip', () => {
     const names = cols.map(function (c) { return c.cn; });
     expect(names.length, 'table should exist with columns').toBeGreaterThan(0);
     ['id', 'created_at_utc', 'created_at_mtn', 'app', 'event_name', 'session_id', 'visitor_id',
-     'is_returning', 'upload_id', 'file_name', 'file_name_hash', 'fil
+     'is_returning', 'upload_id', 'file_name', 'file_name_hash', 'file_type', 'row_count',
+     'cols_matched', 'scorecard_band', 'download_mode', 'split_basis', 'local_hour', 'event_at_local'
+    ].forEach(function (c) { expect(names, 'missing column: ' + c).toContain(c); });
+    // every column in the app whitelist must exist on the table
+    cfg.COLUMNS.forEach(function (c) { expect(names, 'whitelist column missing from table: ' + c).toContain(c); });
+  });
+});
