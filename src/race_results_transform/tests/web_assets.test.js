@@ -49,7 +49,7 @@ test('every script index.html references actually exists', () => {
 test('browser scripts parse (no mid-file truncation / syntax error)', () => {
   const files = REQUIRED.filter(function (s) { return s.indexOf('src/') === 0; })
     .map(function (s) { return path.join(ROOT, s); })
-    .concat([path.join(PUB, 'js', 'app.js')]);
+    .concat([path.join(PUB, 'js', 'app.js'), path.join(PUB, 'vendor', 'exceljs.min.js')]);
   for (const f of files) {
     const code = fs.readFileSync(f, 'utf8');
     // new Function compiles (throws on syntax error) without executing the code.

@@ -985,13 +985,28 @@
     var dark = effective_dark(); var p = prefs(); p.theme = dark ? 'light' : 'dark'; save_prefs(p); apply_theme();
   }
 
+  function start_clock() {
+    var elc = $('footerClock'); if (!elc) return;
+    function tick() {
+      var parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Denver', weekday: 'short',
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).formatToParts(new Date());
+      var p = {}; parts.forEach(function (x) { p[x.type] = x.value; });
+      elc.textContent = p.weekday + '., ' + p.month + '/' + p.day + '/' + p.year + ' ' +
+        p.hour + ':' + p.minute + ':' + p.second + ' ' + p.dayPeriod + ' MTN';
+    }
+    tick(); setInterval(tick, 1000);
+  }
+
   function init() {
-    if (!window.ExcelJS) { alert('ExcelJS failed to load.'); return; }
-    S.store = mapper.make_store(window.localStorage);
-    wire_dropzone(); wire_collapsibles(); wire_layout(); wire_compare_seg();
+    // Theme first — the toggle must render even if a later step fails or ExcelJS is missing.
     apply_theme();
     if ($('themeToggle')) $('themeToggle').addEventListener('click', toggle_theme);
     if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', apply_theme);
+    start_clock();
+    if (!window.ExcelJS) { alert('ExcelJS failed to load — please hard-refresh the page (Ctrl/Cmd+Shift+R).'); return; }
+    S.store = mapper.make_store(window.localStorage);
+    wire_dropzone(); wire_collapsibles(); wire_layout(); wire_compare_seg();
     var tip = document.createElement('div'); tip.className = 'rrt-tip hidden'; document.body.appendChild(tip);
     document.addEventListener('mouseover', function (e) { var td = e.target.closest && e.target.closest('td[data-tip]'); if (!td) return; tip.textContent = td.getAttribute('data-tip'); tip.classList.remove('hidden'); });
     document.addEventListener('mousemove', function (e) { if (tip.classList.contains('hidden')) return; var x = Math.min(e.clientX + 12, window.innerWidth - 300); tip.style.left = x + 'px'; tip.style.top = (e.clientY + 16) + 'px'; });

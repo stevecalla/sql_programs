@@ -332,7 +332,7 @@ table.rt thead th{background:var(--brand);color:#fff;box-shadow:0 1px 0 rgba(0,0
 table.rt thead th .ind{color:rgba(255,255,255,.75)}
 table.rt thead th.rownum{background:var(--brand);color:#fff}
 select.hmap{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.35)}
-select.hmap:hover{background:#fff;color:var(--ink)}
+select.hmap:hover{background:#fff;color:#1c2433}
 
 /* link-tables toggle in the compare header */
 .link-toggle{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#fff;white-space:nowrap;cursor:pointer}

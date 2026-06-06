@@ -30,6 +30,12 @@ node ../../server_race_results_transform_8018.js        # http://localhost:8018/
 #   is_test_ngrok=true also opens a public ngrok URL when NGROK_AUTHTOKEN is set
 #   (reads the repo-root .env). Set is_test_ngrok=false for local-only.
 
+# from the repo root — standard npm scripts (same pattern as the other servers)
+npm run race_results_transform_server      # = node server_race_results_transform_8018.js
+npm run pm2_start_race_results_transform   # pm2-managed as usat_race_results_transform (4G, --expose-gc)
+#   also starts as step 16 of 16 in:  npm run pm2_run_all_servers
+#   manage it:  npm run pm2_logs_race_results_transform | stop_… | restart_… | delete_… | show_…
+
 # command line
 node src/cli.js inspect "<file>.xlsx|.csv"    # show headers + auto-mapping, no write
 node src/cli.js convert "<file>"  [-o out]    # write a reformatted .xlsx (one sheet per source sheet)

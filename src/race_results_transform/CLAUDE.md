@@ -28,6 +28,13 @@ node --test tests/*.test.js                          # tests (node:test, no deps
 Excel/CSV I/O uses **exceljs** (declared in the repo-root `package.json`; the browser uses the
 vendored `public/vendor/exceljs.min.js`). The npm registry is locked down — do NOT `npm install`.
 
+Wired into the monorepo like the other servers: repo-root `package.json` has the standard
+`race_results_transform_server` + `pm2_start/logs/stop/delete/show/restart_race_results_transform`
+scripts (pm2 name `usat_race_results_transform`, 4G, `--expose-gc`; also step 16/16 of
+`pm2_run_all_servers`), and `.vscode/tasks.json` has the `16 RACE RESULTS TRANSFORM (logs/shell)` +
+`Race Results Transform (split)` tasks (group `grp-race-results-transform`). `tests/config_wiring.test.js`
+asserts all of this stays in place (skips when run outside the monorepo).
+
 ## Folder structure
 
 ```
