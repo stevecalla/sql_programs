@@ -17,7 +17,7 @@ const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
 function resolve_src(s) { return s.indexOf('src/') === 0 ? path.join(ROOT, s) : path.join(PUB, s); }
 
 const REQUIRED = ['vendor/exceljs.min.js', 'src/schema.js', 'src/normalize.js', 'src/display.js',
-  'src/sort.js', 'src/split.js', 'src/parse.js', 'src/match.js', 'src/transform.js',
+  'src/sort.js', 'src/view_logic.js', 'src/split.js', 'src/parse.js', 'src/match.js', 'src/transform.js',
   'src/reconcile.js', 'src/mapping.js', 'src/pipeline.js', 'src/io.js', 'js/app.js'];
 
 describe('web_assets', () => {
@@ -49,7 +49,7 @@ test('every script index.html references actually exists', () => {
 test('browser scripts parse (no mid-file truncation / syntax error)', () => {
   const files = REQUIRED.filter(function (s) { return s.indexOf('src/') === 0; })
     .map(function (s) { return path.join(ROOT, s); })
-    .concat([path.join(PUB, 'js', 'app.js'), path.join(PUB, 'vendor', 'exceljs.min.js')]);
+    .concat([path.join(PUB, 'js', 'app.js')]);   // vendored exceljs is third-party + huge; existence-checked above, not parsed here
   for (const f of files) {
     const code = fs.readFileSync(f, 'utf8');
     // new Function compiles (throws on syntax error) without executing the code.

@@ -1,7 +1,7 @@
 {
   "name": "race_results_transform",
   "version": "1.0.0",
-  "description": "Reformat race-results spreadsheets to the USAT rankings template — browser app + CLI sharing one isomorphic engine.",
+  "description": "Reformat race-results spreadsheets to the USAT rankings template \u2014 browser app + CLI sharing one isomorphic engine.",
   "private": true,
   "bin": {
     "race-results-transform": "src/cli.js"
@@ -11,7 +11,17 @@
     "cli": "node src/cli.js",
     "menu": "node menu.js",
     "convert:examples": "node src/cli.js batch data/inputs -o data/outputs",
-    "start": "node ../../server_race_results_transform_8018.js"
+    "start": "node ../../server_race_results_transform_8018.js",
+    "e2e": "playwright test -c e2e/playwright.config.js",
+    "e2e:install": "npm i -D @playwright/test && npx playwright install chromium",
+    "e2e:install:server": "npm i -D @playwright/test && npx playwright install --with-deps chromium",
+    "e2e:headed": "playwright test -c e2e/playwright.config.js --headed",
+    "e2e:step": "playwright test -c e2e/playwright.config.js --debug"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
 }

@@ -46,6 +46,24 @@ node menu.js                                  # sectioned interactive menu (incl
 npm test            # or: node --test tests/*.test.js
 ```
 
+## End-to-end tests (Playwright — opt-in, run from the CLI)
+
+The `node --test` suite above is dependency-free and checks the engine + that the served
+*files* are intact. For a real-browser check of the **served app** (load → convert → download →
+split → combine, plus the theme/clock canaries), there's a Playwright suite in `e2e/`. It is
+**not** part of `npm test` and never enters the locked-down production install.
+
+```
+# one-time install (needs open npm + Playwright CDN access)
+npm run e2e:install              # dev machine (macOS/Windows): Chromium only
+npm run e2e:install:server       # Linux server: adds --with-deps for system libs (root/sudo)
+
+# run (auto-starts server_race_results_transform_8018.js, drives headless Chromium)
+npm run e2e                      # E2E_PORT=8019 npm run e2e  to use another port
+```
+The config passes `--no-sandbox` so it also runs headless as root on the Linux server.
+See `e2e/README.md` for details.
+
 ## The app at a glance
 
 - A light/dark **theme toggle** (top-right). It follows your OS setting until you pick one.
@@ -109,5 +127,4 @@ A small **isomorphic core** in `src/` (pure, no-DOM modules) runs identically in
 CLI (`src/cli.js`), and the tests — so what you test on the command line is exactly what the
 browser does. Excel/CSV I/O uses `exceljs` (declared in the repo-root `package.json`). All domain
 knowledge lives in `src/schema.js` (column aliases) and `src/normalize.js` (value rules) — to
-teach the tool a new file layout, add an alias or tweak a normalizer. See `CLAUDE.md` for the
-full module map. Code is **snake_case** (enforced by `tests/lint_snake_case.test.js`).
+teach the tool a new file layout, add an alias or tweak a normalizer. 
