@@ -173,4 +173,9 @@ whitelist/timestamps, purge-by-year + purge-all), `e2e/metrics_beacon.spec.js` (
 muted under automation), and `e2e/metrics_db.spec.js` (browser→MySQL round-trip — events landed with
 the right columns incl. file_name, + the table schema; chromium-only, skips with no DB: `npm run e2e:db`).
 
+_Potential improvements:_ the `/metrics` dashboard uses HTTP Basic Auth (no session/expiry — the
+browser caches creds until it closes; a signed time-limited token could add a real timeout), and
+the anonymous `visitor_id` lives in `localStorage` (durable, but lost on clear-site-data / incognito /
+another browser or device; a long-lived first-party cookie backup would harden it).
+
 No new dependencies. See `ANALYTICS_PLAN.md` 
