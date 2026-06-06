@@ -31,6 +31,9 @@ module.exports = defineConfig({
   testDir: __dirname,
   fullyParallel: false,
   timeout: 45000,
+  // Per-assertion timeout. Default is 5s; webkit (the slowest engine) sometimes
+  // needs longer to finish the in-browser xlsx parse before #compareCard shows.
+  expect: { timeout: 12000 },
   reporter: [['list']],
   use: {
     baseURL: 'http://localhost:' + PORT,
