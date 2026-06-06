@@ -70,7 +70,9 @@ const SECTIONS = [
     { id: 15, label: 'Browser E2E tests (Playwright)', desc: 'Real-browser convert/download/split/combine against the served app. Run install (18) once first.', cli: 'npm run e2e', action: 'e2e_run' },
     { id: 16, label: 'Browser E2E — watch in Chrome (headed)', desc: 'Same tests in a visible, slowed Chrome window so you can watch. Desktop only (not the headless server).', cli: 'npm run e2e:headed', action: 'e2e_headed' },
     { id: 17, label: 'Browser E2E — step through (pause each step)', desc: 'Headed Chrome that PAUSES on every step via the Playwright Inspector; click Resume to advance one step at a time. Desktop only.', cli: 'npm run e2e:step', action: 'e2e_step' },
-    { id: 18, label: 'Install browser E2E (one-time)', desc: 'Dev: npm run e2e:install (Chromium). Linux server: npm run e2e:install:server (adds --with-deps; root).', cli: 'npm run e2e:install', action: 'e2e_install' }
+    { id: 18, label: 'Install browser E2E (one-time)', desc: 'Dev: npm run e2e:install (axe-core + chromium/firefox/webkit). Linux server: npm run e2e:install:server (adds --with-deps; root).', cli: 'npm run e2e:install', action: 'e2e_install' },
+    { id: 23, label: 'Browser E2E — chromium only (fast)', desc: 'Runs the suite on just chromium, skipping firefox/webkit/mobile projects.', cli: 'npm run e2e:chromium', action: 'e2e_chromium' },
+    { id: 24, label: 'Refresh visual snapshot baselines', desc: 'Regenerate the committed screenshot baselines (e2e/visual.spec.js-snapshots). Run after intended UI changes.', cli: 'npm run e2e:snap', action: 'e2e_snap' }
   ] },
   { label: 'Server & app', color: GREEN, items: [
     { id: 19, label: 'Start the web app server (port 8018)', desc: 'Serve public/ at http://localhost:8018; also opens a public ngrok URL if NGROK_AUTHTOKEN is set (otherwise it just notes that and keeps running). Ctrl-C to stop.', cli: 'node ../../server_race_results_transform_8018.js', action: 'server' },
@@ -143,6 +145,8 @@ async function handle(item) {
     case 'e2e_headed': console.log(c(DIM, '\n  opening Chrome (headed, slowed)…\n')); await run('npm', ['run', 'e2e:headed']); break;
     case 'e2e_step': console.log(c(DIM, '\n  opening Chrome with the Inspector — click Resume to advance each step…\n')); await run('npm', ['run', 'e2e:step']); break;
     case 'e2e_install': console.log(c(DIM, '\n  installing Playwright + Chromium (one-time)…\n')); await run('npm', ['run', 'e2e:install']); break;
+    case 'e2e_chromium': console.log(c(DIM, '\n  running browser tests on chromium only…\n')); await run('npm', ['run', 'e2e:chromium']); break;
+    case 'e2e_snap': console.log(c(DIM, '\n  refreshing visual snapshot baselines…\n')); await run('npm', ['run', 'e2e:snap']); break;
     case 'server': console.log(c(DIM, 'Starting server… Ctrl-C to stop.')); await run('node', [SERVER]); break;
     case 'open': {
       const url = 'http://localhost:8018';

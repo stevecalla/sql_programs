@@ -28,7 +28,11 @@ node --test tests/*.test.js                          # tests (node:test, no deps
 Excel/CSV I/O uses **exceljs** (declared in the repo-root `package.json`; the browser uses the
 vendored `public/vendor/exceljs.min.js`). The npm registry is locked down — do NOT `npm install`
 for the engine. (The opt-in `e2e/` Playwright suite is the one exception: install it deliberately
-on a dev box or the Linux server via `npm run e2e:install` / `e2e:install:server`, then `npm run e2e`.)
+on a dev box or the Linux server via `npm run e2e:install` / `e2e:install:server`, then `npm run e2e`.
+The suite (functional specs across chromium/firefox/webkit + a mobile project, plus a11y/visual/
+mobile/error specs) installs axe-core + all three engines via `e2e:install`. `npm run e2e:chromium`
+is the fast path, `npm run e2e:headed` / `e2e:step` watch or pause it, and `npm run e2e:snap`
+refreshes the committed visual baselines in `e2e/visual.spec.js-snapshots/`.)
 
 Wired into the monorepo like the other servers: repo-root `package.json` has the standard
 `race_results_transform_server` + `pm2_start/logs/stop/delete/show/restart_race_results_transform`
@@ -65,8 +69,12 @@ src/race_results_transform/
   package.json       scripts + bin (no deps block — exceljs lives in the root package)
   examples/template/ the target-format template (no PII)
   examples/sample/   SYNTHETIC committed fixtures (fake CSV + xlsx + build_sample.js + goldens) for tests
-  e2e/               OPT-IN Playwright browser tests (server-served convert/download/split/combine
-                     + theme/clock canaries); dev/CI only, NOT in `npm test`, never in prod install
+  e2e/               OPT-IN Playwright browser tests (10 spec files) of the served app, sharing
+                     helpers.js (narrated step banner + click highlight + fixtures): convert/download/
+                     split/combine, theme/CSV/approve/edit/value-map/remap/link/sort/filter/layout/
+                     sheet-tabs/drag-drop/split-presets, + a11y (axe-core), visual snapshots, mobile
+                     viewport, error handling; runs on chromium/firefox/webkit + a mobile project.
+                     dev/CI only, NOT in `npm test`, never in prod install. (menu.js items 15-17, 23-24)
   tests/             node:test suites (each wrapped in describe(); runnable via menu.js or
                      node --test): engine + lint_snake_case + web_assets (static-asset integrity)
                      + config_wiring (repo-root package.json + .vscode/tasks.json) + sample.test.js
@@ -139,6 +147,9 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   `show_all`, `set_filter`,
   two-row header (control row of remap selects on top so the two tables align), `on_search`/
   `on_sort`/`set_query`/`set_order` hooks for linking.
+- **Accessibility**: dynamically-rendered form controls carry explicit `aria-label`s (table search,
+  header/mapping remap selects, value-map selects+inputs, split-on select, split include checkboxes,
+  group-name inputs) — the `e2e/a11y.spec.js` axe scan guards against critical-impact regressions.
 - Highlight legend: collapsible + resizable; per-reason **Show rows** (`filter_by_code`) +
   **Approve**; **Approve all / Unapprove all**; value-mapping with per-value reset + bulk set.
 
