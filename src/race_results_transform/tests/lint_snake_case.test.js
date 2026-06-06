@@ -10,7 +10,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const FILES = []
   .concat(fs.readdirSync(path.join(ROOT, 'src')).filter((f) => f.endsWith('.js')).map((f) => 'src/' + f))
-  .concat(['public/js/app.js', 'menu.js', 'data_dir.js'])
+  .concat(['public/js/app.js', 'menu.js'])
   .concat(fs.readdirSync(__dirname).filter((f) => /\.test\.js$/.test(f) && f !== 'lint_snake_case.test.js').map((f) => 'tests/' + f));
 
 // DOM / Node / ExcelJS / stdlib camelCase APIs + the one external util — these are not ours.
@@ -19,14 +19,15 @@ addEventListener addRow addWorksheet appendChild after before charCodeAt classLi
 clearTimeout clientY closest columnCount createElement createInterface createObjectURL dataset
 dataTransfer deepEqual doesNotThrow eachCell eachRow effectAllowed execSync existsSync findIndex
 flatMap forEach getAttribute getBoundingClientRect getCell getColumn getElementById getItem getRow getTime rowCount
-getUTCDate getUTCFullYear getUTCMonth getUTCHours getUTCMinutes getUTCSeconds getUTCMilliseconds
+getUTCDate getUTCFullYear getFullYear getUTCMonth getUTCHours getUTCMinutes getUTCSeconds getUTCMilliseconds
+DateTimeFormat affectedRows resolvedOptions
 getUTCDay hasOwnProperty includeEmpty indexOf innerHTML insertBefore isArray isNaN isInteger isTTY
 lastIndexOf localStorage mkdirSync notEqual numFmt padEnd padStart parentNode parseFloat parseInt
 dayPeriod formatToParts preventDefault removeEventListener setInterval timeZone querySelector querySelectorAll readAsArrayBuffer readAsText readFile readFileSync
 readdirSync readyState removeAttribute removeChild revokeObjectURL richText runInContext
 createContext compileFunction scrollIntoView scrollTo scrollTop setAttribute setItem setTimeout
 sessionStorage startsWith stopPropagation strictEqual textContent toFixed toISOString
-localeCompare toLocaleString toLowerCase toString toUpperCase writeBuffer writeFileSync fromCharCode ySplit xSplit matchMedia documentElement getAttribute clientX innerWidth scrollLeft
+localeCompare toLocaleString toLowerCase toString toUpperCase writeBuffer writeFileSync fromCharCode ySplit xSplit matchMedia documentElement getAttribute clientX innerWidth innerHeight scrollLeft
 determineOSPath
 `).trim().split(/\s+/));
 

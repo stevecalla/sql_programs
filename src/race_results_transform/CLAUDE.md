@@ -62,10 +62,13 @@ src/race_results_transform/
                        (every sheet) ; grid_to_buffer / grids_to_buffer (one worksheet per group,
                        names sanitized to <=31 chars, unique); output centered, wide, frozen header
     cli.js             scriptable converter (inspect / convert / batch)
+    data_dir.js        data dir via utilities/determineOSPath (…/usat/data on linux/mac); CLI + tests only
   public/            web app: index.html, css/app.css, js/app.js, favicon.svg, vendor/exceljs.min.js
-  menu.js            interactive launcher (pauses after each command)
-  data_dir.js        data dir via utilities/determineOSPath (…/usat/data on linux/mac; configured
-                       uploads path on Windows) + /race_results_transform; CLI + tests only
+  menu.js            interactive launcher (pauses after each command); item numbers are sequential
+                     1..N in display order, guarded by tests/menu_ids.test.js
+  metrics/           usage-analytics server modules + the Basic-Auth dashboard view (kept OUT of
+                       public/ and src/ so it isn't statically served): metrics_config.js,
+                       metrics_report.js, metrics_dashboard.html
   package.json       scripts + bin (no deps block — exceljs lives in the root package)
   examples/template/ the target-format template (no PII)
   examples/sample/   SYNTHETIC committed fixtures (fake CSV + xlsx + build_sample.js + goldens) for tests
@@ -74,11 +77,13 @@ src/race_results_transform/
                      split/combine, theme/CSV/approve/edit/value-map/remap/link/sort/filter/layout/
                      sheet-tabs/drag-drop/split-presets, + a11y (axe-core), visual snapshots, mobile
                      viewport, error handling; runs on chromium/firefox/webkit + a mobile project.
-                     dev/CI only, NOT in `npm test`, never in prod install. (menu.js items 15-17, 23-24)
+                     dev/CI only, NOT in `npm test`, never in prod install. (menu.js items 15-21)
   tests/             node:test suites (each wrapped in describe(); runnable via menu.js or
                      node --test): engine + lint_snake_case + web_assets (static-asset integrity)
                      + config_wiring (repo-root package.json + .vscode/tasks.json) + sample.test.js
                      (always-on synthetic data) + fixtures.test.js (optional real usat/data tier)
+                     + metrics_ingest + metrics_retention (analytics whitelist/timestamps + purge)
+                     + menu_ids (menu item numbers stay sequential 1..N)
 ../../server_race_results_transform_8018.js   thin express.static host + ngrok (repo root)
 ```
 
@@ -164,6 +169,15 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 
 - Confirm the canonical Category rule for bare division names with the events team.
 - Optional: apply USAT theme to a print/export stylesheet; export/import mapping profiles as JSON.
+- **Metrics dashboard auth** (#7, built): `/metrics` + `/api/metrics-report` use HTTP Basic to
+  bootstrap, then a signed `mx_session` cookie (HMAC keyed off the dashboard pass, 12h absolute
+  TTL) gates access; `GET /metrics/logout` clears it. Adds server-side expiry + revocation on top
+  of Basic. Caveat: browsers cache Basic creds, so a *full* sign-out can still require closing the
+  browser. No new env var (key derived from `_PASS`).
+- **Anonymous visitor_id durability** (#6, built): `visitor_id` is written to BOTH a long-lived
+  first-party cookie (~2yr, SameSite=Lax) AND `localStorage`, and restored from whichever survives,
+  so it persists if one store is cleared. (True cross-device unification would require a
+  login/account, which is intentionally avoided.)
 
 ## Full-name split
 
@@ -172,3 +186,30 @@ When a source has no First/Last column but a single full-name column (`Name`, `A
 (confidence `split`). `transform.run` derives each via `normalize.split_name` (handles `Last, First`
 and `First Middle Last`); `reconcile` skips the pass-through preservation check for these (computed,
 not copied).
+
+## Usage analytics (anonymous)
+
+Built on a reusable core in `utilities/analytics/` (page-agnostic): `event_ingest.js`
+(`make_event_ingest` — whitelist + stamp `created_at_utc`/`created_at_mtn` + insert),
+`ensure_table.js`, `retention.js` (`size`, `purge_keep_years`), `metrics_client.js`
+(browser `UsageMetrics`, served at `/analytics/metrics_client.js`), `report_render.js`
+(report contract → Slack blocks / text / dashboard JSON). Per-app inputs live here:
+`metrics_config.js` (table `race_results_transform_events`, app id, KEEP_YEARS=2, column
+whitelist), DDL in `src/queries/create_drop_db_table/query_create_race_results_transform_events_table.js`,
+aggregation in `metrics_report.js`, and `public/js/metrics.js` (thin init).
+
+Server (`server_race_results_transform_8018.js`): best-effort mysql2/promise pool via
+`local_usat_sales_db_config()`, `ensure_table` at startup, `POST /api/event` ingest,
+`/metrics` dashboard + `/api/metrics-report` (Basic Auth: `RACE_RESULTS_CONVERTER_METRICS_DASH_USER`/`_PASS`),
+and `/scheduled-slack-race-results-metrics` (cron → `slack_message_api`). Analytics is
+fire-and-forget: if the DB is down the converter still serves normally. PII never leaves
+the browser — events carry counts/enums + filename only. The client mutes itself under
+automated browsers (`navigator.webdriver`) unless `window.METRICS_TEST_ALLOW` is set, so e2e
+runs don't pollute the table; the uploaded filename is remembered and attached to every
+post-upload event for traceability (plus the `upload_id` correlation). Every event also carries `page_path` (client `location.pathname`+search; server `req.originalUrl` for `dashboard_view`) so we know which page was viewed, not just `page_view`/`dashboard_view`. New columns are migrated onto existing tables via `ensure_columns` (CREATE IF NOT EXISTS won't add them). Events: page_view, file_uploaded, conversion_completed, download, split_download_used, manual_remap, mapping_saved, start_over, theme_changed, error, + a server-side dashboard_view per /metrics open (skipped when `x-metrics-test` header is set). Dashboard: funnel (incl. start-over stage), activity-by-day (visits/uploads/downloads/start-overs; grouped ≤14 days else auto-stacked with datalabels), downloads-by-type + split panel, top users (visits/uploads/downloads/start-overs + timezone + last activity), a Start-over KPI card, refresh/auto-refresh, dark/light. Data tables have a leading # row-number column and horizontal scroll when narrow. Auto-refresh defaults ON and reloads the report from the DB every 60s (tooltip explains it). Both this server and event_analysis register `SIGINT`/`SIGTERM` `cleanup()` handlers (repo convention) so Ctrl-C cleanly stops them; the server also adds a readline `SIGINT` bridge (Windows/VS Code terminals don't always deliver process-level SIGINT — readline catches the Ctrl-C keystroke directly); `menu.js` launches `node` children WITHOUT a shell on Windows (a cmd.exe wrapper would swallow Ctrl-C) and ignores SIGINT itself so stopping the server returns you to the menu. Every chart has an Expand/PNG/CSV/Table toolbar (same UX as event_analysis, but **live** — served from `/api/metrics-report`, not a generated static file) + a DB-health strip (rows/size/last-data). CLI: `stats`, `metrics:size`,
+`metrics:cleanup`, `metrics:purge-all`. Crons: `utilities/cron_get_slack_race_results_transform/`,
+`cron_get_purge_race_results_transform/`. Reuse the core for other pages (e.g. 8016) by
+supplying a new config + DDL + report. Verified by `tests/metrics_ingest.test.js` + `tests/metrics_retention.test.js` (dep-free unit tests:
+whitelist/timestamps, purge-by-year + purge-all) and
+`e2e/metrics_db.spec.js` (browser→MySQL round-trip + table-schema check; chromium-only,
+auto-skips without a DB — `npm run e2e:db`). Full design + Linux setup

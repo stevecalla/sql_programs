@@ -41,6 +41,7 @@ node src/cli.js inspect "<file>.xlsx|.csv"    # show headers + auto-mapping, no 
 node src/cli.js convert "<file>"  [-o out]    # write a reformatted .xlsx (one sheet per source sheet)
 node src/cli.js batch   <folder>  [-o dir]    # convert a whole folder
 node menu.js                                  # sectioned interactive menu (incl. a Config-wiring check); pauses after each command
+                                              # menu item numbers are sequential 1..N (guarded by tests/menu_ids.test.js)
 
 # tests
 npm test            # or: node --test tests/*.test.js
@@ -143,4 +144,46 @@ A small **isomorphic core** in `src/` (pure, no-DOM modules) runs identically in
 CLI (`src/cli.js`), and the tests — so what you test on the command line is exactly what the
 browser does. Excel/CSV I/O uses `exceljs` (declared in the repo-root `package.json`). All domain
 knowledge lives in `src/schema.js` (column aliases) and `src/normalize.js` (value rules) — to
-teach the tool a new file layout, add an alias or tweak a normalizer. 
+teach the tool a new file layout, add an alias or tweak a normalizer.
+
+## Usage analytics (anonymous) + Slack digest + dashboard
+
+The served app records **anonymous** usage events (counts/enums + the filename — never
+member data) to the local MySQL table `race_results_transform_events`. It is built on a
+reusable core in `utilities/analytics/` (ingest / ensure-table / retention / browser
+client / report render); the 8018 server **auto-creates the table at startup**
+(`CREATE TABLE IF NOT EXISTS`).
+
+- **Capture**: `public/js/metrics.js` → `POST /api/event` via `navigator.sendBeacon`
+  (non-blocking; honors `METRICS_OFF` + Do-Not-Track).
+- **See it**: `node src/cli.js stats [--days 7]`, the dashboard at `/metrics`
+  (Basic Auth — `RACE_RESULTS_CONVERTER_METRICS_DASH_USER` / `RACE_RESULTS_CONVERTER_METRICS_DASH_PASS`), or the weekly Slack digest.
+- **Size / cleanup**: `node src/cli.js metrics:size`, `metrics:cleanup` (keep current + prior
+  calendar year), and `metrics:purge-all` (delete every row — confirms first; for clearing test data).
+- **Cron**: `utilities/cron_get_slack_race_results_transform/` (digest) and
+  `utilities/cron_get_purge_race_results_transform/` (purge) — you set the schedule.
+
+- **Dashboard**: funnel (visit→upload→conversion→download→start-over), activity-by-day
+  (visits·uploads·downloads·start-overs — grouped for ≤14 days, auto-stacked beyond), downloads-by-type +
+  a Split-by-group panel, top users (visits·uploads·downloads·start-overs, timezone + last activity), a
+  Start-over KPI card, ↻ Refresh + auto-refresh, dark/light. Data tables carry a leading # row-number
+  column and scroll horizontally when narrow.
+- **Events**: page_view, file_uploaded, conversion_completed, download, `split_download_used`,
+  manual_remap, mapping_saved, start_over, theme_changed, error, + server-side dashboard_view per /metrics open. Every event also records `page_path` (the URL path viewed) so page_view/dashboard_view are explicit about the page.
+- **Privacy/automation**: the client mutes itself under automated browsers (`navigator.webdriver`)
+  unless `window.METRICS_TEST_ALLOW` is set, so the e2e suite never writes to the table. The uploaded
+  **file name** rides along on every post-upload event (conversion / download / split / error) for
+  traceability (also linkable via `upload_id`).
+
+**Tests**: `tests/metrics_ingest.test.js` + `tests/metrics_retention.test.js` (dep-free units —
+whitelist/timestamps, purge-by-year + purge-all), `e2e/metrics_beacon.spec.js` (fires when allowed /
+muted under automation), and `e2e/metrics_db.spec.js` (browser→MySQL round-trip — events landed with
+the right columns incl. file_name, + the table schema; chromium-only, skips with no DB: `npm run e2e:db`).
+
+_Auth & identity:_ the `/metrics` dashboard uses HTTP Basic to sign in, then a signed `mx_session`
+cookie (12h expiry) gates `/metrics` + `/api/metrics-report`, with a `/metrics/logout` route —
+server-side expiry + revocation on top of Basic (a full sign-out can still need closing the browser).
+The anonymous `visitor_id` is stored in BOTH a long-lived first-party cookie and `localStorage`,
+restored from whichever survives.
+
+No new dependencies. See `ANALYTICS_PLAN.md` 

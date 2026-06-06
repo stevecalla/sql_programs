@@ -6,7 +6,7 @@ const fs = require('fs');
 const display = require('../src/display');
 const io = require('../src/io');
 const parse = require('../src/parse');
-const data_dir = require('../data_dir');
+const data_dir = require('../src/data_dir');
 
 async function inputs_dir() { try { return await data_dir.inputs(); } catch (e) { return null; } }
 

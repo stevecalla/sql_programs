@@ -30,6 +30,43 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
+
+// ---- Usage analytics (best-effort; PII never leaves the browser) -----------
+const mysql = require('mysql2/promise');
+const { local_usat_sales_db_config } = require('./utilities/config');
+const { make_event_ingest, fmt_in_tz } = require('./utilities/analytics/event_ingest');
+const { ensure_table, ensure_columns } = require('./utilities/analytics/ensure_table');
+const metrics_config = require('./src/race_results_transform/metrics/metrics_config');
+const { query_create_race_results_transform_events_table } =
+  require('./src/queries/create_drop_db_table/query_create_race_results_transform_events_table');
+const metrics_report = require('./src/race_results_transform/metrics/metrics_report');
+const { slack_message_api } = require('./utilities/slack_messaging/slack_message_api');
+
+const METRICS_ON = String(process.env.METRICS_OFF).toLowerCase() !== 'true';
+let metrics_pool = null;
+// Proxy so the ingest handler always reads the current pool (created async at startup).
+const pool_proxy = { query: function () {
+  if (!metrics_pool) return Promise.reject(new Error('analytics pool not ready'));
+  return metrics_pool.query.apply(metrics_pool, arguments);
+} };
+async function init_metrics() {
+  if (!METRICS_ON) { console.log('  [analytics] disabled via METRICS_OFF'); return; }
+  try {
+    const cfg = await local_usat_sales_db_config();
+    metrics_pool = mysql.createPool(cfg);
+    const ddl = await query_create_race_results_transform_events_table(metrics_config.TABLE);
+    await ensure_table(metrics_pool, ddl);
+    // migrate already-created tables that predate newer columns (CREATE IF NOT EXISTS won't add them)
+    await ensure_columns(metrics_pool, metrics_config.TABLE, [
+      { name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' }
+    ]);
+    console.log('  [analytics] events table ready (' + metrics_config.TABLE + ')');
+  } catch (e) {
+    console.log('  [analytics] disabled — DB not available: ' + e.message);
+    metrics_pool = null;
+  }
+}
 
 // NGROK TUNNEL — exposes a real public URL for testing/sharing, exactly like
 // the other server_*.js services (e.g. 8017). Set false to run local-only.
@@ -54,6 +91,103 @@ function create_app() {
     res.json({ ok: true, app: 'race_results_transform', time: new Date().toISOString() });
   });
 
+  // Usage analytics — fire-and-forget. Counts/enums only; no-ops if no DB pool.
+  app.use(express.json({ limit: '16kb' }));
+  app.post('/api/event', make_event_ingest({ pool: pool_proxy, table: metrics_config.TABLE, columns: metrics_config.COLUMNS, reporting_tz: metrics_config.REPORTING_TZ }));
+  // Serve the shared generic analytics browser client (UsageMetrics) as a static asset.
+  app.use('/analytics', express.static(path.join(__dirname, 'utilities', 'analytics')));
+
+  // Slack usage digest — hit by the cron_get_slack_race_results_transform job.
+  // Same cron -> route -> slack_message_api convention as the other slack jobs.
+  // ---- Read-only metrics dashboard auth -------------------------------------
+  // HTTP Basic bootstraps the login (browser dialog / httpCredentials in tests);
+  // on success we mint a short-lived SIGNED session cookie so access EXPIRES and
+  // can be revoked via /metrics/logout. The signing key is derived from the
+  // configured password (HMAC), so no extra env var is required. Fail-closed if the
+  // dashboard user/pass aren't set. NOTE: browsers cache Basic creds, so a *full*
+  // sign-out can still require closing the browser — the cookie + TTL add server-side
+  // revocation and an absolute session lifetime on top of Basic.
+  const SESSION_COOKIE = 'mx_session';
+  const SESSION_TTL_MS = 12 * 60 * 60 * 1000;   // 12h absolute expiry
+  function dash_creds() {
+    return { user: process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_USER, pass: process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_PASS };
+  }
+  function sign_session(exp) {
+    return exp + '.' + crypto.createHmac('sha256', 'mx|' + (dash_creds().pass || '')).update(String(exp)).digest('base64url');
+  }
+  function valid_session(token) {
+    if (!token) return false;
+    const dot = token.indexOf('.'); if (dot < 0) return false;
+    const exp = Number(token.slice(0, dot));
+    if (!exp || Date.now() > exp) return false;
+    const want = sign_session(exp);
+    return token.length === want.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(want));
+  }
+  function read_cookie(req, name) {
+    const m = (req.headers.cookie || '').match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  function basic_ok(req) {
+    const c = dash_creds();
+    const m = (req.headers.authorization || '').match(/^Basic (.+)$/);
+    if (!m) return false;
+    const parts = Buffer.from(m[1], 'base64').toString().split(':');
+    return parts[0] === c.user && parts.slice(1).join(':') === c.pass;
+  }
+  function require_dash_auth(req, res, next) {
+    const c = dash_creds();
+    if (!c.user || !c.pass) { res.status(503).send('Dashboard not configured (set RACE_RESULTS_CONVERTER_METRICS_DASH_USER / RACE_RESULTS_CONVERTER_METRICS_DASH_PASS).'); return; }
+    if (valid_session(read_cookie(req, SESSION_COOKIE))) return next();   // unexpired session cookie
+    if (basic_ok(req)) {                                                  // bootstrap via Basic -> mint a session
+      res.cookie(SESSION_COOKIE, sign_session(Date.now() + SESSION_TTL_MS), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_MS });
+      return next();
+    }
+    res.set('WWW-Authenticate', 'Basic realm="race_results_metrics"').status(401).send('Authentication required.');
+  }
+  app.get('/metrics/logout', function (req, res) {
+    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.type('html').send('<!doctype html><meta charset="utf-8"><title>Signed out</title>'
+      + '<p style="font:16px system-ui;margin:2rem">Signed out of the metrics dashboard. <a href="/metrics">Sign back in</a>.</p>'
+      + '<p style="font:13px system-ui;color:#888;margin:0 2rem">Your browser may have cached the login; fully signing out can require closing the browser.</p>');
+  });
+  const DASHBOARD_HTML = path.join(__dirname, 'src', 'race_results_transform', 'metrics', 'metrics_dashboard.html');
+  app.get('/metrics', require_dash_auth, function (req, res) {
+    // record one dashboard_view per page open (best-effort; excluded from "visits")
+    if (metrics_pool && !req.headers['x-metrics-test']) {
+      const now = new Date();
+      metrics_pool.query(
+        'INSERT INTO `' + metrics_config.TABLE + '` (app, event_name, page_path, created_at_utc, created_at_mtn) VALUES (?, ?, ?, ?, ?)',
+        [metrics_config.APP, 'dashboard_view', (req.originalUrl || req.path || '/metrics').slice(0, 255), fmt_in_tz(now, 'UTC'), fmt_in_tz(now, metrics_config.REPORTING_TZ)]
+      ).catch(function (e) { console.error('[analytics] dashboard_view log error:', e.message); });
+    }
+    res.type('html').sendFile(DASHBOARD_HTML);
+  });
+  app.get('/api/metrics-report', require_dash_auth, async function (req, res) {
+    try {
+      if (!metrics_pool) return res.status(503).json({ ok: false, error: 'analytics DB not available' });
+      const days = Number(req.query.days) || 7;
+      const report = await metrics_report.build_report(metrics_pool, { days: days });
+      res.json(report.data);
+    } catch (e) {
+      console.error('[analytics] report error:', e.message);
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  app.get('/scheduled-slack-race-results-metrics', async function (req, res) {
+    try {
+      if (!metrics_pool) return res.status(503).json({ ok: false, error: 'analytics DB not available' });
+      const days = Number(req.query.days) || 7;
+      const blocks = await metrics_report.report_blocks(metrics_pool, { days: days });
+      const text = await metrics_report.report_text(metrics_pool, { days: days });
+      await slack_message_api(text, 'race_results_slack_channel', blocks);
+      res.json({ ok: true, sent: true, days: days });
+    } catch (e) {
+      console.error('[analytics] slack digest error:', e.message);
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   // Serve the shared core modules (src/, single source of truth, also used by
   // the CLI + tests) so the browser <script> tags can load them.
   app.use('/src', express.static(path.join(__dirname, 'src', 'race_results_transform', 'src')));
@@ -72,18 +206,19 @@ function start_server(opts) {
   opts = opts || {};
   const port = opts.port || DEFAULT_PORT;
   const app = create_app();
+  if (require.main === module) { init_metrics(); }   // skip DB in unit tests that import create_app
   return new Promise(function (resolve, reject) {
     const server = app.listen(port, function () {
       const actual = server.address().port;
       if (!opts.silent) {
-        console.log('\nRace Results Transform — local server');
+        console.log('\nRace Results Transform \u2014 local server');
         console.log('  -> http://localhost:' + actual + '/                 (web app)');
         console.log('  -> http://localhost:' + actual + '/api/status       (health check)');
         console.log('  -> https://usat-converter.kidderwise.org' + '       (internet access)');
         console.log('  Serving: ' + PUBLIC_DIR);
         console.log('  Press Ctrl-C to stop.\n');
       }
-      // NGROK TUNNEL — best-effort. Prints "Ingress established at: https://...".
+      // NGROK TUNNEL \u2014 best-effort. Prints "Ingress established at: https://...".
       // A missing/invalid NGROK_AUTHTOKEN must NOT crash the local server, so we
       // catch the (otherwise unhandled) async rejection from create_ngrok_tunnel.
       if (is_test_ngrok) {
@@ -102,11 +237,32 @@ function start_server(opts) {
   });
 }
 
+// Clean up on exit \u2014 same pattern as the other server_*.js services so Ctrl-C
+// actually stops the process (without this the open listener + live mysql2 pool
+// keep the event loop alive and the terminal appears to hang).
+async function cleanup() {
+  console.log('\nGracefully shutting down...');
+  process.exit();
+}
+
+// Handle termination signals
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+
+// Windows fallback: some terminals (notably the VS Code integrated terminal) don't
+// reliably deliver a process-level 'SIGINT' on Ctrl-C, so the handler above may never
+// fire. A readline interface catches the Ctrl-C *keystroke* at the input layer and
+// emits its own 'SIGINT', which we forward to cleanup(). Only when run directly with
+// an interactive TTY (not under the test runner or when piped).
+if (require.main === module && process.stdin.isTTY) {
+  require('readline')
+    .createInterface({ input: process.stdin, output: process.stdout })
+    .on('SIGINT', cleanup);
+}
+
 if (require.main === module) {
   start_server({ port: DEFAULT_PORT }).catch(function (err) {
     console.error('Server failed to start:', err);
     process.exit(1);
   });
 }
-
-module.exports = { create_app: create_app, start_server: start_server, DEFAULT_PORT: DEFAULT_PORT };

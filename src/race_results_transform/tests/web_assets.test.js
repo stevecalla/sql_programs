@@ -14,11 +14,16 @@ const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
 
 // index.html src="..." resolves: src/* from the engine dir (served at /src),
 // js/* and vendor/* from public/.
-function resolve_src(s) { return s.indexOf('src/') === 0 ? path.join(ROOT, s) : path.join(PUB, s); }
+function resolve_src(s) {
+  if (s.indexOf('src/') === 0) return path.join(ROOT, s);
+  if (s.indexOf('/analytics/') === 0) return path.join(ROOT, '..', '..', 'utilities', s); // shared analytics client, served by the server
+  return path.join(PUB, s);
+}
 
 const REQUIRED = ['vendor/exceljs.min.js', 'src/schema.js', 'src/normalize.js', 'src/display.js',
   'src/sort.js', 'src/view_logic.js', 'src/split.js', 'src/parse.js', 'src/match.js', 'src/transform.js',
-  'src/reconcile.js', 'src/mapping.js', 'src/pipeline.js', 'src/io.js', 'js/app.js'];
+  'src/reconcile.js', 'src/mapping.js', 'src/pipeline.js', 'src/io.js', 'js/app.js',
+  'js/metrics.js', '/analytics/metrics_client.js'];
 
 describe('web_assets', () => {
 test('index.html is not truncated (ends with </body></html>)', () => {

@@ -53,7 +53,8 @@ async function slack_message_api(message, channel, blocks) {
   
   const slack_message_url = {
     "steve_calla_slack_channel": process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL,
-    "daily_sales_bot_slack_channel": process.env.SLACK_WEBHOOK_USAT_DAILY_SALES_BOT_URL 
+    "daily_sales_bot_slack_channel": process.env.SLACK_WEBHOOK_USAT_DAILY_SALES_BOT_URL,
+    "race_results_slack_channel": process.env.SLACK_WEBHOOK_RACE_RESULTS_CONVERTER_URL || process.env.SLACK_WEBHOOK_STEVE_CALLA_USAT_URL
   };
 
   let url = slack_message_url[channel];

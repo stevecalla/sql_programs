@@ -70,6 +70,7 @@ Chrome window?". To change the pace, edit `HEADED_SLOWMO` (ms per step) in `e2e/
 - **a11y.spec.js** — axe-core scan (no critical violations) on home + Tables + Mapping.
 - **visual.spec.js** — screenshot baselines (chromium only): upload light/dark + compare card. `npm run e2e:snap` to (re)generate.
 - **mobile.spec.js** — Pixel-5 viewport: no horizontal overflow + convert works (runs in the `mobile` project only).
+- **metrics_db.spec.js** — browser→MySQL round-trip: drives the app, asserts the usage events landed with the right columns + the table schema exists. Chromium-only; skips with no DB. `npm run e2e:db`.
 - **errors.spec.js** — unreadable file → graceful error, page doesn't blank.
 - **helpers.js** — shared step()/highlight()/fixtures (not a test file).
 
