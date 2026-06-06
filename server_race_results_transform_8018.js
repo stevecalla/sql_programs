@@ -34,7 +34,7 @@ const cors = require('cors');
 // ---- Usage analytics (best-effort; PII never leaves the browser) -----------
 const mysql = require('mysql2/promise');
 const { local_usat_sales_db_config } = require('./utilities/config');
-const { make_event_ingest } = require('./utilities/analytics/event_ingest');
+const { make_event_ingest, fmt_in_tz } = require('./utilities/analytics/event_ingest');
 const { ensure_table } = require('./utilities/analytics/ensure_table');
 const metrics_config = require('./src/race_results_transform/metrics_config');
 const { query_create_race_results_transform_events_table } =
@@ -107,6 +107,14 @@ function create_app() {
   }
   const DASHBOARD_HTML = path.join(__dirname, 'src', 'race_results_transform', 'metrics_dashboard.html');
   app.get('/metrics', basic_auth, function (req, res) {
+    // record one dashboard_view per page open (best-effort; excluded from "visits")
+    if (metrics_pool && !req.headers['x-metrics-test']) {
+      const now = new Date();
+      metrics_pool.query(
+        'INSERT INTO `' + metrics_config.TABLE + '` (app, event_name, created_at_utc, created_at_mtn) VALUES (?, ?, ?, ?)',
+        [metrics_config.APP, 'dashboard_view', fmt_in_tz(now, 'UTC'), fmt_in_tz(now, metrics_config.REPORTING_TZ)]
+      ).catch(function (e) { console.error('[analytics] dashboard_view log error:', e.message); });
+    }
     res.type('html').sendFile(DASHBOARD_HTML);
   });
   app.get('/api/metrics-report', basic_auth, async function (req, res) {
@@ -158,14 +166,14 @@ function start_server(opts) {
     const server = app.listen(port, function () {
       const actual = server.address().port;
       if (!opts.silent) {
-        console.log('\nRace Results Transform — local server');
+        console.log('\nRace Results Transform \u2014 local server');
         console.log('  -> http://localhost:' + actual + '/                 (web app)');
         console.log('  -> http://localhost:' + actual + '/api/status       (health check)');
         console.log('  -> https://usat-converter.kidderwise.org' + '       (internet access)');
         console.log('  Serving: ' + PUBLIC_DIR);
         console.log('  Press Ctrl-C to stop.\n');
       }
-      // NGROK TUNNEL — best-effort. Prints "Ingress established at: https://...".
+      // NGROK TUNNEL \u2014 best-effort. Prints "Ingress established at: https://...".
       // A missing/invalid NGROK_AUTHTOKEN must NOT crash the local server, so we
       // catch the (otherwise unhandled) async rejection from create_ngrok_tunnel.
       if (is_test_ngrok) {
@@ -184,11 +192,32 @@ function start_server(opts) {
   });
 }
 
+// Clean up on exit \u2014 same pattern as the other server_*.js services so Ctrl-C
+// actually stops the process (without this the open listener + live mysql2 pool
+// keep the event loop alive and the terminal appears to hang).
+async function cleanup() {
+  console.log('\nGracefully shutting down...');
+  process.exit();
+}
+
+// Handle termination signals
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+
+// Windows fallback: some terminals (notably the VS Code integrated terminal) don't
+// reliably deliver a process-level 'SIGINT' on Ctrl-C, so the handler above may never
+// fire. A readline interface catches the Ctrl-C *keystroke* at the input layer and
+// emits its own 'SIGINT', which we forward to cleanup(). Only when run directly with
+// an interactive TTY (not under the test runner or when piped).
+if (require.main === module && process.stdin.isTTY) {
+  require('readline')
+    .createInterface({ input: process.stdin, output: process.stdout })
+    .on('SIGINT', cleanup);
+}
+
 if (require.main === module) {
   start_server({ port: DEFAULT_PORT }).catch(function (err) {
     console.error('Server failed to start:', err);
     process.exit(1);
   });
 }
-
-module.ex

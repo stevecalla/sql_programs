@@ -27,7 +27,7 @@ dayPeriod formatToParts preventDefault removeEventListener setInterval timeZone 
 readdirSync readyState removeAttribute removeChild revokeObjectURL richText runInContext
 createContext compileFunction scrollIntoView scrollTo scrollTop setAttribute setItem setTimeout
 sessionStorage startsWith stopPropagation strictEqual textContent toFixed toISOString
-localeCompare toLocaleString toLowerCase toString toUpperCase writeBuffer writeFileSync fromCharCode ySplit xSplit matchMedia documentElement getAttribute clientX innerWidth scrollLeft
+localeCompare toLocaleString toLowerCase toString toUpperCase writeBuffer writeFileSync fromCharCode ySplit xSplit matchMedia documentElement getAttribute clientX innerWidth innerHeight scrollLeft
 determineOSPath
 `).trim().split(/\s+/));
 

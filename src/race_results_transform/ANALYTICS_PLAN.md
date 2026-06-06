@@ -56,7 +56,7 @@ Identity / session
 - `visitor_id` CHAR(36) — **anonymous, persistent per-browser id (localStorage)**; the "which user, not who" key
 - `is_returning` TINYINT(1) — new vs repeat (localStorage first-seen flag)
 - `upload_id` CHAR(36) NULL — **correlation id**: minted when a file is loaded; stamped on the upload event AND every download/split event from that load → join "upload → download" for a completion/abandonment funnel
-- `event_name` VARCHAR(40) — page_view / file_uploaded / conversion_completed / download / split_used / mapping_saved / mapping_loaded / manual_remap / value_override / error
+- `event_name` VARCHAR(40) — page_view / file_uploaded / conversion_completed / download / split_download_used / mapping_saved / mapping_loaded / manual_remap / value_override / error / start_over / theme_changed / dashboard_view
 
 File + conversion
 - `file_name` VARCHAR(255) NULL — raw filename (for user support; retention-purged)
@@ -98,7 +98,7 @@ New `public/js/metrics.js` (UMD like the other modules, `window.RRT.metrics`):
 Wire `track(...)` into existing app.js handlers only (no new flows): init →
 `page_view`; `handle_file` → `file_uploaded` (+ mint upload_id); after convert →
 `conversion_completed`; `download_single`/`download_one_sheet`/`download_combined` →
-`download` (with mode); `run_split` → `split_used`; `save_profile` → `mapping_saved`;
+`download` (with mode); `run_split` → `split_download_used`; `save_profile` → `mapping_saved`;
 inline remap / value override → `manual_remap`/`value_override`; `handle_file` catch → `error`.
 
 ---
@@ -434,4 +434,35 @@ The code is built and the dep-free tests pass. To run it in production:
 - CLI: `stats` / `metrics:size` / `metrics:cleanup` in `src/cli.js` (+ menu.js "Usage analytics" items)
 - Crons: `utilities/cron_get_slack_race_results_transform/`, `utilities/cron_get_purge_race_results_transform/`
 - Tests: `tests/metrics_ingest.test.js` (dep-free) + `e2e/metrics_beacon.spec.js` (beacon fires)
-  + `e2e/metrics_db.spec.js` (browser→MySQL round-trip + table-schema check; `npm run e2e:db`, chromium-only, skips without DB)
+  + `e2e/metrics_db.spec.js`
+
+---
+
+# Phase A enhancements — BUILT (#1–5)
+- **#1 split download metric**: event renamed `split_used` → **`split_download_used`** (clearer); dashboard "Split-by-group downloads" panel (count, avg groups, converted/original basis); the Slack/CLI report gains a split line.
+- **#2 funnel**: `metrics_report.funnel` (Visits → Uploads → Conversions → Downloads → **Start over**) + a funnel bar chart on the dashboard. Activity-by-day adds a **start-overs** series and switches **grouped→stacked when >14 days** are shown (datalabels inside bars). A **Start over** KPI card sits in the cards row.
+- **#3 refresh**: dashboard header **↻ Refresh** button + **Auto** toggle (60s, off by default).
+- **#4 top users**: now show **Visits / Uploads / Downloads / Start over** per-user counts + **Location (client_tz)** + **Last activity** (`MAX(created_at_mtn)`) columns (location = timezone proxy; no IP/geo). Leading **#** row-number column; table scrolls horizontally when narrow.
+- **#5 dashboard views**: server logs a `dashboard_view` event on each `/metrics` open (skipped when the `x-metrics-test` header is present, so e2e never pollutes).
+- **Also**: track `start_over` (Clear/Start-over click) and `theme_changed` (light/dark preference, carries `theme`).
+- Tests: `metrics_dashboard.spec.js` asserts the new panels/columns (incl. Visits/Uploads/Downloads/Start over headers + the # row-number column); `metrics_db.spec.js` round-trip now verifies `theme_changed` + `start_over` land; filename rides on every post-upload event. No schema change (reuses existing columns).
+
+## Phase A polish — BUILT (dashboard)
+- **Chart toolbar** on every chart (same toolbar UX as event_analysis, but **live/server-API** —
+  not a static generated file; see note below): **⤢ Expand**
+  (modal w/ enlarged image), **⬇ PNG** (`chart.toBase64Image()`), **⬇ CSV** (chart data), **⇄ Table**
+  (flip canvas ↔ data table). Each chart registers `{title, headers, rows}` for table/CSV.
+- **DB health**: top-right **Last data: <created_at_mtn> MTN**; second-row right shows **N rows · X MB**
+  (whole-table COUNT + information_schema size).
+- **Header layout**: row 1 = title + last-data + dark/light; row 2 = period buttons + Refresh + Auto-refresh.
+- **Sparse data**: Activity-by-day is now grouped **bars** (was a line — a single day showed only a dot).
+- **NOTE**: the running 8018 server caches `metrics_report`; **restart it** after these changes or the
+  dashboard shows the old shape (empty funnel, wrong download count).
+- Tests: `metrics_dashboard.spec.js` asserts the 4-button toolbar on each chart + health + 2-row header.
+
+## Phase A fixes (dashboard polish round 2)
+- **Last-data timezone fix**: was showing UTC (19:33) — `created_at_mtn` was being re-converted via JS `toISOString()`. Now formatted in SQL (`DATE_FORMAT … '%b %e, %Y %l:%i %p'`) so it's true MTN, 12-hour + AM/PM, labeled "Last User Activity" + " MTN".
+- **Header**: "Last User Activity" chip (dim label above a prominent value) in the right corner; theme toggle kept as icon **+ text**, both styled as matching chips; light/dark + mobile via theme tokens + flex-wrap.
+- **Chart data values**: `chartjs-plugin-datalabels` shows values on every bar; the **PNG export and Expand modal use the same image** (offscreen canvas with a solid `--card` background) so they're identical and include the **chart title, legend/keys, and value labels**.
+- **Top users**: now a **full-width** panel; cells `nowrap` with horizontal scroll; **full visitor_id** shown (no longer truncated).
+- Tests: `metrics_dashboard.spec.js` asserts the toolbar (4 buttons × 4 charts), health strip, last-activity label, 2-row header, theme text.

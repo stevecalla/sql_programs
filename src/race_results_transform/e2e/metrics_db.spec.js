@@ -83,6 +83,14 @@ test.describe('race_results_transform — analytics DB round-trip', () => {
 
       // PII guard: no raw cell/header data should ever be a column on the row
       expect(Object.keys(up).indexOf('email')).toBe(-1);
+
+      // theme preference + start-over are tracked too
+      await page.locator('#themeToggle').click();
+      await expect.poll(function () { return has_event(visitor, 'theme_changed'); }, { timeout: 8000 }).toBe(true);
+      const tc = (await rows_for(visitor)).find(function (r) { return r.event_name === 'theme_changed'; });
+      expect(['light', 'dark']).toContain(tc.theme);
+      await page.locator('#clearBtn').click();   // "Start over"
+      await expect.poll(function () { return has_event(visitor, 'start_over'); }, { timeout: 8000 }).toBe(true);
     } finally {
       if (pool && visitor) await pool.query('DELETE FROM `' + cfg.TABLE + '` WHERE visitor_id = ?', [visitor]);
     }

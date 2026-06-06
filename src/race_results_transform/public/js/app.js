@@ -305,6 +305,7 @@
   }
 
   function clear_all() {
+    track('start_over', {});
     S.ir = S.parsed = S.mapping = S.result = S.report = S.work_rows = null;
     S.value_overrides = {}; S.vm_expanded = {}; S.approved = {}; S.orig_table = S.conv_table = null;
     S.sheets = null; S.active = null; S.first_render = true;
@@ -850,7 +851,7 @@
     box.querySelector('.split-go').addEventListener('click', function () {
       var checked = Array.prototype.slice.call(box.querySelectorAll('.split-list input.s-on:checked')).map(function (c) { return groups[+c.value]; });
       if (!checked.length) return;
-      track('split_used', { download_mode: 'split', split_basis: S.split_basis, selected_count: checked.length });
+      track('split_download_used', { download_mode: 'split', split_basis: S.split_basis, selected_count: checked.length });
       if (multi) open_split_picker(box, checked, manual);
       else run_split([S.active], checked, manual);
     });
@@ -883,8 +884,13 @@
     document.body.appendChild(pop);
     var r = btn.getBoundingClientRect();
     pop.style.position = 'fixed';
-    pop.style.top = (r.bottom + 6) + 'px';
     pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 300)) + 'px';
+    // keep the popover on-screen: open below the button, but flip up / clamp if it
+    // would spill past the bottom of the viewport (it's position:fixed, so otherwise unreachable).
+    var ph = pop.getBoundingClientRect().height;
+    var top = r.bottom + 6;
+    if (top + ph > window.innerHeight - 8) top = Math.max(8, window.innerHeight - ph - 8);
+    pop.style.top = top + 'px';
     function update_go() { var n = pop.querySelectorAll('.dl-list input:checked').length; var go = pop.querySelector('#splitGo2'); go.disabled = !n; go.textContent = n ? ('⤓ Download ' + n + ' sheet' + (n > 1 ? 's' : '')) : 'Select sheets'; }
     pop.querySelectorAll('[data-all]').forEach(function (tb) { tb.addEventListener('click', function () { var on = tb.dataset.all === '1'; pop.querySelectorAll('.dl-list input:not([disabled])').forEach(function (c) { c.checked = on; }); update_go(); }); });
     pop.querySelectorAll('.dl-list input').forEach(function (c) { c.addEventListener('change', update_go); });
@@ -1014,8 +1020,13 @@
     document.body.appendChild(pop);
     var r = btn.getBoundingClientRect();
     pop.style.position = 'fixed';
-    pop.style.top = (r.bottom + 6) + 'px';
     pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 300)) + 'px';
+    // keep the popover on-screen: open below the button, but flip up / clamp if it
+    // would spill past the bottom of the viewport (it's position:fixed, so otherwise unreachable).
+    var ph = pop.getBoundingClientRect().height;
+    var top = r.bottom + 6;
+    if (top + ph > window.innerHeight - 8) top = Math.max(8, window.innerHeight - ph - 8);
+    pop.style.top = top + 'px';
     function update_go() {
       var n = pop.querySelectorAll('.dl-list input:checked').length;
       var go = pop.querySelector('#dlGo'); go.disabled = !n;
@@ -1102,6 +1113,7 @@
   }
   function toggle_theme() {
     var dark = effective_dark(); var p = prefs(); p.theme = dark ? 'light' : 'dark'; save_prefs(p); apply_theme();
+    track('theme_changed', { theme: p.theme });
   }
 
   function start_clock() {

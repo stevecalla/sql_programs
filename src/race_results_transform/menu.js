@@ -39,8 +39,17 @@ function run(cmd, args) {
     // Release stdin so the child can read interactive prompts (e.g. cli confirms).
     // The menu's persistent readline would otherwise swallow the keystrokes.
     rl.pause();
-    const p = spawn(cmd, args, { cwd: DIR, stdio: 'inherit', shell: process.platform === 'win32' });
-    p.on('close', function (code) { rl.resume(); resolve(code); });
+    // `node` is directly executable on Windows, so DON'T wrap it in a shell: a cmd.exe
+    // wrapper intercepts Ctrl-C and the child (e.g. the server) never receives SIGINT,
+    // so it can't shut down cleanly. Only npm/open and similar need a shell on Windows.
+    const need_shell = process.platform === 'win32' && cmd !== 'node';
+    // While the child owns the terminal let IT handle Ctrl-C (the server's own SIGINT
+    // cleanup exits it); the menu ignores SIGINT meanwhile and just returns when the
+    // child closes -- so Ctrl-C stops the server and drops you back to the menu.
+    const ignore = function () {};
+    process.on('SIGINT', ignore);
+    const p = spawn(cmd, args, { cwd: DIR, stdio: 'inherit', shell: need_shell });
+    p.on('close', function (code) { process.removeListener('SIGINT', ignore); rl.resume(); resolve(code); });
   });
 }
 async function run_test(file, label) {

@@ -11,7 +11,7 @@ const PASS = process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_PASS;
 
 test.describe('race_results_transform — metrics dashboard', () => {
   test.skip(!USER || !PASS, 'set RACE_RESULTS_CONVERTER_METRICS_DASH_USER / _PASS to run the dashboard checks');
-  test.use({ httpCredentials: { username: USER || '', password: PASS || '' } });
+  test.use({ httpCredentials: { username: USER || '', password: PASS || '' }, extraHTTPHeaders: { 'x-metrics-test': '1' } });   // header tells the server not to log a dashboard_view
 
   test('renders the shell, panels, and matches the app theme toggle', async ({ page }) => {
     await page.goto('/metrics');
@@ -21,6 +21,26 @@ test.describe('race_results_transform — metrics dashboard', () => {
     await expect(page.locator('#chart_days')).toBeVisible();   // activity by day
     await expect(page.locator('#chart_modes')).toBeVisible();  // downloads by type (incl. split)
     await expect(page.locator('#tbl_users')).toBeVisible();    // top users
+    await expect(page.locator('#chart_funnel')).toBeVisible();  // funnel (#2)
+    await expect(page.locator('#splits')).toBeVisible();        // split-by-group panel (#1)
+    await expect(page.locator('#refreshBtn')).toBeVisible();    // refresh (#3)
+    await expect(page.locator('#autoRefresh')).toBeVisible();   // auto-refresh toggle (#3)
+    await expect(page.locator('label.mx-auto')).toHaveAttribute('title', /every 60 seconds/);  // explains what auto-refresh does
+    await expect(page.locator('#autoRefresh')).toBeChecked();    // auto-refresh defaults ON
+    await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', /^data:image\/svg\+xml/);  // bar-chart favicon
+    await expect(page.locator('#tbl_users thead th')).toContainText(['Location (tz)']);  // top-user location (#4)
+    await expect(page.locator('#tbl_users thead th')).toContainText(['Visits', 'Uploads', 'Downloads', 'Start over']);  // per-user activity counts
+    await expect(page.locator('#tbl_users thead th.mx-rn')).toHaveText('#');  // leading row-number column on scrollable tables
+    // per-chart toolbar (expand/png/csv/table) on all four charts
+    await expect(page.locator('.mx-tools button[data-act="expand"]')).toHaveCount(4);
+    await expect(page.locator('.mx-tools button[data-act="png"]')).toHaveCount(4);
+    await expect(page.locator('.mx-tools button[data-act="csv"]')).toHaveCount(4);
+    await expect(page.locator('.mx-tools button[data-act="table"]')).toHaveCount(4);
+    // last-activity chip (label above value) + 2-row header
+    await expect(page.locator('#lastData .mx-last-label')).toContainText('Last User Activity');
+    await expect(page.locator('#lastData .mx-last-val')).toBeVisible();
+    await expect(page.locator('.mx-head2 #periods button')).toHaveCount(5);
+    await expect(page.locator('#themeToggle')).toContainText(/Dark|Light/);
     // theme toggle flips <html data-theme> and persists across reload (shared rrt_ui_v1 pref)
     const html = page.locator('html');
     await page.locator('#themeToggle').click();

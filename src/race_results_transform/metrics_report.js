@@ -47,11 +47,11 @@ async function build_report(pool, opts) {
 
   const comp = (await q(pool,
     "SELECT COUNT(DISTINCT CASE WHEN event_name='file_uploaded' THEN upload_id END) up, " +
-    "COUNT(DISTINCT CASE WHEN event_name IN('download','split_used') THEN upload_id END) dl " +
+    "COUNT(DISTINCT CASE WHEN event_name IN('download','split_download_used') THEN upload_id END) dl " +
     'FROM ' + W + ' AND upload_id IS NOT NULL', A))[0] || {};
 
   const modes = await q(pool, "SELECT download_mode m, COUNT(*) n FROM " + W +
-    " AND event_name IN('download','split_used') GROUP BY download_mode", A);
+    " AND event_name IN('download','split_download_used') GROUP BY download_mode", A);
 
   const conv = (await q(pool,
     'SELECT COUNT(*) n, AVG(row_count) avg_rows, AVG(col_count) avg_cols, AVG(flag_count) avg_flags, ' +
@@ -72,18 +72,26 @@ async function build_report(pool, opts) {
     " AND event_name='file_uploaded' GROUP BY local_dow ORDER BY n DESC", A);
   const by_day = await q(pool, "SELECT DATE(COALESCE(created_at_mtn, created_at_utc)) d, " +
     "SUM(event_name='page_view') visits, SUM(event_name='file_uploaded') uploads, " +
-    "SUM(event_name IN ('download','split_used')) downloads " +
+    "SUM(event_name IN ('download','split_download_used')) downloads, SUM(event_name='start_over') start_overs " +
     "FROM " + W + " GROUP BY d ORDER BY d", A);
   const top_users = await q(pool, "SELECT visitor_id v, MAX(is_returning) ret, " +
-    "SUM(event_name='file_uploaded') uploads, SUM(event_name IN ('download','split_used')) downloads, COUNT(*) events " +
+    "SUM(event_name='page_view') visits, SUM(event_name='file_uploaded') uploads, SUM(event_name IN ('download','split_download_used')) downloads, SUM(event_name='start_over') start_overs, COUNT(*) events, " +
+    "MAX(created_at_mtn) last_seen, MAX(client_tz) tz " +
     "FROM " + W + " AND visitor_id IS NOT NULL GROUP BY visitor_id ORDER BY uploads DESC, events DESC LIMIT 8", A);
+  const splits = (await q(pool,
+    "SELECT COUNT(*) n, AVG(selected_count) avg_groups, " +
+    "SUM(split_basis='converted') converted, SUM(split_basis='original') original " +
+    "FROM " + W + " AND event_name='split_download_used'", A))[0] || {};
+
+  const health = (await q(pool, "SELECT COUNT(*) rows_total, DATE_FORMAT(MAX(created_at_mtn), '%b %e, %Y %l:%i %p') latest FROM `" + T + "`"))[0] || {};
+  const sizerow = (await q(pool, 'SELECT ROUND((data_length+index_length)/1024/1024,2) mb FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [T]))[0] || {};
 
   const uploads = cmap.file_uploaded || 0;
-  const downloads = (cmap.download || 0) + (cmap.split_used || 0);
+  const downloads = (cmap.download || 0) + (cmap.split_download_used || 0);
   const data = {
     days: days, visits: cmap.page_view || 0,
     unique_users: n0(users.uniq), new_users: n0(users.new_u), repeat_users: n0(users.ret_u),
-    uploads: uploads, conversions: cmap.conversion_completed || 0, downloads: downloads,
+    uploads: uploads, conversions: cmap.conversion_completed || 0, downloads: downloads, start_overs: cmap.start_over || 0,
     completion_uploads: n0(comp.up), completion_downloaded: n0(comp.dl),
     download_modes: modes.map(function (r) { return { mode: r.m || 'single', n: n0(r.n) }; }),
     avg_rows: Math.round(n0(conv.avg_rows)), avg_cols: Math.round(n0(conv.avg_cols)),
@@ -96,11 +104,25 @@ async function build_report(pool, opts) {
     by_dow: by_dow.map(function (r) { return { dow: n0(r.d), n: n0(r.n) }; }),
     by_day: by_day.map(function (r) {
       var d = r.d, day = (d && d.toISOString) ? d.toISOString().slice(0, 10) : String(d).slice(0, 10);
-      return { day: day, visits: n0(r.visits), uploads: n0(r.uploads), downloads: n0(r.downloads) };
+      return { day: day, visits: n0(r.visits), uploads: n0(r.uploads), downloads: n0(r.downloads), start_overs: n0(r.start_overs) };
     }),
     top_users: top_users.map(function (r) {
-      return { id: String(r.v || '').slice(0, 8), returning: n0(r.ret), uploads: n0(r.uploads), downloads: n0(r.downloads), events: n0(r.events) };
-    })
+      var ls = r.last_seen, last = ls ? (ls.toISOString ? ls.toISOString().slice(0, 16).replace('T', ' ') : String(ls).slice(0, 16)) : null;
+      return { id: String(r.v || ''), returning: n0(r.ret), visits: n0(r.visits), uploads: n0(r.uploads), downloads: n0(r.downloads), start_overs: n0(r.start_overs), events: n0(r.events), last_seen: last, tz: r.tz || null };
+    }),
+    funnel: [
+      { stage: 'Visits', n: cmap.page_view || 0 },
+      { stage: 'Uploads', n: uploads },
+      { stage: 'Conversions', n: cmap.conversion_completed || 0 },
+      { stage: 'Downloads', n: downloads },
+      { stage: 'Start over', n: cmap.start_over || 0 }
+    ],
+    splits: { count: n0(splits.n), avg_groups: Math.round(n0(splits.avg_groups) * 10) / 10, converted: n0(splits.converted), original: n0(splits.original) },
+    health: {
+      rows: n0(health.rows_total),
+      mb: (sizerow.mb != null ? Number(sizerow.mb) : null),
+      latest_mtn: health.latest || null   // already 'Mon D, YYYY h:mm AM/PM' in MTN (formatted in SQL)
+    }
   };
 
   const dows = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -110,7 +132,7 @@ async function build_report(pool, opts) {
   const ftype_str = data.file_types.map(function (f) { return f.type + ' ' + f.n; }).join(', ') || 'none';
 
   const report = {
-    title: 'Race Results Converter — Usage (last ' + days + ' days)',
+    title: 'Race Results Converter — Metrics (last ' + days + ' days)',
     range: 'MTN reporting calendar · app=' + cfg.APP,
     sections: [
       { heading: 'Usage', lines: [
@@ -118,7 +140,10 @@ async function build_report(pool, opts) {
         data.uploads + ' uploaded · ' + data.conversions + ' converted · ' + data.downloads + ' downloads',
         'Completion: ' + data.completion_downloaded + '/' + data.completion_uploads + ' uploads → download (' + comp_rate + '%)'
       ] },
-      { heading: 'Downloads', lines: [ (data.downloads || 0) + ' total: ' + mode_str ] },
+      { heading: 'Downloads', lines: [
+        (data.downloads || 0) + ' total: ' + mode_str,
+        'split-by-group: ' + data.splits.count + (data.splits.count ? ' (avg ' + data.splits.avg_groups + ' groups · ' + data.splits.converted + ' converted / ' + data.splits.original + ' original)' : '')
+      ] },
       { heading: 'Files & data', lines: [
         'avg ' + data.avg_rows + ' rows / ' + data.avg_cols + ' cols · ' + ftype_str,
         'top files: ' + (data.top_files.map(function (f) { return f.name + ' (' + f.n + ')'; }).join(', ') || 'none')
@@ -145,4 +170,4 @@ async function size(pool) { return retention.size(pool, T); }
 async function cleanup(pool, opts) { return retention.purge_keep_years(pool, T, (opts && opts.years) || cfg.KEEP_YEARS, cfg.REPORTING_TZ); }
 async function purge_all(pool) { return retention.purge_all(pool, T); }
 
-module.exports = { get_pool, build_report, report_text, report_blocks, size, cleanup, purge_all, TABLE: T, cfg: cfg };
+module.exports = { get_pool, build_report, report_text, report_blocks, size, cleanup, purge_all, TABLE: T, cfg: cfg }

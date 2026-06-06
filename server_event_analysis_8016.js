@@ -677,6 +677,17 @@ async function start_server({ port = DEFAULT_PORT, silent = false } = {}) {
   });
 }
 
+// Clean up on exit \u2014 same pattern as the other server_*.js services so Ctrl-C
+// reliably stops the process instead of hanging the terminal.
+async function cleanup() {
+  console.log('\nGracefully shutting down...');
+  process.exit();
+}
+
+// Handle termination signals
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+
 // CLI entry: only run if invoked directly (not via require for tests).
 if (require.main === module) {
   start_server({ port: Number(process.env.PORT) || DEFAULT_PORT }).catch(err => {
