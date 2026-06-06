@@ -1,7 +1,7 @@
 {
   "name": "race_results_transform",
   "version": "1.0.0",
-  "description": "Reformat race-results spreadsheets to the USAT rankings template — browser app + CLI sharing one isomorphic engine.",
+  "description": "Reformat race-results spreadsheets to the USAT rankings template \u2014 browser app + CLI sharing one isomorphic engine.",
   "private": true,
   "bin": {
     "race-results-transform": "src/cli.js"
@@ -13,8 +13,8 @@
     "convert:examples": "node src/cli.js batch data/inputs -o data/outputs",
     "start": "node ../../server_race_results_transform_8018.js",
     "e2e": "playwright test -c e2e/playwright.config.js",
-    "e2e:install": "npm i -D @playwright/test @axe-core/playwright && npx playwright install chromium firefox webkit",
-    "e2e:install:server": "npm i -D @playwright/test @axe-core/playwright && npx playwright install --with-deps chromium firefox webkit",
+    "e2e:install": "npm i -D --prefix ../.. @playwright/test @axe-core/playwright && npx playwright install chromium firefox webkit",
+    "e2e:install:server": "npm i -D --prefix ../.. @playwright/test @axe-core/playwright && npx playwright install --with-deps chromium firefox webkit",
     "e2e:headed": "playwright test -c e2e/playwright.config.js --headed",
     "e2e:step": "playwright test -c e2e/playwright.config.js --debug",
     "e2e:snap": "playwright test -c e2e/playwright.config.js --update-snapshots",
@@ -23,9 +23,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "devDependencies": {
-    "@axe-core/playwright": "^4.11.3",
-    "@playwright/test": "^1.60.0"
   }
 }

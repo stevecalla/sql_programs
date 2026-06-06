@@ -26,11 +26,24 @@ const SERVER = path.join(__dirname, '..', '..', '..', 'server_race_results_trans
 // Firefox/WebKit don't take that arg, so they get a plain launch.
 const chromium_launch = { args: ['--no-sandbox'], slowMo: SLOWMO };
 const plain_launch = { slowMo: SLOWMO };
+// Firefox: disable session restore. Playwright intermittently crashes on context
+// teardown with `can't access property "_maybeDontRestoreTabs"` (a bug in Firefox's
+// sessionstore that fires AFTER the test body passes). Turning session restore off
+// avoids that code path so teardown is clean.
+const firefox_launch = { slowMo: SLOWMO, firefoxUserPrefs: {
+  'browser.sessionstore.resume_from_crash': false,
+  'browser.sessionstore.max_resumed_crashes': 0,
+  'browser.sessionstore.interval': 1000000000,
+  'toolkit.startup.max_resets': 0
+} };
 
 module.exports = defineConfig({
   testDir: __dirname,
   fullyParallel: false,
   timeout: 45000,
+  // One retry: a genuine failure fails twice and still surfaces; a flaky browser
+  // teardown (see firefox sessionstore note below) passes on the retry.
+  retries: 1,
   // Per-assertion timeout. Default is 5s; webkit (the slowest engine) sometimes
   // needs longer to finish the in-browser xlsx parse before #compareCard shows.
   expect: { timeout: 12000 },
@@ -45,7 +58,7 @@ module.exports = defineConfig({
     { name: 'chromium', testIgnore: /mobile\.spec\.js/,
       use: Object.assign({}, devices['Desktop Chrome'], { launchOptions: chromium_launch }) },
     { name: 'firefox', testIgnore: /(mobile|visual|a11y|metrics_db|metrics_dashboard|metrics_beacon)\.spec\.js/,
-      use: Object.assign({}, devices['Desktop Firefox'], { launchOptions: plain_launch }) },
+      use: Object.assign({}, devices['Desktop Firefox'], { launchOptions: firefox_launch }) },
     { name: 'webkit', testIgnore: /(mobile|visual|a11y|metrics_db|metrics_dashboard|metrics_beacon)\.spec\.js/,
       use: Object.assign({}, devices['Desktop Safari'], { launchOptions: plain_launch }) },
     { name: 'mobile', testMatch: /(mobile|metrics_dashboard)\.spec\.js/,

@@ -7,8 +7,8 @@
   'use strict';
   var cfg = { app: 'app', endpoint: '/api/event', allowList: [] };
   var ids = {};
-  var ALWAYS = ['app', 'visitor_id', 'session_id', 'is_returning', 'upload_id',
-    'client_tz', 'local_hour', 'local_dow', 'event_at_local', 'viewport', 'theme', 'event_name'];
+  var ALWAYS = ['app', 'event_name', 'page_path', 'visitor_id', 'session_id', 'is_returning', 'upload_id',
+    'client_tz', 'local_hour', 'local_dow', 'event_at_local', 'viewport', 'theme'];
 
   function uuid() {
     if (global.crypto && global.crypto.randomUUID) return global.crypto.randomUUID();
@@ -42,6 +42,7 @@
       is_returning: ids.is_returning, upload_id: ids.upload_id || null,
       client_tz: tz, local_hour: d.getHours(), local_dow: d.getDay(), event_at_local: fmt_local(d),
       file_name: ids.file_name || null,
+      page_path: (global.location ? (global.location.pathname + global.location.search).slice(0, 255) : null),
       viewport: (global.innerWidth && global.innerWidth < 768) ? 'mobile' : 'desktop',
       theme: (global.document && document.documentElement.getAttribute('data-theme')) || 'auto'
     };

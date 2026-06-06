@@ -57,6 +57,7 @@ Identity / session
 - `is_returning` TINYINT(1) — new vs repeat (localStorage first-seen flag)
 - `upload_id` CHAR(36) NULL — **correlation id**: minted when a file is loaded; stamped on the upload event AND every download/split event from that load → join "upload → download" for a completion/abandonment funnel
 - `event_name` VARCHAR(40) — page_view / file_uploaded / conversion_completed / download / split_download_used / mapping_saved / mapping_loaded / manual_remap / value_override / error / start_over / theme_changed / dashboard_view
+- `page_path` VARCHAR(255) — **which page the event came from** (`location.pathname`+search on the client; `req.originalUrl` for the server-side `dashboard_view`). Makes `page_view`/`dashboard_view` explicit about the actual URL viewed.
 
 File + conversion
 - `file_name` VARCHAR(255) NULL — raw filename (for user support; retention-purged)

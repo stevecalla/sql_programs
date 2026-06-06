@@ -169,7 +169,7 @@ client / report render); the 8018 server **auto-creates the table at startup**
   Start-over KPI card, ↻ Refresh + auto-refresh, dark/light. Data tables carry a leading # row-number
   column and scroll horizontally when narrow.
 - **Events**: page_view, file_uploaded, conversion_completed, download, `split_download_used`,
-  manual_remap, mapping_saved, start_over, theme_changed, error, + server-side dashboard_view per /metrics open.
+  manual_remap, mapping_saved, start_over, theme_changed, error, + server-side dashboard_view per /metrics open. Every event also records `page_path` (the URL path viewed) so page_view/dashboard_view are explicit about the page.
 - **Privacy/automation**: the client mutes itself under automated browsers (`navigator.webdriver`)
   unless `window.METRICS_TEST_ALLOW` is set, so the e2e suite never writes to the table. The uploaded
   **file name** rides along on every post-upload event (conversion / download / split / error) for

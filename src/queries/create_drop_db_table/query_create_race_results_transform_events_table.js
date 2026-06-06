@@ -12,6 +12,7 @@ const identity_fields = `
   -- WHO / SESSION (anonymous — no names, no IP)
   app VARCHAR(40),
   event_name VARCHAR(40),
+  page_path VARCHAR(255),        -- which page the event came from (location.pathname[+search])
   session_id CHAR(36),
   visitor_id CHAR(36),
   is_returning TINYINT(1),

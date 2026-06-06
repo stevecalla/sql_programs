@@ -35,7 +35,7 @@ const cors = require('cors');
 const mysql = require('mysql2/promise');
 const { local_usat_sales_db_config } = require('./utilities/config');
 const { make_event_ingest, fmt_in_tz } = require('./utilities/analytics/event_ingest');
-const { ensure_table } = require('./utilities/analytics/ensure_table');
+const { ensure_table, ensure_columns } = require('./utilities/analytics/ensure_table');
 const metrics_config = require('./src/race_results_transform/metrics_config');
 const { query_create_race_results_transform_events_table } =
   require('./src/queries/create_drop_db_table/query_create_race_results_transform_events_table');
@@ -56,6 +56,10 @@ async function init_metrics() {
     metrics_pool = mysql.createPool(cfg);
     const ddl = await query_create_race_results_transform_events_table(metrics_config.TABLE);
     await ensure_table(metrics_pool, ddl);
+    // migrate already-created tables that predate newer columns (CREATE IF NOT EXISTS won't add them)
+    await ensure_columns(metrics_pool, metrics_config.TABLE, [
+      { name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' }
+    ]);
     console.log('  [analytics] events table ready (' + metrics_config.TABLE + ')');
   } catch (e) {
     console.log('  [analytics] disabled — DB not available: ' + e.message);
@@ -111,8 +115,8 @@ function create_app() {
     if (metrics_pool && !req.headers['x-metrics-test']) {
       const now = new Date();
       metrics_pool.query(
-        'INSERT INTO `' + metrics_config.TABLE + '` (app, event_name, created_at_utc, created_at_mtn) VALUES (?, ?, ?, ?)',
-        [metrics_config.APP, 'dashboard_view', fmt_in_tz(now, 'UTC'), fmt_in_tz(now, metrics_config.REPORTING_TZ)]
+        'INSERT INTO `' + metrics_config.TABLE + '` (app, event_name, page_path, created_at_utc, created_at_mtn) VALUES (?, ?, ?, ?, ?)',
+        [metrics_config.APP, 'dashboard_view', (req.originalUrl || req.path || '/metrics').slice(0, 255), fmt_in_tz(now, 'UTC'), fmt_in_tz(now, metrics_config.REPORTING_TZ)]
       ).catch(function (e) { console.error('[analytics] dashboard_view log error:', e.message); });
     }
     res.type('html').sendFile(DASHBOARD_HTML);

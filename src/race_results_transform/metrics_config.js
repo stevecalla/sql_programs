@@ -10,7 +10,7 @@ const REPORTING_TZ = 'America/Denver';
 // Whitelist of insertable columns (everything except id + the stamped created_at_*).
 // This is the authoritative guard on the server; the browser client mirrors it.
 const COLUMNS = [
-  'app', 'event_name', 'session_id', 'visitor_id', 'is_returning', 'upload_id',
+  'app', 'event_name', 'page_path', 'session_id', 'visitor_id', 'is_returning', 'upload_id',
   'file_name', 'file_name_hash', 'file_type', 'sheet_count', 'row_count', 'col_count',
   'size_bytes', 'cols_matched', 'cols_unmatched', 'scorecard_band', 'scorecard_pct',
   'flag_count', 'target_key', 'download_mode', 'file_out_count', 'selected_count',

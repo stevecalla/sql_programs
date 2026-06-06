@@ -17,12 +17,13 @@ test.beforeAll(async () => {
   try {
     const mysql = require('mysql2/promise');
     const { local_usat_sales_db_config } = require('../../../utilities/config');
-    const { ensure_table } = require('../../../utilities/analytics/ensure_table');
+    const { ensure_table, ensure_columns } = require('../../../utilities/analytics/ensure_table');
     const { query_create_race_results_transform_events_table } =
       require('../../../src/queries/create_drop_db_table/query_create_race_results_transform_events_table');
     pool = mysql.createPool(await local_usat_sales_db_config());
     await pool.query('SELECT 1');
     await ensure_table(pool, await query_create_race_results_transform_events_table(cfg.TABLE)); // safe if server already made it
+    await ensure_columns(pool, cfg.TABLE, [{ name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' }]); // migrate older tables
     db_ok = true;
   } catch (e) { db_ok = false; }
 });
@@ -69,6 +70,10 @@ test.describe('race_results_transform — analytics DB round-trip', () => {
       expect(up.created_at_utc, 'created_at_utc stamped').toBeTruthy();
       expect(up.created_at_mtn, 'created_at_mtn stamped').toBeTruthy();
       expect(up.session_id).toBeTruthy();
+
+      // page_path records WHICH page the event came from (app is served at '/')
+      const pv = rs.find(function (r) { return r.event_name === 'page_view'; });
+      expect(String(pv.page_path)).toMatch(/^\//);   // e.g. '/' for the app
 
       const conv = rs.find(function (r) { return r.event_name === 'conversion_completed'; });
       expect(Number(conv.row_count)).toBeGreaterThan(0);
