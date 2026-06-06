@@ -10,6 +10,10 @@ const { defineConfig } = require('@playwright/test');
 const path = require('path');
 
 const PORT = process.env.E2E_PORT || 8018;
+const HEADED = process.argv.includes('--headed');
+// HEADED_SLOWMO: ms paused between each action in --headed runs, so you can watch.
+// Bump this number for a slower run (env E2E_SLOWMO overrides it on bash, but not Windows cmd).
+const HEADED_SLOWMO = 1500;
 const SERVER = path.join(__dirname, '..', '..', '..', 'server_race_results_transform_8018.js');
 
 module.exports = defineConfig({
@@ -24,7 +28,7 @@ module.exports = defineConfig({
     trace: 'on-first-retry',
     // --no-sandbox so headless Chromium also runs on the Linux server (often as root).
     // slowMo (ms) makes headed runs watchable; 0 = full speed (headless default).
-    launchOptions: { args: ['--no-sandbox'], slowMo: Number(process.env.E2E_SLOWMO) || 0 }
+    launchOptions: { args: ['--no-sandbox'], slowMo: Number(process.env.E2E_SLOWMO) || (HEADED ? HEADED_SLOWMO : 0) }
   },
   // Auto-start the actual static host (serves public/ + /src). ngrok is off by
   // default in the server, so this is a clean local listen.

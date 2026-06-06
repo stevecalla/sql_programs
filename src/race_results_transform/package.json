@@ -15,7 +15,8 @@
     "e2e": "playwright test -c e2e/playwright.config.js",
     "e2e:install": "npm i -D @playwright/test && npx playwright install chromium",
     "e2e:install:server": "npm i -D @playwright/test && npx playwright install --with-deps chromium",
-    "e2e:headed": "E2E_SLOWMO=350 playwright test -c e2e/playwright.config.js --headed"
+    "e2e:headed": "playwright test -c e2e/playwright.config.js --headed",
+    "e2e:step": "playwright test -c e2e/playwright.config.js --debug"
   },
   "engines": {
     "node": ">=18"

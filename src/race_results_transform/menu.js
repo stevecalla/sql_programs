@@ -57,7 +57,7 @@ const SECTIONS = [
     { id: 4, label: 'Inspect headers + auto-mapping', desc: 'Show detected headers and how each maps to the template; no file written.', cli: 'node src/cli.js inspect <file>', action: 'inspect' }
   ] },
   { label: 'Tests  (each group explains what it checks)', color: MAGENTA, items: [
-    { id: 5, label: 'Run ALL tests', desc: 'Runs every test file in tests/, each printed under its own labeled section, with a pass/fail tally.', cli: 'node --test tests/*.test.js', action: 'test_all' },
+    { id: 5, label: 'Run ALL tests', desc: 'Runs every node --test file, then the browser E2E too IF Playwright is installed (otherwise skips it).', cli: 'node --test tests/*.test.js (+ npm run e2e if installed)', action: 'test_all' },
     { id: 6, label: 'Smoke — modules load', desc: 'Each engine module parses + exports; schema has all 12 columns in order.', cli: 'node --test tests/smoke.test.js', action: 'test_smoke' },
     { id: 7, label: 'Value normalization', desc: 'Gender→M/F/NB · DOB→mm/dd/yyyy · times incl. DNS/DNF · state abbrev · member→1-day · category buckets.', cli: 'node --test tests/normalize.test.js', action: 'test_normalize' },
     { id: 8, label: 'Column matching', desc: 'Finish time beats splits · "Age Group" beats "Race / Division" · name-order independence.', cli: 'node --test tests/match.test.js', action: 'test_match' },
@@ -67,16 +67,18 @@ const SECTIONS = [
     { id: 12, label: 'Golden fixtures (real files)', desc: 'Convert the 2 xlsx + 2 csv examples and compare to the checked-in expected snapshots.', cli: 'node --test tests/fixtures.test.js', action: 'test_fixtures' },
     { id: 13, label: 'Lint — snake_case', desc: 'Fail if any of our identifiers are camelCase (DOM/library names + UPPER_SNAKE constants + element ids are allowed).', cli: 'node --test tests/lint_snake_case.test.js', action: 'test_lint' },
     { id: 14, label: 'Config wiring (package + tasks)', desc: 'repo-root package.json scripts + .vscode/tasks.json register this tool (step 16/16) like the other servers.', cli: 'node --test tests/config_wiring.test.js', action: 'test_config' },
-    { id: 15, label: 'Browser E2E tests (Playwright)', desc: 'Real-browser convert/download/split/combine against the served app. Run install (16) once first.', cli: 'npm run e2e', action: 'e2e_run' },
-    { id: 16, label: 'Install browser E2E (one-time)', desc: 'Dev: npm run e2e:install (Chromium). Linux server: npm run e2e:install:server (adds --with-deps; root).', cli: 'npm run e2e:install', action: 'e2e_install' }
+    { id: 15, label: 'Browser E2E tests (Playwright)', desc: 'Real-browser convert/download/split/combine against the served app. Run install (18) once first.', cli: 'npm run e2e', action: 'e2e_run' },
+    { id: 16, label: 'Browser E2E — watch in Chrome (headed)', desc: 'Same tests in a visible, slowed Chrome window so you can watch. Desktop only (not the headless server).', cli: 'npm run e2e:headed', action: 'e2e_headed' },
+    { id: 17, label: 'Browser E2E — step through (pause each step)', desc: 'Headed Chrome that PAUSES on every step via the Playwright Inspector; click Resume to advance one step at a time. Desktop only.', cli: 'npm run e2e:step', action: 'e2e_step' },
+    { id: 18, label: 'Install browser E2E (one-time)', desc: 'Dev: npm run e2e:install (Chromium). Linux server: npm run e2e:install:server (adds --with-deps; root).', cli: 'npm run e2e:install', action: 'e2e_install' }
   ] },
   { label: 'Server & app', color: GREEN, items: [
-    { id: 17, label: 'Start the web app server (port 8018)', desc: 'Serve public/ at http://localhost:8018; also opens a public ngrok URL if NGROK_AUTHTOKEN is set (otherwise it just notes that and keeps running). Ctrl-C to stop.', cli: 'node ../../server_race_results_transform_8018.js', action: 'server' },
-    { id: 18, label: 'Open the web app in a browser', desc: 'Open http://localhost:8018 (start the server first).', cli: 'open http://localhost:8018', action: 'open' }
+    { id: 19, label: 'Start the web app server (port 8018)', desc: 'Serve public/ at http://localhost:8018; also opens a public ngrok URL if NGROK_AUTHTOKEN is set (otherwise it just notes that and keeps running). Ctrl-C to stop.', cli: 'node ../../server_race_results_transform_8018.js', action: 'server' },
+    { id: 20, label: 'Open the web app in a browser', desc: 'Open http://localhost:8018 (start the server first).', cli: 'open http://localhost:8018', action: 'open' }
   ] },
   { label: 'Settings', color: GRAY, items: [
-    { id: 19, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 20, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
+    { id: 21, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
+    { id: 22, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
@@ -113,7 +115,19 @@ async function handle(item) {
         .map(function (f) { return path.join('tests', f); });
       console.log(c(DIM, '\n  Running all ' + files.length + ' test files: node --test tests/\n'));
       const code = await run('node', ['--test'].concat(files));
-      console.log(code === 0 ? c(GREEN, '\n  \u2713 all tests passed') : c(YELLOW, '\n  \u2717 some tests failed'));
+      console.log(code === 0 ? c(GREEN, '\n  \u2713 all node tests passed') : c(YELLOW, '\n  \u2717 some node tests failed'));
+      // Append the browser E2E too — but only if Playwright is installed, so the
+      // dependency-free suite still runs anywhere (locked env / CI). Resolve it the
+      // way Node would (walks up node_modules incl. the hoisted monorepo root), not
+      // a single hardcoded path.
+      let has_pw = false;
+      try { require.resolve('@playwright/test', { paths: [DIR] }); has_pw = true; } catch (e) { has_pw = false; }
+      if (has_pw) {
+        console.log(c(DIM, '\n  + browser E2E (Playwright detected)…\n'));
+        await run('npm', ['run', 'e2e']);
+      } else {
+        console.log(c(DIM, '\n  (browser E2E skipped \u2014 Playwright not installed; use "Install browser E2E" to add it)'));
+      }
       break;
     }
     case 'test_smoke': await run_test('tests/smoke.test.js', 'smoke tests'); break;
@@ -125,12 +139,9 @@ async function handle(item) {
     case 'test_fixtures': await run_test('tests/fixtures.test.js', 'golden-fixture tests'); break;
     case 'test_lint': await run_test('tests/lint_snake_case.test.js', 'snake_case lint'); break;
     case 'test_config': await run_test('tests/config_wiring.test.js', 'config-wiring checks'); break;
-    case 'e2e_run': {
-      const watch = clean(await ask('  Watch it run in a visible Chrome window? (y/N): ')).toLowerCase().indexOf('y') === 0;
-      console.log(c(DIM, watch ? '\n  opening Chrome (headed, slowed so you can watch)…\n' : '\n  running headless… (install first if this fails)\n'));
-      await run('npm', ['run', watch ? 'e2e:headed' : 'e2e']);
-      break;
-    }
+    case 'e2e_run': console.log(c(DIM, '\n  running Playwright browser tests, headless (run "Install browser E2E" first if this fails)…\n')); await run('npm', ['run', 'e2e']); break;
+    case 'e2e_headed': console.log(c(DIM, '\n  opening Chrome (headed, slowed)…\n')); await run('npm', ['run', 'e2e:headed']); break;
+    case 'e2e_step': console.log(c(DIM, '\n  opening Chrome with the Inspector — click Resume to advance each step…\n')); await run('npm', ['run', 'e2e:step']); break;
     case 'e2e_install': console.log(c(DIM, '\n  installing Playwright + Chromium (one-time)…\n')); await run('npm', ['run', 'e2e:install']); break;
     case 'server': console.log(c(DIM, 'Starting server… Ctrl-C to stop.')); await run('node', [SERVER]); break;
     case 'open': {

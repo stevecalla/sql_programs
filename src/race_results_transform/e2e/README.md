@@ -50,7 +50,17 @@ Fixtures: the committed `examples/sample/sample_race_results_FAKE.xlsx`, plus a 
 To see the browser instead of running headless (dev machine with a display only — not the
 headless Linux server):
 ```
-npm run e2e:headed        # opens Chrome, slowed (E2E_SLOWMO=350ms) so you can follow along
+npm run e2e:headed        # opens Chrome, auto-slowed (~1500ms/step) so you can follow along
 ```
 Or from `node menu.js` → **Browser E2E tests** → answer **y** to "Watch it run in a visible
-Chrome window?". Tune the pace with `E2E_SLOWMO=600 npm run e2e:headed`.
+Chrome window?". To change the pace, edit `HEADED_SLOWMO` (ms per step) in `e2e/playwright.config.js` — that works everywhere; the `E2E_SLOWMO` env override only works on bash/macOS/Linux, not Windows `cmd`.
+
+### Step through it manually
+
+`npm run e2e:step` (menu item 17) opens Chrome with the Playwright Inspector and **pauses on every step** — click **Resume** to advance one step at a time. The element about to be clicked gets a red border, and a numbered banner ("Step 3 — …") narrates each action. The plain `npm run e2e:headed` instead auto-advances, holding ~4s per step (`STEP_PAUSE` in `convert_flow.spec.js`).
+
+### What's covered
+
+- **convert_flow.spec.js** — load → convert → download (12-col), split-by-column, multi-sheet Combined, + theme/clock canaries.
+- **ui_interactions.spec.js** — theme persistence, CSV input, Approve all, edit-clears-a-flag, value-map override, inline header remap.
+- **helpers.js** — shared step()/highlight()/fixtures (not a test file).
