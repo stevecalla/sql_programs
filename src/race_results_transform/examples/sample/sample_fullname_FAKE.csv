@@ -1,0 +1,6 @@
+Name,Gender,DOB,City,State,Zip,Email,Category,Finish Time
+"Doe, Jane",F,1990-05-12,Denver,CO,80014,jane@example.com,Age Group,01:05:30
+John Smith,M,1985-06-15,Reno,NV,89501,john@example.com,Elite,00:58:10
+"van Berg, John Paul",M,1979-02-02,Austin,TX,73301,jp@example.com,Relay,01:20:00.500
+Maria De La Cruz,F,1995-11-23,Miami,FL,33101,maria@example.com,Open,01:12:45
+Cher,F,1980-01-01,Los Angeles,CA,90001,cher@example.com,Age Group,01:10:00

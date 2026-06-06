@@ -1,0 +1,13 @@
+Place,USAT Member #,First Name,Last Name,Gender,DOB,City,State,Zip Code,Email,Category,Leg 1 Time,Final Time
+1.,2100000001,Jane,Doe,m,1990-05-12,Denver,Colorado,80014,jane.doe@example.com,Alpha Sprint,00:10:00,01:05:30
+2.,,John,Smith,f,06-15-85,Reno,NV,89501,john.smith@example.com,30-34 Female,00:11:00,01:12:45
+3.,Valid,Alex,Stone,M,2001-11-30,Austin,TX,73301,alex.stone@example.com,Elite,00:09:30,00:58:10
+4.,2100000004,Maria,Lopez,F,1978-01-02,Tijuana,BCN,22000,maria.lopez@example.com,Relay,00:12:00,01:20:00
+5.,2100000005,Sam,Park,x,1995-07-04,Seattle,WA,98101,sam.park@example.com,Para,00:10:30,01:09:00
+6.,2100000006,Riley,Nguyen,male,1988-03-22,Portland,Oregon,97201,riley.nguyen@example.com,Clydesdale,00:11:30,DNS
+7.,,Pat,Kim,female,2003-09-09,Boise,ID,83702,pat.kim@example.com,40-44 Male,00:10:15,01:15:20
+8.,2100000008,Chris,Lee,M,12-25-99,Mesa,AZ,85201,chris.lee@example.com,Age Group,00:09:45,01:02:05
+9.,366000009,Dana,Cruz,F,1969-04-18,Tampa,Florida,33601,dana.cruz@example.com,Military Female,00:13:00,01:30:10
+10.,,Jordan,Reed,m,1992-12-01,Mercer Island,Washington,98040,jordan.reed@example.com,Relay,00:10:00,02:46:11
+11.,2100000011,Taylor,Brooks,f,2000-02-29,Ogden,UT,84401,taylor.brooks@example.com,Sprint,00:11:00,01:08:08
+12.,2100000012,Morgan,Diaz,nb,1985-10-10,Mexico City,MEX,01000,morgan.diaz@example.com,25-29 Male,00:10:20,01:11:11

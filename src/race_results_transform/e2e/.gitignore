@@ -2,3 +2,8 @@ node_modules/
 test-results/
 playwright-report/
 playwright/.cache/
+
+# Visual snapshot baselines MUST be committed, even though the repo-root
+# .gitignore ignores *.png. Re-include just this directory's PNGs.
+!visual.spec.js-snapshots/
+!visual.spec.js-snapshots/*.png

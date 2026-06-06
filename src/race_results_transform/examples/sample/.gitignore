@@ -1,0 +1,5 @@
+# These are SYNTHETIC, PII-free fixtures (note the _FAKE suffix) and the test suite
+# needs them on every clone / CI box. The repo-root .gitignore ignores *.xlsx and
+# *.csv to keep real member data out of git; re-include ONLY these fake fixtures.
+!*_FAKE.xlsx
+!*_FAKE.csv
