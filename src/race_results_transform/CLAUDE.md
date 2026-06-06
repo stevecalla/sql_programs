@@ -105,7 +105,9 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   bar** (`#sheetBar`) switches the active bundle. In the web app **Download** opens a checklist
   (`open_download_picker`) and each selected sheet saves as its own single-sheet `.xlsx`
   (`download_one_sheet` -> `io.grids_to_buffer` with one group). Single sheet / CSV = direct
-  one-file download. The CLI still writes one combined workbook (one tab per source sheet).
+  one-file download (the popover also offers a **Separate / Combined** toggle — Combined stacks all
+  selected sheets' rows into one worksheet via `download_combined`). The CLI still writes one
+  workbook with one tab per source sheet.
 - **Split & download by column** (Mapping tab, `render_split`): pick any *source* header. A mapped
   column offers a **Converted / Original** basis toggle (`S.split_basis`); converted groups by the
   output field value, original groups by the raw cell and lets the user edit a per-value **group
@@ -115,12 +117,15 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   emits one file per group for each chosen sheet (filename includes the sheet name). The inline
   value list reflects the active sheet.
 - **Group-name helpers** (`SPLIT_FEATURES` flags at the top of `app.js`, each independently
-  revertable): `group_picker` makes each Original-value group field a pick-or-type box (a
-  `<datalist id="split-groups">` of the group names you've already typed → dropdown + autocomplete,
-  still free-text for new groups); `remember_grouping` persists the value→group map per
-  `signature|column` in prefs (`split_groups`) and re-applies it on the next same-layout file
-  (`load_saved_groups`/`save_groups`; **Reset groups** also forgets the saved copy). Flip either flag
-  to `false` to disable; `git checkout public/js/app.js public/css/app.css` reverts everything.
+  revertable). `group_picker`: each Original-value field is a pick-or-type box (empty, with the raw
+  value as placeholder; `manual_name` falls back to the raw value so a blank box = its own file) +
+  a `<datalist id="split-groups">` of the group names you've typed (`S.split_manual`) → dropdown +
+  autocomplete, still free-text for new groups. `remember_grouping`: persists value→group per
+  `signature|column` in prefs (`split_groups`), loaded once per key (`S.split_loaded_key`) so
+  **Clear entries** doesn't reload it. A preset toolbar exposes **Clear entries** (reset boxes, keep
+  preset), **Save preset**, **Forget preset**, and an **Auto-save** toggle (`get_pref('split_autosave')`,
+  default on — when off, type freely and Save preset manually). Flip either flag to `false` to
+  disable; `git checkout public/js/app.js public/css/app.css` reverts everything.
 - One **Compare** card with tabs (Tables/Mapping/Scorecard/Integrity/Field reference/How it works)
   + summary bar. Layout switch side/stacked/tabs. **Link tables** (default ON) syncs search, sort
   and vertical scroll across both `TableView`s.
