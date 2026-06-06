@@ -1,0 +1,655 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: layout_sheets.spec.js >> race_results_transform — layout, sheets, drag-drop >> layout switch toggles side / stacked / tabs
+- Location: e2e\layout_sheets.spec.js:14:3
+
+# Error details
+
+```
+Error: browserContext.close: Protocol error (Browser.removeBrowserContext): can't access property "_maybeDontRestoreTabs", this._windows[aWindow.__SSi] is undefined
+```
+
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - heading "Race Results Spreadsheet Converter" [level=1] [ref=e5]
+      - generic [ref=e6]:
+        - button "Toggle light or dark theme" [ref=e7] [cursor=pointer]: ☾ Dark
+        - button "↺ Start over" [ref=e8] [cursor=pointer]
+  - generic [ref=e9]:
+    - generic [ref=e10]: 99%
+    - generic [ref=e11]: Usable — review the flagged columns, then upload.
+    - generic [ref=e12]:
+      - generic "Uploaded file" [ref=e13]: 📄 sample_race_results_FAKE.xlsx
+      - generic "Athlete rows written to the converted file" [ref=e14]: 8 rows
+      - generic "Highlighted cells still needing a look — approve or edit them to clear" [ref=e15]: 12 flagged values
+      - generic [ref=e16]: no rows skipped
+  - generic [ref=e17]:
+    - generic [ref=e18] [cursor=pointer]:
+      - heading "Compare" [level=2] [ref=e19]
+      - generic [ref=e20]:
+        - button "Download .xlsx" [ref=e21]:
+          - img [ref=e22]
+          - generic [ref=e26]: Download .xlsx
+        - button "Save mapping" [ref=e27]:
+          - img [ref=e28]
+          - generic [ref=e30]: Save mapping
+        - generic "Sync search, sort and scroll across both tables" [ref=e31]:
+          - checkbox "Link tables" [checked] [ref=e32]
+          - text: Link tables
+        - group "Layout" [ref=e33]:
+          - button "⬓⬓" [active] [ref=e34]
+          - button "≡" [ref=e35]
+          - button "▭" [ref=e36]
+      - generic [ref=e37]: ▾
+    - generic [ref=e38]:
+      - group "Compare view" [ref=e39]:
+        - button "Tables" [ref=e40] [cursor=pointer]
+        - button "Mapping" [ref=e41] [cursor=pointer]
+        - button "Scorecard" [ref=e42] [cursor=pointer]
+        - button "Integrity" [ref=e43] [cursor=pointer]
+        - button "Field reference" [ref=e44] [cursor=pointer]
+        - button "How it works" [ref=e45] [cursor=pointer]
+      - generic [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - button "Collapse highlights" [ref=e49] [cursor=pointer]: ▾ Hide
+            - generic [ref=e50]: Highlighted (yellow) cells are values the tool changed or guessed — hover one to see why. 12 values in 8 rows to review.
+            - button "✓ Approve all" [ref=e52] [cursor=pointer]
+          - paragraph [ref=e53]: Click a green ✓ Approve button to accept all of that kind — or edit a highlighted cell to accept just that one. Both drop the count toward zero.
+          - list [ref=e54]:
+            - listitem [ref=e55]:
+              - generic [ref=e56]: "7 · No numeric member # (e.g. “Valid”) → set to 1-day"
+              - button "🔍 Show rows" [ref=e57] [cursor=pointer]
+              - button "✓ Approve 7" [ref=e58] [cursor=pointer]
+            - listitem [ref=e59]:
+              - generic [ref=e60]: 2 · Not a US 2-letter state — confirm (e.g. foreign)
+              - button "🔍 Show rows" [ref=e61] [cursor=pointer]
+              - button "✓ Approve 2" [ref=e62] [cursor=pointer]
+            - listitem [ref=e63]:
+              - generic [ref=e64]: "1 · Member # was blank → set to 1-day"
+              - button "🔍 Show rows" [ref=e65] [cursor=pointer]
+              - button "✓ Approve 1" [ref=e66] [cursor=pointer]
+            - listitem [ref=e67]:
+              - generic [ref=e68]: 1 · Category was blank → assumed Age Group
+              - button "🔍 Show rows" [ref=e69] [cursor=pointer]
+              - button "✓ Approve 1" [ref=e70] [cursor=pointer]
+            - listitem [ref=e71]:
+              - generic [ref=e72]: 1 · Division name assumed to be Age Group — confirm
+              - button "🔍 Show rows" [ref=e73] [cursor=pointer]
+              - button "✓ Approve 1" [ref=e74] [cursor=pointer]
+        - generic [ref=e75]:
+          - generic [ref=e76]:
+            - generic [ref=e77]:
+              - heading "Original file" [level=3] [ref=e78]
+              - generic [ref=e79]: 8 rows · 16 cols
+            - generic [ref=e80]:
+              - generic [ref=e81]:
+                - searchbox "Search table rows" [ref=e82]
+                - button "Reset order" [disabled] [ref=e83] [cursor=pointer]
+                - generic [ref=e84]: 8 rows
+              - table [ref=e86]:
+                - rowgroup [ref=e87]:
+                  - row [ref=e88]:
+                    - columnheader [ref=e89]
+                    - columnheader [ref=e90] [cursor=pointer]
+                    - columnheader [ref=e91] [cursor=pointer]
+                    - columnheader [ref=e92] [cursor=pointer]
+                    - columnheader [ref=e93] [cursor=pointer]
+                    - columnheader [ref=e94] [cursor=pointer]
+                    - columnheader [ref=e95] [cursor=pointer]
+                    - columnheader [ref=e96] [cursor=pointer]
+                    - columnheader [ref=e97] [cursor=pointer]
+                    - columnheader [ref=e98] [cursor=pointer]
+                    - columnheader [ref=e99] [cursor=pointer]
+                    - columnheader [ref=e100] [cursor=pointer]
+                    - columnheader [ref=e101] [cursor=pointer]
+                    - columnheader [ref=e102] [cursor=pointer]
+                    - columnheader [ref=e103] [cursor=pointer]
+                    - columnheader [ref=e104] [cursor=pointer]
+                    - columnheader [ref=e105] [cursor=pointer]
+                  - row "# Race / Division Bib First Name Last Name Gender Age Group USAT membership Email Date of Birth City State Zip Code Swim Time Bike Time Run Time Gun Time" [ref=e106]:
+                    - columnheader "#" [ref=e107]
+                    - columnheader "Race / Division" [ref=e108] [cursor=pointer]: Race / Division
+                    - columnheader "Bib" [ref=e109] [cursor=pointer]: Bib
+                    - columnheader "First Name" [ref=e110] [cursor=pointer]: First Name
+                    - columnheader "Last Name" [ref=e111] [cursor=pointer]: Last Name
+                    - columnheader "Gender" [ref=e112] [cursor=pointer]: Gender
+                    - columnheader "Age Group" [ref=e113] [cursor=pointer]: Age Group
+                    - columnheader "USAT membership" [ref=e114] [cursor=pointer]: USAT membership
+                    - columnheader "Email" [ref=e115] [cursor=pointer]: Email
+                    - columnheader "Date of Birth" [ref=e116] [cursor=pointer]: Date of Birth
+                    - columnheader "City" [ref=e117] [cursor=pointer]: City
+                    - columnheader "State" [ref=e118] [cursor=pointer]: State
+                    - columnheader "Zip Code" [ref=e119] [cursor=pointer]: Zip Code
+                    - columnheader "Swim Time" [ref=e120] [cursor=pointer]: Swim Time
+                    - columnheader "Bike Time" [ref=e121] [cursor=pointer]: Bike Time
+                    - columnheader "Run Time" [ref=e122] [cursor=pointer]: Run Time
+                    - columnheader "Gun Time" [ref=e123] [cursor=pointer]: Gun Time
+                - rowgroup [ref=e124]:
+                  - row "1 International Triathlon 1001 Jane Doe M 30-34 Male Valid jane.doe@example.com 05/12/1990 Denver CO 80014 00:12:15 00:49:29 00:38:08 01:41:53" [ref=e125]:
+                    - cell "1" [ref=e126]
+                    - cell "International Triathlon" [ref=e127]
+                    - cell "1001" [ref=e128]
+                    - cell "Jane" [ref=e129]
+                    - cell "Doe" [ref=e130]
+                    - cell "M" [ref=e131]
+                    - cell "30-34 Male" [ref=e132]
+                    - cell "Valid" [ref=e133]
+                    - cell "jane.doe@example.com" [ref=e134]
+                    - cell "05/12/1990" [ref=e135]
+                    - cell "Denver" [ref=e136]
+                    - cell "CO" [ref=e137]
+                    - cell "80014" [ref=e138]
+                    - cell "00:12:15" [ref=e139]
+                    - cell "00:49:29" [ref=e140]
+                    - cell "00:38:08" [ref=e141]
+                    - cell "01:41:53" [ref=e142]
+                  - 'row "2 International Triathlon 1002 John Smith M 25-29 Male Bronze: Single Race Access john.smith@example.com 04/21/1998 San Diego CA 92011 00:14:02 00:48:14 00:37:34 01:42:00" [ref=e143]':
+                    - cell "2" [ref=e144]
+                    - cell "International Triathlon" [ref=e145]
+                    - cell "1002" [ref=e146]
+                    - cell "John" [ref=e147]
+                    - cell "Smith" [ref=e148]
+                    - cell "M" [ref=e149]
+                    - cell "25-29 Male" [ref=e150]
+                    - 'cell "Bronze: Single Race Access" [ref=e151]'
+                    - cell "john.smith@example.com" [ref=e152]
+                    - cell "04/21/1998" [ref=e153]
+                    - cell "San Diego" [ref=e154]
+                    - cell "CA" [ref=e155]
+                    - cell "92011" [ref=e156]
+                    - cell "00:14:02" [ref=e157]
+                    - cell "00:48:14" [ref=e158]
+                    - cell "00:37:34" [ref=e159]
+                    - cell "01:42:00" [ref=e160]
+                  - row "3 International Triathlon 1003 Maria Lopez F 40-44 Female Valid maria.lopez@example.com 09/01/1982 BCN 22000 00:13:12 00:52:22 00:40:30 01:49:22" [ref=e161]:
+                    - cell "3" [ref=e162]
+                    - cell "International Triathlon" [ref=e163]
+                    - cell "1003" [ref=e164]
+                    - cell "Maria" [ref=e165]
+                    - cell "Lopez" [ref=e166]
+                    - cell "F" [ref=e167]
+                    - cell "40-44 Female" [ref=e168]
+                    - cell "Valid" [ref=e169]
+                    - cell "maria.lopez@example.com" [ref=e170]
+                    - cell "09/01/1982" [ref=e171]
+                    - cell [ref=e172]
+                    - cell "BCN" [ref=e173]
+                    - cell "22000" [ref=e174]
+                    - cell "00:13:12" [ref=e175]
+                    - cell "00:52:22" [ref=e176]
+                    - cell "00:40:30" [ref=e177]
+                    - cell "01:49:22" [ref=e178]
+                  - row "4 Sprint Triathlon 2001 Alex Stone M Elite Valid alex.stone@example.com 11/30/2001 Austin TX 73301 00:09:05 00:30:10 00:18:02 00:58:10" [ref=e179]:
+                    - cell "4" [ref=e180]
+                    - cell "Sprint Triathlon" [ref=e181]
+                    - cell "2001" [ref=e182]
+                    - cell "Alex" [ref=e183]
+                    - cell "Stone" [ref=e184]
+                    - cell "M" [ref=e185]
+                    - cell "Elite" [ref=e186]
+                    - cell "Valid" [ref=e187]
+                    - cell "alex.stone@example.com" [ref=e188]
+                    - cell "11/30/2001" [ref=e189]
+                    - cell "Austin" [ref=e190]
+                    - cell "TX" [ref=e191]
+                    - cell "73301" [ref=e192]
+                    - cell "00:09:05" [ref=e193]
+                    - cell "00:30:10" [ref=e194]
+                    - cell "00:18:02" [ref=e195]
+                    - cell "00:58:10" [ref=e196]
+                  - row "5 Sprint Triathlon 2002 Pat Kim F pat.kim@example.com 09/09/2003 Boise ID 83702 00:10:01 00:33:00 00:19:30 01:04:30" [ref=e197]:
+                    - cell "5" [ref=e198]
+                    - cell "Sprint Triathlon" [ref=e199]
+                    - cell "2002" [ref=e200]
+                    - cell "Pat" [ref=e201]
+                    - cell "Kim" [ref=e202]
+                    - cell "F" [ref=e203]
+                    - cell [ref=e204]
+                    - cell [ref=e205]
+                    - cell "pat.kim@example.com" [ref=e206]
+                    - cell "09/09/2003" [ref=e207]
+                    - cell "Boise" [ref=e208]
+                    - cell "ID" [ref=e209]
+                    - cell "83702" [ref=e210]
+                    - cell "00:10:01" [ref=e211]
+                    - cell "00:33:00" [ref=e212]
+                    - cell "00:19:30" [ref=e213]
+                    - cell "01:04:30" [ref=e214]
+                  - row "6 Relay 3001 Jordan Reed M Relay Valid jordan.reed@example.com 12/01/1992 Mercer Island Washington 98040 00:11:00 00:40:00 00:20:00 01:11:00" [ref=e215]:
+                    - cell "6" [ref=e216]
+                    - cell "Relay" [ref=e217]
+                    - cell "3001" [ref=e218]
+                    - cell "Jordan" [ref=e219]
+                    - cell "Reed" [ref=e220]
+                    - cell "M" [ref=e221]
+                    - cell "Relay" [ref=e222]
+                    - cell "Valid" [ref=e223]
+                    - cell "jordan.reed@example.com" [ref=e224]
+                    - cell "12/01/1992" [ref=e225]
+                    - cell "Mercer Island" [ref=e226]
+                    - cell "Washington" [ref=e227]
+                    - cell "98040" [ref=e228]
+                    - cell "00:11:00" [ref=e229]
+                    - cell "00:40:00" [ref=e230]
+                    - cell "00:20:00" [ref=e231]
+                    - cell "01:11:00" [ref=e232]
+                  - row "7 Sprint Duathlon 4001 Dana Cruz F Clydesdale Invalid dana.cruz@example.com 04/18/1969 Tampa FL 33601 00:00:00 00:52:00 00:38:00 01:30:10" [ref=e233]:
+                    - cell "7" [ref=e234]
+                    - cell "Sprint Duathlon" [ref=e235]
+                    - cell "4001" [ref=e236]
+                    - cell "Dana" [ref=e237]
+                    - cell "Cruz" [ref=e238]
+                    - cell "F" [ref=e239]
+                    - cell "Clydesdale" [ref=e240]
+                    - cell "Invalid" [ref=e241]
+                    - cell "dana.cruz@example.com" [ref=e242]
+                    - cell "04/18/1969" [ref=e243]
+                    - cell "Tampa" [ref=e244]
+                    - cell "FL" [ref=e245]
+                    - cell "33601" [ref=e246]
+                    - cell "00:00:00" [ref=e247]
+                    - cell "00:52:00" [ref=e248]
+                    - cell "00:38:00" [ref=e249]
+                    - cell "01:30:10" [ref=e250]
+                  - row "8 International Triathlon 1004 Morgan Diaz NB 20-24 Male Valid morgan.diaz@example.com 08/16/2004 Mexico City MEX 1000 00:12:30 00:51:08 00:39:49 01:47:24" [ref=e251]:
+                    - cell "8" [ref=e252]
+                    - cell "International Triathlon" [ref=e253]
+                    - cell "1004" [ref=e254]
+                    - cell "Morgan" [ref=e255]
+                    - cell "Diaz" [ref=e256]
+                    - cell "NB" [ref=e257]
+                    - cell "20-24 Male" [ref=e258]
+                    - cell "Valid" [ref=e259]
+                    - cell "morgan.diaz@example.com" [ref=e260]
+                    - cell "08/16/2004" [ref=e261]
+                    - cell "Mexico City" [ref=e262]
+                    - cell "MEX" [ref=e263]
+                    - cell "1000" [ref=e264]
+                    - cell "00:12:30" [ref=e265]
+                    - cell "00:51:08" [ref=e266]
+                    - cell "00:39:49" [ref=e267]
+                    - cell "01:47:24" [ref=e268]
+          - generic [ref=e269]:
+            - generic [ref=e270]:
+              - heading "Reformatted — editable · click a column header to remap" [level=3] [ref=e271]
+              - generic [ref=e272]: 8 rows · 12 cols
+            - generic [ref=e273]:
+              - generic [ref=e274]:
+                - searchbox "Search table rows" [ref=e275]
+                - button "Reset order" [disabled] [ref=e276] [cursor=pointer]
+                - generic [ref=e277] [cursor=pointer]:
+                  - checkbox "Only rows to review" [ref=e278]
+                  - text: Only rows to review
+                - generic [ref=e279]: 8 rows
+              - table [ref=e281]:
+                - rowgroup [ref=e282]:
+                  - row "USAT membership Last Name First Name Gender Date of Birth Email (blank) City State Zip Code Age Group Gun Time" [ref=e283]:
+                    - columnheader [ref=e284]
+                    - columnheader "USAT membership" [ref=e285] [cursor=pointer]:
+                      - combobox "Source column for Member Number" [ref=e286]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name"
+                        - option "Gender"
+                        - option "Age Group"
+                        - option "USAT membership" [selected]
+                        - option "Email"
+                        - option "Date of Birth"
+                        - option "City"
+                        - option "State"
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "Last Name" [ref=e287] [cursor=pointer]:
+                      - combobox "Source column for Last Name" [ref=e288]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name" [selected]
+                        - option "Gender"
+                        - option "Age Group"
+                        - option "USAT membership"
+                        - option "Email"
+                        - option "Date of Birth"
+                        - option "City"
+                        - option "State"
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "First Name" [ref=e289] [cursor=pointer]:
+                      - combobox "Source column for First Name" [ref=e290]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name" [selected]
+                        - option "Last Name"
+                        - option "Gender"
+                        - option "Age Group"
+                        - option "USAT membership"
+                        - option "Email"
+                        - option "Date of Birth"
+                        - option "City"
+                        - option "State"
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "Gender" [ref=e291] [cursor=pointer]:
+                      - combobox "Source column for Gender" [ref=e292]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name"
+                        - option "Gender" [selected]
+                        - option "Age Group"
+                        - option "USAT membership"
+                        - option "Email"
+                        - option "Date of Birth"
+                        - option "City"
+                        - option "State"
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "Date of Birth" [ref=e293] [cursor=pointer]:
+                      - combobox "Source column for DOB" [ref=e294]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name"
+                        - option "Gender"
+                        - option "Age Group"
+                        - option "USAT membership"
+                        - option "Email"
+                        - option "Date of Birth" [selected]
+                        - option "City"
+                        - option "State"
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "Email" [ref=e295] [cursor=pointer]:
+                      - combobox "Source column for Email" [ref=e296]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name"
+                        - option "Gender"
+                        - option "Age Group"
+                        - option "USAT membership"
+                        - option "Email" [selected]
+                        - option "Date of Birth"
+                        - option "City"
+                        - option "State"
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "(blank)" [ref=e297] [cursor=pointer]:
+                      - combobox "Source column for Address" [ref=e298]:
+                        - option "(blank)" [selected]
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name"
+                        - option "Gender"
+                        - option "Age Group"
+                        - option "USAT membership"
+                        - option "Email"
+                        - option "Date of Birth"
+                        - option "City"
+                        - option "State"
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "City" [ref=e299] [cursor=pointer]:
+                      - combobox "Source column for City" [ref=e300]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name"
+                        - option "Gender"
+                        - option "Age Group"
+                        - option "USAT membership"
+                        - option "Email"
+                        - option "Date of Birth"
+                        - option "City" [selected]
+                        - option "State"
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "State" [ref=e301] [cursor=pointer]:
+                      - combobox "Source column for State" [ref=e302]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name"
+                        - option "Gender"
+                        - option "Age Group"
+                        - option "USAT membership"
+                        - option "Email"
+                        - option "Date of Birth"
+                        - option "City"
+                        - option "State" [selected]
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "Zip Code" [ref=e303] [cursor=pointer]:
+                      - combobox "Source column for Zip" [ref=e304]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name"
+                        - option "Gender"
+                        - option "Age Group"
+                        - option "USAT membership"
+                        - option "Email"
+                        - option "Date of Birth"
+                        - option "City"
+                        - option "State"
+                        - option "Zip Code" [selected]
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "Age Group" [ref=e305] [cursor=pointer]:
+                      - combobox "Source column for Category" [ref=e306]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name"
+                        - option "Gender"
+                        - option "Age Group" [selected]
+                        - option "USAT membership"
+                        - option "Email"
+                        - option "Date of Birth"
+                        - option "City"
+                        - option "State"
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time"
+                    - columnheader "Gun Time" [ref=e307] [cursor=pointer]:
+                      - combobox "Source column for Recorded Time" [ref=e308]:
+                        - option "(blank)"
+                        - option "Race / Division"
+                        - option "Bib"
+                        - option "First Name"
+                        - option "Last Name"
+                        - option "Gender"
+                        - option "Age Group"
+                        - option "USAT membership"
+                        - option "Email"
+                        - option "Date of Birth"
+                        - option "City"
+                        - option "State"
+                        - option "Zip Code"
+                        - option "Swim Time"
+                        - option "Bike Time"
+                        - option "Run Time"
+                        - option "Gun Time" [selected]
+                  - row "# Member Number Last Name First Name Gender DOB Email Address City State Zip Category Recorded Time" [ref=e309]:
+                    - columnheader "#" [ref=e310]
+                    - columnheader "Member Number" [ref=e311] [cursor=pointer]: Member Number
+                    - columnheader "Last Name" [ref=e312] [cursor=pointer]: Last Name
+                    - columnheader "First Name" [ref=e313] [cursor=pointer]: First Name
+                    - columnheader "Gender" [ref=e314] [cursor=pointer]: Gender
+                    - columnheader "DOB" [ref=e315] [cursor=pointer]: DOB
+                    - columnheader "Email" [ref=e316] [cursor=pointer]: Email
+                    - columnheader "Address" [ref=e317] [cursor=pointer]: Address
+                    - columnheader "City" [ref=e318] [cursor=pointer]: City
+                    - columnheader "State" [ref=e319] [cursor=pointer]: State
+                    - columnheader "Zip" [ref=e320] [cursor=pointer]: Zip
+                    - columnheader "Category" [ref=e321] [cursor=pointer]: Category
+                    - columnheader "Recorded Time" [ref=e322] [cursor=pointer]: Recorded Time
+                - rowgroup [ref=e323]:
+                  - row "1 1-day Doe Jane M 05/12/1990 jane.doe@example.com Denver CO 80014 Age Group 01:41:53.000" [ref=e324]:
+                    - cell "1" [ref=e325]
+                    - cell "1-day" [ref=e326]
+                    - cell "Doe" [ref=e327]
+                    - cell "Jane" [ref=e328]
+                    - cell "M" [ref=e329]
+                    - cell "05/12/1990" [ref=e330]
+                    - cell "jane.doe@example.com" [ref=e331]
+                    - cell [ref=e332]
+                    - cell "Denver" [ref=e333]
+                    - cell "CO" [ref=e334]
+                    - cell "80014" [ref=e335]
+                    - cell "Age Group" [ref=e336]
+                    - cell "01:41:53.000" [ref=e337]
+                  - row "2 1-day Smith John M 04/21/1998 john.smith@example.com San Diego CA 92011 Age Group 01:42:00.000" [ref=e338]:
+                    - cell "2" [ref=e339]
+                    - cell "1-day" [ref=e340]
+                    - cell "Smith" [ref=e341]
+                    - cell "John" [ref=e342]
+                    - cell "M" [ref=e343]
+                    - cell "04/21/1998" [ref=e344]
+                    - cell "john.smith@example.com" [ref=e345]
+                    - cell [ref=e346]
+                    - cell "San Diego" [ref=e347]
+                    - cell "CA" [ref=e348]
+                    - cell "92011" [ref=e349]
+                    - cell "Age Group" [ref=e350]
+                    - cell "01:42:00.000" [ref=e351]
+                  - row "3 1-day Lopez Maria F 09/01/1982 maria.lopez@example.com BCN 22000 Age Group 01:49:22.000" [ref=e352]:
+                    - cell "3" [ref=e353]
+                    - cell "1-day" [ref=e354]
+                    - cell "Lopez" [ref=e355]
+                    - cell "Maria" [ref=e356]
+                    - cell "F" [ref=e357]
+                    - cell "09/01/1982" [ref=e358]
+                    - cell "maria.lopez@example.com" [ref=e359]
+                    - cell [ref=e360]
+                    - cell [ref=e361]
+                    - cell "BCN" [ref=e362]
+                    - cell "22000" [ref=e363]
+                    - cell "Age Group" [ref=e364]
+                    - cell "01:49:22.000" [ref=e365]
+                  - row "4 1-day Stone Alex M 11/30/2001 alex.stone@example.com Austin TX 73301 Elite 00:58:10.000" [ref=e366]:
+                    - cell "4" [ref=e367]
+                    - cell "1-day" [ref=e368]
+                    - cell "Stone" [ref=e369]
+                    - cell "Alex" [ref=e370]
+                    - cell "M" [ref=e371]
+                    - cell "11/30/2001" [ref=e372]
+                    - cell "alex.stone@example.com" [ref=e373]
+                    - cell [ref=e374]
+                    - cell "Austin" [ref=e375]
+                    - cell "TX" [ref=e376]
+                    - cell "73301" [ref=e377]
+                    - cell "Elite" [ref=e378]
+                    - cell "00:58:10.000" [ref=e379]
+                  - row "5 1-day Kim Pat F 09/09/2003 pat.kim@example.com Boise ID 83702 Age Group 01:04:30.000" [ref=e380]:
+                    - cell "5" [ref=e381]
+                    - cell "1-day" [ref=e382]
+                    - cell "Kim" [ref=e383]
+                    - cell "Pat" [ref=e384]
+                    - cell "F" [ref=e385]
+                    - cell "09/09/2003" [ref=e386]
+                    - cell "pat.kim@example.com" [ref=e387]
+                    - cell [ref=e388]
+                    - cell "Boise" [ref=e389]
+                    - cell "ID" [ref=e390]
+                    - cell "83702" [ref=e391]
+                    - cell "Age Group" [ref=e392]
+                    - cell "01:04:30.000" [ref=e393]
+                  - row "6 1-day Reed Jordan M 12/01/1992 jordan.reed@example.com Mercer Island WA 98040 Relay 01:11:00.000" [ref=e394]:
+                    - cell "6" [ref=e395]
+                    - cell "1-day" [ref=e396]
+                    - cell "Reed" [ref=e397]
+                    - cell "Jordan" [ref=e398]
+                    - cell "M" [ref=e399]
+                    - cell "12/01/1992" [ref=e400]
+                    - cell "jordan.reed@example.com" [ref=e401]
+                    - cell [ref=e402]
+                    - cell "Mercer Island" [ref=e403]
+                    - cell "WA" [ref=e404]
+                    - cell "98040" [ref=e405]
+                    - cell "Relay" [ref=e406]
+                    - cell "01:11:00.000" [ref=e407]
+                  - row "7 1-day Cruz Dana F 04/18/1969 dana.cruz@example.com Tampa FL 33601 Age Group 01:30:10.000" [ref=e408]:
+                    - cell "7" [ref=e409]
+                    - cell "1-day" [ref=e410]
+                    - cell "Cruz" [ref=e411]
+                    - cell "Dana" [ref=e412]
+                    - cell "F" [ref=e413]
+                    - cell "04/18/1969" [ref=e414]
+                    - cell "dana.cruz@example.com" [ref=e415]
+                    - cell [ref=e416]
+                    - cell "Tampa" [ref=e417]
+                    - cell "FL" [ref=e418]
+                    - cell "33601" [ref=e419]
+                    - cell "Age Group" [ref=e420]
+                    - cell "01:30:10.000" [ref=e421]
+                  - row "8 1-day Diaz Morgan NB 08/16/2004 morgan.diaz@example.com Mexico City MEX 1000 Age Group 01:47:24.000" [ref=e422]:
+                    - cell "8" [ref=e423]
+                    - cell "1-day" [ref=e424]
+                    - cell "Diaz" [ref=e425]
+                    - cell "Morgan" [ref=e426]
+                    - cell "NB" [ref=e427]
+                    - cell "08/16/2004" [ref=e428]
+                    - cell "morgan.diaz@example.com" [ref=e429]
+                    - cell [ref=e430]
+                    - cell "Mexico City" [ref=e431]
+                    - cell "MEX" [ref=e432]
+                    - cell "1000" [ref=e433]
+                    - cell "Age Group" [ref=e434]
+                    - cell "01:47:24.000" [ref=e435]
+  - contentinfo [ref=e436]: race results converter · runs entirely in your browser · calla codes makes it happen · Sat., 6/6/2026 2:44:58 PM MTN
+```

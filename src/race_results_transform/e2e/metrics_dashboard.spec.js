@@ -15,7 +15,7 @@ test.describe('race_results_transform — metrics dashboard', () => {
 
   test('renders the shell, panels, and matches the app theme toggle', async ({ page }) => {
     await page.goto('/metrics');
-    await expect(page.locator('.mx-title')).toContainText('Usage');
+    await expect(page.locator('.mx-title')).toContainText('Metrics');
     await expect(page.locator('#periods button')).toHaveCount(5);
     // the new panels exist
     await expect(page.locator('#chart_days')).toBeVisible();   // activity by day
