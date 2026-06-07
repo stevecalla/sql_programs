@@ -167,6 +167,36 @@ Mirrors the chatgpt_like 448-line yaml, adapted to the events schema. Sections:
 - `max_steps` cap (default 6) and row/LIMIT caps (default 1000)?
 - Module location: `src/race_results_transform/metrics/ask/` (proposed) — ok?
 
+## 15c. Polish batch 1 (done)
+- UX: textarea (autofocus, Enter/Shift+Enter, x-clear, clears + shows question above answer), Sign-out link, model dropdown.
+- Answer guardrails: Mountain Time only (created_at_mtn, never UTC); report only what rows show (no fabricated clauses/reasons; empty -> "no matching rows"); dashboard_view client fields are NULL by design (server-logged).
+- Example question added: most-recent activity per visitor.
+
+## 15d. Polish batch 1b (done)
+- Ask box restyled as an auto-growing composer textarea (grows as the question wraps; removed the manual resize handle); question is NOT cleared after asking; output scrolls horizontally instead of stretching.
+- Sign-out is in-page (fetch + toast) instead of navigating to a generic page.
+- Dates/times now returned as Mountain-Time STRINGS via DATE_FORMAT(created_at_mtn, ...) (fixes UTC `...Z` values in result rows).
+- Aggregation rule softened: list/recent/"in a table" requests are allowed as small ORDER BY ... LIMIT listings, so models no longer refuse them (fixes one model answering, another refusing).
+
+## 15e. Polish batch 2 (done)
+- Ask box restructured: full-width auto-growing textarea on top, model/clear/Ask in a row beneath (composer layout).
+- Suggested-question chips (A5); markdown rendering of answers incl. tables (A6).
+- Response format guardrail: lead with the bold headline number, table for multi-row (E1).
+- Listings allowed for list/recent/table requests (E2); dates as MT strings via DATE_FORMAT (E4); no fabricated reasons (E3); NULL client-field note (I1); user-activity excludes dashboard_view (E5).
+- Injection test suite `tests/ask_injection.test.js` + guard hardened (blocks load_file) (D1); ask-box UX e2e (D2).
+- Audit log (C1): every dashboard ask is appended to `metrics/ask/ask_log.jsonl` (gitignored, no PII); view via `node src/cli.js ask:log` or the menu.
+
+## 15f. Batch A-E (done)
+- A: audit log moved to MySQL (`race_results_transform_ask_log`); removed the jsonl text file; CLI asks logged too.
+- B: ask results collapse + clear controls. C: default model remembered (localStorage).
+- D: out-of-scope questions declined via an OUT_OF_SCOPE marker (not substituted).
+- E: **true logout** — `/metrics` now uses a login form + session cookie (no HTTP Basic); `/metrics/logout` forces re-login. e2e updated to form login.
+
+## 15g. Charts, vertical scroll, raw-SQL mode (#64-66)
+- #64 Vertical scroll: ask result tables are capped (`max-height` + `overflow:auto`, sticky header) so long results scroll inside the panel.
+- #65 Charts: `ANSWER_SYSTEM` instructs the model to append a `` ```chart {"type","x","y"} ``` `` hint for chartable results; `ask.js:extract_chart()` parses + validates it against the actual columns (drops bad hints, needs >=2 rows) and returns `chart` separately so the answer text stays clean. The dashboard draws it with the already-loaded Chart.js and offers a chart/table toggle. CLI stays text/table.
+- #66 Raw-SQL mode: an opt-in `SQL` toggle (and `ask_sql()` / `POST {mode:'sql'}` / `ask:sql` CLI) runs user SQL directly through the same read-only guard (SELECT-only, table allowlist, enforced LIMIT) -- no LLM. Logged with surface `dashboard-sql`/`cli-sql`.
+
 ## 16. Future recommendations & hardening (AFTER Step 2; not in scope now)
 v1 (Step 2) uses the **current local credentials** with read-only stressed to the model
 (system prompt + context guardrails) and enforced by the SQL guard. The items below harden

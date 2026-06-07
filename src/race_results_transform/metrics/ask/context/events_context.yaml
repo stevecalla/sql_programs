@@ -13,13 +13,16 @@ dataset:
 # Hard rules the assistant MUST follow
 rules:
   - READ ONLY. Only SELECT / WITH queries. Never write, update, delete, or alter data.
-  - ALWAYS AGGREGATE. Use COUNT / COUNT(DISTINCT) / SUM / AVG / GROUP BY; never dump raw rows.
+  - PREFER AGGREGATION (COUNT / COUNT(DISTINCT) / SUM / AVG / GROUP BY). For "list / show / recent / last / in a table" requests, a small ORDER BY ... LIMIT row listing is allowed — do NOT refuse it; the LIMIT cap prevents unbounded dumps.
   - Never return or imply the identity of a person; visitor_id is anonymous. Report counts/rates only.
   - Use created_at_mtn (Mountain Time) for date grouping and today/this week/this month.
+  - When returning a date/time, format it with DATE_FORMAT(created_at_mtn, ...) to a Mountain-Time string; never select created_at_utc and never return a raw DATE/DATETIME (it serializes as UTC).
   - Reference only the table race_results_transform_events.
+  - If a question requires data NOT in this table (members, sales, payments, or any table not listed here), DECLINE — say it is out of scope. Never answer with an unrelated query.
   - If results are capped (truncated), say "showing first N".
   - For a single total, do NOT GROUP BY — return the COUNT directly so an empty period yields 0, not zero rows.
   - today/this week/this month are calendar periods on created_at_mtn (Mountain Time). created_at_mtn is already MTN; the DB server's CURRENT_DATE()/NOW() may be a different timezone, so prefer explicit date ranges on created_at_mtn when exactness matters.
+  - dashboard_view rows are logged server-side (when /metrics is opened) and have NULL client fields (event_at_local, client_tz, local_hour, local_dow, visitor_id, session_id, viewport, theme). Those NULLs are expected, not missing data. "User activity/visits" normally means page_view and other client events, not dashboard_view.
 
 # event_name values (the action each row represents)
 events:
@@ -88,3 +91,4 @@ example_questions:
   - How many errors last week, and of what type?
   - What time of day and day of week is usage highest?
   - Mobile vs desktop, and dark vs light theme?
+  - When was each visitor last active (the most recent event per visitor)?

@@ -1,5 +1,5 @@
 // Layout/theme regression for the /metrics dashboard. Runs on chromium (desktop)
-// AND the mobile project (Pixel 5) — see config. Needs Basic Auth creds; skips the
+// AND the mobile project (Pixel 5) — see config. Needs the dashboard login creds; skips the
 // whole file if they're unset. Structure + theme + mobile-overflow are DOM checks,
 // so they pass even if the DB is down (the page shell still renders).
 const path = require('path');
@@ -11,7 +11,13 @@ const PASS = process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_PASS;
 
 test.describe('race_results_transform — metrics dashboard', () => {
   test.skip(!USER || !PASS, 'set RACE_RESULTS_CONVERTER_METRICS_DASH_USER / _PASS to run the dashboard checks');
-  test.use({ httpCredentials: { username: USER || '', password: PASS || '' }, extraHTTPHeaders: { 'x-metrics-test': '1' } });   // header tells the server not to log a dashboard_view
+  test.use({ extraHTTPHeaders: { 'x-metrics-test': '1' } });   // header tells the server not to log a dashboard_view
+  test.beforeEach(async ({ page }) => {                       // form login -> sets the session cookie
+    await page.goto('/metrics/login');
+    await page.fill('input[name="username"]', USER || '');
+    await page.fill('input[name="password"]', PASS || '');
+    await Promise.all([ page.waitForURL('**/metrics'), page.click('button[type="submit"]') ]);
+  });
 
   test('renders the shell, panels, and matches the app theme toggle', async ({ page }) => {
     await page.goto('/metrics');
@@ -68,13 +74,46 @@ test.describe('race_results_transform — metrics dashboard', () => {
     await expect(page.locator('#periods button').first()).toBeVisible();
   });
 
-  test('mints a session cookie and logout clears it (#7)', async ({ page, context }) => {
-    await page.goto('/metrics');
+  test('login sets a session cookie; logout forces re-login (N2)', async ({ page, context }) => {
     let cookies = await context.cookies();
-    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'session cookie set after auth').toBe(true);
-    const resp = await page.goto('/metrics/logout');
-    expect(resp.status()).toBe(200);
+    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'session cookie set after login').toBe(true);
+    await page.goto('/metrics/logout');
     cookies = await context.cookies();
-    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'session cookie cleared on logout').toBe(false);
+    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'cookie cleared on logout').toBe(false);
+    await page.goto('/metrics');                       // truly logged out -> redirected to the login form
+    await expect(page).toHaveURL(/\/metrics\/login/);
+    await expect(page.locator('form[action="/metrics/login"]')).toBeVisible();
+  });
+
+  test('ask-box UX — chips, autofocus, fill, clear (D2)', async ({ page }) => {
+    await page.goto('/metrics');
+    await expect(page.locator('#ask-suggest button').first()).toBeVisible();
+    await expect(page.locator('#ask-clear')).toBeVisible();
+    await expect(page.locator('#ask-model')).toBeVisible();
+    await expect(page.locator('#ask-q')).toBeFocused();
+    const chip = page.locator('#ask-suggest button').first();
+    const chip_text = (await chip.textContent()).trim();
+    await chip.click();
+    await expect(page.locator('#ask-q')).toHaveValue(chip_text);
+    await page.locator('#ask-clear').click();
+    await expect(page.locator('#ask-q')).toHaveValue('');
+  });
+
+  test('ask-box SQL toggle disables model + swaps placeholder; results scroll (D3, #66/#64)', async ({ page }) => {
+    await page.goto('/metrics');
+    const tog = page.locator('#ask-sql-mode');
+    await expect(tog).toBeVisible();
+    await expect(page.locator('#ask-model')).toBeEnabled();
+    await tog.check();
+    await expect(page.locator('#ask-model')).toBeDisabled();           // model picker not used in raw-SQL mode
+    await expect(page.locator('#ask-q')).toHaveAttribute('placeholder', /SELECT/);
+    await tog.uncheck();
+    await expect(page.locator('#ask-model')).toBeEnabled();
+    // chart/table toggle buttons exist (hidden until a chartable result renders) (#65)
+    await expect(page.locator('#ask-viz-chart')).toHaveCount(1);
+    await expect(page.locator('#ask-viz-table')).toHaveCount(1);
+    // long result tables scroll vertically rather than pushing the page (#64)
+    const mh = await page.locator('#ask-table').evaluate(function (el) { return getComputedStyle(el).maxHeight; });
+    expect(mh).not.toBe('none');
   });
 });

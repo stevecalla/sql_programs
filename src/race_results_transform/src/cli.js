@@ -80,6 +80,7 @@ function parse_args(argv) {
     else if (a === '--days') out.days = argv[++i];
     else if (a === '--provider') out.provider = argv[++i];
     else if (a === '--model') out.model = argv[++i];
+    else if (a === '--n') out.n = argv[++i];
     else if (a === '--yes' || a === '-y') out.yes = true;
     else if (a === '--strict') out.strict = true;
     else out._.push(a);
@@ -144,6 +145,8 @@ function help() {
     '  node cli.js stats          [--days 7]      # usage analytics summary',
     '  node cli.js ask "<question>" [--provider openai|claude] [--model <id>]  # AI: ask the usage data (read-only)',
     '  node cli.js ask:models                       # list selectable AI models',
+    '  node cli.js ask:log [--n 20]                 # recent AI questions + answers (audit)',
+    '  node cli.js ask:sql "<SELECT ...>"           # run read-only SQL directly (guarded, no AI)',
     '  node cli.js metrics:size                   # events table size + rows/year',
     '  node cli.js metrics:cleanup [--yes]        # purge years beyond current+prior',
     '  node cli.js metrics:purge-all [--yes]      # delete ALL rows (confirm) — clears test data',
@@ -192,6 +195,21 @@ async function main() {
       console.log('\nUse: node src/cli.js ask "<q>" --provider ' + models[0].provider + ' --model ' + models[0].model);
       process.exit(0);
     }
+    if (cmd === 'ask:log') {
+      const ask_log = require('../metrics/ask/ask_log');
+      const pool = await metrics.get_pool();
+      try {
+        const rows = await ask_log.read(pool, args.n ? Number(args.n) : 20);
+        if (!rows.length) { console.log('No ask history in ' + ask_log.TABLE + '.'); }
+        else rows.forEach(function (r) {
+          console.log('');
+          console.log(col(C.gray, String(r.created_at_mtn || '')) + '  ' + col(C.bold, '[' + (r.surface || '') + ' \u00b7 ' + (r.provider || '?') + (r.model ? ' \u00b7 ' + r.model : '') + ']') + (r.ok === 0 ? col(C.red, '  (no answer)') : ''));
+          console.log(col(C.cyan, 'Q: ') + r.question);
+          console.log(col(C.green, 'A: ') + String(r.answer || '').split('\n')[0].slice(0, 160));
+        });
+      } finally { await pool.end(); }
+      process.exit(0);
+    }
     if (cmd === 'ask') {
       const question = args._.slice(1).join(' ').trim();
       if (!question) { console.log('Usage: node src/cli.js ask "<question>" [--provider openai|claude] [--model <id>]'); process.exit(2); }
@@ -204,6 +222,32 @@ async function main() {
         console.log(col(C.cyan, '\nA: ') + (r.answer || '(no answer)'));
         if (r.sql) console.log('\n' + col(C.gray, 'SQL: ' + r.sql));
         if (r.truncated) console.log(col(C.yellow, 'note: results truncated to ' + r.rows.length + ' rows'));
+        try { await require('../metrics/ask/ask_log').append(await metrics.get_pool(), { surface: 'cli', question: question, provider: r.provider, model: r.model, sql: r.sql, ok: r.ok, row_count: r.row_count, answer: r.answer }); } catch (e) {}
+      } finally { try { await ask_db.close_pool(); } catch (e) {} }
+      process.exit(0);
+    }
+    if (cmd === 'ask:sql') {
+      const sql = args._.slice(1).join(' ').trim();
+      if (!sql) { console.log('Usage: node src/cli.js ask:sql "<SELECT ...>"  # run read-only SQL directly (guarded)'); process.exit(2); }
+      const ask_mod = require('../metrics/ask/ask');
+      const ask_db = require('../metrics/ask/db');
+      try {
+        const r = await ask_mod.ask_sql(sql);
+        console.log('');
+        console.log(col(C.gray, 'SQL: ' + r.sql));
+        const rows = r.rows || [];
+        if (!rows.length) { console.log(col(C.yellow, '(no rows)')); }
+        else {
+          const cols = Object.keys(rows[0]);
+          console.log(col(C.bold, cols.join('\t')));
+          rows.slice(0, 50).forEach(function (row) { console.log(cols.map(function (k) { return row[k] == null ? '' : String(row[k]); }).join('\t')); });
+          if (r.truncated || rows.length > 50) console.log(col(C.yellow, 'showing ' + Math.min(rows.length, 50) + ' of ' + r.row_count + (r.truncated ? '+ (capped)' : '') + ' rows'));
+        }
+        try { await require('../metrics/ask/ask_log').append(await metrics.get_pool(), { surface: 'cli-sql', question: sql, provider: 'sql', model: null, sql: r.sql, ok: r.ok, row_count: r.row_count, answer: '' }); } catch (e) {}
+      } catch (e) {
+        console.error(col(C.red, 'SQL rejected: ' + e.message));
+        try { await require('../metrics/ask/ask_log').append(await metrics.get_pool(), { surface: 'cli-sql', question: sql, provider: 'sql', model: null, sql: sql, ok: false, row_count: 0, answer: e.message }); } catch (e2) {}
+        process.exit(1);
       } finally { try { await ask_db.close_pool(); } catch (e) {} }
       process.exit(0);
     }

@@ -10,6 +10,22 @@ function pick_provider(name) {
   return require('./providers/openai');   // default
 }
 
+// Pull a ```chart {json}``` hint out of the answer; returns { answer (cleaned), chart|null }.
+// chart is validated against the result columns so a bad hint just gets dropped.
+function extract_chart(answer, rows) {
+  let text = String(answer || '');
+  const m = text.match(/```chart\s*([\s\S]*?)```/i);
+  if (!m) return { answer: text.trim(), chart: null };
+  text = text.replace(m[0], '').trim();
+  let spec = null;
+  try { spec = JSON.parse(m[1].trim()); } catch (e) { return { answer: text, chart: null }; }
+  const cols = (rows && rows[0]) ? Object.keys(rows[0]) : [];
+  const types = ['bar', 'line', 'pie'];
+  if (!spec || !spec.x || !spec.y || cols.indexOf(spec.x) < 0 || cols.indexOf(spec.y) < 0) return { answer: text, chart: null };
+  if ((rows || []).length < 2) return { answer: text, chart: null };
+  return { answer: text, chart: { type: types.indexOf(spec.type) >= 0 ? spec.type : 'bar', x: spec.x, y: spec.y } };
+}
+
 // Pull one SQL statement out of the model's reply (strip code fences / prose).
 function extract_sql(text) {
   let s = String(text || '');
@@ -18,6 +34,15 @@ function extract_sql(text) {
   const m = s.match(/\b(?:with|select)\b[\s\S]*/i);
   s = (m ? m[0] : s).trim();
   return s.replace(/;\s*$/, '');
+}
+
+// Run user-supplied SQL directly (no LLM): guarded read-only + capped. Throws on guard failure.
+async function ask_sql(sql, opts) {
+  opts = opts || {};
+  const result = await run_query(sql, opts);   // guards (read-only/allowlist/LIMIT) + executes + caps
+  const chart = null;
+  return { ok: true, mode: 'sql', provider: null, model: null, sql: result.sql, rows: result.rows,
+    row_count: result.row_count, truncated: result.truncated, steps: [{ kind: 'sql' }], answer: '', chart: chart };
 }
 
 async function ask(question, opts) {
@@ -31,6 +56,11 @@ async function ask(question, opts) {
 
   for (let attempt = 1; attempt <= max_attempts; attempt++) {
     const reply = await provider.chat({ system: ctx.PLAN_SYSTEM, user: ctx.build_plan_prompt(question, schema, prev_error), model: model });
+    if (/^\s*out_of_scope\b/i.test(reply)) {
+      steps.push({ step: attempt, kind: 'out_of_scope' });
+      return { ok: true, mode: 'out_of_scope', provider: provider.id, model: model, sql: null, steps: steps,
+        answer: 'That data is not available here. I can only answer questions about the race-results usage events (the ' + (require('./db').ALLOWED_TABLES[0] || 'events') + ' table) — e.g. visits, uploads, conversions, downloads, splits, remaps, errors.' };
+    }
     // definitional question (no data lookup) -> answer from the grounding context, no SQL
     if (/^\s*no_sql\b/i.test(reply) || !/\b(?:select|with|insert|update|delete|drop|alter|create|truncate|replace|merge)\b/i.test(reply)) {
       steps.push({ step: attempt, kind: 'definition' });
@@ -53,8 +83,9 @@ async function ask(question, opts) {
       answer: 'Could not produce a valid read-only query for that question.' + (prev_error ? ' (' + prev_error + ')' : '') };
   }
   const answer = await provider.chat({ system: ctx.ANSWER_SYSTEM, user: ctx.build_answer_prompt(question, result), model: model });
+  const { answer: clean_answer, chart } = extract_chart(answer, result.rows);
   return { ok: true, provider: provider.id, model: model, sql: result.sql, rows: result.rows,
-    row_count: result.row_count, truncated: result.truncated, steps: steps, answer: String(answer || '').trim() };
+    row_count: result.row_count, truncated: result.truncated, steps: steps, answer: clean_answer, chart: chart };
 }
 
-module.exports = { ask, extract_sql, pick_provider };
+module.exports = { ask, ask_sql, extract_sql, extract_chart, pick_provider };

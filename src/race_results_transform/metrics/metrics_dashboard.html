@@ -61,7 +61,7 @@
   .mx-auto { font-size:13px; color:var(--dim); display:inline-flex; align-items:center; gap:5px; }
   .tag { font-size:11px; padding:1px 7px; border-radius:20px; background:var(--accent-soft); color:var(--accent); }
   @media (max-width:720px){ .mx-grid2 { grid-template-columns:1fr; } }
-  @media (max-width:520px){Race Results Converter — Metrics
+  @media (max-width:520px){
     .mx-wrap { padding:14px 12px 32px; }
     .mx-title { font-size:17px; }
     .mx-periods { order:3; width:100%; }
@@ -70,15 +70,37 @@
     .mx-card .v { font-size:22px; }
   }
   /* ask your data (read-only AI) */
-  .mx-ask-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  #ask-q { flex:1 1 320px; min-width:200px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); font:inherit; }
-  #ask-model { padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); font:inherit; }
-  #ask-answer { margin:10px 0; line-height:1.55; white-space:pre-wrap; color:var(--ink); }
+  .mx-ask-box { border:1px solid var(--line); border-radius:12px; padding:8px 10px; background:var(--card); }
+  .mx-ask-controls { display:flex; align-items:center; gap:8px; margin-top:6px; }
+  .mx-ask-sqltoggle { font-size:12px; color:var(--dim); display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none; }
+  .mx-ask-spacer { flex:1; }
+  #ask-q { display:block; width:100%; box-sizing:border-box; border:none; background:transparent; padding:6px 4px; color:var(--ink); font:inherit; outline:none; resize:none; overflow-y:auto; line-height:1.45; max-height:200px; }
+  #ask-question { margin:8px 0 2px; font-weight:600; }
+  #ask-clear { padding:8px 10px; }
+  #ask-model { border:1px solid var(--line); background:var(--card); color:var(--dim); font:inherit; border-radius:8px; padding:4px 6px; max-width:220px; }
+  #ask-out { overflow-x:auto; max-width:100%; }
+  #ask-table { overflow:auto; max-width:100%; max-height:420px; }
+  #ask-table thead th { position:sticky; top:0; background:var(--card); z-index:1; }
+  #ask-chart-wrap { margin:10px 0; }
+  #ask-chart-box { position:relative; height:300px; }
+  .mx-ask-viz { display:flex; gap:6px; margin-bottom:6px; }
+  .mx-ask-viz button { border:1px solid var(--line); background:transparent; color:var(--dim); border-radius:8px; padding:3px 10px; font-size:12px; cursor:pointer; }
+  .mx-ask-viz button.on { color:var(--ink); border-color:var(--accent); }
+  .mx-ask-viz[hidden] { display:none; }
+  #ask-answer { margin:10px 0; line-height:1.55; color:var(--ink); overflow-x:auto; }
   #ask-sql { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px; overflow-x:auto; font-size:12px; margin:6px 0; }
-  #ask-out table { width:100%; border-collapse:collapse; font-size:13px; }
-  #ask-out th, #ask-out td { border-bottom:1px solid var(--line); padding:4px 8px; text-align:left; color:var(--ink); }
+  #ask-out table { border-collapse:collapse; font-size:13px; }
+  #ask-out th, #ask-out td { border-bottom:1px solid var(--line); padding:4px 8px; text-align:left; color:var(--ink); white-space:nowrap; }
   #ask-out th { color:var(--dim); }
   #ask-meta { margin-top:6px; font-size:12px; }
+  .mx-ask-outbar { display:flex; gap:8px; justify-content:flex-end; margin:6px 0; }
+  .mx-ask-suggest { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .mx-ask-suggest button { border:1px solid var(--line); background:transparent; color:var(--dim); border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
+  .mx-ask-suggest button:hover { color:var(--ink); border-color:var(--accent); }
+  #ask-answer code { background:var(--line); padding:1px 5px; border-radius:4px; font-size:.92em; }
+  #ask-answer table { border-collapse:collapse; margin:8px 0; }
+  #ask-answer th, #ask-answer td { border:1px solid var(--line); padding:4px 8px; text-align:left; white-space:nowrap; }
+  #ask-answer th { color:var(--dim); }
 </style>
 </head>
 <body>
@@ -99,23 +121,48 @@
     <button id="refreshBtn" class="btn ghost" title="Refresh now">↻ Refresh</button>
     <label class="mx-auto" title="When on, the dashboard automatically reloads its data from the database every 60 seconds so the charts and tables stay current without clicking Refresh."><input type="checkbox" id="autoRefresh" checked> Auto-refresh</label>
     <button id="themeToggle" class="btn ghost mx-head-theme" title="Toggle light or dark theme" aria-label="Toggle light or dark theme">☾ Dark</button>
+    <a id="signOut" class="btn ghost" href="/metrics/logout" title="Sign out">↩ Sign out</a>
   </div>
 
   <div class="mx-cards" id="cards"></div>
 
   <div class="mx-panel" id="ask-panel">
     <h2>Ask your data <span class="dim" style="font-weight:400;font-size:13px">— read-only AI</span></h2>
-    <div class="mx-ask-row">
-      <input id="ask-q" type="text" autocomplete="off" placeholder="e.g. How many people used the converter last week?">
-      <select id="ask-model" title="AI model"></select>
-      <button id="ask-go" class="btn">Ask</button>
+    <div class="mx-ask-box">
+      <textarea id="ask-q" rows="1" autocomplete="off" placeholder="Ask about the usage data…  e.g. how many people used the converter last week?"></textarea>
+      <div class="mx-ask-controls">
+        <select id="ask-model" title="AI model"></select>
+        <label class="mx-ask-sqltoggle" title="Type raw read-only SQL instead of a question"><input type="checkbox" id="ask-sql-mode"> SQL</label>
+        <span class="mx-ask-spacer"></span>
+        <button id="ask-clear" class="btn ghost" title="Clear">✕</button>
+        <button id="ask-go" class="btn">Ask</button>
+      </div>
+    </div>
+    <div class="mx-ask-suggest" id="ask-suggest">
+      <button type="button">How many people used the converter last week?</button>
+      <button type="button">What is the conversion rate from upload to download?</button>
+      <button type="button">What are the most common errors by type?</button>
+      <button type="button">Mobile vs desktop, and dark vs light theme?</button>
+      <button type="button">Most recent activity per visitor (in a table)?</button>
     </div>
     <div id="ask-status" class="dim" hidden></div>
     <div id="ask-out" hidden>
-      <div id="ask-answer"></div>
-      <div id="ask-table" class="mx-tablewrap"></div>
-      <details id="ask-sqlwrap"><summary class="dim">SQL</summary><pre id="ask-sql"></pre></details>
-      <div id="ask-meta" class="dim"></div>
+      <div class="mx-ask-outbar">
+        <button id="ask-collapse" class="btn ghost" type="button" title="Collapse / expand">▾</button>
+        <button id="ask-clear-out" class="btn ghost" type="button" title="Clear results">Clear results</button>
+      </div>
+      <div id="ask-body">
+        <div id="ask-question" class="dim"></div>
+        <div id="ask-answer"></div>
+        <div class="mx-ask-viz" id="ask-viz" hidden>
+          <button id="ask-viz-chart" type="button">📊 Chart</button>
+          <button id="ask-viz-table" type="button">📋 Table</button>
+        </div>
+        <div id="ask-chart-wrap" hidden><div id="ask-chart-box"><canvas id="ask-chart"></canvas></div></div>
+        <div id="ask-table" class="mx-tablewrap"></div>
+        <details id="ask-sqlwrap"><summary class="dim">SQL</summary><pre id="ask-sql"></pre></details>
+        <div id="ask-meta" class="dim"></div>
+      </div>
     </div>
   </div>
 
@@ -323,9 +370,24 @@
   apply_theme();
   if (el('autoRefresh').checked) auto_timer = setInterval(function(){ load(current_days); }, 60000);
   // ---- Ask your data (read-only AI) ----
-  function ask_render(d) {
+  function ask_esc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function ask_inline(x){ return x.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>'); }
+  function ask_md(t){
+    var lines = ask_esc(t).split('\n'), out = [], i = 0;
+    while (i < lines.length) {
+      if (/^\s*\|.*\|\s*$/.test(lines[i] || '') && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i+1] || '')) {
+        var head = lines[i].trim().replace(/^\||\|$/g,'').split('|').map(function(x){return x.trim();}); i += 2;
+        var body = []; while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { body.push(lines[i].trim().replace(/^\||\|$/g,'').split('|').map(function(x){return x.trim();})); i++; }
+        out.push('<table><thead><tr>' + head.map(function(h){return '<th>'+ask_inline(h)+'</th>';}).join('') + '</tr></thead><tbody>' + body.map(function(r){ return '<tr>'+r.map(function(x){return '<td>'+ask_inline(x)+'</td>';}).join('')+'</tr>'; }).join('') + '</tbody></table>');
+      } else { out.push('<div>' + (ask_inline(lines[i]) || '&nbsp;') + '</div>'); i++; }
+    }
+    return out.join('');
+  }
+  function ask_render(q, d) {
     el('ask-status').hidden = true; el('ask-out').hidden = false;
-    el('ask-answer').textContent = d.answer || '(no answer)';
+    el('ask-body').hidden = false; el('ask-collapse').textContent = '▾';
+    el('ask-question').textContent = 'Q: ' + q;
+    el('ask-answer').innerHTML = d.answer ? ask_md(d.answer) : (d.mode === 'sql' ? ('Ran read-only SQL · ' + (d.row_count || 0) + ' row(s).') : '(no answer)');
     el('ask-sqlwrap').style.display = d.sql ? '' : 'none';
     if (d.sql) el('ask-sql').textContent = d.sql;
     var rows = d.rows || [];
@@ -334,22 +396,66 @@
       el('ask-table').innerHTML = '<table><thead><tr>' + cols.map(function(k){return '<th>'+k+'</th>';}).join('')
         + '</tr></thead><tbody>' + rows.slice(0,50).map(function(r){ return '<tr>' + cols.map(function(k){ return '<td>'+(r[k]==null?'':r[k])+'</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>';
     } else { el('ask-table').innerHTML = ''; }
+    ask_chart(d.chart, rows);
     el('ask-meta').textContent = (d.provider ? d.provider + (d.model ? ' · ' + d.model : '') : '') + (d.truncated ? '  · showing first ' + rows.length : '');
+  }
+  var ask_chart_obj = null;
+  function ask_show_viz(mode){   // 'chart' | 'table'
+    var on = mode === 'chart';
+    el('ask-chart-wrap').hidden = !on; el('ask-table').hidden = on;
+    el('ask-viz-chart').classList.toggle('on', on); el('ask-viz-table').classList.toggle('on', !on);
+  }
+  function ask_chart(spec, rows){
+    if (ask_chart_obj) { ask_chart_obj.destroy(); ask_chart_obj = null; }
+    var ok = spec && rows && rows.length > 1 && window.Chart && rows[0] && (spec.x in rows[0]) && (spec.y in rows[0]);
+    el('ask-viz').hidden = !ok;
+    if (!ok) { el('ask-chart-wrap').hidden = true; el('ask-table').hidden = false; return; }
+    ask_show_viz('chart');   // show the wrap first so the canvas measures a real size (not 0x0)
+    var labels = rows.map(function(r){ return String(r[spec.x] == null ? '' : r[spec.x]); });
+    var data = rows.map(function(r){ return Number(r[spec.y]) || 0; });
+    var css = getComputedStyle(document.documentElement);
+    var accent = (css.getPropertyValue('--accent') || '#2f6fed').trim();
+    var ink = (css.getPropertyValue('--dim') || '#888').trim();
+    var palette = ['#2f6fed','#16a34a','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16'];
+    var is_pie = spec.type === 'pie';
+    ask_chart_obj = new Chart(el('ask-chart'), {
+      type: spec.type === 'line' ? 'line' : (is_pie ? 'pie' : 'bar'),
+      data: { labels: labels, datasets: [{ label: spec.y, data: data,
+        backgroundColor: is_pie ? labels.map(function(_,i){ return palette[i % palette.length]; }) : accent,
+        borderColor: accent, fill: spec.type === 'line' ? false : true }] },
+      options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:is_pie, labels:{ color:ink } }, datalabels:{ display:false } },
+        scales: is_pie ? {} : { x:{ ticks:{ color:ink } }, y:{ beginAtZero:true, ticks:{ color:ink } } } }
+    });
   }
   function ask_go() {
     var q = (el('ask-q').value || '').trim(); if (!q) return;
     var sel = el('ask-model'), opt = sel.options[sel.selectedIndex];
-    el('ask-out').hidden = true; el('ask-status').hidden = false; el('ask-status').textContent = 'Thinking…';
+    var sql_mode = el('ask-sql-mode') && el('ask-sql-mode').checked;
+    var payload = sql_mode ? { mode:'sql', sql: q } : { question: q, provider: opt ? opt.getAttribute('data-provider') : null, model: opt ? opt.value : null };
+    el('ask-out').hidden = true; el('ask-status').hidden = false; el('ask-status').textContent = sql_mode ? 'Running SQL…' : 'Thinking…';
     fetch('/api/metrics-ask', { method:'POST', credentials:'same-origin', headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify({ question: q, provider: opt ? opt.getAttribute('data-provider') : null, model: opt ? opt.value : null }) })
+      body: JSON.stringify(payload) })
       .then(function(r){ return r.json(); })
-      .then(function(d){ if (d && d.error) el('ask-status').textContent = 'Error: ' + d.error; else ask_render(d); })
+      .then(function(d){ if (d && d.error) el('ask-status').textContent = 'Error: ' + d.error; else ask_render(q, d); })
       .catch(function(e){ el('ask-status').textContent = 'Error: ' + e.message; });
   }
   el('ask-go').addEventListener('click', ask_go);
-  el('ask-q').addEventListener('keydown', function(ev){ if (ev.key === 'Enter') ask_go(); });
+  Array.prototype.forEach.call(el('ask-suggest').querySelectorAll('button'), function(b){ b.addEventListener('click', function(){ el('ask-q').value = b.textContent; ask_autogrow(); el('ask-q').focus(); }); });
+  el('ask-clear').addEventListener('click', function(){ el('ask-q').value = ''; ask_autogrow(); el('ask-q').focus(); });
+  el('ask-collapse').addEventListener('click', function(){ var b = el('ask-body'); b.hidden = !b.hidden; el('ask-collapse').textContent = b.hidden ? '▸' : '▾'; });
+  el('ask-clear-out').addEventListener('click', function(){ el('ask-out').hidden = true; el('ask-answer').innerHTML = ''; el('ask-table').innerHTML = ''; el('ask-sql').textContent = ''; el('ask-question').textContent = ''; if (ask_chart_obj) { ask_chart_obj.destroy(); ask_chart_obj = null; } el('ask-viz').hidden = true; el('ask-chart-wrap').hidden = true; });
+  el('ask-viz-chart').addEventListener('click', function(){ ask_show_viz('chart'); });
+  el('ask-viz-table').addEventListener('click', function(){ ask_show_viz('table'); });
+  el('ask-sql-mode').addEventListener('change', function(){ var t = el('ask-q'); t.placeholder = this.checked ? 'Enter a read-only SELECT…  e.g. SELECT event_name, COUNT(*) n FROM ... GROUP BY 1' : 'Ask about the usage data…  e.g. how many people used the converter last week?'; el('ask-model').disabled = this.checked; t.focus(); });
+  function ask_autogrow(){ var t = el('ask-q'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 200) + 'px'; }
+  el('ask-q').addEventListener('input', ask_autogrow);
+  el('ask-q').addEventListener('keydown', function(ev){ if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); ask_go(); } });
+  el('ask-q').focus(); ask_autogrow();
   fetch('/api/metrics-ask-models', { credentials:'same-origin' }).then(function(r){ return r.json(); }).then(function(list){
-    (list || []).forEach(function(m){ var o = document.createElement('option'); o.value = m.model; o.textContent = m.label + ' · ' + m.model; o.setAttribute('data-provider', m.provider); el('ask-model').appendChild(o); });
+    var sel = el('ask-model');
+    (list || []).forEach(function(m){ var o = document.createElement('option'); o.value = m.model; o.textContent = m.label + ' · ' + m.model; o.setAttribute('data-provider', m.provider); sel.appendChild(o); });
+    try { var saved = localStorage.getItem('rrt_ask_model'); if (saved) { for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].value === saved) { sel.selectedIndex = i; break; } } } } catch (e) {}
+    sel.addEventListener('change', function(){ try { localStorage.setItem('rrt_ask_model', sel.value); } catch (e) {} });
   }).catch(function(){});
   load(7);
 </script>

@@ -15,7 +15,7 @@ const DEFAULT_MAX_LIMIT = 1000;
 const BLOCKED = ['insert', 'update', 'delete', 'merge', 'create', 'drop', 'alter',
   'truncate', 'grant', 'revoke', 'rename', 'call', 'do', 'load', 'set', 'handler',
   'prepare', 'execute', 'deallocate', 'lock', 'unlock', 'into', 'outfile', 'dumpfile',
-  'sleep', 'benchmark'];
+  'load_file', 'sleep', 'benchmark'];
 
 function strip_comments_and_strings(sql) {
   let s = String(sql || '');

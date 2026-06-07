@@ -53,6 +53,17 @@ describe('ask_pipeline (offline: mock provider + pool)', () => {
     assert.equal(pool_called, false);
     assert.match(r.answer, /bands/);
   });
+  test('out-of-scope question is declined, not substituted', async () => {
+    let queried = false;
+    const pool = { query: async function () { queried = true; return [[], []]; } };
+    const prov = mock_provider(['OUT_OF_SCOPE'], 'unused');
+    const r = await ask('how many members signed up?', { provider_impl: prov, pool: pool, schema: 'schema' });
+    assert.equal(r.ok, true);
+    assert.equal(r.mode, 'out_of_scope');
+    assert.equal(r.sql, null);
+    assert.equal(queried, false);
+    assert.match(r.answer, /not available|out of scope|only answer/i);
+  });
   test('flags truncation when the row cap is hit', async () => {
     const rows = Array.from({ length: 5 }, function (_u, i) { return { d: i }; });
     const prov = mock_provider(['SELECT created_at_mtn FROM ' + T], 'ok');
