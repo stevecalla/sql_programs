@@ -69,6 +69,16 @@
     #themeToggle { order:2; }
     .mx-card .v { font-size:22px; }
   }
+  /* ask your data (read-only AI) */
+  .mx-ask-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  #ask-q { flex:1 1 320px; min-width:200px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); font:inherit; }
+  #ask-model { padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); font:inherit; }
+  #ask-answer { margin:10px 0; line-height:1.55; white-space:pre-wrap; color:var(--ink); }
+  #ask-sql { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px; overflow-x:auto; font-size:12px; margin:6px 0; }
+  #ask-out table { width:100%; border-collapse:collapse; font-size:13px; }
+  #ask-out th, #ask-out td { border-bottom:1px solid var(--line); padding:4px 8px; text-align:left; color:var(--ink); }
+  #ask-out th { color:var(--dim); }
+  #ask-meta { margin-top:6px; font-size:12px; }
 </style>
 </head>
 <body>
@@ -92,6 +102,22 @@
   </div>
 
   <div class="mx-cards" id="cards"></div>
+
+  <div class="mx-panel" id="ask-panel">
+    <h2>Ask your data <span class="dim" style="font-weight:400;font-size:13px">— read-only AI</span></h2>
+    <div class="mx-ask-row">
+      <input id="ask-q" type="text" autocomplete="off" placeholder="e.g. How many people used the converter last week?">
+      <select id="ask-model" title="AI model"></select>
+      <button id="ask-go" class="btn">Ask</button>
+    </div>
+    <div id="ask-status" class="dim" hidden></div>
+    <div id="ask-out" hidden>
+      <div id="ask-answer"></div>
+      <div id="ask-table" class="mx-tablewrap"></div>
+      <details id="ask-sqlwrap"><summary class="dim">SQL</summary><pre id="ask-sql"></pre></details>
+      <div id="ask-meta" class="dim"></div>
+    </div>
+  </div>
 
   <div class="mx-panel">
     <div class="mx-ph"><h2>Funnel — visit → upload → conversion → download</h2><div class="mx-tools" data-chart="chart_funnel"><button type="button" data-act="expand" title="Expand">⤢ Expand</button><button type="button" data-act="png" title="Export PNG">⬇ PNG</button><button type="button" data-act="csv" title="Export CSV">⬇ CSV</button><button type="button" data-act="table" title="Switch to table view">⇄ Table</button></div></div>
@@ -296,6 +322,35 @@
   if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', apply_theme);
   apply_theme();
   if (el('autoRefresh').checked) auto_timer = setInterval(function(){ load(current_days); }, 60000);
+  // ---- Ask your data (read-only AI) ----
+  function ask_render(d) {
+    el('ask-status').hidden = true; el('ask-out').hidden = false;
+    el('ask-answer').textContent = d.answer || '(no answer)';
+    el('ask-sqlwrap').style.display = d.sql ? '' : 'none';
+    if (d.sql) el('ask-sql').textContent = d.sql;
+    var rows = d.rows || [];
+    if (rows.length) {
+      var cols = Object.keys(rows[0]);
+      el('ask-table').innerHTML = '<table><thead><tr>' + cols.map(function(k){return '<th>'+k+'</th>';}).join('')
+        + '</tr></thead><tbody>' + rows.slice(0,50).map(function(r){ return '<tr>' + cols.map(function(k){ return '<td>'+(r[k]==null?'':r[k])+'</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>';
+    } else { el('ask-table').innerHTML = ''; }
+    el('ask-meta').textContent = (d.provider ? d.provider + (d.model ? ' · ' + d.model : '') : '') + (d.truncated ? '  · showing first ' + rows.length : '');
+  }
+  function ask_go() {
+    var q = (el('ask-q').value || '').trim(); if (!q) return;
+    var sel = el('ask-model'), opt = sel.options[sel.selectedIndex];
+    el('ask-out').hidden = true; el('ask-status').hidden = false; el('ask-status').textContent = 'Thinking…';
+    fetch('/api/metrics-ask', { method:'POST', credentials:'same-origin', headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ question: q, provider: opt ? opt.getAttribute('data-provider') : null, model: opt ? opt.value : null }) })
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d && d.error) el('ask-status').textContent = 'Error: ' + d.error; else ask_render(d); })
+      .catch(function(e){ el('ask-status').textContent = 'Error: ' + e.message; });
+  }
+  el('ask-go').addEventListener('click', ask_go);
+  el('ask-q').addEventListener('keydown', function(ev){ if (ev.key === 'Enter') ask_go(); });
+  fetch('/api/metrics-ask-models', { credentials:'same-origin' }).then(function(r){ return r.json(); }).then(function(list){
+    (list || []).forEach(function(m){ var o = document.createElement('option'); o.value = m.model; o.textContent = m.label + ' · ' + m.model; o.setAttribute('data-provider', m.provider); el('ask-model').appendChild(o); });
+  }).catch(function(){});
   load(7);
 </script>
 </body>

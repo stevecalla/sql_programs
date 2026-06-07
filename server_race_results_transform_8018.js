@@ -174,6 +174,23 @@ function create_app() {
     }
   });
 
+  // AI "ask your data" — read-only natural-language query over the events table (auth-gated).
+  app.get('/api/metrics-ask-models', require_dash_auth, function (req, res) {
+    try { res.json(require('./src/race_results_transform/metrics/ask/models').list()); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  app.post('/api/metrics-ask', require_dash_auth, async function (req, res) {
+    try {
+      const question = String((req.body && req.body.question) || '').slice(0, 500).trim();
+      if (!question) return res.status(400).json({ ok: false, error: 'no question' });
+      const { ask } = require('./src/race_results_transform/metrics/ask/ask');
+      res.json(await ask(question, { provider: req.body.provider, model: req.body.model }));
+    } catch (e) {
+      console.error('[ask] error:', e.message);
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   app.get('/scheduled-slack-race-results-metrics', async function (req, res) {
     try {
       if (!metrics_pool) return res.status(503).json({ ok: false, error: 'analytics DB not available' });

@@ -186,6 +186,6 @@ server-side expiry + revocation on top of Basic (a full sign-out can still need 
 The anonymous `visitor_id` is stored in BOTH a long-lived first-party cookie and `localStorage`,
 restored from whichever survives.
 
-**AI "ask your data" (in progress):** a read-only natural-language->SQL engine over the usage events lives in `src/race_results_transform/metrics/ask/` Now usable from the CLI/menu: `node src/cli.js ask "how many people used the converter last week?" [--provider openai|claude]` (read-only; prints the answer + the SQL). The dashboard surface comes later. Try the guard: `node src/race_results_transform/metrics/ask/demo_guard.js` (or the guard-demo item under Tests — engine & UI). See `metrics/ASK_DESIGN.md`.
+**AI "ask your data" (in progress):** a read-only natural-language->SQL engine over the usage events lives in `src/race_results_transform/metrics/ask/` Now usable from the CLI/menu: `node src/cli.js ask "how many people used the converter last week?" [--provider openai|claude]` (read-only; prints the answer + the SQL). The `/metrics` dashboard also has an **Ask your data** box (model dropdown + answer + the SQL it ran), backed by the auth-gated `POST /api/metrics-ask`. Try the guard: `node src/race_results_transform/metrics/ask/demo_guard.js` (or the guard-demo item under Tests — engine & UI). See `metrics/ASK_DESIGN.md`.
 
 No new dependencies. See `ANALYTICS_PLAN.md` 

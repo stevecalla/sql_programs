@@ -160,7 +160,7 @@ Mirrors the chatgpt_like 448-line yaml, adapted to the events schema. Sections:
 
 ## 14. Build sequence
 2.2 db.js (read-only pool + catalog) -> 2.3 sql_guard.js -> 2.4 events_context.yaml ->
-2.5 tools.js -> 2.6 providers + loop + ask.js -> 2.7 tests -> #8 CLI (done) -> #9 dashboard ask box -> Step 5 (optional): MCP server (wrap the same db/tools/guard so Claude/Cowork can drive the loop).
+2.5 tools.js -> 2.6 providers + loop + ask.js -> 2.7 tests -> #8 CLI (done) -> #9 dashboard ask box (DONE: auth-gated POST /api/metrics-ask + GET /api/metrics-ask-models, '#ask-panel' on /metrics) -> Step 5 (optional): MCP server (wrap the same db/tools/guard so Claude/Cowork can drive the loop).
 
 ## 15. Open decisions to confirm
 - Default provider (OpenAI or Claude)?

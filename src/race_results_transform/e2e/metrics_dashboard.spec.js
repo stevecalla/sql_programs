@@ -31,6 +31,11 @@ test.describe('race_results_transform — metrics dashboard', () => {
     await expect(page.locator('#tbl_users thead th')).toContainText(['Location (tz)']);  // top-user location (#4)
     await expect(page.locator('#tbl_users thead th')).toContainText(['Visits', 'Uploads', 'Downloads', 'Start over']);  // per-user activity counts
     await expect(page.locator('#tbl_users thead th.mx-rn')).toHaveText('#');  // leading row-number column on scrollable tables
+    // #9 — the "Ask your data" box (renders even without DB/API keys)
+    await expect(page.locator('#ask-panel')).toBeVisible();
+    await expect(page.locator('#ask-q')).toBeVisible();
+    await expect(page.locator('#ask-model')).toBeVisible();
+    await expect(page.locator('#ask-go')).toBeVisible();
     // per-chart toolbar (expand/png/csv/table) on all four charts
     await expect(page.locator('.mx-tools button[data-act="expand"]')).toHaveCount(4);
     await expect(page.locator('.mx-tools button[data-act="png"]')).toHaveCount(4);
