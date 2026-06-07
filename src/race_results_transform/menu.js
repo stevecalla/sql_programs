@@ -70,40 +70,43 @@ const SECTIONS = [
   ] },
   { label: 'Tests — engine & UI (node, no browser)', color: MAGENTA, items: [
     { id: 5, label: 'Run ALL engine/UI tests', desc: 'Runs every node --test suite (dependency-free, no browser). Browser tests are in the next section.', cli: 'node --test tests/*.test.js', action: 'test_all' },
-    { id: 6, label: 'AI ask \u2014 guard & catalog tests', desc: 'Read-only SQL guard (SELECT-only, table allowlist, LIMIT inject/clamp) + ask catalog. Also runs inside Run ALL.', cli: 'node --test tests/ask_db.test.js tests/ask_guard.test.js', action: 'test_ask' },
-    { id: 7, label: 'AI ask — guard demo (try a query)', desc: 'Run example queries through the read-only guard, or paste your own SQL to see ACCEPT/REJECT + the enforced LIMIT.', cli: 'node metrics/ask/demo_guard.js ["<sql>"]', action: 'ask_demo' },
-    { id: 8, label: 'Config wiring (package + tasks)', desc: 'repo-root package.json scripts + .vscode/tasks.json register this tool (step 16/16) like the other servers.', cli: 'node --test tests/config_wiring.test.js', action: 'test_config' },
-    { id: 9, label: 'Table display format', desc: 'Excel times render as times (not dates) · DOB as mm/dd/yyyy · long member #s intact — on real files.', cli: 'node --test tests/display.test.js', action: 'test_display' },
-    { id: 10, label: 'Golden fixtures (real files)', desc: 'Convert the 2 xlsx + 2 csv examples and compare to the checked-in expected snapshots.', cli: 'node --test tests/fixtures.test.js', action: 'test_fixtures' },
-    { id: 11, label: 'Excel / CSV I/O round-trip', desc: 'Write an .xlsx and read it back; member numbers stay text (no scientific notation).', cli: 'node --test tests/io.test.js', action: 'test_io' },
-    { id: 12, label: 'Lint — snake_case', desc: 'Fail if any of our identifiers are camelCase (DOM/library names + UPPER_SNAKE constants + element ids are allowed).', cli: 'node --test tests/lint_snake_case.test.js', action: 'test_lint' },
-    { id: 13, label: 'Column matching', desc: 'Finish time beats splits · "Age Group" beats "Race / Division" · name-order independence.', cli: 'node --test tests/match.test.js', action: 'test_match' },
-    { id: 14, label: 'Value normalization', desc: 'Gender→M/F/NB · DOB→mm/dd/yyyy · times incl. DNS/DNF · state abbrev · member→1-day · category buckets.', cli: 'node --test tests/normalize.test.js', action: 'test_normalize' },
-    { id: 15, label: 'Integrity & reconciliation', desc: 'Row counts tie out · dividers skipped · column ledger · Name/Email/Zip preserved · always 12-col output.', cli: 'node --test tests/reconcile.test.js', action: 'test_reconcile' },
-    { id: 16, label: 'Smoke — modules load', desc: 'Each engine module parses + exports; schema has all 12 columns in order.', cli: 'node --test tests/smoke.test.js', action: 'test_smoke' }
+    { id: 6, label: 'Config wiring (package + tasks)', desc: 'repo-root package.json scripts + .vscode/tasks.json register this tool (step 16/16) like the other servers.', cli: 'node --test tests/config_wiring.test.js', action: 'test_config' },
+    { id: 7, label: 'Table display format', desc: 'Excel times render as times (not dates) · DOB as mm/dd/yyyy · long member #s intact — on real files.', cli: 'node --test tests/display.test.js', action: 'test_display' },
+    { id: 8, label: 'Golden fixtures (real files)', desc: 'Convert the 2 xlsx + 2 csv examples and compare to the checked-in expected snapshots.', cli: 'node --test tests/fixtures.test.js', action: 'test_fixtures' },
+    { id: 9, label: 'Excel / CSV I/O round-trip', desc: 'Write an .xlsx and read it back; member numbers stay text (no scientific notation).', cli: 'node --test tests/io.test.js', action: 'test_io' },
+    { id: 10, label: 'Lint — snake_case', desc: 'Fail if any of our identifiers are camelCase (DOM/library names + UPPER_SNAKE constants + element ids are allowed).', cli: 'node --test tests/lint_snake_case.test.js', action: 'test_lint' },
+    { id: 11, label: 'Column matching', desc: 'Finish time beats splits · "Age Group" beats "Race / Division" · name-order independence.', cli: 'node --test tests/match.test.js', action: 'test_match' },
+    { id: 12, label: 'Value normalization', desc: 'Gender→M/F/NB · DOB→mm/dd/yyyy · times incl. DNS/DNF · state abbrev · member→1-day · category buckets.', cli: 'node --test tests/normalize.test.js', action: 'test_normalize' },
+    { id: 13, label: 'Integrity & reconciliation', desc: 'Row counts tie out · dividers skipped · column ledger · Name/Email/Zip preserved · always 12-col output.', cli: 'node --test tests/reconcile.test.js', action: 'test_reconcile' },
+    { id: 14, label: 'Smoke — modules load', desc: 'Each engine module parses + exports; schema has all 12 columns in order.', cli: 'node --test tests/smoke.test.js', action: 'test_smoke' }
   ] },
   { label: 'Tests — browser (Playwright)', color: MAGENTA, items: [
-    { id: 17, label: 'Install browser E2E (one-time)', desc: 'Dev: npm run e2e:install (axe-core + chromium/firefox/webkit). Linux server: npm run e2e:install:server (adds --with-deps; root).', cli: 'npm run e2e:install', action: 'e2e_install' },
-    { id: 18, label: 'Run ALL browser tests', desc: 'Real-browser convert/download/split/combine + UI/a11y/visual/mobile across chromium/firefox/webkit. Run Install (17) once first.', cli: 'npm run e2e', action: 'e2e_run' },
-    { id: 19, label: 'Browser E2E — chromium only (fast)', desc: 'Runs the suite on just chromium, skipping firefox/webkit/mobile projects.', cli: 'npm run e2e:chromium', action: 'e2e_chromium' },
-    { id: 20, label: 'Browser E2E — analytics DB round-trip (chromium)', desc: 'Drives the app, then checks MySQL received the events and the table schema exists. Skips if no DB.', cli: 'npm run e2e:db', action: 'e2e_db' },
-    { id: 21, label: 'Browser E2E — watch in Chrome (headed)', desc: 'Same tests in a visible, slowed Chrome window so you can watch. Desktop only (not the headless server).', cli: 'npm run e2e:headed', action: 'e2e_headed' },
-    { id: 22, label: 'Browser E2E — step through (pause each step)', desc: 'Headed Chrome that PAUSES on every step via the Playwright Inspector; click Resume to advance one step at a time. Desktop only.', cli: 'npm run e2e:step', action: 'e2e_step' },
-    { id: 23, label: 'Refresh visual snapshot baselines', desc: 'Regenerate the committed screenshot baselines (e2e/visual.spec.js-snapshots). Run after intended UI changes.', cli: 'npm run e2e:snap', action: 'e2e_snap' }
+    { id: 15, label: 'Install browser E2E (one-time)', desc: 'Dev: npm run e2e:install (axe-core + chromium/firefox/webkit). Linux server: npm run e2e:install:server (adds --with-deps; root).', cli: 'npm run e2e:install', action: 'e2e_install' },
+    { id: 16, label: 'Run ALL browser tests', desc: 'Real-browser convert/download/split/combine + UI/a11y/visual/mobile across chromium/firefox/webkit. Run the Install item once first.', cli: 'npm run e2e', action: 'e2e_run' },
+    { id: 17, label: 'Browser E2E — chromium only (fast)', desc: 'Runs the suite on just chromium, skipping firefox/webkit/mobile projects.', cli: 'npm run e2e:chromium', action: 'e2e_chromium' },
+    { id: 18, label: 'Browser E2E — analytics DB round-trip (chromium)', desc: 'Drives the app, then checks MySQL received the events and the table schema exists. Skips if no DB.', cli: 'npm run e2e:db', action: 'e2e_db' },
+    { id: 19, label: 'Browser E2E — watch in Chrome (headed)', desc: 'Same tests in a visible, slowed Chrome window so you can watch. Desktop only (not the headless server).', cli: 'npm run e2e:headed', action: 'e2e_headed' },
+    { id: 20, label: 'Browser E2E — step through (pause each step)', desc: 'Headed Chrome that PAUSES on every step via the Playwright Inspector; click Resume to advance one step at a time. Desktop only.', cli: 'npm run e2e:step', action: 'e2e_step' },
+    { id: 21, label: 'Refresh visual snapshot baselines', desc: 'Regenerate the committed screenshot baselines (e2e/visual.spec.js-snapshots). Run after intended UI changes.', cli: 'npm run e2e:snap', action: 'e2e_snap' }
   ] },
   { label: 'Server & app', color: GREEN, items: [
-    { id: 24, label: 'Start the web app server (port 8018)', desc: 'Serve public/ at http://localhost:8018; also opens a public ngrok URL if NGROK_AUTHTOKEN is set (otherwise it just notes that and keeps running). Ctrl-C to stop.', cli: 'node ../../server_race_results_transform_8018.js', action: 'server' },
-    { id: 25, label: 'Open the web app in a browser', desc: 'Open http://localhost:8018 (start the server first).', cli: 'open http://localhost:8018', action: 'open' }
+    { id: 22, label: 'Start the web app server (port 8018)', desc: 'Serve public/ at http://localhost:8018; also opens a public ngrok URL if NGROK_AUTHTOKEN is set (otherwise it just notes that and keeps running). Ctrl-C to stop.', cli: 'node ../../server_race_results_transform_8018.js', action: 'server' },
+    { id: 23, label: 'Open the web app in a browser', desc: 'Open http://localhost:8018 (start the server first).', cli: 'open http://localhost:8018', action: 'open' }
   ] },
   { label: 'Usage analytics', color: CYAN, items: [
-    { id: 26, label: 'Usage stats (last 7 days)', desc: 'Print the usage summary (same as the Slack digest): visits, new/repeat, uploads, conversions, downloads by mode, completion, auto-map accuracy, top files.', cli: 'node src/cli.js stats', action: 'metrics_stats' },
-    { id: 27, label: 'Usage data — size', desc: 'Events table size (MB), row count, date range, and rows per year.', cli: 'node src/cli.js metrics:size', action: 'metrics_size' },
-    { id: 28, label: 'Usage data — cleanup (purge old years)', desc: 'Keep current + prior calendar year; preview, confirm, then purge older rows.', cli: 'node src/cli.js metrics:cleanup', action: 'metrics_cleanup' },
-    { id: 29, label: 'Usage data — PURGE ALL (danger)', desc: 'Delete every analytics row regardless of date (asks to confirm). For clearing test data.', cli: 'node src/cli.js metrics:purge-all', action: 'metrics_purge_all' }
+    { id: 24, label: 'Usage stats (last 7 days)', desc: 'Print the usage summary (same as the Slack digest): visits, new/repeat, uploads, conversions, downloads by mode, completion, auto-map accuracy, top files.', cli: 'node src/cli.js stats', action: 'metrics_stats' },
+    { id: 25, label: 'Usage data — size', desc: 'Events table size (MB), row count, date range, and rows per year.', cli: 'node src/cli.js metrics:size', action: 'metrics_size' },
+    { id: 26, label: 'Usage data — cleanup (purge old years)', desc: 'Keep current + prior calendar year; preview, confirm, then purge older rows.', cli: 'node src/cli.js metrics:cleanup', action: 'metrics_cleanup' },
+    { id: 27, label: 'Usage data — PURGE ALL (danger)', desc: 'Delete every analytics row regardless of date (asks to confirm). For clearing test data.', cli: 'node src/cli.js metrics:purge-all', action: 'metrics_purge_all' }
+  ] },
+  { label: 'AI \u2014 ask your data', color: CYAN, items: [
+    { id: 28, label: 'AI ask \u2014 ask a question (read-only)', desc: 'Ask the usage data in plain English; choose OpenAI or Claude. Read-only; prints the answer + the SQL it ran.', cli: 'node src/cli.js ask "<question>" [--provider openai|claude]', action: 'ask_question' },
+    { id: 29, label: 'AI ask \u2014 guard demo (try a query)', desc: 'See the read-only guard ACCEPT/REJECT example queries or your own SQL, with the enforced LIMIT.', cli: 'node metrics/ask/demo_guard.js ["<sql>"]', action: 'ask_demo' },
+    { id: 30, label: 'AI ask \u2014 guard & catalog tests', desc: 'Read-only SQL guard + ask catalog tests. Also runs inside Run ALL.', cli: 'node --test tests/ask_db.test.js tests/ask_guard.test.js', action: 'test_ask' }
   ] },
   { label: 'Settings', color: GRAY, items: [
-    { id: 30, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 31, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
+    { id: 31, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
+    { id: 32, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
@@ -144,6 +147,26 @@ async function handle(item) {
       break;
     }
     case 'test_smoke': await run_test('tests/smoke.test.js', 'smoke tests'); break;
+    case 'ask_question': {
+      try {
+        const { CATALOG } = require('./metrics/ask/db');
+        console.log(c(DIM, '\n  Read-only AI query over: ' + CATALOG.map(function (t) { return t.name; }).join(', ')));
+      } catch (e) { /* ignore */ }
+      let example = 'How many people used the converter last week?';
+      try { const qs = require('./metrics/ask/context').load_context().example_questions || []; if (qs.length) example = qs[Math.floor(Math.random() * qs.length)]; } catch (e) { /* ignore */ }
+      const q = clean(await ask(c(DIM, '\n  Your question  [Enter for example: ' + example + ']: '))) || example;
+      let models = [];
+      try { models = require('./metrics/ask/models').list(); } catch (e) { /* ignore */ }
+      if (!models.length) models = [{ provider: 'openai', model: process.env.OPENAI_MODEL || '(OPENAI_MODEL)', label: 'OpenAI' }];
+      console.log(c(DIM, '\n  Model (edit metrics/ask/models.js to add more):'));
+      models.forEach(function (m, i) { console.log(c(DIM, '    ' + (i + 1) + ') ' + m.label + '  \u00b7 ' + m.model + (i === 0 ? '   [default]' : ''))); });
+      const pick = clean(await ask(c(DIM, '  Pick a model [1]: ')));
+      const idx = (Number(pick) >= 1 && Number(pick) <= models.length) ? Number(pick) - 1 : 0;
+      const chosen = models[idx];
+      console.log(c(DIM, '  Using: ' + chosen.provider + ' \u00b7 ' + chosen.model));
+      await run('node', ['src/cli.js', 'ask', q, '--provider', chosen.provider, '--model', chosen.model]);
+      break;
+    }
     case 'ask_demo': {
       try {
         const { CATALOG } = require('./metrics/ask/db');

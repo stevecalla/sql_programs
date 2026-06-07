@@ -5,10 +5,11 @@ Status: BUILDING (Step 2). 2.1 approved.
 ## Build progress
 - [x] 2.2 `ask/db.js` — read-only pool (prefers ASK_DB_* creds, else local config) + catalog/allowlist (events table only).
 - [x] 2.3 `ask/sql_guard.js` — hardened SELECT-only guard (strip comments/strings, block writes/DDL/DoS, single-statement, table allowlist, LIMIT inject/clamp). Tests: `tests/ask_db.test.js`, `tests/ask_guard.test.js` (describe-wrapped). Plus `ask/demo_guard.js` (hands-on ACCEPT/REJECT review) + menu items (AI-ask tests & guard demo).
-- [ ] 2.4 `ask/context/events_context.yaml`
-- [ ] 2.5 `ask/tools.js` + providers + loop
-- [ ] 2.6 `ask/ask.js`
-- [ ] 2.7 finalize tests
+- [x] 2.4 `ask/context/events_context.yaml` + `ask/context.js` (grounding: rules, event glossary, metric defs, example questions; plan/answer prompts).
+- [x] 2.5 `ask/tools.js` (get_schema_text + run_query: guard+execute+row-cap+truncated, injectable pool) + `ask/providers/{openai,anthropic}.js` (uniform chat()).
+- [x] 2.6 `ask/ask.js` — plan -> guard -> run -> repair once on error -> synthesize. OpenAI/Claude selectable. provider+pool+schema injectable.
+- [x] 2.7 tests: `tests/ask_context.test.js` + `tests/ask_pipeline.test.js` (mock provider+pool; happy/repair/give-up/truncation). Plus CLI `cli.js ask` + menu "AI — ask your data" section.
+- NOTE: v1 uses a SIMPLE plan->guard->run->repair->answer pipeline (one table, full schema in the prompt). The full agentic tool-loop (chatgpt_like) is reserved for when the catalog grows to many tables (see §16G); it would slot in behind the same ask() interface.
 
 ## 1. Goal
 Let a user ask a plain-English question and get a grounded, accurate answer from the
@@ -75,6 +76,12 @@ ask(question, {
   provider, model
 }
 ```
+
+## 5b. Two answer modes
+- **Data question** -> plan a SELECT -> guard -> run -> synthesize from rows.
+- **Definition question** ("what does scorecard_band mean?") -> the planner replies `NO_SQL` -> we answer
+  straight from the grounding context (no DB query). Keeps meaning-of-the-data questions from forcing an
+  empty SQL result.
 
 ## 6. Core tools (MySQL versions of the chatgpt_like tools)
 - **list_tables()** — the allowlisted catalog (starts with `race_results_transform_events`).
@@ -153,7 +160,7 @@ Mirrors the chatgpt_like 448-line yaml, adapted to the events schema. Sections:
 
 ## 14. Build sequence
 2.2 db.js (read-only pool + catalog) -> 2.3 sql_guard.js -> 2.4 events_context.yaml ->
-2.5 tools.js -> 2.6 providers + loop + ask.js -> 2.7 tests -> #8 CLI -> #9 dashboard -> (opt) MCP.
+2.5 tools.js -> 2.6 providers + loop + ask.js -> 2.7 tests -> #8 CLI (done) -> #9 dashboard ask box -> Step 5 (optional): MCP server (wrap the same db/tools/guard so Claude/Cowork can drive the loop).
 
 ## 15. Open decisions to confirm
 - Default provider (OpenAI or Claude)?

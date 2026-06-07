@@ -78,6 +78,8 @@ function parse_args(argv) {
     else if (a === '--profile') out.profile = argv[++i];
     else if (a === '--quiet') out.quiet = true;
     else if (a === '--days') out.days = argv[++i];
+    else if (a === '--provider') out.provider = argv[++i];
+    else if (a === '--model') out.model = argv[++i];
     else if (a === '--yes' || a === '-y') out.yes = true;
     else if (a === '--strict') out.strict = true;
     else out._.push(a);
@@ -140,6 +142,8 @@ function help() {
     '  node cli.js inspect <input.xlsx>',
     '  node cli.js batch   <folder> [-o outdir]',
     '  node cli.js stats          [--days 7]      # usage analytics summary',
+    '  node cli.js ask "<question>" [--provider openai|claude] [--model <id>]  # AI: ask the usage data (read-only)',
+    '  node cli.js ask:models                       # list selectable AI models',
     '  node cli.js metrics:size                   # events table size + rows/year',
     '  node cli.js metrics:cleanup [--yes]        # purge years beyond current+prior',
     '  node cli.js metrics:purge-all [--yes]      # delete ALL rows (confirm) — clears test data',
@@ -180,6 +184,28 @@ async function main() {
       }
       console.log('\nProcessed ' + files.length + ' file(s) into ' + outdir);
       process.exit(worst);
+    }
+    if (cmd === 'ask:models') {
+      const models = require('../metrics/ask/models').list();
+      console.log('\nAvailable models (edit metrics/ask/models.js to add):');
+      models.forEach(function (m, i) { console.log('  ' + (i + 1) + ') ' + m.label + '  \u00b7  ' + m.provider + ' \u00b7 ' + m.model); });
+      console.log('\nUse: node src/cli.js ask "<q>" --provider ' + models[0].provider + ' --model ' + models[0].model);
+      process.exit(0);
+    }
+    if (cmd === 'ask') {
+      const question = args._.slice(1).join(' ').trim();
+      if (!question) { console.log('Usage: node src/cli.js ask "<question>" [--provider openai|claude] [--model <id>]'); process.exit(2); }
+      const { ask } = require('../metrics/ask/ask');
+      const ask_db = require('../metrics/ask/db');
+      try {
+        const r = await ask(question, { provider: args.provider, model: args.model });
+        console.log('');
+        console.log(col(C.bold, 'Q: ' + question) + col(C.gray, '   [' + r.provider + (r.model ? ' \u00b7 ' + r.model : '') + ']'));
+        console.log(col(C.cyan, '\nA: ') + (r.answer || '(no answer)'));
+        if (r.sql) console.log('\n' + col(C.gray, 'SQL: ' + r.sql));
+        if (r.truncated) console.log(col(C.yellow, 'note: results truncated to ' + r.rows.length + ' rows'));
+      } finally { try { await ask_db.close_pool(); } catch (e) {} }
+      process.exit(0);
     }
     if (cmd === 'stats') {
       const pool = await metrics.get_pool();
