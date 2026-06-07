@@ -1,0 +1,448 @@
+version: "1.3"
+owner: "USAT Analytics"
+last_updated: "2026-02-01"
+timezone: "America/Denver"   # Mountain Time
+
+# ------------------------------------------------------------
+# Canonical glossary terms
+# - The agent MUST use these definitions verbatim.
+# - If a user uses a term not present here, the agent must ask.
+# ------------------------------------------------------------
+glossary:
+  unique_profiles:
+    label: "Unique Profiles"
+    meaning: "Distinct athlete profiles counted once per year using best-membership logic."
+    grain: "profile-year"
+    allowed_synonyms:
+      - "unique athletes"
+      - "distinct athletes"
+      - "unique members"
+      - "unique profiles"
+    notes:
+      - "A single profile may appear in multiple years, but only once per year."
+      - "If multiple memberships exist in a year, apply ranking rules to select the 'best' membership (membership_type_priority when available)."
+
+  active_members:
+    label: "Active Members"
+    meaning: "Default interpretation is summary-level Unique Profiles for the requested period (full-year or YTD). If the user requests an 'as-of' / status-based definition, switch to membership_detail_data and confirm the as-of date."
+    grain: "segment-period"
+    allowed_synonyms:
+      - "active member"
+      - "active members"
+      - "active unique members"
+      - "active athletes"
+      - "active unique profiles"
+    default_rule:
+      summary_source_of_truth:
+        full_year: "membership_base_data.unique_profiles"
+        ytd_sold_in_any_year: "membership_base_data.unique_profiles_sales_through_day_of_year"
+        ytd_sold_in_that_year: "membership_base_data.unique_profiles_sales_ytd"
+      cutoff_fields:
+        - "ytd_as_of_run_date"
+        - "ytd_as_of_day_of_year"
+    notes:
+      - "membership_base_data is already aggregated; do NOT COUNT(DISTINCT id_profiles) there."
+      - "membership_base_data.unique_profiles is active in calendar year selected and sold in any year"
+      - "membership_base_data.unique_profiles_sales_through_day_of_year is active in the year selected year to date sold in any year"
+      - "membership_base_data.unique_profiles_sales_ytd is active in year selected year to date and sold in that same year"
+      - "If user asks 'currently active', 'as of today', 'non-lapsed', or anything status-based, you MUST clarify the definition and use membership_detail_data."
+      - "If the user only asks for counts by year/month/YTD, use membership_base_data."
+
+  sales_ytd:
+    label: "Sales YTD"
+    meaning: "Purchases where purchased_on_adjusted_mp is on or before the year’s YTD cutoff date (aligned by day-of-year unless otherwise specified)."
+    grain: "transaction"
+    required_fields:
+      - "purchased_on_adjusted_mp"
+    notes:
+      - "Unless the user specifies a different cutoff rule, align year-over-year comparisons using the same day-of-year."
+      - "When available, prefer table-provided YTD indicators/fields (e.g., is_sales_ytd, ytd_as_of_run_date) rather than recomputing."
+
+  one_day_membership:
+    label: "One-Day Membership"
+    meaning: "A membership product valid for a single day (typically tied to event participation)."
+    included_in_base: true
+    renewal: false
+    notes:
+      - "In membership_detail_data, identify using real_membership_type_sa or membership_type fields (depending on availability)."
+
+  goal_comparison:
+    label: "Goal Comparison"
+    meaning: "Comparison of actual performance against a defined goal using precomputed fields in sales_actual_vs_goal_data."
+    grain: "type-category-period"
+    required_fields:
+      - "year_goal"
+      - "month_goal"
+    default_rule:
+      table: "sales_actual_vs_goal_data"
+      delta_definition: "actual minus goal"
+    notes:
+      - "Do NOT recompute goals, actuals, or deltas when using this table."
+      - "Use *_goal, *_actual, and *_diff_abs fields directly."
+      - "ARPU fields (rev_per_unit_*) are NON-ADDITIVE: never SUM() or AVG() them. If aggregating beyond the table's native grain, recompute ARPU as SUM(revenue)/SUM(units)."
+      - "year_goal defines the planning year; year_actual defines the actual sales year."
+      - "If the user asks 'against goal' without specifying a year, assume year_goal = year_actual unless stated otherwise."
+
+  drivers_vs_goal:
+    label: "Drivers vs Goal"
+    meaning: "Membership types or categories that explain variance between actuals and goals, using precomputed deltas."
+    grain: "type-category-period"
+    required_fields:
+      - "goal_vs_actual_rev_diff_abs"
+      - "goal_vs_actual_units_diff_abs"
+    default_rule:
+      ranking_metric: "goal_vs_actual_rev_diff_abs"
+    notes:
+      - "Drivers MUST use precomputed *_diff_abs fields."
+      - "Revenue deltas are preferred unless the user explicitly requests units."
+      - "Exclude rows where both revenue and unit deltas are zero."
+      - "Positive and negative contributors must both be shown."
+
+# ------------------------------------------------------------
+# Data quality & narrative guardrails
+# ------------------------------------------------------------
+data_quality:
+  known_issues:
+    membership_base_data:
+      table: "membership-reporting-447700.membership_reporting.membership_base_data"
+      issues:
+        - id: "incomplete_early_years"
+          description: "Early years are known to be incomplete due to partial ingestion/backfill."
+          affected_years: [2015, 2016]
+          severity: "high"
+          guidance:
+            - "If a user asks for earliest-year trend tables, still show the affected years, but add the required disclaimer."
+            - "Do not claim record highs/lows or 'new best since earliest year' when the reference baseline includes affected years."
+            - "For narrative trend comparisons and record-high logic, treat 2017+ as the first fully reliable baseline year unless the user explicitly requests otherwise."
+          required_disclaimer: "Note: 2015–2016 membership counts are incomplete; comparisons using those years may be misleading."
+
+narrative_guardrails:
+  record_claims:
+    rule: "Record-high / record-low claims must use only trusted years when data quality flags exist."
+    trusted_years_default:
+      membership_base_data_unique_profiles:
+        start_year: 2017
+    disallowed_reference_years:
+      membership_base_data_unique_profiles: [2015, 2016]
+    required_behavior:
+      - "If earliest years returned include disallowed_reference_years, do NOT say 'new all-time high since earliest year available'."
+      - "Instead, use phrasing like 'highest since 2017' (trusted window) or state 'cannot confirm earlier due to incomplete 2015–2016 data'."
+      - "If the user explicitly requests comparisons including incomplete years, comply but keep the disclaimer and caution language."
+
+# ------------------------------------------------------------
+# Business rules the agent should treat as policy
+# ------------------------------------------------------------
+policies:
+  ambiguity_handling:
+    must_ask_if_missing:
+      - "timeframe (YTD vs full-year vs rolling)"
+      - "metric type (counts vs revenue)"
+      - "unit of analysis (profiles vs memberships vs transactions vs participations)"
+    ask_only_if_user_intent_conflicts_with_defaults:
+      - term: "active members"
+        conflict_triggers:
+          - "non-lapsed"
+          - "renewed"
+          - "paid active"
+          - "currently active"
+          - "as of"
+          - "today"
+          - "right now"
+        resolution: "Ask whether they want (A) summary unique_profiles (default, membership_base_data) or (B) status/as-of logic using membership_detail_data; confirm the as-of date if (B)."
+    never_infer:
+      - "definitions not present in glossary"
+      - "business intent"
+      - "date cutoffs beyond the defined default rules"
+
+  timeframe_defaults:
+    ytd_alignment:
+      default_method: "day_of_year"
+      description: "For YoY YTD comparisons, align on same day-of-year unless the user requests month-to-date or another window."
+    same_period_yoy_current_month:
+      method: "month_to_date_through_yesterday"
+      description: "Compare MTD through yesterday vs same MTD last year using same day-of-month cutoff; include cutoff date in response."
+
+  counting_and_grain:
+    default_output: "aggregated"
+    pii_restriction: "Do not output PII or profile-level rows unless explicitly requested."
+    grain_guidance:
+      unique_profiles: "profile-year"
+      active_members: "segment-period"
+      sales_ytd: "transaction"
+      one_day_membership: "membership-product"
+      goal_comparison: "period"
+      drivers_vs_goal: "category-period"
+
+# ------------------------------------------------------------
+# Membership ranking rules
+# ------------------------------------------------------------
+membership_selection:
+  best_membership_logic:
+    description: "When multiple memberships exist for a profile within a year, select the best membership according to ranking rules."
+    ranking_rules:
+      - rule: "Prefer annual over one-day when both exist in the same profile-year."
+      - rule: "If membership_type_priority is available, prefer the lowest numeric priority as 'best' (source of truth)."
+    notes:
+      - "When using membership_detail_data, prefer membership_type_priority to select best membership per id_profiles per year."
+      - "If a required ranking field is missing, the agent must ask or choose a different table."
+
+# ------------------------------------------------------------
+# Common metric mapping (stable within this project)
+# ------------------------------------------------------------
+metric_conventions:
+  membership_sales:
+    default_count_metric: "sales_units"
+    default_revenue_metric: "sales_revenue"
+    notes:
+      - "Do not use member_number_members_sa unless explicitly requested."
+      - "Prefer year/month fields already present in the table (purchased_on_year_adjusted_mp, purchased_on_month_adjusted_mp)."
+
+# ------------------------------------------------------------
+# Source routing defaults
+# ------------------------------------------------------------
+source_routing:
+  # -------------------------
+  # GOAL COMPARISON / DRIVERS
+  # -------------------------
+  goal_and_actual_comparison:
+    description: "Canonical source for all goal vs actual membership sales comparisons."
+    default_table: "membership-reporting-447700.membership_reporting.sales_actual_vs_goal_data"
+    required_fields:
+      - "year_goal"
+      - "month_goal"
+      - "year_actual"
+    output_defaults:
+      metrics:
+        revenue_goal: "sales_rev_2025_goal"
+        revenue_actual: "sales_rev_2025_actual"
+        units_goal: "sales_units_2025_goal"
+        units_actual: "sales_units_2025_actual"
+        arpu_goal: "rev_per_unit_2025_goal"
+        arpu_actual: "rev_per_unit_2025_actual"
+        revenue_delta: "goal_vs_actual_rev_diff_abs"
+        units_delta: "goal_vs_actual_units_diff_abs"
+    notes:
+      - "NEVER calculate (actual - goal); use goal_vs_actual_*_diff_abs."
+      - "Always filter on year_goal AND month_goal when a month is specified."
+      - "Use type_goal and category_goal for goal-side grouping."
+      - "Use type_actual and category_actual ONLY if user explicitly requests actual-side taxonomy."
+      - "If is_year_to_date = true, interpret as YTD through the table's cutoff logic (do not reapply YTD filters)."
+      - "ARPU fields are NON-ADDITIVE: never SUM()/AVG() rev_per_unit_*; if aggregating beyond native grain, recompute ARPU as SUM(revenue)/SUM(units)."
+
+  drivers_vs_goal_monthly:
+    description: "Driver analysis of goal vs actual variance using precomputed deltas."
+    default_table: "membership-reporting-447700.membership_reporting.sales_actual_vs_goal_data"
+    driver_defaults:
+      ranking_metric: "goal_vs_actual_rev_diff_abs"
+      positive_threshold: "> 0"
+      negative_threshold: "< 0"
+      max_drivers_each_side: 5
+    notes:
+      - "Rank drivers by absolute revenue delta vs goal."
+      - "Return top positive and top negative contributors."
+      - "Exclude rows where goal_vs_actual_rev_diff_abs = 0 AND goal_vs_actual_units_diff_abs = 0."
+      - "If the listed drivers explain <80% of total variance, increase N or aggregate to type_goal."
+
+  # -------------------------
+  # YTD PERFORMANCE TABLES
+  # -------------------------
+  ytd_performance_2026:
+    description: "Default table to use for 2026 year-to-date performance (YoY or standalone), unless user specifies another."
+    default_table: "membership-reporting-447700.membership_reporting.sales_year_over_year_2026_data"
+    notes:
+      - "When the user asks about '2026 YTD performance', prefer this table."
+      - "Apply the YTD alignment policy (day-of-year) for YoY comparisons unless the user requests a different window."
+      - "Include cutoff date details in the response when doing aligned YoY."
+
+  ytd_performance_2025:
+    description: "Default table to use for 2025 year-to-date performance (YoY or standalone), unless user specifies another."
+    default_table: "membership-reporting-447700.membership_reporting.sales_year_over_year_data"
+    notes:
+      - "When the user asks about '2025 YTD performance', prefer this table."
+      - "Apply the YTD alignment policy (day-of-year) for YoY comparisons unless the user requests a different window."
+      - "Include cutoff date details in the response when doing aligned YoY."
+
+  # -------------------------
+  # ACTIVE MEMBERS (SUMMARY)
+  # -------------------------
+  active_members_summary:
+    description: "Default source for summary-level active member counts (unique profiles) by year and common segments."
+    default_table: "membership-reporting-447700.membership_reporting.membership_base_data"
+    required_fields:
+      - "year"
+      - "membership_type"
+      - "new_member_category"
+      - "unique_profiles"
+      - "unique_profiles_sales_ytd"
+      - "unique_profiles_sales_through_day_of_year"
+      - "ytd_as_of_run_date"
+      - "ytd_as_of_day_of_year"
+    output_defaults:
+      unit_of_analysis: "unique_profiles"
+      metric_full_year: "unique_profiles"
+      metric_ytd: "unique_profiles_sales_ytd"
+      metric_through_day_of_year: "unique_profiles_sales_through_day_of_year"
+      grain: "year"
+    notes:
+      - "membership_base_data is already aggregated; do NOT COUNT DISTINCT id_profiles and do NOT filter membership_is_active (fields do not exist)."
+      - "Full-year: SUM(unique_profiles) by year (optionally membership_type / new_member_category)."
+      - "YTD: SUM(unique_profiles_sales_ytd) by year; include ytd_as_of_run_date and/or ytd_as_of_day_of_year in output."
+      - "Through day-of-year alignment: prefer unique_profiles_sales_through_day_of_year."
+      - "Use total_memberships_all_profiles_that_year and *_sales_* fields only if the user asks for memberships (not profiles)."
+      - "Data quality: 2015–2016 are incomplete (see data_quality.known_issues); include disclaimer and avoid record claims using those years."
+
+  # -------------------------
+  # ACTIVE / HISTORY (DETAIL)
+  # -------------------------
+  membership_detail_data_over_time:
+    description: "Default source for profile-level history, membership sequences, transitions, and any as-of/status logic."
+    default_table: "membership-reporting-447700.membership_reporting.membership_detail_data"
+    required_fields:
+      - "year"
+      - "id_profiles"
+      - "purchased_on_adjusted_mp"
+      - "starts_mp"
+      - "ends_mp"
+      - "real_membership_type_sa"
+      - "new_member_category_sa"
+      - "membership_type_priority"
+      - "is_sales_ytd"
+      - "is_sales_through_day_of_year"
+      - "ytd_as_of_run_date"
+      - "ytd_as_of_day_of_year"
+    notes:
+      - "Use when user asks: 'over time', 'history', 'subsequently', 'transition', 'retention', or needs membership sequence logic."
+      - "Use this table for any 'currently active' / 'as-of' interpretation using starts_mp/ends_mp (and confirm as-of date if not provided)."
+      - "For 'one_day → adult_annual' analyses, use real_membership_type_sa and ordered purchases by purchased_on_adjusted_mp; count distinct id_profiles."
+      - "For best-membership per profile-year, use membership_type_priority when present (lowest numeric priority = best)."
+
+# ------------------------------------------------------------
+# Optional: Routing intent keywords (helps deterministic table choice)
+# ------------------------------------------------------------
+source_routing_intents:
+  active_members:
+    summary_keywords:
+      - "active members by year"
+      - "active members count"
+      - "active unique members"
+      - "how many active members"
+      - "active unique profiles by year"
+      - "unique profiles by year"
+    detail_keywords:
+      - "over time"
+      - "history"
+      - "subsequently"
+      - "transition"
+      - "one_day"
+      - "adult_annual"
+      - "pathway"
+      - "retention"
+      - "currently active"
+      - "as of"
+
+# ------------------------------------------------------------
+# Table-specific field hints (optional but reduces column mistakes)
+# ------------------------------------------------------------
+table_field_hints:
+  membership_base_data:
+    table: "membership-reporting-447700.membership_reporting.membership_base_data"
+    summary_metrics:
+      full_year_unique_profiles: "unique_profiles"
+      full_year_total_memberships: "total_memberships_all_profiles_that_year"
+      ytd_unique_profiles: "unique_profiles_sales_ytd"
+      ytd_total_memberships: "total_memberships_all_profiles_sales_ytd"
+      through_doy_unique_profiles: "unique_profiles_sales_through_day_of_year"
+      through_doy_total_memberships: "total_memberships_all_profiles_sales_through_day_of_year"
+    dimensions:
+      - "year"
+      - "membership_type"
+      - "new_member_category"
+    cutoff_fields:
+      - "ytd_as_of_run_date"
+      - "ytd_as_of_day_of_year"
+
+  membership_detail_data:
+    table: "membership-reporting-447700.membership_reporting.membership_detail_data"
+    identity_fields:
+      - "id_profiles"
+    time_fields:
+      - "purchased_on_adjusted_mp"
+      - "starts_mp"
+      - "ends_mp"
+      - "purchased_on_year_adjusted_mp"
+      - "purchased_on_month_adjusted_mp"
+    type_fields:
+      - "real_membership_type_sa"
+      - "new_member_category_sa"
+      - "membership_type_priority"
+    ytd_fields:
+      - "is_sales_ytd"
+      - "is_sales_through_day_of_year"
+      - "ytd_as_of_run_date"
+      - "ytd_as_of_day_of_year"
+
+  sales_actual_vs_goal_data:
+    table: "membership-reporting-447700.membership_reporting.sales_actual_vs_goal_data"
+    period_fields:
+      - "year_goal"
+      - "month_goal"
+      - "year_actual"
+      - "month_actual"
+      - "quarter_actual"
+    goal_fields:
+      revenue: "sales_rev_2025_goal"
+      units: "sales_units_2025_goal"
+      arpu: "rev_per_unit_2025_goal"
+    actual_fields:
+      revenue: "sales_rev_2025_actual"
+      units: "sales_units_2025_actual"
+      arpu: "rev_per_unit_2025_actual"
+    delta_fields:
+      revenue: "goal_vs_actual_rev_diff_abs"
+      units: "goal_vs_actual_units_diff_abs"
+      arpu: "goal_vs_actual_rev_per_unit_diff_abs"
+    yoy_fields:
+      revenue: "2025_vs_2024_rev_diff_abs"
+      units: "2025_vs_2024_units_diff_abs"
+      arpu: "2025_vs_2024_rev_per_unit_diff_abs"
+    dimensions:
+      - "type_goal"
+      - "category_goal"
+    flags:
+      - "is_year_to_date"
+      - "is_current_month"
+    aggregation_rules:
+      - "rev_per_unit_* columns are NON-ADDITIVE: never SUM() or AVG()."
+      - "When rolling up multiple rows, compute ARPU as SAFE_DIVIDE(SUM(revenue), SUM(units))."
+
+# ------------------------------------------------------------
+# Metric definitions
+# ------------------------------------------------------------
+metrics:
+  average_revenue_per_unit:
+    label: "Average Revenue per Unit (ARPU)"
+    definition: "Total revenue divided by total units"
+    formula: "SUM(revenue) / SUM(units)"
+    aggregation_rules:
+      - "NEVER SUM"
+      - "NEVER AVERAGE"
+      - "Must be recomputed from aggregated revenue and units"
+    notes:
+      - "If revenue or units are zero or null, ARPU must be null"
+
+# ------------------------------------------------------------
+# Optional: SQL guardrails (for code-enforced validation)
+# ------------------------------------------------------------
+sql_guardrails:
+  derived_metrics:
+    arpu:
+      description: "Prevent invalid aggregation of ARPU / rev_per_unit fields."
+      forbidden_patterns:
+        - "SUM\\s*\\(\\s*rev_per_unit"
+        - "AVG\\s*\\(\\s*rev_per_unit"
+        - "SUM\\s*\\(\\s*arpu"
+        - "AVG\\s*\\(\\s*arpu"
+      recommended_expression:
+        - "SAFE_DIVIDE(SUM(revenue), SUM(units))"
+      notes:
+        - "If SQL includes rev_per_unit_* in SELECT and also includes GROUP BY, prefer recomputing ARPU from revenue and units."
