@@ -116,4 +116,16 @@ test.describe('race_results_transform — metrics dashboard', () => {
     const mh = await page.locator('#ask-table').evaluate(function (el) { return getComputedStyle(el).maxHeight; });
     expect(mh).not.toBe('none');
   });
+
+  test('thread + correction controls exist and start hidden (D4, #68/#70)', async ({ page }) => {
+    await page.goto('/metrics');
+    // thread indicator + new-thread link (B1) present but hidden until a question is asked
+    await expect(page.locator('#ask-thread')).toHaveCount(1);
+    await expect(page.locator('#ask-thread')).toBeHidden();
+    await expect(page.locator('#ask-newthread')).toHaveCount(1);
+    // correction affordance (G2) present but hidden until an answer renders
+    await expect(page.locator('#ask-correct')).toHaveCount(1);
+    await expect(page.locator('#ask-correct')).toBeHidden();
+    await expect(page.locator('#ask-correct-toggle')).toHaveCount(1);
+  });
 });

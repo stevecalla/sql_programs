@@ -104,11 +104,12 @@ const SECTIONS = [
     { id: 29, label: 'AI ask \u2014 guard demo (try a query)', desc: 'See the read-only guard ACCEPT/REJECT example queries or your own SQL, with the enforced LIMIT.', cli: 'node metrics/ask/demo_guard.js ["<sql>"]', action: 'ask_demo' },
     { id: 30, label: 'AI ask \u2014 guard & catalog tests', desc: 'Read-only SQL guard + ask catalog tests. Also runs inside Run ALL.', cli: 'node --test tests/ask_db.test.js tests/ask_guard.test.js', action: 'test_ask' },
     { id: 31, label: 'AI ask \u2014 view question log', desc: 'Recent AI questions + answers (audit log; no PII).', cli: 'node src/cli.js ask:log [--n 20]', action: 'ask_log' },
-    { id: 32, label: 'AI ask \u2014 run SQL directly (read-only)', desc: 'Run a read-only SELECT yourself (guarded: SELECT-only, allowlisted table, enforced LIMIT). No AI involved.', cli: 'node src/cli.js ask:sql "<SELECT ...>"', action: 'ask_sql' }
+    { id: 32, label: 'AI ask \u2014 run SQL directly (read-only)', desc: 'Run a read-only SELECT yourself (guarded: SELECT-only, allowlisted table, enforced LIMIT). No AI involved.', cli: 'node src/cli.js ask:sql "<SELECT ...>"', action: 'ask_sql' },
+    { id: 33, label: 'AI ask \u2014 view/manage corrections', desc: 'Operator clarifications the AI uses as grounding (G2). Deactivate with: node src/cli.js ask:uncorrect <id>.', cli: 'node src/cli.js ask:corrections [--n 20] [--all]', action: 'ask_corrections' }
   ] },
   { label: 'Settings', color: GRAY, items: [
-    { id: 33, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 34, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
+    { id: 34, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
+    { id: 35, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
@@ -170,6 +171,7 @@ async function handle(item) {
       break;
     }
     case 'ask_log': await run('node', ['src/cli.js', 'ask:log']); break;
+    case 'ask_corrections': await run('node', ['src/cli.js', 'ask:corrections']); break;
     case 'ask_sql': {
       const sql = clean(await ask(c(DIM, '\n  Read-only SQL (SELECT only): ')));
       if (sql) { await run('node', ['src/cli.js', 'ask:sql', sql]); }

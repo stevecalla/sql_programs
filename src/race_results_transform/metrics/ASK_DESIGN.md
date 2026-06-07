@@ -197,6 +197,11 @@ Mirrors the chatgpt_like 448-line yaml, adapted to the events schema. Sections:
 - #65 Charts: `ANSWER_SYSTEM` instructs the model to append a `` ```chart {"type","x","y"} ``` `` hint for chartable results; `ask.js:extract_chart()` parses + validates it against the actual columns (drops bad hints, needs >=2 rows) and returns `chart` separately so the answer text stays clean. The dashboard draws it with the already-loaded Chart.js and offers a chart/table toggle. CLI stays text/table.
 - #66 Raw-SQL mode: an opt-in `SQL` toggle (and `ask_sql()` / `POST {mode:'sql'}` / `ask:sql` CLI) runs user SQL directly through the same read-only guard (SELECT-only, table allowlist, enforced LIMIT) -- no LLM. Logged with surface `dashboard-sql`/`cli-sql`.
 
+## 15h. Threads, live metrics, corrections (B1/G1/G2)
+- B1 (threads): the dashboard keeps a bounded client-side history `[{q,sql,answer}]` and posts it; `ask.js:format_history()` compacts the last 4 turns into the plan prompt so follow-ups ("that", "last month", "break it down") resolve. A 'New thread' link clears it. Prompt builders take an optional `extra={history,live,corrections}` (backward compatible).
+- G1 (live metrics): `metrics/ask/live.js:live_snapshot()` reuses `build_report` to produce a compact current-aggregates string; the server caches it ~5 min and injects it as orientation grounding (the model is told to query for exact figures, not quote the snapshot). CLI builds it per call.
+- G2 (corrections): `metrics/ask/corrections.js` is a DB-backed store (`race_results_transform_ask_corrections`, active flag). Recent active notes are injected as authoritative human clarifications into plan/answer/define prompts (cached ~5 min, invalidated on write). Added via `POST /api/metrics-ask-correct` (dashboard 'Correct this'); reviewed/managed via `ask:corrections [--n] [--all]` and `ask:uncorrect <id>`. Governance: global, auto-applied, most-recent-N, deactivatable.
+
 ## 16. Future recommendations & hardening (AFTER Step 2; not in scope now)
 v1 (Step 2) uses the **current local credentials** with read-only stressed to the model
 (system prompt + context guardrails) and enforced by the SQL guard. The items below harden

@@ -81,6 +81,7 @@ function parse_args(argv) {
     else if (a === '--provider') out.provider = argv[++i];
     else if (a === '--model') out.model = argv[++i];
     else if (a === '--n') out.n = argv[++i];
+    else if (a === '--all') out.all = true;
     else if (a === '--yes' || a === '-y') out.yes = true;
     else if (a === '--strict') out.strict = true;
     else out._.push(a);
@@ -147,6 +148,8 @@ function help() {
     '  node cli.js ask:models                       # list selectable AI models',
     '  node cli.js ask:log [--n 20]                 # recent AI questions + answers (audit)',
     '  node cli.js ask:sql "<SELECT ...>"           # run read-only SQL directly (guarded, no AI)',
+    '  node cli.js ask:corrections [--n 20] [--all]   # list operator clarifications used as grounding',
+    '  node cli.js ask:uncorrect <id>              # deactivate a correction so it stops being applied',
     '  node cli.js metrics:size                   # events table size + rows/year',
     '  node cli.js metrics:cleanup [--yes]        # purge years beyond current+prior',
     '  node cli.js metrics:purge-all [--yes]      # delete ALL rows (confirm) — clears test data',
@@ -210,13 +213,43 @@ async function main() {
       } finally { await pool.end(); }
       process.exit(0);
     }
+    if (cmd === 'ask:corrections') {
+      const corr = require('../metrics/ask/corrections');
+      const pool = await metrics.get_pool();
+      try {
+        const rows = await corr.read(pool, args.n ? Number(args.n) : 20, !args.all);
+        if (!rows.length) { console.log('No corrections in ' + corr.TABLE + '.'); }
+        else rows.forEach(function (r) {
+          console.log('');
+          console.log(col(C.gray, String(r.created_at_mtn || '')) + '  ' + col(C.bold, '#' + r.id) + (r.active ? '' : col(C.gray, ' (inactive)')) + (r.author ? col(C.gray, '  by ' + r.author) : ''));
+          if (r.question) console.log(col(C.cyan, 'Q: ') + String(r.question).slice(0, 160));
+          console.log(col(C.green, 'Note: ') + String(r.note || ''));
+        });
+      } finally { await pool.end(); }
+      process.exit(0);
+    }
+    if (cmd === 'ask:uncorrect') {
+      const id = args._.slice(1)[0];
+      if (!id) { console.log('Usage: node src/cli.js ask:uncorrect <id>'); process.exit(2); }
+      const corr = require('../metrics/ask/corrections');
+      const pool = await metrics.get_pool();
+      try { await corr.set_active(pool, id, false); console.log('Deactivated correction #' + id + ' (no longer applied as grounding).'); }
+      finally { await pool.end(); }
+      process.exit(0);
+    }
     if (cmd === 'ask') {
       const question = args._.slice(1).join(' ').trim();
       if (!question) { console.log('Usage: node src/cli.js ask "<question>" [--provider openai|claude] [--model <id>]'); process.exit(2); }
       const { ask } = require('../metrics/ask/ask');
       const ask_db = require('../metrics/ask/db');
+      let live = null, corrections = null;
       try {
-        const r = await ask(question, { provider: args.provider, model: args.model });
+        const mpool = await metrics.get_pool();
+        live = await require('../metrics/ask/live').live_snapshot(mpool, { days: 30 });            // G1
+        corrections = await require('../metrics/ask/corrections').grounding_text(mpool, 12);       // G2
+      } catch (e) { /* grounding is optional */ }
+      try {
+        const r = await ask(question, { provider: args.provider, model: args.model, live: live, corrections: corrections });
         console.log('');
         console.log(col(C.bold, 'Q: ' + question) + col(C.gray, '   [' + r.provider + (r.model ? ' \u00b7 ' + r.model : '') + ']'));
         console.log(col(C.cyan, '\nA: ') + (r.answer || '(no answer)'));

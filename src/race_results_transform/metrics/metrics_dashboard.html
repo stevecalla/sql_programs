@@ -87,6 +87,11 @@
   .mx-ask-viz button { border:1px solid var(--line); background:transparent; color:var(--dim); border-radius:8px; padding:3px 10px; font-size:12px; cursor:pointer; }
   .mx-ask-viz button.on { color:var(--ink); border-color:var(--accent); }
   .mx-ask-viz[hidden] { display:none; }
+  .mx-ask-thread { margin-top:6px; font-size:12px; }
+  .mx-ask-thread a, .mx-ask-correct a { color:var(--accent); }
+  .mx-ask-correct { margin-top:10px; }
+  #ask-correct-note { display:block; width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); font:inherit; padding:6px 8px; margin:6px 0; resize:vertical; }
+  .mx-ask-correct-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   #ask-answer { margin:10px 0; line-height:1.55; color:var(--ink); overflow-x:auto; }
   #ask-sql { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px; overflow-x:auto; font-size:12px; margin:6px 0; }
   #ask-out table { border-collapse:collapse; font-size:13px; }
@@ -138,6 +143,7 @@
         <button id="ask-go" class="btn">Ask</button>
       </div>
     </div>
+    <div id="ask-thread" class="mx-ask-thread dim" hidden>Follow-up context is on (<span id="ask-thread-n">0</span> prior) · <a href="#" id="ask-newthread">start a new thread</a></div>
     <div class="mx-ask-suggest" id="ask-suggest">
       <button type="button">How many people used the converter last week?</button>
       <button type="button">What is the conversion rate from upload to download?</button>
@@ -162,6 +168,17 @@
         <div id="ask-table" class="mx-tablewrap"></div>
         <details id="ask-sqlwrap"><summary class="dim">SQL</summary><pre id="ask-sql"></pre></details>
         <div id="ask-meta" class="dim"></div>
+        <div id="ask-correct" class="mx-ask-correct" hidden>
+          <button id="ask-correct-toggle" class="btn ghost" type="button" title="Tell the AI what was wrong; it will remember for next time">✎ Correct this</button>
+          <div id="ask-correct-box" hidden>
+            <textarea id="ask-correct-note" rows="2" placeholder="What was wrong, or what should it know? e.g. 'active user' should exclude internal test visits."></textarea>
+            <div class="mx-ask-correct-row">
+              <button id="ask-correct-save" class="btn" type="button">Save correction</button>
+              <button id="ask-correct-cancel" class="btn ghost" type="button">Cancel</button>
+              <span id="ask-correct-msg" class="dim"></span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -398,8 +415,11 @@
     } else { el('ask-table').innerHTML = ''; }
     ask_chart(d.chart, rows);
     el('ask-meta').textContent = (d.provider ? d.provider + (d.model ? ' · ' + d.model : '') : '') + (d.truncated ? '  · showing first ' + rows.length : '');
+    ask_last = { q: q, answer: d.answer || '' };
+    el('ask-correct').hidden = false; el('ask-correct-box').hidden = true; el('ask-correct-note').value = ''; el('ask-correct-msg').textContent = '';
   }
   var ask_chart_obj = null;
+  var ask_history = [], ask_last = null;   // B1 thread + G2 last Q/A
   function ask_show_viz(mode){   // 'chart' | 'table'
     var on = mode === 'chart';
     el('ask-chart-wrap').hidden = !on; el('ask-table').hidden = on;
@@ -431,21 +451,36 @@
     var q = (el('ask-q').value || '').trim(); if (!q) return;
     var sel = el('ask-model'), opt = sel.options[sel.selectedIndex];
     var sql_mode = el('ask-sql-mode') && el('ask-sql-mode').checked;
-    var payload = sql_mode ? { mode:'sql', sql: q } : { question: q, provider: opt ? opt.getAttribute('data-provider') : null, model: opt ? opt.value : null };
+    var payload = sql_mode ? { mode:'sql', sql: q } : { question: q, provider: opt ? opt.getAttribute('data-provider') : null, model: opt ? opt.value : null, history: ask_history };
     el('ask-out').hidden = true; el('ask-status').hidden = false; el('ask-status').textContent = sql_mode ? 'Running SQL…' : 'Thinking…';
     fetch('/api/metrics-ask', { method:'POST', credentials:'same-origin', headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify(payload) })
       .then(function(r){ return r.json(); })
-      .then(function(d){ if (d && d.error) el('ask-status').textContent = 'Error: ' + d.error; else ask_render(q, d); })
+      .then(function(d){ if (d && d.error) el('ask-status').textContent = 'Error: ' + d.error; else { ask_render(q, d); ask_after(q, d, sql_mode); } })
       .catch(function(e){ el('ask-status').textContent = 'Error: ' + e.message; });
   }
   el('ask-go').addEventListener('click', ask_go);
   Array.prototype.forEach.call(el('ask-suggest').querySelectorAll('button'), function(b){ b.addEventListener('click', function(){ el('ask-q').value = b.textContent; ask_autogrow(); el('ask-q').focus(); }); });
   el('ask-clear').addEventListener('click', function(){ el('ask-q').value = ''; ask_autogrow(); el('ask-q').focus(); });
   el('ask-collapse').addEventListener('click', function(){ var b = el('ask-body'); b.hidden = !b.hidden; el('ask-collapse').textContent = b.hidden ? '▸' : '▾'; });
-  el('ask-clear-out').addEventListener('click', function(){ el('ask-out').hidden = true; el('ask-answer').innerHTML = ''; el('ask-table').innerHTML = ''; el('ask-sql').textContent = ''; el('ask-question').textContent = ''; if (ask_chart_obj) { ask_chart_obj.destroy(); ask_chart_obj = null; } el('ask-viz').hidden = true; el('ask-chart-wrap').hidden = true; });
+  el('ask-clear-out').addEventListener('click', function(){ el('ask-out').hidden = true; el('ask-answer').innerHTML = ''; el('ask-table').innerHTML = ''; el('ask-sql').textContent = ''; el('ask-question').textContent = ''; if (ask_chart_obj) { ask_chart_obj.destroy(); ask_chart_obj = null; } el('ask-viz').hidden = true; el('ask-chart-wrap').hidden = true; el('ask-correct').hidden = true; });
   el('ask-viz-chart').addEventListener('click', function(){ ask_show_viz('chart'); });
   el('ask-viz-table').addEventListener('click', function(){ ask_show_viz('table'); });
+  function ask_thread_update(){ var on = ask_history.length > 0; el('ask-thread').hidden = !on; if (on) el('ask-thread-n').textContent = String(ask_history.length); }
+  function ask_after(q, d, sql_mode){ if (sql_mode || !d || d.error) return; ask_history.push({ q: q, sql: d.sql || null, answer: (d.answer || '').slice(0,400) }); if (ask_history.length > 8) ask_history = ask_history.slice(-8); ask_thread_update(); }
+  function ask_new_thread(){ ask_history = []; ask_thread_update(); el('ask-q').value=''; ask_autogrow(); el('ask-q').focus(); }
+  el('ask-newthread').addEventListener('click', function(ev){ ev.preventDefault(); ask_new_thread(); });
+  el('ask-correct-toggle').addEventListener('click', function(){ var b = el('ask-correct-box'); b.hidden = !b.hidden; if (!b.hidden) el('ask-correct-note').focus(); });
+  el('ask-correct-cancel').addEventListener('click', function(){ el('ask-correct-box').hidden = true; el('ask-correct-note').value=''; });
+  el('ask-correct-save').addEventListener('click', function(){
+    var note = (el('ask-correct-note').value || '').trim(); if (!note) { el('ask-correct-note').focus(); return; }
+    el('ask-correct-msg').textContent = 'Saving…';
+    fetch('/api/metrics-ask-correct', { method:'POST', credentials:'same-origin', headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ note: note, question: ask_last ? ask_last.q : null, answer: ask_last ? ask_last.answer : null }) })
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d && d.ok) { el('ask-correct-msg').textContent = 'Saved — will apply on the next question.'; el('ask-correct-note').value=''; el('ask-correct-box').hidden = true; } else { el('ask-correct-msg').textContent = 'Error: ' + ((d && d.error) || 'failed'); } })
+      .catch(function(e){ el('ask-correct-msg').textContent = 'Error: ' + e.message; });
+  });
   el('ask-sql-mode').addEventListener('change', function(){ var t = el('ask-q'); t.placeholder = this.checked ? 'Enter a read-only SELECT…  e.g. SELECT event_name, COUNT(*) n FROM ... GROUP BY 1' : 'Ask about the usage data…  e.g. how many people used the converter last week?'; el('ask-model').disabled = this.checked; t.focus(); });
   function ask_autogrow(){ var t = el('ask-q'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 200) + 'px'; }
   el('ask-q').addEventListener('input', ask_autogrow);

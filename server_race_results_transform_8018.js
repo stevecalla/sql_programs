@@ -62,6 +62,8 @@ async function init_metrics() {
       { name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' }
     ]);
     await ensure_table(metrics_pool, require('./src/race_results_transform/metrics/ask/ask_log').DDL);
+    await ensure_table(metrics_pool, require('./src/race_results_transform/metrics/ask/corrections').DDL);
+    await ensure_columns(metrics_pool, require('./src/race_results_transform/metrics/ask/ask_log').TABLE, require('./src/race_results_transform/metrics/ask/ask_log').MIGRATE_COLUMNS);
     console.log('  [analytics] events table ready (' + metrics_config.TABLE + ')');
   } catch (e) {
     console.log('  [analytics] disabled — DB not available: ' + e.message);
@@ -195,6 +197,46 @@ function create_app() {
     try { res.json(require('./src/race_results_transform/metrics/ask/models').list()); }
     catch (e) { res.status(500).json({ error: e.message }); }
   });
+  // G1/G2 grounding, cached ~5 min so we don't re-query on every ask (both degrade to null).
+  let _ask_live = { at: 0, text: null }, _ask_corr = { at: 0, text: null };
+  const ASK_GROUND_TTL = 5 * 60 * 1000;
+  async function get_ask_live() {
+    if (!metrics_pool) return null;
+    if (Date.now() - _ask_live.at < ASK_GROUND_TTL) return _ask_live.text;
+    let text = null;
+    try { text = await require('./src/race_results_transform/metrics/ask/live').live_snapshot(metrics_pool, { days: 30 }); } catch (e) { text = null; }
+    _ask_live = { at: Date.now(), text: text };
+    return text;
+  }
+  async function get_ask_corrections() {
+    if (!metrics_pool) return null;
+    if (Date.now() - _ask_corr.at < ASK_GROUND_TTL) return _ask_corr.text;
+    let text = null;
+    try { text = await require('./src/race_results_transform/metrics/ask/corrections').grounding_text(metrics_pool, 12); } catch (e) { text = null; }
+    _ask_corr = { at: Date.now(), text: text };
+    return text;
+  }
+  // G2: save an operator correction; it joins the grounding for subsequent asks.
+  app.post('/api/metrics-ask-correct', require_dash_auth, async function (req, res) {
+    try {
+      const note = String((req.body && req.body.note) || '').slice(0, 2000).trim();
+      if (!note) return res.status(400).json({ ok: false, error: 'no correction text' });
+      const corr = require('./src/race_results_transform/metrics/ask/corrections');
+      const id = await corr.append(metrics_pool, { note: note, question: req.body.question, original_answer: req.body.answer, author: String((req.body && req.body.author) || 'operator').slice(0, 120) });
+      _ask_corr.at = 0;   // force a refresh so the correction applies on the next ask
+      res.json({ ok: true, id: id });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Conversation transcript: return a thread's turns (oldest first) for display.
+  app.get('/api/metrics-ask-thread', require_dash_auth, async function (req, res) {
+    try {
+      const thread_id = String((req.query && req.query.thread_id) || '').slice(0, 40);
+      if (!thread_id) return res.json({ ok: true, turns: [] });
+      const ask_log = require('./src/race_results_transform/metrics/ask/ask_log');
+      const rows = await ask_log.read_thread(metrics_pool, thread_id, 20);
+      res.json({ ok: true, turns: rows.map(function (r) { return { ts: r.created_at_mtn, question: r.question, answer: r.answer, sql: r.sql_text, ok: r.ok }; }) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   app.post('/api/metrics-ask', require_dash_auth, async function (req, res) {
     const ask_mod = require('./src/race_results_transform/metrics/ask/ask');
     const ask_log = require('./src/race_results_transform/metrics/ask/ask_log');
@@ -204,7 +246,7 @@ function create_app() {
       if (!raw) return res.status(400).json({ ok: false, error: 'no sql' });
       try {
         const r = await ask_mod.ask_sql(raw);
-        ask_log.append(metrics_pool, { surface: 'dashboard-sql', question: raw, provider: 'sql', model: null, sql: r.sql, ok: r.ok, row_count: r.row_count, answer: r.answer });
+        ask_log.append(metrics_pool, { surface: 'dashboard-sql', question: raw, provider: 'sql', model: null, thread_id: (req.body && req.body.thread_id) || null, asker_id: (req.body && req.body.asker_id) || null, sql: r.sql, ok: r.ok, row_count: r.row_count, answer: r.answer });
         return res.json(r);
       } catch (e) {
         ask_log.append(metrics_pool, { surface: 'dashboard-sql', question: raw, provider: 'sql', model: null, sql: raw, ok: false, row_count: 0, answer: e.message });
@@ -214,8 +256,15 @@ function create_app() {
     try {
       const question = String((req.body && req.body.question) || '').slice(0, 500).trim();
       if (!question) return res.status(400).json({ ok: false, error: 'no question' });
-      const r = await ask_mod.ask(question, { provider: req.body.provider, model: req.body.model });
-      ask_log.append(metrics_pool, { surface: 'dashboard', question: question, provider: r.provider, model: r.model, sql: r.sql, ok: r.ok, row_count: r.row_count, answer: r.answer });
+      const thread_id = req.body && req.body.thread_id ? String(req.body.thread_id).slice(0, 40) : null;
+      const asker_id = req.body && req.body.asker_id ? String(req.body.asker_id).slice(0, 40) : null;
+      const live = await get_ask_live();                                   // G1: current aggregates
+      const corrections = await get_ask_corrections();                     // G2: operator clarifications
+      let history = null;                                                  // B1: prefer the server-side thread (survives reload)
+      if (thread_id) { try { history = ask_log.to_history(await ask_log.read_thread(metrics_pool, thread_id, 4)); } catch (e) { history = null; } }
+      if (!history || !history.length) history = Array.isArray(req.body.history) ? req.body.history.slice(-4) : null;
+      const r = await ask_mod.ask(question, { provider: req.body.provider, model: req.body.model, live: live, corrections: corrections, history: history });
+      ask_log.append(metrics_pool, { surface: 'dashboard', question: question, provider: r.provider, model: r.model, thread_id: thread_id, asker_id: asker_id, sql: r.sql, ok: r.ok, row_count: r.row_count, answer: r.answer });
       res.json(r);
     } catch (e) {
       console.error('[ask] error:', e.message);
