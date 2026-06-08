@@ -1,0 +1,5 @@
+# SYNTHETIC, PII-free web asset (note the _FAKE suffix) served at /sample/... for the app's
+# "Try me (fake data)" button. The repo-root .gitignore ignores *.xlsx/*.csv to keep real member
+# data out of git; re-include ONLY these fake fixtures so the demo file ships with the static app.
+!*_FAKE.xlsx
+!*_FAKE.csv

@@ -484,8 +484,13 @@ The code is built and the dep-free tests pass. To run it in production:
 - **App** (`/`): a **Try me** split-button on the upload card (`#tryMeBtn`, `wire_try_me`/`load_demo`
   in `public/js/app.js`) with two paths — *Load sample data* fetches the committed synthetic fixture
   (`/sample/sample_race_results_FAKE.xlsx`) and runs it through the normal pipeline in-browser, and
-  *Download sample file* (`<a download>`) gives the user that file to upload themselves. The 8018
-  server serves the single file from `examples/sample/` (`app.get('/sample/sample_race_results_FAKE.xlsx')`).
+  *Download sample file* (`<a download>`) gives the user that file to upload themselves. The file is a
+  **committed static asset** at `public/sample/sample_race_results_FAKE.xlsx` (served by
+  `express.static`, NOT a dynamic route) so it works identically in an Express deploy and a
+  pure-static / Cloudflare Pages deploy of `public/`. `examples/sample/build_sample.js` writes both
+  the test fixture and this web copy; a `public/sample/.gitignore` re-includes the `_FAKE` file past
+  the repo-root `*.xlsx` ignore. (An earlier version served it via a dynamic `/sample` route reaching
+  into `examples/`, which 404'd in production deploys that didn't run Express or ship `examples/`.)
   `S.is_demo` is set for either path (and auto-detected for a re-uploaded `*_FAKE.*` file via
   `is_demo_filename`), a `#demoBadge` "sample test data" banner shows while viewing, and the upload
   card (with the Try-me button) hides once a workbook loads; **Start over** clears `S.is_demo`, hides

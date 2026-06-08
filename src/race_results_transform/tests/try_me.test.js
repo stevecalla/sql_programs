@@ -31,6 +31,14 @@ describe('try_me / is_demo', () => {
     assert.match(sql, /is_demo\s+TINYINT\(1\)/, 'DDL must declare is_demo TINYINT(1)');
   });
 
+  test('the Try-me sample file ships as a static asset under public/', () => {
+    // Served at /sample/sample_race_results_FAKE.xlsx by express.static (and in any static deploy
+    // of public/). If this file is missing, the "Try me" load/download 404s in production.
+    const f = path.join(ROOT, 'public', 'sample', 'sample_race_results_FAKE.xlsx');
+    assert.ok(fs.existsSync(f), 'public/sample/sample_race_results_FAKE.xlsx is missing — regenerate via examples/sample/build_sample.js');
+    assert.ok(fs.statSync(f).size > 0, 'the served sample file is empty');
+  });
+
   test('index.html has the Try-me dropdown (button + both menu items)', () => {
     assert.match(html, /id="tryMeBtn"/, 'missing Try-me button');
     assert.match(html, /id="tryMeMenu"/, 'missing Try-me menu');

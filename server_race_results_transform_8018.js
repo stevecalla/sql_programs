@@ -292,13 +292,9 @@ function create_app() {
   // the CLI + tests) so the browser <script> tags can load them.
   app.use('/src', express.static(path.join(__dirname, 'src', 'race_results_transform', 'src')));
 
-  // "Try me" sample: serve the committed synthetic (PII-free) fixture so the app can both
-  // load it in-browser and offer it as a download. Single explicit file — no directory listing.
-  app.get('/sample/sample_race_results_FAKE.xlsx', function (req, res) {
-    res.sendFile(path.join(__dirname, 'src', 'race_results_transform', 'examples', 'sample', 'sample_race_results_FAKE.xlsx'));
-  });
-
-  // Static SPA. http://localhost:8018/ serves index.html.
+  // Static SPA. http://localhost:8018/ serves index.html (and the committed "Try me" fixture at
+  // /sample/sample_race_results_FAKE.xlsx — a normal static asset under public/, so it works the
+  // same in an Express deploy and a pure-static / Cloudflare Pages deploy of public/).
   app.use('/', express.static(PUBLIC_DIR));
 
   app.use(function (req, res) {

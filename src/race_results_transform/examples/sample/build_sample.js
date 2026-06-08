@@ -4,6 +4,7 @@
 // "Excel time renders as a time, not a date" behavior get exercised by tests. All data is fake.
 const ExcelJS = require('exceljs');
 const path = require('path');
+const fs = require('fs');
 function t(h, m, s) { return new Date(Date.UTC(1899, 11, 30, h, m, s, 0)); }   // time-of-day
 function d(y, mo, da) { return new Date(Date.UTC(y, mo - 1, da)); }            // calendar date
 
@@ -30,4 +31,12 @@ const rows = [
   const out = path.join(__dirname, 'sample_race_results_FAKE.xlsx');
   await wb.xlsx.writeFile(out);
   console.log('wrote ' + out + ' (' + rows.length + ' fake rows)');
+
+  // Also publish a copy as a STATIC web asset under public/ so the app's "Try me" button can
+  // serve/download it in every deployment mode (Express static AND a pure-static / Cloudflare
+  // Pages deploy of public/) — no dynamic server route required. Same single source (this file).
+  const pub = path.join(__dirname, '..', '..', 'public', 'sample', 'sample_race_results_FAKE.xlsx');
+  fs.mkdirSync(path.dirname(pub), { recursive: true });
+  await wb.xlsx.writeFile(pub);
+  console.log('wrote ' + pub + ' (web asset copy)');
 })();
