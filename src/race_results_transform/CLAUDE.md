@@ -63,7 +63,8 @@ src/race_results_transform/
                        names sanitized to <=31 chars, unique); output centered, wide, frozen header
     cli.js             scriptable converter (inspect / convert / batch)
     data_dir.js        data dir via utilities/determineOSPath (…/usat/data on linux/mac); CLI + tests only
-  public/            web app: index.html, css/app.css, js/app.js, favicon.svg, vendor/exceljs.min.js
+  public/            web app: index.html, css/app.css, js/app.js, favicon.svg, vendor/exceljs.min.js,
+                       sample/sample_race_results_FAKE.xlsx (committed "Try me" static asset)
   menu.js            interactive launcher (pauses after each command); item numbers are sequential
                      1..N in display order, guarded by tests/menu_ids.test.js
   metrics/           usage-analytics server modules + the Basic-Auth dashboard view (kept OUT of
@@ -123,9 +124,12 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   `theme` pref is set (`data-theme` on `<html>`). USAT navy `#15284e` + red `#e4002b`.
 - **Try me (fake data)** (`#tryMeBtn` split-button in the upload card; `wire_try_me`/`load_demo` in
   `app.js`). Dropdown with two paths: *Load sample data* fetches the committed synthetic fixture
-  (`/sample/sample_race_results_FAKE.xlsx`, served by the 8018 server from `examples/sample/`) and runs
-  it through the normal pipeline in-browser; *Download sample file* (`<a download>`) hands the user that
-  file to upload themselves. `S.is_demo` is set for either path (a re-uploaded `*_FAKE.*` file is
+  (`/sample/sample_race_results_FAKE.xlsx` — a STATIC asset under `public/sample/`, served by
+  `express.static`, so it works in an Express deploy AND a pure-static/Cloudflare Pages deploy; NOT a
+  dynamic route) and runs it through the normal pipeline in-browser; *Download sample file*
+  (`<a download>`) hands the user that file to upload themselves. `examples/sample/build_sample.js`
+  writes both the test fixture and this `public/sample/` copy (`public/sample/.gitignore` re-includes
+  the `_FAKE` file past the root `*.xlsx` ignore). `S.is_demo` is set for either path (a re-uploaded `*_FAKE.*` file is
   auto-detected via `is_demo_filename`), which stamps `is_demo:1` on the demo's analytics events and
   shows the `#demoBadge` "sample test data" banner. The upload card (and its Try-me button) hides once a
   workbook loads; **Start over** clears `S.is_demo` + the badge and restores it.

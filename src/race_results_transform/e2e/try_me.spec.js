@@ -23,6 +23,12 @@ test.describe('race_results_transform — Try me (fake data)', () => {
     await expect(page.locator('#tryMeLoad')).toBeVisible();             // load-it-for-me
     await expect(page.locator('#tryMeGet')).toHaveAttribute('href', /\/sample\/sample_race_results_FAKE\.xlsx$/);
     await expect(page.locator('#tryMeGet')).toHaveAttribute('download', '');  // download-to-upload
+    // the served file must actually exist (catches the prod "file wasn't available" 404)
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('#tryMeGet').click()
+    ]);
+    expect(download.suggestedFilename()).toMatch(/sample_race_results_FAKE\.xlsx$/);
   });
 
   test('"Load sample data" loads the fixture, shows the sample badge, hides the button', async ({ page }) => {
