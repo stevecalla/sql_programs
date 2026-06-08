@@ -36,6 +36,7 @@ events:
   start_over:           the user clicked "Start over" (reset / abandon)
   theme_changed:        the user toggled light/dark theme
   error:                an error occurred (see error_type)
+  try_me_download:      the user downloaded the built-in sample file from the "Try me" menu
   dashboard_view:       the internal metrics dashboard was opened (exclude from user visits)
 
 # key columns + how to use them
@@ -64,6 +65,7 @@ columns:
   viewport:       mobile or desktop.
   theme:          light / dark / auto.
   error_type:     the kind of error, when event_name='error'.
+  is_demo:        1 if the event came from the built-in "Try me" sample (fake data), else 0 or NULL for real user activity. Use to separate demo/test usage from real usage.
 
 # metric definitions — keep consistent with the dashboard / metrics_report.js
 metrics:
@@ -77,6 +79,7 @@ metrics:
   completion_rate: downloads / uploads
   automap_rate:    AVG(cols_matched / NULLIF(cols_matched + cols_unmatched,0))
   errors:          COUNT(*) WHERE event_name='error', grouped by error_type
+  demo_vs_real:    split any metric by is_demo (is_demo=1 = "Try me" sample, is_demo=0 or NULL = real). Real-only = WHERE (is_demo IS NULL OR is_demo=0).
 
 # realistic questions users ask (also a smoke set)
 example_questions:

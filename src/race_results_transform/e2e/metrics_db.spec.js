@@ -23,7 +23,10 @@ test.beforeAll(async () => {
     pool = mysql.createPool(await local_usat_sales_db_config());
     await pool.query('SELECT 1');
     await ensure_table(pool, await query_create_race_results_transform_events_table(cfg.TABLE)); // safe if server already made it
-    await ensure_columns(pool, cfg.TABLE, [{ name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' }]); // migrate older tables
+    await ensure_columns(pool, cfg.TABLE, [
+      { name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' },
+      { name: 'is_demo', ddl: 'is_demo TINYINT(1)', after: 'error_type' }
+    ]); // migrate older tables (mirror the server)
     db_ok = true;
   } catch (e) { db_ok = false; }
 });

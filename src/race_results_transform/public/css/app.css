@@ -481,3 +481,15 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 /* split: roomier group-name box (longer names were running over the 160px field) */
 .split-item .s-name,.split-head .s-name{flex:1 1 38%;min-width:0}
 .split-item .m-grp,.split-head .sh-grp{flex:1 1 55%;min-width:200px;max-width:none;width:auto}
+
+/* Try me (fake data) split-button + dropdown inside the dropzone */
+.try-me{position:relative;display:inline-block;margin-top:14px}
+.try-me .caret{font-size:11px;opacity:.8}
+.try-me-menu{position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + 6px);z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);min-width:260px;padding:6px;text-align:left}
+.try-me-menu.hidden{display:none}
+.try-me-item{display:block;width:100%;box-sizing:border-box;text-align:left;background:none;border:0;border-radius:7px;padding:9px 11px;font:inherit;color:var(--ink);cursor:pointer;text-decoration:none}
+.try-me-item:hover,.try-me-item:focus{background:var(--accent-soft);outline:none}
+
+/* "viewing sample data" banner shown while a demo is loaded */
+.demo-badge{background:var(--flag-bg,#fff7d6);border:1px solid var(--flag-line,#e0c84d);color:var(--ink);border-radius:10px;padding:10px 14px;margin:0 0 14px;font-size:13.5px}
+.demo-badge.hidden{display:none}

@@ -110,9 +110,14 @@ const SECTIONS = [
     { id: 35, label: 'AI ask \u2014 test follow-up thread (guided)', desc: 'Step-by-step process to confirm follow-up questions keep conversational context (B1).', cli: 'node src/cli.js ask:test:threads', action: 'ask_test_threads' },
     { id: 36, label: 'AI ask \u2014 run eval scenarios (records report)', desc: 'Runs the review scenarios against the live model (needs API key + DB) and writes a recorded report.', cli: 'node src/cli.js ask:eval', action: 'ask_eval' }
   ] },
+  { label: 'Try Me (sample data)', color: GREEN, items: [
+    { id: 37, label: 'Try Me — UI + is_demo wiring tests', desc: 'node test: the Try-me dropdown markup + the is_demo column wired across DDL, server whitelist, and browser allow-list.', cli: 'node --test tests/try_me.test.js', action: 'test_try_me' },
+    { id: 38, label: 'Try Me — metrics report tests (demo split)', desc: 'node test: the is_demo split query + demo_split shape, plus Last-User-Activity MTN / dashboard_view exclusion.', cli: 'node --test tests/metrics_report.test.js', action: 'test_metrics_report' },
+    { id: 39, label: 'Try Me vs real — counts (read-only SQL)', desc: 'Show demo (Try Me) vs real uploads/conversions/downloads straight from the events table.', cli: 'node src/cli.js ask:sql "SELECT … GROUP BY kind"', action: 'metrics_demo_split' }
+  ] },
   { label: 'Settings', color: GRAY, items: [
-    { id: 37, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 38, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
+    { id: 40, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
+    { id: 41, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
@@ -202,6 +207,17 @@ async function handle(item) {
     case 'test_fixtures': await run_test('tests/fixtures.test.js', 'golden-fixture tests'); break;
     case 'test_lint': await run_test('tests/lint_snake_case.test.js', 'snake_case lint'); break;
     case 'test_config': await run_test('tests/config_wiring.test.js', 'config-wiring checks'); break;
+    case 'test_try_me': await run_test('tests/try_me.test.js', 'Try-me UI + is_demo wiring tests'); break;
+    case 'test_metrics_report': await run_test('tests/metrics_report.test.js', 'metrics report (last-activity + demo split) tests'); break;
+    case 'metrics_demo_split': {
+      const sql = "SELECT CASE WHEN is_demo=1 THEN 'Try Me' ELSE 'Real' END kind, " +
+        "SUM(event_name='file_uploaded') uploads, SUM(event_name='conversion_completed') conversions, " +
+        "SUM(event_name IN ('download','split_download_used')) downloads " +
+        "FROM race_results_transform_events GROUP BY kind";
+      console.log(c(DIM, '\n  Try Me vs real activity (read-only):'));
+      await run('node', ['src/cli.js', 'ask:sql', sql]);
+      break;
+    }
     case 'e2e_run': console.log(c(DIM, '\n  running Playwright browser tests, headless (run "Install browser E2E" first if this fails)…\n')); await run('npm', ['run', 'e2e']); break;
     case 'e2e_headed': console.log(c(DIM, '\n  opening Chrome (headed, slowed)…\n')); await run('npm', ['run', 'e2e:headed']); break;
     case 'e2e_step': console.log(c(DIM, '\n  opening Chrome with the Inspector — click Resume to advance each step…\n')); await run('npm', ['run', 'e2e:step']); break;

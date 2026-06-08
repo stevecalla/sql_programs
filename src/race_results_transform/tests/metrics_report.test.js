@@ -70,3 +70,34 @@ test('Top Users last activity is formatted in SQL (true MTN, not JS-shifted to U
   assert.match(top, /DATE_FORMAT\(MAX\(CASE WHEN event_name <> 'dashboard_view' THEN created_at_mtn END\), '%Y-%m-%d %l:%i %p'\)\s+last_seen/,
     'last_seen must be formatted in SQL via DATE_FORMAT (12-hour, AM/PM) to stay true MTN');
 });
+
+// ---- Try Me vs real activity (is_demo split) ------------------------------------
+function find_demo_sql(seen) {
+  return seen.find(function (s) { return /up_demo/.test(s) && /is_demo/.test(s); });
+}
+
+test('report issues an is_demo split query for Try Me vs real activity', async function () {
+  const pool = make_fake_pool();
+  await report.build_report(pool, { days: 7 });
+  const demo = find_demo_sql(pool.seen);
+  assert.ok(demo, 'expected a query splitting events by is_demo');
+  // demo side requires is_demo=1; real side requires is_demo=0 OR NULL (legacy rows).
+  assert.match(demo, /is_demo=1/, 'demo counts must require is_demo=1');
+  assert.match(demo, /is_demo IS NULL OR is_demo=0/, 'real counts must include NULL/0 is_demo');
+  assert.match(demo, /file_uploaded/, 'split covers uploads');
+  assert.match(demo, /conversion_completed/, 'split covers conversions');
+  assert.match(demo, /split_download_used/, 'split covers downloads');
+});
+
+test('report exposes demo_split (Uploads/Conversions/Downloads) + demo summary', async function () {
+  const pool = make_fake_pool();
+  const r = await report.build_report(pool, { days: 7 });
+  const ds = r.data.demo_split;
+  assert.ok(Array.isArray(ds) && ds.length === 3, 'demo_split must be a 3-row array');
+  assert.deepEqual(ds.map(function (x) { return x.event; }), ['Uploads', 'Conversions', 'Downloads']);
+  ds.forEach(function (x) {
+    assert.equal(typeof x.demo, 'number', 'each row has a numeric demo count');
+    assert.equal(typeof x.real, 'number', 'each row has a numeric real count');
+  });
+  assert.ok(r.data.demo && typeof r.data.demo.uploads === 'number', 'demo summary has uploads count');
+});

@@ -85,6 +85,18 @@ async function build_report(pool, opts) {
     "SUM(split_basis='converted') converted, SUM(split_basis='original') original " +
     "FROM " + W + " AND event_name='split_download_used'", A))[0] || {};
 
+  // Try Me vs real activity: split the key events by is_demo (1 = built-in sample / fake data,
+  // else real user activity). Drives the "Try Me vs real" dashboard chart + KPI card.
+  const demo = (await q(pool,
+    "SELECT " +
+    "SUM(event_name='file_uploaded' AND is_demo=1) up_demo, " +
+    "SUM(event_name='file_uploaded' AND (is_demo IS NULL OR is_demo=0)) up_real, " +
+    "SUM(event_name='conversion_completed' AND is_demo=1) cv_demo, " +
+    "SUM(event_name='conversion_completed' AND (is_demo IS NULL OR is_demo=0)) cv_real, " +
+    "SUM(event_name IN ('download','split_download_used') AND is_demo=1) dl_demo, " +
+    "SUM(event_name IN ('download','split_download_used') AND (is_demo IS NULL OR is_demo=0)) dl_real " +
+    "FROM " + W, A))[0] || {};
+
   // Last User Activity = most recent REAL activity; exclude server-side dashboard_view
   // events (each /metrics open fires one) so merely viewing the dashboard never bumps the
   // date. rows_total stays unfiltered — it's a DB-size health figure, not an activity figure.
@@ -123,6 +135,12 @@ async function build_report(pool, opts) {
       { stage: 'Start over', n: cmap.start_over || 0 }
     ],
     splits: { count: n0(splits.n), avg_groups: Math.round(n0(splits.avg_groups) * 10) / 10, converted: n0(splits.converted), original: n0(splits.original) },
+    demo_split: [
+      { event: 'Uploads', demo: n0(demo.up_demo), real: n0(demo.up_real) },
+      { event: 'Conversions', demo: n0(demo.cv_demo), real: n0(demo.cv_real) },
+      { event: 'Downloads', demo: n0(demo.dl_demo), real: n0(demo.dl_real) }
+    ],
+    demo: { uploads: n0(demo.up_demo), conversions: n0(demo.cv_demo), downloads: n0(demo.dl_demo) },
     health: {
       rows: n0(health.rows_total),
       mb: (sizerow.mb != null ? Number(sizerow.mb) : null),

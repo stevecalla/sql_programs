@@ -55,6 +55,7 @@ const env_fields = `
   viewport VARCHAR(8),
   theme VARCHAR(8),
   error_type VARCHAR(40),
+  is_demo TINYINT(1),            -- 1 = event came from the built-in "Try me" sample (fake data)
 `;
 
 const index_fields = `
