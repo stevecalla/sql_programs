@@ -50,7 +50,7 @@ async function read_thread(pool, thread_id, n) {
   if (!pool || !thread_id) return [];
   try {
     const [rows] = await pool.query(
-      'SELECT created_at_mtn, ok, question, sql_text, answer FROM `' + TABLE + '`'
+      'SELECT created_at_mtn, ok, provider, model, question, sql_text, answer FROM `' + TABLE + '`'
       + ' WHERE thread_id = ? ORDER BY id DESC LIMIT ?', [String(thread_id).slice(0, 40), Number(n) || 8]);
     return (rows || []).reverse();
   } catch (err) { return []; }

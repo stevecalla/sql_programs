@@ -234,7 +234,7 @@ function create_app() {
       if (!thread_id) return res.json({ ok: true, turns: [] });
       const ask_log = require('./src/race_results_transform/metrics/ask/ask_log');
       const rows = await ask_log.read_thread(metrics_pool, thread_id, 20);
-      res.json({ ok: true, turns: rows.map(function (r) { return { ts: r.created_at_mtn, question: r.question, answer: r.answer, sql: r.sql_text, ok: r.ok }; }) });
+      res.json({ ok: true, turns: rows.map(function (r) { return { ts: r.created_at_mtn, question: r.question, answer: r.answer, sql: r.sql_text, ok: r.ok, provider: r.provider, model: r.model }; }) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.post('/api/metrics-ask', require_dash_auth, async function (req, res) {

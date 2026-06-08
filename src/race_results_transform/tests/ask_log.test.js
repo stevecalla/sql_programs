@@ -28,4 +28,20 @@ describe('ask_log (db audit)', () => {
     await log.append(null, { question: 'x' });
     await log.append({ query: async function () { throw new Error('db down'); } }, { question: 'x' });
   });
+  test('append persists thread_id + asker_id', async () => {
+    const pool = mock_pool();
+    await log.append(pool, { surface: 'dashboard', question: 'q', thread_id: 'th-1', asker_id: 'ak-1', ok: true });
+    assert.match(pool.calls[0].sql, /thread_id/);
+    assert.ok(pool.calls[0].params.indexOf('th-1') >= 0);
+    assert.ok(pool.calls[0].params.indexOf('ak-1') >= 0);
+  });
+  test('read_thread returns turns oldest-first and to_history maps them', async () => {
+    const rows = await log.read_thread(mock_pool(), 'th-1', 8);
+    assert.equal(rows.length, 1);
+    const hist = log.to_history(rows);
+    assert.deepEqual(hist[0], { q: 'q', sql: 'SELECT 1', answer: 'a' });
+  });
+  test('read_thread with no thread_id returns []', async () => {
+    assert.deepEqual(await log.read_thread(mock_pool(), null, 8), []);
+  });
 });

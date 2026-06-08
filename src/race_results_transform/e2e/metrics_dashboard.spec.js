@@ -101,14 +101,16 @@ test.describe('race_results_transform — metrics dashboard', () => {
 
   test('ask-box SQL toggle disables model + swaps placeholder; results scroll (D3, #66/#64)', async ({ page }) => {
     await page.goto('/metrics');
-    const tog = page.locator('#ask-sql-mode');
-    await expect(tog).toBeVisible();
+    const sqlChip = page.locator('.mx-ask-sqltoggle');               // chip; the checkbox itself is visually hidden
+    await expect(sqlChip).toBeVisible();
     await expect(page.locator('#ask-model')).toBeEnabled();
-    await tog.check();
+    await sqlChip.click();
     await expect(page.locator('#ask-model')).toBeDisabled();           // model picker not used in raw-SQL mode
+    await expect(sqlChip).toHaveClass(/on/);                           // chip lights up when active
     await expect(page.locator('#ask-q')).toHaveAttribute('placeholder', /SELECT/);
-    await tog.uncheck();
+    await sqlChip.click();
     await expect(page.locator('#ask-model')).toBeEnabled();
+    await expect(sqlChip).not.toHaveClass(/on/);
     // chart/table toggle buttons exist (hidden until a chartable result renders) (#65)
     await expect(page.locator('#ask-viz-chart')).toHaveCount(1);
     await expect(page.locator('#ask-viz-table')).toHaveCount(1);
@@ -127,5 +129,15 @@ test.describe('race_results_transform — metrics dashboard', () => {
     await expect(page.locator('#ask-correct')).toHaveCount(1);
     await expect(page.locator('#ask-correct')).toBeHidden();
     await expect(page.locator('#ask-correct-toggle')).toHaveCount(1);
+    // conversation transcript container (B1 #73) present but hidden until turns exist
+    await expect(page.locator('#ask-convo-list')).toHaveCount(1);     // single in-thread transcript list
+    await expect(page.locator('#ask-thread-scroll')).toHaveCount(1);  // one scrolling conversation
+    await expect(page.locator('#ask-convo-more')).toHaveCount(1);     // 'see older' expander (capped thread)
+    // show/hide toggle collapses the whole ask area
+    await expect(page.locator('#ask-panel-body')).toBeVisible();
+    await page.locator('#ask-panel-toggle').click();
+    await expect(page.locator('#ask-panel-body')).toBeHidden();
+    await page.locator('#ask-panel-toggle').click();
+    await expect(page.locator('#ask-panel-body')).toBeVisible();
   });
 });

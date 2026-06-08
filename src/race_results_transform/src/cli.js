@@ -82,6 +82,7 @@ function parse_args(argv) {
     else if (a === '--model') out.model = argv[++i];
     else if (a === '--n') out.n = argv[++i];
     else if (a === '--all') out.all = true;
+    else if (a === '--q') out.q = argv[++i];
     else if (a === '--yes' || a === '-y') out.yes = true;
     else if (a === '--strict') out.strict = true;
     else out._.push(a);
@@ -150,6 +151,10 @@ function help() {
     '  node cli.js ask:sql "<SELECT ...>"           # run read-only SQL directly (guarded, no AI)',
     '  node cli.js ask:corrections [--n 20] [--all]   # list operator clarifications used as grounding',
     '  node cli.js ask:uncorrect <id>              # deactivate a correction so it stops being applied',
+    '  node cli.js ask:correct "<note>" [--q "<question>"]  # add an operator correction (grounding)',
+    '  node cli.js ask:test:corrections            # guided steps to verify a correction is applied (G2)',
+    '  node cli.js ask:test:threads                # guided steps to verify follow-up threads (B1)',
+    '  node cli.js ask:eval [--provider --model]   # run review scenarios vs the live model; records a report',
     '  node cli.js metrics:size                   # events table size + rows/year',
     '  node cli.js metrics:cleanup [--yes]        # purge years beyond current+prior',
     '  node cli.js metrics:purge-all [--yes]      # delete ALL rows (confirm) — clears test data',
@@ -206,12 +211,37 @@ async function main() {
         if (!rows.length) { console.log('No ask history in ' + ask_log.TABLE + '.'); }
         else rows.forEach(function (r) {
           console.log('');
-          console.log(col(C.gray, String(r.created_at_mtn || '')) + '  ' + col(C.bold, '[' + (r.surface || '') + ' \u00b7 ' + (r.provider || '?') + (r.model ? ' \u00b7 ' + r.model : '') + ']') + (r.ok === 0 ? col(C.red, '  (no answer)') : ''));
+          console.log(col(C.gray, String(r.created_at_mtn || '')) + '  ' + col(C.bold, '[' + (r.surface || '') + ' \u00b7 ' + (r.provider || '?') + (r.model ? ' \u00b7 ' + r.model : '') + ']') + (r.thread_id ? col(C.gray, '  thread:' + String(r.thread_id).slice(0, 8)) : '') + (r.asker_id ? col(C.gray, ' asker:' + String(r.asker_id).slice(0, 8)) : '') + (r.ok === 0 ? col(C.red, '  (no answer)') : ''));
           console.log(col(C.cyan, 'Q: ') + r.question);
           console.log(col(C.green, 'A: ') + String(r.answer || '').split('\n')[0].slice(0, 160));
         });
       } finally { await pool.end(); }
       process.exit(0);
+    }
+    if (cmd === 'ask:correct') {
+      const note = args._.slice(1).join(' ').trim();
+      if (!note) { console.log('Usage: node src/cli.js ask:correct "<note>" [--q "<question>"]'); process.exit(2); }
+      const corr = require('../metrics/ask/corrections');
+      const pool = await metrics.get_pool();
+      try { const id = await corr.append(pool, { note: note, question: args.q || null, author: 'cli' }); console.log(col(C.green, 'Saved correction #' + (id || '?') + ' — it will apply on the next ask.')); }
+      finally { await pool.end(); }
+      process.exit(0);
+    }
+    if (cmd === 'ask:test:corrections' || cmd === 'ask:test:threads') {
+      const guide = require('../metrics/ask/test_guide');
+      console.log(guide.format_guide(cmd === 'ask:test:corrections' ? guide.CORRECTIONS_GUIDE : guide.THREADS_GUIDE));
+      process.exit(0);
+    }
+    if (cmd === 'ask:eval') {
+      const { run_eval } = require('../metrics/ask/eval/run_eval');
+      const out = await run_eval({ provider: args.provider, model: args.model });
+      if (out.skipped) { console.log(col(C.yellow, 'Eval skipped: ' + out.reason + ' (set OPENAI_API_KEY / ANTHROPIC_API_KEY and ensure the DB is reachable).')); process.exit(0); }
+      console.log('');
+      console.log(col(C.bold, 'AI ask eval — ' + out.passed + ' / ' + out.total + ' passed') + col(C.gray, '  [' + out.provider + (out.model ? ' \u00b7 ' + out.model : '') + ']'));
+      out.results.forEach(function (r) { console.log((r.ok ? col(C.green, '  \u2713 ') : col(C.red, '  \u2717 ')) + r.id + col(C.gray, '  (' + r.kind + ')')); });
+      if (out.report_path) console.log(col(C.gray, '\n  recorded: ' + out.report_path));
+      try { await require('../metrics/ask/db').close_pool(); } catch (e) {}
+      process.exit(out.passed === out.total ? 0 : 1);
     }
     if (cmd === 'ask:corrections') {
       const corr = require('../metrics/ask/corrections');

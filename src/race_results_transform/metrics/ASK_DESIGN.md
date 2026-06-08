@@ -198,9 +198,28 @@ Mirrors the chatgpt_like 448-line yaml, adapted to the events schema. Sections:
 - #66 Raw-SQL mode: an opt-in `SQL` toggle (and `ask_sql()` / `POST {mode:'sql'}` / `ask:sql` CLI) runs user SQL directly through the same read-only guard (SELECT-only, table allowlist, enforced LIMIT) -- no LLM. Logged with surface `dashboard-sql`/`cli-sql`.
 
 ## 15h. Threads, live metrics, corrections (B1/G1/G2)
-- B1 (threads): the dashboard keeps a bounded client-side history `[{q,sql,answer}]` and posts it; `ask.js:format_history()` compacts the last 4 turns into the plan prompt so follow-ups ("that", "last month", "break it down") resolve. A 'New thread' link clears it. Prompt builders take an optional `extra={history,live,corrections}` (backward compatible).
+- B1 (threads): the dashboard keeps a bounded client-side history `[{q,sql,answer}]` and posts it; `ask.js:format_history()` compacts the last 4 turns into the plan prompt so follow-ups ("that", "last month", "break it down") resolve. A 'New thread' link clears it. Prompt builders take an optional `extra={history,live,corrections}` (backward compatible). The dashboard also sends a stable per-browser `asker_id` and a `thread_id` (both localStorage); the server persists them on every `ask_log` row and rebuilds the conversation server-side from `ask_log.read_thread()` (so context survives a reload). A scrollable transcript (`#ask-convo`) shows prior turns and rehydrates on load via `GET /api/metrics-ask-thread`; 'New thread' mints a fresh `thread_id` and clears it. The whole conversation is **one scrolling thread** (prior turns as bubbles, the active rich answer pinned at the bottom, newest in view); each prior turn is distinguished by a left accent rule and tagged with the **model used + a Mountain-Time timestamp** (right-aligned), and the active answer's meta line carries them too. The thread is **capped** (last 4 prior turns shown; a `▸ See N earlier` expander reveals the rest) to stay lean, the whole panel has a **show/hide** toggle (persisted in `localStorage`), and 'Clear conversation' resets it. Ask errors render as a prominent ⚠️ red warning. The raw-SQL toggle and the follow-up/new-thread control are labeled pill chips with tooltips, inline next to the model picker; the SQL chip lights green when active.
 - G1 (live metrics): `metrics/ask/live.js:live_snapshot()` reuses `build_report` to produce a compact current-aggregates string; the server caches it ~5 min and injects it as orientation grounding (the model is told to query for exact figures, not quote the snapshot). CLI builds it per call.
 - G2 (corrections): `metrics/ask/corrections.js` is a DB-backed store (`race_results_transform_ask_corrections`, active flag). Recent active notes are injected as authoritative human clarifications into plan/answer/define prompts (cached ~5 min, invalidated on write). Added via `POST /api/metrics-ask-correct` (dashboard 'Correct this'); reviewed/managed via `ask:corrections [--n] [--all]` and `ask:uncorrect <id>`. Governance: global, auto-applied, most-recent-N, deactivatable.
+
+## 17. Test & review playbook (corrections / threads / eval)
+Runnable from the CLI (also a menu item each) so the process is active documentation:
+`node src/cli.js ask:test:corrections` and `ask:test:threads` print the steps below; `ask:eval` runs them against the live model and records a report.
+
+### A. Correction is incorporated into answers (G2)
+1. Ask an UNDEFINED term so the change is visible: `how many power users do we have?` — note the SQL.
+2. Add a correction (dashboard 'Correct this', or `node src/cli.js ask:correct "A power user is any visitor with 3+ uploads (file_uploaded)." --q "how many power users do we have?"`).
+3. Ask the same question again. **Expected:** the SQL now groups by visitor_id with `HAVING COUNT(... file_uploaded ...) >= 3`.
+4. Review: `ask:corrections`; clean up: `ask:uncorrect <id>`.
+
+### B. Follow-up threads keep context (B1)
+1. `how many uploads in the last 7 days?`
+2. `break that down by file type` — **expected:** reuses the uploads metric, adds `GROUP BY file_type`.
+3. `and the week before?` — **expected:** same metric, shifted date window. Same `thread_id` across turns (`ask:log`).
+
+### C. Automated layers
+- Offline (CI, deterministic): `tests/ask_context_extra.test.js` (history/live/corrections flow into the prompts), `tests/ask_eval.test.js` (playbook + scenarios structure + run_eval gating).
+- Live-eval (gated on `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` + DB): `metrics/ask/eval/run_eval.js` runs `eval/scenarios.js`, asserts SQL/mode where deterministic, and writes a timestamped report under the data dir's `ask_eval/`. Run via `node src/cli.js ask:eval`.
 
 ## 16. Future recommendations & hardening (AFTER Step 2; not in scope now)
 v1 (Step 2) uses the **current local credentials** with read-only stressed to the model
