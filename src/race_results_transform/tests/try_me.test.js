@@ -36,7 +36,7 @@ describe('try_me / is_demo', () => {
     // of public/). If this file is missing, the "Try me" load/download 404s in production.
     const f = path.join(ROOT, 'public', 'sample', 'sample_race_results_FAKE.xlsx');
     assert.ok(fs.existsSync(f), 'public/sample/sample_race_results_FAKE.xlsx is missing — regenerate via examples/sample/build_sample.js');
-    assert.ok(fs.statSync(f).size > 0, 'the served sample file is empty');
+    assert.ok(fs.readFileSync(f).length > 0, 'the served sample file is empty');
   });
 
   test('index.html has the Try-me dropdown (button + both menu items)', () => {
