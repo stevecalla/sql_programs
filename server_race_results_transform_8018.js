@@ -61,6 +61,9 @@ async function init_metrics() {
     await ensure_columns(metrics_pool, metrics_config.TABLE, [
       { name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' }
     ]);
+    await ensure_table(metrics_pool, require('./src/race_results_transform/metrics/ask/ask_log').DDL);
+    await ensure_table(metrics_pool, require('./src/race_results_transform/metrics/ask/corrections').DDL);
+    await ensure_columns(metrics_pool, require('./src/race_results_transform/metrics/ask/ask_log').TABLE, require('./src/race_results_transform/metrics/ask/ask_log').MIGRATE_COLUMNS);
     console.log('  [analytics] events table ready (' + metrics_config.TABLE + ')');
   } catch (e) {
     console.log('  [analytics] disabled — DB not available: ' + e.message);
@@ -93,20 +96,19 @@ function create_app() {
 
   // Usage analytics — fire-and-forget. Counts/enums only; no-ops if no DB pool.
   app.use(express.json({ limit: '16kb' }));
+  app.use(express.urlencoded({ extended: false }));
   app.post('/api/event', make_event_ingest({ pool: pool_proxy, table: metrics_config.TABLE, columns: metrics_config.COLUMNS, reporting_tz: metrics_config.REPORTING_TZ }));
   // Serve the shared generic analytics browser client (UsageMetrics) as a static asset.
   app.use('/analytics', express.static(path.join(__dirname, 'utilities', 'analytics')));
 
   // Slack usage digest — hit by the cron_get_slack_race_results_transform job.
   // Same cron -> route -> slack_message_api convention as the other slack jobs.
-  // ---- Read-only metrics dashboard auth -------------------------------------
-  // HTTP Basic bootstraps the login (browser dialog / httpCredentials in tests);
-  // on success we mint a short-lived SIGNED session cookie so access EXPIRES and
-  // can be revoked via /metrics/logout. The signing key is derived from the
-  // configured password (HMAC), so no extra env var is required. Fail-closed if the
-  // dashboard user/pass aren't set. NOTE: browsers cache Basic creds, so a *full*
-  // sign-out can still require closing the browser — the cookie + TTL add server-side
-  // revocation and an absolute session lifetime on top of Basic.
+  // ---- Read-only metrics dashboard auth (form login + signed session cookie) --
+  // A login form (GET/POST /metrics/login) validates the configured user/pass and
+  // sets a short-lived SIGNED session cookie (HMAC of the password; 12h TTL). The
+  // cookie is the ONLY gate, so /metrics/logout TRULY logs the user out (the next
+  // visit redirects back to the login form). No HTTP Basic (which browsers cache and
+  // can't be cleared). Fail-closed if the dashboard user/pass aren't set.
   const SESSION_COOKIE = 'mx_session';
   const SESSION_TTL_MS = 12 * 60 * 60 * 1000;   // 12h absolute expiry
   function dash_creds() {
@@ -127,28 +129,44 @@ function create_app() {
     const m = (req.headers.cookie || '').match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
     return m ? decodeURIComponent(m[1]) : null;
   }
-  function basic_ok(req) {
-    const c = dash_creds();
-    const m = (req.headers.authorization || '').match(/^Basic (.+)$/);
-    if (!m) return false;
-    const parts = Buffer.from(m[1], 'base64').toString().split(':');
-    return parts[0] === c.user && parts.slice(1).join(':') === c.pass;
+  function login_html(err) {
+    return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+      + '<title>Sign in — Metrics</title>'
+      + '<style>body{font:16px system-ui,Arial,sans-serif;background:#0e1b3a;color:#fff;display:grid;place-items:center;min-height:100vh;margin:0}'
+      + 'form{background:#16233f;padding:24px;border-radius:12px;min-width:280px;box-shadow:0 8px 30px rgba(0,0,0,.4)}'
+      + 'h1{font-size:18px;margin:0 0 14px}input{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:10px;border-radius:8px;border:1px solid #2a3a5e;background:#0e1b3a;color:#fff}'
+      + 'button{width:100%;padding:10px;border:0;border-radius:8px;background:#e4002b;color:#fff;font-weight:700;cursor:pointer;margin-top:6px}.err{color:#ff8a8a;font-size:13px;margin:0 0 6px}</style>'
+      + '<form method="post" action="/metrics/login">'
+      + '<h1>\uD83D\uDCCA Metrics \u2014 Sign in</h1>'
+      + (err ? '<p class="err">' + err + '</p>' : '')
+      + '<input name="username" placeholder="Username" autofocus autocomplete="username">'
+      + '<input name="password" type="password" placeholder="Password" autocomplete="current-password">'
+      + '<button type="submit">Sign in</button></form>';
   }
   function require_dash_auth(req, res, next) {
     const c = dash_creds();
     if (!c.user || !c.pass) { res.status(503).send('Dashboard not configured (set RACE_RESULTS_CONVERTER_METRICS_DASH_USER / RACE_RESULTS_CONVERTER_METRICS_DASH_PASS).'); return; }
-    if (valid_session(read_cookie(req, SESSION_COOKIE))) return next();   // unexpired session cookie
-    if (basic_ok(req)) {                                                  // bootstrap via Basic -> mint a session
-      res.cookie(SESSION_COOKIE, sign_session(Date.now() + SESSION_TTL_MS), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_MS });
-      return next();
-    }
-    res.set('WWW-Authenticate', 'Basic realm="race_results_metrics"').status(401).send('Authentication required.');
+    if (valid_session(read_cookie(req, SESSION_COOKIE))) return next();   // valid session cookie = the only gate
+    if (req.path.indexOf('/api') === 0) return res.status(401).json({ ok: false, error: 'not authenticated' });
+    return res.redirect('/metrics/login');
   }
+  app.get('/metrics/login', function (req, res) {
+    if (valid_session(read_cookie(req, SESSION_COOKIE))) return res.redirect('/metrics');
+    res.type('html').send(login_html(''));
+  });
+  app.post('/metrics/login', function (req, res) {
+    const c = dash_creds();
+    if (!c.user || !c.pass) { res.status(503).send('Dashboard not configured.'); return; }
+    const u = (req.body && req.body.username) || '', pw = (req.body && req.body.password) || '';
+    if (u === c.user && pw === c.pass) {
+      res.cookie(SESSION_COOKIE, sign_session(Date.now() + SESSION_TTL_MS), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_MS });
+      return res.redirect('/metrics');
+    }
+    res.status(401).type('html').send(login_html('Invalid username or password.'));
+  });
   app.get('/metrics/logout', function (req, res) {
     res.clearCookie(SESSION_COOKIE, { path: '/' });
-    res.type('html').send('<!doctype html><meta charset="utf-8"><title>Signed out</title>'
-      + '<p style="font:16px system-ui;margin:2rem">Signed out of the metrics dashboard. <a href="/metrics">Sign back in</a>.</p>'
-      + '<p style="font:13px system-ui;color:#888;margin:0 2rem">Your browser may have cached the login; fully signing out can require closing the browser.</p>');
+    res.redirect('/metrics/login');   // truly logged out: next /metrics hit shows the login form
   });
   const DASHBOARD_HTML = path.join(__dirname, 'src', 'race_results_transform', 'metrics', 'metrics_dashboard.html');
   app.get('/metrics', require_dash_auth, function (req, res) {
@@ -170,6 +188,86 @@ function create_app() {
       res.json(report.data);
     } catch (e) {
       console.error('[analytics] report error:', e.message);
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // AI "ask your data" — read-only natural-language query over the events table (auth-gated).
+  app.get('/api/metrics-ask-models', require_dash_auth, function (req, res) {
+    try { res.json(require('./src/race_results_transform/metrics/ask/models').list()); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  // G1/G2 grounding, cached ~5 min so we don't re-query on every ask (both degrade to null).
+  let _ask_live = { at: 0, text: null }, _ask_corr = { at: 0, text: null };
+  const ASK_GROUND_TTL = 5 * 60 * 1000;
+  async function get_ask_live() {
+    if (!metrics_pool) return null;
+    if (Date.now() - _ask_live.at < ASK_GROUND_TTL) return _ask_live.text;
+    let text = null;
+    try { text = await require('./src/race_results_transform/metrics/ask/live').live_snapshot(metrics_pool, { days: 30 }); } catch (e) { text = null; }
+    _ask_live = { at: Date.now(), text: text };
+    return text;
+  }
+  async function get_ask_corrections() {
+    if (!metrics_pool) return null;
+    if (Date.now() - _ask_corr.at < ASK_GROUND_TTL) return _ask_corr.text;
+    let text = null;
+    try { text = await require('./src/race_results_transform/metrics/ask/corrections').grounding_text(metrics_pool, 12); } catch (e) { text = null; }
+    _ask_corr = { at: Date.now(), text: text };
+    return text;
+  }
+  // G2: save an operator correction; it joins the grounding for subsequent asks.
+  app.post('/api/metrics-ask-correct', require_dash_auth, async function (req, res) {
+    try {
+      const note = String((req.body && req.body.note) || '').slice(0, 2000).trim();
+      if (!note) return res.status(400).json({ ok: false, error: 'no correction text' });
+      const corr = require('./src/race_results_transform/metrics/ask/corrections');
+      const id = await corr.append(metrics_pool, { note: note, question: req.body.question, original_answer: req.body.answer, author: String((req.body && req.body.author) || 'operator').slice(0, 120) });
+      _ask_corr.at = 0;   // force a refresh so the correction applies on the next ask
+      res.json({ ok: true, id: id });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Conversation transcript: return a thread's turns (oldest first) for display.
+  app.get('/api/metrics-ask-thread', require_dash_auth, async function (req, res) {
+    try {
+      const thread_id = String((req.query && req.query.thread_id) || '').slice(0, 40);
+      if (!thread_id) return res.json({ ok: true, turns: [] });
+      const ask_log = require('./src/race_results_transform/metrics/ask/ask_log');
+      const rows = await ask_log.read_thread(metrics_pool, thread_id, 20);
+      res.json({ ok: true, turns: rows.map(function (r) { return { ts: r.created_at_mtn, question: r.question, answer: r.answer, sql: r.sql_text, ok: r.ok, provider: r.provider, model: r.model }; }) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/metrics-ask', require_dash_auth, async function (req, res) {
+    const ask_mod = require('./src/race_results_transform/metrics/ask/ask');
+    const ask_log = require('./src/race_results_transform/metrics/ask/ask_log');
+    // Raw-SQL mode: input is treated as SQL and run directly (guarded read-only) -- no LLM.
+    if (req.body && req.body.mode === 'sql') {
+      const raw = String((req.body && req.body.sql) || '').slice(0, 4000).trim();
+      if (!raw) return res.status(400).json({ ok: false, error: 'no sql' });
+      try {
+        const r = await ask_mod.ask_sql(raw);
+        ask_log.append(metrics_pool, { surface: 'dashboard-sql', question: raw, provider: 'sql', model: null, thread_id: (req.body && req.body.thread_id) || null, asker_id: (req.body && req.body.asker_id) || null, sql: r.sql, ok: r.ok, row_count: r.row_count, answer: r.answer });
+        return res.json(r);
+      } catch (e) {
+        ask_log.append(metrics_pool, { surface: 'dashboard-sql', question: raw, provider: 'sql', model: null, sql: raw, ok: false, row_count: 0, answer: e.message });
+        return res.status(400).json({ ok: false, error: e.message });
+      }
+    }
+    try {
+      const question = String((req.body && req.body.question) || '').slice(0, 500).trim();
+      if (!question) return res.status(400).json({ ok: false, error: 'no question' });
+      const thread_id = req.body && req.body.thread_id ? String(req.body.thread_id).slice(0, 40) : null;
+      const asker_id = req.body && req.body.asker_id ? String(req.body.asker_id).slice(0, 40) : null;
+      const live = await get_ask_live();                                   // G1: current aggregates
+      const corrections = await get_ask_corrections();                     // G2: operator clarifications
+      let history = null;                                                  // B1: prefer the server-side thread (survives reload)
+      if (thread_id) { try { history = ask_log.to_history(await ask_log.read_thread(metrics_pool, thread_id, 4)); } catch (e) { history = null; } }
+      if (!history || !history.length) history = Array.isArray(req.body.history) ? req.body.history.slice(-4) : null;
+      const r = await ask_mod.ask(question, { provider: req.body.provider, model: req.body.model, live: live, corrections: corrections, history: history });
+      ask_log.append(metrics_pool, { surface: 'dashboard', question: question, provider: r.provider, model: r.model, thread_id: thread_id, asker_id: asker_id, sql: r.sql, ok: r.ok, row_count: r.row_count, answer: r.answer });
+      res.json(r);
+    } catch (e) {
+      console.error('[ask] error:', e.message);
       res.status(500).json({ ok: false, error: e.message });
     }
   });

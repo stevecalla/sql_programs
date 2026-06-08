@@ -76,14 +76,19 @@ async function build_report(pool, opts) {
     "FROM " + W + " GROUP BY d ORDER BY d", A);
   const top_users = await q(pool, "SELECT visitor_id v, MAX(is_returning) ret, " +
     "SUM(event_name='page_view') visits, SUM(event_name='file_uploaded') uploads, SUM(event_name IN ('download','split_download_used')) downloads, SUM(event_name='start_over') start_overs, COUNT(*) events, " +
-    "MAX(created_at_mtn) last_seen, MAX(client_tz) tz " +
+    // Format last_seen in SQL so it stays true MTN. created_at_mtn is a DATETIME holding MTN
+    // wall-clock; returning the raw Date and calling toISOString() in JS shifts it to UTC.
+    "DATE_FORMAT(MAX(CASE WHEN event_name <> 'dashboard_view' THEN created_at_mtn END), '%Y-%m-%d %l:%i %p') last_seen, MAX(client_tz) tz " +
     "FROM " + W + " AND visitor_id IS NOT NULL GROUP BY visitor_id ORDER BY uploads DESC, events DESC LIMIT 8", A);
   const splits = (await q(pool,
     "SELECT COUNT(*) n, AVG(selected_count) avg_groups, " +
     "SUM(split_basis='converted') converted, SUM(split_basis='original') original " +
     "FROM " + W + " AND event_name='split_download_used'", A))[0] || {};
 
-  const health = (await q(pool, "SELECT COUNT(*) rows_total, DATE_FORMAT(MAX(created_at_mtn), '%b %e, %Y %l:%i %p') latest FROM `" + T + "`"))[0] || {};
+  // Last User Activity = most recent REAL activity; exclude server-side dashboard_view
+  // events (each /metrics open fires one) so merely viewing the dashboard never bumps the
+  // date. rows_total stays unfiltered — it's a DB-size health figure, not an activity figure.
+  const health = (await q(pool, "SELECT COUNT(*) rows_total, DATE_FORMAT(MAX(CASE WHEN event_name <> 'dashboard_view' THEN created_at_mtn END), '%b %e, %Y %l:%i %p') latest FROM `" + T + "`"))[0] || {};
   const sizerow = (await q(pool, 'SELECT ROUND((data_length+index_length)/1024/1024,2) mb FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [T]))[0] || {};
 
   const uploads = cmap.file_uploaded || 0;
@@ -107,7 +112,7 @@ async function build_report(pool, opts) {
       return { day: day, visits: n0(r.visits), uploads: n0(r.uploads), downloads: n0(r.downloads), start_overs: n0(r.start_overs) };
     }),
     top_users: top_users.map(function (r) {
-      var ls = r.last_seen, last = ls ? (ls.toISOString ? ls.toISOString().slice(0, 16).replace('T', ' ') : String(ls).slice(0, 16)) : null;
+      var last = r.last_seen || null; // already 'YYYY-MM-DD h:mm AM/PM' in MTN (formatted in SQL)
       return { id: String(r.v || ''), returning: n0(r.ret), visits: n0(r.visits), uploads: n0(r.uploads), downloads: n0(r.downloads), start_overs: n0(r.start_overs), events: n0(r.events), last_seen: last, tz: r.tz || null };
     }),
     funnel: [

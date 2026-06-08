@@ -70,19 +70,19 @@ const SECTIONS = [
   ] },
   { label: 'Tests — engine & UI (node, no browser)', color: MAGENTA, items: [
     { id: 5, label: 'Run ALL engine/UI tests', desc: 'Runs every node --test suite (dependency-free, no browser). Browser tests are in the next section.', cli: 'node --test tests/*.test.js', action: 'test_all' },
-    { id: 6, label: 'Smoke — modules load', desc: 'Each engine module parses + exports; schema has all 12 columns in order.', cli: 'node --test tests/smoke.test.js', action: 'test_smoke' },
-    { id: 7, label: 'Value normalization', desc: 'Gender→M/F/NB · DOB→mm/dd/yyyy · times incl. DNS/DNF · state abbrev · member→1-day · category buckets.', cli: 'node --test tests/normalize.test.js', action: 'test_normalize' },
-    { id: 8, label: 'Column matching', desc: 'Finish time beats splits · "Age Group" beats "Race / Division" · name-order independence.', cli: 'node --test tests/match.test.js', action: 'test_match' },
-    { id: 9, label: 'Table display format', desc: 'Excel times render as times (not dates) · DOB as mm/dd/yyyy · long member #s intact — on real files.', cli: 'node --test tests/display.test.js', action: 'test_display' },
-    { id: 10, label: 'Excel / CSV I/O round-trip', desc: 'Write an .xlsx and read it back; member numbers stay text (no scientific notation).', cli: 'node --test tests/io.test.js', action: 'test_io' },
-    { id: 11, label: 'Integrity & reconciliation', desc: 'Row counts tie out · dividers skipped · column ledger · Name/Email/Zip preserved · always 12-col output.', cli: 'node --test tests/reconcile.test.js', action: 'test_reconcile' },
-    { id: 12, label: 'Golden fixtures (real files)', desc: 'Convert the 2 xlsx + 2 csv examples and compare to the checked-in expected snapshots.', cli: 'node --test tests/fixtures.test.js', action: 'test_fixtures' },
-    { id: 13, label: 'Lint — snake_case', desc: 'Fail if any of our identifiers are camelCase (DOM/library names + UPPER_SNAKE constants + element ids are allowed).', cli: 'node --test tests/lint_snake_case.test.js', action: 'test_lint' },
-    { id: 14, label: 'Config wiring (package + tasks)', desc: 'repo-root package.json scripts + .vscode/tasks.json register this tool (step 16/16) like the other servers.', cli: 'node --test tests/config_wiring.test.js', action: 'test_config' }
+    { id: 6, label: 'Config wiring (package + tasks)', desc: 'repo-root package.json scripts + .vscode/tasks.json register this tool (step 16/16) like the other servers.', cli: 'node --test tests/config_wiring.test.js', action: 'test_config' },
+    { id: 7, label: 'Table display format', desc: 'Excel times render as times (not dates) · DOB as mm/dd/yyyy · long member #s intact — on real files.', cli: 'node --test tests/display.test.js', action: 'test_display' },
+    { id: 8, label: 'Golden fixtures (real files)', desc: 'Convert the 2 xlsx + 2 csv examples and compare to the checked-in expected snapshots.', cli: 'node --test tests/fixtures.test.js', action: 'test_fixtures' },
+    { id: 9, label: 'Excel / CSV I/O round-trip', desc: 'Write an .xlsx and read it back; member numbers stay text (no scientific notation).', cli: 'node --test tests/io.test.js', action: 'test_io' },
+    { id: 10, label: 'Lint — snake_case', desc: 'Fail if any of our identifiers are camelCase (DOM/library names + UPPER_SNAKE constants + element ids are allowed).', cli: 'node --test tests/lint_snake_case.test.js', action: 'test_lint' },
+    { id: 11, label: 'Column matching', desc: 'Finish time beats splits · "Age Group" beats "Race / Division" · name-order independence.', cli: 'node --test tests/match.test.js', action: 'test_match' },
+    { id: 12, label: 'Value normalization', desc: 'Gender→M/F/NB · DOB→mm/dd/yyyy · times incl. DNS/DNF · state abbrev · member→1-day · category buckets.', cli: 'node --test tests/normalize.test.js', action: 'test_normalize' },
+    { id: 13, label: 'Integrity & reconciliation', desc: 'Row counts tie out · dividers skipped · column ledger · Name/Email/Zip preserved · always 12-col output.', cli: 'node --test tests/reconcile.test.js', action: 'test_reconcile' },
+    { id: 14, label: 'Smoke — modules load', desc: 'Each engine module parses + exports; schema has all 12 columns in order.', cli: 'node --test tests/smoke.test.js', action: 'test_smoke' }
   ] },
   { label: 'Tests — browser (Playwright)', color: MAGENTA, items: [
     { id: 15, label: 'Install browser E2E (one-time)', desc: 'Dev: npm run e2e:install (axe-core + chromium/firefox/webkit). Linux server: npm run e2e:install:server (adds --with-deps; root).', cli: 'npm run e2e:install', action: 'e2e_install' },
-    { id: 16, label: 'Run ALL browser tests', desc: 'Real-browser convert/download/split/combine + UI/a11y/visual/mobile across chromium/firefox/webkit. Run Install (15) once first.', cli: 'npm run e2e', action: 'e2e_run' },
+    { id: 16, label: 'Run ALL browser tests', desc: 'Real-browser convert/download/split/combine + UI/a11y/visual/mobile across chromium/firefox/webkit. Run the Install item once first.', cli: 'npm run e2e', action: 'e2e_run' },
     { id: 17, label: 'Browser E2E — chromium only (fast)', desc: 'Runs the suite on just chromium, skipping firefox/webkit/mobile projects.', cli: 'npm run e2e:chromium', action: 'e2e_chromium' },
     { id: 18, label: 'Browser E2E — analytics DB round-trip (chromium)', desc: 'Drives the app, then checks MySQL received the events and the table schema exists. Skips if no DB.', cli: 'npm run e2e:db', action: 'e2e_db' },
     { id: 19, label: 'Browser E2E — watch in Chrome (headed)', desc: 'Same tests in a visible, slowed Chrome window so you can watch. Desktop only (not the headless server).', cli: 'npm run e2e:headed', action: 'e2e_headed' },
@@ -99,9 +99,20 @@ const SECTIONS = [
     { id: 26, label: 'Usage data — cleanup (purge old years)', desc: 'Keep current + prior calendar year; preview, confirm, then purge older rows.', cli: 'node src/cli.js metrics:cleanup', action: 'metrics_cleanup' },
     { id: 27, label: 'Usage data — PURGE ALL (danger)', desc: 'Delete every analytics row regardless of date (asks to confirm). For clearing test data.', cli: 'node src/cli.js metrics:purge-all', action: 'metrics_purge_all' }
   ] },
+  { label: 'AI \u2014 ask your data', color: CYAN, items: [
+    { id: 28, label: 'AI ask \u2014 ask a question (read-only)', desc: 'Ask the usage data in plain English; choose OpenAI or Claude. Read-only; prints the answer + the SQL it ran.', cli: 'node src/cli.js ask "<question>" [--provider openai|claude]', action: 'ask_question' },
+    { id: 29, label: 'AI ask \u2014 guard demo (try a query)', desc: 'See the read-only guard ACCEPT/REJECT example queries or your own SQL, with the enforced LIMIT.', cli: 'node metrics/ask/demo_guard.js ["<sql>"]', action: 'ask_demo' },
+    { id: 30, label: 'AI ask \u2014 guard & catalog tests', desc: 'Read-only SQL guard + ask catalog tests. Also runs inside Run ALL.', cli: 'node --test tests/ask_db.test.js tests/ask_guard.test.js', action: 'test_ask' },
+    { id: 31, label: 'AI ask \u2014 view question log', desc: 'Recent AI questions + answers (audit log; no PII).', cli: 'node src/cli.js ask:log [--n 20]', action: 'ask_log' },
+    { id: 32, label: 'AI ask \u2014 run SQL directly (read-only)', desc: 'Run a read-only SELECT yourself (guarded: SELECT-only, allowlisted table, enforced LIMIT). No AI involved.', cli: 'node src/cli.js ask:sql "<SELECT ...>"', action: 'ask_sql' },
+    { id: 33, label: 'AI ask \u2014 view/manage corrections', desc: 'Operator clarifications the AI uses as grounding (G2). Deactivate with: node src/cli.js ask:uncorrect <id>.', cli: 'node src/cli.js ask:corrections [--n 20] [--all]', action: 'ask_corrections' },
+    { id: 34, label: 'AI ask \u2014 test corrections (guided)', desc: 'Step-by-step process to confirm a saved correction is incorporated into the next answer (G2).', cli: 'node src/cli.js ask:test:corrections', action: 'ask_test_corrections' },
+    { id: 35, label: 'AI ask \u2014 test follow-up thread (guided)', desc: 'Step-by-step process to confirm follow-up questions keep conversational context (B1).', cli: 'node src/cli.js ask:test:threads', action: 'ask_test_threads' },
+    { id: 36, label: 'AI ask \u2014 run eval scenarios (records report)', desc: 'Runs the review scenarios against the live model (needs API key + DB) and writes a recorded report.', cli: 'node src/cli.js ask:eval', action: 'ask_eval' }
+  ] },
   { label: 'Settings', color: GRAY, items: [
-    { id: 28, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 29, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
+    { id: 37, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
+    { id: 38, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
@@ -142,6 +153,47 @@ async function handle(item) {
       break;
     }
     case 'test_smoke': await run_test('tests/smoke.test.js', 'smoke tests'); break;
+    case 'ask_question': {
+      try {
+        const { CATALOG } = require('./metrics/ask/db');
+        console.log(c(DIM, '\n  Read-only AI query over: ' + CATALOG.map(function (t) { return t.name; }).join(', ')));
+      } catch (e) { /* ignore */ }
+      let example = 'How many people used the converter last week?';
+      try { const qs = require('./metrics/ask/context').load_context().example_questions || []; if (qs.length) example = qs[Math.floor(Math.random() * qs.length)]; } catch (e) { /* ignore */ }
+      const q = clean(await ask(c(DIM, '\n  Your question  [Enter for example: ' + example + ']: '))) || example;
+      let models = [];
+      try { models = require('./metrics/ask/models').list(); } catch (e) { /* ignore */ }
+      if (!models.length) models = [{ provider: 'openai', model: process.env.OPENAI_MODEL || '(OPENAI_MODEL)', label: 'OpenAI' }];
+      console.log(c(DIM, '\n  Model (edit metrics/ask/models.js to add more):'));
+      models.forEach(function (m, i) { console.log(c(DIM, '    ' + (i + 1) + ') ' + m.label + '  \u00b7 ' + m.model + (i === 0 ? '   [default]' : ''))); });
+      const pick = clean(await ask(c(DIM, '  Pick a model [1]: ')));
+      const idx = (Number(pick) >= 1 && Number(pick) <= models.length) ? Number(pick) - 1 : 0;
+      const chosen = models[idx];
+      console.log(c(DIM, '  Using: ' + chosen.provider + ' \u00b7 ' + chosen.model));
+      await run('node', ['src/cli.js', 'ask', q, '--provider', chosen.provider, '--model', chosen.model]);
+      break;
+    }
+    case 'ask_log': await run('node', ['src/cli.js', 'ask:log']); break;
+    case 'ask_corrections': await run('node', ['src/cli.js', 'ask:corrections']); break;
+    case 'ask_test_corrections': await run('node', ['src/cli.js', 'ask:test:corrections']); break;
+    case 'ask_test_threads': await run('node', ['src/cli.js', 'ask:test:threads']); break;
+    case 'ask_eval': await run('node', ['src/cli.js', 'ask:eval']); break;
+    case 'ask_sql': {
+      const sql = clean(await ask(c(DIM, '\n  Read-only SQL (SELECT only): ')));
+      if (sql) { await run('node', ['src/cli.js', 'ask:sql', sql]); }
+      break;
+    }
+    case 'ask_demo': {
+      try {
+        const { CATALOG } = require('./metrics/ask/db');
+        console.log(c(DIM, '\n  Tables you may query (read-only allowlist):'));
+        CATALOG.forEach(function (t) { console.log(c(DIM, '    \u2022 ' + t.name + (t.grain ? '  (' + t.grain + ')' : ''))); });
+      } catch (e) { /* ignore */ }
+      const sql = clean(await ask(c(DIM, '\n  SQL to test (blank = run examples): ')));
+      await run('node', sql ? ['metrics/ask/demo_guard.js', '--no-header', sql] : ['metrics/ask/demo_guard.js', '--no-header']);
+      break;
+    }
+    case 'test_ask': { console.log(c(DIM, '\n  running AI ask guard/catalog tests\u2026\n')); const code = await run('node', ['--test', 'tests/ask_db.test.js', 'tests/ask_guard.test.js']); console.log(code === 0 ? c(GREEN, '\n  \u2713 ask tests passed') : c(YELLOW, '\n  \u2717 ask tests failed')); break; }
     case 'test_normalize': await run_test('tests/normalize.test.js', 'value-normalization tests'); break;
     case 'test_match': await run_test('tests/match.test.js', 'column-matching tests'); break;
     case 'test_display': await run_test('tests/display.test.js', 'display-format tests'); break;

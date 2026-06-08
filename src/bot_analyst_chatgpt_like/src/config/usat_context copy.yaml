@@ -1,0 +1,94 @@
+version: "1.0"
+owner: "USAT Analytics"
+last_updated: "2026-01-30"
+timezone: "America/Denver"   # Mountain Time
+
+# ------------------------------------------------------------
+# Canonical glossary terms
+# - The agent MUST use these definitions verbatim.
+# - If a user uses a term not present here, the agent must ask.
+# ------------------------------------------------------------
+glossary:
+  unique_profiles:
+    label: "Unique Profiles"
+    meaning: "Distinct athlete profiles counted once per year using best-membership logic."
+    grain: "profile-year"
+    allowed_synonyms:
+      - "unique athletes"
+      - "distinct athletes"
+      - "unique members"
+    notes:
+      - "A single profile may appear in multiple years, but only once per year."
+      - "If multiple memberships exist in a year, apply ranking rules to select the 'best' membership."
+
+  sales_ytd:
+    label: "Sales YTD"
+    meaning: "Purchases where purchased_on_adjusted_mp is on or before the year’s YTD cutoff date (aligned by day-of-year unless otherwise specified)."
+    grain: "transaction"
+    required_fields:
+      - "purchased_on_adjusted_mp"
+    notes:
+      - "Unless the user specifies a different cutoff rule, align year-over-year comparisons using the same day-of-year."
+
+  one_day_membership:
+    label: "One-Day Membership"
+    meaning: "A membership product valid for a single day (typically tied to event participation)."
+    included_in_base: true
+    renewal: false
+    notes:
+      - "Counts toward unique_profiles when it is the best membership for that profile-year under ranking rules."
+
+# ------------------------------------------------------------
+# Business rules the agent should treat as policy
+# (helps the model avoid 'smart intern' mistakes)
+# ------------------------------------------------------------
+policies:
+  ambiguity_handling:
+    must_ask_if_missing:
+      - "timeframe (YTD vs full-year vs rolling)"
+      - "metric type (counts vs revenue)"
+      - "unit of analysis (profiles vs memberships vs transactions vs participations)"
+    never_infer:
+      - "definitions not present in glossary"
+      - "business intent"
+      - "date cutoffs beyond the defined default rules"
+
+  timeframe_defaults:
+    ytd_alignment:
+      default_method: "day_of_year"
+      description: "For YoY YTD comparisons, align on same day-of-year unless the user requests month-to-date or another window."
+    same_period_yoy_current_month:
+      method: "month_to_date_through_yesterday"
+      description: "Compare MTD through yesterday vs same MTD last year using same day-of-month cutoff; include cutoff date in response."
+
+  counting_and_grain:
+    default_output: "aggregated"
+    pii_restriction: "Do not output PII or profile-level rows unless explicitly requested."
+    grain_guidance:
+      unique_profiles: "profile-year"
+      sales_ytd: "transaction"
+      one_day_membership: "membership-product"
+
+# ------------------------------------------------------------
+# Membership ranking rules (placeholder — expand later)
+# Keep this short at first; add only what prevents mistakes.
+# ------------------------------------------------------------
+membership_selection:
+  best_membership_logic:
+    description: "When multiple memberships exist for a profile within a year, select the best membership according to ranking rules."
+    ranking_rules:
+      - rule: "Prefer annual over one-day when both exist in the same profile-year."
+      - rule: "If multiple annual memberships exist, choose the highest tier/price (if defined)."
+    notes:
+      - "If ranking depends on fields not available in the chosen catalog table, the agent must ask or choose a different table."
+
+# ------------------------------------------------------------
+# Optional: Common metric mapping (helps reduce wrong columns)
+# Only include what you’re sure is stable across your datasets.
+# ------------------------------------------------------------
+metric_conventions:
+  membership_sales:
+    default_count_metric: "sales_units"
+    default_revenue_metric: "sales_revenue"
+    notes:
+      - "Do not use id_profiles or member_number_members_sa unless explicitly requested."

@@ -61,7 +61,7 @@
   .mx-auto { font-size:13px; color:var(--dim); display:inline-flex; align-items:center; gap:5px; }
   .tag { font-size:11px; padding:1px 7px; border-radius:20px; background:var(--accent-soft); color:var(--accent); }
   @media (max-width:720px){ .mx-grid2 { grid-template-columns:1fr; } }
-  @media (max-width:520px){Race Results Converter — Metrics
+  @media (max-width:520px){
     .mx-wrap { padding:14px 12px 32px; }
     .mx-title { font-size:17px; }
     .mx-periods { order:3; width:100%; }
@@ -69,6 +69,65 @@
     #themeToggle { order:2; }
     .mx-card .v { font-size:22px; }
   }
+  /* ask your data (read-only AI) */
+  .mx-ask-box { border:1px solid var(--line); border-radius:12px; padding:8px 10px; background:var(--card); }
+  .mx-ask-controls { display:flex; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap; }
+  .mx-ask-chip { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:999px; padding:3px 11px; font-size:12px; color:var(--dim); white-space:nowrap; cursor:pointer; user-select:none; }
+  .mx-ask-chip:hover { border-color:var(--accent); color:var(--ink); }
+  .mx-ask-chip[hidden] { display:none; }
+  .mx-ask-sqltoggle input { display:none; }
+  .mx-ask-sqltoggle.on { color:#16a34a; border-color:#16a34a; background:rgba(22,163,74,.10); font-weight:600; }
+  .mx-ask-threadchip { cursor:default; }
+  .mx-ask-threadchip:hover { border-color:var(--line); color:var(--dim); }
+  .mx-ask-threadchip a { color:var(--accent); cursor:pointer; }
+  .mx-ask-spacer { flex:1; }
+  #ask-q { display:block; width:100%; box-sizing:border-box; border:none; background:transparent; padding:6px 4px; color:var(--ink); font:inherit; outline:none; resize:none; overflow-y:auto; line-height:1.45; max-height:200px; }
+  #ask-question { margin:8px 0 2px; font-weight:600; }
+  #ask-clear { padding:8px 10px; }
+  #ask-model { border:1px solid var(--line); background:var(--card); color:var(--dim); font:inherit; border-radius:8px; padding:4px 6px; max-width:220px; }
+  #ask-out { overflow-x:auto; max-width:100%; }
+  #ask-table { overflow:auto; max-width:100%; max-height:420px; }
+  #ask-table thead th { position:sticky; top:0; background:var(--card); z-index:1; }
+  #ask-chart-wrap { margin:10px 0; }
+  #ask-chart-box { position:relative; height:300px; }
+  .mx-ask-viz { display:flex; gap:6px; margin-bottom:6px; }
+  .mx-ask-viz button { border:1px solid var(--line); background:transparent; color:var(--dim); border-radius:8px; padding:3px 10px; font-size:12px; cursor:pointer; }
+  .mx-ask-viz button.on { color:var(--ink); border-color:var(--accent); }
+  .mx-ask-viz[hidden] { display:none; }
+  #ask-status.mx-ask-err { color:#d32f2f; font-weight:600; border:1px solid #d32f2f; background:rgba(211,47,47,.10); border-radius:8px; padding:8px 10px; display:flex; align-items:center; gap:8px; }
+  .mx-ask-thread a, .mx-ask-correct a { color:var(--accent); }
+  .mx-ask-correct { margin-top:10px; }
+  #ask-correct-note { display:block; width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); font:inherit; padding:6px 8px; margin:6px 0; resize:vertical; }
+  .mx-ask-correct-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #ask-thread-scroll { max-height:520px; overflow:auto; }
+  #ask-convo-list { display:flex; flex-direction:column; gap:8px; }
+  #ask-convo-list:not(:empty) { margin-bottom:10px; padding-bottom:10px; border-bottom:1px dashed var(--line); }
+  .mx-convo-hidden { display:none; }
+  .mx-ask-convo-more { background:none; border:none; color:var(--accent); font:inherit; font-size:12px; cursor:pointer; padding:2px 0; margin-bottom:8px; }
+  #ask-panel > h2 { display:flex; align-items:center; gap:6px; }
+  .mx-ask-panel-toggle { margin-left:auto; flex:0 0 auto; font-size:12px; padding:2px 8px; }
+  #ask-body { border:1.5px solid #16a34a; border-radius:10px; padding:10px 12px; background:rgba(22,163,74,.05); }
+  .mx-ask-bubble { border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px; padding:8px 10px; background:transparent; }
+  .mx-ask-bubble-top { display:flex; align-items:baseline; gap:10px; }
+  .mx-ask-bubble-top .q { font-weight:600; color:var(--ink); flex:1 1 auto; min-width:0; }
+  .mx-ask-bubble-top .meta { margin-left:auto; flex:0 0 auto; color:var(--dim); font-size:11px; white-space:nowrap; }
+  .mx-ask-bubble .a { color:var(--ink); line-height:1.5; margin-top:5px; }
+  .mx-ask-bubble .a table { border-collapse:collapse; margin:6px 0; }
+  .mx-ask-bubble .a th, .mx-ask-bubble .a td { border:1px solid var(--line); padding:3px 7px; text-align:left; }
+  #ask-answer { margin:10px 0; line-height:1.55; color:var(--ink); overflow-x:auto; }
+  #ask-sql { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px; overflow-x:auto; font-size:12px; margin:6px 0; }
+  #ask-out table { border-collapse:collapse; font-size:13px; }
+  #ask-out th, #ask-out td { border-bottom:1px solid var(--line); padding:4px 8px; text-align:left; color:var(--ink); white-space:nowrap; }
+  #ask-out th { color:var(--dim); }
+  #ask-meta { margin-top:6px; font-size:12px; }
+  .mx-ask-outbar { display:flex; gap:8px; justify-content:flex-end; margin:6px 0; }
+  .mx-ask-suggest { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .mx-ask-suggest button { border:1px solid var(--line); background:transparent; color:var(--dim); border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
+  .mx-ask-suggest button:hover { color:var(--ink); border-color:var(--accent); }
+  #ask-answer code { background:var(--line); padding:1px 5px; border-radius:4px; font-size:.92em; }
+  #ask-answer table { border-collapse:collapse; margin:8px 0; }
+  #ask-answer th, #ask-answer td { border:1px solid var(--line); padding:4px 8px; text-align:left; white-space:nowrap; }
+  #ask-answer th { color:var(--dim); }
 </style>
 </head>
 <body>
@@ -89,9 +148,68 @@
     <button id="refreshBtn" class="btn ghost" title="Refresh now">↻ Refresh</button>
     <label class="mx-auto" title="When on, the dashboard automatically reloads its data from the database every 60 seconds so the charts and tables stay current without clicking Refresh."><input type="checkbox" id="autoRefresh" checked> Auto-refresh</label>
     <button id="themeToggle" class="btn ghost mx-head-theme" title="Toggle light or dark theme" aria-label="Toggle light or dark theme">☾ Dark</button>
+    <a id="signOut" class="btn ghost" href="/metrics/logout" title="Sign out">↩ Sign out</a>
   </div>
 
   <div class="mx-cards" id="cards"></div>
+
+  <div class="mx-panel" id="ask-panel">
+    <h2>Ask your data <span class="dim" style="font-weight:400;font-size:13px">— read-only AI</span><button id="ask-panel-toggle" class="btn ghost mx-ask-panel-toggle" type="button" title="Show or hide the ask area">▾ Hide</button></h2>
+    <div id="ask-panel-body">
+    <div class="mx-ask-box">
+      <textarea id="ask-q" rows="1" autocomplete="off" placeholder="Ask about the usage data…  e.g. how many people used the converter last week?"></textarea>
+      <div class="mx-ask-controls">
+        <select id="ask-model" title="AI model"></select>
+        <label class="mx-ask-sqltoggle mx-ask-chip" title="Raw SQL mode — type a read-only SELECT instead of a question (guarded: SELECT-only, allowlisted table, capped). Click to toggle."><input type="checkbox" id="ask-sql-mode"> &lt;/&gt; SQL</label>
+        <span id="ask-thread" class="mx-ask-chip mx-ask-threadchip" hidden title="This question continues the conversation — it uses the previous turns as context. Click 'new thread' to start fresh.">↳ Follow-up (<span id="ask-thread-n">0</span>) · <a href="#" id="ask-newthread">new thread</a></span>
+        <span class="mx-ask-spacer"></span>
+        <button id="ask-clear" class="btn ghost" title="Clear">✕</button>
+        <button id="ask-go" class="btn">Ask</button>
+      </div>
+    </div>
+    <div class="mx-ask-suggest" id="ask-suggest">
+      <button type="button">How many people used the converter last week?</button>
+      <button type="button">What is the conversion rate from upload to download?</button>
+      <button type="button">What are the most common errors by type?</button>
+      <button type="button">Mobile vs desktop, and dark vs light theme?</button>
+      <button type="button">Most recent activity per visitor (in a table)?</button>
+    </div>
+    <div id="ask-status" class="dim" hidden></div>
+    <div id="ask-out" hidden>
+      <div class="mx-ask-outbar">
+        <button id="ask-collapse" class="btn ghost" type="button" title="Collapse / expand the conversation">▾</button>
+        <button id="ask-clear-out" class="btn ghost" type="button" title="Clear the conversation">Clear conversation</button>
+      </div>
+      <div id="ask-thread-scroll">
+        <button id="ask-convo-more" class="mx-ask-convo-more" type="button" hidden>▸ See older</button>
+        <div id="ask-convo-list"></div>
+        <div id="ask-body">
+        <div id="ask-question" class="dim"></div>
+        <div id="ask-answer"></div>
+        <div class="mx-ask-viz" id="ask-viz" hidden>
+          <button id="ask-viz-chart" type="button">📊 Chart</button>
+          <button id="ask-viz-table" type="button">📋 Table</button>
+        </div>
+        <div id="ask-chart-wrap" hidden><div id="ask-chart-box"><canvas id="ask-chart"></canvas></div></div>
+        <div id="ask-table" class="mx-tablewrap"></div>
+        <details id="ask-sqlwrap"><summary class="dim">SQL</summary><pre id="ask-sql"></pre></details>
+        <div id="ask-meta" class="dim"></div>
+        <div id="ask-correct" class="mx-ask-correct" hidden>
+          <button id="ask-correct-toggle" class="btn ghost" type="button" title="Tell the AI what was wrong; it will remember for next time">✎ Correct this</button>
+          <div id="ask-correct-box" hidden>
+            <textarea id="ask-correct-note" rows="2" placeholder="What was wrong, or what should it know? e.g. 'active user' should exclude internal test visits."></textarea>
+            <div class="mx-ask-correct-row">
+              <button id="ask-correct-save" class="btn" type="button">Save correction</button>
+              <button id="ask-correct-cancel" class="btn ghost" type="button">Cancel</button>
+              <span id="ask-correct-msg" class="dim"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+    </div>
+  </div>
 
   <div class="mx-panel">
     <div class="mx-ph"><h2>Funnel — visit → upload → conversion → download</h2><div class="mx-tools" data-chart="chart_funnel"><button type="button" data-act="expand" title="Expand">⤢ Expand</button><button type="button" data-act="png" title="Export PNG">⬇ PNG</button><button type="button" data-act="csv" title="Export CSV">⬇ CSV</button><button type="button" data-act="table" title="Switch to table view">⇄ Table</button></div></div>
@@ -296,6 +414,159 @@
   if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', apply_theme);
   apply_theme();
   if (el('autoRefresh').checked) auto_timer = setInterval(function(){ load(current_days); }, 60000);
+  // ---- Ask your data (read-only AI) ----
+  function ask_esc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function ask_inline(x){ return x.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>'); }
+  function ask_md(t){
+    var lines = ask_esc(t).split('\n'), out = [], i = 0;
+    while (i < lines.length) {
+      if (/^\s*\|.*\|\s*$/.test(lines[i] || '') && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i+1] || '')) {
+        var head = lines[i].trim().replace(/^\||\|$/g,'').split('|').map(function(x){return x.trim();}); i += 2;
+        var body = []; while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { body.push(lines[i].trim().replace(/^\||\|$/g,'').split('|').map(function(x){return x.trim();})); i++; }
+        out.push('<table><thead><tr>' + head.map(function(h){return '<th>'+ask_inline(h)+'</th>';}).join('') + '</tr></thead><tbody>' + body.map(function(r){ return '<tr>'+r.map(function(x){return '<td>'+ask_inline(x)+'</td>';}).join('')+'</tr>'; }).join('') + '</tbody></table>');
+      } else { out.push('<div>' + (ask_inline(lines[i]) || '&nbsp;') + '</div>'); i++; }
+    }
+    return out.join('');
+  }
+  function ask_render(q, d) {
+    el('ask-status').hidden = true; el('ask-out').hidden = false;
+    el('ask-thread-scroll').hidden = false; el('ask-collapse').textContent = '▾';
+    el('ask-question').textContent = 'Q: ' + q;
+    el('ask-answer').innerHTML = d.answer ? ask_md(d.answer) : (d.mode === 'sql' ? ('Ran read-only SQL · ' + (d.row_count || 0) + ' row(s).') : '(no answer)');
+    el('ask-sqlwrap').style.display = d.sql ? '' : 'none';
+    if (d.sql) el('ask-sql').textContent = d.sql;
+    var rows = d.rows || [];
+    if (rows.length) {
+      var cols = Object.keys(rows[0]);
+      el('ask-table').innerHTML = '<table><thead><tr>' + cols.map(function(k){return '<th>'+k+'</th>';}).join('')
+        + '</tr></thead><tbody>' + rows.slice(0,50).map(function(r){ return '<tr>' + cols.map(function(k){ return '<td>'+(r[k]==null?'':r[k])+'</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>';
+    } else { el('ask-table').innerHTML = ''; }
+    ask_chart(d.chart, rows);
+    var ts_label = ask_ts_label(d.ts || null);
+    el('ask-meta').textContent = (d.provider ? d.provider + (d.model ? ' · ' + d.model : '') : '') + (d.truncated ? '  · showing first ' + rows.length : '') + '  ·  ' + ts_label;
+    ask_last = { q: q, answer: d.answer || '', ts: ts_label, model: d.model || d.provider || null };
+    el('ask-correct').hidden = false; el('ask-correct-box').hidden = true; el('ask-correct-note').value = ''; el('ask-correct-msg').textContent = '';
+    var sc = el('ask-thread-scroll'); if (sc) sc.scrollTop = sc.scrollHeight;
+  }
+  var ask_chart_obj = null;
+  var ask_history = [], ask_last = null;   // B1 thread + G2 last Q/A
+  function ask_show_viz(mode){   // 'chart' | 'table'
+    var on = mode === 'chart';
+    el('ask-chart-wrap').hidden = !on; el('ask-table').hidden = on;
+    el('ask-viz-chart').classList.toggle('on', on); el('ask-viz-table').classList.toggle('on', !on);
+  }
+  function ask_chart(spec, rows){
+    if (ask_chart_obj) { ask_chart_obj.destroy(); ask_chart_obj = null; }
+    var ok = spec && rows && rows.length > 1 && window.Chart && rows[0] && (spec.x in rows[0]) && (spec.y in rows[0]);
+    el('ask-viz').hidden = !ok;
+    if (!ok) { el('ask-chart-wrap').hidden = true; el('ask-table').hidden = false; return; }
+    ask_show_viz('chart');   // show the wrap first so the canvas measures a real size (not 0x0)
+    var labels = rows.map(function(r){ return String(r[spec.x] == null ? '' : r[spec.x]); });
+    var data = rows.map(function(r){ return Number(r[spec.y]) || 0; });
+    var css = getComputedStyle(document.documentElement);
+    var accent = (css.getPropertyValue('--accent') || '#2f6fed').trim();
+    var ink = (css.getPropertyValue('--dim') || '#888').trim();
+    var palette = ['#2f6fed','#16a34a','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16'];
+    var is_pie = spec.type === 'pie';
+    ask_chart_obj = new Chart(el('ask-chart'), {
+      type: spec.type === 'line' ? 'line' : (is_pie ? 'pie' : 'bar'),
+      data: { labels: labels, datasets: [{ label: spec.y, data: data,
+        backgroundColor: is_pie ? labels.map(function(_,i){ return palette[i % palette.length]; }) : accent,
+        borderColor: accent, fill: spec.type === 'line' ? false : true }] },
+      options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:is_pie, labels:{ color:ink } }, datalabels:{ display:false } },
+        scales: is_pie ? {} : { x:{ ticks:{ color:ink } }, y:{ beginAtZero:true, ticks:{ color:ink } } } }
+    });
+  }
+  function ask_go() {
+    var q = (el('ask-q').value || '').trim(); if (!q) return;
+    var sel = el('ask-model'), opt = sel.options[sel.selectedIndex];
+    var sql_mode = el('ask-sql-mode') && el('ask-sql-mode').checked;
+    var payload = sql_mode ? { mode:'sql', sql: q, thread_id: ask_get_thread(), asker_id: ask_get_asker() } : { question: q, provider: opt ? opt.getAttribute('data-provider') : null, model: opt ? opt.value : null, history: ask_history, thread_id: ask_get_thread(), asker_id: ask_get_asker() };
+    el('ask-out').hidden = true; ask_show_status(sql_mode ? 'Running SQL…' : 'Thinking…');
+    fetch('/api/metrics-ask', { method:'POST', credentials:'same-origin', headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(payload) })
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d && d.error) ask_show_err(d.error); else { if (!sql_mode && ask_last) ask_convo_add(ask_last); ask_render(q, d); ask_after(q, d, sql_mode); } })
+      .catch(function(e){ ask_show_err(e.message); });
+  }
+  el('ask-go').addEventListener('click', ask_go);
+  Array.prototype.forEach.call(el('ask-suggest').querySelectorAll('button'), function(b){ b.addEventListener('click', function(){ el('ask-q').value = b.textContent; ask_autogrow(); el('ask-q').focus(); }); });
+  el('ask-clear').addEventListener('click', function(){ el('ask-q').value = ''; ask_autogrow(); el('ask-q').focus(); });
+  el('ask-collapse').addEventListener('click', function(){ var b = el('ask-thread-scroll'); b.hidden = !b.hidden; el('ask-collapse').textContent = b.hidden ? '▸' : '▾'; });
+  el('ask-clear-out').addEventListener('click', function(){ ask_new_thread(); });
+  el('ask-viz-chart').addEventListener('click', function(){ ask_show_viz('chart'); });
+  el('ask-viz-table').addEventListener('click', function(){ ask_show_viz('table'); });
+  function ask_thread_update(){ var on = ask_history.length > 0; el('ask-thread').hidden = !on; if (on) el('ask-thread-n').textContent = String(ask_history.length); }
+  function ask_after(q, d, sql_mode){ if (sql_mode || !d || d.error) return; ask_history.push({ q: q, sql: d.sql || null, answer: (d.answer || '').slice(0,400) }); if (ask_history.length > 8) ask_history = ask_history.slice(-8); ask_thread_update(); }
+  function ask_new_thread(){ ask_history = []; ask_last = null; ask_convo_expanded = false; el('ask-convo-list').innerHTML = ''; el('ask-convo-more').hidden = true; el('ask-answer').innerHTML = ''; el('ask-table').innerHTML = ''; el('ask-sql').textContent = ''; el('ask-question').textContent = ''; if (ask_chart_obj) { ask_chart_obj.destroy(); ask_chart_obj = null; } el('ask-viz').hidden = true; el('ask-chart-wrap').hidden = true; el('ask-correct').hidden = true; el('ask-out').hidden = true; ask_reset_thread(); ask_thread_update(); el('ask-q').value=''; ask_autogrow(); el('ask-q').focus(); }
+  function ask_uid(){ try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch(e){} return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2,10); }
+  function ask_get_asker(){ try { var a = localStorage.getItem('rrt_ask_asker'); if (!a) { a = ask_uid(); localStorage.setItem('rrt_ask_asker', a); } return a; } catch(e){ return null; } }
+  function ask_get_thread(){ try { var t = localStorage.getItem('rrt_ask_thread'); if (!t) { t = ask_uid(); localStorage.setItem('rrt_ask_thread', t); } return t; } catch(e){ return null; } }
+  function ask_reset_thread(){ var t = ask_uid(); try { localStorage.setItem('rrt_ask_thread', t); } catch(e){} return t; }
+  function ask_show_status(msg){ var el2 = el('ask-status'); el2.hidden = false; el2.className = 'dim'; el2.textContent = msg; }
+  function ask_show_err(msg){ var el2 = el('ask-status'); el2.hidden = false; el2.className = 'mx-ask-err'; el2.textContent = '⚠️  ' + msg; }
+  function ask_ts_label(server_ts){
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], mo, d, h, mi;
+    var m = server_ts && String(server_ts).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+    if (m) { mo = +m[2]-1; d = +m[3]; h = +m[4]; mi = m[5]; } else { var dt = new Date(); mo = dt.getMonth(); d = dt.getDate(); h = dt.getHours(); mi = ('0'+dt.getMinutes()).slice(-2); }
+    var ap = h >= 12 ? 'PM' : 'AM', h12 = ((h + 11) % 12) + 1;
+    return months[mo] + ' ' + d + ', ' + h12 + ':' + mi + ' ' + ap;
+  }
+  var ask_convo_expanded = false, ASK_CONVO_CAP = 4;
+  function ask_convo_trim(){
+    var list = el('ask-convo-list'), kids = list.children, n = kids.length, over = 0;
+    for (var i = 0; i < n; i++){ var hide = (i < n - ASK_CONVO_CAP) && !ask_convo_expanded; kids[i].classList.toggle('mx-convo-hidden', hide); if (i < n - ASK_CONVO_CAP) over++; }
+    var more = el('ask-convo-more');
+    if (over > 0 && !ask_convo_expanded){ more.hidden = false; more.textContent = '▸ See ' + over + ' earlier'; } else { more.hidden = true; }
+  }
+  function ask_convo_add(turn){
+    var list = el('ask-convo-list');
+    var meta = (turn.model ? ask_esc(turn.model) : '') + (turn.ts ? (turn.model ? ' · ' : '') + ask_esc(turn.ts) : '');
+    var div = document.createElement('div'); div.className = 'mx-ask-bubble';
+    div.innerHTML = '<div class="mx-ask-bubble-top"><span class="q">Q: ' + ask_esc(turn.q || '') + '</span><span class="meta">' + meta + '</span></div>'
+      + '<div class="a">' + (turn.answer ? ask_md(turn.answer) : '') + '</div>';
+    list.appendChild(div); ask_convo_trim();
+  }
+  el('ask-convo-more').addEventListener('click', function(){ ask_convo_expanded = true; ask_convo_trim(); });
+  el('ask-newthread').addEventListener('click', function(ev){ ev.preventDefault(); ask_new_thread(); });
+  el('ask-correct-toggle').addEventListener('click', function(){ var b = el('ask-correct-box'); b.hidden = !b.hidden; if (!b.hidden) el('ask-correct-note').focus(); });
+  el('ask-correct-cancel').addEventListener('click', function(){ el('ask-correct-box').hidden = true; el('ask-correct-note').value=''; });
+  el('ask-correct-save').addEventListener('click', function(){
+    var note = (el('ask-correct-note').value || '').trim(); if (!note) { el('ask-correct-note').focus(); return; }
+    el('ask-correct-msg').textContent = 'Saving…';
+    fetch('/api/metrics-ask-correct', { method:'POST', credentials:'same-origin', headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ note: note, question: ask_last ? ask_last.q : null, answer: ask_last ? ask_last.answer : null }) })
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d && d.ok) { el('ask-correct-msg').textContent = 'Saved — will apply on the next question.'; el('ask-correct-note').value=''; el('ask-correct-box').hidden = true; } else { el('ask-correct-msg').textContent = 'Error: ' + ((d && d.error) || 'failed'); } })
+      .catch(function(e){ el('ask-correct-msg').textContent = 'Error: ' + e.message; });
+  });
+  el('ask-sql-mode').addEventListener('change', function(){ var t = el('ask-q'); this.parentNode.classList.toggle('on', this.checked); t.placeholder = this.checked ? 'Enter a read-only SELECT…  e.g. SELECT event_name, COUNT(*) n FROM ... GROUP BY 1' : 'Ask about the usage data…  e.g. how many people used the converter last week?'; el('ask-model').disabled = this.checked; t.focus(); });
+  function ask_autogrow(){ var t = el('ask-q'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 200) + 'px'; }
+  el('ask-q').addEventListener('input', ask_autogrow);
+  el('ask-q').addEventListener('keydown', function(ev){ if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); ask_go(); } });
+  el('ask-panel-toggle').addEventListener('click', function(){ var hide = !el('ask-panel-body').hidden; el('ask-panel-body').hidden = hide; el('ask-panel-toggle').textContent = hide ? '▸ Show' : '▾ Hide'; try { localStorage.setItem('rrt_ask_panel_hidden', hide ? '1' : '0'); } catch(e){} });
+  (function(){ try { if (localStorage.getItem('rrt_ask_panel_hidden') === '1') { el('ask-panel-body').hidden = true; el('ask-panel-toggle').textContent = '▸ Show'; } } catch(e){} })();
+  el('ask-q').focus(); ask_autogrow();
+  fetch('/api/metrics-ask-models', { credentials:'same-origin' }).then(function(r){ return r.json(); }).then(function(list){
+    var sel = el('ask-model');
+    (list || []).forEach(function(m){ var o = document.createElement('option'); o.value = m.model; o.textContent = m.label + ' · ' + m.model; o.setAttribute('data-provider', m.provider); sel.appendChild(o); });
+    try { var saved = localStorage.getItem('rrt_ask_model'); if (saved) { for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].value === saved) { sel.selectedIndex = i; break; } } } } catch (e) {}
+    sel.addEventListener('change', function(){ try { localStorage.setItem('rrt_ask_model', sel.value); } catch (e) {} });
+  }).catch(function(){});
+  (function ask_load_thread(){
+    var tid; try { tid = localStorage.getItem('rrt_ask_thread'); } catch(e){ tid = null; }
+    if (!tid) return;
+    fetch('/api/metrics-ask-thread?thread_id=' + encodeURIComponent(tid), { credentials:'same-origin' })
+      .then(function(r){ return r.json(); })
+      .then(function(d){ var turns = (d && d.turns) || []; if (!turns.length) return;
+        ask_history = turns.map(function(t){ return { q: t.question, sql: t.sql || null, answer: t.answer || '' }; });
+        if (ask_history.length > 8) ask_history = ask_history.slice(-8);
+        ask_thread_update();
+        var last = turns[turns.length - 1];
+        turns.slice(0, -1).forEach(function(t){ ask_convo_add({ q: t.question, answer: t.answer || '', ts: ask_ts_label(t.ts), model: t.model || t.provider || null }); });
+        ask_render(last.question, { answer: last.answer || '', sql: last.sql || null, rows: [], chart: null, ok: last.ok !== 0, mode: last.sql ? undefined : 'definition', provider: last.provider || null, model: last.model || null, ts: last.ts || null });
+      }).catch(function(){});
+  })();
   load(7);
 </script>
 </body>

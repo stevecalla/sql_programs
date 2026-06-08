@@ -1,5 +1,5 @@
 // Layout/theme regression for the /metrics dashboard. Runs on chromium (desktop)
-// AND the mobile project (Pixel 5) — see config. Needs Basic Auth creds; skips the
+// AND the mobile project (Pixel 5) — see config. Needs the dashboard login creds; skips the
 // whole file if they're unset. Structure + theme + mobile-overflow are DOM checks,
 // so they pass even if the DB is down (the page shell still renders).
 const path = require('path');
@@ -11,7 +11,13 @@ const PASS = process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_PASS;
 
 test.describe('race_results_transform — metrics dashboard', () => {
   test.skip(!USER || !PASS, 'set RACE_RESULTS_CONVERTER_METRICS_DASH_USER / _PASS to run the dashboard checks');
-  test.use({ httpCredentials: { username: USER || '', password: PASS || '' }, extraHTTPHeaders: { 'x-metrics-test': '1' } });   // header tells the server not to log a dashboard_view
+  test.use({ extraHTTPHeaders: { 'x-metrics-test': '1' } });   // header tells the server not to log a dashboard_view
+  test.beforeEach(async ({ page }) => {                       // form login -> sets the session cookie
+    await page.goto('/metrics/login');
+    await page.fill('input[name="username"]', USER || '');
+    await page.fill('input[name="password"]', PASS || '');
+    await Promise.all([ page.waitForURL('**/metrics'), page.click('button[type="submit"]') ]);
+  });
 
   test('renders the shell, panels, and matches the app theme toggle', async ({ page }) => {
     await page.goto('/metrics');
@@ -31,6 +37,11 @@ test.describe('race_results_transform — metrics dashboard', () => {
     await expect(page.locator('#tbl_users thead th')).toContainText(['Location (tz)']);  // top-user location (#4)
     await expect(page.locator('#tbl_users thead th')).toContainText(['Visits', 'Uploads', 'Downloads', 'Start over']);  // per-user activity counts
     await expect(page.locator('#tbl_users thead th.mx-rn')).toHaveText('#');  // leading row-number column on scrollable tables
+    // #9 — the "Ask your data" box (renders even without DB/API keys)
+    await expect(page.locator('#ask-panel')).toBeVisible();
+    await expect(page.locator('#ask-q')).toBeVisible();
+    await expect(page.locator('#ask-model')).toBeVisible();
+    await expect(page.locator('#ask-go')).toBeVisible();
     // per-chart toolbar (expand/png/csv/table) on all four charts
     await expect(page.locator('.mx-tools button[data-act="expand"]')).toHaveCount(4);
     await expect(page.locator('.mx-tools button[data-act="png"]')).toHaveCount(4);
@@ -63,13 +74,70 @@ test.describe('race_results_transform — metrics dashboard', () => {
     await expect(page.locator('#periods button').first()).toBeVisible();
   });
 
-  test('mints a session cookie and logout clears it (#7)', async ({ page, context }) => {
-    await page.goto('/metrics');
+  test('login sets a session cookie; logout forces re-login (N2)', async ({ page, context }) => {
     let cookies = await context.cookies();
-    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'session cookie set after auth').toBe(true);
-    const resp = await page.goto('/metrics/logout');
-    expect(resp.status()).toBe(200);
+    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'session cookie set after login').toBe(true);
+    await page.goto('/metrics/logout');
     cookies = await context.cookies();
-    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'session cookie cleared on logout').toBe(false);
+    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'cookie cleared on logout').toBe(false);
+    await page.goto('/metrics');                       // truly logged out -> redirected to the login form
+    await expect(page).toHaveURL(/\/metrics\/login/);
+    await expect(page.locator('form[action="/metrics/login"]')).toBeVisible();
+  });
+
+  test('ask-box UX — chips, autofocus, fill, clear (D2)', async ({ page }) => {
+    await page.goto('/metrics');
+    await expect(page.locator('#ask-suggest button').first()).toBeVisible();
+    await expect(page.locator('#ask-clear')).toBeVisible();
+    await expect(page.locator('#ask-model')).toBeVisible();
+    await expect(page.locator('#ask-q')).toBeFocused();
+    const chip = page.locator('#ask-suggest button').first();
+    const chip_text = (await chip.textContent()).trim();
+    await chip.click();
+    await expect(page.locator('#ask-q')).toHaveValue(chip_text);
+    await page.locator('#ask-clear').click();
+    await expect(page.locator('#ask-q')).toHaveValue('');
+  });
+
+  test('ask-box SQL toggle disables model + swaps placeholder; results scroll (D3, #66/#64)', async ({ page }) => {
+    await page.goto('/metrics');
+    const sqlChip = page.locator('.mx-ask-sqltoggle');               // chip; the checkbox itself is visually hidden
+    await expect(sqlChip).toBeVisible();
+    await expect(page.locator('#ask-model')).toBeEnabled();
+    await sqlChip.click();
+    await expect(page.locator('#ask-model')).toBeDisabled();           // model picker not used in raw-SQL mode
+    await expect(sqlChip).toHaveClass(/on/);                           // chip lights up when active
+    await expect(page.locator('#ask-q')).toHaveAttribute('placeholder', /SELECT/);
+    await sqlChip.click();
+    await expect(page.locator('#ask-model')).toBeEnabled();
+    await expect(sqlChip).not.toHaveClass(/on/);
+    // chart/table toggle buttons exist (hidden until a chartable result renders) (#65)
+    await expect(page.locator('#ask-viz-chart')).toHaveCount(1);
+    await expect(page.locator('#ask-viz-table')).toHaveCount(1);
+    // long result tables scroll vertically rather than pushing the page (#64)
+    const mh = await page.locator('#ask-table').evaluate(function (el) { return getComputedStyle(el).maxHeight; });
+    expect(mh).not.toBe('none');
+  });
+
+  test('thread + correction controls exist and start hidden (D4, #68/#70)', async ({ page }) => {
+    await page.goto('/metrics');
+    // thread indicator + new-thread link (B1) present but hidden until a question is asked
+    await expect(page.locator('#ask-thread')).toHaveCount(1);
+    await expect(page.locator('#ask-thread')).toBeHidden();
+    await expect(page.locator('#ask-newthread')).toHaveCount(1);
+    // correction affordance (G2) present but hidden until an answer renders
+    await expect(page.locator('#ask-correct')).toHaveCount(1);
+    await expect(page.locator('#ask-correct')).toBeHidden();
+    await expect(page.locator('#ask-correct-toggle')).toHaveCount(1);
+    // conversation transcript container (B1 #73) present but hidden until turns exist
+    await expect(page.locator('#ask-convo-list')).toHaveCount(1);     // single in-thread transcript list
+    await expect(page.locator('#ask-thread-scroll')).toHaveCount(1);  // one scrolling conversation
+    await expect(page.locator('#ask-convo-more')).toHaveCount(1);     // 'see older' expander (capped thread)
+    // show/hide toggle collapses the whole ask area
+    await expect(page.locator('#ask-panel-body')).toBeVisible();
+    await page.locator('#ask-panel-toggle').click();
+    await expect(page.locator('#ask-panel-body')).toBeHidden();
+    await page.locator('#ask-panel-toggle').click();
+    await expect(page.locator('#ask-panel-body')).toBeVisible();
   });
 });

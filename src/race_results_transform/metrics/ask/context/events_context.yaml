@@ -1,0 +1,94 @@
+version: "1.0"
+owner: "USAT Analytics"
+timezone: "America/Denver"   # Mountain Time; created_at_mtn is already in this tz
+
+dataset:
+  table: race_results_transform_events
+  grain: one row per usage event
+  description: >
+    Anonymous usage analytics for the Race Results Transform web app, which converts
+    race-results spreadsheets into the USAT rankings template. Each row is one user
+    action. No PII; visitor_id is an anonymous per-browser id.
+
+# Hard rules the assistant MUST follow
+rules:
+  - READ ONLY. Only SELECT / WITH queries. Never write, update, delete, or alter data.
+  - PREFER AGGREGATION (COUNT / COUNT(DISTINCT) / SUM / AVG / GROUP BY). For "list / show / recent / last / in a table" requests, a small ORDER BY ... LIMIT row listing is allowed — do NOT refuse it; the LIMIT cap prevents unbounded dumps.
+  - Never return or imply the identity of a person; visitor_id is anonymous. Report counts/rates only.
+  - Use created_at_mtn (Mountain Time) for date grouping and today/this week/this month.
+  - When returning a date/time, format it with DATE_FORMAT(created_at_mtn, ...) to a Mountain-Time string; never select created_at_utc and never return a raw DATE/DATETIME (it serializes as UTC).
+  - Reference only the table race_results_transform_events.
+  - If a question requires data NOT in this table (members, sales, payments, or any table not listed here), DECLINE — say it is out of scope. Never answer with an unrelated query.
+  - If results are capped (truncated), say "showing first N".
+  - For a single total, do NOT GROUP BY — return the COUNT directly so an empty period yields 0, not zero rows.
+  - today/this week/this month are calendar periods on created_at_mtn (Mountain Time). created_at_mtn is already MTN; the DB server's CURRENT_DATE()/NOW() may be a different timezone, so prefer explicit date ranges on created_at_mtn when exactness matters.
+  - dashboard_view rows are logged server-side (when /metrics is opened) and have NULL client fields (event_at_local, client_tz, local_hour, local_dow, visitor_id, session_id, viewport, theme). Those NULLs are expected, not missing data. "User activity/visits" normally means page_view and other client events, not dashboard_view.
+
+# event_name values (the action each row represents)
+events:
+  page_view:            a page was viewed (the visit signal)
+  file_uploaded:        a user uploaded a race file to convert
+  conversion_completed: the file was converted to the USAT template
+  download:             the converted file was downloaded (single file)
+  split_download_used:  the converted file was downloaded split by a column/group
+  manual_remap:         the user manually re-mapped a column
+  mapping_saved:        the user saved a column-mapping profile
+  start_over:           the user clicked "Start over" (reset / abandon)
+  theme_changed:        the user toggled light/dark theme
+  error:                an error occurred (see error_type)
+  dashboard_view:       the internal metrics dashboard was opened (exclude from user visits)
+
+# key columns + how to use them
+columns:
+  created_at_mtn: DATETIME in Mountain Time — use this for all date grouping.
+  created_at_utc: DATETIME in UTC — prefer created_at_mtn for reporting.
+  event_name:     the action (see events).
+  page_path:      URL path the event came from (/ for the app, /metrics for the dashboard).
+  visitor_id:     anonymous per-browser id. COUNT(DISTINCT visitor_id) = unique visitors. Never identify.
+  is_returning:   1 if the visitor was seen before, else 0.
+  session_id:     random per page load.
+  upload_id:      correlates a file upload with its later conversion/download events.
+  file_type:      xlsx or csv.
+  row_count:      rows in the uploaded file.
+  col_count:      columns in the uploaded file.
+  sheet_count:    worksheets in the uploaded file.
+  cols_matched:   columns auto-matched to the template.
+  cols_unmatched: columns not auto-matched (needed attention).
+  scorecard_band: green / amber / red — overall mapping quality.
+  scorecard_pct:  mapping quality percent (0-100).
+  download_mode:  single or split.
+  split_basis:    the column a split download was grouped by.
+  client_tz:      the visitor's timezone (location proxy; no IP/geo).
+  local_hour:     0-23, the visitor's local hour of the event.
+  local_dow:      0=Sun..6=Sat, the visitor's local day of week.
+  viewport:       mobile or desktop.
+  theme:          light / dark / auto.
+  error_type:     the kind of error, when event_name='error'.
+
+# metric definitions — keep consistent with the dashboard / metrics_report.js
+metrics:
+  visits:          COUNT(*) WHERE event_name='page_view'
+  unique_visitors: COUNT(DISTINCT visitor_id)
+  new_vs_returning: is_returning = 0 (new) vs 1 (returning)
+  uploads:         COUNT(*) WHERE event_name='file_uploaded'
+  conversions:     COUNT(*) WHERE event_name='conversion_completed'
+  downloads:       COUNT(*) WHERE event_name IN ('download','split_download_used')
+  start_overs:     COUNT(*) WHERE event_name='start_over'
+  completion_rate: downloads / uploads
+  automap_rate:    AVG(cols_matched / NULLIF(cols_matched + cols_unmatched,0))
+  errors:          COUNT(*) WHERE event_name='error', grouped by error_type
+
+# realistic questions users ask (also a smoke set)
+example_questions:
+  - How many people used the converter last week?
+  - How many unique visitors this month, new vs returning?
+  - What is the conversion rate from upload to download?
+  - How many users hit Start over after uploading?
+  - What share of columns auto-match without a manual fix?
+  - What is the distribution of scorecard bands (green/amber/red)?
+  - What file types are most common, xlsx vs csv?
+  - How often is split-by-group used vs a single download?
+  - How many errors last week, and of what type?
+  - What time of day and day of week is usage highest?
+  - Mobile vs desktop, and dark vs light theme?
+  - When was each visitor last active (the most recent event per visitor)?
