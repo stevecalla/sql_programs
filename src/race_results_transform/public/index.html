@@ -25,8 +25,18 @@
     <div class="dz-inner">
       <div class="dz-icon">⬆</div>
       <div class="dz-text"><strong>Drop a race-results .xlsx or .csv file here</strong><br><span class="dim">or tap to choose — it is reformatted to the USAT template in your browser, nothing is uploaded</span></div>
+      <div class="try-me" id="tryMe">
+        <button id="tryMeBtn" class="btn ghost" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Try me with fake sample data">▶ Try me (fake data) <span class="caret" aria-hidden="true">▾</span></button>
+        <div class="try-me-menu hidden" id="tryMeMenu" role="menu" aria-label="Try me options">
+          <button type="button" id="tryMeLoad" class="try-me-item" role="menuitem">Load sample data <span class="dim">— see it convert instantly</span></button>
+          <a href="/sample/sample_race_results_FAKE.xlsx" download id="tryMeGet" class="try-me-item" role="menuitem">Download sample file <span class="dim">— then upload it yourself</span></a>
+        </div>
+      </div>
     </div>
   </section>
+
+  <!-- shown while viewing the built-in sample so it's clear this is not a real upload -->
+  <div id="demoBadge" class="demo-badge hidden" role="status">⚠ Showing <strong>sample test data</strong> (fake) — nothing was uploaded. Click <strong>↺ Start over</strong> to convert your own file.</div>
 
   <section id="introCard" class="card">
     <h2 class="steps-title">How it works</h2>

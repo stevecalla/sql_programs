@@ -232,6 +232,11 @@
     <div class="mx-flip" id="chart_hours_table" hidden></div></div>
   </div>
 
+  <div class="mx-panel">
+    <div class="mx-ph"><h2>Try Me vs real activity</h2><div class="mx-tools" data-chart="chart_demo"><button type="button" data-act="expand" title="Expand">⤢ Expand</button><button type="button" data-act="png" title="Export PNG">⬇ PNG</button><button type="button" data-act="csv" title="Export CSV">⬇ CSV</button><button type="button" data-act="table" title="Switch to table view">⇄ Table</button></div></div>
+    <div class="mx-canvas-wrap"><canvas id="chart_demo" height="150"></canvas></div>
+    <div class="mx-flip" id="chart_demo_table" hidden></div></div>
+
   <div class="mx-panel"><h2>Split-by-group downloads</h2><div id="splits" class="dim">—</div></div>
 
   <div class="mx-panel"><h2>Top users <span class="tag">anonymous</span></h2>
@@ -355,6 +360,7 @@
       card('Start over', d.start_overs, '') +
       card('Completion', compRate+'%', d.completion_downloaded+'/'+d.completion_uploads+' uploads→dl') +
       card('Auto-map', d.automap_pct+'%', 'cols matched, no fix') +
+      card('Try Me', (d.demo ? d.demo.uploads : 0), 'sample uploads') +
       card('Row Count DB', (hl.rows != null ? hl.rows : '?'), (hl.mb != null ? hl.mb + ' MB' : '—'));
     var bd = d.by_day || [];
     var stacked = bd.length > 14;   // few days -> grouped bars; many -> stacked (clearer + compact)
@@ -373,6 +379,11 @@
       : 'No split-by-group downloads in this period.';
     bar('chart_modes', d.download_modes.map(function(m){return MODE_LABEL[m.mode]||m.mode;}), d.download_modes.map(function(m){return m.n;}), cssvar('--accent'));
     register('chart_modes', 'Downloads by type', ['Type','Count'], d.download_modes.map(function(m){return [MODE_LABEL[m.mode]||m.mode, m.n];}));
+    var ds = d.demo_split || [];
+    multibar('chart_demo', ds.map(function(x){return x.event;}),
+      [ { label:'Try Me (fake)', data:ds.map(function(x){return x.demo;}), color:'#e0a200' },
+        { label:'Real', data:ds.map(function(x){return x.real;}), color:cssvar('--brand') } ], false);
+    register('chart_demo', 'Try Me vs real activity', ['Activity','Try Me','Real'], ds.map(function(x){return [x.event, x.demo, x.real];}));
     var hours=[], hv=[];
     for (var h=0; h<24; h++){ hours.push(h); var f = d.by_hour.filter(function(x){return x.hour===h;})[0]; hv.push(f?f.n:0); }
     bar('chart_hours', hours, hv, cssvar('--brand'));

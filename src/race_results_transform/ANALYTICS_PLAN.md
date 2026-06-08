@@ -479,3 +479,27 @@ The code is built and the dep-free tests pass. To run it in production:
   (The Top Users query already filtered `visitor_id IS NOT NULL`, and `dashboard_view` rows carry a
   NULL `visitor_id`, so that column was effectively unaffected — the change just makes the intent
   explicit and consistent with the chip.)
+
+## "Try me (fake data)" + the is_demo flag — BUILT
+- **App** (`/`): a **Try me** split-button on the upload card (`#tryMeBtn`, `wire_try_me`/`load_demo`
+  in `public/js/app.js`) with two paths — *Load sample data* fetches the committed synthetic fixture
+  (`/sample/sample_race_results_FAKE.xlsx`) and runs it through the normal pipeline in-browser, and
+  *Download sample file* (`<a download>`) gives the user that file to upload themselves. The 8018
+  server serves the single file from `examples/sample/` (`app.get('/sample/sample_race_results_FAKE.xlsx')`).
+  `S.is_demo` is set for either path (and auto-detected for a re-uploaded `*_FAKE.*` file via
+  `is_demo_filename`), a `#demoBadge` "sample test data" banner shows while viewing, and the upload
+  card (with the Try-me button) hides once a workbook loads; **Start over** clears `S.is_demo`, hides
+  the badge, and restores the button.
+- **Flag**: a new `is_demo TINYINT(1)` column (1 = built-in sample / fake data, else 0/NULL). Wired
+  end-to-end: events DDL (`query_create_race_results_transform_events_table.js`), server whitelist
+  (`metrics_config.COLUMNS`), browser allow-list (`public/js/metrics.js`), and `ensure_columns`
+  migration in the server (so existing tables gain it). `app.js` `track()` stamps `is_demo:1` on the
+  demo session's events; the initial `page_view` and real uploads stay `0`/NULL.
+- **Chart/card**: `metrics_report.build_report` adds a `demo_split` (Uploads / Conversions / Downloads
+  split by `is_demo`) + a `demo` summary. The dashboard renders a **Try Me vs real activity** grouped
+  bar (`chart_demo`, demo vs real) with the standard Expand/PNG/CSV/Table toolbar, plus a **Try Me**
+  KPI card (sample upload count).
+- **Tests**: `tests/metrics_report.test.js` asserts the report issues the `is_demo` split query and
+  returns the `demo_split` shape; `tests/try_me.test.js` asserts the `is_demo` column is wired across
+  DDL + server whitelist + client allow-list and that the Try-me markup/loader exist; the dashboard
+  e2e count moves to 5 charts and `e2e/try_me.spec.js` (opt-in) drives the load-sample flow + badge.

@@ -15,7 +15,7 @@ const COLUMNS = [
   'size_bytes', 'cols_matched', 'cols_unmatched', 'scorecard_band', 'scorecard_pct',
   'flag_count', 'target_key', 'download_mode', 'file_out_count', 'selected_count',
   'split_basis', 'event_at_local', 'client_tz', 'local_hour', 'local_dow',
-  'app_version', 'engine', 'viewport', 'theme', 'error_type'
+  'app_version', 'engine', 'viewport', 'theme', 'error_type', 'is_demo'
 ];
 
 module.exports = { APP, TABLE, KEEP_YEARS, REPORTING_TZ, COLUMNS };

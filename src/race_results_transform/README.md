@@ -12,7 +12,11 @@ template** — entirely in your browser, with a human review step before you dow
 
 Drop a file → it auto-maps the columns to the 12-column template and converts → you review the
 highlighted cells (values it changed or guessed), fix anything, then download a template-ready
-`.xlsx`. The output always has all 12 columns in order:
+`.xlsx`. New to it? The **Try me (fake data)** button on the upload card has two options: *Load
+sample data* runs a built-in synthetic (PII-free) file through the whole flow instantly, or
+*Download sample file* hands you that file to upload yourself. While you're viewing the sample a
+banner makes clear it's fake test data; **Start over** returns to your own upload. The output
+always has all 12 columns in order:
 `Member Number, Last Name, First Name, Gender, DOB, Email, Address, City, State, Zip, Category,
 Recorded Time` — even when the source was missing some. Per the template, only **Address** is
 optional.
@@ -51,7 +55,7 @@ npm test            # or: node --test tests/*.test.js
 
 The `node --test` suite above is dependency-free and checks the engine + that the served
 *files* are intact. For a real-browser check of the **served app**, there's a Playwright suite
-in `e2e/` (10 spec files). It is **not** part of `npm test` and never enters the locked-down
+in `e2e/` (incl. a `try_me` spec). It is **not** part of `npm test` and never enters the locked-down
 production install. It runs every functional spec on **chromium, firefox and webkit**, plus a
 phone-sized **mobile** project, and adds accessibility, visual-snapshot, and error-handling
 coverage:
@@ -165,13 +169,14 @@ client / report render); the 8018 server **auto-creates the table at startup**
 
 - **Dashboard**: funnel (visit→upload→conversion→download→start-over), activity-by-day
   (visits·uploads·downloads·start-overs — grouped for ≤14 days, auto-stacked beyond), downloads-by-type +
-  a Split-by-group panel, top users (visits·uploads·downloads·start-overs, timezone + last activity), a
-  Start-over KPI card, ↻ Refresh + auto-refresh, dark/light. Data tables carry a leading # row-number
-  column and scroll horizontally when narrow. The top-right **Last User Activity** chip and the Top
-  Users **Last activity** column reflect real activity only — server-side `dashboard_view` events are
+  a Split-by-group panel, a **Try Me vs real activity** chart (demo vs real uploads/conversions/
+  downloads) + a **Try Me** KPI card, top users (visits·uploads·downloads·start-overs, timezone + last
+  activity), a Start-over KPI card, ↻ Refresh + auto-refresh, dark/light. Data tables carry a leading #
+  row-number column and scroll horizontally when narrow. The top-right **Last User Activity** chip and the
+  Top Users **Last activity** column reflect real activity only — server-side `dashboard_view` events are
   excluded, so opening the dashboard doesn't bump the date (the **N rows** figure still counts all rows).
 - **Events**: page_view, file_uploaded, conversion_completed, download, `split_download_used`,
-  manual_remap, mapping_saved, start_over, theme_changed, error, + server-side dashboard_view per /metrics open. Every event also records `page_path` (the URL path viewed) so page_view/dashboard_view are explicit about the page.
+  manual_remap, mapping_saved, start_over, theme_changed, error, + server-side dashboard_view per /metrics open. Every event also records `page_path` (the URL path viewed) so page_view/dashboard_view are explicit about the page. Events from the **Try me** sample carry `is_demo=1` (real user activity is `0`/NULL), which powers the Try-Me-vs-real chart.
 - **Privacy/automation**: the client mutes itself under automated browsers (`navigator.webdriver`)
   unless `window.METRICS_TEST_ALLOW` is set, so the e2e suite never writes to the table. The uploaded
   **file name** rides along on every post-upload event (conversion / download / split / error) for

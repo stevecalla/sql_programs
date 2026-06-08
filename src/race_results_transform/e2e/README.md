@@ -67,8 +67,9 @@ Chrome window?". To change the pace, edit `HEADED_SLOWMO` (ms per step) in `e2e/
 - **table_view.spec.js** — search filter + clear, header sort (▲/▼ + Reset), legend “Show rows” filter.
 - **layout_sheets.spec.js** — layout side/stacked/tabs, sheet-tab data switching, drag-and-drop upload.
 - **split_presets.spec.js** — split group-name preset: Save preset (status) then Clear entries.
-- **a11y.spec.js** — axe-core scan (no critical violations) on home + Tables + Mapping.
-- **visual.spec.js** — screenshot baselines (chromium only): upload light/dark + compare card. `npm run e2e:snap` to (re)generate.
+- **try_me.spec.js** — the "Try me (fake data)" dropdown: both menu paths, *Load sample data* → Compare card, the "sample data" badge shows while viewing, the upload card + Try-me button hide once loaded, and Start over restores them.
+- **a11y.spec.js** — axe-core scan (no critical violations) on home + Tables + Mapping, plus the Try-me dropdown (open) and the sample-data badge state.
+- **visual.spec.js** — screenshot baselines (chromium only): upload light/dark (now include the Try-me button) + compare card. `npm run e2e:snap` to (re)generate after intended UI changes.
 - **mobile.spec.js** — Pixel-5 viewport: no horizontal overflow + convert works (runs in the `mobile` project only).
 - **metrics_db.spec.js** — browser→MySQL round-trip: drives the app, asserts the usage events landed with the right columns + the table schema exists. Chromium-only; skips with no DB. `npm run e2e:db`.
 - **errors.spec.js** — unreadable file → graceful error, page doesn't blank.

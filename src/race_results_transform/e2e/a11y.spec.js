@@ -26,4 +26,16 @@ test.describe('race_results_transform — accessibility', () => {
     await expect(page.locator('.rrt-split')).toBeVisible();
     await scan(page, 'Mapping view');
   });
+
+  test('Try-me dropdown (open) + sample-data badge have no critical a11y violations', async ({ page }) => {
+    reset_steps();
+    await page.goto('/');
+    await page.locator('#tryMeBtn').click();             // open the dropdown
+    await expect(page.locator('#tryMeMenu')).toBeVisible();
+    await scan(page, 'Try-me menu (open)');
+    await page.locator('#tryMeLoad').click();            // load the built-in sample
+    await expect(page.locator('#compareCard')).toBeVisible();
+    await expect(page.locator('#demoBadge')).toBeVisible();
+    await scan(page, 'sample-data view (badge shown)');
+  });
 });

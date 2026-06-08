@@ -59,7 +59,9 @@ async function init_metrics() {
     await ensure_table(metrics_pool, ddl);
     // migrate already-created tables that predate newer columns (CREATE IF NOT EXISTS won't add them)
     await ensure_columns(metrics_pool, metrics_config.TABLE, [
-      { name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' }
+      { name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' },
+      // is_demo: 1 when the event came from the built-in "Try me" sample (fake data), else 0/NULL
+      { name: 'is_demo', ddl: 'is_demo TINYINT(1)', after: 'error_type' }
     ]);
     await ensure_table(metrics_pool, require('./src/race_results_transform/metrics/ask/ask_log').DDL);
     await ensure_table(metrics_pool, require('./src/race_results_transform/metrics/ask/corrections').DDL);
@@ -289,6 +291,12 @@ function create_app() {
   // Serve the shared core modules (src/, single source of truth, also used by
   // the CLI + tests) so the browser <script> tags can load them.
   app.use('/src', express.static(path.join(__dirname, 'src', 'race_results_transform', 'src')));
+
+  // "Try me" sample: serve the committed synthetic (PII-free) fixture so the app can both
+  // load it in-browser and offer it as a download. Single explicit file — no directory listing.
+  app.get('/sample/sample_race_results_FAKE.xlsx', function (req, res) {
+    res.sendFile(path.join(__dirname, 'src', 'race_results_transform', 'examples', 'sample', 'sample_race_results_FAKE.xlsx'));
+  });
 
   // Static SPA. http://localhost:8018/ serves index.html.
   app.use('/', express.static(PUBLIC_DIR));

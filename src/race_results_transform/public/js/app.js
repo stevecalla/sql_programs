@@ -36,8 +36,17 @@
     file_name: 'results', ir: null, parsed: null, mapping: null, value_overrides: {},
     result: null, report: null, work_rows: null, store: null, sig: null,
     orig_table: null, conv_table: null, vm_expanded: {}, approved: {}, flag_info: null, link_tables: false,
-    sheets: null, active: null, first_render: true, split_col: null, split_basis: null, split_manual: {}, split_loaded_key: null
+    sheets: null, active: null, first_render: true, split_col: null, split_basis: null, split_manual: {}, split_loaded_key: null,
+    is_demo: false   // true while viewing the built-in "Try me" sample (fake data) — stamps is_demo on its events
   };
+
+  // The committed synthetic fixture served by the app (no PII). Used by both Try-me paths:
+  // "Load sample data" fetches + parses it in-browser; "Download sample file" saves it to upload.
+  var DEMO_URL = '/sample/sample_race_results_FAKE.xlsx';
+  var DEMO_NAME = 'sample_race_results_FAKE.xlsx';
+  // A real upload counts as a demo when its filename is the known fake fixture (so "upload it
+  // yourself" is also tracked as Try-me activity). Matches the _FAKE fixtures.
+  function is_demo_filename(name) { return /_FAKE\.(xlsx|xls|csv)$/i.test(name || ''); }
 
   var $ = function (id) { return document.getElementById(id); };
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
@@ -189,9 +198,24 @@
     dz.addEventListener('drop', function (e) { var f = e.dataTransfer.files[0]; if (f) handle_file(f); });
   }
 
+  // "Try me" split-button: a dropdown with two paths — load the sample instantly, or download
+  // the sample file to upload yourself. Clicks stopPropagation so the dropzone doesn't also open
+  // the file picker. The button lives in the upload card, which hides once a workbook is loaded.
+  function wire_try_me() {
+    var btn = $('tryMeBtn'), menu = $('tryMeMenu'), load = $('tryMeLoad'), get = $('tryMeGet');
+    if (!btn || !menu) return;
+    function close_menu() { menu.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); }
+    function toggle_menu(e) { e.stopPropagation(); menu.classList.toggle('hidden'); btn.setAttribute('aria-expanded', menu.classList.contains('hidden') ? 'false' : 'true'); }
+    btn.addEventListener('click', toggle_menu);
+    btn.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle_menu(e); } });
+    if (load) load.addEventListener('click', function (e) { e.stopPropagation(); close_menu(); load_demo(); });
+    if (get) get.addEventListener('click', function (e) { e.stopPropagation(); close_menu(); track('try_me_download', {}); });
+    document.addEventListener('click', close_menu);
+  }
+
   // ---- usage analytics (fire-and-forget; counts/enums + filename only) -------
   function um() { return (typeof window !== 'undefined') && window.UsageMetrics; }
-  function track(name, props) { try { var m = um(); if (m) m.track(name, props || {}); } catch (e) { /* never break the app */ } }
+  function track(name, props) { try { var m = um(); if (m) { props = props || {}; if (S.is_demo) props.is_demo = 1; m.track(name, props); } } catch (e) { /* never break the app */ } }
   function map_match_counts() {
     var matched = 0, total = (schema.TEMPLATE_SCHEMA ? schema.TEMPLATE_SCHEMA.length : 12);
     try { Object.keys(S.mapping || {}).forEach(function (k) { if (S.mapping[k] && S.mapping[k].source) matched++; }); } catch (e) { /* pre-map */ }
@@ -211,6 +235,7 @@
   }
 
   function handle_file(file) {
+    S.is_demo = is_demo_filename(file.name);   // a re-uploaded sample counts as Try-me activity
     S.file_name = file.name.replace(/\.(xlsx|xls|csv)$/i, '');
     S.file_display = file.name;
     var is_csv = /\.csv$/i.test(file.name);
@@ -222,6 +247,23 @@
       p.then(function (irs) { on_workbook(irs); }).catch(function (e) { track('error', { error_type: 'unreadable_file' }); alert('Could not read file: ' + e.message); });
     };
     if (is_csv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+  }
+
+  // "Try me — Load sample data": fetch the served fake fixture, parse it in-browser, and run it
+  // through the same pipeline as a real upload. is_demo stamps the resulting events.
+  function load_demo() {
+    S.is_demo = true;
+    S.file_name = DEMO_NAME.replace(/\.(xlsx|xls|csv)$/i, '');
+    S.file_display = DEMO_NAME;
+    var m = um(); if (m) m.new_upload();
+    fetch(DEMO_URL)
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+      .then(function (buf) {
+        track('file_uploaded', { file_name: DEMO_NAME, file_type: 'xlsx', size_bytes: buf.byteLength || null });
+        return io.read_to_irs(buf);
+      })
+      .then(function (irs) { on_workbook(irs); })
+      .catch(function (e) { S.is_demo = false; track('error', { error_type: 'demo_load_failed' }); alert('Could not load the sample file: ' + e.message); });
   }
 
   // Build a per-sheet state bundle (one per worksheet / the single CSV).
@@ -244,6 +286,7 @@
     S.active = null; S.first_render = true;
     render_sheet_bar();
     hide('uploadCard'); hide('introCard'); show('clearBtn');
+    if (S.is_demo) show('demoBadge'); else hide('demoBadge');
     activate_sheet(0);
     track('conversion_completed', conversion_props());
     $('summaryBar').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -306,11 +349,12 @@
 
   function clear_all() {
     track('start_over', {});
+    S.is_demo = false;
     S.ir = S.parsed = S.mapping = S.result = S.report = S.work_rows = null;
     S.value_overrides = {}; S.vm_expanded = {}; S.approved = {}; S.orig_table = S.conv_table = null;
     S.sheets = null; S.active = null; S.first_render = true;
     $('fileInput').value = '';
-    ['summaryBar', 'compareCard', 'profileBar', 'clearBtn', 'flagLegend', 'sheetBar'].forEach(hide);
+    ['summaryBar', 'compareCard', 'profileBar', 'clearBtn', 'flagLegend', 'sheetBar', 'demoBadge'].forEach(hide);
     show('uploadCard'); show('introCard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -1137,7 +1181,7 @@
     start_clock();
     if (!window.ExcelJS) { alert('ExcelJS failed to load — please hard-refresh the page (Ctrl/Cmd+Shift+R).'); return; }
     S.store = mapper.make_store(window.localStorage);
-    wire_dropzone(); wire_collapsibles(); wire_layout(); wire_compare_seg();
+    wire_dropzone(); wire_try_me(); wire_collapsibles(); wire_layout(); wire_compare_seg();
     var tip = document.createElement('div'); tip.className = 'rrt-tip hidden'; document.body.appendChild(tip);
     document.addEventListener('mouseover', function (e) { var td = e.target.closest && e.target.closest('td[data-tip]'); if (!td) return; tip.textContent = td.getAttribute('data-tip'); tip.classList.remove('hidden'); });
     document.addEventListener('mousemove', function (e) { if (tip.classList.contains('hidden')) return; var x = Math.min(e.clientX + 12, window.innerWidth - 300); tip.style.left = x + 'px'; tip.style.top = (e.clientY + 16) + 'px'; });

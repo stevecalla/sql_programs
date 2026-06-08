@@ -13,7 +13,7 @@
         'file_name', 'file_name_hash', 'file_type', 'sheet_count', 'row_count', 'col_count',
         'size_bytes', 'cols_matched', 'cols_unmatched', 'scorecard_band', 'scorecard_pct',
         'flag_count', 'target_key', 'download_mode', 'file_out_count', 'selected_count',
-        'split_basis', 'app_version', 'engine', 'error_type'
+        'split_basis', 'app_version', 'engine', 'error_type', 'is_demo'
       ]
     });
   }
