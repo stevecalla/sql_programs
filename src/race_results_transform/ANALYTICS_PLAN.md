@@ -443,7 +443,7 @@ The code is built and the dep-free tests pass. To run it in production:
 - **#1 split download metric**: event renamed `split_used` → **`split_download_used`** (clearer); dashboard "Split-by-group downloads" panel (count, avg groups, converted/original basis); the Slack/CLI report gains a split line.
 - **#2 funnel**: `metrics_report.funnel` (Visits → Uploads → Conversions → Downloads → **Start over**) + a funnel bar chart on the dashboard. Activity-by-day adds a **start-overs** series and switches **grouped→stacked when >14 days** are shown (datalabels inside bars). A **Start over** KPI card sits in the cards row.
 - **#3 refresh**: dashboard header **↻ Refresh** button + **Auto** toggle (60s, off by default).
-- **#4 top users**: now show **Visits / Uploads / Downloads / Start over** per-user counts + **Location (client_tz)** + **Last activity** (`MAX(created_at_mtn)`) columns (location = timezone proxy; no IP/geo). Leading **#** row-number column; table scrolls horizontally when narrow.
+- **#4 top users**: now show **Visits / Uploads / Downloads / Start over** per-user counts + **Location (client_tz)** + **Last activity** (`MAX(created_at_mtn)` over real activity only — `dashboard_view` excluded) columns (location = timezone proxy; no IP/geo). Leading **#** row-number column; table scrolls horizontally when narrow.
 - **#5 dashboard views**: server logs a `dashboard_view` event on each `/metrics` open (skipped when the `x-metrics-test` header is present, so e2e never pollutes).
 - **Also**: track `start_over` (Clear/Start-over click) and `theme_changed` (light/dark preference, carries `theme`).
 - Tests: `metrics_dashboard.spec.js` asserts the new panels/columns (incl. Visits/Uploads/Downloads/Start over headers + the # row-number column); `metrics_db.spec.js` round-trip now verifies `theme_changed` + `start_over` land; filename rides on every post-upload event. No schema change (reuses existing columns).
@@ -467,3 +467,15 @@ The code is built and the dep-free tests pass. To run it in production:
 - **Chart data values**: `chartjs-plugin-datalabels` shows values on every bar; the **PNG export and Expand modal use the same image** (offscreen canvas with a solid `--card` background) so they're identical and include the **chart title, legend/keys, and value labels**.
 - **Top users**: now a **full-width** panel; cells `nowrap` with horizontal scroll; **full visitor_id** shown (no longer truncated).
 - Tests: `metrics_dashboard.spec.js` asserts the toolbar (4 buttons × 4 charts), health strip, last-activity label, 2-row header, theme text.
+
+## Last User Activity excludes dashboard views
+- The top-right **Last User Activity** chip (`health.latest`) and the Top Users **Last activity**
+  column (`top_users.last_seen`) now compute `MAX(created_at_mtn)` over **real activity only**,
+  excluding the server-side `dashboard_view` events that fire on each `/metrics` open
+  (`MAX(CASE WHEN event_name <> 'dashboard_view' THEN created_at_mtn END)` in `metrics_report.js`).
+  So simply opening the dashboard no longer bumps the "last activity" date — it reflects page
+  views, uploads, conversions, downloads, split downloads, start-overs, etc. The **N rows** health
+  figure (`rows_total`) stays unfiltered — it's a DB-size metric, not an activity metric.
+  (The Top Users query already filtered `visitor_id IS NOT NULL`, and `dashboard_view` rows carry a
+  NULL `visitor_id`, so that column was effectively unaffected — the change just makes the intent
+  explicit and consistent with the chip.)

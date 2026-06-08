@@ -167,7 +167,9 @@ client / report render); the 8018 server **auto-creates the table at startup**
   (visits·uploads·downloads·start-overs — grouped for ≤14 days, auto-stacked beyond), downloads-by-type +
   a Split-by-group panel, top users (visits·uploads·downloads·start-overs, timezone + last activity), a
   Start-over KPI card, ↻ Refresh + auto-refresh, dark/light. Data tables carry a leading # row-number
-  column and scroll horizontally when narrow.
+  column and scroll horizontally when narrow. The top-right **Last User Activity** chip and the Top
+  Users **Last activity** column reflect real activity only — server-side `dashboard_view` events are
+  excluded, so opening the dashboard doesn't bump the date (the **N rows** figure still counts all rows).
 - **Events**: page_view, file_uploaded, conversion_completed, download, `split_download_used`,
   manual_remap, mapping_saved, start_over, theme_changed, error, + server-side dashboard_view per /metrics open. Every event also records `page_path` (the URL path viewed) so page_view/dashboard_view are explicit about the page.
 - **Privacy/automation**: the client mutes itself under automated browsers (`navigator.webdriver`)
