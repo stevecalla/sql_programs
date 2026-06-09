@@ -56,6 +56,8 @@ const env_fields = `
   theme VARCHAR(8),
   error_type VARCHAR(40),
   is_demo TINYINT(1),            -- 1 = event came from the built-in "Try me" sample (fake data)
+  is_test TINYINT(1),            -- 1 = deliberate test run (browser opened with ?metrics_test=1); purgeable via metrics:purge-test
+  source VARCHAR(16),            -- where the file came from: 'upload' | 'try_me' | 'salesforce'
 `;
 
 const index_fields = `

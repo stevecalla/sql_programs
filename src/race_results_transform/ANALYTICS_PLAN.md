@@ -18,7 +18,8 @@ no third-party trackers, **no new npm dependencies, no external license**.
 | Ingest | `POST /api/event` on `server_race_results_transform_8018.js`; whitelist + insert |
 | Reporting | One shared aggregation → **Slack digest** (cron→route→`sendSlackMessage`) + **CLI `stats`** + **Basic-Auth dashboard** |
 | Slack cron | We ship `cron_get_slack_race_results_transform/` (mirrors `cron_get_slack_membership_base`); **you own the schedule** |
-| CLI | `node src/cli.js stats` · `metrics:size` · `metrics:cleanup` (+ menu items) |
+| CLI | `node src/cli.js stats` · `metrics:size` · `metrics:cleanup` · `metrics:purge-test` (+ menu items) |
+| Test runs in prod | Open with `?metrics_test=1` → every event stamped `is_test=1` (sticky per tab, tags `page_view` too) → delete just those with `metrics:purge-test` (`DELETE … WHERE is_test=1`; real + demo data untouched) |
 | Dashboard | `http://localhost:8018/metrics` (or ngrok), **HTTP Basic Auth + signed `mx_session` cookie (12h expiry, `/metrics/logout`)**, read-only Chart.js page |
 | Cron setup | **You add** the crontab lines on the server (we ship `run_script.sh`); recommended: digest Mon 8:00a, purge Sun 2:30a MTN |
 | Retention | Keep current + prior calendar year, **purge only (no scrub)**; **automatic** purge cron + CLI `metrics:size` / `metrics:cleanup` |
@@ -166,7 +167,7 @@ of truth used by the Slack digest, the CLI, and the dashboard.
 ## 5b. Dashboard (read-only, on the 8018 server)
 - **URL**: `http://localhost:8018/metrics` locally, or the server's ngrok URL.
 - **Access**: **HTTP Basic Auth** — the browser prompts for user/pass from `.env`
-  (`RACE_RESULTS_CONVERTER_METRICS_DASH_USER` / `RACE_RESULTS_CONVERTER_METRICS_DASH_PASS`); over ngrok TLS so creds aren't sent in clear.
+  (`RACE_RESULTS_CONVERTER_METRICS_USER` / `RACE_RESULTS_CONVERTER_METRICS_PASS`); over ngrok TLS so creds aren't sent in clear.
   NOT a URL-param password.
 - **What it is**: one self-contained HTML page (Chart.js via CDN) that fetches a
   Basic-Auth-protected JSON endpoint (`GET /api/metrics-report?days=30`, returns the shared
@@ -399,7 +400,7 @@ The code is built and the dep-free tests pass. To run it in production:
    `LOCAL_MYSQL_PASSWORD`, `LOCAL_USAT_SALES_DB`). Add:
    - `SLACK_WEBHOOK_RACE_RESULTS_CONVERTER_URL=<webhook>` — optional; falls back to
      `SLACK_WEBHOOK_STEVE_CALLA_USAT_URL` so the digest works immediately for testing.
-   - `RACE_RESULTS_CONVERTER_METRICS_DASH_USER=<user>` and `RACE_RESULTS_CONVERTER_METRICS_DASH_PASS=<pass>` — dashboard Basic Auth
+   - `RACE_RESULTS_CONVERTER_METRICS_USER=<user>` and `RACE_RESULTS_CONVERTER_METRICS_PASS=<pass>` — dashboard Basic Auth
      (the dashboard returns 503 until these are set — never wide open).
    - optional `METRICS_OFF=true` to disable analytics entirely.
 3. **Restart the 8018 server** (pm2). On boot it auto-creates the table
@@ -508,3 +509,15 @@ The code is built and the dep-free tests pass. To run it in production:
   returns the `demo_split` shape; `tests/try_me.test.js` asserts the `is_demo` column is wired across
   DDL + server whitelist + client allow-list and that the Try-me markup/loader exist; the dashboard
   e2e count moves to 5 charts and `e2e/try_me.spec.js` (opt-in) drives the load-sample flow + badge.
+
+## `source` flag (manual vs Try Me vs Salesforce) — BUILT
+- A `source VARCHAR(16)` column records where a converted file came from: `upload` (manual drop/
+  picker), `try_me` (built-in sample), or `salesforce` (the SF intake queue). Wired end-to-end like
+  `is_demo`: DDL + `metrics_config.COLUMNS` + `public/js/metrics.js` allow-list + `app.js` `track()`
+  (`props.source = S.source || (S.is_demo ? 'try_me' : 'upload')`) + an `ensure_columns` migration in
+  the server. `is_demo` stays orthogonal (1 only for the sample).
+- Salesforce files flow the normal funnel: opening a queue file fires `file_uploaded` (first open
+  only) → auto `conversion_completed` → `download`, all stamped `source='salesforce'`. No new event
+  names beyond the existing funnel (the SF "download to folder" is not a funnel event).
+- A future "by source" dashboard breakdown can `GROUP BY source` (left as an optional follow-up; the
+  column + stamping are in place now).

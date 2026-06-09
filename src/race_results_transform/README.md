@@ -42,8 +42,8 @@ npm run pm2_start_race_results_transform   # pm2-managed as usat_race_results_tr
 
 # command line
 node src/cli.js inspect "<file>.xlsx|.csv"    # show headers + auto-mapping, no write
-node src/cli.js convert "<file>"  [-o out]    # write a reformatted .xlsx (one sheet per source sheet)
-node src/cli.js batch   <folder>  [-o dir]    # convert a whole folder
+node src/cli.js convert "<file>"  [-o out] [--format csv|xlsx]   # reformat (xlsx default; csv = one .csv per sheet)
+node src/cli.js batch   <folder>  [-o dir] [--format csv|xlsx]   # convert a whole folder
 node menu.js                                  # sectioned interactive menu (incl. a Config-wiring check); pauses after each command
                                               # menu item numbers are sequential 1..N (guarded by tests/menu_ids.test.js)
 
@@ -55,6 +55,62 @@ npm test            # or: node --test tests/*.test.js
 `tests/lint_snake_case.test.js`. The only exceptions are `UPPER_SNAKE` constants, DOM element ids,
 and library/Node/DOM APIs you can't rename (e.g. `arrayBuffer`). If you call a new camelCase API the
 lint flags, prefer an already-allowed equivalent or add the API name to the `ALLOWED` set in that test.
+**Adding a new package** (e.g. `xlsx`, `jsforce`) usually introduces such camelCase APIs
+(`searchRecords`, `unlinkSync`, `cellDates`, …) — run the lint and allow-list them as part of adding
+the dependency.
+
+## Pull from Salesforce (optional)
+
+Instead of getting files from the source by hand, you can pull **Race Results Doc** files straight
+from Salesforce. It runs *alongside* the normal flow — the dropzone, Try Me, and convert/review/
+download are unchanged. On the upload page, the **Get Race Results from Salesforce** panel lets you:
+
+- pick a **From / To** date window (Mountain Time, on Last-modified or Created), defaulting to
+  **yesterday → today**. **From** can be any day in **2025-01-01 … today**; **To** is then held to
+  **From … From + 14 days** (never past today), so you can position any 14-day window across the range.
+  Tick **Any date (latest)** to ignore dates. From/To, List, Reset and the options sit on one compact line.
+- the first time, **sign in inline** (same login as the metrics dashboard — a small form with a
+  show/hide password toggle appears in the panel; you stay on the page). One **Sign in / Sign out** button
+  (top-right of the panel) toggles the session — it reads "Sign in" when signed out and "Sign out" once a
+  listing or sign-in succeeds.
+- **List files** — a sortable table (Date / Program / Owner / File name / **Type**) with a **search box** to
+  filter the rows, a count of files found and how many are selected; the **newest 25 are auto-selected** by
+  default (raise the **Max files** field, up to **150**), and **Reset** clears the list. Legacy
+  **`.xls`** support is automatic when **`npm install xlsx`** is in place — the server serves SheetJS from
+  `node_modules`, the app lazy-loads it, and `.xls` rows read normally (no warning). Only when SheetJS is
+  genuinely unavailable does the app **highlight** those rows, tag them with `⚠`, and add a "re-save as
+  `.xlsx`" hint (see [`public/vendor/ENABLE_XLS.md`](public/vendor/ENABLE_XLS.md); restart the server after
+  installing),
+- pick a **folder** (Chrome/Edge native folder picker; other browsers type a path). The folder is
+  **remembered** until you choose another. Choose what to do if files already exist (add new only /
+  overwrite same names / delete all then add), and
+- **Download** the selected files — a prominent **progress bar** shows "Downloading *k* of *N*", with a
+  **Cancel** button to stop partway (up to your Max-files limit, hard ceiling **150**). If nothing matches
+  the dates, the panel says so. Files download as `program_owner_racetitle_id.ext` (the id is the
+  Salesforce ContentVersion Id).
+
+The files then appear in a **Files** tab (just left of Mapping) as a **sortable checklist table**
+(# · Program · Owner · File name · **Uploaded → Converted → Downloaded** status). **Click a row** to
+load it into the normal converter; convert and download it as usual, and its status updates. Come back
+anytime to finish the rest — statuses persist locally so they survive a refresh. Each row also has a
+**↻ Reload from disk** button: if you open one of the downloaded files in Excel, fix it and save, click
+Reload to re-read the file from the folder and re-convert it — the row drops back to *Converted* so it's
+clear the earlier download is now out of date and should be re-downloaded.
+
+Privacy: the server fetches each file from Salesforce **into memory and streams it to the browser —
+nothing is written to the server's disk**; the browser saves to the folder you chose. The
+`/api/sf/*` endpoints are gated by the **same login as the metrics dashboard** (`mx_session`); the
+inline `POST /api/login` sets that session cookie without leaving the page.
+
+Setup: set these in the repo-root `.env` — `SF_PROD_LOGIN_URL`, `SF_PROD_USERNAME`,
+`SF_PROD_PASSWORD`, `SF_PROD_SECURITY_TOKEN` (and `SF_DEV_*` for sandbox), plus optional
+`SF_API_VERSION`. There's also a CLI:
+
+```
+node src/cli.js sf:list --today                          # list today's files (MT)
+node src/cli.js sf:list --start 2026-06-01 --end 2026-06-07 --field CreatedDate
+node src/cli.js sf:pull --today -o ./downloads --strategy add_new   # download to a folder
+```
 
 ## End-to-end tests (Playwright — opt-in, run from the CLI)
 
@@ -95,11 +151,17 @@ share `e2e/helpers.js` (narrated step banner + click highlighting + fixtures). S
 - A light/dark **theme toggle** (top-right). It follows your OS setting until you pick one.
 - One **Compare** card with tabs: **Tables · Mapping · Scorecard · Integrity · Field reference ·
   How it works**, plus a summary bar (score %, file name, flagged-value count, skipped rows).
+- **Download — format + filename:** the **Download** button opens a small panel with a **CSV
+  (default) / Excel .xlsx** toggle and a **filename builder** — Sanction ID · Race Type · Race
+  Distance · Race Name — that composes `351003 - Duathlon - Intermediate - Clash Mississippi.csv`
+  (blank fields are skipped; a live preview shows the result). The same panel backs the
+  split-by-column download too.
 - **Multi-sheet workbooks:** if an uploaded `.xlsx` has more than one sheet, a notice and a
   **sheet tab bar** appear; each sheet is converted independently (its own mapping, flags and
-  edits). **Download** opens a checklist with a **Separate / Combined** toggle: *Separate* saves
-  each selected sheet as its own `.xlsx`; *Combined* stacks the selected sheets' rows into one
-  `.xlsx` (single 12-column sheet, tab order).
+  edits). In the Download panel a **Separate / Combined** toggle appears: *Separate* lists **every
+  sheet with its own editable filename** (the Race Type is pre-filled from the tab name when it
+  matches — Triathlon/Duathlon/Aquathlon/Aquabike — and you can rename any file); *Combined* stacks
+  the selected sheets' rows into one file (single 12-column sheet, tab order).
 - **Tables** side-by-side / stacked / tabs (switcher, remembered). Each table is searchable and
   sortable (case-insensitive), with a frozen header row and a friendly empty-state. **Link tables** (on by default)
   syncs search, sort, vertical scroll and the "Show rows" filter across both.
@@ -112,8 +174,10 @@ share `e2e/helpers.js` (narrated step banner + click highlighting + fixtures). S
   it autocompletes and offers a dropdown of the group names you've already made (leave it blank for
   its own file). A small toolbar gives **Clear entries · Save preset · Forget preset · Auto-save**
   (auto-save on by default; presets are remembered per file-layout + column and re-applied next
-  time). For multi-sheet workbooks the **Download** button opens a sheet picker so you can run the
-  split across some or all sheets at once — each sheet’s groups download as their own files.
+  time). The split **Download** opens the same **CSV / Excel + filename builder** panel, plus a
+  **per-group filename** box for each output group (pre-filled `<your name> - <group>`, editable),
+  matching the main Download button. For multi-sheet workbooks it also lists the sheets so you can
+  run the split across some or all of them at once (the sheet name is appended to each file).
 - **Inline remap:** every reformatted column header has a dropdown (in a top header row, so the
   two tables line up) to re-point that field; same controls live in the **Mapping** tab.
 - **Highlights:** changed/guessed cells are highlighted; the legend is collapsible, resizable and
@@ -121,8 +185,12 @@ share `e2e/helpers.js` (narrated step banner + click highlighting + fixtures). S
   **Approve all / Unapprove all**. Editing a highlighted cell also clears it.
 - **Value mapping:** Category, Gender, State and Member Number list their distinct source values
   (Member Number includes blank-source `1-day` defaults) with per-value reset and bulk set/reset.
-- **Download .xlsx** (centered cells, comfortable column widths, frozen header row) and
-  **Save mapping** (remembers your column + value choices for files with the same headers).
+- **Download** as **CSV** (default — plain text, ideal for the rankings upload) or **.xlsx**
+  (centered cells, comfortable column widths, frozen header row), and **Save mapping** (remembers
+  your column + value choices for files with the same headers).
+- **Quirky headers handled:** when a workbook has a **title/banner in row 1** and the real column
+  headers in row 2 (even with a blank leading column), the converter scores rows by how many match
+  known columns and locks onto the true header row automatically.
 
 ## Data
 
@@ -166,9 +234,14 @@ client / report render); the 8018 server **auto-creates the table at startup**
 - **Capture**: `public/js/metrics.js` → `POST /api/event` via `navigator.sendBeacon`
   (non-blocking; honors `METRICS_OFF` + Do-Not-Track).
 - **See it**: `node src/cli.js stats [--days 7]`, the dashboard at `/metrics`
-  (Basic Auth — `RACE_RESULTS_CONVERTER_METRICS_DASH_USER` / `RACE_RESULTS_CONVERTER_METRICS_DASH_PASS`), or the weekly Slack digest.
+  (Basic Auth — `RACE_RESULTS_CONVERTER_METRICS_USER` / `RACE_RESULTS_CONVERTER_METRICS_PASS`), or the weekly Slack digest.
 - **Size / cleanup**: `node src/cli.js metrics:size`, `metrics:cleanup` (keep current + prior
-  calendar year), and `metrics:purge-all` (delete every row — confirms first; for clearing test data).
+  calendar year), `metrics:purge-test` (delete only test-run rows — see below), and `metrics:purge-all`
+  (delete every row — confirms first).
+- **Testing in production**: open the app with **`?metrics_test=1`** and every event from that browser
+  tab is stamped **`is_test=1`** (the flag sticks for the tab session and tags even the `page_view`).
+  When you're done, `node src/cli.js metrics:purge-test` deletes exactly those rows — your real data
+  and the Try-Me/demo data are left untouched.
 - **Cron**: `utilities/cron_get_slack_race_results_transform/` (digest) and
   `utilities/cron_get_purge_race_results_transform/` (purge) — you set the schedule.
 
@@ -188,7 +261,7 @@ client / report render); the 8018 server **auto-creates the table at startup**
   traceability (also linkable via `upload_id`).
 
 **Tests**: `tests/metrics_ingest.test.js` + `tests/metrics_retention.test.js` (dep-free units —
-whitelist/timestamps, purge-by-year + purge-all), `e2e/metrics_beacon.spec.js` (fires when allowed /
+whitelist/timestamps, purge-by-year + purge-all + purge-test, plus `tests/metrics_test_flag.test.js` for the is_test/`?metrics_test=1` wiring), `e2e/metrics_beacon.spec.js` (fires when allowed /
 muted under automation), and `e2e/metrics_db.spec.js` (browser→MySQL round-trip — events landed with
 the right columns incl. file_name, + the table schema; chromium-only, skips with no DB: `npm run e2e:db`).
 

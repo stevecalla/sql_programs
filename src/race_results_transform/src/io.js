@@ -21,6 +21,7 @@
 }(typeof self !== 'undefined' ? self : this, function (ExcelJS) {
   'use strict';
 
+  function strip_mailto(s) { return String(s).replace(/^mailto:/i, '').replace(/\?.*$/, ''); }
   // Flatten an ExcelJS cell value into a plain Cell.
   function flatten_cell(v) {
     if (v === null || v === undefined) return null;
@@ -28,12 +29,19 @@
     var t = typeof v;
     if (t === 'string' || t === 'number' || t === 'boolean') return v;
     if (t === 'object') {
-      // rich text
+      // rich text: concat the runs (styled cells, incl. styled hyperlink labels)
       if (Array.isArray(v.richText)) {
-        return v.richText.map(function (r) { return r.text; }).join('');
+        return v.richText.map(function (r) { return (r && r.text != null) ? r.text : ''; }).join('');
       }
-      // hyperlink { text, hyperlink }
-      if (typeof v.text === 'string') return v.text;
+      // hyperlink { text, hyperlink }: `text` may be a plain string OR rich text (a styled email link
+      // reads as { text: { richText: [...] } }). Flatten it; if there's no usable label, fall back to
+      // the de-mailto'd URL — so an email link never renders as "[object Object]".
+      if ('text' in v) {
+        var label = flatten_cell(v.text);
+        if (label !== null && label !== '') return label;
+        return (typeof v.hyperlink === 'string') ? strip_mailto(v.hyperlink) : label;
+      }
+      if (typeof v.hyperlink === 'string') return strip_mailto(v.hyperlink);
       // formula { formula, result }
       if ('result' in v) return flatten_cell(v.result);
       if ('error' in v) return null;
@@ -170,12 +178,63 @@
     return { sheet_name: 'CSV', rows: rows };
   }
 
+  // ---- CSV writing (RFC-4180): quote any field containing a comma/quote/newline and double
+  // embedded quotes. Every cell is written as text, so long member numbers stay intact in the file
+  // (Excel may still re-format them on open — that's a viewer quirk, not a data loss).
+  function csv_field(v) {
+    var s = (v === null || v === undefined) ? '' : String(v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  // One grid (header row + data rows) -> CSV text. CRLF line endings (Excel-friendly).
+  function grid_to_csv(headers, rows) {
+    var lines = [(headers || []).map(csv_field).join(',')];
+    (rows || []).forEach(function (r) { lines.push((r || []).map(csv_field).join(',')); });
+    return lines.join('\r\n');
+  }
+
+  // ---- legacy .xls via SheetJS (optional, drop-in) --------------------------------------------
+  // exceljs reads ONLY .xlsx. If SheetJS is present — the global `XLSX` (browser, from
+  // public/vendor/xlsx.full.min.js) or the `xlsx` npm package (Node) — we read legacy .xls with it.
+  // Otherwise xls_to_irs throws XLS_UNSUPPORTED and the caller tells the user to re-save as .xlsx.
+  function get_sheetjs() {
+    if (typeof XLSX !== 'undefined' && XLSX) return XLSX;
+    var g = (typeof globalThis !== 'undefined') ? globalThis : (typeof self !== 'undefined' ? self : null);
+    if (g && g.XLSX) return g.XLSX;
+    if (typeof require === 'function') { try { return require('xlsx'); } catch (e) { /* not installed */ } }
+    return null;
+  }
+  function sheetjs_available() { return !!get_sheetjs(); }
+  function xls_open(input) {
+    var X = get_sheetjs();
+    if (!X) { var e = new Error('Legacy .xls needs the SheetJS library — re-save the file as .xlsx, or enable .xls support.'); e.code = 'XLS_UNSUPPORTED'; throw e; }
+    var data = input, type = 'buffer';
+    if (typeof input === 'string') { type = 'file'; }
+    else if (typeof ArrayBuffer !== 'undefined' && input instanceof ArrayBuffer) { data = new Uint8Array(input); type = 'array'; }
+    else if (typeof Uint8Array !== 'undefined' && input instanceof Uint8Array) { type = 'array'; }
+    return { X: X, wb: X.read(data, { type: type, cellDates: true }) };   // cellDates -> JS Dates like exceljs
+  }
+  function xls_rows(X, ws) {
+    var rows = X.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
+    return rows.map(function (r) { return r.map(function (v) { return (v === undefined || v === '') ? null : v; }); });
+  }
+  async function xls_to_irs(input) {
+    var ctx = xls_open(input), out = [];
+    ctx.wb.SheetNames.forEach(function (name) {
+      var rows = xls_rows(ctx.X, ctx.wb.Sheets[name]);
+      if (rows.some(function (r) { return r.some(function (v) { return v !== null && String(v).trim() !== ''; }); })) out.push({ sheet_name: name, rows: rows });
+    });
+    if (!out.length && ctx.wb.SheetNames.length) { var n0 = ctx.wb.SheetNames[0]; out.push({ sheet_name: n0, rows: xls_rows(ctx.X, ctx.wb.Sheets[n0]) }); }
+    return out;
+  }
+  async function xls_to_ir(input) { var irs = await xls_to_irs(input); return irs[0] || { sheet_name: 'Sheet1', rows: [] }; }
+
   // Read any supported file by extension (Node-side convenience for the CLI).
   async function read_file_to_ir(filepath) {
     if (/\.csv$/i.test(filepath)) {
       var fs = require('fs');
       return csv_to_ir(fs.readFileSync(filepath, 'utf8'));
     }
+    if (/\.xls$/i.test(filepath)) return xls_to_ir(filepath);
     return read_to_ir(filepath);
   }
 
@@ -185,11 +244,13 @@
       var fs = require('fs');
       return [csv_to_ir(fs.readFileSync(filepath, 'utf8'))];
     }
+    if (/\.xls$/i.test(filepath)) return xls_to_irs(filepath);
     return read_to_irs(filepath);
   }
 
   return { read_to_ir: read_to_ir, read_to_irs: read_to_irs, csv_to_ir: csv_to_ir,
+    xls_to_ir: xls_to_ir, xls_to_irs: xls_to_irs, sheetjs_available: sheetjs_available,
     read_file_to_ir: read_file_to_ir, read_file_to_irs: read_file_to_irs,
-    parse_csv: parse_csv, grid_to_buffer: grid_to_buffer, grids_to_buffer: grids_to_buffer,
-    sanitize_sheet_name: sanitize_sheet_name, _flattenCell: flatten_cell };
+    parse_csv: parse_csv, grid_to_csv: grid_to_csv, grid_to_buffer: grid_to_buffer, grids_to_buffer: grids_to_buffer,
+    sanitize_sheet_name: sanitize_sheet_name, flatten_cell: flatten_cell, _flattenCell: flatten_cell };
 }));

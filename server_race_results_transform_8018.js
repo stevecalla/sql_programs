@@ -61,7 +61,11 @@ async function init_metrics() {
     await ensure_columns(metrics_pool, metrics_config.TABLE, [
       { name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' },
       // is_demo: 1 when the event came from the built-in "Try me" sample (fake data), else 0/NULL
-      { name: 'is_demo', ddl: 'is_demo TINYINT(1)', after: 'error_type' }
+      { name: 'is_demo', ddl: 'is_demo TINYINT(1)', after: 'error_type' },
+      // is_test: 1 when a deliberate test run (browser opened with ?metrics_test=1) — purgeable via metrics:purge-test
+      { name: 'is_test', ddl: 'is_test TINYINT(1)', after: 'is_demo' },
+      // source: where the file came from — 'upload' | 'try_me' | 'salesforce'
+      { name: 'source', ddl: 'source VARCHAR(16)', after: 'is_test' }
     ]);
     await ensure_table(metrics_pool, require('./src/race_results_transform/metrics/ask/ask_log').DDL);
     await ensure_table(metrics_pool, require('./src/race_results_transform/metrics/ask/corrections').DDL);
@@ -114,7 +118,7 @@ function create_app() {
   const SESSION_COOKIE = 'mx_session';
   const SESSION_TTL_MS = 12 * 60 * 60 * 1000;   // 12h absolute expiry
   function dash_creds() {
-    return { user: process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_USER, pass: process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_PASS };
+    return { user: process.env.RACE_RESULTS_CONVERTER_METRICS_USER, pass: process.env.RACE_RESULTS_CONVERTER_METRICS_PASS };
   }
   function sign_session(exp) {
     return exp + '.' + crypto.createHmac('sha256', 'mx|' + (dash_creds().pass || '')).update(String(exp)).digest('base64url');
@@ -142,12 +146,14 @@ function create_app() {
       + '<h1>\uD83D\uDCCA Metrics \u2014 Sign in</h1>'
       + (err ? '<p class="err">' + err + '</p>' : '')
       + '<input name="username" placeholder="Username" autofocus autocomplete="username">'
-      + '<input name="password" type="password" placeholder="Password" autocomplete="current-password">'
+      + '<input id="pw" name="password" type="password" placeholder="Password" autocomplete="current-password">'
+      + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:2px 0 4px;cursor:pointer">'
+      + '<input type="checkbox" style="width:auto;margin:0" onclick="document.getElementById(\'pw\').type=this.checked?\'text\':\'password\'"> Show password</label>'
       + '<button type="submit">Sign in</button></form>';
   }
   function require_dash_auth(req, res, next) {
     const c = dash_creds();
-    if (!c.user || !c.pass) { res.status(503).send('Dashboard not configured (set RACE_RESULTS_CONVERTER_METRICS_DASH_USER / RACE_RESULTS_CONVERTER_METRICS_DASH_PASS).'); return; }
+    if (!c.user || !c.pass) { res.status(503).send('Dashboard not configured (set RACE_RESULTS_CONVERTER_METRICS_USER / RACE_RESULTS_CONVERTER_METRICS_PASS).'); return; }
     if (valid_session(read_cookie(req, SESSION_COOKIE))) return next();   // valid session cookie = the only gate
     if (req.path.indexOf('/api') === 0) return res.status(401).json({ ok: false, error: 'not authenticated' });
     return res.redirect('/metrics/login');
@@ -165,6 +171,24 @@ function create_app() {
       return res.redirect('/metrics');
     }
     res.status(401).type('html').send(login_html('Invalid username or password.'));
+  });
+  // Inline/AJAX login: same session cookie as /metrics/login, but returns JSON and does NOT redirect
+  // — lets the app (e.g. the Salesforce panel) sign in in place without leaving the page.
+  app.post('/api/login', function (req, res) {
+    const c = dash_creds();
+    if (!c.user || !c.pass) return res.status(503).json({ ok: false, error: 'auth not configured' });
+    const u = (req.body && req.body.username) || '', pw = (req.body && req.body.password) || '';
+    if (u === c.user && pw === c.pass) {
+      res.cookie(SESSION_COOKIE, sign_session(Date.now() + SESSION_TTL_MS), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_MS });
+      return res.json({ ok: true });
+    }
+    return res.status(401).json({ ok: false, error: 'Invalid username or password' });
+  });
+  // Inline/AJAX logout: clears the same session cookie, returns JSON (no redirect). Ends the shared
+  // mx_session (so the /metrics dashboard session ends too).
+  app.post('/api/logout', function (req, res) {
+    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.json({ ok: true });
   });
   app.get('/metrics/logout', function (req, res) {
     res.clearCookie(SESSION_COOKIE, { path: '/' });
@@ -286,6 +310,26 @@ function create_app() {
       console.error('[analytics] slack digest error:', e.message);
       res.status(500).json({ ok: false, error: e.message });
     }
+  });
+
+  // Salesforce race-results intake (optional feature). Gated by the SAME mx_session auth as the
+  // metrics dashboard. Lazy-required so the server still boots if SF env/creds are absent; the
+  // endpoints return 503 "not configured" until SF_* env vars are set. Files stream in-memory —
+  // nothing is persisted on the server (the browser saves to the user's chosen folder).
+  try {
+    require('./src/race_results_transform/sf/sf_routes').mount_sf_routes(app, require_dash_auth);
+  } catch (e) {
+    console.error('[sf] route mount skipped:', e.message);
+  }
+
+  // Optional legacy .xls support: serve SheetJS's browser build straight from the installed `xlsx`
+  // npm package (so `npm install xlsx` is all that's needed — no vendored copy). The app lazy-loads
+  // this only when an .xls is opened. Falls back to a committed public/vendor copy if node_modules
+  // isn't shipped (pure-static deploy).
+  app.get('/vendor/xlsx.full.min.js', function (req, res, next) {
+    const from_pkg = path.join(__dirname, 'node_modules', 'xlsx', 'dist', 'xlsx.full.min.js');
+    if (require('fs').existsSync(from_pkg)) return res.type('application/javascript').sendFile(from_pkg);
+    next();   // fall through to express.static (public/vendor/xlsx.full.min.js) if vendored
   });
 
   // Serve the shared core modules (src/, single source of truth, also used by

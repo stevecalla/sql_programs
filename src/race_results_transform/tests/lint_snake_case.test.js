@@ -16,11 +16,14 @@ const FILES = []
 // DOM / Node / ExcelJS / stdlib camelCase APIs + the one external util — these are not ours.
 const ALLOWED = new Set((`
 addEventListener addRow addWorksheet appendChild after before arrayBuffer byteLength charCodeAt classList className
+showDirectoryPicker getFileHandle getDirectoryHandle getFile createWritable removeEntry encodeURIComponent decodeURIComponent TextDecoder
+indexedDB createObjectStore objectStore queryPermission requestPermission globalThis cellDates
+unlinkSync searchRecords searchResult instanceUrl accessToken loginUrl autoFetch maxFetch
 clearTimeout clientY closest columnCount createElement createInterface createObjectURL dataset
 dataTransfer deepEqual doesNotThrow eachCell eachRow effectAllowed execSync existsSync findIndex
 flatMap forEach getAttribute getBoundingClientRect getCell getColumn getElementById getItem getRow getTime rowCount
-getUTCDate getUTCFullYear getFullYear getUTCMonth getUTCHours getUTCMinutes getUTCSeconds getUTCMilliseconds
-DateTimeFormat affectedRows resolvedOptions
+getUTCDate getUTCFullYear getFullYear getUTCMonth getMonth getDate getUTCHours getUTCMinutes getUTCSeconds getUTCMilliseconds
+DateTimeFormat affectedRows resolvedOptions baseProps
 getUTCDay hasOwnProperty includeEmpty indexOf innerHTML insertBefore isArray isNaN isInteger isTTY
 lastIndexOf localStorage mkdirSync notEqual numFmt padEnd padStart parentNode parseFloat parseInt
 dayPeriod formatToParts preventDefault removeEventListener setInterval timeZone querySelector querySelectorAll readAsArrayBuffer readAsText readFile readFileSync

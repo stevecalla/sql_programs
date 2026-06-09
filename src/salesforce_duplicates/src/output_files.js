@@ -17,6 +17,7 @@ const {
     ARCHIVE_DIR_NAME,
     META_DIR_NAME,
     RUN_SUMMARY_FILE,
+    ZIP_TRIM_MAPPING_FILE,
 } = require('../config');
 
 // Append a date/time stamp to the end of a file name, before its extension.
@@ -82,9 +83,19 @@ async function write_run_summary(summary, meta_dir_name = META_DIR_NAME, file_na
     return full_path;
 }
 
+// Write the ZIP trim mapping (raw -> trimmed -> count) into the meta folder, so
+// a reviewer can confirm how composite ZIPs were normalized to 5 digits. Like
+// the run summary, it lives in the meta folder (NOT the output folder) so it is
+// never swept into the Slack uploads. Overwritten each run. Returns the path.
+async function write_zip_trim_mapping(rows, meta_dir_name = META_DIR_NAME, file_name = ZIP_TRIM_MAPPING_FILE) {
+    const meta_dir = await create_directory(meta_dir_name);
+    return write_csv(meta_dir, file_name, rows);
+}
+
 module.exports = {
     add_timestamp_to_filename,
     write_csv,
     archive_previous_output_files,
     write_run_summary,
+    write_zip_trim_mapping,
 };

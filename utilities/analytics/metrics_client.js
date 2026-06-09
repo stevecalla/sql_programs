@@ -5,7 +5,7 @@
  * Do-Not-Track and a global METRICS_OFF flag. */
 (function (global) {
   'use strict';
-  var cfg = { app: 'app', endpoint: '/api/event', allowList: [] };
+  var cfg = { app: 'app', endpoint: '/api/event', allowList: [], baseProps: {} };
   var ids = {};
   var ALWAYS = ['app', 'event_name', 'page_path', 'visitor_id', 'session_id', 'is_returning', 'upload_id',
     'client_tz', 'local_hour', 'local_dow', 'event_at_local', 'viewport', 'theme'];
@@ -60,6 +60,7 @@
     cfg.app = opts.app || cfg.app;
     cfg.endpoint = opts.endpoint || cfg.endpoint;
     cfg.allowList = opts.allowList || [];
+    cfg.baseProps = opts.baseProps || {};   // props merged into EVERY event (e.g. a per-session is_test flag)
     if (off()) return;
     // Durable anonymous id: prefer cookie, then localStorage, else mint. Persist to BOTH
     // so the id survives if either store is cleared (cookie also lasts ~2 years).
@@ -78,6 +79,7 @@
     if (props && props.file_name) ids.file_name = props.file_name;   // remember for later events
     var merged = {}, src = base_props(), k;
     for (k in src) if (Object.prototype.hasOwnProperty.call(src, k)) merged[k] = src[k];
+    for (k in cfg.baseProps) if (Object.prototype.hasOwnProperty.call(cfg.baseProps, k)) merged[k] = cfg.baseProps[k];
     if (props) for (k in props) if (Object.prototype.hasOwnProperty.call(props, k)) merged[k] = props[k];
     var payload = {};
     Object.keys(merged).forEach(function (key) {

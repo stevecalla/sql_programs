@@ -43,4 +43,13 @@ async function purge_all(pool, table) {
   const [r] = await pool.query('DELETE FROM `' + table + '`');
   return { would_delete: would, deleted: (r && r.affectedRows != null) ? r.affectedRows : would };
 }
-module.exports = { size, purge_keep_years, purge_all, current_year_in_tz, YEAR_COL };
+// Delete only deliberate test-run rows (is_test = 1) — leaves real + demo data untouched.
+// Events from a browser opened with ?metrics_test=1 are stamped is_test=1 by the client.
+async function purge_test(pool, table) {
+  const where = 'is_test = 1';
+  const [c] = await pool.query('SELECT COUNT(*) AS n FROM `' + table + '` WHERE ' + where);
+  const would = c[0] ? c[0].n : 0;
+  const [r] = await pool.query('DELETE FROM `' + table + '` WHERE ' + where);
+  return { would_delete: would, deleted: (r && r.affectedRows != null) ? r.affectedRows : would };
+}
+module.exports = { size, purge_keep_years, purge_all, purge_test, current_year_in_tz, YEAR_COL };

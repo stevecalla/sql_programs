@@ -38,9 +38,10 @@ If a server is already running on the port, it's reused.
 
 ## What it checks (`convert_flow.spec.js`)
 - page shell loads (theme button has text, footer clock shows `… MTN`)
-- upload a fixture → Compare card renders → **Download** → opened `.xlsx` has the 12-column template
-- **split-by-column** → at least one per-group `.xlsx` downloads (12-column)
-- **multi-sheet** → sheet bar appears → **Combined** toggle merges all sheets into one worksheet
+- upload a fixture → Compare card renders → **Download** popover → pick **Excel** → opened `.xlsx` has the 12-column template
+- **Download defaults to CSV** + the filename builder composes `351003 - Duathlon - Intermediate - Clash Mississippi.csv`
+- **split-by-column** → split popover → pick **Excel** → at least one per-group `.xlsx` downloads (12-column)
+- **multi-sheet** → sheet bar appears → **Combined** toggle (with Excel) merges all sheets into one worksheet
 
 Fixtures: the committed `examples/sample/sample_race_results_FAKE.xlsx`, plus a throwaway
 2-sheet workbook the spec builds with exceljs (all fake data).
@@ -68,6 +69,7 @@ Chrome window?". To change the pace, edit `HEADED_SLOWMO` (ms per step) in `e2e/
 - **layout_sheets.spec.js** — layout side/stacked/tabs, sheet-tab data switching, drag-and-drop upload.
 - **split_presets.spec.js** — split group-name preset: Save preset (status) then Clear entries.
 - **try_me.spec.js** — the "Try me (fake data)" dropdown: both menu paths, *Download sample file* actually downloads the served `/sample/...xlsx` (guards the prod "file wasn't available" 404), *Load sample data* → Compare card, the "sample data" badge shows while viewing, the upload card + Try-me button hide once loaded, and Start over restores them.
+- **sf_flow.spec.js** — the "Get Race Results from Salesforce" panel (all `/api/sf/*` + `/api/login` stubbed; File System Access API disabled to force the server-folder fallback): From/To defaults + 14-day cap (From-anchored), inline sign-in + the Sign in/Sign out toggle, list → sort → auto-select → download (with progress) → Files queue table → click a row → convert → download, the 25-default/150-max cap, search filter, Cancel, and the "no files found" state. Two `.xls` cases: with SheetJS **forced 404** the row is highlighted + a re-save hint shows; with SheetJS **stubbed available** the `.xls` row is *not* flagged and there's no warning. Plus **Reload from disk**: download → open → convert → download (Downloaded), then the per-row **↻** re-reads via the stubbed `/api/sf/folder-file` and drops the row back to Converted.
 - **a11y.spec.js** — axe-core scan (no critical violations) on home + Tables + Mapping, plus the Try-me dropdown (open) and the sample-data badge state.
 - **visual.spec.js** — screenshot baselines (chromium only): upload light/dark (now include the Try-me button) + compare card. `npm run e2e:snap` to (re)generate after intended UI changes.
 - **mobile.spec.js** — Pixel-5 viewport: no horizontal overflow + convert works (runs in the `mobile` project only).

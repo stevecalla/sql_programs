@@ -35,7 +35,9 @@ salesforce_duplicates/
     fmt.js                  format_duration, format_timestamp_utc/mtn (pure)
     log.js                  COLORS, colorize, log_info/success/warn/error (uses fmt)
     ids.js                  make_run_id, make_hash, make_external_id (pure)
-    normalize.js            field cleaning + key builders (pure)
+    normalize.js            field cleaning + key builders (pure); composite_zip
+                            trims US ZIPs to first 5 digits (trim_zip5), the single
+                            chokepoint every consumer goes through
     matcher.js              levenshtein, similarity, rule flags, reason strings (pure)
     grouping.js             UnionFind + build_fuzzy_groups
     step_timer.js           create_step_timer: live [STEP] lines + end-of-run
@@ -43,8 +45,11 @@ salesforce_duplicates/
     exact.js                detect_exact_duplicates (+ its summary logger)
     fuzzy.js                run_fuzzy_matching: candidate filter, rule blocks,
                             pairwise compare (+ its two summary loggers)
+    zip_trim.js             build_zip_trim_mapping: reviewable raw -> trimmed
+                            composite-ZIP map + counts (pure)
     sf_rows.js              to_sf_exact/pair/group_row — Salesforce import schema mapping
-    output_files.js         add_timestamp_to_filename, write_csv, archive rotation
+    output_files.js         add_timestamp_to_filename, write_csv, archive rotation,
+                            write_run_summary + write_zip_trim_mapping (meta folder)
     salesforce.js           jsforce connect + Account query (only networked module);
                             --test uses REST autoFetch (ORDERED SOQL, for a stable
                             capped subset), --prod uses the Bulk API (UNORDERED SOQL
@@ -52,7 +57,7 @@ salesforce_duplicates/
     summaries.js            log_run_summary (final run summary block)
   tests/                    node:test unit tests:
     normalize.test.js  matcher.test.js  grouping.test.js  ids.test.js
-    sf_rows.test.js  exact.test.js  fuzzy.test.js
+    sf_rows.test.js  exact.test.js  fuzzy.test.js  zip_trim.test.js
     file_output.test.js     CSV write + archive rotation
     step_2_report.test.js   report module (counts + latest-file selection)
     report_service.test.js  slash-arg parsing + freshness/force (injected deps)
@@ -61,8 +66,9 @@ salesforce_duplicates/
 ```
 
 `main()` is a thin orchestrator (~230 lines): resolve mode -> archive -> fetch ->
-`detect_exact_duplicates` -> write -> `run_fuzzy_matching` -> write ->
-`build_fuzzy_groups` -> write -> `log_run_summary`. A `create_step_timer()` runs
+`build_zip_trim_mapping` (+ write to meta) -> `detect_exact_duplicates` -> write ->
+`run_fuzzy_matching` -> write -> `build_fuzzy_groups` -> write ->
+`log_zip_trim_summary` -> `log_run_summary`. A `create_step_timer()` runs
 alongside it: `timer.stage_done(label)` after each big step prints a live
 `[STEP] <label> — <Xs>` line, and `timer.print_summary()` prints a sorted
 (largest-first) timeline just before the run summary.
@@ -98,13 +104,16 @@ only `/scheduled` accepts `?is_test`.
 UNLESS the newest output file is younger than `FRESH_OUTPUT_WINDOW_MINUTES` (config) —
 within that window it returns the latest instead (the Slack reply explains this and
 points to `force=true`). `mode=run force=true` always regenerates. Run it from the repo
-root (`node server_salesforce_duplicates_8017.js`) or menu item 11; hit it with menu
-items 12–15.
+root (`node server_salesforce_duplicates_8017.js`) or menu item 12; hit it with menu
+items 13–16.
 
-Each run persists a small summary (total records scanned + counts) to
-`META_DIR_NAME/RUN_SUMMARY_FILE` (a sibling of the output folder, so it is never
-swept into the Slack uploads); `step_2_get_duplicate_report` reads it so the stats
-message can report the total records scanned even on a `mode=latest` read.
+Each run persists a small summary (total records scanned + counts, incl. ZIP-trim
+counts) to `META_DIR_NAME/RUN_SUMMARY_FILE` (a sibling of the output folder, so it
+is never swept into the Slack uploads); `step_2_get_duplicate_report` reads it so the
+stats message can report the total records scanned even on a `mode=latest` read. The
+same meta folder also holds `ZIP_TRIM_MAPPING_FILE` (`zip_trim_mapping.csv`), the
+reviewable raw -> trimmed composite-ZIP map written each run (menu item 11 opens this
+folder).
 
 ## Run modes
 

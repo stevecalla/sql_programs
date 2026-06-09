@@ -153,5 +153,25 @@
     return { mapping: mapping, unused: unused };
   }
 
-  return { auto_map: auto_map, norm: norm, pair_score: pair_score, is_split: is_split, THRESHOLD: THRESHOLD };
+  // How many cells in a candidate row look like real template columns (score >= THRESHOLD
+  // against any target's aliases). Used by parse.detect_table to find the true header row even
+  // when a title/banner sits above it — a title row scores 0, the header row scores high, and
+  // data rows (values like "CA", "M", "Yes") score ~0 because they don't match column NAMES.
+  function score_headers(row) {
+    if (!row || !row.length) return 0;
+    var hits = 0;
+    for (var i = 0; i < row.length; i++) {
+      var n = norm(row[i]);
+      if (!n) continue;
+      var toks = tokens(row[i]), best = 0;
+      for (var c = 0; c < schema.TEMPLATE_SCHEMA.length; c++) {
+        var sc = best_score_for_target(schema.TEMPLATE_SCHEMA[c], n, toks);
+        if (sc > best) best = sc;
+      }
+      if (best >= THRESHOLD) hits++;
+    }
+    return hits;
+  }
+
+  return { auto_map: auto_map, norm: norm, pair_score: pair_score, is_split: is_split, score_headers: score_headers, THRESHOLD: THRESHOLD };
 }));

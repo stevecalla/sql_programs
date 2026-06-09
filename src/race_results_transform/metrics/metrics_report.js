@@ -192,5 +192,6 @@ async function report_blocks(pool, opts) { return render.to_slack_blocks(await b
 async function size(pool) { return retention.size(pool, T); }
 async function cleanup(pool, opts) { return retention.purge_keep_years(pool, T, (opts && opts.years) || cfg.KEEP_YEARS, cfg.REPORTING_TZ); }
 async function purge_all(pool) { return retention.purge_all(pool, T); }
+async function purge_test(pool) { return retention.purge_test(pool, T); }
 
-module.exports = { get_pool, build_report, report_text, report_blocks, size, cleanup, purge_all, TABLE: T, cfg: cfg }
+module.exports = { get_pool, build_report, report_text, report_blocks, size, cleanup, purge_all, purge_test, TABLE: T, cfg: cfg }

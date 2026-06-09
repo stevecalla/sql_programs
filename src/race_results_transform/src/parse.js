@@ -36,16 +36,38 @@
     return total >= 2 && strings / total >= 0.7;
   }
 
-  function detect_table(ir) {
+  function detect_table(ir, opts) {
+    opts = opts || {};
     var rows = ir.rows || [];
-    // Find header: the row within the first 10 with the most non-empty string
-    // cells that also looks like a header.
-    var header_idx = 0, best = -1;
     var scan = Math.min(rows.length, 10);
-    for (var r = 0; r < scan; r++) {
-      if (!looks_like_header(rows[r])) continue;
-      var c = non_empty_count(rows[r]);
-      if (c > best) { best = c; header_idx = r; }
+    var header_idx = -1;
+
+    // Preferred: pick the row with the most cells that match a TEMPLATE column alias
+    // (opts.score_header, supplied by match.score_headers). This finds the true header even when
+    // a one-cell title / banner sits in row 1 (it scores 0) and ignores data rows (their values
+    // don't match column NAMES). Require >= 2 recognizable columns so a stray word can't win.
+    if (typeof opts.score_header === 'function') {
+      var best_score = 0, best_count = -1;
+      for (var sr = 0; sr < scan; sr++) {
+        var sc = opts.score_header(rows[sr]);
+        if (sc < 2) continue;
+        var cnt = non_empty_count(rows[sr]);
+        if (sc > best_score || (sc === best_score && cnt > best_count)) {
+          best_score = sc; best_count = cnt; header_idx = sr;
+        }
+      }
+    }
+
+    // Fallback (no scorer, or nothing matched): the row with the most non-empty string cells
+    // that also looks like a header.
+    if (header_idx < 0) {
+      var best = -1;
+      for (var r = 0; r < scan; r++) {
+        if (!looks_like_header(rows[r])) continue;
+        var c = non_empty_count(rows[r]);
+        if (c > best) { best = c; header_idx = r; }
+      }
+      if (header_idx < 0) header_idx = 0;
     }
     var raw_headers = rows[header_idx] || [];
     var headers = raw_headers.map(function (h, i) {

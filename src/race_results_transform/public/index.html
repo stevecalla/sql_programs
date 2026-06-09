@@ -38,6 +38,66 @@
   <!-- shown while viewing the built-in sample so it's clear this is not a real upload -->
   <div id="demoBadge" class="demo-badge hidden" role="status">⚠ Showing <strong>sample test data</strong> (fake) — nothing was uploaded. Click <strong>↺ Start over</strong> to convert your own file.</div>
 
+  <!-- optional: pull race-results files straight from Salesforce, then work them as a queue -->
+  <section id="sfCard" class="card sf-card">
+    <div class="sf-head">
+      <h2>Get Race Results from Salesforce</h2>
+      <span class="dim">download race-results files for a date and work them as a queue — the convert/review/download flow is unchanged</span>
+      <button id="sfLogoutBtn" class="sf-logout" type="button" aria-pressed="false" title="Sign in to use the Salesforce feature">Sign in</button>
+    </div>
+    <div class="sf-controls">
+      <label class="sf-ctl">From <input type="date" id="sfFrom" aria-label="From date"></label>
+      <label class="sf-ctl">To <input type="date" id="sfTo" aria-label="To date"></label>
+      <button id="sfListBtn" class="btn" type="button">List files</button>
+      <button id="sfResetBtn" class="btn ghost" type="button" title="Clear the list and selection">↺ Reset</button>
+      <span class="dim sf-range-hint">max 14 days</span>
+      <label class="sf-ctl sf-anydate"><input type="checkbox" id="sfAnyDate"> Any date</label>
+      <label class="sf-ctl">On <select id="sfField" aria-label="Salesforce date field">
+        <option value="LastModifiedDate">Last modified</option>
+        <option value="CreatedDate">Created</option>
+      </select></label>
+      <label class="sf-ctl">Max <input type="number" id="sfLimit" class="sf-limit" min="1" max="150" value="25" aria-label="Max files to download"></label>
+    </div>
+    <div id="sfStatus" class="sf-status dim" role="status"></div>
+    <div id="sfLogin" class="sf-login hidden">
+      <span class="dim">Sign in to use Salesforce:</span>
+      <input id="sfLoginUser" class="sf-login-in" placeholder="username" aria-label="Username" autocomplete="username">
+      <span class="sf-pass-wrap"><input id="sfLoginPass" class="sf-login-in" type="password" placeholder="password" aria-label="Password" autocomplete="current-password"><button id="sfLoginShow" class="sf-pass-toggle" type="button" aria-label="Show password" aria-pressed="false">show</button></span>
+      <button id="sfLoginBtn" class="btn" type="button">Sign in</button>
+      <span id="sfLoginMsg" class="sf-login-msg dim" role="status"></span>
+    </div>
+    <div id="sfCount" class="sf-count hidden" aria-live="polite"></div>
+    <div id="sfSearchWrap" class="sf-search-wrap hidden"><input type="search" id="sfSearch" class="sf-search" placeholder="Search files…" aria-label="Search files found"></div>
+    <div id="sfTableWrap" class="sf-table-wrap hidden">
+      <table id="sfTable" class="sf-table">
+        <thead><tr>
+          <th><input type="checkbox" id="sfCheckAll" aria-label="Select all files" checked></th>
+          <th class="sf-sort" data-sort="date">Date (MT) <span class="sf-arrow"></span></th>
+          <th class="sf-sort" data-sort="program">Program <span class="sf-arrow"></span></th>
+          <th class="sf-sort" data-sort="owner">Owner <span class="sf-arrow"></span></th>
+          <th class="sf-sort" data-sort="file">File name <span class="sf-arrow"></span></th>
+          <th class="sf-sort" data-sort="type">Type <span class="sf-arrow"></span></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="sfProgress" class="sf-progress hidden">
+      <div class="sf-progress-head"><span id="sfProgressLabel" class="sf-progress-label"></span><button id="sfCancelBtn" class="btn ghost sm" type="button">Cancel</button></div>
+      <div class="sf-progress-track"><div id="sfProgressBar" class="sf-progress-bar"></div></div>
+    </div>
+    <div id="sfDownloadBar" class="sf-dl hidden">
+      <button id="sfChooseFolder" class="btn ghost" type="button">Choose folder…</button>
+      <input id="sfFolderPath" class="sf-folder-path hidden" placeholder="folder path on this computer" aria-label="Folder path">
+      <span id="sfFolderName" class="dim"></span>
+      <label class="sf-ctl">If a file exists <select id="sfStrategy" aria-label="Existing-file strategy">
+        <option value="add_new">Add new only (skip same names)</option>
+        <option value="replace">Overwrite same names</option>
+        <option value="wipe_all">Delete all, then add</option>
+      </select></label>
+      <button id="sfDownloadBtn" class="btn primary" type="button" disabled>Download selected</button>
+    </div>
+  </section>
+
   <section id="introCard" class="card">
     <h2 class="steps-title">How it works</h2>
     <div class="rrt-steps"></div>
@@ -68,6 +128,7 @@
     <div id="sheetBar" class="sheet-bar hidden"></div>
     <div class="seg" id="compareSeg" role="group" aria-label="Compare view">
       <button data-view="tables" class="active">Tables</button>
+      <button data-view="files" id="filesTab" class="hidden">Files</button>
       <button data-view="mapping">Mapping</button>
       <button data-view="scorecard">Scorecard</button>
       <button data-view="integrity">Integrity</button>
@@ -91,6 +152,10 @@
       </section>
     </div><!-- /compareGrid -->
     </div><!-- /tablesView -->
+    <div id="filesView" class="hidden">
+      <p class="dim" style="margin:0 0 10px;font-size:12.5px">Files downloaded from Salesforce. Click <b>Open</b> to load one into the converter — work it through the normal flow, then Download. Status updates as you go; come back anytime to finish the rest.</p>
+      <div id="sfQueue" class="sf-queue"></div>
+    </div>
     <div id="mappingView" class="hidden">
       <p class="dim" style="margin:0 0 10px;font-size:12.5px">Re-point any template column to a different source column, or fix how specific values bucket. <b>Tip:</b> after adjusting, click <b>Save mapping</b> (top-right) to reuse these choices automatically for future files with the same column headers.</p>
       <div class="rrt-colmap map-grid"></div>

@@ -25,7 +25,8 @@ test.beforeAll(async () => {
     await ensure_table(pool, await query_create_race_results_transform_events_table(cfg.TABLE)); // safe if server already made it
     await ensure_columns(pool, cfg.TABLE, [
       { name: 'page_path', ddl: 'page_path VARCHAR(255)', after: 'event_name' },
-      { name: 'is_demo', ddl: 'is_demo TINYINT(1)', after: 'error_type' }
+      { name: 'is_demo', ddl: 'is_demo TINYINT(1)', after: 'error_type' },
+      { name: 'source', ddl: 'source VARCHAR(16)', after: 'is_demo' }
     ]); // migrate older tables (mirror the server)
     db_ok = true;
   } catch (e) { db_ok = false; }
@@ -60,7 +61,8 @@ test.describe('race_results_transform — analytics DB round-trip', () => {
                rs.some(function (r) { return r.event_name === 'conversion_completed'; });
       }, { timeout: 10000 }).toBe(true);
 
-      const [download] = await Promise.all([ page.waitForEvent('download'), page.locator('#downloadBtn').click() ]);
+      await page.locator('#downloadBtn').click();
+      const [download] = await Promise.all([ page.waitForEvent('download'), page.locator('.dl-pop #dlGo').click() ]);
       await download.path();
       await expect.poll(function () { return has_event(visitor, 'download'); }, { timeout: 10000 }).toBe(true);
 
