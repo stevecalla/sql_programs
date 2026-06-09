@@ -28,7 +28,7 @@
 
   function convert(ir, opts) {
     opts = opts || {};
-    var parsed = parse.detect_table(ir);
+    var parsed = parse.detect_table(ir, { score_header: match.score_headers });
     var map;
     if (opts.mapping_override_text) {
       map = mapping.text_to_mapping(opts.mapping_override_text, parsed.headers);

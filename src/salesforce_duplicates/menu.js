@@ -22,7 +22,7 @@ const readline = require('readline');
 const { execSync, spawn } = require('child_process');
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
-const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME } = require('./config');
+const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME, META_DIR_NAME, ZIP_TRIM_MAPPING_FILE } = require('./config');
 
 const DIR = __dirname;
 const MAIN_SCRIPT = 'step_1_find_duplicates.js';
@@ -77,7 +77,7 @@ function open_path(p) {
 }
 
 // Hit a server endpoint on localhost:SERVER_PORT and print the response.
-// Requires the server to already be running (menu item 11, in another terminal).
+// Requires the server to already be running (menu item 12, in another terminal).
 function hit_endpoint(method, route, body = null) {
   console.log(c(DIM, `  ${method} http://localhost:${SERVER_PORT}${route}`));
   return new Promise((resolve) => {
@@ -97,7 +97,7 @@ function hit_endpoint(method, route, body = null) {
       }
     );
     req.on('error', (e) => {
-      console.log(c(YELLOW, `  Could not reach the server on port ${SERVER_PORT} — is it running? (menu item 11, in another terminal)`));
+      console.log(c(YELLOW, `  Could not reach the server on port ${SERVER_PORT} — is it running? (menu item 12, in another terminal)`));
       console.log(c(DIM, `  ${e.code || e.message}`));
       resolve();
     });
@@ -135,24 +135,25 @@ const SECTIONS = [
     items: [
       { id: 9,  label: 'Open output folder',  desc: `Most recent files (${OUTPUT_DIR_NAME})`, action: 'open_output' },
       { id: 10, label: 'Open archive folder', desc: `Previous run (${ARCHIVE_DIR_NAME})`, action: 'open_archive' },
+      { id: 11, label: 'Open review folder',  desc: `ZIP trim mapping + run summary (${META_DIR_NAME})`, action: 'open_meta' },
     ],
   },
   {
     label: 'SERVER — Slack slash-command server (start, then hit from another terminal)',
     color: CYAN,
     items: [
-      { id: 11, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
-      { id: 12, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
-      { id: 13, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
-      { id: 14, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
-      { id: 15, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
+      { id: 12, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
+      { id: 13, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
+      { id: 14, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
+      { id: 15, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
+      { id: 16, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
     ],
   },
   {
     label: 'PREFERENCES',
     color: MAGENTA,
     items: [
-      { id: 16, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
+      { id: 17, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
     ],
   },
 ];
@@ -214,11 +215,17 @@ async function handle_action(item, rl) {
 
     }
     case 'open_output':
-    case 'open_archive': {
-      const name = item.action === 'open_output' ? OUTPUT_DIR_NAME : ARCHIVE_DIR_NAME;
+    case 'open_archive':
+    case 'open_meta': {
+      const name = item.action === 'open_output' ? OUTPUT_DIR_NAME
+                 : item.action === 'open_archive' ? ARCHIVE_DIR_NAME
+                 : META_DIR_NAME;
       const os_path = await determineOSPath();
       const folder = path.join(os_path, name);
       fs.mkdirSync(folder, { recursive: true });
+      if (item.action === 'open_meta') {
+        console.log(c(DIM, `  Review folder — ZIP trim mapping: ${ZIP_TRIM_MAPPING_FILE}`));
+      }
       console.log(c(DIM, `  Opening ${folder}`));
       open_path(folder);
       break;

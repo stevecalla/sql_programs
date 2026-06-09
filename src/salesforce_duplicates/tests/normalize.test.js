@@ -14,6 +14,8 @@ const {
     norm,
     clean_name,
     unique_join,
+    trim_zip5,
+    composite_zip_raw,
     composite_zip,
     make_full_name,
     make_clean_full_name,
@@ -45,11 +47,51 @@ describe('unique_join', () => {
     });
 });
 
+describe('trim_zip5', () => {
+    test('plain 5-digit ZIP is unchanged', () => {
+        assert.equal(trim_zip5('80919'), '80919');
+    });
+    test('ZIP+4 with hyphen keeps first five', () => {
+        assert.equal(trim_zip5('80919-1234'), '80919');
+    });
+    test('9-digit ZIP without hyphen keeps first five', () => {
+        assert.equal(trim_zip5('809191234'), '80919');
+    });
+    test('surrounding whitespace is trimmed before testing', () => {
+        assert.equal(trim_zip5('  80919-1234 '), '80919');
+    });
+    test('non-US / alphanumeric codes are left untouched', () => {
+        assert.equal(trim_zip5('K1A 0B1'), 'K1A 0B1'); // Canadian postal code
+        assert.equal(trim_zip5('SW1A 1AA'), 'SW1A 1AA'); // UK postcode
+    });
+    test('short / non-conforming values pass through unchanged', () => {
+        assert.equal(trim_zip5('2134'), '2134');   // 4-digit (leading zero lost upstream)
+        assert.equal(trim_zip5(''), '');
+        assert.equal(trim_zip5(null), '');
+        assert.equal(trim_zip5(undefined), '');
+    });
+});
+
+describe('composite_zip_raw', () => {
+    test('prefers billing, falls back to mailing, else empty — NO trimming', () => {
+        assert.equal(composite_zip_raw({ BillingPostalCode: '80919-1234', PersonMailingPostalCode: '99999' }), '80919-1234');
+        assert.equal(composite_zip_raw({ BillingPostalCode: '', PersonMailingPostalCode: '99999-0001' }), '99999-0001');
+        assert.equal(composite_zip_raw({}), '');
+    });
+});
+
 describe('composite_zip', () => {
     test('prefers billing, falls back to mailing, else empty', () => {
         assert.equal(composite_zip({ BillingPostalCode: '80301', PersonMailingPostalCode: '99999' }), '80301');
         assert.equal(composite_zip({ BillingPostalCode: '', PersonMailingPostalCode: '99999' }), '99999');
         assert.equal(composite_zip({}), '');
+    });
+    test('trims the chosen ZIP to its first five digits (ZIP+4 -> 5)', () => {
+        assert.equal(composite_zip({ BillingPostalCode: '80919-1234' }), '80919');
+        assert.equal(composite_zip({ BillingPostalCode: '', PersonMailingPostalCode: '809191234' }), '80919');
+    });
+    test('leaves non-US postal codes untouched', () => {
+        assert.equal(composite_zip({ BillingPostalCode: 'K1A 0B1' }), 'K1A 0B1');
     });
 });
 
@@ -79,5 +121,11 @@ describe('keys + required fields', () => {
         assert.equal(has_required_rule_fields(row), true);
         assert.equal(has_required_rule_fields({ ...row, PersonBirthdate: '' }), false);
         assert.equal(has_required_rule_fields({ ...row, BillingPostalCode: '', PersonMailingPostalCode: '' }), false);
+    });
+    test('keys use the trimmed (first-5) ZIP, so ZIP+4 matches plain 5-digit', () => {
+        const plain = make_exact_duplicate_key(row);                       // ...|80301
+        const zip4 = make_exact_duplicate_key({ ...row, BillingPostalCode: '80301-1234' });
+        assert.equal(zip4, plain);
+        assert.equal(make_rule_key({ ...row, BillingPostalCode: '80301-1234' }), 'MALE|1990-01-01|80301');
     });
 });

@@ -97,27 +97,32 @@ const SECTIONS = [
     { id: 24, label: 'Usage stats (last 7 days)', desc: 'Print the usage summary (same as the Slack digest): visits, new/repeat, uploads, conversions, downloads by mode, completion, auto-map accuracy, top files.', cli: 'node src/cli.js stats', action: 'metrics_stats' },
     { id: 25, label: 'Usage data — size', desc: 'Events table size (MB), row count, date range, and rows per year.', cli: 'node src/cli.js metrics:size', action: 'metrics_size' },
     { id: 26, label: 'Usage data — cleanup (purge old years)', desc: 'Keep current + prior calendar year; preview, confirm, then purge older rows.', cli: 'node src/cli.js metrics:cleanup', action: 'metrics_cleanup' },
-    { id: 27, label: 'Usage data — PURGE ALL (danger)', desc: 'Delete every analytics row regardless of date (asks to confirm). For clearing test data.', cli: 'node src/cli.js metrics:purge-all', action: 'metrics_purge_all' }
+    { id: 27, label: 'Usage data — purge TEST rows only (is_test=1)', desc: 'Delete only deliberate test-run rows (browser opened with ?metrics_test=1). Real + demo data is untouched.', cli: 'node src/cli.js metrics:purge-test', action: 'metrics_purge_test' },
+    { id: 28, label: 'Usage data — PURGE ALL (danger)', desc: 'Delete every analytics row regardless of date (asks to confirm). For clearing test data.', cli: 'node src/cli.js metrics:purge-all', action: 'metrics_purge_all' }
   ] },
   { label: 'AI \u2014 ask your data', color: CYAN, items: [
-    { id: 28, label: 'AI ask \u2014 ask a question (read-only)', desc: 'Ask the usage data in plain English; choose OpenAI or Claude. Read-only; prints the answer + the SQL it ran.', cli: 'node src/cli.js ask "<question>" [--provider openai|claude]', action: 'ask_question' },
-    { id: 29, label: 'AI ask \u2014 guard demo (try a query)', desc: 'See the read-only guard ACCEPT/REJECT example queries or your own SQL, with the enforced LIMIT.', cli: 'node metrics/ask/demo_guard.js ["<sql>"]', action: 'ask_demo' },
-    { id: 30, label: 'AI ask \u2014 guard & catalog tests', desc: 'Read-only SQL guard + ask catalog tests. Also runs inside Run ALL.', cli: 'node --test tests/ask_db.test.js tests/ask_guard.test.js', action: 'test_ask' },
-    { id: 31, label: 'AI ask \u2014 view question log', desc: 'Recent AI questions + answers (audit log; no PII).', cli: 'node src/cli.js ask:log [--n 20]', action: 'ask_log' },
-    { id: 32, label: 'AI ask \u2014 run SQL directly (read-only)', desc: 'Run a read-only SELECT yourself (guarded: SELECT-only, allowlisted table, enforced LIMIT). No AI involved.', cli: 'node src/cli.js ask:sql "<SELECT ...>"', action: 'ask_sql' },
-    { id: 33, label: 'AI ask \u2014 view/manage corrections', desc: 'Operator clarifications the AI uses as grounding (G2). Deactivate with: node src/cli.js ask:uncorrect <id>.', cli: 'node src/cli.js ask:corrections [--n 20] [--all]', action: 'ask_corrections' },
-    { id: 34, label: 'AI ask \u2014 test corrections (guided)', desc: 'Step-by-step process to confirm a saved correction is incorporated into the next answer (G2).', cli: 'node src/cli.js ask:test:corrections', action: 'ask_test_corrections' },
-    { id: 35, label: 'AI ask \u2014 test follow-up thread (guided)', desc: 'Step-by-step process to confirm follow-up questions keep conversational context (B1).', cli: 'node src/cli.js ask:test:threads', action: 'ask_test_threads' },
-    { id: 36, label: 'AI ask \u2014 run eval scenarios (records report)', desc: 'Runs the review scenarios against the live model (needs API key + DB) and writes a recorded report.', cli: 'node src/cli.js ask:eval', action: 'ask_eval' }
+    { id: 29, label: 'AI ask \u2014 ask a question (read-only)', desc: 'Ask the usage data in plain English; choose OpenAI or Claude. Read-only; prints the answer + the SQL it ran.', cli: 'node src/cli.js ask "<question>" [--provider openai|claude]', action: 'ask_question' },
+    { id: 30, label: 'AI ask \u2014 guard demo (try a query)', desc: 'See the read-only guard ACCEPT/REJECT example queries or your own SQL, with the enforced LIMIT.', cli: 'node metrics/ask/demo_guard.js ["<sql>"]', action: 'ask_demo' },
+    { id: 31, label: 'AI ask \u2014 guard & catalog tests', desc: 'Read-only SQL guard + ask catalog tests. Also runs inside Run ALL.', cli: 'node --test tests/ask_db.test.js tests/ask_guard.test.js', action: 'test_ask' },
+    { id: 32, label: 'AI ask \u2014 view question log', desc: 'Recent AI questions + answers (audit log; no PII).', cli: 'node src/cli.js ask:log [--n 20]', action: 'ask_log' },
+    { id: 33, label: 'AI ask \u2014 run SQL directly (read-only)', desc: 'Run a read-only SELECT yourself (guarded: SELECT-only, allowlisted table, enforced LIMIT). No AI involved.', cli: 'node src/cli.js ask:sql "<SELECT ...>"', action: 'ask_sql' },
+    { id: 34, label: 'AI ask \u2014 view/manage corrections', desc: 'Operator clarifications the AI uses as grounding (G2). Deactivate with: node src/cli.js ask:uncorrect <id>.', cli: 'node src/cli.js ask:corrections [--n 20] [--all]', action: 'ask_corrections' },
+    { id: 35, label: 'AI ask \u2014 test corrections (guided)', desc: 'Step-by-step process to confirm a saved correction is incorporated into the next answer (G2).', cli: 'node src/cli.js ask:test:corrections', action: 'ask_test_corrections' },
+    { id: 36, label: 'AI ask \u2014 test follow-up thread (guided)', desc: 'Step-by-step process to confirm follow-up questions keep conversational context (B1).', cli: 'node src/cli.js ask:test:threads', action: 'ask_test_threads' },
+    { id: 37, label: 'AI ask \u2014 run eval scenarios (records report)', desc: 'Runs the review scenarios against the live model (needs API key + DB) and writes a recorded report.', cli: 'node src/cli.js ask:eval', action: 'ask_eval' }
   ] },
   { label: 'Try Me (sample data)', color: GREEN, items: [
-    { id: 37, label: 'Try Me — UI + is_demo wiring tests', desc: 'node test: the Try-me dropdown markup + the is_demo column wired across DDL, server whitelist, and browser allow-list.', cli: 'node --test tests/try_me.test.js', action: 'test_try_me' },
-    { id: 38, label: 'Try Me — metrics report tests (demo split)', desc: 'node test: the is_demo split query + demo_split shape, plus Last-User-Activity MTN / dashboard_view exclusion.', cli: 'node --test tests/metrics_report.test.js', action: 'test_metrics_report' },
-    { id: 39, label: 'Try Me vs real — counts (read-only SQL)', desc: 'Show demo (Try Me) vs real uploads/conversions/downloads straight from the events table.', cli: 'node src/cli.js ask:sql "SELECT … GROUP BY kind"', action: 'metrics_demo_split' }
+    { id: 38, label: 'Try Me — UI + is_demo wiring tests', desc: 'node test: the Try-me dropdown markup + the is_demo column wired across DDL, server whitelist, and browser allow-list.', cli: 'node --test tests/try_me.test.js', action: 'test_try_me' },
+    { id: 39, label: 'Try Me — metrics report tests (demo split)', desc: 'node test: the is_demo split query + demo_split shape, plus Last-User-Activity MTN / dashboard_view exclusion.', cli: 'node --test tests/metrics_report.test.js', action: 'test_metrics_report' },
+    { id: 40, label: 'Try Me vs real — counts (read-only SQL)', desc: 'Show demo (Try Me) vs real uploads/conversions/downloads straight from the events table.', cli: 'node src/cli.js ask:sql "SELECT … GROUP BY kind"', action: 'metrics_demo_split' }
+  ] },
+  { label: 'Salesforce (pull race-results files)', color: BLUE, items: [
+    { id: 41, label: 'Salesforce — list files (today, MT)', desc: 'List Race Results Doc files modified today (Mountain Time). Needs SF_* env vars in .env.', cli: 'node src/cli.js sf:list --today', action: 'sf_list' },
+    { id: 42, label: 'Salesforce — pull files to a folder', desc: 'Download Race Results Doc files (snake_case names) into a folder. Prompts for date + folder + strategy.', cli: 'node src/cli.js sf:pull <opts> -o <dir>', action: 'sf_pull' }
   ] },
   { label: 'Settings', color: GRAY, items: [
-    { id: 40, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 41, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
+    { id: 43, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
+    { id: 44, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
@@ -228,7 +233,25 @@ async function handle(item) {
     case 'metrics_stats': await run('node', ['src/cli.js', 'stats']); break;
     case 'metrics_size': await run('node', ['src/cli.js', 'metrics:size']); break;
     case 'metrics_cleanup': await run('node', ['src/cli.js', 'metrics:cleanup']); break;
+    case 'metrics_purge_test': await run('node', ['src/cli.js', 'metrics:purge-test']); break;
     case 'metrics_purge_all': await run('node', ['src/cli.js', 'metrics:purge-all']); break;
+    case 'sf_list': await run('node', ['src/cli.js', 'sf:list', '--today']); break;
+    case 'sf_pull': {
+      console.log(c(DIM, '  Date: [1] today  [2] a specific date  [3] a date range  [4] any (latest)'));
+      const pick = clean(await ask('  Choose [1]: ')) || '1';
+      const date_args = [];
+      if (pick === '2') { const d = clean(await ask('  Date (YYYY-MM-DD): ')); if (d) date_args.push('--date', d); }
+      else if (pick === '3') { const a = clean(await ask('  Start (YYYY-MM-DD): ')); const b = clean(await ask('  End (YYYY-MM-DD): ')); if (a) date_args.push('--start', a); if (b) date_args.push('--end', b); }
+      else if (pick === '4') { /* all */ }
+      else date_args.push('--today');
+      const folder = clean(await ask('  Save to folder (blank = ./sf_race_result_downloads): '));
+      console.log(c(DIM, '  If a file already exists: [1] add new only  [2] overwrite same names  [3] delete all, then add'));
+      const sp = clean(await ask('  Choose [1]: ')) || '1';
+      const strategy = sp === '2' ? 'replace' : (sp === '3' ? 'wipe_all' : 'add_new');
+      const args = ['src/cli.js', 'sf:pull'].concat(date_args, ['-o', folder || 'sf_race_result_downloads', '--strategy', strategy]);
+      await run('node', args);
+      break;
+    }
     case 'server': console.log(c(DIM, 'Starting server… Ctrl-C to stop.')); await run('node', [SERVER]); break;
     case 'open': {
       const url = 'http://localhost:8018';

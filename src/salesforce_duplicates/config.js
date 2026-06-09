@@ -47,6 +47,11 @@ const ARCHIVE_DIR_NAME = "usat_salesforce_duplicates_archive";
 const META_DIR_NAME = "usat_salesforce_duplicates_meta";
 const RUN_SUMMARY_FILE = "run_summary.json";
 
+// Human-reviewable record of how composite ZIPs were trimmed to 5 digits
+// (raw -> trimmed -> count). Lives in the meta folder alongside the run summary
+// so it is never swept into the Slack file uploads. Overwritten each run.
+const ZIP_TRIM_MAPPING_FILE = "zip_trim_mapping.csv";
+
 const REVIEW_STATUS_DEFAULT = "New";
 
 module.exports = {
@@ -64,5 +69,6 @@ module.exports = {
     ARCHIVE_DIR_NAME,
     META_DIR_NAME,
     RUN_SUMMARY_FILE,
+    ZIP_TRIM_MAPPING_FILE,
     REVIEW_STATUS_DEFAULT,
 };

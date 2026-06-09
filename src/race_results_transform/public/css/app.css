@@ -9,6 +9,12 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme]){--bg:#0f1420;--card:#171d2b;--ink:#e7ecf5;--dim:#9aa6ba;--line:#283142;--accent-soft:rgba(228,0,43,.20);--brand:#1b2f57;--brand-ink:#ffffff;--green-bg:#10301f;--amber-bg:#3a2e12;--red-bg:#3a1a17;--flag-bg:#3a3413;--flag-line:#6b5e1f;}
 }
+/* match native controls (date-picker calendar icon + popup) to the active theme so the icon
+   isn't dark-on-dark in dark mode */
+:root{color-scheme:light}
+:root[data-theme="dark"]{color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
@@ -42,6 +48,8 @@ h3{font-size:14px;margin:0}
 .btn.ghost:hover{border-color:var(--accent);color:var(--accent)}
 .btn.sm{padding:6px 11px;min-height:0;font-size:12.5px}
 .btn:active{transform:translateY(1px)}
+.btn:disabled,.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn:disabled:hover,.btn[disabled]:hover{filter:none}
 .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
 @media (max-width:560px){.actions .btn{flex:1 1 100%}}
 
@@ -396,10 +404,34 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 .sheet-tab .dim{font-weight:500;opacity:.8;color:inherit}
 
 /* per-sheet download picker */
-.dl-pop{z-index:50;width:280px;max-width:calc(100vw - 16px);max-height:85vh;overflow-y:auto;background:var(--card);
+.dl-pop{z-index:50;width:320px;max-width:calc(100vw - 16px);max-height:85vh;overflow-y:auto;background:var(--card);
   border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(12,20,40,.28);
   padding:12px;font-size:13px}
 .dl-head{font-weight:700;color:var(--ink);margin-bottom:8px}
+/* format toggle */
+.dl-fmt{margin:0 0 8px;width:100%}
+.dl-fmt button{flex:1}
+/* filename builder */
+.dl-builder{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 8px}
+.dl-fld{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--dim);font-weight:600}
+.dl-fld input,.dl-fld select{padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink);font:inherit;font-weight:400;font-size:12px;height:30px}
+.dl-preview-wrap{margin:0 0 8px;font-size:12px}
+.dl-preview{color:var(--ink);word-break:break-all}
+.dl-hint{margin:0 0 8px;font-size:11.5px}
+/* per-sheet rows in the multi-sheet picker */
+.dl-sheet{padding:6px 6px 8px;border-radius:6px;color:var(--ink);border-bottom:1px solid var(--line)}
+.dl-sheet:last-child{border-bottom:0}
+.dl-pickrow{display:flex;align-items:center;gap:8px;cursor:pointer}
+.dl-pickrow input{accent-color:var(--brand);width:15px;height:15px;flex:none}
+.dl-pickrow .dl-name{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl-row2{display:flex;align-items:center;gap:6px;margin-top:5px;padding-left:23px}
+.dl-row2 .dl-fname,.dl-row2 .split-fname{flex:1;min-width:0;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink);font:inherit;font-size:12px;height:30px}
+.dl-row2 .dl-ext{flex:none}
+.dl-list.combined-mode .dl-row2{display:none}
+/* split picker: per-group rows have no checkbox, so don't indent the name/field */
+.sp-groups .dl-pickrow{padding-left:0}
+.sp-groups .dl-row2{padding-left:0}
+.dl-subhead{font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin:8px 0 4px}
 .dl-tools{display:flex;gap:6px;margin-bottom:8px}
 .dl-list{max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px}
 .dl-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;color:var(--ink)}
@@ -493,3 +525,80 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 /* "viewing sample data" banner shown while a demo is loaded */
 .demo-badge{background:var(--flag-bg,#fff7d6);border:1px solid var(--flag-line,#e0c84d);color:var(--ink);border-radius:10px;padding:10px 14px;margin:0 0 14px;font-size:13.5px}
 .demo-badge.hidden{display:none}
+
+/* Salesforce intake panel (upload page) */
+.sf-card{margin-bottom:14px}
+.sf-card.hidden{display:none}
+.sf-head{display:flex;flex-direction:column;gap:2px;margin-bottom:10px;position:relative}
+.sf-head h2{margin:0;font-size:16px}
+.sf-logout{position:absolute;top:0;right:0;background:var(--card);border:1px solid var(--line);color:var(--ink);font-size:12px;line-height:1;cursor:pointer;padding:5px 11px;border-radius:8px}
+.sf-logout:hover{border-color:var(--accent);color:var(--accent)}
+.sf-logout[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.sf-controls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.sf-ctl{display:inline-flex;gap:5px;align-items:center;font-size:13px;color:var(--dim)}
+.sf-limit{width:58px}
+.sf-ctl select,.sf-folder-path,#sfFrom,#sfTo,.sf-limit,.sf-search{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink);font:inherit;height:34px;box-sizing:border-box;vertical-align:middle}
+.sf-range-hint{white-space:nowrap;margin-left:4px;padding-left:12px;border-left:1px solid var(--line)}
+.sf-limit{width:64px}
+.sf-search{width:220px;max-width:100%}
+.sf-folder-path{min-width:240px}
+.sf-folder-path.hidden{display:none}
+.sf-status{margin:8px 0;font-size:12.5px;min-height:1em}
+.sf-status.err{color:var(--accent)}
+.sf-login{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--bg)}
+.sf-login.hidden{display:none}
+.sf-login-in{padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink);font:inherit;min-width:150px}
+.sf-login-msg{font-size:12px}
+.sf-login-msg.err{color:var(--accent)}
+.sf-pass-wrap{position:relative;display:inline-flex;align-items:center}
+.sf-pass-wrap .sf-login-in{padding-right:48px}
+.sf-pass-toggle{position:absolute;right:7px;background:none;border:0;color:var(--dim);font-size:11px;cursor:pointer;padding:2px 4px}
+.sf-pass-toggle:hover{color:var(--accent)}
+.sf-table-wrap{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:9px;margin-top:8px}
+.sf-table-wrap.hidden{display:none}
+.sf-table{width:100%;border-collapse:collapse;font-size:13px}
+.sf-table th,.sf-table td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+.sf-table th{position:sticky;top:0;background:var(--card);z-index:1}
+.sf-table tbody tr:hover{background:var(--accent-soft)}
+.sf-dl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px}
+.sf-dl.hidden{display:none}
+
+/* Files queue (the task-list tab, left of Mapping) — sortable table like the Get Race card */
+.sf-queue{margin-top:2px}
+.sf-q-wrap{max-height:65vh;min-height:240px;resize:vertical}   /* roomier than the 260px list cap; grows with the viewport, scrolls if long, user-resizable */
+.sf-q-table{width:100%}
+.sf-q-table .sf-rn{color:var(--dim);text-align:right;width:30px;white-space:nowrap}
+.sf-q-table tbody tr{cursor:pointer}
+.sf-q-table tbody tr:hover{background:var(--accent-soft)}
+.sf-q-table tbody tr:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+.sf-q-table tbody tr.active{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--brand)}
+.sf-q-table tbody tr.sf-q-disabled{cursor:not-allowed;opacity:.55}
+.sf-q-table tbody tr.sf-q-disabled:hover{background:transparent}
+.sf-q-file{max-width:280px;overflow:hidden;text-overflow:ellipsis}
+.sf-q-stages{display:inline-flex;gap:8px}
+.sf-q-act{width:34px;text-align:center}
+.sf-q-reload{background:none;border:1px solid var(--line);color:var(--dim);width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:14px;line-height:1;padding:0}
+.sf-q-reload:hover{border-color:var(--brand);color:var(--brand)}
+.sf-q-stage{font-size:11px;color:var(--dim);display:inline-flex;align-items:center;gap:3px}
+.sf-q-stage.done{color:var(--ink);font-weight:700}
+.sf-q-stage .dot{width:8px;height:8px;border-radius:50%;background:var(--line);display:inline-block}
+.sf-q-stage.done .dot{background:#1f9d55}
+
+/* SF: file count, sortable headers, download progress */
+.sf-count{margin:6px 0;font-size:12.5px;color:var(--dim)}
+.sf-count.hidden{display:none}
+.sf-count b{color:var(--ink)}
+.sf-over{color:var(--accent);font-weight:700}
+.sf-table th.sf-sort{cursor:pointer;user-select:none}
+.sf-table th.sf-sort:hover{color:var(--ink)}
+.sf-arrow{font-size:10px;color:var(--dim)}
+.sf-type{font-size:11px;color:var(--dim);text-transform:uppercase}
+.sf-type.xls{color:var(--accent);font-weight:700}
+.sf-xls-row td{background:var(--accent-soft)}
+.sf-xls-tag{font-size:10px;color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:0 5px;margin-left:6px;text-transform:uppercase;font-weight:700;cursor:help}
+.sf-progress{margin:12px 0 4px}
+.sf-progress.hidden{display:none}
+.sf-progress-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.sf-progress-label{font-size:13px;font-weight:700;color:var(--ink)}
+.sf-progress-track{height:18px;border-radius:9px;background:var(--line);overflow:hidden;box-shadow:inset 0 0 0 1px var(--line)}
+.sf-progress-bar{height:100%;width:0;background:var(--accent);transition:width .2s ease}

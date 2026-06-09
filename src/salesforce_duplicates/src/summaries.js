@@ -9,6 +9,34 @@
 const { colorize } = require('./log');
 const { format_duration, format_timestamp_utc } = require('./fmt');
 
+// Print a short, reviewable summary of the composite-ZIP trim (first 5 digits).
+// `zip_trim` is the object returned by build_zip_trim_mapping(); `mapping_path`
+// is where the full raw->trimmed CSV was written. Shows the top few mappings
+// inline so the most common changes are visible without opening the file.
+function log_zip_trim_summary(zip_trim, mapping_path, preview = 5) {
+    const { records_with_zip, records_trimmed, mapping } = zip_trim;
+
+    console.log("");
+    console.log(colorize("bright", "Composite ZIP trim (first 5 digits)"));
+    console.log(colorize("bright", "-----------------------------------"));
+    console.log(`Records with a composite ZIP: ${records_with_zip.toLocaleString()}`);
+    console.log(`Records trimmed to 5 digits: ${records_trimmed.toLocaleString()}`);
+    console.log(`Distinct raw -> trimmed mappings: ${mapping.length.toLocaleString()}`);
+
+    if (mapping.length > 0) {
+        const shown = mapping.slice(0, preview);
+        for (const m of shown) {
+            console.log(`  ${m.raw_composite_zip}  ->  ${m.trimmed_composite_zip}   (${m.record_count.toLocaleString()} record${m.record_count === 1 ? "" : "s"})`);
+        }
+        if (mapping.length > shown.length) {
+            console.log(colorize("gray", `  ...and ${(mapping.length - shown.length).toLocaleString()} more (full list in the mapping file).`));
+        }
+        console.log(`Full mapping for review written to: ${mapping_path}`);
+    } else {
+        console.log(colorize("gray", "No ZIPs needed trimming (no ZIP+4 / non-5-digit US ZIPs in this run)."));
+    }
+}
+
 function log_run_summary({
     run_id,
     script_start_date,
@@ -27,6 +55,8 @@ function log_run_summary({
     is_test,
     max_fetch,
     fuzzy_threshold,
+    zip_records_trimmed = 0,
+    zip_distinct_mappings = 0,
     exact_groups_size,
     exact_duplicate_groups_found,
     exact_duplicate_record_ids_excluded,
@@ -64,6 +94,7 @@ function log_run_summary({
     console.log(`Run mode: ${is_test ? "TEST (dev sandbox)" : "PRODUCTION"}`);
     console.log(`MAX_FETCH: ${max_fetch}`);
     console.log(`FUZZY_THRESHOLD: ${fuzzy_threshold}`);
+    console.log(`Composite ZIPs trimmed to 5 digits: ${zip_records_trimmed.toLocaleString()} (${zip_distinct_mappings.toLocaleString()} distinct raw -> trimmed mappings)`);
     console.log(`Unique exact duplicate-check groups: ${exact_groups_size}`);
     console.log(`Exact duplicate groups found: ${exact_duplicate_groups_found}`);
     console.log(`Exact duplicate record IDs excluded from fuzzy files: ${exact_duplicate_record_ids_excluded}`);
@@ -82,4 +113,4 @@ function log_run_summary({
     console.log(`Fuzzy group Salesforce import output written to: ${fuzzy_group_output_path}`);
 }
 
-module.exports = { log_run_summary };
+module.exports = { log_run_summary, log_zip_trim_summary };

@@ -34,11 +34,14 @@ test.describe('race_results_transform — UI interactions', () => {
     await page.setInputFiles('#fileInput', SINGLE_CSV);
     await expect(page.locator('#compareCard')).toBeVisible();
     await expect(page.locator('#resultGrid table tbody tr').first()).toBeVisible();
-    await step(page, 'Downloading the converted file');
-    await highlight(page, page.locator('#downloadBtn'));
+    await step(page, 'Opening the Download picker and choosing Excel');
+    await page.locator('#downloadBtn').click();
+    const pop = page.locator('.dl-pop');
+    await expect(pop).toBeVisible();
+    await pop.locator('[data-fmt="xlsx"]').click();
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.locator('#downloadBtn').click()
+      pop.locator('#dlGo').click()
     ]);
     const wb = await read_xlsx(await download.path());
     expect(wb.worksheets[0].getRow(1).values.slice(1).length).toBe(12);

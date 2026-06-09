@@ -122,7 +122,7 @@ Exact First Name
 | `First_Name__c` | Text | Shared first name for the exact duplicate group. |
 | `Gender__c` | Text or Picklist | Shared gender value for the group. |
 | `Birthdate__c` | Date | Shared birthdate for the group. |
-| `Composite_Zip__c` | Text | Shared composite ZIP for the group. Composite ZIP uses Billing ZIP when present, otherwise Person Mailing ZIP. |
+| `Composite_Zip__c` | Text | Shared composite ZIP for the group. Composite ZIP uses Billing ZIP when present, otherwise Person Mailing ZIP, then trims US ZIPs to the first 5 digits (e.g. `80919-1234` -> `80919`; non-US codes left intact). |
 | `Duplicate_Count__c` | Number | Number of Account records in the exact duplicate group. |
 | `Record_Ids__c` | Long Text Area | Semicolon-delimited Salesforce Account IDs in the group. |
 | `Member_Numbers__c` | Long Text Area | Semicolon-delimited member numbers in the group. |

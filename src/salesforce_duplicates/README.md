@@ -35,13 +35,14 @@ salesforce_duplicates/
     step_timer.js           per-step stopwatch: live [STEP] lines + end timeline
     exact.js                exact-duplicate detection
     fuzzy.js                fuzzy candidate filter + rule blocks + pairwise compare
+    zip_trim.js             builds the reviewable raw -> trimmed composite-ZIP map
     sf_rows.js              maps result rows to the Salesforce import schema
-    output_files.js         CSV write + output/archive rotation
+    output_files.js         CSV write + output/archive rotation + meta files
     salesforce.js           jsforce connect + Account query (--test=REST/ordered,
                             --prod=Bulk API/unordered)
   tests/                    node:test unit tests (normalize, matcher, grouping, ids,
-                            sf_rows, exact, fuzzy, file output, step_2 report,
-                            report_service, step_timer)
+                            sf_rows, exact, fuzzy, zip_trim, file output, step_2
+                            report, report_service, step_timer)
   README.md / CLAUDE.md / schema.md
 ```
 
@@ -215,18 +216,61 @@ else:
     use PersonMailingPostalCode
 ```
 
-The script recreates that logic in Node.js:
+The chosen value is then **trimmed to its first five digits** (US ZIP
+normalization), so a ZIP+4 like `80919-1234` and the plain `80919` are treated
+as the same ZIP and no longer block an otherwise-matching duplicate. The trim is
+deliberately conservative: it only fires when the value **begins with exactly
+five digits** (optionally followed by a ZIP+4 suffix such as `-1234` or `1234`).
+Anything that does not start with five digits — e.g. a Canadian postal code like
+`K1A 0B1` or a UK postcode — is left untouched, so international codes are never
+mangled or collapsed together.
+
+The script recreates that logic in Node.js (`src/normalize.js`):
 
 ```js
-function compositeZip(row) {
+// First 5 digits only when the value starts with 5 digits; else unchanged.
+function trim_zip5(value) {
+    const trimmed = (value || "").trim();
+    const match = trimmed.match(/^(\d{5})/);
+    return match ? match[1] : trimmed;
+}
+
+function composite_zip_raw(row) {
     const billing = (row.BillingPostalCode || "").trim();
     const mailing = (row.PersonMailingPostalCode || "").trim();
-
     return billing !== "" ? billing : mailing;
+}
+
+function composite_zip(row) {
+    return trim_zip5(composite_zip_raw(row));
 }
 ```
 
-This is done in Node.js because Salesforce formula fields may not be usable in SOQL `GROUP BY` queries.
+`composite_zip()` is the single place ZIP normalization happens; every consumer
+(the exact key, the fuzzy rule-block key, the required-field check, the matcher
+flags, and all output rows) goes through it, so the trim propagates everywhere.
+
+This is done in Node.js because Salesforce formula fields may not be usable in
+SOQL `GROUP BY` queries.
+
+### Reviewing the ZIP trim
+
+Because trimming loosens matching, each run writes a **reviewable raw → trimmed
+mapping** so the normalization can be audited. It lists every distinct composite
+ZIP that changed, what it became, and how many records had it:
+
+```text
+raw_composite_zip, trimmed_composite_zip, record_count
+80919-1234,        80919,                 312
+90210-0001,        90210,                 7
+```
+
+The file (`zip_trim_mapping.csv`) is written to the **meta folder**
+(`usat_salesforce_duplicates_meta`) — a sibling of the output folder, so it is
+never swept into the Slack file uploads — and is overwritten each run. The run
+also prints a short summary to the console (records trimmed + the top mappings),
+and the menu's **Open review folder** item (OUTPUT section) opens the meta folder
+for inspection.
 
 ## Exact Duplicate Logic
 
@@ -724,7 +768,7 @@ Or use menu item 1 (all tests) / 2 (file output tests).
 `server_*.js`, port 8017) exposes the duplicate output over Slack slash commands.
 It mirrors `server_slack_events.js` and reuses the shared Slack upload utilities.
 
-Run it from the repo root (or menu item 11):
+Run it from the repo root (or menu item 12):
 
 ```bash
 node server_salesforce_duplicates_8017.js
@@ -815,6 +859,23 @@ Run timing (largest first):
 This mirrors the stage timer in `event_analysis/build_all.js`. Implemented in
 `src/step_timer.js` (`create_step_timer`).
 
+### Composite ZIP trim summary
+
+Just before the run summary, the script prints how many composite ZIPs were
+trimmed to five digits, plus the most common raw → trimmed mappings, and the
+path to the full mapping file for review:
+
+```text
+Composite ZIP trim (first 5 digits)
+-----------------------------------
+Records with a composite ZIP: 4,901
+Records trimmed to 5 digits: 312
+Distinct raw -> trimmed mappings: 48
+  80919-1234  ->  80919   (312 records)
+  ...and 47 more (full list in the mapping file).
+Full mapping for review written to: .../usat_salesforce_duplicates_meta/zip_trim_mapping.csv
+```
+
 ### Run summary
 
 The script also logs the full run summary, including:
@@ -828,6 +889,7 @@ Query end time
 Query duration
 Salesforce total matching records
 Records actually fetched
+Composite ZIPs trimmed to 5 digits (+ distinct raw -> trimmed mappings)
 Exact duplicate groups found
 Exact duplicate record IDs excluded from fuzzy
 Fuzzy candidate records
@@ -853,6 +915,7 @@ Total records scanned: 5000
 Salesforce total matching records: 695827
 Hardcoded MAX_FETCH: 5000
 Hardcoded FUZZY_THRESHOLD: 90
+Composite ZIPs trimmed to 5 digits: 312 (48 distinct raw -> trimmed mappings)
 Exact duplicate groups found: 47
 Exact duplicate record IDs excluded from fuzzy files: 138
 Fuzzy candidate records scanned after exact exclusion and required-rule filters: 4244
@@ -992,7 +1055,9 @@ Potential improvements:
 3. [partial] MAX_FETCH is now env-driven (SF_DUP_IS_TEST); FUZZY_THRESHOLD still in config.js.
 4. Add separate rule-based-only output:
    same gender + birthdate + ZIP, regardless of name score.
-5. Add ZIP normalization to compare only first 5 digits.
+5. [done] ZIP normalization: composite ZIP is trimmed to the first 5 digits
+   (US-pattern only; non-US codes left intact), with a reviewable raw->trimmed
+   mapping written to the meta folder.
 6. Add nickname handling:
    Bill/William, Bob/Robert, Mike/Michael, etc.
 7. Load results into MySQL for deeper review.

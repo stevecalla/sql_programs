@@ -6,11 +6,11 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '..', '.env') });
 const { test, expect } = require('@playwright/test');
 
-const USER = process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_USER;
-const PASS = process.env.RACE_RESULTS_CONVERTER_METRICS_DASH_PASS;
+const USER = process.env.RACE_RESULTS_CONVERTER_METRICS_USER;
+const PASS = process.env.RACE_RESULTS_CONVERTER_METRICS_PASS;
 
 test.describe('race_results_transform — metrics dashboard', () => {
-  test.skip(!USER || !PASS, 'set RACE_RESULTS_CONVERTER_METRICS_DASH_USER / _PASS to run the dashboard checks');
+  test.skip(!USER || !PASS, 'set RACE_RESULTS_CONVERTER_METRICS_USER / _PASS to run the dashboard checks');
   test.use({ extraHTTPHeaders: { 'x-metrics-test': '1' } });   // header tells the server not to log a dashboard_view
   test.beforeEach(async ({ page }) => {                       // form login -> sets the session cookie
     await page.goto('/metrics/login');

@@ -39,4 +39,14 @@ test('purge_all deletes every row with no date filter', async () => {
   assert.equal(r.deleted, 80);
   assert.equal(r.would_delete, 80);
 });
+
+test('purge_test deletes ONLY is_test = 1 rows (real + demo data untouched)', async () => {
+  const pool = mock_pool(7);
+  const r = await retention.purge_test(pool, 't_events');
+  const del = pool.calls.find(function (s) { return /^DELETE/i.test(s); });
+  assert.match(del, /^DELETE FROM `t_events` WHERE is_test = 1\s*$/, 'delete is scoped to is_test = 1');
+  assert.ok(del.indexOf('is_demo') < 0, 'does not touch demo rows');
+  assert.equal(r.deleted, 7);
+  assert.equal(r.would_delete, 7);
+});
 });

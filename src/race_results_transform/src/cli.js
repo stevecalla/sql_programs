@@ -3,7 +3,7 @@
  * cli.js — scriptable race-results -> template converter.
  *
  * Usage:
- *   node cli.js convert <input.xlsx> [-o out.xlsx] [--profile file.json] [--quiet]
+ *   node cli.js convert <input.xlsx> [-o out] [--format csv|xlsx] [--profile file.json] [--quiet]
  *   node cli.js inspect <input.xlsx>          # show detected headers + auto-mapping, no write
  *   node cli.js batch   <folder> [-o outdir]  # convert every .xlsx in a folder
  *   node cli.js help
@@ -85,15 +85,27 @@ function parse_args(argv) {
     else if (a === '--q') out.q = argv[++i];
     else if (a === '--yes' || a === '-y') out.yes = true;
     else if (a === '--strict') out.strict = true;
+    else if (a === '--date') out.date = argv[++i];
+    else if (a === '--start') out.start = argv[++i];
+    else if (a === '--end') out.end = argv[++i];
+    else if (a === '--field') out.field = argv[++i];
+    else if (a === '--limit') out.limit = argv[++i];
+    else if (a === '--strategy') out.strategy = argv[++i];
+    else if (a === '--format' || a === '--fmt') out.format = argv[++i];
+    else if (a === '--today') out.today = true;
+    else if (a === '--test') out.test = true;
     else out._.push(a);
   }
   return out;
 }
 
-async function default_out_name(input) {
+function out_format(opts) { return String((opts && opts.format) || 'xlsx').toLowerCase() === 'csv' ? 'csv' : 'xlsx'; }
+
+async function default_out_name(input, fmt) {
   // Generated files go to the data/outputs dir (usat/data/...), never the repo.
   const base = path.basename(input).replace(/\.(xlsx|xls|csv)$/i, '');
-  return path.join(await data_dir.outputs(), base + ' - formatted.xlsx');
+  const ext = String(fmt).toLowerCase() === 'csv' ? '.csv' : '.xlsx';
+  return path.join(await data_dir.outputs(), base + ' - formatted' + ext);
 }
 
 async function convert_one(input, out_path, opts) {
@@ -108,13 +120,30 @@ async function convert_one(input, out_path, opts) {
     return { ir: ir, res: pipe.convert(ir, { mapping_override_text: mapping_override_text, value_overrides: value_overrides }) };
   });
   const sheets = results.map(function (r) { return { name: r.ir.sheet_name, headers: r.res.result.headers, rows: r.res.result.rows }; });
-  const buf = await io.grids_to_buffer(sheets);
-  fs.writeFileSync(out_path, Buffer.from(buf));
+  const fmt = out_format(opts);
+  const outputs = [];
+  if (fmt === 'csv') {
+    // CSV can't hold multiple tabs: a multi-sheet workbook writes one .csv per sheet.
+    const dir = path.dirname(out_path), base = path.basename(out_path).replace(/\.(xlsx|csv)$/i, '');
+    if (sheets.length === 1) {
+      const p = path.join(dir, base + '.csv');
+      fs.writeFileSync(p, io.grid_to_csv(sheets[0].headers, sheets[0].rows)); outputs.push(p);
+    } else {
+      sheets.forEach(function (sh) {
+        const safe = String(sh.name).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'sheet';
+        const p = path.join(dir, base + ' - ' + safe + '.csv');
+        fs.writeFileSync(p, io.grid_to_csv(sh.headers, sh.rows)); outputs.push(p);
+      });
+    }
+  } else {
+    const buf = await io.grids_to_buffer(sheets);
+    fs.writeFileSync(out_path, Buffer.from(buf)); outputs.push(out_path);
+  }
   if (!opts.quiet) {
     const suffix = results.length > 1 ? '  (' + results.length + ' sheets)' : '';
-    results.forEach(function (r) { print_scorecard(r.res.report, path.basename(input) + ' [' + r.ir.sheet_name + ']  ->  ' + path.basename(out_path) + suffix); });
+    results.forEach(function (r) { print_scorecard(r.res.report, path.basename(input) + ' [' + r.ir.sheet_name + ']  ->  ' + path.basename(outputs[0]) + suffix); });
   }
-  return results[0].res.report;
+  return { report: results[0].res.report, outputs: outputs };
 }
 
 function print_inspect(input) {
@@ -141,9 +170,10 @@ function help() {
     '',
     col(C.bold, 'race_results_transform — CLI'),
     '',
-    '  node cli.js convert <input.xlsx> [-o out.xlsx] [--profile p.json] [--quiet]',
+    '  node cli.js convert <input.xlsx> [-o out] [--format csv|xlsx] [--profile p.json] [--quiet]',
     '  node cli.js inspect <input.xlsx>',
-    '  node cli.js batch   <folder> [-o outdir]',
+    '  node cli.js batch   <folder> [-o outdir] [--format csv|xlsx]',
+    '                                              # --format defaults to xlsx; csv writes one .csv per sheet',
     '  node cli.js stats          [--days 7]      # usage analytics summary',
     '  node cli.js ask "<question>" [--provider openai|claude] [--model <id>]  # AI: ask the usage data (read-only)',
     '  node cli.js ask:models                       # list selectable AI models',
@@ -155,8 +185,13 @@ function help() {
     '  node cli.js ask:test:corrections            # guided steps to verify a correction is applied (G2)',
     '  node cli.js ask:test:threads                # guided steps to verify follow-up threads (B1)',
     '  node cli.js ask:eval [--provider --model]   # run review scenarios vs the live model; records a report',
+    '  node cli.js sf:list [--today|--date YYYY-MM-DD|--start A --end B] [--field LastModifiedDate|CreatedDate] [--limit N] [--test]',
+    '                                              # list Race Results Doc files in Salesforce (Mountain Time)',
+    '  node cli.js sf:pull <sf:list opts> [-o <dir>] [--strategy add_new|replace|wipe_all]',
+    '                                              # download those files (snake_case names) into a folder',
     '  node cli.js metrics:size                   # events table size + rows/year',
     '  node cli.js metrics:cleanup [--yes]        # purge years beyond current+prior',
+    '  node cli.js metrics:purge-test [--yes]     # delete only test rows (is_test=1) — keeps real + demo data',
     '  node cli.js metrics:purge-all [--yes]      # delete ALL rows (confirm) — clears test data',
     '  node cli.js help',
     ''
@@ -176,10 +211,10 @@ async function main() {
     if (cmd === 'convert') {
       const input = args._[1];
       if (!input) { help(); process.exit(2); }
-      const out = args.out || await default_out_name(input);
-      const report = await convert_one(input, out, args);
-      console.log('\nSaved: ' + out);
-      process.exit(report.scorecard.band === 'red' ? 1 : 0);
+      const out = args.out || await default_out_name(input, out_format(args));
+      const conv = await convert_one(input, out, args);
+      console.log('\nSaved: ' + conv.outputs.join('\n       '));
+      process.exit(conv.report.scorecard.band === 'red' ? 1 : 0);
     }
     if (cmd === 'batch') {
       const dir = args._[1];
@@ -187,13 +222,20 @@ async function main() {
       const outdir = args.out || await data_dir.outputs();
       if (!fs.existsSync(outdir)) fs.mkdirSync(outdir, { recursive: true });
       const files = fs.readdirSync(dir).filter(function (f) { return /\.(xlsx|xls|csv)$/i.test(f) && !/ - formatted\./i.test(f); });
-      let worst = 0;
+      const ext = out_format(args) === 'csv' ? '.csv' : '.xlsx';
+      let worst = 0, skipped = 0;
       for (const f of files) {
-        const out = path.join(outdir, f.replace(/\.(xlsx|xls)$/i, '') + ' - formatted.xlsx');
-        const report = await convert_one(path.join(dir, f), out, args);
-        if (report.scorecard.band === 'red') worst = 1;
+        const out = path.join(outdir, f.replace(/\.(xlsx|xls|csv)$/i, '') + ' - formatted' + ext);
+        try {
+          const conv = await convert_one(path.join(dir, f), out, args);
+          if (conv.report.scorecard.band === 'red') worst = 1;
+        } catch (e) {
+          // e.g. a legacy .xls without SheetJS — skip and keep going instead of aborting the batch
+          console.error(col(C.red, '  skipped ' + f + ': ' + e.message));
+          skipped++; worst = 1;
+        }
       }
-      console.log('\nProcessed ' + files.length + ' file(s) into ' + outdir);
+      console.log('\nProcessed ' + (files.length - skipped) + ' file(s)' + (skipped ? ' (' + skipped + ' skipped)' : '') + ' into ' + outdir);
       process.exit(worst);
     }
     if (cmd === 'ask:models') {
@@ -360,6 +402,56 @@ async function main() {
       console.log(col(C.green, '  Deleted ' + r.deleted + ' row(s). Table is now empty.'));
       await pool.end();
       process.exit(0);
+    }
+    if (cmd === 'metrics:purge-test') {
+      const pool = await metrics.get_pool();
+      // count first so the user sees exactly what will go (is_test = 1 only — real + demo rows are safe)
+      const [c] = await pool.query('SELECT COUNT(*) AS n FROM `' + metrics.TABLE + '` WHERE is_test = 1');
+      const n = (c[0] && c[0].n) || 0;
+      console.log('');
+      if (!n) { console.log('  No test rows (is_test = 1) to purge.'); await pool.end(); process.exit(0); }
+      console.log(col(C.bold, 'Will delete ' + n + ' test row(s) (is_test = 1) from ' + metrics.TABLE + '. Real + demo data is untouched.'));
+      if (!args.yes && !(await confirm('  Proceed? [y/N] '))) { console.log('  Cancelled.'); await pool.end(); process.exit(0); }
+      const r = await metrics.purge_test(pool);
+      console.log(col(C.green, '  Deleted ' + r.deleted + ' test row(s).'));
+      await pool.end();
+      process.exit(0);
+    }
+    if (cmd === 'sf:list' || cmd === 'sf:pull') {
+      const sf = require('../sf');
+      const cfg = sf.sf_config({ is_test: !!args.test });
+      const check = sf.check_sf_config(cfg);
+      if (!check.ok) { console.error(col(C.red, 'Salesforce not configured — missing: ' + check.missing.join(', '))); process.exit(2); }
+      const mode = args.today ? 'today' : (args.date ? 'specific' : ((args.start || args.end) ? 'range' : 'all'));
+      const filter = { mode: mode, field: args.field || 'LastModifiedDate', date: args.date, start: args.start, end: args.end, tz: sf.DEFAULT_TZ };
+      console.log(col(C.dim, 'Logging into Salesforce (' + cfg.environment_name + ')…'));
+      const conn = await sf.make_connection(cfg);
+      let files = await sf.list_race_results_files(conn, { filter: filter });
+      if (args.limit) files = files.slice(0, Number(args.limit));
+      console.log(col(C.bold, '\n' + files.length + ' Race Results Doc file(s):'));
+      files.forEach(function (f, i) {
+        console.log('  ' + String(i + 1).padStart(3) + '. ' + f.target_name +
+          col(C.gray, '  · ' + (f.program_name || '—') + ' · ' + (f.owner_name || '—') + ' · ' + f.modified_mtn_full));
+      });
+      if (cmd === 'sf:list') { console.log(''); return; }
+      // sf:pull -> download to a folder (same snake_case names as the web app)
+      const out_dir = args.out || path.join(process.cwd(), 'sf_race_result_downloads');
+      const strategy = args.strategy || 'add_new';   // add_new | replace | wipe_all
+      fs.mkdirSync(out_dir, { recursive: true });
+      if (strategy === 'wipe_all') {
+        fs.readdirSync(out_dir).forEach(function (fn) { if (/\.(xlsx|xls|csv)$/i.test(fn)) { try { fs.unlinkSync(path.join(out_dir, fn)); } catch (e) { /* ignore */ } } });
+      }
+      let saved = 0, skipped = 0;
+      for (const f of files) {
+        const dest = path.join(out_dir, f.target_name);
+        if (strategy === 'add_new' && fs.existsSync(dest)) { skipped++; continue; }
+        const buf = await sf.fetch_content_version_bytes(conn, f.content_version_id);
+        fs.writeFileSync(dest, buf);
+        saved++;
+        console.log(col(C.green, '  saved ') + f.target_name);
+      }
+      console.log(col(C.bold, '\nDownloaded ' + saved + ' file(s)' + (skipped ? ', skipped ' + skipped + ' existing' : '') + ' to ' + out_dir));
+      return;
     }
     console.log('Unknown command: ' + cmd);
     help();

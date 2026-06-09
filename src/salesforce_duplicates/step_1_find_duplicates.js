@@ -18,12 +18,13 @@ const { format_timestamp_utc, format_timestamp_mtn } = require("./src/fmt");
 const { build_fuzzy_groups } = require("./src/grouping");
 const { make_run_id } = require("./src/ids");
 const { create_step_timer } = require("./src/step_timer");
-const { add_timestamp_to_filename, write_csv, archive_previous_output_files, write_run_summary } = require("./src/output_files");
+const { add_timestamp_to_filename, write_csv, archive_previous_output_files, write_run_summary, write_zip_trim_mapping } = require("./src/output_files");
 const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row } = require("./src/sf_rows");
 const { fetch_salesforce_accounts } = require("./src/salesforce");
+const { build_zip_trim_mapping } = require("./src/zip_trim");
 const { detect_exact_duplicates } = require("./src/exact");
 const { run_fuzzy_matching } = require("./src/fuzzy");
-const { log_run_summary } = require("./src/summaries");
+const { log_run_summary, log_zip_trim_summary } = require("./src/summaries");
 
 async function main(is_test = resolve_is_test()) {
     const script_start_date = new Date();
@@ -72,6 +73,12 @@ async function main(is_test = resolve_is_test()) {
     for (const row of result.records) {
         record_lookup.set(row.Id, row);
     }
+
+    // Composite ZIPs are normalized to their first five digits (see
+    // src/normalize.js -> trim_zip5). Build a reviewable raw -> trimmed mapping
+    // and write it to the meta folder so the trim can be audited after the run.
+    const zip_trim = build_zip_trim_mapping(result.records);
+    const zip_trim_mapping_path = await write_zip_trim_mapping(zip_trim.mapping);
 
     const { exact_groups_size, exact_duplicate_groups, exact_duplicate_record_ids } =
         detect_exact_duplicates(result.records, { script_start_ms });
@@ -188,6 +195,8 @@ async function main(is_test = resolve_is_test()) {
         is_test,
         total_records_scanned: result.records.length,
         salesforce_total_size: result.totalSize,
+        zip_records_trimmed: zip_trim.records_trimmed,
+        zip_distinct_mappings: zip_trim.mapping.length,
         exact_duplicate_groups: exact_duplicates_sf_import.length,
         fuzzy_pair_matches: fuzzy_pair_sf_import.length,
         fuzzy_groups: fuzzy_group_sf_import.length,
@@ -198,6 +207,9 @@ async function main(is_test = resolve_is_test()) {
 
     // Step-by-step timeline (largest first) — quick read on where the time went.
     timer.print_summary();
+
+    // Reviewable composite-ZIP trim summary (raw -> trimmed -> count).
+    log_zip_trim_summary(zip_trim, zip_trim_mapping_path);
 
     log_run_summary({
         run_id,
@@ -217,6 +229,8 @@ async function main(is_test = resolve_is_test()) {
         is_test,
         max_fetch,
         fuzzy_threshold: FUZZY_THRESHOLD,
+        zip_records_trimmed: zip_trim.records_trimmed,
+        zip_distinct_mappings: zip_trim.mapping.length,
         exact_groups_size,
         exact_duplicate_groups_found: exact_duplicates_sf_import.length,
         exact_duplicate_record_ids_excluded: exact_duplicate_record_ids.size,
