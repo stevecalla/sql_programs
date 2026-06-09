@@ -51,6 +51,11 @@ node menu.js                                  # sectioned interactive menu (incl
 npm test            # or: node --test tests/*.test.js
 ```
 
+**Code style:** use `snake_case` for every identifier we define — it's enforced by
+`tests/lint_snake_case.test.js`. The only exceptions are `UPPER_SNAKE` constants, DOM element ids,
+and library/Node/DOM APIs you can't rename (e.g. `arrayBuffer`). If you call a new camelCase API the
+lint flags, prefer an already-allowed equivalent or add the API name to the `ALLOWED` set in that test.
+
 ## End-to-end tests (Playwright — opt-in, run from the CLI)
 
 The `node --test` suite above is dependency-free and checks the engine + that the served

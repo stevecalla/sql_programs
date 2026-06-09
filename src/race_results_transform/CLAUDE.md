@@ -175,9 +175,15 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 
 ## Naming & layout
 
-- Identifiers are **snake_case**, enforced by `tests/lint_snake_case.test.js` (it scans source
-  with comments/strings stripped; allow-list covers DOM/library APIs + UPPER_SNAKE constants +
-  DOM element ids). Exceptions: UPPER_SNAKE constants, DOM ids (`$('compareCard')`), library APIs.
+- **Use snake_case for every identifier we define** (functions, vars, object keys) — enforced by
+  `tests/lint_snake_case.test.js` (it scans source with comments/strings stripped; allow-list covers
+  DOM/library APIs + UPPER_SNAKE constants + DOM element ids). Exceptions: UPPER_SNAKE constants,
+  DOM ids (`$('compareCard')`), and library/Node/DOM APIs you can't rename.
+- When you call a **new camelCase library/Node/DOM API** (e.g. `statSync`, `arrayBuffer`,
+  `byteLength`), the lint will flag it. Either prefer an equivalent already in the allow-list
+  (e.g. `fs.readFileSync(f).length` instead of `fs.statSync(f).size`) or add the genuine API name to
+  the `ALLOWED` set in `tests/lint_snake_case.test.js`. Run `node --test tests/lint_snake_case.test.js`
+  before committing. (DOM ids in `index.html` are auto-allowed — the lint reads `id="…"` values.)
 - The portable core is in `src/` (browser loads `src/*.js`, served at `/src`).
 
 ## Suggested next steps (not done)
