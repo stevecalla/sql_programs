@@ -67,10 +67,12 @@ src/race_results_transform/
                        names sanitized to <=31 chars, unique); output centered, wide, frozen header.
                        grid_to_csv (header + rows -> RFC-4180 CSV text, CRLF; all cells text so long
                        member #s stay intact) backs the CSV-default downloads + CLI `--format csv`.
-                       Legacy .xls is OPTIONAL via SheetJS (xls_to_irs/sheetjs_available; not bundled —
-                       `npm install xlsx`: the server serves node_modules/xlsx/dist/xlsx.full.min.js at
-                       /vendor/xlsx.full.min.js, app lazy-loads it; CLI uses require('xlsx'). See
-                       public/vendor/ENABLE_XLS.md)
+                       Legacy .xls via SheetJS (xls_to_irs/sheetjs_available). The browser build is
+                       **bundled** at public/vendor/xlsx.full.min.js (committed, like exceljs.min.js) so
+                       .xls works on any deploy WITHOUT npm install (incl. prod with a locked registry);
+                       the server's /vendor/xlsx.full.min.js route prefers node_modules/xlsx/dist when
+                       present and falls through to the committed copy. App lazy-loads it; the CLI still
+                       uses require('xlsx') (node_modules). See public/vendor/ENABLE_XLS.md
     cli.js             scriptable converter (inspect / convert / batch)
     data_dir.js        data dir via utilities/determineOSPath (…/usat/data on linux/mac); CLI + tests only
   public/            web app: index.html, css/app.css, js/app.js, favicon.svg, vendor/exceljs.min.js,

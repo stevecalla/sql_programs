@@ -1,25 +1,28 @@
-# Optional: legacy `.xls` support (SheetJS)
+# Legacy `.xls` support (SheetJS)
 
 The converter reads **`.xlsx`** (bundled exceljs) and **`.csv`** out of the box. Legacy binary
-**`.xls`** files need **SheetJS** (the `xlsx` package), which is intentionally NOT bundled. The
-integration is already wired — you just make SheetJS available.
+**`.xls`** files need **SheetJS** (the `xlsx` package).
 
-## Recommended: install the npm package (one step)
+## Now bundled (works everywhere, incl. production with a locked npm registry)
 
-```
-npm install xlsx
-```
+`public/vendor/xlsx.full.min.js` is **committed** (just like `exceljs.min.js`), so the web app's
+`.xls` support works on ANY deploy — Express *or* pure-static — **without `npm install`**. The 8018
+server's `/vendor/xlsx.full.min.js` route prefers `node_modules/xlsx/dist/xlsx.full.min.js` when it's
+there and otherwise falls through to this committed copy. The app **lazy-loads it** the first time an
+`.xls` is opened (Salesforce **Files** queue or a manual upload). `io.sheetjs_available()` reports
+whether it's enabled. **Restart the 8018 server after deploying** so the static asset is served.
 
-That's it. The 8018 server serves SheetJS's browser build from `node_modules/xlsx/dist/xlsx.full.min.js`
-at `/vendor/xlsx.full.min.js`, and the web app **lazy-loads it** the first time an `.xls` is opened
-(from the Salesforce **Files** queue or a manual upload). The Node CLI/engine uses the same package
-via `require('xlsx')`. No vendored copy, no `<script>` tag, no code change. `io.sheetjs_available()`
-reports whether it's enabled. **Restart the 8018 server after installing.**
+### Refreshing the bundled copy
+To update SheetJS, replace `public/vendor/xlsx.full.min.js` with a newer
+`node_modules/xlsx/dist/xlsx.full.min.js` (e.g. `npm install xlsx` on a dev box, then copy it here).
 
-## Alternative: vendor a copy (pure-static / Cloudflare Pages deploys with no node_modules)
+## Node CLI / engine
+The CLI uses the same package via `require('xlsx')`, which needs `node_modules/xlsx` (the committed
+browser bundle is for the web app only). On a box with a locked registry, `.xls` via the CLI still
+needs the package installed; the **web app** works from the bundled copy regardless.
 
-If the app is served as static files only (no Node server / no `node_modules`), drop SheetJS's
-`xlsx.full.min.js` here as **`public/vendor/xlsx.full.min.js`** — the server route falls through to it.
+## If SheetJS is somehow unavailable
+`.xls` rows are highlighted/flagged and opening one explains how to enable it / to re-save as `.xlsx`.
 
 ## Until SheetJS is present
 
