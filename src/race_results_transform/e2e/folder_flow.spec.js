@@ -2,8 +2,20 @@
 // (the native showDirectoryPicker can't be scripted), then runs the picked files through the SAME
 // Files queue as the Salesforce flow: list → select → load → open → convert → download.
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const h = require('./helpers');
 const { step, reset_steps, SINGLE_XLSX, SINGLE_CSV } = h;
+
+// A webkitdirectory input needs a DIRECTORY path (not individual files), so build a temp folder
+// holding exactly two spreadsheets and hand setInputFiles that directory.
+function make_folder() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rrt-folder-'));
+  fs.copyFileSync(SINGLE_XLSX, path.join(dir, 'race_a_FAKE.xlsx'));
+  fs.copyFileSync(SINGLE_CSV, path.join(dir, 'race_b_FAKE.csv'));
+  return dir;
+}
 
 test.describe('race_results_transform — convert files from a folder', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,9 +25,9 @@ test.describe('race_results_transform — convert files from a folder', () => {
   });
 
   test('pick files → list → load → Files queue → open → convert', async ({ page }) => {
-    await step(page, 'Choosing folder files (webkitdirectory fallback)');
-    // setInputFiles drives the same code path as a folder pick; both fixtures are spreadsheets
-    await page.setInputFiles('#folderInput', [SINGLE_XLSX, SINGLE_CSV]);
+    await step(page, 'Choosing a folder (webkitdirectory fallback)');
+    // setInputFiles with a directory drives the same code path as a real folder pick
+    await page.setInputFiles('#folderInput', make_folder());
     await expect(page.locator('#folderTable tbody tr')).toHaveCount(2);
     await expect(page.locator('#folderCount')).toContainText('2');
     await expect(page.locator('#folderTable tbody input.folder-pick:checked')).toHaveCount(2);
@@ -47,7 +59,7 @@ test.describe('race_results_transform — convert files from a folder', () => {
   });
 
   test('search filters the folder list and Reset clears it', async ({ page }) => {
-    await page.setInputFiles('#folderInput', [SINGLE_XLSX, SINGLE_CSV]);
+    await page.setInputFiles('#folderInput', make_folder());
     await expect(page.locator('#folderTable tbody tr')).toHaveCount(2);
     await page.locator('#folderSearch').fill('.csv');
     await expect(page.locator('#folderTable tbody tr')).toHaveCount(1);
