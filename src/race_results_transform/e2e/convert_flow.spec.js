@@ -100,13 +100,14 @@ test.describe('race_results_transform — served app', () => {
     await step(page, 'Checking the multi-sheet tab bar appeared');
     await expect(page.locator('#sheetBar')).toBeVisible();
 
-    await highlight_click(page, page.locator('#downloadBtn'), 'Opening the Download picker');
+    await page.locator('#downloadBtn').click();
+    await step(page, 'Opening the Download picker');
     const pop = page.locator('.dl-pop');
     await expect(pop).toBeVisible();
-    await pop.locator('[data-fmt="xlsx"]').click();   // combined .xlsx so we can read the merged worksheet
-    await highlight_click(page, pop.locator('[data-mode="combined"]'), 'Switching to the Combined option');
+    await pop.locator('[data-fmt="xlsx"]').click();        // combined .xlsx so we can read the merged worksheet
+    await pop.locator('[data-mode="combined"]').click();   // Combined mode hides the per-sheet rows (shorter popover)
     await step(page, 'Downloading the combined workbook');
-    await highlight(page, pop.locator('#dlGo'));
+    await pop.locator('#dlGo').scrollIntoViewIfNeeded();   // keep the button actionable on WebKit
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       pop.locator('#dlGo').click()
