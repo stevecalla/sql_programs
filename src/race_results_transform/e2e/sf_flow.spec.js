@@ -194,7 +194,9 @@ test.describe('race_results_transform — Salesforce intake', () => {
     await page.locator('#sfFolderPath').fill('C:/temp/sf_test');
     await page.locator('#sfDownloadBtn').click();
     await expect(page.locator('#sfProgress')).toBeVisible();   // download is underway
-    await page.locator('#sfCancelBtn').click();
+    // force-click: the animating progress bar can leave the Cancel button "not stable" for Playwright's
+    // actionability check on WebKit, but it IS clickable.
+    await page.locator('#sfCancelBtn').click({ force: true });
     await expect(page.locator('#sfStatus')).toContainText(/ancel/);   // "Cancelling…" / "cancelled"
   });
 

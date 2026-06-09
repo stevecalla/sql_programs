@@ -261,9 +261,19 @@
   // .xlsx (a zip); a legacy .xls (old binary Excel) or any non-xlsx file fails this way.
   function unreadable_message(name, err) {
     var msg = (err && err.message) || String(err || '');
-    if (/central directory|not a zip|corrupted zip/i.test(msg) || /\.xls$/i.test(name || '')) {
-      return 'This file isn’t a readable .xlsx. Legacy .xls (old Excel) and other formats aren’t supported — ' +
-             'open it in Excel and use “Save As” → .xlsx (or .csv), then try again.';
+    // The .xls reader (SheetJS) couldn't be loaded — distinct from a bad file.
+    if (/XLS_UNSUPPORTED/i.test(msg)) {
+      return 'Couldn’t load the .xls reader. Install it with “npm install xlsx” and restart the server (it ' +
+             'serves /vendor/xlsx.full.min.js), then reload — or open the file in Excel and “Save As” → .xlsx / .csv.';
+    }
+    // A real .xls that SheetJS tried but failed on — show the actual error so it's diagnosable.
+    if (/\.xls$/i.test(name || '')) {
+      return 'Couldn’t read this .xls file: ' + (msg || 'unknown error') + '. Try opening it in Excel and ' +
+             '“Save As” → .xlsx (or .csv).';
+    }
+    if (/central directory|not a zip|corrupted zip/i.test(msg)) {
+      return 'This file isn’t a readable .xlsx (it may be a different format saved with an .xlsx name). ' +
+             'Open it in Excel and “Save As” → .xlsx (or .csv).';
     }
     return 'Could not read file: ' + msg;
   }
@@ -420,7 +430,19 @@
     opts = opts || {}; opts.credentials = 'same-origin';
     return fetch(url, opts).then(function (r) {
       if (r.status === 401) { var e = new Error('sign in required'); e.needs_login = true; throw e; }
-      return r.json().then(function (j) { if (!r.ok || (j && j.ok === false)) throw new Error((j && j.error) || ('HTTP ' + r.status)); return j; });
+      // read as text first so a non-JSON body (e.g. a plain-text 503 / an HTML error page) gives a
+      // clean message instead of "Unexpected token 'D', \"Dashboard …\"".
+      return r.text().then(function (t) {
+        var j;
+        try { j = t ? JSON.parse(t) : {}; }
+        catch (pe) {
+          throw new Error(r.status === 503
+            ? 'Salesforce/metrics login isn’t configured on the server (set RACE_RESULTS_CONVERTER_METRICS_USER / _PASS in .env and restart).'
+            : 'Server returned a non-JSON response (HTTP ' + r.status + ') — is it running the latest code?');
+        }
+        if (!r.ok || (j && j.ok === false)) throw new Error((j && j.error) || ('HTTP ' + r.status));
+        return j;
+      });
     });
   }
   function sf_list() {

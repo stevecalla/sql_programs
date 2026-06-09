@@ -153,9 +153,16 @@ function create_app() {
   }
   function require_dash_auth(req, res, next) {
     const c = dash_creds();
-    if (!c.user || !c.pass) { res.status(503).send('Dashboard not configured (set RACE_RESULTS_CONVERTER_METRICS_USER / RACE_RESULTS_CONVERTER_METRICS_PASS).'); return; }
+    const is_api = req.path.indexOf('/api') === 0;
+    if (!c.user || !c.pass) {
+      // API callers (e.g. the Salesforce panel) must get JSON, not the plain-text page — otherwise
+      // the browser's r.json() fails with "Unexpected token 'D', \"Dashboard …\"".
+      const msg = 'Dashboard auth is not configured — set RACE_RESULTS_CONVERTER_METRICS_USER / RACE_RESULTS_CONVERTER_METRICS_PASS in .env.';
+      if (is_api) return res.status(503).json({ ok: false, error: msg });
+      return res.status(503).send(msg);
+    }
     if (valid_session(read_cookie(req, SESSION_COOKIE))) return next();   // valid session cookie = the only gate
-    if (req.path.indexOf('/api') === 0) return res.status(401).json({ ok: false, error: 'not authenticated' });
+    if (is_api) return res.status(401).json({ ok: false, error: 'not authenticated' });
     return res.redirect('/metrics/login');
   }
   app.get('/metrics/login', function (req, res) {
