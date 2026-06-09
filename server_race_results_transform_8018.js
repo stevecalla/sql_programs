@@ -26,7 +26,20 @@ const path = require('path');
 const dotenv = require('dotenv');
 // Load the repo-root .env (where NGROK_AUTHTOKEN lives) regardless of the
 // working directory — the menu launches this from the project subfolder.
-dotenv.config({ path: path.join(__dirname, '.env') });
+const ENV_PATH = path.join(__dirname, '.env');
+// override:true so the .env wins over a stale value already in the environment (e.g. an old empty
+// var cached by pm2) — the repo-root .env is the single source of config for this app.
+dotenv.config({ path: ENV_PATH, override: true });
+// Startup diagnostic (no secrets printed): tells you, in the pm2/prod logs, exactly where .env was
+// looked for and whether the dashboard/Salesforce login is actually configured in THIS process.
+(function () {
+  const exists = require('fs').existsSync(ENV_PATH);
+  const have_dash = !!(process.env.RACE_RESULTS_CONVERTER_METRICS_USER && process.env.RACE_RESULTS_CONVERTER_METRICS_PASS);
+  const have_sf = !!(process.env.SF_PROD_USERNAME || process.env.SF_DEV_USERNAME);
+  console.log('[env] .env path: ' + ENV_PATH + ' (exists: ' + exists + ')');
+  console.log('[env] dashboard login configured: ' + have_dash + '  ·  Salesforce configured: ' + have_sf);
+  if (!have_dash) console.log('[env] → set RACE_RESULTS_CONVERTER_METRICS_USER and RACE_RESULTS_CONVERTER_METRICS_PASS in ' + ENV_PATH + ', then restart.');
+})();
 
 const express = require('express');
 const cors = require('cors');
