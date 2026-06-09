@@ -11,8 +11,10 @@ template** — entirely in your browser, with a human review step before you dow
 ## What it does
 
 Drop a file → it auto-maps the columns to the 12-column template and converts → you review the
-highlighted cells (values it changed or guessed), fix anything, then download a template-ready
-`.xlsx`. New to it? The **Try me (fake data)** button on the upload card has two options: *Load
+highlighted cells (values it changed or guessed), fix anything, then download a template-ready file
+(**CSV by default**, or Excel) with a filename you compose (Sanction ID · Type · Distance · Race Name).
+You can also pull files straight from **Salesforce** or pick a **local folder** of files and work them
+as a queue. New to it? The **Try me (fake data)** button on the upload card has two options: *Load
 sample data* runs a built-in synthetic (PII-free) file through the whole flow instantly, or
 *Download sample file* hands you that file to upload yourself. While you're viewing the sample a
 banner makes clear it's fake test data; **Start over** returns to your own upload. The output
@@ -76,11 +78,11 @@ download are unchanged. On the upload page, the **Get Race Results from Salesfor
 - **List files** — a sortable table (Date / Program / Owner / File name / **Type**) with a **search box** to
   filter the rows, a count of files found and how many are selected; the **newest 25 are auto-selected** by
   default (raise the **Max files** field, up to **150**), and **Reset** clears the list. Legacy
-  **`.xls`** support is automatic when **`npm install xlsx`** is in place — the server serves SheetJS from
-  `node_modules`, the app lazy-loads it, and `.xls` rows read normally (no warning). Only when SheetJS is
-  genuinely unavailable does the app **highlight** those rows, tag them with `⚠`, and add a "re-save as
-  `.xlsx`" hint (see [`public/vendor/ENABLE_XLS.md`](public/vendor/ENABLE_XLS.md); restart the server after
-  installing),
+  **`.xls`** is supported out of the box — SheetJS is **bundled** at `public/vendor/xlsx.full.min.js`
+  (committed, like exceljs), so `.xls` reads on any deploy without `npm install`; the server prefers a
+  `node_modules/xlsx` copy if present. Only if SheetJS is genuinely unavailable does the app
+  **highlight** those rows, tag them with `⚠`, and add a "re-save as `.xlsx`" hint (see
+  [`public/vendor/ENABLE_XLS.md`](public/vendor/ENABLE_XLS.md)),
 - pick a **folder** (Chrome/Edge native folder picker; other browsers type a path). The folder is
   **remembered** until you choose another. Choose what to do if files already exist (add new only /
   overwrite same names / delete all then add), and

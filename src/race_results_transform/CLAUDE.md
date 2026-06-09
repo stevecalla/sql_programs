@@ -2,8 +2,8 @@
 
 ## What this project does
 
-Reformats a coworker's race-results spreadsheet (`.xlsx` or `.csv`, any column order / naming /
-date-time formatting) into the fixed 12-column **USAT rankings template**:
+Reformats a coworker's race-results spreadsheet (`.xlsx`, `.xls`, or `.csv`, any column order /
+naming / date-time formatting) into the fixed 12-column **USAT rankings template**:
 
 ```
 Member Number | Last Name | First Name | Gender | DOB | Email |

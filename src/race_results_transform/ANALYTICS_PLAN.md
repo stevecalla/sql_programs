@@ -130,9 +130,12 @@ Three timestamps, each with a clear job (matches the repo's `created_at_*` conve
   America/Denver, so the MySQL tz tables are loaded.)
 - `event_at_local` + `client_tz` = the **user's** own wall clock (they may not be in MTN),
   for human reference/support only — never aggregated.
-- **Time-of-day trend** ("what part of *their* day") → `GROUP BY local_hour` (+ `local_dow`),
-  the user-local integers. Do NOT use created_at_mtn for this (HQ time ≠ the user's time)
-  and do NOT use UTC (it smears morning/evening across zones).
+- **Time-of-day trend.** Two valid lenses, both supported: `local_hour`/`local_dow` answer "what part
+  of *their* day" (user-local integers — never UTC, which smears morning/evening across zones), while
+  `HOUR(created_at_mtn)` answers "what part of *our* (Mountain) day". **The dashboard "Uploads by hour"
+  chart uses `HOUR(created_at_mtn)`** (the team asked to see it in the org's operating timezone,
+  consistent with the by-day / last-activity stats); the raw `local_hour`/`local_dow` are still stored
+  for a per-user-timezone view if ever needed.
 
 ---
 
@@ -175,7 +178,7 @@ of truth used by the Slack digest, the CLI, and the dashboard.
   - KPI cards: visits · unique users (new/repeat) · uploads · conversions · downloads · completion %
   - uploads & downloads over time (line, by MTN day)
   - download-mode breakdown (single / separate / combined / split)
-  - time-of-day (by `local_hour`) + busiest days
+  - time-of-day (dashboard chart by `HOUR(created_at_mtn)` = MTN; `local_hour` stored too) + busiest days
   - auto-map accuracy, top columns needing a manual fix, top files, flag-code counts
   - date-range selector (7 / 30 / 90 / this year)
 
@@ -369,7 +372,7 @@ existing server auth pattern if one exists (checked at build), else HTTP Basic A
 4. **File name**: stored (+ salted hash); kept for current+prior year (no scrub). ✅
 5. **Completion**: `upload_id` correlation (upload→download funnel). ✅
 6. **Download kind**: `download_mode` single/separate/combined/split + counts. ✅
-7. **Time zones**: `created_at_utc` + `created_at_mtn` (repo convention) + user-local fields; calendar buckets `GROUP BY DATE(created_at_mtn)`, time-of-day by `local_hour`. ✅
+7. **Time zones**: `created_at_utc` + `created_at_mtn` (repo convention) + user-local fields; calendar buckets `GROUP BY DATE(created_at_mtn)`, dashboard time-of-day by `HOUR(created_at_mtn)` (MTN; `local_hour` still stored for a per-user view). ✅
 8. **Geo**: DROPPED — no IP geolocation, no MaxMind license, no new dependency.
    `client_tz` gives a loose region for free. ✅
 9. **IP / ip_hash**: not collected at all. ✅
@@ -512,12 +515,13 @@ The code is built and the dep-free tests pass. To run it in production:
 
 ## `source` flag (manual vs Try Me vs Salesforce) — BUILT
 - A `source VARCHAR(16)` column records where a converted file came from: `upload` (manual drop/
-  picker), `try_me` (built-in sample), or `salesforce` (the SF intake queue). Wired end-to-end like
-  `is_demo`: DDL + `metrics_config.COLUMNS` + `public/js/metrics.js` allow-list + `app.js` `track()`
+  picker), `try_me` (built-in sample), `salesforce` (the SF intake queue), or `folder` (the local
+  "Convert files from a folder" intake). Wired end-to-end like `is_demo`: DDL + `metrics_config.COLUMNS`
+  + `public/js/metrics.js` allow-list + `app.js` `track()`
   (`props.source = S.source || (S.is_demo ? 'try_me' : 'upload')`) + an `ensure_columns` migration in
   the server. `is_demo` stays orthogonal (1 only for the sample).
-- Salesforce files flow the normal funnel: opening a queue file fires `file_uploaded` (first open
-  only) → auto `conversion_completed` → `download`, all stamped `source='salesforce'`. No new event
-  names beyond the existing funnel (the SF "download to folder" is not a funnel event).
+- Queue files (Salesforce or local folder) flow the normal funnel: opening a queue file fires
+  `file_uploaded` (first open only) → auto `conversion_completed` → `download`, stamped
+  `source='salesforce'` or `source='folder'`. No new event names beyond the existing funnel.
 - A future "by source" dashboard breakdown can `GROUP BY source` (left as an optional follow-up; the
   column + stamping are in place now).
