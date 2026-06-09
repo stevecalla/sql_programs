@@ -1077,7 +1077,7 @@
     S.sheets = irs.map(make_bundle);
     S.active = null; S.first_render = true;
     render_sheet_bar();
-    hide('uploadCard'); hide('introCard'); show('clearBtn');
+    hide('uploadCard'); hide('introCard'); hide('sfCard'); if ($('folderCard')) hide('folderCard'); show('clearBtn');
     if (S.is_demo) show('demoBadge'); else hide('demoBadge');
     activate_sheet(0);
     track('conversion_completed', conversion_props());
