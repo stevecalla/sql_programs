@@ -98,6 +98,36 @@
     </div>
   </section>
 
+  <section id="folderCard" class="card sf-card">
+    <div class="sf-head">
+      <h2>Convert files from a folder</h2>
+      <span class="dim">pick a folder on your computer, choose the files, and work them in the Files queue — nothing is uploaded</span>
+    </div>
+    <div class="sf-controls">
+      <button id="folderChooseBtn" class="btn" type="button">Choose folder…</button>
+      <span id="folderName" class="dim"></span>
+      <button id="folderResetBtn" class="btn ghost" type="button" title="Clear the list">↺ Reset</button>
+      <input id="folderInput" type="file" webkitdirectory multiple class="hidden" aria-hidden="true" tabindex="-1">
+    </div>
+    <div id="folderStatus" class="sf-status dim" role="status"></div>
+    <div id="folderCount" class="sf-count hidden" aria-live="polite"></div>
+    <div id="folderSearchWrap" class="sf-search-wrap hidden"><input type="search" id="folderSearch" class="sf-search" placeholder="Search files…" aria-label="Search files in the folder"></div>
+    <div id="folderTableWrap" class="sf-table-wrap hidden">
+      <table id="folderTable" class="sf-table">
+        <thead><tr>
+          <th><input type="checkbox" id="folderCheckAll" aria-label="Select all files" checked></th>
+          <th>File name</th>
+          <th>Type</th>
+          <th>Modified</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="folderLoadBar" class="sf-dl hidden">
+      <button id="folderLoadBtn" class="btn primary" type="button">Load files</button>
+    </div>
+  </section>
+
   <section id="introCard" class="card">
     <h2 class="steps-title">How it works</h2>
     <div class="rrt-steps"></div>

@@ -66,8 +66,11 @@ async function build_report(pool, opts) {
     " AND event_name='manual_remap' AND target_key IS NOT NULL GROUP BY target_key ORDER BY n DESC LIMIT 5", A);
   const errors = await q(pool, "SELECT error_type e, COUNT(*) n FROM " + W +
     " AND event_name='error' GROUP BY error_type", A);
-  const by_hour = await q(pool, "SELECT local_hour h, COUNT(*) n FROM " + W +
-    " AND event_name='file_uploaded' GROUP BY local_hour ORDER BY h", A);
+  // Hour-of-day in MOUNTAIN time (consistent with by_day / last-activity), not each visitor's
+  // browser-local hour. created_at_mtn is a DATETIME holding MTN wall-clock; fall back to UTC only
+  // for any legacy rows missing it.
+  const by_hour = await q(pool, "SELECT HOUR(COALESCE(created_at_mtn, created_at_utc)) h, COUNT(*) n FROM " + W +
+    " AND event_name='file_uploaded' GROUP BY h ORDER BY h", A);
   const by_dow = await q(pool, "SELECT local_dow d, COUNT(*) n FROM " + W +
     " AND event_name='file_uploaded' GROUP BY local_dow ORDER BY n DESC", A);
   const by_day = await q(pool, "SELECT DATE(COALESCE(created_at_mtn, created_at_utc)) d, " +

@@ -227,7 +227,7 @@
     <div class="mx-canvas-wrap"><canvas id="chart_modes" height="170"></canvas></div>
     <div class="mx-flip" id="chart_modes_table" hidden></div></div>
     <div class="mx-panel">
-    <div class="mx-ph"><h2>Uploads by hour (user-local)</h2><div class="mx-tools" data-chart="chart_hours"><button type="button" data-act="expand" title="Expand">⤢ Expand</button><button type="button" data-act="png" title="Export PNG">⬇ PNG</button><button type="button" data-act="csv" title="Export CSV">⬇ CSV</button><button type="button" data-act="table" title="Switch to table view">⇄ Table</button></div></div>
+    <div class="mx-ph"><h2>Uploads by hour (Mountain Time)</h2><div class="mx-tools" data-chart="chart_hours"><button type="button" data-act="expand" title="Expand">⤢ Expand</button><button type="button" data-act="png" title="Export PNG">⬇ PNG</button><button type="button" data-act="csv" title="Export CSV">⬇ CSV</button><button type="button" data-act="table" title="Switch to table view">⇄ Table</button></div></div>
     <div class="mx-canvas-wrap"><canvas id="chart_hours" height="170"></canvas></div>
     <div class="mx-flip" id="chart_hours_table" hidden></div></div>
   </div>
@@ -387,7 +387,7 @@
     var hours=[], hv=[];
     for (var h=0; h<24; h++){ hours.push(h); var f = d.by_hour.filter(function(x){return x.hour===h;})[0]; hv.push(f?f.n:0); }
     bar('chart_hours', hours, hv, cssvar('--brand'));
-    register('chart_hours', 'Uploads by hour (user-local)', ['Hour','Uploads'], hours.map(function(h,i){return [h, hv[i]];}));
+    register('chart_hours', 'Uploads by hour (Mountain Time)', ['Hour','Uploads'], hours.map(function(h,i){return [h, hv[i]];}));
     el('lastData').querySelector('.mx-last-val').textContent = hl.latest_mtn ? (hl.latest_mtn + ' MTN') : 'No data yet';
     fill('tbl_users', d.top_users||[], function(u,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+u.id+'</td><td>'+u.visits+'</td><td>'+u.uploads+'</td><td>'+u.downloads+'</td><td>'+u.start_overs+'</td><td>'+(u.tz||'—')+'</td><td>'+(u.last_seen||'—')+'</td><td>'+(u.returning?'<span class="tag">returning</span>':'new')+'</td></tr>'; });
     fill('tbl_files', d.top_files, function(f,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+f.name+'</td><td>'+f.n+'</td></tr>'; });

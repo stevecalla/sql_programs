@@ -112,6 +112,21 @@ node src/cli.js sf:list --start 2026-06-01 --end 2026-06-07 --field CreatedDate
 node src/cli.js sf:pull --today -o ./downloads --strategy add_new   # download to a folder
 ```
 
+## Convert files from a folder
+
+On the upload page, the **Convert files from a folder** panel lets you point at a folder on your
+computer and work several files at once — without dragging them in one at a time. Click **Choose
+folder…**, and the app lists the spreadsheets in it (`.xlsx / .xls / .csv`, top level only) as a
+checklist with search + a count. Check the ones you want and click **Load** — they drop into the same
+**Files** queue as the Salesforce flow, so you click each row to convert it, download it (CSV or Excel,
+your filename), and the Uploaded → Converted → Downloaded status tracks your progress. On Chrome/Edge
+the **↻ Reload from disk** button works here too (fix a file in Excel, click Reload, it re-converts).
+
+Everything stays in your browser — **nothing is uploaded**. Chrome/Edge use the native folder picker
+(which also enables Reload); other browsers fall back to a standard folder-select that still loads and
+converts the files (just without Reload). The headless equivalent is the CLI:
+`node src/cli.js batch <folder> [--format csv|xlsx]`.
+
 ## End-to-end tests (Playwright — opt-in, run from the CLI)
 
 The `node --test` suite above is dependency-free and checks the engine + that the served

@@ -71,7 +71,9 @@ describe('salesforce intake — UI + wiring', () => {
   });
 
   test('SF files are tagged source = salesforce', () => {
-    assert.match(app_js, /S\.source\s*=\s*'salesforce'/, "open_queue_file must set S.source='salesforce'");
+    // open_queue_file now takes the item's source; sf_build_queue tags SF items 'salesforce'
+    assert.match(app_js, /source: 'salesforce'/, "sf_build_queue must tag SF items source='salesforce'");
+    assert.match(app_js, /S\.source = it\.source \|\| S\.queue_source/, 'open_queue_file takes the item source');
   });
 
   test('source flag is wired across COLUMNS, client allow-list, and DDL', async () => {
@@ -89,5 +91,32 @@ describe('salesforce intake — UI + wiring', () => {
     assert.match(server, /app\.post\('\/api\/logout'/, 'inline JSON logout endpoint');
     assert.match(server, /mount_sf_routes\(app, require_dash_auth\)/, 'SF routes mounted behind dashboard auth');
     assert.match(server, /\{ name: 'source', ddl: 'source VARCHAR\(16\)'/, 'source ensure_columns migration');
+  });
+});
+
+describe('local-folder intake — UI + wiring', () => {
+  test('panel markup: choose folder, webkitdirectory input, file list, load button', () => {
+    [
+      'id="folderCard"', 'id="folderChooseBtn"', 'id="folderInput"', 'webkitdirectory',
+      'id="folderTable"', 'id="folderCheckAll"', 'id="folderSearch"', 'id="folderCount"', 'id="folderLoadBtn"'
+    ].forEach(function (needle) { assert.ok(html.indexOf(needle) >= 0, 'index.html missing ' + needle); });
+    assert.ok(html.indexOf('Convert files from a folder') >= 0, 'panel heading text');
+  });
+
+  test('app.js wires the folder picker + the generic queue', () => {
+    [
+      /function wire_folder\b/, /function folder_choose\b/, /function folder_from_input\b/, /function folder_load\b/,
+      /function folder_render\b/, /function folder_reset\b/, /function build_queue\b/,
+      /showDirectoryPicker/, /webkitdirectory|webkitRelativePath/
+    ].forEach(function (re) { assert.match(app_js, re); });
+    assert.match(app_js, /source: 'folder'/, "folder_load must build_queue with source 'folder'");
+    assert.match(app_js, /S\.queue_source === 'folder'/, 'render_queue adapts columns for the folder source');
+    assert.match(app_js, /wire_folder\(\)/, 'wire_folder is called from init');
+  });
+
+  test('the queue is source-agnostic (sf_build_queue delegates to build_queue)', () => {
+    assert.match(app_js, /function build_queue\b/, 'generic build_queue exists');
+    assert.match(app_js, /build_queue\(saved\.map/, 'sf_build_queue delegates to build_queue');
+    assert.match(app_js, /S\.source = it\.source \|\| S\.queue_source/, 'open_queue_file takes the item source');
   });
 });

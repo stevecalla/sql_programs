@@ -43,10 +43,14 @@
     sheets: null, active: null, first_render: true, split_col: null, split_basis: null, split_manual: {}, split_loaded_key: null,
     dl_format: 'csv', dl_fields: { id: '', type: '', distance: '', name: '' },  // download format + filename builder
     is_demo: false,  // true while viewing the built-in "Try me" sample (fake data) — stamps is_demo on its events
-    source: null,    // where the active file came from: null/'upload' | 'salesforce' (try_me derives from is_demo)
+    source: null,    // where the active file came from: null/'upload' | 'salesforce' | 'folder' (try_me derives from is_demo)
     // Salesforce intake / queue
     sf_files: null, sf_selected: {}, sf_sort: { key: 'date', dir: 'desc' }, sf_cancel: false, sf_authed: false,
-    sf_dir: null, sf_folder: '', sf_sig: null, queue: null, queue_sort: { key: null, dir: 'asc' }, active_queue_id: null
+    sf_dir: null, sf_folder: '', sf_sig: null, queue: null, queue_sort: { key: null, dir: 'asc' }, active_queue_id: null,
+    // Files queue is source-agnostic: 'salesforce' (downloaded) or 'folder' (local folder pick)
+    queue_source: 'salesforce', queue_dir: null, queue_folder: '', queue_sig: null,
+    // local-folder intake
+    folder_files: null, folder_selected: {}, folder_dir: null, folder_name: ''
   };
 
   // The committed synthetic fixture served by the app (no PII). Used by both Try-me paths:
@@ -228,8 +232,8 @@
     try {
       var m = um();
       if (m) { props = props || {}; if (S.is_demo) props.is_demo = 1; props.source = S.source || (S.is_demo ? 'try_me' : 'upload'); m.track(name, props); }
-      // a download of an active Salesforce-queue file advances its status to Downloaded
-      if ((name === 'download' || name === 'split_download_used') && S.source === 'salesforce' && S.active_queue_id) {
+      // a download of an active queue file (Salesforce OR local folder) advances its status to Downloaded
+      if ((name === 'download' || name === 'split_download_used') && S.active_queue_id) {
         var it = (S.queue || []).filter(function (q) { return q.id === S.active_queue_id; })[0];
         if (it) sf_set_stage(it.name, SF_STAGE.DOWNLOADED);
       }
@@ -624,7 +628,7 @@
       sf_set_status('This browser has no folder picker — type a folder path on this computer instead.');
     }
   }
-  function sf_status_key() { return 'rrt_sf_status::' + (S.sf_sig || 'default'); }
+  function sf_status_key() { return 'rrt_sf_status::' + (S.queue_sig || S.sf_sig || 'default'); }
   function sf_load_statuses() { try { return JSON.parse(window.localStorage.getItem(sf_status_key()) || '{}'); } catch (e) { return {}; } }
   function sf_save_statuses(map) { try { window.localStorage.setItem(sf_status_key(), JSON.stringify(map)); } catch (e) { /* private mode */ } }
   function sf_set_stage(name, level) {
@@ -707,19 +711,33 @@
         .catch(function (e) { sf_set_status('Download failed: ' + e.message, true); $('sfDownloadBtn').disabled = false; sf_progress(1, 1); });
     }
   }
-  function sf_build_queue(saved) {
+  // Source-agnostic queue builder. items: [{ id, name, bytes, program?, owner?, meta? }].
+  // opts: { source: 'salesforce'|'folder', dir, folder, sig } — dir/folder/sig power Reload + status memory.
+  function build_queue(items, opts) {
+    opts = opts || {};
+    S.queue_source = opts.source || 'salesforce';
+    S.queue_dir = opts.dir || null;
+    S.queue_folder = opts.folder || '';
+    S.queue_sig = opts.sig || S.sf_sig || ('queue:' + S.queue_source);
     var statuses = sf_load_statuses();
-    S.queue = saved.map(function (s) {
-      return { id: s.id, name: s.name, bytes: s.bytes || null, program: s.f.program_name, owner: s.f.owner_name, level: statuses[s.name] || 0 };
+    S.queue = items.map(function (it) {
+      return { id: it.id, name: it.name, bytes: it.bytes || null, source: S.queue_source,
+        program: it.program || '', owner: it.owner || '', meta: it.meta || '', level: statuses[it.name] || 0 };
     });
-    hide('uploadCard'); hide('introCard'); hide('sfCard'); show('clearBtn');
+    hide('uploadCard'); hide('introCard'); hide('sfCard'); if ($('folderCard')) hide('folderCard'); show('clearBtn');
     show('compareCard'); show('filesTab'); set_compare_view('files'); render_queue();
     $('compareCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  // Salesforce wrapper: map downloaded files into the generic queue.
+  function sf_build_queue(saved) {
+    build_queue(saved.map(function (s) { return { id: s.id, name: s.name, bytes: s.bytes || null, program: s.f.program_name, owner: s.f.owner_name }; }),
+      { source: 'salesforce', dir: S.sf_dir, folder: S.sf_folder || ($('sfFolderPath') && $('sfFolderPath').value) || '', sig: S.sf_sig });
   }
   function sf_stage_html(label, on) { return '<span class="sf-q-stage' + (on ? ' done' : '') + '"><span class="dot"></span>' + label + '</span>'; }
   function queue_cmp_val(it, key) {
     if (key === 'program') return it.program || '';
     if (key === 'owner') return it.owner || '';
+    if (key === 'meta') return it.meta || '';
     if (key === 'status') return it.level || 0;
     return it.name || '';
   }
@@ -746,6 +764,7 @@
       return '<th class="sf-sort" data-qsort="' + key + '">' + label + ' <span class="sf-arrow">' + arrow + '</span></th>';
     }
     var can_reload = sf_can_reload();
+    var is_folder = S.queue_source === 'folder';   // local-folder queue: Program/Owner don't apply
     var body = queue_sorted_indexes().map(function (idx, di) {
       var it = q[idx];
       var active = (S.active_queue_id === it.id) ? ' active' : '';
@@ -754,16 +773,20 @@
       var reload = can_reload
         ? '<button type="button" class="sf-q-reload" data-i="' + idx + '" title="Reload this file from the folder — picks up edits you made in Excel (clears Downloaded)">↻</button>'
         : '';
+      var file_cell = '<td class="sf-q-file" title="' + esc(it.name) + '">' + esc(it.name) + (sf_file_ext(it) === 'xls' ? ' <span class="sf-xls-tag" title="Legacy .xls — re-save as .xlsx">xls</span>' : '') + '</td>';
+      var lead = is_folder
+        ? file_cell + '<td>' + esc(it.meta || '') + '</td>'
+        : '<td>' + esc(it.program || 'No program') + '</td><td>' + esc(it.owner || 'No owner') + '</td>' + file_cell;
       return '<tr class="sf-q-trow' + active + dis + '" data-i="' + idx + '" role="button" tabindex="0"' + title + '>' +
-        '<td class="sf-rn">' + (di + 1) + '</td>' +
-        '<td>' + esc(it.program || 'No program') + '</td>' +
-        '<td>' + esc(it.owner || 'No owner') + '</td>' +
-        '<td class="sf-q-file" title="' + esc(it.name) + '">' + esc(it.name) + (sf_file_ext(it) === 'xls' ? ' <span class="sf-xls-tag" title="Legacy .xls — re-save as .xlsx">xls</span>' : '') + '</td>' +
+        '<td class="sf-rn">' + (di + 1) + '</td>' + lead +
         '<td><span class="sf-q-stages">' + sf_stage_html('Uploaded', it.level >= 1) + sf_stage_html('Converted', it.level >= 2) + sf_stage_html('Downloaded', it.level >= 3) + '</span></td>' +
         '<td class="sf-q-act">' + reload + '</td></tr>';
     }).join('');
+    var heads = is_folder
+      ? head('file', 'File name') + head('meta', 'Modified')
+      : head('program', 'Program') + head('owner', 'Owner') + head('file', 'File name');
     box.innerHTML = '<div class="sf-table-wrap sf-q-wrap"><table class="sf-table sf-q-table"><thead><tr>' +
-      '<th class="sf-rn">#</th>' + head('program', 'Program') + head('owner', 'Owner') + head('file', 'File name') + head('status', 'Status') + '<th class="sf-q-act" aria-label="Reload"></th>' +
+      '<th class="sf-rn">#</th>' + heads + head('status', 'Status') + '<th class="sf-q-act" aria-label="Reload"></th>' +
       '</tr></thead><tbody>' + body + '</tbody></table></div>';
   }
   function queue_sort_by(key) {
@@ -782,7 +805,7 @@
   }
   function open_queue_file(idx) {
     var it = (S.queue || [])[idx]; if (!it || !it.bytes) return;
-    S.source = 'salesforce'; S.is_demo = false; S.active_queue_id = it.id;
+    S.source = it.source || S.queue_source || 'salesforce'; S.is_demo = false; S.active_queue_id = it.id;
     S.file_name = it.name.replace(/\.(xlsx|xls|csv)$/i, ''); S.file_display = it.name;
     var m = um(); if (m) m.new_upload();
     if ((it.level || 0) < SF_STAGE.UPLOADED) track('file_uploaded', { file_name: it.name, file_type: /\.csv$/i.test(it.name) ? 'csv' : 'xlsx', size_bytes: it.bytes.byteLength || null });
@@ -792,23 +815,26 @@
     p.then(function (irs) { on_workbook(irs); sf_set_stage(it.name, SF_STAGE.CONVERTED); })
      .catch(function (e) { track('error', { error_type: 'unreadable_file' }); alert(unreadable_message(it.name, e)); });
   }
-  // Is a folder source available to re-read from? (Chrome dir handle, or a fallback server path.)
-  function sf_can_reload() { return !!(S.sf_dir || S.sf_folder || ($('sfFolderPath') && $('sfFolderPath').value)); }
+  // Is the queue's source folder available to re-read from? A directory handle (Chrome/Edge, either
+  // source) or — for the Salesforce server-folder fallback only — a folder path.
+  function sf_can_reload() {
+    return !!(S.queue_dir || (S.queue_source === 'salesforce' && (S.queue_folder || ($('sfFolderPath') && $('sfFolderPath').value))));
+  }
   // Re-read a queue file's CURRENT bytes from disk (picks up edits made in Excel), then re-run the
   // pipeline. Resets that row's status — Converted re-runs and Downloaded clears (the prior download
-  // is now stale). Works via the folder handle (Chrome/Edge) or the server-folder fallback endpoint.
+  // is now stale). Works via the folder handle (Chrome/Edge) or the SF server-folder fallback endpoint.
   function sf_reload_file(idx) {
     var it = (S.queue || [])[idx]; if (!it) return;
     var fresh;
-    if (S.sf_dir) {
+    if (S.queue_dir) {
       fresh = (async function () {
-        var ok = await sf_ensure_permission(S.sf_dir);
+        var ok = await sf_ensure_permission(S.queue_dir);
         if (!ok) throw new Error('folder permission not granted');
-        var fh = await S.sf_dir.getFileHandle(it.name);
+        var fh = await S.queue_dir.getFileHandle(it.name);
         return (await fh.getFile()).arrayBuffer();
       })();
     } else {
-      var folder = S.sf_folder || ($('sfFolderPath') && $('sfFolderPath').value) || '';
+      var folder = S.queue_folder || ($('sfFolderPath') && $('sfFolderPath').value) || '';
       fresh = fetch('/api/sf/folder-file?folder=' + encodeURIComponent(folder) + '&name=' + encodeURIComponent(it.name), { credentials: 'same-origin' })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); });
     }
@@ -876,6 +902,138 @@
       queue.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open_queue_row(e.target); } });
     }
     sf_restore_folder();   // bring back the last-used folder
+  }
+
+  // ---------- local-folder intake: pick a folder -> choose files -> the Files queue ----------
+  function folder_is_spreadsheet(name) { return /\.(xlsx|xls|csv)$/i.test(name || ''); }
+  function folder_ext(f) { var n = (f && f.name) || ''; return n.indexOf('.') >= 0 ? n.split('.').pop().toLowerCase() : ''; }
+  function folder_fmt_modified(ms) {
+    if (!ms) return '';
+    var d = new Date(ms);
+    return (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+  }
+  function folder_set_status(msg, err) { var el = $('folderStatus'); if (!el) return; el.textContent = msg || ''; el.classList.toggle('err', !!err); }
+  function folder_set_files(files, dir, name) {
+    S.folder_files = files; S.folder_dir = dir || null; S.folder_name = name || '';
+    S.folder_selected = {}; files.forEach(function (f) { S.folder_selected[f.name] = true; });
+    if ($('folderName')) $('folderName').textContent = name ? ('Folder: ' + name) : '';
+    if (!files.length) {
+      folder_set_status('No spreadsheet files (.xlsx / .xls / .csv) in that folder.', true);
+      hide('folderTableWrap'); hide('folderSearchWrap'); hide('folderLoadBar'); $('folderCount').classList.add('hidden');
+      return;
+    }
+    folder_set_status(''); folder_render();
+  }
+  // Chrome/Edge: showDirectoryPicker → dir handle (enables Reload). Else: a webkitdirectory input.
+  function folder_choose() {
+    if (window.showDirectoryPicker) {
+      window.showDirectoryPicker({ mode: 'read' }).then(async function (dir) {
+        var name = dir.name || 'folder';
+        folder_set_status('Reading “' + name + '” …');
+        var out = [], total = 0, subdirs = 0;
+        for await (var entry of dir.values()) {
+          total++;
+          if (entry.kind === 'directory') { subdirs++; continue; }   // top-level files only
+          if (!folder_is_spreadsheet(entry.name)) continue;
+          // list the file from its name+handle; read getFile() metadata best-effort so a OneDrive/
+          // cloud "files on demand" placeholder (where getFile can fail/lag) is still listed and loadable.
+          var item = { name: entry.name, handle: entry };
+          try { var f = await entry.getFile(); item.size = f.size; item.modified = f.lastModified; } catch (e) { /* keep it anyway */ }
+          out.push(item);
+        }
+        out.sort(function (a, b) { return sort.compare_text(a.name, b.name); });   // reuse src/sort.js
+        folder_set_files(out, dir, name);
+        if (!out.length) {
+          var bits = [];
+          if (subdirs) bits.push(subdirs + ' subfolder(s) — this reads top-level files only');
+          if (total - subdirs) bits.push((total - subdirs) + ' non-spreadsheet file(s)');
+          folder_set_status('No .xlsx / .xls / .csv files at the top level of “' + name + '”' + (bits.length ? ' (found ' + bits.join(', ') + ')' : '') + '.', true);
+        }
+      }).catch(function (e) {
+        if (e && e.name === 'AbortError') return;   // user cancelled the picker
+        folder_set_status('Could not read that folder: ' + ((e && e.message) || e), true);
+      });
+    } else {
+      $('folderInput').click();
+    }
+  }
+  // Fallback: a <input webkitdirectory> File list. Keep TOP-LEVEL files only (rel = "folder/file").
+  function folder_from_input(file_list) {
+    var files = [], top = null;
+    Array.prototype.slice.call(file_list || []).forEach(function (f) {
+      var rel = f.webkitRelativePath || f.name, parts = rel.split('/');
+      if (parts.length > 1) top = parts[0];
+      if (parts.length > 2) return;                 // a subfolder file — skip (top-level only)
+      if (!folder_is_spreadsheet(f.name)) return;
+      files.push({ name: f.name, file: f, size: f.size, modified: f.lastModified });
+    });
+    files.sort(function (a, b) { return sort.compare_text(a.name, b.name); });
+    folder_set_files(files, null, top || '(folder)');   // no dir handle in the fallback → no Reload
+  }
+  function folder_visible() {
+    var q = (($('folderSearch') && $('folderSearch').value) || '').toLowerCase().trim();
+    var all = S.folder_files || [];
+    if (!q) return all;
+    return all.filter(function (f) { return (f.name + ' ' + folder_ext(f)).toLowerCase().indexOf(q) >= 0; });
+  }
+  function folder_selected_files() { return (S.folder_files || []).filter(function (f) { return S.folder_selected[f.name]; }); }
+  function folder_update_count() {
+    var total = (S.folder_files || []).length, sel = folder_selected_files().length, vis = folder_visible().length;
+    var el = $('folderCount'); if (!el) return;
+    el.classList.toggle('hidden', total === 0);
+    var showing = (vis < total) ? (' · showing <b>' + vis + '</b>') : '';
+    el.innerHTML = '<b>' + total + '</b> file(s) found' + showing + ' · <b>' + sel + '</b> selected';
+    var btn = $('folderLoadBtn'); if (btn) { btn.disabled = !sel; btn.textContent = sel ? ('Load ' + sel + ' file' + (sel > 1 ? 's' : '')) : 'Load files'; }
+  }
+  function folder_render() {
+    var vis = folder_visible();
+    $('folderTable').querySelector('tbody').innerHTML = vis.map(function (f) {
+      var checked = S.folder_selected[f.name] ? ' checked' : '';
+      return '<tr><td><input type="checkbox" class="folder-pick" data-name="' + esc(f.name) + '" aria-label="Select file"' + checked + '></td>' +
+        '<td title="' + esc(f.name) + '">' + esc(f.name) + '</td>' +
+        '<td>' + esc(folder_ext(f) || '?') + '</td>' +
+        '<td class="dim">' + esc(folder_fmt_modified(f.modified)) + '</td></tr>';
+    }).join('');
+    $('folderCheckAll').checked = vis.length > 0 && vis.every(function (f) { return S.folder_selected[f.name]; });
+    show('folderTableWrap'); show('folderSearchWrap'); show('folderLoadBar');
+    folder_update_count();
+  }
+  function folder_read_bytes(f) {
+    if (f.handle) return f.handle.getFile().then(function (file) { return file.arrayBuffer(); });
+    if (f.file) return f.file.arrayBuffer();
+    return Promise.reject(new Error('no file source'));
+  }
+  function folder_load() {
+    var picks = folder_selected_files();
+    if (!picks.length) return;
+    folder_set_status('Loading ' + picks.length + ' file(s)…');
+    Promise.all(picks.map(function (f) {
+      return folder_read_bytes(f).then(function (buf) { return { id: f.name, name: f.name, bytes: buf, meta: folder_fmt_modified(f.modified) }; });
+    })).then(function (items) {
+      build_queue(items, { source: 'folder', dir: S.folder_dir, folder: S.folder_name, sig: 'folder:' + (S.folder_name || 'default') });
+    }).catch(function (e) { folder_set_status('Could not read files: ' + e.message, true); });
+  }
+  function folder_reset() {
+    S.folder_files = null; S.folder_selected = {};
+    if ($('folderTable')) $('folderTable').querySelector('tbody').innerHTML = '';
+    if ($('folderSearch')) $('folderSearch').value = '';
+    hide('folderTableWrap'); hide('folderSearchWrap'); hide('folderLoadBar'); if ($('folderCount')) $('folderCount').classList.add('hidden');
+    folder_set_status('');
+  }
+  function wire_folder() {
+    if (!$('folderCard')) return;
+    if ($('folderChooseBtn')) $('folderChooseBtn').addEventListener('click', folder_choose);
+    if ($('folderInput')) $('folderInput').addEventListener('change', function () { folder_from_input($('folderInput').files); });
+    if ($('folderResetBtn')) $('folderResetBtn').addEventListener('click', folder_reset);
+    if ($('folderSearch')) $('folderSearch').addEventListener('input', folder_render);
+    if ($('folderLoadBtn')) $('folderLoadBtn').addEventListener('click', folder_load);
+    if ($('folderCheckAll')) $('folderCheckAll').addEventListener('change', function () {
+      var on = $('folderCheckAll').checked; folder_visible().forEach(function (f) { S.folder_selected[f.name] = on; }); folder_render();
+    });
+    if ($('folderTable')) $('folderTable').addEventListener('change', function (e) {
+      var cb = e.target.closest && e.target.closest('.folder-pick'); if (!cb) return;
+      S.folder_selected[cb.dataset.name] = cb.checked; folder_update_count();
+    });
   }
 
   // Build a per-sheet state bundle (one per worksheet / the single CSV).
@@ -967,10 +1125,12 @@
     S.value_overrides = {}; S.vm_expanded = {}; S.approved = {}; S.orig_table = S.conv_table = null;
     S.sheets = null; S.active = null; S.first_render = true;
     S.queue = null; S.queue_sort = { key: null, dir: 'asc' }; S.active_queue_id = null;
+    S.queue_source = 'salesforce'; S.queue_dir = null; S.queue_folder = ''; S.queue_sig = null;
     if ($('sfTable')) sf_reset();   // clear the SF list/status/count/search (keeps the remembered folder)
+    if ($('folderTable')) folder_reset();   // clear the local-folder list (keeps the remembered folder)
     $('fileInput').value = '';
     ['summaryBar', 'compareCard', 'profileBar', 'clearBtn', 'flagLegend', 'sheetBar', 'demoBadge', 'filesTab'].forEach(hide);
-    show('uploadCard'); show('introCard'); show('sfCard');
+    show('uploadCard'); show('introCard'); show('sfCard'); if ($('folderCard')) show('folderCard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1916,7 +2076,7 @@
     start_clock();
     if (!window.ExcelJS) { alert('ExcelJS failed to load — please hard-refresh the page (Ctrl/Cmd+Shift+R).'); return; }
     S.store = mapper.make_store(window.localStorage);
-    wire_dropzone(); wire_try_me(); wire_sf(); wire_collapsibles(); wire_layout(); wire_compare_seg();
+    wire_dropzone(); wire_try_me(); wire_sf(); wire_folder(); wire_collapsibles(); wire_layout(); wire_compare_seg();
     var tip = document.createElement('div'); tip.className = 'rrt-tip hidden'; document.body.appendChild(tip);
     document.addEventListener('mouseover', function (e) { var td = e.target.closest && e.target.closest('td[data-tip]'); if (!td) return; tip.textContent = td.getAttribute('data-tip'); tip.classList.remove('hidden'); });
     document.addEventListener('mousemove', function (e) { if (tip.classList.contains('hidden')) return; var x = Math.min(e.clientX + 12, window.innerWidth - 300); tip.style.left = x + 'px'; tip.style.top = (e.clientY + 16) + 'px'; });
