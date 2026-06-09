@@ -27,9 +27,7 @@ const dotenv = require('dotenv');
 // Load the repo-root .env (where NGROK_AUTHTOKEN lives) regardless of the
 // working directory — the menu launches this from the project subfolder.
 const ENV_PATH = path.join(__dirname, '.env');
-// override:true so the .env wins over a stale value already in the environment (e.g. an old empty
-// var cached by pm2) — the repo-root .env is the single source of config for this app.
-dotenv.config({ path: ENV_PATH, override: true });
+dotenv.config({ path: ENV_PATH });
 // Startup diagnostic (no secrets printed): tells you, in the pm2/prod logs, exactly where .env was
 // looked for and whether the dashboard/Salesforce login is actually configured in THIS process.
 (function () {
