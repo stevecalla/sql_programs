@@ -11,6 +11,9 @@
 // Projects: the Tier 1/2 specs run on chromium + firefox + webkit. mobile.spec.js
 // runs ONLY in the phone-sized "mobile" project; visual.spec.js (screenshot
 // baselines) runs ONLY on chromium so we keep a single committed baseline set.
+// metrics_dashboard.spec.js also runs on mobile for the "mobile-safe overflow" render check, but its
+// ask-box CLICK tests self-skip on the mobile project (the /metrics dashboard is a desktop tool — at
+// phone width its cards overlap the ask-box, so clicks can't land).
 const { defineConfig, devices } = require('@playwright/test');
 const path = require('path');
 
