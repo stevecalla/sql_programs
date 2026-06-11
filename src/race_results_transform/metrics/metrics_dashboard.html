@@ -570,7 +570,11 @@
     fetch('/api/metrics-ask-thread?thread_id=' + encodeURIComponent(tid), { credentials:'same-origin' })
       .then(function(r){ return r.json(); })
       .then(function(d){ var turns = (d && d.turns) || []; if (!turns.length) return;
-        ask_history = turns.map(function(t){ return { q: t.question, sql: t.sql || null, answer: t.answer || '' }; });
+        // Cap each rehydrated answer to 400 chars to match the live path (ask_after) — keeps the
+        // POSTed `history` context small so a reloaded thread can't blow past the JSON body limit.
+        // The VISIBLE transcript below renders full answers separately (ask_convo_add / ask_render),
+        // so "See N earlier" still shows the complete text.
+        ask_history = turns.map(function(t){ return { q: t.question, sql: t.sql || null, answer: (t.answer || '').slice(0, 400) }; });
         if (ask_history.length > 8) ask_history = ask_history.slice(-8);
         ask_thread_update();
         var last = turns[turns.length - 1];

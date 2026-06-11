@@ -107,11 +107,14 @@ inline remap / value override → `manual_remap`/`value_override`; `handle_file`
 
 ## 3. Ingest (server → MySQL — existing convention)
 Add routes to the existing app server `server_race_results_transform_8018.js` (no new server):
-- `POST /api/event` → `express.json()` → **whitelist + type-coerce** → insert using the
+- `POST /api/event` → `express.json({ limit: '16kb' })` → **whitelist + type-coerce** → insert using the
   existing pattern (`dotenv`, `mysql2/promise`, `local_usat_sales_db_config()`,
   parameterised `INSERT INTO ... VALUES (?, ...)` like `flush_batch()` in
   `step_1_transfer_data_usat_to_local.js`). One shared pool created at server start.
-  Rejects unknown fields; responds 204 fast (fire-and-forget).
+  Rejects unknown fields; responds 204 fast (fire-and-forget). The public ingest stays capped at
+  **16kb**; the auth-gated dashboard ask routes (`/api/metrics-ask`, `/api/metrics-ask-correct`) get a
+  larger **512kb** parser, and a JSON error handler converts an oversized/malformed body into a clean
+  413/400 JSON response (never Express's default HTML error page). See `tests/ask_payload.test.js`.
 - **Idempotent / zero-touch on Linux**: the server runs the query-file DDL
   (`CREATE TABLE IF NOT EXISTS`) **once at startup**, so the table is created
   automatically on first boot in production — no manual step. A `step_0_init`
