@@ -75,7 +75,7 @@ download are unchanged. On the upload page, the **Get Race Results from Salesfor
   show/hide password toggle appears in the panel; you stay on the page). One **Sign in / Sign out** button
   (top-right of the panel) toggles the session — it reads "Sign in" when signed out and "Sign out" once a
   listing or sign-in succeeds.
-- **List files** — a sortable table (Date / Program / Owner / File name / **Type**) with a **search box** to
+- **List files** — a sortable table (Date / Program / **Sanction** / Owner / File name / **Type**) with a **search box** to
   filter the rows, a count of files found and how many are selected; the **newest 25 are auto-selected** by
   default (raise the **Max files** field, up to **150**), and **Reset** clears the list. Legacy
   **`.xls`** is supported out of the box — SheetJS is **bundled** at `public/vendor/xlsx.full.min.js`
@@ -109,10 +109,17 @@ Setup: set these in the repo-root `.env` — `SF_PROD_LOGIN_URL`, `SF_PROD_USERN
 `SF_API_VERSION`. There's also a CLI:
 
 ```
-node src/cli.js sf:list --today                          # list today's files (MT)
+node src/cli.js sf:list --today                          # list today's files (MT) + their Sanction IDs
 node src/cli.js sf:list --start 2026-06-01 --end 2026-06-07 --field CreatedDate
 node src/cli.js sf:pull --today -o ./downloads --strategy add_new   # download to a folder
+node src/cli.js sf:describe Program --field sanction     # confirm an object's field API names (read-only)
+node src/cli.js sf:soql "SELECT Id, cfg_Id__c FROM Program LIMIT 5"   # run a guarded read-only SELECT
 ```
+
+The **Sanction ID** comes from the Program (event) object's `cfg_Id__c` formula field
+(`= BLANKVALUE(cfg_Legacy_Id__c, cfg_Autonumber_ID__c)`). It leads the snake_case download name when known
+and pre-fills the download filename builder's *Sanction ID* box. If your org names the object/field
+differently, set `SF_PROGRAM_OBJECT` / `SF_SANCTION_FIELD` in `.env`.
 
 ## Convert files from a folder
 

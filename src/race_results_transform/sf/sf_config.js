@@ -15,7 +15,12 @@ function sf_config(opts) {
       : (env.SF_PROD_LOGIN_URL || 'https://usatriathlon.my.salesforce.com'),
     username: is_test ? env.SF_DEV_USERNAME : env.SF_PROD_USERNAME,
     password: is_test ? env.SF_DEV_PASSWORD : env.SF_PROD_PASSWORD,
-    security_token: is_test ? env.SF_DEV_SECURITY_TOKEN : env.SF_PROD_SECURITY_TOKEN
+    security_token: is_test ? env.SF_DEV_SECURITY_TOKEN : env.SF_PROD_SECURITY_TOKEN,
+    // The Program (event) object + its Sanctioning ID formula field. Defaults match the standard
+    // `Program` object (cfg_Id__c = BLANKVALUE(cfg_Legacy_Id__c, cfg_Autonumber_ID__c)); override
+    // via env if the object is namespaced or the field differs in another org.
+    program_object: env.SF_PROGRAM_OBJECT || 'Program',
+    sanction_field: env.SF_SANCTION_FIELD || 'cfg_Id__c'
   };
   return cfg;
 }

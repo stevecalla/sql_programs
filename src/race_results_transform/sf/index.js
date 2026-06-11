@@ -23,6 +23,8 @@ module.exports = {
   // client
   make_connection: client.make_connection,
   list_race_results_files: client.list_race_results_files,
+  run_soql: client.run_soql,
+  describe_object: client.describe_object,
   DEFAULT_SEARCH_TERM: client.DEFAULT_SEARCH_TERM,
   DEFAULT_EXTS: client.DEFAULT_EXTS,
   // fetch

@@ -26,6 +26,25 @@ describe('salesforce intake — UI + wiring', () => {
     ].forEach(function (needle) { assert.ok(html.indexOf(needle) >= 0, 'index.html missing ' + needle); });
     assert.ok(html.indexOf('Get Race Results from Salesforce') >= 0, 'panel heading text');
     assert.ok(html.indexOf('data-sort="type"') >= 0, 'list has a sortable Type column');
+    assert.ok(html.indexOf('data-sort="sanction"') >= 0, 'list has a sortable Sanction column');
+  });
+
+  test('sanction id is surfaced + pre-fills the download filename builder + shows in the summary bar', () => {
+    assert.match(app_js, /sanction: s\.f\.sanction_id/, 'sf_build_queue carries the file sanction id into the queue');
+    assert.match(app_js, /\{ id: it\.sanction \|\| '' \}/, 'opening a file sets the builder Sanction ID from that file (SF) or blanks it');
+    assert.match(app_js, /key === 'sanction'/, 'SF list is sortable by sanction');
+    assert.match(app_js, /S\.active_sanction = it\.sanction/, 'open_queue_file records the active sanction for the readout');
+    assert.match(app_js, /class="chip sanctionchip"/, 'summary bar renders a visible Sanction readout chip');
+    assert.match(app_js, /S\.source === 'salesforce' && S\.active_sanction/, 'readout only shows for Salesforce files with a sanction');
+  });
+
+  test('sanction id stays SF-only: blanked for manual upload, folder open, and Start over', () => {
+    // manual upload (handle_file) clears the builder Sanction ID
+    assert.match(app_js, /S\.dl_fields = Object\.assign\(\{\}, S\.dl_fields, \{ id: '' \}\);\s*\/\/ so the download builder/, 'handle_file blanks the Sanction ID');
+    // opening a queue file sets id from that file (SF) or blanks it (folder has no sanction)
+    assert.match(app_js, /\{ id: it\.sanction \|\| '' \}/, 'open_queue_file sets/clears id from the file, never carries over');
+    // Start over clears it too
+    assert.match(app_js, /sanction is SF-only/, 'clear_all blanks the Sanction ID');
   });
 
   test('app.js exposes file type + highlights/guards legacy .xls', () => {
