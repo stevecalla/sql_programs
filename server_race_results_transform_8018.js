@@ -111,6 +111,11 @@ function create_app() {
     res.json({ ok: true, app: 'race_results_transform', time: new Date().toISOString() });
   });
 
+  // The auth-gated dashboard "ask" routes carry a few turns of conversation context, so they need a
+  // larger JSON body than the deliberately-tight public /api/event ingest. Mounted BEFORE the global
+  // 16kb parser so these paths parse first; body-parser then sees req._body and the 16kb parser skips
+  // them. Everything else stays capped at 16kb.
+  app.use(['/api/metrics-ask', '/api/metrics-ask-correct'], express.json({ limit: '512kb' }));
   // Usage analytics — fire-and-forget. Counts/enums only; no-ops if no DB pool.
   app.use(express.json({ limit: '16kb' }));
   app.use(express.urlencoded({ extended: false }));
@@ -361,6 +366,21 @@ function create_app() {
 
   app.use(function (req, res) {
     res.status(404).json({ error: 'not found', path: req.path });
+  });
+
+  // JSON error handler — never let body-parser (or any thrown error) fall through to Express's
+  // default HTML error page, which an AJAX caller would fail to JSON.parse ("Unexpected token '<'").
+  // An oversized body becomes a clean 413; malformed JSON a 400.
+  app.use(function (err, req, res, next) {
+    if (res.headersSent) return next(err);
+    if (err && (err.type === 'entity.too.large' || err.status === 413 || err.statusCode === 413)) {
+      return res.status(413).json({ ok: false, error: 'request too large' });
+    }
+    if (err && err.type === 'entity.parse.failed') {
+      return res.status(400).json({ ok: false, error: 'invalid JSON body' });
+    }
+    console.error('[server] error:', (err && err.message) || err);
+    return res.status((err && (err.status || err.statusCode)) || 500).json({ ok: false, error: (err && err.message) || 'server error' });
   });
 
   return app;
