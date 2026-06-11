@@ -53,6 +53,8 @@ function log_run_summary({
     total_records_scanned,
     salesforce_total_size,
     is_test,
+    is_full = false,
+    is_partial = false,
     max_fetch,
     fuzzy_threshold,
     zip_records_trimmed = 0,
@@ -73,6 +75,16 @@ function log_run_summary({
     exact_output_path,
     fuzzy_pair_output_path,
     fuzzy_group_output_path,
+    // --- nickname + consolidated (additive; only printed when enabled) ---
+    nickname_matching_enabled = false,
+    nickname_pair_matches_found,
+    nickname_groups_found,
+    consolidated_clusters_found,
+    pairs_matched_spelling_only,
+    pairs_matched_nickname_only,
+    pairs_matched_both,
+    nickname_output_path,
+    consolidated_output_path,
 }) {
     console.log("");
     console.log(colorize("bright", "Summary"));
@@ -91,7 +103,7 @@ function log_run_summary({
     console.log(`created_at_utc: ${created_at_utc}`);
     console.log(`Total records scanned: ${total_records_scanned}`);
     console.log(`Salesforce total matching records: ${salesforce_total_size}`);
-    console.log(`Run mode: ${is_test ? "TEST (dev sandbox)" : "PRODUCTION"}`);
+    console.log(`Run mode: ${is_test ? "TEST (dev sandbox)" : "PRODUCTION"}${is_full ? " — FULL (all records, Bulk API)" : ""}${is_partial ? " — PARTIAL (capped sample)" : ""}`);
     console.log(`MAX_FETCH: ${max_fetch}`);
     console.log(`FUZZY_THRESHOLD: ${fuzzy_threshold}`);
     console.log(`Composite ZIPs trimmed to 5 digits: ${zip_records_trimmed.toLocaleString()} (${zip_distinct_mappings.toLocaleString()} distinct raw -> trimmed mappings)`);
@@ -111,6 +123,53 @@ function log_run_summary({
     console.log(`Exact duplicate Salesforce import output written to: ${exact_output_path}`);
     console.log(`Fuzzy pair Salesforce import output written to: ${fuzzy_pair_output_path}`);
     console.log(`Fuzzy group Salesforce import output written to: ${fuzzy_group_output_path}`);
+
+    if (nickname_matching_enabled) {
+        console.log("");
+        console.log(colorize("bright", "Nickname + consolidated (additive views)"));
+        console.log(colorize("green", `Nickname pair matches found: ${Number(nickname_pair_matches_found || 0).toLocaleString()}`));
+        console.log(`  pairs matched nickname only: ${Number(pairs_matched_nickname_only || 0).toLocaleString()}`);
+        console.log(`  pairs matched both nickname + fuzzy: ${Number(pairs_matched_both || 0).toLocaleString()}`);
+        console.log(`  pairs matched fuzzy spelling only: ${Number(pairs_matched_spelling_only || 0).toLocaleString()}`);
+        console.log(colorize("green", `Nickname groups found: ${Number(nickname_groups_found || 0).toLocaleString()}`));
+        console.log(colorize("green", `Consolidated clusters found: ${Number(consolidated_clusters_found || 0).toLocaleString()}`));
+        console.log(`Nickname view output written to: ${nickname_output_path}`);
+        console.log(`Consolidated output written to: ${consolidated_output_path}`);
+    }
 }
 
-module.exports = { log_run_summary, log_zip_trim_summary };
+// Final "what did each rule contribute?" block. Shows the per-signal pair/group
+// counts and how the reconciled consolidated clusters break down by their
+// strongest signal (exact > fuzzy > nickname), so the marginal lift of each rule
+// (especially the net-new groups nicknames surfaced) is visible at a glance.
+function log_contribution_summary({
+    exact_groups,
+    exact_records,
+    fuzzy_baseline_pairs,
+    fuzzy_complete_pairs,
+    nickname_pairs,
+    nickname_only,
+    nickname_both,
+    cluster_summary,
+}) {
+    const t = (cluster_summary && cluster_summary.by_tier) || {
+        exact: { clusters: 0, records: 0 },
+        fuzzy: { clusters: 0, records: 0 },
+        nickname: { clusters: 0, records: 0 },
+    };
+    const n = (v) => Number(v || 0).toLocaleString();
+
+    console.log("");
+    console.log(colorize("bright", "Match contribution by rule"));
+    console.log(colorize("bright", "--------------------------"));
+    console.log(`Exact      : ${n(exact_groups)} groups  (${n(exact_records)} records)`);
+    console.log(`Fuzzy(90)  : ${n(fuzzy_complete_pairs)} pairs on the complete pool  (${n(fuzzy_baseline_pairs)} in the baseline fuzzy file)`);
+    console.log(`Nickname   : ${n(nickname_pairs)} pairs  (${n(nickname_only)} new - not caught by fuzzy; ${n(nickname_both)} also clear fuzzy)`);
+    console.log("Consolidated clusters by strongest signal:");
+    console.log(`  exact    : ${n(t.exact.clusters)} clusters  (${n(t.exact.records)} records)`);
+    console.log(`  fuzzy    : ${n(t.fuzzy.clusters)} clusters  (${n(t.fuzzy.records)} records)`);
+    console.log(colorize("green", `  nickname : ${n(t.nickname.clusters)} clusters  (${n(t.nickname.records)} records)  <- net-new duplicate groups from nicknames`));
+    console.log(`Total consolidated clusters: ${n(cluster_summary && cluster_summary.total_clusters)} (${n(cluster_summary && cluster_summary.total_records)} records)`);
+}
+
+module.exports = { log_run_summary, log_zip_trim_summary, log_contribution_summary };

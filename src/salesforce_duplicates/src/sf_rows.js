@@ -47,7 +47,8 @@ function to_sf_exact_row({
         Duplicate_Count__c: row.duplicate_count,
         Record_Ids__c: row.record_ids.join(";"),
         Member_Numbers__c: row.member_numbers.join(";"),
-        Foundation_Constituent_Values__c: unique_join(row.foundation_constituents),
+        Merge_Ids__c: row.merge_ids.join(";"),
+        Foundation_Constituent_Values__c: row.foundation_constituents.join(";"),
 
         Created_At_Mtn__c: created_at_mtn,
         Created_At_Utc__c: created_at_utc,
@@ -108,6 +109,7 @@ function to_sf_fuzzy_pair_row({
 
         Account_1__c: row.record_id_1,
         Member_Number_1__c: row.member_number_1,
+        Merge_Id_1__c: row.merge_id_1,
         First_Name_1__c: row.first_name_1,
         Last_Name_1__c: row.last_name_1,
         Full_Name_1__c: row.full_name_1,
@@ -121,6 +123,7 @@ function to_sf_fuzzy_pair_row({
 
         Account_2__c: row.record_id_2,
         Member_Number_2__c: row.member_number_2,
+        Merge_Id_2__c: row.merge_id_2,
         First_Name_2__c: row.first_name_2,
         Last_Name_2__c: row.last_name_2,
         Full_Name_2__c: row.full_name_2,
@@ -181,6 +184,7 @@ function to_sf_fuzzy_group_row({
         Clean_Names_In_Group__c: row.clean_names_in_group,
         Record_Ids__c: row.record_ids,
         Member_Numbers__c: row.member_numbers,
+        Merge_Ids__c: row.merge_ids,
         Foundation_Constituents__c: row.foundation_constituents,
 
         Best_Pair_Score__c: row.best_pair_score,
@@ -194,8 +198,201 @@ function to_sf_fuzzy_group_row({
     };
 }
 
+// Nickname single-signal view (c). Mirrors the fuzzy-pair schema, with the
+// nickname-specific flags/reason. Review-only for now, but the columns follow
+// the Salesforce __c naming convention so a future import is plug-and-play.
+function to_sf_nickname_row({
+    row,
+    row_number,
+    run_id,
+    created_at_mtn,
+    created_at_utc,
+    script_start_date,
+    query_start_date,
+    query_end_date,
+    query_duration_ms,
+    source_file_name,
+}) {
+    return {
+        Run_Id__c: run_id,
+        External_Id__c: make_external_id(run_id, "nickname_pair", `${row.record_id_1}|${row.record_id_2}`),
+        Match_Type__c: "nickname_pair",
+        Source_File_Name__c: source_file_name,
+        Review_Status__c: REVIEW_STATUS_DEFAULT,
+
+        Row_Number__c: row_number,
+        Run_Start_Time__c: format_timestamp_utc(script_start_date),
+        Query_Start_Time__c: format_timestamp_utc(query_start_date),
+        Query_End_Time__c: format_timestamp_utc(query_end_date),
+        Query_Duration__c: format_duration(query_duration_ms),
+
+        Rule_Key__c: row.rule_key,
+        Match_Path__c: row.match_path,
+        Nickname_Match_Reason__c: row.nickname_match_reason,
+
+        Match_Score_Combined_Name__c: row.combined_name_score,
+        Match_Score_First_Name__c: row.first_name_score,
+        Match_Score_Last_Name__c: row.last_name_score,
+
+        Nickname_Match_Flag__c: row.nickname_match_flag,
+        Spelling_Match_Flag__c: row.spelling_match_flag,
+        Also_Clears_Fuzzy_Flag__c: row.also_clears_fuzzy_flag,
+        In_Exact_Group_Flag__c: row.in_exact_group_flag,
+
+        Account_1__c: row.record_id_1,
+        Member_Number_1__c: row.member_number_1,
+        Merge_Id_1__c: row.merge_id_1,
+        First_Name_1__c: row.first_name_1,
+        Last_Name_1__c: row.last_name_1,
+        Full_Name_1__c: row.full_name_1,
+        Clean_Full_Name_1__c: row.clean_full_name_1,
+        Gender_1__c: row.gender_1,
+        Birthdate_1__c: row.birthdate_1,
+        Composite_Zip_1__c: row.composite_zip_1,
+        Billing_Zip_1__c: row.billing_zip_1,
+        Mailing_Zip_1__c: row.mailing_zip_1,
+        Foundation_Constituent_1__c: row.foundation_constituent_1,
+
+        Account_2__c: row.record_id_2,
+        Member_Number_2__c: row.member_number_2,
+        Merge_Id_2__c: row.merge_id_2,
+        First_Name_2__c: row.first_name_2,
+        Last_Name_2__c: row.last_name_2,
+        Full_Name_2__c: row.full_name_2,
+        Clean_Full_Name_2__c: row.clean_full_name_2,
+        Gender_2__c: row.gender_2,
+        Birthdate_2__c: row.birthdate_2,
+        Composite_Zip_2__c: row.composite_zip_2,
+        Billing_Zip_2__c: row.billing_zip_2,
+        Mailing_Zip_2__c: row.mailing_zip_2,
+        Foundation_Constituent_2__c: row.foundation_constituent_2,
+
+        Nickname_Logic__c: row.nickname_logic,
+
+        Created_At_Mtn__c: created_at_mtn,
+        Created_At_Utc__c: created_at_utc,
+    };
+}
+
+// Consolidated reconciled view (d) — one row per cluster, with provenance flags
+// and a confidence tier. This is the authoritative output. Review-only for now;
+// columns use __c naming for a possible future import.
+function to_sf_consolidated_row({
+    row,
+    row_number,
+    run_id,
+    created_at_mtn,
+    created_at_utc,
+    script_start_date,
+    query_start_date,
+    query_end_date,
+    query_duration_ms,
+    source_file_name,
+}) {
+    return {
+        Run_Id__c: run_id,
+        External_Id__c: make_external_id(run_id, "consolidated_cluster", row.consolidated_group_key),
+        Match_Type__c: "consolidated_cluster",
+        Source_File_Name__c: source_file_name,
+        Review_Status__c: REVIEW_STATUS_DEFAULT,
+
+        Row_Number__c: row_number,
+        Run_Start_Time__c: format_timestamp_utc(script_start_date),
+        Query_Start_Time__c: format_timestamp_utc(query_start_date),
+        Query_End_Time__c: format_timestamp_utc(query_end_date),
+        Query_Duration__c: format_duration(query_duration_ms),
+
+        Consolidated_Group_Key__c: row.consolidated_group_key,
+        Group_Record_Count__c: row.group_record_count,
+        Confidence_Tier__c: row.confidence_tier,
+        Match_Composition__c: row.match_composition,
+
+        Has_Exact_Flag__c: row.has_exact_flag,
+        Has_Fuzzy_Flag__c: row.has_fuzzy_flag,
+        Has_Nickname_Flag__c: row.has_nickname_flag,
+        Exact_Link_Count__c: row.exact_link_count,
+        Fuzzy_Link_Count__c: row.fuzzy_link_count,
+        Nickname_Link_Count__c: row.nickname_link_count,
+        Match_Link_Count__c: row.match_link_count,
+
+        Shared_Gender__c: row.shared_gender,
+        Shared_Birthdate__c: row.shared_birthdate,
+        Shared_Composite_Zip__c: row.shared_composite_zip,
+
+        Names_In_Group__c: row.names_in_group,
+        Clean_Names_In_Group__c: row.clean_names_in_group,
+        Record_Ids__c: row.record_ids,
+        Member_Numbers__c: row.member_numbers,
+        Merge_Ids__c: row.merge_ids,
+        Foundation_Constituents__c: row.foundation_constituents,
+
+        Best_Pair_Score__c: row.best_pair_score,
+        Lowest_Pair_Score__c: row.lowest_pair_score,
+        Representative_Pair__c: row.representative_pair,
+        Match_Link_Reasons__c: row.match_link_reasons,
+        Consolidated_Logic__c: row.consolidated_logic,
+
+        Created_At_Mtn__c: created_at_mtn,
+        Created_At_Utc__c: created_at_utc,
+    };
+}
+
+// Nickname group view — clusters of nickname pairs. Mirrors the fuzzy-group
+// schema (Match_Type__c = "nickname_group"). Review-only; SF __c naming.
+function to_sf_nickname_group_row({
+    row,
+    row_number,
+    run_id,
+    created_at_mtn,
+    created_at_utc,
+    script_start_date,
+    query_start_date,
+    query_end_date,
+    query_duration_ms,
+    source_file_name,
+}) {
+    return {
+        Run_Id__c: run_id,
+        External_Id__c: make_external_id(run_id, "nickname_group", row.nickname_group_key),
+        Match_Type__c: "nickname_group",
+        Source_File_Name__c: source_file_name,
+        Review_Status__c: REVIEW_STATUS_DEFAULT,
+
+        Row_Number__c: row_number,
+        Run_Start_Time__c: format_timestamp_utc(script_start_date),
+        Query_Start_Time__c: format_timestamp_utc(query_start_date),
+        Query_End_Time__c: format_timestamp_utc(query_end_date),
+        Query_Duration__c: format_duration(query_duration_ms),
+
+        Nickname_Group_Key__c: row.nickname_group_key,
+        Group_Record_Count__c: row.group_record_count,
+        Shared_Gender__c: row.shared_gender,
+        Shared_Birthdate__c: row.shared_birthdate,
+        Shared_Composite_Zip__c: row.shared_composite_zip,
+
+        Names_In_Group__c: row.names_in_group,
+        Clean_Names_In_Group__c: row.clean_names_in_group,
+        Record_Ids__c: row.record_ids,
+        Member_Numbers__c: row.member_numbers,
+        Merge_Ids__c: row.merge_ids,
+        Foundation_Constituents__c: row.foundation_constituents,
+
+        Best_Pair_Score__c: row.best_pair_score,
+        Lowest_Pair_Score__c: row.lowest_pair_score,
+        Nickname_Pair_Count_In_Group__c: row.nickname_pair_count_in_group,
+        Nickname_Pair_Summary__c: row.nickname_pair_summary,
+        Nickname_Group_Logic__c: row.nickname_group_logic,
+
+        Created_At_Mtn__c: created_at_mtn,
+        Created_At_Utc__c: created_at_utc,
+    };
+}
+
 module.exports = {
     to_sf_exact_row,
     to_sf_fuzzy_pair_row,
     to_sf_fuzzy_group_row,
+    to_sf_nickname_row,
+    to_sf_consolidated_row,
+    to_sf_nickname_group_row,
 };

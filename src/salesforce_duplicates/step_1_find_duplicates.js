@@ -5,12 +5,21 @@ const { getCurrentDateTimeForFileNaming } = require("../../utilities/getCurrentD
 
 const {
     resolve_is_test,
+    resolve_is_full,
+    resolve_is_partial,
+    resolve_fetch_plan,
     TEST_MAX_FETCH,
     PROD_MAX_FETCH,
+    TEST_FULL_MAX_FETCH,
+    PROD_PARTIAL_MAX_FETCH,
     FUZZY_THRESHOLD,
     EXACT_OUTPUT_FILE,
     FUZZY_PAIR_OUTPUT_FILE,
     FUZZY_GROUP_OUTPUT_FILE,
+    ENABLE_NICKNAME_MATCHING,
+    NICKNAME_OUTPUT_FILE,
+    NICKNAME_GROUP_OUTPUT_FILE,
+    CONSOLIDATED_OUTPUT_FILE,
 } = require("./config");
 
 const { colorize, log_info, log_success, log_warn, log_error } = require("./src/log");
@@ -18,20 +27,21 @@ const { format_timestamp_utc, format_timestamp_mtn } = require("./src/fmt");
 const { build_fuzzy_groups } = require("./src/grouping");
 const { make_run_id } = require("./src/ids");
 const { create_step_timer } = require("./src/step_timer");
-const { add_timestamp_to_filename, write_csv, archive_previous_output_files, write_run_summary, write_zip_trim_mapping } = require("./src/output_files");
-const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row } = require("./src/sf_rows");
+const { add_timestamp_to_filename, write_csv, archive_previous_output_files, write_run_summary, write_zip_trim_mapping, write_nickname_fire_mapping } = require("./src/output_files");
+const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row, to_sf_nickname_row, to_sf_nickname_group_row, to_sf_consolidated_row } = require("./src/sf_rows");
 const { fetch_salesforce_accounts } = require("./src/salesforce");
 const { build_zip_trim_mapping } = require("./src/zip_trim");
 const { detect_exact_duplicates } = require("./src/exact");
 const { run_fuzzy_matching } = require("./src/fuzzy");
-const { log_run_summary, log_zip_trim_summary } = require("./src/summaries");
+const { build_match_edges, build_nickname_groups, build_consolidated_clusters, summarize_clusters } = require("./src/consolidate");
+const { log_run_summary, log_zip_trim_summary, log_contribution_summary } = require("./src/summaries");
 
-async function main(is_test = resolve_is_test()) {
+async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is_partial = resolve_is_partial()) {
     const script_start_date = new Date();
     const script_start_ms = Date.now();
     const timer = create_step_timer(); // per-step stopwatch (live + end timeline)
 
-    const max_fetch = is_test ? TEST_MAX_FETCH : PROD_MAX_FETCH;
+    const { max_fetch } = resolve_fetch_plan(is_test, is_full, is_partial);
 
     const run_id = make_run_id(script_start_date);
     const created_at_mtn = format_timestamp_mtn(script_start_date);
@@ -40,6 +50,7 @@ async function main(is_test = resolve_is_test()) {
     log_info("Script started.");
     log_info(`run_id: ${run_id}`);
     log_info(`Run mode: ${is_test ? "TEST (dev sandbox)" : "PRODUCTION"}`);
+    log_info(`Fetch scope: ${is_partial ? "PARTIAL (capped sample, REST)" : (is_full ? "FULL (Bulk API, all records up to the cap)" : (is_test ? "capped sample" : "full production"))}`);
     log_info(`MAX_FETCH: ${max_fetch}`);
     log_info(`FUZZY_THRESHOLD: ${FUZZY_THRESHOLD}`);
     log_info(`created_at_mtn: ${created_at_mtn}`);
@@ -56,7 +67,7 @@ async function main(is_test = resolve_is_test()) {
     timer.stage_done("archive prior outputs");
 
     const { result, query_start_date, query_end_date, query_duration_ms } =
-        await fetch_salesforce_accounts({ is_test, max_fetch, script_start_ms });
+        await fetch_salesforce_accounts({ is_test, is_full, is_partial, max_fetch, script_start_ms });
     timer.stage_done("fetch from Salesforce");
 
     if (result.records.length === 0) {
@@ -187,6 +198,93 @@ async function main(is_test = resolve_is_test()) {
     log_success(`Salesforce fuzzy group import file written: ${fuzzy_group_output_path}`, script_start_ms);
     timer.stage_done("fuzzy groups");
 
+    // ADDITIVE: nickname single-signal view (c) + reconciled consolidated view (d).
+    // The three baseline files above are untouched; this layer recomputes its own
+    // exact + fuzzy + nickname edges over the COMPLETE rule-eligible pool (exact
+    // records NOT removed) so the consolidated clusters can merge exact<->fuzzy
+    // and exact<->nickname links. See README_NICKNAME.md.
+    let nickname_output_path;
+    let consolidated_output_path;
+    let consolidation_counters = {};
+    let nickname_pair_count = 0;
+    let consolidated_cluster_count = 0;
+    let nickname_group_count = 0;
+    let cluster_summary = null;
+
+    if (ENABLE_NICKNAME_MATCHING) {
+        log_info("Building nickname view + consolidated duplicate file...", script_start_ms);
+
+        const nickname_output_file = add_timestamp_to_filename(NICKNAME_OUTPUT_FILE, file_timestamp);
+        const consolidated_output_file = add_timestamp_to_filename(CONSOLIDATED_OUTPUT_FILE, file_timestamp);
+
+        const { edges, nickname_pairs, fire_summary, counters } =
+            build_match_edges(result.records, exact_duplicate_groups);
+        consolidation_counters = counters;
+        nickname_pair_count = nickname_pairs.length;
+
+        const nickname_sf_import = nickname_pairs.map((row, index) =>
+            to_sf_nickname_row({
+                row,
+                row_number: index + 1,
+                run_id,
+                created_at_mtn,
+                created_at_utc,
+                script_start_date,
+                query_start_date,
+                query_end_date,
+                query_duration_ms,
+                source_file_name: nickname_output_file,
+            })
+        );
+        nickname_output_path = await write_csv(output_dir, nickname_output_file, nickname_sf_import);
+        await write_nickname_fire_mapping(fire_summary);
+        log_success(`Nickname view written (${nickname_pair_count.toLocaleString()} pairs): ${nickname_output_path}`, script_start_ms);
+        timer.stage_done("nickname matching");
+
+        const nickname_group_output_file = add_timestamp_to_filename(NICKNAME_GROUP_OUTPUT_FILE, file_timestamp);
+        const nickname_groups = build_nickname_groups(nickname_pairs, record_lookup);
+        nickname_group_count = nickname_groups.length;
+        const nickname_group_sf_import = nickname_groups.map((row, index) =>
+            to_sf_nickname_group_row({
+                row,
+                row_number: index + 1,
+                run_id,
+                created_at_mtn,
+                created_at_utc,
+                script_start_date,
+                query_start_date,
+                query_end_date,
+                query_duration_ms,
+                source_file_name: nickname_group_output_file,
+            })
+        );
+        const nickname_group_output_path = await write_csv(output_dir, nickname_group_output_file, nickname_group_sf_import);
+        log_success(`Nickname groups written (${nickname_group_count.toLocaleString()} groups): ${nickname_group_output_path}`, script_start_ms);
+        timer.stage_done("nickname groups");
+
+        const clusters = build_consolidated_clusters(edges, record_lookup);
+        consolidated_cluster_count = clusters.length;
+        cluster_summary = summarize_clusters(clusters);
+
+        const consolidated_sf_import = clusters.map((row, index) =>
+            to_sf_consolidated_row({
+                row,
+                row_number: index + 1,
+                run_id,
+                created_at_mtn,
+                created_at_utc,
+                script_start_date,
+                query_start_date,
+                query_end_date,
+                query_duration_ms,
+                source_file_name: consolidated_output_file,
+            })
+        );
+        consolidated_output_path = await write_csv(output_dir, consolidated_output_file, consolidated_sf_import);
+        log_success(`Consolidated file written (${consolidated_cluster_count.toLocaleString()} clusters): ${consolidated_output_path}`, script_start_ms);
+        timer.stage_done("consolidation");
+    }
+
     // Persist a small run summary (read back by the Slack server's report).
     await write_run_summary({
         run_id,
@@ -200,6 +298,10 @@ async function main(is_test = resolve_is_test()) {
         exact_duplicate_groups: exact_duplicates_sf_import.length,
         fuzzy_pair_matches: fuzzy_pair_sf_import.length,
         fuzzy_groups: fuzzy_group_sf_import.length,
+        nickname_matching_enabled: ENABLE_NICKNAME_MATCHING,
+        nickname_pair_matches: nickname_pair_count,
+        nickname_groups: nickname_group_count,
+        consolidated_clusters: consolidated_cluster_count,
     });
 
     const script_end_date = new Date();
@@ -227,6 +329,8 @@ async function main(is_test = resolve_is_test()) {
         total_records_scanned: result.records.length,
         salesforce_total_size: result.totalSize,
         is_test,
+        is_full,
+        is_partial,
         max_fetch,
         fuzzy_threshold: FUZZY_THRESHOLD,
         zip_records_trimmed: zip_trim.records_trimmed,
@@ -247,7 +351,33 @@ async function main(is_test = resolve_is_test()) {
         exact_output_path,
         fuzzy_pair_output_path,
         fuzzy_group_output_path,
+        nickname_matching_enabled: ENABLE_NICKNAME_MATCHING,
+        nickname_pair_matches_found: nickname_pair_count,
+        nickname_groups_found: nickname_group_count,
+        consolidated_clusters_found: consolidated_cluster_count,
+        pairs_matched_spelling_only: consolidation_counters.pairs_matched_spelling_only,
+        pairs_matched_nickname_only: consolidation_counters.pairs_matched_nickname_only,
+        pairs_matched_both: consolidation_counters.pairs_matched_both,
+        nickname_output_path,
+        consolidated_output_path,
     });
+
+    // Final per-rule contribution block (exact / fuzzy(90) / nickname), incl. how
+    // the reconciled clusters break down by strongest signal.
+    if (ENABLE_NICKNAME_MATCHING && cluster_summary) {
+        log_contribution_summary({
+            exact_groups: exact_duplicates_sf_import.length,
+            exact_records: exact_duplicate_record_ids.size,
+            fuzzy_baseline_pairs: fuzzy_pair_sf_import.length,
+            fuzzy_complete_pairs:
+                (consolidation_counters.pairs_matched_spelling_only || 0) +
+                (consolidation_counters.pairs_matched_both || 0),
+            nickname_pairs: nickname_pair_count,
+            nickname_only: consolidation_counters.pairs_matched_nickname_only,
+            nickname_both: consolidation_counters.pairs_matched_both,
+            cluster_summary,
+        });
+    }
 }
 
 if (require.main === module) {

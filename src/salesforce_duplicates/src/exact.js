@@ -62,6 +62,7 @@ function detect_exact_duplicates(records, { script_start_ms } = {}) {
                 duplicate_count: 0,
                 record_ids: [],
                 member_numbers: [],
+                merge_ids: [],
                 foundation_constituents: [],
             });
         }
@@ -71,13 +72,12 @@ function detect_exact_duplicates(records, { script_start_ms } = {}) {
         group.duplicate_count += 1;
         group.record_ids.push(row.Id);
 
-        if (row.cfg_Member_Number__pc) {
-            group.member_numbers.push(row.cfg_Member_Number__pc);
-        }
-
-        if (row.usat_Foundation_Constituent__c) {
-            group.foundation_constituents.push(row.usat_Foundation_Constituent__c);
-        }
+        // Positional: exactly one entry per record (blank when the field is empty),
+        // so member_numbers[i] / merge_ids[i] / foundation_constituents[i] line up
+        // with record_ids[i].
+        group.member_numbers.push(row.cfg_Member_Number__pc || "");
+        group.merge_ids.push(row.usat_Salesforce_Merge_Id__pc || "");
+        group.foundation_constituents.push(row.usat_Foundation_Constituent__c || "");
 
         if ((i + 1) % PROGRESS_LOG_EVERY_RECORDS === 0) {
             const pct = (((i + 1) / records.length) * 100).toFixed(1);

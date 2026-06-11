@@ -188,6 +188,7 @@ function run_fuzzy_matching(records, exact_duplicate_record_ids, { script_start_
 
                     record_id_1: row_a.Id,
                     member_number_1: row_a.cfg_Member_Number__pc,
+                    merge_id_1: row_a.usat_Salesforce_Merge_Id__pc,
                     first_name_1: row_a.FirstName,
                     last_name_1: row_a.LastName,
                     full_name_1: make_full_name(row_a),
@@ -201,6 +202,7 @@ function run_fuzzy_matching(records, exact_duplicate_record_ids, { script_start_
 
                     record_id_2: row_b.Id,
                     member_number_2: row_b.cfg_Member_Number__pc,
+                    merge_id_2: row_b.usat_Salesforce_Merge_Id__pc,
                     first_name_2: row_b.FirstName,
                     last_name_2: row_b.LastName,
                     full_name_2: make_full_name(row_b),

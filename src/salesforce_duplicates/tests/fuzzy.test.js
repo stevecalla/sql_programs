@@ -76,3 +76,16 @@ describe('run_fuzzy_matching', () => {
         assert.equal(out.fuzzy_matches.length, 0);
     });
 });
+
+describe('fuzzy merge ids', () => {
+    test('carries merge_id_1 / merge_id_2 on a pair', () => {
+        const records = [
+            rec('10', 'Jonathan', 'Snow', { usat_Salesforce_Merge_Id__pc: 'MGA' }),
+            rec('11', 'Johnathan', 'Snow', { usat_Salesforce_Merge_Id__pc: 'MGB' }),
+        ];
+        const out = run_fuzzy_matching(records, new Set(), { script_start_ms: Date.now(), fuzzy_start_ms: Date.now() });
+        assert.equal(out.fuzzy_matches.length, 1);
+        assert.equal(out.fuzzy_matches[0].merge_id_1, 'MGA');
+        assert.equal(out.fuzzy_matches[0].merge_id_2, 'MGB');
+    });
+});

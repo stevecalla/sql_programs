@@ -16,16 +16,22 @@ account_fuzzy_name_matches_sf_import.csv
 account_fuzzy_name_groups_sf_import.csv
 ```
 
-> **Planned (not yet implemented): nickname matching + a consolidated output.**
-> A third name-comparison dimension (nicknames, e.g. Bob/Robert, Bill/William) adds
-> two new files: a single-signal nickname view (`account_nickname_name_matches_sf_import.csv`)
-> and an authoritative consolidated file (`account_consolidated_duplicates_sf_import.csv`)
-> that reconciles exact, fuzzy(90), and nickname matches into one cluster-centric
-> output. The model is three single-signal review views (exact, fuzzy, nickname) plus
-> one reconciled view. The three baseline files above are intentionally left
-> **unchanged** so they stay a regression-safe baseline; all new behavior is additive.
-> See **`README_NICKNAME.md`** for the full plan, the `nicknames-curated` package
-> details, and how cross-list overlap is managed.
+When `ENABLE_NICKNAME_MATCHING` is on (the default), the run also produces **three
+additional files** — a third name-comparison dimension (nicknames, e.g. Bob/Robert,
+Bill/William):
+
+```text
+account_nickname_name_matches_sf_import.csv     (c) single-signal nickname view (pairs)
+account_nickname_name_groups_sf_import.csv      (c) nickname groups (clusters of those pairs)
+account_consolidated_duplicates_sf_import.csv   (d) reconciled, authoritative view
+```
+
+The model is three single-signal review views (exact, fuzzy, nickname) plus one
+reconciled cluster view that merges exact + fuzzy(90) + nickname. The three baseline
+files above are left **byte-for-byte unchanged** (a regression-safe baseline); all
+new behavior is additive and review-only (no Salesforce import). See
+**`README_NICKNAME.md`** for the full design, the `nicknames-curated` package, and
+how cross-list overlap is managed.
 
 ## Project Structure
 
@@ -42,6 +48,10 @@ salesforce_duplicates/
     ids.js                  run id, hashing, external id (pure)
     normalize.js            field cleaning + key builders (pure)
     matcher.js              levenshtein, similarity, rule flags, reasons (pure)
+    nicknames.js            symmetric nickname equivalence (Bob~Robert) via the
+                            nicknames-curated package (pure-style; injectable namer)
+    consolidate.js          additive: complete-pool exact+fuzzy+nickname edge gen,
+                            nickname view (c) rows, and UnionFind cluster view (d)
     grouping.js             UnionFind + fuzzy group builder
     step_timer.js           per-step stopwatch: live [STEP] lines + end timeline
     exact.js                exact-duplicate detection
@@ -53,7 +63,7 @@ salesforce_duplicates/
                             --prod=Bulk API/unordered)
   tests/                    node:test unit tests (normalize, matcher, grouping, ids,
                             sf_rows, exact, fuzzy, zip_trim, file output, step_2
-                            report, report_service, step_timer)
+                            report, report_service, step_timer, nicknames, consolidate)
   README.md / CLAUDE.md / schema.md
 ```
 
@@ -139,6 +149,34 @@ Record A; Record B; Record C
 
 This makes fuzzy output easier to review because it behaves more like the exact duplicate group file.
 
+### 4. `account_nickname_name_matches_sf_import.csv` (nickname view)
+
+Pair-level matches where the first names are **nickname-equivalent** (Bob ~ Robert,
+Bill ~ William) via the `nicknames-curated` dataset, with the same strict gate as
+fuzzy (same gender + birthdate + composite ZIP) and the last name still agreeing
+(exact or fuzzy). Each row carries `Also_Clears_Fuzzy_Flag__c` (the pair would also
+pass the spelling threshold) and `In_Exact_Group_Flag__c` (one record is also an
+exact duplicate), so this single-signal lens is self-describing.
+
+### 5. `account_nickname_name_groups_sf_import.csv` (nickname groups)
+
+Connected groups of nickname pairs — if Bob, Bobby, and Robert share a DOB + ZIP,
+their pair rows collapse into one group row (`Bob;Bobby;Robert`). The single-signal
+companion to the nickname view (#4), mirroring the fuzzy pair → group pattern. Columns
+match the fuzzy group file (`Nickname_Group_Key__c`, `Group_Record_Count__c`, etc.).
+
+### 6. `account_consolidated_duplicates_sf_import.csv` (consolidated view)
+
+The reconciled, authoritative file. It generates exact + fuzzy(90) + nickname edges
+over the **complete** rule-eligible pool (exact records are *not* removed) and unions
+them into one cluster per person. Each row is a cluster with `Confidence_Tier__c`
+(exact > fuzzy > nickname), a one-glance `Match_Composition__c` label (e.g. `exact + nickname`),
+provenance flags `Has_Exact/Fuzzy/Nickname_Flag__c`, per-signal `*_Link_Count__c`, a
+`Representative_Pair__c` (strongest pair side-by-side with scores), and `Match_Link_Reasons__c`
+(one line per connected pair, with scores). This is the file to review/act on; (a)/(b)/(c)
+are the per-signal lenses behind it. (Column names use the same "group" vocabulary as the
+other group files; a "link" = a matched pair inside the cluster.)
+
 ## Salesforce Object Used
 
 The script queries the Salesforce `Account` object.
@@ -155,12 +193,13 @@ LastName,
 FirstName,
 cfg_Member_Number__pc,
 cfg_Gender_Identity__pc,
+usat_Salesforce_Merge_Id__pc,
 PersonBirthdate,
 BillingPostalCode,
 PersonMailingPostalCode
 ```
 
-If any of these fields do not exist, or if your Salesforce user does not have access to them, the query will fail.
+If any of these fields do not exist, or if your Salesforce user does not have access to them, the query will fail — **except** `usat_Salesforce_Merge_Id__pc`, which is **optional**: the run DESCRIBEs Account and includes it only if the org has it, so an org without the field still runs (the merge columns just come out blank, and the field is picked up automatically once an admin adds it).
 
 ## SOQL Query
 
@@ -172,6 +211,7 @@ SELECT Id,
     FirstName,
     cfg_Member_Number__pc,
     cfg_Gender_Identity__pc,
+    usat_Salesforce_Merge_Id__pc,
     PersonBirthdate,
     BillingPostalCode,
     PersonMailingPostalCode
@@ -679,11 +719,14 @@ function resolve_is_test(argv = process.argv) {
 ```
 
 `is_test` selects the Salesforce credentials (dev sandbox vs. production) and the
-fetch limit (`MAX_FETCH` = 5,000 test / 1,000,000 prod). Set it per run:
+fetch limit (`MAX_FETCH` = 5,000 test / 1,000,000 prod; `--test --full` and
+`--prod --partial` use their own caps in `config.js`). Set it per run:
 
 ```bash
-node step_1_find_duplicates.js --test   # dev sandbox, 5,000 cap
-node step_1_find_duplicates.js --prod   # production, full fetch
+node step_1_find_duplicates.js --test         # dev sandbox, 5,000 cap
+node step_1_find_duplicates.js --test --full  # dev sandbox, ALL records (Bulk API)
+node step_1_find_duplicates.js --prod --partial  # production, capped sample (try before full)
+node step_1_find_duplicates.js --prod         # production, full fetch
 ```
 
 ### FUZZY_THRESHOLD
@@ -739,8 +782,11 @@ https://login.salesforce.com
 Install dependencies:
 
 ```bash
-npm install dotenv jsforce fast-csv
+npm install dotenv jsforce fast-csv nicknames-curated
 ```
+
+(`nicknames-curated` powers the nickname view + consolidated output. If you disable
+nickname matching in `config.js`, it is still required at load time.)
 
 ## Run the Script
 
@@ -756,9 +802,11 @@ PRODUCTION mode, and open the output/archive folders.
 Or run the script directly:
 
 ```bash
-node step_1_find_duplicates.js --test   # test (dev sandbox, 5,000 cap)
-node step_1_find_duplicates.js --prod   # production (full fetch)
-node step_1_find_duplicates.js          # defaults to production
+node step_1_find_duplicates.js --test         # test (dev sandbox, 5,000 cap)
+node step_1_find_duplicates.js --test --full  # dev sandbox, ALL records (Bulk API)
+node step_1_find_duplicates.js --prod --partial  # production, capped sample (try before full)
+node step_1_find_duplicates.js --prod         # production (full fetch)
+node step_1_find_duplicates.js                # defaults to production
 ```
 
 ## Testing
@@ -779,7 +827,7 @@ Or use menu item 1 (all tests) / 2 (file output tests).
 `server_*.js`, port 8017) exposes the duplicate output over Slack slash commands.
 It mirrors `server_slack_events.js` and reuses the shared Slack upload utilities.
 
-Run it from the repo root (or menu item 12):
+Run it from the repo root (or menu item 14):
 
 ```bash
 node server_salesforce_duplicates_8017.js
@@ -818,13 +866,15 @@ To regenerate anyway, add **`force=true`**:
 /duplicates mode=run force=true   -> always regenerate (ignores the window)
 ```
 
-The `/scheduled` endpoint additionally accepts `?is_test=true|false` (default
+The `/scheduled` endpoint additionally accepts `?is_test=true|false` (and `?full=true`
+for a FULL fetch / all records) (default
 `false` = production), so you can drive a full server → Slack run against the dev
 sandbox without touching production:
 
 ```text
-GET /scheduled-salesforce-duplicates?is_test=true    # dev sandbox
-GET /scheduled-salesforce-duplicates?is_test=false   # production (default)
+GET /scheduled-salesforce-duplicates?is_test=true              # dev sandbox (capped)
+GET /scheduled-salesforce-duplicates?is_test=true&full=true    # dev sandbox, ALL records
+GET /scheduled-salesforce-duplicates?is_test=false             # production (default)
 ```
 
 CLI examples:
@@ -850,7 +900,12 @@ watch progress and see exactly when each stage completes:
 [STEP] exact duplicates                3.2s
 [STEP] fuzzy matching                  6.8s
 [STEP] fuzzy groups                    0.4s
+[STEP] nickname matching               7.1s
+[STEP] nickname groups                 0.3s
+[STEP] consolidation                   0.6s
 ```
+
+(The last two lines appear only when `ENABLE_NICKNAME_MATCHING` is on.)
 
 Just before the run summary, it prints a timeline sorted largest-first (with bars)
 so the slow stage is obvious at a glance:
@@ -933,6 +988,14 @@ Fuzzy candidate records scanned after exact exclusion and required-rule filters:
 Fuzzy pairs compared: 40
 Fuzzy pair matches found: 5
 Fuzzy groups found: 5
+
+Nickname + consolidated (additive views)
+Nickname pair matches found: 9
+  pairs matched nickname only: 7
+  pairs matched both nickname + fuzzy: 2
+  pairs matched fuzzy spelling only: 5
+Nickname groups found: 6
+Consolidated clusters found: 14
 ```
 
 ## Recommended Review Order
@@ -940,12 +1003,17 @@ Fuzzy groups found: 5
 Review the files in this order:
 
 ```text
-1. account_duplicates.csv
-2. account_fuzzy_name_groups.csv
-3. account_fuzzy_name_matches.csv
+1. account_consolidated_duplicates_sf_import.csv   (the reconciled, authoritative view)
+2. account_duplicates.csv
+3. account_fuzzy_name_groups.csv
+4. account_fuzzy_name_matches.csv
+5. account_nickname_name_groups_sf_import.csv
+6. account_nickname_name_matches_sf_import.csv
 ```
 
-Use the pair file to explain or audit records from the group file.
+Start with the consolidated file (d) — it merges exact, fuzzy, and nickname into one
+cluster per person, with `Confidence_Tier__c` and `Has_*_Flag__c` provenance. Use the
+single-signal files (a/b/c) to explain or audit why a specific link exists.
 
 ## Common Questions
 
@@ -1069,11 +1137,10 @@ Potential improvements:
 5. [done] ZIP normalization: composite ZIP is trimmed to the first 5 digits
    (US-pattern only; non-US codes left intact), with a reviewable raw->trimmed
    mapping written to the meta folder.
-6. [planned] Add nickname handling:
-   Bill/William, Bob/Robert, Mike/Michael, etc. — via the `nicknames-curated`
-   package, surfaced through a new consolidated output that unifies exact,
-   fuzzy(90), and nickname matches (baseline files unchanged). Full design in
-   `README_NICKNAME.md`.
+6. [done] Nickname handling (Bill/William, Bob/Robert, Mike/Michael, etc.) via the
+   `nicknames-curated` package, surfaced as a single-signal nickname view (c) plus a
+   reconciled consolidated output (d) that unifies exact, fuzzy(90), and nickname
+   matches into clusters. Baseline files unchanged. See `README_NICKNAME.md`.
 7. Load results into MySQL for deeper review.
 8. Add Salesforce update logic only after manual review.
 ```

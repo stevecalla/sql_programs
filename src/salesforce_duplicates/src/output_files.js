@@ -18,6 +18,7 @@ const {
     META_DIR_NAME,
     RUN_SUMMARY_FILE,
     ZIP_TRIM_MAPPING_FILE,
+    NICKNAME_FIRE_MAPPING_FILE,
 } = require('../config');
 
 // Append a date/time stamp to the end of a file name, before its extension.
@@ -92,10 +93,19 @@ async function write_zip_trim_mapping(rows, meta_dir_name = META_DIR_NAME, file_
     return write_csv(meta_dir, file_name, rows);
 }
 
+// Write the reviewable nickname-fire mapping (first-name A <-> B -> count) into
+// the meta folder, alongside the ZIP-trim mapping. Lets a reviewer confirm which
+// nickname relationships actually fired. Overwritten each run. Returns the path.
+async function write_nickname_fire_mapping(rows, meta_dir_name = META_DIR_NAME, file_name = NICKNAME_FIRE_MAPPING_FILE) {
+    const meta_dir = await create_directory(meta_dir_name);
+    return write_csv(meta_dir, file_name, rows);
+}
+
 module.exports = {
     add_timestamp_to_filename,
     write_csv,
     archive_previous_output_files,
     write_run_summary,
     write_zip_trim_mapping,
+    write_nickname_fire_mapping,
 };
