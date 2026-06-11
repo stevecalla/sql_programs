@@ -77,7 +77,7 @@ function open_path(p) {
 }
 
 // Hit a server endpoint on localhost:SERVER_PORT and print the response.
-// Requires the server to already be running (menu item 12, in another terminal).
+// Requires the server to already be running (start it from the SERVER menu, in another terminal).
 function hit_endpoint(method, route, body = null) {
   console.log(c(DIM, `  ${method} http://localhost:${SERVER_PORT}${route}`));
   return new Promise((resolve) => {
@@ -97,7 +97,7 @@ function hit_endpoint(method, route, body = null) {
       }
     );
     req.on('error', (e) => {
-      console.log(c(YELLOW, `  Could not reach the server on port ${SERVER_PORT} — is it running? (menu item 12, in another terminal)`));
+      console.log(c(YELLOW, `  Could not reach the server on port ${SERVER_PORT} — is it running? (start the Slack server from the SERVER menu, in another terminal)`));
       console.log(c(DIM, `  ${e.code || e.message}`));
       resolve();
     });
@@ -126,34 +126,44 @@ const SECTIONS = [
     color: YELLOW,
     items: [
       { id: 7, label: 'Find duplicates — TEST',       desc: '--test: dev sandbox, fetch capped at 5,000', action: 'run_test', cli: `node ${MAIN_SCRIPT} --test` },
-      { id: 8, label: 'Find duplicates — PRODUCTION', desc: '--prod: prod login, full fetch, writes CSVs to /data', action: 'run_prod', cli: `node ${MAIN_SCRIPT} --prod` },
+      { id: 8, label: 'Find duplicates — TEST FULL',  desc: '--test --full: dev sandbox, ALL records (Bulk API)', action: 'run_test_full', cli: `node ${MAIN_SCRIPT} --test --full` },
+      { id: 9, label: 'Find duplicates — PROD PARTIAL', desc: '--prod --partial: prod login, capped sample (try before the full run)', action: 'run_prod_partial', cli: `node ${MAIN_SCRIPT} --prod --partial` },
+      { id: 10, label: 'Find duplicates — PRODUCTION', desc: '--prod: prod login, full fetch, writes CSVs to /data', action: 'run_prod', cli: `node ${MAIN_SCRIPT} --prod` },
     ],
   },
   {
     label: 'OUTPUT',
     color: GREEN,
     items: [
-      { id: 9,  label: 'Open output folder',  desc: `Most recent files (${OUTPUT_DIR_NAME})`, action: 'open_output' },
-      { id: 10, label: 'Open archive folder', desc: `Previous run (${ARCHIVE_DIR_NAME})`, action: 'open_archive' },
-      { id: 11, label: 'Open review folder',  desc: `ZIP trim mapping + run summary (${META_DIR_NAME})`, action: 'open_meta' },
+      { id: 11,  label: 'Open output folder',  desc: `Most recent files (${OUTPUT_DIR_NAME})`, action: 'open_output' },
+      { id: 12, label: 'Open archive folder', desc: `Previous run (${ARCHIVE_DIR_NAME})`, action: 'open_archive' },
+      { id: 13, label: 'Open review folder',  desc: `ZIP trim mapping + run summary (${META_DIR_NAME})`, action: 'open_meta' },
     ],
   },
   {
     label: 'SERVER — Slack slash-command server (start, then hit from another terminal)',
     color: CYAN,
     items: [
-      { id: 12, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
-      { id: 13, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
-      { id: 14, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
-      { id: 15, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
-      { id: 16, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
+      { id: 14, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
+      { id: 15, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
+      { id: 16, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
+      { id: 17, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
+      { id: 18, label: 'Hit /scheduled — TEST FULL',  desc: 'is_test=true&full=true: dev sandbox, ALL records + Slack post', action: 'hit_scheduled_test_full', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true&full=true"` },
+      { id: 19, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
+    ],
+  },
+  {
+    label: 'DISCOVERY — confirm Salesforce field names (read-only)',
+    color: MAGENTA,
+    items: [
+      { id: 20, label: 'Discover Salesforce fields', desc: 'Describe + Tooling SOQL for a field on an entity (prompts: entity / term / mode)', action: 'discover_fields', cli: 'node discover_account_fields.js --prod Account Merge' },
     ],
   },
   {
     label: 'PREFERENCES',
     color: MAGENTA,
     items: [
-      { id: 17, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
+      { id: 21, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
     ],
   },
 ];
@@ -205,6 +215,12 @@ async function handle_action(item, rl) {
       report(code, label, 'completed');
       break;
     }
+    case 'run_test_full': {
+      const label = 'duplicate finder run (dev sandbox, FULL)';
+      const code = await run_node([MAIN_SCRIPT, '--test', '--full'], label);
+      report(code, label, 'completed');
+      break;
+    }
     case 'run_prod': {
       const answer = (await prompt(rl, c(YELLOW, '  PRODUCTION run — logs into prod Salesforce and writes files. Continue? (y/N): '))).trim().toLowerCase();
       if (answer !== 'y' && answer !== 'yes') { console.log(c(DIM, '  Cancelled.')); break; }
@@ -213,6 +229,14 @@ async function handle_action(item, rl) {
       report(code, label, 'completed');
       break;
 
+    }
+    case 'run_prod_partial': {
+      const answer = (await prompt(rl, c(YELLOW, '  PRODUCTION PARTIAL — logs into prod Salesforce and pulls a small sample. Continue? (y/N): '))).trim().toLowerCase();
+      if (answer !== 'y' && answer !== 'yes') { console.log(c(DIM, '  Cancelled.')); break; }
+      const label = 'duplicate finder run (production, PARTIAL sample)';
+      const code = await run_node([MAIN_SCRIPT, '--prod', '--partial'], label);
+      report(code, label, 'completed');
+      break;
     }
     case 'open_output':
     case 'open_archive':
@@ -258,10 +282,28 @@ async function handle_action(item, rl) {
       await hit_endpoint('GET', '/scheduled-salesforce-duplicates?is_test=true');
       break;
     }
+    case 'hit_scheduled_test_full': {
+      // Dev sandbox, FULL fetch (all records) — safe to fire without confirmation.
+      await hit_endpoint('GET', '/scheduled-salesforce-duplicates?is_test=true&full=true');
+      break;
+    }
     case 'hit_scheduled_prod': {
       const answer = (await prompt(rl, c(YELLOW, '  This triggers a PRODUCTION run + Slack post on the running server. Continue? (y/N): '))).trim().toLowerCase();
       if (answer !== 'y' && answer !== 'yes') { console.log(c(DIM, '  Cancelled.')); break; }
       await hit_endpoint('GET', '/scheduled-salesforce-duplicates?is_test=false');
+      break;
+    }
+    case 'discover_fields': {
+      // Read-only field discovery. Prompts with defaults applied on blank Enter.
+      const entity_raw = (await prompt(rl, c(BOLD, '  Entity API name [Account] (Contact also works): '))).trim();
+      const entity = entity_raw || 'Account';
+      const term_raw = (await prompt(rl, c(BOLD, '  Qualified API name contains [Merge]: '))).trim();
+      const term = term_raw || 'Merge';
+      const mode_raw = (await prompt(rl, c(BOLD, '  Run against (t)est sandbox or (p)roduction? [p]: '))).trim().toLowerCase();
+      const mode = mode_raw === 't' || mode_raw === 'test' ? '--test' : '--prod';
+      const label = `field discovery (${entity} / "${term}" / ${mode})`;
+      const code = await run_node(['discover_account_fields.js', mode, entity, term], label);
+      report(code, label, 'completed');
       break;
     }
     case 'toggle_cli': {

@@ -11,6 +11,13 @@
  *   --prod (full ~700k pull)                -> Bulk API query (far fewer, larger
  *       transfers than REST paging 2,000 at a time).
  * Both paths return the same { result: { records, totalSize }, ... } shape.
+ *
+ * Optional merge field: `usat_Salesforce_Merge_Id__pc` may not exist in every org
+ * (e.g. it was added to the sandbox before production). At fetch time we DESCRIBE
+ * Account and include the field in the SELECT only if it exists. If it's missing,
+ * the field is omitted (the merge columns simply come out blank) and the run does
+ * NOT fail. The moment an admin adds the field, the next run picks it up
+ * automatically — no code change needed.
  */
 
 'use strict';
@@ -19,66 +26,89 @@ const jsforce = require('jsforce');
 
 const { log_info, log_success } = require('./log');
 const { format_duration, format_timestamp_utc } = require('./fmt');
+const { resolve_fetch_plan } = require('../config');
 
-// Base query — no ORDER BY. The duplicate detection never needs the rows in
-// any particular order: exact grouping uses a hash Map, fuzzy uses rule-block
-// buckets, and the output files are sorted in code afterward. Leaving the sort
-// off lets Salesforce stream records as it finds them instead of sorting the
-// whole result set first — a big win on the full ~700k production extract.
-const ACCOUNT_SOQL_BASE = `
-    SELECT Id,
-        LastName,
-        FirstName,
-        cfg_Member_Number__pc,
-        cfg_Gender_Identity__pc,
-        usat_Foundation_Constituent__c,
-        PersonBirthdate,
-        BillingPostalCode,
-        PersonMailingPostalCode
-    FROM Account
-    WHERE FirstName != null
-    AND LastName != null
-`;
+// Optional, org-dependent field (Person-Account `__pc` view of the Contact field).
+const MERGE_ID_FIELD = 'usat_Salesforce_Merge_Id__pc';
 
-// Ordered variant — used ONLY by the capped --test REST pull so the dev-sandbox
-// run returns a stable, deterministic subset (same 5,000 rows every time). The
-// sort cost is negligible at that size.
-const ACCOUNT_SOQL_ORDERED = `${ACCOUNT_SOQL_BASE.trimEnd()}
-    ORDER BY LastName, FirstName, Id
-`;
+// The always-present base fields. The optional merge field is inserted (when it
+// exists) right after the foundation field by build_account_soql().
+const ACCOUNT_BASE_FIELDS = [
+    'Id',
+    'LastName',
+    'FirstName',
+    'cfg_Member_Number__pc',
+    'cfg_Gender_Identity__pc',
+    'usat_Foundation_Constituent__c',
+    'PersonBirthdate',
+    'BillingPostalCode',
+    'PersonMailingPostalCode',
+];
 
-// Back-compat alias (anything importing the old name gets the ordered query).
+// Build the Account SOQL. `include_merge_id` adds the optional merge field;
+// `ordered` adds ORDER BY (deterministic — used only for the capped --test sample).
+// No ORDER BY otherwise: detection never needs sorted input (exact uses a hash Map,
+// fuzzy uses rule-block buckets, outputs are sorted in code), so dropping the sort
+// lets Salesforce stream the full ~700k extract without sorting it first.
+function build_account_soql({ include_merge_id = true, ordered = false } = {}) {
+    const fields = [...ACCOUNT_BASE_FIELDS];
+    if (include_merge_id) fields.splice(6, 0, MERGE_ID_FIELD); // after usat_Foundation_Constituent__c
+    const select = `SELECT ${fields.join(', ')} FROM Account WHERE FirstName != null AND LastName != null`;
+    return ordered ? `${select} ORDER BY LastName, FirstName, Id` : select;
+}
+
+// Back-compat constants (full query, merge field included) — kept for anything
+// importing them and for the documented SOQL.
+const ACCOUNT_SOQL_BASE = build_account_soql({ include_merge_id: true, ordered: false });
+const ACCOUNT_SOQL_ORDERED = build_account_soql({ include_merge_id: true, ordered: true });
 const ACCOUNT_SOQL = ACCOUNT_SOQL_ORDERED;
+
+// Describe Account and report whether a field exists. If the describe itself fails
+// (e.g. permissions), return false so the optional field is safely omitted.
+async function account_field_exists(conn, field) {
+    try {
+        const meta = await conn.sobject('Account').describe();
+        return meta.fields.some((f) => f.name === field);
+    } catch (_) {
+        return false;
+    }
+}
 
 // Bulk jobs run asynchronously server-side; jsforce's default poll timeout is
 // only 30s, which a full ~700k extract will exceed. Give it generous headroom.
 const BULK_POLL_INTERVAL_MS = 5_000;        // check the job every 5s
 const BULK_POLL_TIMEOUT_MS = 20 * 60 * 1000; // allow up to 20 minutes
 
-// REST autoFetch — pages of 2,000, capped at max_fetch. Used for --test.
-// Uses the ORDERED query so the capped subset is deterministic.
-async function rest_query(conn, max_fetch) {
-    const result = await conn.query(ACCOUNT_SOQL_ORDERED).execute({
+// REST autoFetch — pages of 2,000, capped at max_fetch. Used for --test / --partial.
+async function rest_query(conn, soql, max_fetch) {
+    const result = await conn.query(soql).execute({
         autoFetch: true,
         maxFetch: max_fetch,
     });
     return { records: result.records, total_size: result.totalSize };
 }
 
-// Bulk API query — one async job, results streamed back in large chunks.
-// Used for production (the whole result set; no maxFetch cap). Uses the
-// UNORDERED query so Salesforce doesn't sort ~700k rows before streaming.
-async function bulk_query(conn) {
+// Bulk API query — one async job, results streamed back in large chunks. Used for
+// production / any --full run. Stops at max_fetch (the --test --full guardrail).
+async function bulk_query(conn, soql, max_fetch = Infinity) {
     const records = [];
-    const record_stream = await conn.bulk2.query(ACCOUNT_SOQL_BASE, {
+    const record_stream = await conn.bulk2.query(soql, {
         pollInterval: BULK_POLL_INTERVAL_MS,
         pollTimeout: BULK_POLL_TIMEOUT_MS,
     });
 
     await new Promise((resolve, reject) => {
-        record_stream.on('record', (rec) => records.push(rec));
-        record_stream.on('error', reject);
-        record_stream.on('end', resolve);
+        let settled = false;
+        const finish = () => { if (!settled) { settled = true; resolve(); } };
+        record_stream.on('record', (rec) => {
+            records.push(rec);
+            if (records.length >= max_fetch) {
+                try { record_stream.destroy(); } catch (_) { /* ignore */ }
+                finish();
+            }
+        });
+        record_stream.on('error', (err) => { if (!settled) { settled = true; reject(err); } });
+        record_stream.on('end', finish);
     });
 
     return { records, total_size: records.length };
@@ -86,7 +116,7 @@ async function bulk_query(conn) {
 
 // Log into Salesforce (dev sandbox when is_test, else production) and run the
 // Account query. Returns the raw result plus query timing for the run summary.
-async function fetch_salesforce_accounts({ is_test, max_fetch, script_start_ms }) {
+async function fetch_salesforce_accounts({ is_test, is_full = false, is_partial = false, max_fetch, script_start_ms }) {
     const conn = new jsforce.Connection({
         loginUrl: is_test ? process.env.SF_DEV_LOGIN_URL : process.env.SF_PROD_LOGIN_URL,
     });
@@ -102,15 +132,30 @@ async function fetch_salesforce_accounts({ is_test, max_fetch, script_start_ms }
 
     log_success("Login successful.", script_start_ms);
 
+    // Only request the optional merge field if this org actually has it.
+    const include_merge_id = await account_field_exists(conn, MERGE_ID_FIELD);
+    log_info(
+        `Optional field ${MERGE_ID_FIELD}: ${include_merge_id ? 'present — included in query' : 'NOT present in this org — skipped (merge columns will be blank)'}`,
+        script_start_ms
+    );
+
     const query_start_date = new Date();
     const query_start_ms = Date.now();
 
-    const method = is_test ? 'REST autoFetch' : 'Bulk API';
+    // Fetch path:
+    //   --partial      -> quick capped REST sample (no Bulk job, no full sort)
+    //   plain --test   -> capped REST ordered sample (deterministic 5k)
+    //   prod / --full  -> Bulk API (full)
+    const { use_rest, ordered } = resolve_fetch_plan(is_test, is_full, is_partial);
+    const soql = build_account_soql({ include_merge_id, ordered });
+    const method = use_rest
+        ? `REST autoFetch (${is_partial ? 'partial sample' : 'capped'})`
+        : (is_test ? 'Bulk API (dev sandbox, FULL)' : 'Bulk API');
     log_info(`Running Salesforce query via ${method}...`, script_start_ms);
 
-    const { records, total_size } = is_test
-        ? await rest_query(conn, max_fetch)
-        : await bulk_query(conn);
+    const { records, total_size } = use_rest
+        ? await rest_query(conn, soql, max_fetch)
+        : await bulk_query(conn, soql, max_fetch);
 
     const query_end_date = new Date();
     const query_duration_ms = Date.now() - query_start_ms;
@@ -130,6 +175,10 @@ async function fetch_salesforce_accounts({ is_test, max_fetch, script_start_ms }
 }
 
 module.exports = {
+    MERGE_ID_FIELD,
+    ACCOUNT_BASE_FIELDS,
+    build_account_soql,
+    account_field_exists,
     ACCOUNT_SOQL, // back-compat alias = ACCOUNT_SOQL_ORDERED
     ACCOUNT_SOQL_BASE,
     ACCOUNT_SOQL_ORDERED,

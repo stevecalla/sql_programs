@@ -60,3 +60,17 @@ describe('build_fuzzy_groups', () => {
         assert.deepEqual(build_fuzzy_groups([], new Map()), []);
     });
 });
+
+describe('fuzzy group merge ids', () => {
+    test('joins per-record merge ids', () => {
+        const record_lookup = new Map([
+            ['1', { Id: '1', FirstName: 'Jon', LastName: 'Snow', usat_Salesforce_Merge_Id__pc: 'MG1' }],
+            ['2', { Id: '2', FirstName: 'John', LastName: 'Snow', usat_Salesforce_Merge_Id__pc: 'MG2' }],
+        ]);
+        const fuzzy_matches = [
+            { record_id_1: '1', record_id_2: '2', match_score_combined_name: 93, full_name_1: 'Jon Snow', full_name_2: 'John Snow' },
+        ];
+        const groups = build_fuzzy_groups(fuzzy_matches, record_lookup);
+        assert.equal(groups[0].merge_ids, 'MG1;MG2');
+    });
+});

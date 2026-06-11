@@ -127,13 +127,9 @@ function build_fuzzy_groups(fuzzy_matches, record_lookup) {
                 names_in_group: rows.map(make_full_name).join(";"),
                 clean_names_in_group: rows.map(make_clean_full_name).join(";"),
                 record_ids: rows.map((r) => r.Id).join(";"),
-                member_numbers: rows
-                    .map((r) => r.cfg_Member_Number__pc)
-                    .filter(Boolean)
-                    .join(";"),
-                foundation_constituents: unique_join(
-                    rows.map((r) => r.usat_Foundation_Constituent__c)
-                ),
+                member_numbers: rows.map((r) => r.cfg_Member_Number__pc || "").join(";"),
+                merge_ids: rows.map((r) => r.usat_Salesforce_Merge_Id__pc || "").join(";"),
+                foundation_constituents: rows.map((r) => r.usat_Foundation_Constituent__c || "").join(";"),
                 best_pair_score: stats?.best_pair_score || "",
                 lowest_pair_score: stats?.lowest_pair_score || "",
                 fuzzy_pair_count_in_group: stats?.pair_count || 0,

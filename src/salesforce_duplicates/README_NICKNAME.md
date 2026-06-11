@@ -4,11 +4,17 @@
 
 *Plan at a glance (full source in `nickname_plan_diagram.svg`). Detail follows below.*
 
-**Status: PLANNED (not yet implemented).** This is the design record for adding a
-third name-comparison dimension (nicknames) and a final consolidated output that
-reconciles exact, fuzzy(90), and nickname matches. Nothing here is built yet; the
-current pipeline still produces only the three baseline files described in
-`README.md`.
+**Status: IMPLEMENTED.** This is the design record and is now shipped. The run
+produces the three baseline files plus the nickname view (c) and consolidated view
+(d) when `ENABLE_NICKNAME_MATCHING` is on (default). New code: `src/nicknames.js`,
+`src/consolidate.js`, mappers in `src/sf_rows.js`, config flags, orchestrator wiring,
+a nickname GROUP file (`account_nickname_name_groups_sf_import.csv` via
+`build_nickname_groups`), the Account merge field `usat_Salesforce_Merge_Id__pc`
+carried into every output (`Merge_Id_1/2__c` / `Merge_Ids__c`), and
+`tests/nicknames.test.js` + `tests/consolidate.test.js`. One deviation from the
+plan below: `src/matcher.js` and `src/fuzzy.js` were left **untouched** — all
+nickname logic lives in `nicknames.js`/`consolidate.js`, which is even more
+conservative than the plan (the baseline scoring code never changed).
 
 **Guiding principle — additive and behavior-preserving.** The existing exact,
 fuzzy-pair, and fuzzy-group outputs stay byte-for-byte unchanged so they remain a

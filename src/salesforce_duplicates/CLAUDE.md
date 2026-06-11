@@ -8,21 +8,27 @@ See `README.md` for the full algorithm (exact keys, fuzzy scoring, rule blocks).
 This file is the orientation map for the code + how to run/test it. Keep it current
 as the structure changes.
 
-## Planned: nickname matching + consolidated output (see `README_NICKNAME.md`)
+## Nickname matching + consolidated output — IMPLEMENTED (see `README_NICKNAME.md`)
 
-Designed, NOT yet implemented. A third name dimension (nicknames via the
-`nicknames-curated` npm package) plus one new consolidated output that unifies
-exact + fuzzy(90) + nickname into a cluster-centric file. Key constraints when
-building it:
+Shipped. A third name dimension (nicknames via the `nicknames-curated` npm package)
+plus one consolidated output that unifies exact + fuzzy(90) + nickname into a
+cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it works:
 
 - **Additive / behavior-preserving.** The three baseline files (exact, fuzzy pair,
-  fuzzy group) stay byte-for-byte unchanged as a regression baseline; `exact.js`
-  and `fuzzy.js` logic is not rewritten.
-- **New modules** (planned): `src/nicknames.js` (NickNamer singleton + a *symmetric*
+  fuzzy group) stay byte-for-byte unchanged as a regression baseline. `exact.js`,
+  `fuzzy.js`, `matcher.js`, and `grouping.js` were **not modified at all** — all new
+  logic lives in new modules (even more conservative than the original plan).
+- **New modules**: `src/nicknames.js` (NickNamer singleton + a *symmetric*
   `are_nickname_equivalents`, since the package's relation is directional) and
-  `src/consolidate.js` (feeds exact + fuzzy + nickname edges into the existing
-  `UnionFind` from `grouping.js` and emits one row per cluster with provenance
-  flags `has_exact/has_fuzzy/has_nickname`).
+  `src/consolidate.js` (`build_match_edges` does complete-pool exact+fuzzy+nickname
+  edge generation + the nickname view rows + fire summary; `build_consolidated_clusters`
+  feeds all edges into the existing `UnionFind` from `grouping.js` and emits one row
+  per cluster with provenance flags `has_exact/has_fuzzy/has_nickname` + a confidence
+  tier, a `Match_Composition__c` label, per-signal `*_Link_Count__c`, a
+  `Representative_Pair__c`, and `Match_Link_Reasons__c` (renamed from Edge_Reasons; an
+  "edge"/"link" = a matched pair inside the cluster). The consolidated file uses the
+  same "group" column vocabulary as the other group files. Mappers `to_sf_nickname_row`
+  / `to_sf_consolidated_row` in `sf_rows.js`.
 - **Overlap is managed by clustering**, not by a separate nickname file: a
   precedence ladder (exact → fuzzy(90) → nickname) labels each edge, dual flags
   record pairs that qualify both ways, and the consolidated `UnionFind` merges the
@@ -44,9 +50,22 @@ building it:
   exact (a) and fuzzy(90) (b) files are joined by two new files: a single-signal
   nickname view `account_nickname_name_matches_sf_import.csv` (c) and the
   authoritative reconciled `account_consolidated_duplicates_sf_import.csv` (d).
-  (a)(b)(c) are per-signal review lenses; (d) is the only import/action target.
-  Config flag `ENABLE_NICKNAME_MATCHING`. Default v1 is review-only (no Salesforce
-  import target). Full design + open decisions in `README_NICKNAME.md`.
+  (a)(b)(c) are per-signal review lenses; (d) is the only action target. A nickname
+  GROUP file (`account_nickname_name_groups_sf_import.csv`, `build_nickname_groups`)
+  mirrors the fuzzy pair->group pattern. All new files are written in `step_1` AFTER the unchanged baseline writes, with their own
+  step-timer stages ("nickname matching", "consolidation") and run-summary counts.
+  Review-only (no Salesforce import), but columns use `__c` naming so a future import
+  is plug-and-play. A reviewable nickname-fire map is written to the meta folder
+  (`nickname_fire_mapping.csv`), like the ZIP-trim map. Full detail in `README_NICKNAME.md`.
+- **Merge id (all files).** Every output carries the Account merge field
+  `usat_Salesforce_Merge_Id__pc` (Person-Account `__pc` view of Contact's `__c`) as
+  `Merge_Id_1/2__c` (pairs) or `Merge_Ids__c` (groups/clusters). This DID edit the
+  baseline `exact.js`/`fuzzy.js`/`grouping.js` (a deliberate schema add, no longer
+  byte-for-byte unchanged). `discover_account_fields.js` (menu item 20) confirms the
+  field name. The query **auto-detects** the field (Account DESCRIBE) and includes it
+  only if the org has it (`build_account_soql` / `account_field_exists` in
+  `salesforce.js`), so an org without it still runs — merge columns just come out
+  blank. See `README_MERGE.md`.
 
 ## Entry points
 
@@ -133,7 +152,8 @@ alongside it: `timer.stage_done(label)` after each big step prints a live
   (incl. total records scanned).
 - `GET  /scheduled-salesforce-duplicates` — cron; regenerates then posts the files to
   `SF_DUP_CHANNEL_ID` (guarded by an `isRunning` lock). Drive the run with
-  `?is_test=true` (dev sandbox) or `?is_test=false` (production, default).
+  `?is_test=true` (dev sandbox) or `?is_test=false` (production, default); add
+  `?full=true` for a FULL fetch (Bulk API, all records — e.g. the whole sandbox).
 - `POST /salesforce-duplicates-reporting` — slash `/reporting`; DMs the CSV file(s) + stats.
 
 Slash args (in the command `text`, `key=value`): `mode=latest|run` (default `latest`),
@@ -144,15 +164,15 @@ only `/scheduled` accepts `?is_test`.
 UNLESS the newest output file is younger than `FRESH_OUTPUT_WINDOW_MINUTES` (config) —
 within that window it returns the latest instead (the Slack reply explains this and
 points to `force=true`). `mode=run force=true` always regenerates. Run it from the repo
-root (`node server_salesforce_duplicates_8017.js`) or menu item 12; hit it with menu
-items 13–16.
+root (`node server_salesforce_duplicates_8017.js`) or menu item 14; hit it with menu
+items 15–19.
 
 Each run persists a small summary (total records scanned + counts, incl. ZIP-trim
 counts) to `META_DIR_NAME/RUN_SUMMARY_FILE` (a sibling of the output folder, so it
 is never swept into the Slack uploads); `step_2_get_duplicate_report` reads it so the
 stats message can report the total records scanned even on a `mode=latest` read. The
 same meta folder also holds `ZIP_TRIM_MAPPING_FILE` (`zip_trim_mapping.csv`), the
-reviewable raw -> trimmed composite-ZIP map written each run (menu item 11 opens this
+reviewable raw -> trimmed composite-ZIP map written each run (menu item 13 opens this
 folder).
 
 ## Run modes
@@ -161,16 +181,19 @@ Run mode is chosen with a cross-platform CLI flag — it works identically in
 PowerShell, cmd, and bash because it's passed as a normal process argument (no
 shell-specific env-var syntax). `config.js` exposes `resolve_is_test(argv)`, and
 the resolved boolean is passed into `main(is_test)`, which selects SF credentials
-(dev vs prod) and `MAX_FETCH` (5,000 test / 1,000,000 prod). Nothing reads
+(dev vs prod) and `MAX_FETCH` (5,000 test / 1,000,000 prod; `--full` and `--partial`
+have their own caps — see `resolve_fetch_plan` in config.js). Nothing reads
 `process.env` for mode selection.
 
 ```bash
-node step_1_find_duplicates.js --test    # dev sandbox, capped fetch
-node step_1_find_duplicates.js --prod    # production, full fetch
+node step_1_find_duplicates.js --test            # dev sandbox, capped fetch
+node step_1_find_duplicates.js --test --full     # dev sandbox, ALL records (Bulk API)
+node step_1_find_duplicates.js --prod --partial  # production, capped sample (try before full)
+node step_1_find_duplicates.js --prod            # production, full fetch
 node step_1_find_duplicates.js           # defaults to production
 ```
 
-Or use the menu (items 7 = TEST, 8 = PRODUCTION).
+Or use the menu (items 7 = TEST, 8 = TEST FULL, 9 = PROD PARTIAL, 10 = PRODUCTION).
 
 ## Output + archiving
 

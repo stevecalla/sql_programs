@@ -151,7 +151,8 @@ let lockTimeout;
 // ===========================
 // GET /scheduled-salesforce-duplicates  — cron; regenerate + post files to a channel
 //   drive with ?is_test=true (dev sandbox) or ?is_test=false (production, default)
-//   curl        curl "http://localhost:8017/scheduled-salesforce-duplicates?is_test=false"
+//   add ?full=true to force a FULL fetch (Bulk API, all records; e.g. the whole sandbox)
+//   curl        curl "http://localhost:8017/scheduled-salesforce-duplicates?is_test=true&full=true"
 //   cloudflare  https://usat-salesforce-duplicates.kidderwise.org/scheduled-salesforce-duplicates
 // ===========================
 app.get('/scheduled-salesforce-duplicates', async (req, res) => {
@@ -180,11 +181,14 @@ app.get('/scheduled-salesforce-duplicates', async (req, res) => {
 
     try {
         // Drive the run with ?is_test=true|false (default false = production).
+        // Add ?full=true for a FULL fetch (Bulk API, all records) — most useful with
+        // ?is_test=true to pull the ENTIRE dev sandbox instead of the 5,000 cap.
         const is_test = String(req.query?.is_test ?? '').toLowerCase() === 'true';
-        console.log(`Scheduled run mode: ${is_test ? 'TEST (dev sandbox)' : 'PRODUCTION'}`);
+        const is_full = String(req.query?.full ?? '').toLowerCase() === 'true';
+        console.log(`Scheduled run mode: ${is_test ? 'TEST (dev sandbox)' : 'PRODUCTION'}${is_full ? ' — FULL (all records, Bulk API)' : ''}`);
 
         // STEP 1: REGENERATE THE DUPLICATE FILES
-        await execute_get_salesforce_duplicates_data(is_test);
+        await execute_get_salesforce_duplicates_data(is_test, is_full);
 
         // STEP 2: READ THE FRESH REPORT
         const report = await execute_get_duplicate_report('all');

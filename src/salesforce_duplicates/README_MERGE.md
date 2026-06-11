@@ -360,3 +360,17 @@ Build the unmerge process before allowing automated or bulk merges.
 ```
 
 This approach gives the organization a controlled merge process while preserving the ability to recover if an upstream system, business process, or user later determines that the merge was incorrect.
+
+---
+
+## Merge id on the dedupe outputs (implemented)
+
+The duplicate-detection outputs now carry the Account merge field
+`usat_Salesforce_Merge_Id__pc` (created on Contact as `usat_Salesforce_Merge_Id__c`,
+surfaced on Account as `__pc`; the pipeline queries Account so it uses `__pc`). It
+appears as `Merge_Id_1__c`/`Merge_Id_2__c` in the pair files and `Merge_Ids__c` in the
+group/cluster files. The field is optional in the query — the run DESCRIBEs Account and includes it only
+if the org has it (so a sandbox-before-prod rollout still runs, with blank merge
+columns until the field exists). It is blank until Salesforce populates the field, then fills
+automatically — giving the merge/unmerge workflow described above a stable id to key
+on. Confirm the exact API name with `discover_account_fields.js` (menu item 20).

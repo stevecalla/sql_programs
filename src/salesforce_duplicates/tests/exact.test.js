@@ -57,3 +57,30 @@ describe('detect_exact_duplicates', () => {
         assert.equal(out.exact_duplicate_record_ids.size, 0);
     });
 });
+
+describe('exact merge ids', () => {
+    test('collects per-record merge ids into the group', () => {
+        const records = [
+            rec('1', 'John', 'Smith', { usat_Salesforce_Merge_Id__pc: 'MG1' }),
+            rec('2', 'John', 'Smith', { usat_Salesforce_Merge_Id__pc: 'MG2' }),
+        ];
+        const { exact_duplicate_groups } = detect_exact_duplicates(records, { script_start_ms: Date.now() });
+        assert.deepEqual(exact_duplicate_groups[0].merge_ids, ['MG1', 'MG2']);
+    });
+});
+
+describe('exact positional list columns', () => {
+    test('member/merge/foundation each have one entry per record, aligned with record_ids', () => {
+        const records = [
+            rec('1', 'Alfonso', 'Ahuja', { cfg_Member_Number__pc: 'M1', usat_Salesforce_Merge_Id__pc: '',    usat_Foundation_Constituent__c: 'true' }),
+            rec('2', 'Alfonso', 'Ahuja', { cfg_Member_Number__pc: '',   usat_Salesforce_Merge_Id__pc: 'MG2',  usat_Foundation_Constituent__c: 'false' }),
+            rec('3', 'Alfonso', 'Ahuja', { cfg_Member_Number__pc: 'M3', usat_Salesforce_Merge_Id__pc: '',    usat_Foundation_Constituent__c: 'true' }),
+        ];
+        const { exact_duplicate_groups } = detect_exact_duplicates(records, { script_start_ms: Date.now() });
+        const g = exact_duplicate_groups[0];
+        assert.deepEqual(g.record_ids,            ['1', '2', '3']);
+        assert.deepEqual(g.member_numbers,        ['M1', '', 'M3']);   // blank where missing
+        assert.deepEqual(g.merge_ids,             ['', 'MG2', '']);
+        assert.deepEqual(g.foundation_constituents, ['true', 'false', 'true']);
+    });
+});
