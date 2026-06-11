@@ -189,6 +189,8 @@ function help() {
     '                                              # list Race Results Doc files in Salesforce (Mountain Time)',
     '  node cli.js sf:pull <sf:list opts> [-o <dir>] [--strategy add_new|replace|wipe_all]',
     '                                              # download those files (snake_case names) into a folder',
+    '  node cli.js sf:describe <Object> [--field <substr>] [--test]   # list an sObject’s fields (confirm API names)',
+    '  node cli.js sf:soql "<SELECT ...>" [--limit N] [--test]        # run a read-only SOQL SELECT (discovery)',
     '  node cli.js metrics:size                   # events table size + rows/year',
     '  node cli.js metrics:cleanup [--yes]        # purge years beyond current+prior',
     '  node cli.js metrics:purge-test [--yes]     # delete only test rows (is_test=1) — keeps real + demo data',
@@ -417,6 +419,44 @@ async function main() {
       await pool.end();
       process.exit(0);
     }
+    if (cmd === 'sf:describe' || cmd === 'sf:soql') {
+      // Read-only Salesforce discovery, run as the integration user (which can see objects/files a
+      // personal Workbench login often can't). sf:describe lists an sObject's field API names;
+      // sf:soql runs a single guarded SELECT.
+      const sf = require('../sf');
+      const cfg = sf.sf_config({ is_test: !!args.test });
+      const check = sf.check_sf_config(cfg);
+      if (!check.ok) { console.error(col(C.red, 'Salesforce not configured — missing: ' + check.missing.join(', '))); process.exit(2); }
+      console.log(col(C.dim, 'Logging into Salesforce (' + cfg.environment_name + ')…'));
+      const conn = await sf.make_connection(cfg);
+      if (cmd === 'sf:describe') {
+        const obj = args._[1];
+        if (!obj) { console.log('Usage: node src/cli.js sf:describe <Object> [--field <substr>]'); process.exit(2); }
+        const meta = await sf.describe_object(conn, obj);
+        let fields = meta.fields;
+        if (args.field) { const needle = String(args.field).toLowerCase(); fields = fields.filter(function (fld) { return (fld.name + ' ' + fld.label).toLowerCase().indexOf(needle) >= 0; }); }
+        console.log(col(C.bold, '\n' + meta.label + '  (' + meta.name + ') — ' + fields.length + ' field(s):'));
+        fields.forEach(function (fld) { console.log('  ' + String(fld.name).padEnd(34) + col(C.gray, String(fld.type).padEnd(14)) + fld.label); });
+        console.log('');
+        return;
+      }
+      const soql = args._.slice(1).join(' ').trim();
+      if (!soql) { console.log('Usage: node src/cli.js sf:soql "<SELECT ...>" [--limit N]'); process.exit(2); }
+      if (!/^\s*select\b/i.test(soql)) { console.error(col(C.red, 'Only read-only SELECT queries are allowed.')); process.exit(2); }
+      const recs = await sf.run_soql(conn, soql, args.limit ? Number(args.limit) : undefined);
+      console.log(col(C.bold, '\n' + recs.length + ' row(s):'));
+      if (recs.length) {
+        const cols = Object.keys(recs[0]).filter(function (k) { return k !== 'attributes'; });
+        console.log(col(C.bold, cols.join('\t')));
+        const cap = args.limit ? Number(args.limit) : 50;
+        recs.slice(0, cap).forEach(function (r) {
+          console.log(cols.map(function (k) { let v = r[k]; if (v && typeof v === 'object') v = v.Name || v.Type || ''; return v == null ? '' : String(v); }).join('\t'));
+        });
+        if (recs.length > cap) console.log(col(C.yellow, 'showing ' + cap + ' of ' + recs.length + ' rows'));
+      }
+      console.log('');
+      return;
+    }
     if (cmd === 'sf:list' || cmd === 'sf:pull') {
       const sf = require('../sf');
       const cfg = sf.sf_config({ is_test: !!args.test });
@@ -431,7 +471,7 @@ async function main() {
       console.log(col(C.bold, '\n' + files.length + ' Race Results Doc file(s):'));
       files.forEach(function (f, i) {
         console.log('  ' + String(i + 1).padStart(3) + '. ' + f.target_name +
-          col(C.gray, '  · ' + (f.program_name || '—') + ' · ' + (f.owner_name || '—') + ' · ' + f.modified_mtn_full));
+          col(C.gray, '  · sanction ' + (f.sanction_id || '—') + ' · ' + (f.program_name || '—') + ' · ' + (f.owner_name || '—') + ' · ' + f.modified_mtn_full));
       });
       if (cmd === 'sf:list') { console.log(''); return; }
       // sf:pull -> download to a folder (same snake_case names as the web app)

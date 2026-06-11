@@ -16,6 +16,17 @@ account_fuzzy_name_matches_sf_import.csv
 account_fuzzy_name_groups_sf_import.csv
 ```
 
+> **Planned (not yet implemented): nickname matching + a consolidated output.**
+> A third name-comparison dimension (nicknames, e.g. Bob/Robert, Bill/William) adds
+> two new files: a single-signal nickname view (`account_nickname_name_matches_sf_import.csv`)
+> and an authoritative consolidated file (`account_consolidated_duplicates_sf_import.csv`)
+> that reconciles exact, fuzzy(90), and nickname matches into one cluster-centric
+> output. The model is three single-signal review views (exact, fuzzy, nickname) plus
+> one reconciled view. The three baseline files above are intentionally left
+> **unchanged** so they stay a regression-safe baseline; all new behavior is additive.
+> See **`README_NICKNAME.md`** for the full plan, the `nicknames-curated` package
+> details, and how cross-list overlap is managed.
+
 ## Project Structure
 
 ```text
@@ -1058,8 +1069,11 @@ Potential improvements:
 5. [done] ZIP normalization: composite ZIP is trimmed to the first 5 digits
    (US-pattern only; non-US codes left intact), with a reviewable raw->trimmed
    mapping written to the meta folder.
-6. Add nickname handling:
-   Bill/William, Bob/Robert, Mike/Michael, etc.
+6. [planned] Add nickname handling:
+   Bill/William, Bob/Robert, Mike/Michael, etc. — via the `nicknames-curated`
+   package, surfaced through a new consolidated output that unifies exact,
+   fuzzy(90), and nickname matches (baseline files unchanged). Full design in
+   `README_NICKNAME.md`.
 7. Load results into MySQL for deeper review.
 8. Add Salesforce update logic only after manual review.
 ```

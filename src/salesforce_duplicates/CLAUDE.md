@@ -8,6 +8,46 @@ See `README.md` for the full algorithm (exact keys, fuzzy scoring, rule blocks).
 This file is the orientation map for the code + how to run/test it. Keep it current
 as the structure changes.
 
+## Planned: nickname matching + consolidated output (see `README_NICKNAME.md`)
+
+Designed, NOT yet implemented. A third name dimension (nicknames via the
+`nicknames-curated` npm package) plus one new consolidated output that unifies
+exact + fuzzy(90) + nickname into a cluster-centric file. Key constraints when
+building it:
+
+- **Additive / behavior-preserving.** The three baseline files (exact, fuzzy pair,
+  fuzzy group) stay byte-for-byte unchanged as a regression baseline; `exact.js`
+  and `fuzzy.js` logic is not rewritten.
+- **New modules** (planned): `src/nicknames.js` (NickNamer singleton + a *symmetric*
+  `are_nickname_equivalents`, since the package's relation is directional) and
+  `src/consolidate.js` (feeds exact + fuzzy + nickname edges into the existing
+  `UnionFind` from `grouping.js` and emits one row per cluster with provenance
+  flags `has_exact/has_fuzzy/has_nickname`).
+- **Overlap is managed by clustering**, not by a separate nickname file: a
+  precedence ladder (exact → fuzzy(90) → nickname) labels each edge, dual flags
+  record pairs that qualify both ways, and the consolidated `UnionFind` merges the
+  exact↔nickname interaction that record-level exclusion would otherwise hide.
+- **Two-layer split — edge generation vs view eligibility.** "Edge generation" =
+  detection (compare two records, emit a match edge). "View eligibility" = which
+  edges/records each output file is allowed to show. Detection runs ONCE on the
+  complete rule-eligible pool (gender+birthdate+ZIP present, exact records NOT
+  removed); eligibility is a per-file filter on top. This is why baseline (b)
+  excludes (a) (a frozen display choice) while (c)/(d) include it — the matching is
+  identical, only the views differ. For (d), all three edge types (exact, fuzzy,
+  nickname) are recomputed on the complete pool so it catches exact↔fuzzy and
+  exact↔nickname merges alike. Keep the baseline detection path literally untouched
+  (Approach B): the consolidation layer recomputes its own complete-pool edges
+  rather than rewiring `fuzzy.js`.
+- **Nickname is first-name-only** and keeps the mandatory gender+birthdate+ZIP gate;
+  it relaxes only the first-name comparison.
+- **Output model: three single-signal views + one reconciled view.** The baseline
+  exact (a) and fuzzy(90) (b) files are joined by two new files: a single-signal
+  nickname view `account_nickname_name_matches_sf_import.csv` (c) and the
+  authoritative reconciled `account_consolidated_duplicates_sf_import.csv` (d).
+  (a)(b)(c) are per-signal review lenses; (d) is the only import/action target.
+  Config flag `ENABLE_NICKNAME_MATCHING`. Default v1 is review-only (no Salesforce
+  import target). Full design + open decisions in `README_NICKNAME.md`.
+
 ## Entry points
 
 - `step_1_find_duplicates.js` — main orchestrator. `main()` runs the full pipeline;

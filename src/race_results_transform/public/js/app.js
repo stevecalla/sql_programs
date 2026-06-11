@@ -325,6 +325,8 @@
 
   function handle_file(file) {
     S.source = null;                            // a manual drop/picker upload (source derives to 'upload')
+    S.active_sanction = '';                     // sanction is only known from Salesforce — blank it for uploads
+    S.dl_fields = Object.assign({}, S.dl_fields, { id: '' });   // so the download builder's Sanction ID isn't a stale SF value
     S.is_demo = is_demo_filename(file.name);   // a re-uploaded sample counts as Try-me activity
     S.file_name = file.name.replace(/\.(xlsx|xls|csv)$/i, '');
     S.file_display = file.name;
@@ -516,6 +518,7 @@
   function sf_cmp_val(f, key) {
     if (key === 'date') return f.last_modified_date_utc || '';
     if (key === 'program') return f.program_name || '';
+    if (key === 'sanction') return f.sanction_id || '';
     if (key === 'owner') return f.owner_name || '';
     if (key === 'type') return sf_file_ext(f);
     return f.target_name || '';
@@ -542,7 +545,7 @@
     var all = S.sf_files || [];
     if (!q) return all;
     return all.filter(function (f) {
-      return (String(f.target_name || '') + ' ' + String(f.program_name || '') + ' ' + String(f.owner_name || '') + ' ' + sf_file_ext(f)).toLowerCase().indexOf(q) >= 0;
+      return (String(f.target_name || '') + ' ' + String(f.program_name || '') + ' ' + String(f.sanction_id || '') + ' ' + String(f.owner_name || '') + ' ' + sf_file_ext(f)).toLowerCase().indexOf(q) >= 0;
     });
   }
   function sf_update_count() {
@@ -560,7 +563,9 @@
       var ext = sf_file_ext(f);
       return '<tr' + (ext === 'xls' && xls_ok === false ? ' class="sf-xls-row"' : '') + '><td><input type="checkbox" class="sf-pick" data-id="' + esc(f.content_version_id) + '" aria-label="Select file"' + checked + '></td>' +
         '<td>' + esc(f.modified_mtn_full || '') + '</td>' +
-        '<td>' + esc(f.program_name || '—') + '</td><td>' + esc(f.owner_name || '—') + '</td>' +
+        '<td>' + esc(f.program_name || '—') + '</td>' +
+        '<td>' + esc(f.sanction_id || '—') + '</td>' +
+        '<td>' + esc(f.owner_name || '—') + '</td>' +
         '<td title="' + esc(f.target_name) + '">' + esc(f.target_name) + '</td>' +
         '<td>' + sf_type_cell(ext) + '</td></tr>';
     }).join('');
@@ -744,7 +749,7 @@
     var statuses = sf_load_statuses();
     S.queue = items.map(function (it) {
       return { id: it.id, name: it.name, bytes: it.bytes || null, source: S.queue_source,
-        program: it.program || '', owner: it.owner || '', meta: it.meta || '', level: statuses[it.name] || 0 };
+        program: it.program || '', owner: it.owner || '', sanction: it.sanction || '', meta: it.meta || '', level: statuses[it.name] || 0 };
     });
     hide('uploadCard'); hide('introCard'); hide('sfCard'); if ($('folderCard')) hide('folderCard'); show('clearBtn');
     show('compareCard'); show('filesTab'); set_compare_view('files'); render_queue();
@@ -752,7 +757,7 @@
   }
   // Salesforce wrapper: map downloaded files into the generic queue.
   function sf_build_queue(saved) {
-    build_queue(saved.map(function (s) { return { id: s.id, name: s.name, bytes: s.bytes || null, program: s.f.program_name, owner: s.f.owner_name }; }),
+    build_queue(saved.map(function (s) { return { id: s.id, name: s.name, bytes: s.bytes || null, program: s.f.program_name, owner: s.f.owner_name, sanction: s.f.sanction_id }; }),
       { source: 'salesforce', dir: S.sf_dir, folder: S.sf_folder || ($('sfFolderPath') && $('sfFolderPath').value) || '', sig: S.sf_sig });
   }
   function sf_stage_html(label, on) { return '<span class="sf-q-stage' + (on ? ' done' : '') + '"><span class="dot"></span>' + label + '</span>'; }
@@ -828,6 +833,10 @@
   function open_queue_file(idx) {
     var it = (S.queue || [])[idx]; if (!it || !it.bytes) return;
     S.source = it.source || S.queue_source || 'salesforce'; S.is_demo = false; S.active_queue_id = it.id;
+    S.active_sanction = it.sanction || '';                                                // surfaced as a summary-bar readout
+    // The Sanction ID is only known for Salesforce files. Set it from the file when present; for a
+    // folder file (no sanction) blank it so a previous SF file's id can't carry over into this download.
+    S.dl_fields = Object.assign({}, S.dl_fields, { id: it.sanction || '' });
     S.file_name = it.name.replace(/\.(xlsx|xls|csv)$/i, ''); S.file_display = it.name;
     var m = um(); if (m) m.new_upload();
     if ((it.level || 0) < SF_STAGE.UPLOADED) track('file_uploaded', { file_name: it.name, file_type: /\.csv$/i.test(it.name) ? 'csv' : 'xlsx', size_bytes: it.bytes.byteLength || null });
@@ -1143,6 +1152,8 @@
     track('start_over', {});
     S.is_demo = false;
     S.source = null;
+    S.active_sanction = '';
+    S.dl_fields = Object.assign({}, S.dl_fields, { id: '' });   // sanction is SF-only; don't carry it past Start over
     S.ir = S.parsed = S.mapping = S.result = S.report = S.work_rows = null;
     S.value_overrides = {}; S.vm_expanded = {}; S.approved = {}; S.orig_table = S.conv_table = null;
     S.sheets = null; S.active = null; S.first_render = true;
@@ -1228,6 +1239,7 @@
       '<span class="verdict">' + esc(sc.verdict) + '</span>' +
       '<span class="chips">' +
         '<span class="chip filechip" title="Uploaded file">📄 ' + esc(S.file_display || S.file_name) + '</span>' +
+        ((S.source === 'salesforce' && S.active_sanction) ? '<span class="chip sanctionchip" title="Salesforce Sanctioning ID (Program.cfg_Id__c) — leads the download filename">🏷 Sanction <b>' + esc(S.active_sanction) + '</b></span>' : '') +
         '<span class="chip" title="Athlete rows written to the converted file"><b>' + n(rep.rows.out) + '</b> rows</span>' +
         '<span class="chip" title="Highlighted cells still needing a look — approve or edit them to clear"><b>' + n(flagged) + '</b> flagged values</span>' +
         (skip

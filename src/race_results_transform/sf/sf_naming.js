@@ -22,11 +22,14 @@ function safe_file_name(value) {
   return snake_case(base) + ext;
 }
 
-// program_name_owner_name_original_file_name_content_version_id.ext (single underscores) — the
-// event (program) leads, then owner, then the race-results title, then the unique ContentVersion id.
+// [sanction_id_]program_name_owner_name_original_file_name_content_version_id.ext (single
+// underscores) — the Sanction ID leads when known (most useful identifier), then the event (program),
+// owner, the race-results title, and finally the unique ContentVersion id. A blank/absent sanction is
+// simply omitted, so older 3-arg callers produce the same name as before.
 // `file` carries Title, FileExtension, Id (ContentVersion id) from Salesforce.
-function build_download_file_name(file, program_name, owner_name) {
+function build_download_file_name(file, program_name, owner_name, sanction_id) {
   const parts = [
+    snake_case(sanction_id || ''),
     snake_case(program_name || 'no_program_name'),
     snake_case(owner_name || 'no_owner_name'),
     snake_case((file && file.Title) || ''),

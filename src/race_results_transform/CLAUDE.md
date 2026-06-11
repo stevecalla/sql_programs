@@ -252,11 +252,17 @@ the SAME engine.
 - **Engine** `src/sf/` (Node-only, no DOM; shared by server + CLI + tests, refactored from the
   `salesforce_duplicates` archive script): `sf_naming.js` (snake_case `original_program_owner_versionid.ext`),
   `sf_dates.js` (Mountain-Time today/specific/range filter), `sf_config.js` (`SF_PROD_*`/`SF_DEV_*`,
-  `SF_API_VERSION`, `is_test`), `sf_client.js` (jsforce login + SOSL `FIND {Race Results Doc}` →
-  ContentVersion (xls/xlsx/csv) → enrich Program via ContentDocumentLink + Owner via User → newest
-  first; **connection injected** so it's unit-testable with a mock), `sf_fetch.js` (one ContentVersion
+  `SF_API_VERSION`, `is_test`, **`SF_PROGRAM_OBJECT`**/**`SF_SANCTION_FIELD`** — default `Program`/`cfg_Id__c`),
+  `sf_client.js` (jsforce login + SOSL `FIND {Race Results Doc}` →
+  ContentVersion (xls/xlsx/csv) → enrich Program via ContentDocumentLink (name) + **Sanction ID** via a
+  second query of the Program object's `cfg_Id__c` formula field (`= BLANKVALUE(cfg_Legacy_Id__c,
+  cfg_Autonumber_ID__c)`; degrades to blank if the object isn't SOQL-queryable for the connected user)
+  + Owner via User → newest first; **connection injected** so it's unit-testable with a mock; also
+  exposes read-only `run_soql`/`describe_object` helpers for the `sf:soql`/`sf:describe` CLI discovery
+  commands), `sf_fetch.js` (one ContentVersion
   → in-memory Buffer, never written to server disk), `sf_routes.js` (`mount_sf_routes(app, require_auth)`),
-  `index.js`.
+  `index.js`. The snake_case download name leads with the Sanction ID when known
+  (`351003_program_owner_title_versionid.ext`; blank sanction is simply omitted).
 - **Server** (`server_…8018.js`): `mount_sf_routes` registers `GET /api/sf/files`, `GET /api/sf/file/:id`
   (streams bytes in-memory — no server persistence), and the non-Chrome fallback `POST /api/sf/save` +
   `GET /api/sf/folder`. All gated by the SAME `require_dash_auth` (mx_session) as `/metrics`. Lazy-required;
@@ -280,8 +286,15 @@ the SAME engine.
   IndexedDB `sf_idb_*`, fallback path in localStorage; `sf_restore_folder` on load, write permission
   re-confirmed via `sf_ensure_permission`) until another is picked. Existing-file strategy add_new/replace/
   wipe_all (add_new still loads the existing file's bytes so the row stays openable). Preview table columns are
-  Date · Program · Owner · File name · **Type**, **sortable** by header (`S.sf_sort`, comparator reused from
-  `src/sort.js` `compare_text` via `sf_toggle_sort`). `.xls` reads via SheetJS when it's available — `app.js`
+  Date · Program · **Sanction** · Owner · File name · **Type**, **sortable** by header (`S.sf_sort`, comparator
+  reused from `src/sort.js` `compare_text` via `sf_toggle_sort`); the Sanction value (`f.sanction_id`)
+  also **pre-fills the download filename builder's Sanction ID** when you open that file from the queue
+  (`open_queue_file` → `S.dl_fields.id`, so it leads the converted download name via `build_base_name`) and
+  shows as a visible **Sanction readout chip** in the results summary bar (`render_summary`, gated on
+  `S.source === 'salesforce' && S.active_sanction`; cleared on Start over). The Sanction ID is
+  **Salesforce-only**: `handle_file` (manual upload), a folder-file open, and `clear_all` all blank
+  `S.dl_fields.id`, and `open_queue_file` sets it from `it.sanction || ''`, so a previous SF file's
+  sanction never carries over into a manual/folder download name. `.xls` reads via SheetJS when it's available — `app.js`
   `read_spreadsheet` routes `.xls` through a lazy `load_sheetjs` (vendor/xlsx.full.min.js, served from
   node_modules/xlsx) → `io.xls_to_irs`. The legacy-`.xls` **warning is conditional**: on first list with an
   `.xls`, `sf_probe_xls` loads SheetJS once and sets `xls_ok`; only when it's genuinely unavailable
@@ -324,8 +337,12 @@ download / Reload). Purely client-side: nothing is uploaded, no server, no Sales
   `source='folder'`. **Start over** clears it (`folder_reset`).
 - **CLI equivalent**: `node src/cli.js batch <folder> [--format csv|xlsx]` already converts a whole folder
   of files (top-level `.xlsx/.xls/.csv`) — the headless counterpart to this browser flow.
-- **CLI**: `node src/cli.js sf:list [--today|--date|--start/--end] [--field] [--limit] [--test]` and
-  `sf:pull <opts> -o <dir> [--strategy add_new|replace|wipe_all]`. Menu "Salesforce" section (items 40-41).
+- **CLI**: `node src/cli.js sf:list [--today|--date|--start/--end] [--field] [--limit] [--test]` (lists each
+  file's Sanction ID too) and `sf:pull <opts> -o <dir> [--strategy add_new|replace|wipe_all]`. Plus two
+  **read-only discovery** commands that log in as the integration user (which can see objects/files a
+  personal Workbench login often can't): `sf:describe <Object> [--field <substr>]` (dump an sObject's
+  field API names — how we confirmed `Program.cfg_Id__c`) and `sf:soql "<SELECT ...>" [--limit N]` (run a
+  single guarded SELECT; non-SELECT is rejected). Menu "Salesforce" section (items 40-41).
 - **Tests**: `tests/sf_naming.test.js`, `tests/sf_dates.test.js`, `tests/sf_client.test.js` (mock jsforce,
   no network); opt-in `e2e/sf_flow.spec.js` (stubs `/api/sf/*`, forces the server-folder fallback). Live SF
   stays out of CI. No new deps — `jsforce` + `fast-csv` are already in the repo.

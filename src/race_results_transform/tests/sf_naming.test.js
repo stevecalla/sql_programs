@@ -34,4 +34,17 @@ describe('sf_naming', () => {
       'no_program_name_no_owner_name_race_cv9.csv'
     );
   });
+
+  test('sanction id leads the name when present, and is omitted when blank (4th arg optional)', () => {
+    const file = { Title: 'Spring Tri Results.xlsx', FileExtension: 'xlsx', Id: 'cv1' };
+    assert.equal(
+      build_download_file_name(file, 'Spring Triathlon', 'Jane Coordinator', '351003'),
+      '351003_spring_triathlon_jane_coordinator_spring_tri_results_cv1.xlsx'
+    );
+    // blank/absent sanction -> identical to the legacy 3-arg name
+    assert.equal(
+      build_download_file_name(file, 'Spring Triathlon', 'Jane Coordinator', ''),
+      build_download_file_name(file, 'Spring Triathlon', 'Jane Coordinator')
+    );
+  });
 });
