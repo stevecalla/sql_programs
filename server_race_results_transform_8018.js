@@ -213,6 +213,11 @@ function create_app() {
     res.clearCookie(SESSION_COOKIE, { path: '/' });
     res.json({ ok: true });
   });
+  // Lightweight auth probe (NOT gated). The mx_session cookie is httpOnly, so the browser can't read it;
+  // the SF panel calls this on load to show the correct Sign in / Sign out label after a refresh.
+  app.get('/api/auth-status', function (req, res) {
+    res.json({ ok: true, authed: valid_session(read_cookie(req, SESSION_COOKIE)) });
+  });
   app.get('/metrics/logout', function (req, res) {
     res.clearCookie(SESSION_COOKIE, { path: '/' });
     res.redirect('/metrics/login');   // truly logged out: next /metrics hit shows the login form

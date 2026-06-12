@@ -118,11 +118,12 @@ const SECTIONS = [
   ] },
   { label: 'Salesforce (pull race-results files)', color: BLUE, items: [
     { id: 41, label: 'Salesforce — list files (today, MT)', desc: 'List Race Results Doc files modified today (Mountain Time). Needs SF_* env vars in .env.', cli: 'node src/cli.js sf:list --today', action: 'sf_list' },
-    { id: 42, label: 'Salesforce — pull files to a folder', desc: 'Download Race Results Doc files (snake_case names) into a folder. Prompts for date + folder + strategy.', cli: 'node src/cli.js sf:pull <opts> -o <dir>', action: 'sf_pull' }
+    { id: 42, label: 'Salesforce — list recent files (precise or broad, prod or test)', desc: 'List recent files newest-first. Prompts: environment (prod/sandbox), search (precise term or broadened OR terms), and how many — so you can compare recall.', cli: 'node src/cli.js sf:list [--test] [--search "..."] --limit N', action: 'sf_list_recent' },
+    { id: 43, label: 'Salesforce — pull files to a folder', desc: 'Download Race Results Doc files (snake_case names) into a folder. Prompts for date + folder + strategy.', cli: 'node src/cli.js sf:pull <opts> -o <dir>', action: 'sf_pull' }
   ] },
   { label: 'Settings', color: GRAY, items: [
-    { id: 43, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 44, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
+    { id: 44, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
+    { id: 45, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
@@ -236,6 +237,21 @@ async function handle(item) {
     case 'metrics_purge_test': await run('node', ['src/cli.js', 'metrics:purge-test']); break;
     case 'metrics_purge_all': await run('node', ['src/cli.js', 'metrics:purge-all']); break;
     case 'sf_list': await run('node', ['src/cli.js', 'sf:list', '--today']); break;
+    case 'sf_list_recent': {
+      console.log(c(DIM, '  Environment: [1] production  [2] test sandbox'));
+      const envpick = clean(await ask('  Choose [1]: ')) || '1';
+      const test_args = envpick === '2' ? ['--test'] : [];
+      console.log(c(DIM, '  Search term:'));
+      console.log(c(DIM, '    [1] precise (default) — only "Race Results Doc" titles. Cleanest + fewest files; may miss oddly-named ones.'));
+      console.log(c(DIM, '    [2] broad — OR of "Race Results Doc" / "Race Results" / Race / Results. Also catches race-results files'));
+      console.log(c(DIM, '        NOT titled "Race Results Doc", but pulls in more unrelated spreadsheets that mention race or results.'));
+      const spick = clean(await ask('  Choose [1]: ')) || '1';
+      const search_args = spick === '2' ? ['--search', 'Race Results Doc,Race Results,Race,Results'] : [];
+      const n = clean(await ask('  How many (blank = 25): '));
+      const args = ['src/cli.js', 'sf:list'].concat(test_args, search_args, ['--limit', n || '25']);
+      await run('node', args);
+      break;
+    }
     case 'sf_pull': {
       console.log(c(DIM, '  Date: [1] today  [2] a specific date  [3] a date range  [4] any (latest)'));
       const pick = clean(await ask('  Choose [1]: ')) || '1';

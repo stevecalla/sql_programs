@@ -279,9 +279,14 @@ the SAME engine.
   with a show/hide password toggle) appears and, on success, retries the list — no redirect, never leaves `/`;
   a single **Sign in / Sign out toggle button** (`#sfLogoutBtn`, styled as a pill top-right of `.sf-head`;
   `sf_toggle_auth` → `sf_show_login` when signed out, `sf_logout` → `POST /api/logout` when signed in;
-  label/`aria-pressed` driven by `sf_set_authed`, flipped to true on list/login success and false on 401/logout)
-  ends or opens the shared session. The whole control row (From/To, max-14 hint, Any date, On field, Max files,
-  List, Reset) is one tightened wrapping line. Folder picker via File System
+  label/`aria-pressed` driven by `sf_set_authed`, flipped to true on list/login success and false on 401/logout;
+  **on page load** `wire_sf` calls the ungated `GET /api/auth-status` and sets the label, so a refresh while
+  signed in shows "Sign out" instead of "Sign in" — the `mx_session` cookie is httpOnly so JS can't read it)
+  ends or opens the shared session. The whole control row (From/To, max-14 hint, Any date, **Broaden**, On field,
+  Max files, List, Reset) is one tightened wrapping line. The **Broaden** checkbox (`#sfBroaden`, **default ON**, with a hover
+  `title` tooltip) sends `search=Race Results Doc,Race Results,Race,Results` to `/api/sf/files`, which the
+  server splits into `search_terms` for the SAME OR'd-SOSL + `ContentDocumentId`-dedup path the CLI `--search`
+  uses; uncheck it for the precise default term. Folder picker via File System
   Access API on Chrome/Edge else a server-folder path; the chosen folder **persists** (Chrome dir handle in
   IndexedDB `sf_idb_*`, fallback path in localStorage; `sf_restore_folder` on load, write permission
   re-confirmed via `sf_ensure_permission`) until another is picked. Existing-file strategy add_new/replace/
@@ -302,10 +307,15 @@ the SAME engine.
   (`sf_type_cell`), and `sf_list_status` append the "re-save as .xlsx" hint (re-rendered when the probe
   settles). If SheetJS is missing, opening still shows the clear `unreadable_message` instead of the raw JSZip
   "end of central directory" error. All rows **auto-selected** (`S.sf_selected` map survives sorting), with a
-  found/selected **count** (`#sfCount`), a **Reset** (`sf_reset`, keeps the folder), a prominent labeled
-  **progress bar** (`sf_progress`; paced to ~2s via `sf_delay`) with a **Cancel** button (`S.sf_cancel`,
-  partial-aware via `sf_download_finish`), a **100-file cap** (`SF_MAX_FILES`; auto-selects the newest 100),
-  a **show/hide password** toggle on the inline login, and a "No files found" indication.
+  found/selected **count** (`#sfCount`) that **flags when more files are available than selected**
+  (`.sf-more` — "N more available, raise Max files"; the **Max files** field itself glows amber via
+  `.sf-limit-hot` when the cap is below the number available and can still go higher), a **Reset**
+  (`sf_reset`, keeps the folder), a prominent
+  labeled **progress bar** (`sf_progress`; paced to ~2s via `sf_delay`) with a **Cancel** button (`S.sf_cancel`,
+  partial-aware via `sf_download_finish`), a **150-file ceiling** (`SF_MAX_FILES`; auto-selects the newest
+  **`SF_DEFAULT_FILES` = 50**, overridable via the **Max files** field), a **show/hide password** toggle on the
+  inline login, and a "No files found" indication. The results table is **vertically resizable** (`.sf-table-wrap`
+  `resize:vertical`) and **rows missing a program name or sanction id are highlighted** (`.sf-missing-meta`).
   Downloaded files become a **sortable checklist table** in a new **Files** tab (`#filesTab`, left of Mapping;
   `COMPARE_PANELS.files`; `render_queue`) — # · Program · Owner · File name · **Uploaded → Converted →
   Downloaded** status; **clicking a row** opens it (no Open button). Opening runs the normal `on_workbook`
@@ -342,7 +352,10 @@ download / Reload). Purely client-side: nothing is uploaded, no server, no Sales
   **read-only discovery** commands that log in as the integration user (which can see objects/files a
   personal Workbench login often can't): `sf:describe <Object> [--field <substr>]` (dump an sObject's
   field API names — how we confirmed `Program.cfg_Id__c`) and `sf:soql "<SELECT ...>" [--limit N]` (run a
-  single guarded SELECT; non-SELECT is rejected). Menu "Salesforce" section (items 40-41).
+  single guarded SELECT; non-SELECT is rejected). `sf:list` also takes **`--search "a,b,c"`** to widen recall —
+  the terms are OR'd into one SOSL (multi-word phrases quoted), results deduped by `ContentDocumentId`; one term
+  keeps the precise default. Menu "Salesforce" section: list today · **list recent** — `sf_list_recent` prompts
+  for environment (production / sandbox via `--test`), **search (precise or broad)**, and count · pull.
 - **Tests**: `tests/sf_naming.test.js`, `tests/sf_dates.test.js`, `tests/sf_client.test.js` (mock jsforce,
   no network); opt-in `e2e/sf_flow.spec.js` (stubs `/api/sf/*`, forces the server-folder fallback). Live SF
   stays out of CI. No new deps — `jsforce` + `fast-csv` are already in the repo.

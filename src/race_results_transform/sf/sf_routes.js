@@ -48,8 +48,10 @@ function mount_sf_routes(app, require_auth) {
         date: req.query.date, start: req.query.start, end: req.query.end,
         tz: 'America/Denver'
       };
+      // Optional broadened search: comma-separated terms OR'd in one SOSL (else the precise default).
+      const search_terms = req.query.search ? String(req.query.search).split(',').map(function (s) { return s.trim(); }).filter(Boolean) : undefined;
       const conn = await get_conn(bool(req.query.is_test));
-      const files = await sf.list_race_results_files(conn, { filter: filter });
+      const files = await sf.list_race_results_files(conn, { filter: filter, search_terms: search_terms });
       res.json({ ok: true, count: files.length, files: files });
     } catch (e) { send_sf_error(res, e); }
   });

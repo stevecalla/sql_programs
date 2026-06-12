@@ -52,11 +52,12 @@
       <button id="sfResetBtn" class="btn ghost" type="button" title="Clear the list and selection">↺ Reset</button>
       <span class="dim sf-range-hint">max 14 days</span>
       <label class="sf-ctl sf-anydate"><input type="checkbox" id="sfAnyDate"> Any date</label>
+      <label class="sf-ctl" title="Broaden the search: also match Race / Results, not just &quot;Race Results Doc&quot; titles — catches more files but adds noise"><input type="checkbox" id="sfBroaden" checked> Broaden</label>
       <label class="sf-ctl">On <select id="sfField" aria-label="Salesforce date field">
         <option value="LastModifiedDate">Last modified</option>
         <option value="CreatedDate">Created</option>
       </select></label>
-      <label class="sf-ctl">Max <input type="number" id="sfLimit" class="sf-limit" min="1" max="150" value="25" aria-label="Max files to download"></label>
+      <label class="sf-ctl">Max <input type="number" id="sfLimit" class="sf-limit" min="1" max="150" value="50" aria-label="Max files to download"></label>
     </div>
     <div id="sfStatus" class="sf-status dim" role="status"></div>
     <div id="sfLogin" class="sf-login hidden">

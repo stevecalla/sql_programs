@@ -71,13 +71,21 @@ download are unchanged. On the upload page, the **Get Race Results from Salesfor
   **yesterday → today**. **From** can be any day in **2025-01-01 … today**; **To** is then held to
   **From … From + 14 days** (never past today), so you can position any 14-day window across the range.
   Tick **Any date (latest)** to ignore dates. From/To, List, Reset and the options sit on one compact line.
+- choose the search breadth with the **Broaden** checkbox (**on by default**, with a hover tooltip):
+  on, it OR's the wider terms (`Race Results Doc` / `Race Results` / `Race` / `Results`) so it also catches
+  race-results files **not** titled "Race Results Doc"; uncheck it for the precise `Race Results Doc` term
+  only. Results are always deduped by file and filtered to `.xlsx/.xls/.csv`. (CLI equivalent: `--search`.)
 - the first time, **sign in inline** (same login as the metrics dashboard — a small form with a
   show/hide password toggle appears in the panel; you stay on the page). One **Sign in / Sign out** button
-  (top-right of the panel) toggles the session — it reads "Sign in" when signed out and "Sign out" once a
-  listing or sign-in succeeds.
+  (top-right of the panel) toggles the session and reflects the **real session state on load** — so after a
+  page refresh while signed in it correctly reads "Sign out" (not "Sign in").
 - **List files** — a sortable table (Date / Program / **Sanction** / Owner / File name / **Type**) with a **search box** to
-  filter the rows, a count of files found and how many are selected; the **newest 25 are auto-selected** by
-  default (raise the **Max files** field, up to **150**), and **Reset** clears the list. Legacy
+  filter the rows, a count of files found and how many are selected (it **highlights when more files are
+  available than selected**, and the **Max files** box itself glows amber to prompt you to raise the cap);
+  the **newest 50 are auto-selected** by
+  default (raise the **Max files** field, up to **150**), and **Reset** clears the list. The results table is
+  **resizable** (drag its bottom edge), and **rows missing a program name or sanction id are highlighted** so
+  you can spot incomplete records. Legacy
   **`.xls`** is supported out of the box — SheetJS is **bundled** at `public/vendor/xlsx.full.min.js`
   (committed, like exceljs), so `.xls` reads on any deploy without `npm install`; the server prefers a
   `node_modules/xlsx` copy if present. Only if SheetJS is genuinely unavailable does the app

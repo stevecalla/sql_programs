@@ -34,15 +34,23 @@ async function query_in_batches(conn, build_soql, ids, max_fetch) {
   return out;
 }
 
-// Returns normalized records (newest first). opts: { search_term, filter, exts, tz, max_fetch }.
+// Returns normalized records (newest first). opts: { search_term, search_terms[], filter, exts, tz,
+// max_fetch }. One SOSL term keeps its original unquoted form (behaviour unchanged); multiple terms
+// are OR'd together (multi-word phrases quoted) so you can widen recall — e.g.
+// ['Race Results Doc','Race Results','Race','Results'] -> FIND {"Race Results Doc" OR ... OR Results}.
 async function list_race_results_files(conn, opts) {
   const o = opts || {};
   const tz = (o.filter && o.filter.tz) || o.tz || DEFAULT_TZ;
   const exts = o.exts || DEFAULT_EXTS;
-  const search_term = o.search_term || DEFAULT_SEARCH_TERM;
+  const terms = (Array.isArray(o.search_terms) && o.search_terms.length)
+    ? o.search_terms
+    : [o.search_term || DEFAULT_SEARCH_TERM];
+  const find_expr = (terms.length === 1)
+    ? terms[0]
+    : terms.map(function (t) { return /\s/.test(t) ? '"' + String(t).replace(/"/g, '') + '"' : t; }).join(' OR ');
 
   const search_result = await conn.search(
-    'FIND {' + search_term + '} IN ALL FIELDS RETURNING ContentVersion(' +
+    'FIND {' + find_expr + '} IN ALL FIELDS RETURNING ContentVersion(' +
     'Id, ContentDocumentId, Title, FileExtension, FileType, FirstPublishLocationId, ' +
     'CreatedDate, LastModifiedDate, CreatedById ' +
     'ORDER BY LastModifiedDate DESC, CreatedDate DESC LIMIT 2000)'
@@ -51,10 +59,14 @@ async function list_race_results_files(conn, opts) {
   const found = (search_result && search_result.searchRecords) || [];
   const keep_date = make_date_filter(o.filter || { mode: 'all', field: 'LastModifiedDate', tz: tz });
 
+  const seen_docs = new Set();
   const files = found
     .filter(function (f) { return exts.indexOf(String(f.FileExtension || '').toLowerCase()) >= 0; })
     .filter(keep_date)
-    .sort(function (a, b) { return new Date(b.LastModifiedDate) - new Date(a.LastModifiedDate); });
+    .sort(function (a, b) { return new Date(b.LastModifiedDate) - new Date(a.LastModifiedDate); })
+    // Dedup by file (ContentDocumentId): keep one row per document — the newest, since we sorted first.
+    // A broader OR'd search can surface the same file via several terms; this guarantees no repeats.
+    .filter(function (f) { const k = f.ContentDocumentId || f.Id; if (seen_docs.has(k)) return false; seen_docs.add(k); return true; });
 
   if (files.length === 0) return [];
 
