@@ -91,6 +91,7 @@ function parse_args(argv) {
     else if (a === '--field') out.field = argv[++i];
     else if (a === '--limit') out.limit = argv[++i];
     else if (a === '--strategy') out.strategy = argv[++i];
+    else if (a === '--search') out.search = argv[++i];
     else if (a === '--format' || a === '--fmt') out.format = argv[++i];
     else if (a === '--today') out.today = true;
     else if (a === '--test') out.test = true;
@@ -185,8 +186,9 @@ function help() {
     '  node cli.js ask:test:corrections            # guided steps to verify a correction is applied (G2)',
     '  node cli.js ask:test:threads                # guided steps to verify follow-up threads (B1)',
     '  node cli.js ask:eval [--provider --model]   # run review scenarios vs the live model; records a report',
-    '  node cli.js sf:list [--today|--date YYYY-MM-DD|--start A --end B] [--field LastModifiedDate|CreatedDate] [--limit N] [--test]',
+    '  node cli.js sf:list [--today|--date YYYY-MM-DD|--start A --end B] [--field LastModifiedDate|CreatedDate] [--limit N] [--search "a,b,c"] [--test]',
     '                                              # list Race Results Doc files in Salesforce (Mountain Time)',
+    '                                              # --search widens recall: terms OR’d, e.g. "Race Results Doc,Race Results,Race,Results"',
     '  node cli.js sf:pull <sf:list opts> [-o <dir>] [--strategy add_new|replace|wipe_all]',
     '                                              # download those files (snake_case names) into a folder',
     '  node cli.js sf:describe <Object> [--field <substr>] [--test]   # list an sObject’s fields (confirm API names)',
@@ -464,9 +466,11 @@ async function main() {
       if (!check.ok) { console.error(col(C.red, 'Salesforce not configured — missing: ' + check.missing.join(', '))); process.exit(2); }
       const mode = args.today ? 'today' : (args.date ? 'specific' : ((args.start || args.end) ? 'range' : 'all'));
       const filter = { mode: mode, field: args.field || 'LastModifiedDate', date: args.date, start: args.start, end: args.end, tz: sf.DEFAULT_TZ };
+      // --search "a,b,c" widens recall (terms OR'd); omit it to keep the precise default term.
+      const search_terms = args.search ? String(args.search).split(',').map(function (s) { return s.trim(); }).filter(Boolean) : undefined;
       console.log(col(C.dim, 'Logging into Salesforce (' + cfg.environment_name + ')…'));
       const conn = await sf.make_connection(cfg);
-      let files = await sf.list_race_results_files(conn, { filter: filter });
+      let files = await sf.list_race_results_files(conn, { filter: filter, search_terms: search_terms });
       if (args.limit) files = files.slice(0, Number(args.limit));
       console.log(col(C.bold, '\n' + files.length + ' Race Results Doc file(s):'));
       files.forEach(function (f, i) {

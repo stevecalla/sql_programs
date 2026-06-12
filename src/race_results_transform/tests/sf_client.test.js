@@ -12,7 +12,8 @@ function make_mock_conn() {
     { Id: 'cv3', ContentDocumentId: 'cd3', Title: 'flyer.pdf', FileExtension: 'pdf', FileType: 'PDF', LastModifiedDate: '2026-06-04T12:00:00Z', CreatedById: 'u1' }
   ];
   return {
-    async search() { return { searchRecords: search_records }; },
+    last_search: null,
+    async search(q) { this.last_search = q; return { searchRecords: search_records }; },
     query(soql) {
       return {
         async execute() {
@@ -83,6 +84,32 @@ describe('sf_client.list_race_results_files', () => {
     const meta = await describe_object(conn, 'Program');
     assert.equal(meta.name, 'Program');
     assert.deepEqual(meta.fields[0], { name: 'cfg_Id__c', label: 'Sanctioning ID', type: 'string' });
+  });
+
+  test('a single search term keeps the original unquoted FIND (default behaviour unchanged)', async () => {
+    const conn = make_mock_conn();
+    await list_race_results_files(conn, { filter: { mode: 'all' } });
+    assert.match(conn.last_search, /FIND \{Race Results Doc\}/);
+  });
+
+  test('multiple search terms build an OR-joined SOSL with multi-word phrases quoted', async () => {
+    const conn = make_mock_conn();
+    await list_race_results_files(conn, { filter: { mode: 'all' }, search_terms: ['Race Results Doc', 'Race Results', 'Race', 'Results'] });
+    assert.match(conn.last_search, /FIND \{"Race Results Doc" OR "Race Results" OR Race OR Results\}/);
+  });
+
+  test('dedups by ContentDocumentId (one row per file, newest kept)', async () => {
+    const conn = make_mock_conn();
+    // two ContentVersions of the SAME document (cd1) — only the newest should survive
+    conn.search = async function () {
+      return { searchRecords: [
+        { Id: 'cvA', ContentDocumentId: 'cd1', Title: 'A.csv', FileExtension: 'csv', LastModifiedDate: '2026-06-02T18:00:00Z', CreatedById: 'u1' },
+        { Id: 'cvB', ContentDocumentId: 'cd1', Title: 'A.csv', FileExtension: 'csv', LastModifiedDate: '2026-06-01T18:00:00Z', CreatedById: 'u1' }
+      ] };
+    };
+    const out = await list_race_results_files(conn, { filter: { mode: 'all' } });
+    assert.equal(out.length, 1, 'duplicate document collapsed to one row');
+    assert.equal(out[0].content_version_id, 'cvA', 'kept the newest version');
   });
 
   test('applies the MT date filter', async () => {

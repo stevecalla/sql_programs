@@ -362,7 +362,7 @@
   // Bytes come from the server (/api/sf/*, mx_session-gated). The browser saves them to the folder
   // you pick and works each file as a queue. Statuses persist in localStorage by folder + filename.
   var SF_STAGE = { PENDING: 0, UPLOADED: 1, CONVERTED: 2, DOWNLOADED: 3 };
-  var SF_DEFAULT_FILES = 25;   // auto-select the newest 25 by default
+  var SF_DEFAULT_FILES = 50;   // auto-select the newest 50 by default
   var SF_MAX_FILES = 150;      // hard ceiling — the "Max files" override clamps to this
   function sf_limit() {
     var v = parseInt(($('sfLimit') && $('sfLimit').value) || '', 10);
@@ -382,10 +382,16 @@
   // From==To = a single day; otherwise a range (capped at 14 days).
   function sf_query_params() {
     var field = $('sfField').value;
-    if ($('sfAnyDate') && $('sfAnyDate').checked) return { mode: 'all', field: field };
-    var a = $('sfFrom').value, b = $('sfTo').value;
-    if (a && b && a === b) return { mode: 'specific', field: field, date: a };
-    return { mode: 'range', field: field, start: a, end: b };
+    // Broaden = OR the wider terms server-side (same as CLI --search); off = the precise default term.
+    var broad = ($('sfBroaden') && $('sfBroaden').checked) ? 'Race Results Doc,Race Results,Race,Results' : null;
+    var p;
+    if ($('sfAnyDate') && $('sfAnyDate').checked) p = { mode: 'all', field: field };
+    else {
+      var a = $('sfFrom').value, b = $('sfTo').value;
+      p = (a && b && a === b) ? { mode: 'specific', field: field, date: a } : { mode: 'range', field: field, start: a, end: b };
+    }
+    if (broad) p.search = broad;
+    return p;
   }
   var SF_MAX_RANGE_DAYS = 14;
   var SF_MIN_DATE = '2025-01-01';   // earliest selectable date (floor) — change here if needed
@@ -554,14 +560,20 @@
     el.classList.toggle('hidden', total === 0);
     var over = sel > lim ? (' <span class="sf-over">— max ' + lim + ' per download</span>') : '';
     var showing = (vis < total) ? (' · showing <b>' + vis + '</b>') : '';
-    el.innerHTML = '<b>' + total + '</b> file(s) found' + showing + ' · <b>' + sel + '</b> selected' + over;
+    var more = (total > sel) ? (' <span class="sf-more">— ' + (total - sel) + ' more available (raise “Max files” to include)</span>') : '';
+    // Highlight the Max-files field itself when more files exist than the current cap AND the cap can still go up.
+    var li = $('sfLimit'); if (li) li.classList.toggle('sf-limit-hot', total > lim && lim < SF_MAX_FILES);
+    el.innerHTML = '<b>' + total + '</b> file(s) found' + showing + ' · <b>' + sel + '</b> selected' + over + more;
   }
   function sf_render() {
     var vis = sf_visible();
     $('sfTable').querySelector('tbody').innerHTML = vis.map(function (f) {
       var checked = S.sf_selected[f.content_version_id] ? ' checked' : '';
       var ext = sf_file_ext(f);
-      return '<tr' + (ext === 'xls' && xls_ok === false ? ' class="sf-xls-row"' : '') + '><td><input type="checkbox" class="sf-pick" data-id="' + esc(f.content_version_id) + '" aria-label="Select file"' + checked + '></td>' +
+      var rowcls = [];
+      if (ext === 'xls' && xls_ok === false) rowcls.push('sf-xls-row');
+      if (!f.program_name || !f.sanction_id) rowcls.push('sf-missing-meta');   // flag files missing a program name or sanction id
+      return '<tr' + (rowcls.length ? ' class="' + rowcls.join(' ') + '"' : '') + '><td><input type="checkbox" class="sf-pick" data-id="' + esc(f.content_version_id) + '" aria-label="Select file"' + checked + '></td>' +
         '<td>' + esc(f.modified_mtn_full || '') + '</td>' +
         '<td>' + esc(f.program_name || '—') + '</td>' +
         '<td>' + esc(f.sanction_id || '—') + '</td>' +
@@ -879,6 +891,10 @@
   }
   function wire_sf() {
     if (!$('sfCard')) return;
+    // Reflect the real session state on the Sign in/out button after a refresh (mx_session is httpOnly,
+    // so we ask the server instead of reading the cookie).
+    fetch('/api/auth-status', { credentials: 'same-origin' }).then(function (r) { return r.json(); })
+      .then(function (j) { sf_set_authed(!!(j && j.authed)); }).catch(function () {});
     // default span = yesterday → today; bounded to SF_MIN_DATE..today, max 14-day span
     if ($('sfFrom') && !$('sfFrom').value) { $('sfFrom').value = sf_yesterday(); $('sfTo').value = sf_today(); }
     sf_apply_range_limits();

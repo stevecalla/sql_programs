@@ -27,6 +27,15 @@ describe('salesforce intake — UI + wiring', () => {
     assert.ok(html.indexOf('Get Race Results from Salesforce') >= 0, 'panel heading text');
     assert.ok(html.indexOf('data-sort="type"') >= 0, 'list has a sortable Type column');
     assert.ok(html.indexOf('data-sort="sanction"') >= 0, 'list has a sortable Sanction column');
+    assert.ok(html.indexOf('id="sfBroaden" checked') >= 0, 'panel has the Broaden search toggle, default ON');
+  });
+
+  test('broaden toggle widens the search (app.js param + server passes search_terms)', () => {
+    assert.match(app_js, /\$\('sfBroaden'\)/, 'app.js reads the Broaden checkbox');
+    assert.match(app_js, /Race Results Doc,Race Results,Race,Results/, 'broad sends the OR-term list as search');
+    const sf_routes = fs.readFileSync(path.join(ROOT, 'sf', 'sf_routes.js'), 'utf8');
+    assert.match(sf_routes, /req\.query\.search/, '/api/sf/files reads the search param');
+    assert.match(sf_routes, /search_terms: search_terms/, 'passes search_terms into the engine');
   });
 
   test('sanction id is surfaced + pre-fills the download filename builder + shows in the summary bar', () => {
@@ -70,8 +79,18 @@ describe('salesforce intake — UI + wiring', () => {
       /function sf_visible\b/, /function sf_limit\b/, /function sf_select_newest\b/, /function sf_logout\b/, /function sf_yesterday\b/,
       /function sf_set_authed\b/, /function sf_toggle_auth\b/, /function sf_probe_xls\b/, /function sf_list_status\b/,
       /function sf_reload_file\b/, /function sf_can_reload\b/,
-      /\/api\/sf\/files/, /\/api\/sf\/file\//, /\/api\/login/, /\/api\/logout/, /\/api\/sf\/folder-file/
+      /\/api\/sf\/files/, /\/api\/sf\/file\//, /\/api\/login/, /\/api\/logout/, /\/api\/sf\/folder-file/,
+      /\/api\/auth-status/
     ].forEach(function (re) { assert.match(app_js, re); });
+  });
+
+  test('refresh keeps the Sign in/out label correct: load-time auth probe + server route', () => {
+    assert.match(app_js, /\/api\/auth-status[\s\S]*?sf_set_authed/, 'wire_sf probes auth status on load and sets the button');
+    const server_path = path.join(ROOT, '..', '..', 'server_race_results_transform_8018.js');
+    if (!fs.existsSync(server_path)) return;   // skip outside the monorepo
+    const server = fs.readFileSync(server_path, 'utf8');
+    assert.match(server, /app\.get\('\/api\/auth-status'/, 'server exposes the (ungated) auth-status probe');
+    assert.match(server, /authed: valid_session\(read_cookie/, 'auth-status reports the real session state');
   });
 
   test('reload-from-disk: per-row button + the server folder-file route', () => {
@@ -82,11 +101,23 @@ describe('salesforce intake — UI + wiring', () => {
     assert.match(sf_routes, /path\.basename/, 'folder-file guards against path traversal (basename only)');
   });
 
-  test('limits: default 25, hard max 150, 14-day range, date floor', () => {
-    assert.match(app_js, /SF_DEFAULT_FILES\s*=\s*25/, 'default 25 selected');
+  test('limits: default 50, hard max 150, 14-day range, date floor', () => {
+    assert.match(app_js, /SF_DEFAULT_FILES\s*=\s*50/, 'default 50 selected');
     assert.match(app_js, /SF_MAX_FILES\s*=\s*150/, 'hard ceiling 150');
     assert.match(app_js, /SF_MAX_RANGE_DAYS\s*=\s*14/, '14-day range cap');
     assert.match(app_js, /SF_MIN_DATE\s*=\s*'2025-01-01'/, 'date floor 2025-01-01');
+  });
+
+  test('list UX: highlights missing program/sanction rows, flags more-available, resizable box', () => {
+    assert.match(app_js, /sf-missing-meta/, 'rows missing program or sanction get a highlight class');
+    assert.match(app_js, /!f\.program_name \|\| !f\.sanction_id/, 'highlight condition = missing program or sanction');
+    assert.match(app_js, /class="sf-more"/, 'count flags when more files are available than selected');
+    assert.match(app_js, /sf-limit-hot/, 'Max-files field is highlighted when the cap is below the number available');
+    assert.match(app_js, /total > lim && lim < SF_MAX_FILES/, 'highlight only when raising the cap can include more');
+    const css = fs.readFileSync(path.join(ROOT, 'public', 'css', 'app.css'), 'utf8');
+    assert.match(css, /\.sf-table-wrap\{[^}]*resize:\s*vertical/, 'results box is vertically resizable');
+    assert.match(css, /\.sf-missing-meta td\{/, 'missing-meta highlight style exists');
+    assert.match(css, /\.sf-limit-hot\{/, 'Max-files highlight style exists');
   });
 
   test('SF files are tagged source = salesforce', () => {

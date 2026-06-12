@@ -554,7 +554,7 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 .sf-pass-wrap .sf-login-in{padding-right:48px}
 .sf-pass-toggle{position:absolute;right:7px;background:none;border:0;color:var(--dim);font-size:11px;cursor:pointer;padding:2px 4px}
 .sf-pass-toggle:hover{color:var(--accent)}
-.sf-table-wrap{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:9px;margin-top:8px}
+.sf-table-wrap{height:300px;min-height:140px;max-height:80vh;overflow:auto;resize:vertical;border:1px solid var(--line);border-radius:9px;margin-top:8px}
 .sf-table-wrap.hidden{display:none}
 .sf-table{width:100%;border-collapse:collapse;font-size:13px}
 .sf-table th,.sf-table td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -589,6 +589,11 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 .sf-count.hidden{display:none}
 .sf-count b{color:var(--ink)}
 .sf-over{color:var(--accent);font-weight:700}
+.sf-more{color:#b45309;font-weight:700}
+.sf-missing-meta td{background:rgba(245,158,11,.13)}
+.sf-missing-meta:hover td{background:rgba(245,158,11,.20)}
+/* Max-files field glows amber when more files are available than the current cap (raising it would help) */
+.sf-limit-hot{border-color:#f59e0b !important;box-shadow:0 0 0 2px rgba(245,158,11,.30);border-radius:7px}
 .sf-table th.sf-sort{cursor:pointer;user-select:none}
 .sf-table th.sf-sort:hover{color:var(--ink)}
 .sf-arrow{font-size:10px;color:var(--dim)}
