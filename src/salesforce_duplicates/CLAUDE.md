@@ -61,7 +61,7 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   `usat_Salesforce_Merge_Id__pc` (Person-Account `__pc` view of Contact's `__c`) as
   `Merge_Id_1/2__c` (pairs) or `Merge_Ids__c` (groups/clusters). This DID edit the
   baseline `exact.js`/`fuzzy.js`/`grouping.js` (a deliberate schema add, no longer
-  byte-for-byte unchanged). `discover_account_fields.js` (menu item 20) confirms the
+  byte-for-byte unchanged). `discover_account_fields.js` (menu item 24) confirms the
   field name. The query **auto-detects** the field (Account DESCRIBE) and includes it
   only if the org has it (`build_account_soql` / `account_field_exists` in
   `salesforce.js`), so an org without it still runs — merge columns just come out
@@ -73,8 +73,18 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   exported as `execute_get_salesforce_duplicates_data`. Guarded by
   `require.main === module`, so requiring it does not run it.
 - `menu.js` — interactive launcher (`node menu.js`): run tests, syntax check, run
-  the finder in TEST or PRODUCTION mode, open the output/archive folders, start
-  the Slack server.
+  the finder in TEST or PRODUCTION mode, open the output/archive folders, run the
+  DUPLICATE TUNING sweep (items 14–19, incl. sweep detail/diff), start the Slack
+  server. Items are numbered sequentially 1–27; renumber on insert.
+- `sweep_duplicates.js` — duplicate criteria tuning CLI (review-only). Fetches once
+  (`snapshot`), then replays detection over a grid of criteria (`run`/`detail`/`diff`)
+  and prints exact/fuzzy/nickname/consolidated counts side by side with a funnel +
+  baseline delta. Uses the self-contained engine `src/sweep.js` (reuses scoring
+  primitives; does NOT modify `exact.js`/`fuzzy.js`/`consolidate.js`). Grid in
+  `sweep_grid.json`. Output goes to `TUNING_DIR_NAME` (`usat_salesforce_duplicates_tuning`),
+  a sibling of the output folder under the same external `/data` root (same pattern as
+  OUTPUT/ARCHIVE/META, so it stays out of the Slack uploads + archive rotation; override
+  with `SWEEP_TUNING_DIR`). See `README_TUNING.md`.
 - `../../server_salesforce_duplicates_8017.js` — Slack slash-command server (lives
   at the repo root with the other `server_*.js`). See "Slack server" below.
 
@@ -164,8 +174,8 @@ only `/scheduled` accepts `?is_test`.
 UNLESS the newest output file is younger than `FRESH_OUTPUT_WINDOW_MINUTES` (config) —
 within that window it returns the latest instead (the Slack reply explains this and
 points to `force=true`). `mode=run force=true` always regenerates. Run it from the repo
-root (`node server_salesforce_duplicates_8017.js`) or menu item 14; hit it with menu
-items 15–19.
+root (`node server_salesforce_duplicates_8017.js`) or menu item 20; hit it with menu
+items 21–25.
 
 Each run persists a small summary (total records scanned + counts, incl. ZIP-trim
 counts) to `META_DIR_NAME/RUN_SUMMARY_FILE` (a sibling of the output folder, so it

@@ -96,6 +96,25 @@ const CONSOLIDATED_OUTPUT_FILE = "account_consolidated_duplicates_sf_import.csv"
 const OUTPUT_DIR_NAME = "usat_salesforce_duplicates";
 const ARCHIVE_DIR_NAME = "usat_salesforce_duplicates_archive";
 
+// Duplicate criteria tuning sweep output (review-only). A sibling of the output
+// folder under the same external /data root (same pattern as OUTPUT/ARCHIVE/META),
+// so the sweep's files never mix with the production import CSVs, the Slack uploads,
+// or the archive rotation.
+const TUNING_DIR_NAME = "usat_salesforce_duplicates_tuning";
+const SWEEP_SNAPSHOT_FILE = "snapshot.json";
+const SWEEP_SUMMARY_FILE = "sweep_summary.csv";
+
+// --- SQL backbone (see README_SQL.md) ---
+// The disposable snapshot table lives in the local USAT database (usat_sales_db),
+// reached via create_local_db_connection(local_usat_sales_db_config()). It is dropped
+// and recreated on every run, so it never accumulates in that shared database. Name is
+// spelled out (no abbreviations) so it reads clearly alongside the sales/participation
+// tables already in that DB.
+const SNAPSHOT_TABLE_NAME = "salesforce_account_duplicate_snapshot";
+
+// Rows per multi-row INSERT when streaming records into the snapshot table.
+const DB_INSERT_BATCH_SIZE = 2000;
+
 // Per-run summary (total records scanned, counts, timestamps) lives in its own
 // meta folder — NOT the output folder — so it is never swept into the Slack
 // file uploads, and is overwritten each run (always reflects the latest run).
@@ -139,6 +158,11 @@ module.exports = {
     NICKNAME_FIRE_MAPPING_FILE,
     OUTPUT_DIR_NAME,
     ARCHIVE_DIR_NAME,
+    TUNING_DIR_NAME,
+    SWEEP_SNAPSHOT_FILE,
+    SWEEP_SUMMARY_FILE,
+    SNAPSHOT_TABLE_NAME,
+    DB_INSERT_BATCH_SIZE,
     META_DIR_NAME,
     RUN_SUMMARY_FILE,
     ZIP_TRIM_MAPPING_FILE,

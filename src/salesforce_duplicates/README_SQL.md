@@ -1,0 +1,220 @@
+# SQL backbone for the duplicate finder + tuning sweep — PLAN (not yet built)
+
+Status: **planning only.** No code written yet. This captures the design so it can be
+reviewed and approved before any work starts.
+
+## Goal
+
+Make a fresh MySQL table the single source the duplicate detection reads from, for
+**both** the real finder (`step_1_find_duplicates.js`) and the tuning sweep
+(`sweep_duplicates.js`). Salesforce is contacted only to populate the table; every
+detection step after that reads from SQL.
+
+The database is **disposable** — it is dropped and recreated on every run. That
+removes a lot of complexity: no migrations, no upserts, no run history to reconcile,
+no staleness between runs. Load fresh, detect, done.
+
+## Guiding principles (carried over from the rest of this tool)
+
+1. **Outputs stay byte-for-byte identical** to today's baseline (the exact, fuzzy,
+   nickname, and consolidated CSVs). This is the regression guarantee the project has
+   protected throughout. A diff harness proves it before we call it done.
+2. **Matching logic stays in the existing tested pure modules** (`normalize.js`,
+   `matcher.js`, `nicknames.js`). SQL takes over **storage, grouping, and candidate
+   blocking** — not the Levenshtein scoring or the nickname dictionary, which have no
+   native MySQL equivalent.
+3. **Reuse the database already used throughout the codebase** (see Open Question #1)
+   and its existing connection helper, rather than introducing a new one.
+
+## One backbone for both; convert to SQL only where it makes sense
+
+The SQL database is the backbone for **both** the real finder and the tuning sweep —
+one fresh `salesforce_account_duplicate_snapshot` table, populated by a single
+Salesforce pull, serves both. We do **not** rewrite everything in SQL; we move work to
+SQL only where SQL is the right tool:
+
+- **Goes into SQL** (set-oriented): storing the streamed records; the exact-rule
+  `GROUP BY exact_duplicate_key HAVING COUNT(*) > 1`; the rule-block bucketing that
+  produces fuzzy/nickname candidates; counting / filtering; later, enrichment joins to
+  other `usat_sales_db` tables.
+- **Stays in Node** (algorithmic, no SQL equivalent): Levenshtein scoring
+  (`matcher.js`), the nickname dictionary (`nicknames.js`), and the UnionFind
+  clustering (`grouping.js`). SQL hands these candidate blocks; they do the per-pair
+  reasoning.
+
+**Sequencing: start with the tuning sweep, then the real finder.** The sweep is
+review-only (a mistake never corrupts the authoritative output CSVs), its existing
+"snapshot → replay" model maps one-to-one onto "load the table once, query it many
+times," and the current in-memory sweep engine stays as a built-in oracle to diff the
+SQL path against. Once the pattern is proven there, the real finder moves onto the same
+table, where the bar is byte-identical baseline outputs.
+
+## The one design choice that keeps it safe
+
+Compute the normalized keys in Node **at load time** (reusing `normalize.js`) and
+store them as their own columns — do **not** rely on SQL's `UPPER()`/`TRIM()`/`LEFT()`
+to reproduce the JavaScript normalization. If SQL did the normalizing, collation and
+charset differences could group records differently than the JS does, and the outputs
+would drift from the baseline. By precomputing the cleaned names, normalized
+gender/birthdate, five-digit composite ZIP, and the composite keys with the same
+helpers the current code already uses, a SQL `GROUP BY exact_duplicate_key` is
+*guaranteed* to match the in-memory result. SQL only does set operations on keys the
+JavaScript produced.
+
+## Streaming load (no bulk-load pain)
+
+Records are **streamed into SQL as they arrive from Salesforce** — never materialized
+as one giant in-memory array or one huge file:
+
+```
+Salesforce Bulk API stream ──▶ per-record: compute normalized keys (normalize.js)
+                              ──▶ buffer into a batch (e.g. ~2,000 rows)
+                              ──▶ flush a single multi-row INSERT
+                              ──▶ repeat until the stream ends
+```
+
+The Bulk API already hands records back as a stream (`record_stream.on('record', …)`),
+so the loader rides on that: accumulate a batch, flush, clear, continue. This keeps
+Node memory flat regardless of whether it is 5,000 or 700,000 records, and avoids a
+single oversized load or any dependency on `LOAD DATA INFILE` / `local_infile`. Batch
+size is a tunable constant. The load runs inside a transaction (or builds into a
+staging table that is swapped in) so a failed/partial stream never leaves a
+half-populated table.
+
+## Architecture / data flow
+
+```
+Salesforce ──stream──▶  load into fresh table        ──▶  detection reads from SQL  ──▶  outputs
+                        (drop & recreate; keys             ├─ exact:    SQL GROUP BY exact_duplicate_key HAVING COUNT(*)>1
+                         precomputed in Node;              ├─ fuzzy:    SQL pulls rule_block_key blocks → Node scores pairs
+                         streamed in batches)              └─ nickname / consolidated: same blocks → Node
+```
+
+The tuning sweep reuses the **same loaded table** — it runs many criteria over it
+instead of one. So one Salesforce pull serves both the finder and a full sweep.
+
+## Database design (names spelled out — no abbreviations)
+
+Database: **`usat_sales_db`** — the local USAT MySQL database (host `127.0.0.1`) used
+throughout the codebase. Reached through the existing helpers, not a new connection:
+`create_local_db_connection(await local_usat_sales_db_config())` from
+`utilities/` (the same path the sales / participation / marketo / google_cloud loaders
+use). The database name is **not** hardcoded — it comes from the `LOCAL_USAT_SALES_DB`
+environment variable, exactly like the rest of the codebase.
+
+Primary table: **`salesforce_account_duplicate_snapshot`** — one row per fetched
+Account. Columns (raw Salesforce fields first, then the precomputed detection
+columns):
+
+```text
+salesforce_account_id              (primary key — the SF Id)
+last_name
+first_name
+member_number
+gender_identity
+foundation_constituent
+salesforce_merge_id
+person_birthdate
+billing_postal_code
+person_mailing_postal_code
+-- precomputed at load time via normalize.js --
+clean_first_name
+clean_last_name
+gender_normalized
+birthdate_normalized
+composite_zip_five_digit
+exact_duplicate_key                (last+first+gender+birthdate+composite-zip key)
+rule_block_key                     (gender+birthdate+composite-zip blocking key)
+loaded_at
+```
+
+Indexes on `exact_duplicate_key` and on `rule_block_key`. Key columns use a binary
+collation so grouping is exact. Indexes are added **after** the streamed load
+finishes (faster to load into an unindexed table, then index).
+
+Optional, additive (Phase 3): result tables `duplicate_detection_run` (one row per
+run) and `duplicate_detection_result` (one row per group/pair/cluster) — these mirror
+the `Duplicate_Run__c` / `Duplicate_Result__c` model already sketched in `schema.md`.
+
+## What changes in the real finder (`step_1_find_duplicates.js`)
+
+A new stage slots in right after the Salesforce fetch: a `src/database_snapshot.js`
+module that connects, drops + recreates `salesforce_account_duplicate_snapshot`, and
+**streams** the incoming records in (computing keys per record via `normalize.js`).
+Then detection sources from SQL:
+
+- **Exact**: a SQL `GROUP BY exact_duplicate_key HAVING COUNT(*) > 1`, with the
+  per-group member lists assembled from the grouped rows.
+- **Fuzzy / nickname**: pull the candidate blocks (`rule_block_key` groups of size > 1)
+  from the indexed table and stream each block into the **existing** scoring code.
+- The output writers and the consolidated clustering are **unchanged**.
+
+## What changes in the sweep (`sweep_duplicates.js`)
+
+- `snapshot` = fetch + stream-load the table (instead of writing `snapshot.json`).
+- `run` / `detail` / `diff` read from that table.
+- Because the sweep varies criteria (ZIP-trim length, which rule fields are required),
+  the per-profile keys can't be fully precomputed. The lean approach: keep the sweep's
+  keying in the proven `src/sweep.js` engine and just swap its record source from JSON
+  to a database read (the engine already rebuilds keys per profile). SQL still does the
+  heavy lifting of holding and streaming the records.
+
+## Phasing
+
+```text
+Phase 0  Database scaffolding: src/database_snapshot.js (connect / recreate /
+         stream-load) + db config block + tests against a disposable local table.
+Phase 1  TUNING SWEEP on SQL (start here — review-only, lowest risk; the snapshot →
+         replay model already fits). snapshot stream-loads the table; run/detail/diff
+         read from it. Keep the in-memory sweep engine as the oracle to diff against;
+         retire the JSON snapshot (or keep it behind a flag).
+Phase 2  REAL FINDER on SQL: exact via SQL, fuzzy/nickname blocks from SQL. Prove the
+         four output files are byte-identical to the saved baseline before sign-off.
+Phase 3  (Optional) Persist duplicate_detection_run / _result tables; point the
+         Slack/reporting path at the DB.
+```
+
+## Risks and mitigations
+
+- **Normalization parity** (the big one): mitigated by precomputing keys in Node and a
+  regression diff of new vs. saved baseline outputs.
+- **Partial/failed load**: stream inside a transaction or load into a staging table
+  that is atomically swapped in, so detection never sees a half-loaded table.
+- **Concurrency** (a manual run and the Slack `/scheduled` run both loading the same
+  table): guard with the server's existing `isRunning` lock, and/or a per-run table
+  name (Open Question #7).
+- **Charset/collation**: `utf8mb4` with a binary collation on the key columns.
+- **Standing rule**: tests, docs (`README_SQL.md` + README/CLAUDE/schema), and
+  CLI/menu items move in lockstep with the code.
+
+## Open questions (to settle before building)
+
+1. **Which database?** RESOLVED — the local USAT database **`usat_sales_db`**
+   (`127.0.0.1`), via `create_local_db_connection(await local_usat_sales_db_config())`.
+   Name read from `LOCAL_USAT_SALES_DB`, not hardcoded. The snapshot table is dropped
+   and recreated each run, so it never accumulates in that shared database.
+2. **Schema/database name** for the snapshot — a dedicated schema that is dropped each
+   run, or a table inside an existing schema (dropped/recreated each run)?
+3. **Reset mechanism** — `DROP TABLE` + `CREATE`, `TRUNCATE`, or drop the whole schema
+   each run? (You confirmed the data can be deleted/replaced each time.)
+4. **Streaming batch size** — rows per multi-row INSERT (default ~2,000; tune for the
+   connection).
+5. **Keep the in-memory path as a fallback?** I'd keep an `--in-memory` flag through
+   Phase 1 so we can diff SQL output against the current code as the regression check,
+   then decide whether to retire it.
+6. **Persist results in SQL too** (`duplicate_detection_run` / `_result`), or keep
+   outputs as CSV only for now?
+7. **Concurrency / table naming** — single shared table guarded by the run lock, or a
+   per-run table/schema name to allow overlap?
+8. **Do both run modes go through SQL**, or keep the 5,000-row `--test` sample
+   in-memory and route only full/production through SQL?
+9. **Sweep keying** — rebuild per-profile keys in SQL from stored atoms, or keep the
+   keying in the Node sweep engine reading rows from SQL (my lean: the latter)?
+10. **Test approach for the DB layer** — integration tests against a disposable local
+    schema vs. mocking the pool. The pure modules stay unit-tested as they are.
+
+## Not changing
+
+The Salesforce query and read-only posture, the normalization/scoring/nickname logic,
+the output CSV schemas, and the existing menu/Slack endpoints. SQL is added as the
+record store + grouping engine; it does not rewrite the matching rules.

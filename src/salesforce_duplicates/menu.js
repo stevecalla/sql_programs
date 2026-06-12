@@ -22,10 +22,11 @@ const readline = require('readline');
 const { execSync, spawn } = require('child_process');
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
-const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME, META_DIR_NAME, ZIP_TRIM_MAPPING_FILE } = require('./config');
+const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME, META_DIR_NAME, ZIP_TRIM_MAPPING_FILE, TUNING_DIR_NAME, SWEEP_SUMMARY_FILE } = require('./config');
 
 const DIR = __dirname;
 const MAIN_SCRIPT = 'step_1_find_duplicates.js';
+const SWEEP_SCRIPT = 'sweep_duplicates.js';
 const SERVER_PORT = 8017;
 
 // ── Colors ────────────────────────────────────────────────────────────────
@@ -74,6 +75,115 @@ function open_path(p) {
             : `xdg-open "${p}"`;
   try { execSync(cmd, { stdio: 'ignore' }); }
   catch { console.log(`\n  Open this folder manually:\n  ${p}\n`); }
+}
+
+// Resolve the tuning folder the same way sweep_duplicates.js does: honor the
+// SWEEP_TUNING_DIR override if set, else the cross-platform /data path.
+async function resolve_tuning_dir() {
+  if (process.env.SWEEP_TUNING_DIR) return process.env.SWEEP_TUNING_DIR;
+  return path.join(await determineOSPath(), TUNING_DIR_NAME);
+}
+
+// Parse one CSV line, honoring quoted cells (the sweep quotes any cell that
+// contains a comma / quote / newline).
+function parse_csv_line(line) {
+  const out = [];
+  let cur = '';
+  let in_quotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (in_quotes) {
+      if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else in_quotes = false; }
+      else cur += ch;
+    } else if (ch === '"') { in_quotes = true; }
+    else if (ch === ',') { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+// Read the profiles from the latest sweep_summary.csv as objects keyed by the
+// CSV header (label, fuzzy_threshold, exact_groups, consolidated_clusters, …).
+// Returns [] if the sweep hasn't been run yet (file missing / unreadable).
+async function read_sweep_profiles() {
+  try {
+    const csv_path = path.join(await resolve_tuning_dir(), SWEEP_SUMMARY_FILE);
+    if (!fs.existsSync(csv_path)) return [];
+    const lines = fs.readFileSync(csv_path, 'utf8').split(/\r?\n/).filter(Boolean);
+    if (lines.length <= 1) return [];
+    const header = parse_csv_line(lines[0]);
+    return lines.slice(1).map((line) => {
+      const cells = parse_csv_line(line);
+      const row = {};
+      header.forEach((h, i) => { row[h] = cells[i]; });
+      return row;
+    }).filter((r) => r.label);
+  } catch (_) {
+    return [];
+  }
+}
+
+const _num = (v) => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString() : (v ?? ''); };
+
+// Abbreviate a rule_fields string ("gender+birthdate+zip") to its initials ("gbz").
+function abbrev_fields(s) {
+  return String(s || '').split('+').map((f) => f.trim()[0] || '').join('');
+}
+
+// Build the one-line summary shown next to a profile in the picker, mirroring the
+// sweep comparison table: threshold / nickname / fields, then the counts and the
+// delta-vs-baseline (added/removed matched pairs).
+function profile_summary(row) {
+  const thr = `t${row.fuzzy_threshold}`;
+  const nick = String(row.nickname_enabled) === 'true' ? 'nickON' : 'nickOFF';
+  const fields = abbrev_fields(row.rule_fields);
+  const counts = `exact:${_num(row.exact_groups)} fuzzy:${_num(row.fuzzy_pairs)} nick:${_num(row.nickname_pairs)} consol:${_num(row.consolidated_clusters)}`;
+  const is_base = String(row.is_baseline) === '1' || row.label === 'baseline';
+  const delta = is_base ? 'baseline' : `Δ +${_num(row.added_vs_baseline)}/-${_num(row.removed_vs_baseline)}`;
+  return `${thr} ${nick} ${fields}  ${counts}  ${delta}`;
+}
+
+// Print the legend that decodes the profile labels and the inline summary.
+// Keeps the numbered list readable without having to remember the naming scheme.
+function print_profile_key() {
+  console.log(c(CYAN, '  KEY — how to read each profile'));
+  console.log(c(DIM, "    label  =  t<thr>_nick<ON|OFF>_z<zipTrim>_<fields>   e.g. t88_nickON_z5_gbz"));
+  console.log(c(DIM, '    thr      fuzzy name-score threshold a pair must reach (higher = stricter)'));
+  console.log(c(DIM, '    nick     nickname matching ON/OFF (Bill↔William, etc.)'));
+  console.log(c(DIM, '    z<n>     ZIP trimmed to first n digits (z5 = production)'));
+  console.log(c(DIM, '    fields   required matching fields — g=gender  b=birthdate  z=zip  (gbz = all three)'));
+  console.log(c(DIM, '    counts   exact=exact-dup groups · fuzzy=fuzzy pairs · nick=nickname pairs · consol=consolidated clusters'));
+  console.log(c(DIM, '    Δ        matched pairs vs baseline:  +gained / -lost'));
+}
+
+// Prompt the user to choose a profile. If a sweep_summary.csv exists, show the
+// profiles as a numbered list WITH their key counts (so they're easy to tell
+// apart) and accept either the number or a typed label; otherwise fall back to
+// free-text entry. `show_key` prints the decoding legend first (suppress it on a
+// second consecutive prompt, e.g. the B side of a diff). Returns the chosen
+// label, or null if cancelled (blank).
+async function pick_label(rl, question, show_key = true) {
+  const profiles = await read_sweep_profiles();
+  if (profiles.length === 0) {
+    console.log(c(YELLOW, '  No sweep_summary.csv found yet — run the sweep first (menu item 16) to generate profile labels.'));
+    const typed = (await prompt(rl, c(BOLD, `  ${question} (type a label, or blank to cancel): `))).trim();
+    return typed || null;
+  }
+  const labels = profiles.map((p) => p.label);
+  const w = Math.max(...labels.map((l) => l.length));
+  if (show_key) print_profile_key();
+  console.log(c(DIM, '  Available profiles  (label — threshold/nickname/fields · counts · Δ vs baseline):'));
+  profiles.forEach((p, i) => {
+    console.log(`    ${c(BOLD, String(i + 1).padStart(2))}. ${p.label.padEnd(w)}  ${c(DIM, profile_summary(p))}`);
+  });
+  const raw = (await prompt(rl, c(BOLD, `  ${question} (number or label, blank to cancel): `))).trim();
+  if (!raw) return null;
+  const asNum = parseInt(raw, 10);
+  if (String(asNum) === raw && asNum >= 1 && asNum <= labels.length) return labels[asNum - 1];
+  if (labels.includes(raw)) return raw;
+  console.log(c(YELLOW, `  "${raw}" is not a listed profile — passing it through anyway (the sweep will validate it).`));
+  return raw;
 }
 
 // Hit a server endpoint on localhost:SERVER_PORT and print the response.
@@ -141,29 +251,41 @@ const SECTIONS = [
     ],
   },
   {
+    label: 'DUPLICATE TUNING — compare duplicate counts across criteria (review-only)',
+    color: YELLOW,
+    items: [
+      { id: 14, label: 'Sweep snapshot — TEST',       desc: 'Fetch records ONCE (dev sandbox) and cache them for the sweep', action: 'sweep_snapshot_test', cli: `node ${SWEEP_SCRIPT} snapshot --test` },
+      { id: 15, label: 'Sweep snapshot — PRODUCTION', desc: 'Fetch records ONCE (production) and cache them for the sweep', action: 'sweep_snapshot_prod', cli: `node ${SWEEP_SCRIPT} snapshot --prod` },
+      { id: 16, label: 'Run sweep (grid over snapshot)', desc: 'Replay the grid in sweep_grid.json; prints summary + table, writes sweep_summary.csv', action: 'sweep_run', cli: `node ${SWEEP_SCRIPT} run` },
+      { id: 17, label: 'Sweep detail (one profile)', desc: 'Matched pairs for one profile -> CSV (prompts: picks a profile from the last sweep)', action: 'sweep_detail', cli: `node ${SWEEP_SCRIPT} detail "<profile-label>"` },
+      { id: 18, label: 'Sweep diff (two profiles)', desc: 'Pair-level diff between two profiles -> CSV (prompts: picks profile A + B)', action: 'sweep_diff', cli: `node ${SWEEP_SCRIPT} diff "<labelA>" "<labelB>"` },
+      { id: 19, label: 'Open tuning folder',  desc: `Snapshot + sweep CSVs (${TUNING_DIR_NAME})`, action: 'open_tuning' },
+    ],
+  },
+  {
     label: 'SERVER — Slack slash-command server (start, then hit from another terminal)',
     color: CYAN,
     items: [
-      { id: 14, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
-      { id: 15, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
-      { id: 16, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
-      { id: 17, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
-      { id: 18, label: 'Hit /scheduled — TEST FULL',  desc: 'is_test=true&full=true: dev sandbox, ALL records + Slack post', action: 'hit_scheduled_test_full', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true&full=true"` },
-      { id: 19, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
+      { id: 20, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
+      { id: 21, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
+      { id: 22, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
+      { id: 23, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
+      { id: 24, label: 'Hit /scheduled — TEST FULL',  desc: 'is_test=true&full=true: dev sandbox, ALL records + Slack post', action: 'hit_scheduled_test_full', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true&full=true"` },
+      { id: 25, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
     ],
   },
   {
     label: 'DISCOVERY — confirm Salesforce field names (read-only)',
     color: MAGENTA,
     items: [
-      { id: 20, label: 'Discover Salesforce fields', desc: 'Describe + Tooling SOQL for a field on an entity (prompts: entity / term / mode)', action: 'discover_fields', cli: 'node discover_account_fields.js --prod Account Merge' },
+      { id: 26, label: 'Discover Salesforce fields', desc: 'Describe + Tooling SOQL for a field on an entity (prompts: entity / term / mode)', action: 'discover_fields', cli: 'node discover_account_fields.js --prod Account Merge' },
     ],
   },
   {
     label: 'PREFERENCES',
     color: MAGENTA,
     items: [
-      { id: 21, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
+      { id: 27, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
     ],
   },
 ];
@@ -238,11 +360,52 @@ async function handle_action(item, rl) {
       report(code, label, 'completed');
       break;
     }
+    case 'sweep_snapshot_test': {
+      const label = 'sweep snapshot (dev sandbox)';
+      const code = await run_node([SWEEP_SCRIPT, 'snapshot', '--test'], label);
+      report(code, label, 'completed');
+      break;
+    }
+    case 'sweep_snapshot_prod': {
+      const answer = (await prompt(rl, c(YELLOW, '  PRODUCTION snapshot — logs into prod Salesforce to cache records for tuning. Continue? (y/N): '))).trim().toLowerCase();
+      if (answer !== 'y' && answer !== 'yes') { console.log(c(DIM, '  Cancelled.')); break; }
+      const label = 'sweep snapshot (production)';
+      const code = await run_node([SWEEP_SCRIPT, 'snapshot', '--prod'], label);
+      report(code, label, 'completed');
+      break;
+    }
+    case 'sweep_run': {
+      const label = 'criteria sweep (grid over snapshot)';
+      const code = await run_node([SWEEP_SCRIPT, 'run'], label);
+      report(code, label, 'completed');
+      break;
+    }
+    case 'sweep_detail': {
+      const profile = await pick_label(rl, 'Profile to drill into');
+      if (!profile) { console.log(c(DIM, '  Cancelled.')); break; }
+      const label = `sweep detail (${profile})`;
+      const code = await run_node([SWEEP_SCRIPT, 'detail', profile], label);
+      report(code, label, 'completed');
+      break;
+    }
+    case 'sweep_diff': {
+      const a = await pick_label(rl, 'First profile (A)');
+      if (!a) { console.log(c(DIM, '  Cancelled.')); break; }
+      const b = await pick_label(rl, 'Second profile (B)', false);
+      if (!b) { console.log(c(DIM, '  Cancelled.')); break; }
+      if (a === b) { console.log(c(YELLOW, '  Both choices are the same profile — a diff would be empty. Cancelled.')); break; }
+      const label = `sweep diff (${a} vs ${b})`;
+      const code = await run_node([SWEEP_SCRIPT, 'diff', a, b], label);
+      report(code, label, 'completed');
+      break;
+    }
     case 'open_output':
     case 'open_archive':
-    case 'open_meta': {
+    case 'open_meta':
+    case 'open_tuning': {
       const name = item.action === 'open_output' ? OUTPUT_DIR_NAME
                  : item.action === 'open_archive' ? ARCHIVE_DIR_NAME
+                 : item.action === 'open_tuning' ? TUNING_DIR_NAME
                  : META_DIR_NAME;
       const os_path = await determineOSPath();
       const folder = path.join(os_path, name);

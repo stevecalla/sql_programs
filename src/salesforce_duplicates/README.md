@@ -894,6 +894,28 @@ node --test tests/matcher.test.js  # run one suite
 
 Or use menu item 1 (all tests) / 2 (file output tests).
 
+## Duplicate Criteria Tuning (sweep)
+
+A separate, review-only CLI (`sweep_duplicates.js`) answers "how many duplicates
+would we get under different criteria?" It fetches the records **once** (a snapshot),
+then replays the matching over a grid of criteria — fuzzy threshold, nickname on/off,
+which of gender/birthdate/zip are required, ZIP trim, name weights — and prints the
+counts side by side, broken out by exact / fuzzy / nickname / consolidated, with the
+criteria and a per-stage funnel shown, plus a delta vs. the current logic (baseline).
+
+```bash
+node sweep_duplicates.js snapshot --test    # fetch once (or --prod / --full / --partial)
+node sweep_duplicates.js run                 # replay sweep_grid.json over the snapshot
+node sweep_duplicates.js diff "baseline" "t88_nickON_z5_gbz"
+```
+
+From the menu, the **DUPLICATE TUNING** section (items 14–17) runs the snapshot, the
+sweep, and opens the tuning folder. Production code is never touched — the matching
+runs through the self-contained engine in `src/sweep.js`. Output goes to a
+`usat_salesforce_duplicates_tuning` folder, a sibling of the output folder under the
+same external `/data` root (so it stays out of the Slack uploads and archive
+rotation). Full detail in **`README_TUNING.md`**.
+
 ## Slack Server
 
 `server_salesforce_duplicates_8017.js` (at the repo root, alongside the other
