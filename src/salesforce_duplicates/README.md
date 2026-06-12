@@ -370,6 +370,79 @@ record_ids
 member_numbers
 ```
 
+## Expressing the Exact Rule as a SOQL Query
+
+The exact rule (and only the exact rule) can be expressed directly in SOQL using
+`GROUP BY ... HAVING COUNT(Id) > 1`. The query below is tested and runs as-is — every
+group it returns is a suspected exact duplicate set (same last name, first name,
+gender, birthdate, and ZIP):
+
+```sql
+SELECT LastName,
+    FirstName,
+    cfg_Gender_Identity__pc,
+    PersonBirthdate,
+    BillingPostalCode,
+    PersonMailingPostalCode,
+    COUNT(Id) duplicate_count
+FROM Account
+WHERE FirstName != null AND LastName != null
+GROUP BY
+    LastName,
+    FirstName,
+    cfg_Gender_Identity__pc,
+    PersonBirthdate,
+    BillingPostalCode,
+    PersonMailingPostalCode
+HAVING COUNT(Id) > 1
+ORDER BY LastName, FirstName DESC
+LIMIT 2000
+```
+
+This is great for a quick in-platform list (the `LIMIT 2000` keeps it within SOQL
+query limits). It is **not** a full match for the code, because SOQL has no string
+functions and `GROUP BY` accepts only real fields, not expressions. So it:
+
+1. **Does not trim the ZIP.** There is no `LEFT()` / `SUBSTRING()` in SOQL, so
+   `80919` and `80919-1234` are treated as different ZIPs and won't group together.
+2. **Groups billing and mailing separately.** Both ZIP fields are grouping keys, so
+   two records match only when their billing ZIPs agree *and* their mailing ZIPs
+   agree — unlike the code's single "use billing, else mailing" composite ZIP.
+3. **Normalizes nothing.** It can't uppercase/trim names, so `" bob "` and `"Bob"`
+   can land in different groups (case/whitespace sensitivity). It also returns
+   counts, not the Account IDs in each set — you'd pull those with a follow-up query.
+
+### Native workaround: a `Zip5__c` formula field
+
+To also collapse ZIP+4 and use a single billing-else-mailing ZIP (closer to the
+code), add a **formula field** on Account, e.g. `Zip5__c`:
+
+```text
+LEFT(BLANKVALUE(BillingPostalCode, PersonMailingPostalCode), 5)
+```
+
+Once the formula field exists you can group on it (formula fields *are* allowed in
+`GROUP BY`, raw expressions are not):
+
+```sql
+SELECT LastName, FirstName, cfg_Gender_Identity__pc,
+       PersonBirthdate, Zip5__c, COUNT(Id) dup_count
+FROM Account
+WHERE FirstName != null AND LastName != null
+  AND cfg_Gender_Identity__pc != null
+  AND PersonBirthdate != null
+  AND Zip5__c != null
+GROUP BY LastName, FirstName, cfg_Gender_Identity__pc,
+         PersonBirthdate, Zip5__c
+HAVING COUNT(Id) > 1
+```
+
+That is why the tool recreates the ZIP/name logic in Node instead of relying on SOQL
+grouping: it already has the records in memory and can trim, fall back to mailing
+ZIP, and normalize names in one pass without adding org metadata. The **fuzzy** and
+**nickname** passes have no SOQL equivalent at all — they need per-pair Levenshtein
+scoring and a nickname dictionary.
+
 ## Fuzzy Match Logic
 
 The fuzzy match logic is intentionally strict.
@@ -1112,7 +1185,13 @@ run every record is fetched, so order doesn't matter.)
 
 ### Formula fields are handled in Node.js
 
-The composite ZIP formula is recreated in Node.js because Salesforce may not allow formula fields in aggregate grouping.
+The composite ZIP formula is recreated in Node.js because SOQL has no string
+functions and `GROUP BY` accepts only real fields, not expressions like
+`LEFT(BillingPostalCode, 5)`. The exact rule *can* be approximated natively if you
+add a `Zip5__c` formula field and group on it — see **"Expressing the Exact Rule as
+a SOQL Query"** above. The tool keeps the logic in Node so it can also fall back to
+mailing ZIP and normalize names in the same pass, and so fuzzy/nickname (which have
+no SOQL equivalent) run on the same normalized values.
 
 ### Fuzzy logic requires gender, birthdate, and ZIP
 

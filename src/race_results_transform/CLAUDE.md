@@ -354,7 +354,9 @@ download / Reload). Purely client-side: nothing is uploaded, no server, no Sales
   field API names — how we confirmed `Program.cfg_Id__c`) and `sf:soql "<SELECT ...>" [--limit N]` (run a
   single guarded SELECT; non-SELECT is rejected). `sf:list` also takes **`--search "a,b,c"`** to widen recall —
   the terms are OR'd into one SOSL (multi-word phrases quoted), results deduped by `ContentDocumentId`; one term
-  keeps the precise default. Menu "Salesforce" section: list today · **list recent** — `sf_list_recent` prompts
+  keeps the precise default. **See `sf/SEARCH_NOTES.md`** for the SOSL/SOQL reference: why we use SOSL (the
+  record-share visibility gotcha), the Title-convention finding (no category field), the broadened query, and the
+  dedup/IsLatest guards. Menu "Salesforce" section: list today · **list recent** — `sf_list_recent` prompts
   for environment (production / sandbox via `--test`), **search (precise or broad)**, and count · pull.
 - **Tests**: `tests/sf_naming.test.js`, `tests/sf_dates.test.js`, `tests/sf_client.test.js` (mock jsforce,
   no network); opt-in `e2e/sf_flow.spec.js` (stubs `/api/sf/*`, forces the server-folder fallback). Live SF

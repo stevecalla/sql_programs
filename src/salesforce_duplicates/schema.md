@@ -24,6 +24,20 @@ fuzzy matching uses rule-block buckets, and outputs are sorted in code.
 
 The fetch is read-only — it never updates, merges, or deletes anything in Salesforce.
 
+### Approximating the exact rule in SOQL
+
+The **exact** rule can be approximated natively in SOQL with
+`GROUP BY ... HAVING COUNT(Id) > 1` over last name, first name, gender, birthdate,
+and ZIP — useful for a quick in-platform count. SOQL has no string functions, so it
+cannot trim the ZIP to 5 digits (`LEFT()`/`SUBSTRING()` are unavailable and
+`GROUP BY` rejects expressions), fall back to mailing ZIP, or uppercase/trim names.
+To get the ZIP trim natively, add an Account **formula field** `Zip5__c` =
+`LEFT(BLANKVALUE(BillingPostalCode, PersonMailingPostalCode), 5)` and group on it
+(formula fields are allowed in `GROUP BY`). The Node tool recreates this logic in
+code so it can also normalize names and run the **fuzzy**/**nickname** passes (which
+have no SOQL equivalent) on the same normalized values. Full query examples are in
+`README.md` → "Expressing the Exact Rule as a SOQL Query".
+
 ## Output Files
 
 | File | Purpose | Suggested Salesforce Use |
