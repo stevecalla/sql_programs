@@ -132,9 +132,27 @@ Indexes on `exact_duplicate_key` and on `rule_block_key`. Key columns use a bina
 collation so grouping is exact. Indexes are added **after** the streamed load
 finishes (faster to load into an unindexed table, then index).
 
-Optional, additive (Phase 3): result tables `duplicate_detection_run` (one row per
-run) and `duplicate_detection_result` (one row per group/pair/cluster) — these mirror
-the `Duplicate_Run__c` / `Duplicate_Result__c` model already sketched in `schema.md`.
+Phase 3 (in progress): a unified **run table** plus per-view **result tables**.
+
+`salesforce_duplicate_detection_run` (the "logbook") — DONE. One row per run, written
+by BOTH the finder and the sweep (`run_type` = `finder` | `snapshot`), carrying mode,
+timestamps, record count, and the detection counts (null for a snapshot-only run).
+`CREATE TABLE IF NOT EXISTS`, so it accumulates history. `write_run` / `read_latest_run`
+in `src/database_results.js`; `status` reads it. This replaced the per-snapshot
+`snapshot_meta` table — there is now one table describing every run.
+
+Result tables (Option A) — DONE. One table per output view —
+`salesforce_duplicate_exact_group`, `_fuzzy_pair`, `_fuzzy_group`, `_nickname_pair`,
+`_nickname_group`, `_consolidated_cluster` — each mirroring its CSV (columns inferred
+from the row keys, all TEXT). REFRESHED each finder run (drop + recreate; no history —
+the run table holds that). An empty view drops its table and creates nothing.
+`write_result_table` / `write_all_result_tables` in `src/database_results.js`. This is
+the explicit, no-abbreviation form of the `Duplicate_Run__c` / `Duplicate_Result__c`
+model sketched in `schema.md`. To maximize what lives in SQL, the finder also persists
+two previously file-only review maps the same way: `salesforce_duplicate_zip_trim_mapping`
+(raw→trimmed composite ZIP) and `salesforce_duplicate_nickname_fire_mapping` (which
+nickname relationships fired). The **sweep `run`** logs a `run_type = 'sweep'` row to the
+logbook too (baseline-profile counts), so every action is recorded.
 
 ## What changes in the real finder (`step_1_find_duplicates.js`)
 
@@ -168,16 +186,101 @@ Phase 0  [DONE] Database scaffolding: src/database_snapshot.js (recreate table +
          DB_INSERT_BATCH_SIZE) + tests/database_snapshot.test.js (10 tests, fake
          executor — no live MySQL). Does NOT yet touch step_1 or the sweep.
 Phase 1  [DONE] TUNING SWEEP on SQL. `snapshot` streams the fetched records into the
-         table + a one-row meta table (salesforce_account_duplicate_snapshot_meta);
-         `run`/`detail`/`diff` read records + meta back from the DB; new `status`
-         subcommand (menu item 17) verifies the DB snapshot. The JSON snapshot is
-         GONE — the database is the snapshot. The matching engine is unchanged; a
-         load->read round-trip test proves DB-sourced records give identical counts.
-Phase 2  REAL FINDER on SQL: exact via SQL, fuzzy/nickname blocks from SQL. Prove the
-         four output files are byte-identical to the saved baseline before sign-off.
-Phase 3  (Optional) Persist duplicate_detection_run / _result tables; point the
-         Slack/reporting path at the DB.
+         table (originally with a per-snapshot meta table, since SUPERSEDED in Phase 3
+         by the unified run table); `run`/`detail`/`diff` read records back from the DB;
+         `status` subcommand (menu item 17). The JSON snapshot is GONE — the database is
+         the snapshot. The matching engine is unchanged; a load->read round-trip test
+         proves DB-sourced records give identical counts.
+Phase 2  [DONE, default ON] REAL FINDER sources records from the DB. step_1 (by default,
+         ENABLE_SQL_BACKBONE=true; `--in-memory` bypasses) streams the fetched records into
+         the snapshot table and reads them back in fetch order (load_sequence ordinal +
+         ORDER BY), then runs the UNCHANGED detection off those records. Output is
+         byte-identical to the in-memory path — a parity test
+         (tests/sql_backbone_parity.test.js) proves the order-sensitive exact output
+         (positional record_ids lists) survives the round-trip. Default is **ON**
+         (the SQL backbone is the finder's normal path; menu items 7-10 stream into
+         the snapshot table); pass `--in-memory` to bypass it. NOTE: this is the "DB as
+         the record source" step. Pushing the exact
+         GROUP BY itself into SQL (and fuzzy/nickname blocking) is a later optimization
+         (Phase 2b) on top of this — not required for the finder to run on the backbone.
+Phase 3  [DONE] Persist runs + results in the DB. (1) the unified run table
+         `salesforce_duplicate_detection_run` (the "logbook") is written by BOTH the
+         finder and the sweep — one row per run (run_type finder|snapshot), accumulating
+         history; `status` reads it; the old snapshot_meta table is gone. (2) the six
+         per-view result tables (exact_group / fuzzy_pair / fuzzy_group / nickname_pair /
+         nickname_group / consolidated_cluster) are refreshed (drop+recreate) by the
+         finder each run. (3) one Excel workbook (.xlsx, one tab per view) is written
+         beside the CSVs via exceljs (config.ENABLE_EXCEL_OUTPUT).
 ```
+
+## Verifying Phase 2b (the SQL exact rule) — Node → SQL → live
+
+Phase 2b moves the exact-duplicate rule into SQL (`GROUP BY exact_duplicate_key
+HAVING COUNT(*) > 1`) while keeping the final sort + row formatting in Node so the
+output stays byte-identical. It was verified in three layers, from pure Node up to a
+live run against MySQL:
+
+**1. Node unit parity (no database).** `tests/exact_sql.test.js` runs the SQL path
+(`detect_exact_duplicates_sql`) against a *fake executor* that simulates the GROUP BY
+from the same records, and asserts the result deep-equals the in-memory `exact.js`
+output — same groups, same positional `record_ids` / `member_numbers` lists, same sort
+order — including the hard "full tie" case (two groups with identical count and display
+names but different keys, where order must follow first appearance). This proves the
+Node-side rebuild + sort matches the baseline independently of MySQL.
+
+**2. The SQL it actually runs** (against `salesforce_account_duplicate_snapshot`):
+
+```sql
+SET SESSION group_concat_max_len = 67108864;
+
+-- exact_groups_size (all distinct keys)
+SELECT COUNT(DISTINCT exact_duplicate_key) AS n
+FROM salesforce_account_duplicate_snapshot;
+
+-- the duplicate groups: 2+ records, member IDs in fetch order,
+-- groups ordered by first appearance
+SELECT exact_duplicate_key,
+       GROUP_CONCAT(salesforce_account_id ORDER BY load_sequence SEPARATOR ',') AS ids
+FROM salesforce_account_duplicate_snapshot
+GROUP BY exact_duplicate_key
+HAVING COUNT(*) > 1
+ORDER BY MIN(load_sequence);
+```
+
+Node then rebuilds each group from those IDs (via `record_lookup`) and applies the same
+sort as `exact.js` — the sort stays in Node because JS `localeCompare` and MySQL
+collation do not order identically.
+
+**3. Live dual-run on real data.** Run the finder both ways on the deterministic
+`--test` sample (same 5,000 ordered rows each run) and compare the run-summary counts:
+
+```bash
+node step_1_find_duplicates.js --test              # SQL backbone ON  -> GROUP BY
+node step_1_find_duplicates.js --test --in-memory  # legacy in-memory Map
+```
+
+Observed (2026-06-12) — identical across every view:
+
+| metric | SQL backbone | in-memory |
+|---|---|---|
+| Exact duplicate groups | 48 | 48 |
+| Exact records excluded | 140 | 140 |
+| Unique exact-check groups | 4,908 | 4,908 |
+| Fuzzy pairs / groups | 5 / 5 | 5 / 5 |
+| Nickname pairs / groups | 9 / 9 | 9 / 9 |
+| Consolidated clusters | 62 | 62 |
+
+Every number matches, confirming the SQL exact rule produces the same result as the
+baseline on real data. You can also run the queries above directly in Workbench after a
+backbone run (the snapshot table persists) and confirm the group count equals "Exact
+duplicate groups found" in the run summary.
+
+> Performance note: the streaming load is wrapped in a **single transaction** (DONE) —
+> `recreate_table` runs first (DDL auto-commits), then `START TRANSACTION` → all batched
+> inserts → `COMMIT`, then `add_indexes`. That collapses ~350 per-batch disk flushes into
+> one commit (much faster) and makes the load atomic (a failure rolls back, no
+> half-filled table). It needs a dedicated single connection (`open_local_connection`),
+> since a transaction lives on one connection; `materialize_via_db` uses it.
 
 ## Risks and mitigations
 

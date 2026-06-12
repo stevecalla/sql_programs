@@ -118,13 +118,13 @@ const SECTIONS = [
     ],
   },
   {
-    label: 'RUN — the real duplicate finder',
+    label: 'RUN — the real duplicate finder (SQL backbone ON; add --in-memory to bypass)',
     color: YELLOW,
     items: [
-      { id: 7, label: 'Find duplicates — TEST',       desc: '--test: dev sandbox, fetch capped at 5,000', action: 'run_test', cli: `node ${MAIN_SCRIPT} --test` },
-      { id: 8, label: 'Find duplicates — TEST FULL',  desc: '--test --full: dev sandbox, ALL records (Bulk API)', action: 'run_test_full', cli: `node ${MAIN_SCRIPT} --test --full` },
-      { id: 9, label: 'Find duplicates — PROD PARTIAL', desc: '--prod --partial: prod login, capped sample (try before the full run)', action: 'run_prod_partial', cli: `node ${MAIN_SCRIPT} --prod --partial` },
-      { id: 10, label: 'Find duplicates — PRODUCTION', desc: '--prod: prod login, full fetch, writes CSVs to /data', action: 'run_prod', cli: `node ${MAIN_SCRIPT} --prod` },
+      { id: 7, label: 'Find duplicates — TEST',       desc: '--test: dev sandbox, capped 5,000 -> streams into the snapshot table (SQL backbone)', action: 'run_test', cli: `node ${MAIN_SCRIPT} --test` },
+      { id: 8, label: 'Find duplicates — TEST FULL',  desc: '--test --full: dev sandbox, ALL records (Bulk) -> snapshot table (SQL backbone)', action: 'run_test_full', cli: `node ${MAIN_SCRIPT} --test --full` },
+      { id: 9, label: 'Find duplicates — PROD PARTIAL', desc: '--prod --partial: capped sample -> snapshot table (SQL backbone; try before full)', action: 'run_prod_partial', cli: `node ${MAIN_SCRIPT} --prod --partial` },
+      { id: 10, label: 'Find duplicates — PRODUCTION', desc: '--prod: full fetch -> streams into snapshot table (SQL backbone), writes CSVs to /data', action: 'run_prod', cli: `node ${MAIN_SCRIPT} --prod` },
     ],
   },
   {

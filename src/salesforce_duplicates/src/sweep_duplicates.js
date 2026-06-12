@@ -28,7 +28,9 @@ const fs = require('fs');
 const { resolve_is_test, resolve_is_full, resolve_is_partial, resolve_fetch_plan,
         TUNING_DIR_NAME, SWEEP_SUMMARY_FILE, DEFAULT_SWEEP_GRID, DB_LOAD_PROGRESS_EVERY } = require('../config');
 const { fetch_salesforce_accounts } = require('./salesforce');
-const { open_local_executor, load_snapshot, write_meta, read_meta, read_records, count_rows } = require('./database_snapshot');
+const { open_local_executor, load_snapshot, read_records, count_rows } = require('./database_snapshot');
+const { write_run, read_latest_run } = require('./database_results');
+const { make_run_id } = require('./ids');
 const { colorize, log_info } = require('./log');
 const { create_directory } = require('../../../utilities/createDirectory');
 const {
@@ -77,11 +79,19 @@ function resolve_grid(argv) {
 async function read_snapshot() {
     const { pool, executor } = await open_local_executor();
     try {
-        const meta = await read_meta(executor);
-        if (!meta) {
+        const run = await read_latest_run(executor);
+        if (!run) {
             throw new Error('No snapshot in the database. Run:  node src/sweep_duplicates.js snapshot --test');
         }
         const records = await read_records(executor);
+        const meta = {
+            record_count: run.total_records_scanned,
+            fetched_at: run.run_at,
+            mode: run.mode,
+            is_full: run.is_full,
+            is_partial: run.is_partial,
+            salesforce_total_size: run.salesforce_total_size,
+        };
         return { meta, records };
     } finally {
         try { pool.end(); } catch (_) { /* ignore */ }
@@ -120,14 +130,16 @@ async function cmd_snapshot(argv) {
                 `Loaded ${n(done)} / ${n(total)} rows (${total ? Math.round((done / total) * 100) : 0}%) into the snapshot table`,
                 script_start_ms),
         });
-        await write_meta(executor, {
-            fetched_at: new Date().toISOString(),
+        await write_run(executor, {
+            run_id: make_run_id(new Date()),
+            run_type: 'snapshot',
             mode: is_test ? 'test' : 'prod',
             is_full,
             is_partial,
-            max_fetch,
-            record_count: loaded,
+            run_at: new Date().toISOString(),
+            total_records_scanned: loaded,
             salesforce_total_size: result.totalSize,
+            // detection counts are null for a snapshot-only run
         });
     } finally {
         try { pool.end(); } catch (_) { /* ignore */ }
@@ -184,6 +196,34 @@ async function cmd_run(argv) {
     console.log(colorize('green', `\nSummary CSV written: ${csv_path}`));
     console.log(`Drill in:  node src/sweep_duplicates.js detail "<profile-label>"`);
     console.log(`Compare :  node src/sweep_duplicates.js diff "<labelA>" "<labelB>"`);
+
+    // Log this sweep run to the unified logbook (run_type 'sweep'); the baseline profile
+    // (production-equivalent) supplies the representative counts. A logging failure must
+    // not fail the sweep.
+    try {
+        const { pool, executor } = await open_local_executor();
+        try {
+            await write_run(executor, {
+                run_id: make_run_id(new Date()),
+                run_type: 'sweep',
+                mode: meta.mode,
+                is_full: meta.is_full,
+                is_partial: meta.is_partial,
+                run_at: new Date().toISOString(),
+                total_records_scanned: meta.record_count,
+                salesforce_total_size: meta.salesforce_total_size,
+                exact_duplicate_groups: baseline.counts.exact_groups,
+                fuzzy_pair_matches: baseline.counts.fuzzy_pairs,
+                nickname_pair_matches: baseline.counts.nickname_pairs,
+                consolidated_clusters: baseline.counts.consolidated_clusters,
+            });
+            console.log(colorize('gray', 'Sweep run logged to salesforce_duplicate_detection_run.'));
+        } finally {
+            try { pool.end(); } catch (_) { /* ignore */ }
+        }
+    } catch (e) {
+        console.log(colorize('gray', `(Could not log the sweep run: ${e.message})`));
+    }
 }
 
 function pad(s, w) { s = String(s); return s.length >= w ? s : s + ' '.repeat(w - s.length); }
@@ -382,23 +422,28 @@ async function cmd_inspect(argv) {
 async function cmd_status() {
     const { pool, executor } = await open_local_executor();
     try {
-        const meta = await read_meta(executor);
-        if (!meta) {
-            console.log(colorize('gray', 'No sweep snapshot in the database.'));
-            console.log('Run:  node src/sweep_duplicates.js snapshot --test');
+        const run = await read_latest_run(executor);
+        if (!run) {
+            console.log(colorize('gray', 'No run logged in the database yet.'));
+            console.log('Run:  node src/sweep_duplicates.js snapshot --test   (or a finder run)');
             return;
         }
         const live = await count_rows(executor);
-        console.log(colorize('bright', 'Sweep snapshot status (from the database)'));
-        console.log(`  Fetched at         : ${meta.fetched_at}`);
-        console.log(`  Mode               : ${meta.mode}${meta.is_full ? ' full' : ''}${meta.is_partial ? ' partial' : ''}`);
-        console.log(`  Records (meta)     : ${n(meta.record_count)}`);
+        console.log(colorize('bright', 'Latest run (from the unified run table)'));
+        console.log(`  run_id             : ${run.run_id}`);
+        console.log(`  Type               : ${run.run_type}`);
+        console.log(`  Mode               : ${run.mode}${run.is_full ? ' full' : ''}${run.is_partial ? ' partial' : ''}`);
+        console.log(`  Run at             : ${run.run_at}`);
+        console.log(`  Records (logged)   : ${n(run.total_records_scanned)}`);
         console.log(`  Records (live count): ${n(live)}`);
-        console.log(`  Salesforce total   : ${n(meta.salesforce_total_size)}`);
-        if (live !== meta.record_count) {
-            console.log(colorize('red', '  WARNING: live row count does not match the recorded count.'));
+        console.log(`  Salesforce total   : ${n(run.salesforce_total_size)}`);
+        if (run.run_type === 'finder') {
+            console.log(`  Exact / Fuzzy / Nickname / Consolidated: ${n(run.exact_duplicate_groups)} / ${n(run.fuzzy_pair_matches)} / ${n(run.nickname_pair_matches)} / ${n(run.consolidated_clusters)}`);
+        }
+        if (live !== run.total_records_scanned) {
+            console.log(colorize('red', '  NOTE: live row count differs from the logged count (a later run reloaded the table).'));
         } else {
-            console.log(colorize('green', '  OK: live row count matches the recorded snapshot.'));
+            console.log(colorize('green', '  OK: live row count matches the latest logged run.'));
         }
     } finally {
         try { pool.end(); } catch (_) { /* ignore */ }

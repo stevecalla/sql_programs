@@ -8,7 +8,8 @@ fuzzy, nickname, and the reconciled consolidated clusters, with the criteria sho
 It never touches production: the matching runs through a self-contained engine
 (`src/sweep.js`) that reuses the low-level scoring primitives but does **not** modify
 `exact.js` / `fuzzy.js` / `consolidate.js`. The fetched records are streamed once into
-the local DB (table `salesforce_account_duplicate_snapshot` + a meta table) and every
+the local DB (table `salesforce_account_duplicate_snapshot`, plus a row in the unified
+run table `salesforce_duplicate_detection_run`) and every
 replay reads from there — there is no JSON snapshot file. The CSV results go to a
 folder that is a sibling of the production output (see "Where output goes").
 
@@ -29,13 +30,14 @@ From the menu (`node menu.js`), the **DUPLICATE TUNING** section:
 14. Sweep snapshot — TEST         fetch records once (dev sandbox) and stream into the DB
 15. Sweep snapshot — PRODUCTION   fetch records once (production) and stream into the DB
 16. Run sweep (grid over snapshot) replay the grid over the DB snapshot; summary + CSV
-17. Sweep snapshot status (DB)    verify the DB snapshot: meta + live row count
+17. Sweep snapshot status (DB)    latest run from the logbook + live row count
 18. Open tuning folder            the sweep CSVs
 ```
 
 The typical flow is **14 or 15 → 16 → 18**, with **17** any time to confirm what's
 loaded. The snapshot lives in the local DB (table
-`salesforce_account_duplicate_snapshot` + its meta table) — there is no JSON file. The
+`salesforce_account_duplicate_snapshot`, with the run logged to the unified
+`salesforce_duplicate_detection_run` table) — there is no JSON file. The
 `detail` and `diff` drill-downs are
 available as CLI subcommands (below); profile labels read as
 `t<thr>_nick<ON|OFF>_z<zipTrim>_<fields>` — e.g. `t88_nickON_z5_gbz` means
@@ -52,7 +54,7 @@ node src/sweep_duplicates.js snapshot --prod --partial  # production, capped sam
 node src/sweep_duplicates.js snapshot --prod            # production, full
 
 # 2. (optional) confirm what's loaded in the DB:
-node src/sweep_duplicates.js status                     # meta + live row count
+node src/sweep_duplicates.js status                     # latest run (logbook) + live row count
 
 # 3. replay the grid over the DB snapshot (no Salesforce — reads the table):
 node src/sweep_duplicates.js run                        # default grid (config.js DEFAULT_SWEEP_GRID)

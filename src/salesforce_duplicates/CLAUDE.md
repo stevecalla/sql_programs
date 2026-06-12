@@ -71,7 +71,14 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
 
 - `step_1_find_duplicates.js` — main orchestrator. `main()` runs the full pipeline;
   exported as `execute_get_salesforce_duplicates_data`. Guarded by
-  `require.main === module`, so requiring it does not run it.
+  `require.main === module`, so requiring it does not run it. **SQL backbone (Phase 2,
+  default ON; `--in-memory` to bypass):** when on, after the fetch it streams records into the
+  `salesforce_account_duplicate_snapshot` table (`materialize_via_db`) and reads them
+  back in fetch order (load_sequence ordinal), then runs the UNCHANGED detection off
+  those records — byte-identical to the in-memory path (proven by
+  `tests/sql_backbone_parity.test.js`). Default ON (`ENABLE_SQL_BACKBONE = true`, so
+  menu items 7-10 load MySQL); `resolve_use_sql_backbone`: `--in-memory` off, `--sql`
+  on, else the config default. See `README_SQL.md`.
 - `menu.js` — interactive launcher (`node menu.js`): run tests, syntax check, run
   the finder in TEST or PRODUCTION mode, open the output/archive folders, run the
   DUPLICATE TUNING sweep (items 14–18, incl. snapshot status; the sweep CLI also has
@@ -79,9 +86,10 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   start the Slack server. Items are numbered sequentially 1–30; renumber on insert.
 - `src/sweep_duplicates.js` — duplicate criteria tuning CLI (review-only). `snapshot`
   fetches once and STREAMS the records into the local DB (table
-  `salesforce_account_duplicate_snapshot` + a one-row meta table) — NO JSON file;
-  `run`/`detail`/`diff` read records + meta back from the DB; `status` verifies the DB
-  snapshot. Replays detection over a grid of criteria and prints
+  `salesforce_account_duplicate_snapshot`) and logs a `snapshot` row to the unified run
+  table (`salesforce_duplicate_detection_run`) — NO JSON file; `run`/`detail`/`diff`
+  read records back from the DB + the latest run row for the header; `status` prints the
+  latest run from that one logbook (finder or snapshot). Replays detection over a grid of criteria and prints
   exact/fuzzy/nickname/consolidated counts side by side with a funnel + baseline delta.
   Uses the self-contained engine `src/sweep.js` (reuses scoring primitives; does NOT
   modify `exact.js`/`fuzzy.js`/`consolidate.js`). Default grid is
@@ -98,7 +106,9 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
 ```
 salesforce_duplicates/
   step_1_find_duplicates.js   orchestrator: exact + fuzzy pipeline + run summary
-  step_2_get_duplicate_report.js   locate latest output CSVs + counts (for the server)
+  step_2_get_duplicate_report.js   counts from the DB logbook (latest finder run via
+                            read_latest_run; falls back to counting CSV rows if the DB is
+                            down) + locates latest output CSVs for the Slack upload
   step_2a_create_duplicate_message.js   build the Slack summary text
   report_service.js         server glue: parse_report_args + resolve_report
                             (slash-arg parsing + freshness/force logic; testable)
@@ -132,12 +142,29 @@ salesforce_duplicates/
     sweep.js                criteria tuning engine (expand_grid/run_profile/diff; pure)
     sweep_duplicates.js     duplicate criteria tuning CLI (snapshot/run/detail/diff);
                             default grid is config.DEFAULT_SWEEP_GRID (--grid <file> overrides)
-    database_snapshot.js    SQL backbone (Phases 0-1): stream Account records into the
-                            usat_sales_db table salesforce_account_duplicate_snapshot
-                            (drop+recreate; keys precomputed via normalize.js for parity)
-                            + read back (record_from_row/read_records) + a one-row meta
-                            table (write_meta/read_meta). Injectable executor so it's
-                            testable without MySQL; the sweep is the first consumer.
+    database_snapshot.js    SQL backbone: stream Account records into the usat_sales_db
+                            table salesforce_account_duplicate_snapshot (drop+recreate;
+                            keys precomputed via normalize.js for parity; load_sequence
+                            ordinal preserves fetch order) + read back in that order
+                            (record_from_row/read_records) + materialize_via_db (load
+                            then read, used by the finder). The load is wrapped in a single
+                            transaction (open_local_connection — a dedicated connection;
+                            DDL outside, inserts inside) for speed + atomicity. Injectable
+                            executor so it's testable without MySQL.
+    exact_sql.js            Phase 2b: SQL-based exact grouping (GROUP BY exact_duplicate_key
+                            HAVING COUNT>1 ORDER BY MIN(load_sequence)); Node rebuilds +
+                            sorts for byte-identical output to exact.js.
+    database_results.js     Phase 3: the unified run table (salesforce_duplicate_detection_run,
+                            the "logbook") written by BOTH the finder and the sweep — one
+                            row per run (write_run / read_latest_run); accumulates history.
+                            ALSO the six per-view result tables (write_result_table /
+                            write_all_result_tables) — exact_group / fuzzy_pair / fuzzy_group
+                            / nickname_pair / nickname_group / consolidated_cluster, plus
+                            zip_trim_mapping + nickname_fire_mapping, refreshed (drop+recreate)
+                            each finder run. The sweep `run` also logs a run row. Injectable
+                            executor (testable).
+    excel_output.js         Phase 3: write_workbook — one .xlsx (config.EXCEL_OUTPUT_FILE)
+                            with one tab per view, written beside the CSVs via exceljs.
     verify_database_snapshot.js  manual step-by-step DB loader smoke test
                             (load/show/drop; menu items 20-22) — synthetic rows into
                             usat_sales_db, then the exact-duplicate GROUP BY
@@ -148,6 +175,10 @@ salesforce_duplicates/
     step_2_report.test.js   report module (counts + latest-file selection)
     report_service.test.js  slash-arg parsing + freshness/force (injected deps)
     sweep.test.js           tuning engine; database_snapshot.test.js  SQL loader (fake executor)
+    exact_sql.test.js       Phase 2b exact-grouping parity vs exact.js (fake executor)
+    sql_backbone_parity.test.js  finder order-preservation (load_sequence) parity
+    database_results.test.js  unified run table + 6 result tables (fake executor)
+    excel_output.test.js    .xlsx workbook writer (writes + reads back a real file)
   README.md                 algorithm + field reference
   README_TUNING.md          duplicate criteria tuning sweep
   README_SQL.md             SQL backbone plan (usat_sales_db) + Phase 0 loader
@@ -194,13 +225,17 @@ only `/scheduled` accepts `?is_test`.
 UNLESS the newest output file is younger than `FRESH_OUTPUT_WINDOW_MINUTES` (config) —
 within that window it returns the latest instead (the Slack reply explains this and
 points to `force=true`). `mode=run force=true` always regenerates. Run it from the repo
-root (`node server_salesforce_duplicates_8017.js`) or menu item 20; hit it with menu
-items 21–25.
+root (`node server_salesforce_duplicates_8017.js`) or menu item 23; hit it with menu
+items 24–28.
 
-Each run persists a small summary (total records scanned + counts, incl. ZIP-trim
-counts) to `META_DIR_NAME/RUN_SUMMARY_FILE` (a sibling of the output folder, so it
-is never swept into the Slack uploads); `step_2_get_duplicate_report` reads it so the
-stats message can report the total records scanned even on a `mode=latest` read. The
+The Slack stats now come from the **DB logbook** — `step_2_get_duplicate_report` reads
+the latest `run_type = 'finder'` row from `salesforce_duplicate_detection_run` for the
+counts + total records scanned (`counts_source: 'database'`), and falls back to counting
+the CSV rows + `RUN_SUMMARY_FILE` only if the DB is unavailable (`counts_source: 'files'`).
+The file uploads still send the actual CSVs (you can't attach a table to Slack). Each run
+still also persists a small summary (total records scanned + counts, incl. ZIP-trim
+counts) to `META_DIR_NAME/RUN_SUMMARY_FILE` (a sibling of the output folder, so it is
+never swept into the Slack uploads) as that fallback. The
 same meta folder also holds `ZIP_TRIM_MAPPING_FILE` (`zip_trim_mapping.csv`), the
 reviewable raw -> trimmed composite-ZIP map written each run (menu item 13 opens this
 folder).

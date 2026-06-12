@@ -54,17 +54,27 @@ salesforce_duplicates/
                             nickname view (c) rows, and UnionFind cluster view (d)
     grouping.js             UnionFind + fuzzy group builder
     step_timer.js           per-step stopwatch: live [STEP] lines + end timeline
-    exact.js                exact-duplicate detection
+    exact.js                exact-duplicate detection (in-memory)
+    exact_sql.js            SQL-based exact grouping (GROUP BY; byte-identical)
     fuzzy.js                fuzzy candidate filter + rule blocks + pairwise compare
     zip_trim.js             builds the reviewable raw -> trimmed composite-ZIP map
     sf_rows.js              maps result rows to the Salesforce import schema
     output_files.js         CSV write + output/archive rotation + meta files
     salesforce.js           jsforce connect + Account query (--test=REST/ordered,
                             --prod=Bulk API/unordered)
-  tests/                    node:test unit tests (normalize, matcher, grouping, ids,
-                            sf_rows, exact, fuzzy, zip_trim, file output, step_2
-                            report, report_service, step_timer, nicknames, consolidate)
-  README.md / CLAUDE.md / schema.md
+    sweep.js                criteria tuning engine (expand_grid/run_profile/diff; pure)
+    sweep_duplicates.js     duplicate criteria tuning CLI (snapshot/run/detail/diff)
+    database_snapshot.js    SQL backbone: stream records into usat_sales_db + read back
+    database_results.js     run logbook + the 6 result tables (+ zip-trim/nickname-fire)
+    excel_output.js         one .xlsx workbook, one tab per view (exceljs)
+    verify_database_snapshot.js  manual DB-loader smoke test (load/show/drop)
+  tests/                    node:test unit suites (normalize, matcher, grouping, ids,
+                            sf_rows, exact, fuzzy, zip_trim, file output, step_2 report,
+                            report_service, step_timer, nicknames, consolidate, sweep,
+                            database_snapshot, database_results, excel_output, exact_sql,
+                            sql_backbone_parity, salesforce, config)
+  README.md / README_SQL.md / README_TUNING.md / README_NICKNAME.md / README_MERGE.md
+  CLAUDE.md / schema.md
 ```
 
 `main()` in `step_1_find_duplicates.js` is now a thin orchestrator that calls
@@ -176,6 +186,19 @@ provenance flags `Has_Exact/Fuzzy/Nickname_Flag__c`, per-signal `*_Link_Count__c
 (one line per connected pair, with scores). This is the file to review/act on; (a)/(b)/(c)
 are the per-signal lenses behind it. (Column names use the same "group" vocabulary as the
 other group files; a "link" = a matched pair inside the cluster.)
+
+### Also written each run: an Excel workbook + database tables
+
+Alongside the CSVs, every run writes **one Excel workbook** (`account_duplicates_all_views_<timestamp>.xlsx`)
+with **one tab per view** (`exact`, `fuzzy_pair`, `fuzzy_group`, `nickname_pair`,
+`nickname_group`, `consolidated`) — handy for a reviewer who'd rather open one file.
+This is on by default (`ENABLE_EXCEL_OUTPUT` in `config.js`).
+
+When the SQL backbone is on (the default — see below), the run also persists each of the
+six views into its own **database table** in `usat_sales_db`
+(`salesforce_duplicate_exact_group`, `_fuzzy_pair`, `_fuzzy_group`, `_nickname_pair`,
+`_nickname_group`, `_consolidated_cluster`), refreshed each run, plus a row in the run
+"logbook" (`salesforce_duplicate_detection_run`). See `README_SQL.md`.
 
 ## Salesforce Object Used
 
@@ -890,6 +913,22 @@ node step_1_find_duplicates.js --prod         # production (full fetch)
 node step_1_find_duplicates.js                # defaults to production
 ```
 
+### SQL backbone (default ON; `--in-memory` to bypass)
+
+By default (`ENABLE_SQL_BACKBONE = true` in `config.js`) the finder streams the fetched
+records into the local `usat_sales_db` snapshot table and reads them back **in fetch
+order** (via a `load_sequence` ordinal), then runs the same detection off the database —
+so every run (menu items 7-10 included) loads MySQL. The output is byte-for-byte
+identical to the in-memory path — `tests/sql_backbone_parity.test.js` proves the
+order-sensitive exact output survives the round-trip. Pass `--in-memory` to force the
+legacy in-memory path (no DB). This is the same table the tuning sweep uses, so one
+backbone serves both. See `README_SQL.md`.
+
+```bash
+node step_1_find_duplicates.js --prod              # production, detection off the DB (default)
+node step_1_find_duplicates.js --prod --in-memory  # force the legacy in-memory path
+```
+
 ## Testing
 
 The `src/` modules are pure and unit-tested with Node's built-in test runner.
@@ -930,7 +969,7 @@ rotation). Full detail in **`README_TUNING.md`**.
 `server_*.js`, port 8017) exposes the duplicate output over Slack slash commands.
 It mirrors `server_slack_events.js` and reuses the shared Slack upload utilities.
 
-Run it from the repo root (or menu item 14):
+Run it from the repo root (or menu item 23):
 
 ```bash
 node server_salesforce_duplicates_8017.js

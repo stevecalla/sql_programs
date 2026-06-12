@@ -61,19 +61,42 @@ describe('find_latest_by_base', () => {
 });
 
 describe('execute_get_duplicate_report', () => {
-    test('summarizes the latest files + reads total_records_scanned from meta', async () => {
+    // DB unavailable -> fall back to counting the CSV files (read_db stub returns null).
+    const no_db = { read_db: async () => null };
+
+    test('DB unavailable: falls back to file counts + run_summary (counts_source=files)', async () => {
         const dir = make_fixture_dir();
         const meta = make_meta_dir(5000);
         try {
-            const all = await execute_get_duplicate_report('all', dir, meta);
+            const all = await execute_get_duplicate_report('all', dir, meta, no_db);
             assert.equal(all.has_output, true);
+            assert.equal(all.counts_source, 'files');
             assert.deepEqual(all.counts, { exact: 2, fuzzy_pair: 1, fuzzy_group: 0 });
             assert.equal(all.file_path, null);                 // 'all' uploads the whole dir
             assert.equal(all.total_records_scanned, 5000);     // from run_summary.json
             assert.ok(all.age_minutes >= 0 && all.age_minutes < 5);
 
-            const exact = await execute_get_duplicate_report('exact', dir, meta);
+            const exact = await execute_get_duplicate_report('exact', dir, meta, no_db);
             assert.ok(exact.file_path.endsWith('account_duplicates_sf_import_2026-06-04_10-00-00.csv'));
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+            fs.rmSync(meta, { recursive: true, force: true });
+        }
+    });
+
+    test('DB available: counts + records come from the logbook (counts_source=database)', async () => {
+        const dir = make_fixture_dir();   // files have 2/1/0; DB should override them
+        const meta = make_meta_dir(5000);
+        const read_db = async () => ({
+            exact_duplicate_groups: 48, fuzzy_pair_matches: 5, fuzzy_groups: 5,
+            total_records_scanned: 695828, salesforce_total_size: 695828,
+        });
+        try {
+            const all = await execute_get_duplicate_report('all', dir, meta, { read_db });
+            assert.equal(all.counts_source, 'database');
+            assert.deepEqual(all.counts, { exact: 48, fuzzy_pair: 5, fuzzy_group: 5 });
+            assert.equal(all.total_records_scanned, 695828);
+            assert.equal(all.salesforce_total_size, 695828);
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });
             fs.rmSync(meta, { recursive: true, force: true });
@@ -84,7 +107,8 @@ describe('execute_get_duplicate_report', () => {
         const out = await execute_get_duplicate_report(
             'all',
             path.join(os.tmpdir(), 'sfdup-no-out-xyz'),
-            path.join(os.tmpdir(), 'sfdup-no-meta-xyz')
+            path.join(os.tmpdir(), 'sfdup-no-meta-xyz'),
+            no_db
         );
         assert.equal(out.has_output, false);
         assert.deepEqual(out.counts, { exact: 0, fuzzy_pair: 0, fuzzy_group: 0 });

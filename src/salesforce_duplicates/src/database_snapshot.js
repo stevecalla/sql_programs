@@ -28,7 +28,7 @@ const {
     make_exact_duplicate_key,
     make_rule_key,
 } = require('./normalize');
-const { SNAPSHOT_TABLE_NAME, SNAPSHOT_META_TABLE_NAME, DB_INSERT_BATCH_SIZE } = require('../config');
+const { SNAPSHOT_TABLE_NAME, DB_INSERT_BATCH_SIZE } = require('../config');
 
 // Column order is the single source of truth for both the CREATE and the INSERT.
 const COLUMNS = [
@@ -50,11 +50,12 @@ const COLUMNS = [
     'exact_duplicate_key',
     'rule_block_key',
     'loaded_at',
+    'load_sequence',
 ];
 
 // Map one fetched Salesforce record to the ordered row of column values. Pure — the
 // keys come straight from normalize.js, so they match the in-memory detection exactly.
-function to_snapshot_row(record, loaded_at = new Date()) {
+function to_snapshot_row(record, loaded_at = new Date(), load_sequence = null) {
     return [
         record.Id || '',
         record.LastName || '',
@@ -74,6 +75,7 @@ function to_snapshot_row(record, loaded_at = new Date()) {
         make_exact_duplicate_key(record),
         make_rule_key(record),
         loaded_at,
+        load_sequence,
     ];
 }
 
@@ -99,6 +101,7 @@ function create_table_sql(table = SNAPSHOT_TABLE_NAME) {
   exact_duplicate_key          VARCHAR(800) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
   rule_block_key               VARCHAR(600) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
   loaded_at                    DATETIME,
+  load_sequence                INT,
   PRIMARY KEY (salesforce_account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`;
 }
@@ -117,6 +120,7 @@ const KEY_INDEX_PREFIX = 255;
 async function add_indexes(executor, table = SNAPSHOT_TABLE_NAME) {
     await executor(`CREATE INDEX idx_exact_duplicate_key ON \`${table}\` (exact_duplicate_key(${KEY_INDEX_PREFIX}))`, []);
     await executor(`CREATE INDEX idx_rule_block_key ON \`${table}\` (rule_block_key(${KEY_INDEX_PREFIX}))`, []);
+    await executor(`CREATE INDEX idx_load_sequence ON \`${table}\` (load_sequence)`, []);
 }
 
 // Build one multi-row INSERT for a batch of already-mapped rows. Returns { sql, params }.
@@ -143,6 +147,7 @@ async function load_snapshot(records, {
     loaded_at = new Date(),
     progress_every = 0,
     on_progress,
+    transaction,
 } = {}) {
     if (typeof executor !== 'function') throw new Error('load_snapshot requires an executor(sql, params) function');
 
@@ -157,9 +162,12 @@ async function load_snapshot(records, {
         }
     };
 
+    if (transaction) await transaction.begin();
+
     let loaded = 0;
     let batch = [];
     const seen = new Set();
+    try {
     for (const record of records) {
         const id = record && record.Id;
         // Skip blank Ids and the Bulk API CSV header row, which jsforce can leak as a
@@ -169,7 +177,7 @@ async function load_snapshot(records, {
         // across Bulk download chunks. Distinct IDs differing only by case are kept.
         if (seen.has(id)) continue;
         seen.add(id);
-        batch.push(to_snapshot_row(record, loaded_at));
+        batch.push(to_snapshot_row(record, loaded_at, loaded + batch.length));
         if (batch.length >= batch_size) {
             loaded += await insert_batch(executor, batch, table);
             batch = [];
@@ -177,6 +185,11 @@ async function load_snapshot(records, {
         }
     }
     if (batch.length > 0) loaded += await insert_batch(executor, batch, table);
+    if (transaction) await transaction.commit();
+    } catch (e) {
+        if (transaction) { try { await transaction.rollback(); } catch (_) { /* ignore */ } }
+        throw e;
+    }
 
     await add_indexes(executor, table);
     return loaded;
@@ -205,7 +218,7 @@ async function read_records(executor, table = SNAPSHOT_TABLE_NAME) {
         `SELECT salesforce_account_id, last_name, first_name, member_number, gender_identity,
                 foundation_constituent, salesforce_merge_id, person_birthdate,
                 billing_postal_code, person_mailing_postal_code
-         FROM \`${table}\``, []);
+         FROM \`${table}\` ORDER BY load_sequence`, []);
     return rows.map(record_from_row);
 }
 
@@ -213,61 +226,25 @@ async function count_rows(executor, table = SNAPSHOT_TABLE_NAME) {
     const rows = await executor(`SELECT COUNT(*) AS n FROM \`${table}\``, []);
     return Number(rows[0] ? rows[0].n : 0);
 }
-
-// --- Snapshot meta: a one-row companion table so the snapshot stays self-describing
-// in the DB (replaces the old snapshot.json meta). Dropped + recreated each snapshot.
-const META_COLUMNS = ['fetched_at', 'mode', 'is_full', 'is_partial', 'max_fetch', 'record_count', 'salesforce_total_size'];
-
-function create_meta_table_sql(table = SNAPSHOT_META_TABLE_NAME) {
-    return `CREATE TABLE \`${table}\` (
-  fetched_at             VARCHAR(40),
-  mode                   VARCHAR(16),
-  is_full                TINYINT,
-  is_partial             TINYINT,
-  max_fetch              INT,
-  record_count           INT,
-  salesforce_total_size  INT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`;
-}
-
-async function write_meta(executor, meta, table = SNAPSHOT_META_TABLE_NAME) {
-    await executor(`DROP TABLE IF EXISTS \`${table}\``, []);
-    await executor(create_meta_table_sql(table), []);
-    const params = [
-        meta.fetched_at || new Date().toISOString(),
-        meta.mode || '',
-        meta.is_full ? 1 : 0,
-        meta.is_partial ? 1 : 0,
-        Number(meta.max_fetch || 0),
-        Number(meta.record_count || 0),
-        Number(meta.salesforce_total_size || 0),
-    ];
-    await executor(`INSERT INTO \`${table}\` (${META_COLUMNS.join(', ')}) VALUES (${META_COLUMNS.map(() => '?').join(', ')})`, params);
-}
-
-// Returns the meta row (normalized) or null if no snapshot has been loaded.
-async function read_meta(executor, table = SNAPSHOT_META_TABLE_NAME) {
-    let rows;
-    try {
-        rows = await executor(`SELECT ${META_COLUMNS.join(', ')} FROM \`${table}\` LIMIT 1`, []);
-    } catch (e) {
-        if (/doesn't exist|Unknown table/i.test(e.message)) return null;
-        throw e;
-    }
-    if (!rows || rows.length === 0) return null;
-    const r = rows[0];
-    return {
-        fetched_at: r.fetched_at,
-        mode: r.mode,
-        is_full: !!r.is_full,
-        is_partial: !!r.is_partial,
-        max_fetch: Number(r.max_fetch || 0),
-        record_count: Number(r.record_count || 0),
-        salesforce_total_size: Number(r.salesforce_total_size || 0),
-    };
-}
-
 // --- Real connection (not exercised by unit tests; used by the pipeline) ----------
+// A DEDICATED single-connection executor (transactions live on one connection, so a
+// pooled query-per-call executor can't hold a transaction). close() releases + ends.
+async function open_local_connection() {
+    const { create_local_db_connection } = require('../../../utilities/connectionLocalDB');
+    const { local_usat_sales_db_config } = require('../../../utilities/config');
+    const pool = await create_local_db_connection(await local_usat_sales_db_config());
+    const conn = await pool.promise().getConnection();
+    const executor = async (sql, params) => {
+        const [rows] = await conn.query(sql, params);
+        return rows;
+    };
+    const close = () => {
+        try { conn.release(); } catch (_) { /* ignore */ }
+        try { pool.end(); } catch (_) { /* ignore */ }
+    };
+    return { conn, executor, close };
+}
+
 // Opens a pool on the local USAT database and returns { pool, executor }. The executor
 // adapts mysql2's pool.query to the (sql, params) -> rows shape the loader expects.
 async function open_local_executor() {
@@ -281,6 +258,28 @@ async function open_local_executor() {
         return rows;
     };
     return { pool, executor };
+}
+
+// Phase 2: stream records into the snapshot table, then read them back in fetch order
+// (ORDER BY load_sequence). Used by the finder so detection runs OFF the database. The
+// returned records carry the same raw fields in the same order as the input, so the
+// finder's output is byte-identical to the in-memory path (proven by tests).
+async function materialize_via_db(records, { progress_every = 0, on_progress } = {}) {
+    const { conn, executor, close } = await open_local_connection();
+    try {
+        const loaded = await load_snapshot(records, {
+            executor, progress_every, on_progress,
+            transaction: {
+                begin: () => conn.beginTransaction(),
+                commit: () => conn.commit(),
+                rollback: () => conn.rollback(),
+            },
+        });
+        const out = await read_records(executor);
+        return { records: out, loaded };
+    } finally {
+        close();
+    }
 }
 
 // Convenience: open the local DB, load the snapshot, close the pool. Returns the count.
@@ -305,9 +304,8 @@ module.exports = {
     record_from_row,
     read_records,
     count_rows,
-    create_meta_table_sql,
-    write_meta,
-    read_meta,
     open_local_executor,
+    open_local_connection,
+    materialize_via_db,
     load_snapshot_to_local_db,
 };

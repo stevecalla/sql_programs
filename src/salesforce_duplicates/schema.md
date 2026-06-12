@@ -38,6 +38,32 @@ code so it can also normalize names and run the **fuzzy**/**nickname** passes (w
 have no SOQL equivalent) on the same normalized values. Full query examples are in
 `README.md` → "Expressing the Exact Rule as a SOQL Query".
 
+## Local SQL backbone tables (`usat_sales_db`)
+
+When the SQL backbone is on (the default — see `README_SQL.md`), each run also writes to
+these local MySQL tables in `usat_sales_db`, so as much of the output as possible lives
+in SQL (queryable and joinable), not just in files. Names are spelled out, no
+abbreviations.
+
+| Table | Lifecycle | Contents |
+|---|---|---|
+| `salesforce_account_duplicate_snapshot` | drop + recreate each run | the fetched Account records + precomputed keys; detection reads from this |
+| `salesforce_duplicate_detection_run` | accumulates (history) | the run "logbook" — one row per run (`run_type` = `finder` / `sweep` / `snapshot`), with mode, timestamps, record count, and the detection counts |
+| `salesforce_duplicate_exact_group` | refresh each finder run | exact-duplicate groups — mirrors `account_duplicates_sf_import.csv` |
+| `salesforce_duplicate_fuzzy_pair` | refresh each finder run | fuzzy pair matches — mirrors `account_fuzzy_name_matches_sf_import.csv` |
+| `salesforce_duplicate_fuzzy_group` | refresh each finder run | fuzzy groups — mirrors `account_fuzzy_name_groups_sf_import.csv` |
+| `salesforce_duplicate_nickname_pair` | refresh each finder run | nickname pair matches — mirrors `account_nickname_name_matches_sf_import.csv` |
+| `salesforce_duplicate_nickname_group` | refresh each finder run | nickname groups — mirrors `account_nickname_name_groups_sf_import.csv` |
+| `salesforce_duplicate_consolidated_cluster` | refresh each finder run | reconciled clusters — mirrors `account_consolidated_duplicates_sf_import.csv` |
+| `salesforce_duplicate_zip_trim_mapping` | refresh each finder run | raw → trimmed composite-ZIP map — mirrors `zip_trim_mapping.csv` |
+| `salesforce_duplicate_nickname_fire_mapping` | refresh each finder run | which nickname relationships fired — mirrors `nickname_fire_mapping.csv` |
+
+The six result tables carry the same `__c` import columns documented per file below
+(columns are inferred from the CSV-shaped rows and stored as `TEXT`). **"Refresh each
+run"** = the table is dropped and recreated with only the latest run's data; the run
+logbook keeps the history. **"Accumulates"** = one row appended per run. The snapshot
+load is wrapped in a single transaction (one commit) for speed and atomicity.
+
 ## Output Files
 
 | File | Purpose | Suggested Salesforce Use |

@@ -23,8 +23,6 @@ const {
     record_from_row,
     read_records,
     count_rows,
-    write_meta,
-    read_meta,
 } = require('../src/database_snapshot');
 const { make_exact_duplicate_key, make_rule_key } = require('../src/normalize');
 const { SNAPSHOT_TABLE_NAME } = require('../config');
@@ -77,7 +75,7 @@ describe('to_snapshot_row', () => {
 
     test('blank fields become empty strings, not undefined', () => {
         const row = to_snapshot_row({ Id: '9' });
-        for (let i = 0; i < COLUMNS.length - 1; i++) { // last col is loaded_at (a Date)
+        for (let i = 0; i < COLUMNS.length - 2; i++) { // last two cols are loaded_at (Date) + load_sequence (null when unset)
             assert.notEqual(row[i], undefined);
         }
     });
@@ -108,9 +106,10 @@ describe('add_indexes', () => {
     test('uses prefix indexes on the key columns (under InnoDB 3072-byte limit)', async () => {
         const { executor, calls } = fake_executor();
         await add_indexes(executor);
-        assert.equal(calls.length, 2);
+        assert.equal(calls.length, 3);
         assert.ok(/CREATE INDEX .*exact_duplicate_key\(255\)/.test(calls[0].sql), calls[0].sql);
         assert.ok(/CREATE INDEX .*rule_block_key\(255\)/.test(calls[1].sql), calls[1].sql);
+        assert.ok(/CREATE INDEX .*load_sequence/.test(calls[2].sql), calls[2].sql);
     });
 });
 
@@ -151,7 +150,7 @@ describe('load_snapshot', () => {
         assert.equal(drops.length, 1);
         assert.equal(creates.length, 1);
         assert.equal(inserts.length, 3); // 2 + 2 + 1
-        assert.equal(indexes.length, 2);
+        assert.equal(indexes.length, 3);
 
         // order: drop -> create -> inserts... -> indexes
         assert.ok(calls[0].sql.startsWith('DROP TABLE'));
@@ -165,6 +164,65 @@ describe('load_snapshot', () => {
 
     test('throws without an executor', async () => {
         await assert.rejects(() => load_snapshot([], {}), /requires an executor/);
+    });
+
+    test('transaction object is driven begin -> inserts -> commit, with DDL outside', async () => {
+        const seq = [];
+        const executor = async (sql) => { seq.push(sql.split(/\s+/).slice(0, 2).join(' ')); return []; };
+        const transaction = {
+            begin: async () => { seq.push('BEGIN'); },
+            commit: async () => { seq.push('COMMIT'); },
+            rollback: async () => { seq.push('ROLLBACK'); },
+        };
+        await load_snapshot([rec('1', 'Bob', 'Smith'), rec('2', 'Bob', 'Smith')], { executor, batch_size: 1, transaction });
+        const begin = seq.indexOf('BEGIN');
+        const commit = seq.indexOf('COMMIT');
+        const firstInsert = seq.indexOf('INSERT INTO');
+        const firstDdl = seq.indexOf('CREATE TABLE');
+        assert.ok(begin > -1 && commit > begin, 'begin before commit');
+        assert.ok(firstDdl < begin, 'CREATE TABLE before the transaction (DDL auto-commits)');
+        assert.ok(firstInsert > begin && firstInsert < commit, 'inserts inside the transaction');
+        assert.ok(seq.lastIndexOf('CREATE INDEX') > commit, 'indexes after commit');
+        assert.ok(!seq.includes('ROLLBACK'));
+    });
+
+    test('rollback is called if an insert throws inside the transaction', async () => {
+        const seq = [];
+        let n = 0;
+        const executor = async (sql) => {
+            if (sql.startsWith('INSERT')) { n += 1; if (n === 2) throw new Error('boom'); }
+            return [];
+        };
+        const transaction = {
+            begin: async () => { seq.push('BEGIN'); },
+            commit: async () => { seq.push('COMMIT'); },
+            rollback: async () => { seq.push('ROLLBACK'); },
+        };
+        await assert.rejects(() => load_snapshot(
+            [rec('1', 'A', 'A'), rec('2', 'B', 'B'), rec('3', 'C', 'C')],
+            { executor, batch_size: 1, transaction }));
+        assert.deepEqual(seq, ['BEGIN', 'ROLLBACK']);
+    });
+
+    test('no transaction object (default): no begin/commit, inserts still run', async () => {
+        const { executor, calls } = fake_executor();
+        await load_snapshot([rec('1', 'Bob', 'Smith')], { executor });
+        assert.ok(calls.some((c) => c.sql.startsWith('INSERT INTO')));
+    });
+
+    test('assigns load_sequence 0..n-1 in input (fetch) order', async () => {
+        const { executor, calls } = fake_executor();
+        const records = ['a', 'b', 'c'].map((id, i) => rec(String(i), 'F' + id, 'L' + id));
+        await load_snapshot(records, { executor, batch_size: 2 });
+        const seqCol = COLUMNS.indexOf('load_sequence');
+        const inserts = calls.filter((c) => c.sql.startsWith('INSERT INTO'));
+        const seqs = [];
+        for (const ins of inserts) {
+            for (let off = 0; off < ins.params.length; off += COLUMNS.length) {
+                seqs.push(ins.params[off + seqCol]);
+            }
+        }
+        assert.deepEqual(seqs, [0, 1, 2]);
     });
 
     test('on_progress fires at the configured cadence with (loaded, total)', async () => {
@@ -231,6 +289,7 @@ describe('read_records', () => {
         };
         const records = await read_records(executor);
         assert.ok(captured[0].startsWith('SELECT'));
+        assert.ok(/ORDER BY load_sequence/.test(captured[0]), captured[0]);
         assert.equal(records.length, 1);
         assert.equal(records[0].FirstName, 'Bob');
         assert.equal(records[0].cfg_Gender_Identity__pc, 'Male');
@@ -241,36 +300,5 @@ describe('count_rows', () => {
     test('returns the COUNT(*) value as a number', async () => {
         const executor = async () => [{ n: 42 }];
         assert.equal(await count_rows(executor), 42);
-    });
-});
-
-describe('snapshot meta table', () => {
-    test('write_meta drops, creates, and inserts one row with the right params', async () => {
-        const { executor, calls } = fake_executor();
-        await write_meta(executor, {
-            fetched_at: '2026-06-12T00:00:00Z', mode: 'test', is_full: false, is_partial: true,
-            max_fetch: 5000, record_count: 4, salesforce_total_size: 9,
-        });
-        assert.equal(calls.length, 3);
-        assert.ok(calls[0].sql.startsWith('DROP TABLE'));
-        assert.ok(calls[1].sql.startsWith('CREATE TABLE'));
-        assert.ok(calls[2].sql.startsWith('INSERT INTO'));
-        // params: fetched_at, mode, is_full(0), is_partial(1), max_fetch, record_count, total
-        assert.deepEqual(calls[2].params, ['2026-06-12T00:00:00Z', 'test', 0, 1, 5000, 4, 9]);
-    });
-
-    test('read_meta returns the normalized row, or null when missing', async () => {
-        const present = async () => [{ fetched_at: 'x', mode: 'prod', is_full: 1, is_partial: 0,
-                                       max_fetch: 1000000, record_count: 700000, salesforce_total_size: 700000 }];
-        const meta = await read_meta(present);
-        assert.equal(meta.mode, 'prod');
-        assert.equal(meta.is_full, true);
-        assert.equal(meta.record_count, 700000);
-
-        const empty = async () => [];
-        assert.equal(await read_meta(empty), null);
-
-        const missingTable = async () => { throw new Error("Table 'x' doesn't exist"); };
-        assert.equal(await read_meta(missingTable), null);
     });
 });
