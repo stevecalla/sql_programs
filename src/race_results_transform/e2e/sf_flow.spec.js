@@ -127,15 +127,17 @@ test.describe('race_results_transform — Salesforce intake', () => {
     await expect(page.locator('#sfTable tbody tr')).toHaveCount(2);   // retried after sign-in, no redirect
   });
 
-  test('cap: newest 25 auto-selected; "Max files" raises it and clamps at 150', async ({ page }) => {
-    await page.route('**/api/sf/files**', (route) => route.fulfill(json({ ok: true, count: 40, files: make_files(40) })));
+  test('cap: newest 50 auto-selected; "Max files" raises it and clamps at 150', async ({ page }) => {
+    await page.route('**/api/sf/files**', (route) => route.fulfill(json({ ok: true, count: 60, files: make_files(60) })));
     await page.locator('#sfListBtn').click();
-    await expect(page.locator('#sfTable tbody tr')).toHaveCount(40);
-    await expect(page.locator('#sfTable tbody input.sf-pick:checked')).toHaveCount(25);   // default 25
+    await expect(page.locator('#sfTable tbody tr')).toHaveCount(60);
+    await expect(page.locator('#sfTable tbody input.sf-pick:checked')).toHaveCount(50);   // default 50
+    await expect(page.locator('#sfLimit')).toHaveClass(/sf-limit-hot/);                    // 60 available > 50 cap -> field glows
 
-    await page.locator('#sfLimit').fill('40');
+    await page.locator('#sfLimit').fill('60');
     await page.locator('#sfLimit').dispatchEvent('change');
-    await expect(page.locator('#sfTable tbody input.sf-pick:checked')).toHaveCount(40);    // raised
+    await expect(page.locator('#sfTable tbody input.sf-pick:checked')).toHaveCount(60);    // raised to include all
+    await expect(page.locator('#sfLimit')).not.toHaveClass(/sf-limit-hot/);                // nothing more to include -> no glow
 
     await page.locator('#sfLimit').fill('500');
     await page.locator('#sfLimit').dispatchEvent('change');
