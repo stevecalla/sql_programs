@@ -162,12 +162,17 @@ Then detection sources from SQL:
 ## Phasing
 
 ```text
-Phase 0  Database scaffolding: src/database_snapshot.js (connect / recreate /
-         stream-load) + db config block + tests against a disposable local table.
-Phase 1  TUNING SWEEP on SQL (start here — review-only, lowest risk; the snapshot →
-         replay model already fits). snapshot stream-loads the table; run/detail/diff
-         read from it. Keep the in-memory sweep engine as the oracle to diff against;
-         retire the JSON snapshot (or keep it behind a flag).
+Phase 0  [DONE] Database scaffolding: src/database_snapshot.js (recreate table +
+         stream batched INSERTs; keys precomputed via normalize.js for exact parity;
+         injectable executor) + config constants (SNAPSHOT_TABLE_NAME,
+         DB_INSERT_BATCH_SIZE) + tests/database_snapshot.test.js (10 tests, fake
+         executor — no live MySQL). Does NOT yet touch step_1 or the sweep.
+Phase 1  [DONE] TUNING SWEEP on SQL. `snapshot` streams the fetched records into the
+         table + a one-row meta table (salesforce_account_duplicate_snapshot_meta);
+         `run`/`detail`/`diff` read records + meta back from the DB; new `status`
+         subcommand (menu item 17) verifies the DB snapshot. The JSON snapshot is
+         GONE — the database is the snapshot. The matching engine is unchanged; a
+         load->read round-trip test proves DB-sourced records give identical counts.
 Phase 2  REAL FINDER on SQL: exact via SQL, fuzzy/nickname blocks from SQL. Prove the
          four output files are byte-identical to the saved baseline before sign-off.
 Phase 3  (Optional) Persist duplicate_detection_run / _result tables; point the

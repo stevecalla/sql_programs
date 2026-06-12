@@ -7,7 +7,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { build_account_soql, account_field_exists, MERGE_ID_FIELD } = require('../src/salesforce');
+const { build_account_soql, account_field_exists, MERGE_ID_FIELD, is_bulk_header_row } = require('../src/salesforce');
 
 describe('build_account_soql', () => {
     test('includes the optional merge field only when asked', () => {
@@ -44,5 +44,27 @@ describe('account_field_exists', () => {
     test('false (safe) when the describe call throws', async () => {
         const conn = { sobject: () => ({ describe: async () => { throw new Error('no access'); } }) };
         assert.equal(await account_field_exists(conn, MERGE_ID_FIELD), false);
+    });
+});
+
+
+describe('is_bulk_header_row', () => {
+    test('true for the leaked Bulk CSV header (every field = its column name)', () => {
+        assert.equal(is_bulk_header_row({
+            Id: 'Id', LastName: 'LastName', FirstName: 'FirstName',
+            cfg_Gender_Identity__pc: 'cfg_Gender_Identity__pc', PersonBirthdate: 'PersonBirthdate',
+            BillingPostalCode: 'BillingPostalCode',
+        }), true);
+    });
+
+    test('false for a real Account record', () => {
+        assert.equal(is_bulk_header_row({ Id: '001A000001abcDEF', LastName: 'Smith', FirstName: 'Bob' }), false);
+    });
+
+    test('false for empty / missing input', () => {
+        assert.equal(is_bulk_header_row(null), false);
+        assert.equal(is_bulk_header_row(undefined), false);
+        assert.equal(is_bulk_header_row({}), false);
+        assert.equal(is_bulk_header_row({ Id: '' }), false);
     });
 });

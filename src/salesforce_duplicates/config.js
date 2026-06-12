@@ -101,7 +101,6 @@ const ARCHIVE_DIR_NAME = "usat_salesforce_duplicates_archive";
 // so the sweep's files never mix with the production import CSVs, the Slack uploads,
 // or the archive rotation.
 const TUNING_DIR_NAME = "usat_salesforce_duplicates_tuning";
-const SWEEP_SNAPSHOT_FILE = "snapshot.json";
 const SWEEP_SUMMARY_FILE = "sweep_summary.csv";
 
 // --- SQL backbone (see README_SQL.md) ---
@@ -111,9 +110,35 @@ const SWEEP_SUMMARY_FILE = "sweep_summary.csv";
 // spelled out (no abbreviations) so it reads clearly alongside the sales/participation
 // tables already in that DB.
 const SNAPSHOT_TABLE_NAME = "salesforce_account_duplicate_snapshot";
+const SNAPSHOT_META_TABLE_NAME = "salesforce_account_duplicate_snapshot_meta";
 
 // Rows per multi-row INSERT when streaming records into the snapshot table.
 const DB_INSERT_BATCH_SIZE = 2000;
+
+// Console progress cadence (matches the PROGRESS_LOG_EVERY_* pattern used elsewhere):
+// print one line every N rows so test (small) and prod (~700k) both stay readable.
+const DB_LOAD_PROGRESS_EVERY = 50000;   // streaming records INTO the snapshot table
+const BULK_FETCH_PROGRESS_EVERY = 50000; // records arriving FROM the Bulk API
+
+// --- Duplicate tuning sweep default grid (see README_TUNING.md) ---
+// The sweep runs the cartesian product of these axes, with the current production
+// logic ('baseline') always included first. Edit here, or pass `--grid <file>` to the
+// sweep CLI to use a one-off JSON grid instead. rule_fields entries are subsets of
+// [gender, birthdate, zip]; keep "no DOB" and dropping two fields at once as
+// deliberate opt-in experiments (higher false-positive / performance risk).
+const DEFAULT_SWEEP_GRID = {
+    fuzzy_threshold: [88, 90, 92],
+    nickname_enabled: [true, false],
+    rule_fields: [
+        ["gender", "birthdate", "zip"],
+        ["gender", "birthdate"],
+        ["birthdate", "zip"],
+    ],
+    zip_trim_len: [5],
+    weight_first: [0.45],
+    weight_last: [0.55],
+    nickname_last_name_min_score: [90],
+};
 
 // Per-run summary (total records scanned, counts, timestamps) lives in its own
 // meta folder — NOT the output folder — so it is never swept into the Slack
@@ -159,10 +184,13 @@ module.exports = {
     OUTPUT_DIR_NAME,
     ARCHIVE_DIR_NAME,
     TUNING_DIR_NAME,
-    SWEEP_SNAPSHOT_FILE,
     SWEEP_SUMMARY_FILE,
     SNAPSHOT_TABLE_NAME,
+    SNAPSHOT_META_TABLE_NAME,
     DB_INSERT_BATCH_SIZE,
+    DB_LOAD_PROGRESS_EVERY,
+    BULK_FETCH_PROGRESS_EVERY,
+    DEFAULT_SWEEP_GRID,
     META_DIR_NAME,
     RUN_SUMMARY_FILE,
     ZIP_TRIM_MAPPING_FILE,

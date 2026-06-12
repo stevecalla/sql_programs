@@ -7,11 +7,11 @@
  * counts side by side. Production code is never touched — all matching runs through
  * the self-contained engine in src/sweep.js.
  *
- * Subcommands:
- *   snapshot [--test|--prod|--full|--partial]   fetch once, cache to the tuning folder
- *   run      [--grid <file>] [--snapshot <file>] replay the grid, print the summary + table
- *   detail   <profile-label>                     write the matched pairs for one profile
- *   diff     <labelA> <labelB>                    pair-level diff between two profiles
+ * Lives in src/ with the other modules; run it from the project folder:
+ *   node src/sweep_duplicates.js snapshot [--test|--prod|--full|--partial]
+ *   node src/sweep_duplicates.js run      [--grid <file>] [--snapshot <file>]
+ *   node src/sweep_duplicates.js detail   "<profile-label>"
+ *   node src/sweep_duplicates.js diff     "<labelA>" "<labelB>"
  *
  * Output goes to the `usat_salesforce_duplicates_tuning` folder (a sibling of the
  * production output folder) — the production output folder is never touched.
@@ -19,25 +19,24 @@
 
 'use strict';
 
+const path = require('path');
 const dotenv = require('dotenv');
-dotenv.config({ path: '../../.env' });
+dotenv.config({ path: path.join(__dirname, '../../../.env') });
 
 const fs = require('fs');
-const path = require('path');
 
 const { resolve_is_test, resolve_is_full, resolve_is_partial, resolve_fetch_plan,
-        TUNING_DIR_NAME, SWEEP_SNAPSHOT_FILE, SWEEP_SUMMARY_FILE } = require('./config');
-const { fetch_salesforce_accounts } = require('./src/salesforce');
-const { colorize } = require('./src/log');
-const { create_directory } = require('../../utilities/createDirectory');
+        TUNING_DIR_NAME, SWEEP_SUMMARY_FILE, DEFAULT_SWEEP_GRID, DB_LOAD_PROGRESS_EVERY } = require('../config');
+const { fetch_salesforce_accounts } = require('./salesforce');
+const { open_local_executor, load_snapshot, write_meta, read_meta, read_records, count_rows } = require('./database_snapshot');
+const { colorize, log_info } = require('./log');
+const { create_directory } = require('../../../utilities/createDirectory');
 const {
     expand_grid,
     run_profile,
     diff_profiles,
     fields_abbrev,
-} = require('./src/sweep');
-
-const DEFAULT_GRID_FILE = path.join(__dirname, 'sweep_grid.json');
+} = require('./sweep');
 
 // Tuning output folder. Honors SWEEP_TUNING_DIR (any writable path) if set;
 // otherwise uses the cross-platform /data path resolved by createDirectory.
@@ -52,11 +51,11 @@ async function resolve_tuning_dir() {
 
 const n = (v) => Number(v || 0).toLocaleString();
 
-// ---------- shared helpers ----------
+// ---------- grid ----------
 
+// Load a one-off grid JSON file (only array-valued keys are kept).
 function load_grid(grid_path) {
     const raw = JSON.parse(fs.readFileSync(grid_path, 'utf8'));
-    // strip comment / non-array keys
     const grid = {};
     for (const [k, v] of Object.entries(raw)) {
         if (Array.isArray(v)) grid[k] = v;
@@ -64,14 +63,29 @@ function load_grid(grid_path) {
     return grid;
 }
 
-async function load_snapshot(explicit_path) {
-    const dir = await resolve_tuning_dir();
-    const snap_path = explicit_path || path.join(dir, SWEEP_SNAPSHOT_FILE);
-    if (!fs.existsSync(snap_path)) {
-        throw new Error(`No snapshot found at ${snap_path}. Run:  node sweep_duplicates.js snapshot --test`);
+// The grid to use: the --grid file if given, otherwise the default baked into config.js.
+function resolve_grid(argv) {
+    const grid_path = arg_value(argv, '--grid');
+    if (grid_path) return { grid: load_grid(grid_path), source: path.basename(grid_path) };
+    return { grid: DEFAULT_SWEEP_GRID, source: 'config.js (DEFAULT_SWEEP_GRID)' };
+}
+
+// ---------- shared helpers ----------
+
+// Read the snapshot from the local DB (the salesforce_account_duplicate_snapshot
+// table + its meta table). Replaces the old snapshot.json. Returns { meta, records }.
+async function read_snapshot() {
+    const { pool, executor } = await open_local_executor();
+    try {
+        const meta = await read_meta(executor);
+        if (!meta) {
+            throw new Error('No snapshot in the database. Run:  node src/sweep_duplicates.js snapshot --test');
+        }
+        const records = await read_records(executor);
+        return { meta, records };
+    } finally {
+        try { pool.end(); } catch (_) { /* ignore */ }
     }
-    const snap = JSON.parse(fs.readFileSync(snap_path, 'utf8'));
-    return { snap, snap_path };
 }
 
 function criteria_conditions_line(c) {
@@ -95,46 +109,54 @@ async function cmd_snapshot(argv) {
     const { result } = await fetch_salesforce_accounts({ is_test, is_full, is_partial, max_fetch, script_start_ms });
     const records = result.records;
 
-    const dir = await resolve_tuning_dir();
-    const snap_path = path.join(dir, SWEEP_SNAPSHOT_FILE);
-    const snapshot = {
-        meta: {
+    console.log(colorize('gray', `Streaming ${n(records.length)} records into the snapshot table...`));
+    const { pool, executor } = await open_local_executor();
+    let loaded;
+    try {
+        loaded = await load_snapshot(records, {
+            executor,
+            progress_every: DB_LOAD_PROGRESS_EVERY,
+            on_progress: (done, total) => log_info(
+                `Loaded ${n(done)} / ${n(total)} rows (${total ? Math.round((done / total) * 100) : 0}%) into the snapshot table`,
+                script_start_ms),
+        });
+        await write_meta(executor, {
             fetched_at: new Date().toISOString(),
             mode: is_test ? 'test' : 'prod',
             is_full,
             is_partial,
             max_fetch,
-            record_count: records.length,
+            record_count: loaded,
             salesforce_total_size: result.totalSize,
-        },
-        records,
-    };
-    fs.writeFileSync(snap_path, JSON.stringify(snapshot));
-    console.log(colorize('green', `\nSnapshot saved: ${snap_path}`));
-    console.log(`Records cached: ${n(records.length)} (Salesforce total: ${n(result.totalSize)})`);
-    console.log(`\nNext:  node sweep_duplicates.js run`);
+        });
+    } finally {
+        try { pool.end(); } catch (_) { /* ignore */ }
+    }
+
+    const skipped = records.length - loaded;
+    console.log(colorize('green', `\nSnapshot loaded into the database: ${loaded.toLocaleString()} rows.`));
+    if (skipped > 0) console.log(colorize('gray', `Skipped ${n(skipped)} non-record/duplicate rows (e.g. Bulk API header artifacts).`));
+    console.log(`Salesforce total: ${n(result.totalSize)}`);
+    console.log(`\nNext:  node src/sweep_duplicates.js run`);
 }
 
 // ---------- run ----------
 
 async function cmd_run(argv) {
-    const grid_path = arg_value(argv, '--grid') || DEFAULT_GRID_FILE;
-    const snap_arg = arg_value(argv, '--snapshot');
-    const { snap, snap_path } = await load_snapshot(snap_arg);
-    const grid = load_grid(grid_path);
+    const { meta, records } = await read_snapshot();
+    const { grid, source } = resolve_grid(argv);
     const profiles = expand_grid(grid);
 
     console.log(colorize('bright', '============================================================'));
     console.log(colorize('bright', 'DUPLICATE CRITERIA SWEEP'));
     console.log(colorize('bright', '============================================================'));
-    console.log(`Snapshot : ${n(snap.meta.record_count)} records  (fetched ${snap.meta.fetched_at}, mode=${snap.meta.mode}${snap.meta.is_full ? ' full' : ''}${snap.meta.is_partial ? ' partial' : ''})`);
-    console.log(`Grid     : ${path.basename(grid_path)}  ->  ${profiles.length} profiles`);
+    console.log(`Snapshot : ${n(meta.record_count)} records  (fetched ${meta.fetched_at}, mode=${meta.mode}${meta.is_full ? ' full' : ''}${meta.is_partial ? ' partial' : ''})  [from the database]`);
+    console.log(`Grid     : ${source}  ->  ${profiles.length} profiles`);
     console.log('');
 
-    const results = profiles.map((c) => run_profile(snap.records, c));
+    const results = profiles.map((c) => run_profile(records, c));
     const baseline = results[0];
 
-    // per-profile detail blocks
     for (const r of results) {
         const c = r.criteria;
         const k = r.counts;
@@ -156,14 +178,12 @@ async function cmd_run(argv) {
         console.log('');
     }
 
-    // comparison table
     print_table(results, baseline);
 
-    // CSV
     const csv_path = await write_summary_csv(results, baseline);
     console.log(colorize('green', `\nSummary CSV written: ${csv_path}`));
-    console.log(`Drill in:  node sweep_duplicates.js detail "<profile-label>"`);
-    console.log(`Compare :  node sweep_duplicates.js diff "<labelA>" "<labelB>"`);
+    console.log(`Drill in:  node src/sweep_duplicates.js detail "<profile-label>"`);
+    console.log(`Compare :  node src/sweep_duplicates.js diff "<labelA>" "<labelB>"`);
 }
 
 function pad(s, w) { s = String(s); return s.length >= w ? s : s + ' '.repeat(w - s.length); }
@@ -242,9 +262,9 @@ async function write_summary_csv(results, baseline) {
 
 async function cmd_detail(argv) {
     const label = argv.find((a) => !a.startsWith('--'));
-    if (!label) throw new Error('Usage: node sweep_duplicates.js detail "<profile-label>"');
-    const { snap } = await load_snapshot(arg_value(argv, '--snapshot'));
-    const grid = load_grid(arg_value(argv, '--grid') || DEFAULT_GRID_FILE);
+    if (!label) throw new Error('Usage: node src/sweep_duplicates.js detail "<profile-label>"');
+    const { records } = await read_snapshot();
+    const { grid } = resolve_grid(argv);
     const profiles = expand_grid(grid);
     const profile = profiles.find((p) => p.label === label || (label === 'baseline' && p.is_baseline));
     if (!profile) {
@@ -252,8 +272,8 @@ async function cmd_detail(argv) {
         for (const p of profiles) console.log('  ' + p.label);
         return;
     }
-    const r = run_profile(snap.records, profile);
-    const lookup = new Map(snap.records.map((rec) => [rec.Id, rec]));
+    const r = run_profile(records, profile);
+    const lookup = new Map(records.map((rec) => [rec.Id, rec]));
     const dir = await resolve_tuning_dir();
     const out = path.join(dir, `sweep_detail_${label.replace(/[^A-Za-z0-9_-]/g, '_')}.csv`);
     const lines = ['record_id_1,name_1,record_id_2,name_2,signal,spelling,nickname'];
@@ -275,10 +295,10 @@ async function cmd_detail(argv) {
 
 async function cmd_diff(argv) {
     const labels = argv.filter((a) => !a.startsWith('--'));
-    if (labels.length < 2) throw new Error('Usage: node sweep_duplicates.js diff "<labelA>" "<labelB>"');
+    if (labels.length < 2) throw new Error('Usage: node src/sweep_duplicates.js diff "<labelA>" "<labelB>"');
     const [la, lb] = labels;
-    const { snap } = await load_snapshot(arg_value(argv, '--snapshot'));
-    const grid = load_grid(arg_value(argv, '--grid') || DEFAULT_GRID_FILE);
+    const { records } = await read_snapshot();
+    const { grid } = resolve_grid(argv);
     const profiles = expand_grid(grid);
     const pa = profiles.find((p) => p.label === la || (la === 'baseline' && p.is_baseline));
     const pb = profiles.find((p) => p.label === lb || (lb === 'baseline' && p.is_baseline));
@@ -287,10 +307,10 @@ async function cmd_diff(argv) {
         for (const p of profiles) console.log('  ' + p.label);
         return;
     }
-    const ra = run_profile(snap.records, pa);
-    const rb = run_profile(snap.records, pb);
+    const ra = run_profile(records, pa);
+    const rb = run_profile(records, pb);
     const d = diff_profiles(ra.edges, rb.edges);
-    const lookup = new Map(snap.records.map((rec) => [rec.Id, rec]));
+    const lookup = new Map(records.map((rec) => [rec.Id, rec]));
     const name = (id) => { const r = lookup.get(id) || {}; return `${r.FirstName || ''} ${r.LastName || ''}`.trim(); };
 
     console.log(colorize('bright', `DIFF  [${la}]  vs  [${lb}]`));
@@ -309,6 +329,82 @@ async function cmd_diff(argv) {
     console.log(colorize('green', `\nDiff CSV written: ${out}`));
 }
 
+// ---------- inspect ----------
+
+// Read-only: fetch from Salesforce and report any record whose Id is NOT a valid
+// 15/18-char Salesforce Id, plus any Id that appears more than once. Writes nothing.
+// This is how you confirm the "Id === 'Id'" rows are a Bulk CSV-header parsing
+// artifact (they show up via the Bulk API, not via REST) and not real records.
+async function cmd_inspect(argv) {
+    const is_test = resolve_is_test(argv);
+    const is_full = resolve_is_full(argv);
+    const is_partial = resolve_is_partial(argv);
+    const { max_fetch, use_rest } = resolve_fetch_plan(is_test, is_full, is_partial);
+
+    console.log(colorize('bright', 'Fetch inspection (read-only, no DB write)'));
+    console.log(`Mode: ${is_test ? 'TEST' : 'PRODUCTION'}${is_full ? ' FULL' : ''}${is_partial ? ' PARTIAL' : ''}  via ${use_rest ? 'REST' : 'Bulk API'}  max_fetch=${n(max_fetch)}`);
+
+    const script_start_ms = Date.now();
+    const { result } = await fetch_salesforce_accounts({ is_test, is_full, is_partial, max_fetch, script_start_ms });
+    const records = result.records;
+
+    const SF_ID = /^[A-Za-z0-9]{15}([A-Za-z0-9]{3})?$/;
+    const anomalous = [];
+    const id_counts = new Map();
+    for (const r of records) {
+        const id = r && r.Id;
+        if (!id || !SF_ID.test(String(id))) anomalous.push(r);
+        id_counts.set(id, (id_counts.get(id) || 0) + 1);
+    }
+    const dups = [...id_counts.entries()].filter(([, c]) => c > 1);
+
+    console.log('');
+    console.log(`Total fetched                                  : ${n(records.length)}`);
+    console.log(`Records whose Id is NOT a valid SF Id (15/18)  : ${n(anomalous.length)}`);
+    console.log(`Distinct Id values appearing more than once    : ${n(dups.length)}`);
+
+    if (anomalous.length) {
+        console.log(colorize('bright', '\nFirst anomalous records (raw JSON — this is what tried to load as a row):'));
+        for (const r of anomalous.slice(0, 10)) console.log('  ' + JSON.stringify(r));
+    }
+    if (dups.length) {
+        console.log(colorize('bright', '\nDuplicated Id values (first 10):'));
+        for (const [id, c] of dups.slice(0, 10)) console.log(`  ${JSON.stringify(id)}  x${c}`);
+    }
+    if (!anomalous.length && !dups.length) {
+        console.log(colorize('green', '\nNo anomalies — every record has a unique, valid Salesforce Id.'));
+    }
+}
+
+// ---------- status ----------
+
+// Verify the DB snapshot: print the meta + live row count straight from the database.
+async function cmd_status() {
+    const { pool, executor } = await open_local_executor();
+    try {
+        const meta = await read_meta(executor);
+        if (!meta) {
+            console.log(colorize('gray', 'No sweep snapshot in the database.'));
+            console.log('Run:  node src/sweep_duplicates.js snapshot --test');
+            return;
+        }
+        const live = await count_rows(executor);
+        console.log(colorize('bright', 'Sweep snapshot status (from the database)'));
+        console.log(`  Fetched at         : ${meta.fetched_at}`);
+        console.log(`  Mode               : ${meta.mode}${meta.is_full ? ' full' : ''}${meta.is_partial ? ' partial' : ''}`);
+        console.log(`  Records (meta)     : ${n(meta.record_count)}`);
+        console.log(`  Records (live count): ${n(live)}`);
+        console.log(`  Salesforce total   : ${n(meta.salesforce_total_size)}`);
+        if (live !== meta.record_count) {
+            console.log(colorize('red', '  WARNING: live row count does not match the recorded count.'));
+        } else {
+            console.log(colorize('green', '  OK: live row count matches the recorded snapshot.'));
+        }
+    } finally {
+        try { pool.end(); } catch (_) { /* ignore */ }
+    }
+}
+
 // ---------- arg parsing + dispatch ----------
 
 function arg_value(argv, flag) {
@@ -320,19 +416,25 @@ function usage() {
     console.log(`Duplicate criteria tuning sweep
 
 Usage:
-  node sweep_duplicates.js snapshot [--test|--prod|--full|--partial]
-  node sweep_duplicates.js run      [--grid <file>] [--snapshot <file>]
-  node sweep_duplicates.js detail   "<profile-label>"
-  node sweep_duplicates.js diff     "<labelA>" "<labelB>"
+  node src/sweep_duplicates.js snapshot [--test|--prod|--full|--partial]
+  node src/sweep_duplicates.js run      [--grid <file>]
+  node src/sweep_duplicates.js status
+  node src/sweep_duplicates.js inspect  [--test|--prod|--full|--partial]
+  node src/sweep_duplicates.js detail   "<profile-label>"
+  node src/sweep_duplicates.js diff     "<labelA>" "<labelB>"
 
-snapshot  fetch the Account records ONCE and cache them in the tuning folder.
-run       replay the grid over the snapshot; print the summary + comparison table
+snapshot  fetch the Account records ONCE and STREAM them into the local DB table
+          salesforce_account_duplicate_snapshot (+ a meta table). No JSON file.
+run       replay the grid over the DB snapshot; print the summary + comparison table
           and write sweep_summary.csv.
+status    print the DB snapshot meta + live row count (verify the snapshot is loaded).
+inspect   fetch (read-only, no DB) and report any non-valid / duplicate Ids.
 detail    write the matched pairs for one profile to a CSV.
 diff      pair-level difference between two profiles.
 
-The default grid lives in sweep_grid.json (edit it freely). Output goes to the
-${TUNING_DIR_NAME} folder; the production output folder is never touched.`);
+The default grid lives in config.js (DEFAULT_SWEEP_GRID); pass --grid <file> to use a
+one-off JSON grid instead. Output goes to the ${TUNING_DIR_NAME} folder; the
+production output folder is never touched.`);
 }
 
 async function main() {
@@ -341,6 +443,8 @@ async function main() {
         switch (cmd) {
             case 'snapshot': await cmd_snapshot(rest); break;
             case 'run': await cmd_run(rest); break;
+            case 'status': await cmd_status(rest); break;
+            case 'inspect': await cmd_inspect(rest); break;
             case 'detail': await cmd_detail(rest); break;
             case 'diff': await cmd_diff(rest); break;
             default: usage();
@@ -353,4 +457,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { load_grid, criteria_conditions_line };
+module.exports = { load_grid, resolve_grid, criteria_conditions_line };

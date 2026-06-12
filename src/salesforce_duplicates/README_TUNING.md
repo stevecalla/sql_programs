@@ -7,16 +7,18 @@ fuzzy, nickname, and the reconciled consolidated clusters, with the criteria sho
 
 It never touches production: the matching runs through a self-contained engine
 (`src/sweep.js`) that reuses the low-level scoring primitives but does **not** modify
-`exact.js` / `fuzzy.js` / `consolidate.js`. Output goes to its own folder, a sibling
-of the production output (see "Where output goes").
+`exact.js` / `fuzzy.js` / `consolidate.js`. The fetched records are streamed once into
+the local DB (table `salesforce_account_duplicate_snapshot` + a meta table) and every
+replay reads from there — there is no JSON snapshot file. The CSV results go to a
+folder that is a sibling of the production output (see "Where output goes").
 
 ## Files
 
 ```text
-sweep_duplicates.js   the CLI (snapshot / run / detail / diff)
-sweep_grid.json       the default, editable criteria grid
-src/sweep.js          the pure engine (expand_grid, run_profile, diff_profiles)
-tests/sweep.test.js   unit tests
+src/sweep_duplicates.js   the CLI (snapshot / run / detail / diff)
+src/sweep.js              the pure engine (expand_grid, run_profile, diff_profiles)
+config.js                 DEFAULT_SWEEP_GRID — the default, editable criteria grid
+tests/sweep.test.js       unit tests
 ```
 
 ## How to run
@@ -24,65 +26,51 @@ tests/sweep.test.js   unit tests
 From the menu (`node menu.js`), the **DUPLICATE TUNING** section:
 
 ```text
-14. Sweep snapshot — TEST         fetch records once (dev sandbox) and cache them
-15. Sweep snapshot — PRODUCTION   fetch records once (production) and cache them
-16. Run sweep (grid over snapshot) replay the grid; print summary + table; write CSV
-17. Sweep detail (one profile)    drill into one profile -> matched-pairs CSV
-18. Sweep diff (two profiles)     pair-level diff between two profiles -> CSV
-19. Open tuning folder            the snapshot + sweep CSVs
+14. Sweep snapshot — TEST         fetch records once (dev sandbox) and stream into the DB
+15. Sweep snapshot — PRODUCTION   fetch records once (production) and stream into the DB
+16. Run sweep (grid over snapshot) replay the grid over the DB snapshot; summary + CSV
+17. Sweep snapshot status (DB)    verify the DB snapshot: meta + live row count
+18. Open tuning folder            the sweep CSVs
 ```
 
-Items 17 and 18 are interactive: after a sweep has run, they read
-`sweep_summary.csv` and show the profiles as a numbered list **with each
-profile's key counts inline** (threshold / nickname / fields, then
-exact / fuzzy / nickname / consolidated, then the Δ-vs-baseline) — the same
-figures as the comparison table — so they're easy to tell apart. You pick by
-number (or type a label). The list is fully dynamic: edit `sweep_grid.json`,
-re-run the sweep, and the picker reflects the new profiles. Example:
-
-```text
-  Available profiles  (label — threshold/nickname/fields · counts · Δ vs baseline):
-     1. baseline           t90 nickON gbz  exact:9,299 fuzzy:329 nick:944 consol:10,512  baseline
-     2. t88_nickON_z5_gbz  t88 nickON gbz  exact:9,299 fuzzy:417 nick:944 consol:10,594  Δ +85/-0
-     3. t88_nickON_z5_gb   t88 nickON gb  exact:15,970 fuzzy:816 nick:1,639 consol:17,921  Δ +10,153/-337
-```
-
-The picker prints a **KEY** first that decodes the labels and columns:
-
-```text
-label  =  t<thr>_nick<ON|OFF>_z<zipTrim>_<fields>     e.g. t88_nickON_z5_gbz
-  thr      fuzzy name-score threshold a pair must reach (higher = stricter)
-  nick     nickname matching ON/OFF (Bill<->William, etc.)
-  z<n>     ZIP trimmed to first n digits (z5 = production)
-  fields   required matching fields — g=gender  b=birthdate  z=zip  (gbz = all three)
-  counts   exact=exact-dup groups · fuzzy=fuzzy pairs · nick=nickname pairs · consol=consolidated clusters
-  Δ        matched pairs vs baseline:  +gained / -lost
-```
-
-So `t88_nickON_z5_gbz` reads as "threshold 88, nicknames on, ZIP trimmed to 5,
-requiring gender + birthdate + zip." The typical flow is
-**14/15 → 16 → 17 or 18 → 19**.
+The typical flow is **14 or 15 → 16 → 18**, with **17** any time to confirm what's
+loaded. The snapshot lives in the local DB (table
+`salesforce_account_duplicate_snapshot` + its meta table) — there is no JSON file. The
+`detail` and `diff` drill-downs are
+available as CLI subcommands (below); profile labels read as
+`t<thr>_nick<ON|OFF>_z<zipTrim>_<fields>` — e.g. `t88_nickON_z5_gbz` means
+"threshold 88, nicknames on, ZIP trimmed to 5, requiring gender + birthdate + zip"
+(`g`=gender, `b`=birthdate, `z`=zip; `gbz` = all three).
 
 Or directly:
 
 ```bash
-# 1. take a snapshot (fetch once). Same flags as the finder:
-node sweep_duplicates.js snapshot --test            # dev sandbox, capped
-node sweep_duplicates.js snapshot --test --full     # dev sandbox, ALL records (Bulk)
-node sweep_duplicates.js snapshot --prod --partial  # production, capped sample
-node sweep_duplicates.js snapshot --prod            # production, full
+# 1. take a snapshot (fetch once, STREAM into the DB). Same flags as the finder:
+node src/sweep_duplicates.js snapshot --test            # dev sandbox, capped
+node src/sweep_duplicates.js snapshot --test --full     # dev sandbox, ALL records (Bulk)
+node src/sweep_duplicates.js snapshot --prod --partial  # production, capped sample
+node src/sweep_duplicates.js snapshot --prod            # production, full
 
-# 2. replay the grid over the snapshot (no Salesforce — reads the cache):
-node sweep_duplicates.js run                        # default grid (sweep_grid.json)
-node sweep_duplicates.js run --grid my_grid.json    # a custom grid
+# 2. (optional) confirm what's loaded in the DB:
+node src/sweep_duplicates.js status                     # meta + live row count
 
-# 3. drill in:
-node sweep_duplicates.js detail "t88_nickON_z5_gbz" # matched pairs for one profile
-node sweep_duplicates.js diff "baseline" "t88_nickON_z5_gbz"   # pair-level diff
+# 3. replay the grid over the DB snapshot (no Salesforce — reads the table):
+node src/sweep_duplicates.js run                        # default grid (config.js DEFAULT_SWEEP_GRID)
+node src/sweep_duplicates.js run --grid my_grid.json    # a one-off JSON grid override
+
+# 4. drill in:
+node src/sweep_duplicates.js detail "t88_nickON_z5_gbz" # matched pairs for one profile
+node src/sweep_duplicates.js diff "baseline" "t88_nickON_z5_gbz"   # pair-level diff
 ```
 
-The snapshot step is the only one that hits Salesforce. After that, `run` / `detail` /
-`diff` are instant and offline, so you can iterate on the grid freely.
+The snapshot step is the only one that hits Salesforce. After that, `status` / `run` /
+`detail` / `diff` read from the local DB, so you can iterate on the grid freely.
+
+On a full production snapshot, the CLI shows progress so the long steps aren't silent:
+the Bulk fetch logs `Fetched 200,000 records from Salesforce...` every
+`BULK_FETCH_PROGRESS_EVERY` rows, and the stream-load logs `Loaded 150,000 / 700,322
+rows (21%) into the snapshot table` every `DB_LOAD_PROGRESS_EVERY` rows (both in
+`config.js`). Test snapshots are small enough that they just finish.
 
 ## What the console shows
 
@@ -112,25 +100,28 @@ t90_nickOFF_z5_gbz                  90   OFF     gbz     47      5     0       9
 ...
 ```
 
-## The grid (`sweep_grid.json`)
+## The grid (`config.js` → `DEFAULT_SWEEP_GRID`)
 
 Each key is an axis; the sweep runs the **cartesian product** of all axes, with the
-current production logic (`baseline`) always included first. Edit it freely.
+current production logic (`baseline`) always included first. The default grid lives in
+`config.js` as `DEFAULT_SWEEP_GRID` — edit it there. To try a one-off grid without
+touching config, pass `--grid <file>` pointing at a JSON file of the same shape.
 
-```json
-{
-  "fuzzy_threshold": [88, 90, 92],
-  "nickname_enabled": [true, false],
-  "rule_fields": [
-    ["gender", "birthdate", "zip"],
-    ["gender", "birthdate"],
-    ["birthdate", "zip"]
-  ],
-  "zip_trim_len": [5],
-  "weight_first": [0.45],
-  "weight_last": [0.55],
-  "nickname_last_name_min_score": [90]
-}
+```js
+// config.js
+const DEFAULT_SWEEP_GRID = {
+    fuzzy_threshold: [88, 90, 92],
+    nickname_enabled: [true, false],
+    rule_fields: [
+        ["gender", "birthdate", "zip"],
+        ["gender", "birthdate"],
+        ["birthdate", "zip"],
+    ],
+    zip_trim_len: [5],
+    weight_first: [0.45],
+    weight_last: [0.55],
+    nickname_last_name_min_score: [90],
+};
 ```
 
 The default is 18 profiles (3 thresholds × nickname on/off × 3 rule-field sets).
@@ -161,15 +152,17 @@ resolved by `utilities/determineOSPath.js`:
 
 ```text
 usat_salesforce_duplicates_tuning/
-  snapshot.json                          the cached records (re-used by run/detail/diff)
   sweep_summary.csv                      the comparison table (all profiles)
   sweep_detail_<profile>.csv             matched pairs for one profile (detail)
   sweep_diff_<a>__<b>.csv                pair-level diff between two profiles
 ```
 
-Being a sibling (not inside the output folder) keeps the sweep CSVs out of the Slack
-`/scheduled` uploads and the archive rotation — the same reason the `meta` folder is
-separate. Set `SWEEP_TUNING_DIR=<path>` to override the destination.
+The **records themselves** are not here — they live in the DB
+(`salesforce_account_duplicate_snapshot`), re-used by `run`/`detail`/`diff`/`status`.
+Only the CSV results land in this folder. Being a sibling (not inside the output
+folder) keeps the sweep CSVs out of the Slack `/scheduled` uploads and the archive
+rotation — the same reason the `meta` folder is separate. Set `SWEEP_TUNING_DIR=<path>`
+to override the CSV destination.
 
 ## Testing
 

@@ -250,6 +250,14 @@ Both paths return the same shape to the rest of the pipeline, so nothing
 downstream changes. Bulk jobs run asynchronously server-side, so the poll timeout
 is set generously (20 min) to allow a large extract to finish.
 
+**Bulk CSV header rows are dropped.** The Bulk API 2.0 returns CSV, and jsforce can
+leak the CSV header row into the record stream as a fake record where every field
+equals its own column name (`Id === 'Id'`, `LastName === 'LastName'`, …) — once per
+result chunk on a large extract. `bulk_query` filters these out at the source
+(`is_bulk_header_row`), so they never reach detection. (REST autoFetch does not have
+this issue.) Without the filter, the identical header rows would otherwise form a
+bogus "LastName/FirstName" exact-duplicate group in the output.
+
 ## Composite ZIP Logic
 
 Salesforce has a formula field similar to:
@@ -904,9 +912,9 @@ counts side by side, broken out by exact / fuzzy / nickname / consolidated, with
 criteria and a per-stage funnel shown, plus a delta vs. the current logic (baseline).
 
 ```bash
-node sweep_duplicates.js snapshot --test    # fetch once (or --prod / --full / --partial)
-node sweep_duplicates.js run                 # replay sweep_grid.json over the snapshot
-node sweep_duplicates.js diff "baseline" "t88_nickON_z5_gbz"
+node src/sweep_duplicates.js snapshot --test    # fetch once (or --prod / --full / --partial)
+node src/sweep_duplicates.js run                 # replay config.js DEFAULT_SWEEP_GRID over the snapshot
+node src/sweep_duplicates.js diff "baseline" "t88_nickON_z5_gbz"
 ```
 
 From the menu, the **DUPLICATE TUNING** section (items 14–17) runs the snapshot, the

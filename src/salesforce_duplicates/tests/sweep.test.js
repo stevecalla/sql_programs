@@ -150,3 +150,22 @@ describe('diff_profiles', () => {
         assert.equal(d.only_in_b, 0);
     });
 });
+
+
+describe('engine parity: in-memory records vs DB-round-tripped records', () => {
+    const { COLUMNS, to_snapshot_row, record_from_row } = require('../src/database_snapshot');
+
+    test('run_profile gives identical counts after a load->read round-trip', () => {
+        const records = pool();
+        // simulate: record -> stored row -> SELECTed object -> record
+        const dbRecords = records.map((r) => {
+            const row = to_snapshot_row(r);
+            const o = {};
+            COLUMNS.forEach((col, i) => { o[col] = row[i]; });
+            return record_from_row(o);
+        });
+        const a = run_profile(records, { ...BASELINE_CRITERIA, label: 'orig' }).counts;
+        const b = run_profile(dbRecords, { ...BASELINE_CRITERIA, label: 'db' }).counts;
+        assert.deepEqual(b, a);
+    });
+});

@@ -61,7 +61,7 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   `usat_Salesforce_Merge_Id__pc` (Person-Account `__pc` view of Contact's `__c`) as
   `Merge_Id_1/2__c` (pairs) or `Merge_Ids__c` (groups/clusters). This DID edit the
   baseline `exact.js`/`fuzzy.js`/`grouping.js` (a deliberate schema add, no longer
-  byte-for-byte unchanged). `discover_account_fields.js` (menu item 24) confirms the
+  byte-for-byte unchanged). `discover_account_fields.js` (menu item 29) confirms the
   field name. The query **auto-detects** the field (Account DESCRIBE) and includes it
   only if the org has it (`build_account_soql` / `account_field_exists` in
   `salesforce.js`), so an org without it still runs — merge columns just come out
@@ -74,14 +74,19 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   `require.main === module`, so requiring it does not run it.
 - `menu.js` — interactive launcher (`node menu.js`): run tests, syntax check, run
   the finder in TEST or PRODUCTION mode, open the output/archive folders, run the
-  DUPLICATE TUNING sweep (items 14–19, incl. sweep detail/diff), start the Slack
-  server. Items are numbered sequentially 1–27; renumber on insert.
-- `sweep_duplicates.js` — duplicate criteria tuning CLI (review-only). Fetches once
-  (`snapshot`), then replays detection over a grid of criteria (`run`/`detail`/`diff`)
-  and prints exact/fuzzy/nickname/consolidated counts side by side with a funnel +
-  baseline delta. Uses the self-contained engine `src/sweep.js` (reuses scoring
-  primitives; does NOT modify `exact.js`/`fuzzy.js`/`consolidate.js`). Grid in
-  `sweep_grid.json`. Output goes to `TUNING_DIR_NAME` (`usat_salesforce_duplicates_tuning`),
+  DUPLICATE TUNING sweep (items 14–18, incl. snapshot status; the sweep CLI also has
+  detail/diff subcommands), verify the SQL backbone loader step by step (items 19–22),
+  start the Slack server. Items are numbered sequentially 1–30; renumber on insert.
+- `src/sweep_duplicates.js` — duplicate criteria tuning CLI (review-only). `snapshot`
+  fetches once and STREAMS the records into the local DB (table
+  `salesforce_account_duplicate_snapshot` + a one-row meta table) — NO JSON file;
+  `run`/`detail`/`diff` read records + meta back from the DB; `status` verifies the DB
+  snapshot. Replays detection over a grid of criteria and prints
+  exact/fuzzy/nickname/consolidated counts side by side with a funnel + baseline delta.
+  Uses the self-contained engine `src/sweep.js` (reuses scoring primitives; does NOT
+  modify `exact.js`/`fuzzy.js`/`consolidate.js`). Default grid is
+  `config.DEFAULT_SWEEP_GRID` (`--grid <file>` overrides). CSV results go to `TUNING_DIR_NAME` Output goes to `TUNING_DIR_NAME`
+  (`usat_salesforce_duplicates_tuning`),
   a sibling of the output folder under the same external `/data` root (same pattern as
   OUTPUT/ARCHIVE/META, so it stays out of the Slack uploads + archive rotation; override
   with `SWEEP_TUNING_DIR`). See `README_TUNING.md`.
@@ -124,13 +129,28 @@ salesforce_duplicates/
                             capped subset), --prod uses the Bulk API (UNORDERED SOQL
                             so SF doesn't sort ~700k rows before streaming)
     summaries.js            log_run_summary (final run summary block)
+    sweep.js                criteria tuning engine (expand_grid/run_profile/diff; pure)
+    sweep_duplicates.js     duplicate criteria tuning CLI (snapshot/run/detail/diff);
+                            default grid is config.DEFAULT_SWEEP_GRID (--grid <file> overrides)
+    database_snapshot.js    SQL backbone (Phases 0-1): stream Account records into the
+                            usat_sales_db table salesforce_account_duplicate_snapshot
+                            (drop+recreate; keys precomputed via normalize.js for parity)
+                            + read back (record_from_row/read_records) + a one-row meta
+                            table (write_meta/read_meta). Injectable executor so it's
+                            testable without MySQL; the sweep is the first consumer.
+    verify_database_snapshot.js  manual step-by-step DB loader smoke test
+                            (load/show/drop; menu items 20-22) — synthetic rows into
+                            usat_sales_db, then the exact-duplicate GROUP BY
   tests/                    node:test unit tests:
     normalize.test.js  matcher.test.js  grouping.test.js  ids.test.js
     sf_rows.test.js  exact.test.js  fuzzy.test.js  zip_trim.test.js
     file_output.test.js     CSV write + archive rotation
     step_2_report.test.js   report module (counts + latest-file selection)
     report_service.test.js  slash-arg parsing + freshness/force (injected deps)
+    sweep.test.js           tuning engine; database_snapshot.test.js  SQL loader (fake executor)
   README.md                 algorithm + field reference
+  README_TUNING.md          duplicate criteria tuning sweep
+  README_SQL.md             SQL backbone plan (usat_sales_db) + Phase 0 loader
   schema.md                 Salesforce custom-object/import schema notes
 ```
 
