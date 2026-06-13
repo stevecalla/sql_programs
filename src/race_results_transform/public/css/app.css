@@ -89,7 +89,7 @@ h3{font-size:14px;margin:0}
 .compare-grid.layout-tabs .pane.tab-hidden{display:none}
 @media (max-width:900px){.compare-grid.layout-side{grid-template-columns:1fr}}
 .pane{min-width:0;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg)}
-.pane-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+.pane-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;min-height:32px}
 
 /* tableview */
 .tv-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
