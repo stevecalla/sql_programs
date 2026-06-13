@@ -142,15 +142,15 @@ The **Sanction ID** comes from the Program (event) object's `cfg_Id__c` formula 
 and pre-fills the download filename builder's *Sanction ID* box. If your org names the object/field
 differently, set `SF_PROGRAM_OBJECT` / `SF_SANCTION_FIELD` in `.env`.
 
-## Convert files from a folder
+## Convert files from a folder (the From Folder tab)
 
-On the upload page, the **Convert files from a folder** panel lets you point at a folder on your
-computer and work several files at once — without dragging them in one at a time. Click **Choose
+On the upload page, the **Get Race Results** card has a **From Folder** tab that lets you point at a folder
+on your computer and work several files at once — without dragging them in one at a time. Click **Choose
 folder…**, and the app lists the spreadsheets in it (`.xlsx / .xls / .csv`, top level only) as a
-checklist with search + a count. Check the ones you want and click **Load** — they drop into the same
-**Files** queue as the Salesforce flow, so you click each row to convert it, download it (CSV or Excel,
-your filename), and the Uploaded → Converted → Downloaded status tracks your progress. On Chrome/Edge
-the **↻ Reload from disk** button works here too (fix a file in Excel, click Reload, it re-converts).
+checklist with search, a **Max** cap, and a count. Check the ones you want and click **Load** — they drop
+into the same **Files** queue as the Salesforce flow, so you click each row to convert it, download it
+(CSV or Excel, your filename), and the Uploaded → Converted → Downloaded status tracks your progress. On
+Chrome/Edge the **↻ Reload from disk** button works here too (fix a file in Excel, click Reload, it re-converts).
 
 Everything stays in your browser — **nothing is uploaded**. Chrome/Edge use the native folder picker
 (which also enables Reload); other browsers fall back to a standard folder-select that still loads and

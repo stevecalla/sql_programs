@@ -28,9 +28,8 @@ test.describe('race_results_transform — served app', () => {
     await expect(page.locator('#resultGrid table thead')).toContainText('Member Number');
     await expect(page.locator('#resultGrid table thead')).toContainText('Recorded Time');
     await expect(page.locator('#resultGrid table tbody tr').first()).toBeVisible();
-    // a dropzone upload must hide the OTHER intake cards (Salesforce + folder), like the queue flow does
+    // a dropzone upload must hide the OTHER intake card (Get Race Results), like the queue flow does
     await expect(page.locator('#sfCard')).toBeHidden();
-    await expect(page.locator('#folderCard')).toBeHidden();
 
     await step(page, 'Opening the Download picker and choosing Excel');
     await highlight_click(page, page.locator('#downloadBtn'), 'Opening the Download picker');

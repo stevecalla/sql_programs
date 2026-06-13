@@ -19,10 +19,11 @@ Status legend: ⬜ not started · 🟡 in progress · ✅ done.
 - ✅ B1 — "From Folder" tab folded into `#sfTable` (standalone `#folderCard` kept for the compare)
 - ✅ B2 — "Slack Ironman" tab (under-construction placeholder)
 
-> **Review checkpoint (now):** the standalone "Convert files from a folder" card is still live so you can
-> compare the in-tab folder vs the standalone. If the tabbed one is better, the follow-up removes the standalone
-> card + its `wire_folder`/`folder_*` code. Revert path: `git checkout public/index.html public/js/app.js
-> public/css/app.css` (the folder tab, Slack tab, and dashboard add-ons are all in those + `metrics/*`).
+> **Review done — standalone card removed.** Parity was confirmed, so the standalone "Convert files from a
+> folder" card and its `wire_folder` / `folder_*` code were deleted; the **From Folder tab** is now the only
+> folder intake (two shared helpers — `folder_is_spreadsheet`, `folder_fmt_modified` — are kept). `folder_flow.spec.js`
+> was repointed at the tab. Revert path for the whole intake/dashboard work: `git checkout public/index.html
+> public/js/app.js public/css/app.css metrics/` (+ the `/api/metrics-purge-test` route in the 8018 server).
 
 ---
 

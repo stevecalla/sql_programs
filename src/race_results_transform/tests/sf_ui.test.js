@@ -190,8 +190,9 @@ describe('intake tab bar — SF Upload · SF Email · From Folder · Slack Ironm
     assert.match(app_js, /label: 'Modified'/, 'folder column set includes a Modified column');
     assert.ok(html.indexOf('id="sfFolderChoose"') >= 0 && html.indexOf('id="sfFolderLoadBtn"') >= 0, 'folder Choose + Load buttons');
     assert.ok(html.indexOf('id="sfFolderInput"') >= 0, 'folder webkitdirectory input');
-    // the standalone folder card is kept (for now) so both can be compared
-    assert.ok(html.indexOf('id="folderCard"') >= 0, 'standalone folder card stays in place during evaluation');
+    // the standalone "Convert files from a folder" card has been removed — the tab is now the only folder intake
+    assert.ok(html.indexOf('id="folderCard"') < 0, 'standalone folder card is gone (folded into the From Folder tab)');
+    assert.ok(html.indexOf('Convert files from a folder') < 0, 'standalone folder card heading is gone');
   });
 
   test('From Folder tab has its own Reset + a Max cap, and reuses the original folder-path styling', () => {
@@ -213,29 +214,24 @@ describe('intake tab bar — SF Upload · SF Email · From Folder · Slack Ironm
   });
 });
 
-describe('local-folder intake — UI + wiring', () => {
-  test('panel markup: choose folder, webkitdirectory input, file list, load button', () => {
-    [
-      'id="folderCard"', 'id="folderChooseBtn"', 'id="folderInput"', 'webkitdirectory',
-      'id="folderTable"', 'id="folderCheckAll"', 'id="folderSearch"', 'id="folderCount"', 'id="folderLoadBtn"'
-    ].forEach(function (needle) { assert.ok(html.indexOf(needle) >= 0, 'index.html missing ' + needle); });
-    assert.ok(html.indexOf('Convert files from a folder') >= 0, 'panel heading text');
+describe('local-folder intake — folded into the From Folder tab', () => {
+  test('the standalone folder card + its wiring are gone (replaced by the tab)', () => {
+    // the old #folderCard section and its dedicated functions were removed; only the From Folder tab remains
+    ['id="folderCard"', 'id="folderChooseBtn"', 'id="folderTable"', 'id="folderLoadBtn"'].forEach(function (needle) {
+      assert.ok(html.indexOf(needle) < 0, 'standalone folder markup should be gone: ' + needle);
+    });
+    assert.ok(!/function wire_folder\b/.test(app_js), 'wire_folder removed');
+    assert.ok(!/function folder_render\b/.test(app_js), 'standalone folder_render removed');
+    assert.ok(!/function folder_choose\b/.test(app_js), 'standalone folder_choose removed (sf_folder_choose replaces it)');
+    // the two shared helpers the tab relies on are KEPT
+    assert.match(app_js, /function folder_is_spreadsheet\b/, 'shared spreadsheet-ext helper kept');
+    assert.match(app_js, /function folder_fmt_modified\b/, 'shared modified-date helper kept');
   });
 
-  test('app.js wires the folder picker + the generic queue', () => {
-    [
-      /function wire_folder\b/, /function folder_choose\b/, /function folder_from_input\b/, /function folder_load\b/,
-      /function folder_render\b/, /function folder_reset\b/, /function build_queue\b/,
-      /showDirectoryPicker/, /webkitdirectory|webkitRelativePath/
-    ].forEach(function (re) { assert.match(app_js, re); });
-    assert.match(app_js, /source: 'folder'/, "folder_load must build_queue with source 'folder'");
-    assert.match(app_js, /S\.queue_source === 'folder'/, 'render_queue adapts columns for the folder source');
-    assert.match(app_js, /wire_folder\(\)/, 'wire_folder is called from init');
-  });
-
-  test('the queue is source-agnostic (sf_build_queue delegates to build_queue)', () => {
+  test('the From Folder tab still feeds the same source-agnostic Files queue', () => {
     assert.match(app_js, /function build_queue\b/, 'generic build_queue exists');
-    assert.match(app_js, /build_queue\(saved\.map/, 'sf_build_queue delegates to build_queue');
+    assert.match(app_js, /source: 'folder'/, "sf_folder_load builds the queue with source 'folder'");
+    assert.match(app_js, /S\.queue_source === 'folder'/, 'render_queue adapts columns for the folder source');
     assert.match(app_js, /S\.source = it\.source \|\| S\.queue_source/, 'open_queue_file takes the item source');
   });
 });

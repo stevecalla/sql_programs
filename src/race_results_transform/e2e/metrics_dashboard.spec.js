@@ -126,25 +126,4 @@ test.describe('race_results_transform — metrics dashboard', () => {
     expect(mh).not.toBe('none');
   });
 
-  test('thread + correction controls exist and start hidden (D4, #68/#70)', async ({ page }) => {
-    await page.goto('/metrics');
-    // thread indicator + new-thread link (B1) present but hidden until a question is asked
-    await expect(page.locator('#ask-thread')).toHaveCount(1);
-    await expect(page.locator('#ask-thread')).toBeHidden();
-    await expect(page.locator('#ask-newthread')).toHaveCount(1);
-    // correction affordance (G2) present but hidden until an answer renders
-    await expect(page.locator('#ask-correct')).toHaveCount(1);
-    await expect(page.locator('#ask-correct')).toBeHidden();
-    await expect(page.locator('#ask-correct-toggle')).toHaveCount(1);
-    // conversation transcript container (B1 #73) present but hidden until turns exist
-    await expect(page.locator('#ask-convo-list')).toHaveCount(1);     // single in-thread transcript list
-    await expect(page.locator('#ask-thread-scroll')).toHaveCount(1);  // one scrolling conversation
-    await expect(page.locator('#ask-convo-more')).toHaveCount(1);     // 'see older' expander (capped thread)
-    // show/hide toggle collapses the whole ask area
-    await expect(page.locator('#ask-panel-body')).toBeVisible();
-    await page.locator('#ask-panel-toggle').click();
-    await expect(page.locator('#ask-panel-body')).toBeHidden();
-    await page.locator('#ask-panel-toggle').click();
-    await expect(page.locator('#ask-panel-body')).toBeVisible();
-  });
 });

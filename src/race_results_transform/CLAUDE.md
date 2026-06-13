@@ -365,10 +365,13 @@ own **↺ Reset** (`#sfFolderReset` → `sf_folder_reset`) + the shared **Max** 
 cap, same as the SF tabs) + a `Folder: <name>` path label reusing the standalone card's styling. Records get a
 synthetic `content_version_id` so the shared sort/search/select work unchanged, and its action is a
 local **Load selected** (`#sfFolderLoadBtn` → `sf_folder_load`) that reads bytes in-browser and routes them into
-the SAME Files queue (`build_queue(... source:'folder')`) — no server, no download. The **standalone
-`#folderCard`** ("Convert files from a folder") is intentionally **kept alongside** the tab for now so the two can
-be compared; remove it in a follow-up once the tabbed version is preferred. **Slack Ironman** is an
-under-construction placeholder panel (`#sfSlackPanel`, `.sf-slack-panel`) — no functionality yet.
+the SAME Files queue (`build_queue(... source:'folder')`) — no server, no download. Its control row puts the
+folder picker first, then **↺ Reset** (`#sfFolderReset` → `sf_folder_reset`), then the shared **Max** field, then a
+`Folder: <name>` label. The **Max** cap auto-selects the newest N files, exactly like the SF tabs (`sf_select_newest`
+folder branch). The old **standalone `#folderCard`** ("Convert files from a folder") has been **removed** — the tab
+is now the only folder intake; only two small shared helpers survive in `app.js` (`folder_is_spreadsheet`,
+`folder_fmt_modified`). **Slack Ironman** is an under-construction placeholder panel (`#sfSlackPanel`,
+`.sf-slack-panel`) — no functionality yet.
 
 ### Email Queue (a Salesforce source — Email-to-Case)
 The **SF Email Queue** tab lists spreadsheet attachments on cases in the
@@ -390,23 +393,26 @@ The **SF Email Queue** tab lists spreadsheet attachments on cases in the
   `Opened·Modified·Status·Subject·Sender·Sanction·Program·File·Type`). `#sfEmailStatus` is 3-way, mapped
   straight to Case `IsClosed` — **Is Not Closed (default, `IsClosed=false`)** · Is Closed (`IsClosed=true`)
   · All (no filter) — and `sf_set_source` toggles the controls (`.sf-upload-only`/`.sf-email-only`).
-  `sf_select_newest` only **pre-checks not-closed rows** for email (so All lists both but auto-selects just
-  the not-closed ones; Is Closed pre-selects none). Files flow into the SAME Files queue + download as the
-  upload path. Missing program/sanction is NOT flagged for email (it's the norm there).
+  `sf_select_newest` auto-selects the **newest N of whatever is listed** (the Status filter already narrows the
+  list server-side via `IsClosed`), so "Is Closed"/"All" select rows too — earlier the email branch pre-checked
+  only not-closed rows, which left the Download button dead at 0 selected when the window held only closed cases.
+  Files flow into the SAME Files queue + download as the upload path. Missing program/sanction is NOT flagged for
+  email (it's the norm there).
 
-## Local-folder intake (Convert files from a folder)
+## Local-folder intake (the From Folder tab)
 
-A second local intake (`#folderCard`, `wire_folder`/`folder_*` in `app.js`) — pick a folder on your
-computer, choose the spreadsheet files, and run them through the SAME Files queue (convert / review /
-download / Reload). Purely client-side: nothing is uploaded, no server, no Salesforce.
-- **Pick**: Chrome/Edge use `showDirectoryPicker` (dir handle → Reload works); other browsers fall back to a
-  hidden `<input type="file" webkitdirectory>` (`folder_from_input` keeps **top-level** files only — rel path
-  `folder/file`, depth 1 — and gets bytes but no handle, so Reload is disabled there).
-- **List/select**: top-level `.xlsx/.xls/.csv` only, rendered as a checklist (File name · Type · Modified)
-  reusing the SF `sf-table`/`sf-count`/`sf-search` styles, with Select-all + search + a found/selected count.
-- **Load**: `folder_load` reads each picked file's bytes (`handle.getFile().arrayBuffer()` or
+Local-folder intake now lives entirely in the **From Folder tab** of the "Get Race Results" card (the standalone
+`#folderCard` was removed; see the **Intake tab bar** section). Pick a folder on your computer, choose the
+spreadsheet files in `#sfTable`, and run them through the SAME Files queue (convert / review / download / Reload).
+Purely client-side: nothing is uploaded, no server, no Salesforce.
+- **Pick**: Chrome/Edge use `showDirectoryPicker` (`sf_folder_choose`); other browsers fall back to a hidden
+  `<input type="file" webkitdirectory>` (`sf_folder_from_input` keeps **top-level** files only — rel path
+  `folder/file`, depth 1).
+- **List/select**: top-level `.xlsx/.xls/.csv` only, rendered in the shared `#sfTable` (File name · Type ·
+  Modified) with Select-all + search + a found/selected count; the **Max** field caps the auto-selection.
+- **Load**: `sf_folder_load` reads each picked file's bytes (`handle.getFile().arrayBuffer()` or
   `File.arrayBuffer()`) → `build_queue(items, { source: 'folder', dir, folder, sig })`. Events carry
-  `source='folder'`. **Start over** clears it (`folder_reset`).
+  `source='folder'`. **Start over** / the tab's **↺ Reset** (`sf_folder_reset`) clears it.
 - **CLI equivalent**: `node src/cli.js batch <folder> [--format csv|xlsx]` already converts a whole folder
   of files (top-level `.xlsx/.xls/.csv`) — the headless counterpart to this browser flow.
 - **CLI**: `node src/cli.js sf:list [--today|--date|--start/--end] [--field] [--limit] [--test]` (lists each
