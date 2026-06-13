@@ -89,13 +89,25 @@ h3{font-size:14px;margin:0}
 .compare-grid.layout-tabs .pane.tab-hidden{display:none}
 @media (max-width:900px){.compare-grid.layout-side{grid-template-columns:1fr}}
 .pane{min-width:0;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg)}
-.pane-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+.pane-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;min-height:32px}
 
 /* tableview */
 .tv-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 .tv-search{flex:1;min-width:120px;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);
   border-radius:9px;background:var(--card);color:var(--ink)}
 .tv-count{font-size:12px;color:var(--dim);white-space:nowrap}
+/* row delete (original table): per-row ✕ in the body, Delete/Restore in the pane-head, deleted chip */
+.tv-del{background:none;border:0;color:var(--dim);cursor:pointer;font-size:11px;line-height:1;padding:0 2px;margin-left:4px;opacity:.5}
+.tv-del:hover{color:var(--red,#e4002b);opacity:1}
+.pane-head h3{margin-right:auto}                     /* keep title left; meta + delete controls group right */
+.orig-del{display:inline-flex;gap:6px;align-items:center;flex:0 0 auto}
+.orig-del .btn{white-space:nowrap}
+.orig-del-btn{color:var(--red,#e4002b);border-color:var(--red,#e4002b)}
+.orig-del-btn:hover:not(:disabled){background:rgba(228,0,43,.08)}
+.orig-del-btn:disabled{opacity:.4;cursor:default}
+.chip-del{color:#b45309;border-color:#b45309;font-weight:700}
+/* CSV Excel-safe toggle in the download popover */
+.dl-xsafe{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);margin:6px 0 2px;cursor:help;white-space:nowrap}
 .grid-scroll{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px;max-height:62vh;background:var(--card)}
 table.rt{border-collapse:collapse;font-size:13px;width:max-content;min-width:100%}
 table.rt th,table.rt td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:6px 9px;white-space:nowrap;text-align:left;vertical-align:top}
@@ -535,6 +547,12 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 .sf-logout:hover{border-color:var(--accent);color:var(--accent)}
 .sf-logout[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
 .sf-controls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.sf-source-seg{margin-bottom:10px;flex-wrap:wrap}                    /* SF Upload · SF Email · From Folder · Slack Ironman tabs */
+.sf-slack-panel{text-align:center;padding:34px 18px;margin-top:10px;border:1px dashed var(--line);border-radius:12px;background:var(--card)}
+.sf-slack-emoji{font-size:42px;line-height:1}
+.sf-slack-panel h3{margin:10px 0 4px;color:var(--ink)}
+.sf-slack-panel p{margin:0 auto;max-width:46ch}
+.sf-subj{display:inline-block;max-width:340px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 .sf-ctl{display:inline-flex;gap:5px;align-items:center;font-size:13px;color:var(--dim)}
 .sf-limit{width:58px}
 .sf-ctl select,.sf-folder-path,#sfFrom,#sfTo,.sf-limit,.sf-search{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink);font:inherit;height:34px;box-sizing:border-box;vertical-align:middle}
@@ -562,6 +580,14 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 .sf-table tbody tr:hover{background:var(--accent-soft)}
 .sf-dl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px}
 .sf-dl.hidden{display:none}
+/* mobile: keep the intake card usable on a phone */
+@media (max-width:520px){
+  .sf-head h2{padding-right:88px}                      /* clear the absolute Sign in/out pill */
+  .sf-source-seg{flex-wrap:nowrap;overflow-x:auto}     /* 4 tabs on one horizontally-scrollable row */
+  .sf-search,.sf-folder-path{width:100%;min-width:0}
+  .sf-table-wrap{height:240px}
+  .sf-dl .btn.primary{flex:1 1 100%}                   /* full-width Download / Load */
+}
 
 /* Files queue (the task-list tab, left of Mapping) — sortable table like the Get Race card */
 .sf-queue{margin-top:2px}

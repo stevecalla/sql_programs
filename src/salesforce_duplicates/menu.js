@@ -22,10 +22,12 @@ const readline = require('readline');
 const { execSync, spawn } = require('child_process');
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
-const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME, META_DIR_NAME, ZIP_TRIM_MAPPING_FILE } = require('./config');
+const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME, META_DIR_NAME, ZIP_TRIM_MAPPING_FILE, TUNING_DIR_NAME, SNAPSHOT_TABLE_NAME } = require('./config');
 
 const DIR = __dirname;
 const MAIN_SCRIPT = 'step_1_find_duplicates.js';
+const SWEEP_SCRIPT = 'src/sweep_duplicates.js';
+const VERIFY_SCRIPT = 'src/verify_database_snapshot.js';
 const SERVER_PORT = 8017;
 
 // ── Colors ────────────────────────────────────────────────────────────────
@@ -47,9 +49,6 @@ function prompt(rl, question) {
   return new Promise((resolve) => rl.question(question, resolve));
 }
 
-// Spawn `node <args>` from this directory, streaming output to the console,
-// and resolve with the exit code. Used for the real script and tests
-// (tests need `--test` as a node flag, so we spawn node directly).
 function run_node(args, label, env = {}) {
   console.log(c(DIM, `  Running ${label}: node ${args.join(' ')}\n`));
   return new Promise((resolve) => {
@@ -76,8 +75,6 @@ function open_path(p) {
   catch { console.log(`\n  Open this folder manually:\n  ${p}\n`); }
 }
 
-// Hit a server endpoint on localhost:SERVER_PORT and print the response.
-// Requires the server to already be running (start it from the SERVER menu, in another terminal).
 function hit_endpoint(method, route, body = null) {
   console.log(c(DIM, `  ${method} http://localhost:${SERVER_PORT}${route}`));
   return new Promise((resolve) => {
@@ -107,7 +104,6 @@ function hit_endpoint(method, route, body = null) {
 }
 
 // ── Menu definition ─────────────────────────────────────────────────────────
-// Test items carry `target` (path passed to `node --test`) + `test_label`.
 const SECTIONS = [
   {
     label: 'TESTING — verify the code is working',
@@ -122,13 +118,13 @@ const SECTIONS = [
     ],
   },
   {
-    label: 'RUN — the real duplicate finder',
+    label: 'RUN — the real duplicate finder (SQL backbone ON; add --in-memory to bypass)',
     color: YELLOW,
     items: [
-      { id: 7, label: 'Find duplicates — TEST',       desc: '--test: dev sandbox, fetch capped at 5,000', action: 'run_test', cli: `node ${MAIN_SCRIPT} --test` },
-      { id: 8, label: 'Find duplicates — TEST FULL',  desc: '--test --full: dev sandbox, ALL records (Bulk API)', action: 'run_test_full', cli: `node ${MAIN_SCRIPT} --test --full` },
-      { id: 9, label: 'Find duplicates — PROD PARTIAL', desc: '--prod --partial: prod login, capped sample (try before the full run)', action: 'run_prod_partial', cli: `node ${MAIN_SCRIPT} --prod --partial` },
-      { id: 10, label: 'Find duplicates — PRODUCTION', desc: '--prod: prod login, full fetch, writes CSVs to /data', action: 'run_prod', cli: `node ${MAIN_SCRIPT} --prod` },
+      { id: 7, label: 'Find duplicates — TEST',       desc: '--test: dev sandbox, capped 5,000 -> streams into the snapshot table (SQL backbone)', action: 'run_test', cli: `node ${MAIN_SCRIPT} --test` },
+      { id: 8, label: 'Find duplicates — TEST FULL',  desc: '--test --full: dev sandbox, ALL records (Bulk) -> snapshot table (SQL backbone)', action: 'run_test_full', cli: `node ${MAIN_SCRIPT} --test --full` },
+      { id: 9, label: 'Find duplicates — PROD PARTIAL', desc: '--prod --partial: capped sample -> snapshot table (SQL backbone; try before full)', action: 'run_prod_partial', cli: `node ${MAIN_SCRIPT} --prod --partial` },
+      { id: 10, label: 'Find duplicates — PRODUCTION', desc: '--prod: full fetch -> streams into snapshot table (SQL backbone), writes CSVs to /data', action: 'run_prod', cli: `node ${MAIN_SCRIPT} --prod` },
     ],
   },
   {
@@ -141,29 +137,50 @@ const SECTIONS = [
     ],
   },
   {
+    label: 'DUPLICATE TUNING — compare duplicate counts across criteria (DB-backed, review-only)',
+    color: YELLOW,
+    items: [
+      { id: 14, label: 'Sweep snapshot — TEST',       desc: 'Fetch records ONCE (dev sandbox) and STREAM them into the snapshot table', action: 'sweep_snapshot_test', cli: `node ${SWEEP_SCRIPT} snapshot --test` },
+      { id: 15, label: 'Sweep snapshot — PRODUCTION', desc: 'Fetch records ONCE (production) and STREAM them into the snapshot table', action: 'sweep_snapshot_prod', cli: `node ${SWEEP_SCRIPT} snapshot --prod` },
+      { id: 16, label: 'Run sweep (grid over snapshot)', desc: 'Replay config.DEFAULT_SWEEP_GRID over the DB snapshot; prints summary + table, writes sweep_summary.csv', action: 'sweep_run', cli: `node ${SWEEP_SCRIPT} run` },
+      { id: 17, label: 'Sweep snapshot status (DB)', desc: 'Verify the DB snapshot: meta + live row count from the database', action: 'sweep_status', cli: `node ${SWEEP_SCRIPT} status` },
+      { id: 18, label: 'Open tuning folder',  desc: `Sweep CSVs (${TUNING_DIR_NAME})`, action: 'open_tuning' },
+    ],
+  },
+  {
+    label: 'SQL BACKBONE — verify the Phase 0 loader against the local DB (step by step)',
+    color: GREEN,
+    items: [
+      { id: 19, label: 'Loader unit tests (no DB)', desc: 'tests/database_snapshot.test.js — logic only, no MySQL', action: 'run_tests', target: 'tests/database_snapshot.test.js', test_label: 'database_snapshot tests', cli: 'node --test tests/database_snapshot.test.js' },
+      { id: 20, label: 'Step 1 — Load synthetic rows', desc: `Drop+recreate ${SNAPSHOT_TABLE_NAME} in usat_sales_db and load 4 rows`, action: 'db_verify_load', cli: `node ${VERIFY_SCRIPT} load` },
+      { id: 21, label: 'Step 2 — Show rows + dup groups', desc: 'SELECT the rows and run the exact-duplicate GROUP BY (SQL output)', action: 'db_verify_show', cli: `node ${VERIFY_SCRIPT} show` },
+      { id: 22, label: 'Step 3 — Drop the table', desc: 'Remove the verification table (cleanup)', action: 'db_verify_drop', cli: `node ${VERIFY_SCRIPT} drop` },
+    ],
+  },
+  {
     label: 'SERVER — Slack slash-command server (start, then hit from another terminal)',
     color: CYAN,
     items: [
-      { id: 14, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
-      { id: 15, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
-      { id: 16, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
-      { id: 17, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
-      { id: 18, label: 'Hit /scheduled — TEST FULL',  desc: 'is_test=true&full=true: dev sandbox, ALL records + Slack post', action: 'hit_scheduled_test_full', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true&full=true"` },
-      { id: 19, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
+      { id: 23, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
+      { id: 24, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
+      { id: 25, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
+      { id: 26, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
+      { id: 27, label: 'Hit /scheduled — TEST FULL',  desc: 'is_test=true&full=true: dev sandbox, ALL records + Slack post', action: 'hit_scheduled_test_full', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true&full=true"` },
+      { id: 28, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
     ],
   },
   {
     label: 'DISCOVERY — confirm Salesforce field names (read-only)',
     color: MAGENTA,
     items: [
-      { id: 20, label: 'Discover Salesforce fields', desc: 'Describe + Tooling SOQL for a field on an entity (prompts: entity / term / mode)', action: 'discover_fields', cli: 'node discover_account_fields.js --prod Account Merge' },
+      { id: 29, label: 'Discover Salesforce fields', desc: 'Describe + Tooling SOQL for a field on an entity (prompts: entity / term / mode)', action: 'discover_fields', cli: 'node discover_account_fields.js --prod Account Merge' },
     ],
   },
   {
     label: 'PREFERENCES',
     color: MAGENTA,
     items: [
-      { id: 21, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
+      { id: 30, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
     ],
   },
 ];
@@ -179,8 +196,6 @@ function print_menu() {
     for (const item of section.items) {
       const num = String(item.id).padStart(3);
       console.log(`  ${c(BOLD, num + '.')} ${item.label.padEnd(28)} ${c(DIM, item.desc)}`);
-      // Second dimmed line with the CLI equivalent — only when the toggle is on.
-      // Items without a `cli` field (Open folders, the toggle itself) skip it.
       if (_show_cli && item.cli) {
         console.log(`        ${c(DIM, '$ ' + item.cli)}`);
       }
@@ -228,7 +243,6 @@ async function handle_action(item, rl) {
       const code = await run_node([MAIN_SCRIPT, '--prod'], label);
       report(code, label, 'completed');
       break;
-
     }
     case 'run_prod_partial': {
       const answer = (await prompt(rl, c(YELLOW, '  PRODUCTION PARTIAL — logs into prod Salesforce and pulls a small sample. Continue? (y/N): '))).trim().toLowerCase();
@@ -238,11 +252,57 @@ async function handle_action(item, rl) {
       report(code, label, 'completed');
       break;
     }
+    case 'sweep_snapshot_test': {
+      const label = 'sweep snapshot (dev sandbox -> DB)';
+      const code = await run_node([SWEEP_SCRIPT, 'snapshot', '--test'], label);
+      report(code, label, 'completed');
+      break;
+    }
+    case 'sweep_snapshot_prod': {
+      const answer = (await prompt(rl, c(YELLOW, '  PRODUCTION snapshot — logs into prod Salesforce and streams records into the DB. Continue? (y/N): '))).trim().toLowerCase();
+      if (answer !== 'y' && answer !== 'yes') { console.log(c(DIM, '  Cancelled.')); break; }
+      const label = 'sweep snapshot (production -> DB)';
+      const code = await run_node([SWEEP_SCRIPT, 'snapshot', '--prod'], label);
+      report(code, label, 'completed');
+      break;
+    }
+    case 'sweep_run': {
+      const label = 'criteria sweep (grid over DB snapshot)';
+      const code = await run_node([SWEEP_SCRIPT, 'run'], label);
+      report(code, label, 'completed');
+      break;
+    }
+    case 'sweep_status': {
+      const label = 'sweep snapshot status (DB)';
+      const code = await run_node([SWEEP_SCRIPT, 'status'], label);
+      report(code, label, 'completed');
+      break;
+    }
+    case 'db_verify_load': {
+      const label = 'DB verify — load synthetic rows';
+      const code = await run_node([VERIFY_SCRIPT, 'load'], label);
+      report(code, label, 'completed');
+      break;
+    }
+    case 'db_verify_show': {
+      const label = 'DB verify — show rows + duplicate groups';
+      const code = await run_node([VERIFY_SCRIPT, 'show'], label);
+      report(code, label, 'completed');
+      break;
+    }
+    case 'db_verify_drop': {
+      const label = 'DB verify — drop the table';
+      const code = await run_node([VERIFY_SCRIPT, 'drop'], label);
+      report(code, label, 'completed');
+      break;
+    }
     case 'open_output':
     case 'open_archive':
-    case 'open_meta': {
+    case 'open_meta':
+    case 'open_tuning': {
       const name = item.action === 'open_output' ? OUTPUT_DIR_NAME
                  : item.action === 'open_archive' ? ARCHIVE_DIR_NAME
+                 : item.action === 'open_tuning' ? TUNING_DIR_NAME
                  : META_DIR_NAME;
       const os_path = await determineOSPath();
       const folder = path.join(os_path, name);
@@ -255,8 +315,6 @@ async function handle_action(item, rl) {
       break;
     }
     case 'start_server': {
-      // The server lives at the repo root and loads .env from there, so spawn
-      // it with cwd = repo root (two levels up from this menu).
       const repo_root = path.resolve(DIR, '..', '..');
       console.log(c(DIM, `  Starting server from ${repo_root} (Ctrl-C to stop)...\n`));
       await new Promise((resolve) => {
@@ -278,12 +336,10 @@ async function handle_action(item, rl) {
       break;
     }
     case 'hit_scheduled_test': {
-      // Dev sandbox — safe to fire without confirmation.
       await hit_endpoint('GET', '/scheduled-salesforce-duplicates?is_test=true');
       break;
     }
     case 'hit_scheduled_test_full': {
-      // Dev sandbox, FULL fetch (all records) — safe to fire without confirmation.
       await hit_endpoint('GET', '/scheduled-salesforce-duplicates?is_test=true&full=true');
       break;
     }
@@ -294,7 +350,6 @@ async function handle_action(item, rl) {
       break;
     }
     case 'discover_fields': {
-      // Read-only field discovery. Prompts with defaults applied on blank Enter.
       const entity_raw = (await prompt(rl, c(BOLD, '  Entity API name [Account] (Contact also works): '))).trim();
       const entity = entity_raw || 'Account';
       const term_raw = (await prompt(rl, c(BOLD, '  Qualified API name contains [Merge]: '))).trim();

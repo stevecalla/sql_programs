@@ -186,9 +186,21 @@
     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
   // One grid (header row + data rows) -> CSV text. CRLF line endings (Excel-friendly).
-  function grid_to_csv(headers, rows) {
+  // opts.excel_safe_cols: column indices whose values are wrapped as an Excel text formula ="value"
+  // so Excel keeps them EXACTLY as written when the CSV is opened (times like 00:59:59.000 and dates
+  // aren't auto-reformatted). Opt-in — those cells become text in Excel, and other CSV tools (Google
+  // Sheets, scripts) see the literal ="..." — so it's off by default.
+  function grid_to_csv(headers, rows, opts) {
+    var safe = (opts && opts.excel_safe_cols) || null;
+    function field(v, c) {
+      if (safe && safe.indexOf(c) >= 0) {
+        var s = (v == null ? '' : String(v));
+        if (s !== '') return csv_field('="' + s.replace(/"/g, '""') + '"');
+      }
+      return csv_field(v);
+    }
     var lines = [(headers || []).map(csv_field).join(',')];
-    (rows || []).forEach(function (r) { lines.push((r || []).map(csv_field).join(',')); });
+    (rows || []).forEach(function (r) { lines.push((r || []).map(function (v, c) { return field(v, c); }).join(',')); });
     return lines.join('\r\n');
   }
 

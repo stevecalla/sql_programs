@@ -39,18 +39,20 @@
   var S = {
     file_name: 'results', ir: null, parsed: null, mapping: null, value_overrides: {},
     result: null, report: null, work_rows: null, store: null, sig: null,
-    orig_table: null, conv_table: null, vm_expanded: {}, approved: {}, flag_info: null, link_tables: false,
+    orig_table: null, conv_table: null, vm_expanded: {}, approved: {}, excluded: {}, flag_info: null, link_tables: false,
     sheets: null, active: null, first_render: true, split_col: null, split_basis: null, split_manual: {}, split_loaded_key: null,
     dl_format: 'csv', dl_fields: { id: '', type: '', distance: '', name: '' },  // download format + filename builder
+    dl_excel_safe: false,   // CSV only: wrap DOB/Recorded Time as Excel text so Excel keeps the format on open
     is_demo: false,  // true while viewing the built-in "Try me" sample (fake data) — stamps is_demo on its events
     source: null,    // where the active file came from: null/'upload' | 'salesforce' | 'folder' (try_me derives from is_demo)
     // Salesforce intake / queue
     sf_files: null, sf_selected: {}, sf_sort: { key: 'date', dir: 'desc' }, sf_cancel: false, sf_authed: false,
+    sf_source: 'upload',   // 'upload' | 'email' (Salesforce) | 'folder' (local pick) | 'slack' (placeholder)
     sf_dir: null, sf_folder: '', sf_sig: null, queue: null, queue_sort: { key: null, dir: 'asc' }, active_queue_id: null,
+    // From Folder tab: the chosen local folder (handle + name) for the in-#sfTable folder intake
+    sf_folder_dir: null, sf_folder_name: '',
     // Files queue is source-agnostic: 'salesforce' (downloaded) or 'folder' (local folder pick)
-    queue_source: 'salesforce', queue_dir: null, queue_folder: '', queue_sig: null,
-    // local-folder intake
-    folder_files: null, folder_selected: {}, folder_dir: null, folder_name: ''
+    queue_source: 'salesforce', queue_dir: null, queue_folder: '', queue_sig: null
   };
 
   // The committed synthetic fixture served by the app (no PII). Used by both Try-me paths:
@@ -84,9 +86,11 @@
       col_menu: !!opts.col_menu, top_header: !!opts.top_header, source_headers: opts.source_headers || [],
       current_source: opts.current_source || null, on_remap: opts.on_remap || null, on_edit: opts.on_edit || null,
       on_search: opts.on_search || null, on_sort: opts.on_sort || null, on_filter: opts.on_filter || null,
+      deletable: !!opts.deletable, on_delete: opts.on_delete || null, on_render: opts.on_render || null, excluded: null,
       headers: [], data: [], order: [], query: '', sort_col: null, sort_dir: 1,
       cap: opts.cap || 500, show_all: false, filter_set: null, filter_label: '', search_index: []
     };
+    function excluded_count() { var n = 0; if (T.excluded) for (var k in T.excluded) if (T.excluded[k]) n++; return n; }
 
     function compare(a, b, c) {
       // Comparator lives in the isomorphic core (src/sort.js) so it's unit-tested.
@@ -97,7 +101,10 @@
       if (T.sort_col != null) T.order.sort(function (a, b) { return compare(a, b, T.sort_col); });
     };
     T.set_data = function (headers, data) { T.headers = headers; T.data = data; T.sort_col = null; T.filter_set = null; T.filter_label = ''; T.search_index = view.build_search_index(data, cell_text); T.apply_sort(); mount(); render_body(); };
-    T.export_rows = function () { return T.order.map(function (i) { return T.data[i]; }); };
+    // Export honours the on-screen sort but skips user-deleted rows (NOT the search filter).
+    T.export_rows = function () { return T.order.filter(function (i) { return !(T.excluded && T.excluded[i]); }).map(function (i) { return T.data[i]; }); };
+    T.set_excluded = function (set) { T.excluded = set || null; render_body(); };
+    T.visible_keys = function () { return visible_indices(); };   // current visible row indices (for external "delete shown")
     T.set_query = function (q) { T.query = q; var sb = T.el.querySelector('.tv-search'); if (sb) sb.value = q; render_body(); };
     T.set_order = function (order) { T.order = order.slice(); T.sort_col = null; render_body(); };
     function apply_filter(set, label) {
@@ -108,7 +115,7 @@
     T.set_filter = function (set, label) { apply_filter(set, label); if (T.on_filter) T.on_filter(set, label); };
     T.set_filter_quiet = function (set, label) { apply_filter(set, label); };
 
-    function visible_indices() { return view.visible_indices(T.order, T.query, T.search_index, T.filter_set); }
+    function visible_indices() { return view.visible_indices(T.order, T.query, T.search_index, T.filter_set, T.excluded); }
 
     function name_th(h, c) { return '<th data-c="' + c + '">' + esc(h) + '<span class="ind"></span></th>'; }
     function ctrl_th(h, c) {
@@ -162,6 +169,12 @@
           if (T.on_edit) T.on_edit(+td.dataset.i, +td.dataset.c, td);
         });
       }
+      if (T.deletable) {
+        T.el.querySelector('tbody').addEventListener('click', function (e) {
+          var b = e.target.closest('.tv-del'); if (!b) return;   // per-row ✕ in the row-number cell
+          if (T.on_delete) T.on_delete([+b.dataset.i]);
+        });
+      }
     }
 
     function render_body() {
@@ -172,7 +185,8 @@
       } else {
         for (var k = 0; k < limit; k++) {
           var i = vis[k];
-          html += '<tr><td class="rownum">' + (i + 1) + '</td>';
+          var rn = T.deletable ? ((i + 1) + ' <button type="button" class="tv-del" data-i="' + i + '" title="Delete this row" aria-label="Delete row ' + (i + 1) + '">✕</button>') : (i + 1);
+          html += '<tr><td class="rownum">' + rn + '</td>';
           for (var c = 0; c < T.headers.length; c++) {
             var flag = T.get_flag ? T.get_flag(i, c) : null;
             var attrs = T.editable ? ' contenteditable="true" data-i="' + i + '" data-c="' + c + '"' : '';
@@ -188,6 +202,7 @@
       });
       var hidden = vis.length - limit;
       T.el.querySelector('.tv-count').textContent = vis.length + ' row' + (vis.length === 1 ? '' : 's') + (hidden > 0 ? ' (' + limit + ' shown)' : '');
+      if (T.deletable && T.on_render) T.on_render();   // refresh the external delete/restore controls (pane-head)
       var fb = T.el.querySelector('.tv-filter');
       if (fb) {
         if (T.filter_set) { fb.classList.remove('hidden'); fb.innerHTML = 'Showing only: <b>' + esc(T.filter_label) + '</b> <button class="tv-clear" title="Clear filter — show all rows">\u2715</button>'; fb.querySelector('.tv-clear').addEventListener('click', function () { T.set_filter(null); }); }
@@ -369,8 +384,17 @@
     if (!v || v < 1) v = SF_DEFAULT_FILES;
     return Math.min(v, SF_MAX_FILES);
   }
-  function sf_select_newest() {   // select the newest N by modified date, regardless of display sort
-    var by_date = (S.sf_files || []).slice().sort(function (a, b) { return sort.compare_text(b.last_modified_date_utc || '', a.last_modified_date_utc || ''); });
+  function sf_select_newest() {   // auto-select: newest N by modified date
+    if (S.sf_source === 'folder') {   // select the newest N (by file mtime), capped by the Max field — same cap behavior as the SF tabs
+      var fpool = (S.sf_files || []).slice().sort(function (a, b) { return (b._modified_ms || 0) - (a._modified_ms || 0); });
+      S.sf_selected = {}; fpool.slice(0, sf_limit()).forEach(function (f) { S.sf_selected[f.content_version_id] = true; });
+      return;
+    }
+    // Auto-select the newest N of whatever is LISTED (the Status filter already narrows the email
+    // list server-side via IsClosed), so "Is Closed" / "All" select rows too instead of leaving the
+    // Download button dead at 0 selected. The user can still uncheck any they don't want.
+    var pool = (S.sf_files || []).slice();
+    var by_date = pool.sort(function (a, b) { return sort.compare_text(b.modified_utc || b.last_modified_date_utc || '', a.modified_utc || a.last_modified_date_utc || ''); });
     S.sf_selected = {}; by_date.slice(0, sf_limit()).forEach(function (f) { S.sf_selected[f.content_version_id] = true; });
   }
 
@@ -378,19 +402,55 @@
     var el = $('sfStatus'); if (!el) return;
     el.textContent = msg || ''; el.classList.toggle('err', !!is_err);
   }
+  // Tab-bar source: SF Upload Queue · SF Email Queue · From Folder · Slack Ironman.
+  // Each source shows its own control row + panel and hides the others; switching resets the list.
+  function sf_subtitle(src) {
+    if (src === 'email') return 'pull race-results attachments from Rankings cases (Email-to-Case) — same convert/review/download flow';
+    if (src === 'folder') return 'pick a folder on your computer and load the files into the queue — nothing is uploaded';
+    if (src === 'slack') return 'Slack Ironman submissions — coming soon';
+    return 'download race-results files for a date and work them as a queue — the convert/review/download flow is unchanged';
+  }
+  function sf_default_sort(src) {
+    if (src === 'email') return { key: 'modified', dir: 'desc' };
+    if (src === 'folder') return { key: 'file', dir: 'asc' };
+    return { key: 'date', dir: 'desc' };
+  }
+  function sf_set_source(src) {
+    if (['upload', 'email', 'folder', 'slack'].indexOf(src) < 0) src = 'upload';
+    if (S.sf_source === src) return;
+    S.sf_source = src;
+    S.sf_sort = sf_default_sort(src);
+    var seg = $('sfSourceSeg');
+    if (seg) seg.querySelectorAll('[data-src]').forEach(function (b) {
+      var on = b.dataset.src === src; b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.sf-upload-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'upload'); });
+    document.querySelectorAll('.sf-email-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'email'); });
+    document.querySelectorAll('.sf-folder-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'folder'); });
+    document.querySelectorAll('.sf-slack-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'slack'); });
+    document.querySelectorAll('.sf-query-only').forEach(function (el) { el.classList.toggle('hidden', src === 'folder' || src === 'slack'); });
+    document.querySelectorAll('.sf-cap-only').forEach(function (el) { el.classList.toggle('hidden', src === 'slack'); });   // Max applies to upload/email/folder
+    document.querySelectorAll('.sf-dl-server').forEach(function (el) { el.classList.toggle('hidden', src !== 'upload' && src !== 'email'); });
+    var sub = $('sfCardSub'); if (sub) sub.textContent = sf_subtitle(src);
+    sf_reset();   // clear the current list/selection when switching sources
+  }
   // From/To date fields → the server's mode/date/start/end contract. "Any date" = no filter;
   // From==To = a single day; otherwise a range (capped at 14 days).
   function sf_query_params() {
     var field = $('sfField').value;
-    // Broaden = OR the wider terms server-side (same as CLI --search); off = the precise default term.
-    var broad = ($('sfBroaden') && $('sfBroaden').checked) ? 'Race Results Doc,Race Results,Race,Results' : null;
     var p;
     if ($('sfAnyDate') && $('sfAnyDate').checked) p = { mode: 'all', field: field };
     else {
       var a = $('sfFrom').value, b = $('sfTo').value;
       p = (a && b && a === b) ? { mode: 'specific', field: field, date: a } : { mode: 'range', field: field, start: a, end: b };
     }
-    if (broad) p.search = broad;
+    if (S.sf_source === 'email') {
+      // email queue status maps to Case IsClosed (no Broaden — that's an Upload-Queue search lever)
+      p.status = ($('sfEmailStatus') && $('sfEmailStatus').value) || 'not_closed';
+    } else if ($('sfBroaden') && $('sfBroaden').checked) {
+      // Broaden = OR the wider terms server-side (same as CLI --search); off = the precise default term.
+      p.search = 'Race Results Doc,Race Results,Race,Results';
+    }
     return p;
   }
   var SF_MAX_RANGE_DAYS = 14;
@@ -457,8 +517,9 @@
     if (!sf_range_ok()) return;
     var p = sf_query_params();
     var qs = Object.keys(p).filter(function (k) { return p[k]; }).map(function (k) { return k + '=' + encodeURIComponent(p[k]); }).join('&');
-    sf_set_status('Searching Salesforce…');
-    sf_fetch_json('/api/sf/files?' + qs).then(function (j) {
+    var endpoint = (S.sf_source === 'email') ? '/api/sf/email-files' : '/api/sf/files';
+    sf_set_status(S.sf_source === 'email' ? 'Searching the email queue…' : 'Searching Salesforce…');
+    sf_fetch_json(endpoint + '?' + qs).then(function (j) {
       S.sf_files = j.files || [];
       if (!S.sf_files.length) {
         $('sfTable').querySelector('tbody').innerHTML = '';
@@ -469,7 +530,7 @@
       }
       sf_set_authed(true);   // listing succeeded → session is valid
       // default sort newest-first, then auto-select the newest sf_limit() files
-      S.sf_sort = { key: 'date', dir: 'desc' }; sf_sort_files();
+      S.sf_sort = { key: (S.sf_source === 'email') ? 'modified' : 'date', dir: 'desc' }; sf_sort_files();   // newest-modified first
       sf_select_newest();
       sf_sort_and_render();
       // if any legacy .xls is present, find out whether SheetJS can read it; the message/highlight
@@ -521,14 +582,34 @@
     if (ext === 'xls' && xls_ok === false) return '<span class="sf-type xls" title="Legacy .xls — open it in Excel and Save As .xlsx (or .csv) to convert it here">xls ⚠</span>';
     return '<span class="sf-type">' + esc(ext || '?') + '</span>';
   }
-  function sf_cmp_val(f, key) {
-    if (key === 'date') return f.last_modified_date_utc || '';
-    if (key === 'program') return f.program_name || '';
-    if (key === 'sanction') return f.sanction_id || '';
-    if (key === 'owner') return f.owner_name || '';
-    if (key === 'type') return sf_file_ext(f);
-    return f.target_name || '';
+  // Files-found table columns by source. val() = plain text (sort/search), cell() = HTML (display).
+  function sf_columns() {
+    if (S.sf_source === 'folder') return [
+      { key: 'file', label: 'File name', val: function (f) { return f.target_name || ''; }, cell: function (f) { return '<span title="' + esc(f.target_name) + '">' + esc(f.target_name) + '</span>'; } },
+      { key: 'type', label: 'Type', val: function (f) { return sf_file_ext(f); }, cell: function (f) { return sf_type_cell(sf_file_ext(f)); } },
+      { key: 'modified', label: 'Modified', val: function (f) { return String(f._modified_ms || 0); }, cell: function (f) { return esc(folder_fmt_modified(f._modified_ms)); } }
+    ];
+    if (S.sf_source === 'email') return [
+      { key: 'opened', label: 'Opened (MT)', val: function (f) { return f.opened_utc || ''; }, cell: function (f) { return esc(f.opened_mtn || ''); } },
+      { key: 'modified', label: 'Modified', val: function (f) { return f.modified_utc || ''; }, cell: function (f) { return esc(f.modified_mtn || ''); } },
+      { key: 'status', label: 'Status', val: function (f) { return f.status || ''; }, cell: function (f) { return esc(f.status || '—'); } },
+      { key: 'subject', label: 'Subject', val: function (f) { return f.subject || ''; }, cell: function (f) { return '<span class="sf-subj" title="' + esc(f.subject) + '">' + esc(f.subject || '—') + '</span>'; } },
+      { key: 'sender', label: 'Sender', val: function (f) { return f.sender || ''; }, cell: function (f) { return esc(f.sender || '—'); } },
+      { key: 'sanction', label: 'Sanction', val: function (f) { return f.sanction_id || ''; }, cell: function (f) { return esc(f.sanction_id || '—'); } },
+      { key: 'program', label: 'Program', val: function (f) { return f.program_name || ''; }, cell: function (f) { return esc(f.program_name || '—'); } },
+      { key: 'file', label: 'File name', val: function (f) { return f.target_name || ''; }, cell: function (f) { return '<span title="' + esc(f.target_name) + '">' + esc(f.target_name) + '</span>'; } },
+      { key: 'type', label: 'Type', val: function (f) { return sf_file_ext(f); }, cell: function (f) { return sf_type_cell(sf_file_ext(f)); } }
+    ];
+    return [
+      { key: 'date', label: 'Date (MT)', val: function (f) { return f.last_modified_date_utc || ''; }, cell: function (f) { return esc(f.modified_mtn_full || ''); } },
+      { key: 'program', label: 'Program', val: function (f) { return f.program_name || ''; }, cell: function (f) { return esc(f.program_name || '—'); } },
+      { key: 'sanction', label: 'Sanction', val: function (f) { return f.sanction_id || ''; }, cell: function (f) { return esc(f.sanction_id || '—'); } },
+      { key: 'owner', label: 'Owner', val: function (f) { return f.owner_name || ''; }, cell: function (f) { return esc(f.owner_name || '—'); } },
+      { key: 'file', label: 'File name', val: function (f) { return f.target_name || ''; }, cell: function (f) { return '<span title="' + esc(f.target_name) + '">' + esc(f.target_name) + '</span>'; } },
+      { key: 'type', label: 'Type', val: function (f) { return sf_file_ext(f); }, cell: function (f) { return sf_type_cell(sf_file_ext(f)); } }
+    ];
   }
+  function sf_cmp_val(f, key) { var c = sf_columns().filter(function (x) { return x.key === key; })[0]; return c ? c.val(f) : (f.target_name || ''); }
   // Shared with the queue: toggle a {key,dir} sort state on header click (re-click flips direction).
   function sf_toggle_sort(state, key, default_dir) {
     if (state && state.key === key) return { key: key, dir: state.dir === 'asc' ? 'desc' : 'asc' };
@@ -546,12 +627,13 @@
     });
   }
   function sf_selected_files() { return (S.sf_files || []).filter(function (f) { return S.sf_selected[f.content_version_id]; }); }
-  function sf_visible() {   // rows matching the search box (by file name / program / owner / type)
+  function sf_visible() {   // rows matching the search box (searches every visible column's text)
     var q = (($('sfSearch') && $('sfSearch').value) || '').toLowerCase().trim();
     var all = S.sf_files || [];
     if (!q) return all;
+    var cols = sf_columns();
     return all.filter(function (f) {
-      return (String(f.target_name || '') + ' ' + String(f.program_name || '') + ' ' + String(f.sanction_id || '') + ' ' + String(f.owner_name || '') + ' ' + sf_file_ext(f)).toLowerCase().indexOf(q) >= 0;
+      return cols.map(function (c) { return String(c.val(f) || ''); }).join(' ').toLowerCase().indexOf(q) >= 0;
     });
   }
   function sf_update_count() {
@@ -566,20 +648,20 @@
     el.innerHTML = '<b>' + total + '</b> file(s) found' + showing + ' · <b>' + sel + '</b> selected' + over + more;
   }
   function sf_render() {
-    var vis = sf_visible();
+    var cols = sf_columns(), vis = sf_visible();
+    // header (rebuilt per source so Upload Queue / Email Queue show their own columns)
+    $('sfTable').querySelector('thead').innerHTML =
+      '<tr><th><input type="checkbox" id="sfCheckAll" aria-label="Select all files" checked></th>' +
+      cols.map(function (c) { return '<th class="sf-sort" data-sort="' + c.key + '">' + esc(c.label) + ' <span class="sf-arrow"></span></th>'; }).join('') + '</tr>';
     $('sfTable').querySelector('tbody').innerHTML = vis.map(function (f) {
       var checked = S.sf_selected[f.content_version_id] ? ' checked' : '';
       var ext = sf_file_ext(f);
       var rowcls = [];
       if (ext === 'xls' && xls_ok === false) rowcls.push('sf-xls-row');
-      if (!f.program_name || !f.sanction_id) rowcls.push('sf-missing-meta');   // flag files missing a program name or sanction id
+      // missing program/sanction is only meaningful for the upload queue (email/folder have no such concept)
+      if (S.sf_source === 'upload' && (!f.program_name || !f.sanction_id)) rowcls.push('sf-missing-meta');
       return '<tr' + (rowcls.length ? ' class="' + rowcls.join(' ') + '"' : '') + '><td><input type="checkbox" class="sf-pick" data-id="' + esc(f.content_version_id) + '" aria-label="Select file"' + checked + '></td>' +
-        '<td>' + esc(f.modified_mtn_full || '') + '</td>' +
-        '<td>' + esc(f.program_name || '—') + '</td>' +
-        '<td>' + esc(f.sanction_id || '—') + '</td>' +
-        '<td>' + esc(f.owner_name || '—') + '</td>' +
-        '<td title="' + esc(f.target_name) + '">' + esc(f.target_name) + '</td>' +
-        '<td>' + sf_type_cell(ext) + '</td></tr>';
+        cols.map(function (c) { return '<td>' + c.cell(f) + '</td>'; }).join('') + '</tr>';
     }).join('');
     $('sfCheckAll').checked = vis.length > 0 && vis.every(function (f) { return S.sf_selected[f.content_version_id]; });
     sf_set_header_arrows();
@@ -589,8 +671,82 @@
   function sf_sort_and_render() { sf_sort_files(); sf_render(); }
   function sf_update_dl_enabled() {
     var sel = sf_selected_files().length, lim = sf_limit();
+    if (S.sf_source === 'folder') {
+      var lb = $('sfFolderLoadBtn');
+      if (lb) { lb.disabled = sel === 0; lb.textContent = sel ? ('Load ' + sel + ' file' + (sel > 1 ? 's' : '')) : 'Load selected'; }
+      return;
+    }
     var ready = sel > 0 && sel <= lim && (S.sf_dir || $('sfFolderPath').value);
     $('sfDownloadBtn').disabled = !ready;
+  }
+  // ----- "From Folder" tab: pick a local folder, list spreadsheets in the shared #sfTable, Load → queue.
+  // Folder records reuse the SF table/sort/search/select machinery; content_version_id is a synthetic
+  // per-file id so S.sf_selected works unchanged. No server, no download — "Load" reads bytes locally.
+  function sf_folder_record(name, folder) {
+    return { content_version_id: 'folder:' + folder + '/' + name, target_name: name,
+      file_extension: (name.indexOf('.') >= 0 ? name.split('.').pop().toLowerCase() : '') };
+  }
+  function sf_folder_set(files, dir, name) {
+    S.sf_folder_dir = dir || null; S.sf_folder_name = name || '';
+    if ($('sfFolderPickName')) { $('sfFolderPickName').textContent = name ? ('Folder: ' + name) : ''; $('sfFolderPickName').classList.toggle('hidden', !name); }
+    if (!files.length) { S.sf_files = []; $('sfTable').querySelector('tbody').innerHTML = ''; hide('sfTableWrap'); hide('sfDownloadBar'); if ($('sfSearchWrap')) hide('sfSearchWrap'); $('sfCount').classList.add('hidden'); sf_set_status('No .xlsx / .xls / .csv files at the top level of “' + name + '”.', true); return; }
+    S.sf_files = files;
+    sf_select_newest();           // folder branch: newest N up to the Max cap
+    S.sf_sort = sf_default_sort('folder'); sf_sort_files();
+    sf_render(); sf_set_status('');
+  }
+  // Clear the folder list + chosen-folder label (the From Folder tab's Reset; mirrors the standalone card's ↺ Reset)
+  function sf_folder_reset() {
+    S.sf_files = null; S.sf_selected = {}; S.sf_folder_dir = null; S.sf_folder_name = '';
+    if ($('sfFolderPickName')) { $('sfFolderPickName').textContent = ''; $('sfFolderPickName').classList.add('hidden'); }
+    $('sfTable').querySelector('tbody').innerHTML = '';
+    if ($('sfSearch')) $('sfSearch').value = '';
+    hide('sfTableWrap'); hide('sfDownloadBar'); if ($('sfSearchWrap')) hide('sfSearchWrap');
+    $('sfCount').classList.add('hidden');
+    sf_set_status('');
+  }
+  function sf_folder_choose() {
+    if (window.showDirectoryPicker) {
+      window.showDirectoryPicker({ mode: 'read' }).then(async function (dir) {
+        var name = dir.name || 'folder';
+        sf_set_status('Reading “' + name + '” …');
+        var out = [];
+        for await (var entry of dir.values()) {
+          if (entry.kind === 'directory') continue;                  // top-level files only
+          if (!folder_is_spreadsheet(entry.name)) continue;
+          var item = sf_folder_record(entry.name, name); item._handle = entry;
+          try { var f = await entry.getFile(); item._size = f.size; item._modified_ms = f.lastModified; } catch (e) { /* cloud placeholder — keep it */ }
+          out.push(item);
+        }
+        out.sort(function (a, b) { return sort.compare_text(a.target_name, b.target_name); });
+        sf_folder_set(out, dir, name);
+      }).catch(function (e) { if (e && e.name === 'AbortError') return; sf_set_status('Could not read that folder: ' + ((e && e.message) || e), true); });
+    } else { $('sfFolderInput').click(); }
+  }
+  function sf_folder_from_input(file_list) {
+    var out = [], top = null;
+    Array.prototype.slice.call(file_list || []).forEach(function (f) {
+      var rel = f.webkitRelativePath || f.name, parts = rel.split('/');
+      if (parts.length > 1) top = parts[0];
+      if (parts.length > 2) return;                                  // subfolder file — skip
+      if (!folder_is_spreadsheet(f.name)) return;
+      var item = sf_folder_record(f.name, top || '(folder)'); item._file = f; item._size = f.size; item._modified_ms = f.lastModified;
+      out.push(item);
+    });
+    out.sort(function (a, b) { return sort.compare_text(a.target_name, b.target_name); });
+    sf_folder_set(out, null, top || '(folder)');                     // no handle → Reload n/a (load only)
+  }
+  function sf_folder_load() {
+    var picks = sf_selected_files();
+    if (!picks.length) return;
+    sf_set_status('Loading ' + picks.length + ' file(s)…');
+    Promise.all(picks.map(function (f) {
+      var read = f._handle ? f._handle.getFile().then(function (file) { return file.arrayBuffer(); })
+        : (f._file ? f._file.arrayBuffer() : Promise.reject(new Error('no file source')));
+      return read.then(function (buf) { return { id: f.content_version_id, name: f.target_name, bytes: buf, meta: folder_fmt_modified(f._modified_ms) }; });
+    })).then(function (items) {
+      build_queue(items, { source: 'folder', dir: S.sf_folder_dir, folder: S.sf_folder_name, sig: 'folder:' + (S.sf_folder_name || 'default') });
+    }).catch(function (e) { sf_set_status('Could not read files: ' + e.message, true); });
   }
   function sf_apply_limit() {   // clamp the "Max files" field and re-select the newest N
     if ($('sfLimit')) { var lim = sf_limit(); if (String(lim) !== $('sfLimit').value) $('sfLimit').value = lim; }
@@ -763,7 +919,7 @@
       return { id: it.id, name: it.name, bytes: it.bytes || null, source: S.queue_source,
         program: it.program || '', owner: it.owner || '', sanction: it.sanction || '', meta: it.meta || '', level: statuses[it.name] || 0 };
     });
-    hide('uploadCard'); hide('introCard'); hide('sfCard'); if ($('folderCard')) hide('folderCard'); show('clearBtn');
+    hide('uploadCard'); hide('introCard'); hide('sfCard'); show('clearBtn');
     show('compareCard'); show('filesTab'); set_compare_view('files'); render_queue();
     $('compareCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -907,6 +1063,8 @@
     if ($('sfAnyDate')) $('sfAnyDate').addEventListener('change', sf_toggle_anydate);
     if ($('sfListBtn')) $('sfListBtn').addEventListener('click', sf_list);
     if ($('sfResetBtn')) $('sfResetBtn').addEventListener('click', sf_reset);
+    if ($('sfSourceSeg')) $('sfSourceSeg').addEventListener('click', function (e) { var b = e.target.closest('[data-src]'); if (b) sf_set_source(b.dataset.src); });
+    if ($('sfEmailStatus')) $('sfEmailStatus').addEventListener('change', function () { if (S.sf_files) sf_list(); });
     if ($('sfLoginBtn')) $('sfLoginBtn').addEventListener('click', sf_login);
     if ($('sfLoginPass')) $('sfLoginPass').addEventListener('keydown', function (e) { if (e.key === 'Enter') sf_login(); });
     if ($('sfLoginShow')) $('sfLoginShow').addEventListener('click', function () {
@@ -917,6 +1075,10 @@
     if ($('sfLogoutBtn')) $('sfLogoutBtn').addEventListener('click', sf_toggle_auth);
     if ($('sfChooseFolder')) $('sfChooseFolder').addEventListener('click', sf_choose_folder);
     if ($('sfDownloadBtn')) $('sfDownloadBtn').addEventListener('click', sf_download_selected);
+    if ($('sfFolderChoose')) $('sfFolderChoose').addEventListener('click', sf_folder_choose);
+    if ($('sfFolderReset')) $('sfFolderReset').addEventListener('click', sf_folder_reset);
+    if ($('sfFolderInput')) $('sfFolderInput').addEventListener('change', function () { sf_folder_from_input($('sfFolderInput').files); });
+    if ($('sfFolderLoadBtn')) $('sfFolderLoadBtn').addEventListener('click', sf_folder_load);
     if ($('sfFolderPath')) $('sfFolderPath').addEventListener('input', function () { S.sf_folder = $('sfFolderPath').value; try { window.localStorage.setItem('rrt_sf_folder', S.sf_folder); } catch (e) { /* ignore */ } sf_update_dl_enabled(); });
     if ($('sfSearch')) $('sfSearch').addEventListener('input', sf_render);
     if ($('sfLimit')) $('sfLimit').addEventListener('change', sf_apply_limit);
@@ -951,136 +1113,12 @@
     sf_restore_folder();   // bring back the last-used folder
   }
 
-  // ---------- local-folder intake: pick a folder -> choose files -> the Files queue ----------
+  // ---------- shared spreadsheet-file helpers (used by the From Folder tab) ----------
   function folder_is_spreadsheet(name) { return /\.(xlsx|xls|csv)$/i.test(name || ''); }
-  function folder_ext(f) { var n = (f && f.name) || ''; return n.indexOf('.') >= 0 ? n.split('.').pop().toLowerCase() : ''; }
   function folder_fmt_modified(ms) {
     if (!ms) return '';
     var d = new Date(ms);
     return (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
-  }
-  function folder_set_status(msg, err) { var el = $('folderStatus'); if (!el) return; el.textContent = msg || ''; el.classList.toggle('err', !!err); }
-  function folder_set_files(files, dir, name) {
-    S.folder_files = files; S.folder_dir = dir || null; S.folder_name = name || '';
-    S.folder_selected = {}; files.forEach(function (f) { S.folder_selected[f.name] = true; });
-    if ($('folderName')) $('folderName').textContent = name ? ('Folder: ' + name) : '';
-    if (!files.length) {
-      folder_set_status('No spreadsheet files (.xlsx / .xls / .csv) in that folder.', true);
-      hide('folderTableWrap'); hide('folderSearchWrap'); hide('folderLoadBar'); $('folderCount').classList.add('hidden');
-      return;
-    }
-    folder_set_status(''); folder_render();
-  }
-  // Chrome/Edge: showDirectoryPicker → dir handle (enables Reload). Else: a webkitdirectory input.
-  function folder_choose() {
-    if (window.showDirectoryPicker) {
-      window.showDirectoryPicker({ mode: 'read' }).then(async function (dir) {
-        var name = dir.name || 'folder';
-        folder_set_status('Reading “' + name + '” …');
-        var out = [], total = 0, subdirs = 0;
-        for await (var entry of dir.values()) {
-          total++;
-          if (entry.kind === 'directory') { subdirs++; continue; }   // top-level files only
-          if (!folder_is_spreadsheet(entry.name)) continue;
-          // list the file from its name+handle; read getFile() metadata best-effort so a OneDrive/
-          // cloud "files on demand" placeholder (where getFile can fail/lag) is still listed and loadable.
-          var item = { name: entry.name, handle: entry };
-          try { var f = await entry.getFile(); item.size = f.size; item.modified = f.lastModified; } catch (e) { /* keep it anyway */ }
-          out.push(item);
-        }
-        out.sort(function (a, b) { return sort.compare_text(a.name, b.name); });   // reuse src/sort.js
-        folder_set_files(out, dir, name);
-        if (!out.length) {
-          var bits = [];
-          if (subdirs) bits.push(subdirs + ' subfolder(s) — this reads top-level files only');
-          if (total - subdirs) bits.push((total - subdirs) + ' non-spreadsheet file(s)');
-          folder_set_status('No .xlsx / .xls / .csv files at the top level of “' + name + '”' + (bits.length ? ' (found ' + bits.join(', ') + ')' : '') + '.', true);
-        }
-      }).catch(function (e) {
-        if (e && e.name === 'AbortError') return;   // user cancelled the picker
-        folder_set_status('Could not read that folder: ' + ((e && e.message) || e), true);
-      });
-    } else {
-      $('folderInput').click();
-    }
-  }
-  // Fallback: a <input webkitdirectory> File list. Keep TOP-LEVEL files only (rel = "folder/file").
-  function folder_from_input(file_list) {
-    var files = [], top = null;
-    Array.prototype.slice.call(file_list || []).forEach(function (f) {
-      var rel = f.webkitRelativePath || f.name, parts = rel.split('/');
-      if (parts.length > 1) top = parts[0];
-      if (parts.length > 2) return;                 // a subfolder file — skip (top-level only)
-      if (!folder_is_spreadsheet(f.name)) return;
-      files.push({ name: f.name, file: f, size: f.size, modified: f.lastModified });
-    });
-    files.sort(function (a, b) { return sort.compare_text(a.name, b.name); });
-    folder_set_files(files, null, top || '(folder)');   // no dir handle in the fallback → no Reload
-  }
-  function folder_visible() {
-    var q = (($('folderSearch') && $('folderSearch').value) || '').toLowerCase().trim();
-    var all = S.folder_files || [];
-    if (!q) return all;
-    return all.filter(function (f) { return (f.name + ' ' + folder_ext(f)).toLowerCase().indexOf(q) >= 0; });
-  }
-  function folder_selected_files() { return (S.folder_files || []).filter(function (f) { return S.folder_selected[f.name]; }); }
-  function folder_update_count() {
-    var total = (S.folder_files || []).length, sel = folder_selected_files().length, vis = folder_visible().length;
-    var el = $('folderCount'); if (!el) return;
-    el.classList.toggle('hidden', total === 0);
-    var showing = (vis < total) ? (' · showing <b>' + vis + '</b>') : '';
-    el.innerHTML = '<b>' + total + '</b> file(s) found' + showing + ' · <b>' + sel + '</b> selected';
-    var btn = $('folderLoadBtn'); if (btn) { btn.disabled = !sel; btn.textContent = sel ? ('Load ' + sel + ' file' + (sel > 1 ? 's' : '')) : 'Load files'; }
-  }
-  function folder_render() {
-    var vis = folder_visible();
-    $('folderTable').querySelector('tbody').innerHTML = vis.map(function (f) {
-      var checked = S.folder_selected[f.name] ? ' checked' : '';
-      return '<tr><td><input type="checkbox" class="folder-pick" data-name="' + esc(f.name) + '" aria-label="Select file"' + checked + '></td>' +
-        '<td title="' + esc(f.name) + '">' + esc(f.name) + '</td>' +
-        '<td>' + esc(folder_ext(f) || '?') + '</td>' +
-        '<td class="dim">' + esc(folder_fmt_modified(f.modified)) + '</td></tr>';
-    }).join('');
-    $('folderCheckAll').checked = vis.length > 0 && vis.every(function (f) { return S.folder_selected[f.name]; });
-    show('folderTableWrap'); show('folderSearchWrap'); show('folderLoadBar');
-    folder_update_count();
-  }
-  function folder_read_bytes(f) {
-    if (f.handle) return f.handle.getFile().then(function (file) { return file.arrayBuffer(); });
-    if (f.file) return f.file.arrayBuffer();
-    return Promise.reject(new Error('no file source'));
-  }
-  function folder_load() {
-    var picks = folder_selected_files();
-    if (!picks.length) return;
-    folder_set_status('Loading ' + picks.length + ' file(s)…');
-    Promise.all(picks.map(function (f) {
-      return folder_read_bytes(f).then(function (buf) { return { id: f.name, name: f.name, bytes: buf, meta: folder_fmt_modified(f.modified) }; });
-    })).then(function (items) {
-      build_queue(items, { source: 'folder', dir: S.folder_dir, folder: S.folder_name, sig: 'folder:' + (S.folder_name || 'default') });
-    }).catch(function (e) { folder_set_status('Could not read files: ' + e.message, true); });
-  }
-  function folder_reset() {
-    S.folder_files = null; S.folder_selected = {};
-    if ($('folderTable')) $('folderTable').querySelector('tbody').innerHTML = '';
-    if ($('folderSearch')) $('folderSearch').value = '';
-    hide('folderTableWrap'); hide('folderSearchWrap'); hide('folderLoadBar'); if ($('folderCount')) $('folderCount').classList.add('hidden');
-    folder_set_status('');
-  }
-  function wire_folder() {
-    if (!$('folderCard')) return;
-    if ($('folderChooseBtn')) $('folderChooseBtn').addEventListener('click', folder_choose);
-    if ($('folderInput')) $('folderInput').addEventListener('change', function () { folder_from_input($('folderInput').files); });
-    if ($('folderResetBtn')) $('folderResetBtn').addEventListener('click', folder_reset);
-    if ($('folderSearch')) $('folderSearch').addEventListener('input', folder_render);
-    if ($('folderLoadBtn')) $('folderLoadBtn').addEventListener('click', folder_load);
-    if ($('folderCheckAll')) $('folderCheckAll').addEventListener('change', function () {
-      var on = $('folderCheckAll').checked; folder_visible().forEach(function (f) { S.folder_selected[f.name] = on; }); folder_render();
-    });
-    if ($('folderTable')) $('folderTable').addEventListener('change', function (e) {
-      var cb = e.target.closest && e.target.closest('.folder-pick'); if (!cb) return;
-      S.folder_selected[cb.dataset.name] = cb.checked; folder_update_count();
-    });
   }
 
   // Build a per-sheet state bundle (one per worksheet / the single CSV).
@@ -1088,7 +1126,7 @@
     var parsed = parse.detect_table(ir, { score_header: match.score_headers });
     var sig = mapper.header_signature(parsed.headers);
     var b = { name: ir.sheet_name, ir: ir, parsed: parsed, sig: sig,
-      value_overrides: {}, vm_expanded: {}, approved: {}, computed: false,
+      value_overrides: {}, vm_expanded: {}, approved: {}, excluded: {}, computed: false,
       mapping: null, used_profile: false, result: null, report: null, work_rows: null };
     var prof = S.store.get(sig);
     if (prof && prof.mapping) {
@@ -1102,7 +1140,7 @@
     S.sheets = irs.map(make_bundle);
     S.active = null; S.first_render = true;
     render_sheet_bar();
-    hide('uploadCard'); hide('introCard'); hide('sfCard'); if ($('folderCard')) hide('folderCard'); show('clearBtn');
+    hide('uploadCard'); hide('introCard'); hide('sfCard'); show('clearBtn');
     if (S.is_demo) show('demoBadge'); else hide('demoBadge');
     activate_sheet(0);
     track('conversion_completed', conversion_props());
@@ -1124,7 +1162,7 @@
     if (S.active == null || !S.sheets || !S.sheets[S.active]) return;
     var b = S.sheets[S.active];
     b.mapping = S.mapping; b.value_overrides = S.value_overrides; b.vm_expanded = S.vm_expanded;
-    b.approved = S.approved; b.result = S.result; b.report = S.report; b.work_rows = S.work_rows;
+    b.approved = S.approved; b.excluded = S.excluded; b.result = S.result; b.report = S.report; b.work_rows = S.work_rows;
     b.computed = true;
   }
 
@@ -1134,7 +1172,7 @@
     var b = S.sheets && S.sheets[i]; if (!b) return;
     S.active = i;
     S.ir = b.ir; S.parsed = b.parsed; S.sig = b.sig; S.mapping = b.mapping;
-    S.value_overrides = b.value_overrides; S.vm_expanded = b.vm_expanded; S.approved = b.approved;
+    S.value_overrides = b.value_overrides; S.vm_expanded = b.vm_expanded; S.approved = b.approved; S.excluded = b.excluded || {};
     show_profile_bar(b.used_profile);
     if (!b.computed) { compute(); b.result = S.result; b.report = S.report; b.work_rows = S.work_rows; b.computed = true; }
     else { S.result = b.result; S.report = b.report; S.work_rows = b.work_rows; S.flag_info = build_flag_info(); }
@@ -1171,15 +1209,14 @@
     S.active_sanction = '';
     S.dl_fields = Object.assign({}, S.dl_fields, { id: '' });   // sanction is SF-only; don't carry it past Start over
     S.ir = S.parsed = S.mapping = S.result = S.report = S.work_rows = null;
-    S.value_overrides = {}; S.vm_expanded = {}; S.approved = {}; S.orig_table = S.conv_table = null;
+    S.value_overrides = {}; S.vm_expanded = {}; S.approved = {}; S.excluded = {}; S.orig_table = S.conv_table = null;
     S.sheets = null; S.active = null; S.first_render = true;
     S.queue = null; S.queue_sort = { key: null, dir: 'asc' }; S.active_queue_id = null;
     S.queue_source = 'salesforce'; S.queue_dir = null; S.queue_folder = ''; S.queue_sig = null;
     if ($('sfTable')) sf_reset();   // clear the SF list/status/count/search (keeps the remembered folder)
-    if ($('folderTable')) folder_reset();   // clear the local-folder list (keeps the remembered folder)
     $('fileInput').value = '';
     ['summaryBar', 'compareCard', 'profileBar', 'clearBtn', 'flagLegend', 'sheetBar', 'demoBadge', 'filesTab'].forEach(hide);
-    show('uploadCard'); show('introCard'); show('sfCard'); if ($('folderCard')) show('folderCard');
+    show('uploadCard'); show('introCard'); show('sfCard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1250,13 +1287,16 @@
   function render_summary() {
     var sc = S.report.scorecard, rep = S.report, n = function (x) { return x.toLocaleString(); };
     var skip = rep.rows.skipped.length, flagged = S.flag_info ? S.flag_info.total : rep.flag_count;
+    var nex = 0; if (S.excluded) for (var ek in S.excluded) if (S.excluded[ek]) nex++;   // user-deleted rows
+    var kept_out = Math.max(0, rep.rows.out - nex);   // rows actually written to the download
     $('summaryBar').innerHTML =
       '<span class="score-badge ' + sc.band + '">' + sc.pct + '%</span>' +
       '<span class="verdict">' + esc(sc.verdict) + '</span>' +
       '<span class="chips">' +
         '<span class="chip filechip" title="Uploaded file">📄 ' + esc(S.file_display || S.file_name) + '</span>' +
         ((S.source === 'salesforce' && S.active_sanction) ? '<span class="chip sanctionchip" title="Salesforce Sanctioning ID (Program.cfg_Id__c) — leads the download filename">🏷 Sanction <b>' + esc(S.active_sanction) + '</b></span>' : '') +
-        '<span class="chip" title="Athlete rows written to the converted file"><b>' + n(rep.rows.out) + '</b> rows</span>' +
+        '<span class="chip" title="Athlete rows written to the converted file"><b>' + n(kept_out) + '</b> rows</span>' +
+        (nex > 0 ? '<span class="chip chip-del" title="Rows you deleted — left out of the download. Restore them from the original table."><b>' + n(nex) + '</b> deleted</span>' : '') +
         '<span class="chip" title="Highlighted cells still needing a look — approve or edit them to clear"><b>' + n(flagged) + '</b> flagged values</span>' +
         (skip
           ? '<button class="chip chip-btn" id="skip_chip" title="Section-header & blank rows excluded — click to view"><b>' + n(skip) + '</b> rows skipped ›</button>'
@@ -1271,14 +1311,46 @@
     $('compareCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  // ---------- row delete (original table) — soft-exclude, reversible, in-session ----------
+  // Deleted rows are hidden from BOTH tables and left out of the download, but the transform still
+  // runs on the full data (indices stay stable, so edits/overrides/approvals keep working). Restore
+  // brings them all back. Stored per-sheet in S.excluded (mirrored into the active bundle).
+  function delete_orig_rows(indices) {
+    if (!indices || !indices.length) return;
+    if (indices.length > 1 && !window.confirm('Delete ' + indices.length + ' row(s) from the converted output? You can Restore them.')) return;
+    indices.forEach(function (i) { S.excluded[i] = true; });
+    apply_excluded();
+  }
+  function restore_orig_rows() { Object.keys(S.excluded).forEach(function (k) { delete S.excluded[k]; }); apply_excluded(); }
+  function excluded_n() { var n = 0; for (var k in S.excluded) if (S.excluded[k]) n++; return n; }
+  // Delete/Restore live in the ORIGINAL pane-head (next to "Original file") — NOT in the table toolbar —
+  // so both table toolbars keep the same height and the two grids stay aligned side by side.
+  function render_orig_del() {
+    var el = $('origDelCtl'); if (!el || !S.orig_table) return;
+    var shown = S.orig_table.visible_keys().length, nex = excluded_n();
+    el.innerHTML =
+      '<button type="button" class="btn sm orig-del-btn" id="origDelShown"' + (shown ? '' : ' disabled') +
+        ' title="Delete the rows currently shown (search first to delete a subset). Removed from the converted output and the download — Restore brings them back.">🗑 Delete ' + shown + '</button>' +
+      (nex > 0 ? '<button type="button" class="btn sm orig-restore-btn" id="origRestore" title="Bring back the rows you deleted">↩ Restore ' + nex + '</button>' : '');
+    var ds = $('origDelShown'); if (ds) ds.addEventListener('click', function () { delete_orig_rows(S.orig_table.visible_keys()); });
+    var rs = $('origRestore'); if (rs) rs.addEventListener('click', restore_orig_rows);
+  }
+  function apply_excluded() {
+    if (S.conv_table) S.conv_table.set_excluded(S.excluded);
+    if (S.orig_table) S.orig_table.set_excluded(S.excluded);   // triggers render -> on_render -> render_orig_del
+    render_summary();
+  }
+
   // ---------- compare ----------
   function grid_scroll_pos(id) { var c = $(id), e = c && c.querySelector('.grid-scroll'); return e ? { l: e.scrollLeft, t: e.scrollTop } : null; }
   function grid_scroll_set(id, pos) { if (!pos) return; var c = $(id), e = c && c.querySelector('.grid-scroll'); if (e) { e.scrollLeft = pos.l; e.scrollTop = pos.t; } }
   function render_compare(first_time) {
     var keep_orig = grid_scroll_pos('originalGrid'), keep_conv = grid_scroll_pos('resultGrid');
     var orig_rows = S.parsed.data_rows.map(function (d) { return d.cells; });
-    if (!S.orig_table) S.orig_table = TableView($('originalGrid'), { top_header: true });
+    if (!S.orig_table) S.orig_table = TableView($('originalGrid'), { top_header: true,
+      deletable: true, on_delete: delete_orig_rows, on_render: render_orig_del });
     S.orig_table.set_data(S.parsed.headers, orig_rows);
+    S.orig_table.set_excluded(S.excluded);   // hide user-deleted rows (search → delete a subset, reversible)
     $('originalMeta').textContent = S.parsed.data_rows.length + ' rows · ' + S.parsed.headers.length + ' cols';
 
     if (!S.conv_table) {
@@ -1292,6 +1364,7 @@
     S.conv_table.source_headers = S.parsed.headers;
     S.conv_table.get_flag = S.flag_info.get; S.conv_table.flagged_rows = S.flag_info.rows;
     S.conv_table.set_data(S.result.headers, S.work_rows);
+    S.conv_table.set_excluded(S.excluded);   // converted side mirrors the deletions so the two tables stay aligned
     $('resultMeta').textContent = S.result.row_count + ' rows · 12 cols';
 
     S.orig_table.on_search = function (q) { if (S.link_tables) S.conv_table.set_query(q); };
@@ -1882,13 +1955,20 @@
   }
   function dl_ext() { return S.dl_format === 'xlsx' ? '.xlsx' : '.csv'; }
   // Emit one grid in the chosen format under `base` (no extension): CSV (default) or .xlsx.
+  // Columns to lock as Excel text in the CSV (so Excel doesn't re-format the time/date on open).
+  function dl_safe_cols(headers) {
+    var want = { 'DOB': 1, 'Recorded Time': 1 }, cols = [];
+    (headers || []).forEach(function (h, i) { if (want[h]) cols.push(i); });
+    return cols;
+  }
   function emit_grid(headers, rows, base) {
     var name = clean_part(base) || 'rankings';
     if (S.dl_format === 'xlsx') {
       return io.grids_to_buffer([{ name: name.slice(0, 31), headers: headers, rows: rows }])
         .then(function (buf) { save_download(buf, name + '.xlsx', 'xlsx'); });
     }
-    save_download(io.grid_to_csv(headers, rows), name + '.csv', 'csv');
+    var csv_opts = S.dl_excel_safe ? { excel_safe_cols: dl_safe_cols(headers) } : null;   // CSV-only Excel-safe wrap
+    save_download(io.grid_to_csv(headers, rows, csv_opts), name + '.csv', 'csv');
     return Promise.resolve();
   }
   // Single sheet / CSV: one file, honours the on-screen sort/filter.
@@ -1897,12 +1977,14 @@
     return emit_grid(S.result.headers, S.conv_table.export_rows(), base);
   }
   // Each selected sheet -> its own file with its own base name (staggered so the browser keeps them).
+  // A bundle's converted rows minus the rows the user deleted on that sheet (work_rows[i] ↔ row i).
+  function kept_rows(b) { return (b.excluded) ? b.work_rows.filter(function (_, i) { return !b.excluded[i]; }) : b.work_rows; }
   function download_selected(idx, names) {
     save_active();
     track('download', { download_mode: 'separate', file_out_count: idx.length, selected_count: idx.length });
     idx.forEach(function (i, k) {
       var b = S.sheets[i];
-      setTimeout(function () { compute_bundle(b); emit_grid(b.result.headers, b.work_rows, names[i]); }, k * 300);
+      setTimeout(function () { compute_bundle(b); emit_grid(b.result.headers, kept_rows(b), names[i]); }, k * 300);
     });
   }
   // Combine the chosen sheets into ONE file — converted rows stacked in tab order.
@@ -1910,7 +1992,7 @@
     save_active();
     track('download', { download_mode: 'combined', file_out_count: 1, selected_count: idx.length });
     var rows = [];
-    idx.forEach(function (i) { var b = S.sheets[i]; compute_bundle(b); rows = rows.concat(b.work_rows); });
+    idx.forEach(function (i) { var b = S.sheets[i]; compute_bundle(b); rows = rows.concat(kept_rows(b)); });
     emit_grid(S.sheets[idx[0]].result.headers, rows, base);
   }
   function download() { save_active(); open_download_picker(); }
@@ -1927,7 +2009,9 @@
   }
   function dl_format_html() {
     return '<div class="seg dl-fmt"><button type="button" data-fmt="csv"' + (S.dl_format === 'csv' ? ' class="active"' : '') + '>CSV</button>' +
-      '<button type="button" data-fmt="xlsx"' + (S.dl_format === 'xlsx' ? ' class="active"' : '') + '>Excel .xlsx</button></div>';
+      '<button type="button" data-fmt="xlsx"' + (S.dl_format === 'xlsx' ? ' class="active"' : '') + '>Excel .xlsx</button></div>' +
+      '<label class="dl-xsafe" title="Keep the time/date format when the CSV is opened in Excel. Wraps the DOB and Recorded Time columns as Excel text (=&quot;value&quot;) so Excel shows them EXACTLY as written instead of auto-reformatting the time/date. Other tools (Google Sheets, scripts) will see the literal =&quot;...&quot;. Not needed for the Excel .xlsx download.">' +
+      '<input type="checkbox" id="dlXsafe"' + (S.dl_excel_safe ? ' checked' : '') + '> CSV-safe times/dates</label>';
   }
   function dl_builder_html() {
     var f = S.dl_fields;
@@ -1955,6 +2039,8 @@
         on_change();
       });
     });
+    var xs = pop.querySelector('#dlXsafe');
+    if (xs) xs.addEventListener('change', function () { S.dl_excel_safe = xs.checked; on_change(); });
   }
   function close_download_picker() {
     var p = $('dlPop'); if (p) p.remove();
@@ -2126,7 +2212,7 @@
     start_clock();
     if (!window.ExcelJS) { alert('ExcelJS failed to load — please hard-refresh the page (Ctrl/Cmd+Shift+R).'); return; }
     S.store = mapper.make_store(window.localStorage);
-    wire_dropzone(); wire_try_me(); wire_sf(); wire_folder(); wire_collapsibles(); wire_layout(); wire_compare_seg();
+    wire_dropzone(); wire_try_me(); wire_sf(); wire_collapsibles(); wire_layout(); wire_compare_seg();
     var tip = document.createElement('div'); tip.className = 'rrt-tip hidden'; document.body.appendChild(tip);
     document.addEventListener('mouseover', function (e) { var td = e.target.closest && e.target.closest('td[data-tip]'); if (!td) return; tip.textContent = td.getAttribute('data-tip'); tip.classList.remove('hidden'); });
     document.addEventListener('mousemove', function (e) { if (tip.classList.contains('hidden')) return; var x = Math.min(e.clientX + 12, window.innerWidth - 300); tip.style.left = x + 'px'; tip.style.top = (e.clientY + 16) + 'px'; });

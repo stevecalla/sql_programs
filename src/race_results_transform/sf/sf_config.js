@@ -20,7 +20,10 @@ function sf_config(opts) {
     // `Program` object (cfg_Id__c = BLANKVALUE(cfg_Legacy_Id__c, cfg_Autonumber_ID__c)); override
     // via env if the object is namespaced or the field differs in another org.
     program_object: env.SF_PROGRAM_OBJECT || 'Program',
-    sanction_field: env.SF_SANCTION_FIELD || 'cfg_Id__c'
+    sanction_field: env.SF_SANCTION_FIELD || 'cfg_Id__c',
+    // Email-Queue intake: the Salesforce Queue (a Group) that Email-to-Case routes race-results
+    // submissions to. Default DeveloperName `cfg_Rankings` (display name "Rankings").
+    rankings_queue: env.SF_RANKINGS_QUEUE || 'cfg_Rankings'
   };
   return cfg;
 }

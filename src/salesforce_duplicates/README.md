@@ -54,17 +54,27 @@ salesforce_duplicates/
                             nickname view (c) rows, and UnionFind cluster view (d)
     grouping.js             UnionFind + fuzzy group builder
     step_timer.js           per-step stopwatch: live [STEP] lines + end timeline
-    exact.js                exact-duplicate detection
+    exact.js                exact-duplicate detection (in-memory)
+    exact_sql.js            SQL-based exact grouping (GROUP BY; byte-identical)
     fuzzy.js                fuzzy candidate filter + rule blocks + pairwise compare
     zip_trim.js             builds the reviewable raw -> trimmed composite-ZIP map
     sf_rows.js              maps result rows to the Salesforce import schema
     output_files.js         CSV write + output/archive rotation + meta files
     salesforce.js           jsforce connect + Account query (--test=REST/ordered,
                             --prod=Bulk API/unordered)
-  tests/                    node:test unit tests (normalize, matcher, grouping, ids,
-                            sf_rows, exact, fuzzy, zip_trim, file output, step_2
-                            report, report_service, step_timer, nicknames, consolidate)
-  README.md / CLAUDE.md / schema.md
+    sweep.js                criteria tuning engine (expand_grid/run_profile/diff; pure)
+    sweep_duplicates.js     duplicate criteria tuning CLI (snapshot/run/detail/diff)
+    database_snapshot.js    SQL backbone: stream records into usat_sales_db + read back
+    database_results.js     run logbook + the 6 result tables (+ zip-trim/nickname-fire)
+    excel_output.js         one .xlsx workbook, one tab per view (exceljs)
+    verify_database_snapshot.js  manual DB-loader smoke test (load/show/drop)
+  tests/                    node:test unit suites (normalize, matcher, grouping, ids,
+                            sf_rows, exact, fuzzy, zip_trim, file output, step_2 report,
+                            report_service, step_timer, nicknames, consolidate, sweep,
+                            database_snapshot, database_results, excel_output, exact_sql,
+                            sql_backbone_parity, salesforce, config)
+  README.md / README_SQL.md / README_TUNING.md / README_NICKNAME.md / README_MERGE.md
+  CLAUDE.md / schema.md
 ```
 
 `main()` in `step_1_find_duplicates.js` is now a thin orchestrator that calls
@@ -177,6 +187,19 @@ provenance flags `Has_Exact/Fuzzy/Nickname_Flag__c`, per-signal `*_Link_Count__c
 are the per-signal lenses behind it. (Column names use the same "group" vocabulary as the
 other group files; a "link" = a matched pair inside the cluster.)
 
+### Also written each run: an Excel workbook + database tables
+
+Alongside the CSVs, every run writes **one Excel workbook** (`account_duplicates_all_views_<timestamp>.xlsx`)
+with **one tab per view** (`exact`, `fuzzy_pair`, `fuzzy_group`, `nickname_pair`,
+`nickname_group`, `consolidated`) — handy for a reviewer who'd rather open one file.
+This is on by default (`ENABLE_EXCEL_OUTPUT` in `config.js`).
+
+When the SQL backbone is on (the default — see below), the run also persists each of the
+six views into its own **database table** in `usat_sales_db`
+(`salesforce_duplicate_exact_group`, `_fuzzy_pair`, `_fuzzy_group`, `_nickname_pair`,
+`_nickname_group`, `_consolidated_cluster`), refreshed each run, plus a row in the run
+"logbook" (`salesforce_duplicate_detection_run`). See `README_SQL.md`.
+
 ## Salesforce Object Used
 
 The script queries the Salesforce `Account` object.
@@ -249,6 +272,14 @@ The download method depends on the run mode (see `src/salesforce.js`):
 Both paths return the same shape to the rest of the pipeline, so nothing
 downstream changes. Bulk jobs run asynchronously server-side, so the poll timeout
 is set generously (20 min) to allow a large extract to finish.
+
+**Bulk CSV header rows are dropped.** The Bulk API 2.0 returns CSV, and jsforce can
+leak the CSV header row into the record stream as a fake record where every field
+equals its own column name (`Id === 'Id'`, `LastName === 'LastName'`, …) — once per
+result chunk on a large extract. `bulk_query` filters these out at the source
+(`is_bulk_header_row`), so they never reach detection. (REST autoFetch does not have
+this issue.) Without the filter, the identical header rows would otherwise form a
+bogus "LastName/FirstName" exact-duplicate group in the output.
 
 ## Composite ZIP Logic
 
@@ -369,6 +400,79 @@ duplicate_count
 record_ids
 member_numbers
 ```
+
+## Expressing the Exact Rule as a SOQL Query
+
+The exact rule (and only the exact rule) can be expressed directly in SOQL using
+`GROUP BY ... HAVING COUNT(Id) > 1`. The query below is tested and runs as-is — every
+group it returns is a suspected exact duplicate set (same last name, first name,
+gender, birthdate, and ZIP):
+
+```sql
+SELECT LastName,
+    FirstName,
+    cfg_Gender_Identity__pc,
+    PersonBirthdate,
+    BillingPostalCode,
+    PersonMailingPostalCode,
+    COUNT(Id) duplicate_count
+FROM Account
+WHERE FirstName != null AND LastName != null
+GROUP BY
+    LastName,
+    FirstName,
+    cfg_Gender_Identity__pc,
+    PersonBirthdate,
+    BillingPostalCode,
+    PersonMailingPostalCode
+HAVING COUNT(Id) > 1
+ORDER BY LastName, FirstName DESC
+LIMIT 2000
+```
+
+This is great for a quick in-platform list (the `LIMIT 2000` keeps it within SOQL
+query limits). It is **not** a full match for the code, because SOQL has no string
+functions and `GROUP BY` accepts only real fields, not expressions. So it:
+
+1. **Does not trim the ZIP.** There is no `LEFT()` / `SUBSTRING()` in SOQL, so
+   `80919` and `80919-1234` are treated as different ZIPs and won't group together.
+2. **Groups billing and mailing separately.** Both ZIP fields are grouping keys, so
+   two records match only when their billing ZIPs agree *and* their mailing ZIPs
+   agree — unlike the code's single "use billing, else mailing" composite ZIP.
+3. **Normalizes nothing.** It can't uppercase/trim names, so `" bob "` and `"Bob"`
+   can land in different groups (case/whitespace sensitivity). It also returns
+   counts, not the Account IDs in each set — you'd pull those with a follow-up query.
+
+### Native workaround: a `Zip5__c` formula field
+
+To also collapse ZIP+4 and use a single billing-else-mailing ZIP (closer to the
+code), add a **formula field** on Account, e.g. `Zip5__c`:
+
+```text
+LEFT(BLANKVALUE(BillingPostalCode, PersonMailingPostalCode), 5)
+```
+
+Once the formula field exists you can group on it (formula fields *are* allowed in
+`GROUP BY`, raw expressions are not):
+
+```sql
+SELECT LastName, FirstName, cfg_Gender_Identity__pc,
+       PersonBirthdate, Zip5__c, COUNT(Id) dup_count
+FROM Account
+WHERE FirstName != null AND LastName != null
+  AND cfg_Gender_Identity__pc != null
+  AND PersonBirthdate != null
+  AND Zip5__c != null
+GROUP BY LastName, FirstName, cfg_Gender_Identity__pc,
+         PersonBirthdate, Zip5__c
+HAVING COUNT(Id) > 1
+```
+
+That is why the tool recreates the ZIP/name logic in Node instead of relying on SOQL
+grouping: it already has the records in memory and can trim, fall back to mailing
+ZIP, and normalize names in one pass without adding org metadata. The **fuzzy** and
+**nickname** passes have no SOQL equivalent at all — they need per-pair Levenshtein
+scoring and a nickname dictionary.
 
 ## Fuzzy Match Logic
 
@@ -809,6 +913,22 @@ node step_1_find_duplicates.js --prod         # production (full fetch)
 node step_1_find_duplicates.js                # defaults to production
 ```
 
+### SQL backbone (default ON; `--in-memory` to bypass)
+
+By default (`ENABLE_SQL_BACKBONE = true` in `config.js`) the finder streams the fetched
+records into the local `usat_sales_db` snapshot table and reads them back **in fetch
+order** (via a `load_sequence` ordinal), then runs the same detection off the database —
+so every run (menu items 7-10 included) loads MySQL. The output is byte-for-byte
+identical to the in-memory path — `tests/sql_backbone_parity.test.js` proves the
+order-sensitive exact output survives the round-trip. Pass `--in-memory` to force the
+legacy in-memory path (no DB). This is the same table the tuning sweep uses, so one
+backbone serves both. See `README_SQL.md`.
+
+```bash
+node step_1_find_duplicates.js --prod              # production, detection off the DB (default)
+node step_1_find_duplicates.js --prod --in-memory  # force the legacy in-memory path
+```
+
 ## Testing
 
 The `src/` modules are pure and unit-tested with Node's built-in test runner.
@@ -821,13 +941,35 @@ node --test tests/matcher.test.js  # run one suite
 
 Or use menu item 1 (all tests) / 2 (file output tests).
 
+## Duplicate Criteria Tuning (sweep)
+
+A separate, review-only CLI (`sweep_duplicates.js`) answers "how many duplicates
+would we get under different criteria?" It fetches the records **once** (a snapshot),
+then replays the matching over a grid of criteria — fuzzy threshold, nickname on/off,
+which of gender/birthdate/zip are required, ZIP trim, name weights — and prints the
+counts side by side, broken out by exact / fuzzy / nickname / consolidated, with the
+criteria and a per-stage funnel shown, plus a delta vs. the current logic (baseline).
+
+```bash
+node src/sweep_duplicates.js snapshot --test    # fetch once (or --prod / --full / --partial)
+node src/sweep_duplicates.js run                 # replay config.js DEFAULT_SWEEP_GRID over the snapshot
+node src/sweep_duplicates.js diff "baseline" "t88_nickON_z5_gbz"
+```
+
+From the menu, the **DUPLICATE TUNING** section (items 14–17) runs the snapshot, the
+sweep, and opens the tuning folder. Production code is never touched — the matching
+runs through the self-contained engine in `src/sweep.js`. Output goes to a
+`usat_salesforce_duplicates_tuning` folder, a sibling of the output folder under the
+same external `/data` root (so it stays out of the Slack uploads and archive
+rotation). Full detail in **`README_TUNING.md`**.
+
 ## Slack Server
 
 `server_salesforce_duplicates_8017.js` (at the repo root, alongside the other
 `server_*.js`, port 8017) exposes the duplicate output over Slack slash commands.
 It mirrors `server_slack_events.js` and reuses the shared Slack upload utilities.
 
-Run it from the repo root (or menu item 14):
+Run it from the repo root (or menu item 23):
 
 ```bash
 node server_salesforce_duplicates_8017.js
@@ -1112,7 +1254,13 @@ run every record is fetched, so order doesn't matter.)
 
 ### Formula fields are handled in Node.js
 
-The composite ZIP formula is recreated in Node.js because Salesforce may not allow formula fields in aggregate grouping.
+The composite ZIP formula is recreated in Node.js because SOQL has no string
+functions and `GROUP BY` accepts only real fields, not expressions like
+`LEFT(BillingPostalCode, 5)`. The exact rule *can* be approximated natively if you
+add a `Zip5__c` formula field and group on it — see **"Expressing the Exact Rule as
+a SOQL Query"** above. The tool keeps the logic in Node so it can also fall back to
+mailing ZIP and normalize names in the same pass, and so fuzzy/nickname (which have
+no SOQL equivalent) run on the same normalized values.
 
 ### Fuzzy logic requires gender, birthdate, and ZIP
 

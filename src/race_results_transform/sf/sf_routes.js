@@ -56,6 +56,23 @@ function mount_sf_routes(app, require_auth) {
     } catch (e) { send_sf_error(res, e); }
   });
 
+  // List Email-Queue (Rankings) race-results attachments for a Mountain-Time date filter (no bytes).
+  // status=all includes closed cases (default open-only). Download reuses /api/sf/file/:id.
+  app.get('/api/sf/email-files', require_auth, async function (req, res) {
+    try {
+      const filter = {
+        mode: req.query.mode || 'today',
+        field: req.query.field || 'LastModifiedDate',
+        date: req.query.date, start: req.query.start, end: req.query.end,
+        tz: 'America/Denver'
+      };
+      const status = (['all', 'closed', 'not_closed', 'open', 'not_open'].indexOf(req.query.status) >= 0) ? req.query.status : 'not_closed';
+      const conn = await get_conn(bool(req.query.is_test));
+      const files = await sf.list_email_queue_files(conn, { filter: filter, status: status });
+      res.json({ ok: true, count: files.length, files: files });
+    } catch (e) { send_sf_error(res, e); }
+  });
+
   // Stream one ContentVersion's bytes to the browser. In-memory; nothing persisted server-side.
   app.get('/api/sf/file/:id', require_auth, async function (req, res) {
     try {

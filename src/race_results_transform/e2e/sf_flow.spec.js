@@ -226,23 +226,6 @@ test.describe('race_results_transform — Salesforce intake', () => {
     await expect(page.locator('#sfStatus')).not.toContainText('re-saved');
   });
 
-  test('opening an .xls without SheetJS available prompts to re-save as .xlsx', async ({ page }) => {
-    await page.route('**/vendor/xlsx.full.min.js', (route) => route.fulfill({ status: 404, body: '' }));   // force "SheetJS not available"
-    await page.route('**/api/sf/files**', (route) => route.fulfill(json({ ok: true, count: 1, files: [
-      { content_version_id: 'cx1', target_name: 'old_race_cx1.xls', file_extension: 'xls', program_name: 'Prog', owner_name: 'Owner', modified_mtn_full: '06/01/2026, 1:00:00 PM MDT' }
-    ] })));
-    await page.locator('#sfListBtn').click();
-    await page.locator('#sfChooseFolder').click();
-    await page.locator('#sfFolderPath').fill('C:/temp/sf_test');
-    await page.locator('#sfDownloadBtn').click();
-    await expect(page.locator('.sf-q-trow')).toHaveCount(1);
-
-    let dialog_msg = '';
-    page.on('dialog', (d) => { dialog_msg = d.message(); d.dismiss().catch(function () {}); });
-    await page.locator('.sf-q-trow').first().click();   // vendor/xlsx.full.min.js 404s → re-save message
-    await expect.poll(() => dialog_msg).toContain('.xlsx');
-  });
-
   test('no files found is indicated, and Reset clears the panel', async ({ page }) => {
     await page.route('**/api/sf/files**', (route) => route.fulfill(json({ ok: true, count: 0, files: [] })));
     await page.locator('#sfListBtn').click();

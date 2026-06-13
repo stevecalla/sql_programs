@@ -4,6 +4,7 @@ const naming = require('./sf_naming');
 const dates = require('./sf_dates');
 const config = require('./sf_config');
 const client = require('./sf_client');
+const email = require('./sf_email');
 const fetch_mod = require('./sf_fetch');
 
 module.exports = {
@@ -27,6 +28,9 @@ module.exports = {
   describe_object: client.describe_object,
   DEFAULT_SEARCH_TERM: client.DEFAULT_SEARCH_TERM,
   DEFAULT_EXTS: client.DEFAULT_EXTS,
+  // email queue
+  list_email_queue_files: email.list_email_queue_files,
+  parse_subject: email.parse_subject,
   // fetch
   fetch_content_version_bytes: fetch_mod.fetch_content_version_bytes
 };

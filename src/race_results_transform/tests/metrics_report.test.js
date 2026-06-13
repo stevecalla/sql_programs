@@ -47,6 +47,16 @@ test('Last User Activity chip excludes dashboard_view but keeps row count unfilt
 
   // The row count must NOT be filtered — it counts every row in the table.
   assert.match(health, /COUNT\(\*\)\s+rows_total/, 'rows_total must remain a plain whole-table COUNT(*)');
+
+  // The health query also surfaces the deliberate-test-row count for the dashboard's Test rows card + Purge button.
+  assert.match(health, /SUM\(CASE WHEN is_test = 1 THEN 1 ELSE 0 END\)\s+test_rows/, 'health query counts is_test=1 rows as test_rows');
+});
+
+test('report exposes health.test_rows + a purge_test entry point for the dashboard', async function () {
+  const pool = make_fake_pool();
+  const r = await report.build_report(pool, { days: 7 });
+  assert.ok(r.data.health && 'test_rows' in r.data.health, 'health object includes test_rows');
+  assert.equal(typeof report.purge_test, 'function', 'metrics_report exposes purge_test for /api/metrics-purge-test');
 });
 
 test('Top Users last activity column excludes dashboard_view', async function () {

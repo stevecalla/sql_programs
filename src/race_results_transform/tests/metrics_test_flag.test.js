@@ -50,4 +50,17 @@ describe('metrics is_test flag + purge-test', () => {
     assert.match(menu_js, /metrics:purge-test/, 'menu.js must offer the purge-test command');
     assert.match(menu_js, /action: 'metrics_purge_test'/, 'menu.js must wire the purge-test action');
   });
+
+  test('the dashboard exposes a Test rows count + a Purge test button backed by an auth-gated route', () => {
+    const dash = fs.readFileSync(path.join(ROOT, 'metrics', 'metrics_dashboard.html'), 'utf8');
+    assert.match(dash, /id="purgeTest"/, 'dashboard has the Purge test button');
+    assert.match(dash, />Purge test</, 'button label is just "Purge test"');
+    assert.match(dash, /card\('Test rows', tr/, 'Test rows count is a KPI card in the stats row');
+    assert.match(dash, /\/api\/metrics-purge-test/, 'button POSTs the purge route');
+    const server_path = path.join(ROOT, '..', '..', 'server_race_results_transform_8018.js');
+    if (!fs.existsSync(server_path)) return;   // skip outside the monorepo
+    const server = fs.readFileSync(server_path, 'utf8');
+    assert.match(server, /app\.post\('\/api\/metrics-purge-test', require_dash_auth/, 'purge route is auth-gated');
+    assert.match(server, /metrics_report\.purge_test\(metrics_pool\)/, 'route calls purge_test');
+  });
 });

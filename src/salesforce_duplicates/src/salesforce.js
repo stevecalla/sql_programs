@@ -26,7 +26,7 @@ const jsforce = require('jsforce');
 
 const { log_info, log_success } = require('./log');
 const { format_duration, format_timestamp_utc } = require('./fmt');
-const { resolve_fetch_plan } = require('../config');
+const { resolve_fetch_plan, BULK_FETCH_PROGRESS_EVERY } = require('../config');
 
 // Optional, org-dependent field (Person-Account `__pc` view of the Contact field).
 const MERGE_ID_FIELD = 'usat_Salesforce_Merge_Id__pc';
@@ -88,10 +88,19 @@ async function rest_query(conn, soql, max_fetch) {
     return { records: result.records, total_size: result.totalSize };
 }
 
+// The Bulk API 2.0 returns CSV; jsforce can leak the CSV HEADER row into the record
+// stream as a fake record where every field equals its own column name (Id === 'Id',
+// LastName === 'LastName', ...) — once per result chunk on large extracts. These are
+// not real Accounts, so we drop them at the source. (REST autoFetch does not do this.)
+function is_bulk_header_row(rec) {
+    return !!rec && rec.Id === 'Id';
+}
+
 // Bulk API query — one async job, results streamed back in large chunks. Used for
 // production / any --full run. Stops at max_fetch (the --test --full guardrail).
-async function bulk_query(conn, soql, max_fetch = Infinity) {
+async function bulk_query(conn, soql, max_fetch = Infinity, { script_start_ms } = {}) {
     const records = [];
+    let header_rows_skipped = 0;
     const record_stream = await conn.bulk2.query(soql, {
         pollInterval: BULK_POLL_INTERVAL_MS,
         pollTimeout: BULK_POLL_TIMEOUT_MS,
@@ -101,7 +110,11 @@ async function bulk_query(conn, soql, max_fetch = Infinity) {
         let settled = false;
         const finish = () => { if (!settled) { settled = true; resolve(); } };
         record_stream.on('record', (rec) => {
+            if (is_bulk_header_row(rec)) { header_rows_skipped += 1; return; }
             records.push(rec);
+            if (records.length % BULK_FETCH_PROGRESS_EVERY === 0) {
+                log_info(`Fetched ${records.length.toLocaleString()} records from Salesforce...`, script_start_ms);
+            }
             if (records.length >= max_fetch) {
                 try { record_stream.destroy(); } catch (_) { /* ignore */ }
                 finish();
@@ -110,6 +123,10 @@ async function bulk_query(conn, soql, max_fetch = Infinity) {
         record_stream.on('error', (err) => { if (!settled) { settled = true; reject(err); } });
         record_stream.on('end', finish);
     });
+
+    if (header_rows_skipped > 0) {
+        console.log(`Bulk API: dropped ${header_rows_skipped} CSV header row(s) leaked into the record stream.`);
+    }
 
     return { records, total_size: records.length };
 }
@@ -155,7 +172,7 @@ async function fetch_salesforce_accounts({ is_test, is_full = false, is_partial 
 
     const { records, total_size } = use_rest
         ? await rest_query(conn, soql, max_fetch)
-        : await bulk_query(conn, soql, max_fetch);
+        : await bulk_query(conn, soql, max_fetch, { script_start_ms });
 
     const query_end_date = new Date();
     const query_duration_ms = Date.now() - query_start_ms;
@@ -185,4 +202,5 @@ module.exports = {
     fetch_salesforce_accounts,
     rest_query,
     bulk_query,
+    is_bulk_header_row,
 };

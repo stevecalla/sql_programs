@@ -63,9 +63,25 @@ the dependency.
 
 ## Pull from Salesforce (optional)
 
-Instead of getting files from the source by hand, you can pull **Race Results Doc** files straight
+Instead of getting files from the source by hand, you can pull race-results files straight
 from Salesforce. It runs *alongside* the normal flow — the dropzone, Try Me, and convert/review/
-download are unchanged. On the upload page, the **Get Race Results from Salesforce** panel lets you:
+download are unchanged. The **Get Race Results** card has a **tab bar** that picks the source:
+**SF Upload Queue · SF Email Queue · From Folder · Slack Ironman**.
+
+- **SF Upload Queue** — `Race Results Doc` files uploaded to Salesforce (the default).
+- **SF Email Queue** — spreadsheet attachments on **Rankings cases** (Email-to-Case). Same date picker;
+  a **Status** filter mapped to the case `IsClosed` flag — **Is Not Closed** (default) / **Is Closed** /
+  **All**. The **newest files (up to Max)** are pre-checked for download regardless of status, so "Is Closed"
+  and "All" select rows too — uncheck any you don't want. Columns suited to emails
+  (`Opened · Modified · Status · Subject · Sender · Sanction · Program · File · Type`), sorted by **Modified,
+  newest first** — *Opened* and *Modified* are the **case's** Created / Last-Modified dates (the same dates
+  shown in Salesforce's "Queue: Rankings" view). Sanction/Program are shown when the email subject includes
+  them and left blank otherwise. Selected files run through the **same** convert/review/download flow.
+  CLI: `node src/cli.js sf:list-email [--status not_closed|closed|all] [--test]`.
+- **From Folder** — a local folder of files (no Salesforce); see "Convert files from a folder" below.
+- **Slack Ironman** — an under-construction placeholder (coming soon).
+
+Both Salesforce queues let you:
 
 - pick a **From / To** date window (Mountain Time, on Last-modified or Created), defaulting to
   **yesterday → today**. **From** can be any day in **2025-01-01 … today**; **To** is then held to
@@ -129,15 +145,15 @@ The **Sanction ID** comes from the Program (event) object's `cfg_Id__c` formula 
 and pre-fills the download filename builder's *Sanction ID* box. If your org names the object/field
 differently, set `SF_PROGRAM_OBJECT` / `SF_SANCTION_FIELD` in `.env`.
 
-## Convert files from a folder
+## Convert files from a folder (the From Folder tab)
 
-On the upload page, the **Convert files from a folder** panel lets you point at a folder on your
-computer and work several files at once — without dragging them in one at a time. Click **Choose
+On the upload page, the **Get Race Results** card has a **From Folder** tab that lets you point at a folder
+on your computer and work several files at once — without dragging them in one at a time. Click **Choose
 folder…**, and the app lists the spreadsheets in it (`.xlsx / .xls / .csv`, top level only) as a
-checklist with search + a count. Check the ones you want and click **Load** — they drop into the same
-**Files** queue as the Salesforce flow, so you click each row to convert it, download it (CSV or Excel,
-your filename), and the Uploaded → Converted → Downloaded status tracks your progress. On Chrome/Edge
-the **↻ Reload from disk** button works here too (fix a file in Excel, click Reload, it re-converts).
+checklist with search, a **Max** cap, and a count. Check the ones you want and click **Load** — they drop
+into the same **Files** queue as the Salesforce flow, so you click each row to convert it, download it
+(CSV or Excel, your filename), and the Uploaded → Converted → Downloaded status tracks your progress. On
+Chrome/Edge the **↻ Reload from disk** button works here too (fix a file in Excel, click Reload, it re-converts).
 
 Everything stays in your browser — **nothing is uploaded**. Chrome/Edge use the native folder picker
 (which also enables Reload); other browsers fall back to a standard folder-select that still loads and
@@ -183,11 +199,17 @@ share `e2e/helpers.js` (narrated step banner + click highlighting + fixtures). S
 - A light/dark **theme toggle** (top-right). It follows your OS setting until you pick one.
 - One **Compare** card with tabs: **Tables · Mapping · Scorecard · Integrity · Field reference ·
   How it works**, plus a summary bar (score %, file name, flagged-value count, skipped rows).
+- **Delete rows:** on the **original** (left) table you can remove rows — search to narrow the list,
+  then **🗑 Delete N** (in the "Original file" header), or click the **✕** on any single row. Deleted rows
+  drop from the converted table and the download; the summary shows a **deleted** count and **↩ Restore**
+  brings them all back. (In-session and reversible — your file on disk isn't touched.)
 - **Download — format + filename:** the **Download** button opens a small panel with a **CSV
   (default) / Excel .xlsx** toggle and a **filename builder** — Sanction ID · Race Type · Race
   Distance · Race Name — that composes `351003 - Duathlon - Intermediate - Clash Mississippi.csv`
-  (blank fields are skipped; a live preview shows the result). The same panel backs the
-  split-by-column download too.
+  (blank fields are skipped; a live preview shows the result). For CSV, an optional **"CSV-safe
+  times/dates"** checkbox locks the DOB and Recorded Time columns as text so Excel shows them exactly
+  as written when the CSV is opened in Excel (it doesn't auto-reformat the time); not needed for the
+  `.xlsx` download. The same panel backs the split-by-column download too.
 - **Multi-sheet workbooks:** if an uploaded `.xlsx` has more than one sheet, a notice and a
   **sheet tab bar** appear; each sheet is converted independently (its own mapping, flags and
   edits). In the Download panel a **Separate / Combined** toggle appears: *Separate* lists **every
@@ -280,9 +302,13 @@ client / report render); the 8018 server **auto-creates the table at startup**
 - **Dashboard**: funnel (visit→upload→conversion→download→start-over), activity-by-day
   (visits·uploads·downloads·start-overs — grouped for ≤14 days, auto-stacked beyond), downloads-by-type +
   a Split-by-group panel, a **Try Me vs real activity** chart (demo vs real uploads/conversions/
-  downloads) + a **Try Me** KPI card, top users (visits·uploads·downloads·start-overs, timezone + last
-  activity), a Start-over KPI card, ↻ Refresh + auto-refresh, dark/light. Data tables carry a leading #
-  row-number column and scroll horizontally when narrow. The top-right **Last User Activity** chip and the
+  downloads) + a **Try Me** KPI card, a **Test rows** KPI card (count of `is_test=1` rows), top users
+  (visits·uploads·downloads·start-overs, timezone + last activity), a Start-over KPI card, ↻ Refresh +
+  auto-refresh, dark/light, and a quick **"Uploads today, in a table"** ask-box suggestion chip. When there
+  are test rows, a **Purge test** button (in the controls row, left of the light/dark toggle) deletes only
+  those `is_test=1` rows after a confirm. Data tables carry a leading #
+  row-number column and scroll horizontally when narrow; the header, controls, and cards reflow on mobile. The
+  top-right **Last User Activity** chip and the
   Top Users **Last activity** column reflect real activity only — server-side `dashboard_view` events are
   excluded, so opening the dashboard doesn't bump the date (the **N rows** figure still counts all rows).
 - **Events**: page_view, file_uploaded, conversion_completed, download, `split_download_used`,
@@ -305,4 +331,4 @@ restored from whichever survives.
 
 **AI "ask your data" (in progress):** a read-only natural-language->SQL engine over the usage events lives in `src/race_results_transform/metrics/ask/` Now usable from the CLI/menu: `node src/cli.js ask "how many people used the converter last week?" [--provider openai|claude]` (read-only; prints the answer + the SQL). The `/metrics` dashboard also has an **Ask your data** box (model dropdown + answer + the SQL it ran), backed by the auth-gated `POST /api/metrics-ask` (auto-growing composer with model picker, suggested-question chips, markdown answers, auto charts for chartable results, vertically scrollable result tables, collapse/clear results, follow-up threads with a a single scrolling conversation thread (capped with a “see older” expander; model + time per turn; whole-panel show/hide; SQL & follow-up controls are tooltip chips), and an opt-in raw-SQL mode; answers in Mountain Time, grounded on a live metrics snapshot + operator corrections, out-of-scope questions declined). Sign in via a login form (real logout; no cached Basic). Power users can run guarded read-only SQL directly (`node src/cli.js ask:sql "<SELECT ...>"`). Operators can correct an answer in the dashboard so the AI honors it next time (`node src/cli.js ask:corrections` to review, `ask:uncorrect <id>` to drop one). Guided review processes are built in: `node src/cli.js ask:test:corrections` and `ask:test:threads` print step-by-step verification, and `ask:eval` runs review scenarios against the live model and records a report. Every ask is logged to a DB table for review (`node src/cli.js ask:log`), and a `tests/ask_injection.test.js` suite proves the read-only guard blocks SQL/prompt injection. Try the guard: `node src/race_results_transform/metrics/ask/demo_guard.js` (or the guard-demo item under Tests — engine & UI). See `metrics/ASK_DESIGN.md`.
 
-No new dependencies. See `ANALYTICS_PLAN.md` 
+No new dependencies. See `plans_and_notes/ANALYTICS_PLAN.md` 
