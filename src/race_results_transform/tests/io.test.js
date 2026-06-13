@@ -29,6 +29,19 @@ test('grid_to_csv quotes fields with comma/quote/newline and keeps numbers as te
   assert.equal(lines[3], ',"Quote ""x""",');                    // embedded quotes doubled, trailing empty field
 });
 
+test('grid_to_csv excel_safe_cols wraps the chosen columns as ="..." (Excel keeps the format)', () => {
+  const headers = ['First Name', 'DOB', 'Recorded Time'];
+  const rows = [['Ann', '01/15/1990', '00:59:59.000']];
+  const csv = io.grid_to_csv(headers, rows, { excel_safe_cols: [1, 2] });
+  const line = csv.split('\r\n')[1];
+  // wrapped cells become ="value", then CSV-quoted -> "=""value"""
+  assert.equal(line, 'Ann,"=""01/15/1990""","=""00:59:59.000"""');
+  // without the option, behaviour is unchanged
+  assert.equal(io.grid_to_csv(headers, rows).split('\r\n')[1], 'Ann,01/15/1990,00:59:59.000');
+  // empty cells are not wrapped
+  assert.equal(io.grid_to_csv(['DOB'], [['']], { excel_safe_cols: [0] }).split('\r\n')[1], '');
+});
+
 test('grid_to_csv round-trips back through csv_to_ir', () => {
   const headers = ['First Name', 'Last Name', 'City'];
   const rows = [['Ann', 'Lee', 'San Jose'], ['Bo', 'Ng', 'Reno, NV']];

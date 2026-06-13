@@ -39,9 +39,10 @@
   var S = {
     file_name: 'results', ir: null, parsed: null, mapping: null, value_overrides: {},
     result: null, report: null, work_rows: null, store: null, sig: null,
-    orig_table: null, conv_table: null, vm_expanded: {}, approved: {}, flag_info: null, link_tables: false,
+    orig_table: null, conv_table: null, vm_expanded: {}, approved: {}, excluded: {}, flag_info: null, link_tables: false,
     sheets: null, active: null, first_render: true, split_col: null, split_basis: null, split_manual: {}, split_loaded_key: null,
     dl_format: 'csv', dl_fields: { id: '', type: '', distance: '', name: '' },  // download format + filename builder
+    dl_excel_safe: false,   // CSV only: wrap DOB/Recorded Time as Excel text so Excel keeps the format on open
     is_demo: false,  // true while viewing the built-in "Try me" sample (fake data) — stamps is_demo on its events
     source: null,    // where the active file came from: null/'upload' | 'salesforce' | 'folder' (try_me derives from is_demo)
     // Salesforce intake / queue
@@ -84,9 +85,11 @@
       col_menu: !!opts.col_menu, top_header: !!opts.top_header, source_headers: opts.source_headers || [],
       current_source: opts.current_source || null, on_remap: opts.on_remap || null, on_edit: opts.on_edit || null,
       on_search: opts.on_search || null, on_sort: opts.on_sort || null, on_filter: opts.on_filter || null,
+      deletable: !!opts.deletable, on_delete: opts.on_delete || null, on_render: opts.on_render || null, excluded: null,
       headers: [], data: [], order: [], query: '', sort_col: null, sort_dir: 1,
       cap: opts.cap || 500, show_all: false, filter_set: null, filter_label: '', search_index: []
     };
+    function excluded_count() { var n = 0; if (T.excluded) for (var k in T.excluded) if (T.excluded[k]) n++; return n; }
 
     function compare(a, b, c) {
       // Comparator lives in the isomorphic core (src/sort.js) so it's unit-tested.
@@ -97,7 +100,10 @@
       if (T.sort_col != null) T.order.sort(function (a, b) { return compare(a, b, T.sort_col); });
     };
     T.set_data = function (headers, data) { T.headers = headers; T.data = data; T.sort_col = null; T.filter_set = null; T.filter_label = ''; T.search_index = view.build_search_index(data, cell_text); T.apply_sort(); mount(); render_body(); };
-    T.export_rows = function () { return T.order.map(function (i) { return T.data[i]; }); };
+    // Export honours the on-screen sort but skips user-deleted rows (NOT the search filter).
+    T.export_rows = function () { return T.order.filter(function (i) { return !(T.excluded && T.excluded[i]); }).map(function (i) { return T.data[i]; }); };
+    T.set_excluded = function (set) { T.excluded = set || null; render_body(); };
+    T.visible_keys = function () { return visible_indices(); };   // current visible row indices (for external "delete shown")
     T.set_query = function (q) { T.query = q; var sb = T.el.querySelector('.tv-search'); if (sb) sb.value = q; render_body(); };
     T.set_order = function (order) { T.order = order.slice(); T.sort_col = null; render_body(); };
     function apply_filter(set, label) {
@@ -108,7 +114,7 @@
     T.set_filter = function (set, label) { apply_filter(set, label); if (T.on_filter) T.on_filter(set, label); };
     T.set_filter_quiet = function (set, label) { apply_filter(set, label); };
 
-    function visible_indices() { return view.visible_indices(T.order, T.query, T.search_index, T.filter_set); }
+    function visible_indices() { return view.visible_indices(T.order, T.query, T.search_index, T.filter_set, T.excluded); }
 
     function name_th(h, c) { return '<th data-c="' + c + '">' + esc(h) + '<span class="ind"></span></th>'; }
     function ctrl_th(h, c) {
@@ -162,6 +168,12 @@
           if (T.on_edit) T.on_edit(+td.dataset.i, +td.dataset.c, td);
         });
       }
+      if (T.deletable) {
+        T.el.querySelector('tbody').addEventListener('click', function (e) {
+          var b = e.target.closest('.tv-del'); if (!b) return;   // per-row ✕ in the row-number cell
+          if (T.on_delete) T.on_delete([+b.dataset.i]);
+        });
+      }
     }
 
     function render_body() {
@@ -172,7 +184,8 @@
       } else {
         for (var k = 0; k < limit; k++) {
           var i = vis[k];
-          html += '<tr><td class="rownum">' + (i + 1) + '</td>';
+          var rn = T.deletable ? ((i + 1) + ' <button type="button" class="tv-del" data-i="' + i + '" title="Delete this row" aria-label="Delete row ' + (i + 1) + '">✕</button>') : (i + 1);
+          html += '<tr><td class="rownum">' + rn + '</td>';
           for (var c = 0; c < T.headers.length; c++) {
             var flag = T.get_flag ? T.get_flag(i, c) : null;
             var attrs = T.editable ? ' contenteditable="true" data-i="' + i + '" data-c="' + c + '"' : '';
@@ -188,6 +201,7 @@
       });
       var hidden = vis.length - limit;
       T.el.querySelector('.tv-count').textContent = vis.length + ' row' + (vis.length === 1 ? '' : 's') + (hidden > 0 ? ' (' + limit + ' shown)' : '');
+      if (T.deletable && T.on_render) T.on_render();   // refresh the external delete/restore controls (pane-head)
       var fb = T.el.querySelector('.tv-filter');
       if (fb) {
         if (T.filter_set) { fb.classList.remove('hidden'); fb.innerHTML = 'Showing only: <b>' + esc(T.filter_label) + '</b> <button class="tv-clear" title="Clear filter — show all rows">\u2715</button>'; fb.querySelector('.tv-clear').addEventListener('click', function () { T.set_filter(null); }); }
@@ -1088,7 +1102,7 @@
     var parsed = parse.detect_table(ir, { score_header: match.score_headers });
     var sig = mapper.header_signature(parsed.headers);
     var b = { name: ir.sheet_name, ir: ir, parsed: parsed, sig: sig,
-      value_overrides: {}, vm_expanded: {}, approved: {}, computed: false,
+      value_overrides: {}, vm_expanded: {}, approved: {}, excluded: {}, computed: false,
       mapping: null, used_profile: false, result: null, report: null, work_rows: null };
     var prof = S.store.get(sig);
     if (prof && prof.mapping) {
@@ -1124,7 +1138,7 @@
     if (S.active == null || !S.sheets || !S.sheets[S.active]) return;
     var b = S.sheets[S.active];
     b.mapping = S.mapping; b.value_overrides = S.value_overrides; b.vm_expanded = S.vm_expanded;
-    b.approved = S.approved; b.result = S.result; b.report = S.report; b.work_rows = S.work_rows;
+    b.approved = S.approved; b.excluded = S.excluded; b.result = S.result; b.report = S.report; b.work_rows = S.work_rows;
     b.computed = true;
   }
 
@@ -1134,7 +1148,7 @@
     var b = S.sheets && S.sheets[i]; if (!b) return;
     S.active = i;
     S.ir = b.ir; S.parsed = b.parsed; S.sig = b.sig; S.mapping = b.mapping;
-    S.value_overrides = b.value_overrides; S.vm_expanded = b.vm_expanded; S.approved = b.approved;
+    S.value_overrides = b.value_overrides; S.vm_expanded = b.vm_expanded; S.approved = b.approved; S.excluded = b.excluded || {};
     show_profile_bar(b.used_profile);
     if (!b.computed) { compute(); b.result = S.result; b.report = S.report; b.work_rows = S.work_rows; b.computed = true; }
     else { S.result = b.result; S.report = b.report; S.work_rows = b.work_rows; S.flag_info = build_flag_info(); }
@@ -1171,7 +1185,7 @@
     S.active_sanction = '';
     S.dl_fields = Object.assign({}, S.dl_fields, { id: '' });   // sanction is SF-only; don't carry it past Start over
     S.ir = S.parsed = S.mapping = S.result = S.report = S.work_rows = null;
-    S.value_overrides = {}; S.vm_expanded = {}; S.approved = {}; S.orig_table = S.conv_table = null;
+    S.value_overrides = {}; S.vm_expanded = {}; S.approved = {}; S.excluded = {}; S.orig_table = S.conv_table = null;
     S.sheets = null; S.active = null; S.first_render = true;
     S.queue = null; S.queue_sort = { key: null, dir: 'asc' }; S.active_queue_id = null;
     S.queue_source = 'salesforce'; S.queue_dir = null; S.queue_folder = ''; S.queue_sig = null;
@@ -1250,13 +1264,16 @@
   function render_summary() {
     var sc = S.report.scorecard, rep = S.report, n = function (x) { return x.toLocaleString(); };
     var skip = rep.rows.skipped.length, flagged = S.flag_info ? S.flag_info.total : rep.flag_count;
+    var nex = 0; if (S.excluded) for (var ek in S.excluded) if (S.excluded[ek]) nex++;   // user-deleted rows
+    var kept_out = Math.max(0, rep.rows.out - nex);   // rows actually written to the download
     $('summaryBar').innerHTML =
       '<span class="score-badge ' + sc.band + '">' + sc.pct + '%</span>' +
       '<span class="verdict">' + esc(sc.verdict) + '</span>' +
       '<span class="chips">' +
         '<span class="chip filechip" title="Uploaded file">📄 ' + esc(S.file_display || S.file_name) + '</span>' +
         ((S.source === 'salesforce' && S.active_sanction) ? '<span class="chip sanctionchip" title="Salesforce Sanctioning ID (Program.cfg_Id__c) — leads the download filename">🏷 Sanction <b>' + esc(S.active_sanction) + '</b></span>' : '') +
-        '<span class="chip" title="Athlete rows written to the converted file"><b>' + n(rep.rows.out) + '</b> rows</span>' +
+        '<span class="chip" title="Athlete rows written to the converted file"><b>' + n(kept_out) + '</b> rows</span>' +
+        (nex > 0 ? '<span class="chip chip-del" title="Rows you deleted — left out of the download. Restore them from the original table."><b>' + n(nex) + '</b> deleted</span>' : '') +
         '<span class="chip" title="Highlighted cells still needing a look — approve or edit them to clear"><b>' + n(flagged) + '</b> flagged values</span>' +
         (skip
           ? '<button class="chip chip-btn" id="skip_chip" title="Section-header & blank rows excluded — click to view"><b>' + n(skip) + '</b> rows skipped ›</button>'
@@ -1271,14 +1288,46 @@
     $('compareCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  // ---------- row delete (original table) — soft-exclude, reversible, in-session ----------
+  // Deleted rows are hidden from BOTH tables and left out of the download, but the transform still
+  // runs on the full data (indices stay stable, so edits/overrides/approvals keep working). Restore
+  // brings them all back. Stored per-sheet in S.excluded (mirrored into the active bundle).
+  function delete_orig_rows(indices) {
+    if (!indices || !indices.length) return;
+    if (indices.length > 1 && !window.confirm('Delete ' + indices.length + ' row(s) from the converted output? You can Restore them.')) return;
+    indices.forEach(function (i) { S.excluded[i] = true; });
+    apply_excluded();
+  }
+  function restore_orig_rows() { Object.keys(S.excluded).forEach(function (k) { delete S.excluded[k]; }); apply_excluded(); }
+  function excluded_n() { var n = 0; for (var k in S.excluded) if (S.excluded[k]) n++; return n; }
+  // Delete/Restore live in the ORIGINAL pane-head (next to "Original file") — NOT in the table toolbar —
+  // so both table toolbars keep the same height and the two grids stay aligned side by side.
+  function render_orig_del() {
+    var el = $('origDelCtl'); if (!el || !S.orig_table) return;
+    var shown = S.orig_table.visible_keys().length, nex = excluded_n();
+    el.innerHTML =
+      '<button type="button" class="btn sm orig-del-btn" id="origDelShown"' + (shown ? '' : ' disabled') +
+        ' title="Delete the rows currently shown (search first to delete a subset). Removed from the converted output and the download — Restore brings them back.">🗑 Delete ' + shown + '</button>' +
+      (nex > 0 ? '<button type="button" class="btn sm orig-restore-btn" id="origRestore" title="Bring back the rows you deleted">↩ Restore ' + nex + '</button>' : '');
+    var ds = $('origDelShown'); if (ds) ds.addEventListener('click', function () { delete_orig_rows(S.orig_table.visible_keys()); });
+    var rs = $('origRestore'); if (rs) rs.addEventListener('click', restore_orig_rows);
+  }
+  function apply_excluded() {
+    if (S.conv_table) S.conv_table.set_excluded(S.excluded);
+    if (S.orig_table) S.orig_table.set_excluded(S.excluded);   // triggers render -> on_render -> render_orig_del
+    render_summary();
+  }
+
   // ---------- compare ----------
   function grid_scroll_pos(id) { var c = $(id), e = c && c.querySelector('.grid-scroll'); return e ? { l: e.scrollLeft, t: e.scrollTop } : null; }
   function grid_scroll_set(id, pos) { if (!pos) return; var c = $(id), e = c && c.querySelector('.grid-scroll'); if (e) { e.scrollLeft = pos.l; e.scrollTop = pos.t; } }
   function render_compare(first_time) {
     var keep_orig = grid_scroll_pos('originalGrid'), keep_conv = grid_scroll_pos('resultGrid');
     var orig_rows = S.parsed.data_rows.map(function (d) { return d.cells; });
-    if (!S.orig_table) S.orig_table = TableView($('originalGrid'), { top_header: true });
+    if (!S.orig_table) S.orig_table = TableView($('originalGrid'), { top_header: true,
+      deletable: true, on_delete: delete_orig_rows, on_render: render_orig_del });
     S.orig_table.set_data(S.parsed.headers, orig_rows);
+    S.orig_table.set_excluded(S.excluded);   // hide user-deleted rows (search → delete a subset, reversible)
     $('originalMeta').textContent = S.parsed.data_rows.length + ' rows · ' + S.parsed.headers.length + ' cols';
 
     if (!S.conv_table) {
@@ -1292,6 +1341,7 @@
     S.conv_table.source_headers = S.parsed.headers;
     S.conv_table.get_flag = S.flag_info.get; S.conv_table.flagged_rows = S.flag_info.rows;
     S.conv_table.set_data(S.result.headers, S.work_rows);
+    S.conv_table.set_excluded(S.excluded);   // converted side mirrors the deletions so the two tables stay aligned
     $('resultMeta').textContent = S.result.row_count + ' rows · 12 cols';
 
     S.orig_table.on_search = function (q) { if (S.link_tables) S.conv_table.set_query(q); };
@@ -1882,13 +1932,20 @@
   }
   function dl_ext() { return S.dl_format === 'xlsx' ? '.xlsx' : '.csv'; }
   // Emit one grid in the chosen format under `base` (no extension): CSV (default) or .xlsx.
+  // Columns to lock as Excel text in the CSV (so Excel doesn't re-format the time/date on open).
+  function dl_safe_cols(headers) {
+    var want = { 'DOB': 1, 'Recorded Time': 1 }, cols = [];
+    (headers || []).forEach(function (h, i) { if (want[h]) cols.push(i); });
+    return cols;
+  }
   function emit_grid(headers, rows, base) {
     var name = clean_part(base) || 'rankings';
     if (S.dl_format === 'xlsx') {
       return io.grids_to_buffer([{ name: name.slice(0, 31), headers: headers, rows: rows }])
         .then(function (buf) { save_download(buf, name + '.xlsx', 'xlsx'); });
     }
-    save_download(io.grid_to_csv(headers, rows), name + '.csv', 'csv');
+    var csv_opts = S.dl_excel_safe ? { excel_safe_cols: dl_safe_cols(headers) } : null;   // CSV-only Excel-safe wrap
+    save_download(io.grid_to_csv(headers, rows, csv_opts), name + '.csv', 'csv');
     return Promise.resolve();
   }
   // Single sheet / CSV: one file, honours the on-screen sort/filter.
@@ -1897,12 +1954,14 @@
     return emit_grid(S.result.headers, S.conv_table.export_rows(), base);
   }
   // Each selected sheet -> its own file with its own base name (staggered so the browser keeps them).
+  // A bundle's converted rows minus the rows the user deleted on that sheet (work_rows[i] ↔ row i).
+  function kept_rows(b) { return (b.excluded) ? b.work_rows.filter(function (_, i) { return !b.excluded[i]; }) : b.work_rows; }
   function download_selected(idx, names) {
     save_active();
     track('download', { download_mode: 'separate', file_out_count: idx.length, selected_count: idx.length });
     idx.forEach(function (i, k) {
       var b = S.sheets[i];
-      setTimeout(function () { compute_bundle(b); emit_grid(b.result.headers, b.work_rows, names[i]); }, k * 300);
+      setTimeout(function () { compute_bundle(b); emit_grid(b.result.headers, kept_rows(b), names[i]); }, k * 300);
     });
   }
   // Combine the chosen sheets into ONE file — converted rows stacked in tab order.
@@ -1910,7 +1969,7 @@
     save_active();
     track('download', { download_mode: 'combined', file_out_count: 1, selected_count: idx.length });
     var rows = [];
-    idx.forEach(function (i) { var b = S.sheets[i]; compute_bundle(b); rows = rows.concat(b.work_rows); });
+    idx.forEach(function (i) { var b = S.sheets[i]; compute_bundle(b); rows = rows.concat(kept_rows(b)); });
     emit_grid(S.sheets[idx[0]].result.headers, rows, base);
   }
   function download() { save_active(); open_download_picker(); }
@@ -1927,7 +1986,9 @@
   }
   function dl_format_html() {
     return '<div class="seg dl-fmt"><button type="button" data-fmt="csv"' + (S.dl_format === 'csv' ? ' class="active"' : '') + '>CSV</button>' +
-      '<button type="button" data-fmt="xlsx"' + (S.dl_format === 'xlsx' ? ' class="active"' : '') + '>Excel .xlsx</button></div>';
+      '<button type="button" data-fmt="xlsx"' + (S.dl_format === 'xlsx' ? ' class="active"' : '') + '>Excel .xlsx</button></div>' +
+      '<label class="dl-xsafe" title="Keep the time/date format when the CSV is opened in Excel. Wraps the DOB and Recorded Time columns as Excel text (=&quot;value&quot;) so Excel shows them EXACTLY as written instead of auto-reformatting the time/date. Other tools (Google Sheets, scripts) will see the literal =&quot;...&quot;. Not needed for the Excel .xlsx download.">' +
+      '<input type="checkbox" id="dlXsafe"' + (S.dl_excel_safe ? ' checked' : '') + '> CSV-safe times/dates</label>';
   }
   function dl_builder_html() {
     var f = S.dl_fields;
@@ -1955,6 +2016,8 @@
         on_change();
       });
     });
+    var xs = pop.querySelector('#dlXsafe');
+    if (xs) xs.addEventListener('change', function () { S.dl_excel_safe = xs.checked; on_change(); });
   }
   function close_download_picker() {
     var p = $('dlPop'); if (p) p.remove();

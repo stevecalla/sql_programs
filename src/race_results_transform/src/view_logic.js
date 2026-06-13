@@ -35,10 +35,12 @@
   //   query        : current search text (case-insensitive substring)
   //   search_index : per-row lowercased search strings (build_search_index output)
   //   filter_set   : optional { rowIndex: true } whitelist (e.g. flagged rows)
-  function visible_indices(order, query, search_index, filter_set) {
+  //   excluded     : optional { rowIndex: true } blacklist (user-deleted rows — hidden + not downloaded)
+  function visible_indices(order, query, search_index, filter_set, excluded) {
     var q = (query == null ? '' : String(query)).toLowerCase(), out = [];
     for (var k = 0; k < order.length; k++) {
       var i = order[k];
+      if (excluded && excluded[i]) continue;
       if (filter_set && !filter_set[i]) continue;
       if (q && (search_index[i] || '').indexOf(q) < 0) continue;
       out.push(i);

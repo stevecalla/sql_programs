@@ -96,6 +96,18 @@ h3{font-size:14px;margin:0}
 .tv-search{flex:1;min-width:120px;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);
   border-radius:9px;background:var(--card);color:var(--ink)}
 .tv-count{font-size:12px;color:var(--dim);white-space:nowrap}
+/* row delete (original table): per-row ✕ in the body, Delete/Restore in the pane-head, deleted chip */
+.tv-del{background:none;border:0;color:var(--dim);cursor:pointer;font-size:11px;line-height:1;padding:0 2px;margin-left:4px;opacity:.5}
+.tv-del:hover{color:var(--red,#e4002b);opacity:1}
+.pane-head h3{margin-right:auto}                     /* keep title left; meta + delete controls group right */
+.orig-del{display:inline-flex;gap:6px;align-items:center;flex:0 0 auto}
+.orig-del .btn{white-space:nowrap}
+.orig-del-btn{color:var(--red,#e4002b);border-color:var(--red,#e4002b)}
+.orig-del-btn:hover:not(:disabled){background:rgba(228,0,43,.08)}
+.orig-del-btn:disabled{opacity:.4;cursor:default}
+.chip-del{color:#b45309;border-color:#b45309;font-weight:700}
+/* CSV Excel-safe toggle in the download popover */
+.dl-xsafe{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);margin:6px 0 2px;cursor:help;white-space:nowrap}
 .grid-scroll{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px;max-height:62vh;background:var(--card)}
 table.rt{border-collapse:collapse;font-size:13px;width:max-content;min-width:100%}
 table.rt th,table.rt td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:6px 9px;white-space:nowrap;text-align:left;vertical-align:top}

@@ -183,11 +183,17 @@ share `e2e/helpers.js` (narrated step banner + click highlighting + fixtures). S
 - A light/dark **theme toggle** (top-right). It follows your OS setting until you pick one.
 - One **Compare** card with tabs: **Tables · Mapping · Scorecard · Integrity · Field reference ·
   How it works**, plus a summary bar (score %, file name, flagged-value count, skipped rows).
+- **Delete rows:** on the **original** (left) table you can remove rows — search to narrow the list,
+  then **🗑 Delete N** (in the "Original file" header), or click the **✕** on any single row. Deleted rows
+  drop from the converted table and the download; the summary shows a **deleted** count and **↩ Restore**
+  brings them all back. (In-session and reversible — your file on disk isn't touched.)
 - **Download — format + filename:** the **Download** button opens a small panel with a **CSV
   (default) / Excel .xlsx** toggle and a **filename builder** — Sanction ID · Race Type · Race
   Distance · Race Name — that composes `351003 - Duathlon - Intermediate - Clash Mississippi.csv`
-  (blank fields are skipped; a live preview shows the result). The same panel backs the
-  split-by-column download too.
+  (blank fields are skipped; a live preview shows the result). For CSV, an optional **"CSV-safe
+  times/dates"** checkbox locks the DOB and Recorded Time columns as text so Excel shows them exactly
+  as written when the CSV is opened in Excel (it doesn't auto-reformat the time); not needed for the
+  `.xlsx` download. The same panel backs the split-by-column download too.
 - **Multi-sheet workbooks:** if an uploaded `.xlsx` has more than one sheet, a notice and a
   **sheet tab bar** appear; each sheet is converted independently (its own mapping, flags and
   edits). In the Download panel a **Separate / Combined** toggle appears: *Separate* lists **every

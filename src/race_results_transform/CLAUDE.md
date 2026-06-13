@@ -160,7 +160,11 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   (`RACE_TYPES`) · Race Distance (`RACE_DISTANCES`) · Race Name → `build_base_name` composes
   `351003 - Duathlon - Intermediate - Clash Mississippi`, blanks (and their separators) skipped,
   illegal chars stripped (`clean_part`). `emit_grid` writes CSV via `io.grid_to_csv` or `.xlsx` via
-  `io.grids_to_buffer`. Fields persist in `S.dl_fields`.
+  `io.grids_to_buffer`. Fields persist in `S.dl_fields`. A **CSV-only "CSV-safe times/dates"**
+  checkbox (`#dlXsafe` → `S.dl_excel_safe`, off by default, with a hover tooltip "Keep the time/date format when the CSV is opened in Excel") makes `emit_grid` pass
+  `excel_safe_cols` (the DOB + Recorded Time column indices) to `io.grid_to_csv`, which wraps those cells
+  as an Excel text formula `="value"` so Excel keeps them EXACTLY as written instead of auto-reformatting
+  the time/date on open (other CSV tools see the literal `="..."`; no effect on the `.xlsx` download).
 - **Multi-sheet**: `io.read_to_irs` yields one IR per non-empty worksheet; `app.js` keeps a
   per-sheet state bundle (mapping/overrides/approvals/edits/computed result) and a **sheet tab
   bar** (`#sheetBar`) switches the active bundle. **Download** always opens the popover
@@ -200,6 +204,16 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   `show_all`, `set_filter`,
   two-row header (control row of remap selects on top so the two tables align), `on_search`/
   `on_sort`/`set_query`/`set_order` hooks for linking.
+- **Row delete (original table, opt-in `deletable`)**: a per-row ✕ in the table body, plus **Delete N
+  shown** + **Restore N** controls rendered in the original **pane-head** (`#origDelCtl`, via the
+  TableView's `on_render` hook + `visible_keys()`) — deliberately NOT in the table toolbar, so both
+  grids' toolbars stay the same height and the tables keep aligning side by side. Soft-exclude — `S.excluded`
+  (per-sheet, mirrored into the active bundle) is a `{ rowIndex: true }` set passed to
+  `view.visible_indices` (new 5th arg) so deleted rows are **hidden from BOTH tables** and left out of
+  the download (`export_rows` / `kept_rows` skip them), but the transform still runs on the FULL data so
+  row indices stay stable and edits/overrides/approvals keep working — no recompute needed (display +
+  download only). The summary bar shows a **`N deleted`** chip and the rows count drops accordingly;
+  **Restore** clears `S.excluded`. Reversible, in-session; cleared on Start over.
 - **Accessibility**: dynamically-rendered form controls carry explicit `aria-label`s (table search,
   header/mapping remap selects, value-map selects+inputs, split-on select, split include checkboxes,
   group-name inputs) — the `e2e/a11y.spec.js` axe scan guards against critical-impact regressions.
