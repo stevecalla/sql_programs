@@ -93,6 +93,8 @@ function parse_args(argv) {
     else if (a === '--strategy') out.strategy = argv[++i];
     else if (a === '--search') out.search = argv[++i];
     else if (a === '--status') out.status = argv[++i];
+    else if (a === '--channel') out.channel = argv[++i];
+    else if (a === '--json') out.json = true;
     else if (a === '--format' || a === '--fmt') out.format = argv[++i];
     else if (a === '--today') out.today = true;
     else if (a === '--test') out.test = true;
@@ -197,10 +199,16 @@ function help() {
     '  node cli.js sf:list-email [--today|--date|--start/--end] [--status not_closed|closed|all] [--limit N] [--test]',
     '                                              # list Email-Queue (Rankings) attachments (status default Is-Not-Closed; --all = all)',
     '  node cli.js sf:pull-email <sf:list-email opts> [-o <dir>] [--strategy add_new|replace|wipe_all]',
+    '  node cli.js slack:probe [--channel <id|name>] [--test]        # check the bot token + list its channels (read-only)',
+    '  node cli.js slack:channels [--test]                           # list the channels the bot is in (+ ids)',
+    '  node cli.js slack:list [--channel <id|name>] [--today|--date|--start/--end] [--limit N] [--test]',
+    '                                              # list spreadsheet attachments in a Slack channel (date range)',
+    '  node cli.js slack:pull <slack:list opts> [-o <dir>] [--strategy add_new|replace|wipe_all]',
     '  node cli.js metrics:size                   # events table size + rows/year',
     '  node cli.js metrics:cleanup [--yes]        # purge years beyond current+prior',
     '  node cli.js metrics:purge-test [--yes]     # delete only test rows (is_test=1) — keeps real + demo data',
     '  node cli.js metrics:purge-all [--yes]      # delete ALL rows (confirm) — clears test data',
+    '  node cli.js metrics:backfill-source [--yes] # relabel legacy source=salesforce -> sf_upload_queue (idempotent)',
     '  node cli.js help',
     ''
   ].join('\n'));
@@ -533,6 +541,92 @@ async function main() {
         const dest = path.join(out_dir, f.target_name);
         if (strategy === 'add_new' && fs.existsSync(dest)) { skipped++; continue; }
         const buf = await sf.fetch_content_version_bytes(conn, f.content_version_id);
+        fs.writeFileSync(dest, buf);
+        saved++;
+        console.log(col(C.green, '  saved ') + f.target_name);
+      }
+      console.log(col(C.bold, '\nDownloaded ' + saved + ' file(s)' + (skipped ? ', skipped ' + skipped + ' existing' : '') + ' to ' + out_dir));
+      return;
+    }
+    if (cmd === 'metrics:backfill-source') {
+      // One-time, idempotent: relabel legacy source='salesforce' rows as 'sf_upload_queue' (the SF Email
+      // Queue is new, so all prior salesforce activity was the upload queue). Dry-run -> confirm -> update.
+      const pool = await metrics.get_pool();
+      const n = await metrics.count_source(pool, 'salesforce');
+      console.log('');
+      if (!n) { console.log("  No legacy source='salesforce' rows to backfill (already done, or none)."); await pool.end(); process.exit(0); }
+      console.log(col(C.bold, "Will relabel " + n + " row(s) source 'salesforce' -> 'sf_upload_queue' in " + metrics.TABLE + "."));
+      console.log(col(C.gray, '  Idempotent — safe to re-run. is_test/is_demo and all other values are untouched.'));
+      if (!args.yes && !(await confirm('  Proceed? [y/N] '))) { console.log('  Cancelled.'); await pool.end(); process.exit(0); }
+      const r = await metrics.backfill_source(pool, 'salesforce', 'sf_upload_queue');
+      console.log(col(C.green, '  Updated ' + r.updated + ' row(s).'));
+      await pool.end();
+      process.exit(0);
+    }
+    if (cmd === 'slack:probe' || cmd === 'slack:channels' || cmd === 'slack:list' || cmd === 'slack:pull') {
+      // Slack intake: pull spreadsheet attachments from a channel the bot is in. Read-only except pull.
+      const slack = require('../slack');
+      const cfg = slack.slack_config({ is_test: !!args.test });
+      const check = slack.check_slack_config(cfg);
+      if (!check.ok) { console.error(col(C.red, 'Slack not configured — missing: ' + check.missing.join(', '))); process.exit(2); }
+      const conn = slack.make_connection(cfg);
+      const identity = await slack.auth_test(conn);
+      const channels = await slack.list_member_channels(conn);
+
+      if (cmd === 'slack:probe') {
+        console.log(col(C.bold, '\nSlack OK — bot @' + identity.user + ' on ' + identity.team));
+        console.log(col(C.gray, '  add a channel by inviting it in Slack:  /invite @' + identity.user));
+        console.log(col(C.bold, '\n' + channels.length + ' channel(s) the bot is in:'));
+        channels.forEach(function (c) { console.log('  ' + (c.is_private ? '[priv] ' : '#      ') + String(c.name).padEnd(28) + col(C.gray, c.id)); });
+        const probe_name = String(args.channel || cfg.default_channel || '').replace(/^#/, '');
+        const probe_ch = channels.filter(function (c) { return c.id === args.channel || c.name === probe_name; })[0];
+        if (probe_ch) {
+          try {
+            const files = await slack.list_channel_files(conn, { channel: probe_ch.id, filter: { mode: 'all', tz: slack.DEFAULT_TZ } });
+            console.log(col(C.bold, '\n' + files.length + ' spreadsheet file(s) in #' + probe_ch.name + ' (all dates):'));
+            if (files.length) {
+              const buf = await slack.fetch_file_bytes(conn, files[0].file_id);
+              console.log(col(C.green, '  download check: ' + files[0].target_name + ' -> ' + buf.length + ' bytes ✓'));
+            }
+          } catch (e) { console.log(col(C.yellow, '  channel probe: ' + e.message)); }
+        }
+        console.log('');
+        return;
+      }
+      if (cmd === 'slack:channels') {
+        if (args.json) { console.log(JSON.stringify(channels)); return; }   // machine-readable for the menu pick-list
+        console.log(col(C.bold, '\n' + channels.length + ' channel(s) the bot is in:'));
+        channels.forEach(function (c) { console.log('  ' + (c.is_private ? '[priv] ' : '#      ') + String(c.name).padEnd(28) + col(C.gray, c.id)); });
+        console.log('');
+        return;
+      }
+
+      // slack:list | slack:pull need a channel (--channel id|name, else SLACK_CHANNEL_ID default)
+      const wanted = args.channel || cfg.default_channel;
+      const wanted_name = String(wanted || '').replace(/^#/, '');
+      const match = channels.filter(function (c) { return c.id === wanted || c.name === wanted_name; })[0];
+      if (!match) { console.error(col(C.red, "Channel not found among the bot's channels: " + (wanted || '(none)') + '. Invite the bot first (/invite @' + identity.user + '), or pass --channel.')); process.exit(2); }
+      const mode = args.today ? 'today' : (args.date ? 'specific' : ((args.start || args.end) ? 'range' : 'all'));
+      const filter = { mode: mode, date: args.date, start: args.start, end: args.end, tz: slack.DEFAULT_TZ };
+      let files = await slack.list_channel_files(conn, { channel: match.id, filter: filter });
+      if (args.limit) files = files.slice(0, Number(args.limit));
+      console.log(col(C.bold, '\n' + files.length + ' spreadsheet file(s) in #' + match.name + ':'));
+      files.forEach(function (f, i) {
+        console.log('  ' + String(i + 1).padStart(3) + '. ' + f.target_name + col(C.gray, '  · ' + (f.uploader_name || '—') + ' · ' + f.created_mtn));
+      });
+      if (cmd === 'slack:list') { console.log(''); return; }
+      // slack:pull -> download to a folder (same snake_case names + strategy as sf:pull)
+      const out_dir = args.out || path.join(process.cwd(), 'slack_race_result_downloads');
+      const strategy = args.strategy || 'add_new';
+      fs.mkdirSync(out_dir, { recursive: true });
+      if (strategy === 'wipe_all') {
+        fs.readdirSync(out_dir).forEach(function (fn) { if (/\.(xlsx|xls|csv)$/i.test(fn)) { try { fs.unlinkSync(path.join(out_dir, fn)); } catch (e) { /* ignore */ } } });
+      }
+      let saved = 0, skipped = 0;
+      for (const f of files) {
+        const dest = path.join(out_dir, f.target_name);
+        if (strategy === 'add_new' && fs.existsSync(dest)) { skipped++; continue; }
+        const buf = await slack.fetch_file_bytes(conn, f.file_id);
         fs.writeFileSync(dest, buf);
         saved++;
         console.log(col(C.green, '  saved ') + f.target_name);

@@ -198,4 +198,17 @@ async function cleanup(pool, opts) { return retention.purge_keep_years(pool, T, 
 async function purge_all(pool) { return retention.purge_all(pool, T); }
 async function purge_test(pool) { return retention.purge_test(pool, T); }
 
-module.exports = { get_pool, build_report, report_text, report_blocks, size, cleanup, purge_all, purge_test, TABLE: T, cfg: cfg }
+// Count rows with a given source value (used by the backfill dry-run).
+async function count_source(pool, value) {
+  const rows = await q(pool, 'SELECT COUNT(*) AS n FROM `' + T + '` WHERE source = ?', [value]);
+  return (rows[0] && rows[0].n) || 0;
+}
+
+// One-time, idempotent source rename. The SF Email Queue is new, so every prior source='salesforce'
+// row was the upload queue → relabel them 'sf_upload_queue'. Re-running changes 0 rows.
+async function backfill_source(pool, from_value, to_value) {
+  const [result] = await pool.query('UPDATE `' + T + '` SET source = ? WHERE source = ?', [to_value, from_value]);
+  return { updated: (result && result.affectedRows) || 0 };
+}
+
+module.exports = { get_pool, build_report, report_text, report_blocks, size, cleanup, purge_all, purge_test, count_source, backfill_source, TABLE: T, cfg: cfg }

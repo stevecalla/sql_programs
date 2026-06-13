@@ -52,6 +52,26 @@ function run(cmd, args) {
     p.on('close', function (code) { process.removeListener('SIGINT', ignore); rl.resume(); resolve(code); });
   });
 }
+// Capture the bot's channels as JSON (via the CLI, which loads .env) for a numbered pick-list.
+function slack_channels_json() {
+  try {
+    const out = execSync('node src/cli.js slack:channels --json', { cwd: DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return JSON.parse(out.trim());
+  } catch (e) { return null; }
+}
+// Show a numbered list of the bot's channels and return the chosen id (blank = SLACK_CHANNEL_ID default).
+async function slack_pick_channel() {
+  const chans = slack_channels_json();
+  if (!chans) { console.log(c(YELLOW, '  Could not load channels (is SLACK_BOT_TOKEN set in .env?).')); return clean(await ask('  Channel (id or name, blank = default): ')); }
+  if (!chans.length) { console.log(c(YELLOW, '  The bot is in no channels yet — /invite it in Slack first.')); return ''; }
+  console.log(c(DIM, '\n  Channels the bot is in:'));
+  chans.forEach(function (ch, i) { console.log('    ' + c(BOLD, '[' + (i + 1) + ']') + ' ' + (ch.is_private ? '🔒 ' : '#  ') + ch.name + c(GRAY, '  ' + ch.id)); });
+  const pick = clean(await ask('  Pick a number (or type an id/name; blank = SLACK_CHANNEL_ID default): '));
+  if (!pick) return '';
+  const idx = Number(pick);
+  if (idx >= 1 && idx <= chans.length) return chans[idx - 1].id;
+  return pick;   // user typed an id/name directly
+}
 async function run_test(file, label) {
   console.log(c(DIM, '\n  running ' + label + '…\n'));
   const code = await run('node', ['--test', file]);
@@ -123,9 +143,20 @@ const SECTIONS = [
     { id: 44, label: 'Salesforce — list EMAIL-queue files (prod or test)', desc: 'List Rankings email-queue race-results attachments. Prompts for environment, open-only/all status, and count.', cli: 'node src/cli.js sf:list-email [--all] [--test]', action: 'sf_list_email' },
     { id: 45, label: 'Salesforce — pull EMAIL-queue files to a folder', desc: 'Download Rankings email-queue attachments (snake_case names). Prompts for environment, status, and folder.', cli: 'node src/cli.js sf:pull-email <opts> -o <dir>', action: 'sf_pull_email' }
   ] },
+  { label: 'Slack (pull race-results files)', color: BLUE, items: [
+    { id: 46, label: 'Slack — check connection (probe)', desc: 'Read-only: confirm SLACK_BOT_TOKEN works, show the bot identity, and list the channels it is in. Optionally probe one channel for files.', cli: 'node src/cli.js slack:probe [--channel <id|name>]', action: 'slack_probe' },
+    { id: 47, label: 'Slack — list the bot’s channels', desc: 'List the channels the bot is a member of (+ ids). Invite the bot to a channel in Slack and it shows up here.', cli: 'node src/cli.js slack:channels', action: 'slack_channels' },
+    { id: 48, label: 'Slack — list files (date range)', desc: 'List spreadsheet attachments in a channel for a date range. Prompts for channel + date.', cli: 'node src/cli.js slack:list --channel <id|name> [date opts]', action: 'slack_list' },
+    { id: 49, label: 'Slack — pull files to a folder', desc: 'Download a channel’s spreadsheet attachments (snake_case names) into a folder. Prompts for channel + date + folder + strategy.', cli: 'node src/cli.js slack:pull <opts> -o <dir>', action: 'slack_pull' },
+    { id: 50, label: 'Slack — run Slack tests', desc: 'Run the Slack engine + UI unit tests (mock client, no network).', cli: 'node --test tests/slack_*.test.js', action: 'slack_tests' },
+    { id: 51, label: 'Slack — setup & how-to (future self)', desc: 'Print the runbook: app scopes, getting the bot token into .env, and the self-service /invite channel flow.', action: 'slack_howto' }
+  ] },
+  { label: 'Usage analytics — maintenance', color: CYAN, items: [
+    { id: 52, label: 'Backfill source: salesforce → sf_upload_queue', desc: 'One-time, idempotent relabel of legacy source=salesforce rows (the SF Email Queue is new, so all prior salesforce activity was the upload queue). Dry-run → confirm.', cli: 'node src/cli.js metrics:backfill-source', action: 'metrics_backfill_source' }
+  ] },
   { label: 'Settings', color: GRAY, items: [
-    { id: 46, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 47, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
+    { id: 53, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
+    { id: 54, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
@@ -292,6 +323,53 @@ async function handle(item) {
       await run('node', args);
       break;
     }
+    case 'slack_probe': {
+      const ch = clean(await ask('  Probe a channel too? (id or name, blank = just list channels): '));
+      const ch_args = ch ? ['--channel', ch] : [];
+      await run('node', ['src/cli.js', 'slack:probe'].concat(ch_args));
+      break;
+    }
+    case 'slack_channels': await run('node', ['src/cli.js', 'slack:channels']); break;
+    case 'slack_list': {
+      const ch = await slack_pick_channel();
+      const ch_args = ch ? ['--channel', ch] : [];
+      console.log(c(DIM, '  Date: [1] today  [2] a specific date  [3] a date range  [4] any (latest)'));
+      const pick = clean(await ask('  Choose [4]: ')) || '4';
+      const date_args = [];
+      if (pick === '1') date_args.push('--today');
+      else if (pick === '2') { const d = clean(await ask('  Date (YYYY-MM-DD): ')); if (d) date_args.push('--date', d); }
+      else if (pick === '3') { const a = clean(await ask('  Start (YYYY-MM-DD): ')); const b = clean(await ask('  End (YYYY-MM-DD): ')); if (a) date_args.push('--start', a); if (b) date_args.push('--end', b); }
+      await run('node', ['src/cli.js', 'slack:list'].concat(ch_args, date_args));
+      break;
+    }
+    case 'slack_pull': {
+      const ch = await slack_pick_channel();
+      const ch_args = ch ? ['--channel', ch] : [];
+      console.log(c(DIM, '  Date: [1] today  [2] a specific date  [3] a date range  [4] any (latest)'));
+      const pick = clean(await ask('  Choose [4]: ')) || '4';
+      const date_args = [];
+      if (pick === '1') date_args.push('--today');
+      else if (pick === '2') { const d = clean(await ask('  Date (YYYY-MM-DD): ')); if (d) date_args.push('--date', d); }
+      else if (pick === '3') { const a = clean(await ask('  Start (YYYY-MM-DD): ')); const b = clean(await ask('  End (YYYY-MM-DD): ')); if (a) date_args.push('--start', a); if (b) date_args.push('--end', b); }
+      const folder = clean(await ask('  Save to folder (blank = ./slack_race_result_downloads): '));
+      await run('node', ['src/cli.js', 'slack:pull'].concat(ch_args, date_args, ['-o', folder || 'slack_race_result_downloads', '--strategy', 'add_new']));
+      break;
+    }
+    case 'slack_tests': { console.log(c(DIM, '\n  running Slack engine + UI tests…\n')); const code = await run('node', ['--test', 'tests/slack_dates.test.js', 'tests/slack_client.test.js', 'tests/slack_ui.test.js']); console.log(code === 0 ? c(GREEN, '\n  ✓ Slack tests passed') : c(YELLOW, '\n  ✗ Slack tests failed')); break; }
+    case 'slack_howto': {
+      console.log(c(BLUE, '\n  Slack intake — setup & how-to (future self)\n'));
+      console.log('  One-time app setup (api.slack.com → your app):');
+      console.log(c(DIM, '    1. OAuth & Permissions → Bot Token Scopes: files:read, channels:read, channels:history,'));
+      console.log(c(DIM, '       groups:read, groups:history, users:read. Then reinstall the app.'));
+      console.log(c(DIM, '    2. Copy the Bot User OAuth Token (xoxb-…) into .env as SLACK_BOT_TOKEN (keep it local).'));
+      console.log('\n  Self-service channels (no config, no redeploy):');
+      console.log(c(DIM, '    In Slack, run  /invite @your-bot  in any channel → it auto-appears in the picker (↻ Refresh).'));
+      console.log(c(DIM, '    The web app shows this instruction + a copy button next to the channel dropdown.'));
+      console.log('\n  Point at a different/real channel: just invite the bot there — no env change needed.');
+      console.log('\n  Verify: ' + c(DIM, 'node src/cli.js slack:probe') + '  ·  plan: ' + c(DIM, 'plans_and_notes/SLACK_INTAKE_PLAN.md') + '\n');
+      break;
+    }
+    case 'metrics_backfill_source': await run('node', ['src/cli.js', 'metrics:backfill-source']); break;
     case 'server': console.log(c(DIM, 'Starting server… Ctrl-C to stop.')); await run('node', [SERVER]); break;
     case 'open': {
       const url = 'http://localhost:8018';

@@ -49,7 +49,7 @@
       <button type="button" role="tab" id="sfTabUpload" data-src="upload" class="active" aria-selected="true" aria-controls="sfPanel" title="Race Results Doc files uploaded to Salesforce">SF Upload Queue</button>
       <button type="button" role="tab" id="sfTabEmail" data-src="email" aria-selected="false" aria-controls="sfPanel" title="Spreadsheet attachments on Rankings cases (Email-to-Case)">SF Email Queue</button>
       <button type="button" role="tab" id="sfTabFolder" data-src="folder" aria-selected="false" aria-controls="sfPanel" title="Pick a folder on your computer and load the files locally — nothing is uploaded">From Folder</button>
-      <button type="button" role="tab" id="sfTabSlack" data-src="slack" aria-selected="false" aria-controls="sfPanel" title="Slack Ironman submissions — coming soon">Slack Ironman</button>
+      <button type="button" role="tab" id="sfTabSlack" data-src="slack" aria-selected="false" aria-controls="sfPanel" title="Pull spreadsheet attachments from a Slack channel for a date range">Slack Ironman</button>
     </div>
     <div id="sfPanel" role="tabpanel" aria-label="Race results files" tabindex="0">
     <div class="sf-controls">
@@ -65,10 +65,13 @@
         <option value="closed">Is Closed</option>
         <option value="not_closed" selected>Is Not Closed</option>
       </select></label>
-      <label class="sf-ctl sf-query-only">On <select id="sfField" aria-label="Salesforce date field">
+      <label class="sf-ctl sf-datefield-only">On <select id="sfField" aria-label="Salesforce date field">
         <option value="LastModifiedDate">Last modified</option>
         <option value="CreatedDate">Created</option>
       </select></label>
+      <!-- Slack channel picker (self-service: invite the bot to a channel and it appears here) -->
+      <label class="sf-ctl sf-slack-only hidden">Channel <select id="sfSlackChannel" aria-label="Slack channel"></select></label>
+      <button id="sfSlackRefresh" class="btn ghost sf-slack-only hidden" type="button" title="Reload the channels the bot is in">↻ Refresh</button>
       <!-- From Folder controls (local; no server). Max sits to the RIGHT of Reset here. -->
       <button id="sfFolderChoose" class="btn sf-folder-only hidden" type="button">Choose folder…</button>
       <button id="sfFolderReset" class="btn ghost sf-folder-only hidden" type="button" title="Clear the folder list">↺ Reset</button>
@@ -76,10 +79,11 @@
       <span id="sfFolderPickName" class="dim sf-folder-only hidden"></span>
       <input id="sfFolderInput" type="file" webkitdirectory multiple class="hidden" aria-hidden="true" tabindex="-1">
     </div>
-    <div id="sfSlackPanel" class="sf-slack-panel sf-slack-only hidden">
-      <div class="sf-slack-emoji" aria-hidden="true">🚧</div>
-      <h3>Slack Ironman submissions — coming soon</h3>
-      <p class="dim">We're building a lane to pull Ironman race results straight from Slack. Hang tight — this one's under construction.</p>
+    <div id="sfSlackPanel" class="sf-slack-note sf-slack-only hidden" role="note">
+      <span class="dim">Don’t see your channel? In Slack, run</span>
+      <code id="sfSlackInvite" class="sf-invite-code">/invite @your-bot</code>
+      <button id="sfSlackInviteCopy" class="btn ghost sm sf-invite-copy" type="button" title="Copy the invite command">📋 Copy</button>
+      <span class="dim">in that channel, then click ↻ Refresh.</span>
     </div>
     <div id="sfStatus" class="sf-status dim" role="status"></div>
     <div id="sfLogin" class="sf-login hidden">

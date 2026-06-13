@@ -213,11 +213,29 @@ describe('intake tab bar — SF Upload · SF Email · From Folder · Slack Ironm
     assert.match(app_js, /'Folder: ' \+ name/, 'folder tab reuses the original "Folder:" path label');
   });
 
-  test('Slack Ironman tab shows an under-construction placeholder (no functionality yet)', () => {
-    assert.ok(html.indexOf('id="sfSlackPanel"') >= 0, 'slack placeholder panel present');
-    assert.match(html, /Slack Ironman submissions — coming soon/, 'on-brand coming-soon copy');
+  test('Slack Ironman tab is functional: channel picker, invite copy chip, source-aware endpoints', () => {
+    assert.ok(html.indexOf('id="sfSlackChannel"') >= 0, 'channel picker present');
+    assert.ok(html.indexOf('id="sfSlackRefresh"') >= 0, 'refresh button present');
+    assert.ok(html.indexOf('id="sfSlackInvite"') >= 0 && html.indexOf('id="sfSlackInviteCopy"') >= 0, 'invite code + copy chip present');
+    assert.ok(html.indexOf('coming soon') < 0, 'under-construction copy is gone (tab is functional)');
+    assert.match(app_js, /function sf_load_channels\b/, 'app.js auto-populates the bot channels');
+    assert.match(app_js, /\/api\/slack\/channels/, 'calls the channels endpoint');
+    assert.match(app_js, /\/api\/slack\/files/, 'lists slack files by date');
+    assert.match(app_js, /'\/api\/slack\/file\/'/, 'downloads slack file bytes source-aware');
+    assert.match(app_js, /S\.sf_source === 'slack'/, 'app.js branches on the slack source');
     const css = fs.readFileSync(path.join(ROOT, 'public', 'css', 'app.css'), 'utf8');
-    assert.match(css, /\.sf-slack-panel\{/, 'slack placeholder is styled');
+    assert.match(css, /\.sf-slack-note\{/, 'invite-note is styled');
+  });
+
+  test('intake-by-tab analytics: SF source split into sf_upload_queue / sf_email_queue (+ slack)', () => {
+    assert.match(app_js, /function sf_queue_source\b/, 'app.js derives the per-tab analytics source');
+    assert.match(app_js, /'sf_upload_queue'/, 'SF Upload Queue source value');
+    assert.match(app_js, /'sf_email_queue'/, 'SF Email Queue source value');
+    assert.match(app_js, /S\.sf_source === 'slack'\) \? 'slack'/, 'slack tab tags source=slack');
+    // server backfill + count helpers exist on metrics_report
+    const mr = fs.readFileSync(path.join(ROOT, 'metrics', 'metrics_report.js'), 'utf8');
+    assert.match(mr, /function backfill_source\b/, 'metrics_report exposes backfill_source');
+    assert.match(mr, /SET source = \? WHERE source = \?/, 'backfill is a targeted UPDATE');
   });
 });
 

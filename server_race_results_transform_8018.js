@@ -362,6 +362,15 @@ function create_app() {
     console.error('[sf] route mount skipped:', e.message);
   }
 
+  // Slack race-results intake (optional feature). Same mx_session auth. Lazy-required so the server
+  // still boots if SLACK_* env is absent; /api/slack/* returns 503 "not configured" until
+  // SLACK_BOT_TOKEN is set. Bot token stays server-side; file bytes stream in-memory (no disk).
+  try {
+    require('./src/race_results_transform/slack/slack_routes').mount_slack_routes(app, require_dash_auth);
+  } catch (e) {
+    console.error('[slack] route mount skipped:', e.message);
+  }
+
   // Optional legacy .xls support: serve SheetJS's browser build straight from the installed `xlsx`
   // npm package (so `npm install xlsx` is all that's needed — no vendored copy). The app lazy-loads
   // this only when an .xls is opened. Falls back to a committed public/vendor copy if node_modules

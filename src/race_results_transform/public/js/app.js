@@ -407,7 +407,7 @@
   function sf_subtitle(src) {
     if (src === 'email') return 'pull race-results attachments from Rankings cases (Email-to-Case) — same convert/review/download flow';
     if (src === 'folder') return 'pick a folder on your computer and load the files into the queue — nothing is uploaded';
-    if (src === 'slack') return 'Slack Ironman submissions — coming soon';
+    if (src === 'slack') return 'pull spreadsheet attachments from a Slack channel for a date range — same convert/review/download flow';
     return 'download race-results files for a date and work them as a queue — the convert/review/download flow is unchanged';
   }
   function sf_default_sort(src) {
@@ -428,11 +428,45 @@
     document.querySelectorAll('.sf-email-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'email'); });
     document.querySelectorAll('.sf-folder-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'folder'); });
     document.querySelectorAll('.sf-slack-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'slack'); });
-    document.querySelectorAll('.sf-query-only').forEach(function (el) { el.classList.toggle('hidden', src === 'folder' || src === 'slack'); });
-    document.querySelectorAll('.sf-cap-only').forEach(function (el) { el.classList.toggle('hidden', src === 'slack'); });   // Max applies to upload/email/folder
-    document.querySelectorAll('.sf-dl-server').forEach(function (el) { el.classList.toggle('hidden', src !== 'upload' && src !== 'email'); });
+    document.querySelectorAll('.sf-query-only').forEach(function (el) { el.classList.toggle('hidden', src === 'folder'); });          // date row: upload/email/slack
+    document.querySelectorAll('.sf-datefield-only').forEach(function (el) { el.classList.toggle('hidden', src === 'folder' || src === 'slack'); });  // 'On' Last-modified/Created: SF only
+    document.querySelectorAll('.sf-cap-only').forEach(function (el) { el.classList.toggle('hidden', false); });                       // Max applies everywhere
+    document.querySelectorAll('.sf-dl-server').forEach(function (el) { el.classList.toggle('hidden', src === 'folder'); });           // server download: upload/email/slack
     var sub = $('sfCardSub'); if (sub) sub.textContent = sf_subtitle(src);
     sf_reset();   // clear the current list/selection when switching sources
+    if (src === 'slack') sf_load_channels();   // self-service: populate the picker from the bot's channels
+  }
+  // ----- Slack channel picker: self-service. The dropdown is the channels the BOT is a member of
+  // (users.conversations); invite the bot to a channel in Slack and it appears here on Refresh.
+  function sf_render_invite() {
+    var code = $('sfSlackInvite'); if (code) code.textContent = '/invite @' + (S.slack_bot_handle || 'your-bot');
+  }
+  function sf_flash_copied() {
+    var b = $('sfSlackInviteCopy'); if (!b) return;
+    var prev = b.textContent; b.textContent = 'Copied!'; setTimeout(function () { b.textContent = prev; }, 1200);
+  }
+  function sf_load_channels() {
+    var sel = $('sfSlackChannel'); if (!sel) return;
+    var prev = sel.value;
+    sf_set_status('Loading the bot’s channels…');
+    sf_fetch_json('/api/slack/channels').then(function (j) {
+      S.slack_bot_handle = (j.bot && j.bot.handle) || 'your-bot';
+      sf_render_invite();
+      var chans = j.channels || [];
+      if (!chans.length) {
+        sel.innerHTML = '<option value="">(no channels yet — invite the bot, then ↻ Refresh)</option>';
+      } else {
+        sel.innerHTML = chans.map(function (c) { return '<option value="' + esc(c.id) + '">' + (c.is_private ? '🔒 ' : '# ') + esc(c.name) + '</option>'; }).join('');
+        var saved = ''; try { saved = window.localStorage.getItem('rrt_slack_channel') || ''; } catch (e) { /* ignore */ }
+        var want = prev || saved || j.default_channel || '';
+        if (want && chans.some(function (c) { return c.id === want; })) sel.value = want;
+      }
+      sf_set_authed(true);
+      sf_set_status('');
+    }).catch(function (e) {
+      if (e.needs_login) { sf_set_authed(false); sf_set_status('Sign in to use Slack.'); sf_show_login(); }
+      else sf_set_status('Could not load Slack channels: ' + e.message, true);
+    });
   }
   // From/To date fields → the server's mode/date/start/end contract. "Any date" = no filter;
   // From==To = a single day; otherwise a range (capped at 14 days).
@@ -444,7 +478,11 @@
       var a = $('sfFrom').value, b = $('sfTo').value;
       p = (a && b && a === b) ? { mode: 'specific', field: field, date: a } : { mode: 'range', field: field, start: a, end: b };
     }
-    if (S.sf_source === 'email') {
+    if (S.sf_source === 'slack') {
+      // slack: a channel + the date window (no SF field/status/broaden); the route ignores `field`.
+      delete p.field;
+      p.channel = ($('sfSlackChannel') && $('sfSlackChannel').value) || '';
+    } else if (S.sf_source === 'email') {
       // email queue status maps to Case IsClosed (no Broaden — that's an Upload-Queue search lever)
       p.status = ($('sfEmailStatus') && $('sfEmailStatus').value) || 'not_closed';
     } else if ($('sfBroaden') && $('sfBroaden').checked) {
@@ -515,9 +553,13 @@
   }
   function sf_list() {
     if (!sf_range_ok()) return;
+    if (S.sf_source === 'slack' && !($('sfSlackChannel') && $('sfSlackChannel').value)) {
+      sf_set_status('Pick a Slack channel first — if the list is empty, invite the bot to a channel (see the note), then ↻ Refresh.', true);
+      return;
+    }
     var p = sf_query_params();
     var qs = Object.keys(p).filter(function (k) { return p[k]; }).map(function (k) { return k + '=' + encodeURIComponent(p[k]); }).join('&');
-    var endpoint = (S.sf_source === 'email') ? '/api/sf/email-files' : '/api/sf/files';
+    var endpoint = (S.sf_source === 'slack') ? '/api/slack/files' : (S.sf_source === 'email') ? '/api/sf/email-files' : '/api/sf/files';
     sf_set_status(S.sf_source === 'email' ? 'Searching the email queue…' : 'Searching Salesforce…');
     sf_fetch_json(endpoint + '?' + qs).then(function (j) {
       S.sf_files = j.files || [];
@@ -584,6 +626,12 @@
   }
   // Files-found table columns by source. val() = plain text (sort/search), cell() = HTML (display).
   function sf_columns() {
+    if (S.sf_source === 'slack') return [
+      { key: 'date', label: 'Date (MT)', val: function (f) { return String(f.created_ms || 0); }, cell: function (f) { return esc(f.created_mtn || ''); } },
+      { key: 'uploader', label: 'Uploader', val: function (f) { return f.uploader_name || ''; }, cell: function (f) { return esc(f.uploader_name || '—'); } },
+      { key: 'file', label: 'File name', val: function (f) { return f.target_name || f.name || ''; }, cell: function (f) { return '<span title="' + esc(f.target_name || f.name) + '">' + esc(f.name || f.target_name) + '</span>'; } },
+      { key: 'type', label: 'Type', val: function (f) { return sf_file_ext(f); }, cell: function (f) { return sf_type_cell(sf_file_ext(f)); } }
+    ];
     if (S.sf_source === 'folder') return [
       { key: 'file', label: 'File name', val: function (f) { return f.target_name || ''; }, cell: function (f) { return '<span title="' + esc(f.target_name) + '">' + esc(f.target_name) + '</span>'; } },
       { key: 'type', label: 'Type', val: function (f) { return sf_file_ext(f); }, cell: function (f) { return sf_type_cell(sf_file_ext(f)); } },
@@ -838,7 +886,8 @@
     var w = await fh.createWritable(); await w.write(bytes); await w.close();
   }
   function sf_get_bytes(f) {
-    return fetch('/api/sf/file/' + encodeURIComponent(f.content_version_id) + '?name=' + encodeURIComponent(f.target_name), { credentials: 'same-origin' })
+    var base = (S.sf_source === 'slack') ? '/api/slack/file/' : '/api/sf/file/';
+    return fetch(base + encodeURIComponent(f.content_version_id) + '?name=' + encodeURIComponent(f.target_name), { credentials: 'same-origin' })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); });
   }
   function sf_download_finish(saved, picks) {   // partial-aware finish (cancel or success)
@@ -891,7 +940,7 @@
     } else {
       var folder = $('sfFolderPath').value; S.sf_sig = 'path:' + folder;
       var t0 = Date.now(), step = Math.min(500, Math.ceil(2000 / picks.length));  // ~2s paced progress
-      sf_fetch_json('/api/sf/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder: folder, strategy: strategy, items: picks.map(function (f) { return { id: f.content_version_id, name: f.target_name }; }) }) })
+      sf_fetch_json((S.sf_source === 'slack') ? '/api/slack/save' : '/api/sf/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder: folder, strategy: strategy, items: picks.map(function (f) { return { id: f.content_version_id, name: f.target_name }; }) }) })
         .then(function () {
           var out = [];
           return picks.reduce(function (chain, f, i) {
@@ -923,10 +972,14 @@
     show('compareCard'); show('filesTab'); set_compare_view('files'); render_queue();
     $('compareCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  // Salesforce wrapper: map downloaded files into the generic queue.
+  // The analytics `source` for the active Get-Race-Results tab (intake-by-tab breakdown).
+  function sf_queue_source() {
+    return (S.sf_source === 'slack') ? 'slack' : (S.sf_source === 'email') ? 'sf_email_queue' : 'sf_upload_queue';
+  }
+  // Salesforce / Slack wrapper: map downloaded files into the generic queue.
   function sf_build_queue(saved) {
     build_queue(saved.map(function (s) { return { id: s.id, name: s.name, bytes: s.bytes || null, program: s.f.program_name, owner: s.f.owner_name, sanction: s.f.sanction_id }; }),
-      { source: 'salesforce', dir: S.sf_dir, folder: S.sf_folder || ($('sfFolderPath') && $('sfFolderPath').value) || '', sig: S.sf_sig });
+      { source: sf_queue_source(), dir: S.sf_dir, folder: S.sf_folder || ($('sfFolderPath') && $('sfFolderPath').value) || '', sig: S.sf_sig });
   }
   function sf_stage_html(label, on) { return '<span class="sf-q-stage' + (on ? ' done' : '') + '"><span class="dot"></span>' + label + '</span>'; }
   function queue_cmp_val(it, key) {
@@ -1079,6 +1132,16 @@
     if ($('sfFolderReset')) $('sfFolderReset').addEventListener('click', sf_folder_reset);
     if ($('sfFolderInput')) $('sfFolderInput').addEventListener('change', function () { sf_folder_from_input($('sfFolderInput').files); });
     if ($('sfFolderLoadBtn')) $('sfFolderLoadBtn').addEventListener('click', sf_folder_load);
+    if ($('sfSlackRefresh')) $('sfSlackRefresh').addEventListener('click', sf_load_channels);
+    if ($('sfSlackChannel')) $('sfSlackChannel').addEventListener('change', function () {
+      try { window.localStorage.setItem('rrt_slack_channel', $('sfSlackChannel').value || ''); } catch (e) { /* ignore */ }
+      if (S.sf_files) sf_reset();
+    });
+    if ($('sfSlackInviteCopy')) $('sfSlackInviteCopy').addEventListener('click', function () {
+      var text = '/invite @' + (S.slack_bot_handle || 'your-bot');
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(sf_flash_copied, function () { /* ignore */ });
+      else sf_flash_copied();
+    });
     if ($('sfFolderPath')) $('sfFolderPath').addEventListener('input', function () { S.sf_folder = $('sfFolderPath').value; try { window.localStorage.setItem('rrt_sf_folder', S.sf_folder); } catch (e) { /* ignore */ } sf_update_dl_enabled(); });
     if ($('sfSearch')) $('sfSearch').addEventListener('input', sf_render);
     if ($('sfLimit')) $('sfLimit').addEventListener('change', sf_apply_limit);
