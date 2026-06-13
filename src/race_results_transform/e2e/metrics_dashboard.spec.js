@@ -42,11 +42,11 @@ test.describe('race_results_transform — metrics dashboard', () => {
     await expect(page.locator('#ask-q')).toBeVisible();
     await expect(page.locator('#ask-model')).toBeVisible();
     await expect(page.locator('#ask-go')).toBeVisible();
-    // per-chart toolbar (expand/png/csv/table) on all five charts (funnel/days/modes/hours/demo)
-    await expect(page.locator('.mx-tools button[data-act="expand"]')).toHaveCount(5);
-    await expect(page.locator('.mx-tools button[data-act="png"]')).toHaveCount(5);
-    await expect(page.locator('.mx-tools button[data-act="csv"]')).toHaveCount(5);
-    await expect(page.locator('.mx-tools button[data-act="table"]')).toHaveCount(5);
+    // per-chart toolbar (expand/png/csv/table) on all six charts (funnel/days/modes/hours/demo/source)
+    await expect(page.locator('.mx-tools button[data-act="expand"]')).toHaveCount(6);
+    await expect(page.locator('.mx-tools button[data-act="png"]')).toHaveCount(6);
+    await expect(page.locator('.mx-tools button[data-act="csv"]')).toHaveCount(6);
+    await expect(page.locator('.mx-tools button[data-act="table"]')).toHaveCount(6);
     // Try Me vs real activity chart
     await expect(page.locator('canvas#chart_demo')).toBeVisible();
     // last-activity chip (label above value) + 2-row header

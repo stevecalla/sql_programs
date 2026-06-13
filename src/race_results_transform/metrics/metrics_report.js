@@ -100,6 +100,16 @@ async function build_report(pool, opts) {
     "SUM(event_name IN ('download','split_download_used') AND (is_demo IS NULL OR is_demo=0)) dl_real " +
     "FROM " + W, A))[0] || {};
 
+  // Intake-by-tab: split uploads/conversions/downloads by `source` (which intake the file came from —
+  // upload | try_me | sf_upload_queue | sf_email_queue | folder | slack). Only file-bearing events carry
+  // a source, so page_view/dashboard_view (source NULL) are excluded.
+  const by_source = await q(pool,
+    "SELECT source src, " +
+    "SUM(event_name='file_uploaded') uploads, " +
+    "SUM(event_name='conversion_completed') conversions, " +
+    "SUM(event_name IN ('download','split_download_used')) downloads " +
+    "FROM " + W + " AND source IS NOT NULL AND source <> '' GROUP BY source ORDER BY uploads DESC, downloads DESC", A);
+
   // Last User Activity = most recent REAL activity; exclude server-side dashboard_view
   // events (each /metrics open fires one) so merely viewing the dashboard never bumps the
   // date. rows_total stays unfiltered — it's a DB-size health figure, not an activity figure.
@@ -144,6 +154,7 @@ async function build_report(pool, opts) {
       { event: 'Downloads', demo: n0(demo.dl_demo), real: n0(demo.dl_real) }
     ],
     demo: { uploads: n0(demo.up_demo), conversions: n0(demo.cv_demo), downloads: n0(demo.dl_demo) },
+    by_source: by_source.map(function (r) { return { source: r.src, uploads: n0(r.uploads), conversions: n0(r.conversions), downloads: n0(r.downloads) }; }),
     health: {
       rows: n0(health.rows_total),
       test_rows: n0(health.test_rows),   // is_test=1 rows (deliberate test runs) — purgeable from the dashboard

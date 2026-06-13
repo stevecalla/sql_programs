@@ -39,8 +39,11 @@ channel via env vars now; flip the env to the real channel later — **no code c
 - ⬜ Phase 2 — Server routes (`/api/slack/*`, mx_session) + CLI + menu ("Slack" section + how-to runbook)
 - ⬜ Phase 3 — Browser: make the Slack Ironman tab functional (channel picker + copy chip) + `source='slack'`
 - ⬜ Phase 4 — Tests (ui + e2e) + docs
-- ⬜ Phase 5 — Intake-by-tab analytics: split SF source into `sf_upload_queue`/`sf_email_queue`, **backfill**
-  legacy `salesforce` rows, `by_source` report + dashboard "Intake by tab" chart + Ask-data chip
+- ✅ Phase 5 — Intake-by-tab analytics: SF source split into `sf_upload_queue`/`sf_email_queue` (via
+  `sf_queue_source`), `metrics:backfill-source` (idempotent legacy `salesforce` → `sf_upload_queue`),
+  `by_source` report aggregation + dashboard **"Intake by tab"** chart (`chart_source`) + Ask-data chip.
+  (Fixed the source-rename fallout: `sf_can_reload` + the sanction chip now use `!== 'folder'` /
+  `is_sf_download_source`.)
 
 ---
 

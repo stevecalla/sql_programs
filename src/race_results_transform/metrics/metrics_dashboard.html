@@ -174,6 +174,7 @@
     </div>
     <div class="mx-ask-suggest" id="ask-suggest">
       <button type="button">How many uploads today, and list them in a table?</button>
+      <button type="button">Uploads by source (intake tab) this week, in a table?</button>
       <button type="button">How many people used the converter last week?</button>
       <button type="button">What is the conversion rate from upload to download?</button>
       <button type="button">What are the most common errors by type?</button>
@@ -242,6 +243,11 @@
     <div class="mx-ph"><h2>Try Me vs real activity</h2><div class="mx-tools" data-chart="chart_demo"><button type="button" data-act="expand" title="Expand">⤢ Expand</button><button type="button" data-act="png" title="Export PNG">⬇ PNG</button><button type="button" data-act="csv" title="Export CSV">⬇ CSV</button><button type="button" data-act="table" title="Switch to table view">⇄ Table</button></div></div>
     <div class="mx-canvas-wrap"><canvas id="chart_demo" height="150"></canvas></div>
     <div class="mx-flip" id="chart_demo_table" hidden></div></div>
+
+  <div class="mx-panel">
+    <div class="mx-ph"><h2>Intake by tab — which source the files came from</h2><div class="mx-tools" data-chart="chart_source"><button type="button" data-act="expand" title="Expand">⤢ Expand</button><button type="button" data-act="png" title="Export PNG">⬇ PNG</button><button type="button" data-act="csv" title="Export CSV">⬇ CSV</button><button type="button" data-act="table" title="Switch to table view">⇄ Table</button></div></div>
+    <div class="mx-canvas-wrap"><canvas id="chart_source" height="160"></canvas></div>
+    <div class="mx-flip" id="chart_source_table" hidden></div></div>
 
   <div class="mx-panel"><h2>Split-by-group downloads</h2><div id="splits" class="dim">—</div></div>
 
@@ -392,6 +398,14 @@
       [ { label:'Try Me (fake)', data:ds.map(function(x){return x.demo;}), color:'#e0a200' },
         { label:'Real', data:ds.map(function(x){return x.real;}), color:cssvar('--brand') } ], false);
     register('chart_demo', 'Try Me vs real activity', ['Activity','Try Me','Real'], ds.map(function(x){return [x.event, x.demo, x.real];}));
+    var bs = d.by_source || [];
+    var SRC_LABEL = { upload:'Manual upload', try_me:'Try Me', sf_upload_queue:'SF Upload Queue', sf_email_queue:'SF Email Queue', folder:'From Folder', slack:'Slack', salesforce:'Salesforce (legacy)' };
+    var src_labels = bs.map(function(x){ return SRC_LABEL[x.source] || x.source; });
+    multibar('chart_source', src_labels,
+      [ { label:'Uploads', data:bs.map(function(x){return x.uploads;}), color:cssvar('--brand') },
+        { label:'Conversions', data:bs.map(function(x){return x.conversions;}), color:cssvar('--dim') },
+        { label:'Downloads', data:bs.map(function(x){return x.downloads;}), color:cssvar('--accent') } ], false);
+    register('chart_source', 'Intake by tab', ['Source','Uploads','Conversions','Downloads'], bs.map(function(x){return [SRC_LABEL[x.source]||x.source, x.uploads, x.conversions, x.downloads];}));
     var hours=[], hv=[];
     for (var h=0; h<24; h++){ hours.push(h); var f = d.by_hour.filter(function(x){return x.hour===h;})[0]; hv.push(f?f.n:0); }
     bar('chart_hours', hours, hv, cssvar('--brand'));

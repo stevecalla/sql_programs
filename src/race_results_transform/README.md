@@ -302,7 +302,8 @@ client / report render); the 8018 server **auto-creates the table at startup**
 - **Dashboard**: funnel (visit→upload→conversion→download→start-over), activity-by-day
   (visits·uploads·downloads·start-overs — grouped for ≤14 days, auto-stacked beyond), downloads-by-type +
   a Split-by-group panel, a **Try Me vs real activity** chart (demo vs real uploads/conversions/
-  downloads) + a **Try Me** KPI card, a **Test rows** KPI card (count of `is_test=1` rows), top users
+  downloads) + a **Try Me** KPI card, an **Intake by tab** chart (uploads/conversions/downloads per source —
+  manual upload · SF Upload Queue · SF Email Queue · Folder · Slack), a **Test rows** KPI card (count of `is_test=1` rows), top users
   (visits·uploads·downloads·start-overs, timezone + last activity), a Start-over KPI card, ↻ Refresh +
   auto-refresh, dark/light, and a quick **"Uploads today, in a table"** ask-box suggestion chip. When there
   are test rows, a **Purge test** button (in the controls row, left of the light/dark toggle) deletes only

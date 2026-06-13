@@ -605,7 +605,7 @@ async function main() {
       const wanted = args.channel || cfg.default_channel;
       const wanted_name = String(wanted || '').replace(/^#/, '');
       const match = channels.filter(function (c) { return c.id === wanted || c.name === wanted_name; })[0];
-      if (!match) { console.error(col(C.red, "Channel not found among the bot's channels: " + (wanted || '(none)') + '. Invite the bot first (/invite @' + identity.user + '), or pass --channel.')); process.exit(2); }
+      if (!match) { console.error(col(C.red, 'Channel not found among the channels the bot is in: ' + (wanted || '(none)') + '. Invite the bot first (/invite @' + identity.user + '), or pass --channel.')); process.exit(2); }
       const mode = args.today ? 'today' : (args.date ? 'specific' : ((args.start || args.end) ? 'range' : 'all'));
       const filter = { mode: mode, date: args.date, start: args.start, end: args.end, tz: slack.DEFAULT_TZ };
       let files = await slack.list_channel_files(conn, { channel: match.id, filter: filter });

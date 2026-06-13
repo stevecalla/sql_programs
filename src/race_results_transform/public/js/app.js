@@ -44,7 +44,7 @@
     dl_format: 'csv', dl_fields: { id: '', type: '', distance: '', name: '' },  // download format + filename builder
     dl_excel_safe: false,   // CSV only: wrap DOB/Recorded Time as Excel text so Excel keeps the format on open
     is_demo: false,  // true while viewing the built-in "Try me" sample (fake data) — stamps is_demo on its events
-    source: null,    // where the active file came from: null/'upload' | 'salesforce' | 'folder' (try_me derives from is_demo)
+    source: null,    // intake of the active file: 'upload' (manual) | 'sf_upload_queue' | 'sf_email_queue' | 'folder' | 'slack' (try_me derives from is_demo)
     // Salesforce intake / queue
     sf_files: null, sf_selected: {}, sf_sort: { key: 'date', dir: 'desc' }, sf_cancel: false, sf_authed: false,
     sf_source: 'upload',   // 'upload' | 'email' (Salesforce) | 'folder' (local pick) | 'slack' (placeholder)
@@ -976,6 +976,11 @@
   function sf_queue_source() {
     return (S.sf_source === 'slack') ? 'slack' : (S.sf_source === 'email') ? 'sf_email_queue' : 'sf_upload_queue';
   }
+  // A Salesforce-downloaded queue source (upload or email queue, or legacy 'salesforce') — used where the
+  // queue behaves like the SF flow (sanction chip). Slack/folder are separate.
+  function is_sf_download_source(src) {
+    return src === 'sf_upload_queue' || src === 'sf_email_queue' || src === 'salesforce';
+  }
   // Salesforce / Slack wrapper: map downloaded files into the generic queue.
   function sf_build_queue(saved) {
     build_queue(saved.map(function (s) { return { id: s.id, name: s.name, bytes: s.bytes || null, program: s.f.program_name, owner: s.f.owner_name, sanction: s.f.sanction_id }; }),
@@ -1070,7 +1075,9 @@
   // Is the queue's source folder available to re-read from? A directory handle (Chrome/Edge, either
   // source) or — for the Salesforce server-folder fallback only — a folder path.
   function sf_can_reload() {
-    return !!(S.queue_dir || (S.queue_source === 'salesforce' && (S.queue_folder || ($('sfFolderPath') && $('sfFolderPath').value))));
+    // server-downloaded sources (SF upload/email, Slack, legacy salesforce) reload from a folder path;
+    // the local-folder source reloads via its dir handle (S.queue_dir). Anything but 'folder' is server-side.
+    return !!(S.queue_dir || (S.queue_source !== 'folder' && (S.queue_folder || ($('sfFolderPath') && $('sfFolderPath').value))));
   }
   // Re-read a queue file's CURRENT bytes from disk (picks up edits made in Excel), then re-run the
   // pipeline. Resets that row's status — Converted re-runs and Downloaded clears (the prior download
@@ -1357,7 +1364,7 @@
       '<span class="verdict">' + esc(sc.verdict) + '</span>' +
       '<span class="chips">' +
         '<span class="chip filechip" title="Uploaded file">📄 ' + esc(S.file_display || S.file_name) + '</span>' +
-        ((S.source === 'salesforce' && S.active_sanction) ? '<span class="chip sanctionchip" title="Salesforce Sanctioning ID (Program.cfg_Id__c) — leads the download filename">🏷 Sanction <b>' + esc(S.active_sanction) + '</b></span>' : '') +
+        ((is_sf_download_source(S.source) && S.active_sanction) ? '<span class="chip sanctionchip" title="Salesforce Sanctioning ID (Program.cfg_Id__c) — leads the download filename">🏷 Sanction <b>' + esc(S.active_sanction) + '</b></span>' : '') +
         '<span class="chip" title="Athlete rows written to the converted file"><b>' + n(kept_out) + '</b> rows</span>' +
         (nex > 0 ? '<span class="chip chip-del" title="Rows you deleted — left out of the download. Restore them from the original table."><b>' + n(nex) + '</b> deleted</span>' : '') +
         '<span class="chip" title="Highlighted cells still needing a look — approve or edit them to clear"><b>' + n(flagged) + '</b> flagged values</span>' +

@@ -67,7 +67,7 @@ describe('salesforce intake — UI + wiring', () => {
     assert.match(app_js, /key: 'sanction'/, 'SF list is sortable by sanction (column spec)');
     assert.match(app_js, /S\.active_sanction = it\.sanction/, 'open_queue_file records the active sanction for the readout');
     assert.match(app_js, /class="chip sanctionchip"/, 'summary bar renders a visible Sanction readout chip');
-    assert.match(app_js, /S\.source === 'salesforce' && S\.active_sanction/, 'readout only shows for Salesforce files with a sanction');
+    assert.match(app_js, /is_sf_download_source\(S\.source\) && S\.active_sanction/, 'readout only shows for Salesforce (upload/email) files with a sanction');
   });
 
   test('sanction id stays SF-only: blanked for manual upload, folder open, and Start over', () => {
