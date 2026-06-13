@@ -346,6 +346,31 @@ the SAME engine.
   `render_queue` shows Program/Owner for SF and **File name · Modified** for a folder; `sf_reload_file`/
   `sf_can_reload` read from `S.queue_dir`/`S.queue_folder`; `open_queue_file` stamps `S.source` from the item.
 
+### Email Queue (second Salesforce source — Email-to-Case)
+A **segmented toggle** at the top of the Get-Race-Results card switches between the **Upload Queue** (the
+`Race Results Doc` SOSL path above) and the **Email Queue** — spreadsheet attachments on OPEN cases in the
+**Rankings** queue. Plan + the verified SOQL chain live in **`sf/EMAIL_QUEUE_PLAN.md`**.
+- **Engine** `sf/sf_email.js` `list_email_queue_files(conn, opts)` runs the chain
+  `Group(Type='Queue', DeveloperName=cfg_Rankings)` → `Case(OwnerId=queue [, IsClosed=false])` →
+  `EmailMessage(HasAttachment=true)` → `ContentDocumentLink` → `ContentVersion(IsLatest, ext filter)`,
+  dedups by document, and best-effort parses **sanction + program from the email Subject** (`parse_subject`;
+  blank/placeholder most of the time) with an OPTIONAL `Program WHERE cfg_Id__c=<parsed>` upgrade. Sender =
+  `FromName||FromAddress` (also aliased to `owner_name` so the shared queue/download reuse it). **Opened =
+  `Case.CreatedDate`, Modified = `Case.LastModifiedDate`** (matches the SF "Queue: Rankings" list view and the
+  date filter); the email's `MessageDate` and the ContentVersion's own dates are also captured on the record
+  (`message_date_*`) if we ever switch the columns to those. `SF_RANKINGS_QUEUE` (default `cfg_Rankings`) +
+  `SF_EMAIL_SANCTION_RE` configure it. Default table sort = **Modified desc**.
+- **Server** `GET /api/sf/email-files` (same `mx_session`; `status=open|all`); download reuses `/api/sf/file/:id`.
+- **CLI** `node src/cli.js sf:list-email [--all] [date opts] [--test]` / `sf:pull-email`; menu items 44/45.
+- **Browser**: `S.sf_source` ('upload'|'email') drives `sf_columns()` — one shared `#sfTable` whose thead+rows
+  are rebuilt per source (Upload: `Date·Program·Sanction·Owner·File·Type`; Email:
+  `Opened·Modified·Status·Subject·Sender·Sanction·Program·File·Type`). `#sfEmailStatus` is 3-way, mapped
+  straight to Case `IsClosed` — **Is Not Closed (default, `IsClosed=false`)** · Is Closed (`IsClosed=true`)
+  · All (no filter) — and `sf_set_source` toggles the controls (`.sf-upload-only`/`.sf-email-only`).
+  `sf_select_newest` only **pre-checks not-closed rows** for email (so All lists both but auto-selects just
+  the not-closed ones; Is Closed pre-selects none). Files flow into the SAME Files queue + download as the
+  upload path. Missing program/sanction is NOT flagged for email (it's the norm there).
+
 ## Local-folder intake (Convert files from a folder)
 
 A second local intake (`#folderCard`, `wire_folder`/`folder_*` in `app.js`) — pick a folder on your

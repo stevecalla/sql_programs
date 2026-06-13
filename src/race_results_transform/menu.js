@@ -119,11 +119,13 @@ const SECTIONS = [
   { label: 'Salesforce (pull race-results files)', color: BLUE, items: [
     { id: 41, label: 'Salesforce — list files (today, MT)', desc: 'List Race Results Doc files modified today (Mountain Time). Needs SF_* env vars in .env.', cli: 'node src/cli.js sf:list --today', action: 'sf_list' },
     { id: 42, label: 'Salesforce — list recent files (precise or broad, prod or test)', desc: 'List recent files newest-first. Prompts: environment (prod/sandbox), search (precise term or broadened OR terms), and how many — so you can compare recall.', cli: 'node src/cli.js sf:list [--test] [--search "..."] --limit N', action: 'sf_list_recent' },
-    { id: 43, label: 'Salesforce — pull files to a folder', desc: 'Download Race Results Doc files (snake_case names) into a folder. Prompts for date + folder + strategy.', cli: 'node src/cli.js sf:pull <opts> -o <dir>', action: 'sf_pull' }
+    { id: 43, label: 'Salesforce — pull files to a folder', desc: 'Download Race Results Doc files (snake_case names) into a folder. Prompts for date + folder + strategy.', cli: 'node src/cli.js sf:pull <opts> -o <dir>', action: 'sf_pull' },
+    { id: 44, label: 'Salesforce — list EMAIL-queue files (prod or test)', desc: 'List Rankings email-queue race-results attachments. Prompts for environment, open-only/all status, and count.', cli: 'node src/cli.js sf:list-email [--all] [--test]', action: 'sf_list_email' },
+    { id: 45, label: 'Salesforce — pull EMAIL-queue files to a folder', desc: 'Download Rankings email-queue attachments (snake_case names). Prompts for environment, status, and folder.', cli: 'node src/cli.js sf:pull-email <opts> -o <dir>', action: 'sf_pull_email' }
   ] },
   { label: 'Settings', color: GRAY, items: [
-    { id: 44, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 45, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
+    { id: 46, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
+    { id: 47, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
@@ -250,6 +252,28 @@ async function handle(item) {
       const n = clean(await ask('  How many (blank = 25): '));
       const args = ['src/cli.js', 'sf:list'].concat(test_args, search_args, ['--limit', n || '25']);
       await run('node', args);
+      break;
+    }
+    case 'sf_list_email': {
+      console.log(c(DIM, '  Environment: [1] production  [2] test sandbox'));
+      const envpick = clean(await ask('  Choose [1]: ')) || '1';
+      const test_args = envpick === '2' ? ['--test'] : [];
+      console.log(c(DIM, '  Status: [1] Is Not Closed  [2] Is Closed  [3] All'));
+      const stpick = clean(await ask('  Choose [1]: ')) || '1';
+      const status_args = stpick === '2' ? ['--status', 'closed'] : (stpick === '3' ? ['--status', 'all'] : []);
+      const n = clean(await ask('  How many (blank = 50): '));
+      await run('node', ['src/cli.js', 'sf:list-email'].concat(test_args, status_args, ['--limit', n || '50']));
+      break;
+    }
+    case 'sf_pull_email': {
+      console.log(c(DIM, '  Environment: [1] production  [2] test sandbox'));
+      const envpick = clean(await ask('  Choose [1]: ')) || '1';
+      const test_args = envpick === '2' ? ['--test'] : [];
+      console.log(c(DIM, '  Status: [1] open only  [2] all statuses'));
+      const stpick = clean(await ask('  Choose [1]: ')) || '1';
+      const status_args = stpick === '2' ? ['--all'] : [];
+      const folder = clean(await ask('  Save to folder (blank = ./sf_email_race_result_downloads): '));
+      await run('node', ['src/cli.js', 'sf:pull-email'].concat(test_args, status_args, ['-o', folder || 'sf_email_race_result_downloads', '--strategy', 'add_new']));
       break;
     }
     case 'sf_pull': {

@@ -63,9 +63,22 @@ the dependency.
 
 ## Pull from Salesforce (optional)
 
-Instead of getting files from the source by hand, you can pull **Race Results Doc** files straight
+Instead of getting files from the source by hand, you can pull race-results files straight
 from Salesforce. It runs *alongside* the normal flow — the dropzone, Try Me, and convert/review/
-download are unchanged. On the upload page, the **Get Race Results from Salesforce** panel lets you:
+download are unchanged. A **toggle** at the top of the **Get Race Results from Salesforce** panel picks the
+source:
+
+- **Upload Queue** — `Race Results Doc` files uploaded to Salesforce (the default).
+- **Email Queue** — spreadsheet attachments on **Rankings cases** (Email-to-Case). Same date picker;
+  a **Status** filter mapped to the case `IsClosed` flag — **Is Not Closed** (default) / **Is Closed** /
+  **All** — where only the **not-closed** rows are pre-checked for download. Columns suited to emails
+  (`Opened · Modified · Status · Subject · Sender · Sanction · Program · File · Type`), sorted by **Modified,
+  newest first** — *Opened* and *Modified* are the **case's** Created / Last-Modified dates (the same dates
+  shown in Salesforce's "Queue: Rankings" view). Sanction/Program are shown when the email subject includes
+  them and left blank otherwise. Selected files run through the **same** convert/review/download flow.
+  CLI: `node src/cli.js sf:list-email [--status not_closed|closed|all] [--test]`.
+
+Either source lets you:
 
 - pick a **From / To** date window (Mountain Time, on Last-modified or Created), defaulting to
   **yesterday → today**. **From** can be any day in **2025-01-01 … today**; **To** is then held to

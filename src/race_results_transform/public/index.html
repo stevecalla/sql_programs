@@ -42,8 +42,12 @@
   <section id="sfCard" class="card sf-card">
     <div class="sf-head">
       <h2>Get Race Results from Salesforce</h2>
-      <span class="dim">download race-results files for a date and work them as a queue — the convert/review/download flow is unchanged</span>
+      <span class="dim" id="sfCardSub">download race-results files for a date and work them as a queue — the convert/review/download flow is unchanged</span>
       <button id="sfLogoutBtn" class="sf-logout" type="button" aria-pressed="false" title="Sign in to use the Salesforce feature">Sign in</button>
+    </div>
+    <div class="seg sf-source-seg" id="sfSourceSeg" role="group" aria-label="Race results source">
+      <button type="button" data-src="upload" class="active" aria-pressed="true" title="Race Results Doc files uploaded to Salesforce">Upload Queue</button>
+      <button type="button" data-src="email" aria-pressed="false" title="Spreadsheet attachments on open Rankings cases (Email-to-Case)">Email Queue</button>
     </div>
     <div class="sf-controls">
       <label class="sf-ctl">From <input type="date" id="sfFrom" aria-label="From date"></label>
@@ -52,7 +56,12 @@
       <button id="sfResetBtn" class="btn ghost" type="button" title="Clear the list and selection">↺ Reset</button>
       <span class="dim sf-range-hint">max 14 days</span>
       <label class="sf-ctl sf-anydate"><input type="checkbox" id="sfAnyDate"> Any date</label>
-      <label class="sf-ctl" title="Broaden the search: also match Race / Results, not just &quot;Race Results Doc&quot; titles — catches more files but adds noise"><input type="checkbox" id="sfBroaden" checked> Broaden</label>
+      <label class="sf-ctl sf-upload-only" title="Broaden the search: also match Race / Results, not just &quot;Race Results Doc&quot; titles — catches more files but adds noise"><input type="checkbox" id="sfBroaden" checked> Broaden</label>
+      <label class="sf-ctl sf-email-only hidden" title="Case IsClosed flag: All = both · Is Closed = IsClosed true · Is Not Closed = IsClosed false (default). Only Is-Not-Closed rows are auto-checked for download.">Status <select id="sfEmailStatus" aria-label="Case status filter">
+        <option value="all">All</option>
+        <option value="closed">Is Closed</option>
+        <option value="not_closed" selected>Is Not Closed</option>
+      </select></label>
       <label class="sf-ctl">On <select id="sfField" aria-label="Salesforce date field">
         <option value="LastModifiedDate">Last modified</option>
         <option value="CreatedDate">Created</option>

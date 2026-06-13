@@ -92,6 +92,7 @@ function parse_args(argv) {
     else if (a === '--limit') out.limit = argv[++i];
     else if (a === '--strategy') out.strategy = argv[++i];
     else if (a === '--search') out.search = argv[++i];
+    else if (a === '--status') out.status = argv[++i];
     else if (a === '--format' || a === '--fmt') out.format = argv[++i];
     else if (a === '--today') out.today = true;
     else if (a === '--test') out.test = true;
@@ -193,6 +194,9 @@ function help() {
     '                                              # download those files (snake_case names) into a folder',
     '  node cli.js sf:describe <Object> [--field <substr>] [--test]   # list an sObject’s fields (confirm API names)',
     '  node cli.js sf:soql "<SELECT ...>" [--limit N] [--test]        # run a read-only SOQL SELECT (discovery)',
+    '  node cli.js sf:list-email [--today|--date|--start/--end] [--status not_closed|closed|all] [--limit N] [--test]',
+    '                                              # list Email-Queue (Rankings) attachments (status default Is-Not-Closed; --all = all)',
+    '  node cli.js sf:pull-email <sf:list-email opts> [-o <dir>] [--strategy add_new|replace|wipe_all]',
     '  node cli.js metrics:size                   # events table size + rows/year',
     '  node cli.js metrics:cleanup [--yes]        # purge years beyond current+prior',
     '  node cli.js metrics:purge-test [--yes]     # delete only test rows (is_test=1) — keeps real + demo data',
@@ -481,6 +485,45 @@ async function main() {
       // sf:pull -> download to a folder (same snake_case names as the web app)
       const out_dir = args.out || path.join(process.cwd(), 'sf_race_result_downloads');
       const strategy = args.strategy || 'add_new';   // add_new | replace | wipe_all
+      fs.mkdirSync(out_dir, { recursive: true });
+      if (strategy === 'wipe_all') {
+        fs.readdirSync(out_dir).forEach(function (fn) { if (/\.(xlsx|xls|csv)$/i.test(fn)) { try { fs.unlinkSync(path.join(out_dir, fn)); } catch (e) { /* ignore */ } } });
+      }
+      let saved = 0, skipped = 0;
+      for (const f of files) {
+        const dest = path.join(out_dir, f.target_name);
+        if (strategy === 'add_new' && fs.existsSync(dest)) { skipped++; continue; }
+        const buf = await sf.fetch_content_version_bytes(conn, f.content_version_id);
+        fs.writeFileSync(dest, buf);
+        saved++;
+        console.log(col(C.green, '  saved ') + f.target_name);
+      }
+      console.log(col(C.bold, '\nDownloaded ' + saved + ' file(s)' + (skipped ? ', skipped ' + skipped + ' existing' : '') + ' to ' + out_dir));
+      return;
+    }
+    if (cmd === 'sf:list-email' || cmd === 'sf:pull-email') {
+      // Email-Queue intake: spreadsheet attachments off OPEN Rankings cases (--all includes closed).
+      const sf = require('../sf');
+      const cfg = sf.sf_config({ is_test: !!args.test });
+      const check = sf.check_sf_config(cfg);
+      if (!check.ok) { console.error(col(C.red, 'Salesforce not configured — missing: ' + check.missing.join(', '))); process.exit(2); }
+      const mode = args.today ? 'today' : (args.date ? 'specific' : ((args.start || args.end) ? 'range' : 'all'));
+      const filter = { mode: mode, field: args.field || 'LastModifiedDate', date: args.date, start: args.start, end: args.end, tz: sf.DEFAULT_TZ };
+      const status = args.status ? String(args.status) : (args.all ? 'all' : 'not_closed');   // not_closed | closed | all
+      console.log(col(C.dim, 'Logging into Salesforce (' + cfg.environment_name + ')…  [email queue · ' + status + ']'));
+      const conn = await sf.make_connection(cfg);
+      let files = await sf.list_email_queue_files(conn, { filter: filter, status: status });
+      if (args.limit) files = files.slice(0, Number(args.limit));
+      console.log(col(C.bold, '\n' + files.length + ' email-queue race-results file(s):'));
+      files.forEach(function (f, i) {
+        console.log('  ' + String(i + 1).padStart(3) + '. ' + f.target_name +
+          col(C.gray, '  · [' + (f.status || '—') + '] sanction ' + (f.sanction_id || '—') + ' · ' + (f.program_name || '—') + ' · ' + (f.sender || '—') + ' · ' + f.modified_mtn));
+        console.log(col(C.gray, '       ' + (f.subject || '')));
+      });
+      if (cmd === 'sf:list-email') { console.log(''); return; }
+      // sf:pull-email -> download to a folder (same snake_case names + strategy as sf:pull)
+      const out_dir = args.out || path.join(process.cwd(), 'sf_email_race_result_downloads');
+      const strategy = args.strategy || 'add_new';
       fs.mkdirSync(out_dir, { recursive: true });
       if (strategy === 'wipe_all') {
         fs.readdirSync(out_dir).forEach(function (fn) { if (/\.(xlsx|xls|csv)$/i.test(fn)) { try { fs.unlinkSync(path.join(out_dir, fn)); } catch (e) { /* ignore */ } } });

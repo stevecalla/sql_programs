@@ -547,6 +547,8 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 .sf-logout:hover{border-color:var(--accent);color:var(--accent)}
 .sf-logout[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
 .sf-controls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.sf-source-seg{margin-bottom:10px}                                  /* Upload Queue / Email Queue toggle */
+.sf-subj{display:inline-block;max-width:340px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 .sf-ctl{display:inline-flex;gap:5px;align-items:center;font-size:13px;color:var(--dim)}
 .sf-limit{width:58px}
 .sf-ctl select,.sf-folder-path,#sfFrom,#sfTo,.sf-limit,.sf-search{padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink);font:inherit;height:34px;box-sizing:border-box;vertical-align:middle}

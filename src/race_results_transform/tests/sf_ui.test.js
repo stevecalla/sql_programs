@@ -38,10 +38,25 @@ describe('salesforce intake — UI + wiring', () => {
     assert.match(sf_routes, /search_terms: search_terms/, 'passes search_terms into the engine');
   });
 
+  test('email queue: source toggle, status filter, columns, route + engine wiring', () => {
+    assert.ok(html.indexOf('id="sfSourceSeg"') >= 0, 'source toggle present');
+    assert.ok(html.indexOf('data-src="email"') >= 0, 'Email Queue toggle button');
+    assert.ok(html.indexOf('id="sfEmailStatus"') >= 0, 'status filter present');
+    assert.ok(html.indexOf('value="closed"') >= 0 && html.indexOf('value="not_closed"') >= 0, 'IsClosed-based status (All / Is Closed / Is Not Closed)');
+    assert.ok(html.indexOf('sf-email-only') >= 0 && html.indexOf('sf-upload-only') >= 0, 'source-specific control classes');
+    assert.match(app_js, /function sf_set_source\b/, 'app.js toggles the source');
+    assert.match(app_js, /function sf_columns\b/, 'source-aware column spec');
+    assert.match(app_js, /\/api\/sf\/email-files/, 'app.js calls the email endpoint');
+    assert.match(app_js, /S\.sf_source === 'email'/, 'app.js branches on source');
+    const sf_routes2 = fs.readFileSync(path.join(ROOT, 'sf', 'sf_routes.js'), 'utf8');
+    assert.match(sf_routes2, /app\.get\('\/api\/sf\/email-files'/, 'email-files route exists');
+    assert.match(sf_routes2, /list_email_queue_files/, 'route calls the email engine');
+  });
+
   test('sanction id is surfaced + pre-fills the download filename builder + shows in the summary bar', () => {
     assert.match(app_js, /sanction: s\.f\.sanction_id/, 'sf_build_queue carries the file sanction id into the queue');
     assert.match(app_js, /\{ id: it\.sanction \|\| '' \}/, 'opening a file sets the builder Sanction ID from that file (SF) or blanks it');
-    assert.match(app_js, /key === 'sanction'/, 'SF list is sortable by sanction');
+    assert.match(app_js, /key: 'sanction'/, 'SF list is sortable by sanction (column spec)');
     assert.match(app_js, /S\.active_sanction = it\.sanction/, 'open_queue_file records the active sanction for the readout');
     assert.match(app_js, /class="chip sanctionchip"/, 'summary bar renders a visible Sanction readout chip');
     assert.match(app_js, /S\.source === 'salesforce' && S\.active_sanction/, 'readout only shows for Salesforce files with a sanction');
