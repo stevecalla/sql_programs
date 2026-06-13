@@ -288,7 +288,7 @@ the SAME engine.
   (NOT auth-gated) validates the dashboard creds and sets the `mx_session` cookie, returning JSON (no
   redirect) so the panel can sign in in place; `POST /api/logout` clears the same cookie. The old
   `/metrics/login` form-redirect + `/metrics/logout` still exist too.
-- **Browser** (`app.js` `wire_sf`/`sf_*`): a **Get Race Results from Salesforce** panel on the upload page.
+- **Browser** (`app.js` `wire_sf`/`sf_*`): the **Get Race Results** card on the upload page (its **SF Upload Queue** tab).
   Date filter is a **From / To** pair (`#sfFrom`/`#sfTo`, defaulting to **yesterday → today**, on
   Last-modified/Created), bounded to **`SF_MIN_DATE` (2025-01-01) … today** and capped at a **14-day** span
   (`SF_MAX_RANGE_DAYS`; `sf_apply_range_limits` sets the pickers' min/max + clamps, `sf_range_ok` validates on

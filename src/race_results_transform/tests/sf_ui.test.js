@@ -54,6 +54,13 @@ describe('salesforce intake — UI + wiring', () => {
     assert.match(sf_routes2, /list_email_queue_files/, 'route calls the email engine');
   });
 
+  test('email auto-select picks the newest N of whatever is listed (no client-side is_closed filter)', () => {
+    // the Status filter narrows the list server-side; the old `pool.filter(!is_closed)` left "Is Closed"/"All"
+    // with 0 selected and a dead Download button, so it must be gone.
+    assert.ok(!/sf_source === 'email'\) pool = pool\.filter/.test(app_js), 'no client-side not-closed filter in sf_select_newest');
+    assert.ok(!/pool\.filter\(function \(f\) \{ return !f\.is_closed; \}\)/.test(app_js), 'the not-closed pre-select filter is removed');
+  });
+
   test('sanction id is surfaced + pre-fills the download filename builder + shows in the summary bar', () => {
     assert.match(app_js, /sanction: s\.f\.sanction_id/, 'sf_build_queue carries the file sanction id into the queue');
     assert.match(app_js, /\{ id: it\.sanction \|\| '' \}/, 'opening a file sets the builder Sanction ID from that file (SF) or blanks it');

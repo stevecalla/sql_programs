@@ -65,20 +65,23 @@ the dependency.
 
 Instead of getting files from the source by hand, you can pull race-results files straight
 from Salesforce. It runs *alongside* the normal flow — the dropzone, Try Me, and convert/review/
-download are unchanged. A **toggle** at the top of the **Get Race Results from Salesforce** panel picks the
-source:
+download are unchanged. The **Get Race Results** card has a **tab bar** that picks the source:
+**SF Upload Queue · SF Email Queue · From Folder · Slack Ironman**.
 
-- **Upload Queue** — `Race Results Doc` files uploaded to Salesforce (the default).
-- **Email Queue** — spreadsheet attachments on **Rankings cases** (Email-to-Case). Same date picker;
+- **SF Upload Queue** — `Race Results Doc` files uploaded to Salesforce (the default).
+- **SF Email Queue** — spreadsheet attachments on **Rankings cases** (Email-to-Case). Same date picker;
   a **Status** filter mapped to the case `IsClosed` flag — **Is Not Closed** (default) / **Is Closed** /
-  **All** — where only the **not-closed** rows are pre-checked for download. Columns suited to emails
+  **All**. The **newest files (up to Max)** are pre-checked for download regardless of status, so "Is Closed"
+  and "All" select rows too — uncheck any you don't want. Columns suited to emails
   (`Opened · Modified · Status · Subject · Sender · Sanction · Program · File · Type`), sorted by **Modified,
   newest first** — *Opened* and *Modified* are the **case's** Created / Last-Modified dates (the same dates
   shown in Salesforce's "Queue: Rankings" view). Sanction/Program are shown when the email subject includes
   them and left blank otherwise. Selected files run through the **same** convert/review/download flow.
   CLI: `node src/cli.js sf:list-email [--status not_closed|closed|all] [--test]`.
+- **From Folder** — a local folder of files (no Salesforce); see "Convert files from a folder" below.
+- **Slack Ironman** — an under-construction placeholder (coming soon).
 
-Either source lets you:
+Both Salesforce queues let you:
 
 - pick a **From / To** date window (Mountain Time, on Last-modified or Created), defaulting to
   **yesterday → today**. **From** can be any day in **2025-01-01 … today**; **To** is then held to
@@ -299,9 +302,13 @@ client / report render); the 8018 server **auto-creates the table at startup**
 - **Dashboard**: funnel (visit→upload→conversion→download→start-over), activity-by-day
   (visits·uploads·downloads·start-overs — grouped for ≤14 days, auto-stacked beyond), downloads-by-type +
   a Split-by-group panel, a **Try Me vs real activity** chart (demo vs real uploads/conversions/
-  downloads) + a **Try Me** KPI card, top users (visits·uploads·downloads·start-overs, timezone + last
-  activity), a Start-over KPI card, ↻ Refresh + auto-refresh, dark/light. Data tables carry a leading #
-  row-number column and scroll horizontally when narrow. The top-right **Last User Activity** chip and the
+  downloads) + a **Try Me** KPI card, a **Test rows** KPI card (count of `is_test=1` rows), top users
+  (visits·uploads·downloads·start-overs, timezone + last activity), a Start-over KPI card, ↻ Refresh +
+  auto-refresh, dark/light, and a quick **"Uploads today, in a table"** ask-box suggestion chip. When there
+  are test rows, a **Purge test** button (in the controls row, left of the light/dark toggle) deletes only
+  those `is_test=1` rows after a confirm. Data tables carry a leading #
+  row-number column and scroll horizontally when narrow; the header, controls, and cards reflow on mobile. The
+  top-right **Last User Activity** chip and the
   Top Users **Last activity** column reflect real activity only — server-side `dashboard_view` events are
   excluded, so opening the dashboard doesn't bump the date (the **N rows** figure still counts all rows).
 - **Events**: page_view, file_uploaded, conversion_completed, download, `split_download_used`,

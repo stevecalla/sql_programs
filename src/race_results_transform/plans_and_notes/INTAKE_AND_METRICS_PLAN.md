@@ -16,7 +16,7 @@ Status legend: ⬜ not started · 🟡 in progress · ✅ done.
 
 **B. Intake card → tab bar**
 - ✅ B0 — Tab bar + heading rename + a11y (4-tab `role="tablist"`, "Get Race Results")
-- ✅ B1 — "From Folder" tab folded into `#sfTable` (standalone `#folderCard` kept for the compare)
+- ✅ B1 — "From Folder" tab folded into `#sfTable` (standalone `#folderCard` later **removed** after parity check)
 - ✅ B2 — "Slack Ironman" tab (under-construction placeholder)
 
 > **Review done — standalone card removed.** Parity was confirmed, so the standalone "Convert files from a
@@ -33,7 +33,7 @@ Status legend: ⬜ not started · 🟡 in progress · ✅ done.
 |---|---|
 | Tab labels | **SF Upload Queue · SF Email Queue · From Folder · Slack Ironman** (Salesforce tabs prefixed "SF"). |
 | Card heading | Rename "Get Race Results from Salesforce" → **"Get Race Results"**. |
-| Folder card | **Keep the standalone `#folderCard` for now**; the Folder tab is added alongside it. Remove later only if you prefer the tab. |
+| Folder card | Kept the standalone `#folderCard` during the compare, then **removed it** once the tab proved out (the From Folder tab is now the only folder intake). |
 | Folder table | **Fold into the shared `#sfTable`** via a folder column set (`File name · Type · Modified`) — consistent tabbed UX; differences handled by a source-specific control row + action. |
 | a11y | The bar becomes a proper **`role="tablist"`** with `role="tab"` + `aria-selected` + linked panels (passes axe; correct semantics now that there are 4 real tabs). |
 | Chip wording | Suggestion chip **"Uploads today"** seeds *"How many uploads today, and list them in a table"*. |
