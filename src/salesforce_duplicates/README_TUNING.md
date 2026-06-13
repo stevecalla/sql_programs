@@ -76,8 +76,24 @@ rows (21%) into the snapshot table` every `DB_LOAD_PROGRESS_EVERY` rows (both in
 
 ## What the console shows
 
-`run` prints a block per profile, then a comparison table. Each block shows the
-**conditions**, the **funnel** (records → eligible → blocks → pairs compared), the
+`run` replays the full detection pipeline (exact + fuzzy + nickname + consolidated)
+once **per profile** over every snapshot record, so on a large prod snapshot it runs
+for a while. It first prints a **live progress line per profile** — with a per-profile
+time and a running ETA — so you can tell it's working and not hung:
+
+```text
+[1/18] baseline ... done in 41.2s  (~11m 40s left)
+[2/18] t88_nickON_z5_gbz ... done in 39.8s  (~10m 33s left)
+...
+All 18 profiles complete in 12m 18s
+```
+
+(The ETA is the average time per finished profile × profiles still to go, so it steadies
+as the run proceeds. A TEST snapshot is only 5,000 records, so the whole grid finishes in
+seconds — the progress matters mainly on a PRODUCTION snapshot.)
+
+After all profiles finish it prints a block per profile, then a comparison table. Each
+block shows the **conditions**, the **funnel** (records → eligible → blocks → pairs compared), the
 **rule signals** (exact / fuzzy / nickname, with the nickname net-new vs also-fuzzy
 split), the **consolidated** clusters by strongest signal, and the **delta vs the
 baseline** (matched pairs gained/lost):

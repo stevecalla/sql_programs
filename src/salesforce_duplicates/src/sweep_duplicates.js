@@ -53,6 +53,14 @@ async function resolve_tuning_dir() {
 
 const n = (v) => Number(v || 0).toLocaleString();
 
+// Compact duration: "42.3s" under a minute, "3m 21s" at or above one.
+function fmt_secs(s) {
+    s = Math.max(0, s);
+    if (s < 60) return `${s.toFixed(1)}s`;
+    const m = Math.floor(s / 60);
+    return `${m}m ${Math.round(s - m * 60)}s`;
+}
+
 // ---------- grid ----------
 
 // Load a one-off grid JSON file (only array-valued keys are kept).
@@ -166,7 +174,26 @@ async function cmd_run(argv) {
     console.log(`Grid     : ${source}  ->  ${profiles.length} profiles`);
     console.log('');
 
-    const results = profiles.map((c) => run_profile(records, c));
+    // Run each profile with a live progress line. The sweep replays the full detection
+    // pipeline (exact + fuzzy + nickname + consolidated) once PER profile over every
+    // snapshot record, so on a large prod snapshot this is the slow part — without these
+    // lines the CLI looks hung while it churns through all the profiles in silence.
+    const sweep_start = Date.now();
+    const results = [];
+    for (let i = 0; i < profiles.length; i++) {
+        const c = profiles[i];
+        const label = c.is_baseline ? 'baseline' : c.label;
+        process.stdout.write(colorize('gray', `[${i + 1}/${profiles.length}] ${label} ... `));
+        const t0 = Date.now();
+        results.push(run_profile(records, c));
+        const done = i + 1;
+        const remaining = profiles.length - done;
+        // ETA = average time per completed profile * profiles still to go. Steadies as
+        // more profiles finish; suppressed on the last one (nothing left to estimate).
+        const eta = remaining > 0 ? `  (~${fmt_secs((Date.now() - sweep_start) / done / 1000 * remaining)} left)` : '';
+        console.log(colorize('gray', `done in ${fmt_secs((Date.now() - t0) / 1000)}${eta}`));
+    }
+    console.log(colorize('gray', `All ${profiles.length} profiles complete in ${fmt_secs((Date.now() - sweep_start) / 1000)}\n`));
     const baseline = results[0];
 
     for (const r of results) {
