@@ -580,6 +580,14 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 .sf-table tbody tr:hover{background:var(--accent-soft)}
 .sf-dl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px}
 .sf-dl.hidden{display:none}
+/* mobile: keep the intake card usable on a phone */
+@media (max-width:520px){
+  .sf-head h2{padding-right:88px}                      /* clear the absolute Sign in/out pill */
+  .sf-source-seg{flex-wrap:nowrap;overflow-x:auto}     /* 4 tabs on one horizontally-scrollable row */
+  .sf-search,.sf-folder-path{width:100%;min-width:0}
+  .sf-table-wrap{height:240px}
+  .sf-dl .btn.primary{flex:1 1 100%}                   /* full-width Download / Load */
+}
 
 /* Files queue (the task-list tab, left of Mapping) — sortable table like the Get Race card */
 .sf-queue{margin-top:2px}

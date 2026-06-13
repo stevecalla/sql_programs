@@ -385,7 +385,11 @@
     return Math.min(v, SF_MAX_FILES);
   }
   function sf_select_newest() {   // auto-select: newest N by modified date
-    if (S.sf_source === 'folder') { S.sf_selected = {}; (S.sf_files || []).forEach(function (f) { S.sf_selected[f.content_version_id] = true; }); return; }
+    if (S.sf_source === 'folder') {   // select the newest N (by file mtime), capped by the Max field — same cap behavior as the SF tabs
+      var fpool = (S.sf_files || []).slice().sort(function (a, b) { return (b._modified_ms || 0) - (a._modified_ms || 0); });
+      S.sf_selected = {}; fpool.slice(0, sf_limit()).forEach(function (f) { S.sf_selected[f.content_version_id] = true; });
+      return;
+    }
     var pool = (S.sf_files || []).slice();
     // Email queue: only auto-check rows whose case is NOT closed (regardless of the status filter).
     // So "All statuses" lists open + closed but pre-selects just the open ones; "Not open" pre-selects none.
@@ -425,6 +429,7 @@
     document.querySelectorAll('.sf-folder-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'folder'); });
     document.querySelectorAll('.sf-slack-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'slack'); });
     document.querySelectorAll('.sf-query-only').forEach(function (el) { el.classList.toggle('hidden', src === 'folder' || src === 'slack'); });
+    document.querySelectorAll('.sf-cap-only').forEach(function (el) { el.classList.toggle('hidden', src === 'slack'); });   // Max applies to upload/email/folder
     document.querySelectorAll('.sf-dl-server').forEach(function (el) { el.classList.toggle('hidden', src !== 'upload' && src !== 'email'); });
     var sub = $('sfCardSub'); if (sub) sub.textContent = sf_subtitle(src);
     sf_reset();   // clear the current list/selection when switching sources
@@ -683,12 +688,22 @@
   }
   function sf_folder_set(files, dir, name) {
     S.sf_folder_dir = dir || null; S.sf_folder_name = name || '';
-    if ($('sfFolderPickName')) { $('sfFolderPickName').textContent = name ? ('📁 ' + name) : ''; $('sfFolderPickName').classList.toggle('hidden', !name); }
+    if ($('sfFolderPickName')) { $('sfFolderPickName').textContent = name ? ('Folder: ' + name) : ''; $('sfFolderPickName').classList.toggle('hidden', !name); }
     if (!files.length) { S.sf_files = []; $('sfTable').querySelector('tbody').innerHTML = ''; hide('sfTableWrap'); hide('sfDownloadBar'); if ($('sfSearchWrap')) hide('sfSearchWrap'); $('sfCount').classList.add('hidden'); sf_set_status('No .xlsx / .xls / .csv files at the top level of “' + name + '”.', true); return; }
     S.sf_files = files;
-    sf_select_newest();           // folder branch selects all
+    sf_select_newest();           // folder branch: newest N up to the Max cap
     S.sf_sort = sf_default_sort('folder'); sf_sort_files();
     sf_render(); sf_set_status('');
+  }
+  // Clear the folder list + chosen-folder label (the From Folder tab's Reset; mirrors the standalone card's ↺ Reset)
+  function sf_folder_reset() {
+    S.sf_files = null; S.sf_selected = {}; S.sf_folder_dir = null; S.sf_folder_name = '';
+    if ($('sfFolderPickName')) { $('sfFolderPickName').textContent = ''; $('sfFolderPickName').classList.add('hidden'); }
+    $('sfTable').querySelector('tbody').innerHTML = '';
+    if ($('sfSearch')) $('sfSearch').value = '';
+    hide('sfTableWrap'); hide('sfDownloadBar'); if ($('sfSearchWrap')) hide('sfSearchWrap');
+    $('sfCount').classList.add('hidden');
+    sf_set_status('');
   }
   function sf_folder_choose() {
     if (window.showDirectoryPicker) {
@@ -1061,6 +1076,7 @@
     if ($('sfChooseFolder')) $('sfChooseFolder').addEventListener('click', sf_choose_folder);
     if ($('sfDownloadBtn')) $('sfDownloadBtn').addEventListener('click', sf_download_selected);
     if ($('sfFolderChoose')) $('sfFolderChoose').addEventListener('click', sf_folder_choose);
+    if ($('sfFolderReset')) $('sfFolderReset').addEventListener('click', sf_folder_reset);
     if ($('sfFolderInput')) $('sfFolderInput').addEventListener('change', function () { sf_folder_from_input($('sfFolderInput').files); });
     if ($('sfFolderLoadBtn')) $('sfFolderLoadBtn').addEventListener('click', sf_folder_load);
     if ($('sfFolderPath')) $('sfFolderPath').addEventListener('input', function () { S.sf_folder = $('sfFolderPath').value; try { window.localStorage.setItem('rrt_sf_folder', S.sf_folder); } catch (e) { /* ignore */ } sf_update_dl_enabled(); });

@@ -69,10 +69,11 @@
         <option value="LastModifiedDate">Last modified</option>
         <option value="CreatedDate">Created</option>
       </select></label>
-      <label class="sf-ctl sf-query-only">Max <input type="number" id="sfLimit" class="sf-limit" min="1" max="150" value="50" aria-label="Max files to download"></label>
+      <label class="sf-ctl sf-cap-only">Max <input type="number" id="sfLimit" class="sf-limit" min="1" max="150" value="50" aria-label="Max files"></label>
       <!-- From Folder controls (local; no server) -->
       <button id="sfFolderChoose" class="btn sf-folder-only hidden" type="button">Choose folder…</button>
-      <span id="sfFolderPickName" class="dim sf-ctl sf-folder-only hidden"></span>
+      <button id="sfFolderReset" class="btn ghost sf-folder-only hidden" type="button" title="Clear the folder list">↺ Reset</button>
+      <span id="sfFolderPickName" class="dim sf-folder-only hidden"></span>
       <input id="sfFolderInput" type="file" webkitdirectory multiple class="hidden" aria-hidden="true" tabindex="-1">
     </div>
     <div id="sfSlackPanel" class="sf-slack-panel sf-slack-only hidden">

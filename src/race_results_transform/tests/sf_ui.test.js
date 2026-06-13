@@ -194,6 +194,17 @@ describe('intake tab bar — SF Upload · SF Email · From Folder · Slack Ironm
     assert.ok(html.indexOf('id="folderCard"') >= 0, 'standalone folder card stays in place during evaluation');
   });
 
+  test('From Folder tab has its own Reset + a Max cap, and reuses the original folder-path styling', () => {
+    assert.ok(html.indexOf('id="sfFolderReset"') >= 0, 'folder tab has a Reset button');
+    assert.match(app_js, /function sf_folder_reset\b/, 'folder Reset clears the list + chosen-folder label');
+    // Max is shared with the SF tabs (shown for upload/email/folder, hidden only for slack)
+    assert.ok(html.indexOf('sf-cap-only') >= 0, 'Max field carries the sf-cap-only class');
+    assert.match(app_js, /\.sf-cap-only[\s\S]*?src === 'slack'/, 'sf_set_source shows Max for everything but Slack');
+    assert.match(app_js, /fpool\.slice\(0, sf_limit\(\)\)/, 'folder selection respects the Max cap (newest N)');
+    // folder-path label matches the standalone card ("Folder: <name>"), not a bespoke style
+    assert.match(app_js, /'Folder: ' \+ name/, 'folder tab reuses the original "Folder:" path label');
+  });
+
   test('Slack Ironman tab shows an under-construction placeholder (no functionality yet)', () => {
     assert.ok(html.indexOf('id="sfSlackPanel"') >= 0, 'slack placeholder panel present');
     assert.match(html, /Slack Ironman submissions — coming soon/, 'on-brand coming-soon copy');

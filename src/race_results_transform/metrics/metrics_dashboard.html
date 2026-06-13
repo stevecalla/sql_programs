@@ -39,8 +39,8 @@
   .mx-last { display:flex; flex-direction:column; align-items:flex-end; line-height:1.25; border:1px solid var(--line); background:var(--card); border-radius:8px; padding:5px 12px; }
   .mx-last-label { font-size:11px; font-weight:600; color:var(--dim); text-transform:uppercase; letter-spacing:.4px; }
   .mx-last-val { font-size:15px; font-weight:800; color:var(--ink); white-space:nowrap; }
-  .mx-test-rows .mx-last-val { color:#b45309; }
-  .mx-purge { color:#b45309; border-color:#e0a200; align-self:center; }
+  .mx-purge { color:#b45309; border-color:#e0a200; margin-left:auto; }   /* starts the right cluster: purge · theme · sign-out */
+  .mx-purge[hidden] { display:none; }
   .mx-purge:hover { background:#fef3c7; }
   .mx-tablewrap { overflow-x:auto; }
   .mx-utable { min-width:820px; }
@@ -69,6 +69,7 @@
     .mx-title { font-size:17px; }
     .mx-periods { order:3; width:100%; }
     .mx-periods button { flex:1 1 auto; padding:8px 6px; }
+    #purgeTest { order:2; margin-left:0; }
     #themeToggle { order:2; }
     .mx-card .v { font-size:22px; }
   }
@@ -139,8 +140,6 @@
     <h1 class="mx-title"><span class="arrow">📊</span> Race Results Converter — Metrics</h1>
     <div class="mx-spacer"></div>
     <span id="lastData" class="mx-last" title="Most recent event in the database (MTN)"><span class="mx-last-label">Last User Activity</span><span class="mx-last-val">—</span></span>
-    <span id="testRows" class="mx-last mx-test-rows" hidden title="Rows flagged is_test=1 — deliberate test runs in production"><span class="mx-last-label">Test rows</span><span class="mx-last-val">—</span></span>
-    <button id="purgeTest" class="btn ghost mx-purge" type="button" hidden title="Delete ONLY the is_test=1 rows — real and Try-Me/demo data are untouched">Purge test rows</button>
   </div>
   <div class="mx-head mx-head2">
     <div class="mx-periods" id="periods">
@@ -152,6 +151,7 @@
     </div>
     <button id="refreshBtn" class="btn ghost" title="Refresh now">↻ Refresh</button>
     <label class="mx-auto" title="When on, the dashboard automatically reloads its data from the database every 60 seconds so the charts and tables stay current without clicking Refresh."><input type="checkbox" id="autoRefresh" checked> Auto-refresh</label>
+    <button id="purgeTest" class="btn ghost mx-purge" type="button" hidden title="Delete ONLY the is_test=1 rows — real and Try-Me/demo data are untouched">Purge test</button>
     <button id="themeToggle" class="btn ghost mx-head-theme" title="Toggle light or dark theme" aria-label="Toggle light or dark theme">☾ Dark</button>
     <a id="signOut" class="btn ghost" href="/metrics/logout" title="Sign out">↩ Sign out</a>
   </div>
@@ -358,6 +358,7 @@
     last_data = d;
     var compRate = d.completion_uploads ? Math.round(100*d.completion_downloaded/d.completion_uploads) : 0;
     var hl = d.health || {};
+    var tr = Number(hl.test_rows || 0);
     el('cards').innerHTML =
       card('Visits', d.visits, d.unique_users+' users · '+d.new_users+' new / '+d.repeat_users+' return') +
       card('Uploads', d.uploads, 'avg '+d.avg_rows+' rows') +
@@ -367,6 +368,7 @@
       card('Completion', compRate+'%', d.completion_downloaded+'/'+d.completion_uploads+' uploads→dl') +
       card('Auto-map', d.automap_pct+'%', 'cols matched, no fix') +
       card('Try Me', (d.demo ? d.demo.uploads : 0), 'sample uploads') +
+      card('Test rows', tr, 'is_test=1 (purgeable)') +
       card('Row Count DB', (hl.rows != null ? hl.rows : '?'), (hl.mb != null ? hl.mb + ' MB' : '—'));
     var bd = d.by_day || [];
     var stacked = bd.length > 14;   // few days -> grouped bars; many -> stacked (clearer + compact)
@@ -395,11 +397,7 @@
     bar('chart_hours', hours, hv, cssvar('--brand'));
     register('chart_hours', 'Uploads by hour (Mountain Time)', ['Hour','Uploads'], hours.map(function(h,i){return [h, hv[i]];}));
     el('lastData').querySelector('.mx-last-val').textContent = hl.latest_mtn ? (hl.latest_mtn + ' MTN') : 'No data yet';
-    var tr = Number(hl.test_rows || 0);
-    el('testRows').querySelector('.mx-last-val').textContent = tr;
-    el('testRows').hidden = (tr === 0);
-    el('purgeTest').hidden = (tr === 0);
-    el('purgeTest').textContent = 'Purge ' + tr + ' test row' + (tr === 1 ? '' : 's');
+    el('purgeTest').hidden = (tr === 0);   // count lives in the Test rows KPI card; button only shows when there's something to purge
     fill('tbl_users', d.top_users||[], function(u,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+u.id+'</td><td>'+u.visits+'</td><td>'+u.uploads+'</td><td>'+u.downloads+'</td><td>'+u.start_overs+'</td><td>'+(u.tz||'—')+'</td><td>'+(u.last_seen||'—')+'</td><td>'+(u.returning?'<span class="tag">returning</span>':'new')+'</td></tr>'; });
     fill('tbl_files', d.top_files, function(f,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+f.name+'</td><td>'+f.n+'</td></tr>'; });
     fill('tbl_fixed', d.fixed_columns, function(c,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+c.key+'</td><td>'+c.n+'</td></tr>'; });
@@ -421,7 +419,7 @@
   });
   el('refreshBtn').addEventListener('click', function(){ load(current_days); });
   el('purgeTest').addEventListener('click', function(){
-    var n = el('testRows').querySelector('.mx-last-val').textContent;
+    var n = (last_data && last_data.health && last_data.health.test_rows) || 0;
     if (!window.confirm('Delete ' + n + ' test row(s) (is_test=1)? Real and Try-Me/demo data are untouched. This cannot be undone.')) return;
     var btn = el('purgeTest'); btn.disabled = true; var prev = btn.textContent; btn.textContent = 'Purging…';
     fetch('/api/metrics-purge-test', { method:'POST', credentials:'same-origin' })
