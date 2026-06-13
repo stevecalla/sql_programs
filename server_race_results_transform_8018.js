@@ -246,6 +246,18 @@ function create_app() {
     }
   });
 
+  // Purge only the deliberate test rows (is_test = 1). Real + Try-Me/demo data untouched. Auth-gated.
+  app.post('/api/metrics-purge-test', require_dash_auth, async function (req, res) {
+    try {
+      if (!metrics_pool) return res.status(503).json({ ok: false, error: 'analytics DB not available' });
+      const r = await metrics_report.purge_test(metrics_pool);
+      res.json({ ok: true, deleted: (r && r.deleted) || 0 });
+    } catch (e) {
+      console.error('[analytics] purge-test error:', e.message);
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   // AI "ask your data" — read-only natural-language query over the events table (auth-gated).
   app.get('/api/metrics-ask-models', require_dash_auth, function (req, res) {
     try { res.json(require('./src/race_results_transform/metrics/ask/models').list()); }

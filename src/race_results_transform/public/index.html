@@ -41,32 +41,44 @@
   <!-- optional: pull race-results files straight from Salesforce, then work them as a queue -->
   <section id="sfCard" class="card sf-card">
     <div class="sf-head">
-      <h2>Get Race Results from Salesforce</h2>
+      <h2>Get Race Results</h2>
       <span class="dim" id="sfCardSub">download race-results files for a date and work them as a queue — the convert/review/download flow is unchanged</span>
       <button id="sfLogoutBtn" class="sf-logout" type="button" aria-pressed="false" title="Sign in to use the Salesforce feature">Sign in</button>
     </div>
-    <div class="seg sf-source-seg" id="sfSourceSeg" role="group" aria-label="Race results source">
-      <button type="button" data-src="upload" class="active" aria-pressed="true" title="Race Results Doc files uploaded to Salesforce">Upload Queue</button>
-      <button type="button" data-src="email" aria-pressed="false" title="Spreadsheet attachments on open Rankings cases (Email-to-Case)">Email Queue</button>
+    <div class="seg sf-source-seg" id="sfSourceSeg" role="tablist" aria-label="Race results source">
+      <button type="button" role="tab" id="sfTabUpload" data-src="upload" class="active" aria-selected="true" aria-controls="sfPanel" title="Race Results Doc files uploaded to Salesforce">SF Upload Queue</button>
+      <button type="button" role="tab" id="sfTabEmail" data-src="email" aria-selected="false" aria-controls="sfPanel" title="Spreadsheet attachments on Rankings cases (Email-to-Case)">SF Email Queue</button>
+      <button type="button" role="tab" id="sfTabFolder" data-src="folder" aria-selected="false" aria-controls="sfPanel" title="Pick a folder on your computer and load the files locally — nothing is uploaded">From Folder</button>
+      <button type="button" role="tab" id="sfTabSlack" data-src="slack" aria-selected="false" aria-controls="sfPanel" title="Slack Ironman submissions — coming soon">Slack Ironman</button>
     </div>
+    <div id="sfPanel" role="tabpanel" aria-label="Race results files" tabindex="0">
     <div class="sf-controls">
-      <label class="sf-ctl">From <input type="date" id="sfFrom" aria-label="From date"></label>
-      <label class="sf-ctl">To <input type="date" id="sfTo" aria-label="To date"></label>
-      <button id="sfListBtn" class="btn" type="button">List files</button>
-      <button id="sfResetBtn" class="btn ghost" type="button" title="Clear the list and selection">↺ Reset</button>
-      <span class="dim sf-range-hint">max 14 days</span>
-      <label class="sf-ctl sf-anydate"><input type="checkbox" id="sfAnyDate"> Any date</label>
+      <label class="sf-ctl sf-query-only">From <input type="date" id="sfFrom" aria-label="From date"></label>
+      <label class="sf-ctl sf-query-only">To <input type="date" id="sfTo" aria-label="To date"></label>
+      <button id="sfListBtn" class="btn sf-query-only" type="button">List files</button>
+      <button id="sfResetBtn" class="btn ghost sf-query-only" type="button" title="Clear the list and selection">↺ Reset</button>
+      <span class="dim sf-range-hint sf-query-only">max 14 days</span>
+      <label class="sf-ctl sf-anydate sf-query-only"><input type="checkbox" id="sfAnyDate"> Any date</label>
       <label class="sf-ctl sf-upload-only" title="Broaden the search: also match Race / Results, not just &quot;Race Results Doc&quot; titles — catches more files but adds noise"><input type="checkbox" id="sfBroaden" checked> Broaden</label>
       <label class="sf-ctl sf-email-only hidden" title="Case IsClosed flag: All = both · Is Closed = IsClosed true · Is Not Closed = IsClosed false (default). Only Is-Not-Closed rows are auto-checked for download.">Status <select id="sfEmailStatus" aria-label="Case status filter">
         <option value="all">All</option>
         <option value="closed">Is Closed</option>
         <option value="not_closed" selected>Is Not Closed</option>
       </select></label>
-      <label class="sf-ctl">On <select id="sfField" aria-label="Salesforce date field">
+      <label class="sf-ctl sf-query-only">On <select id="sfField" aria-label="Salesforce date field">
         <option value="LastModifiedDate">Last modified</option>
         <option value="CreatedDate">Created</option>
       </select></label>
-      <label class="sf-ctl">Max <input type="number" id="sfLimit" class="sf-limit" min="1" max="150" value="50" aria-label="Max files to download"></label>
+      <label class="sf-ctl sf-query-only">Max <input type="number" id="sfLimit" class="sf-limit" min="1" max="150" value="50" aria-label="Max files to download"></label>
+      <!-- From Folder controls (local; no server) -->
+      <button id="sfFolderChoose" class="btn sf-folder-only hidden" type="button">Choose folder…</button>
+      <span id="sfFolderPickName" class="dim sf-ctl sf-folder-only hidden"></span>
+      <input id="sfFolderInput" type="file" webkitdirectory multiple class="hidden" aria-hidden="true" tabindex="-1">
+    </div>
+    <div id="sfSlackPanel" class="sf-slack-panel sf-slack-only hidden">
+      <div class="sf-slack-emoji" aria-hidden="true">🚧</div>
+      <h3>Slack Ironman submissions — coming soon</h3>
+      <p class="dim">We're building a lane to pull Ironman race results straight from Slack. Hang tight — this one's under construction.</p>
     </div>
     <div id="sfStatus" class="sf-status dim" role="status"></div>
     <div id="sfLogin" class="sf-login hidden">
@@ -97,16 +109,18 @@
       <div class="sf-progress-track"><div id="sfProgressBar" class="sf-progress-bar"></div></div>
     </div>
     <div id="sfDownloadBar" class="sf-dl hidden">
-      <button id="sfChooseFolder" class="btn ghost" type="button">Choose folder…</button>
-      <input id="sfFolderPath" class="sf-folder-path hidden" placeholder="folder path on this computer" aria-label="Folder path">
-      <span id="sfFolderName" class="dim"></span>
-      <label class="sf-ctl">If a file exists <select id="sfStrategy" aria-label="Existing-file strategy">
+      <button id="sfChooseFolder" class="btn ghost sf-dl-server" type="button">Choose folder…</button>
+      <input id="sfFolderPath" class="sf-folder-path hidden sf-dl-server" placeholder="folder path on this computer" aria-label="Folder path">
+      <span id="sfFolderName" class="dim sf-dl-server"></span>
+      <label class="sf-ctl sf-dl-server">If a file exists <select id="sfStrategy" aria-label="Existing-file strategy">
         <option value="add_new">Add new only (skip same names)</option>
         <option value="replace">Overwrite same names</option>
         <option value="wipe_all">Delete all, then add</option>
       </select></label>
-      <button id="sfDownloadBtn" class="btn primary" type="button" disabled>Download selected</button>
+      <button id="sfDownloadBtn" class="btn primary sf-dl-server" type="button" disabled>Download selected</button>
+      <button id="sfFolderLoadBtn" class="btn primary sf-folder-only hidden" type="button" disabled>Load selected</button>
     </div>
+    </div><!-- /#sfPanel -->
   </section>
 
   <section id="folderCard" class="card sf-card">

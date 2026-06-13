@@ -103,7 +103,7 @@ async function build_report(pool, opts) {
   // Last User Activity = most recent REAL activity; exclude server-side dashboard_view
   // events (each /metrics open fires one) so merely viewing the dashboard never bumps the
   // date. rows_total stays unfiltered — it's a DB-size health figure, not an activity figure.
-  const health = (await q(pool, "SELECT COUNT(*) rows_total, DATE_FORMAT(MAX(CASE WHEN event_name <> 'dashboard_view' THEN created_at_mtn END), '%b %e, %Y %l:%i %p') latest FROM `" + T + "`"))[0] || {};
+  const health = (await q(pool, "SELECT COUNT(*) rows_total, SUM(CASE WHEN is_test = 1 THEN 1 ELSE 0 END) test_rows, DATE_FORMAT(MAX(CASE WHEN event_name <> 'dashboard_view' THEN created_at_mtn END), '%b %e, %Y %l:%i %p') latest FROM `" + T + "`"))[0] || {};
   const sizerow = (await q(pool, 'SELECT ROUND((data_length+index_length)/1024/1024,2) mb FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [T]))[0] || {};
 
   const uploads = cmap.file_uploaded || 0;
@@ -146,6 +146,7 @@ async function build_report(pool, opts) {
     demo: { uploads: n0(demo.up_demo), conversions: n0(demo.cv_demo), downloads: n0(demo.dl_demo) },
     health: {
       rows: n0(health.rows_total),
+      test_rows: n0(health.test_rows),   // is_test=1 rows (deliberate test runs) — purgeable from the dashboard
       mb: (sizerow.mb != null ? Number(sizerow.mb) : null),
       latest_mtn: health.latest || null   // already 'Mon D, YYYY h:mm AM/PM' in MTN (formatted in SQL)
     }

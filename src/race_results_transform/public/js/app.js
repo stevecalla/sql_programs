@@ -385,6 +385,7 @@
     return Math.min(v, SF_MAX_FILES);
   }
   function sf_select_newest() {   // auto-select: newest N by modified date
+    if (S.sf_source === 'folder') { S.sf_selected = {}; (S.sf_files || []).forEach(function (f) { S.sf_selected[f.content_version_id] = true; }); return; }
     var pool = (S.sf_files || []).slice();
     // Email queue: only auto-check rows whose case is NOT closed (regardless of the status filter).
     // So "All statuses" lists open + closed but pre-selects just the open ones; "Not open" pre-selects none.
@@ -397,19 +398,35 @@
     var el = $('sfStatus'); if (!el) return;
     el.textContent = msg || ''; el.classList.toggle('err', !!is_err);
   }
-  // Switch between the Upload Queue (Race Results Doc files) and the Email Queue (Rankings attachments).
+  // Tab-bar source: SF Upload Queue · SF Email Queue · From Folder · Slack Ironman.
+  // Each source shows its own control row + panel and hides the others; switching resets the list.
+  function sf_subtitle(src) {
+    if (src === 'email') return 'pull race-results attachments from Rankings cases (Email-to-Case) — same convert/review/download flow';
+    if (src === 'folder') return 'pick a folder on your computer and load the files into the queue — nothing is uploaded';
+    if (src === 'slack') return 'Slack Ironman submissions — coming soon';
+    return 'download race-results files for a date and work them as a queue — the convert/review/download flow is unchanged';
+  }
+  function sf_default_sort(src) {
+    if (src === 'email') return { key: 'modified', dir: 'desc' };
+    if (src === 'folder') return { key: 'file', dir: 'asc' };
+    return { key: 'date', dir: 'desc' };
+  }
   function sf_set_source(src) {
-    if (src !== 'email' && src !== 'upload') src = 'upload';
+    if (['upload', 'email', 'folder', 'slack'].indexOf(src) < 0) src = 'upload';
     if (S.sf_source === src) return;
     S.sf_source = src;
-    S.sf_sort = { key: (src === 'email') ? 'modified' : 'date', dir: 'desc' };
+    S.sf_sort = sf_default_sort(src);
     var seg = $('sfSourceSeg');
-    if (seg) seg.querySelectorAll('[data-src]').forEach(function (b) { b.classList.toggle('active', b.dataset.src === src); });
-    document.querySelectorAll('.sf-upload-only').forEach(function (el) { el.classList.toggle('hidden', src === 'email'); });
+    if (seg) seg.querySelectorAll('[data-src]').forEach(function (b) {
+      var on = b.dataset.src === src; b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.sf-upload-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'upload'); });
     document.querySelectorAll('.sf-email-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'email'); });
-    var sub = $('sfCardSub'); if (sub) sub.textContent = (src === 'email')
-      ? 'pull race-results attachments from OPEN Rankings cases (Email-to-Case) — same convert/review/download flow'
-      : 'download race-results files for a date and work them as a queue — the convert/review/download flow is unchanged';
+    document.querySelectorAll('.sf-folder-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'folder'); });
+    document.querySelectorAll('.sf-slack-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'slack'); });
+    document.querySelectorAll('.sf-query-only').forEach(function (el) { el.classList.toggle('hidden', src === 'folder' || src === 'slack'); });
+    document.querySelectorAll('.sf-dl-server').forEach(function (el) { el.classList.toggle('hidden', src !== 'upload' && src !== 'email'); });
+    var sub = $('sfCardSub'); if (sub) sub.textContent = sf_subtitle(src);
     sf_reset();   // clear the current list/selection when switching sources
   }
   // From/To date fields → the server's mode/date/start/end contract. "Any date" = no filter;
@@ -562,6 +579,11 @@
   }
   // Files-found table columns by source. val() = plain text (sort/search), cell() = HTML (display).
   function sf_columns() {
+    if (S.sf_source === 'folder') return [
+      { key: 'file', label: 'File name', val: function (f) { return f.target_name || ''; }, cell: function (f) { return '<span title="' + esc(f.target_name) + '">' + esc(f.target_name) + '</span>'; } },
+      { key: 'type', label: 'Type', val: function (f) { return sf_file_ext(f); }, cell: function (f) { return sf_type_cell(sf_file_ext(f)); } },
+      { key: 'modified', label: 'Modified', val: function (f) { return String(f._modified_ms || 0); }, cell: function (f) { return esc(folder_fmt_modified(f._modified_ms)); } }
+    ];
     if (S.sf_source === 'email') return [
       { key: 'opened', label: 'Opened (MT)', val: function (f) { return f.opened_utc || ''; }, cell: function (f) { return esc(f.opened_mtn || ''); } },
       { key: 'modified', label: 'Modified', val: function (f) { return f.modified_utc || ''; }, cell: function (f) { return esc(f.modified_mtn || ''); } },
@@ -631,8 +653,8 @@
       var ext = sf_file_ext(f);
       var rowcls = [];
       if (ext === 'xls' && xls_ok === false) rowcls.push('sf-xls-row');
-      // missing program/sanction is the norm for the email queue, so only flag it for the upload queue
-      if (S.sf_source !== 'email' && (!f.program_name || !f.sanction_id)) rowcls.push('sf-missing-meta');
+      // missing program/sanction is only meaningful for the upload queue (email/folder have no such concept)
+      if (S.sf_source === 'upload' && (!f.program_name || !f.sanction_id)) rowcls.push('sf-missing-meta');
       return '<tr' + (rowcls.length ? ' class="' + rowcls.join(' ') + '"' : '') + '><td><input type="checkbox" class="sf-pick" data-id="' + esc(f.content_version_id) + '" aria-label="Select file"' + checked + '></td>' +
         cols.map(function (c) { return '<td>' + c.cell(f) + '</td>'; }).join('') + '</tr>';
     }).join('');
@@ -644,8 +666,72 @@
   function sf_sort_and_render() { sf_sort_files(); sf_render(); }
   function sf_update_dl_enabled() {
     var sel = sf_selected_files().length, lim = sf_limit();
+    if (S.sf_source === 'folder') {
+      var lb = $('sfFolderLoadBtn');
+      if (lb) { lb.disabled = sel === 0; lb.textContent = sel ? ('Load ' + sel + ' file' + (sel > 1 ? 's' : '')) : 'Load selected'; }
+      return;
+    }
     var ready = sel > 0 && sel <= lim && (S.sf_dir || $('sfFolderPath').value);
     $('sfDownloadBtn').disabled = !ready;
+  }
+  // ----- "From Folder" tab: pick a local folder, list spreadsheets in the shared #sfTable, Load → queue.
+  // Folder records reuse the SF table/sort/search/select machinery; content_version_id is a synthetic
+  // per-file id so S.sf_selected works unchanged. No server, no download — "Load" reads bytes locally.
+  function sf_folder_record(name, folder) {
+    return { content_version_id: 'folder:' + folder + '/' + name, target_name: name,
+      file_extension: (name.indexOf('.') >= 0 ? name.split('.').pop().toLowerCase() : '') };
+  }
+  function sf_folder_set(files, dir, name) {
+    S.sf_folder_dir = dir || null; S.sf_folder_name = name || '';
+    if ($('sfFolderPickName')) { $('sfFolderPickName').textContent = name ? ('📁 ' + name) : ''; $('sfFolderPickName').classList.toggle('hidden', !name); }
+    if (!files.length) { S.sf_files = []; $('sfTable').querySelector('tbody').innerHTML = ''; hide('sfTableWrap'); hide('sfDownloadBar'); if ($('sfSearchWrap')) hide('sfSearchWrap'); $('sfCount').classList.add('hidden'); sf_set_status('No .xlsx / .xls / .csv files at the top level of “' + name + '”.', true); return; }
+    S.sf_files = files;
+    sf_select_newest();           // folder branch selects all
+    S.sf_sort = sf_default_sort('folder'); sf_sort_files();
+    sf_render(); sf_set_status('');
+  }
+  function sf_folder_choose() {
+    if (window.showDirectoryPicker) {
+      window.showDirectoryPicker({ mode: 'read' }).then(async function (dir) {
+        var name = dir.name || 'folder';
+        sf_set_status('Reading “' + name + '” …');
+        var out = [];
+        for await (var entry of dir.values()) {
+          if (entry.kind === 'directory') continue;                  // top-level files only
+          if (!folder_is_spreadsheet(entry.name)) continue;
+          var item = sf_folder_record(entry.name, name); item._handle = entry;
+          try { var f = await entry.getFile(); item._size = f.size; item._modified_ms = f.lastModified; } catch (e) { /* cloud placeholder — keep it */ }
+          out.push(item);
+        }
+        out.sort(function (a, b) { return sort.compare_text(a.target_name, b.target_name); });
+        sf_folder_set(out, dir, name);
+      }).catch(function (e) { if (e && e.name === 'AbortError') return; sf_set_status('Could not read that folder: ' + ((e && e.message) || e), true); });
+    } else { $('sfFolderInput').click(); }
+  }
+  function sf_folder_from_input(file_list) {
+    var out = [], top = null;
+    Array.prototype.slice.call(file_list || []).forEach(function (f) {
+      var rel = f.webkitRelativePath || f.name, parts = rel.split('/');
+      if (parts.length > 1) top = parts[0];
+      if (parts.length > 2) return;                                  // subfolder file — skip
+      if (!folder_is_spreadsheet(f.name)) return;
+      var item = sf_folder_record(f.name, top || '(folder)'); item._file = f; item._size = f.size; item._modified_ms = f.lastModified;
+      out.push(item);
+    });
+    out.sort(function (a, b) { return sort.compare_text(a.target_name, b.target_name); });
+    sf_folder_set(out, null, top || '(folder)');                     // no handle → Reload n/a (load only)
+  }
+  function sf_folder_load() {
+    var picks = sf_selected_files();
+    if (!picks.length) return;
+    sf_set_status('Loading ' + picks.length + ' file(s)…');
+    Promise.all(picks.map(function (f) {
+      var read = f._handle ? f._handle.getFile().then(function (file) { return file.arrayBuffer(); })
+        : (f._file ? f._file.arrayBuffer() : Promise.reject(new Error('no file source')));
+      return read.then(function (buf) { return { id: f.content_version_id, name: f.target_name, bytes: buf, meta: folder_fmt_modified(f._modified_ms) }; });
+    })).then(function (items) {
+      build_queue(items, { source: 'folder', dir: S.sf_folder_dir, folder: S.sf_folder_name, sig: 'folder:' + (S.sf_folder_name || 'default') });
+    }).catch(function (e) { sf_set_status('Could not read files: ' + e.message, true); });
   }
   function sf_apply_limit() {   // clamp the "Max files" field and re-select the newest N
     if ($('sfLimit')) { var lim = sf_limit(); if (String(lim) !== $('sfLimit').value) $('sfLimit').value = lim; }
@@ -974,6 +1060,9 @@
     if ($('sfLogoutBtn')) $('sfLogoutBtn').addEventListener('click', sf_toggle_auth);
     if ($('sfChooseFolder')) $('sfChooseFolder').addEventListener('click', sf_choose_folder);
     if ($('sfDownloadBtn')) $('sfDownloadBtn').addEventListener('click', sf_download_selected);
+    if ($('sfFolderChoose')) $('sfFolderChoose').addEventListener('click', sf_folder_choose);
+    if ($('sfFolderInput')) $('sfFolderInput').addEventListener('change', function () { sf_folder_from_input($('sfFolderInput').files); });
+    if ($('sfFolderLoadBtn')) $('sfFolderLoadBtn').addEventListener('click', sf_folder_load);
     if ($('sfFolderPath')) $('sfFolderPath').addEventListener('input', function () { S.sf_folder = $('sfFolderPath').value; try { window.localStorage.setItem('rrt_sf_folder', S.sf_folder); } catch (e) { /* ignore */ } sf_update_dl_enabled(); });
     if ($('sfSearch')) $('sfSearch').addEventListener('input', sf_render);
     if ($('sfLimit')) $('sfLimit').addEventListener('change', sf_apply_limit);

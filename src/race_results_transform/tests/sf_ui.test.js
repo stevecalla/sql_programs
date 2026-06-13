@@ -24,7 +24,8 @@ describe('salesforce intake — UI + wiring', () => {
       'id="sfLogoutBtn"', 'id="sfSearch"', 'id="sfLimit"',
       'id="sfQueue"', 'id="filesTab"', 'id="filesView"'
     ].forEach(function (needle) { assert.ok(html.indexOf(needle) >= 0, 'index.html missing ' + needle); });
-    assert.ok(html.indexOf('Get Race Results from Salesforce') >= 0, 'panel heading text');
+    assert.ok(html.indexOf('>Get Race Results<') >= 0, 'panel heading renamed to "Get Race Results"');
+    assert.ok(html.indexOf('Get Race Results from Salesforce') < 0, 'old Salesforce-specific heading is gone');
     assert.ok(html.indexOf('data-sort="type"') >= 0, 'list has a sortable Type column');
     assert.ok(html.indexOf('data-sort="sanction"') >= 0, 'list has a sortable Sanction column');
     assert.ok(html.indexOf('id="sfBroaden" checked') >= 0, 'panel has the Broaden search toggle, default ON');
@@ -156,6 +157,48 @@ describe('salesforce intake — UI + wiring', () => {
     assert.match(server, /app\.post\('\/api\/logout'/, 'inline JSON logout endpoint');
     assert.match(server, /mount_sf_routes\(app, require_dash_auth\)/, 'SF routes mounted behind dashboard auth');
     assert.match(server, /\{ name: 'source', ddl: 'source VARCHAR\(16\)'/, 'source ensure_columns migration');
+  });
+});
+
+describe('intake tab bar — SF Upload · SF Email · From Folder · Slack Ironman', () => {
+  test('the source toggle is a proper tablist with 4 SF-prefixed / labeled tabs (a11y)', () => {
+    assert.match(html, /id="sfSourceSeg"[^>]*role="tablist"/, 'source bar is a role=tablist');
+    ['data-src="upload"', 'data-src="email"', 'data-src="folder"', 'data-src="slack"'].forEach(function (n) {
+      assert.ok(html.indexOf(n) >= 0, 'tablist missing ' + n);
+    });
+    // each tab carries role="tab" + aria-selected (satisfies axe aria-required-children)
+    assert.ok((html.match(/role="tab"/g) || []).length >= 4, 'four role=tab buttons');
+    assert.ok(html.indexOf('aria-selected="true"') >= 0, 'the active tab is aria-selected');
+    assert.ok(html.indexOf('role="tabpanel"') >= 0, 'tabs control a tabpanel');
+    assert.ok(html.indexOf('>SF Upload Queue<') >= 0 && html.indexOf('>SF Email Queue<') >= 0, 'Salesforce tabs are SF-prefixed');
+    assert.ok(html.indexOf('>From Folder<') >= 0 && html.indexOf('>Slack Ironman<') >= 0, 'Folder + Slack tabs present');
+  });
+
+  test('app.js sf_set_source handles all 4 sources + toggles the per-source control classes', () => {
+    assert.match(app_js, /\['upload', 'email', 'folder', 'slack'\]\.indexOf\(src\)/, 'sf_set_source validates 4 sources');
+    assert.match(app_js, /aria-selected/, 'sf_set_source maintains aria-selected on the tabs');
+    ['sf-upload-only', 'sf-email-only', 'sf-folder-only', 'sf-slack-only', 'sf-query-only', 'sf-dl-server'].forEach(function (c) {
+      assert.ok(app_js.indexOf(c) >= 0 && html.indexOf(c) >= 0, 'control class wired both sides: ' + c);
+    });
+  });
+
+  test('From Folder tab folds into the shared #sfTable (folder column set + local Load)', () => {
+    assert.match(app_js, /S\.sf_source === 'folder'/, 'sf_columns/render branch on the folder source');
+    assert.match(app_js, /function sf_folder_choose\b/, 'folder picker for the SF card');
+    assert.match(app_js, /function sf_folder_from_input\b/, 'webkitdirectory fallback');
+    assert.match(app_js, /function sf_folder_load\b/, 'Load reads bytes locally → build_queue');
+    assert.match(app_js, /label: 'Modified'/, 'folder column set includes a Modified column');
+    assert.ok(html.indexOf('id="sfFolderChoose"') >= 0 && html.indexOf('id="sfFolderLoadBtn"') >= 0, 'folder Choose + Load buttons');
+    assert.ok(html.indexOf('id="sfFolderInput"') >= 0, 'folder webkitdirectory input');
+    // the standalone folder card is kept (for now) so both can be compared
+    assert.ok(html.indexOf('id="folderCard"') >= 0, 'standalone folder card stays in place during evaluation');
+  });
+
+  test('Slack Ironman tab shows an under-construction placeholder (no functionality yet)', () => {
+    assert.ok(html.indexOf('id="sfSlackPanel"') >= 0, 'slack placeholder panel present');
+    assert.match(html, /Slack Ironman submissions — coming soon/, 'on-brand coming-soon copy');
+    const css = fs.readFileSync(path.join(ROOT, 'public', 'css', 'app.css'), 'utf8');
+    assert.match(css, /\.sf-slack-panel\{/, 'slack placeholder is styled');
   });
 });
 
