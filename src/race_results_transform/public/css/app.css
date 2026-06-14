@@ -29,6 +29,8 @@ h3{font-size:14px;margin:0}
 .app-header{margin-bottom:16px}
 .title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .app-footer{text-align:center;margin:28px 0 8px;font-size:12px}
+.footer-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.footer-link:hover{color:var(--accent)}
 
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   box-shadow:var(--shadow);padding:clamp(14px,2vw,20px);margin:0 0 16px}

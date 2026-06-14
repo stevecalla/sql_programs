@@ -32,6 +32,14 @@ describe('slack intake — UI + wiring', () => {
     ].forEach(function (re) { assert.match(app_js, re); });
   });
 
+  test('public/private channel filter: a Show toggle that re-filters the cached channel list', () => {
+    assert.ok(html.indexOf('id="sfSlackVis"') >= 0, 'visibility filter present');
+    assert.ok(html.indexOf('value="public"') >= 0 && html.indexOf('value="private"') >= 0, 'public/private options');
+    assert.match(app_js, /function sf_render_channel_options\b/, 'renders options from the cached list');
+    assert.match(app_js, /vis === 'private' \? c\.is_private : !c\.is_private/, 'filters by is_private');
+    assert.match(app_js, /rrt_slack_vis/, 'the filter choice persists');
+  });
+
   test('the channel selection persists across sessions (localStorage)', () => {
     assert.match(app_js, /localStorage\.setItem\('rrt_slack_channel'/, 'saves the chosen channel');
     assert.match(app_js, /localStorage\.getItem\('rrt_slack_channel'/, 'restores the chosen channel');

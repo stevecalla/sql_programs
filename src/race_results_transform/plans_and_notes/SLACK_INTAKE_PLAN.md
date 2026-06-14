@@ -38,7 +38,8 @@ channel via env vars now; flip the env to the real channel later — **no code c
 - ⬜ Phase 1 — `slack/` engine + unit tests (mock client, no network)
 - ⬜ Phase 2 — Server routes (`/api/slack/*`, mx_session) + CLI + menu ("Slack" section + how-to runbook)
 - ⬜ Phase 3 — Browser: make the Slack Ironman tab functional (channel picker + copy chip) + `source='slack'`
-- ⬜ Phase 4 — Tests (ui + e2e) + docs
+- ✅ Phase 4 — Tests (`slack_dates`/`slack_client`/`slack_ui` units + opt-in `e2e/slack_flow.spec.js`) +
+  docs (README "Pull from Slack", CLAUDE `slack/` section + intake-tab, e2e README, `.env` vars)
 - ✅ Phase 5 — Intake-by-tab analytics: SF source split into `sf_upload_queue`/`sf_email_queue` (via
   `sf_queue_source`), `metrics:backfill-source` (idempotent legacy `salesforce` → `sf_upload_queue`),
   `by_source` report aggregation + dashboard **"Intake by tab"** chart (`chart_source`) + Ask-data chip.

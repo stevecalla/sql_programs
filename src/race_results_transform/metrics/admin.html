@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Race Results Spreadsheet Converter — Admin</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  .admin-shell { display:flex; align-items:stretch; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .admin-rail { flex:0 0 186px; display:flex; flex-direction:column; gap:2px; padding:12px 10px; border-right:1px solid var(--line); background:var(--surface-2,rgba(127,127,127,.05)); }
+  .admin-rail .grp { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--dim); padding:6px 10px 2px; }
+  .admin-rail a { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; color:var(--ink); text-decoration:none; cursor:pointer; font-size:14px; border:1px solid transparent; }
+  .admin-rail a:hover { background:var(--surface-2,rgba(127,127,127,.08)); }
+  .admin-rail a.on { background:rgba(21,40,78,.10); border-color:var(--line); font-weight:600; }
+  .admin-main { flex:1; min-width:0; padding:14px 16px; }
+  .pane { display:none; }
+  .pane.active { display:block; }
+  .ad-card { margin-bottom:14px; }
+  .ad-card h2 { font-size:12px; margin:0 0 12px; text-transform:uppercase; letter-spacing:.5px; color:var(--dim); }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; }
+  .tile { background:var(--surface-2,rgba(127,127,127,.07)); border-radius:10px; padding:10px 12px; }
+  .tile .k { font-size:12px; color:var(--dim); }
+  .tile .v { font-size:15px; margin-top:2px; }
+  .ok { color:#16a34a; } .warn { color:#b45309; } .bad { color:var(--accent); }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:760px){ .two-col{ grid-template-columns:1fr; } .admin-shell{ flex-direction:column; } .admin-rail{ flex-direction:row; flex-wrap:wrap; position:static; } }
+  .pill { font-size:12px; font-weight:700; border-radius:999px; padding:2px 10px; display:inline-block; }
+  .pill.yes{ background:rgba(22,163,74,.14); color:#16a34a; } .pill.no{ background:rgba(228,0,43,.14); color:var(--accent); }
+  .pill.warn{ background:rgba(224,162,0,.18); color:#b45309; } .pill.neutral{ border:1px solid var(--line); color:var(--dim); }
+  table.grid { width:100%; border-collapse:collapse; font-size:14px; }
+  table.grid td, table.grid th { padding:7px 6px; border-bottom:1px solid var(--line); text-align:left; }
+  table.grid th { font-size:12px; color:var(--dim); font-weight:600; }
+  .act-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+  .dim { color:var(--dim); }
+  code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; }
+  /* operations */
+  .ops-sec { border:1px solid var(--line); border-radius:10px; margin-bottom:10px; overflow:hidden; }
+  .ops-sec > h3 { margin:0; font-size:13px; padding:9px 12px; background:var(--surface-2,rgba(127,127,127,.06)); border-bottom:1px solid var(--line); cursor:pointer; display:flex; align-items:center; justify-content:space-between; user-select:none; }
+  .ops-sec > h3 .chev { transition:transform .15s; font-size:11px; color:var(--dim); }
+  .ops-sec.collapsed > h3 { border-bottom:0; }
+  .ops-sec.collapsed > h3 .chev { transform:rotate(-90deg); }
+  .ops-sec.collapsed .ops-item, .ops-sec.collapsed .ops-form { display:none; }
+  .ops-num { display:inline-block; min-width:20px; color:var(--dim); font-variant-numeric:tabular-nums; }
+  #logsOut, #opsOut { resize:vertical; min-height:240px; }
+  #logsOut { max-height:640px; }
+  .ops-item { display:flex; gap:10px; align-items:flex-start; padding:9px 12px; border-bottom:1px solid var(--line); }
+  .ops-item:last-child { border-bottom:0; }
+  .ops-item .meta { flex:1; min-width:0; }
+  .ops-item .lbl { font-size:13.5px; }
+  .ops-item .dsc { font-size:12px; color:var(--dim); margin-top:1px; }
+  .ops-item .cli { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; color:var(--dim); margin-top:3px; display:none; }
+  .show-cli .ops-item .cli { display:block; }
+  .ops-item.greyed { opacity:.6; }
+  .badge { font-size:10.5px; border-radius:6px; padding:1px 6px; border:1px solid var(--line); color:var(--dim); }
+  .badge.test{ color:#7c3aed; } .badge.read{ color:#0c447c; } .badge.mutate{ color:#b45309; } .badge.destruct{ color:var(--accent); }
+  .ops-form { display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:0 12px 10px 12px; }
+  .ops-form label { font-size:12px; color:var(--dim); display:flex; flex-direction:column; gap:2px; }
+  .term { background:#0c1220; color:#c9d4e3; border-radius:10px; padding:10px 12px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:1.65; max-height:340px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+  .term .l-err{ color:#f0997b; } .term .l-meta{ color:#5dcaa5; } .term .l-sys{ color:#ef9f27; }
+  .run-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
+  .btn.sm{ padding:4px 10px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app-header">
+    <div class="title-row">
+      <h1>⚙️ Race Results Spreadsheet Converter <span class="dim" style="font-weight:400;font-size:.6em">— Admin</span></h1>
+      <div class="header-btns">
+        <button id="themeToggle" class="btn ghost" aria-label="Toggle light or dark theme"></button>
+        <a class="btn ghost" href="/admin/logout">↩ Sign out</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="admin-shell">
+    <nav class="admin-rail" aria-label="Admin sections">
+      <div class="grp">Admin</div>
+      <a data-pane="overview" class="on"><span aria-hidden="true">▦</span> Overview</a>
+      <a data-pane="maintenance"><span aria-hidden="true">⚒</span> Maintenance</a>
+      <a data-pane="operations"><span aria-hidden="true">▸</span> Operations</a>
+      <a data-pane="logs"><span aria-hidden="true">▤</span> Logs</a>
+      <a data-pane="settings"><span aria-hidden="true">⚙</span> Settings</a>
+      <a data-pane="access"><span aria-hidden="true">◍</span> Access</a>
+      <a data-pane="reference"><span aria-hidden="true">❏</span> Reference</a>
+      <div class="grp">Links</div>
+      <a href="/metrics?metrics_test=1">📊 Metrics</a>
+      <a href="/?metrics_test=1">🧰 Converter</a>
+    </nav>
+
+    <main class="admin-main">
+
+      <!-- OVERVIEW (dense, Option A) -->
+      <section class="pane active" data-view="overview">
+        <div class="card ad-card">
+          <h2>System health</h2>
+          <div class="tiles" id="healthTiles"><div class="dim">Loading…</div></div>
+        </div>
+        <div class="two-col">
+          <div class="card ad-card">
+            <h2>Maintenance <span class="dim" style="text-transform:none;font-weight:400">— full controls in the Maintenance tab</span></h2>
+            <div class="act-row"><button class="btn ghost" type="button" data-goto="maintenance">⚒ Open Maintenance →</button></div>
+            <div class="dim" id="maintSummary" style="font-size:13px;line-height:2;margin-top:4px">Loading…</div>
+          </div>
+          <div class="card ad-card">
+            <h2>Settings (current)</h2>
+            <div id="settingsSummary" class="dim" style="font-size:13px;line-height:2">Loading…</div>
+            <button class="btn ghost sm" type="button" data-goto="settings" style="margin-top:8px">Edit settings →</button>
+          </div>
+        </div>
+        <div class="card ad-card">
+          <h2>System reference</h2>
+          <div class="dim" style="font-size:13px;line-height:1.7">
+            <b style="color:var(--ink)">Program object</b> resolves the Sanction ID (<code>cfg_Id__c</code>) — don't rename ·
+            <b style="color:var(--ink)">Tables</b> <code>race_results_transform_events</code>, <code>…_ask_log</code> ·
+            <b style="color:var(--ink)">Auth</b> app login gates <code>/</code> + intake, admin login gates <code>/metrics</code> + <code>/admin</code>.
+            <button class="btn ghost sm" type="button" data-goto="reference" style="margin-left:6px">Full reference →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- MAINTENANCE -->
+      <section class="pane" data-view="maintenance">
+        <div class="card ad-card">
+          <h2>Connection tests</h2>
+          <div class="act-row"><button class="btn ghost" type="button" data-action="test-sf">🔌 Test Salesforce</button><span class="dim" style="font-size:12px">Read-only login check.</span></div>
+          <div class="act-row"><button class="btn ghost" type="button" data-action="test-slack">🔌 Test Slack</button><span class="dim" style="font-size:12px">Verify bot token + channels.</span></div>
+        </div>
+        <div class="card ad-card">
+          <h2>Data maintenance</h2>
+          <div class="act-row"><button class="btn ghost" type="button" id="btnBackfill" data-action="backfill">↻ Backfill source</button><span class="dim" id="descBackfill" style="font-size:12px"></span></div>
+          <div class="act-row"><button class="btn ghost" type="button" id="btnPurge" data-action="purge-test">🗑 Purge test rows</button><span class="dim" id="descPurge" style="font-size:12px"></span></div>
+        </div>
+        <div class="card ad-card">
+          <h2>Server <span class="dim" style="text-transform:none;font-weight:400">— restart/stop require pm2</span></h2>
+          <div class="act-row" id="serverCtlRow"><button class="btn ghost" type="button" id="btnRestart">♻ Restart server</button><button class="btn ghost" type="button" id="btnStop">■ Stop server</button><span class="dim" id="descServer" style="font-size:12px"></span></div>
+          <div class="dim" id="serverCtlNote" style="font-size:12px;display:none">Not running under pm2 — start the server with pm2 to restart/stop it from here.</div>
+          <div class="act-row"><span class="dim" id="ngrokStatus" style="font-size:12px"></span></div>
+        </div>
+        <div id="actionResult" class="dim" style="min-height:1.2em;margin-top:4px"></div>
+      </section>
+
+      <!-- OPERATIONS -->
+      <section class="pane" data-view="operations">
+        <div class="card ad-card">
+          <div class="run-head">
+            <h2 style="margin:0">Operations <span class="dim" style="text-transform:none;font-weight:400">— run menu commands here; output streams live</span></h2>
+            <label class="dim" style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleCli"> show $ commands</label>
+          </div>
+          <div class="run-head">
+            <div class="dim" style="font-size:12px" id="runStatus">No command running.</div>
+            <button class="btn ghost sm" id="killBtn" type="button" style="display:none">■ Kill</button>
+          </div>
+          <div class="term" id="opsOut" aria-live="polite">Pick a command below to run it.</div>
+        </div>
+        <div id="opsSections"><div class="dim">Loading commands…</div></div>
+      </section>
+
+      <!-- LOGS -->
+      <section class="pane" data-view="logs">
+        <div class="card ad-card">
+          <h2>Process (pm2)</h2>
+          <div class="tiles" id="pm2Tiles"><div class="dim">Loading…</div></div>
+        </div>
+        <div class="card ad-card">
+          <div class="run-head"><h2 style="margin:0">Server console <span class="dim" style="text-transform:none;font-weight:400">— auto-streaming (drag the bottom edge to resize)</span></h2>
+            <span style="display:flex;align-items:center;gap:8px"><span id="logsLive" class="dim" style="font-size:12px">○ connecting…</span><button class="btn ghost sm" id="logsReload" type="button">↻ Reconnect</button></span></div>
+          <div class="term" id="logsOut" aria-live="polite">Connecting…</div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="pane" data-view="settings">
+        <div class="card ad-card">
+          <h2>Config <span class="dim" style="text-transform:none;font-weight:400">— non-secret, applied live; saved to admin_overrides.json (the .env file is never modified)</span></h2>
+          <div id="configForm" class="dim">Loading…</div>
+          <button class="btn" id="saveConfig" type="button" style="margin-top:12px">Save config</button>
+          <span id="configResult" class="dim" style="margin-left:10px"></span>
+          <div id="cfgUpdated" class="dim" style="font-size:12px;margin-top:8px"></div>
+        </div>
+      </section>
+
+      <!-- ACCESS -->
+      <section class="pane" data-view="access">
+        <div class="card ad-card">
+          <h2>Users <span class="dim" style="text-transform:none;font-weight:400">— extra logins; the .env account is the recovery and can't be removed</span></h2>
+          <table class="grid"><thead><tr><th>User</th><th>Access</th><th>Source</th><th></th></tr></thead><tbody id="usersBody"><tr><td class="dim">Loading…</td></tr></tbody></table>
+          <div class="act-row" style="margin-top:12px;align-items:center;flex-wrap:wrap">
+            <input id="newUser" placeholder="username" aria-label="New username" autocomplete="off">
+            <input id="newPass" type="password" placeholder="password" aria-label="New password" autocomplete="new-password">
+            <span style="display:flex;gap:12px;align-items:center;font-size:13px">
+              <label><input type="checkbox" class="newCap" value="admin"> Admin hub</label>
+              <label><input type="checkbox" class="newCap" value="metrics"> Metrics</label>
+              <label><input type="checkbox" class="newCap" value="intake" checked> Intake</label>
+            </span>
+            <button class="btn" id="addUser" type="button">Add user</button>
+          </div>
+          <div id="userResult" class="dim" style="min-height:1.2em"></div>
+          <p class="dim" style="font-size:12.5px;margin-top:10px">Each user gets exactly the areas you check: <b>Admin hub</b> (<code>/admin</code>), <b>Metrics</b> (<code>/metrics</code>), <b>Intake</b> (the converter Salesforce/Slack/Folder pull). The <code>.env</code> accounts always have full access (recovery). Passwords are scrypt-hashed; changing one never logs anyone out.</p>
+        </div>
+      </section>
+
+      <!-- REFERENCE -->
+      <section class="pane" data-view="reference">
+        <div class="card ad-card">
+          <h2>System reference</h2>
+          <table class="grid">
+            <tr><th style="width:160px">Program object</th><td>Salesforce sObject holding the Sanction ID via <code>cfg_Id__c = BLANKVALUE(cfg_Legacy_Id__c, cfg_Autonumber_ID__c)</code>. Default <code>Program</code>. Change only if your org renamed/recustomized it (Settings → Advanced).</td></tr>
+            <tr><th>Live APIs</th><td>Salesforce SOSL/SOQL (file intake) · Slack <code>files.list</code> (Slack intake) · <code>/api/event</code> (analytics ingest) · ngrok (optional public tunnel).</td></tr>
+            <tr><th>Database tables</th><td><code>race_results_transform_events</code> (usage) · <code>race_results_transform_ask_log</code> · <code>race_results_transform_ask_corrections</code>.</td></tr>
+            <tr><th>Key env vars</th><td><code>RACE_RESULTS_ADMIN_USER/_PASS</code> (admin) · <code>RACE_RESULTS_CONVERTER_METRICS_USER/_PASS</code> (app) · <code>SF_PROD_*/SF_DEV_*</code> · <code>SLACK_BOT_TOKEN</code> · <code>SF_PROGRAM_OBJECT</code> · <code>NGROK_AUTHTOKEN</code>.</td></tr>
+            <tr><th>Auth model</th><td>App login → <code>/</code> + Salesforce/Slack/Folder intake. Admin login → <code>/metrics</code> + <code>/admin</code>. The <code>.env</code> account is the non-removable recovery; extra users live in the gitignored <code>admin_overrides.json</code>.</td></tr>
+            <tr><th>Slack setup</th><td>Bot scopes <code>files:read, channels:read, channels:history, groups:read, groups:history, users:read</code>; put the <code>xoxb-…</code> token in <code>.env</code>; <code>/invite @bot</code> in any channel and it appears in the picker.</td></tr>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer class="app-footer dim">race results converter · admin · <a href="/metrics?metrics_test=1" class="footer-link">Metrics</a> · <a href="/?metrics_test=1" class="footer-link">Converter</a> · <span id="footerClock"></span></footer>
+</div>
+
+<script>
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function el(id){ return document.getElementById(id); }
+  function fmt_mtn(iso){ try{ var p={}; new Intl.DateTimeFormat('en-US',{timeZone:'America/Denver',weekday:'short',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}).formatToParts(new Date(iso)).forEach(function(x){p[x.type]=x.value;}); return p.weekday+'., '+p.month+'/'+p.day+'/'+p.year+' '+p.hour+':'+p.minute+':'+p.second+' '+p.dayPeriod+' MTN'; }catch(e){ return iso; } }
+
+  // theme (shared rrt_ui_v1 pref)
+  var PREF='rrt_ui_v1';
+  function prefs(){ try{return JSON.parse(localStorage.getItem(PREF)||'{}');}catch(e){return {};} }
+  function save_prefs(p){ try{localStorage.setItem(PREF,JSON.stringify(p));}catch(e){} }
+  function dark(){ var t=prefs().theme; if(t==='dark')return true; if(t==='light')return false; return !!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches); }
+  function apply_theme(){ var t=prefs().theme,d=document.documentElement; if(t==='dark'||t==='light')d.setAttribute('data-theme',t);else d.removeAttribute('data-theme'); var b=el('themeToggle'); if(b){var k=dark();b.textContent=k?'☀ Light':'☾ Dark';b.title='Switch to '+(k?'light':'dark')+' theme';} }
+  el('themeToggle').addEventListener('click',function(){ var p=prefs(); p.theme=dark()?'light':'dark'; save_prefs(p); apply_theme(); });
+  if(window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change',apply_theme);
+  apply_theme();
+
+  // footer clock (MT, live)
+  (function(){ var c=el('footerClock'); if(!c)return; function tick(){ var p={}; new Intl.DateTimeFormat('en-US',{timeZone:'America/Denver',weekday:'short',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}).formatToParts(new Date()).forEach(function(x){p[x.type]=x.value;}); c.textContent=p.weekday+'., '+p.month+'/'+p.day+'/'+p.year+' '+p.hour+':'+p.minute+':'+p.second+' '+p.dayPeriod+' MTN'; } tick(); setInterval(tick, 1000); })();
+
+  // nav
+  var rail=document.querySelectorAll('.admin-rail a[data-pane]');
+  function show_pane(name){
+    rail.forEach(function(a){ a.classList.toggle('on', a.getAttribute('data-pane')===name); });
+    document.querySelectorAll('.pane').forEach(function(p){ p.classList.toggle('active', p.getAttribute('data-view')===name); });
+    if(name==='operations') load_commands();
+    if(name==='logs') load_logs();
+  }
+  rail.forEach(function(a){ a.addEventListener('click',function(e){ if(a.getAttribute('data-pane')){ e.preventDefault(); show_pane(a.getAttribute('data-pane')); } }); });
+  document.addEventListener('click',function(e){ var g=e.target.closest&&e.target.closest('[data-goto]'); if(g) show_pane(g.getAttribute('data-goto')); });
+
+  function get_json(u){ return fetch(u,{credentials:'same-origin'}).then(function(r){ if(r.status===401){location.href='/admin/login';throw new Error('auth');} return r.json(); }); }
+  function post_json(u,b){ return fetch(u,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}).then(function(r){ if(r.status===401){location.href='/admin/login';throw new Error('auth');} return r.json(); }); }
+  function result(id,ok,msg){ var o=el(id); if(!o)return; o.textContent=(ok?'✓ ':'✗ ')+msg; o.style.color=ok?'#16a34a':'var(--accent)'; }
+
+  // ---- Overview: status tiles + maintenance counts + settings summary ----
+  function tile(k,vhtml){ return '<div class="tile"><div class="k">'+k+'</div><div class="v">'+vhtml+'</div></div>'; }
+  function set_action(btn,desc,count,noun,base){
+    var b=el(btn),d=el(desc);
+    if(count==null){ d.innerHTML=base+' <b>(DB off)</b>'; b.disabled=true; return; }
+    d.innerHTML=base+' <b style="color:var(--ink)">'+count+' '+noun+'.</b>';
+    b.disabled=(count===0);
+    b.setAttribute('data-confirm', count===0?'':('Affect '+count+' '+noun+'?'));
+  }
+  function load_status(){
+    get_json('/api/admin-status').then(function(d){
+      el('healthTiles').innerHTML =
+        tile('Admin login', d.admin_dedicated?'<span class="ok">Dedicated</span>':'<span class="warn">Falls back to app</span>')+
+        tile('App / intake', d.app_login?'<span class="ok">On</span>':'<span class="bad">Off</span>')+
+        tile('Analytics DB', d.analytics_db?'<span class="ok">Connected</span>':'<span class="bad">Off</span>')+
+        tile('Salesforce', d.salesforce?'<span class="ok">Configured</span>':'<span class="dim">Not set</span>')+
+        tile('Slack bot', d.slack?'<span class="ok">Set</span>':'<span class="warn">No token</span>')+
+        tile('ngrok', d.ngrok?'<span class="ok">On</span>':'<span class="dim">Off</span>');
+      set_action('btnPurge','descPurge',d.test_rows,'test row(s)','Deletes is_test=1 rows.');
+      set_action('btnBackfill','descBackfill',d.legacy_source,'legacy row(s)','Relabels salesforce→sf_upload_queue.');
+      var pm2=d.under_pm2;
+      if(el('serverCtlRow')) el('serverCtlRow').style.display=pm2?'':'none';
+      if(el('serverCtlNote')) el('serverCtlNote').style.display=pm2?'none':'';
+      if(el('descServer')) el('descServer').innerHTML=pm2?'Under pm2 — restart respawns automatically.':'';
+      var ng=d.ngrok_enabled?(d.ngrok_url?('● live: <a href="'+esc(d.ngrok_url)+'" target="_blank" rel="noopener">'+esc(d.ngrok_url)+'</a>'):('enabled — starts on restart'+(d.ngrok?'':' (needs NGROK_AUTHTOKEN)'))):'disabled';
+      el('ngrokStatus').innerHTML='ngrok tunnel: <b>'+ng+'</b>';
+      var ms=el('maintSummary'); if(ms) ms.innerHTML='Test rows: <b>'+(d.test_rows==null?'—':d.test_rows)+'</b> · pm2: <b>'+(pm2?'yes':'no')+'</b> · ngrok: <b>'+(d.ngrok_enabled?(d.ngrok_url?'live':'on (restart)'):'off')+'</b>';
+    }).catch(function(){});
+  }
+  function server_ctl(url,msg){ if(!window.confirm(msg))return; el('actionResult').textContent='Working…'; el('actionResult').style.color='var(--dim)'; fetch(url,{method:'POST',credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){ result('actionResult',!!j.ok,j.ok?j.message:(j.error||'failed')); }).catch(function(){}); }
+  el('btnRestart').addEventListener('click',function(){ server_ctl('/api/admin-restart','Restart the server now? It will be unavailable for a few seconds.'); });
+  el('btnStop').addEventListener('click',function(){ server_ctl('/api/admin-stop','Stop the server now? It will go OFFLINE and can only be restarted from the box.'); });
+  var ACTIONS={'test-sf':'/api/admin-test-sf','test-slack':'/api/admin-test-slack','backfill':'/api/admin-backfill-source','purge-test':'/api/metrics-purge-test'};
+  document.querySelectorAll('[data-action]').forEach(function(b){ b.addEventListener('click',function(){
+    var url=ACTIONS[b.getAttribute('data-action')]; if(!url)return;
+    var c=b.getAttribute('data-confirm'); if(c&&!window.confirm(c))return;
+    el('actionResult').textContent='Working…'; el('actionResult').style.color='var(--dim)'; b.disabled=true;
+    fetch(url,{method:'POST',credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+      b.disabled=false; var ok=j&&j.ok!==false;
+      result('actionResult',ok,ok?(j.message||('Deleted '+(j.deleted||0)+' row(s).')):(j.error||'failed')); load_status();
+    }).catch(function(){ b.disabled=false; });
+  }); });
+
+  // ---- Settings (config) ----
+  var FILE_OPTS=['xlsx','xls','csv','pptx','ppt']; var slack_channels=null;
+  function chan_name(id){ if(!slack_channels)return id; var c=slack_channels.filter(function(x){return x.id===id;})[0]; return c?((c.is_private?'🔒 ':'# ')+c.name):id; }
+  function render_config(d){
+    var hid=(d.effective.slack_hidden_channels||'').split(',').map(function(s){return s.trim();}).filter(Boolean), html='';
+    html+='<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:8px">Slack channels — hide from end users <button class="btn ghost sm" id="cfgChanRefresh" type="button" title="Reload the bot’s channels (after inviting/kicking)">↻ Refresh</button></div>';
+    if(slack_channels&&slack_channels.length){
+      html+='<div style="display:flex;flex-direction:column;gap:5px;max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px">'+
+        slack_channels.map(function(c){ var on=hid.indexOf(c.id)>=0; return '<label style="font-size:14px;display:flex;gap:7px;align-items:center"><input type="checkbox" class="cfg-hide" value="'+esc(c.id)+'"'+(on?' checked':'')+'> '+(c.is_private?'🔒 private ':'# public ')+esc(c.name)+' <span class="dim" style="font-size:11px">'+esc(c.id)+'</span></label>'; }).join('')+'</div>';
+    } else { html+='<input id="cfgHideFallback" value="'+esc(d.config.slack_hidden_channels||'')+'" placeholder="channel ids to hide, comma-separated (blank = show all)">'; }
+    html+='<div class="dim" style="font-size:12px;margin-top:4px"><b>Check a channel to HIDE it</b> from the end-user picker. Unchecked = shown; <b>new channels are visible by default</b>. 🔒 = private (the bot must be invited + have the groups scopes).'+((slack_channels&&!slack_channels.length)?' · set SLACK_BOT_TOKEN to pick from a list':'')+'</div></div>';
+    html+='<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="font-weight:600;margin-bottom:4px">Slack bot handle</div><input id="cfgHandle" value="'+esc(d.config.slack_bot_handle||'')+'" placeholder="'+esc(d.effective.slack_bot_handle||'membership-sales-bot')+'"><div class="dim" style="font-size:12px;margin-top:4px">Shown in the <code>/invite</code> + <code>/kick</code> hints (e.g. <code>membership-sales-bot</code>). Blank = use the bot’s own @handle from Slack.</div></div>';
+    var active=(d.effective.slack_file_types||'').split(',').map(function(s){return s.trim().toLowerCase();});
+    html+='<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="font-weight:600;margin-bottom:4px">Slack file types</div><div style="display:flex;gap:14px;flex-wrap:wrap">'+
+      FILE_OPTS.map(function(t){return '<label style="font-size:14px"><input type="checkbox" class="cfg-ft" value="'+t+'"'+(active.indexOf(t)>=0?' checked':'')+'> '+t+'</label>';}).join('')+
+      '</div><div class="dim" style="font-size:12px;margin-top:4px">All checked = default ('+esc(d.defaults.slack_file_types)+').</div></div>';
+    html+='<div style="padding:8px 0"><div class="dim" style="font-size:12px;cursor:pointer" id="advToggle">▸ Advanced — Salesforce program object (rarely changed)</div>'+
+      '<div id="advBox" style="display:none;margin-top:6px"><input id="cfgSf" value="'+esc(d.config.sf_program_object||'')+'" placeholder="'+esc(d.defaults.sf_program_object)+' (default)">'+
+      '<div class="dim" style="font-size:12px;margin-top:4px">Active: <b>'+esc(d.effective.sf_program_object)+'</b> · default: '+esc(d.defaults.sf_program_object)+' · the SF object that holds the Sanction ID. Blank = default.</div></div></div>';
+    html='<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="font-weight:600;margin-bottom:4px">Public ngrok tunnel</div><label style="font-size:14px;display:flex;gap:7px;align-items:center"><input type="checkbox" id="cfgNgrok"'+(d.effective.ngrok_enabled==='true'?' checked':'')+'> Expose a public URL when the server starts</label><div class="dim" style="font-size:12px;margin-top:4px">Needs <code>NGROK_AUTHTOKEN</code> in .env. <b>Takes effect on the next start/restart</b> (use Restart server in Maintenance). The live URL appears under Maintenance.</div></div>'+html;
+    el('configForm').innerHTML=html;
+    var at=el('advToggle'); if(at) at.addEventListener('click',function(){ var b=el('advBox'); b.style.display=b.style.display==='none'?'block':'none'; });
+    var cr=el('cfgChanRefresh'); if(cr) cr.addEventListener('click',function(){ cr.textContent='↻ Refreshing…'; cr.disabled=true; slack_channels=null; load_admin_config(); });
+    el('settingsSummary').innerHTML='Hidden Slack channels: <b>'+(hid.length?(hid.length+' hidden'):'none (all shown)')+'</b><br>Bot handle: <b>'+esc(d.effective.slack_bot_handle||'(auto)')+'</b><br>File types: <b>'+esc(d.effective.slack_file_types)+'</b>';
+  }
+  function caps_badges(caps){ return (caps||[]).map(function(c){ return '<span class="pill yes" style="margin-right:3px">'+esc(c)+'</span>'; }).join('')||'<span class="dim">none</span>'; }
+  function render_users(d){
+    var rows=[];
+    if(d.env_admin_user) rows.push('<tr><td>'+esc(d.env_admin_user)+'</td><td>'+caps_badges(d.all_caps)+'</td><td><span class="pill neutral">.env recovery</span></td><td></td></tr>');
+    (d.admin_users_caps||[]).forEach(function(u){ rows.push('<tr><td>'+esc(u.user)+'</td><td>'+caps_badges(u.caps)+'</td><td>stored</td><td><button class="btn ghost sm" data-remove="'+esc(u.user)+'" data-scope="admin">remove</button></td></tr>'); });
+    if(d.env_app_user) rows.push('<tr><td>'+esc(d.env_app_user)+'</td><td>'+caps_badges(['intake'])+'</td><td><span class="pill neutral">.env recovery</span></td><td></td></tr>');
+    (d.app_users_caps||[]).forEach(function(u){ rows.push('<tr><td>'+esc(u.user)+'</td><td>'+caps_badges(u.caps)+'</td><td>stored</td><td><button class="btn ghost sm" data-remove="'+esc(u.user)+'" data-scope="app">remove</button></td></tr>'); });
+    el('usersBody').innerHTML=rows.join('')||'<tr><td class="dim">none</td></tr>';
+  }
+  function load_admin_config(){
+    Promise.all([ get_json('/api/admin-config'), get_json('/api/admin-slack-channels').catch(function(){return {ok:false};}) ]).then(function(res){
+      var d=res[0], ch=res[1]; slack_channels=(ch&&ch.ok&&ch.channels)?ch.channels:[];
+      render_config(d); render_users(d);
+      var cu=el('cfgUpdated'); if(cu) cu.textContent=d.config_updated_at?('Last changed: '+fmt_mtn(d.config_updated_at)):'No saved config changes yet.';
+    }).catch(function(){});
+  }
+  el('saveConfig').addEventListener('click',function(){
+    var hide=Array.prototype.map.call(document.querySelectorAll('.cfg-hide:checked'),function(c){return c.value;});
+    var hide_fallback=el('cfgHideFallback')?el('cfgHideFallback').value.trim():'';
+    var slack_hidden_channels=hide.length?hide.join(','):hide_fallback;   // empty = all channels visible
+    var slack_bot_handle=el('cfgHandle')?el('cfgHandle').value.trim().replace(/^@/,''):'';
+    var checked=Array.prototype.map.call(document.querySelectorAll('.cfg-ft:checked'),function(c){return c.value;});
+    var file_types=(checked.length===0||checked.length===FILE_OPTS.length)?'':checked.join(',');
+    var sf=el('cfgSf')?el('cfgSf').value.trim():'';
+    var ngrok_enabled=(el('cfgNgrok')&&el('cfgNgrok').checked)?'true':'false';
+    post_json('/api/admin-config',{config:{slack_hidden_channels:slack_hidden_channels,slack_bot_handle:slack_bot_handle,slack_file_types:file_types,sf_program_object:sf,ngrok_enabled:ngrok_enabled}}).then(function(j){
+      result('configResult',!!j.ok,j.ok?(j.message||'Saved.'):(j.error||'failed')); if(j.ok) load_admin_config();
+    });
+  });
+  el('addUser').addEventListener('click',function(){
+    var user=el('newUser').value.trim(),pass=el('newPass').value;
+    var caps=Array.prototype.map.call(document.querySelectorAll('.newCap:checked'),function(c){return c.value;});
+    if(!user||!pass){ result('userResult',false,'username and password required'); return; }
+    if(!caps.length){ result('userResult',false,'pick at least one area of access'); return; }
+    post_json('/api/admin-user-add',{user:user,pass:pass,caps:caps}).then(function(j){
+      result('userResult',!!j.ok,j.ok?j.message:(j.error||'failed')); if(j.ok){ el('newUser').value='';el('newPass').value=''; load_admin_config(); }
+    });
+  });
+  document.addEventListener('click',function(e){ var b=e.target.closest&&e.target.closest('[data-remove]'); if(!b)return;
+    var u=b.getAttribute('data-remove'),scope=b.getAttribute('data-scope');
+    if(!window.confirm('Remove '+scope+' user "'+u+'"?'))return;
+    post_json('/api/admin-user-remove',{scope:scope,user:u}).then(function(j){ result('userResult',!!j.ok,j.ok?j.message:(j.error||'failed')); if(j.ok) load_admin_config(); });
+  });
+
+  // ---- Operations ----
+  var commands_loaded=false, cur_es=null, cur_run=null;
+  el('toggleCli').addEventListener('change',function(){ el('opsSections').classList.toggle('show-cli', this.checked); });
+  function field(p){
+    var name='p_'+p.name, lab='<span>'+esc(p.label||p.name)+'</span>';
+    if(p.type==='enum'){ return '<label>'+lab+'<select data-p="'+esc(p.name)+'">'+(p.options||[]).map(function(o){return '<option value="'+esc(o.value)+'"'+(String(o.value)===String(p.default||'')?' selected':'')+'>'+esc(o.label)+'</option>';}).join('')+'</select></label>'; }
+    var type=p.type==='int'?'number':(p.type==='date'?'date':'text');
+    return '<label>'+lab+'<input data-p="'+esc(p.name)+'" type="'+type+'" value="'+esc(p.default||'')+'" placeholder="'+esc(p.label||'')+'"></label>';
+  }
+  function render_commands(sections){
+    el('opsSections').innerHTML = sections.map(function(s){
+      return '<div class="ops-sec collapsed"><h3><span>'+esc(s.label)+'</span><span class="chev" aria-hidden="true">▾</span></h3>'+ s.items.map(function(it){
+        var greyed = it.web==='terminal';
+        var badge = it.klass&&it.klass!=='na' ? '<span class="badge '+it.klass+'">'+it.klass+'</span>' : '';
+        var right = greyed
+          ? '<span class="dim" style="font-size:12px;max-width:240px">'+esc(it.note||'terminal only')+'</span>'
+          : '<button class="btn sm" type="button" data-run="'+it.id+'">Run</button>';
+        var form = (it.web==='form'&&it.params&&it.params.length) ? '<div class="ops-form" id="form_'+it.id+'" style="display:none">'+it.params.map(field).join('')+'</div>' : '';
+        return '<div class="ops-item'+(greyed?' greyed':'')+'"><div class="meta"><div class="lbl"><span class="ops-num">'+it.id+'.</span> '+esc(it.label)+' '+badge+'</div><div class="dsc">'+esc(it.desc)+'</div>'+(it.cli?'<div class="cli">$ '+esc(it.cli)+'</div>':'')+'</div>'+right+'</div>'+form;
+      }).join('')+'</div>';
+    }).join('');
+    document.querySelectorAll('#opsSections [data-run]').forEach(function(b){ b.addEventListener('click',function(){ on_run(Number(b.getAttribute('data-run')), b); }); });
+    document.querySelectorAll('#opsSections .ops-sec > h3').forEach(function(h){ h.addEventListener('click',function(){ h.parentNode.classList.toggle('collapsed'); }); });
+  }
+  var REG_BY_ID={};
+  function on_run(id, btn){
+    var item=REG_BY_ID[id]; if(!item)return;
+    var form=el('form_'+id);
+    if(item.web==='form' && form && form.style.display==='none'){ form.style.display='flex'; btn.textContent='Run now'; return; }
+    var params={};
+    if(form) form.querySelectorAll('[data-p]').forEach(function(i){ params[i.getAttribute('data-p')]=i.value; });
+    var confirm_tok;
+    if(item.klass==='destruct'){ if(!window.confirm('This is destructive: '+item.label+'\nRun it now?'))return; confirm_tok=item.id; }
+    start_stream(id, params, confirm_tok, btn);
+  }
+  function start_stream(id, params, confirm_tok, btn){
+    if(cur_es){ try{cur_es.close();}catch(e){} cur_es=null; }
+    el('opsOut').textContent=''; el('runStatus').textContent='Starting…'; if(btn) btn.disabled=true;
+    post_json('/api/admin-console/run',{id:id,params:params,confirm:confirm_tok}).then(function(j){
+      if(btn) btn.disabled=false;
+      if(!j.ok){ append_line({stream:'err',line:'✗ '+(j.error||'failed to start')}); el('runStatus').textContent='Failed to start.'; return; }
+      cur_run=j.run_id; el('runStatus').textContent='Running… (run '+j.run_id+')'; el('killBtn').style.display='';
+      var es=new EventSource('/api/admin-console/stream/'+encodeURIComponent(j.run_id)); cur_es=es;
+      es.addEventListener('line',function(ev){ append_line(JSON.parse(ev.data)); });
+      es.addEventListener('exit',function(ev){ var d=JSON.parse(ev.data); el('runStatus').textContent='Finished: '+d.status+(d.code!=null?(' (code '+d.code+')'):'')+(d.capped?' · output truncated':''); el('killBtn').style.display='none'; es.close(); cur_es=null; });
+      es.onerror=function(){ el('runStatus').textContent='Stream closed.'; el('killBtn').style.display='none'; try{es.close();}catch(e){} cur_es=null; };
+    }).catch(function(){ if(btn) btn.disabled=false; });
+  }
+  function append_line(evt){
+    var o=el('opsOut'); var div=document.createElement('div');
+    div.className = evt.stream==='err'?'l-err':(evt.stream==='meta'?'l-meta':(evt.stream==='sys'?'l-sys':''));
+    div.textContent=evt.line; o.appendChild(div); o.scrollTop=o.scrollHeight;
+  }
+  el('killBtn').addEventListener('click',function(){ if(cur_run) post_json('/api/admin-console/kill/'+encodeURIComponent(cur_run),{}); });
+  function load_commands(){
+    if(commands_loaded)return; commands_loaded=true;
+    get_json('/api/admin-console/commands').then(function(d){
+      (d.sections||[]).forEach(function(s){ s.items.forEach(function(it){ REG_BY_ID[it.id]=it; }); });
+      render_commands(d.sections||[]);
+    }).catch(function(){ commands_loaded=false; el('opsSections').innerHTML='<div class="dim">Could not load commands.</div>'; });
+  }
+
+  // ---- Logs ----
+  var logs_es=null, logs_started=false;
+  function load_logs(){
+    get_json('/api/admin-pm2').then(function(d){
+      if(!d.under_pm2){ el('pm2Tiles').innerHTML='<div class="dim">Not running under pm2 ('+esc(d.reason||'dev mode')+') — console tail below still works.</div>'; return; }
+      function fmt_up(ms){ if(ms==null)return '—'; var s=Math.floor(ms/1000),dd=Math.floor(s/86400),hh=Math.floor((s%86400)/3600); return dd+'d '+hh+'h'; }
+      el('pm2Tiles').innerHTML =
+        tile('Status', d.status==='online'?'<span class="ok">online</span>':'<span class="warn">'+esc(d.status)+'</span>')+
+        tile('Uptime', fmt_up(d.uptime_ms))+ tile('Restarts', d.restarts)+
+        tile('CPU', (d.cpu!=null?d.cpu+'%':'—'))+ tile('Memory', d.memory_bytes!=null?Math.round(d.memory_bytes/1048576)+' MB':'—');
+    }).catch(function(){ el('pm2Tiles').innerHTML='<div class="dim">pm2 unavailable.</div>'; });
+    if(logs_started)return; logs_started=true;
+    el('logsOut').textContent='';
+    var es=new EventSource('/api/admin-logs/stream'); logs_es=es;
+    function set_live(on){ var s=el('logsLive'); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'#16a34a':'var(--dim)'; } }
+    es.onopen=function(){ set_live(true); };
+    es.addEventListener('line',function(ev){ var d=JSON.parse(ev.data); var o=el('logsOut'); var div=document.createElement('div'); div.className=d.level==='error'?'l-err':(d.level==='warn'?'l-sys':''); div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line; o.appendChild(div); while(o.childNodes.length>600)o.removeChild(o.firstChild); o.scrollTop=o.scrollHeight; });
+    es.onerror=function(){ set_live(false); /* browser auto-reconnects */ };
+  }
+  el('logsReload').addEventListener('click',function(){ logs_started=false; if(logs_es){try{logs_es.close();}catch(e){}} load_logs(); });
+
+  // initial loads
+  load_status();
+  load_admin_config();
+</script>
+</body>
+</html>

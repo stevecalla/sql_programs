@@ -261,7 +261,7 @@
 
   <div class="mx-panel"><h2>Errors</h2><table id="tbl_errors"><tbody></tbody></table></div>
 
-  <div class="mx-foot" id="foot">Loading…</div>
+  <div class="mx-foot" id="foot"><span id="footText">Loading…</span> · <a href="/admin?metrics_test=1" class="footer-link">Admin</a> · <a href="/?metrics_test=1" class="footer-link">Converter</a> · <span id="footerClock"></span></div>
 </div>
 
 <script>
@@ -420,16 +420,27 @@
     fill('tbl_files', d.top_files, function(f,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+f.name+'</td><td>'+f.n+'</td></tr>'; });
     fill('tbl_fixed', d.fixed_columns, function(c,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+c.key+'</td><td>'+c.n+'</td></tr>'; });
     fill('tbl_errors', d.errors, function(e,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+e.type+'</td><td>'+e.n+'</td></tr>'; });
-    el('foot').textContent = 'Last ' + d.days + ' days · anonymous usage analytics · refreshed ' + new Date().toLocaleString();
+    el('footText').textContent = 'Last ' + d.days + ' days · anonymous usage analytics';
   }
   function load(days){
     current_days = days;
-    el('foot').textContent = 'Loading…';
+    el('footText').textContent = 'Loading…';
     fetch('/api/metrics-report?days='+days, { credentials:'same-origin' })
       .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(render)
-      .catch(function(e){ el('foot').textContent = 'Could not load metrics: ' + e.message; });
+      .catch(function(e){ el('footText').textContent = 'Could not load metrics: ' + e.message; });
   }
+  // live Mountain-Time footer clock (identical to the converter at /)
+  (function start_clock(){
+    var elc = document.getElementById('footerClock'); if (!elc) return;
+    function tick(){
+      var parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Denver', weekday: 'short',
+        year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).formatToParts(new Date());
+      var p = {}; parts.forEach(function (x) { p[x.type] = x.value; });
+      elc.textContent = p.weekday + '., ' + p.month + '/' + p.day + '/' + p.year + ' ' + p.hour + ':' + p.minute + ':' + p.second + ' ' + p.dayPeriod + ' MTN';
+    }
+    tick(); setInterval(tick, 1000);
+  })();
   el('periods').addEventListener('click', function(ev){
     var b = ev.target.closest('button[data-days]'); if(!b) return;
     [].forEach.call(el('periods').children, function(x){ x.classList.toggle('active', x===b); });

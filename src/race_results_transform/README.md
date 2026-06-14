@@ -91,7 +91,7 @@ Both Salesforce queues let you:
   on, it OR's the wider terms (`Race Results Doc` / `Race Results` / `Race` / `Results`) so it also catches
   race-results files **not** titled "Race Results Doc"; uncheck it for the precise `Race Results Doc` term
   only. Results are always deduped by file and filtered to `.xlsx/.xls/.csv`. (CLI equivalent: `--search`.)
-- the first time, **sign in inline** (same login as the metrics dashboard — a small form with a
+- the first time, **sign in inline** (the converter's **app login** — a small form with a
   show/hide password toggle appears in the panel; you stay on the page). One **Sign in / Sign out** button
   (top-right of the panel) toggles the session and reflects the **real session state on load** — so after a
   page refresh while signed in it correctly reads "Sign out" (not "Sign in").
@@ -125,8 +125,10 @@ clear the earlier download is now out of date and should be re-downloaded.
 
 Privacy: the server fetches each file from Salesforce **into memory and streams it to the browser —
 nothing is written to the server's disk**; the browser saves to the folder you chose. The
-`/api/sf/*` endpoints are gated by the **same login as the metrics dashboard** (`mx_session`); the
-inline `POST /api/login` sets that session cookie without leaving the page.
+`/api/sf/*` endpoints are gated by the **app login** (`mx_session` ←
+`RACE_RESULTS_CONVERTER_METRICS_USER` / `_PASS`); the inline `POST /api/login` sets that session cookie
+without leaving the page. (The `/metrics` dashboard + the new `/admin` hub use a *separate* admin login —
+`RACE_RESULTS_ADMIN_USER` / `_PASS`, falling back to the app creds if unset.)
 
 Setup: set these in the repo-root `.env` — `SF_PROD_LOGIN_URL`, `SF_PROD_USERNAME`,
 `SF_PROD_PASSWORD`, `SF_PROD_SECURITY_TOKEN` (and `SF_DEV_*` for sandbox), plus optional
@@ -159,6 +161,24 @@ Everything stays in your browser — **nothing is uploaded**. Chrome/Edge use th
 (which also enables Reload); other browsers fall back to a standard folder-select that still loads and
 converts the files (just without Reload). The headless equivalent is the CLI:
 `node src/cli.js batch <folder> [--format csv|xlsx]`.
+
+## Pull from Slack (the Slack Ironman tab)
+
+The **Slack Ironman** tab pulls **spreadsheet (and PowerPoint) attachments out of a Slack channel** for a
+date range, then runs the spreadsheets through the same convert/review/download Files queue as everything
+else. It's **self-service**: a Slack bot is added to your workspace, and the tab shows a **channel picker
+auto-populated from the channels the bot is a member of**. To make a channel available, just run
+`/invite @your-bot` in it (the tab shows the exact command with a 📋 copy button) and click **↻ Refresh** —
+no config, no redeploy. Your channel pick is remembered between visits.
+
+One-time setup (server-side): create a Slack app with a **bot token** (`xoxb-…`) scoped
+`files:read`, `channels:read`+`channels:history`, `groups:read`+`groups:history`, `users:read`, put the token
+in `.env` as `SLACK_BOT_TOKEN`, and invite the bot to your channel. The token **never leaves the server** —
+files stream in-memory to the browser, like the Salesforce flow. File types: `xlsx · xls · csv · pptx · ppt`
+(override with `SLACK_FILE_TYPES`). Headless equivalents: `node src/cli.js slack:probe` (check the token +
+list channels), `slack:channels`, `slack:list --channel <id|name> [date opts]`, `slack:pull <opts> -o <dir>`.
+Full design + setup runbook: `plans_and_notes/SLACK_INTAKE_PLAN.md` (also printed by the menu's
+**Slack — setup & how-to** item).
 
 ## End-to-end tests (Playwright — opt-in, run from the CLI)
 
@@ -288,7 +308,8 @@ client / report render); the 8018 server **auto-creates the table at startup**
 - **Capture**: `public/js/metrics.js` → `POST /api/event` via `navigator.sendBeacon`
   (non-blocking; honors `METRICS_OFF` + Do-Not-Track).
 - **See it**: `node src/cli.js stats [--days 7]`, the dashboard at `/metrics`
-  (Basic Auth — `RACE_RESULTS_CONVERTER_METRICS_USER` / `RACE_RESULTS_CONVERTER_METRICS_PASS`), or the weekly Slack digest.
+  (the **admin login** — `RACE_RESULTS_ADMIN_USER` / `RACE_RESULTS_ADMIN_PASS`, falling back to the
+  `RACE_RESULTS_CONVERTER_METRICS_USER` / `_PASS` app creds if the admin vars aren't set; same gate gating the new `/admin` hub), or the weekly Slack digest.
 - **Size / cleanup**: `node src/cli.js metrics:size`, `metrics:cleanup` (keep current + prior
   calendar year), `metrics:purge-test` (delete only test-run rows — see below), and `metrics:purge-all`
   (delete every row — confirms first).

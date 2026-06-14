@@ -439,28 +439,38 @@
   // ----- Slack channel picker: self-service. The dropdown is the channels the BOT is a member of
   // (users.conversations); invite the bot to a channel in Slack and it appears here on Refresh.
   function sf_render_invite() {
-    var code = $('sfSlackInvite'); if (code) code.textContent = '/invite @' + (S.slack_bot_handle || 'your-bot');
+    var h = S.slack_bot_handle || 'your-bot';
+    var inv = $('sfSlackInvite'); if (inv) inv.textContent = '/invite @' + h;
+    var kick = $('sfSlackKick'); if (kick) kick.textContent = '/kick @' + h;
   }
-  function sf_flash_copied() {
-    var b = $('sfSlackInviteCopy'); if (!b) return;
+  function sf_flash_copied(id) {
+    var b = $(id || 'sfSlackInviteCopy'); if (!b) return;
     var prev = b.textContent; b.textContent = 'Copied!'; setTimeout(function () { b.textContent = prev; }, 1200);
   }
-  function sf_load_channels() {
+  function sf_slack_visibility() { return ($('sfSlackVis') && $('sfSlackVis').value) || 'all'; }
+  // Re-render the channel dropdown from the cached list, filtered by the Public/Private/All toggle.
+  function sf_render_channel_options() {
     var sel = $('sfSlackChannel'); if (!sel) return;
     var prev = sel.value;
+    var all = S.slack_channels || [];
+    if (!all.length) { sel.innerHTML = '<option value="">(no channels yet — invite the bot, then ↻ Refresh)</option>'; return; }
+    var vis = sf_slack_visibility();
+    var chans = all.filter(function (c) { return vis === 'all' || (vis === 'private' ? c.is_private : !c.is_private); });
+    if (!chans.length) { sel.innerHTML = '<option value="">(no ' + vis + ' channels the bot is in — switch the filter)</option>'; return; }
+    sel.innerHTML = chans.map(function (c) { return '<option value="' + esc(c.id) + '">' + (c.is_private ? '🔒 ' : '# ') + esc(c.name) + '</option>'; }).join('');
+    var saved = ''; try { saved = window.localStorage.getItem('rrt_slack_channel') || ''; } catch (e) { /* ignore */ }
+    var want = prev || saved || S.slack_default_channel || '';
+    if (want && chans.some(function (c) { return c.id === want; })) sel.value = want;
+  }
+  function sf_load_channels() {
+    if (!$('sfSlackChannel')) return;
     sf_set_status('Loading the bot’s channels…');
     sf_fetch_json('/api/slack/channels').then(function (j) {
       S.slack_bot_handle = (j.bot && j.bot.handle) || 'your-bot';
+      S.slack_default_channel = j.default_channel || '';
+      S.slack_channels = j.channels || [];
       sf_render_invite();
-      var chans = j.channels || [];
-      if (!chans.length) {
-        sel.innerHTML = '<option value="">(no channels yet — invite the bot, then ↻ Refresh)</option>';
-      } else {
-        sel.innerHTML = chans.map(function (c) { return '<option value="' + esc(c.id) + '">' + (c.is_private ? '🔒 ' : '# ') + esc(c.name) + '</option>'; }).join('');
-        var saved = ''; try { saved = window.localStorage.getItem('rrt_slack_channel') || ''; } catch (e) { /* ignore */ }
-        var want = prev || saved || j.default_channel || '';
-        if (want && chans.some(function (c) { return c.id === want; })) sel.value = want;
-      }
+      sf_render_channel_options();
       sf_set_authed(true);
       sf_set_status('');
     }).catch(function (e) {
@@ -1124,6 +1134,7 @@
     if ($('sfListBtn')) $('sfListBtn').addEventListener('click', sf_list);
     if ($('sfResetBtn')) $('sfResetBtn').addEventListener('click', sf_reset);
     if ($('sfSourceSeg')) $('sfSourceSeg').addEventListener('click', function (e) { var b = e.target.closest('[data-src]'); if (b) sf_set_source(b.dataset.src); });
+    if ($('sfSourceSeg')) sf_set_source('email');   // default the Get Race Results intake to the SF Email Queue
     if ($('sfEmailStatus')) $('sfEmailStatus').addEventListener('change', function () { if (S.sf_files) sf_list(); });
     if ($('sfLoginBtn')) $('sfLoginBtn').addEventListener('click', sf_login);
     if ($('sfLoginPass')) $('sfLoginPass').addEventListener('keydown', function (e) { if (e.key === 'Enter') sf_login(); });
@@ -1140,6 +1151,14 @@
     if ($('sfFolderInput')) $('sfFolderInput').addEventListener('change', function () { sf_folder_from_input($('sfFolderInput').files); });
     if ($('sfFolderLoadBtn')) $('sfFolderLoadBtn').addEventListener('click', sf_folder_load);
     if ($('sfSlackRefresh')) $('sfSlackRefresh').addEventListener('click', sf_load_channels);
+    if ($('sfSlackVis')) {
+      try { var sv = window.localStorage.getItem('rrt_slack_vis'); if (sv) $('sfSlackVis').value = sv; } catch (e) { /* ignore */ }
+      $('sfSlackVis').addEventListener('change', function () {
+        try { window.localStorage.setItem('rrt_slack_vis', $('sfSlackVis').value); } catch (e) { /* ignore */ }
+        sf_render_channel_options();
+        if (S.sf_files) sf_reset();
+      });
+    }
     if ($('sfSlackChannel')) $('sfSlackChannel').addEventListener('change', function () {
       try { window.localStorage.setItem('rrt_slack_channel', $('sfSlackChannel').value || ''); } catch (e) { /* ignore */ }
       if (S.sf_files) sf_reset();
@@ -1148,6 +1167,12 @@
       var text = '/invite @' + (S.slack_bot_handle || 'your-bot');
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(sf_flash_copied, function () { /* ignore */ });
       else sf_flash_copied();
+    });
+    if ($('sfSlackKickCopy')) $('sfSlackKickCopy').addEventListener('click', function () {
+      var text = '/kick @' + (S.slack_bot_handle || 'your-bot');
+      var done = function () { sf_flash_copied('sfSlackKickCopy'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { /* ignore */ });
+      else done();
     });
     if ($('sfFolderPath')) $('sfFolderPath').addEventListener('input', function () { S.sf_folder = $('sfFolderPath').value; try { window.localStorage.setItem('rrt_sf_folder', S.sf_folder); } catch (e) { /* ignore */ } sf_update_dl_enabled(); });
     if ($('sfSearch')) $('sfSearch').addEventListener('input', sf_render);

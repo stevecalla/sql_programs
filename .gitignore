@@ -222,3 +222,6 @@ src/race_results_transform/.menu_prefs.json
 # AI bot (bot_analyst)
 *.log
 
+
+# Race Results Converter — admin overrides (password hashes + session secret; never commit)
+admin_overrides.json

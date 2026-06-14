@@ -43,11 +43,15 @@ function mount_slack_routes(app, require_auth) {
     try {
       const conn = get_conn(bool(req.query.is_test));
       const identity = await slack.auth_test(conn);
-      const channels = await slack.list_member_channels(conn);
+      let channels = await slack.list_member_channels(conn);
       const cfg = slack.slack_config({ is_test: bool(req.query.is_test) });
+      // Admin HIDE-list: channels listed in SLACK_HIDDEN_CHANNELS are hidden from end users; everything else
+      // (including newly-invited channels) stays visible. Set from /admin → Settings → Slack channels.
+      const hidden = String(process.env.SLACK_HIDDEN_CHANNELS || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (hidden.length) channels = channels.filter(function (c) { return hidden.indexOf(c.id) < 0; });
       res.json({
         ok: true,
-        bot: { handle: identity.user, user_id: identity.user_id, team: identity.team },
+        bot: { handle: process.env.SLACK_BOT_HANDLE || identity.user, user_id: identity.user_id, team: identity.team },
         default_channel: cfg.default_channel || '',
         channels: channels
       });

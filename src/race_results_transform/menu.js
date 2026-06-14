@@ -79,7 +79,11 @@ async function run_test(file, label) {
 }
 
 // ── menu definition ──
-const SECTIONS = [
+// The catalog (sections/ids/labels/descriptions/the "$ ..." line) is the SINGLE SOURCE OF TRUTH in
+// admin/console_registry.js so menu.js and the /admin Operations panel never drift. The real SECTIONS
+// is derived from the registry just below this literal; DEAD_INLINE_SECTIONS is unused (kept only so the
+// diff is reviewable) and can be deleted.
+const DEAD_INLINE_SECTIONS = [
   { label: 'Convert', color: CYAN, items: [
     { id: 1, label: 'Convert a file', desc: 'Reformat one .xlsx or .csv to the USAT template; prints a scorecard.', cli: 'node src/cli.js convert <file> [-o out.xlsx]', action: 'convert' },
     { id: 2, label: 'Batch-convert a folder', desc: 'Reformat every .xlsx/.csv in a folder.', cli: 'node src/cli.js batch <folder> [-o outdir]', action: 'batch' },
@@ -159,6 +163,18 @@ const SECTIONS = [
     { id: 54, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
   ] }
 ];
+void DEAD_INLINE_SECTIONS;   // superseded by the registry-derived SECTIONS below
+const console_registry = require('./admin/console_registry');
+const COLOR_BY_NAME = { CYAN: CYAN, BLUE: BLUE, MAGENTA: MAGENTA, GREEN: GREEN, GRAY: GRAY, YELLOW: YELLOW };
+const SECTIONS = console_registry.SECTIONS.map(function (s) {
+  return {
+    label: s.label,
+    color: COLOR_BY_NAME[s.color] || CYAN,
+    items: s.items.map(function (it) {
+      return { id: it.id, label: it.label, desc: it.desc, cli: it.cli, action: it.action };
+    })
+  };
+});
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
 
 function banner() {

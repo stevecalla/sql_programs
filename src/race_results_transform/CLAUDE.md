@@ -81,7 +81,15 @@ src/race_results_transform/
                      sf_config, sf_client (injectable conn), sf_fetch (in-memory, no disk),
                      sf_routes (mount_sf_routes), index. See "Salesforce intake" below.
   menu.js            interactive launcher (pauses after each command); item numbers are sequential
-                     1..N in display order, guarded by tests/menu_ids.test.js
+                     1..N in display order, guarded by tests/menu_ids.test.js. The CATALOG (sections/ids/
+                     labels/descriptions) is the SINGLE SOURCE OF TRUTH in admin/console_registry.js so
+                     menu.js and the /admin Operations panel can't drift; menu keeps its own interactive
+                     prompts (handle()).
+  admin/             /admin support (Node-only, not lint-scanned): admin_store.js (scrypt users + config
+                     overrides), console_registry.js (the 54-command catalog + how the web runs each:
+                     run/form/terminal/menu, safety klass, declarative argv+params), console_runner.js
+                     (allowlist + argv-assembly + validation + the run/SSE-stream/kill registry; spawns
+                     with shell:false — no injection), log_ring.js (in-memory console ring + pm2 jlist).
   metrics/           usage-analytics server modules + the Basic-Auth dashboard view (kept OUT of
                        public/ and src/ so it isn't statically served): metrics_config.js,
                        metrics_report.js, metrics_dashboard.html
@@ -109,6 +117,8 @@ src/race_results_transform/
                      + sf_naming/sf_dates/sf_client (Salesforce engine, mock conn — no network)
                      + sf_ui (SF panel markup + app.js wiring + source flag across COLUMNS/client/DDL)
                      + menu_ids (menu item numbers stay sequential 1..N)
+                     + admin_store/admin_auth (admin login + overrides store + ops-console route gating)
+                     + admin_console (console_registry shape + console_runner argv-assembly/guards)
 ../../server_race_results_transform_8018.js   thin express.static host + ngrok (repo root)
 ```
 
@@ -247,7 +257,68 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 
 - Confirm the canonical Category rule for bare division names with the events team.
 - Optional: apply USAT theme to a print/export stylesheet; export/import mapping profiles as JSON.
-- **Metrics dashboard auth** (#7 + N2, built): a **login form** (`GET/POST /metrics/login`) validates the configured user/pass and sets a signed `mx_session` cookie (HMAC of `_PASS`, 12h TTL) — the cookie is the ONLY gate (no HTTP Basic), so `/metrics/logout` **truly** logs out (next visit redirects to the login form). API routes return 401 when unauthenticated; the page redirects to login.
+- **Split auth — app login vs admin login** (built): two independent signed-cookie logins, both HMAC/12h, no
+  HTTP Basic. (1) The **app login** (`mx_session` ← `RACE_RESULTS_CONVERTER_METRICS_USER`/`_PASS`, via
+  `require_dash_auth` + `POST /api/login`) gates the converter's **Salesforce/Slack intake** (`/api/sf/*`,
+  `/api/slack/*`) — the drag-drop converter at `/` stays public static. (2) The **admin login**
+  (`admin_session` ← **`RACE_RESULTS_ADMIN_USER`/`RACE_RESULTS_ADMIN_PASS`**, via `require_admin_auth`) gates
+  **`/metrics`** (+ all `/api/metrics-*`) **and the new `/admin` hub**. `/metrics/login` + `/admin/login`
+  (and `/metrics/logout` + `/admin/logout`) drive the admin cookie. **Fallback:** if the `ADMIN_*` vars
+  aren't set, `admin_creds()` falls back to the metrics creds, so an existing deploy keeps working until you
+  add them. **`/admin`** (`metrics/admin.html`, served only via the gated route — NOT public static) is a
+  config **monitor + control panel**, themed to match `/` (reuses `/css/app.css`, the `rrt_ui_v1` light/dark
+  toggle, the live MTN footer clock, the 🏁/⚙️/📊 header style). `GET /api/admin-status` returns booleans only
+  (which logins/DB/SF/Slack/ngrok are configured; the Slack channel is a set/unset flag, **never its value**).
+  **Admin actions** (gated POSTs, surfaced as buttons): `/api/admin-test-slack` + `/api/admin-test-sf`
+  (read-only connection tests), `/api/admin-backfill-source` (legacy `salesforce`→`sf_upload_queue`), and the
+  existing `/api/metrics-purge-test`; plus a quick link to the converter in test mode (`/?metrics_test=1`).
+  **Editable config + user management** (built): backed by a gitignored `admin_overrides.json`
+  (`admin/admin_store.js`) layered over `.env`. Passwords are **scrypt-hashed**; the `.env` creds stay an
+  always-on **recovery account** (can't be removed). **Sessions are signed with a stable `session_secret`
+  (not the password)**, so changing a password never logs anyone out (existing sessions re-prompt only on the
+  one deploy that introduced this). Gated routes: `GET/POST /api/admin-config` (non-secret values — Slack
+  default channel, file types, SF object — applied onto `process.env` live), `POST /api/admin-user-add`,
+  `POST /api/admin-user-remove`; both logins validate via `admin_store.valid_login(env account + stored users)`.
+  The UI lists **usernames only, never hashes**. **Slack channel hide-list (built):** the config key
+  `slack_hidden_channels` (a checklist in /admin → Settings) maps onto `process.env.SLACK_HIDDEN_CHANNELS`;
+  the end-user `GET /api/slack/channels` HIDES those channels (**empty = show all; newly-invited channels are
+  visible by default until explicitly hidden**). A `slack_bot_handle` config (`SLACK_BOT_HANDLE`, blank = the
+  bot's own @handle) drives the `/invite` + `/kick` hints in the Slack panel. Every config save stamps
+  `config_updated_at`, shown as "Last changed: <MTN>" on the Settings card.
+  **Per-user access control (RBAC, built):** each stored user carries a `caps` array — any of **`admin`**
+  (the `/admin` hub), **`metrics`** (the `/metrics` dashboard), **`intake`** (the converter SF/Slack/Folder
+  pull) — set with checkboxes in /admin → Access. The signed `admin_session` cookie now **carries the
+  username**; every gate looks that user's caps up fresh (`caps_for`/`req_caps`): `require_admin_auth` needs
+  `admin`, `require_metrics_auth` (which `/metrics` + `/api/metrics-*` now use) needs `metrics`, and
+  `require_dash_auth` (intake) needs `intake` (or a legacy `mx_session`). `authenticate()` validates the
+  `.env` recovery accounts OR any stored user and returns the username; **the `.env` admin account always has
+  all caps and the `.env` app account has `intake`**, so you can't lock yourself out. `/api/login` +
+  `admin_signin_post` set the cookie with the username; `/api/logout` clears both cookies. Changing the
+  signing format means everyone re-logs in once on the deploy that introduces this. The **Get-Results panel login (`POST /api/login`) accepts ANY account in the file**: an
+  admin account signs in with the admin cookie (reaches `/admin` + `/metrics` + intake), an app account gets the
+  app cookie (intake only). **ngrok is a toggle** (`ngrok_enabled` config, default off): /admin → Settings turns
+  it on; the server starts the tunnel on (re)start and `create_ngrok_tunnel` returns the public URL, surfaced in
+  `/api/admin-status` (`ngrok_url`) + the Maintenance card. **Restart/stop from /admin** via `POST
+  /api/admin-restart` + `/api/admin-stop` (pm2 only — replies first, then `pm2 restart|stop`; degrades to a note
+  off pm2; `under_pm2` in admin-status gates the buttons). Cross-page links from /admin + /metrics carry
+  `?metrics_test=1`. Guards: `tests/admin_store.test.js` + `tests/admin_auth.test.js`.
+  **`/admin` is a blend ops console** (left nav rail + a dense "Overview" landing): Overview (health tiles +
+  maintenance actions w/ live counts + settings summary + reference), **Operations**, **Logs**, Settings
+  (Slack channel dropdown + file-type checkboxes + an Advanced SF-object box), Access (users table + add form),
+  and **Reference** (Program object/APIs/DB tables/env/auth). **Operations runs `menu.js` commands from the
+  browser**: it reads `GET /api/admin-console/commands` (the `console_registry` web sections), renders each menu
+  section with the same labels, and runs an item via `POST /api/admin-console/run {id, params, confirm}` →
+  `console_runner` validates params + assembles argv from the registry + `spawn`s with **shell:false** (no
+  injection) → output **streams live** over SSE (`GET /api/admin-console/stream/:run_id`, EventSource) into a
+  dark console box, with a **Kill** button (`POST /api/admin-console/kill/:run_id`). `run` items run on click;
+  `form` items expand inline param inputs (dropdowns/number/text); `terminal`-only items (start server, open
+  browser, headed/step e2e, convert/inspect/batch — need a local path or desktop) are **greyed with a note**;
+  `destruct` items (purge-all, cleanup) require a typed confirm = the command id. **Logs** shows pm2 stats
+  (`GET /api/admin-pm2` → `pm2 jlist`; degrades to "not under pm2" in dev) + a **live console tail**
+  (`log_ring` mirrors the server's console into an in-memory ring; `GET /api/admin-logs` + `/api/admin-logs/stream`).
+  All endpoints `require_admin_auth`. Guards: `tests/admin_console.test.js` (registry shape + argv-assembly/guards)
+  + the ops-console assertions in `tests/admin_auth.test.js`. Plan: `plans_and_notes/ADMIN_CONSOLE_PLAN.md`
+  (+ a clickable `admin_console_mockup.html`).
 - **Anonymous visitor_id durability** (#6, built): `visitor_id` is written to BOTH a long-lived
   first-party cookie (~2yr, SameSite=Lax) AND `localStorage`, and restored from whichever survives,
   so it persists if one store is cleared. (True cross-device unification would require a
@@ -430,6 +501,42 @@ Purely client-side: nothing is uploaded, no server, no Salesforce.
   no network); opt-in `e2e/sf_flow.spec.js` (stubs `/api/sf/*`, forces the server-folder fallback). Live SF
   stays out of CI. No new deps — `jsforce` + `fast-csv` are already in the repo.
 
+## Slack intake (optional — the Slack Ironman tab)
+
+Pull **spreadsheet + PowerPoint attachments out of a Slack channel** for a date range, into the SAME Files
+queue. A 4th intake alongside SF + Folder; the existing flow is unchanged. The bot token stays server-side;
+file bytes stream **in-memory** to the browser (like `sf_fetch`). No new deps — uses `fetch` + the Web API.
+
+- **Engine** `slack/` (Node-only, injectable transport so it's unit-testable with a mock `conn` — no network),
+  mirroring `sf/`: `slack_config.js` (`SLACK_BOT_TOKEN` (xoxb), `SLACK_CHANNEL_ID` optional default,
+  `SLACK_CHANNEL_VISIBILITY=auto|public|private`, `SLACK_API_BASE`, `SLACK_FILE_TYPES` default
+  `xlsx,xls,csv,pptx,ppt`), `slack_dates.js` (MT From/To → padded Unix-seconds `files.list` window + a
+  `created_ms` MT day filter; reuses `sf_dates`), `slack_client.js` (`make_connection`/`slack_call` Bearer
+  transport · `auth_test` · `list_member_channels` via `users.conversations` · `channel_info` ·
+  `list_channel_files` via `files.list` → ext filter → MT filter → dedupe → newest-first → uploader names;
+  records reuse `content_version_id` = Slack file id so the shared UI works unchanged), `slack_fetch.js`
+  (`fetch_file_bytes`: `files.info` → `url_private_download` + Bearer → Buffer; guards the HTML-login-page
+  case = bot not in channel / bad scope), `slack_naming.js`, `slack_routes.js`, `index.js`.
+- **Server**: `mount_slack_routes(app, require_dash_auth)` (same `mx_session` auth; 503 until `SLACK_BOT_TOKEN`
+  set; lazy-required). `GET /api/slack/channels` (the bot's channels + its `@handle` for the invite chip),
+  `GET /api/slack/files` (validates the channel is one the bot is in), `GET /api/slack/file/:id` (in-memory
+  stream), `POST /api/slack/save` (non-Chrome server-folder fallback).
+- **Browser** (`app.js`, `S.sf_source === 'slack'`): the **Slack Ironman tab** is self-service — a **Channel
+  dropdown auto-populated from `users.conversations`** (`sf_load_channels`) + ↻ Refresh + a `/invite @bot`
+  **copy chip** (`sf_render_invite`/`sf_flash_copied`) + always-visible instructions; the pick persists in
+  `localStorage` (`rrt_slack_channel`). A **Show: All / Public / Private** filter (`#sfSlackVis`,
+  `sf_render_channel_options` filters the cached `S.slack_channels` by `is_private`; choice persists in
+  `rrt_slack_vis`) is a browsing aid only — both types read identically once the bot is invited. Columns `Date (MT) · Uploader · File name · Type` (`sf_columns`
+  slack branch); date range → `/api/slack/files`; download source-aware (`/api/slack/file/`); files flow into
+  the SAME queue tagged `source='slack'`.
+- **CLI + menu**: `slack:probe` (read-only: token + bot identity + channels + optional download check),
+  `slack:channels` (+ `--json` for the menu pick-list), `slack:list [--channel <id|name>] [date opts]`,
+  `slack:pull <opts> -o <dir>`. Menu **"Slack"** section: probe · list channels · list files · pull · run
+  tests · **setup & how-to (future-self runbook)**. Plan + runbook: `plans_and_notes/SLACK_INTAKE_PLAN.md`.
+- **Tests**: `tests/slack_dates.test.js`, `tests/slack_client.test.js` (mock conn, no network),
+  `tests/slack_ui.test.js` (markup + wiring + source + file-types); opt-in `e2e/slack_flow.spec.js` (stubs
+  `/api/slack/*`, forces the server-folder fallback). Live Slack stays out of CI.
+
 ## Usage analytics (anonymous)
 
 Built on a reusable core in `utilities/analytics/` (page-agnostic): `event_ingest.js`
@@ -443,7 +550,7 @@ aggregation in `metrics_report.js`, and `public/js/metrics.js` (thin init).
 
 Server (`server_race_results_transform_8018.js`): best-effort mysql2/promise pool via
 `local_usat_sales_db_config()`, `ensure_table` at startup, `POST /api/event` ingest,
-`/metrics` dashboard + `/api/metrics-report` (Basic Auth: `RACE_RESULTS_CONVERTER_METRICS_USER`/`_PASS`),
+`/metrics` dashboard + `/api/metrics-report` + the `/admin` hub (admin login: `RACE_RESULTS_ADMIN_USER`/`_PASS`, falling back to the metrics creds),
 and `/scheduled-slack-race-results-metrics` (cron → `slack_message_api`). Analytics is
 fire-and-forget: if the DB is down the converter still serves normally. PII never leaves
 the browser — events carry counts/enums + filename only. The client mutes itself under
