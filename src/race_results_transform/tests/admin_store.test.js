@@ -1,6 +1,7 @@
 'use strict';
 // Admin overrides store — pure unit tests (no network, no DB). scrypt hashing, multi-user logins with the
 // .env recovery account, config, and JSON persistence with a stable session secret.
+// NOTE: every password literal below is a throwaway UNIT-TEST FIXTURE fed to scrypt — none is a real secret.
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -14,10 +15,10 @@ function temp_file() {
 
 describe('admin_store', () => {
   test('scrypt hashing round-trips and never stores plaintext', () => {
-    const h = store.hash_password('s3cret-pw');
-    assert.ok(store.verify_password('s3cret-pw', h), 'correct password verifies');
+    const h = store.hash_password('pw-fixture-not-a-secret');
+    assert.ok(store.verify_password('pw-fixture-not-a-secret', h), 'correct password verifies');
     assert.ok(!store.verify_password('wrong', h), 'wrong password fails');
-    assert.ok(h.indexOf('s3cret-pw') < 0 && h.indexOf('scrypt$') === 0, 'stored value is a salted hash, not plaintext');
+    assert.ok(h.indexOf('pw-fixture-not-a-secret') < 0 && h.indexOf('scrypt$') === 0, 'stored value is a salted hash, not plaintext');
   });
 
   test('users: add / list / validate, scoped to admin vs app', () => {
@@ -35,7 +36,7 @@ describe('admin_store', () => {
 
   test('the .env recovery account always works and cannot be removed', () => {
     const o = store.empty_overrides();
-    assert.ok(store.valid_login(o, 'admin', 'envuser', 'envpass', 'envuser', 'envpass'), 'env creds validate even with no stored users');
+    assert.ok(store.valid_login(o, 'admin', 'envuser', 'env-fixture-not-a-secret', 'envuser', 'env-fixture-not-a-secret'), 'env creds validate even with no stored users');
     store.add_user(o, 'admin', 'temp', 'x');
     assert.equal(store.remove_user(o, 'admin', 'temp').ok, true, 'a stored user removes');
     assert.equal(store.remove_user(o, 'admin', 'envuser', 'envuser').ok, false, 'the env recovery account is protected');

@@ -78,10 +78,10 @@ test.describe('race_results_transform — metrics dashboard', () => {
 
   test('login sets a session cookie; logout forces re-login (N2)', async ({ page, context }) => {
     let cookies = await context.cookies();
-    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'session cookie set after login').toBe(true);
+    expect(cookies.some(function (c) { return c.name === 'admin_session'; }), 'session cookie set after login').toBe(true);
     await page.goto('/metrics/logout');
     cookies = await context.cookies();
-    expect(cookies.some(function (c) { return c.name === 'mx_session'; }), 'cookie cleared on logout').toBe(false);
+    expect(cookies.some(function (c) { return c.name === 'admin_session'; }), 'cookie cleared on logout').toBe(false);
     await page.goto('/metrics');                       // truly logged out -> redirected to the login form
     await expect(page).toHaveURL(/\/metrics\/login/);
     await expect(page.locator('form[action="/metrics/login"]')).toBeVisible();

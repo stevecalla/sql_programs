@@ -292,7 +292,9 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   `admin`, `require_metrics_auth` (which `/metrics` + `/api/metrics-*` now use) needs `metrics`, and
   `require_dash_auth` (intake) needs `intake` (or a legacy `mx_session`). `authenticate()` validates the
   `.env` recovery accounts OR any stored user and returns the username; **the `.env` admin account always has
-  all caps and the `.env` app account has `intake`**, so you can't lock yourself out. `/api/login` +
+  all caps and the `.env` converter-metrics account has `metrics` + `intake`** (the dashboard + intake, not
+  `/admin`), so you can't lock yourself out. (When no dedicated `RACE_RESULTS_ADMIN_*` is set, that one account
+  is also the admin account and gets all caps.) `/api/login` +
   `admin_signin_post` set the cookie with the username; `/api/logout` clears both cookies. Changing the
   signing format means everyone re-logs in once on the deploy that introduces this. The **Get-Results panel login (`POST /api/login`) accepts ANY account in the file**: an
   admin account signs in with the admin cookie (reaches `/admin` + `/metrics` + intake), an app account gets the

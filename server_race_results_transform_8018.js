@@ -239,7 +239,7 @@ function create_app() {
   function caps_for(user) {
     if (!user) return [];
     if (user === admin_creds().user) return admin_store.ALL_CAPS.slice();   // .env admin = full access (recovery)
-    if (user === dash_creds().user) return ['intake'];                       // .env app account = intake only
+    if (user === dash_creds().user) return ['metrics', 'intake'];            // .env converter-metrics account = dashboard + intake (not /admin)
     return admin_store.user_caps(overrides, user);
   }
   function req_caps(req) { return caps_for(admin_session_user(read_cookie(req, ADMIN_COOKIE))); }
