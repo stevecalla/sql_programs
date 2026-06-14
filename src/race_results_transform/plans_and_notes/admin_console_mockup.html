@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>/admin ops console — mockup</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#15284e; --dim:#6b7280; --line:#e3e6ec; --navy:#15284e; --red:#e4002b;
+          --ok:#16a34a; --warn:#b45309; --info-bg:#e6f1fb; --info-tx:#0c447c; --term-bg:#0c1220; --term-tx:#c9d4e3; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+  .note { max-width:920px; margin:18px auto 0; padding:0 16px; color:var(--dim); font-size:13px; }
+  .frame { max-width:920px; margin:12px auto; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); background:#fafbfc; }
+  .head b { font-weight:600; }
+  .pill { font-size:12px; border:1px solid var(--line); border-radius:999px; padding:3px 10px; color:var(--dim); }
+  .body { display:flex; min-height:430px; }
+  .rail { width:152px; border-right:1px solid var(--line); background:#fafbfc; padding:12px 8px; font-size:13px; }
+  .rail .grp { font-weight:600; padding:6px 8px; }
+  .rail a { display:block; padding:7px 8px; border-radius:8px; color:var(--dim); text-decoration:none; cursor:pointer; }
+  .rail a.on { background:var(--info-bg); color:var(--info-tx); }
+  .rail a:hover { background:#eef1f5; }
+  .pane { flex:1; padding:14px 16px; min-width:0; }
+  .panelabel { font-size:12px; color:var(--dim); margin-bottom:8px; display:flex; justify-content:space-between; }
+  .live { color:var(--ok); }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(86px,1fr)); gap:8px; margin-bottom:14px; }
+  .tile { background:#f1f3f6; border-radius:8px; padding:8px 10px; }
+  .tile .k { font-size:11px; color:var(--dim); }
+  .tile .v { font-size:14px; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); }
+  .term { background:var(--term-bg); color:var(--term-tx); border-radius:8px; padding:10px 12px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; line-height:1.7; margin-bottom:14px; overflow:auto; }
+  .term .t { color:#5f7791; } .term .g { color:#5dcaa5; } .term .b { color:#85b7eb; } .term .a { color:#ef9f27; }
+  .ops { border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .ops h4 { margin:0 0 8px; font-size:13px; font-weight:600; }
+  .ops h4 span { color:var(--dim); font-weight:400; font-size:11px; }
+  .btns { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .btn { border:1px solid var(--line); border-radius:8px; padding:5px 10px; font-size:12px; background:#fff; cursor:pointer; }
+  .btn:hover { background:#f1f3f6; }
+  .btn.danger { color:var(--red); }
+  .btn.off { color:#b8bdc7; border-style:dashed; cursor:not-allowed; }
+  .hide { display:none; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1320; --card:#161b2b; --ink:#e7ecf5; --dim:#9aa6bd; --line:#2a3247; --info-bg:#10243a; --info-tx:#85b7eb; }
+    .head,.rail { background:#121726; } .tile { background:#1c2336; } .rail a:hover,.btn:hover { background:#1c2336; } .btn{background:#161b2b;}
+  }
+</style>
+</head>
+<body>
+  <p class="note">Static mockup of the proposed <b>/admin ops console</b> (blend layout). Click the left-rail items to switch panes. Buttons are illustrative only.</p>
+  <div class="frame">
+    <div class="head"><div>⚙️ <b>Race Results Spreadsheet Converter — Admin</b></div><div><span class="pill">☾ Dark</span> <span class="pill">↩ Sign out</span></div></div>
+    <div class="body">
+      <nav class="rail">
+        <div class="grp">⚙️ Admin</div>
+        <a data-pane="overview">Overview</a>
+        <a data-pane="maint">Maintenance</a>
+        <a data-pane="settings">Settings</a>
+        <a data-pane="access">Access</a>
+        <a data-pane="ops">Operations</a>
+        <a class="on" data-pane="logs">Logs</a>
+        <a data-pane="ref">Reference</a>
+      </nav>
+      <section class="pane">
+
+        <div data-view="logs">
+          <div class="panelabel"><span>Logs &amp; process</span><span class="live">● live</span></div>
+          <div class="tiles">
+            <div class="tile"><div class="k">pm2 status</div><div class="v ok">online</div></div>
+            <div class="tile"><div class="k">uptime</div><div class="v">6d 4h</div></div>
+            <div class="tile"><div class="k">restarts</div><div class="v">2</div></div>
+            <div class="tile"><div class="k">cpu</div><div class="v">0.4%</div></div>
+            <div class="tile"><div class="k">mem</div><div class="v">118 MB</div></div>
+          </div>
+          <div class="term">
+            <div><span class="t">10:42:01</span> <span class="g">[env]</span> .env loaded (exists: true)</div>
+            <div><span class="t">10:42:01</span> server on :8018 · /metrics · /admin</div>
+            <div><span class="t">10:42:18</span> <span class="b">POST</span> /api/event 200 file_uploaded</div>
+            <div><span class="t">10:43:02</span> <span class="a">[sf]</span> list 14 files (broaden) 1.2s</div>
+            <div><span class="t">10:43:40</span> <span class="b">GET</span> /metrics 200 dashboard_view</div>
+          </div>
+          <div class="ops">
+            <h4>Operations <span>— curated menu.js commands, live output</span></h4>
+            <div class="btns">
+              <button class="btn">🔌 sf:probe</button>
+              <button class="btn">🔌 slack:probe</button>
+              <button class="btn">🗄 metrics:size</button>
+              <button class="btn">📊 stats</button>
+              <button class="btn">🧪 run tests</button>
+              <button class="btn danger">⚠ purge (confirm)</button>
+              <button class="btn off">▶ start server (terminal only)</button>
+            </div>
+            <div class="term">
+              <div><span class="g">$</span> node src/cli.js sf:probe</div>
+              <div>login ok · 14 files visible · sanction field reachable</div>
+              <div class="g">done in 1.4s ✓</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hide" data-view="overview">
+          <div class="panelabel"><span>Overview</span></div>
+          <div class="tiles">
+            <div class="tile"><div class="k">Admin login</div><div class="v ok">Dedicated</div></div>
+            <div class="tile"><div class="k">Analytics DB</div><div class="v ok">Connected</div></div>
+            <div class="tile"><div class="k">Salesforce</div><div class="v ok">Configured</div></div>
+            <div class="tile"><div class="k">Slack bot</div><div class="v warn">No token</div></div>
+          </div>
+          <div class="ops"><h4>Quick reference</h4><div style="font-size:13px;color:var(--dim)">Program object = Sanction ID source (don't rename) · Tables: <code>…_events</code>, <code>…_ask_log</code> · each rail item opens its own focused page.</div></div>
+        </div>
+
+        <div class="hide" data-view="maint">
+          <div class="panelabel"><span>Maintenance</span></div>
+          <div class="ops"><h4>Data actions <span>— with live counts</span></h4>
+            <div style="font-size:13px;line-height:2">Purge test rows — <b>14 flagged</b> &nbsp;<button class="btn danger">Purge 14</button><br>
+            Backfill source — <b>0 legacy rows</b> &nbsp;<button class="btn off">None</button></div>
+          </div>
+        </div>
+
+        <div class="hide" data-view="settings">
+          <div class="panelabel"><span>Settings</span></div>
+          <div class="ops"><h4>Config</h4><div style="font-size:13px;line-height:2">Slack default channel: <b>None — user picks</b> ▾<br>File types: <b>xlsx xls csv</b> (pptx off) · all = default<br><span style="color:var(--dim)">▸ Advanced — Salesforce program object (rarely changed)</span></div></div>
+        </div>
+
+        <div class="hide" data-view="access">
+          <div class="panelabel"><span>Access</span></div>
+          <div class="ops"><h4>Users</h4><div style="font-size:13px;line-height:2">skip — Admin <span class="pill">.env recovery</span><br>dana — App <button class="btn danger">remove</button><br><span style="color:var(--dim)">[Admin ▾] [username] [password] </span><button class="btn">Add user</button></div></div>
+        </div>
+
+        <div class="hide" data-view="ref">
+          <div class="panelabel"><span>System reference</span></div>
+          <div class="ops"><h4>How the system is wired</h4><div style="font-size:13px;line-height:1.8;color:var(--dim)">
+            <b style="color:var(--ink)">Program object</b> — SF sObject holding the Sanction ID (<code>cfg_Id__c</code>). Don't rename.<br>
+            <b style="color:var(--ink)">APIs</b> — SF SOSL/SOQL · Slack files.list · /api/event analytics · ngrok tunnel<br>
+            <b style="color:var(--ink)">DB / tables</b> — <code>race_results_transform_events</code> · <code>…_ask_log</code> · <code>…_ask_corrections</code><br>
+            <b style="color:var(--ink)">Auth</b> — app login gates / + intake; admin login gates /metrics + /admin; .env = recovery
+          </div></div>
+        </div>
+
+      </section>
+    </div>
+  </div>
+<script>
+  var rail = document.querySelectorAll('.rail a');
+  rail.forEach(function (a) {
+    a.addEventListener('click', function () {
+      rail.forEach(function (x) { x.classList.remove('on'); });
+      a.classList.add('on');
+      var pane = a.getAttribute('data-pane');
+      document.querySelectorAll('[data-view]').forEach(function (v) {
+        v.classList.toggle('hide', v.getAttribute('data-view') !== pane);
+      });
+    });
+  });
+</script>
+</body>
+</html>

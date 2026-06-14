@@ -11,7 +11,7 @@
 <div class="wrap">
   <header class="app-header">
     <div class="title-row">
-      <h1>Race Results Spreadsheet Converter</h1>
+      <h1>🏁 Race Results Spreadsheet Converter</h1>
       <div class="header-btns">
         <button id="themeToggle" class="btn ghost" aria-label="Toggle light or dark theme"></button>
         <button id="clearBtn" class="btn ghost hidden">↺ Start over</button>
@@ -19,26 +19,7 @@
     </div>
   </header>
 
-  <!-- upload -->
-  <section id="uploadCard" class="card dropzone" tabindex="0" aria-label="Upload spreadsheet">
-    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
-    <div class="dz-inner">
-      <div class="dz-icon">⬆</div>
-      <div class="dz-text"><strong>Drop a race-results .xlsx or .csv file here</strong><br><span class="dim">or tap to choose — it is reformatted to the USAT template in your browser, nothing is uploaded</span></div>
-      <div class="try-me" id="tryMe">
-        <button id="tryMeBtn" class="btn ghost" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Try me with fake sample data">▶ Try me (fake data) <span class="caret" aria-hidden="true">▾</span></button>
-        <div class="try-me-menu hidden" id="tryMeMenu" role="menu" aria-label="Try me options">
-          <button type="button" id="tryMeLoad" class="try-me-item" role="menuitem">Load sample data <span class="dim">— see it convert instantly</span></button>
-          <a href="/sample/sample_race_results_FAKE.xlsx" download id="tryMeGet" class="try-me-item" role="menuitem">Download sample file <span class="dim">— then upload it yourself</span></a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- shown while viewing the built-in sample so it's clear this is not a real upload -->
-  <div id="demoBadge" class="demo-badge hidden" role="status">⚠ Showing <strong>sample test data</strong> (fake) — nothing was uploaded. Click <strong>↺ Start over</strong> to convert your own file.</div>
-
-  <!-- optional: pull race-results files straight from Salesforce, then work them as a queue -->
+  <!-- primary: pull race-results files from Salesforce / Slack / a folder, then work them as a queue -->
   <section id="sfCard" class="card sf-card">
     <div class="sf-head">
       <h2>Get Race Results</h2>
@@ -49,7 +30,7 @@
       <button type="button" role="tab" id="sfTabUpload" data-src="upload" class="active" aria-selected="true" aria-controls="sfPanel" title="Race Results Doc files uploaded to Salesforce">SF Upload Queue</button>
       <button type="button" role="tab" id="sfTabEmail" data-src="email" aria-selected="false" aria-controls="sfPanel" title="Spreadsheet attachments on Rankings cases (Email-to-Case)">SF Email Queue</button>
       <button type="button" role="tab" id="sfTabFolder" data-src="folder" aria-selected="false" aria-controls="sfPanel" title="Pick a folder on your computer and load the files locally — nothing is uploaded">From Folder</button>
-      <button type="button" role="tab" id="sfTabSlack" data-src="slack" aria-selected="false" aria-controls="sfPanel" title="Slack Ironman submissions — coming soon">Slack Ironman</button>
+      <button type="button" role="tab" id="sfTabSlack" data-src="slack" aria-selected="false" aria-controls="sfPanel" title="Pull spreadsheet attachments from a Slack channel for a date range">Slack Ironman</button>
     </div>
     <div id="sfPanel" role="tabpanel" aria-label="Race results files" tabindex="0">
     <div class="sf-controls">
@@ -60,15 +41,23 @@
       <span class="dim sf-range-hint sf-query-only">max 14 days</span>
       <label class="sf-ctl sf-anydate sf-query-only"><input type="checkbox" id="sfAnyDate"> Any date</label>
       <label class="sf-ctl sf-upload-only" title="Broaden the search: also match Race / Results, not just &quot;Race Results Doc&quot; titles — catches more files but adds noise"><input type="checkbox" id="sfBroaden" checked> Broaden</label>
-      <label class="sf-ctl sf-email-only hidden" title="Case IsClosed flag: All = both · Is Closed = IsClosed true · Is Not Closed = IsClosed false (default). Only Is-Not-Closed rows are auto-checked for download.">Status <select id="sfEmailStatus" aria-label="Case status filter">
-        <option value="all">All</option>
+      <label class="sf-ctl sf-email-only hidden" title="Case IsClosed flag: All = both (default) · Is Closed = IsClosed true · Is Not Closed = IsClosed false. The newest files shown are auto-checked for download.">Status <select id="sfEmailStatus" aria-label="Case status filter">
+        <option value="all" selected>All</option>
         <option value="closed">Is Closed</option>
-        <option value="not_closed" selected>Is Not Closed</option>
+        <option value="not_closed">Is Not Closed</option>
       </select></label>
-      <label class="sf-ctl sf-query-only">On <select id="sfField" aria-label="Salesforce date field">
+      <label class="sf-ctl sf-datefield-only">On <select id="sfField" aria-label="Salesforce date field">
         <option value="LastModifiedDate">Last modified</option>
         <option value="CreatedDate">Created</option>
       </select></label>
+      <!-- Slack channel picker (self-service: invite the bot to a channel and it appears here) -->
+      <label class="sf-ctl sf-slack-only hidden" title="Filter the channel list by type. Both work the same once the bot is invited — this is just a browsing aid.">Show <select id="sfSlackVis" aria-label="Channel visibility filter">
+        <option value="all">All channels</option>
+        <option value="public">Public only</option>
+        <option value="private">Private only</option>
+      </select></label>
+      <label class="sf-ctl sf-slack-only hidden">Channel <select id="sfSlackChannel" aria-label="Slack channel"></select></label>
+      <button id="sfSlackRefresh" class="btn ghost sf-slack-only hidden" type="button" title="Reload the channels the bot is in">↻ Refresh</button>
       <!-- From Folder controls (local; no server). Max sits to the RIGHT of Reset here. -->
       <button id="sfFolderChoose" class="btn sf-folder-only hidden" type="button">Choose folder…</button>
       <button id="sfFolderReset" class="btn ghost sf-folder-only hidden" type="button" title="Clear the folder list">↺ Reset</button>
@@ -76,10 +65,19 @@
       <span id="sfFolderPickName" class="dim sf-folder-only hidden"></span>
       <input id="sfFolderInput" type="file" webkitdirectory multiple class="hidden" aria-hidden="true" tabindex="-1">
     </div>
-    <div id="sfSlackPanel" class="sf-slack-panel sf-slack-only hidden">
-      <div class="sf-slack-emoji" aria-hidden="true">🚧</div>
-      <h3>Slack Ironman submissions — coming soon</h3>
-      <p class="dim">We're building a lane to pull Ironman race results straight from Slack. Hang tight — this one's under construction.</p>
+    <div id="sfSlackPanel" class="sf-slack-note sf-slack-only hidden" role="note">
+      <div>
+        <span class="dim">Don’t see your channel? In Slack, run</span>
+        <code id="sfSlackInvite" class="sf-invite-code">/invite @your-bot</code>
+        <button id="sfSlackInviteCopy" class="btn ghost sm sf-invite-copy" type="button" title="Copy the invite command">📋 Copy</button>
+        <span class="dim">in that channel, then click ↻ Refresh.</span>
+      </div>
+      <div style="margin-top:4px">
+        <span class="dim">To stop pulling from a channel, run</span>
+        <code id="sfSlackKick" class="sf-invite-code">/kick @your-bot</code>
+        <button id="sfSlackKickCopy" class="btn ghost sm sf-invite-copy" type="button" title="Copy the kick command">📋 Copy</button>
+        <span class="dim">in that channel (or just hide it in /admin).</span>
+      </div>
     </div>
     <div id="sfStatus" class="sf-status dim" role="status"></div>
     <div id="sfLogin" class="sf-login hidden">
@@ -123,6 +121,25 @@
     </div>
     </div><!-- /#sfPanel -->
   </section>
+
+  <!-- upload (manual drop — secondary to the Get Race Results intake above) -->
+  <section id="uploadCard" class="card dropzone" tabindex="0" aria-label="Upload spreadsheet">
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+    <div class="dz-inner">
+      <div class="dz-icon">⬆</div>
+      <div class="dz-text"><strong>Drop a race-results .xlsx or .csv file here</strong><br><span class="dim">or tap to choose — it is reformatted to the USAT template in your browser, nothing is uploaded</span></div>
+      <div class="try-me" id="tryMe">
+        <button id="tryMeBtn" class="btn ghost" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Try me with fake sample data">▶ Try me (fake data) <span class="caret" aria-hidden="true">▾</span></button>
+        <div class="try-me-menu hidden" id="tryMeMenu" role="menu" aria-label="Try me options">
+          <button type="button" id="tryMeLoad" class="try-me-item" role="menuitem">Load sample data <span class="dim">— see it convert instantly</span></button>
+          <a href="/sample/sample_race_results_FAKE.xlsx" download id="tryMeGet" class="try-me-item" role="menuitem">Download sample file <span class="dim">— then upload it yourself</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- shown while viewing the built-in sample so it's clear this is not a real upload -->
+  <div id="demoBadge" class="demo-badge hidden" role="status">⚠ Showing <strong>sample test data</strong> (fake) — nothing was uploaded. Click <strong>↺ Start over</strong> to convert your own file.</div>
 
   <section id="introCard" class="card">
     <h2 class="steps-title">How it works</h2>
@@ -197,7 +214,7 @@
     </div><!-- /card-body -->
   </section>
 
-  <footer class="app-footer dim">race results converter · runs entirely in your browser · calla codes makes it happen · <span id="footerClock"></span></footer>
+  <footer class="app-footer dim">race results converter · runs entirely in your browser · calla codes makes it happen · <span id="footerClock"></span> · <a href="/metrics" class="footer-link">Metrics</a> · <a href="/admin" class="footer-link">Admin</a></footer>
 </div>
 
 <script src="vendor/exceljs.min.js"></script>

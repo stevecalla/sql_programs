@@ -16,10 +16,10 @@ const FILES = []
 // DOM / Node / ExcelJS / stdlib camelCase APIs + the one external util — these are not ours.
 const ALLOWED = new Set((`
 addEventListener addRow addWorksheet appendChild after before arrayBuffer byteLength charCodeAt classList className
-showDirectoryPicker getFileHandle getDirectoryHandle getFile createWritable removeEntry encodeURIComponent decodeURIComponent TextDecoder
+showDirectoryPicker getFileHandle getDirectoryHandle getFile createWritable removeEntry encodeURIComponent decodeURIComponent TextDecoder writeText
 indexedDB createObjectStore objectStore queryPermission requestPermission globalThis cellDates
 unlinkSync searchRecords searchResult instanceUrl accessToken loginUrl autoFetch maxFetch
-clearTimeout clientY closest columnCount createElement createInterface createObjectURL dataset
+clearTimeout clearCookie clientY closest columnCount createElement createInterface createObjectURL createHmac dataset
 dataTransfer deepEqual doesNotThrow eachCell eachRow effectAllowed execSync existsSync findIndex
 flatMap forEach getAttribute getBoundingClientRect getCell getColumn getElementById getItem getRow getTime rowCount
 getUTCDate getUTCFullYear getFullYear getUTCMonth getMonth getDate getUTCHours getUTCMinutes getUTCSeconds getUTCMilliseconds

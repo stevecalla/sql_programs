@@ -99,6 +99,21 @@ test('report issues an is_demo split query for Try Me vs real activity', async f
   assert.match(demo, /split_download_used/, 'split covers downloads');
 });
 
+function find_source_sql(seen) {
+  return seen.find(function (s) { return /GROUP BY source/.test(s) && /file_uploaded/.test(s); });
+}
+
+test('report splits intake activity by source (intake-by-tab breakdown)', async function () {
+  const pool = make_fake_pool();
+  const r = await report.build_report(pool, { days: 7 });
+  const sql = find_source_sql(pool.seen);
+  assert.ok(sql, 'expected a GROUP BY source aggregation');
+  assert.match(sql, /file_uploaded/, 'by_source covers uploads');
+  assert.match(sql, /conversion_completed/, 'by_source covers conversions');
+  assert.match(sql, /source IS NOT NULL/, 'excludes events with no source (page_view / dashboard_view)');
+  assert.ok(Array.isArray(r.data.by_source), 'data.by_source is an array');
+});
+
 test('report exposes demo_split (Uploads/Conversions/Downloads) + demo summary', async function () {
   const pool = make_fake_pool();
   const r = await report.build_report(pool, { days: 7 });

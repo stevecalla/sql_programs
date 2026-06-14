@@ -92,6 +92,9 @@ async function init_metrics() {
 // the other server_*.js services (e.g. 8017). Set false to run local-only.
 // Needs NGROK_AUTHTOKEN in the environment (authtoken_from_env).
 const is_test_ngrok = false;
+// Module-scope ngrok state so BOTH the inner route setup and the top-level listen() block can see it.
+let ngrok_url = null;            // the live public URL once the tunnel is established (else null)
+let ngrok_enabled_flag = false;  // mirror of the ngrok_enabled config; set in apply_config_overrides()
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
 
 const DEFAULT_PORT = Number(process.env.PORT) || Number(process.env.RACE_RESULTS_PORT) || 8018;
@@ -133,11 +136,41 @@ function create_app() {
   // can't be cleared). Fail-closed if the dashboard user/pass aren't set.
   const SESSION_COOKIE = 'mx_session';
   const SESSION_TTL_MS = 12 * 60 * 60 * 1000;   // 12h absolute expiry
+  // ---- editable overrides store (config + extra users/passwords, layered over .env). Gitignored JSON. ----
+  const admin_store = require('./src/race_results_transform/admin/admin_store');
+  const OVERRIDES_FILE = process.env.ADMIN_OVERRIDES_FILE || path.join(__dirname, 'admin_overrides.json');
+  let overrides = admin_store.load_or_init(OVERRIDES_FILE);
+  // Apply non-secret config overrides onto process.env (override wins) so the engines pick them up live.
+  function apply_config_overrides() {
+    const c = admin_store.get_config(overrides);
+    if (c.slack_default_channel) process.env.SLACK_CHANNEL_ID = c.slack_default_channel;
+    // HIDE-list: channels the END USER should NOT see in the Slack picker (empty = show all; new channels
+    // are visible by default until explicitly hidden here).
+    process.env.SLACK_HIDDEN_CHANNELS = c.slack_hidden_channels || '';
+    process.env.SLACK_BOT_HANDLE = c.slack_bot_handle || '';   // display handle for the /invite + /kick hints
+    if (c.slack_file_types) process.env.SLACK_FILE_TYPES = c.slack_file_types;
+    if (c.sf_program_object) process.env.SF_PROGRAM_OBJECT = c.sf_program_object;
+    ngrok_enabled_flag = (c.ngrok_enabled === 'true');   // read at startup; the tunnel starts in listen()
+  }
+  apply_config_overrides();
+  // ---- /admin ops console: run curated menu.js commands + a live log ring + pm2 stats (all admin-gated) ----
+  const console_runner = require('./src/race_results_transform/admin/console_runner');
+  const console_registry = require('./src/race_results_transform/admin/console_registry');
+  const log_ring = require('./src/race_results_transform/admin/log_ring');
+  log_ring.install(console);   // mirror the server's console output into an in-memory ring for the Logs panel
+  const PM2_PROCESS_NAME = 'usat_race_results_transform';
+  function open_sse(res) {
+    res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+    if (res.flushHeaders) res.flushHeaders();
+  }
+  // Sessions are signed with a STABLE per-server secret (not the password), so changing a password never
+  // logs anyone out. A separate role marker ('mx' app / 'admin') keeps the two cookies distinct.
+  function session_secret() { return overrides.session_secret || (process.env.RACE_RESULTS_CONVERTER_METRICS_PASS || 'fallback'); }
   function dash_creds() {
     return { user: process.env.RACE_RESULTS_CONVERTER_METRICS_USER, pass: process.env.RACE_RESULTS_CONVERTER_METRICS_PASS };
   }
   function sign_session(exp) {
-    return exp + '.' + crypto.createHmac('sha256', 'mx|' + (dash_creds().pass || '')).update(String(exp)).digest('base64url');
+    return exp + '.' + crypto.createHmac('sha256', session_secret()).update('mx|' + exp).digest('base64url');
   }
   function valid_session(token) {
     if (!token) return false;
@@ -151,15 +184,17 @@ function create_app() {
     const m = (req.headers.cookie || '').match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
     return m ? decodeURIComponent(m[1]) : null;
   }
-  function login_html(err) {
+  function login_html(err, action, title) {
+    const act = action || '/admin/login';
+    const ttl = title || 'Admin';
     return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-      + '<title>Sign in — Metrics</title>'
+      + '<title>Sign in — ' + ttl + '</title>'
       + '<style>body{font:16px system-ui,Arial,sans-serif;background:#0e1b3a;color:#fff;display:grid;place-items:center;min-height:100vh;margin:0}'
       + 'form{background:#16233f;padding:24px;border-radius:12px;min-width:280px;box-shadow:0 8px 30px rgba(0,0,0,.4)}'
       + 'h1{font-size:18px;margin:0 0 14px}input{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:10px;border-radius:8px;border:1px solid #2a3a5e;background:#0e1b3a;color:#fff}'
       + 'button{width:100%;padding:10px;border:0;border-radius:8px;background:#e4002b;color:#fff;font-weight:700;cursor:pointer;margin-top:6px}.err{color:#ff8a8a;font-size:13px;margin:0 0 6px}</style>'
-      + '<form method="post" action="/metrics/login">'
-      + '<h1>\uD83D\uDCCA Metrics \u2014 Sign in</h1>'
+      + '<form method="post" action="' + act + '">'
+      + '<h1>\uD83D\uDD12 ' + ttl + ' \u2014 Sign in</h1>'
       + (err ? '<p class="err">' + err + '</p>' : '')
       + '<input name="username" placeholder="Username" autofocus autocomplete="username">'
       + '<input id="pw" name="password" type="password" placeholder="Password" autocomplete="current-password">'
@@ -167,63 +202,325 @@ function create_app() {
       + '<input type="checkbox" style="width:auto;margin:0" onclick="document.getElementById(\'pw\').type=this.checked?\'text\':\'password\'"> Show password</label>'
       + '<button type="submit">Sign in</button></form>';
   }
-  function require_dash_auth(req, res, next) {
-    const c = dash_creds();
+  // ---- Admin auth: a SEPARATE login gating /metrics + /admin, distinct from the app/intake login.
+  // Admin creds default to RACE_RESULTS_ADMIN_USER/_PASS; if those aren't set, fall back to the metrics
+  // creds so an existing deploy keeps working until the new vars are added. Own cookie (admin_session).
+  const ADMIN_COOKIE = 'admin_session';
+  function admin_creds() {
+    return {
+      user: process.env.RACE_RESULTS_ADMIN_USER || process.env.RACE_RESULTS_CONVERTER_METRICS_USER,
+      pass: process.env.RACE_RESULTS_ADMIN_PASS || process.env.RACE_RESULTS_CONVERTER_METRICS_PASS
+    };
+  }
+  // true only when a DEDICATED admin credential is configured (not just the metrics fallback).
+  function admin_creds_dedicated() { return !!(process.env.RACE_RESULTS_ADMIN_USER && process.env.RACE_RESULTS_ADMIN_PASS); }
+  // The admin cookie carries the signed-in USERNAME so each gate can look up that user's capabilities
+  // (which areas they may reach). Per-user access is set in /admin → Access.
+  function sign_admin(exp, user) {
+    user = user || '';
+    return exp + '|' + Buffer.from(user).toString('base64url') + '.' + crypto.createHmac('sha256', session_secret()).update('admin|' + user + '|' + exp).digest('base64url');
+  }
+  function admin_session_user(token) {   // -> username if the cookie is valid + unexpired, else null
+    if (!token) return null;
+    const dot = token.indexOf('.'); if (dot < 0) return null;
+    const head = token.slice(0, dot); const bar = head.indexOf('|'); if (bar < 0) return null;
+    const exp = Number(head.slice(0, bar));
+    if (!exp || Date.now() > exp) return null;
+    let user; try { user = Buffer.from(head.slice(bar + 1), 'base64url').toString(); } catch (e) { return null; }
+    const want = sign_admin(exp, user);
+    if (token.length !== want.length) return null;
+    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(want)) ? user : null;
+  }
+  function valid_admin_session(token) { return admin_session_user(token) !== null; }
+  function set_admin_cookie(res, user) {
+    res.cookie(ADMIN_COOKIE, sign_admin(Date.now() + SESSION_TTL_MS, user || ''), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_MS });
+  }
+  // Capabilities for a user. The .env recovery accounts are always full / intake (so you can't lock yourself out).
+  function caps_for(user) {
+    if (!user) return [];
+    if (user === admin_creds().user) return admin_store.ALL_CAPS.slice();   // .env admin = full access (recovery)
+    if (user === dash_creds().user) return ['intake'];                       // .env app account = intake only
+    return admin_store.user_caps(overrides, user);
+  }
+  function req_caps(req) { return caps_for(admin_session_user(read_cookie(req, ADMIN_COOKIE))); }
+  // Validate a login against the .env recovery accounts OR any stored user. Returns the username, or null.
+  function authenticate(u, pw) {
+    const ac = admin_creds(), dc = dash_creds();
+    if (ac.user && ac.pass && u === ac.user && String(pw) === String(ac.pass)) return ac.user;
+    if (dc.user && dc.pass && u === dc.user && String(pw) === String(dc.pass)) return dc.user;
+    const rec = admin_store.valid_user(overrides, u, pw);
+    return rec ? rec.user : null;
+  }
+  function auth_not_configured() { return (!admin_creds().user || !admin_creds().pass) && (!dash_creds().user || !dash_creds().pass); }
+  function gate_cap(cap, login_path) {
+    return function (req, res, next) {
+      const is_api = req.path.indexOf('/api') === 0;
+      if (auth_not_configured()) {
+        const msg = 'Auth is not configured — set the admin or metrics creds in .env.';
+        return is_api ? res.status(503).json({ ok: false, error: msg }) : res.status(503).send(msg);
+      }
+      if (req_caps(req).indexOf(cap) >= 0) return next();
+      if (is_api) return res.status(401).json({ ok: false, error: 'not authorized' });
+      return res.redirect(login_path);
+    };
+  }
+  const require_admin_auth = gate_cap('admin', '/admin/login');       // /admin hub + its APIs
+  const require_metrics_auth = gate_cap('metrics', '/metrics/login'); // /metrics dashboard + its APIs
+  function require_dash_auth(req, res, next) {                        // converter Salesforce/Slack/Folder intake
     const is_api = req.path.indexOf('/api') === 0;
-    if (!c.user || !c.pass) {
-      // API callers (e.g. the Salesforce panel) must get JSON, not the plain-text page — otherwise
-      // the browser's r.json() fails with "Unexpected token 'D', \"Dashboard …\"".
-      const msg = 'Dashboard auth is not configured — set RACE_RESULTS_CONVERTER_METRICS_USER / RACE_RESULTS_CONVERTER_METRICS_PASS in .env.';
-      if (is_api) return res.status(503).json({ ok: false, error: msg });
-      return res.status(503).send(msg);
+    if (auth_not_configured()) {
+      const msg = 'Auth is not configured — set the converter/metrics creds in .env.';
+      return is_api ? res.status(503).json({ ok: false, error: msg }) : res.status(503).send(msg);
     }
-    if (valid_session(read_cookie(req, SESSION_COOKIE))) return next();   // valid session cookie = the only gate
+    if (valid_session(read_cookie(req, SESSION_COOKIE))) return next();   // legacy app session cookie
+    if (req_caps(req).indexOf('intake') >= 0) return next();             // admin-cookie user with the intake cap
     if (is_api) return res.status(401).json({ ok: false, error: 'not authenticated' });
     return res.redirect('/metrics/login');
   }
-  app.get('/metrics/login', function (req, res) {
-    if (valid_session(read_cookie(req, SESSION_COOKIE))) return res.redirect('/metrics');
-    res.type('html').send(login_html(''));
-  });
-  app.post('/metrics/login', function (req, res) {
-    const c = dash_creds();
-    if (!c.user || !c.pass) { res.status(503).send('Dashboard not configured.'); return; }
+  // /metrics + /admin share the ADMIN login (admin_session). A shared POST handler signs in and
+  // redirects to the area the form belongs to.
+  function admin_signin_post(req, res, redirect_to) {
+    if (auth_not_configured()) { res.status(503).send('Auth not configured.'); return; }
     const u = (req.body && req.body.username) || '', pw = (req.body && req.body.password) || '';
-    if (u === c.user && pw === c.pass) {
-      res.cookie(SESSION_COOKIE, sign_session(Date.now() + SESSION_TTL_MS), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_MS });
-      return res.redirect('/metrics');
-    }
-    res.status(401).type('html').send(login_html('Invalid username or password.'));
+    const user = authenticate(u, pw);
+    const needed = redirect_to === '/admin' ? 'admin' : 'metrics';
+    const action = redirect_to === '/admin' ? '/admin/login' : '/metrics/login';
+    const title = redirect_to === '/admin' ? 'Admin' : 'Metrics';
+    if (user && caps_for(user).indexOf(needed) >= 0) { set_admin_cookie(res, user); return res.redirect(redirect_to); }
+    const msg = user ? ('This account has no access to ' + title + '.') : 'Invalid username or password.';
+    res.status(401).type('html').send(login_html(msg, action, title));
+  }
+  // When already signed in as a user WITHOUT this area's cap, show the form with a clear message (instead of a
+  // blank form or a redirect loop) so they can sign in as an account that does have access.
+  function wrong_account_msg(req, area) {
+    const u = admin_session_user(read_cookie(req, ADMIN_COOKIE));
+    return u ? ('Signed in as "' + u + '", which has no ' + area + ' access. Sign in with an account that does.') : '';
+  }
+  app.get('/metrics/login', function (req, res) {
+    if (req_caps(req).indexOf('metrics') >= 0) return res.redirect('/metrics');   // only bounce if they HAVE the cap
+    res.type('html').send(login_html(wrong_account_msg(req, 'Metrics'), '/metrics/login', 'Metrics'));
   });
+  app.post('/metrics/login', function (req, res) { admin_signin_post(req, res, '/metrics'); });
+  app.get('/admin/login', function (req, res) {
+    if (req_caps(req).indexOf('admin') >= 0) return res.redirect('/admin');
+    res.type('html').send(login_html(wrong_account_msg(req, 'Admin'), '/admin/login', 'Admin'));
+  });
+  app.post('/admin/login', function (req, res) { admin_signin_post(req, res, '/admin'); });
+  app.get('/admin/logout', function (req, res) { res.clearCookie(ADMIN_COOKIE, { path: '/' }); res.redirect('/admin/login'); });
   // Inline/AJAX login: same session cookie as /metrics/login, but returns JSON and does NOT redirect
   // — lets the app (e.g. the Salesforce panel) sign in in place without leaving the page.
   app.post('/api/login', function (req, res) {
-    const c = dash_creds();
-    if (!c.user || !c.pass) return res.status(503).json({ ok: false, error: 'auth not configured' });
     const u = (req.body && req.body.username) || '', pw = (req.body && req.body.password) || '';
-    if (u === c.user && pw === c.pass) {
-      res.cookie(SESSION_COOKIE, sign_session(Date.now() + SESSION_TTL_MS), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_TTL_MS });
-      return res.json({ ok: true });
+    // The Get-Results panel accepts ANY account in the file. The admin cookie carries the username; the
+    // user's capabilities then gate every area (admin only reaches /admin, intake-only reaches the converter).
+    const user = authenticate(u, pw);
+    if (user) {
+      set_admin_cookie(res, user);
+      const caps = caps_for(user);
+      return res.json({ ok: true, admin: caps.indexOf('admin') >= 0, caps: caps });
     }
+    if (auth_not_configured()) return res.status(503).json({ ok: false, error: 'auth not configured' });
     return res.status(401).json({ ok: false, error: 'Invalid username or password' });
   });
   // Inline/AJAX logout: clears the same session cookie, returns JSON (no redirect). Ends the shared
   // mx_session (so the /metrics dashboard session ends too).
   app.post('/api/logout', function (req, res) {
     res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.clearCookie(ADMIN_COOKIE, { path: '/' });   // an admin signed in here too — clear both so Sign out truly ends it
     res.json({ ok: true });
   });
   // Lightweight auth probe (NOT gated). The mx_session cookie is httpOnly, so the browser can't read it;
   // the SF panel calls this on load to show the correct Sign in / Sign out label after a refresh.
   app.get('/api/auth-status', function (req, res) {
-    res.json({ ok: true, authed: valid_session(read_cookie(req, SESSION_COOKIE)) });
+    res.json({ ok: true, authed: valid_session(read_cookie(req, SESSION_COOKIE)) || valid_admin_session(read_cookie(req, ADMIN_COOKIE)) });
   });
   app.get('/metrics/logout', function (req, res) {
-    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.clearCookie(ADMIN_COOKIE, { path: '/' });
     res.redirect('/metrics/login');   // truly logged out: next /metrics hit shows the login form
   });
+  // ---- /admin hub (admin login). Read-only config monitor now; manage/allow-list scaffolded for later. ----
+  const ADMIN_HTML = path.join(__dirname, 'src', 'race_results_transform', 'metrics', 'admin.html');
+  app.get('/admin', require_admin_auth, function (req, res) { res.type('html').sendFile(ADMIN_HTML); });
+  // Config STATUS — booleans (is X configured?), never secret values, never a channel; plus live action counts
+  // (how many rows the Purge/Backfill buttons would touch) so the UI can show magnitude + disable when empty.
+  app.get('/api/admin-status', require_admin_auth, async function (req, res) {
+    const env = process.env;
+    let test_rows = null, legacy_source = null;
+    if (metrics_pool) {
+      try {
+        const [tr] = await metrics_pool.query('SELECT SUM(CASE WHEN is_test = 1 THEN 1 ELSE 0 END) n FROM `' + metrics_config.TABLE + '`');
+        test_rows = (tr[0] && tr[0].n != null) ? Number(tr[0].n) : 0;
+        legacy_source = await metrics_report.count_source(metrics_pool, 'salesforce');
+      } catch (e) { /* leave counts null on error */ }
+    }
+    res.json({
+      ok: true,
+      admin_dedicated: admin_creds_dedicated(),                       // separate admin creds set (vs metrics fallback)
+      app_login: !!(env.RACE_RESULTS_CONVERTER_METRICS_USER && env.RACE_RESULTS_CONVERTER_METRICS_PASS),
+      analytics_db: !!metrics_pool,
+      salesforce: !!(env.SF_PROD_USERNAME || env.SF_DEV_USERNAME),
+      slack: !!env.SLACK_BOT_TOKEN,
+      slack_default_channel_set: !!env.SLACK_CHANNEL_ID,              // boolean only — never the channel itself
+      ngrok: !!env.NGROK_AUTHTOKEN,                                  // an authtoken is configured
+      ngrok_enabled: (is_test_ngrok || ngrok_enabled_flag),          // tunnel is turned on (starts on (re)start)
+      ngrok_url: ngrok_url,                                          // the live public URL once established (else null)
+      under_pm2: !!process.env.pm_id,                               // running under pm2 (restart/stop available)
+      test_rows: test_rows,                                          // rows the Purge button would delete (null = DB off)
+      legacy_source: legacy_source                                   // rows the Backfill button would relabel
+    });
+  });
+  // Restart / stop the server from /admin — only meaningful UNDER pm2 (pm2 respawns it). We reply FIRST, then
+  // fire pm2 a moment later so the JSON response actually reaches the browser before this process is replaced.
+  function pm2_control(action, res) {
+    if (!process.env.pm_id) return res.json({ ok: false, error: 'Not running under pm2 — start/stop from the box (pm2 start/restart).' });
+    res.json({ ok: true, message: action === 'restart' ? 'Restarting… reconnect in a few seconds.' : 'Stopping… the server will go offline.' });
+    setTimeout(function () {
+      try { require('child_process').spawn('pm2', [action, PM2_PROCESS_NAME], { detached: true, stdio: 'ignore', shell: process.platform === 'win32' }).unref(); }
+      catch (e) { console.error('[admin] pm2 ' + action + ' failed: ' + e.message); }
+    }, 250);
+  }
+  app.post('/api/admin-restart', require_admin_auth, function (req, res) { pm2_control('restart', res); });
+  app.post('/api/admin-stop', require_admin_auth, function (req, res) { pm2_control('stop', res); });
+
+  // Admin ACTIONS (gated): read-only connection tests + the existing maintenance ops, so /admin actually
+  // manages, not just monitors. (Purge-test reuses the admin-gated /api/metrics-purge-test.)
+  app.post('/api/admin-test-slack', require_admin_auth, async function (req, res) {
+    try {
+      const slack = require('./src/race_results_transform/slack');
+      const cfg = slack.slack_config({});
+      const chk = slack.check_slack_config(cfg);
+      if (!chk.ok) return res.json({ ok: false, error: 'Not configured: ' + chk.missing.join(', ') });
+      const conn = slack.make_connection(cfg);
+      const id = await slack.auth_test(conn);
+      const chans = await slack.list_member_channels(conn);
+      res.json({ ok: true, message: 'Bot @' + id.user + ' on ' + id.team + ' — in ' + chans.length + ' channel(s).' });
+    } catch (e) { res.json({ ok: false, error: (e && e.message) || 'Slack error' }); }
+  });
+  app.post('/api/admin-test-sf', require_admin_auth, async function (req, res) {
+    try {
+      const sf = require('./src/race_results_transform/sf');
+      const cfg = sf.sf_config({ is_test: !!(req.body && req.body.is_test) });
+      const chk = sf.check_sf_config(cfg);
+      if (!chk.ok) return res.json({ ok: false, error: 'Not configured: ' + chk.missing.join(', ') });
+      await sf.make_connection(cfg);   // a successful login is the connection test
+      res.json({ ok: true, message: 'Connected to Salesforce (' + cfg.environment_name + ').' });
+    } catch (e) { res.json({ ok: false, error: (e && e.message) || 'Salesforce error' }); }
+  });
+  app.post('/api/admin-backfill-source', require_admin_auth, async function (req, res) {
+    try {
+      if (!metrics_pool) return res.json({ ok: false, error: 'analytics DB not available' });
+      const was = await metrics_report.count_source(metrics_pool, 'salesforce');
+      const r = await metrics_report.backfill_source(metrics_pool, 'salesforce', 'sf_upload_queue');
+      res.json({ ok: true, message: 'Relabelled ' + r.updated + ' legacy salesforce row(s) → sf_upload_queue' + (was === 0 ? ' (none to change).' : '.') });
+    } catch (e) { res.json({ ok: false, error: (e && e.message) || 'backfill error' }); }
+  });
+  // ---- editable config + user management (gated). Never returns hashes/secrets; .env users are recovery. ----
+  function save_overrides() { try { admin_store.write_overrides(OVERRIDES_FILE, overrides); return true; } catch (e) { return false; } }
+  app.get('/api/admin-config', require_admin_auth, function (req, res) {
+    const env = process.env;
+    const defaults = { slack_default_channel: '', slack_hidden_channels: '', slack_bot_handle: '', slack_file_types: 'xlsx,xls,csv,pptx,ppt', sf_program_object: 'Program', ngrok_enabled: 'false' };
+    const cfg = admin_store.get_config(overrides);
+    const effective = {                                            // what the engines are actually using right now
+      slack_default_channel: env.SLACK_CHANNEL_ID || '',
+      slack_hidden_channels: env.SLACK_HIDDEN_CHANNELS || '',       // channels hidden from end users (empty = none)
+      slack_bot_handle: env.SLACK_BOT_HANDLE || '',
+      slack_file_types: env.SLACK_FILE_TYPES || defaults.slack_file_types,
+      sf_program_object: env.SF_PROGRAM_OBJECT || defaults.sf_program_object,
+      ngrok_enabled: cfg.ngrok_enabled === 'true' ? 'true' : 'false'
+    };
+    res.json({
+      ok: true,
+      config: admin_store.get_config(overrides),                   // the saved override (blank = use default)
+      keys: admin_store.CONFIG_KEYS,
+      defaults: defaults,                                          // built-in fallback per key
+      effective: effective,                                       // active value now (override or default)
+      slack_file_type_options: ['xlsx', 'xls', 'csv', 'pptx', 'ppt'],
+      admin_users: admin_store.list_users(overrides, 'admin'),     // usernames only — never hashes
+      app_users: admin_store.list_users(overrides, 'app'),
+      admin_users_caps: admin_store.list_users_with_caps(overrides, 'admin'),   // [{user,caps}] for the Access table
+      app_users_caps: admin_store.list_users_with_caps(overrides, 'app'),
+      all_caps: admin_store.ALL_CAPS,                              // ['admin','metrics','intake']
+      env_admin_user: admin_creds().user || '',                    // the .env recovery account names (no passwords)
+      env_app_user: dash_creds().user || '',
+      config_updated_at: overrides.config_updated_at || ''         // ISO; the client renders it in Mountain Time
+    });
+  });
+  app.post('/api/admin-config', require_admin_auth, function (req, res) {
+    admin_store.set_config(overrides, (req.body && req.body.config) || {});
+    overrides.config_updated_at = new Date().toISOString();        // stamp the change (shown as "Last changed" in MTN)
+    if (!save_overrides()) return res.json({ ok: false, error: 'could not write the overrides file' });
+    apply_config_overrides();   // take effect live (env-read config)
+    res.json({ ok: true, message: 'Config saved.', config: admin_store.get_config(overrides), config_updated_at: overrides.config_updated_at });
+  });
+  app.post('/api/admin-user-add', require_admin_auth, function (req, res) {
+    const b = req.body || {};
+    const user = String(b.user || '').trim(), pass = String(b.pass || '');
+    const caps = (Array.isArray(b.caps) ? b.caps : []).filter(function (x) { return admin_store.ALL_CAPS.indexOf(x) >= 0; });
+    if (!user || !pass) return res.json({ ok: false, error: 'username and password are required' });
+    if (!caps.length) return res.json({ ok: false, error: 'pick at least one area of access' });
+    // store admin-area users (admin/metrics caps) in admin_users, intake-only users in app_users
+    const scope = (caps.indexOf('admin') >= 0 || caps.indexOf('metrics') >= 0) ? 'admin' : 'app';
+    admin_store.add_user(overrides, scope, user, pass, caps);
+    if (!save_overrides()) return res.json({ ok: false, error: 'could not write the overrides file' });
+    res.json({ ok: true, message: 'Saved user "' + user + '" — access: ' + caps.join(', ') + '.' });
+  });
+  app.post('/api/admin-user-remove', require_admin_auth, function (req, res) {
+    const b = req.body || {};
+    const scope = b.scope === 'app' ? 'app' : 'admin';
+    const user = String(b.user || '').trim();
+    const env_user = scope === 'app' ? (dash_creds().user || '') : (admin_creds().user || '');
+    const r = admin_store.remove_user(overrides, scope, user, env_user);
+    if (!r.ok) return res.json({ ok: false, error: r.error || 'could not remove user' });
+    if (!save_overrides()) return res.json({ ok: false, error: 'could not write the overrides file' });
+    res.json({ ok: true, message: 'Removed ' + scope + ' user "' + user + '".' });
+  });
+  // The bot's channels for the /admin config dropdown (admin-gated; the /api/slack/* list uses the app login).
+  app.get('/api/admin-slack-channels', require_admin_auth, async function (req, res) {
+    try {
+      const slack = require('./src/race_results_transform/slack');
+      const cfg = slack.slack_config({});
+      if (!slack.check_slack_config(cfg).ok) return res.json({ ok: false, error: 'Slack not configured' });
+      const conn = slack.make_connection(cfg);
+      const chans = await slack.list_member_channels(conn);
+      res.json({ ok: true, channels: chans.map(function (c) { return { id: c.id, name: c.name, is_private: !!c.is_private }; }) });
+    } catch (e) { res.json({ ok: false, error: (e && e.message) || 'Slack error' }); }
+  });
+
+  // ---- /admin ops console routes (admin-gated). The client sends only { id, params, confirm }; the
+  // server assembles argv from the registry and spawns with no shell (see admin/console_runner.js). ----
+  app.get('/api/admin-console/commands', require_admin_auth, function (req, res) {
+    res.json({ ok: true, sections: console_runner.commands(), runs: console_runner.list_runs(), audit: console_runner.recent_audit() });
+  });
+  app.post('/api/admin-console/run', require_admin_auth, function (req, res) {
+    const b = req.body || {};
+    const item = console_registry.by_id(b.id);
+    if (!item) return res.json({ ok: false, error: 'unknown command' });
+    const r = console_runner.start_run(item, b.params || {}, b.confirm);
+    res.json(r);
+  });
+  app.get('/api/admin-console/stream/:run_id', require_admin_auth, function (req, res) {
+    open_sse(res);
+    console_runner.subscribe(req.params.run_id, res);
+  });
+  app.post('/api/admin-console/kill/:run_id', require_admin_auth, function (req, res) {
+    res.json(console_runner.kill_run(req.params.run_id));
+  });
+
+  // ---- /admin Logs panel: in-memory console ring (+ SSE tail) and pm2 process stats ----
+  app.get('/api/admin-logs', require_admin_auth, function (req, res) {
+    res.json({ ok: true, lines: log_ring.tail(req.query.n) });
+  });
+  app.get('/api/admin-logs/stream', require_admin_auth, function (req, res) {
+    open_sse(res);
+    log_ring.subscribe(res);
+  });
+  app.get('/api/admin-pm2', require_admin_auth, async function (req, res) {
+    try { res.json(Object.assign({ ok: true }, await log_ring.read_pm2(PM2_PROCESS_NAME))); }
+    catch (e) { res.json({ ok: false, under_pm2: false, error: (e && e.message) || 'pm2 error' }); }
+  });
+
   const DASHBOARD_HTML = path.join(__dirname, 'src', 'race_results_transform', 'metrics', 'metrics_dashboard.html');
-  app.get('/metrics', require_dash_auth, function (req, res) {
+  app.get('/metrics', require_metrics_auth,function (req, res) {
     // record one dashboard_view per page open (best-effort; excluded from "visits")
     if (metrics_pool && !req.headers['x-metrics-test']) {
       const now = new Date();
@@ -234,7 +531,7 @@ function create_app() {
     }
     res.type('html').sendFile(DASHBOARD_HTML);
   });
-  app.get('/api/metrics-report', require_dash_auth, async function (req, res) {
+  app.get('/api/metrics-report', require_metrics_auth,async function (req, res) {
     try {
       if (!metrics_pool) return res.status(503).json({ ok: false, error: 'analytics DB not available' });
       const days = Number(req.query.days) || 7;
@@ -247,7 +544,7 @@ function create_app() {
   });
 
   // Purge only the deliberate test rows (is_test = 1). Real + Try-Me/demo data untouched. Auth-gated.
-  app.post('/api/metrics-purge-test', require_dash_auth, async function (req, res) {
+  app.post('/api/metrics-purge-test', require_metrics_auth,async function (req, res) {
     try {
       if (!metrics_pool) return res.status(503).json({ ok: false, error: 'analytics DB not available' });
       const r = await metrics_report.purge_test(metrics_pool);
@@ -259,7 +556,7 @@ function create_app() {
   });
 
   // AI "ask your data" — read-only natural-language query over the events table (auth-gated).
-  app.get('/api/metrics-ask-models', require_dash_auth, function (req, res) {
+  app.get('/api/metrics-ask-models', require_metrics_auth,function (req, res) {
     try { res.json(require('./src/race_results_transform/metrics/ask/models').list()); }
     catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -283,7 +580,7 @@ function create_app() {
     return text;
   }
   // G2: save an operator correction; it joins the grounding for subsequent asks.
-  app.post('/api/metrics-ask-correct', require_dash_auth, async function (req, res) {
+  app.post('/api/metrics-ask-correct', require_metrics_auth,async function (req, res) {
     try {
       const note = String((req.body && req.body.note) || '').slice(0, 2000).trim();
       if (!note) return res.status(400).json({ ok: false, error: 'no correction text' });
@@ -294,7 +591,7 @@ function create_app() {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Conversation transcript: return a thread's turns (oldest first) for display.
-  app.get('/api/metrics-ask-thread', require_dash_auth, async function (req, res) {
+  app.get('/api/metrics-ask-thread', require_metrics_auth,async function (req, res) {
     try {
       const thread_id = String((req.query && req.query.thread_id) || '').slice(0, 40);
       if (!thread_id) return res.json({ ok: true, turns: [] });
@@ -303,7 +600,7 @@ function create_app() {
       res.json({ ok: true, turns: rows.map(function (r) { return { ts: r.created_at_mtn, question: r.question, answer: r.answer, sql: r.sql_text, ok: r.ok, provider: r.provider, model: r.model }; }) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
-  app.post('/api/metrics-ask', require_dash_auth, async function (req, res) {
+  app.post('/api/metrics-ask', require_metrics_auth,async function (req, res) {
     const ask_mod = require('./src/race_results_transform/metrics/ask/ask');
     const ask_log = require('./src/race_results_transform/metrics/ask/ask_log');
     // Raw-SQL mode: input is treated as SQL and run directly (guarded read-only) -- no LLM.
@@ -362,6 +659,15 @@ function create_app() {
     console.error('[sf] route mount skipped:', e.message);
   }
 
+  // Slack race-results intake (optional feature). Same mx_session auth. Lazy-required so the server
+  // still boots if SLACK_* env is absent; /api/slack/* returns 503 "not configured" until
+  // SLACK_BOT_TOKEN is set. Bot token stays server-side; file bytes stream in-memory (no disk).
+  try {
+    require('./src/race_results_transform/slack/slack_routes').mount_slack_routes(app, require_dash_auth);
+  } catch (e) {
+    console.error('[slack] route mount skipped:', e.message);
+  }
+
   // Optional legacy .xls support: serve SheetJS's browser build straight from the installed `xlsx`
   // npm package (so `npm install xlsx` is all that's needed — no vendored copy). The app lazy-loads
   // this only when an .xls is opened. Falls back to a committed public/vendor copy if node_modules
@@ -413,7 +719,9 @@ function start_server(opts) {
       const actual = server.address().port;
       if (!opts.silent) {
         console.log('\nRace Results Transform \u2014 local server');
-        console.log('  -> http://localhost:' + actual + '/                 (web app)');
+        console.log('  -> http://localhost:' + actual + '/                 (web app \u2014 converter + intake)');
+        console.log('  -> http://localhost:' + actual + '/metrics          (usage dashboard \u2014 admin login)');
+        console.log('  -> http://localhost:' + actual + '/admin            (admin hub \u2014 admin login)');
         console.log('  -> http://localhost:' + actual + '/api/status       (health check)');
         console.log('  -> https://usat-converter.kidderwise.org' + '       (internet access)');
         console.log('  Serving: ' + PUBLIC_DIR);
@@ -422,15 +730,17 @@ function start_server(opts) {
       // NGROK TUNNEL \u2014 best-effort. Prints "Ingress established at: https://...".
       // A missing/invalid NGROK_AUTHTOKEN must NOT crash the local server, so we
       // catch the (otherwise unhandled) async rejection from create_ngrok_tunnel.
-      if (is_test_ngrok) {
+      if (is_test_ngrok || ngrok_enabled_flag) {
         process.once('unhandledRejection', function (err) {
           var msg = (err && (err.errorCode || err.message)) || String(err);
           console.log('\n  [ngrok] tunnel not started: ' + msg);
           console.log('  The local server above keeps running. To get a public URL, set');
           console.log('  NGROK_AUTHTOKEN (https://dashboard.ngrok.com/get-started/your-authtoken),');
-          console.log('  or set is_test_ngrok=false at the top of this file to skip ngrok.\n');
+          console.log('  or turn ngrok off in /admin → Settings.\n');
         });
-        create_ngrok_tunnel(actual);
+        create_ngrok_tunnel(actual).then(function (u) { if (u) { ngrok_url = u; console.log('  [ngrok] public URL: ' + u); } });
+      } else {
+        console.log('  [ngrok] tunnel disabled (enable it in /admin → Settings, then restart).');
       }
       resolve({ port: actual, server: server });
     });

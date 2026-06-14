@@ -174,6 +174,7 @@
     </div>
     <div class="mx-ask-suggest" id="ask-suggest">
       <button type="button">How many uploads today, and list them in a table?</button>
+      <button type="button">Uploads by source (intake tab) this week, in a table?</button>
       <button type="button">How many people used the converter last week?</button>
       <button type="button">What is the conversion rate from upload to download?</button>
       <button type="button">What are the most common errors by type?</button>
@@ -243,6 +244,11 @@
     <div class="mx-canvas-wrap"><canvas id="chart_demo" height="150"></canvas></div>
     <div class="mx-flip" id="chart_demo_table" hidden></div></div>
 
+  <div class="mx-panel">
+    <div class="mx-ph"><h2>Intake by tab — which source the files came from</h2><div class="mx-tools" data-chart="chart_source"><button type="button" data-act="expand" title="Expand">⤢ Expand</button><button type="button" data-act="png" title="Export PNG">⬇ PNG</button><button type="button" data-act="csv" title="Export CSV">⬇ CSV</button><button type="button" data-act="table" title="Switch to table view">⇄ Table</button></div></div>
+    <div class="mx-canvas-wrap"><canvas id="chart_source" height="160"></canvas></div>
+    <div class="mx-flip" id="chart_source_table" hidden></div></div>
+
   <div class="mx-panel"><h2>Split-by-group downloads</h2><div id="splits" class="dim">—</div></div>
 
   <div class="mx-panel"><h2>Top users <span class="tag">anonymous</span></h2>
@@ -255,7 +261,7 @@
 
   <div class="mx-panel"><h2>Errors</h2><table id="tbl_errors"><tbody></tbody></table></div>
 
-  <div class="mx-foot" id="foot">Loading…</div>
+  <div class="mx-foot" id="foot"><span id="footText">Loading…</span> · <a href="/admin?metrics_test=1" class="footer-link">Admin</a> · <a href="/?metrics_test=1" class="footer-link">Converter</a> · <span id="footerClock"></span></div>
 </div>
 
 <script>
@@ -392,6 +398,14 @@
       [ { label:'Try Me (fake)', data:ds.map(function(x){return x.demo;}), color:'#e0a200' },
         { label:'Real', data:ds.map(function(x){return x.real;}), color:cssvar('--brand') } ], false);
     register('chart_demo', 'Try Me vs real activity', ['Activity','Try Me','Real'], ds.map(function(x){return [x.event, x.demo, x.real];}));
+    var bs = d.by_source || [];
+    var SRC_LABEL = { upload:'Manual upload', try_me:'Try Me', sf_upload_queue:'SF Upload Queue', sf_email_queue:'SF Email Queue', folder:'From Folder', slack:'Slack', salesforce:'Salesforce (legacy)' };
+    var src_labels = bs.map(function(x){ return SRC_LABEL[x.source] || x.source; });
+    multibar('chart_source', src_labels,
+      [ { label:'Uploads', data:bs.map(function(x){return x.uploads;}), color:cssvar('--brand') },
+        { label:'Conversions', data:bs.map(function(x){return x.conversions;}), color:cssvar('--dim') },
+        { label:'Downloads', data:bs.map(function(x){return x.downloads;}), color:cssvar('--accent') } ], false);
+    register('chart_source', 'Intake by tab', ['Source','Uploads','Conversions','Downloads'], bs.map(function(x){return [SRC_LABEL[x.source]||x.source, x.uploads, x.conversions, x.downloads];}));
     var hours=[], hv=[];
     for (var h=0; h<24; h++){ hours.push(h); var f = d.by_hour.filter(function(x){return x.hour===h;})[0]; hv.push(f?f.n:0); }
     bar('chart_hours', hours, hv, cssvar('--brand'));
@@ -406,16 +420,27 @@
     fill('tbl_files', d.top_files, function(f,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+f.name+'</td><td>'+f.n+'</td></tr>'; });
     fill('tbl_fixed', d.fixed_columns, function(c,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+c.key+'</td><td>'+c.n+'</td></tr>'; });
     fill('tbl_errors', d.errors, function(e,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td>'+e.type+'</td><td>'+e.n+'</td></tr>'; });
-    el('foot').textContent = 'Last ' + d.days + ' days · anonymous usage analytics · refreshed ' + new Date().toLocaleString();
+    el('footText').textContent = 'Last ' + d.days + ' days · anonymous usage analytics';
   }
   function load(days){
     current_days = days;
-    el('foot').textContent = 'Loading…';
+    el('footText').textContent = 'Loading…';
     fetch('/api/metrics-report?days='+days, { credentials:'same-origin' })
       .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(render)
-      .catch(function(e){ el('foot').textContent = 'Could not load metrics: ' + e.message; });
+      .catch(function(e){ el('footText').textContent = 'Could not load metrics: ' + e.message; });
   }
+  // live Mountain-Time footer clock (identical to the converter at /)
+  (function start_clock(){
+    var elc = document.getElementById('footerClock'); if (!elc) return;
+    function tick(){
+      var parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Denver', weekday: 'short',
+        year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }).formatToParts(new Date());
+      var p = {}; parts.forEach(function (x) { p[x.type] = x.value; });
+      elc.textContent = p.weekday + '., ' + p.month + '/' + p.day + '/' + p.year + ' ' + p.hour + ':' + p.minute + ':' + p.second + ' ' + p.dayPeriod + ' MTN';
+    }
+    tick(); setInterval(tick, 1000);
+  })();
   el('periods').addEventListener('click', function(ev){
     var b = ev.target.closest('button[data-days]'); if(!b) return;
     [].forEach.call(el('periods').children, function(x){ x.classList.toggle('active', x===b); });

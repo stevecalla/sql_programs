@@ -29,6 +29,8 @@ h3{font-size:14px;margin:0}
 .app-header{margin-bottom:16px}
 .title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .app-footer{text-align:center;margin:28px 0 8px;font-size:12px}
+.footer-link{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.footer-link:hover{color:var(--accent)}
 
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   box-shadow:var(--shadow);padding:clamp(14px,2vw,20px);margin:0 0 16px}
@@ -548,10 +550,10 @@ table.rt thead tr.tnames th.rownum{z-index:5}
 .sf-logout[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
 .sf-controls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
 .sf-source-seg{margin-bottom:10px;flex-wrap:wrap}                    /* SF Upload · SF Email · From Folder · Slack Ironman tabs */
-.sf-slack-panel{text-align:center;padding:34px 18px;margin-top:10px;border:1px dashed var(--line);border-radius:12px;background:var(--card)}
-.sf-slack-emoji{font-size:42px;line-height:1}
-.sf-slack-panel h3{margin:10px 0 4px;color:var(--ink)}
-.sf-slack-panel p{margin:0 auto;max-width:46ch}
+.sf-slack-note{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;font-size:13px}   /* self-service "invite the bot" hint */
+.sf-invite-code{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 8px;color:var(--ink)}
+.sf-invite-copy{padding:2px 8px;font-size:12px}
+#sfSlackChannel{max-width:220px}
 .sf-subj{display:inline-block;max-width:340px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 .sf-ctl{display:inline-flex;gap:5px;align-items:center;font-size:13px;color:var(--dim)}
 .sf-limit{width:58px}

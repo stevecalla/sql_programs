@@ -44,7 +44,7 @@
     dl_format: 'csv', dl_fields: { id: '', type: '', distance: '', name: '' },  // download format + filename builder
     dl_excel_safe: false,   // CSV only: wrap DOB/Recorded Time as Excel text so Excel keeps the format on open
     is_demo: false,  // true while viewing the built-in "Try me" sample (fake data) — stamps is_demo on its events
-    source: null,    // where the active file came from: null/'upload' | 'salesforce' | 'folder' (try_me derives from is_demo)
+    source: null,    // intake of the active file: 'upload' (manual) | 'sf_upload_queue' | 'sf_email_queue' | 'folder' | 'slack' (try_me derives from is_demo)
     // Salesforce intake / queue
     sf_files: null, sf_selected: {}, sf_sort: { key: 'date', dir: 'desc' }, sf_cancel: false, sf_authed: false,
     sf_source: 'upload',   // 'upload' | 'email' (Salesforce) | 'folder' (local pick) | 'slack' (placeholder)
@@ -407,7 +407,7 @@
   function sf_subtitle(src) {
     if (src === 'email') return 'pull race-results attachments from Rankings cases (Email-to-Case) — same convert/review/download flow';
     if (src === 'folder') return 'pick a folder on your computer and load the files into the queue — nothing is uploaded';
-    if (src === 'slack') return 'Slack Ironman submissions — coming soon';
+    if (src === 'slack') return 'pull spreadsheet attachments from a Slack channel for a date range — same convert/review/download flow';
     return 'download race-results files for a date and work them as a queue — the convert/review/download flow is unchanged';
   }
   function sf_default_sort(src) {
@@ -428,11 +428,55 @@
     document.querySelectorAll('.sf-email-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'email'); });
     document.querySelectorAll('.sf-folder-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'folder'); });
     document.querySelectorAll('.sf-slack-only').forEach(function (el) { el.classList.toggle('hidden', src !== 'slack'); });
-    document.querySelectorAll('.sf-query-only').forEach(function (el) { el.classList.toggle('hidden', src === 'folder' || src === 'slack'); });
-    document.querySelectorAll('.sf-cap-only').forEach(function (el) { el.classList.toggle('hidden', src === 'slack'); });   // Max applies to upload/email/folder
-    document.querySelectorAll('.sf-dl-server').forEach(function (el) { el.classList.toggle('hidden', src !== 'upload' && src !== 'email'); });
+    document.querySelectorAll('.sf-query-only').forEach(function (el) { el.classList.toggle('hidden', src === 'folder'); });          // date row: upload/email/slack
+    document.querySelectorAll('.sf-datefield-only').forEach(function (el) { el.classList.toggle('hidden', src === 'folder' || src === 'slack'); });  // 'On' Last-modified/Created: SF only
+    document.querySelectorAll('.sf-cap-only').forEach(function (el) { el.classList.toggle('hidden', false); });                       // Max applies everywhere
+    document.querySelectorAll('.sf-dl-server').forEach(function (el) { el.classList.toggle('hidden', src === 'folder'); });           // server download: upload/email/slack
     var sub = $('sfCardSub'); if (sub) sub.textContent = sf_subtitle(src);
     sf_reset();   // clear the current list/selection when switching sources
+    if (src === 'slack') sf_load_channels();   // self-service: populate the picker from the bot's channels
+  }
+  // ----- Slack channel picker: self-service. The dropdown is the channels the BOT is a member of
+  // (users.conversations); invite the bot to a channel in Slack and it appears here on Refresh.
+  function sf_render_invite() {
+    var h = S.slack_bot_handle || 'your-bot';
+    var inv = $('sfSlackInvite'); if (inv) inv.textContent = '/invite @' + h;
+    var kick = $('sfSlackKick'); if (kick) kick.textContent = '/kick @' + h;
+  }
+  function sf_flash_copied(id) {
+    var b = $(id || 'sfSlackInviteCopy'); if (!b) return;
+    var prev = b.textContent; b.textContent = 'Copied!'; setTimeout(function () { b.textContent = prev; }, 1200);
+  }
+  function sf_slack_visibility() { return ($('sfSlackVis') && $('sfSlackVis').value) || 'all'; }
+  // Re-render the channel dropdown from the cached list, filtered by the Public/Private/All toggle.
+  function sf_render_channel_options() {
+    var sel = $('sfSlackChannel'); if (!sel) return;
+    var prev = sel.value;
+    var all = S.slack_channels || [];
+    if (!all.length) { sel.innerHTML = '<option value="">(no channels yet — invite the bot, then ↻ Refresh)</option>'; return; }
+    var vis = sf_slack_visibility();
+    var chans = all.filter(function (c) { return vis === 'all' || (vis === 'private' ? c.is_private : !c.is_private); });
+    if (!chans.length) { sel.innerHTML = '<option value="">(no ' + vis + ' channels the bot is in — switch the filter)</option>'; return; }
+    sel.innerHTML = chans.map(function (c) { return '<option value="' + esc(c.id) + '">' + (c.is_private ? '🔒 ' : '# ') + esc(c.name) + '</option>'; }).join('');
+    var saved = ''; try { saved = window.localStorage.getItem('rrt_slack_channel') || ''; } catch (e) { /* ignore */ }
+    var want = prev || saved || S.slack_default_channel || '';
+    if (want && chans.some(function (c) { return c.id === want; })) sel.value = want;
+  }
+  function sf_load_channels() {
+    if (!$('sfSlackChannel')) return;
+    sf_set_status('Loading the bot’s channels…');
+    sf_fetch_json('/api/slack/channels').then(function (j) {
+      S.slack_bot_handle = (j.bot && j.bot.handle) || 'your-bot';
+      S.slack_default_channel = j.default_channel || '';
+      S.slack_channels = j.channels || [];
+      sf_render_invite();
+      sf_render_channel_options();
+      sf_set_authed(true);
+      sf_set_status('');
+    }).catch(function (e) {
+      if (e.needs_login) { sf_set_authed(false); sf_set_status('Sign in to use Slack.'); sf_show_login(); }
+      else sf_set_status('Could not load Slack channels: ' + e.message, true);
+    });
   }
   // From/To date fields → the server's mode/date/start/end contract. "Any date" = no filter;
   // From==To = a single day; otherwise a range (capped at 14 days).
@@ -444,7 +488,11 @@
       var a = $('sfFrom').value, b = $('sfTo').value;
       p = (a && b && a === b) ? { mode: 'specific', field: field, date: a } : { mode: 'range', field: field, start: a, end: b };
     }
-    if (S.sf_source === 'email') {
+    if (S.sf_source === 'slack') {
+      // slack: a channel + the date window (no SF field/status/broaden); the route ignores `field`.
+      delete p.field;
+      p.channel = ($('sfSlackChannel') && $('sfSlackChannel').value) || '';
+    } else if (S.sf_source === 'email') {
       // email queue status maps to Case IsClosed (no Broaden — that's an Upload-Queue search lever)
       p.status = ($('sfEmailStatus') && $('sfEmailStatus').value) || 'not_closed';
     } else if ($('sfBroaden') && $('sfBroaden').checked) {
@@ -515,9 +563,13 @@
   }
   function sf_list() {
     if (!sf_range_ok()) return;
+    if (S.sf_source === 'slack' && !($('sfSlackChannel') && $('sfSlackChannel').value)) {
+      sf_set_status('Pick a Slack channel first — if the list is empty, invite the bot to a channel (see the note), then ↻ Refresh.', true);
+      return;
+    }
     var p = sf_query_params();
     var qs = Object.keys(p).filter(function (k) { return p[k]; }).map(function (k) { return k + '=' + encodeURIComponent(p[k]); }).join('&');
-    var endpoint = (S.sf_source === 'email') ? '/api/sf/email-files' : '/api/sf/files';
+    var endpoint = (S.sf_source === 'slack') ? '/api/slack/files' : (S.sf_source === 'email') ? '/api/sf/email-files' : '/api/sf/files';
     sf_set_status(S.sf_source === 'email' ? 'Searching the email queue…' : 'Searching Salesforce…');
     sf_fetch_json(endpoint + '?' + qs).then(function (j) {
       S.sf_files = j.files || [];
@@ -584,6 +636,12 @@
   }
   // Files-found table columns by source. val() = plain text (sort/search), cell() = HTML (display).
   function sf_columns() {
+    if (S.sf_source === 'slack') return [
+      { key: 'date', label: 'Date (MT)', val: function (f) { return String(f.created_ms || 0); }, cell: function (f) { return esc(f.created_mtn || ''); } },
+      { key: 'uploader', label: 'Uploader', val: function (f) { return f.uploader_name || ''; }, cell: function (f) { return esc(f.uploader_name || '—'); } },
+      { key: 'file', label: 'File name', val: function (f) { return f.target_name || f.name || ''; }, cell: function (f) { return '<span title="' + esc(f.target_name || f.name) + '">' + esc(f.name || f.target_name) + '</span>'; } },
+      { key: 'type', label: 'Type', val: function (f) { return sf_file_ext(f); }, cell: function (f) { return sf_type_cell(sf_file_ext(f)); } }
+    ];
     if (S.sf_source === 'folder') return [
       { key: 'file', label: 'File name', val: function (f) { return f.target_name || ''; }, cell: function (f) { return '<span title="' + esc(f.target_name) + '">' + esc(f.target_name) + '</span>'; } },
       { key: 'type', label: 'Type', val: function (f) { return sf_file_ext(f); }, cell: function (f) { return sf_type_cell(sf_file_ext(f)); } },
@@ -838,7 +896,8 @@
     var w = await fh.createWritable(); await w.write(bytes); await w.close();
   }
   function sf_get_bytes(f) {
-    return fetch('/api/sf/file/' + encodeURIComponent(f.content_version_id) + '?name=' + encodeURIComponent(f.target_name), { credentials: 'same-origin' })
+    var base = (S.sf_source === 'slack') ? '/api/slack/file/' : '/api/sf/file/';
+    return fetch(base + encodeURIComponent(f.content_version_id) + '?name=' + encodeURIComponent(f.target_name), { credentials: 'same-origin' })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); });
   }
   function sf_download_finish(saved, picks) {   // partial-aware finish (cancel or success)
@@ -891,7 +950,7 @@
     } else {
       var folder = $('sfFolderPath').value; S.sf_sig = 'path:' + folder;
       var t0 = Date.now(), step = Math.min(500, Math.ceil(2000 / picks.length));  // ~2s paced progress
-      sf_fetch_json('/api/sf/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder: folder, strategy: strategy, items: picks.map(function (f) { return { id: f.content_version_id, name: f.target_name }; }) }) })
+      sf_fetch_json((S.sf_source === 'slack') ? '/api/slack/save' : '/api/sf/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder: folder, strategy: strategy, items: picks.map(function (f) { return { id: f.content_version_id, name: f.target_name }; }) }) })
         .then(function () {
           var out = [];
           return picks.reduce(function (chain, f, i) {
@@ -923,10 +982,19 @@
     show('compareCard'); show('filesTab'); set_compare_view('files'); render_queue();
     $('compareCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  // Salesforce wrapper: map downloaded files into the generic queue.
+  // The analytics `source` for the active Get-Race-Results tab (intake-by-tab breakdown).
+  function sf_queue_source() {
+    return (S.sf_source === 'slack') ? 'slack' : (S.sf_source === 'email') ? 'sf_email_queue' : 'sf_upload_queue';
+  }
+  // A Salesforce-downloaded queue source (upload or email queue, or legacy 'salesforce') — used where the
+  // queue behaves like the SF flow (sanction chip). Slack/folder are separate.
+  function is_sf_download_source(src) {
+    return src === 'sf_upload_queue' || src === 'sf_email_queue' || src === 'salesforce';
+  }
+  // Salesforce / Slack wrapper: map downloaded files into the generic queue.
   function sf_build_queue(saved) {
     build_queue(saved.map(function (s) { return { id: s.id, name: s.name, bytes: s.bytes || null, program: s.f.program_name, owner: s.f.owner_name, sanction: s.f.sanction_id }; }),
-      { source: 'salesforce', dir: S.sf_dir, folder: S.sf_folder || ($('sfFolderPath') && $('sfFolderPath').value) || '', sig: S.sf_sig });
+      { source: sf_queue_source(), dir: S.sf_dir, folder: S.sf_folder || ($('sfFolderPath') && $('sfFolderPath').value) || '', sig: S.sf_sig });
   }
   function sf_stage_html(label, on) { return '<span class="sf-q-stage' + (on ? ' done' : '') + '"><span class="dot"></span>' + label + '</span>'; }
   function queue_cmp_val(it, key) {
@@ -1017,7 +1085,9 @@
   // Is the queue's source folder available to re-read from? A directory handle (Chrome/Edge, either
   // source) or — for the Salesforce server-folder fallback only — a folder path.
   function sf_can_reload() {
-    return !!(S.queue_dir || (S.queue_source === 'salesforce' && (S.queue_folder || ($('sfFolderPath') && $('sfFolderPath').value))));
+    // server-downloaded sources (SF upload/email, Slack, legacy salesforce) reload from a folder path;
+    // the local-folder source reloads via its dir handle (S.queue_dir). Anything but 'folder' is server-side.
+    return !!(S.queue_dir || (S.queue_source !== 'folder' && (S.queue_folder || ($('sfFolderPath') && $('sfFolderPath').value))));
   }
   // Re-read a queue file's CURRENT bytes from disk (picks up edits made in Excel), then re-run the
   // pipeline. Resets that row's status — Converted re-runs and Downloaded clears (the prior download
@@ -1064,6 +1134,7 @@
     if ($('sfListBtn')) $('sfListBtn').addEventListener('click', sf_list);
     if ($('sfResetBtn')) $('sfResetBtn').addEventListener('click', sf_reset);
     if ($('sfSourceSeg')) $('sfSourceSeg').addEventListener('click', function (e) { var b = e.target.closest('[data-src]'); if (b) sf_set_source(b.dataset.src); });
+    if ($('sfSourceSeg')) sf_set_source('email');   // default the Get Race Results intake to the SF Email Queue
     if ($('sfEmailStatus')) $('sfEmailStatus').addEventListener('change', function () { if (S.sf_files) sf_list(); });
     if ($('sfLoginBtn')) $('sfLoginBtn').addEventListener('click', sf_login);
     if ($('sfLoginPass')) $('sfLoginPass').addEventListener('keydown', function (e) { if (e.key === 'Enter') sf_login(); });
@@ -1079,6 +1150,30 @@
     if ($('sfFolderReset')) $('sfFolderReset').addEventListener('click', sf_folder_reset);
     if ($('sfFolderInput')) $('sfFolderInput').addEventListener('change', function () { sf_folder_from_input($('sfFolderInput').files); });
     if ($('sfFolderLoadBtn')) $('sfFolderLoadBtn').addEventListener('click', sf_folder_load);
+    if ($('sfSlackRefresh')) $('sfSlackRefresh').addEventListener('click', sf_load_channels);
+    if ($('sfSlackVis')) {
+      try { var sv = window.localStorage.getItem('rrt_slack_vis'); if (sv) $('sfSlackVis').value = sv; } catch (e) { /* ignore */ }
+      $('sfSlackVis').addEventListener('change', function () {
+        try { window.localStorage.setItem('rrt_slack_vis', $('sfSlackVis').value); } catch (e) { /* ignore */ }
+        sf_render_channel_options();
+        if (S.sf_files) sf_reset();
+      });
+    }
+    if ($('sfSlackChannel')) $('sfSlackChannel').addEventListener('change', function () {
+      try { window.localStorage.setItem('rrt_slack_channel', $('sfSlackChannel').value || ''); } catch (e) { /* ignore */ }
+      if (S.sf_files) sf_reset();
+    });
+    if ($('sfSlackInviteCopy')) $('sfSlackInviteCopy').addEventListener('click', function () {
+      var text = '/invite @' + (S.slack_bot_handle || 'your-bot');
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(sf_flash_copied, function () { /* ignore */ });
+      else sf_flash_copied();
+    });
+    if ($('sfSlackKickCopy')) $('sfSlackKickCopy').addEventListener('click', function () {
+      var text = '/kick @' + (S.slack_bot_handle || 'your-bot');
+      var done = function () { sf_flash_copied('sfSlackKickCopy'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { /* ignore */ });
+      else done();
+    });
     if ($('sfFolderPath')) $('sfFolderPath').addEventListener('input', function () { S.sf_folder = $('sfFolderPath').value; try { window.localStorage.setItem('rrt_sf_folder', S.sf_folder); } catch (e) { /* ignore */ } sf_update_dl_enabled(); });
     if ($('sfSearch')) $('sfSearch').addEventListener('input', sf_render);
     if ($('sfLimit')) $('sfLimit').addEventListener('change', sf_apply_limit);
@@ -1294,7 +1389,7 @@
       '<span class="verdict">' + esc(sc.verdict) + '</span>' +
       '<span class="chips">' +
         '<span class="chip filechip" title="Uploaded file">📄 ' + esc(S.file_display || S.file_name) + '</span>' +
-        ((S.source === 'salesforce' && S.active_sanction) ? '<span class="chip sanctionchip" title="Salesforce Sanctioning ID (Program.cfg_Id__c) — leads the download filename">🏷 Sanction <b>' + esc(S.active_sanction) + '</b></span>' : '') +
+        ((is_sf_download_source(S.source) && S.active_sanction) ? '<span class="chip sanctionchip" title="Salesforce Sanctioning ID (Program.cfg_Id__c) — leads the download filename">🏷 Sanction <b>' + esc(S.active_sanction) + '</b></span>' : '') +
         '<span class="chip" title="Athlete rows written to the converted file"><b>' + n(kept_out) + '</b> rows</span>' +
         (nex > 0 ? '<span class="chip chip-del" title="Rows you deleted — left out of the download. Restore them from the original table."><b>' + n(nex) + '</b> deleted</span>' : '') +
         '<span class="chip" title="Highlighted cells still needing a look — approve or edit them to clear"><b>' + n(flagged) + '</b> flagged values</span>' +
