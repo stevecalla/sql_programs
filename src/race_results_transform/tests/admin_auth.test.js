@@ -16,7 +16,7 @@ const server = have_server ? fs.readFileSync(SERVER, 'utf8') : '';
 describe('admin auth — /metrics + /admin behind a separate admin login', () => {
   test('the server defines a distinct admin session + guard, with metrics-cred fallback', { skip: !have_server }, () => {
     assert.match(server, /const ADMIN_COOKIE = 'admin_session'/, 'separate admin_session cookie');
-    assert.match(server, /function require_admin_auth\b/, 'admin guard');
+    assert.match(server, /const require_admin_auth = gate_cap\('admin'/, 'admin guard (capability-based)');
     assert.match(server, /function valid_admin_session\b/, 'admin session validator');
     assert.match(server, /function sign_admin\b/, 'admin session signer (own HMAC key)');
     // admin creds default to the dedicated vars, else fall back to the metrics creds (no lockout)
@@ -24,13 +24,13 @@ describe('admin auth — /metrics + /admin behind a separate admin login', () =>
     assert.match(server, /RACE_RESULTS_ADMIN_PASS \|\| process\.env\.RACE_RESULTS_CONVERTER_METRICS_PASS/, 'admin pass falls back to metrics pass');
   });
 
-  test('/metrics + its APIs + /admin are gated by require_admin_auth', { skip: !have_server }, () => {
-    assert.match(server, /app\.get\('\/metrics', require_admin_auth/, '/metrics is admin-gated');
-    assert.match(server, /app\.get\('\/api\/metrics-report', require_admin_auth/, 'metrics-report admin-gated');
-    assert.match(server, /app\.post\('\/api\/metrics-purge-test', require_admin_auth/, 'purge-test admin-gated');
-    assert.match(server, /app\.post\('\/api\/metrics-ask', require_admin_auth/, 'ask admin-gated');
-    assert.match(server, /app\.get\('\/admin', require_admin_auth/, '/admin is admin-gated');
-    assert.match(server, /app\.get\('\/api\/admin-status', require_admin_auth/, 'admin-status admin-gated');
+  test('/metrics is gated by the metrics cap; /admin by the admin cap', { skip: !have_server }, () => {
+    assert.match(server, /app\.get\('\/metrics', require_metrics_auth/, '/metrics needs the metrics cap');
+    assert.match(server, /app\.get\('\/api\/metrics-report', require_metrics_auth/, 'metrics-report needs the metrics cap');
+    assert.match(server, /app\.post\('\/api\/metrics-purge-test', require_metrics_auth/, 'purge-test needs the metrics cap');
+    assert.match(server, /app\.post\('\/api\/metrics-ask', require_metrics_auth/, 'ask needs the metrics cap');
+    assert.match(server, /app\.get\('\/admin', require_admin_auth/, '/admin needs the admin cap');
+    assert.match(server, /app\.get\('\/api\/admin-status', require_admin_auth/, 'admin-status needs the admin cap');
   });
 
   test('admin login/logout use the admin cookie; /metrics login moved to admin auth', { skip: !have_server }, () => {
@@ -44,7 +44,7 @@ describe('admin auth — /metrics + /admin behind a separate admin login', () =>
   test('the converter intake keeps the SEPARATE app login (mx_session) — unchanged', { skip: !have_server }, () => {
     assert.match(server, /mount_sf_routes\(app, require_dash_auth\)/, 'SF intake still on app login');
     assert.match(server, /mount_slack_routes\(app, require_dash_auth\)/, 'Slack intake still on app login');
-    assert.match(server, /app\.post\('\/api\/login'[\s\S]{0,260}authenticate\(u, pw\)/, '/api/login authenticates any account in the file');
+    assert.match(server, /app\.post\('\/api\/login'[\s\S]{0,500}authenticate\(u, pw\)/, '/api/login authenticates any account in the file');
     assert.match(server, /authed: valid_session\(read_cookie/, '/api/auth-status still reflects the app session');
   });
 

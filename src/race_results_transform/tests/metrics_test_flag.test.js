@@ -60,7 +60,7 @@ describe('metrics is_test flag + purge-test', () => {
     const server_path = path.join(ROOT, '..', '..', 'server_race_results_transform_8018.js');
     if (!fs.existsSync(server_path)) return;   // skip outside the monorepo
     const server = fs.readFileSync(server_path, 'utf8');
-    assert.match(server, /app\.post\('\/api\/metrics-purge-test', require_admin_auth/, 'purge route is admin-gated');
+    assert.match(server, /app\.post\('\/api\/metrics-purge-test', require_metrics_auth/, 'purge route is gated by the metrics cap');
     assert.match(server, /metrics_report\.purge_test\(metrics_pool\)/, 'route calls purge_test');
   });
 });
