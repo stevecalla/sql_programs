@@ -26,8 +26,12 @@ test.describe('race_results_transform — Salesforce intake', () => {
     await page.route('**/api/sf/file/**', (route) => route.fulfill({ status: 200, contentType: 'application/octet-stream', body: fs.readFileSync(SINGLE_XLSX) }));
     await page.goto('/');
     await expect(page.locator('#sfCard')).toBeVisible();
-    // the intake now defaults to the SF Email Queue tab — these tests cover the SF Upload Queue, so select it
-    await page.locator('#sfSourceSeg [data-src="upload"]').click();
+    // the intake now defaults to the SF Email Queue tab — these tests cover the SF Upload Queue, so select it.
+    // Retry the click until the Upload tab is actually active (avoids racing the just-wired tab handler).
+    await expect(async () => {
+      await page.locator('#sfSourceSeg [data-src="upload"]').click();
+      await expect(page.locator('#sfTabUpload')).toHaveClass(/active/, { timeout: 1000 });
+    }).toPass({ timeout: 10000 });
   });
 
   test('list → download → queue → open → convert → download updates statuses', async ({ page }) => {
