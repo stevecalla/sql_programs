@@ -7,6 +7,16 @@ These are **opt-in dev/CI tooling** — separate from the dependency-free `node 
 and never installed into the locked-down production engine. The config auto-starts the real
 `server_race_results_transform_8018.js` (ngrok off) and drives headless Chromium.
 
+> **Two gotchas after the /admin + intake changes:**
+> 1. **Restart the server before re-running** when you change the server or auth. The Playwright config
+>    uses `reuseExistingServer: true`, so if a server is already running it reuses that (stale) one. The
+>    `metrics_dashboard` specs log in with the converter-metrics creds and need the **metrics capability**
+>    (the `.env` converter-metrics account has `metrics` + `intake`); an old server without that fix makes
+>    the login `beforeEach` time out.
+> 2. **The "Get Race Results" intake now defaults to the SF Email Queue tab.** The `sf_flow` specs cover the
+>    SF *Upload* Queue, so their `beforeEach` selects that tab first; `folder_flow` / `slack_flow` select
+>    their own tabs.
+
 ## Install (one time)
 
 Run these from `src/race_results_transform/`:

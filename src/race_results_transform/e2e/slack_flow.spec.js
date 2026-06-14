@@ -20,7 +20,7 @@ function make_slack_files(n) {
 const SLACK_FILES = { ok: true, count: 2, files: make_slack_files(2) };
 const SLACK_CHANNELS = {
   ok: true,
-  bot: { handle: 'membershipsalesbot', user_id: 'U01', team: 'USA Triathlon' },
+  bot: { handle: 'membership-sales-bot', user_id: 'U01', team: 'USA Triathlon' },
   default_channel: 'C0TEST',
   channels: [{ id: 'C0TEST', name: 'test_bot', is_private: true }, { id: 'C0PUB', name: 'general', is_private: false }]
 };
