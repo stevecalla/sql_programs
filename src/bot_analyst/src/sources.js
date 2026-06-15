@@ -15,7 +15,8 @@ function parse_allowed_datasets() {
 function get_region_prefix() {
   // Default US multi-region (matches your earlier pattern).
   // If you later want EU, add env like USAT_BQ_REGION=region-eu.
-  return String(process.env.USAT_BQ_REGION || "region-us").trim();
+  // return String(process.env.USAT_BQ_REGION || "region-us").trim();
+  return String(process.env.USAT_BQ_LOCATION || "region-us").trim();
 }
 
 async function list_tables_for_dataset(project_id, dataset_id) {

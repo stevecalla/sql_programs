@@ -7,7 +7,12 @@ These are **opt-in dev/CI tooling** — separate from the dependency-free `node 
 and never installed into the locked-down production engine. The config auto-starts the real
 `server_race_results_transform_8018.js` (ngrok off) and drives headless Chromium.
 
-> **Two gotchas after the /admin + intake changes:**
+> **Gotchas:**
+> 0. **Cross-browser flakiness is expected on the full run.** The suite reuses one server, so firefox/webkit
+>    under parallel load occasionally throw "Could not connect to server" / "element not stable" / a firefox
+>    teardown crash — *different tests each run*. The config caps `workers: 2` and retries twice to absorb
+>    these (a real failure fails all three attempts). For a fast, reliable signal use `npm run e2e:chromium`;
+>    lower the load further with `E2E_WORKERS=1 npm run e2e`.
 > 1. **Restart the server before re-running** when you change the server or auth. The Playwright config
 >    uses `reuseExistingServer: true`, so if a server is already running it reuses that (stale) one. The
 >    `metrics_dashboard` specs log in with the converter-metrics creds and need the **metrics capability**

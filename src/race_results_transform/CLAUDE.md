@@ -296,7 +296,13 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   `/admin`), so you can't lock yourself out. (When no dedicated `RACE_RESULTS_ADMIN_*` is set, that one account
   is also the admin account and gets all caps.) `/api/login` +
   `admin_signin_post` set the cookie with the username; `/api/logout` clears both cookies. Changing the
-  signing format means everyone re-logs in once on the deploy that introduces this. The **Get-Results panel login (`POST /api/login`) accepts ANY account in the file**: an
+  signing format means everyone re-logs in once on the deploy that introduces this. **One consolidated
+  login panel** (`login_html` + `login_ctx`): the card always shows the form, the "Sign in with an account
+  that has <area> access" subtitle, and the sibling-area chips (**Converter** → `/?metrics_test=1`, plus
+  **Metrics** and **Admin** → `/…?metrics_test=1`, each skipped on its own page) — so it looks identical
+  whether or not you're signed in. When you arrive already
+  signed in as an account lacking that area's cap, it ALSO shows an amber "Signed in as X — no <area> access"
+  banner + a **Sign out** chip (and any error line). One page, no redirect loop, no dead-end blank form. The **Get-Results panel login (`POST /api/login`) accepts ANY account in the file**: an
   admin account signs in with the admin cookie (reaches `/admin` + `/metrics` + intake), an app account gets the
   app cookie (intake only). **ngrok is a toggle** (`ngrok_enabled` config, default off): /admin → Settings turns
   it on; the server starts the tunnel on (re)start and `create_ngrok_tunnel` returns the public URL, surfaced in
