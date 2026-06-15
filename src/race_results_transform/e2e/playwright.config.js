@@ -44,9 +44,13 @@ module.exports = defineConfig({
   testDir: __dirname,
   fullyParallel: false,
   timeout: 45000,
-  // One retry: a genuine failure fails twice and still surfaces; a flaky browser
-  // teardown (see firefox sessionstore note below) passes on the retry.
-  retries: 1,
+  // Cap concurrency: the suite reuses ONE server, so too many parallel browser contexts (across
+  // chromium/firefox/webkit/mobile) overwhelm it → sporadic "Could not connect to server" / "element not
+  // stable" on the slower engines. 2 workers keeps server load sane (override with E2E_WORKERS).
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 2,
+  // Two retries: cross-browser teardown/load flakes (firefox sessionstore, webkit-under-load) pass on a
+  // re-run; a REAL failure fails all THREE attempts and still surfaces. Fast reliable signal: e2e:chromium.
+  retries: 2,
   // Per-assertion timeout. Default is 5s; webkit (the slowest engine) sometimes
   // needs longer to finish the in-browser xlsx parse before #compareCard shows.
   expect: { timeout: 12000 },

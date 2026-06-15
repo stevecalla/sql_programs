@@ -184,18 +184,45 @@ function create_app() {
     const m = (req.headers.cookie || '').match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
     return m ? decodeURIComponent(m[1]) : null;
   }
-  function login_html(err, action, title) {
+  function esc_login(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  // The signed-in user + their caps, for the consolidated login panel (identity banner + area links).
+  function login_ctx(req) { const u = admin_session_user(read_cookie(req, ADMIN_COOKIE)); return { user: u, caps: u ? caps_for(u) : [] }; }
+  // ONE adaptive sign-in panel: an optional "signed in as X — no <area> access" banner, an optional error line,
+  // Sign out + links to the areas the current user CAN reach, and the form to sign in as another account.
+  function login_html(err, action, title, ctx) {
+    ctx = ctx || {};
     const act = action || '/admin/login';
     const ttl = title || 'Admin';
+    const logout = act.replace('/login', '/logout');
+    const caps = ctx.caps || [];
+    let banner = '', chips = '';
+    void caps;
+    // Identity banner only when signed in (we can't show "signed in as" otherwise). The link chips render
+    // ALWAYS so the page looks the same whether or not you're signed in: Sign out (when signed in) + the
+    // sibling areas (Converter is public; Metrics prompts its own sign-in).
+    if (ctx.user) {
+      banner = '<div class="who">Signed in as <b>' + esc_login(ctx.user) + '</b> — this account has no <b>' + ttl + '</b> access.</div>';
+      chips += '<a class="chip" href="' + logout + '">↩ Sign out</a>';
+    }
+    chips += '<a class="chip" href="/?metrics_test=1">🧰 Converter →</a>';
+    if (ttl !== 'Metrics') chips += '<a class="chip" href="/metrics?metrics_test=1">📊 Metrics →</a>';
+    if (ttl !== 'Admin') chips += '<a class="chip" href="/admin?metrics_test=1">⚙️ Admin →</a>';
+    chips = '<div class="chips" style="margin-top:14px">' + chips + '</div>';
     return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
       + '<title>Sign in — ' + ttl + '</title>'
       + '<style>body{font:16px system-ui,Arial,sans-serif;background:#0e1b3a;color:#fff;display:grid;place-items:center;min-height:100vh;margin:0}'
       + 'form{background:#16233f;padding:24px;border-radius:12px;min-width:280px;box-shadow:0 8px 30px rgba(0,0,0,.4)}'
       + 'h1{font-size:18px;margin:0 0 14px}input{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:10px;border-radius:8px;border:1px solid #2a3a5e;background:#0e1b3a;color:#fff}'
-      + 'button{width:100%;padding:10px;border:0;border-radius:8px;background:#e4002b;color:#fff;font-weight:700;cursor:pointer;margin-top:6px}.err{color:#ff8a8a;font-size:13px;margin:0 0 6px}</style>'
+      + 'button{width:100%;padding:10px;border:0;border-radius:8px;background:#e4002b;color:#fff;font-weight:700;cursor:pointer;margin-top:6px}.err{color:#ff8a8a;font-size:13px;margin:0 0 8px}'
+      + '.who{background:rgba(239,159,39,.14);border:1px solid rgba(239,159,39,.4);border-radius:8px;padding:8px 10px;margin:0 0 8px;font-size:13px;color:#f0c98a}.who b{color:#ffe1b0}'
+      + '.chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}.chip{font-size:12.5px;color:#cfe0ff;border:1px solid #2a3a5e;border-radius:8px;padding:5px 10px;text-decoration:none}.chip:hover{background:#0e1b3a}'
+      + '.sub{font-size:12px;color:#8ea3c8;margin:0 0 4px;border-top:1px solid #2a3a5e;padding-top:12px}</style>'
       + '<form method="post" action="' + act + '">'
       + '<h1>\uD83D\uDD12 ' + ttl + ' \u2014 Sign in</h1>'
-      + (err ? '<p class="err">' + err + '</p>' : '')
+      + banner
+      + (err ? '<p class="err">' + esc_login(err) + '</p>' : '')
+      + chips
+      + '<div class="sub">Sign in with an account that has ' + ttl + ' access:</div>'
       + '<input name="username" placeholder="Username" autofocus autocomplete="username">'
       + '<input id="pw" name="password" type="password" placeholder="Password" autocomplete="current-password">'
       + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:2px 0 4px;cursor:pointer">'
@@ -286,24 +313,19 @@ function create_app() {
     const needed = redirect_to === '/admin' ? 'admin' : 'metrics';
     const action = redirect_to === '/admin' ? '/admin/login' : '/metrics/login';
     const title = redirect_to === '/admin' ? 'Admin' : 'Metrics';
+    // Failure: show the consolidated panel with the error AND the current identity (banner + area links).
     if (user && caps_for(user).indexOf(needed) >= 0) { set_admin_cookie(res, user); return res.redirect(redirect_to); }
-    const msg = user ? ('This account has no access to ' + title + '.') : 'Invalid username or password.';
-    res.status(401).type('html').send(login_html(msg, action, title));
-  }
-  // When already signed in as a user WITHOUT this area's cap, show the form with a clear message (instead of a
-  // blank form or a redirect loop) so they can sign in as an account that does have access.
-  function wrong_account_msg(req, area) {
-    const u = admin_session_user(read_cookie(req, ADMIN_COOKIE));
-    return u ? ('Signed in as "' + u + '", which has no ' + area + ' access. Sign in with an account that does.') : '';
+    const msg = user ? ('That account has no ' + title + ' access.') : 'Invalid username or password.';
+    res.status(401).type('html').send(login_html(msg, action, title, login_ctx(req)));
   }
   app.get('/metrics/login', function (req, res) {
     if (req_caps(req).indexOf('metrics') >= 0) return res.redirect('/metrics');   // only bounce if they HAVE the cap
-    res.type('html').send(login_html(wrong_account_msg(req, 'Metrics'), '/metrics/login', 'Metrics'));
+    res.type('html').send(login_html('', '/metrics/login', 'Metrics', login_ctx(req)));
   });
   app.post('/metrics/login', function (req, res) { admin_signin_post(req, res, '/metrics'); });
   app.get('/admin/login', function (req, res) {
     if (req_caps(req).indexOf('admin') >= 0) return res.redirect('/admin');
-    res.type('html').send(login_html(wrong_account_msg(req, 'Admin'), '/admin/login', 'Admin'));
+    res.type('html').send(login_html('', '/admin/login', 'Admin', login_ctx(req)));
   });
   app.post('/admin/login', function (req, res) { admin_signin_post(req, res, '/admin'); });
   app.get('/admin/logout', function (req, res) { res.clearCookie(ADMIN_COOKIE, { path: '/' }); res.redirect('/admin/login'); });

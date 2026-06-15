@@ -12,7 +12,8 @@ const { run_bigquery } = require("./bigquery");
 
 function get_region_prefix() {
   // Default US multi-region. Override via USAT_BQ_REGION (e.g., region-eu).
-  return String(process.env.USAT_BQ_REGION || "region-us").trim();
+  // return String(process.env.USAT_BQ_REGION || "region-us").trim();
+  return String(process.env.USAT_BQ_LOCATION || "region-us").trim();
 }
 
 function get_default_project_id() {

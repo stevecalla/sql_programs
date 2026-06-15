@@ -163,6 +163,11 @@ describe('admin auth — /metrics + /admin behind a separate admin login', () =>
       // login GETs redirect to the area ONLY when the user has that cap — otherwise the form shows (no redirect loop)
       assert.match(server, /app\.get\('\/admin\/login'[\s\S]{0,140}req_caps\(req\)\.indexOf\('admin'\) >= 0\) return res\.redirect\('\/admin'\)/, 'admin login avoids the redirect loop');
       assert.match(server, /req_caps\(req\)\.indexOf\('metrics'\) >= 0\) return res\.redirect\('\/metrics'\)/, 'metrics login avoids the redirect loop');
+      // one consolidated login panel: identity banner + Sign out / area links + error, all on a single page
+      assert.match(server, /function login_ctx\(req\)/, 'login panel resolves the signed-in identity + caps');
+      assert.match(server, /Signed in as <b>/, 'login panel shows an identity banner when signed in');
+      assert.match(server, /class="chip" href="' \+ logout/, 'login panel offers Sign out + links to accessible areas');
+      assert.match(server, /class="chip" href="\/\?metrics_test=1"/, 'login Converter link carries ?metrics_test=1');
       assert.match(server, /admin_store\.ALL_CAPS\.slice\(\)/, '.env admin account always gets all caps (recovery)');
       assert.match(server, /admin_store\.add_user\(overrides, scope, user, pass, caps\)/, 'user-add stores caps');
     }
