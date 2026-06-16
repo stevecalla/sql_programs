@@ -6,6 +6,9 @@
 //   #3 im_participation_3_profile      — one row per profile (FINAL)
 // The per-batch insert (step_c) runs the full behavior query against a 50k-profile slice of #2.
 
+// Single source of truth for the IRONMAN classification rule (see ../ironman_rule.js).
+const { ironman_event_predicate } = require('../ironman_rule');
+
 // GET CURRENT DATE IN MTN (MST OR MDT)
 async function created_at_mtn() {
     return `
@@ -117,16 +120,8 @@ async function step_b_create_distinct_profile_id_table(table_name) {
         WHERE id_profile_rr IS NOT NULL AND id_profile_rr <> ''
           -- OLD RULE (name must contain "ironman"):
           --   AND LOWER(name_events_rr) LIKE '%ironman%'
-          --
-          -- NEW RULE: "ironman" in the name, PLUS a curated allow-list of official IRONMAN
-          -- 70.3 races whose names omit "ironman" (a blanket %70.3% rule wrongly pulls in
-          -- independent half-distance races like "Howlin Half 70.3", "Marthas Vineyard 70.3").
-          AND (
-                LOWER(name_events_rr) LIKE '%ironman%'
-             OR name_events_rr LIKE '%Augusta 70.3%'      -- IRONMAN 70.3 Augusta (2022, 2023, ...)
-             OR name_events_rr LIKE '%IM 70.3 Maine%'     -- IRONMAN 70.3 Maine
-             OR name_events_rr LIKE '%Steelhead 70.3%'    -- IRONMAN 70.3 Steelhead (Maytag)
-          );
+          -- NEW RULE: shared curated predicate (see ../ironman_rule.js).
+          AND ${ironman_event_predicate('name_events_rr')};
 
         ALTER TABLE ${table_name}
             ADD INDEX idx_profile_id (id_profile_rr);
@@ -145,25 +140,19 @@ async function step_d_create_history_table(table_name, profile_id_table = 'im_pa
             m.start_date_races, m.start_date_year_races,
             -- OLD is_ironman_event (name must contain "ironman"):
             --   CASE WHEN LOWER(m.name_events_rr) LIKE '%ironman%' THEN 1 ELSE 0 END AS is_ironman_event,
-            -- NEW: "ironman" in name + curated allow-list of official IRONMAN 70.3 races that omit "ironman".
-            CASE WHEN LOWER(m.name_events_rr) LIKE '%ironman%'
-                      OR m.name_events_rr LIKE '%Augusta 70.3%'      -- IRONMAN 70.3 Augusta
-                      OR m.name_events_rr LIKE '%IM 70.3 Maine%'     -- IRONMAN 70.3 Maine
-                      OR m.name_events_rr LIKE '%Steelhead 70.3%'    -- IRONMAN 70.3 Steelhead (Maytag)
-                 THEN 1 ELSE 0 END AS is_ironman_event,
-            -- im_distance_bucket — the leading "is Ironman?" test below MUST match is_ironman_event
-            -- above, so the allow-listed races bucket as Ironman (not non_ironman).
+            -- NEW: shared curated predicate (see ../ironman_rule.js).
+            CASE WHEN ${ironman_event_predicate('m.name_events_rr')} THEN 1 ELSE 0 END AS is_ironman_event,
+            -- im_distance_bucket — leading "is Ironman?" test uses the SAME shared predicate as is_ironman_event.
             CASE
-                WHEN (LOWER(m.name_events_rr) LIKE '%ironman%' OR m.name_events_rr LIKE '%Augusta 70.3%' OR m.name_events_rr LIKE '%IM 70.3 Maine%' OR m.name_events_rr LIKE '%Steelhead 70.3%')
+                WHEN ${ironman_event_predicate('m.name_events_rr')}
                      AND (m.name_events_rr LIKE '%70.3%'  OR LOWER(m.name_distance_types) LIKE '%70.3%'
                           OR LOWER(m.name_distance_types) LIKE '%half%'
                           OR LOWER(m.name_distance_types) = 'long')   THEN 'ironman_70_3'
-                WHEN (LOWER(m.name_events_rr) LIKE '%ironman%' OR m.name_events_rr LIKE '%Augusta 70.3%' OR m.name_events_rr LIKE '%IM 70.3 Maine%' OR m.name_events_rr LIKE '%Steelhead 70.3%')
+                WHEN ${ironman_event_predicate('m.name_events_rr')}
                      AND (m.name_events_rr LIKE '%140.6%' OR LOWER(m.name_distance_types) LIKE '%140.6%'
                           OR LOWER(m.name_distance_types) LIKE '%full%'
                           OR LOWER(m.name_distance_types) = 'ultra')  THEN 'ironman_140_6'
-                WHEN (LOWER(m.name_events_rr) LIKE '%ironman%' OR m.name_events_rr LIKE '%Augusta 70.3%' OR m.name_events_rr LIKE '%IM 70.3 Maine%' OR m.name_events_rr LIKE '%Steelhead 70.3%')
-                                                                      THEN 'ironman_140_6'
+                WHEN ${ironman_event_predicate('m.name_events_rr')}    THEN 'ironman_140_6'
                 ELSE 'non_ironman'
             END AS im_distance_bucket
         FROM all_participation_data_with_membership_match m

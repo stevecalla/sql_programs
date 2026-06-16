@@ -62,9 +62,16 @@ WITH test as (
         m.member_number AS member_number_members,
         
         -- IRONMAN
-        CASE 
-                WHEN e.name LIKE '%IRONMAN%' OR e.name LIKE '%Ironman%' 
-                OR e.name LIKE '%70.3%' OR e.name LIKE '%140.6%' THEN 1 
+        -- OLD (broad) rule:
+        --   CASE WHEN e.name LIKE '%IRONMAN%' OR e.name LIKE '%Ironman%'
+        --        OR e.name LIKE '%70.3%' OR e.name LIKE '%140.6%' THEN 1 ELSE 0 END AS is_ironman,
+        -- NEW (curated) rule — manual mirror of src/queries/ironman_rule.js (keep in sync):
+        CASE
+                WHEN LOWER(e.name) LIKE '%ironman%'
+                     OR e.name LIKE '%Augusta 70.3%'      -- IRONMAN 70.3 Augusta
+                     OR e.name LIKE '%IM 70.3 Maine%'     -- IRONMAN 70.3 Maine
+                     OR e.name LIKE '%Steelhead 70.3%'    -- IRONMAN 70.3 Steelhead (Maytag)
+                     THEN 1
                 ELSE 0
         END AS is_ironman,
         
