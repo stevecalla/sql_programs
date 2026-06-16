@@ -1,5 +1,8 @@
 // C:\Users\calla\development\usat\sql_code\8_events\step_1_get_event_data_042125.sql
 
+// Single source of truth for the IRONMAN classification rule (see ../ironman_rule.js).
+const { ironman_event_predicate } = require('../ironman_rule');
+
 function step_1_query_event_data() {
     return `
         SELECT
@@ -71,11 +74,11 @@ function step_1_query_event_data() {
             m.member_number AS member_number_members,
             
             -- IRONMAN
-            CASE 
-                    WHEN e.name LIKE '%IRONMAN%' OR e.name LIKE '%Ironman%' 
-                    OR e.name LIKE '%70.3%' OR e.name LIKE '%140.6%' THEN 1 
-                    ELSE 0
-            END AS is_ironman,
+            -- OLD (broad) rule:
+            --   CASE WHEN e.name LIKE '%IRONMAN%' OR e.name LIKE '%Ironman%'
+            --        OR e.name LIKE '%70.3%' OR e.name LIKE '%140.6%' THEN 1 ELSE 0 END AS is_ironman,
+            -- NEW: shared curated predicate (see ../ironman_rule.js).
+            CASE WHEN ${ironman_event_predicate('e.name')} THEN 1 ELSE 0 END AS is_ironman,
             
             -- RACES TABLE
             DATE_FORMAT(r.start_date, '%Y-%m-%d') AS start_date_races,
