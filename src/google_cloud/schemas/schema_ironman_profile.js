@@ -46,6 +46,8 @@ const ironman_profile_schema = [
 
     { name: "behavior_segment", mode: "NULLABLE", type: "STRING", description: "one_and_done / repeat_ironman / continued_non_ironman / lapsed_after_ironman", fields: [] },
 
+    { name: "ironman_race_positions", mode: "NULLABLE", type: "STRING", description: "Position of each Ironman within all races, date order, e.g. '2 | 4 | 7'", fields: [] },
+
     // CHRONOLOGICAL EVENT HISTORIES
     { name: "event_timeline", mode: "NULLABLE", type: "STRING", description: "Start-date-ordered tagged event history (all events)", fields: [] },
     { name: "ironman_event_timeline", mode: "NULLABLE", type: "STRING", description: "Start-date-ordered Ironman events", fields: [] },

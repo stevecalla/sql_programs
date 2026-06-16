@@ -56,6 +56,9 @@ async function query_ironman_profile(batch_size = 10, offset = 0) {
 
             behavior_segment,
 
+            -- Ironman positions within all races (date order), e.g. "2 | 4 | 7"
+            IFNULL(ironman_race_positions, '') AS ironman_race_positions,
+
             -- ******************
             -- CHRONOLOGICAL EVENT HISTORIES
             -- ******************

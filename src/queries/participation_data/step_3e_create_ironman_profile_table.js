@@ -94,6 +94,10 @@ async function step_a_create_ironman_profile_table(table_name) {
 
             behavior_segment VARCHAR(30),
 
+            -- Position of each Ironman within ALL of the profile's races (date order),
+            -- e.g. "2 | 4 | 7" = their 2nd, 4th and 7th races were the Ironmans.
+            ironman_race_positions TEXT,
+
             -- ******************
             -- CHRONOLOGICAL EVENT HISTORIES (start-date ordered)
             -- ******************
@@ -205,7 +209,9 @@ async function step_c_insert_ironman_profiles(final_table, history_table, where 
                 name_events_rr, name_distance_types, name_race_type, category,
                 age, age_as_race_results_bin, gender_code, region_name,
                 start_date_races, start_date_year_races,
-                is_ironman_event, im_distance_bucket
+                is_ironman_event, im_distance_bucket,
+                -- Overall race position within the profile's whole racing cycle (date order).
+                ROW_NUMBER() OVER (PARTITION BY id_profile_rr ORDER BY start_date_races ASC, id_rr ASC) AS race_seq
             FROM ${history_table}
             WHERE id_profile_rr IS NOT NULL AND id_profile_rr <> ''
                 ${where}
@@ -267,7 +273,13 @@ async function step_c_insert_ironman_profiles(final_table, history_table, where 
                     END
                     ORDER BY start_date_races ASC, id_rr ASC
                     SEPARATOR '  >>  '
-                ) AS non_ironman_event_timeline
+                ) AS non_ironman_event_timeline,
+                -- Position of each Ironman within ALL races (date order), e.g. "2 | 4 | 7".
+                GROUP_CONCAT(
+                    CASE WHEN is_ironman_event = 1 THEN race_seq END
+                    ORDER BY start_date_races ASC, id_rr ASC
+                    SEPARATOR ' | '
+                ) AS ironman_race_positions
             FROM base GROUP BY id_profile_rr
         ),
         post AS (
@@ -310,6 +322,8 @@ async function step_c_insert_ironman_profiles(final_table, history_table, where 
                 WHEN p.races_after_last_im  > 0                             THEN 'continued_non_ironman'
                 ELSE 'lapsed_after_ironman'
             END AS behavior_segment,
+
+            t.ironman_race_positions,
 
             t.event_timeline,
             t.ironman_event_timeline,
