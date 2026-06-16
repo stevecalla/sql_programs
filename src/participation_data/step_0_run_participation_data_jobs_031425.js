@@ -21,6 +21,14 @@ const { execute_load_big_query_participation_profile_metrics } = require('./step
 const { execute_create_participation_race_profile_tables } = require("./step_3c_create_participation_match_race_profile");
 const { execute_load_big_query_participation_race_profile_metrics } = require('./step_3d_load_bq_participation_match_race_profile_metrics');
 
+// CREATE & LOAD IRONMAN BEHAVIOR PROFILE
+const { execute_create_ironman_profile_tables } = require("./step_3e_create_ironman_profile");
+const { execute_load_big_query_ironman_profile_metrics } = require('./step_3f_load_bq_ironman_profile_metrics');
+
+// CREATE & LOAD IRONMAN BEHAVIOR TIME-SERIES
+const { execute_create_ironman_timeseries_tables } = require("./step_3g_create_ironman_timeseries");
+const { execute_load_big_query_ironman_timeseries_metrics } = require('./step_3h_load_bq_ironman_timeseries_metrics');
+
 // MATCH MEMBERSHIP & PARTICIPATION DATA
 const { execute_create_membership_with_participation_match } = require("./step_4_create_membership_with_participation_match");
 
@@ -91,22 +99,27 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1  = true; // get all participation data
-  const run_step_2  = true; // load participation data
+  const run_step_1  = false; // get all participation data
+  const run_step_2  = false; // load participation data
   // const run_step_2a = false; // load region table
 
-  const run_step_3  = true; // create table participation with membership sales match
-  const run_step_3a_1 = true; // load participation with membership sales match to bigquery
+  const run_step_3  = false; // create table participation with membership sales match
+  const run_step_3a_1 = false; // load participation with membership sales match to bigquery
 
-  const run_step_3a = true; // create participation profile (profile_id) table
-  const run_step_3b = true; // load membership participation match profile to bigquery
-  const run_step_3c = true; // create membership participation race (race_id) profile table
-  const run_step_3d = true; // load membership participation match race to bigquery
+  const run_step_3a = false; // create participation profile (profile_id) table
+  const run_step_3b = false; // load membership participation match profile to bigquery
+  const run_step_3c = false; // create membership participation race (race_id) profile table
+  const run_step_3d = false; // load membership participation match race to bigquery
 
-  // const run_step_4 = true; // create table membership with participation match
+  const run_step_3e = true; // create ironman behavior profile tables (#1-#3) + CSV export
+  const run_step_3f = false; // load ironman behavior profile (#3) to bigquery
+  const run_step_3g = false; // create ironman behavior time-series (#4-#5)
+  const run_step_3h = false; // load ironman behavior time-series to bigquery
 
-  const run_step_10 = true; // create all_participation_state_rankings_results
-  const run_step_11 = true; // load all_participation_state_rankings_results to bigquery
+  // const run_step_4 = false; // create table membership with participation match
+
+  const run_step_10 = false; // create all_participation_state_rankings_results
+  const run_step_11 = false; // load all_participation_state_rankings_results to bigquery
 
   try {
     const stepFunctions = [
@@ -122,6 +135,11 @@ async function main() {
 
       run_step_3c ? execute_create_participation_race_profile_tables : null,
       run_step_3d ? execute_load_big_query_participation_race_profile_metrics : null,
+
+      run_step_3e ? execute_create_ironman_profile_tables : null,
+      run_step_3f ? execute_load_big_query_ironman_profile_metrics : null,
+      run_step_3g ? execute_create_ironman_timeseries_tables : null,
+      run_step_3h ? execute_load_big_query_ironman_timeseries_metrics : null,
 
       // run_step_4 ? execute_create_membership_with_participation_match : null,
 
@@ -143,6 +161,11 @@ async function main() {
 
       `Step #3c - Created participation race profile table`, // takes about 3 minutes
       `Step #3d - Load participation race profile to BQ: `,
+
+      `Step #3e - Created ironman behavior profile table (#1-#3) + CSV`,
+      `Step #3f - Load ironman behavior profile to BQ: `,
+      `Step #3g - Created ironman behavior time-series (#4-#5)`,
+      `Step #3h - Load ironman behavior time-series to BQ: `,
 
       // `Step #4 - Created membership data with participation match`,
 
