@@ -6,10 +6,7 @@ const { create_local_db_connection } = require('../../utilities/connectionLocalD
 const { triggerGarbageCollection } = require('../../utilities/garbage_collection/trigger_garbage_collection');
 const { runTimer, stopTimer } = require('../../utilities/timer');
 
-const path = require('path');
-const { create_directory } = require('../../utilities/createDirectory');
-const { streamQueryToCsv } = require('../../utilities/stream_query_to_csv');
-const { getCurrentDateTimeForFileNaming } = require('../../utilities/getCurrentDate');
+const { execute_save_single_csv } = require('../../utilities/save_single_csv_with_archive');
 
 const { query_drop_table } = require("../queries/create_drop_db_table/queries_drop_db_tables");
 const { query_ironman_profile } = require('../google_cloud/queries/query_ironman_profile');
@@ -192,30 +189,21 @@ async function append_indexes(pool, db_name, final_table) {
     stopTimer('query_to_create_indexes');
 }
 
-// STEP IV: Export the final profile table to a SINGLE CSV at the /data path.
-// Streams one query (no LIMIT/OFFSET paging) row-by-row to one file (memory-safe).
+// STEP IV: Export the final profile table to a SINGLE, archived CSV at the /data path.
+// Archives the prior run (clears archive folder, moves old main-folder csvs into it),
+// then streams one query row-by-row to one file (memory-safe).
 async function export_to_csv() {
-    console.log('STEP IV: Exporting Ironman profile table to a single CSV (/data path)');
+    console.log('STEP IV: Exporting Ironman profile table to a single archived CSV (/data path)');
     runTimer('export_csv');
 
-    const pool = await create_connection();
-    try {
-        const dirPath = await create_directory('usat_csv_ironman_profile');
-        const timestamp = getCurrentDateTimeForFileNaming();
-        const filePath = path.join(dirPath, `results_${timestamp}_ironman_profile_data.csv`);
+    await execute_save_single_csv({
+        directory_name:         'usat_csv_ironman_profile',
+        directory_name_archive: 'usat_csv_ironman_profile_archive',
+        fileName:               'ironman_profile_data',
+        query: (retrieval_batch_size, offset) => query_ironman_profile(retrieval_batch_size, offset),
+    });
 
-        // One query, all rows (huge LIMIT = no real cap); streamed straight to a single file.
-        const sql = await query_ironman_profile(1000000000, 0);
-
-        console.log(`🚀 Exporting (single file): ${filePath}`);
-        const result = await streamQueryToCsv(pool, sql, filePath);
-        console.log(`✅ Wrote ${result.rows_count} rows to ${filePath}`);
-    } catch (err) {
-        console.error('Error exporting CSV:', err);
-    } finally {
-        await pool.end();
-        stopTimer('export_csv');
-    }
+    stopTimer('export_csv');
 }
 
 // Main function to execute the overall process.
