@@ -111,10 +111,10 @@ async function main() {
   const run_step_3c = true; // create membership participation race (race_id) profile table
   const run_step_3d = true; // load membership participation match race to bigquery
 
-  const run_step_3e = true; // create ironman behavior profile tables (#1-#3) + CSV export
-  const run_step_3f = true; // load ironman behavior profile (#3) to bigquery
-  const run_step_3g = true; // create ironman behavior time-series (#4-#5)
-  const run_step_3h = true; // load ironman behavior time-series to bigquery
+  const run_step_3e = true;  // create ironman behavior profile tables (#1-#3) + CSV export
+  const run_step_3f = false; // load ironman behavior profile (#3) to bigquery — OFF for now (CSV only)
+  const run_step_3g = true;  // create ironman behavior time-series (#4-#5) + CSV export
+  const run_step_3h = false; // load ironman behavior time-series to bigquery — OFF for now (CSV only)
 
   // const run_step_4 = true; // create table membership with participation match
 
