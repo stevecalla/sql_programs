@@ -29,6 +29,72 @@ All tables are prefixed `im_participation_<n>_` so they cluster together and lis
 
 ---
 
+## Table details
+
+### `#1 im_participation_1_profile_ids` — the Ironman population
+`SELECT DISTINCT id_profile_rr` from the source where the IRONMAN rule matches. **One row per Ironman
+participant** (PK on `id_profile_rr`).
+**Answers:** *"Who counts as an Ironman participant — which profiles are in scope?"*
+**Purpose:** defines exactly *whose* full history we pull into `#2`, and is the list the `#3` batch loop
+pages through (via keyset range). Everything downstream is scoped to this population.
+
+### `#2 im_participation_2_history` — the working history
+The **full race history** (Ironman *and* non-Ironman races) of every `#1` profile, built by joining the
+source table to `#1`. **One row per race result (`id_rr`).** It carries the dimensions needed downstream
+— event / distance type / race type / category, `age` + `age_as_race_results_bin`, `gender_code`,
+region, `start_date_races` + `start_date_year_races` — and adds two **derived** columns:
+`is_ironman_event` (the rule applied per race) and `im_distance_bucket`
+(`ironman_70_3` / `ironman_140_6` / `non_ironman`).
+**Answers:** *"For everyone who's done an Ironman, what is their complete race history — Ironman and non-Ironman?"*
+**Purpose:** (a) the bounded, indexed input the batched `#3` build slices over; (b) the source for the
+`#5` activity rollup. We deliberately keep each participant's *whole* history — not just their Ironman
+races — because the core question is what they did **before and after** their Ironman.
+
+### `#3 im_participation_3_profile` — the answer table
+**One row per Ironman participant**, computed per 50k-profile batch from `#2`. For each person it derives:
+- **first and last Ironman** — date, year, age, age bucket, distance bucket, distance type, race type, category, region;
+- **race counts** — total distinct races, Ironman races, `count_im_140_6` (full), `count_im_70_3`, non-Ironman races, distinct start years, first/last race year;
+- **post-Ironman behavior** — races/years after the first and after the last Ironman, non-IM vs IM races after, `continued_after_first_im`/`…last_im`, and the 12/24/36-month and year+1/+2/+3 "raced again" flags;
+- **`behavior_segment`** — `one_and_done` / `repeat_ironman` / `continued_non_ironman` / `lapsed_after_ironman`;
+- **`ironman_race_positions`** — where each Ironman fell in their overall racing cycle, e.g. `"2 | 4 | 7"` = their 2nd, 4th and 7th races (date order) were the Ironmans;
+- **three start-date-ordered timelines** — all events (tagged), Ironman-only, non-Ironman-only.
+
+**Answers:** *"Did this person keep racing after their Ironman — and how does that vary by who they are
+(age, gender, distance, race type, category)?"*
+**Purpose:** the single per-participant table you slice directly by any `first_im_*` dimension. (Full
+column list in the "`#3` key columns" section below.)
+
+### `#4 im_participation_4_timeseries_cohort` — cohort retention (built from `#3`)
+Groups the profile table by **when each athlete did their first Ironman** (`first_im_year`) crossed with
+demographics (`first_im_distance_bucket`, `first_im_age_bucket`, `first_im_gender`, `first_im_category`,
+`first_im_race_type`), and computes retention measures per cell: `count_participants`,
+`count_continued_after_last_im`, `retention_rate` (share who raced again after their last Ironman),
+`avg_races_after_last_im`, `avg_years_after_last_im`, `pct_repeat_ironman`, `pct_one_and_done`, and the
+12/24/36-month "raced again" counts.
+
+**Answers — "Does post-Ironman behavior differ by entry cohort and segment?"** e.g. *did people whose
+first Ironman was 2018 keep racing at a higher rate than the 2023 cohort? Do 70.3 first-timers stick
+around more than 140.6 first-timers? Does retention vary by age group?* This is the "how has behavior
+changed over time" view, keyed on the **cohort**.
+
+### `#5 im_participation_5_timeseries_activity` — activity by calendar year (built from `#2`)
+Groups the full race history by **calendar year of each race** (`start_date_year_races`) ×
+`is_ironman_event` × `im_distance_bucket` × `name_distance_types` × `name_race_type` × `category` ×
+`gender_code` × `age_as_race_results_bin`, and counts `count_distinct_profiles`, `count_distinct_races`,
+`count_rows`.
+
+**Answers — "How much did this population race each year, and in what?"** e.g. *how many Ironman
+participants showed up to race in 2019 vs 2024, how does their Ironman vs non-Ironman racing volume trend
+year over year, which distances/demographics are growing or shrinking.* This is participation **volume
+over calendar time**, within the Ironman population.
+
+> **`#4` vs `#5` in one line:** `#4` is keyed on *when they started Ironman* (cohort retention from `#3`);
+> `#5` is keyed on *the calendar year of each race* (activity volume from `#2`). Both are pre-aggregated
+> convenience tables — anything in `#4` can be derived from `#3` and anything in `#5` from `#2` — they
+> just save scanning the big tables for repeatable trend reports.
+
+---
+
 ## The IRONMAN classification rule (single source of truth)
 
 **File:** `src/queries/ironman_rule.js` → `ironman_event_predicate(col)`
@@ -140,6 +206,7 @@ Root: `determineOSPath()` (Windows: `C:/ProgramData/MySQL/MySQL Server 8.0/Uploa
 - **Last Ironman:** `last_im_date`, `last_im_year`, `last_im_age`, `last_im_distance_bucket`
 - **Counts:** `count_races_total`, `count_ironman_races`, `count_im_140_6`, `count_im_70_3`, `count_non_ironman_races`, `count_start_years`, `first_race_year`, `last_race_year`
 - **Behavior:** `races_after_first_im`, `races_after_last_im`, `non_im_races_after_first_im`, `im_races_after_first_im`, `years_after_first_im`, `years_after_last_im`, `continued_after_first_im`, `continued_after_last_im`, `raced_within_12m_after_last_im`, `…_24m_…`, `…_36m_…`, `behavior_segment`
+- **`ironman_race_positions`** — `"2 | 4 | 7"`-style list: the position of each Ironman within *all* the profile's races (date order). `count_ironman_races` = how many entries; the values show how deep into their racing each Ironman came.
 - **Timelines (start-date ordered, `MEDIUMTEXT`):** `event_timeline` (all, tagged), `ironman_event_timeline`, `non_ironman_event_timeline`
 - `created_at_mtn`, `created_at_utc`
 
