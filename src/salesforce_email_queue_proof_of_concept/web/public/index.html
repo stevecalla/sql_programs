@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-<title>USAT Email Queue Assistant</title>
+<title>Email Queue Assistant</title>
 <style>
   :root{
     --bg:#f4f6fb; --card:#ffffff; --ink:#1c2433; --dim:#6b7686; --line:#e2e7f0;
@@ -36,7 +36,9 @@
   .btn.sel{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
   .btn.ghost:hover{border-color:var(--accent);color:var(--accent)} .btn.sm{padding:5px 10px;min-height:0;font-size:12.5px}
   .btn:disabled,.btn[disabled]{opacity:.45;cursor:not-allowed} .btn:active{transform:translateY(1px)}
-  .wrap{display:grid;grid-template-columns:340px 6px minmax(0,1fr) 6px 380px;height:calc(100vh - 51px)}
+  .wrap{display:grid;grid-template-columns:340px 6px minmax(0,1fr) 6px 380px;height:calc(100vh - 51px - 30px)}
+  .eq-footer{height:30px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;color:var(--dim);border-top:1px solid var(--line);background:var(--card)}
+  .eq-footer a{color:var(--dim);text-decoration:none} .eq-footer a:hover{color:var(--accent)}
   .split{background:var(--line);cursor:col-resize} .split:hover{background:var(--accent)}
   .pane{min-width:0;overflow:auto;padding:14px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:13px;margin:0 0 13px}
@@ -110,6 +112,7 @@
     .modal{max-width:96vw} .modal-b iframe{height:60vh}
   }
 </style>
+<script src="/analytics/metrics_client.js"></script>
 </head>
 <body>
 <div id="app"></div>
@@ -196,6 +199,17 @@ let state = { queues:[], cases:[], thread:[], queue:null, case:null, provider:'o
   checked: loadJSON('eq_checked', {}), collapsed:{}, dedupe:true, viewHtml:true, instanceUrl:'', caseQuery:'',
   dateFrom:'', dateTo:'', dateField:'LastModifiedDate', dateAny:false, loaded:false, datesOpen:false, attOnly:false, caseLimit:25, queueCardOpen:true };
 
+// ---- usage analytics (UsageMetrics browser client). ?metrics_test=1 marks the whole session as a
+// test run (is_test=1) so the entries are trackable + purgeable from /admin. Fire-and-forget; never
+// throws. AI-call events are logged server-side (latency/verdict/success); the browser logs page +
+// navigation + interaction events here. ----
+var M_TEST = (function(){ try{ if(new URLSearchParams(location.search).get('metrics_test')==='1') sessionStorage.setItem('eq_mtest','1'); }catch(e){} try{ return sessionStorage.getItem('eq_mtest')==='1'; }catch(e){ return false; } })();
+var M_BASE = { source:'web', is_test: M_TEST?1:0 };
+try{ if(window.UsageMetrics) UsageMetrics.init({ app:'salesforce_email_queue', endpoint:'/api/event',
+  allowList:['is_test','source','queue','queue_id','thread_msg_count','has_attachment','attachment_type','correction_scope','context_action','soql_chars','actor'],
+  baseProps: M_BASE }); }catch(e){}
+var M = { t: M_TEST?1:0, track:function(n,p){ try{ if(window.UsageMetrics) UsageMetrics.track(n, p||{}); }catch(e){} }, setActor:function(a){ try{ M_BASE.actor=a||''; }catch(e){} } };
+
 function renderLogin(msg) {
   document.body.innerHTML = '<div id="app"></div>';
   const u = el('input', { placeholder:'Username', id:'u' });
@@ -204,7 +218,7 @@ function renderLogin(msg) {
   const btn = el('button', { class:'btn primary', style:'width:100%', onclick: async function(){ err.textContent=''; try{ await api('/api/login',{method:'POST',body:JSON.stringify({user:u.value,pass:p.value})}); boot(); }catch(e){ err.textContent=(e&&e.message)||'Invalid credentials'; } } }, ['Sign in']);
   p.addEventListener('keydown', function(e){ if(e.key==='Enter') btn.click(); });
   $('#app').appendChild(el('div',{class:'center'},[ el('div',{class:'card login'},[
-    el('h1',{},[el('span',{class:'arrow'},['> ']),'USAT Email Queue Assistant']),
+    el('h1',{},[el('span',{class:'arrow'},['> ']),'Email Queue Assistant']),
     el('div',{class:'sub'},['Read-only proof of concept. Nothing is sent to Salesforce.']),
     el('div',{class:'stack',style:'margin-top:12px'},[ u, p, btn, err ]),
     el('div',{style:'margin-top:12px;text-align:center'},[ makeThemeBtn() ])
@@ -218,8 +232,11 @@ function shell() {
   const logout = el('button',{class:'btn ghost',onclick:async function(){ await fetch('/api/logout',{method:'POST'}); renderLogin('Signed out.'); }},['Sign out']);
   document.body.appendChild(el('div',{class:'app-header'},[
     el('span',{class:'brandmark','aria-label':'email',html:'<svg width="22" height="22" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="19" width="38" height="26" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M14 21l18 14 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg>'}),
-    el('div',{},[ el('h1',{},['USAT Email Queue Assistant']), el('div',{class:'sub'},['read-only proof of concept - nothing is sent to Salesforce']) ]),
-    el('div',{class:'right'},[ el('span',{class:'dim'},['Model:']), provider, makeThemeBtn(), logout ])
+    el('div',{},[ el('h1',{},['Email Queue Assistant']), el('div',{class:'sub'},['read-only proof of concept - nothing is sent to Salesforce']) ]),
+    el('div',{class:'right'},[ el('span',{class:'dim'},['Model:']), provider,
+      ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/metrics',title:'Usage dashboard (admin)'},['📊 Metrics']):null),
+      ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/admin',title:'Admin hub (admin)'},['⚙ Admin']):null),
+      makeThemeBtn(), logout ])
   ]));
   document.body.appendChild(el('div',{class:'wrap'},[
     el('div',{class:'pane',id:'left'},[]),
@@ -230,6 +247,14 @@ function shell() {
   ]));
   setupSplit();
   renderLeft();
+  // Consistent footer across all paths (App · Admin · Metrics), carrying ?metrics_test=1 so admin
+  // navigation stays in test mode. Admin links shown only to admins.
+  var isAdmin = state.me && state.me.role === 'admin';
+  var fkids = ['Email Queue Assistant · ', el('a',{href:'/?metrics_test=1'},['App'])];
+  if (isAdmin) { fkids.push(' · ', el('a',{href:'/admin?metrics_test=1'},['Admin']), ' · ', el('a',{href:'/metrics?metrics_test=1'},['Metrics'])); }
+  fkids.push(' · ', el('span',{id:'eqClock'},[]));
+  document.body.appendChild(el('footer',{class:'eq-footer'},fkids));
+  (function(){ function t(){ var c=document.getElementById('eqClock'); if(c){ try{ c.textContent='MTN '+new Intl.DateTimeFormat('en-US',{timeZone:'America/Denver',dateStyle:'medium',timeStyle:'short'}).format(new Date()); }catch(e){} } } t(); setInterval(t,30000); })();
 }
 
 function setupSplit(){
@@ -249,13 +274,13 @@ function statusColor(s){ s=String(s||'').toLowerCase(); if(s.indexOf('clos')>=0)
 var TRIAGE_LABEL={answer_ready:'Answer ready',draft_possible:'Draft possible',needs_info:'Needs info',awaiting_reply:'Awaiting reply',spam:'Spam?',non_actionable:'No action',pending:'Triaging...'};
 function triageBadge(t){ if(!t||!t.status) return el('span',{}); return el('span',{class:'tstat '+t.status, title:t.reason||''},[ TRIAGE_LABEL[t.status]||t.status ]); }
 async function triageOne(){ const cs=state.case; if(!cs) return; state.triage[cs.case_id]={status:'pending',reason:''}; renderThread(); renderCases();
-  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,queue:state.queue.name,provider:state.provider})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
+  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
   catch(e){ state.triage[cs.case_id]={status:'needs_info',reason:'(triage error) '+e.message}; }
   renderThread(); renderCases();
   if(state.case && state.case.case_id===cs.case_id && state.triage[cs.case_id] && state.triage[cs.case_id].status==='answer_ready' && typeof state._doDraft==='function'){ state._doDraft(); } }
 async function triageVisible(){ const prog=$('#triProg'); const list=state.cases.slice(); let i=0;
   for(const cs of list){ i++; if(state.triage[cs.case_id] && state.triage[cs.case_id].status!=='pending'){ continue; } if(prog) prog.textContent='Triaging '+i+'/'+list.length+'...';
-    try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,queue:state.queue.name,provider:state.provider})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
+    try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
     catch(e){ state.triage[cs.case_id]={status:'needs_info',reason:'(error)'}; }
     renderCases(); }
   if(prog) prog.textContent='Triage complete.'; }
@@ -267,7 +292,7 @@ function renderLeft(){
   const left=$('#left'); left.innerHTML='';
   if(!state.dateFrom) state.dateFrom=eq_yesterday();
   if(!state.dateTo) state.dateTo=eq_today();
-  const qsel = el('select',{onchange:async function(e){ state.queue=state.queues.find(function(q){return q.id===e.target.value;})||null; saveJSON('eq_queue', state.queue?state.queue.id:''); state.counts={}; state.cases=[]; state.loaded=false; renderCases(); if(state.queue){ await loadCounts(); renderLeft(); } }},
+  const qsel = el('select',{onchange:async function(e){ state.queue=state.queues.find(function(q){return q.id===e.target.value;})||null; saveJSON('eq_queue', state.queue?state.queue.id:''); state.counts={}; state.cases=[]; state.loaded=false; renderCases(); if(state.queue){ M.track('queue_viewed',{ queue:state.queue.name, queue_id:state.queue.id }); await loadCounts(); renderLeft(); } }},
     [el('option',{value:''},['- pick a queue -'])].concat(state.queues.map(function(q){ return el('option',{value:q.id},[q.name+'  ('+(q.open_count!=null?q.open_count:'?')+' open)']); })));
   if(state.queue) qsel.value=state.queue.id;
   const statusOpts=[el('option',{value:'open'},['Open only']), el('option',{value:'all'},['All statuses'])]
@@ -383,6 +408,7 @@ async function loadCases(){
 
 async function selectCase(cs){
   state.case=cs; state.askHistory=[]; state.askShowAll=false; state.collapsed={}; state._doDraft=null; renderCases();
+  M.track('thread_opened',{ queue:(state.queue&&state.queue.name)||'', queue_id:(state.queue&&state.queue.id)||'', thread_msg_count:(cs.message_count||0), has_attachment: cs.has_attachment?1:0 });
   const mid=$('#mid'); mid.innerHTML='<div class="dim">Loading thread...</div>'; $('#right').innerHTML='';
   try{ const j=await api('/api/thread?caseId='+encodeURIComponent(cs.case_id)); state.thread=j.thread;
     // default: collapse all but the newest
@@ -514,7 +540,7 @@ function renderRight(){
   async function doDraft(){
     draftBtn.classList.add('sel'); ackBtn.classList.remove('sel');
     out.innerHTML='<div class="dim">Thinking ('+state.provider+')...</div>';
-    try{ const j=await api('/api/ai/respond',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,provider:state.provider})});
+    try{ const j=await api('/api/ai/respond',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t})});
       out.innerHTML=''; out.appendChild(el('span',{class:'badge '+j.verdict},[j.verdict==='draft'?'DRAFT':'NEED INFO']));
       reply.value=j.body||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['Loaded into the editable reply below.']));
     }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; }
@@ -523,7 +549,7 @@ function renderRight(){
   async function doAck(){
     ackBtn.classList.add('sel'); draftBtn.classList.remove('sel');
     out.innerHTML='<div class="dim">Writing acknowledgement ('+state.provider+')...</div>';
-    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,provider:state.provider,question:'Write a brief, friendly acknowledgement / holding reply to the customer for this case: confirm we received their message and are looking into it, and that we will follow up. Do NOT promise or invent any specific timeframe, price, policy, email, phone, or other detail that is not in the context. End with the SAME closing sign-off and team signature (team name, phone number, etc.) used in the automated reply in this thread; copy it verbatim if present and do not invent contact details. If the thread has no such sign-off, close simply with "Best regards," and "USA Triathlon". 2-4 sentences plus the sign-off, ready to send.'})});
+    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,action:'acknowledge',_test:M.t,question:'Write a brief, friendly acknowledgement / holding reply to the customer for this case: confirm we received their message and are looking into it, and that we will follow up. Do NOT promise or invent any specific timeframe, price, policy, email, phone, or other detail that is not in the context. End with the SAME closing sign-off and team signature (team name, phone number, etc.) used in the automated reply in this thread; copy it verbatim if present and do not invent contact details. If the thread has no such sign-off, close simply with "Best regards," and "USA Triathlon". 2-4 sentences plus the sign-off, ready to send.'})});
       out.innerHTML=''; out.appendChild(el('span',{class:'badge draft'},['ACKNOWLEDGEMENT'])); reply.value=j.answer||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['A short holding reply - edit as needed.']));
     }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; }
   }
@@ -546,7 +572,7 @@ function renderRight(){
   const hist=el('div',{id:'askHist'},[]);
   const qbox=el('textarea',{placeholder:'Ask a question about this case...',style:'min-height:64px'});
   async function doAsk(){ const q=qbox.value.trim(); if(!q) return; const ts=new Date().toLocaleString(); renderAskHist(true);
-    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,provider:state.provider,question:q,history:state.askHistory.slice(-6)})});
+    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t,question:q,history:state.askHistory.slice(-6)})});
       state.askHistory.push({q:q,a:j.answer||'',ts:ts}); qbox.value=''; renderAskHist(); }
     catch(e){ state.askHistory.push({q:q,a:'(error) '+e.message,ts:ts}); renderAskHist(); } }
   function renderAskHist(thinking){
@@ -569,7 +595,7 @@ function renderRight(){
   async function refreshCorr(){ try{ const j=await api('/api/corrections'); corrList.innerHTML=''; var items=(j.corrections||[]).filter(function(c){return c.active;}); if(!items.length){ corrList.appendChild(el('div',{class:'dim'},['(no corrections yet)'])); } items.slice().reverse().slice(0,8).forEach(function(c){ corrList.appendChild(el('div',{class:'fi'},[ el('span',{},[c.note]), el('span',{class:'dim'},[(c.scope||'global')+(c.queue?(' · '+c.queue):'')]) ])); }); }catch(e){ corrList.innerHTML='<div class="err">'+e.message+'</div>'; } }
   const corrBtn=el('button',{class:'btn'},['Add correction']);
   corrBtn.onclick=async function(){ const note=corrNote.value.trim(); if(!note){ corrMsg.className='note'; corrMsg.textContent='Type a correction first.'; return; } corrMsg.className='note'; corrMsg.textContent='Saving...';
-    try{ await api('/api/corrections',{method:'POST',body:JSON.stringify({note:note,scope:corrScope.value,queue:state.queue.name,caseId:state.case.case_id})}); corrNote.value=''; corrMsg.className='note ok'; corrMsg.textContent='Saved - it will ground future drafts & answers.'; refreshCorr(); if(typeof refreshContext==='function') refreshContext(); }
+    try{ await api('/api/corrections',{method:'POST',body:JSON.stringify({note:note,scope:corrScope.value,queue:state.queue.name,caseId:state.case.case_id})}); M.track('correction_added',{ correction_scope:corrScope.value, queue:(state.queue&&state.queue.name)||'' }); corrNote.value=''; corrMsg.className='note ok'; corrMsg.textContent='Saved - it will ground future drafts & answers.'; refreshCorr(); if(typeof refreshContext==='function') refreshContext(); }
     catch(e){ corrMsg.className='note warn'; corrMsg.textContent=e.message; } };
   right.appendChild(acard('Corrections (teach the AI)', [ el('div',{class:'note'},['Corrections are injected into the AI grounding so future drafts and answers honor them.']), corrList, corrNote, el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ corrScope, corrBtn ]), corrMsg ], true));
   refreshCorr();
@@ -611,7 +637,7 @@ function renderRight(){
     }catch(e){ fileList.innerHTML='<div class="err">'+e.message+'</div>'; } }
   const upBtn=el('button',{class:'btn',onclick:function(){ const f=fileInput.files&&fileInput.files[0]; if(!f){ upMsg.textContent='Choose a file first.'; return; }
     const rd=new FileReader(); rd.onload=async function(){ const b64=String(rd.result).split(',').pop(); upMsg.className='note'; upMsg.textContent='Uploading...';
-      try{ await api('/api/context',{method:'POST',body:JSON.stringify({scope:scope.value,queue:state.queue.name,name:f.name,content_base64:b64})}); upMsg.className='note ok'; upMsg.textContent='Uploaded.'; fileInput.value=''; fileName.textContent='No file chosen'; refreshContext(); }
+      try{ await api('/api/context',{method:'POST',body:JSON.stringify({scope:scope.value,queue:state.queue.name,name:f.name,content_base64:b64})}); M.track('context_changed',{ context_action:'upload', queue:(state.queue&&state.queue.name)||'' }); upMsg.className='note ok'; upMsg.textContent='Uploaded.'; fileInput.value=''; fileName.textContent='No file chosen'; refreshContext(); }
       catch(e){ upMsg.className='note warn'; upMsg.textContent=e.message; } };
     rd.readAsDataURL(f); }},['Upload']);
   const ctxRefresh=el('button',{class:'btn ghost sm',title:'Refresh the context file list',onclick:function(){ refreshContext(); }},['↻ Refresh']);
@@ -657,7 +683,7 @@ function renderRight(){
   const expRes=el('button',{class:'btn ghost sm',title:'Open results in a larger window'},['⤢ Expand']); expRes.onclick=function(){ if(!lastRecords.length) return; var d=el('button',{class:'btn ghost sm'},['⬇ Download CSV']); d.onclick=function(){ downloadCSV('soql_results.csv', recordsToRows(lastRecords)); }; eq_modal('SOQL results ('+lastRecords.length+')', recordsToTable(lastRecords), [ d ]); };
   soqlTools.appendChild(dlCsv); soqlTools.appendChild(expRes);
   async function runSoql(box){ var q=String(box.value||'').trim(); soqlResults.style.display='block'; soqlResults.textContent='Running...'; soqlTools.style.display='none';
-    try{ const j=await api('/api/soql',{method:'POST',body:JSON.stringify({q:q})}); lastRecords=j.records||[]; soqlResults.innerHTML='';
+    try{ const j=await api('/api/soql',{method:'POST',body:JSON.stringify({q:q})}); M.track('soql_run',{ soql_chars:q.length, queue:(state.queue&&state.queue.name)||'' }); lastRecords=j.records||[]; soqlResults.innerHTML='';
       soqlResults.appendChild(el('div',{class:'dim',style:'font-size:11px;margin-bottom:4px'},[(j.total!=null?(j.total+' record(s)'):'')+(j.done===false?' - more not shown':'')]));
       soqlResults.appendChild(recordsToTable(lastRecords)); soqlTools.style.display=lastRecords.length?'flex':'none'; }
     catch(e){ lastRecords=[]; soqlResults.textContent='Error: '+e.message; } }
@@ -686,7 +712,7 @@ function renderRight(){
 }
 
 async function boot(){
-  try{ await api('/api/me'); shell();
+  try{ const me=await api('/api/me'); state.me=me; M.setActor(me&&me.user); shell();
     const r=await Promise.all([ api('/api/queues'), api('/api/statuses').catch(function(){return {statuses:[]};}) ]);
     state.queues=r[0].queues; state.statuses=r[1].statuses||[]; state.instanceUrl=r[0].instance_url||'';
     var sq=loadJSON('eq_queue',''); if(sq){ state.queue=state.queues.find(function(q){return q.id===sq;})||null; }

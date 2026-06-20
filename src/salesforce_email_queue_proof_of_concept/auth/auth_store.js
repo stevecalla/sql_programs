@@ -34,26 +34,35 @@ function write(o) { fs.mkdirSync(path.dirname(FILE), { recursive: true }); fs.wr
 function load_or_init() { const had = fs.existsSync(FILE); const o = read(); if (!had) write(o); return o; }
 
 function session_secret() { return load_or_init().session_secret; }
-function list_users() { return read().users.map(function (u) { return { user: u.user, sf_email: u.sf_email || '' }; }); }
-function add_user(user, pass, sf_email) {
+function list_users() { return read().users.map(function (u) { return { user: u.user, sf_email: u.sf_email || '', role: u.role || 'user' }; }); }
+// .env accounts surfaced for the /admin Access pane (recovery accounts — always valid, never removable).
+function env_accounts() {
+  const out = [];
+  if (process.env.SF_EMAIL_QUEUE_ADMIN_USER) out.push({ user: process.env.SF_EMAIL_QUEUE_ADMIN_USER, role: 'admin', source: 'env' });
+  if (process.env.SF_EMAIL_QUEUE_USER) out.push({ user: process.env.SF_EMAIL_QUEUE_USER, role: 'user', source: 'env' });
+  return out;
+}
+// role is optional (4th param so existing add_user(user,pass[,sf_email]) callers keep working).
+function add_user(user, pass, sf_email, role) {
   const o = read();
   const ex = o.users.filter(function (u) { return u.user === user; })[0];
   const hash = hash_password(pass);
-  if (ex) { ex.hash = hash; if (sf_email != null) ex.sf_email = sf_email; }
-  else o.users.push({ user: String(user), hash: hash, sf_email: sf_email || '' });
-  write(o); return { user: user };
+  const r = (role === 'admin' || role === 'user') ? role : null;
+  if (ex) { ex.hash = hash; if (sf_email != null) ex.sf_email = sf_email; if (r) ex.role = r; }
+  else o.users.push({ user: String(user), hash: hash, sf_email: sf_email || '', role: r || 'user' });
+  write(o); return { user: user, role: r || (ex && ex.role) || 'user' };
 }
 function remove_user(user) { const o = read(); const n = o.users.length; o.users = o.users.filter(function (u) { return u.user !== user; }); write(o); return o.users.length < n; }
 function valid_user(user, pass) {
   if (!user) return null;
   const p = String(pass == null ? '' : pass);
   // .env accounts (always valid; carry a role for future access differentiation).
-  const env_accounts = [
+  const env_list = [
     { u: process.env.SF_EMAIL_QUEUE_ADMIN_USER, p: process.env.SF_EMAIL_QUEUE_ADMIN_PASS, role: 'admin' },
     { u: process.env.SF_EMAIL_QUEUE_USER, p: process.env.SF_EMAIL_QUEUE_PASS, role: 'user' }
   ];
-  for (let i = 0; i < env_accounts.length; i++) {
-    const a = env_accounts[i];
+  for (let i = 0; i < env_list.length; i++) {
+    const a = env_list[i];
     if (a.u && a.p && user === a.u && p === String(a.p)) return { user: user, env: true, role: a.role };
   }
   const u = read().users.filter(function (x) { return x.user === user; })[0];
@@ -61,4 +70,4 @@ function valid_user(user, pass) {
   return null;
 }
 
-module.exports = { hash_password, verify_password, session_secret, list_users, add_user, remove_user, valid_user, load_or_init };
+module.exports = { hash_password, verify_password, session_secret, list_users, env_accounts, add_user, remove_user, valid_user, load_or_init };
