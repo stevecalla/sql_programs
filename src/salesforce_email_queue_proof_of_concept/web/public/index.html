@@ -143,7 +143,7 @@ function copyText(t, msg) {
 // ---- theme (transform-style sun/moon) ----
 function effective_dark(){ let t=null; try{t=localStorage.getItem('eq_theme');}catch(e){} if(t==='dark')return true; if(t==='light')return false; return !!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches); }
 function apply_theme(){ let t=null; try{t=localStorage.getItem('eq_theme');}catch(e){} const r=document.documentElement; if(t==='dark'||t==='light')r.setAttribute('data-theme',t); else r.removeAttribute('data-theme'); const d=effective_dark(); Array.prototype.forEach.call(document.querySelectorAll('[data-theme-toggle]'),function(b){ b.textContent=d?'☀ Light':'☾ Dark'; b.title='Switch to '+(d?'light':'dark')+' theme'; }); }
-function toggle_theme(){ const d=effective_dark(); try{localStorage.setItem('eq_theme',d?'light':'dark');}catch(e){} apply_theme(); }
+function toggle_theme(){ const d=effective_dark(); try{localStorage.setItem('eq_theme',d?'light':'dark');}catch(e){} apply_theme(); try{ if(typeof M!=='undefined') M.track('theme_changed',{ theme: d?'light':'dark' }); }catch(e){} }
 function makeThemeBtn(){ const d=effective_dark(); return el('button',{class:'btn ghost','data-theme-toggle':'1','aria-label':'Toggle light or dark theme',onclick:toggle_theme},[d?'☀ Light':'☾ Dark']); }
 apply_theme(); if(window.matchMedia){try{window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',apply_theme);}catch(e){}}
 
@@ -173,6 +173,7 @@ function linkifyInto(node, text){
   if(last<str.length) node.appendChild(document.createTextNode(str.slice(last)));
 }
 function openLinkPreview(url){
+  try{ if(typeof M!=='undefined') M.track('link_previewed',{}); }catch(e){}
   var safe = /^https?:\/\//i.test(url) ? url : ('https://'+url);
   var info=el('div',{class:'note warn'},['This link came from an email - verify before trusting it: ', el('b',{},[safe])]);
   var openTab=el('a',{class:'btn',href:safe,target:'_blank',rel:'noopener noreferrer'},['Open in new tab ↗']);
@@ -199,10 +200,10 @@ let state = { queues:[], cases:[], thread:[], queue:null, case:null, provider:'o
   checked: loadJSON('eq_checked', {}), collapsed:{}, dedupe:true, viewHtml:true, instanceUrl:'', caseQuery:'',
   dateFrom:'', dateTo:'', dateField:'LastModifiedDate', dateAny:false, loaded:false, datesOpen:false, attOnly:false, caseLimit:25, queueCardOpen:true };
 
-// ---- usage analytics (UsageMetrics browser client). ?metrics_test=1 marks the whole session as a
-// test run (is_test=1) so the entries are trackable + purgeable from /admin. Fire-and-forget; never
-// throws. AI-call events are logged server-side (latency/verdict/success); the browser logs page +
-// navigation + interaction events here. ----
+// ---- usage analytics (UsageMetrics browser client). is_test=1 ONLY when THIS page load's URL has
+// ?metrics_test=1 — never from session/storage or any other state — so test entries stay trackable +
+// purgeable without ever mis-flagging real activity. Fire-and-forget; never throws. AI-call events are
+// logged server-side (latency/verdict/success); the browser logs page + navigation + interaction events. ----
 // Test mode is opt-in PER PAGE LOAD via ?metrics_test=1 only — never persisted. (Persisting it in
 // sessionStorage leaked the flag into a user's normal activity for the rest of the tab session, which
 // wrongly stamped real page_view/thread_opened/ai_call rows as is_test=1.) Admin links to the app carry
@@ -211,9 +212,19 @@ var M_TEST = (function(){ try{ return new URLSearchParams(location.search).get('
 try{ sessionStorage.removeItem('eq_mtest'); }catch(e){}
 var M_BASE = { source:'web', is_test: M_TEST?1:0 };
 try{ if(window.UsageMetrics) UsageMetrics.init({ app:'salesforce_email_queue', endpoint:'/api/event',
-  allowList:['is_test','source','queue','queue_id','thread_msg_count','has_attachment','attachment_type','correction_scope','context_action','soql_chars','actor'],
-  baseProps: M_BASE }); }catch(e){}
-var M = { t: M_TEST?1:0, track:function(n,p){ try{ if(window.UsageMetrics) UsageMetrics.track(n, p||{}); }catch(e){} }, setActor:function(a){ try{ M_BASE.actor=a||''; }catch(e){} } };
+  allowList:['is_test','source','queue','queue_id','case_id','case_number','thread_msg_count','has_attachment','attachment_type','correction_scope','context_action','soql_chars','actor'],
+  baseProps: M_BASE, autoPageView:false }); }catch(e){}   // visit is recorded after sign-in (see boot), so it carries the actor
+var M = { t: M_TEST?1:0, track:function(n,p){ try{ if(window.UsageMetrics) UsageMetrics.track(n, p||{}); }catch(e){} }, setActor:function(a){ try{ M_BASE.actor=a||''; }catch(e){} },
+  // Sticky current-case context: once an email is opened, every later event carries this case_id/case_number
+  // (and queue) until another email is opened (setCase) or the queue is changed (clearCase).
+  setCase:function(c){ try{ M_BASE.case_id=(c&&c.case_id)||''; M_BASE.case_number=(c&&c.case_number)||''; if(c&&c.queue!=null)M_BASE.queue=c.queue; if(c&&c.queue_id!=null)M_BASE.queue_id=c.queue_id; }catch(e){} },
+  clearCase:function(){ try{ M_BASE.case_id=''; M_BASE.case_number=''; }catch(e){} },
+  // Expose the analytics visitor/session ids so server-logged events (ai_call / send / status) can carry
+  // the SAME ids as the browser events for end-to-end correlation.
+  vid:function(){ try{ return (window.UsageMetrics&&UsageMetrics.ids&&UsageMetrics.ids().visitor_id)||''; }catch(e){ return ''; } },
+  sid:function(){ try{ return (window.UsageMetrics&&UsageMetrics.ids&&UsageMetrics.ids().session_id)||''; }catch(e){ return ''; } },
+  // Full client metadata (ids + tz/local time/viewport/theme/page) for server-logged events.
+  meta:function(){ try{ return (window.UsageMetrics&&UsageMetrics.meta&&UsageMetrics.meta())||{}; }catch(e){ return {}; } } };
 
 function renderLogin(msg) {
   // Styled to match the transform's sign-in page exactly (navy full-screen card, USAT-red button,
@@ -254,15 +265,15 @@ function renderLogin(msg) {
 
 function shell() {
   document.body.innerHTML='';
-  const provider = el('select',{style:'width:auto',onchange:function(e){state.provider=e.target.value;}},
+  const provider = el('select',{style:'width:auto',onchange:function(e){state.provider=e.target.value; M.track('model_selected',{ ai_provider: e.target.value==='anthropic'?'claude':'chatgpt' });}},
     [el('option',{value:'openai'},['ChatGPT (default)']), el('option',{value:'anthropic'},['Claude'])]);
-  const logout = el('button',{class:'btn ghost',onclick:async function(){ await fetch('/api/logout',{method:'POST'}); renderLogin('Signed out.'); }},['Sign out']);
+  const logout = el('button',{class:'btn ghost',onclick:async function(){ M.track('sign_out',{}); await fetch('/api/logout',{method:'POST'}); renderLogin('Signed out.'); }},['Sign out']);
   document.body.appendChild(el('div',{class:'app-header'},[
     el('span',{class:'brandmark','aria-label':'email',html:'<svg width="22" height="22" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="19" width="38" height="26" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M14 21l18 14 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg>'}),
     el('div',{},[ el('h1',{},['Email Queue Assistant']), el('div',{class:'sub'},['read-only proof of concept - nothing is sent to Salesforce']) ]),
     el('div',{class:'right'},[ el('span',{class:'dim'},['Model:']), provider,
-      ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/metrics',title:'Usage dashboard (admin)'},['📊 Metrics']):null),
-      ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/admin',title:'Admin hub (admin)'},['⚙ Admin']):null),
+      ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/metrics?metrics_test=1',title:'Usage dashboard (admin)'},['📊 Metrics']):null),
+      ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/admin?metrics_test=1',title:'Admin hub (admin)'},['⚙ Admin']):null),
       makeThemeBtn(), logout ])
   ]));
   document.body.appendChild(el('div',{class:'wrap'},[
@@ -277,7 +288,7 @@ function shell() {
   // Consistent footer across all paths (App · Admin · Metrics), carrying ?metrics_test=1 so admin
   // navigation stays in test mode. Admin links shown only to admins.
   var isAdmin = state.me && state.me.role === 'admin';
-  var fkids = ['Email Queue Assistant · ', el('a',{href:'/?metrics_test=1'},['App'])];
+  var fkids = ['Email Queue Assistant · ', el('a',{href:'/'},['App'])];   // App = real work (no test flag), for everyone
   if (isAdmin) { fkids.push(' · ', el('a',{href:'/admin?metrics_test=1'},['Admin']), ' · ', el('a',{href:'/metrics?metrics_test=1'},['Metrics'])); }
   fkids.push(' · ', el('span',{id:'eqClock'},[]));
   document.body.appendChild(el('footer',{class:'eq-footer'},fkids));
@@ -301,13 +312,13 @@ function statusColor(s){ s=String(s||'').toLowerCase(); if(s.indexOf('clos')>=0)
 var TRIAGE_LABEL={answer_ready:'Answer ready',draft_possible:'Draft possible',needs_info:'Needs info',awaiting_reply:'Awaiting reply',spam:'Spam?',non_actionable:'No action',pending:'Triaging...'};
 function triageBadge(t){ if(!t||!t.status) return el('span',{}); return el('span',{class:'tstat '+t.status, title:t.reason||''},[ TRIAGE_LABEL[t.status]||t.status ]); }
 async function triageOne(){ const cs=state.case; if(!cs) return; state.triage[cs.case_id]={status:'pending',reason:''}; renderThread(); renderCases();
-  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
+  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
   catch(e){ state.triage[cs.case_id]={status:'needs_info',reason:'(triage error) '+e.message}; }
   renderThread(); renderCases();
   if(state.case && state.case.case_id===cs.case_id && state.triage[cs.case_id] && state.triage[cs.case_id].status==='answer_ready' && typeof state._doDraft==='function'){ state._doDraft(); } }
 async function triageVisible(){ const prog=$('#triProg'); const list=state.cases.slice(); let i=0;
   for(const cs of list){ i++; if(state.triage[cs.case_id] && state.triage[cs.case_id].status!=='pending'){ continue; } if(prog) prog.textContent='Triaging '+i+'/'+list.length+'...';
-    try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
+    try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
     catch(e){ state.triage[cs.case_id]={status:'needs_info',reason:'(error)'}; }
     renderCases(); }
   if(prog) prog.textContent='Triage complete.'; }
@@ -319,7 +330,7 @@ function renderLeft(){
   const left=$('#left'); left.innerHTML='';
   if(!state.dateFrom) state.dateFrom=eq_yesterday();
   if(!state.dateTo) state.dateTo=eq_today();
-  const qsel = el('select',{onchange:async function(e){ state.queue=state.queues.find(function(q){return q.id===e.target.value;})||null; saveJSON('eq_queue', state.queue?state.queue.id:''); state.counts={}; state.cases=[]; state.loaded=false; renderCases(); if(state.queue){ M.track('queue_viewed',{ queue:state.queue.name, queue_id:state.queue.id }); await loadCounts(); renderLeft(); } }},
+  const qsel = el('select',{onchange:async function(e){ state.queue=state.queues.find(function(q){return q.id===e.target.value;})||null; saveJSON('eq_queue', state.queue?state.queue.id:''); state.counts={}; state.cases=[]; state.loaded=false; state.case=null; M.clearCase(); renderCases(); if(state.queue){ M.track('queue_viewed',{ queue:state.queue.name, queue_id:state.queue.id }); await loadCounts(); renderLeft(); } }},
     [el('option',{value:''},['- pick a queue -'])].concat(state.queues.map(function(q){ return el('option',{value:q.id},[q.name+'  ('+(q.open_count!=null?q.open_count:'?')+' open)']); })));
   if(state.queue) qsel.value=state.queue.id;
   const statusOpts=[el('option',{value:'open'},['Open only']), el('option',{value:'all'},['All statuses'])]
@@ -429,13 +440,15 @@ async function loadCases(){
   if($('#caseList')) $('#caseList').innerHTML='<div class="dim">Loading...</div>';
   var dq='';
   if(!state.dateAny && state.dateFrom && state.dateTo){ dq='&from='+encodeURIComponent(state.dateFrom)+'&to='+encodeURIComponent(state.dateTo)+'&field='+encodeURIComponent(state.dateField||'LastModifiedDate'); }
-  try{ const j=await api('/api/cases?queue='+encodeURIComponent(state.queue.id)+'&status='+encodeURIComponent(status)+dq+'&limit='+encodeURIComponent(state.caseLimit||25)+'&links=1'); state.cases=j.cases; state.loaded=true; renderCases(); }
+  try{ const j=await api('/api/cases?queue='+encodeURIComponent(state.queue.id)+'&status='+encodeURIComponent(status)+dq+'&limit='+encodeURIComponent(state.caseLimit||25)+'&links=1'); state.cases=j.cases; state.loaded=true; renderCases();
+    M.track('cases_listed',{ queue:(state.queue&&state.queue.name)||'', queue_id:(state.queue&&state.queue.id)||'' }); }
   catch(e){ if($('#caseList')) $('#caseList').innerHTML='<div class="err">'+e.message+'</div>'; }
 }
 
 async function selectCase(cs){
   state.case=cs; state.askHistory=[]; state.askShowAll=false; state.collapsed={}; state._doDraft=null; renderCases();
-  M.track('thread_opened',{ queue:(state.queue&&state.queue.name)||'', queue_id:(state.queue&&state.queue.id)||'', thread_msg_count:(cs.message_count||0), has_attachment: cs.has_attachment?1:0 });
+  M.setCase({ case_id: cs.case_id, case_number: cs.case_number, queue:(state.queue&&state.queue.name)||'', queue_id:(state.queue&&state.queue.id)||'' });
+  M.track('thread_opened',{ thread_msg_count:(cs.message_count||0), has_attachment: cs.has_attachment?1:0 });
   const mid=$('#mid'); mid.innerHTML='<div class="dim">Loading thread...</div>'; $('#right').innerHTML='';
   try{ const j=await api('/api/thread?caseId='+encodeURIComponent(cs.case_id)); state.thread=j.thread;
     // default: collapse all but the newest
@@ -475,7 +488,7 @@ function attachmentEl(a){
     pane.textContent='Extracting...'; try{ const j=await api('/api/attachment/'+encodeURIComponent(a.content_version_id)+'/text?ext='+encodeURIComponent(ext)+'&title='+encodeURIComponent(a.title||'')); pane.textContent=(j.text||'(no extractable text)')+(j.note?('\n\n['+j.note+']'):''); }catch(e){ pane.textContent='Error: '+e.message; } loaded=true;
   }
   var view=el('button',{class:'btn ghost sm'},['view '+kind]);
-  view.onclick=async function(){ if(pane.style.display==='block'){ pane.style.display='none'; view.textContent='view '+kind; return; } pane.style.display='block'; if(!loaded){ await load(); } view.textContent='hide '+kind; };
+  view.onclick=async function(){ if(pane.style.display==='block'){ pane.style.display='none'; view.textContent='view '+kind; return; } pane.style.display='block'; if(!loaded){ M.track('attachment_viewed',{ attachment_type: kind }); await load(); } view.textContent='hide '+kind; };
   var expand=el('button',{class:'btn ghost sm',title:'Open in a larger window'},['⤢ expand']);
   expand.onclick=async function(){ if(!loaded){ await load(); } var clone=pane.cloneNode(true); clone.style.display='block'; clone.style.maxHeight='none'; eq_modal(label, clone, dlUrl?[ el('a',{class:'btn ghost sm',href:dlUrl,target:'_blank',rel:'noopener'},['⬇ Download']) ]:[]); };
   return el('div',{class:'matt'},[ el('div',{style:'display:flex;gap:6px;align-items:center;flex-wrap:wrap'},[ dl, view, expand ]), pane ]);
@@ -493,7 +506,10 @@ function renderThread(){
   const hdrStatus=el('select',{title:'Change status (mock - not saved to Salesforce)',style:'width:auto;min-height:0;padding:2px 6px;font-size:12px'}, (state.statuses.length?state.statuses:['New','Working','Escalated','Closed']).map(function(x){return el('option',{value:x},[x]);}));
   if(state.case.status) hdrStatus.value=state.case.status;
   const hdrMsg=el('span',{class:'dim',style:'font-size:11px'},[]);
-  hdrStatus.addEventListener('change',function(){ state.case.status=hdrStatus.value; state.case._statusMock=true; hdrMsg.textContent='mock - not saved to SF'; renderCases(); });
+  hdrStatus.addEventListener('change',function(){ state.case.status=hdrStatus.value; state.case._statusMock=true; hdrMsg.textContent='mock - not saved to SF'; renderCases();
+    // Record the status-change attempt + SF outcome (server logs status_change; currently mocked sf_ok=0).
+    api('/api/status',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:(state.queue&&state.queue.name)||'',queueId:(state.queue&&state.queue.id)||'',status:hdrStatus.value,_test:M.t,meta:M.meta()})}).catch(function(){});
+  });
   mid.appendChild(el('div',{class:'thread-head'},[
     el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ caseTitle, el('span',{class:'dim'},['· '+state.thread.length+' msg · newest first']), triageControl(), el('span',{style:'display:inline-flex;gap:4px;align-items:center'},[el('span',{class:'dim',style:'font-size:12px'},['Status:']), hdrStatus, hdrMsg]) ]),
     el('div',{style:'margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap'},[ el('label',{class:'inline',title:'Show original HTML email (off = plain text)'},[htmlChk,'HTML']), el('label',{class:'inline'},[dedupe,'Hide quoted/repeated text']), collapseAll, expandAll ])
@@ -525,6 +541,7 @@ function renderThread(){
 
 function rowsToTSV(rows){ return (rows||[]).map(function(r){ return (r||[]).map(function(c){ return String(c==null?'':c); }).join('\t'); }).join('\n'); }
 async function viewContextFile(f){
+  try{ M.track('context_viewed',{ attachment_type: (String(f.name||'').split('.').pop()||'').toLowerCase() }); }catch(e){}
   try{ const q=state.queue?state.queue.name:'';
     const j=await api('/api/context/file?scope='+encodeURIComponent(f.scope)+'&queue='+encodeURIComponent(q)+'&name='+encodeURIComponent(f.name));
     var rawUrl='/api/context/raw?scope='+encodeURIComponent(f.scope)+'&queue='+encodeURIComponent(q)+'&name='+encodeURIComponent(f.name);
@@ -567,7 +584,7 @@ function renderRight(){
   async function doDraft(){
     draftBtn.classList.add('sel'); ackBtn.classList.remove('sel');
     out.innerHTML='<div class="dim">Thinking ('+state.provider+')...</div>';
-    try{ const j=await api('/api/ai/respond',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t})});
+    try{ const j=await api('/api/ai/respond',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t,meta:M.meta()})});
       out.innerHTML=''; out.appendChild(el('span',{class:'badge '+j.verdict},[j.verdict==='draft'?'DRAFT':'NEED INFO']));
       reply.value=j.body||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['Loaded into the editable reply below.']));
     }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; }
@@ -576,7 +593,7 @@ function renderRight(){
   async function doAck(){
     ackBtn.classList.add('sel'); draftBtn.classList.remove('sel');
     out.innerHTML='<div class="dim">Writing acknowledgement ('+state.provider+')...</div>';
-    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,action:'acknowledge',_test:M.t,question:'Write a brief, friendly acknowledgement / holding reply to the customer for this case: confirm we received their message and are looking into it, and that we will follow up. Do NOT promise or invent any specific timeframe, price, policy, email, phone, or other detail that is not in the context. End with the SAME closing sign-off and team signature (team name, phone number, etc.) used in the automated reply in this thread; copy it verbatim if present and do not invent contact details. If the thread has no such sign-off, close simply with "Best regards," and "USA Triathlon". 2-4 sentences plus the sign-off, ready to send.'})});
+    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,action:'acknowledge',_test:M.t,meta:M.meta(),question:'Write a brief, friendly acknowledgement / holding reply to the customer for this case: confirm we received their message and are looking into it, and that we will follow up. Do NOT promise or invent any specific timeframe, price, policy, email, phone, or other detail that is not in the context. End with the SAME closing sign-off and team signature (team name, phone number, etc.) used in the automated reply in this thread; copy it verbatim if present and do not invent contact details. If the thread has no such sign-off, close simply with "Best regards," and "USA Triathlon". 2-4 sentences plus the sign-off, ready to send.'})});
       out.innerHTML=''; out.appendChild(el('span',{class:'badge draft'},['ACKNOWLEDGEMENT'])); reply.value=j.answer||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['A short holding reply - edit as needed.']));
     }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; }
   }
@@ -584,11 +601,11 @@ function renderRight(){
   const ackBtn=el('button',{class:'btn',title:'Generate a short, friendly acknowledgement (no specifics) you can send now',onclick:doAck},['Acknowledge receipt']);
   const sendBtn=el('button',{class:'btn',onclick:async function(){
     sendMsg.textContent='';
-    try{ await api('/api/send',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,body:reply.value})}); sendMsg.className='note ok'; sendMsg.textContent='Sent.'; }
+    try{ await api('/api/send',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:(state.queue&&state.queue.name)||'',queueId:(state.queue&&state.queue.id)||'',body:reply.value,_test:M.t,meta:M.meta()})}); sendMsg.className='note ok'; sendMsg.textContent='Sent.'; }
     catch(e){ sendMsg.className='note warn'; sendMsg.textContent=e.message; }
   }},['Send reply']);
   const copyBtn=el('button',{class:'btn'},['📋 Copy reply']);
-  copyBtn.onclick=function(){ if(!reply.value.trim()){ sendMsg.className='note'; sendMsg.textContent='Nothing to copy yet - draft or write a reply first.'; return; } copyText(reply.value, sendMsg); flashCopied(copyBtn,'📋 Copy reply'); };
+  copyBtn.onclick=function(){ if(!reply.value.trim()){ sendMsg.className='note'; sendMsg.textContent='Nothing to copy yet - draft or write a reply first.'; return; } copyText(reply.value, sendMsg); flashCopied(copyBtn,'📋 Copy reply'); M.track('reply_copied',{ ai_reply_chars: reply.value.length }); };
   right.appendChild(acard('AI suggested response', [ el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ draftBtn, ackBtn ]), out,
     el('h3',{style:'margin-top:6px'},['Reply (editable)']), reply,
     el('div',{style:'display:flex;gap:8px;align-items:center'},[ sendBtn, copyBtn ]), sendMsg ], false));
@@ -599,7 +616,7 @@ function renderRight(){
   const hist=el('div',{id:'askHist'},[]);
   const qbox=el('textarea',{placeholder:'Ask a question about this case...',style:'min-height:64px'});
   async function doAsk(){ const q=qbox.value.trim(); if(!q) return; const ts=new Date().toLocaleString(); renderAskHist(true);
-    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t,question:q,history:state.askHistory.slice(-6)})});
+    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t,meta:M.meta(),question:q,history:state.askHistory.slice(-6)})});
       state.askHistory.push({q:q,a:j.answer||'',ts:ts}); qbox.value=''; renderAskHist(); }
     catch(e){ state.askHistory.push({q:q,a:'(error) '+e.message,ts:ts}); renderAskHist(); } }
   function renderAskHist(thinking){
@@ -739,7 +756,7 @@ function renderRight(){
 }
 
 async function boot(){
-  try{ const me=await api('/api/me'); state.me=me; M.setActor(me&&me.user); shell();
+  try{ const me=await api('/api/me'); state.me=me; M.setActor(me&&me.user); M.track('page_view', {}); shell();
     const r=await Promise.all([ api('/api/queues'), api('/api/statuses').catch(function(){return {statuses:[]};}) ]);
     state.queues=r[0].queues; state.statuses=r[1].statuses||[]; state.instanceUrl=r[0].instance_url||'';
     var sq=loadJSON('eq_queue',''); if(sq){ state.queue=state.queues.find(function(q){return q.id===sq;})||null; }

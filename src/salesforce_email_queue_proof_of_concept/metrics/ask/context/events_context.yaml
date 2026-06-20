@@ -25,7 +25,8 @@ rules:
 events:
   page_view:        the web app was loaded (the visit signal)
   dashboard_view:   the internal /metrics dashboard was opened (exclude from user visits)
-  queue_viewed:     an operator selected a Salesforce queue
+  queue_viewed:     an operator selected a Salesforce queue (the dropdown)
+  cases_listed:     an operator clicked View to load a queue's case list (with the chosen status/dates)
   thread_opened:    an operator opened a case/email thread
   ai_call:          an AI request — see ai_action (respond | ask | acknowledge | triage)
   acknowledge_sent: a short holding/acknowledgement reply was generated
@@ -33,6 +34,14 @@ events:
   correction_added: an operator added a correction that grounds future AI output (see correction_scope)
   context_changed:  an operator uploaded/excluded/included a context knowledge file (see context_action)
   soql_run:         an operator ran a read-only SOQL query in the app
+  reply_copied:     the operator copied the drafted reply (a completion signal)
+  send_email:       attempt to send a reply to Salesforce (see sf_ok/sf_error; currently mocked so sf_ok=0)
+  status_change:    attempt to change the Case status in Salesforce (see status_to, sf_ok/sf_error; currently mocked)
+  context_viewed:   an operator opened/previewed a context knowledge file (see attachment_type for the file kind)
+  link_previewed:   an operator previewed a link found in an email
+  model_selected:   an operator switched the AI model (see ai_provider)
+  theme_changed:    an operator toggled light/dark theme (see theme)
+  sign_out:         an operator signed out
   error:            an error occurred (see error_type)
 
 columns:
@@ -44,6 +53,12 @@ columns:
   visitor_id:     anonymous per-browser id (client events only).
   is_returning:   1 if the browser was seen before, else 0.
   queue:          Salesforce queue name (e.g. Coaching, Event Services). queue_id is its Group id.
+  case_id:        Salesforce Case id of the opened email. Every event after a thread is opened carries the current case_id/case_number until another email is opened — use to follow one email's activity.
+  case_number:    human-friendly Case number (e.g. 00123456). COUNT(DISTINCT case_number) = cases worked.
+  sf_action:      "'send' | 'status_change' (on send_email / status_change events)."
+  sf_ok:          1 = Salesforce accepted the write, 0 = error / not enabled. AVG(sf_ok) on send_email = send success rate.
+  sf_error:       error category when sf_ok=0 (no content).
+  status_to:      the new Case status (on status_change).
   queue_id:       Salesforce Group (queue) id.
   thread_msg_count: number of messages in the opened thread.
   has_attachment: 1 if the opened thread had an attachment.

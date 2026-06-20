@@ -178,7 +178,7 @@
           <div class="mut" style="line-height:1.9">
             • Analytics table: <code>salesforce_email_queue_events</code> (local MySQL; created on startup).<br>
             • Ask-your-data tables: <code>salesforce_email_queue_ask_log</code>, <code>salesforce_email_queue_ask_corrections</code>.<br>
-            • Test mode: open any page with <code>?metrics_test=1</code> → events flagged <code>is_test=1</code>, purgeable under Maintenance. Admin/Metrics/App links here carry it.<br>
+            • Test mode: open a page with <code>?metrics_test=1</code> → events flagged <code>is_test=1</code> (per URL only), purgeable under Maintenance. The Admin/Metrics links carry it; the App link is real (no flag), so normal queue work always counts. Use “App (test)” in the rail to open the app in test mode deliberately.<br>
             • No member PII is stored: counts/enums + operator staff username + queue name only.<br>
             • Admin pages reuse the app session with role <code>admin</code> (no second login).<br>
             • Sensitive data lives OUTSIDE the repo: <code>auth.json</code>, <code>corrections.json</code>, <code>queue_access.json</code>.<br>
@@ -189,7 +189,7 @@
     </main>
   </div>
 </div>
-<footer class="foot">Email Queue Assistant · admin · <a class="footer-link" href="/?metrics_test=1">App</a> · <a class="footer-link" href="/admin?metrics_test=1">Admin</a> · <a class="footer-link" href="/metrics?metrics_test=1">Metrics</a> · <span id="footerClock"></span></footer>
+<footer class="foot">Email Queue Assistant · admin · <a class="footer-link" href="/">App</a> · <a class="footer-link" href="/admin?metrics_test=1">Admin</a> · <a class="footer-link" href="/metrics?metrics_test=1">Metrics</a> · <span id="footerClock"></span></footer>
 
 <script>
 function effDark(){ var t; try{t=localStorage.getItem('eq_theme');}catch(e){} if(t==='dark')return true; if(t==='light')return false; return !!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches); }

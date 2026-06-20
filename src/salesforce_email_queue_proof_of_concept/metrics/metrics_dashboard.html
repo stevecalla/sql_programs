@@ -208,6 +208,19 @@
   <div class="mx-panel"><h2>Most recent active users</h2>
     <table id="tbl_recent"><thead><tr><th class="mx-rn">#</th><th>Operator</th><th>Last active (MTN)</th><th>Events</th><th>AI calls</th></tr></thead><tbody></tbody></table></div>
 
+  <div class="mx-panel"><h2>Cases worked <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:400">— per email (activity after it was opened)</span></h2>
+    <div class="mx-tablewrap"><table id="tbl_cases" class="mx-utable"><thead><tr><th class="mx-rn">#</th><th>Case #</th><th>Queue</th><th>Operator</th><th>Events</th><th>AI calls</th><th>Asks</th><th>Drafts</th><th>Corr.</th><th>Context</th><th>Sends</th><th>Status chg</th><th>Attach</th><th>Last activity</th></tr></thead><tbody></tbody></table></div></div>
+
+  <div class="mx-panel"><h2>Salesforce writes <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:400">— send + status change (received vs error)</span></h2>
+    <div id="sfWrites" class="mx-health">—</div>
+    <div id="tSfErr" style="margin-top:8px"></div></div>
+
+  <div class="mx-grid2">
+    <div class="mx-panel"><h2>Corrections added (by scope)</h2><table id="tbl_corr"><thead><tr><th class="mx-rn">#</th><th>Scope</th><th>Count</th></tr></thead><tbody></tbody></table></div>
+    <div class="mx-panel"><h2>Context file changes</h2><table id="tbl_ctx"><thead><tr><th class="mx-rn">#</th><th>Action</th><th>Count</th></tr></thead><tbody></tbody></table>
+      <div id="repliesCopied" class="mx-health" style="margin-top:10px">—</div></div>
+  </div>
+
   <div class="mx-panel"><h2>Visitors <span class="tag">anonymous</span> — with location (timezone)</h2>
     <div class="mx-tablewrap"><table id="tbl_users" class="mx-utable"><thead><tr><th class="mx-rn">#</th><th>Visitor</th><th>Operator</th><th>Visits</th><th>Threads</th><th>Queues</th><th>Location (tz)</th><th>Device</th><th>Last activity</th><th>Type</th></tr></thead><tbody></tbody></table></div></div>
 
@@ -218,7 +231,7 @@
 
   <div class="mx-panel"><h2>Attachments viewed</h2><table id="tbl_att"><thead><tr><th class="mx-rn">#</th><th>Type</th><th>Viewed</th></tr></thead><tbody></tbody></table></div>
 
-  <div class="app-footer"><span id="footText">Loading…</span> · <a href="/?metrics_test=1" class="footer-link">App</a> · <a href="/admin?metrics_test=1" class="footer-link">Admin</a> · <a href="/metrics?metrics_test=1" class="footer-link">Metrics</a> · <span id="footerClock"></span></div>
+  <div class="app-footer"><span id="footText">Loading…</span> · <a href="/" class="footer-link">App</a> · <a href="/admin?metrics_test=1" class="footer-link">Admin</a> · <a href="/metrics?metrics_test=1" class="footer-link">Metrics</a> · <span id="footerClock"></span></div>
 </div>
 
 <script>
@@ -309,6 +322,14 @@
     fillRows('tbl_recent', (d.recent_operators||[]).map(function(o){ return [esc(o.actor||'(unknown)'), esc(o.last_seen||'—'), o.events, o.ai_calls]; }));
     var users = d.visitors || [];
     el('tbl_users').querySelector('tbody').innerHTML = users.length ? users.map(function(u,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td class="mono">'+esc(u.id)+'</td><td>'+esc(u.actor||'—')+'</td><td>'+u.visits+'</td><td>'+u.threads+'</td><td>'+u.queues+'</td><td>'+esc(u.tz||'—')+'</td><td>'+esc(u.viewport||'—')+'</td><td>'+esc(u.last_seen||'—')+'</td><td>'+(u.returning?'<span class="tag">returning</span>':'<span class="tag new">new</span>')+'</td></tr>'; }).join('') : '<tr><td class="dim" colspan="10">no visitor activity in this window</td></tr>';
+    var cs=(d.cases||[]);
+    el('tbl_cases').querySelector('tbody').innerHTML = cs.length ? cs.map(function(c,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td class="mono">'+esc(c.case_number||'—')+'</td><td>'+esc(c.queue||'—')+'</td><td>'+esc(c.actor||'—')+'</td><td>'+c.events+'</td><td>'+c.ai_calls+'</td><td>'+(c.asks||0)+'</td><td>'+c.drafts+'</td><td>'+(c.corrections||0)+'</td><td>'+(c.context_changes||0)+'</td><td>'+c.sends+'</td><td>'+c.status_changes+'</td><td>'+c.attachments+'</td><td>'+esc(c.last_seen||'—')+'</td></tr>'; }).join('') : '<tr><td class="dim" colspan="14">no case activity in this window</td></tr>';
+    var sf=d.sf||{sends:0,sends_ok:0,status_changes:0,status_ok:0};
+    document.getElementById('sfWrites').textContent = 'Sends: '+sf.sends_ok+' / '+sf.sends+' accepted · Status changes: '+sf.status_ok+' / '+sf.status_changes+' accepted'+((sf.sends+sf.status_changes)===0?'  (none yet — SF writes are mocked in this build)':'');
+    document.getElementById('tSfErr').innerHTML = (d.sf_errors&&d.sf_errors.length)? ('<table>'+'<thead><tr><th>Action</th><th>Error</th><th>Count</th></tr></thead><tbody>'+d.sf_errors.map(function(e){return '<tr><td>'+esc(e.action)+'</td><td>'+esc(e.error)+'</td><td>'+e.n+'</td></tr>';}).join('')+'</tbody></table>') : '';
+    fillRows('tbl_corr', (d.corrections||[]).map(function(c){ return [esc(c.scope), c.n]; }));
+    fillRows('tbl_ctx', (d.context_changes||[]).map(function(c){ return [esc(c.action), c.n]; }));
+    document.getElementById('repliesCopied').textContent = 'Replies copied: ' + (d.replies_copied||0);
     fillRows('tbl_ops', (d.top_operators||[]).map(function(o){ return [esc(o.actor||'(unknown)'), o.ai_calls, o.threads, esc(o.last_seen||'—')]; }));
     fillRows('tbl_errors', (d.ai_errors||[]).map(function(e){ return [esc(e.error), e.n]; }));
     fillRows('tbl_att', (d.attachments||[]).map(function(a){ return [esc(a.type), a.n]; }));

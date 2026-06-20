@@ -54,16 +54,37 @@ function mount(app, deps) {
   const analytics = (deps && deps.analytics) || { log: function () {}, enabled: function () { return false; } };
   // Normalize a provider id to the label stored in analytics.
   function provider_label(p) { return p === 'anthropic' ? 'claude' : 'chatgpt'; }
+  // Common case/session context attached to every server-logged event (so all activity after an email
+  // is opened is attributed to that case). Never throws.
+  function ctx(req, body) {
+    // The browser sends its full env in body.meta (ids + tz/local time/viewport/theme/page) so
+    // server-logged events carry the SAME metadata as browser events. insert_event whitelists columns.
+    const m = (body && body.meta) || {};
+    return {
+      actor: req.user,
+      queue: (body && body.queue) || '', queue_id: (body && body.queueId) || '',
+      case_id: (body && body.caseId) || '', case_number: (body && body.caseNumber) || '',
+      visitor_id: m.visitor_id || null, session_id: m.session_id || null,
+      is_returning: (m.is_returning != null ? m.is_returning : null),
+      page_path: m.page_path || null, event_at_local: m.event_at_local || null,
+      client_tz: m.client_tz || null, local_hour: (m.local_hour != null ? m.local_hour : null),
+      local_dow: (m.local_dow != null ? m.local_dow : null),
+      viewport: m.viewport || null, theme: m.theme || null,
+      is_test: (body && (body._test === 1 || body._test === '1')) ? 1 : 0
+    };
+  }
   // Fire-and-forget AI-call event (never throws, never blocks the response).
   function log_ai(req, body, fields) {
     try {
-      analytics.log(Object.assign({
-        event_name: 'ai_call', actor: req.user,
-        queue: (body && body.queue) || '', queue_id: (body && body.queueId) || '',
-        ai_provider: provider_label(body && body.provider),
-        is_test: (body && (body._test === 1 || body._test === '1')) ? 1 : 0
-      }, fields || {}));
+      analytics.log(Object.assign(
+        { event_name: 'ai_call', ai_provider: provider_label(body && body.provider), ai_model: ai.resolve_model(body && body.provider, body && body.model) },
+        ctx(req, body), fields || {}));
     } catch (e) { /* analytics must never break the app */ }
+  }
+  // Fire-and-forget Salesforce-write event (send reply / status change) with the SF outcome.
+  function log_sf(req, body, fields) {
+    try { analytics.log(Object.assign(ctx(req, body), fields || {})); }
+    catch (e) { /* analytics must never break the app */ }
   }
 
   app.post('/api/login', function (req, res) {
@@ -213,7 +234,9 @@ function mount(app, deps) {
     const t0 = Date.now();
     try {
       const r = await ai.triage_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, faq: await faq.load_knowledge(b.queue) });
-      log_ai(req, b, { ai_action: 'triage', ai_intent: r.status || '', ai_verdict: r.status || '', ai_latency_ms: Date.now() - t0, ai_ok: 1 });
+      log_ai(req, b, { ai_action: 'triage', ai_intent: r.status || '', ai_verdict: r.status || '',
+        ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.prompt_chars || 0,
+        ai_reply_chars: (r.reply_chars != null ? r.reply_chars : (r.reason || '').length), ai_ok: 1 });
       res.json(Object.assign({ ok: true }, r));
     } catch (e) {
       log_ai(req, b, { ai_action: 'triage', ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) });
@@ -338,7 +361,22 @@ function mount(app, deps) {
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
-  // Salesforce writes are intentionally disabled in this POC.
-  app.post('/api/send', require_auth, function (req, res) { res.status(403).json({ ok: false, error: 'Sending to Salesforce is not enabled in this build.' }); });
+  // ---- Salesforce writes: DISABLED in this POC, but the ATTEMPT + outcome are tracked so you can see
+  // the activity now and watch sf_ok flip to 1 once real writes are wired up. ----
+  // Send a reply. Mock (no real SF write) -> records send_email with sf_ok=0 + reason.
+  app.post('/api/send', require_auth, function (req, res) {
+    const b = req.body || {};
+    const reply = String(b.body || '');
+    // When real sending is enabled, set sf_ok=1 on success / 0 + sf_error on failure here.
+    log_sf(req, b, { event_name: 'send_email', sf_action: 'send', sf_ok: 0, sf_error: 'sending not enabled in this build', ai_reply_chars: reply.length });
+    res.status(403).json({ ok: false, error: 'Sending to Salesforce is not enabled in this build.' });
+  });
+  // Change a Case status. Mock (no real SF write) -> records status_change with sf_ok=0 + reason.
+  app.post('/api/status', require_auth, function (req, res) {
+    const b = req.body || {};
+    const status_to = String(b.status || '').slice(0, 40);
+    log_sf(req, b, { event_name: 'status_change', sf_action: 'status_change', status_to: status_to, sf_ok: 0, sf_error: 'status change not enabled in this build' });
+    res.status(403).json({ ok: false, error: 'Status changes are not written to Salesforce in this build.', status_to: status_to });
+  });
 }
 module.exports = mount;

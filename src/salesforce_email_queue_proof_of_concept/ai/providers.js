@@ -17,6 +17,12 @@ function resolve(provider) {
   if (!p) throw new Error('Unknown provider: ' + provider);
   return p;
 }
+// The model string a call WILL use (explicit > env override > provider default) — for analytics logging.
+function resolve_model(provider, model, env) {
+  env = env || process.env;
+  try { const p = resolve(provider); return model || env[p.env_model] || p.default_model; }
+  catch (e) { return model || ''; }
+}
 async function safe_text(res) { try { return await res.text(); } catch (e) { return ''; } }
 
 // complete({ provider, model, system, prompt, env, transport })
@@ -67,4 +73,4 @@ async function anthropic_complete(a) {
   return ((j.content && j.content[0] && j.content[0].text) || '').trim();
 }
 
-module.exports = { PROVIDERS, DEFAULT_PROVIDER, list_providers, complete };
+module.exports = { PROVIDERS, DEFAULT_PROVIDER, list_providers, complete, resolve_model };

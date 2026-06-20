@@ -33,7 +33,8 @@ async function triage_case(opts) {
   if (!o.conn || !o.case_id) throw new Error('triage_case: conn and case_id required');
   const thread = o.thread || await sf.get_thread(o.conn, o.case_id);
   const local = classify_local(thread);
-  if (local) return Object.assign({ case_id: o.case_id }, local);
+  // Local (no-AI) classification: no model call, so no prompt/reply sizes.
+  if (local) return Object.assign({ case_id: o.case_id, prompt_chars: 0, reply_chars: (local.reason || '').length, ai: false }, local);
   const inbound = thread.filter(function (m) { return m.incoming; });
   const latest = inbound[inbound.length - 1] || thread[0] || {};
   const human_answered = thread.some(function (m) { return !m.incoming && !m.automated; });
@@ -52,7 +53,7 @@ async function triage_case(opts) {
   ].join('\n');
   const complete = o.complete || providers.complete;
   const text = await complete({ provider: o.provider, model: o.model, system: 'You are a terse triage classifier. Output only: TOKEN - reason.', prompt: prompt, env: o.env });
-  return Object.assign({ case_id: o.case_id }, parse_triage(text));
+  return Object.assign({ case_id: o.case_id, prompt_chars: prompt.length, reply_chars: (text || '').length, ai: true }, parse_triage(text));
 }
 
 module.exports = { triage_case, parse_triage, classify_local, STATUSES };

@@ -135,9 +135,19 @@ identity, §12 AI tools, §13 API limits), `mvp_plan.md`, `plan.md` (full roadma
   `src/queries/create_drop_db_table/query_create_salesforce_email_queue_events_table.js` (created on
   startup via `ensure_table`). **AI-call events are logged server-side** in `web/routes.js`
   (provider/action/verdict/latency/ok/grounded — no content); browser logs page/queue/thread/attachment/
-  correction/context/soql via `metrics_client.js` (loaded in `index.html`). **`?metrics_test=1`** stamps
-  `is_test=1`; purge via `/admin`, CLI, or `npm run email_queue_metrics_purge_test`. **No member PII**
-  (counts/enums + staff username + queue name only; no Case id). Writes hit only the local MySQL DB.
+  correction/context/soql/reply_copied via `metrics_client.js` (loaded in `index.html`).
+- **Per-case tracking + SF-write outcome**: opening an email sets a sticky `case_id`/`case_number`
+  context (browser via `M.setCase`; cleared on queue change) that rides on all later events; server
+  events get it from the request body. `/api/send` + `/api/status` log `send_email`/`status_change`
+  with `sf_action`/`sf_ok`/`sf_error`/`status_to` (mocked → sf_ok=0; flips to 1 when real). New columns
+  (`case_id, case_number, sf_action, sf_ok, sf_error, status_to`) migrate via `ensure_columns`. The
+  report excludes `is_test=1` from real stats, fixes acknowledge (counts `ai_action='acknowledge'`),
+  and adds per-case table (asks/corrections/context/sends/status/attachments), case funnel, SF-writes,
+  context-changes, corrections-by-scope, reply-copied. Browser visit fires AFTER sign-in (carries actor;
+  `metrics_client` `autoPageView:false`). `?metrics_test=1` is **per-load only** (not persisted) so a
+  user's real activity is never mis-flagged. **`?metrics_test=1`** stamps `is_test=1`; purge via `/admin`,
+  CLI, or `npm run email_queue_metrics_purge_test`. **No member PII** (counts/enums + staff username +
+  queue name + SF record ids only). Writes hit only the local MySQL DB.
 - **Queue allow-list** (`store/queue_access.js`, external `queue_access.json`, override
   `EQ_QUEUE_ACCESS_FILE`): general default + per-user overrides; admins bypass. Enforced in
   `/api/queues` (filter) + `/api/cases`/`/api/status-counts` (403). Managed via `/api/admin/queue-access`.

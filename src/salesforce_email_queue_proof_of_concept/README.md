@@ -112,6 +112,50 @@ Login (auth-gated) - 3 **resizable** panes:
   returns the not-enabled message); Ask with **preset chips** + running **history**; **mock** case-status
   update (not connected); **context upload** (drop files the AI will read).
 
+## What we track (events)
+
+Every event row carries: `actor` (staff username), `queue`/`queue_id`, a timestamp, `is_test`, and —
+once an email is opened — the current `case_id`/`case_number`, so all activity is attributed to that
+case until another email is opened (per-case funnel). **No member PII** (no names, bodies, addresses):
+only counts, enums, the operator's username, the queue name, and Salesforce record ids.
+
+| Event | Fires when | Key fields | Where it shows |
+| --- | --- | --- | --- |
+| `page_view` | after sign-in | visitor/session, env | Visits card |
+| `queue_viewed` | a queue is selected (dropdown) | queue | (events / Ask) |
+| `cases_listed` | **View** clicked — case list loaded | queue, status/dates | (events / Ask) |
+| `thread_opened` | an email is opened (sets case context) | thread_msg_count, has_attachment | Threads card, Cases, funnel |
+| `ai_call` · respond | **Draft reply** button | ai_verdict, latency, grounded, corrections_used | AI calls, Verdicts, by-action, Cases |
+| `ai_call` · ask | Ask a question | latency, grounded | by-action, Cases |
+| `ai_call` · acknowledge | **Acknowledge receipt** (holding reply) | latency | Acks card, by-action, funnel |
+| `ai_call` · triage | AI status check | ai_intent | by-action |
+| `attachment_viewed` | an attachment is opened | attachment_type | Attachments table, Cases |
+| `correction_added` | a correction is saved | correction_scope | Corrections-by-scope, Cases |
+| `context_changed` | context file upload/exclude/include | context_action | Context-changes panel, Cases |
+| `reply_copied` | the draft is copied | ai_reply_chars | Replies-copied count, Cases |
+| `soql_run` | a read-only SOQL is run | soql_chars | (events / Ask) |
+| `context_viewed` | a context file is opened/previewed | attachment_type | (events / Ask) |
+| `link_previewed` | a link in an email is previewed | — | (events / Ask) |
+| `model_selected` | operator switches the AI model | ai_provider | (events / Ask) |
+| `theme_changed` | operator toggles light/dark | theme | (events / Ask) |
+| `sign_out` | operator signs out | — | (events / Ask) |
+| `send_email` | **Send reply** (mocked) | sf_action, sf_ok, sf_error | Salesforce-writes panel, Cases |
+| `status_change` | Case status changed (mocked) | status_to, sf_ok, sf_error | Salesforce-writes panel, Cases |
+| `dashboard_view` / `admin_view` | `/metrics` or `/admin` opened | — (always `is_test=1`) | excluded from real stats |
+
+Every event carries `visitor_id` + `session_id` for end-to-end correlation: browser events from the
+analytics client, and server-logged events (`ai_call`, `send_email`, `status_change`) from ids the
+client sends on the request (page navigations like `dashboard_view` read `visitor_id` from the
+`um_visitor_id` cookie). AI calls also record the resolved `ai_model` (e.g. `gpt-4o-mini`).
+
+Salesforce writes (`send_email`, `status_change`) are **disabled** in this POC, so the **attempt** is
+recorded with `sf_ok=0` + a reason; when real writes are wired up, `sf_ok` flips to 1 on acceptance or
+records the error — so "received by Salesforce vs error" is visible either way. The dashboard's
+**Cases worked** table breaks each email's activity into AI calls / asks / drafts / corrections /
+context / sends / status changes / attachments, and the **per-case funnel** is Opened → AI-assisted →
+Drafted → Sent → Status-changed. Real stats exclude `is_test=1` rows (admin views + test sessions),
+which remain purgeable.
+
 ## Metrics & admin (usage analytics)
 
 Two admin-only pages, modeled on the transform app's `/metrics` + `/admin` and reusing the shared

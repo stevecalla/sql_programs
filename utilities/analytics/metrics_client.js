@@ -71,7 +71,9 @@
     ck_set('um_visitor_id', vid);
     ids.visitor_id = vid;
     ids.session_id = uuid();
-    track('page_view', {});
+    // Auto-fire the page_view on init unless the caller opts out (opts.autoPageView === false). Apps
+    // that gate behind a login can defer the visit until after auth so it carries the user/actor.
+    if (opts.autoPageView !== false) track('page_view', {});
   }
   function new_upload() { ids.upload_id = uuid(); return ids.upload_id; }
   function track(event_name, props) {
@@ -98,5 +100,9 @@
       }
     } catch (e) { /* never throw from analytics */ }
   }
-  global.UsageMetrics = { init: init, track: track, new_upload: new_upload };
+  global.UsageMetrics = { init: init, track: track, new_upload: new_upload,
+    ids: function () { return { visitor_id: ids.visitor_id || null, session_id: ids.session_id || null }; },
+    // Full client env (ids + tz/local time/viewport/theme/page) so server-logged events (ai_call,
+    // send, status) can carry the SAME metadata as browser events.
+    meta: function () { try { return base_props(); } catch (e) { return {}; } } };
 })(typeof window !== 'undefined' ? window : this);

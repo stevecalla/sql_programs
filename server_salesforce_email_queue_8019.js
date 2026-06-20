@@ -64,6 +64,11 @@ const eq_session = require('./src/salesforce_email_queue_proof_of_concept/auth/s
 const eq_store = require('./src/salesforce_email_queue_proof_of_concept/auth/auth_store');
 function esc_login(x){ return String(x == null ? '' : x).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function eq_current_user(req){ try { const c = eq_session.parse_cookies(req.headers.cookie); const pl = eq_session.verify(c[eq_session.COOKIE], eq_store.session_secret()); return pl ? { user: pl.user, role: pl.role || 'user' } : null; } catch (e) { return null; } }
+// The browser analytics client persists its anonymous visitor id in the `um_visitor_id` cookie, so
+// server-rendered page events (dashboard_view / admin_view / sign_out) can carry the same visitor_id.
+function um_vid(req){ try { return eq_session.parse_cookies(req.headers.cookie)['um_visitor_id'] || null; } catch (e) { return null; } }
+// is_test is 1 ONLY when the request URL carries ?metrics_test=1 — never from session or any other state.
+function qtest(req){ return String((req.query && req.query.metrics_test) || '') === '1' ? 1 : 0; }
 // ONE adaptive sign-in page (mirrors race_results_transform login_html): optional "signed in as X" banner,
 // optional error, link chips to sibling areas (all carrying ?metrics_test=1), and the sign-in form.
 function eq_login_html(err, action, title, ctx, test){
@@ -121,6 +126,15 @@ async function init_metrics() {
     metrics_pool = mysql.createPool(cfg);
     const ddl = await query_create_salesforce_email_queue_events_table(metrics_config.TABLE);
     await ensure_table(metrics_pool, ddl);
+    // Migrate already-created tables to the per-case + SF-write columns (CREATE IF NOT EXISTS won't add them).
+    await ensure_columns(metrics_pool, metrics_config.TABLE, [
+      { name: 'case_id', ddl: 'case_id CHAR(18)', after: 'queue_id' },
+      { name: 'case_number', ddl: 'case_number VARCHAR(20)', after: 'case_id' },
+      { name: 'sf_action', ddl: 'sf_action VARCHAR(16)', after: 'ai_error' },
+      { name: 'sf_ok', ddl: 'sf_ok TINYINT(1)', after: 'sf_action' },
+      { name: 'sf_error', ddl: 'sf_error VARCHAR(120)', after: 'sf_ok' },
+      { name: 'status_to', ddl: 'status_to VARCHAR(40)', after: 'sf_error' }
+    ]);
     // Ask-your-data audit log + operator corrections (mirrors 8018). Writable analytics pool.
     var _ask_log = require('./src/salesforce_email_queue_proof_of_concept/metrics/ask/ask_log');
     var _ask_corr = require('./src/salesforce_email_queue_proof_of_concept/metrics/ask/corrections');
@@ -201,18 +215,19 @@ function create_app() {
   app.post('/admin/login', function (req, res) { eq_login_post(req, res, '/admin'); });
 
   // ---- /metrics dashboard + /admin hub (admin login = existing session with role 'admin') ----
-  // Admin views of /metrics + /admin are always flagged is_test=1: they're operator/admin activity,
-  // not real end-user usage, so they're excluded from the real stats and are purgeable.
+  // is_test reflects the URL only (?metrics_test=1) — the nav/footer links to these pages carry it,
+  // so admin testing is flagged, but a plain visit is real. Never forced.
   app.get('/metrics', require_admin_page, function (req, res) {
-    log_event({ event_name: 'dashboard_view', actor: req.user, page_path: '/metrics', is_test: 1 });
+    log_event({ event_name: 'dashboard_view', actor: req.user, page_path: '/metrics', visitor_id: um_vid(req), is_test: qtest(req) });
     res.type('html').sendFile(METRICS_HTML);
   });
   app.get('/admin', require_admin_page, function (req, res) {
-    log_event({ event_name: 'admin_view', actor: req.user, page_path: '/admin', is_test: 1 });
+    log_event({ event_name: 'admin_view', actor: req.user, page_path: '/admin', visitor_id: um_vid(req), is_test: qtest(req) });
     res.type('html').sendFile(ADMIN_HTML);
   });
-  // Sign-out for the admin pages: clears the shared session cookie, then back to the app login.
+  // Sign-out for the admin pages: clears the shared session cookie, logs sign_out, then back to login.
   app.get(['/metrics/logout', '/admin/logout'], function (req, res) {
+    log_event({ event_name: 'sign_out', actor: (eq_current_user(req) || {}).user || '', page_path: req.path, visitor_id: um_vid(req), is_test: qtest(req) });
     res.setHeader('Set-Cookie', 'eq_session=; HttpOnly; Path=/; Max-Age=0');
     res.redirect('/');
   });

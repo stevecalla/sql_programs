@@ -81,7 +81,7 @@ async function build_report(pool, opts) {
   const by_day = await q(pool,
     "SELECT DATE(COALESCE(created_at_mtn, created_at_utc)) d, " +
     "SUM(event_name='page_view') visits, SUM(event_name='thread_opened') threads, " +
-    "SUM(event_name='ai_call') ai_calls, SUM(event_name='acknowledge_sent') acks " +
+    "SUM(event_name='ai_call') ai_calls, SUM(event_name='ai_call' AND ai_action='acknowledge') acks " +
     'FROM ' + W + ' GROUP BY d ORDER BY d', A);
   const by_hour = await q(pool, "SELECT HOUR(COALESCE(created_at_mtn, created_at_utc)) h, COUNT(*) n FROM " + AIW + ' GROUP BY h ORDER BY h', A);
   const by_dow = await q(pool, "SELECT local_dow d, COUNT(*) n FROM " + W + " AND event_name='ai_call' GROUP BY local_dow ORDER BY n DESC", A);
@@ -90,6 +90,36 @@ async function build_report(pool, opts) {
   const attach = await q(pool, "SELECT attachment_type t, COUNT(*) n FROM " + W + " AND event_name='attachment_viewed' AND attachment_type IS NOT NULL GROUP BY attachment_type ORDER BY n DESC", A);
   const corr = await q(pool, "SELECT correction_scope s, COUNT(*) n FROM " + W + " AND event_name='correction_added' AND correction_scope IS NOT NULL GROUP BY correction_scope ORDER BY n DESC", A);
   const errors = await q(pool, "SELECT error_type e, COUNT(*) n FROM " + W + " AND event_name='error' GROUP BY error_type", A);
+
+  // ---- Salesforce writes (send / status change) + acknowledgements ----
+  const sfw = (await q(pool,
+    "SELECT SUM(event_name='send_email') sends, SUM(event_name='send_email' AND sf_ok=1) sends_ok, " +
+    "SUM(event_name='status_change') status_changes, SUM(event_name='status_change' AND sf_ok=1) status_ok, " +
+    "SUM(event_name='ai_call' AND ai_action='acknowledge') acks " +
+    'FROM ' + W, A))[0] || {};
+  const sf_errors = await q(pool, "SELECT sf_action a, sf_error e, COUNT(*) n FROM " + W +
+    " AND sf_ok=0 AND sf_error IS NOT NULL AND sf_error<>'' GROUP BY sf_action, sf_error ORDER BY n DESC LIMIT 8", A);
+
+  // ---- context-file changes, reply-copied, corrections-by-scope (surfaced on the dashboard) ----
+  const ctxchg = await q(pool, "SELECT context_action a, COUNT(*) n FROM " + W + " AND event_name='context_changed' AND context_action IS NOT NULL AND context_action<>'' GROUP BY context_action ORDER BY n DESC", A);
+  const replies_copied = n0(((await q(pool, "SELECT COUNT(*) n FROM " + W + " AND event_name='reply_copied'", A))[0] || {}).n);
+
+  // ---- per-case activity (cases worked, most recent first) + the case funnel ----
+  const cases = await q(pool,
+    "SELECT case_number cn, MAX(case_id) cid, MAX(queue) queue, MAX(actor) actor, COUNT(*) events, " +
+    "SUM(event_name='ai_call') ai_calls, SUM(event_name='ai_call' AND ai_action='ask') asks, " +
+    "SUM(event_name='ai_call' AND ai_action='respond' AND ai_verdict='DRAFT') drafts, " +
+    "SUM(event_name='correction_added') corrections, SUM(event_name='context_changed') context_changes, " +
+    "SUM(event_name='send_email') sends, SUM(event_name='status_change') status_changes, SUM(event_name='attachment_viewed') attachments, " +
+    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
+    'FROM ' + W + " AND case_number IS NOT NULL AND case_number<>'' GROUP BY case_number ORDER BY MAX(created_at_mtn) DESC LIMIT 15", A);
+  const cfun = (await q(pool,
+    "SELECT COUNT(DISTINCT case_number) opened, " +
+    "COUNT(DISTINCT CASE WHEN event_name='ai_call' THEN case_number END) assisted, " +
+    "COUNT(DISTINCT CASE WHEN event_name='ai_call' AND ai_action='respond' AND ai_verdict='DRAFT' THEN case_number END) drafted, " +
+    "COUNT(DISTINCT CASE WHEN event_name='send_email' THEN case_number END) sent, " +
+    "COUNT(DISTINCT CASE WHEN event_name='status_change' THEN case_number END) status_changed " +
+    'FROM ' + W + " AND case_number IS NOT NULL AND case_number<>''", A))[0] || {};
 
   // ---- health (whole table, unfiltered — DB-size + test-row figure) ----
   const health = (await q(pool, "SELECT COUNT(*) rows_total, SUM(CASE WHEN is_test=1 THEN 1 ELSE 0 END) test_rows, DATE_FORMAT(MAX(CASE WHEN event_name<>'dashboard_view' THEN created_at_mtn END), '%b %e, %Y %l:%i %p') latest FROM `" + T + "`"))[0] || {};
@@ -101,7 +131,19 @@ async function build_report(pool, opts) {
     visits: cmap.page_view || 0,
     unique_users: n0(users.uniq), new_users: n0(users.new_u), repeat_users: n0(users.ret_u), operators: n0(users.operators),
     threads_opened: cmap.thread_opened || 0,
-    acknowledgements: cmap.acknowledge_sent || 0,
+    acknowledgements: n0(sfw.acks),
+    sf: { sends: n0(sfw.sends), sends_ok: n0(sfw.sends_ok), status_changes: n0(sfw.status_changes), status_ok: n0(sfw.status_ok) },
+    sf_errors: sf_errors.map(function (r) { return { action: r.a || '?', error: r.e, n: n0(r.n) }; }),
+    context_changes: ctxchg.map(function (r) { return { action: r.a || '?', n: n0(r.n) }; }),
+    replies_copied: replies_copied,
+    cases: cases.map(function (r) { return { case_number: String(r.cn || ''), case_id: String(r.cid || ''), queue: r.queue || '', actor: String(r.actor || ''), events: n0(r.events), ai_calls: n0(r.ai_calls), asks: n0(r.asks), drafts: n0(r.drafts), corrections: n0(r.corrections), context_changes: n0(r.context_changes), sends: n0(r.sends), status_changes: n0(r.status_changes), attachments: n0(r.attachments), last_seen: r.last_seen || null }; }),
+    case_funnel: [
+      { stage: 'Opened', n: n0(cfun.opened) },
+      { stage: 'AI-assisted', n: n0(cfun.assisted) },
+      { stage: 'Drafted', n: n0(cfun.drafted) },
+      { stage: 'Sent', n: n0(cfun.sent) },
+      { stage: 'Status changed', n: n0(cfun.status_changed) }
+    ],
     ai: {
       calls: calls, ok: n0(ai.ok), failed: n0(ai.failed),
       success_pct: pct(n0(ai.ok), calls),
