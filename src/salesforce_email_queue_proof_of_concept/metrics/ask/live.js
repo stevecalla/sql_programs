@@ -12,7 +12,7 @@ async function live_snapshot(pool, opts) {
     const d = report.data;
     const lines = [];
     lines.push('Window: last ' + d.days + ' days (Mountain Time).');
-    lines.push('Visits ' + d.visits + ' (unique ' + d.unique_users + ', operators ' + d.operators + '). Threads opened ' + d.threads_opened + ', acknowledgements ' + d.acknowledgements + '.');
+    lines.push('Visits ' + d.visits + ' (unique ' + d.unique_users + ', actors ' + d.operators + '). Threads opened ' + d.threads_opened + ', acknowledgements ' + d.acknowledgements + '.');
     lines.push('AI calls ' + d.ai.calls + ' (' + d.ai.success_pct + '% ok, avg ' + d.ai.avg_ms + 'ms, grounded ' + d.ai.grounded_pct + '%).');
     if (d.by_provider && d.by_provider.length) lines.push('Providers: ' + d.by_provider.map(function (p) { return p.provider + ' ' + p.n; }).join(', ') + '.');
     if (d.by_verdict && d.by_verdict.length) lines.push('Verdicts: ' + d.by_verdict.map(function (v) { return v.verdict + ' ' + v.n; }).join(', ') + '.');

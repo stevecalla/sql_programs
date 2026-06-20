@@ -48,7 +48,7 @@ columns:
   created_at_mtn: DATETIME in Mountain Time — use for all date grouping.
   created_at_utc: DATETIME in UTC — prefer created_at_mtn for reporting.
   event_name:     the action (see events).
-  actor:          the staff operator's username (NOT a member). COUNT(DISTINCT actor) = number of operators.
+  actor:          the staff user's username (the "actor"; NOT a member). COUNT(DISTINCT actor) = number of actors.
   page_path:      URL path the event came from (/ app, /metrics dashboard).
   visitor_id:     anonymous per-browser id (client events only).
   is_returning:   1 if the browser was seen before, else 0.
@@ -91,7 +91,7 @@ columns:
 
 metrics:
   visits:            COUNT(*) WHERE event_name='page_view'
-  operators:         COUNT(DISTINCT actor)
+  actors:            COUNT(DISTINCT actor)
   threads_opened:    COUNT(*) WHERE event_name='thread_opened'
   ai_calls:          COUNT(*) WHERE event_name='ai_call'
   ai_success_rate:   AVG(ai_ok) WHERE event_name='ai_call'
@@ -109,7 +109,7 @@ example_questions:
   - What is the average AI latency by provider?
   - How many drafts vs need-info verdicts in the last 7 days?
   - Which queues have the most AI activity this month?
-  - Who are the most active operators, and when were they last active?
+  - Who are the most active actors, and when were they last active?
   - How many acknowledgements were sent yesterday?
   - What share of AI calls were grounded with context?
   - How many attachments were viewed, by type?

@@ -69,11 +69,14 @@ async function build_report(pool, opts) {
     "SELECT actor a, COUNT(*) events, SUM(event_name='ai_call') ai_calls, MAX(event_name) last_event, " +
     "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
     'FROM ' + W + " AND actor IS NOT NULL AND actor<>'' GROUP BY actor ORDER BY MAX(created_at_mtn) DESC LIMIT 10", A);
-  // Per-visitor activity (browser-level), with location proxy (client timezone) + new/returning —
-  // mirrors the transform dashboard's user table. visitor_id is anonymous; AI calls are server-logged
-  // (no visitor_id), so this reflects browsing activity (visits/threads/events).
+  // Per-visitor activity (browser-level), with location proxy (client timezone) + new/returning.
+  // visitor_id is anonymous and per-BROWSER, not per-login: one browser shared by several staff logins
+  // collapses to a single row, so we show the MOST-RECENT actor plus actor_n = how many distinct logins
+  // were seen on that browser. (Server-logged AI calls now also carry visitor_id via the request meta.)
   const visitors = await q(pool,
-    "SELECT visitor_id v, MAX(is_returning) ret, MAX(actor) actor, MAX(client_tz) tz, MAX(viewport) viewport, " +
+    "SELECT visitor_id v, MAX(is_returning) ret, " +
+    "SUBSTRING_INDEX(GROUP_CONCAT(NULLIF(actor,'') ORDER BY created_at_mtn DESC SEPARATOR 0x1f), 0x1f, 1) actor, " +
+    "COUNT(DISTINCT NULLIF(actor,'')) actor_n, MAX(client_tz) tz, MAX(viewport) viewport, " +
     "SUM(event_name='page_view') visits, SUM(event_name='thread_opened') threads, " +
     "SUM(event_name='queue_viewed') queues, COUNT(*) events, " +
     "DATE_FORMAT(MAX(CASE WHEN event_name<>'dashboard_view' THEN created_at_mtn END), '%Y-%m-%d %l:%i %p') last_seen " +
@@ -159,7 +162,7 @@ async function build_report(pool, opts) {
     by_queue: by_queue.map(function (r) { return { queue: r.qn, events: n0(r.events), ai_calls: n0(r.ai_calls), threads: n0(r.threads) }; }),
     top_operators: top_ops.map(function (r) { return { actor: String(r.a || ''), ai_calls: n0(r.ai_calls), threads: n0(r.threads), events: n0(r.events), last_seen: r.last_seen || null }; }),
     recent_operators: recent_ops.map(function (r) { return { actor: String(r.a || ''), events: n0(r.events), ai_calls: n0(r.ai_calls), last_seen: r.last_seen || null }; }),
-    visitors: visitors.map(function (r) { return { id: String(r.v || ''), returning: n0(r.ret), actor: String(r.actor || ''), tz: r.tz || null, viewport: r.viewport || null, visits: n0(r.visits), threads: n0(r.threads), queues: n0(r.queues), events: n0(r.events), last_seen: r.last_seen || null }; }),
+    visitors: visitors.map(function (r) { return { id: String(r.v || ''), returning: n0(r.ret), actor: String(r.actor || ''), actors: n0(r.actor_n), tz: r.tz || null, viewport: r.viewport || null, visits: n0(r.visits), threads: n0(r.threads), queues: n0(r.queues), events: n0(r.events), last_seen: r.last_seen || null }; }),
     by_day: by_day.map(function (r) {
       var d = r.d, day = (d && d.toISOString) ? d.toISOString().slice(0, 10) : String(d).slice(0, 10);
       return { day: day, visits: n0(r.visits), threads: n0(r.threads), ai_calls: n0(r.ai_calls), acks: n0(r.acks) };
@@ -192,7 +195,7 @@ async function build_report(pool, opts) {
     range: 'MTN reporting calendar · app=' + cfg.APP,
     sections: [
       { heading: 'Usage', lines: [
-        data.visits + ' visits · ' + data.unique_users + ' unique users · ' + data.operators + ' operators',
+        data.visits + ' visits · ' + data.unique_users + ' unique users · ' + data.operators + ' actors',
         data.threads_opened + ' threads opened · ' + data.acknowledgements + ' acknowledgements sent'
       ] },
       { heading: 'AI flow', lines: [
