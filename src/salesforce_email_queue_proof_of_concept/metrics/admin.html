@@ -116,10 +116,21 @@
 
       <!-- SETTINGS -->
       <section class="pane" data-view="settings">
-        <div class="ad-card"><h2>Settings</h2>
-          <div class="empty">Editable runtime config (applied live) is part of the transform admin and is
-            <b>not enabled in this POC</b>. Configuration is via the repo-root <code>.env</code> (see Reference).
-            Queue visibility is managed under <b>Access</b>.</div>
+        <div class="ad-card"><h2>Admin default landing page</h2>
+          <div class="mut">Where an <b>admin</b> account is sent by default right after signing in. Non-admins always go to the app. An explicit deep-link (e.g. opening <code>/metrics</code> directly) still wins.</div>
+          <div class="act-row" style="margin-top:10px">
+            <span class="mut">Default:</span>
+            <select id="landingSel">
+              <option value="/metrics">📊 Metrics dashboard</option>
+              <option value="/admin">⚙ Admin hub</option>
+              <option value="/">📧 App (queue)</option>
+            </select>
+            <button class="btn primary" id="saveLanding">Save</button>
+            <span class="msg" id="landingMsg"></span>
+          </div>
+        </div>
+        <div class="ad-card"><h2>Other settings</h2>
+          <div class="mut">Connectors, AI keys, and logins are configured in the repo-root <code>.env</code> (see Reference). Queue visibility is managed under <b>Access</b>.</div>
         </div>
       </section>
 
@@ -265,7 +276,17 @@ document.getElementById('purgeTest').onclick=async function(){ if(!confirm('Dele
   try{ var j=await postJSON('/api/metrics-purge-test',{}); if(j.ok){ m.textContent='Deleted '+(j.deleted||0)+' test row(s).'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; } }
   catch(e){ m.textContent='Failed: '+e.message; m.className='msg err'; } this.disabled=false; };
 
-loadStatus(); loadUsers(); loadAccess();
+// ---- Settings: admin default landing page ----
+async function loadSettings(){
+  try{ var j=await getJSON('/api/admin/config'); if(j.ok){ var sel=document.getElementById('landingSel'); sel.value=j.admin_landing||'/metrics'; } }catch(e){ if(e.message!=='auth') document.getElementById('landingMsg').textContent='Failed: '+e.message; }
+}
+document.getElementById('saveLanding').onclick=async function(){
+  var m=document.getElementById('landingMsg'); m.textContent='Saving…'; m.className='msg';
+  var j=await postJSON('/api/admin/config',{ admin_landing: document.getElementById('landingSel').value });
+  if(j.ok){ m.textContent='Saved — admins will land on '+j.admin_landing+'.'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; }
+};
+
+loadStatus(); loadUsers(); loadAccess(); loadSettings();
 </script>
 </body>
 </html>

@@ -34,7 +34,12 @@ function require_admin(req, res, next) {
 function require_admin_page(req, res, next) {
   const p = _payload(req);
   if (p && (p.role || 'user') === 'admin') { req.user = p.user; req.role = p.role; return next(); }
-  return res.redirect('/?next=' + encodeURIComponent(req.originalUrl || '/'));
+  // Bounce to the area's own sign-in page (transform-style /metrics/login or /admin/login), preserving
+  // ?metrics_test=1 so an admin testing the system stays in test mode through login.
+  const orig = req.originalUrl || '/';
+  const area = orig.indexOf('/admin') === 0 ? '/admin' : '/metrics';
+  const keep_test = /[?&]metrics_test=1\b/.test(orig) ? '?metrics_test=1' : '';
+  return res.redirect(area + '/login' + keep_test);
 }
 
 module.exports = { require_auth, require_admin, require_admin_page };
