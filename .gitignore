@@ -225,3 +225,10 @@ src/race_results_transform/.menu_prefs.json
 
 # Race Results Converter — admin overrides (password hashes + session secret; never commit)
 admin_overrides.json
+
+# Salesforce Email Queue POC - runtime / sensitive (do not commit member data)
+# Salesforce Email Queue POC: runtime/sensitive data (auth.json, corrections.json, uploaded context)
+# now lives OUTSIDE the repo via data_dir.js -> utilities/determineOSPath() (<base>/usat_email_queue/).
+# Nothing data-related is in-repo at all (no data/ folder); knowledge is the external context folder.
+src/salesforce_email_queue_proof_of_concept/.menu_prefs.json
+
