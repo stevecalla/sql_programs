@@ -20,4 +20,14 @@ function default_model() {
   return all.filter(function (m) { return m.is_default; })[0] || all[0];
 }
 
-module.exports = { list, default_model };
+// The fallback model STRING for one provider (its is_default row, else its first row, else '').
+// This is the single place providers.js gets its last-resort model, so no model string is
+// hardcoded in the transport layer.
+function default_for(provider) {
+  const all = list();
+  const m = all.filter(function (x) { return x.provider === provider && x.is_default; })[0]
+         || all.filter(function (x) { return x.provider === provider; })[0];
+  return m ? m.model : '';
+}
+
+module.exports = { list, default_model, default_for };

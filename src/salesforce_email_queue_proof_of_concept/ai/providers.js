@@ -1,11 +1,13 @@
 'use strict';
-// AI provider abstraction. Default = OpenAI (ChatGPT); Anthropic (Claude) selectable. Keys/models
-// come from .env. The HTTP transport is injectable (opts.transport) so respond/ask can be unit-
-// tested with no network. Returns plain text.
+// AI provider abstraction. Default = OpenAI (ChatGPT); Anthropic (Claude) selectable. The HTTP
+// transport is injectable (opts.transport) so respond/ask can be unit-tested with no network.
+// Returns plain text. This layer is ONLY transport config (API key + model env var names) — every
+// model STRING (including the last-resort default) comes from the one registry, ai/models.js.
+const models = require('./models');
 
 const PROVIDERS = {
-  openai: { id: 'openai', label: 'ChatGPT (OpenAI)', env_key: 'OPENAI_API_KEY', env_model: 'OPENAI_MODEL', default_model: 'gpt-4o-mini' },
-  anthropic: { id: 'anthropic', label: 'Claude (Anthropic)', env_key: 'ANTHROPIC_API_KEY', env_model: 'ANTHROPIC_MODEL', default_model: 'claude-sonnet-4-6' }
+  openai: { id: 'openai', label: 'ChatGPT (OpenAI)', env_key: 'OPENAI_API_KEY', env_model: 'OPENAI_MODEL' },
+  anthropic: { id: 'anthropic', label: 'Claude (Anthropic)', env_key: 'ANTHROPIC_API_KEY', env_model: 'ANTHROPIC_MODEL' }
 };
 
 const DEFAULT_PROVIDER = 'openai';
@@ -20,10 +22,10 @@ function resolve(provider) {
   return p;
 }
 
-// The model string a call WILL use (explicit > env override > provider default) — for analytics logging.
+// The model string a call WILL use (explicit > env override > registry default) — for analytics logging.
 function resolve_model(provider, model, env) {
   env = env || process.env;
-  try { const p = resolve(provider); return model || env[p.env_model] || p.default_model; }
+  try { const p = resolve(provider); return model || env[p.env_model] || models.default_for(p.id); }
   catch (e) { return model || ''; }
 }
 
@@ -34,7 +36,7 @@ async function complete(opts) {
   const o = opts || {};
   const p = resolve(o.provider);
   const env = o.env || process.env;
-  const model = o.model || env[p.env_model] || p.default_model;
+  const model = o.model || env[p.env_model] || models.default_for(p.id);
   const api_key = env[p.env_key];
   const transport = o.transport || (typeof fetch !== 'undefined' ? fetch : null);
   if (!api_key) { const e = new Error(p.label + ' API key missing (' + p.env_key + ')'); e.code = 'NO_API_KEY'; throw e; }

@@ -17,10 +17,13 @@ test('COLUMNS whitelist excludes id + stamped timestamps, includes AI-flow + is_
   ['id', 'created_at_utc', 'created_at_mtn'].forEach(function (c) {
     assert.ok(cfg.COLUMNS.indexOf(c) < 0, c + ' must NOT be insertable');
   });
-  ['is_test', 'is_demo', 'actor', 'queue', 'ai_action', 'ai_provider', 'ai_verdict', 'ai_latency_ms']
+  ['is_test', 'is_demo', 'actor', 'queue', 'ai_action', 'ai_provider', 'ai_model', 'ai_verdict', 'ai_latency_ms']
     .forEach(function (c) { assert.ok(cfg.COLUMNS.indexOf(c) >= 0, 'missing column ' + c); });
-  // no member-data pointer
-  assert.ok(cfg.COLUMNS.indexOf('case_id') < 0, 'case_id must be omitted by design');
+  // case_id/case_number ARE stored — Salesforce record pointers for per-case attribution, not member
+  // content. What must NEVER be stored is any actual member data (names, bodies, addresses).
+  ['case_id', 'case_number'].forEach(function (c) { assert.ok(cfg.COLUMNS.indexOf(c) >= 0, c + ' should be insertable'); });
+  ['subject', 'body', 'text_body', 'from_address', 'email', 'member_name', 'name']
+    .forEach(function (c) { assert.ok(cfg.COLUMNS.indexOf(c) < 0, c + ' (member content) must never be stored'); });
 });
 
 test('DDL is CREATE TABLE IF NOT EXISTS and covers every whitelisted column', async function () {

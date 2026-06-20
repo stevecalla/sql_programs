@@ -46,4 +46,5 @@ test('build_report returns the report contract with the AI-flow data block', asy
   assert.ok(report.data.sf && 'sends' in report.data.sf && 'status_changes' in report.data.sf, 'sf write block');
   assert.strictEqual(typeof report.data.replies_copied, 'number', 'replies_copied count');
   assert.ok(report.data.health && 'test_rows' in report.data.health);
-  assert.ok(Array.isArray(report.s
+  assert.ok(Array.isArray(report.sections), 'sections is an array');
+});
