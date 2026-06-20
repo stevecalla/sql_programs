@@ -4,16 +4,17 @@ const test = require('node:test');
 const assert = require('node:assert');
 const store = require('../auth/auth_store');
 const session = require('../auth/session');
+// NOTE: every value below is a throwaway unit-test fixture - NOT a real credential.
 
 test('password hash + verify (timing-safe)', function () {
-  const h = store.hash_password('s3cret!');
-  assert.ok(store.verify_password('s3cret!', h));
+  const h = store.hash_password('fake-test-pw');
+  assert.ok(store.verify_password('fake-test-pw', h));
   assert.ok(!store.verify_password('wrong', h));
 });
 test('add_user then valid_user', function () {
-  store.add_user('carlie', 'pw12345', 'carlie@usatriathlon.org');
-  assert.ok(store.valid_user('carlie', 'pw12345'));
-  assert.strictEqual(store.valid_user('carlie', 'nope'), null);
+  store.add_user('test_user', 'fake-test-pw', 'test_user@example.com');
+  assert.ok(store.valid_user('test_user', 'fake-test-pw'));
+  assert.strictEqual(store.valid_user('test_user', 'nope'), null);
 });
 test('signed cookie round-trips and rejects tampering', function () {
   const secret = 'test-secret';
