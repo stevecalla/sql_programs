@@ -196,7 +196,7 @@ function eq_yesterday(){ return eq_ymd_add(eq_today(),-1); }
 function eq_days_between(a,b){ return Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000); }
 function eq_clamp_date(v,lo,hi){ return v<lo?lo:(v>hi?hi:v); }
 
-let state = { queues:[], cases:[], thread:[], queue:null, case:null, provider:'openai', statuses:[], counts:{}, askHistory:[], askShowAll:false, triage:{},
+let state = { queues:[], cases:[], thread:[], queue:null, case:null, provider:'openai', model:null, models:[], statuses:[], counts:{}, askHistory:[], askShowAll:false, triage:{},
   checked: loadJSON('eq_checked', {}), collapsed:{}, dedupe:true, viewHtml:true, instanceUrl:'', caseQuery:'',
   dateFrom:'', dateTo:'', dateField:'LastModifiedDate', dateAny:false, loaded:false, datesOpen:false, attOnly:false, caseLimit:25, queueCardOpen:true };
 
@@ -265,8 +265,15 @@ function renderLogin(msg) {
 
 function shell() {
   document.body.innerHTML='';
-  const provider = el('select',{style:'width:auto',onchange:function(e){state.provider=e.target.value; M.track('model_selected',{ ai_provider: e.target.value==='anthropic'?'claude':'chatgpt' });}},
-    [el('option',{value:'openai'},['ChatGPT (default)']), el('option',{value:'anthropic'},['Claude'])]);
+  // Single model picker for ALL AI features (triage, draft, ask). Options come from /api/ai/models
+  // (the one shared registry, ai/models.js). onchange sets BOTH provider + model from the option.
+  const provider = el('select',{id:'eq-model',style:'width:auto',title:'AI model — used for triage, draft & ask',onchange:function(e){
+      var opt=e.target.options[e.target.selectedIndex];
+      state.model = opt ? opt.value : null;
+      state.provider = opt ? (opt.getAttribute('data-provider')||'openai') : 'openai';
+      try{ localStorage.setItem('eq_model', state.model||''); }catch(_){}
+      M.track('model_selected',{ ai_provider: state.provider==='anthropic'?'claude':'chatgpt', ai_model: state.model||'' });
+    }},[]);
   const logout = el('button',{class:'btn ghost',onclick:async function(){ M.track('sign_out',{}); await fetch('/api/logout',{method:'POST'}); renderLogin('Signed out.'); }},['Sign out']);
   document.body.appendChild(el('div',{class:'app-header'},[
     el('span',{class:'brandmark','aria-label':'email',html:'<svg width="22" height="22" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="19" width="38" height="26" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M14 21l18 14 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg>'}),
@@ -285,6 +292,7 @@ function shell() {
   ]));
   setupSplit();
   renderLeft();
+  loadModels();
   // Consistent footer across all paths (App · Admin · Metrics), carrying ?metrics_test=1 so admin
   // navigation stays in test mode. Admin links shown only to admins.
   var isAdmin = state.me && state.me.role === 'admin';
@@ -293,6 +301,25 @@ function shell() {
   fkids.push(' · ', el('span',{id:'eqClock'},[]));
   document.body.appendChild(el('footer',{class:'eq-footer'},fkids));
   (function(){ function t(){ var c=document.getElementById('eqClock'); if(c){ try{ c.textContent='MTN '+new Intl.DateTimeFormat('en-US',{timeZone:'America/Denver',dateStyle:'medium',timeStyle:'short'}).format(new Date()); }catch(e){} } } t(); setInterval(t,30000); })();
+}
+
+// Populate the header model picker from the shared registry. Restores the last choice
+// (localStorage eq_model), else uses the registry default (is_default). Sets state.provider+model
+// so triage/draft/ask all send the SAME chosen model.
+function loadModels(){
+  var sel=document.getElementById('eq-model'); if(!sel) return;
+  api('/api/ai/models').then(function(list){
+    state.models = list||[];
+    sel.innerHTML='';
+    var saved=null; try{ saved=localStorage.getItem('eq_model'); }catch(_){}
+    var pick=0;
+    (state.models).forEach(function(m,i){
+      var o=document.createElement('option'); o.value=m.model; o.textContent=m.label+' · '+m.model;
+      o.setAttribute('data-provider', m.provider); sel.appendChild(o);
+      if(saved ? (m.model===saved) : m.is_default) pick=i;
+    });
+    if(state.models.length){ sel.selectedIndex=pick; var m=state.models[pick]; state.model=m.model; state.provider=m.provider; }
+  }).catch(function(){ /* leave picker empty; server falls back to env/default */ });
 }
 
 function setupSplit(){
@@ -312,13 +339,13 @@ function statusColor(s){ s=String(s||'').toLowerCase(); if(s.indexOf('clos')>=0)
 var TRIAGE_LABEL={answer_ready:'Answer ready',draft_possible:'Draft possible',needs_info:'Needs info',awaiting_reply:'Awaiting reply',spam:'Spam?',non_actionable:'No action',pending:'Triaging...'};
 function triageBadge(t){ if(!t||!t.status) return el('span',{}); return el('span',{class:'tstat '+t.status, title:t.reason||''},[ TRIAGE_LABEL[t.status]||t.status ]); }
 async function triageOne(){ const cs=state.case; if(!cs) return; state.triage[cs.case_id]={status:'pending',reason:''}; renderThread(); renderCases();
-  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
+  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
   catch(e){ state.triage[cs.case_id]={status:'needs_info',reason:'(triage error) '+e.message}; }
   renderThread(); renderCases();
   if(state.case && state.case.case_id===cs.case_id && state.triage[cs.case_id] && state.triage[cs.case_id].status==='answer_ready' && typeof state._doDraft==='function'){ state._doDraft(); } }
 async function triageVisible(){ const prog=$('#triProg'); const list=state.cases.slice(); let i=0;
   for(const cs of list){ i++; if(state.triage[cs.case_id] && state.triage[cs.case_id].status!=='pending'){ continue; } if(prog) prog.textContent='Triaging '+i+'/'+list.length+'...';
-    try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
+    try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
     catch(e){ state.triage[cs.case_id]={status:'needs_info',reason:'(error)'}; }
     renderCases(); }
   if(prog) prog.textContent='Triage complete.'; }
@@ -584,7 +611,7 @@ function renderRight(){
   async function doDraft(){
     draftBtn.classList.add('sel'); ackBtn.classList.remove('sel');
     out.innerHTML='<div class="dim">Thinking ('+state.provider+')...</div>';
-    try{ const j=await api('/api/ai/respond',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t,meta:M.meta()})});
+    try{ const j=await api('/api/ai/respond',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})});
       out.innerHTML=''; out.appendChild(el('span',{class:'badge '+j.verdict},[j.verdict==='draft'?'DRAFT':'NEED INFO']));
       reply.value=j.body||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['Loaded into the editable reply below.']));
     }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; }
@@ -593,7 +620,7 @@ function renderRight(){
   async function doAck(){
     ackBtn.classList.add('sel'); draftBtn.classList.remove('sel');
     out.innerHTML='<div class="dim">Writing acknowledgement ('+state.provider+')...</div>';
-    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,action:'acknowledge',_test:M.t,meta:M.meta(),question:'Write a brief, friendly acknowledgement / holding reply to the customer for this case: confirm we received their message and are looking into it, and that we will follow up. Do NOT promise or invent any specific timeframe, price, policy, email, phone, or other detail that is not in the context. End with the SAME closing sign-off and team signature (team name, phone number, etc.) used in the automated reply in this thread; copy it verbatim if present and do not invent contact details. If the thread has no such sign-off, close simply with "Best regards," and "USA Triathlon". 2-4 sentences plus the sign-off, ready to send.'})});
+    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,action:'acknowledge',_test:M.t,meta:M.meta(),question:'Write a brief, friendly acknowledgement / holding reply to the customer for this case: confirm we received their message and are looking into it, and that we will follow up. Do NOT promise or invent any specific timeframe, price, policy, email, phone, or other detail that is not in the context. End with the SAME closing sign-off and team signature (team name, phone number, etc.) used in the automated reply in this thread; copy it verbatim if present and do not invent contact details. If the thread has no such sign-off, close simply with "Best regards," and "USA Triathlon". 2-4 sentences plus the sign-off, ready to send.'})});
       out.innerHTML=''; out.appendChild(el('span',{class:'badge draft'},['ACKNOWLEDGEMENT'])); reply.value=j.answer||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['A short holding reply - edit as needed.']));
     }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; }
   }
@@ -616,7 +643,7 @@ function renderRight(){
   const hist=el('div',{id:'askHist'},[]);
   const qbox=el('textarea',{placeholder:'Ask a question about this case...',style:'min-height:64px'});
   async function doAsk(){ const q=qbox.value.trim(); if(!q) return; const ts=new Date().toLocaleString(); renderAskHist(true);
-    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,_test:M.t,meta:M.meta(),question:q,history:state.askHistory.slice(-6)})});
+    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta(),question:q,history:state.askHistory.slice(-6)})});
       state.askHistory.push({q:q,a:j.answer||'',ts:ts}); qbox.value=''; renderAskHist(); }
     catch(e){ state.askHistory.push({q:q,a:'(error) '+e.message,ts:ts}); renderAskHist(); } }
   function renderAskHist(thinking){

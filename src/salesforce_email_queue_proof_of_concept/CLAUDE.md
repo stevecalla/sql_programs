@@ -36,6 +36,9 @@ sf/                 Salesforce reads (connection/plumbing reused from ../race_re
   text_clean.js     html_to_text, strip_quoted_history (pure, tested)
 ai/
   providers.js      OpenAI (default) + Anthropic via fetch; transport injectable for tests
+  models.js         SINGLE model registry (list/default_model) — the one source of truth for
+                    triage/draft/ask AND the metrics Ask box; OpenAI tracks OPENAI_MODEL,
+                    Claude Sonnet tracks ANTHROPIC_MODEL. Served via /api/ai/models.
   prompt.js         SYSTEM (role + strict grounding rules) + respond/ask prompt builders
   context.js        build_context (tiers 1/2/4 + corrections); tier-3 deferred
   respond.js        respond_to_case -> verdict draft|need_info (conn + provider injected)
@@ -156,8 +159,10 @@ identity, §12 AI tools, §13 API limits), `mvp_plan.md`, `plan.md` (full roadma
   allow-listed table, blocked keywords stripped from comments/strings, row cap), `db.js` (read-only pool;
   prefers `ASK_DB_*`, else analytics creds), `tools.js`, `context.js` + `context/events_context.yaml`
   (email-queue schema grounding), `live.js` (live snapshot from build_report), `corrections.js` +
-  `ask_log.js` (MySQL tables `<APP>_ask_corrections` / `<APP>_ask_log`, created on startup), `models.js`,
-  `providers/{openai,anthropic}.js`. Server routes (require_admin): `/api/metrics-ask`, `-ask-models`,
+  `ask_log.js` (MySQL tables `<APP>_ask_corrections` / `<APP>_ask_log`, created on startup), `models.js`
+  (now a thin re-export of `ai/models.js` — one shared registry), and a `pick_provider` that delegates
+  to the shared `ai/providers.complete()` (the per-ask `providers/{openai,anthropic}.js` adapters were
+  removed — one transport for all AI). Server routes (require_admin): `/api/metrics-ask`, `-ask-models`,
   `-ask-correct`, `-ask-thread`. Dashboard has the Ask panel (model picker, SQL-mode toggle, chips,
   results table + chart, save-correction, history) + a "most recent active users" table
   (`recent_operators` in metrics_report). Consistent footer (App · Admin · Metrics, all `?metrics_test=1`)

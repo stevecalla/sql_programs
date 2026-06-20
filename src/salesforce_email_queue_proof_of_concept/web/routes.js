@@ -186,6 +186,12 @@ function mount(app, deps) {
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
+  // Selectable AI models for the in-app picker (triage / draft / ask). Single source of truth =
+  // ai/models.js (same list the metrics Ask box uses via /api/metrics-ask-models).
+  app.get('/api/ai/models', require_auth, function (req, res) {
+    try { res.json(ai.list_models()); } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
+  });
+
   app.post('/api/ai/respond', require_auth, async function (req, res) {
     const b = req.body || {};
     const t0 = Date.now();
@@ -193,7 +199,7 @@ function mount(app, deps) {
       const knowledge = await faq.load_knowledge(b.queue);
       const images = await faq.load_context_images(b.queue);
       const corr = corrections.grounding_lines(12, { queue: b.queue, user: req.user });
-      const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, fetch_attachments: true, faq: knowledge, images: images, corrections: corr });
+      const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, model: b.model, fetch_attachments: true, faq: knowledge, images: images, corrections: corr });
       log_ai(req, b, {
         ai_action: 'respond', ai_verdict: (r.verdict || '').toUpperCase(),
         ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
@@ -215,7 +221,7 @@ function mount(app, deps) {
       const knowledge = await faq.load_knowledge(b.queue);
       const images = await faq.load_context_images(b.queue);
       const corr = corrections.grounding_lines(12, { queue: b.queue, user: req.user });
-      const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, question: b.question, history: b.history, faq: knowledge, images: images, corrections: corr });
+      const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, model: b.model, question: b.question, history: b.history, faq: knowledge, images: images, corrections: corr });
       log_ai(req, b, {
         ai_action: action, ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
         ai_reply_chars: (r.answer || '').length, ai_used_images: images && images.length ? 1 : 0,
@@ -233,7 +239,7 @@ function mount(app, deps) {
     const b = req.body || {};
     const t0 = Date.now();
     try {
-      const r = await ai.triage_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, faq: await faq.load_knowledge(b.queue) });
+      const r = await ai.triage_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, model: b.model, faq: await faq.load_knowledge(b.queue) });
       log_ai(req, b, { ai_action: 'triage', ai_intent: r.status || '', ai_verdict: r.status || '',
         ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.prompt_chars || 0,
         ai_reply_chars: (r.reply_chars != null ? r.reply_chars : (r.reason || '').length), ai_ok: 1 });

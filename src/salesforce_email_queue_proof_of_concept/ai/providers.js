@@ -5,24 +5,28 @@
 
 const PROVIDERS = {
   openai: { id: 'openai', label: 'ChatGPT (OpenAI)', env_key: 'OPENAI_API_KEY', env_model: 'OPENAI_MODEL', default_model: 'gpt-4o-mini' },
-  anthropic: { id: 'anthropic', label: 'Claude (Anthropic)', env_key: 'ANTHROPIC_API_KEY', env_model: 'ANTHROPIC_MODEL', default_model: 'claude-3-5-sonnet-latest' }
+  anthropic: { id: 'anthropic', label: 'Claude (Anthropic)', env_key: 'ANTHROPIC_API_KEY', env_model: 'ANTHROPIC_MODEL', default_model: 'claude-sonnet-4-6' }
 };
+
 const DEFAULT_PROVIDER = 'openai';
 
 function list_providers() {
   return Object.keys(PROVIDERS).map(function (k) { return { id: k, label: PROVIDERS[k].label, is_default: k === DEFAULT_PROVIDER }; });
 }
+
 function resolve(provider) {
   const p = PROVIDERS[provider || DEFAULT_PROVIDER];
   if (!p) throw new Error('Unknown provider: ' + provider);
   return p;
 }
+
 // The model string a call WILL use (explicit > env override > provider default) — for analytics logging.
 function resolve_model(provider, model, env) {
   env = env || process.env;
   try { const p = resolve(provider); return model || env[p.env_model] || p.default_model; }
   catch (e) { return model || ''; }
 }
+
 async function safe_text(res) { try { return await res.text(); } catch (e) { return ''; } }
 
 // complete({ provider, model, system, prompt, env, transport })
@@ -45,6 +49,7 @@ function openai_user_content(prompt, images) {
   images.forEach(function (im) { arr.push({ type: 'image_url', image_url: { url: 'data:' + im.media_type + ';base64,' + im.data_base64 } }); });
   return arr;
 }
+
 async function openai_complete(a) {
   const res = await a.transport('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -62,6 +67,7 @@ function anthropic_user_content(prompt, images) {
   images.forEach(function (im) { arr.push({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data_base64 } }); });
   return arr;
 }
+
 async function anthropic_complete(a) {
   const res = await a.transport('https://api.anthropic.com/v1/messages', {
     method: 'POST',

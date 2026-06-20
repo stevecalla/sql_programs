@@ -82,3 +82,28 @@ test('no images -> plain string content (back-compat)', async function () {
   await providers.complete({ provider: 'openai', system: 'S', prompt: 'P', env: { OPENAI_API_KEY: 'k' }, transport: transport });
   assert.strictEqual(body.messages[1].content, 'P');
 });
+
+// --- single model registry: one source of truth for triage / draft / ask / Ask-box ---
+const models = require('../ai/models');
+test('registry lists models with provider+model+label and exactly one default', function () {
+  const list = models.list();
+  assert.ok(Array.isArray(list) && list.length >= 1, 'non-empty list');
+  list.forEach(function (m) { assert.ok(m.provider && m.model && m.label, 'each entry has provider/model/label'); });
+  assert.strictEqual(list.filter(function (m) { return m.is_default; }).length, 1, 'exactly one is_default');
+  assert.strictEqual(models.default_model().model, list.filter(function (m) { return m.is_default; })[0].model);
+});
+test('OpenAI registry entry tracks OPENAI_MODEL from env', function () {
+  const prev = process.env.OPENAI_MODEL;
+  process.env.OPENAI_MODEL = 'gpt-test-123';
+  try { assert.strictEqual(models.list().filter(function (m) { return m.provider === 'openai'; })[0].model, 'gpt-test-123'); }
+  finally { if (prev === undefined) delete process.env.OPENAI_MODEL; else process.env.OPENAI_MODEL = prev; }
+});
+test('metrics Ask box shares the SAME registry (re-export)', function () {
+  const ask_models = require('../metrics/ask/models');
+  assert.deepStrictEqual(ask_models.list(), models.list(), 'ask/models re-exports ai/models');
+});
+test('resolve_model: explicit model wins, else env, else provider default', function () {
+  assert.strictEqual(providers.resolve_model('anthropic', 'claude-x'), 'claude-x', 'explicit wins');
+  assert.strictEqual(providers.resolve_model('openai', null, { OPENAI_MODEL: 'gpt-env' }), 'gpt-env', 'env override');
+  assert.strictEqual(providers.resolve_model('anthropic', null, {}), 'claude-sonnet-4-6', 'provider default');
+});

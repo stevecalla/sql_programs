@@ -38,8 +38,10 @@ Create a login first: set `.env` accounts (always valid, carry a role for future
 ## Configuration (repo-root `.env`)
 
 - `SF_PROD_*` — Salesforce credentials (reads run as the integration user).
-- `OPENAI_API_KEY` (default model `gpt-4o-mini`) and/or `ANTHROPIC_API_KEY` (Claude).
-- Optional model overrides: `OPENAI_MODEL`, `ANTHROPIC_MODEL`.
+- `OPENAI_API_KEY` (default model `gpt-4o-mini`) and/or `ANTHROPIC_API_KEY` (Claude, default `claude-sonnet-4-6`).
+- Optional model overrides: `OPENAI_MODEL`, `ANTHROPIC_MODEL`. These feed the **one model registry**
+  (`ai/models.js`) that drives every AI feature — triage, draft, ask, and the metrics Ask box.
+  Add or retire selectable models in that one file; the in-app picker and the Ask box both read it.
 - Web-app logins (`.env` accounts, always valid, each carries a role used for access control):
   - `SF_EMAIL_QUEUE_ADMIN_USER` / `SF_EMAIL_QUEUE_ADMIN_PASS` — role `admin` (also gates `/metrics` + `/admin`).
   - `SF_EMAIL_QUEUE_USER` / `SF_EMAIL_QUEUE_PASS` — role `user`.
@@ -136,7 +138,7 @@ only counts, enums, the operator's username, the queue name, and Salesforce reco
 | `soql_run` | a read-only SOQL is run | soql_chars | (events / Ask) |
 | `context_viewed` | a context file is opened/previewed | attachment_type | (events / Ask) |
 | `link_previewed` | a link in an email is previewed | — | (events / Ask) |
-| `model_selected` | operator switches the AI model | ai_provider | (events / Ask) |
+| `model_selected` | operator switches the AI model | ai_provider, ai_model | (events / Ask) |
 | `theme_changed` | operator toggles light/dark | theme | (events / Ask) |
 | `sign_out` | operator signs out | — | (events / Ask) |
 | `send_email` | **Send reply** (mocked) | sf_action, sf_ok, sf_error | Salesforce-writes panel, Cases |
@@ -146,7 +148,9 @@ only counts, enums, the operator's username, the queue name, and Salesforce reco
 Every event carries `visitor_id` + `session_id` for end-to-end correlation: browser events from the
 analytics client, and server-logged events (`ai_call`, `send_email`, `status_change`) from ids the
 client sends on the request (page navigations like `dashboard_view` read `visitor_id` from the
-`um_visitor_id` cookie). AI calls also record the resolved `ai_model` (e.g. `gpt-4o-mini`).
+`um_visitor_id` cookie). AI calls also record the resolved `ai_model` (e.g. `gpt-4o-mini`). The app
+header has **one model picker** (populated from `/api/ai/models` → `ai/models.js`); the chosen model is
+sent with every triage / draft / ask request, so `ai_model` reflects exactly what was selected.
 
 Salesforce writes (`send_email`, `status_change`) are **disabled** in this POC, so the **attempt** is
 recorded with `sf_ok=0` + a reason; when real writes are wired up, `sf_ok` flips to 1 on acceptance or
@@ -189,7 +193,8 @@ type a natural-language question and the assistant plans a **read-only** MySQL `
 table, runs it behind a hardened guard (`metrics/ask/sql_guard.js` — single SELECT/WITH only, allow-listed
 table, blocked keywords even inside comments/strings, enforced row cap), then summarizes the rows (with a
 chart when the shape fits). It also supports a **SQL mode** toggle (run your own read-only SQL), a model
-picker (ChatGPT default; Claude Sonnet/Haiku), follow-up conversation history, and **corrections** you can
+picker (served from the shared `ai/models.js` registry — same list as the app's header picker), follow-up
+conversation history, and **corrections** you can
 save to ground future answers. Questions/answers are logged to `salesforce_email_queue_ask_log` and
 corrections to `salesforce_email_queue_ask_corrections` (no member PII — questions are admin-typed). The
 brain queries through a read-only pool that prefers a dedicated read-only DB user if `ASK_DB_*` is set,
