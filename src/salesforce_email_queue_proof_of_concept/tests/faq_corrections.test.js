@@ -45,3 +45,42 @@ test('save_context_file writes and list_context_meta sees it', async function ()
 test('save_context_file rejects unsupported types', async function () {
   await assert.rejects(async function () { await faq.save_context_file('global', 'Coaching', 'evil.exe', Buffer.from('x')); });
 });
+
+test('set_context_excluded removes a file from grounding but keeps it on disk', async function () {
+  await faq.save_context_file('global', 'Coaching', 'drop_me.md', Buffer.from('SECRETMARKER content'));
+  let meta = await faq.list_context_meta('Coaching');
+  const row = meta.filter(function (m) { return m.name === 'drop_me.md'; })[0];
+  assert.ok(row && row.key && row.excluded === false, 'listed + not excluded yet');
+  let k = await faq.load_knowledge('Coaching');
+  assert.ok(k.indexOf('SECRETMARKER') >= 0, 'included before exclude');
+  faq.set_context_excluded(row.key, true);
+  meta = await faq.list_context_meta('Coaching');
+  assert.ok(meta.filter(function (m) { return m.name === 'drop_me.md'; })[0].excluded === true, 'now flagged excluded');
+  k = await faq.load_knowledge('Coaching');
+  assert.ok(k.indexOf('SECRETMARKER') < 0, 'excluded from grounding');
+  const fs = require('fs'); assert.ok(fs.existsSync(await faq.find_context_path('Coaching', 'drop_me.md')), 'still on disk');
+  faq.set_context_excluded(row.key, false); // restore
+});
+test('read_context_file is type-aware (text vs table)', async function () {
+  await faq.save_context_file('global', 'Coaching', 'rows.csv', Buffer.from('a,b\n1,2'));
+  const t = await faq.read_context_file('global', 'Coaching', 'notes.md');
+  assert.strictEqual(t.kind, 'text');
+  const c = await faq.read_context_file('global', 'Coaching', 'rows.csv');
+  assert.strictEqual(c.kind, 'table');
+  assert.deepStrictEqual(c.rows[0], ['a', 'b']);
+});
+test('find_context_path throws for a missing file', async function () {
+  await assert.rejects(function () { return faq.find_context_path('Coaching', 'nope_does_not_exist.md'); });
+});
+test('corrections grounding respects scope (me / queue / global)', function () {
+  corr._reset();
+  corr.add({ note: 'GLOBAL fact', scope: 'global' });
+  corr.add({ note: 'QUEUE fact', scope: 'queue', queue: 'Coaching' });
+  corr.add({ note: 'MINE fact', scope: 'me', author: 'skip' });
+  const forSkipCoaching = corr.grounding_lines(12, { queue: 'Coaching', user: 'skip' }).join(' | ');
+  assert.ok(forSkipCoaching.indexOf('GLOBAL fact') >= 0 && forSkipCoaching.indexOf('QUEUE fact') >= 0 && forSkipCoaching.indexOf('MINE fact') >= 0);
+  const forOtherRankings = corr.grounding_lines(12, { queue: 'Rankings', user: 'other' }).join(' | ');
+  assert.ok(forOtherRankings.indexOf('GLOBAL fact') >= 0, 'global always applies');
+  assert.ok(forOtherRankings.indexOf('QUEUE fact') < 0, 'queue-scoped excluded on other queue');
+  assert.ok(forOtherRankings.indexOf('MINE fact') < 0, 'me-scoped excluded for other user');
+});

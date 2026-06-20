@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { get_thread, list_queue_cases, is_automated_sender } = require('../sf/sf_threads');
+const { get_thread, list_queue_cases, is_automated_sender, cases_with_links } = require('../sf/sf_threads');
 
 // Minimal mock matching jsforce's conn.query(soql).execute({...}) -> { records } shape that
 // race_results_transform's run_soql consumes. Routes pick records by matching the SOQL text.
@@ -56,4 +56,17 @@ test('get_thread orders, strips quotes, flags automated, and attaches files', as
   assert.strictEqual(thread[2].attachments.length, 1);
   assert.strictEqual(thread[2].attachments[0].content_version_id, '068A');
   assert.strictEqual(thread[2].attachments[0].file_extension, 'pdf');
+});
+
+test('cases_with_links flags cases whose email bodies contain URLs', async function () {
+  const conn = mock_conn([{ match: /SELECT ParentId, TextBody FROM EmailMessage/, records: [
+    { ParentId: '500A', TextBody: 'See https://usatriathlon.org/coaching for details.' },
+    { ParentId: '500A', TextBody: 'no link here' },
+    { ParentId: '500B', TextBody: 'plain text only' }
+  ] }]);
+  const out = await cases_with_links(conn, ['500A', '500B']);
+  assert.ok(out['500A'] && out['500A'].count >= 1, '500A has a link');
+  assert.ok(/^https:\/\/usatriathlon\.org\/coaching/.test(out['500A'].first), 'captures first url');
+  assert.ok(!out['500B'], '500B has no link');
+  assert.deepStrictEqual(await cases_with_links(conn, []), {});
 });

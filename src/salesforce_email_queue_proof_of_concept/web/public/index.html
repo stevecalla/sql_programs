@@ -335,13 +335,6 @@ function renderLeft(){
   left.appendChild(el('div',{id:'caseList'},[]));
   renderCases();
 }
-function summaryChips(){
-  const wrap=el('div',{class:'summary'},[]);
-  const c=state.counts; const keys=Object.keys(c);
-  if(!keys.length) return wrap;
-  keys.forEach(function(k){ wrap.appendChild(el('span',{class:'chip'},[k+': ', el('b',{},[String(c[k])])])); });
-  return wrap;
-}
 async function loadCounts(){ if(!state.queue) return; try{ const j=await api('/api/status-counts?queue='+encodeURIComponent(state.queue.id)); state.counts=j.by_status||{}; }catch(e){ state.counts={}; } }
 
 function caseMatches(cs,q){

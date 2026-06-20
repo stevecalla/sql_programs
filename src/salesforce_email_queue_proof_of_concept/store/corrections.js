@@ -39,7 +39,6 @@ function add(e) {
   items.push(rec); save(); return rec;
 }
 function list(active_only) { return load().filter(function (r) { return active_only === false || r.active; }); }
-function set_active(id, active) { const r = load().filter(function (x) { return x.id === id; })[0]; if (r) { r.active = active ? 1 : 0; save(); } }
 
 // scope-aware. opts: { queue, user }. With no opts, returns all active (back-compat).
 function grounding_lines(n, opts) {
@@ -56,4 +55,4 @@ function grounding_lines(n, opts) {
 }
 function _reset() { _items = []; }
 
-module.exports = { add, list, set_active, grounding_lines, _reset };
+module.exports = { add, list, grounding_lines, _reset };
