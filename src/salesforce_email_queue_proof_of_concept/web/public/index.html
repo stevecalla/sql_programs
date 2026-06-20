@@ -203,7 +203,12 @@ let state = { queues:[], cases:[], thread:[], queue:null, case:null, provider:'o
 // test run (is_test=1) so the entries are trackable + purgeable from /admin. Fire-and-forget; never
 // throws. AI-call events are logged server-side (latency/verdict/success); the browser logs page +
 // navigation + interaction events here. ----
-var M_TEST = (function(){ try{ if(new URLSearchParams(location.search).get('metrics_test')==='1') sessionStorage.setItem('eq_mtest','1'); }catch(e){} try{ return sessionStorage.getItem('eq_mtest')==='1'; }catch(e){ return false; } })();
+// Test mode is opt-in PER PAGE LOAD via ?metrics_test=1 only — never persisted. (Persisting it in
+// sessionStorage leaked the flag into a user's normal activity for the rest of the tab session, which
+// wrongly stamped real page_view/thread_opened/ai_call rows as is_test=1.) Admin links to the app carry
+// the param explicitly when an admin is deliberately testing; a plain visit to / is real activity.
+var M_TEST = (function(){ try{ return new URLSearchParams(location.search).get('metrics_test') === '1'; }catch(e){ return false; } })();
+try{ sessionStorage.removeItem('eq_mtest'); }catch(e){}
 var M_BASE = { source:'web', is_test: M_TEST?1:0 };
 try{ if(window.UsageMetrics) UsageMetrics.init({ app:'salesforce_email_queue', endpoint:'/api/event',
   allowList:['is_test','source','queue','queue_id','thread_msg_count','has_attachment','attachment_type','correction_scope','context_action','soql_chars','actor'],
