@@ -102,10 +102,15 @@ const SECTIONS = [
   { label: 'Metrics & analytics (needs the local analytics DB)', color: YEL, items: [
     { label: 'Metrics stats (last 7 days)', desc: 'Text usage report from the analytics table (AI calls, providers, verdicts, queues).', cli: 'node metrics/metrics_cli.js stats', action: 'metrics_stats' },
     { label: 'Metrics table size', desc: 'Row count + size + by-year breakdown of the events table.', cli: 'node metrics/metrics_cli.js size', action: 'metrics_size' },
-    { label: 'Purge TEST rows (is_test=1)', desc: 'Delete deliberate test-run rows (browser opened with ?metrics_test=1). Real + demo data untouched.', cli: 'node metrics/metrics_cli.js purge-test', action: 'metrics_purge_test' }
+    { label: 'Purge TEST rows (is_test=1)', desc: 'Delete deliberate test-run rows (browser opened with ?metrics_test=1). Real + demo data untouched.', cli: 'node metrics/metrics_cli.js purge-test', action: 'metrics_purge_test' },
+    { label: 'Cleanup — purge old years', desc: 'Keep current + prior calendar year; delete older rows.', cli: 'node metrics/metrics_cli.js cleanup', action: 'metrics_cleanup' },
+    { label: 'PURGE ALL (danger)', desc: 'Delete every analytics row regardless of date.', cli: 'node metrics/metrics_cli.js purge-all', action: 'metrics_purge_all' },
+    { label: 'AI ask — ask a question (read-only)', desc: 'Ask the usage data in plain English; prints the answer + the SQL it ran. Read-only guarded.', cli: 'node metrics/metrics_cli.js ask "<question>"', action: 'metrics_ask' },
+    { label: 'AI ask — guard demo', desc: 'See the read-only SQL guard ACCEPT/REJECT example queries (no DB needed).', cli: 'node metrics/metrics_cli.js guard', action: 'metrics_guard' }
   ] },
   { label: 'Server & users', color: BLU, items: [
     { label: 'Start web app (port 8019)', desc: 'Express server + SPA + /metrics dashboard + /admin hub. Ctrl-C to stop.', cli: 'node ../../server_salesforce_email_queue_8019.js', action: 'server' },
+    { label: 'Open the web app in a browser', desc: 'Open http://localhost:8019 (start the server first). /metrics + /admin are linked in the header for admins.', cli: 'open http://localhost:8019', action: 'open_app' },
     { label: 'Add / update a user', desc: 'Create a web app login (username + password).', cli: 'node src/admin.js add', action: 'add_user' },
     { label: 'List users', desc: 'Show web app logins.', cli: 'node src/admin.js list', action: 'list_users' },
     { label: 'Reset a user password', desc: 'Set a new password for an existing login (passwords are hashed, never shown).', cli: 'node src/admin.js passwd', action: 'reset_pw' },
@@ -130,6 +135,11 @@ const ACTIONS = {
   metrics_stats: function () { return run('node', ['metrics/metrics_cli.js', 'stats']); },
   metrics_size: function () { return run('node', ['metrics/metrics_cli.js', 'size']); },
   metrics_purge_test: function () { return run('node', ['metrics/metrics_cli.js', 'purge-test']); },
+  metrics_cleanup: function () { return run('node', ['metrics/metrics_cli.js', 'cleanup']); },
+  metrics_purge_all: function () { return run('node', ['metrics/metrics_cli.js', 'purge-all']); },
+  metrics_ask: async function () { const q = clean(await ask('  Question: ')); if (!q) return; return run('node', ['metrics/metrics_cli.js', 'ask', q]); },
+  metrics_guard: function () { return run('node', ['metrics/metrics_cli.js', 'guard']); },
+  open_app: function () { const url = 'http://localhost:8019'; const cmd = process.platform === 'win32' ? 'cmd' : (process.platform === 'darwin' ? 'open' : 'xdg-open'); const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url]; return run(cmd, args); },
   verify_prod: function () { return run('node', ['verify_sf_access.js', 'prod']); },
   verify_sandbox: function () { return run('node', ['verify_sf_access.js', 'sandbox']); },
   list_queues: function () { return run('node', ['src/cli.js', 'queues']); },

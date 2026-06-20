@@ -36,6 +36,7 @@ async function build_report(pool, opts) {
   const users = (await q(pool,
     'SELECT COUNT(DISTINCT visitor_id) uniq, ' +
     "COUNT(DISTINCT CASE WHEN is_returning=1 THEN visitor_id END) ret_u, " +
+    "COUNT(DISTINCT CASE WHEN (is_returning IS NULL OR is_returning=0) THEN visitor_id END) new_u, " +
     "COUNT(DISTINCT actor) operators " +
     'FROM ' + W + " AND event_name='page_view'", A))[0] || {};
 
@@ -96,7 +97,7 @@ async function build_report(pool, opts) {
   const data = {
     days: days,
     visits: cmap.page_view || 0,
-    unique_users: n0(users.uniq), repeat_users: n0(users.ret_u), operators: n0(users.operators),
+    unique_users: n0(users.uniq), new_users: n0(users.new_u), repeat_users: n0(users.ret_u), operators: n0(users.operators),
     threads_opened: cmap.thread_opened || 0,
     acknowledgements: cmap.acknowledge_sent || 0,
     ai: {

@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-<title>USAT Email Queue Assistant</title>
+<title>Email Queue Assistant</title>
 <style>
   :root{
     --bg:#f4f6fb; --card:#ffffff; --ink:#1c2433; --dim:#6b7686; --line:#e2e7f0;
@@ -218,7 +218,7 @@ function renderLogin(msg) {
   const btn = el('button', { class:'btn primary', style:'width:100%', onclick: async function(){ err.textContent=''; try{ await api('/api/login',{method:'POST',body:JSON.stringify({user:u.value,pass:p.value})}); boot(); }catch(e){ err.textContent=(e&&e.message)||'Invalid credentials'; } } }, ['Sign in']);
   p.addEventListener('keydown', function(e){ if(e.key==='Enter') btn.click(); });
   $('#app').appendChild(el('div',{class:'center'},[ el('div',{class:'card login'},[
-    el('h1',{},[el('span',{class:'arrow'},['> ']),'USAT Email Queue Assistant']),
+    el('h1',{},[el('span',{class:'arrow'},['> ']),'Email Queue Assistant']),
     el('div',{class:'sub'},['Read-only proof of concept. Nothing is sent to Salesforce.']),
     el('div',{class:'stack',style:'margin-top:12px'},[ u, p, btn, err ]),
     el('div',{style:'margin-top:12px;text-align:center'},[ makeThemeBtn() ])
@@ -232,7 +232,7 @@ function shell() {
   const logout = el('button',{class:'btn ghost',onclick:async function(){ await fetch('/api/logout',{method:'POST'}); renderLogin('Signed out.'); }},['Sign out']);
   document.body.appendChild(el('div',{class:'app-header'},[
     el('span',{class:'brandmark','aria-label':'email',html:'<svg width="22" height="22" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="19" width="38" height="26" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M14 21l18 14 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg>'}),
-    el('div',{},[ el('h1',{},['USAT Email Queue Assistant']), el('div',{class:'sub'},['read-only proof of concept - nothing is sent to Salesforce']) ]),
+    el('div',{},[ el('h1',{},['Email Queue Assistant']), el('div',{class:'sub'},['read-only proof of concept - nothing is sent to Salesforce']) ]),
     el('div',{class:'right'},[ el('span',{class:'dim'},['Model:']), provider,
       ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/metrics',title:'Usage dashboard (admin)'},['📊 Metrics']):null),
       ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/admin',title:'Admin hub (admin)'},['⚙ Admin']):null),
@@ -250,7 +250,7 @@ function shell() {
   // Consistent footer across all paths (App · Admin · Metrics), carrying ?metrics_test=1 so admin
   // navigation stays in test mode. Admin links shown only to admins.
   var isAdmin = state.me && state.me.role === 'admin';
-  var fkids = ['USA Triathlon Email Queue · ', el('a',{href:'/?metrics_test=1'},['App'])];
+  var fkids = ['Email Queue Assistant · ', el('a',{href:'/?metrics_test=1'},['App'])];
   if (isAdmin) { fkids.push(' · ', el('a',{href:'/admin?metrics_test=1'},['Admin']), ' · ', el('a',{href:'/metrics?metrics_test=1'},['Metrics'])); }
   fkids.push(' · ', el('span',{id:'eqClock'},[]));
   document.body.appendChild(el('footer',{class:'eq-footer'},fkids));
@@ -678,48 +678,4 @@ function renderRight(){
   const soqlMsg=el('div',{class:'note'},[]);
   const soqlResults=el('div',{class:'attext',style:'display:none'},[]);
   var lastRecords=[];
-  const soqlTools=el('div',{style:'display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px'},[]);
-  const dlCsv=el('button',{class:'btn ghost sm'},['⬇ Download CSV']); dlCsv.onclick=function(){ if(lastRecords.length) downloadCSV('soql_results.csv', recordsToRows(lastRecords)); };
-  const expRes=el('button',{class:'btn ghost sm',title:'Open results in a larger window'},['⤢ Expand']); expRes.onclick=function(){ if(!lastRecords.length) return; var d=el('button',{class:'btn ghost sm'},['⬇ Download CSV']); d.onclick=function(){ downloadCSV('soql_results.csv', recordsToRows(lastRecords)); }; eq_modal('SOQL results ('+lastRecords.length+')', recordsToTable(lastRecords), [ d ]); };
-  soqlTools.appendChild(dlCsv); soqlTools.appendChild(expRes);
-  async function runSoql(box){ var q=String(box.value||'').trim(); soqlResults.style.display='block'; soqlResults.textContent='Running...'; soqlTools.style.display='none';
-    try{ const j=await api('/api/soql',{method:'POST',body:JSON.stringify({q:q})}); M.track('soql_run',{ soql_chars:q.length, queue:(state.queue&&state.queue.name)||'' }); lastRecords=j.records||[]; soqlResults.innerHTML='';
-      soqlResults.appendChild(el('div',{class:'dim',style:'font-size:11px;margin-bottom:4px'},[(j.total!=null?(j.total+' record(s)'):'')+(j.done===false?' - more not shown':'')]));
-      soqlResults.appendChild(recordsToTable(lastRecords)); soqlTools.style.display=lastRecords.length?'flex':'none'; }
-    catch(e){ lastRecords=[]; soqlResults.textContent='Error: '+e.message; } }
-  const soqlCopy=el('button',{class:'btn'},['📋 Copy SOQL']);
-  soqlCopy.onclick=function(){ copyText(soqlBox.value, soqlMsg); flashCopied(soqlCopy,'📋 Copy SOQL'); };
-  const runBtn=el('button',{class:'btn',title:'Runs the (edited) query server-side via the read-only connection; results appear below'},['Run query']);
-  runBtn.onclick=function(){ runSoql(soqlBox); };
-  const caseSoqlBox=el('textarea',{style:'min-height:70px;font-family:monospace;font-size:12px'});
-  caseSoqlBox.value="SELECT Id, CaseNumber, Subject, Status, SuppliedEmail FROM Case WHERE Id = '"+state.case.case_id+"'";
-  const caseSoqlCopy=el('button',{class:'btn'},['📋 Copy case SOQL']);
-  caseSoqlCopy.onclick=function(){ copyText(caseSoqlBox.value, soqlMsg); flashCopied(caseSoqlCopy,'📋 Copy case SOQL'); };
-  const caseRunBtn=el('button',{class:'btn'},['Run case query']);
-  caseRunBtn.onclick=function(){ runSoql(caseSoqlBox); };
-  const wbLink=el('a',{class:'btn ghost',href:'https://workbench.developerforce.com/query.php',target:'_blank',rel:'noopener',title:'Workbench cannot be pre-filled from a link - click Copy SOQL, then paste it into Workbench'},['Open Workbench ↗']);
-  right.appendChild(acard('SOQL (editable, runs read-only)', [
-    el('div',{class:'note'},['Case Id: '+state.case.case_id+(state.case.case_number?'  ·  Case #'+state.case.case_number:'')+' - edit, then Run (results below) or Copy for Workbench.']),
-    el('h3',{style:'margin-top:6px'},['Thread query (EmailMessage)']), soqlBox,
-    el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ runBtn, soqlCopy, wbLink ]),
-    el('h3',{style:'margin-top:6px'},['Case query']), caseSoqlBox,
-    el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ caseRunBtn, caseSoqlCopy ]),
-    el('h3',{style:'margin-top:6px'},['Results']), soqlTools, soqlResults, soqlMsg
-  ], true));
-
-  // auto-draft when the AI status is already 'answer ready' for this case
-  if(state.case && state.triage[state.case.case_id] && state.triage[state.case.case_id].status==='answer_ready'){ doDraft(); }
-}
-
-async function boot(){
-  try{ const me=await api('/api/me'); state.me=me; M.setActor(me&&me.user); shell();
-    const r=await Promise.all([ api('/api/queues'), api('/api/statuses').catch(function(){return {statuses:[]};}) ]);
-    state.queues=r[0].queues; state.statuses=r[1].statuses||[]; state.instanceUrl=r[0].instance_url||'';
-    var sq=loadJSON('eq_queue',''); if(sq){ state.queue=state.queues.find(function(q){return q.id===sq;})||null; }
-    renderLeft();
-  }catch(e){ if(e.message!=='unauthorized') renderLogin(e.message); }
-}
-boot();
-</script>
-</body>
-</html>
+  const soqlTools=el('d

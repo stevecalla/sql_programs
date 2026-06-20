@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>USAT Email Queue Assistant — Metrics</title>
+<title>Email Queue Assistant — Metrics</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
@@ -93,6 +93,7 @@
   .mx-ask-suggest{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; } .mx-ask-suggest button{ border:1px solid var(--line); background:transparent; color:var(--dim); border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; } .mx-ask-suggest button:hover{ color:var(--ink); border-color:var(--accent); }
   @media (max-width:720px){ .mx-grid2{ grid-template-columns:1fr; } }
 </style>
+<link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
 <div class="mx-wrap">
@@ -265,13 +266,14 @@
 
   function render(report){ last_data = report; var d = report.data; var hl = d.health || {}; var tr = Number(hl.test_rows||0);
     el('cards').innerHTML =
+      card('Visits', d.visits, d.unique_users+' users · '+d.new_users+' new / '+d.repeat_users+' return') +
       card('AI calls', d.ai.calls, d.ai.success_pct+'% ok') +
       card('Avg latency', d.ai.avg_ms+' ms', 'max '+d.ai.max_ms+' ms') +
       card('Drafts ok', d.ai.ok, d.ai.failed+' failed') +
       card('Grounded', d.ai.grounded_pct+'%', d.ai.with_images+' w/ images') +
       card('Threads', d.threads_opened, '') +
       card('Acks', d.acknowledgements, 'holding replies') +
-      card('Users', d.unique_users, d.operators+' operators') +
+      card('Operators', d.operators, 'distinct staff') +
       card('Corrections', d.ai.corrections_used, 'applied') +
       card('Test rows', tr, 'is_test=1 (purgeable)') +
       card('Row Count DB', (hl.rows!=null?hl.rows:'?'), (hl.mb!=null?hl.mb+' MB':'—'));

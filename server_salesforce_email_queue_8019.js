@@ -144,6 +144,8 @@ function create_app() {
   app.post('/api/event', make_event_ingest({ pool: pool_proxy, table: metrics_config.TABLE, columns: metrics_config.COLUMNS, reporting_tz: metrics_config.REPORTING_TZ }));
   // Serve the shared generic analytics browser client (UsageMetrics) as a static asset.
   app.use('/analytics', express.static(path.join(__dirname, 'utilities', 'analytics')));
+  // Reuse the transform's stylesheet so /metrics + /admin match it exactly (single source of truth).
+  app.use('/css', express.static(path.join(__dirname, 'src', 'race_results_transform', 'public', 'css')));
 
   // ---- /metrics dashboard + /admin hub (admin login = existing session with role 'admin') ----
   app.get('/metrics', require_admin_page, function (req, res) {
