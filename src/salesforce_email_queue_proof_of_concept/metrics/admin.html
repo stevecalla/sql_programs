@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Email Queue Assistant — Admin</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  :root{ --bg:#f4f6fb; --card:#fff; --ink:#1c2433; --dim:#6b7686; --line:#e2e7f0; --accent:#e4002b;
+    --accent-soft:rgba(228,0,43,.08); --brand:#15284e; --surface-2:rgba(127,127,127,.05);
+    --radius:14px; --shadow:0 1px 3px rgba(20,30,60,.06),0 6px 24px rgba(20,30,60,.05); color-scheme:light; }
+  :root[data-theme="dark"]{ --bg:#0f1420; --card:#171d2b; --ink:#e7ecf5; --dim:#9aa6ba; --line:#283142; --accent-soft:rgba(228,0,43,.20); --brand:#1b2f57; --surface-2:rgba(127,127,127,.10); color-scheme:dark; }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){ --bg:#0f1420; --card:#171d2b; --ink:#e7ecf5; --dim:#9aa6ba; --line:#283142; --accent-soft:rgba(228,0,43,.20); --brand:#1b2f57; --surface-2:rgba(127,127,127,.10); color-scheme:dark; } }
+  *{box-sizing:border-box} body{ margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  a{ color:var(--accent); }
+  /* width/padding come from app.css .wrap (min(1500px,96vw)) so /admin matches the transform */
+  .app-header{ margin-bottom:14px; }
+  .title-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .title-row h1{ font-size:clamp(18px,3vw,24px); margin:0; }
+  .header-btns{ margin-left:auto; display:flex; gap:8px; }
+  .btn{ border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:9px; padding:7px 13px; font:inherit; font-weight:600; font-size:13px; line-height:1; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+  .btn:hover, .btn.ghost:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn.primary{ background:var(--accent); color:#fff; border-color:transparent; } .btn.primary:hover{ filter:brightness(1.05); color:#fff; }
+  .btn.warn{ color:#b45309; border-color:#e0a200; } .btn.warn:hover{ background:#fef3c7; }
+  .btn.sm{ padding:4px 9px; font-size:12px; }
+  .admin-shell{ display:flex; align-items:stretch; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--card); box-shadow:var(--shadow); }
+  .admin-rail{ flex:0 0 190px; display:flex; flex-direction:column; gap:2px; padding:12px 10px; border-right:1px solid var(--line); background:var(--surface-2); }
+  .admin-rail .grp{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--dim); padding:8px 10px 2px; }
+  .admin-rail a{ display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; color:var(--ink); text-decoration:none; cursor:pointer; font-size:14px; border:1px solid transparent; }
+  .admin-rail a:hover{ background:rgba(127,127,127,.10); }
+  .admin-rail a.on{ background:var(--accent-soft); border-color:var(--line); font-weight:600; color:var(--ink); }
+  .admin-main{ flex:1; min-width:0; padding:16px 18px; }
+  .pane{ display:none; } .pane.active{ display:block; }
+  .ad-card{ background:transparent; margin-bottom:16px; }
+  .ad-card h2{ font-size:12px; margin:0 0 12px; text-transform:uppercase; letter-spacing:.5px; color:var(--dim); }
+  .mut{ color:var(--dim); font-size:13px; }
+  .tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .tile{ background:var(--surface-2); border-radius:10px; padding:10px 12px; }
+  .tile .k{ font-size:12px; color:var(--dim); } .tile .v{ font-size:15px; margin-top:4px; }
+  .pill{ font-size:12px; font-weight:700; border-radius:999px; padding:2px 10px; display:inline-block; }
+  .pill.yes{ background:rgba(22,163,74,.14); color:#16a34a; } .pill.no{ background:rgba(228,0,43,.14); color:var(--accent); }
+  .pill.admin{ background:var(--accent-soft); color:var(--accent); } .pill.user{ background:rgba(46,117,182,.16); color:#2e75b6; }
+  .pill.env{ border:1px solid var(--line); color:var(--dim); } .pill.stored{ background:rgba(127,127,127,.12); color:var(--ink); }
+  table.grid{ width:100%; border-collapse:collapse; font-size:14px; } table.grid td, table.grid th{ padding:7px 6px; border-bottom:1px solid var(--line); text-align:left; }
+  table.grid th{ font-size:12px; color:var(--dim); font-weight:600; }
+  .act-row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+  .qlist{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:4px 16px; margin:12px 0; }
+  .qrow{ display:flex; align-items:center; gap:8px; font-size:14px; }
+  label{ cursor:pointer; }
+  input[type=text], input[type=password], select{ font:inherit; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
+  .msg{ font-size:13px; margin-left:8px; } .msg.ok{ color:#16a34a; } .msg.err{ color:var(--accent); }
+  .empty{ border:1px dashed var(--line); border-radius:10px; padding:18px; color:var(--dim); font-size:13px; text-align:center; background:var(--surface-2); }
+  .foot{ text-align:center; color:var(--dim); font-size:12px; padding:16px; }
+  .footer-link{ color:var(--dim); } .footer-link:hover{ color:var(--accent); }
+  @media (max-width:760px){ .admin-shell{ flex-direction:column; } .admin-rail{ flex-direction:row; flex-wrap:wrap; } }
+</style>
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="app-header">
+    <div class="title-row">
+      <h1>⚙️ Email Queue Assistant <span class="mut" style="font-weight:400;font-size:.7em">— Admin</span></h1>
+      <div class="header-btns">
+        <button id="themeToggle" class="btn ghost">☾ Dark</button>
+        <a class="btn ghost" href="/admin/logout">↩ Sign out</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="admin-shell">
+    <nav class="admin-rail" aria-label="Admin sections">
+      <div class="grp">Admin</div>
+      <a data-pane="overview" class="on"><span aria-hidden="true">▦</span> Overview</a>
+      <a data-pane="maintenance"><span aria-hidden="true">⚒</span> Maintenance</a>
+      <a data-pane="operations"><span aria-hidden="true">▸</span> Operations</a>
+      <a data-pane="logs"><span aria-hidden="true">▤</span> Logs</a>
+      <a data-pane="settings"><span aria-hidden="true">⚙</span> Settings</a>
+      <a data-pane="access"><span aria-hidden="true">◍</span> Access</a>
+      <a data-pane="reference"><span aria-hidden="true">❏</span> Reference</a>
+      <div class="grp">Links</div>
+      <a href="/metrics?metrics_test=1">📊 Metrics</a>
+      <a href="/?metrics_test=1">📧 App (test)</a>
+    </nav>
+
+    <main class="admin-main">
+      <!-- OVERVIEW -->
+      <section class="pane active" data-view="overview">
+        <div class="ad-card"><h2>Configuration status</h2><div class="tiles" id="status"><div class="mut">Loading…</div></div>
+          <div class="mut" style="margin-top:10px">Booleans only — no secrets or values are shown.</div></div>
+      </section>
+
+      <!-- MAINTENANCE -->
+      <section class="pane" data-view="maintenance">
+        <div class="ad-card"><h2>Data maintenance</h2>
+          <div class="act-row"><button class="btn warn" id="purgeTest">🗑 Purge test rows (is_test=1)</button><span class="msg" id="maintMsg"></span></div>
+          <div class="mut">Deletes only deliberate test rows (sessions opened with <code>?metrics_test=1</code>). Real + demo data are untouched.</div>
+        </div>
+      </section>
+
+      <!-- OPERATIONS -->
+      <section class="pane" data-view="operations">
+        <div class="ad-card"><h2>Operations</h2>
+          <div class="empty">The operator console (running menu commands with live output) is part of the transform admin
+            but is <b>not enabled in this read-only POC</b>. Use the CLI menu instead: <code>node menu.js</code>.</div>
+        </div>
+      </section>
+
+      <!-- LOGS -->
+      <section class="pane" data-view="logs">
+        <div class="ad-card"><h2>Logs</h2>
+          <div class="empty">Live server log / pm2 process panels are part of the transform admin and are
+            <b>not enabled in this POC</b>. Tail logs from your terminal or <code>pm2 logs usat_salesforce_email_queue</code>.</div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="pane" data-view="settings">
+        <div class="ad-card"><h2>Settings</h2>
+          <div class="empty">Editable runtime config (applied live) is part of the transform admin and is
+            <b>not enabled in this POC</b>. Configuration is via the repo-root <code>.env</code> (see Reference).
+            Queue visibility is managed under <b>Access</b>.</div>
+        </div>
+      </section>
+
+      <!-- ACCESS -->
+      <section class="pane" data-view="access">
+        <div class="ad-card">
+          <h2>Users</h2>
+          <div class="mut">App logins. <code>.env</code> accounts are always-valid recovery accounts and can’t be removed; add app-specific users below. Role <b>admin</b> can reach <code>/admin</code> + <code>/metrics</code>.</div>
+          <table class="grid" style="margin-top:10px"><thead><tr><th>User</th><th>Role</th><th>Source</th><th></th></tr></thead><tbody id="usersBody"><tr><td class="mut">Loading…</td></tr></tbody></table>
+          <div class="act-row" style="margin-top:10px">
+            <input type="text" id="newUser" placeholder="username" autocomplete="off" style="width:160px">
+            <input type="password" id="newPass" placeholder="password" autocomplete="new-password" style="width:160px">
+            <select id="newRole"><option value="user">user</option><option value="admin">admin</option></select>
+            <button class="btn primary" id="addUser">Add / update user</button>
+            <span class="msg" id="userMsg"></span>
+          </div>
+        </div>
+        <div class="ad-card">
+          <h2>Queue access — general default</h2>
+          <div class="mut">Which queues non-admin users see by default. Admins always see every queue.</div>
+          <div class="act-row" style="margin-top:10px">
+            <label><input type="radio" name="defmode" value="all"> All queues</label>
+            <label><input type="radio" name="defmode" value="some"> Only selected</label>
+          </div>
+          <div class="qlist" id="defQueues"></div>
+          <button class="btn primary" id="saveDefault">Save default</button><span class="msg" id="defMsg"></span>
+        </div>
+        <div class="ad-card">
+          <h2>Queue access — per user</h2>
+          <div class="mut">Override the default for one user. “Use default” removes the override.</div>
+          <div class="act-row" style="margin-top:10px">
+            <span class="mut">User:</span><select id="userSel"></select>
+            <label><input type="radio" name="usermode" value="default"> Use default</label>
+            <label><input type="radio" name="usermode" value="all"> All queues</label>
+            <label><input type="radio" name="usermode" value="some"> Only selected</label>
+          </div>
+          <div class="qlist" id="userQueues"></div>
+          <button class="btn primary" id="saveUser">Save user</button><span class="msg" id="userQMsg"></span>
+        </div>
+      </section>
+
+      <!-- REFERENCE -->
+      <section class="pane" data-view="reference">
+        <div class="ad-card"><h2>System reference</h2>
+          <div class="mut" style="line-height:1.9">
+            • Analytics table: <code>salesforce_email_queue_events</code> (local MySQL; created on startup).<br>
+            • Ask-your-data tables: <code>salesforce_email_queue_ask_log</code>, <code>salesforce_email_queue_ask_corrections</code>.<br>
+            • Test mode: open any page with <code>?metrics_test=1</code> → events flagged <code>is_test=1</code>, purgeable under Maintenance. Admin/Metrics/App links here carry it.<br>
+            • No member PII is stored: counts/enums + operator staff username + queue name only.<br>
+            • Admin pages reuse the app session with role <code>admin</code> (no second login).<br>
+            • Sensitive data lives OUTSIDE the repo: <code>auth.json</code>, <code>corrections.json</code>, <code>queue_access.json</code>.<br>
+            • Env: <code>SF_PROD_*</code>, <code>OPENAI_API_KEY</code>/<code>ANTHROPIC_API_KEY</code>, <code>SF_EMAIL_QUEUE_ADMIN_*</code>/<code>SF_EMAIL_QUEUE_*</code>, <code>LOCAL_MYSQL_*</code>.
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<footer class="foot">Email Queue Assistant · admin · <a class="footer-link" href="/?metrics_test=1">App</a> · <a class="footer-link" href="/admin?metrics_test=1">Admin</a> · <a class="footer-link" href="/metrics?metrics_test=1">Metrics</a> · <span id="footerClock"></span></footer>
+
+<script>
+function effDark(){ var t; try{t=localStorage.getItem('eq_theme');}catch(e){} if(t==='dark')return true; if(t==='light')return false; return !!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches); }
+function applyTheme(){ var t; try{t=localStorage.getItem('eq_theme');}catch(e){} var r=document.documentElement; if(t==='dark'||t==='light')r.setAttribute('data-theme',t); else r.removeAttribute('data-theme'); document.getElementById('themeToggle').textContent=effDark()?'☀ Light':'☾ Dark'; }
+document.getElementById('themeToggle').onclick=function(){ try{localStorage.setItem('eq_theme', effDark()?'light':'dark');}catch(e){} applyTheme(); };
+applyTheme();
+function tickClock(){ try{ document.getElementById('footerClock').textContent='MTN '+new Intl.DateTimeFormat('en-US',{ timeZone:'America/Denver', dateStyle:'medium', timeStyle:'short' }).format(new Date()); }catch(e){} }
+setInterval(tickClock,1000); tickClock();
+function esc(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+Array.prototype.forEach.call(document.querySelectorAll('.admin-rail a[data-pane]'), function(a){
+  a.onclick=function(){ var id=a.getAttribute('data-pane');
+    Array.prototype.forEach.call(document.querySelectorAll('.admin-rail a[data-pane]'),function(x){x.classList.toggle('on',x===a);});
+    Array.prototype.forEach.call(document.querySelectorAll('.pane'),function(p){p.classList.toggle('active', p.getAttribute('data-view')===id);}); };
+});
+
+async function getJSON(u){ var r=await fetch(u,{headers:{'Accept':'application/json'}}); if(r.status===401||r.status===403){ location.href='/?next=/admin'; throw new Error('auth'); } return r.json(); }
+async function postJSON(u,b){ var r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}); return r.json(); }
+
+function tile(label,on){ return '<div class="tile"><div class="k">'+label+'</div><div class="v"><span class="pill '+(on?'yes':'no')+'">'+(on?'yes':'no')+'</span></div></div>'; }
+async function loadStatus(){
+  try{ var j=await getJSON('/api/admin-status'); document.getElementById('status').innerHTML=[
+    tile('Salesforce', j.salesforce_configured), tile('OpenAI key', j.openai_key), tile('Anthropic key', j.anthropic_key),
+    tile('Analytics DB', j.analytics_db), tile('Admin login (.env)', j.admin_login_configured), tile('User login (.env)', j.user_login_configured), tile('ngrok', j.ngrok_enabled)
+  ].join(''); }catch(e){ if(e.message!=='auth') document.getElementById('status').innerHTML='<div class="msg err">Failed: '+e.message+'</div>'; }
+}
+
+// ---- Users ----
+async function loadUsers(){
+  try{ var j=await getJSON('/api/admin/users'); var b=document.getElementById('usersBody'); b.innerHTML='';
+    (j.users||[]).forEach(function(u){
+      var tr=document.createElement('tr');
+      var actions = u.removable
+        ? '<button class="btn ghost sm" data-reset="'+esc(u.user)+'">reset pw</button> <button class="btn ghost sm" data-remove="'+esc(u.user)+'">remove</button>'
+        : '<span class="mut">recovery</span>';
+      tr.innerHTML='<td>'+esc(u.user)+'</td><td><span class="pill '+(u.role==='admin'?'admin':'user')+'">'+esc(u.role)+'</span></td><td><span class="pill '+(u.source==='env'?'env':'stored')+'">'+esc(u.source)+'</span></td><td>'+actions+'</td>';
+      b.appendChild(tr);
+    });
+    if(!(j.users||[]).length) b.innerHTML='<tr><td class="mut" colspan="4">no users</td></tr>';
+    // wire row buttons
+    Array.prototype.forEach.call(b.querySelectorAll('[data-remove]'),function(btn){ btn.onclick=async function(){ var u=btn.getAttribute('data-remove'); if(!confirm('Remove user "'+u+'"?')) return; var r=await postJSON('/api/admin/users/remove',{user:u}); if(r.ok){ loadUsers(); loadAccess(); } else alert(r.error||'failed'); }; });
+    Array.prototype.forEach.call(b.querySelectorAll('[data-reset]'),function(btn){ btn.onclick=function(){ var u=btn.getAttribute('data-reset'); document.getElementById('newUser').value=u; document.getElementById('newPass').focus(); document.getElementById('userMsg').textContent='Set a new password for "'+u+'" and click Add / update.'; document.getElementById('userMsg').className='msg'; }; });
+  }catch(e){ if(e.message!=='auth') document.getElementById('usersBody').innerHTML='<tr><td class="msg err" colspan="4">Failed: '+e.message+'</td></tr>'; }
+}
+document.getElementById('addUser').onclick=async function(){
+  var user=document.getElementById('newUser').value.trim(), pass=document.getElementById('newPass').value, role=document.getElementById('newRole').value;
+  var m=document.getElementById('userMsg'); if(!user||pass.length<4){ m.textContent='Username + a password (4+ chars) required.'; m.className='msg err'; return; }
+  m.textContent='Saving…'; m.className='msg';
+  var r=await postJSON('/api/admin/users',{user:user,pass:pass,role:role});
+  if(r.ok){ m.textContent='Saved “'+r.user+'” ('+r.role+').'; m.className='msg ok'; document.getElementById('newUser').value=''; document.getElementById('newPass').value=''; loadUsers(); loadAccess(); }
+  else { m.textContent=r.error||'error'; m.className='msg err'; }
+};
+
+// ---- Queue access ----
+var QUEUES=[], ACCESS={default:'all',users:{}};
+function checks(containerId, selectedSet){ var c=document.getElementById(containerId); c.innerHTML=''; if(!QUEUES.length){ c.innerHTML='<div class="mut">No queues found.</div>'; return; }
+  QUEUES.forEach(function(q){ var id=containerId+'_'+q.id; var row=document.createElement('div'); row.className='qrow';
+    row.innerHTML='<input type="checkbox" id="'+id+'" value="'+q.id+'"'+(selectedSet&&selectedSet[q.id]?' checked':'')+'><label for="'+id+'">'+esc(q.name)+'</label>'; c.appendChild(row); }); }
+function setRadio(name,val){ Array.prototype.forEach.call(document.getElementsByName(name),function(r){ r.checked=(r.value===val); }); }
+function getRadio(name){ var v=null; Array.prototype.forEach.call(document.getElementsByName(name),function(r){ if(r.checked)v=r.value; }); return v; }
+function collect(id){ var ids=[]; Array.prototype.forEach.call(document.getElementById(id).querySelectorAll('input[type=checkbox]'),function(cb){ if(cb.checked)ids.push(cb.value); }); return ids; }
+async function loadAccess(){
+  try{ var j=await getJSON('/api/admin/queue-access'); QUEUES=j.queues||[]; ACCESS=j.access||{default:'all',users:{}};
+    var defAll=ACCESS.default==='all'; setRadio('defmode', defAll?'all':'some'); var defSet={}; if(!defAll)(ACCESS.default||[]).forEach(function(id){defSet[id]=1;}); checks('defQueues', defSet);
+    var sel=document.getElementById('userSel'); sel.innerHTML=''; (j.users||[]).forEach(function(u){ var o=document.createElement('option'); o.value=u; o.textContent=u; sel.appendChild(o); });
+    if(!(j.users||[]).length){ var o=document.createElement('option'); o.value=''; o.textContent='(no named users — using .env accounts)'; sel.appendChild(o); }
+    renderUser();
+  }catch(e){ if(e.message!=='auth') document.getElementById('defMsg').textContent='Failed: '+e.message; }
+}
+function renderUser(){ var u=document.getElementById('userSel').value; var ov=ACCESS.users?ACCESS.users[u]:undefined;
+  setRadio('usermode', ov===undefined?'default':(ov==='all'?'all':'some')); var set={}; if(Array.isArray(ov)) ov.forEach(function(id){set[id]=1;}); checks('userQueues', set); }
+document.getElementById('userSel').onchange=renderUser;
+document.getElementById('saveDefault').onclick=async function(){ var mode=getRadio('defmode'); var m=document.getElementById('defMsg'); m.textContent='Saving…'; m.className='msg';
+  var j=await postJSON('/api/admin/queue-access',{ default: mode==='all'?'all':collect('defQueues') }); if(j.ok){ ACCESS=j.access; m.textContent='Saved.'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; } };
+document.getElementById('saveUser').onclick=async function(){ var u=document.getElementById('userSel').value; var m=document.getElementById('userQMsg');
+  if(!u){ m.textContent='No named user (these come from .env).'; m.className='msg err'; return; }
+  var mode=getRadio('usermode'); var payload = mode==='default'?{user:u,clear:true}:{user:u,queues:mode==='all'?'all':collect('userQueues')};
+  m.textContent='Saving…'; m.className='msg'; var j=await postJSON('/api/admin/queue-access',payload);
+  if(j.ok){ ACCESS=j.access; m.textContent='Saved.'; m.className='msg ok'; renderUser(); } else { m.textContent=j.error||'error'; m.className='msg err'; } };
+
+// ---- Maintenance ----
+document.getElementById('purgeTest').onclick=async function(){ if(!confirm('Delete all test rows (is_test=1)? Real + demo data are untouched.')) return;
+  var m=document.getElementById('maintMsg'); m.textContent='Purging…'; m.className='msg'; this.disabled=true;
+  try{ var j=await postJSON('/api/metrics-purge-test',{}); if(j.ok){ m.textContent='Deleted '+(j.deleted||0)+' test row(s).'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; } }
+  catch(e){ m.textContent='Failed: '+e.message; m.className='msg err'; } this.disabled=false; };
+
+loadStatus(); loadUsers(); loadAccess();
+</script>
+</body>
+</html>

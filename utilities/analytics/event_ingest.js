@@ -25,6 +25,31 @@ function fmt_in_tz(date, tz) {
          parts.hour + ':' + parts.minute + ':' + parts.second;
 }
 
+// Whitelist `body` to `allow`, stamp the two canonical timestamps, and INSERT one row.
+// Shared by the HTTP ingest handler AND server-side loggers (e.g. AI-call events, where latency /
+// verdict / success are only known on the server). Returns true if a row was written.
+async function insert_event(pool, table, allow, reporting_tz, body) {
+  body = body || {};
+  const cols = [];
+  const vals = [];
+  Object.keys(body).forEach(function (k) {
+    if (allow.has(k) && body[k] !== undefined) {
+      cols.push(k);
+      vals.push(body[k] === '' ? null : body[k]);
+    }
+  });
+  if (!cols.length) return false;
+  // stamp the two canonical timestamps (computed in Node — no CONVERT_TZ needed)
+  const now = new Date();
+  cols.push('created_at_utc'); vals.push(fmt_in_tz(now, 'UTC'));
+  cols.push('created_at_mtn'); vals.push(fmt_in_tz(now, reporting_tz));
+  const col_list = cols.map(function (c) { return '`' + c + '`'; }).join(', ');
+  const placeholders = cols.map(function () { return '?'; }).join(', ');
+  const sql = 'INSERT INTO `' + table + '` (' + col_list + ') VALUES (' + placeholders + ')';
+  await pool.query(sql, vals);
+  return true;
+}
+
 function make_event_ingest(opts) {
   const pool = opts.pool;
   const table = opts.table;
@@ -32,24 +57,7 @@ function make_event_ingest(opts) {
   const reporting_tz = opts.reporting_tz || DEFAULT_TZ;
   return async function event_ingest(req, res) {
     try {
-      const body = (req && req.body) || {};
-      const cols = [];
-      const vals = [];
-      Object.keys(body).forEach(function (k) {
-        if (allow.has(k) && body[k] !== undefined) {
-          cols.push(k);
-          vals.push(body[k] === '' ? null : body[k]);
-        }
-      });
-      if (!cols.length) { res.status(204).end(); return; }
-      // stamp the two canonical timestamps (computed in Node — no CONVERT_TZ needed)
-      const now = new Date();
-      cols.push('created_at_utc'); vals.push(fmt_in_tz(now, 'UTC'));
-      cols.push('created_at_mtn'); vals.push(fmt_in_tz(now, reporting_tz));
-      const col_list = cols.map(function (c) { return '`' + c + '`'; }).join(', ');
-      const placeholders = cols.map(function () { return '?'; }).join(', ');
-      const sql = 'INSERT INTO `' + table + '` (' + col_list + ') VALUES (' + placeholders + ')';
-      await pool.query(sql, vals);
+      await insert_event(pool, table, allow, reporting_tz, (req && req.body) || {});
       res.status(204).end();
     } catch (e) {
       console.error('[analytics] ingest error:', e.message);
@@ -57,4 +65,4 @@ function make_event_ingest(opts) {
     }
   };
 }
-module.exports = { make_event_ingest, fmt_in_tz };
+module.exports = { make_event_ingest, insert_event, fmt_in_tz };

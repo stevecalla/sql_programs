@@ -1,0 +1,102 @@
+version: "1.0"
+owner: "USA Triathlon — Email Queue Assistant"
+timezone: "America/Denver"   # Mountain Time; created_at_mtn is already in this tz
+
+dataset:
+  table: salesforce_email_queue_events
+  grain: one row per usage event
+  description: >
+    Usage analytics for the Salesforce Email Queue Assistant (a read-only POC that helps USA
+    Triathlon staff draft replies to emails in Salesforce queues). Each row is one action. No member
+    PII: `actor` is the staff operator's username; `queue` is the Salesforce queue name. There is no
+    Case id (it points at member data and is omitted by design).
+
+rules:
+  - READ ONLY. Only SELECT / WITH queries. Never write, update, delete, or alter data.
+  - PREFER AGGREGATION (COUNT / COUNT(DISTINCT) / SUM / AVG / GROUP BY). For "list / show / recent / last / in a table" requests a small ORDER BY ... LIMIT row listing is allowed — do NOT refuse it; the LIMIT cap prevents unbounded dumps.
+  - Use created_at_mtn (Mountain Time) for date grouping and today/this week/this month.
+  - When returning a date/time, format it with DATE_FORMAT(created_at_mtn, ...) to a Mountain-Time string; never select created_at_utc and never return a raw DATE/DATETIME (it serializes as UTC).
+  - Reference only the table salesforce_email_queue_events.
+  - If a question requires data NOT in this table (Salesforce case contents, members, payments, or any other table), DECLINE — say it is out of scope. Never answer with an unrelated query.
+  - dashboard_view rows are logged server-side when /metrics is opened and have NULL client fields; exclude them from "user activity/visits".
+  - is_test=1 rows are deliberate test runs (sessions opened with ?metrics_test=1). Exclude them from real usage unless asked, e.g. WHERE (is_test IS NULL OR is_test=0).
+
+# event_name values (the action each row represents)
+events:
+  page_view:        the web app was loaded (the visit signal)
+  dashboard_view:   the internal /metrics dashboard was opened (exclude from user visits)
+  queue_viewed:     an operator selected a Salesforce queue
+  thread_opened:    an operator opened a case/email thread
+  ai_call:          an AI request — see ai_action (respond | ask | acknowledge | triage)
+  acknowledge_sent: a short holding/acknowledgement reply was generated
+  attachment_viewed: an operator viewed an attachment (see attachment_type)
+  correction_added: an operator added a correction that grounds future AI output (see correction_scope)
+  context_changed:  an operator uploaded/excluded/included a context knowledge file (see context_action)
+  soql_run:         an operator ran a read-only SOQL query in the app
+  error:            an error occurred (see error_type)
+
+columns:
+  created_at_mtn: DATETIME in Mountain Time — use for all date grouping.
+  created_at_utc: DATETIME in UTC — prefer created_at_mtn for reporting.
+  event_name:     the action (see events).
+  actor:          the staff operator's username (NOT a member). COUNT(DISTINCT actor) = number of operators.
+  page_path:      URL path the event came from (/ app, /metrics dashboard).
+  visitor_id:     anonymous per-browser id (client events only).
+  is_returning:   1 if the browser was seen before, else 0.
+  queue:          Salesforce queue name (e.g. Coaching, Event Services). queue_id is its Group id.
+  queue_id:       Salesforce Group (queue) id.
+  thread_msg_count: number of messages in the opened thread.
+  has_attachment: 1 if the opened thread had an attachment.
+  ai_action:      respond | ask | acknowledge | triage (only on event_name='ai_call').
+  ai_provider:    chatgpt | claude.
+  ai_model:       resolved model string.
+  ai_verdict:     "for respond: DRAFT or NEED_INFO; for triage: the status token."
+  ai_intent:      triage classification / detected intent.
+  ai_latency_ms:  round-trip time of the AI call in milliseconds. AVG for average latency.
+  ai_prompt_chars: size of the assembled prompt (no content stored).
+  ai_reply_chars: size of the generated draft/answer (no content stored).
+  ai_used_images: 1 if vision/image context was attached.
+  ai_grounded:    1 if knowledge/context was injected into the prompt.
+  ai_correction_count: number of operator corrections injected.
+  ai_ok:          1 = AI call succeeded, 0 = failed (see ai_error).
+  ai_error:       error category when ai_ok=0 (no content).
+  attachment_type: image | pdf | csv | xlsx | text (only on attachment_viewed).
+  correction_scope: me | queue | global (only on correction_added).
+  context_action: upload | exclude | include (only on context_changed).
+  soql_chars:     length of an executed read-only SOQL (no content).
+  client_tz:      operator's timezone (client events).
+  local_hour:     0-23 operator-local hour.
+  local_dow:      0=Sun..6=Sat operator-local day of week.
+  viewport:       mobile or desktop.
+  theme:          light / dark / auto.
+  error_type:     kind of error when event_name='error'.
+  is_test:        1 = deliberate test run (?metrics_test=1); exclude from real usage unless asked.
+  is_demo:        1 = demo/sample data.
+  source:         "where activity originated: web | cli | demo."
+
+metrics:
+  visits:            COUNT(*) WHERE event_name='page_view'
+  operators:         COUNT(DISTINCT actor)
+  threads_opened:    COUNT(*) WHERE event_name='thread_opened'
+  ai_calls:          COUNT(*) WHERE event_name='ai_call'
+  ai_success_rate:   AVG(ai_ok) WHERE event_name='ai_call'
+  avg_latency_ms:    AVG(ai_latency_ms) WHERE event_name='ai_call'
+  grounded_rate:     AVG(ai_grounded) WHERE event_name='ai_call'
+  by_provider:       GROUP BY ai_provider WHERE event_name='ai_call'
+  by_verdict:        GROUP BY ai_verdict WHERE event_name='ai_call' AND ai_action='respond'
+  by_queue:          GROUP BY queue
+  acknowledgements:  COUNT(*) WHERE event_name='acknowledge_sent'
+  attachments:       COUNT(*) WHERE event_name='attachment_viewed', grouped by attachment_type
+  errors:            COUNT(*) WHERE event_name='error', grouped by error_type
+
+example_questions:
+  - How many AI calls this week, and what % succeeded?
+  - What is the average AI latency by provider?
+  - How many drafts vs need-info verdicts in the last 7 days?
+  - Which queues have the most AI activity this month?
+  - Who are the most active operators, and when were they last active?
+  - How many acknowledgements were sent yesterday?
+  - What share of AI calls were grounded with context?
+  - How many attachments were viewed, by type?
+  - What time of day is AI usage highest (Mountain Time)?
+  - How many corrections were added, by scope?

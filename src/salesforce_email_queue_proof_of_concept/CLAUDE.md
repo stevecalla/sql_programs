@@ -127,5 +127,33 @@ identity, §12 AI tools, §13 API limits), `mvp_plan.md`, `plan.md` (full roadma
   `ai/faq.js` `load_context_images()` reads png/jpeg/gif/webp from the context folder (<=4 imgs, <=4MB);
   `respond`/`ask` pass them via routes. Uploaded context images become real grounding.
 - - Full productionization plan: `plans_and_notes/path_to_production.md` (SF writes, per-user identity, DB).
+- **Metrics & admin** (mirrors transform; reuses `utilities/analytics/*`): admin-gated `/metrics`
+  dashboard + `/admin` hub, served by `server_8019` and gated by the existing session with role
+  `admin` (`auth/require_auth.js` adds `require_admin` + `require_admin_page` — no second cookie).
+  Per-app config in `metrics/metrics_config.js` (APP/TABLE/COLUMNS); aggregation in
+  `metrics/metrics_report.js`; CLI `metrics/metrics_cli.js` (stats/size/purge-test). Table DDL:
+  `src/queries/create_drop_db_table/query_create_salesforce_email_queue_events_table.js` (created on
+  startup via `ensure_table`). **AI-call events are logged server-side** in `web/routes.js`
+  (provider/action/verdict/latency/ok/grounded — no content); browser logs page/queue/thread/attachment/
+  correction/context/soql via `metrics_client.js` (loaded in `index.html`). **`?metrics_test=1`** stamps
+  `is_test=1`; purge via `/admin`, CLI, or `npm run email_queue_metrics_purge_test`. **No member PII**
+  (counts/enums + staff username + queue name only; no Case id). Writes hit only the local MySQL DB.
+- **Queue allow-list** (`store/queue_access.js`, external `queue_access.json`, override
+  `EQ_QUEUE_ACCESS_FILE`): general default + per-user overrides; admins bypass. Enforced in
+  `/api/queues` (filter) + `/api/cases`/`/api/status-counts` (403). Managed via `/api/admin/queue-access`.
+- **Ask your data** (ported from transform `metrics/ask/*` — identical require depths, so near-verbatim):
+  `ask.js` (plan→guarded SELECT→answer), `sql_guard.js` (read-only enforcement: single SELECT/WITH,
+  allow-listed table, blocked keywords stripped from comments/strings, row cap), `db.js` (read-only pool;
+  prefers `ASK_DB_*`, else analytics creds), `tools.js`, `context.js` + `context/events_context.yaml`
+  (email-queue schema grounding), `live.js` (live snapshot from build_report), `corrections.js` +
+  `ask_log.js` (MySQL tables `<APP>_ask_corrections` / `<APP>_ask_log`, created on startup), `models.js`,
+  `providers/{openai,anthropic}.js`. Server routes (require_admin): `/api/metrics-ask`, `-ask-models`,
+  `-ask-correct`, `-ask-thread`. Dashboard has the Ask panel (model picker, SQL-mode toggle, chips,
+  results table + chart, save-correction, history) + a "most recent active users" table
+  (`recent_operators` in metrics_report). Consistent footer (App · Admin · Metrics, all `?metrics_test=1`)
+  on all three pages.
+- New test suites: `tests/metrics.test.js`, `tests/queue_access.test.js`, `tests/analytics.test.js`,
+  `tests/ask.test.js` (71 tests / 12 files total). All pure (fake pool / temp JSON / injected provider —
+  no DB or network needed); `ask.test.js` covers the SQL guard + the ask() brain end to end.
 - Auth: `.env` accounts carry a **role** (mirrors transform `admin_store` env+store pattern):
   `SF_EMAIL_QUEUE_ADMIN_USER/PASS` -> `a

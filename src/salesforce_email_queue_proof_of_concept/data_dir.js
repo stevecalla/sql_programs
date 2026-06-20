@@ -7,8 +7,12 @@
  * That base is usat/data/ on linux/mac, so data lives OUTSIDE the sql_programs repo and member
  * data (uploaded context, future corrections/history) is never committed.
  *
- *   <determineOSPath()>/email_queue/
- *     context/   user-provided knowledge the AI reads (_global + <queue_slug>)
+ *   <determineOSPath()>/usat_email_queue/
+ *     context/        user-provided knowledge the AI reads (_global + <queue_slug>)
+ *     auth.json       local user store
+ *     corrections.json operator corrections
+ *     queue_access.json queue allow-list (general + per-user)
+ *     config.json     non-secret app config (context_dir override, exclusions)
  *
  * Created automatically (mkdir recursive) on first use. Async, because determineOSPath() is async.
  * Overrides: EQ_DATA_DIR (project root) and EQ_CONTEXT_DIR (just the context folder).
