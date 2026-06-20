@@ -40,10 +40,13 @@ Create a login first: set `.env` accounts (always valid, carry a role for future
 - `SF_PROD_*` — Salesforce credentials (reads run as the integration user).
 - `OPENAI_API_KEY` (default model `gpt-4o-mini`) and/or `ANTHROPIC_API_KEY` (Claude).
 - Optional model overrides: `OPENAI_MODEL`, `ANTHROPIC_MODEL`.
-- Web-app logins (`.env` accounts, always valid, each carries a role for future access control):
-  - `SF_EMAIL_QUEUE_ADMIN_USER` / `SF_EMAIL_QUEUE_ADMIN_PASS` — role `admin`.
+- Web-app logins (`.env` accounts, always valid, each carries a role used for access control):
+  - `SF_EMAIL_QUEUE_ADMIN_USER` / `SF_EMAIL_QUEUE_ADMIN_PASS` — role `admin` (also gates `/metrics` + `/admin`).
   - `SF_EMAIL_QUEUE_USER` / `SF_EMAIL_QUEUE_PASS` — role `user`.
   - (Stored, scrypt-hashed users can also be added with `node src/admin.js add`.)
+- Analytics DB (optional; same local MySQL the other servers use via `utilities/config.js`):
+  `LOCAL_HOST`, `LOCAL_MYSQL_USER`, `LOCAL_MYSQL_PASSWORD`, `LOCAL_USAT_SALES_DB`. If unset/unreachable,
+  analytics simply no-ops (the app is unaffected). Disable entirely with `METRICS_OFF=true`.
 
 ## Attachment parsing (optional)
 
@@ -109,6 +112,49 @@ Login (auth-gated) - 3 **resizable** panes:
   returns the not-enabled message); Ask with **preset chips** + running **history**; **mock** case-status
   update (not connected); **context upload** (drop files the AI will read).
 
+## Metrics & admin (usage analytics)
+
+Two admin-only pages, modeled on the transform app's `/metrics` + `/admin` and reusing the shared
+analytics core (`utilities/analytics/*`). Both are gated by the existing session with role `admin`
+(no second login); admins also get **📊 Metrics** and **⚙ Admin** links in the app header.
+
+- **`/metrics`** — usage dashboard. KPI cards + Chart.js charts for the **AI flow**: calls by provider
+  (ChatGPT/Claude), respond **verdicts** (DRAFT/NEED_INFO), success rate + latency, grounded %, calls
+  by queue and by action (respond/ask/acknowledge/triage), activity by day, top operators, AI errors,
+  attachments viewed, and a **data-health** strip. Pick a window (1/7/30/90 days).
+- **`/admin`** — config-status strip (booleans only — never secrets) plus the **queue allow-list**:
+  set the **general default** (all queues, or only selected) and **per-user overrides**. Non-admins
+  only see/READ queues they're permitted (`/api/queues` filters; `/api/cases` 403s otherwise). Admins
+  always see everything. Also a **🧪 Purge test rows** button.
+
+**Test mode + purge.** Open the app (or the pages) with **`?metrics_test=1`** to flag the whole
+browser session — every event is stamped `is_test=1` so test traffic is separable and **deletable**
+later via `/admin` → Purge test rows, the CLI (`node metrics/metrics_cli.js purge-test`), or
+`npm run email_queue_metrics_purge_test`.
+
+**What's tracked.** AI-call events are logged **server-side** (provider, action, verdict, latency,
+success, grounded, images, corrections applied — never message content); the browser logs page views,
+queue/thread opens, attachment views, corrections, context changes and SOQL runs. Events go to the
+`salesforce_email_queue_events` table (created on startup; created by
+`src/queries/create_drop_db_table/query_create_salesforce_email_queue_events_table.js`). **No member
+PII** is stored — no names, bodies, addresses, or Case ids; just counts/enums, the operator's staff
+username, and the queue name. Analytics writes go only to the local MySQL DB, never to Salesforce.
+
+**Ask your data (AI/search).** The dashboard has an "Ask your data" panel (ported from the transform):
+type a natural-language question and the assistant plans a **read-only** MySQL `SELECT` over the events
+table, runs it behind a hardened guard (`metrics/ask/sql_guard.js` — single SELECT/WITH only, allow-listed
+table, blocked keywords even inside comments/strings, enforced row cap), then summarizes the rows (with a
+chart when the shape fits). It also supports a **SQL mode** toggle (run your own read-only SQL), a model
+picker (ChatGPT default; Claude Sonnet/Haiku), follow-up conversation history, and **corrections** you can
+save to ground future answers. Questions/answers are logged to `salesforce_email_queue_ask_log` and
+corrections to `salesforce_email_queue_ask_corrections` (no member PII — questions are admin-typed). The
+brain queries through a read-only pool that prefers a dedicated read-only DB user if `ASK_DB_*` is set,
+otherwise reuses the analytics creds (the guard is the enforcement layer either way). A "most recent active
+users" table sits near the top of the dashboard. All three pages (App · `/admin` · `/metrics`) share a
+footer linking every path with `?metrics_test=1`.
+
+CLI: `node metrics/metrics_cli.js stats [days] | size | purge-test` (also `npm run email_queue_metrics_stats`).
+
 ## Theme
 
 The web app supports auto / light / dark, matching the transform app (USAT red accent, navy brand).
@@ -118,10 +164,14 @@ Use the "Theme:" button in the header (or on the login screen); the choice persi
 
 - Dependencies (incl. optional parsers `pdf-parse`, `mammoth`, `xlsx`) live in the **repo-root**
   `package.json`; run `npm install` at the repo root. This folder has no `package.json` by design.
-- **No sensitive data in the repo.** Logins (`auth.json`), operator `corrections.json`, and uploaded
-  context all live OUTSIDE the repo via `data_dir.js` -> `utilities/determineOSPath()`
-  (`<base>/usat_email_queue/`). There is no in-repo data folder. `corrections` is slated to move to a DB table (see `plans_and_notes/path_to_production.md`,
-  Track C). Overrides: `EQ_DATA_DIR`, `EQ_CONTEXT_DIR`, `EQ_USERS_FILE`, `EQ_CORRECTIONS_FILE`.
+- **No sensitive data in the repo.** Logins (`auth.json`), operator `corrections.json`, the queue
+  allow-list (`queue_access.json`), and uploaded context all live OUTSIDE the repo via `data_dir.js` ->
+  `utilities/determineOSPath()` (`<base>/usat_email_queue/`). There is no in-repo data folder.
+  `corrections` is slated to move to a DB table (see `plans_and_notes/path_to_production.md`, Track C).
+  Overrides: `EQ_DATA_DIR`, `EQ_CONTEXT_DIR`, `EQ_USERS_FILE`, `EQ_CORRECTIONS_FILE`, `EQ_QUEUE_ACCESS_FILE`.
+- **Usage analytics** (the `salesforce_email_queue_events` table) store counts/enums + the operator's
+  staff username + queue name only — never member names, email bodies, addresses, or Case ids. Writes
+  go only to the local MySQL analytics DB, never to Salesforce.
 - AI calls use your **commercial OpenAI/Anthropic API** keys: under those terms inputs/outputs are
   **not used for training** by default; retention is short (OpenAI ~30d, Anthropic ~7d) and can be
   **zero** with a Zero-Data-Retention (ZDR) agreement.
@@ -131,5 +181,6 @@ Use the "Theme:" button in the header (or on the login screen); the choice persi
 
 ## Tests
 
-`node menu.js test` (or `node --test tests/*.test.js`) runs all suites - **50 tests across 8 files**:
+`node menu.js test` (or `node --test tests/*.test.js`) runs all suites - **71 tests across 12 files**
+(adds `metrics`, `queue_access`, `analytics`, `ask`):
 unit (text/threads/extract/ai/faq+context/auth) p

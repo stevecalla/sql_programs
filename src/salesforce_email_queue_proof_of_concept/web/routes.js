@@ -5,9 +5,10 @@ const sf = require('../sf');
 const ai = require('../ai');
 const faq = require('../ai/faq');
 const corrections = require('../store/corrections');
+const queue_access = require('../store/queue_access');
 const store = require('../auth/auth_store');
 const session = require('../auth/session');
-const { require_auth } = require('../auth/require_auth');
+const { require_auth, require_admin } = require('../auth/require_auth');
 
 let _conn = null;
 async function get_conn() {
@@ -38,7 +39,24 @@ function parse_delimited(text, delim) {
   return rows;
 }
 
-function mount(app) {
+function mount(app, deps) {
+  // Server-side analytics logger (injected by the server, which owns the DB pool). No-op in tests /
+  // when analytics is off, so mount(app) keeps working unchanged.
+  const analytics = (deps && deps.analytics) || { log: function () {}, enabled: function () { return false; } };
+  // Normalize a provider id to the label stored in analytics.
+  function provider_label(p) { return p === 'anthropic' ? 'claude' : 'chatgpt'; }
+  // Fire-and-forget AI-call event (never throws, never blocks the response).
+  function log_ai(req, body, fields) {
+    try {
+      analytics.log(Object.assign({
+        event_name: 'ai_call', actor: req.user,
+        queue: (body && body.queue) || '', queue_id: (body && body.queueId) || '',
+        ai_provider: provider_label(body && body.provider),
+        is_test: (body && (body._test === 1 || body._test === '1')) ? 1 : 0
+      }, fields || {}));
+    } catch (e) { /* analytics must never break the app */ }
+  }
+
   app.post('/api/login', function (req, res) {
     const b = req.body || {};
     const v = store.valid_user(b.user, b.pass);
@@ -51,7 +69,14 @@ function mount(app) {
   app.get('/api/me', require_auth, function (req, res) { res.json({ ok: true, user: req.user, role: req.role }); });
 
   app.get('/api/queues', require_auth, async function (req, res) {
-    try { const c = await get_conn(); res.json({ ok: true, queues: await sf.list_queues(c, { with_open_counts: true }), instance_url: c.instanceUrl || '' }); } catch (e) { err(res, e); }
+    try {
+      const c = await get_conn();
+      const all = await sf.list_queues(c, { with_open_counts: true });
+      // Enforce the allow-list: non-admins only see queues they're permitted (general default or a
+      // per-user override). Admins see all. Managed from /admin.
+      const visible = queue_access.filter_queues(all, req.user, req.role);
+      res.json({ ok: true, queues: visible, instance_url: c.instanceUrl || '' });
+    } catch (e) { err(res, e); }
   });
   app.get('/api/statuses', require_auth, async function (req, res) {
     try {
@@ -62,6 +87,10 @@ function mount(app) {
   });
   app.get('/api/cases', require_auth, async function (req, res) {
     try {
+      // Allow-list guard: a non-admin may not read cases from a queue they aren't permitted.
+      if (req.query.queue && !queue_access.is_allowed(req.user, req.role, req.query.queue)) {
+        return res.status(403).json({ ok: false, error: 'queue not permitted' });
+      }
       const c = await get_conn();
       const lim = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 200);
       const cases = await sf.list_queue_cases(c, { queue_id: req.query.queue, status: req.query.status || 'open', limit: lim, date_from: req.query.from || '', date_to: req.query.to || '', date_field: req.query.field || 'LastModifiedDate' });
@@ -73,7 +102,12 @@ function mount(app) {
     } catch (e) { err(res, e); }
   });
   app.get('/api/status-counts', require_auth, async function (req, res) {
-    try { res.json(Object.assign({ ok: true }, await sf.status_counts(await get_conn(), req.query.queue))); } catch (e) { err(res, e); }
+    try {
+      if (req.query.queue && !queue_access.is_allowed(req.user, req.role, req.query.queue)) {
+        return res.status(403).json({ ok: false, error: 'queue not permitted' });
+      }
+      res.json(Object.assign({ ok: true }, await sf.status_counts(await get_conn(), req.query.queue)));
+    } catch (e) { err(res, e); }
   });
   app.get('/api/thread', require_auth, async function (req, res) {
     try { res.json({ ok: true, thread: await sf.get_thread(await get_conn(), req.query.caseId) }); } catch (e) { err(res, e); }
@@ -120,23 +154,59 @@ function mount(app) {
   });
 
   app.post('/api/ai/respond', require_auth, async function (req, res) {
+    const b = req.body || {};
+    const t0 = Date.now();
     try {
-      const b = req.body || {};
-      const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, fetch_attachments: true, faq: await faq.load_knowledge(b.queue), images: await faq.load_context_images(b.queue), corrections: corrections.grounding_lines(12, { queue: b.queue, user: req.user }) });
+      const knowledge = await faq.load_knowledge(b.queue);
+      const images = await faq.load_context_images(b.queue);
+      const corr = corrections.grounding_lines(12, { queue: b.queue, user: req.user });
+      const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, fetch_attachments: true, faq: knowledge, images: images, corrections: corr });
+      log_ai(req, b, {
+        ai_action: 'respond', ai_verdict: (r.verdict || '').toUpperCase(),
+        ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
+        ai_reply_chars: (r.body || '').length, ai_used_images: images && images.length ? 1 : 0,
+        ai_grounded: (knowledge && knowledge.length) || (images && images.length) || (corr && corr.length) ? 1 : 0,
+        ai_correction_count: (corr && corr.length) || 0, ai_ok: 1
+      });
       res.json(Object.assign({ ok: true }, r));
-    } catch (e) { err(res, e); }
+    } catch (e) {
+      log_ai(req, b, { ai_action: 'respond', ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) });
+      err(res, e);
+    }
   });
   app.post('/api/ai/ask', require_auth, async function (req, res) {
+    const b = req.body || {};
+    const action = b.action === 'acknowledge' ? 'acknowledge' : 'ask';
+    const t0 = Date.now();
     try {
-      const b = req.body || {};
-      const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, question: b.question, history: b.history, faq: await faq.load_knowledge(b.queue), images: await faq.load_context_images(b.queue), corrections: corrections.grounding_lines(12, { queue: b.queue, user: req.user }) });
+      const knowledge = await faq.load_knowledge(b.queue);
+      const images = await faq.load_context_images(b.queue);
+      const corr = corrections.grounding_lines(12, { queue: b.queue, user: req.user });
+      const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, question: b.question, history: b.history, faq: knowledge, images: images, corrections: corr });
+      log_ai(req, b, {
+        ai_action: action, ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
+        ai_reply_chars: (r.answer || '').length, ai_used_images: images && images.length ? 1 : 0,
+        ai_grounded: (knowledge && knowledge.length) || (images && images.length) || (corr && corr.length) ? 1 : 0,
+        ai_correction_count: (corr && corr.length) || 0, ai_ok: 1
+      });
       res.json(Object.assign({ ok: true }, r));
-    } catch (e) { err(res, e); }
+    } catch (e) {
+      log_ai(req, b, { ai_action: action, ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) });
+      err(res, e);
+    }
   });
 
   app.post('/api/ai/triage', require_auth, async function (req, res) {
-    try { const b = req.body || {}; const r = await ai.triage_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, faq: await faq.load_knowledge(b.queue) }); res.json(Object.assign({ ok: true }, r)); }
-    catch (e) { err(res, e); }
+    const b = req.body || {};
+    const t0 = Date.now();
+    try {
+      const r = await ai.triage_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, faq: await faq.load_knowledge(b.queue) });
+      log_ai(req, b, { ai_action: 'triage', ai_intent: r.status || '', ai_verdict: r.status || '', ai_latency_ms: Date.now() - t0, ai_ok: 1 });
+      res.json(Object.assign({ ok: true }, r));
+    } catch (e) {
+      log_ai(req, b, { ai_action: 'triage', ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) });
+      err(res, e);
+    }
   });
   app.get('/api/corrections', require_auth, function (req, res) { res.json({ ok: true, corrections: corrections.list(false) }); });
   app.post('/api/corrections', require_auth, function (req, res) {
@@ -181,6 +251,66 @@ function mount(app) {
   app.get('/api/context/file', require_auth, async function (req, res) {
     try { res.json(Object.assign({ ok: true }, await faq.read_context_file(req.query.scope, req.query.queue, req.query.name))); }
     catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // ---- /admin: queue allow-list management (admin only) ----
+  // GET returns every Salesforce queue + the current allow-list + the app's named users, so the
+  // admin page can render checkboxes for the global default and per-user overrides.
+  app.get('/api/admin/queue-access', require_admin, async function (req, res) {
+    try {
+      const c = await get_conn();
+      const queues = await sf.list_queues(c, { with_open_counts: false });
+      res.json({ ok: true, queues: queues, access: queue_access.get(), users: store.list_users().map(function (u) { return u.user; }) });
+    } catch (e) { err(res, e); }
+  });
+  // POST sets the global default and/or a per-user override.
+  //   { default: "all" | [queueId...] }                  -> set global default
+  //   { user: "<name>", queues: "all" | [queueId...] }   -> set a per-user override
+  //   { user: "<name>", clear: true }                     -> remove a per-user override
+  app.post('/api/admin/queue-access', require_admin, function (req, res) {
+    try {
+      const b = req.body || {};
+      if (b.default !== undefined) queue_access.set_default(b.default);
+      if (b.user && b.clear) queue_access.clear_user(b.user);
+      else if (b.user && b.queues !== undefined) queue_access.set_user(b.user, b.queues);
+      res.json({ ok: true, access: queue_access.get() });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // ---- /admin: user management (Access pane, admin only) ----
+  // GET returns .env recovery accounts (non-removable) + stored users, each with role.
+  app.get('/api/admin/users', require_admin, function (req, res) {
+    try {
+      const env = store.env_accounts().map(function (u) { return { user: u.user, role: u.role, source: 'env', removable: false }; });
+      const stored = store.list_users().map(function (u) { return { user: u.user, role: u.role || 'user', sf_email: u.sf_email || '', source: 'stored', removable: true }; });
+      res.json({ ok: true, users: env.concat(stored) });
+    } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  // POST add/update a stored user: { user, pass, role: 'admin'|'user', sf_email? }. Also used for reset (same user + new pass).
+  app.post('/api/admin/users', require_admin, function (req, res) {
+    try {
+      const b = req.body || {};
+      const user = String(b.user || '').trim();
+      const pass = String(b.pass || '');
+      if (!user) return res.status(400).json({ ok: false, error: 'username required' });
+      if (pass.length < 4) return res.status(400).json({ ok: false, error: 'password must be at least 4 characters' });
+      const role = b.role === 'admin' ? 'admin' : 'user';
+      const r = store.add_user(user, pass, b.sf_email != null ? String(b.sf_email) : null, role);
+      res.json({ ok: true, user: r.user, role: r.role });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  // POST remove a stored user: { user }. .env accounts can't be removed.
+  app.post('/api/admin/users/remove', require_admin, function (req, res) {
+    try {
+      const user = String((req.body && req.body.user) || '').trim();
+      if (!user) return res.status(400).json({ ok: false, error: 'username required' });
+      const isEnv = store.env_accounts().some(function (u) { return u.user === user; });
+      if (isEnv) return res.status(400).json({ ok: false, error: 'cannot remove a .env recovery account' });
+      const removed = store.remove_user(user);
+      // also drop any per-user queue override so we don't leave orphaned access entries
+      try { queue_access.clear_user(user); } catch (e) { /* ignore */ }
+      res.json({ ok: removed, error: removed ? null : 'no such user' });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
   // Salesforce writes are intentionally disabled in this POC.

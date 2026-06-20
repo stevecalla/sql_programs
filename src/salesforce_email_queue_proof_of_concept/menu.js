@@ -57,7 +57,7 @@ function run(cmd, args) {
   });
 }
 
-const ALL_TESTS = ['tests/text_clean.test.js', 'tests/sf_threads.test.js', 'tests/extract.test.js', 'tests/ai.test.js', 'tests/faq_corrections.test.js', 'tests/auth.test.js'];
+const ALL_TESTS = ['tests/text_clean.test.js', 'tests/sf_threads.test.js', 'tests/extract.test.js', 'tests/ai.test.js', 'tests/faq_corrections.test.js', 'tests/auth.test.js', 'tests/metrics.test.js', 'tests/queue_access.test.js', 'tests/analytics.test.js', 'tests/ask.test.js', 'tests/admin_users.test.js'];
 
 async function run_all_tests() {
   const failed = [];
@@ -81,6 +81,11 @@ const SECTIONS = [
     { label: 'AI layer tests', desc: 'context assembly + verdict parsing (mock provider).', cli: 'node --test tests/ai.test.js', action: 'test_ai' },
     { label: 'FAQ + corrections tests', desc: 'faq loader + corrections store/grounding.', cli: 'node --test tests/faq_corrections.test.js', action: 'test_faq' },
     { label: 'Auth tests', desc: 'scrypt hashing + signed-cookie sessions.', cli: 'node --test tests/auth.test.js', action: 'test_auth' },
+    { label: 'Metrics config + DDL tests', desc: 'metrics_config + events-table DDL contract.', cli: 'node --test tests/metrics.test.js', action: 'test_metrics' },
+    { label: 'Queue access tests', desc: 'allow-list default + per-user overrides + admin bypass.', cli: 'node --test tests/queue_access.test.js', action: 'test_qa' },
+    { label: 'Analytics tests', desc: 'ingest whitelist/stamp + metrics report contract (fake pool).', cli: 'node --test tests/analytics.test.js', action: 'test_analytics' },
+    { label: 'Ask-your-data tests', desc: 'SQL guard (read-only) + ask() brain with injected provider/pool.', cli: 'node --test tests/ask.test.js', action: 'test_ask' },
+    { label: 'Admin users tests', desc: 'auth_store roles + .env recovery accounts (Access pane).', cli: 'node --test tests/admin_users.test.js', action: 'test_admin_users' },
     { label: 'Web E2E (Playwright)', desc: 'Browser tests of the web UI (stubs the API). One-time: npx playwright install chromium.', cli: 'npx playwright test -c e2e/playwright.config.js', action: 'e2e' }
   ] },
   { label: 'Salesforce (read-only)', color: CYAN, items: [
@@ -94,8 +99,13 @@ const SECTIONS = [
     { label: 'View corrections', desc: 'Operator corrections currently grounding the AI.', cli: 'node src/cli.js corrections', action: 'view_corrections' },
     { label: 'View context files', desc: 'Reference files the AI reads from data/context/ (md, csv, pdf, docx, xlsx).', cli: 'node src/cli.js context', action: 'view_context' }
   ] },
+  { label: 'Metrics & analytics (needs the local analytics DB)', color: YEL, items: [
+    { label: 'Metrics stats (last 7 days)', desc: 'Text usage report from the analytics table (AI calls, providers, verdicts, queues).', cli: 'node metrics/metrics_cli.js stats', action: 'metrics_stats' },
+    { label: 'Metrics table size', desc: 'Row count + size + by-year breakdown of the events table.', cli: 'node metrics/metrics_cli.js size', action: 'metrics_size' },
+    { label: 'Purge TEST rows (is_test=1)', desc: 'Delete deliberate test-run rows (browser opened with ?metrics_test=1). Real + demo data untouched.', cli: 'node metrics/metrics_cli.js purge-test', action: 'metrics_purge_test' }
+  ] },
   { label: 'Server & users', color: BLU, items: [
-    { label: 'Start web app (port 8019)', desc: 'Express server + single-page UI for reviewers. Ctrl-C to stop.', cli: 'node ../../server_salesforce_email_queue_8019.js', action: 'server' },
+    { label: 'Start web app (port 8019)', desc: 'Express server + SPA + /metrics dashboard + /admin hub. Ctrl-C to stop.', cli: 'node ../../server_salesforce_email_queue_8019.js', action: 'server' },
     { label: 'Add / update a user', desc: 'Create a web app login (username + password).', cli: 'node src/admin.js add', action: 'add_user' },
     { label: 'List users', desc: 'Show web app logins.', cli: 'node src/admin.js list', action: 'list_users' },
     { label: 'Reset a user password', desc: 'Set a new password for an existing login (passwords are hashed, never shown).', cli: 'node src/admin.js passwd', action: 'reset_pw' },
@@ -111,7 +121,15 @@ const ACTIONS = {
   test_ai: function () { return run('node', ['--test', 'tests/ai.test.js']); },
   test_faq: function () { return run('node', ['--test', 'tests/faq_corrections.test.js']); },
   test_auth: function () { return run('node', ['--test', 'tests/auth.test.js']); },
+  test_metrics: function () { return run('node', ['--test', 'tests/metrics.test.js']); },
+  test_qa: function () { return run('node', ['--test', 'tests/queue_access.test.js']); },
+  test_analytics: function () { return run('node', ['--test', 'tests/analytics.test.js']); },
+  test_ask: function () { return run('node', ['--test', 'tests/ask.test.js']); },
+  test_admin_users: function () { return run('node', ['--test', 'tests/admin_users.test.js']); },
   e2e: function () { return run('npx', ['playwright', 'test', '-c', 'e2e/playwright.config.js']); },
+  metrics_stats: function () { return run('node', ['metrics/metrics_cli.js', 'stats']); },
+  metrics_size: function () { return run('node', ['metrics/metrics_cli.js', 'size']); },
+  metrics_purge_test: function () { return run('node', ['metrics/metrics_cli.js', 'purge-test']); },
   verify_prod: function () { return run('node', ['verify_sf_access.js', 'prod']); },
   verify_sandbox: function () { return run('node', ['verify_sf_access.js', 'sandbox']); },
   list_queues: function () { return run('node', ['src/cli.js', 'queues']); },
