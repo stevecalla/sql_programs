@@ -242,3 +242,16 @@ E2E scaffold** in `e2e/` (stubs the API; run `npx playwright test -c e2e/playwri
   (`create_app`/`start_server`, cors, no-cache, `/api/status`, dual-stack `app.listen` so the Cloudflare
   tunnel reaches it over IPv6 localhost, optional ngrok off by default).
 - Docs updated (README configuration + CLAUDE update notes). Tests: **43/43**.
+
+---
+
+## Round 11 update (QA pass: dead-code sweep, docs, tests)
+
+- **Dead code removed:** `summaryChips()` (web UI, unused after the queue redesign) and
+  `corrections.set_active()` (defined/exported, never called). Confirmed no leftovers from removed
+  features (register/signup, context-extra/context-dir, set_context_dir, delete-from-disk).
+- **Tests +5 -> 50 across 8 suites:** `cases_with_links` (link detection), context **exclude/include**
+  (file stays on disk, drops from grounding), type-aware `read_context_file` (text vs table),
+  `find_context_path` missing-file error, and corrections **scope** (me/queue/global) grounding.
+- **Docs synced:** README + CLAUDE test counts; context model (single external folder, exclude toggle,
+  vision, choose-file/folder), auth roles, env accounts, and `path_to_production` Tracks A-F.

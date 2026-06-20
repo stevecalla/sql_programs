@@ -19,7 +19,7 @@ web app (`server_salesforce_email_queue_8019.js`). **Nothing is ever written/sen
 - E — Express server + auth-gated JSON API ✅
 - F — single-page web UI ✅
 - G — per-queue FAQ + operator corrections ✅
-- Tests: 40 passing across 8 suites (unit + route-integration) (`node --test`, no network) ✅
+- Tests: 50 passing across 8 suites (unit + route-integration) (`node --test`, no network) ✅
 
 Deferred (documented, not built): SF write-back (close/status/send), tier-3 queue-wide learning,
 per-user Salesforce identity (OAuth/Connected App).

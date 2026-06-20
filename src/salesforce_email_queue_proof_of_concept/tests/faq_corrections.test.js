@@ -7,6 +7,7 @@ fs.writeFileSync(path.join(CTX, '_global', 'notes.md'), '# Coaching notes\nRecer
 fs.writeFileSync(path.join(CTX, '_global', 'fees.csv'), 'item,amount\nrecert,40');
 fs.writeFileSync(path.join(CTX, '_global', 'README.md'), 'ignore me');
 process.env.EQ_CONTEXT_DIR = CTX;
+process.env.EQ_DATA_DIR = CTX;   // config.json (exclusions) writes here in tests
 
 const test = require('node:test');
 const assert = require('node:assert');

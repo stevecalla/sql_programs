@@ -131,5 +131,5 @@ Use the "Theme:" button in the header (or on the login screen); the choice persi
 
 ## Tests
 
-`node menu.js test` (or `node --test tests/*.test.js`) runs all suites - **40 tests across 8 files**:
+`node menu.js test` (or `node --test tests/*.test.js`) runs all suites - **50 tests across 8 files**:
 unit (text/threads/extract/ai/faq+context/auth) p
