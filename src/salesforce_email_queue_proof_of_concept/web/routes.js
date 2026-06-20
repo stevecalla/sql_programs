@@ -8,7 +8,16 @@ const corrections = require('../store/corrections');
 const queue_access = require('../store/queue_access');
 const store = require('../auth/auth_store');
 const session = require('../auth/session');
+const data_dir = require('../data_dir');
 const { require_auth, require_admin } = require('../auth/require_auth');
+
+// Where an admin lands by default after signing in (configurable from /admin -> Settings; stored in
+// the external config.json). Non-admins always go to the app root ('/'). Valid values: /metrics | /admin | /.
+const ADMIN_LANDINGS = ['/metrics', '/admin', '/'];
+function admin_landing() {
+  try { const v = (data_dir.read_config() || {}).admin_landing; return ADMIN_LANDINGS.indexOf(v) >= 0 ? v : '/metrics'; }
+  catch (e) { return '/metrics'; }
+}
 
 let _conn = null;
 async function get_conn() {
@@ -63,7 +72,10 @@ function mount(app, deps) {
     if (!v) return res.status(401).json({ ok: false, error: 'invalid credentials' });
     const token = session.sign({ user: v.user, role: v.role || 'user', ts: Date.now() }, store.session_secret());
     res.setHeader('Set-Cookie', session.COOKIE + '=' + token + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=' + Math.floor(session.MAX_AGE_MS / 1000));
-    res.json({ ok: true, user: v.user, role: v.role || 'user' });
+    const role = v.role || 'user';
+    // landing tells the SPA where to send this account by default after sign-in (admins -> configured
+    // page, others -> the app root). The client still honors an explicit ?next= first.
+    res.json({ ok: true, user: v.user, role: role, landing: role === 'admin' ? admin_landing() : '/' });
   });
   app.post('/api/logout', function (req, res) { res.setHeader('Set-Cookie', session.COOKIE + '=; HttpOnly; Path=/; Max-Age=0'); res.json({ ok: true }); });
   app.get('/api/me', require_auth, function (req, res) { res.json({ ok: true, user: req.user, role: req.role }); });
@@ -274,6 +286,19 @@ function mount(app, deps) {
       if (b.user && b.clear) queue_access.clear_user(b.user);
       else if (b.user && b.queues !== undefined) queue_access.set_user(b.user, b.queues);
       res.json({ ok: true, access: queue_access.get() });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // ---- /admin: settings (admin only) — currently just the admin default landing page ----
+  app.get('/api/admin/config', require_admin, function (req, res) {
+    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS });
+  });
+  app.post('/api/admin/config', require_admin, function (req, res) {
+    try {
+      const v = String((req.body && req.body.admin_landing) || '');
+      if (ADMIN_LANDINGS.indexOf(v) < 0) return res.status(400).json({ ok: false, error: 'invalid landing page' });
+      const cfg = data_dir.read_config() || {}; cfg.admin_landing = v; data_dir.write_config(cfg);
+      res.json({ ok: true, admin_landing: v });
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 

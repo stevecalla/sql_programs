@@ -27,7 +27,9 @@ async function build_report(pool, opts) {
   opts = opts || {};
   const days = Number(opts.days) || 7;
   const since = 'created_at_utc >= UTC_TIMESTAMP() - INTERVAL ' + days + ' DAY';
-  const W = '`' + T + '` WHERE app = ? AND ' + since;
+  // Real-stats window EXCLUDES is_test=1 rows (deliberate test runs + admin views of /metrics & /admin),
+  // so test activity never inflates the dashboard. Test rows are still counted in `health` and purgeable.
+  const W = '`' + T + '` WHERE app = ? AND ' + since + ' AND (is_test IS NULL OR is_test = 0)';
   const A = [cfg.APP];
 
   const counts = await q(pool, 'SELECT event_name, COUNT(*) n FROM ' + W + ' GROUP BY event_name', A);

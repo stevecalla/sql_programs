@@ -234,7 +234,15 @@ function renderLogin(msg) {
   document.getElementById('eqshow').addEventListener('change', function(){ document.getElementById('p').type = this.checked ? 'text' : 'password'; });
   document.getElementById('eqlf').addEventListener('submit', async function(ev){
     ev.preventDefault(); err.textContent = '';
-    try { await api('/api/login', { method:'POST', body: JSON.stringify({ user: document.getElementById('u').value, pass: document.getElementById('p').value }) }); boot(); }
+    try {
+      var r = await api('/api/login', { method:'POST', body: JSON.stringify({ user: document.getElementById('u').value, pass: document.getElementById('p').value }) });
+      // Role-based routing: an explicit ?next= wins (deep-link/bounce); otherwise admins go to their
+      // configured landing page (set in /admin -> Settings) and everyone else loads the app in place.
+      var qs = new URLSearchParams(location.search), nx = qs.get('next');
+      if (nx && /^\/(metrics|admin)\b/.test(nx)) { var t = (M.t && nx.indexOf('metrics_test=') < 0) ? (nx.indexOf('?') >= 0 ? '&' : '?') + 'metrics_test=1' : ''; location.href = nx + t; }
+      else if (r && r.role === 'admin' && r.landing && r.landing !== '/') { location.href = r.landing + (M.t ? '?metrics_test=1' : ''); }
+      else boot();
+    }
     catch(e){ err.textContent = (e && e.message) || 'Invalid credentials'; }
   });
 }

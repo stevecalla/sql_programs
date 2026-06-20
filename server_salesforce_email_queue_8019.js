@@ -60,6 +60,42 @@ const metrics_config = require('./src/salesforce_email_queue_proof_of_concept/me
 const metrics_report = require('./src/salesforce_email_queue_proof_of_concept/metrics/metrics_report');
 const { query_create_salesforce_email_queue_events_table } = require('./src/queries/create_drop_db_table/query_create_salesforce_email_queue_events_table');
 const { require_admin, require_admin_page } = require('./src/salesforce_email_queue_proof_of_concept/auth/require_auth');
+const eq_session = require('./src/salesforce_email_queue_proof_of_concept/auth/session');
+const eq_store = require('./src/salesforce_email_queue_proof_of_concept/auth/auth_store');
+function esc_login(x){ return String(x == null ? '' : x).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function eq_current_user(req){ try { const c = eq_session.parse_cookies(req.headers.cookie); const pl = eq_session.verify(c[eq_session.COOKIE], eq_store.session_secret()); return pl ? { user: pl.user, role: pl.role || 'user' } : null; } catch (e) { return null; } }
+// ONE adaptive sign-in page (mirrors race_results_transform login_html): optional "signed in as X" banner,
+// optional error, link chips to sibling areas (all carrying ?metrics_test=1), and the sign-in form.
+function eq_login_html(err, action, title, ctx, test){
+  const ttl = title || 'Admin'; const logout = action.replace('/login', '/logout'); const tq = test ? '?metrics_test=1' : '';
+  // Role-based routing: no cross-area chips. Only a Sign-out link when a wrong (non-admin) account is
+  // already signed in, so they can switch accounts.
+  let banner = '', chips = '';
+  if (ctx && ctx.user) {
+    banner = '<div class="who">Signed in as <b>' + esc_login(ctx.user) + '</b> — this account has no <b>' + ttl + '</b> access.</div>';
+    chips = '<div class="chips" style="margin-top:14px"><a class="chip" href="' + logout + '">↩ Sign out</a></div>';
+  }
+  return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+    + '<title>Sign in — ' + ttl + '</title>'
+    + '<style>body{font:16px system-ui,Arial,sans-serif;background:#0e1b3a;color:#fff;display:grid;place-items:center;min-height:100vh;margin:0}'
+    + 'form{background:#16233f;padding:24px;border-radius:12px;min-width:280px;box-shadow:0 8px 30px rgba(0,0,0,.4)}'
+    + 'h1{font-size:18px;margin:0 0 14px}input{display:block;width:100%;box-sizing:border-box;margin:8px 0;padding:10px;border-radius:8px;border:1px solid #2a3a5e;background:#0e1b3a;color:#fff}'
+    + 'button{width:100%;padding:10px;border:0;border-radius:8px;background:#e4002b;color:#fff;font-weight:700;cursor:pointer;margin-top:6px}.err{color:#ff8a8a;font-size:13px;margin:0 0 8px}'
+    + '.who{background:rgba(239,159,39,.14);border:1px solid rgba(239,159,39,.4);border-radius:8px;padding:8px 10px;margin:0 0 8px;font-size:13px;color:#f0c98a}.who b{color:#ffe1b0}'
+    + '.chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}.chip{font-size:12.5px;color:#cfe0ff;border:1px solid #2a3a5e;border-radius:8px;padding:5px 10px;text-decoration:none}.chip:hover{background:#0e1b3a}'
+    + '.sub{font-size:12px;color:#8ea3c8;margin:0 0 4px;border-top:1px solid #2a3a5e;padding-top:12px}label{display:flex;align-items:center;gap:6px;font-size:13px;margin:2px 0 4px;cursor:pointer}label input{width:auto;margin:0}</style>'
+    + '<form method="post" action="' + action + tq + '">'
+    + '<h1>🔒 Email Queue Assistant — ' + ttl + ' sign in</h1>'
+    + banner
+    + (err ? '<p class="err">' + esc_login(err) + '</p>' : '')
+    + chips
+    + '<div class="sub">Sign in with an admin account:</div>'
+    + '<input name="username" placeholder="Username" autofocus autocomplete="username">'
+    + '<input id="pw" name="password" type="password" placeholder="Password" autocomplete="current-password">'
+    + (test ? '<input type="hidden" name="metrics_test" value="1">' : '')
+    + '<label><input type="checkbox" onclick="document.getElementById(\'pw\').type=this.checked?\'text\':\'password\'"> Show password</label>'
+    + '<button type="submit">Sign in</button></form>';
+}
 
 const METRICS_ON = String(process.env.METRICS_OFF).toLowerCase() !== 'true';
 let metrics_pool = null;
@@ -147,13 +183,34 @@ function create_app() {
   // Reuse the transform's stylesheet so /metrics + /admin match it exactly (single source of truth).
   app.use('/css', express.static(path.join(__dirname, 'src', 'race_results_transform', 'public', 'css')));
 
+  // ---- Transform-style sign-in for /metrics + /admin (server-rendered, with chips + ?metrics_test=1) ----
+  app.use(['/metrics/login', '/admin/login'], express.urlencoded({ extended: false }));
+  function eq_login_post(req, res, area) {
+    const b = req.body || {}; const test = String(b.metrics_test || '') === '1'; const ttl = area === '/admin' ? 'Admin' : 'Metrics';
+    const v = eq_store.valid_user(b.username, b.password);
+    if (!v || (v.role || 'user') !== 'admin') {
+      return res.status(401).type('html').send(eq_login_html('Invalid credentials, or that account is not an admin.', area + '/login', ttl, eq_current_user(req), test));
+    }
+    const token = eq_session.sign({ user: v.user, role: v.role || 'user', ts: Date.now() }, eq_store.session_secret());
+    res.setHeader('Set-Cookie', eq_session.COOKIE + '=' + token + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=' + Math.floor(eq_session.MAX_AGE_MS / 1000));
+    res.redirect(area + (test ? '?metrics_test=1' : ''));
+  }
+  app.get('/metrics/login', function (req, res) { const u = eq_current_user(req); const test = String(req.query.metrics_test || '') === '1'; if (u && u.role === 'admin') return res.redirect('/metrics' + (test ? '?metrics_test=1' : '')); res.type('html').send(eq_login_html('', '/metrics/login', 'Metrics', u, test)); });
+  app.post('/metrics/login', function (req, res) { eq_login_post(req, res, '/metrics'); });
+  app.get('/admin/login', function (req, res) { const u = eq_current_user(req); const test = String(req.query.metrics_test || '') === '1'; if (u && u.role === 'admin') return res.redirect('/admin' + (test ? '?metrics_test=1' : '')); res.type('html').send(eq_login_html('', '/admin/login', 'Admin', u, test)); });
+  app.post('/admin/login', function (req, res) { eq_login_post(req, res, '/admin'); });
+
   // ---- /metrics dashboard + /admin hub (admin login = existing session with role 'admin') ----
+  // Admin views of /metrics + /admin are always flagged is_test=1: they're operator/admin activity,
+  // not real end-user usage, so they're excluded from the real stats and are purgeable.
   app.get('/metrics', require_admin_page, function (req, res) {
-    const is_test = String(req.query.metrics_test || '') === '1' ? 1 : 0;
-    log_event({ event_name: 'dashboard_view', actor: req.user, page_path: '/metrics', is_test: is_test });
+    log_event({ event_name: 'dashboard_view', actor: req.user, page_path: '/metrics', is_test: 1 });
     res.type('html').sendFile(METRICS_HTML);
   });
-  app.get('/admin', require_admin_page, function (req, res) { res.type('html').sendFile(ADMIN_HTML); });
+  app.get('/admin', require_admin_page, function (req, res) {
+    log_event({ event_name: 'admin_view', actor: req.user, page_path: '/admin', is_test: 1 });
+    res.type('html').sendFile(ADMIN_HTML);
+  });
   // Sign-out for the admin pages: clears the shared session cookie, then back to the app login.
   app.get(['/metrics/logout', '/admin/logout'], function (req, res) {
     res.setHeader('Set-Cookie', 'eq_session=; HttpOnly; Path=/; Max-Age=0');
@@ -323,7 +380,6 @@ async function cleanup() { console.log('\nGracefully shutting down...'); process
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
 // Windows fallback: some terminals don't deliver process-level SIGINT on Ctrl-C; a readline
-// interface catches the keystroke and emits its own SIGINT, which we forward to cleanup().
 if (require.main === module && process.stdin.isTTY) {
   require('readline').createInterface({ input: process.stdin, output: process.stdout }).on('SIGINT', cleanup);
 }
