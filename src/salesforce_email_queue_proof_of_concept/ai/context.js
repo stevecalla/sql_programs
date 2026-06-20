@@ -28,7 +28,7 @@ function build_context(data) {
     out.push('\n=== PRIOR CASES FROM THIS SENDER (same person; safe to reference) ===');
     d.sender_history.forEach(function (c) { out.push('- ' + (c.created_mtn || '') + '  #' + c.case_number + '  [' + c.status + ']  ' + c.subject); });
   }
-  if (d.faq) { out.push('\n=== QUEUE FAQ / KNOWLEDGE ==='); out.push(String(d.faq)); }
+  if (d.faq) { out.push('\n=== KNOWLEDGE / CONTEXT ==='); out.push(String(d.faq)); }
   if (d.corrections && d.corrections.length) {
     out.push('\n=== OPERATOR CORRECTIONS (follow these) ===');
     d.corrections.forEach(function (c) { out.push('- ' + c); });

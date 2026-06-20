@@ -1,13 +1,18 @@
 'use strict';
 // Local user store: scrypt-hashed passwords (per-user salt, timing-safe compare), persisted to a
-// gitignored JSON. A generated session_secret signs cookies. An optional .env recovery account
-// (EQ_RECOVERY_USER / EQ_RECOVERY_PASS) is always valid so you can't lock yourself out.
+// gitignored JSON. A generated session_secret signs cookies. Optional .env accounts are always
+// valid so you can't lock yourself out, and carry a role for future access differentiation:
+//   SF_EMAIL_QUEUE_ADMIN_USER / SF_EMAIL_QUEUE_ADMIN_PASS  -> role 'admin'
+//   SF_EMAIL_QUEUE_USER       / SF_EMAIL_QUEUE_PASS        -> role 'user'
 // Pattern mirrors race_results_transform/admin/admin_store.js. File override: EQ_USERS_FILE (tests).
 // Each user may carry an optional sf_email for FUTURE per-user Salesforce identity (unused now).
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const FILE = process.env.EQ_USERS_FILE || path.join(__dirname, '..', 'data', 'auth.json');
+const data_dir = require('../data_dir');
+// Users file lives OUTSIDE the repo (no auth info committed): <determineOSPath()>/usat_email_queue/auth.json
+// Override with EQ_USERS_FILE.
+const FILE = process.env.EQ_USERS_FILE || data_dir.file_sync('auth.json');
 
 function hash_password(pw) {
   const salt = crypto.randomBytes(16);
@@ -41,10 +46,18 @@ function add_user(user, pass, sf_email) {
 function remove_user(user) { const o = read(); const n = o.users.length; o.users = o.users.filter(function (u) { return u.user !== user; }); write(o); return o.users.length < n; }
 function valid_user(user, pass) {
   if (!user) return null;
-  const ru = process.env.EQ_RECOVERY_USER, rp = process.env.EQ_RECOVERY_PASS;
-  if (ru && rp && user === ru && String(pass) === String(rp)) return { user: user, recovery: true };
+  const p = String(pass == null ? '' : pass);
+  // .env accounts (always valid; carry a role for future access differentiation).
+  const env_accounts = [
+    { u: process.env.SF_EMAIL_QUEUE_ADMIN_USER, p: process.env.SF_EMAIL_QUEUE_ADMIN_PASS, role: 'admin' },
+    { u: process.env.SF_EMAIL_QUEUE_USER, p: process.env.SF_EMAIL_QUEUE_PASS, role: 'user' }
+  ];
+  for (let i = 0; i < env_accounts.length; i++) {
+    const a = env_accounts[i];
+    if (a.u && a.p && user === a.u && p === String(a.p)) return { user: user, env: true, role: a.role };
+  }
   const u = read().users.filter(function (x) { return x.user === user; })[0];
-  if (u && verify_password(pass, u.hash)) return { user: u.user, sf_email: u.sf_email || '' };
+  if (u && verify_password(pass, u.hash)) return { user: u.user, sf_email: u.sf_email || '', role: u.role || 'user' };
   return null;
 }
 

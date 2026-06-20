@@ -30,6 +30,20 @@ async function determineOSPath() {
     }
 }
 
+// Synchronous sibling of determineOSPath() for modules that resolve paths at load time (no real
+// async work happens above - just os.userInfo()/platform). Same cross-platform base directory.
+function determineOSPathSync() {
+    const platform = process.platform;
+    if (platform === 'darwin') {
+        return csv_export_paths.mac;
+    } else if (platform === 'linux') {
+        const username = os.userInfo().username;
+        return csv_export_paths.linux[username] || csv_export_paths.linux['usat-server'];
+    } else {
+        return csv_export_paths.windows;
+    }
+}
+
 // READ UBUNTU SERVER UPDATE LOG
 const ubuntu_folder_path = {
     linux: {
@@ -62,6 +76,7 @@ async function determine_ubuntu_update_log_file_path(file_name) {
 
 module.exports = { 
     determineOSPath, 
+    determineOSPathSync,
     determineOSUser,
     determine_ubuntu_update_log_file_path,
 };

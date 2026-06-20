@@ -43,12 +43,12 @@ function mount(app) {
     const b = req.body || {};
     const v = store.valid_user(b.user, b.pass);
     if (!v) return res.status(401).json({ ok: false, error: 'invalid credentials' });
-    const token = session.sign({ user: v.user, ts: Date.now() }, store.session_secret());
+    const token = session.sign({ user: v.user, role: v.role || 'user', ts: Date.now() }, store.session_secret());
     res.setHeader('Set-Cookie', session.COOKIE + '=' + token + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=' + Math.floor(session.MAX_AGE_MS / 1000));
-    res.json({ ok: true, user: v.user });
+    res.json({ ok: true, user: v.user, role: v.role || 'user' });
   });
   app.post('/api/logout', function (req, res) { res.setHeader('Set-Cookie', session.COOKIE + '=; HttpOnly; Path=/; Max-Age=0'); res.json({ ok: true }); });
-  app.get('/api/me', require_auth, function (req, res) { res.json({ ok: true, user: req.user }); });
+  app.get('/api/me', require_auth, function (req, res) { res.json({ ok: true, user: req.user, role: req.role }); });
 
   app.get('/api/queues', require_auth, async function (req, res) {
     try { const c = await get_conn(); res.json({ ok: true, queues: await sf.list_queues(c, { with_open_counts: true }), instance_url: c.instanceUrl || '' }); } catch (e) { err(res, e); }
@@ -122,14 +122,14 @@ function mount(app) {
   app.post('/api/ai/respond', require_auth, async function (req, res) {
     try {
       const b = req.body || {};
-      const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, fetch_attachments: true, faq: await faq.load_knowledge(b.queue), corrections: corrections.grounding_lines(12, { queue: b.queue, user: req.user }) });
+      const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, fetch_attachments: true, faq: await faq.load_knowledge(b.queue), images: await faq.load_context_images(b.queue), corrections: corrections.grounding_lines(12, { queue: b.queue, user: req.user }) });
       res.json(Object.assign({ ok: true }, r));
     } catch (e) { err(res, e); }
   });
   app.post('/api/ai/ask', require_auth, async function (req, res) {
     try {
       const b = req.body || {};
-      const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, question: b.question, history: b.history, faq: await faq.load_knowledge(b.queue), corrections: corrections.grounding_lines(12, { queue: b.queue, user: req.user }) });
+      const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, question: b.question, history: b.history, faq: await faq.load_knowledge(b.queue), images: await faq.load_context_images(b.queue), corrections: corrections.grounding_lines(12, { queue: b.queue, user: req.user }) });
       res.json(Object.assign({ ok: true }, r));
     } catch (e) { err(res, e); }
   });
@@ -145,18 +145,42 @@ function mount(app) {
     res.json({ ok: !!r, correction: r });
   });
 
-  app.get('/api/context', require_auth, function (req, res) {
-    try { const q = req.query.queue || ''; res.json({ ok: true, files: faq.list_context_meta(q), dir: faq.CONTEXT_DIR, faq_chars: faq.load_faq(q).length, corrections: corrections.list(true).length }); } catch (e) { err(res, e); }
+  app.get('/api/context', require_auth, async function (req, res) {
+    try { const q = req.query.queue || ''; const knowledge = await faq.load_knowledge(q); res.json({ ok: true, files: await faq.list_context_meta(q), dir: await faq.context_dir(), knowledge_chars: knowledge.length, corrections: corrections.list(true).length }); } catch (e) { err(res, e); }
   });
-  app.post('/api/context', require_auth, function (req, res) {
+  app.post('/api/context', require_auth, async function (req, res) {
     try {
       const b = req.body || {};
       const buf = Buffer.from(String(b.content_base64 || ''), 'base64');
       if (!buf.length) throw new Error('empty file');
-      if (buf.length > 5 * 1024 * 1024) throw new Error('file too large (5 MB max)');
-      const saved = faq.save_context_file(b.scope, b.queue, b.name, buf);
+      if (buf.length > 25 * 1024 * 1024) throw new Error('file too large (25 MB max)');
+      const saved = await faq.save_context_file(b.scope, b.queue, b.name, buf, b.folder);
       res.json({ ok: true, saved: saved });
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || 'upload failed' }); }
+  });
+
+  app.get('/api/context/raw', require_auth, async function (req, res) {
+    try {
+      const fsx = require('fs'); const pathx = require('path');
+      const p = await faq.find_context_path(req.query.queue, req.query.name);
+      const ext = pathx.extname(p).toLowerCase().replace('.', '');
+      const MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
+        txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8', csv: 'text/csv; charset=utf-8', tsv: 'text/tab-separated-values; charset=utf-8',
+        json: 'application/json; charset=utf-8', html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xls: 'application/vnd.ms-excel' };
+      res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'inline; filename="' + pathx.basename(p).replace(/[\r\n"]/g, '') + '"');
+      res.send(fsx.readFileSync(p));
+    } catch (e) { res.status(404).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  app.post('/api/context-exclude', require_auth, function (req, res) {
+    try { const b = req.body || {}; faq.set_context_excluded(b.key, !!b.excluded); res.json({ ok: true }); }
+    catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  app.get('/api/context/file', require_auth, async function (req, res) {
+    try { res.json(Object.assign({ ok: true }, await faq.read_context_file(req.query.scope, req.query.queue, req.query.name))); }
+    catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
   // Salesforce writes are intentionally disabled in this POC.

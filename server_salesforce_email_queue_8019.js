@@ -37,8 +37,10 @@ dotenv.config({ path: ENV_PATH });
   const exists = require('fs').existsSync(ENV_PATH);
   const have_sf = !!(process.env.SF_PROD_USERNAME || process.env.SF_DEV_USERNAME);
   const have_ai = !!(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
+  const have_login = !!((process.env.SF_EMAIL_QUEUE_ADMIN_USER && process.env.SF_EMAIL_QUEUE_ADMIN_PASS) || (process.env.SF_EMAIL_QUEUE_USER && process.env.SF_EMAIL_QUEUE_PASS));
   console.log('[env] .env path: ' + ENV_PATH + ' (exists: ' + exists + ')');
-  console.log('[env] Salesforce configured: ' + have_sf + '  ·  AI key configured: ' + have_ai);
+  console.log('[env] Salesforce configured: ' + have_sf + '  |  AI key configured: ' + have_ai + '  |  login configured: ' + have_login);
+  if (!have_login) console.log('[env] -> set SF_EMAIL_QUEUE_ADMIN_USER/PASS (and/or SF_EMAIL_QUEUE_USER/PASS) in ' + ENV_PATH + ', then restart.');
 })();
 
 const express = require('express');
@@ -46,7 +48,7 @@ const cors = require('cors');
 
 // NGROK TUNNEL — optional public URL, exactly like server_race_results_transform_8018.js.
 // Off by default (Cloudflare fronts this app). Set true / NGROK_AUTHTOKEN to use it.
-const is_test_ngrok = true;
+const is_test_ngrok = false;
 let ngrok_url = null;
 let ngrok_enabled_flag = false;
 const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
@@ -55,6 +57,7 @@ const DEFAULT_PORT = Number(process.env.EQ_PORT) || 8019;
 const POC = path.join(__dirname, 'src', 'salesforce_email_queue_proof_of_concept');
 const PUBLIC_DIR = path.join(POC, 'web', 'public');
 const mount = require(path.join(POC, 'web', 'routes'));
+const faq = require(path.join(POC, 'ai', 'faq'));   // for one-time sample-context seeding
 
 function create_app() {
   const app = express();
@@ -79,7 +82,7 @@ function create_app() {
   });
 
   // JSON API (login/logout public; the rest auth-gated; no Salesforce writes). Body parser inside.
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '50mb' }));
   mount(app);
 
   // Static SPA. http://localhost:8019/ serves index.html.
@@ -101,19 +104,23 @@ function start_server(opts) {
   opts = opts || {};
   const port = opts.port || DEFAULT_PORT;
   const app = create_app();
+  faq.seed_sample_context().then(function (r) {
+    if (r && r.seeded) console.log('[context] external context folder ready: ' + r.dir);
+    else console.log('[context] could NOT write the external context folder: ' + (r && r.error) + ' (set EQ_CONTEXT_DIR to a writable path)');
+  });
   return new Promise(function (resolve, reject) {
     // NB: no host arg -> dual-stack '::' (IPv6 + IPv4). See header note re: Cloudflare/Windows.
     const server = app.listen(port, function () {
       const actual = server.address().port;
       if (!opts.silent) {
-        console.log('\nSalesforce Email Queue Assistant — local server');
-        console.log('  -> http://localhost:' + actual + '/                 (web app — read-only)');
+        console.log('\nSalesforce Email Queue Assistant - local server');
+        console.log('  -> http://localhost:' + actual + '/                 (web app - read-only)');
         console.log('  -> http://localhost:' + actual + '/api/status        (health check)');
         console.log('  -> https://usat-email.kidderwise.org' + '            (internet access via Cloudflare tunnel)');
         console.log('  Serving: ' + PUBLIC_DIR);
-        console.log('  Waiting for requests — one log line per request below. Press Ctrl-C to stop.\n');
+        console.log('  Waiting for requests - one log line per request below. Press Ctrl-C to stop.\n');
       }
-      // NGROK — best-effort; a missing/invalid NGROK_AUTHTOKEN must NOT crash the local server.
+      // NGROK - best-effort; a missing/invalid NGROK_AUTHTOKEN must NOT crash the local server.
       if (is_test_ngrok || ngrok_enabled_flag) {
         process.once('unhandledRejection', function (err) {
           console.log('\n  [ngrok] tunnel not started: ' + ((err && (err.errorCode || err.message)) || String(err)));
@@ -126,13 +133,13 @@ function start_server(opts) {
       resolve({ port: actual, server: server });
     });
     server.on('error', function (e) {
-      if (e && e.code === 'EADDRINUSE') console.error('PORT ' + port + ' is already in use — stop the other process or set EQ_PORT.');
+      if (e && e.code === 'EADDRINUSE') console.error('PORT ' + port + ' is already in use - stop the other process or set EQ_PORT.');
       reject(e);
     });
   });
 }
 
-// Clean up on exit — same pattern as the other server_*.js services so Ctrl-C actually stops the
+// Clean up on exit - same pattern as the other server_*.js services so Ctrl-C actually stops the
 // process (without this the open listener keeps the event loop alive and the terminal hangs).
 async function cleanup() { console.log('\nGracefully shutting down...'); process.exit(); }
 process.on('SIGINT', cleanup);

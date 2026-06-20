@@ -47,7 +47,12 @@ async function extract_text(buffer, opts) {
       return { ok: true, ext: ext, text: parts.join('\n\n').trim() };
     } catch (e) { return { ok: false, ext: ext, text: '', note: '[' + label + ': spreadsheet parse failed]' }; }
   }
+  if (IMAGE_EXT.indexOf(ext) >= 0) {
+    const size = o.content_size ? ' (' + o.content_size + ' bytes)' : '';
+    return { ok: false, ext: ext, text: '', note: '[' + label + size + ': image - read directly by the vision model (png/jpeg/gif/webp); not text-extracted]' };
+  }
   return unsupported(label, ext, o);
 }
 
-module.exports = { extract_text, TEXT_EXT };
+const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'heic', 'svg'];
+module.exports = { extract_text, TEXT_EXT, IMAGE_EXT };

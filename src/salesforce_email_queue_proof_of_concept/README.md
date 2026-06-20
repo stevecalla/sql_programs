@@ -31,14 +31,19 @@ node ../../server_salesforce_email_queue_8019.js     # then open http://localhos
 Single page: queue/email list on the left, the email thread + attachments in the middle, and an AI
 panel (suggested reply, ask-a-question, correction box, and a disabled "send" button) on the right.
 
-Create a login first: `node src/admin.js add` (or set `EQ_RECOVERY_USER` / `EQ_RECOVERY_PASS` in the
-environment for a bootstrap account).
+Create a login first: set `.env` accounts (always valid, carry a role for future access control):
+`SF_EMAIL_QUEUE_ADMIN_USER` / `SF_EMAIL_QUEUE_ADMIN_PASS` (admin) and/or `SF_EMAIL_QUEUE_USER` /
+`SF_EMAIL_QUEUE_PASS` (user). You can also add stored users with `node src/admin.js add`.
 
 ## Configuration (repo-root `.env`)
 
 - `SF_PROD_*` — Salesforce credentials (reads run as the integration user).
 - `OPENAI_API_KEY` (default model `gpt-4o-mini`) and/or `ANTHROPIC_API_KEY` (Claude).
 - Optional model overrides: `OPENAI_MODEL`, `ANTHROPIC_MODEL`.
+- Web-app logins (`.env` accounts, always valid, each carries a role for future access control):
+  - `SF_EMAIL_QUEUE_ADMIN_USER` / `SF_EMAIL_QUEUE_ADMIN_PASS` — role `admin`.
+  - `SF_EMAIL_QUEUE_USER` / `SF_EMAIL_QUEUE_PASS` — role `user`.
+  - (Stored, scrypt-hashed users can also be added with `node src/admin.js add`.)
 
 ## Attachment parsing (optional)
 
@@ -64,17 +69,32 @@ roadmap with the native-Salesforce-vs-build comparison, and the build review gui
 
 ## Adding your own context files (knowledge the AI reads)
 
-Drop reference files into `data/context/` and the assistant reads them as grounding:
+Context lives **outside the repo** (so member data is never committed), resolved cross-platform via the
+shared utility pattern (`data_dir.js` -> `utilities/determineOSPath()`), at
+`<base>/usat_email_queue/context/` (e.g. `.../usat/data/usat_email_queue/context/` on linux/mac). Drop reference
+files there and the assistant reads them as grounding:
 
-- `data/context/_global/` - applied to EVERY queue
-- `data/context/<queue_slug>/` - applied to that queue only (e.g. `coaching`, `event_services`, `rankings`)
+- `<context>/_global/` - applied to EVERY queue
+- `<context>/<queue_slug>/` - applied to that queue only (e.g. `coaching`, `event_services`, `rankings`)
 
-Supported out of the box: `.md`, `.txt`, `.csv`, `.tsv`, `.html`, `.json`. With the optional parsers
-(`npm install`): `.pdf`, `.docx`, `.xlsx`, `.xls`. Total context is capped (~20k chars) per request.
+Two ways to add context from the web app's **Context files** card (each file has **view** + an **exclude/include** toggle that keeps the file on disk but skips it for grounding):
+1. **Add a file** - upload one file into the context folder.
+2. **Choose a folder from your computer** - the browser reads a local folder (File System Access API;
+   falls back to a folder picker on Safari/Firefox) and sends its files into the context store.
+
+All knowledge (FAQ-style facts, policies, contacts, rosters) goes here for now - it is the single
+grounding source. Overrides: `EQ_CONTEXT_DIR` (point at any local folder; uploads write there too) and
+`EQ_DATA_DIR` (project data root). A SAMPLE file (`knowledge_SAMPLE.md`) is seeded into `_global` on
+first run so grounding works out of the box; the server logs the folder path at startup.
+
+Supported (text-extracted): `.md` `.txt` `.csv` `.tsv` `.html` `.json` `.xml` `.log` `.yaml`/`.yml` `.rtf`,
+and (with optional parsers via `npm install`) `.pdf` `.docx` `.xlsx` `.xls`. **Images** are read by the AI via **vision**: `.png` `.jpg/.jpeg` `.gif` `.webp` in the context folder are
+sent to the model as grounding (up to 4 images, <=4MB each). Other image types (`.bmp/.tif/.heic/.svg`)
+and binaries are stored/listed but not sent. Total text context is capped (~20k chars) per request.
 
 See what's currently loaded: `node src/cli.js context [queue]` (or menu -> View context files).
-This is the best way to give the AI real USAT facts (policies, timelines, contacts) so it stops
-guessing - alongside the per-queue FAQ in `data/faq/` and operator corrections.
+This is the single place to give the AI real USAT facts (policies, timelines, contacts) so it stops
+guessing - alongside operator corrections.
 
 ## Web app features
 
@@ -98,8 +118,10 @@ Use the "Theme:" button in the header (or on the login screen); the choice persi
 
 - Dependencies (incl. optional parsers `pdf-parse`, `mammoth`, `xlsx`) live in the **repo-root**
   `package.json`; run `npm install` at the repo root. This folder has no `package.json` by design.
-- `data/` (auth, corrections, uploaded context) is **gitignored** - do not commit member data. Keep
-  context files out of version control; for production move them to a secured server store.
+- **No sensitive data in the repo.** Logins (`auth.json`), operator `corrections.json`, and uploaded
+  context all live OUTSIDE the repo via `data_dir.js` -> `utilities/determineOSPath()`
+  (`<base>/usat_email_queue/`). There is no in-repo data folder. `corrections` is slated to move to a DB table (see `plans_and_notes/path_to_production.md`,
+  Track C). Overrides: `EQ_DATA_DIR`, `EQ_CONTEXT_DIR`, `EQ_USERS_FILE`, `EQ_CORRECTIONS_FILE`.
 - AI calls use your **commercial OpenAI/Anthropic API** keys: under those terms inputs/outputs are
   **not used for training** by default; retention is short (OpenAI ~30d, Anthropic ~7d) and can be
   **zero** with a Zero-Data-Retention (ZDR) agreement.
@@ -110,7 +132,4 @@ Use the "Theme:" button in the header (or on the login screen); the choice persi
 ## Tests
 
 `node menu.js test` (or `node --test tests/*.test.js`) runs all suites - **40 tests across 8 files**:
-unit (text/threads/extract/ai/faq+context/auth) plus **route-integration tests** (`tests/routes.test.js`:
-login/session, disabled send, context list, corrections) that run in-process with no Salesforce.
-Browser E2E lives in `e2e/` (Playwright, API-stubbed): `npx playwright install chromium` once, then
-`npx playwright test -c e2e/playwright.config.js` (or menu -> Web E2E).
+unit (text/threads/extract/ai/faq+context/auth) p

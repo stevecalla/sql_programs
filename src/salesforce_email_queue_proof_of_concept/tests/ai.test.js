@@ -58,3 +58,27 @@ test('ask_about_case folds prior Q&A history into the prompt', async function ()
   assert.ok(seen.prompt.indexOf('EARLIER Q&A') >= 0);
   assert.ok(seen.prompt.indexOf('prior q') >= 0);
 });
+
+// --- vision: images reach the provider payloads ---
+const providers = require('../ai/providers');
+test('openai complete embeds images as image_url data URLs', async function () {
+  let body = null;
+  const transport = async function (url, opts) { body = JSON.parse(opts.body); return { ok: true, json: async function () { return { choices: [{ message: { content: 'ok' } }] }; } }; };
+  await providers.complete({ provider: 'openai', system: 'S', prompt: 'P', images: [{ media_type: 'image/png', data_base64: 'AAAA' }], env: { OPENAI_API_KEY: 'k' }, transport: transport });
+  const content = body.messages[1].content;
+  assert.ok(Array.isArray(content), 'user content is multimodal array');
+  assert.ok(content.some(function (c) { return c.type === 'image_url' && /^data:image\/png;base64,AAAA/.test(c.image_url.url); }), 'image_url present');
+});
+test('anthropic complete embeds images as base64 source', async function () {
+  let body = null;
+  const transport = async function (url, opts) { body = JSON.parse(opts.body); return { ok: true, json: async function () { return { content: [{ text: 'ok' }] }; } }; };
+  await providers.complete({ provider: 'anthropic', system: 'S', prompt: 'P', images: [{ media_type: 'image/jpeg', data_base64: 'BBBB' }], env: { ANTHROPIC_API_KEY: 'k' }, transport: transport });
+  const content = body.messages[0].content;
+  assert.ok(Array.isArray(content) && content.some(function (c) { return c.type === 'image' && c.source && c.source.data === 'BBBB' && c.source.media_type === 'image/jpeg'; }), 'image source present');
+});
+test('no images -> plain string content (back-compat)', async function () {
+  let body = null;
+  const transport = async function (url, opts) { body = JSON.parse(opts.body); return { ok: true, json: async function () { return { choices: [{ message: { content: 'ok' } }] }; } }; };
+  await providers.complete({ provider: 'openai', system: 'S', prompt: 'P', env: { OPENAI_API_KEY: 'k' }, transport: transport });
+  assert.strictEqual(body.messages[1].content, 'P');
+});

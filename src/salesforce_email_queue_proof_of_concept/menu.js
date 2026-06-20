@@ -98,7 +98,8 @@ const SECTIONS = [
     { label: 'Start web app (port 8019)', desc: 'Express server + single-page UI for reviewers. Ctrl-C to stop.', cli: 'node ../../server_salesforce_email_queue_8019.js', action: 'server' },
     { label: 'Add / update a user', desc: 'Create a web app login (username + password).', cli: 'node src/admin.js add', action: 'add_user' },
     { label: 'List users', desc: 'Show web app logins.', cli: 'node src/admin.js list', action: 'list_users' },
-    { label: 'Reset a user password', desc: 'Set a new password for an existing login (passwords are hashed, never shown).', cli: 'node src/admin.js passwd', action: 'reset_pw' }
+    { label: 'Reset a user password', desc: 'Set a new password for an existing login (passwords are hashed, never shown).', cli: 'node src/admin.js passwd', action: 'reset_pw' },
+    { label: 'Remove a user', desc: 'Delete a web app login (prompts for the username + confirm).', cli: 'node src/admin.js remove', action: 'remove_user' }
   ] }
 ];
 
@@ -121,7 +122,8 @@ const ACTIONS = {
   server: function () { return run('node', ['../../server_salesforce_email_queue_8019.js']); },
   add_user: function () { return run('node', ['src/admin.js', 'add']); },
   list_users: function () { return run('node', ['src/admin.js', 'list']); },
-  reset_pw: function () { return run('node', ['src/admin.js', 'passwd']); }
+  reset_pw: function () { return run('node', ['src/admin.js', 'passwd']); },
+  remove_user: function () { return run('node', ['src/admin.js', 'remove']); }
 };
 
 function render() {

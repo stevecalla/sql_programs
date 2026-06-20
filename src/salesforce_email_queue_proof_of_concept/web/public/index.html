@@ -27,12 +27,13 @@
   .arrow{color:var(--accent)} .dim{color:var(--dim)} .sub{color:var(--dim);font-size:12.5px;margin:2px 0 0} a{color:var(--accent)}
   .app-header{display:flex;align-items:center;gap:14px;padding:12px 18px;background:var(--card);border-bottom:1px solid var(--line)}
   .app-header .right{margin-left:auto;display:flex;align-items:center;gap:8px}
-  .brandmark{width:26px;height:26px;border-radius:7px;background:var(--accent);display:inline-grid;place-items:center;color:#fff;font-weight:800;font-size:14px}
+  .brandmark{width:34px;height:34px;border-radius:9px;background:var(--accent);display:inline-grid;place-items:center;color:#fff}
   select,input:not([type=checkbox]):not([type=radio]):not([type=file]),textarea{appearance:none;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 10px;min-height:38px;width:100%}
   input[type=file]{font:inherit;color:var(--ink)}
   textarea{min-height:120px;resize:vertical;line-height:1.45}
   .btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:600;padding:8px 14px;border-radius:10px;cursor:pointer;min-height:38px;width:auto}
   .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent} .btn.primary:hover{filter:brightness(1.05)}
+  .btn.sel{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
   .btn.ghost:hover{border-color:var(--accent);color:var(--accent)} .btn.sm{padding:5px 10px;min-height:0;font-size:12.5px}
   .btn:disabled,.btn[disabled]{opacity:.45;cursor:not-allowed} .btn:active{transform:translateY(1px)}
   .wrap{display:grid;grid-template-columns:340px 6px minmax(0,1fr) 6px 380px;height:calc(100vh - 51px)}
@@ -95,6 +96,19 @@
   .center{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px} .login{width:360px}
   label.inline{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim);cursor:pointer;min-height:0}
   input[type=checkbox]{width:16px;height:16px;min-height:0;margin:0;cursor:pointer;flex:0 0 auto;accent-color:var(--accent)}
+  /* ---- mobile / narrow screens: stack the 3 panes, hide drag splitters ---- */
+  @media (max-width: 820px){
+    html,body{height:auto}
+    .wrap{display:block !important; height:auto !important}
+    .split{display:none}
+    .pane{overflow:visible; height:auto; border-bottom:1px solid var(--line)}
+    #left{max-height:52vh; overflow:auto}
+    .app-header{flex-wrap:wrap; gap:8px; padding:10px 12px}
+    .app-header h1{font-size:18px}
+    .thread-head{position:static}
+    .mhtml{height:320px}
+    .modal{max-width:96vw} .modal-b iframe{height:60vh}
+  }
 </style>
 </head>
 <body>
@@ -132,6 +146,7 @@ apply_theme(); if(window.matchMedia){try{window.matchMedia('(prefers-color-schem
 
 // ---- persisted bits ----
 function flashCopied(btn, original){ if(!btn) return; btn.textContent='✓ Copied!'; setTimeout(function(){ btn.textContent=original; }, 1500); }
+function autoGrow(ta, maxPx){ if(!ta) return; maxPx=maxPx||600; ta.style.height='auto'; var h=Math.min(ta.scrollHeight+2, maxPx); ta.style.height=h+'px'; ta.style.overflowY=(ta.scrollHeight>maxPx)?'auto':'hidden'; }
 function eq_modal(title, bodyNode, actions){
   var h=el('div',{class:'modal-h'},[ el('h3',{},[title||'']) ]);
   (actions||[]).forEach(function(a){ if(a) h.appendChild(a); });
@@ -179,14 +194,14 @@ function eq_clamp_date(v,lo,hi){ return v<lo?lo:(v>hi?hi:v); }
 
 let state = { queues:[], cases:[], thread:[], queue:null, case:null, provider:'openai', statuses:[], counts:{}, askHistory:[], askShowAll:false, triage:{},
   checked: loadJSON('eq_checked', {}), collapsed:{}, dedupe:true, viewHtml:true, instanceUrl:'', caseQuery:'',
-  dateFrom:'', dateTo:'', dateField:'LastModifiedDate', dateAny:false, loaded:false, datesOpen:false, attOnly:false, caseLimit:25 };
+  dateFrom:'', dateTo:'', dateField:'LastModifiedDate', dateAny:false, loaded:false, datesOpen:false, attOnly:false, caseLimit:25, queueCardOpen:true };
 
 function renderLogin(msg) {
   document.body.innerHTML = '<div id="app"></div>';
   const u = el('input', { placeholder:'Username', id:'u' });
   const p = el('input', { placeholder:'Password', type:'password', id:'p' });
   const err = el('div', { class:'err' }, [msg||'']);
-  const btn = el('button', { class:'btn primary', style:'width:100%', onclick: async function(){ err.textContent=''; try{ await api('/api/login',{method:'POST',body:JSON.stringify({user:u.value,pass:p.value})}); boot(); }catch(e){ err.textContent='Invalid credentials'; } } }, ['Sign in']);
+  const btn = el('button', { class:'btn primary', style:'width:100%', onclick: async function(){ err.textContent=''; try{ await api('/api/login',{method:'POST',body:JSON.stringify({user:u.value,pass:p.value})}); boot(); }catch(e){ err.textContent=(e&&e.message)||'Invalid credentials'; } } }, ['Sign in']);
   p.addEventListener('keydown', function(e){ if(e.key==='Enter') btn.click(); });
   $('#app').appendChild(el('div',{class:'center'},[ el('div',{class:'card login'},[
     el('h1',{},[el('span',{class:'arrow'},['> ']),'USAT Email Queue Assistant']),
@@ -202,7 +217,7 @@ function shell() {
     [el('option',{value:'openai'},['ChatGPT (default)']), el('option',{value:'anthropic'},['Claude'])]);
   const logout = el('button',{class:'btn ghost',onclick:async function(){ await fetch('/api/logout',{method:'POST'}); renderLogin('Signed out.'); }},['Sign out']);
   document.body.appendChild(el('div',{class:'app-header'},[
-    el('span',{class:'brandmark'},['Q']),
+    el('span',{class:'brandmark','aria-label':'email',html:'<svg width="22" height="22" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="19" width="38" height="26" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M14 21l18 14 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg>'}),
     el('div',{},[ el('h1',{},['USAT Email Queue Assistant']), el('div',{class:'sub'},['read-only proof of concept - nothing is sent to Salesforce']) ]),
     el('div',{class:'right'},[ el('span',{class:'dim'},['Model:']), provider, makeThemeBtn(), logout ])
   ]));
@@ -289,7 +304,7 @@ function renderLeft(){
   const attChk=el('input',{type:'checkbox'}); attChk.checked=!!state.attOnly; attChk.addEventListener('change',function(){ state.attOnly=attChk.checked; renderCases(); });
   const limSel=el('select',{style:'width:auto'},[25,50,100,200].map(function(n){ return el('option',{value:String(n)},[String(n)]); })); limSel.value=String(state.caseLimit||25);
   limSel.addEventListener('change',function(){ state.caseLimit=parseInt(limSel.value,10)||25; if(state.loaded && state.queue){ loadCases(); } });
-  const viewBtn=el('button',{class:'btn primary',onclick:async function(){ if(!state.queue){ dMsg.className='note warn'; dMsg.textContent='Pick a queue first.'; return; } if(!rangeOk()) return; state.caseQuery=''; await loadCounts(); renderLeft(); loadCases(); }},['View']);
+  const viewBtn=el('button',{class:'btn primary',style:'width:100%',onclick:async function(){ if(!state.queue){ dMsg.className='note warn'; dMsg.textContent='Pick a queue first.'; return; } if(!rangeOk()) return; state.caseQuery=''; state.queueCardOpen=false; await loadCounts(); renderLeft(); loadCases(); }},['View']);
 
   // collapsible date filters (default collapsed; default range yesterday -> today)
   const datesBody=el('div',{},[
@@ -302,15 +317,20 @@ function renderLeft(){
   const datesSummary=el('span',{class:'dim',style:'font-size:11px;margin-left:auto'},[ state.dateAny?'Any date':(state.dateFrom+' → '+state.dateTo) ]);
   const datesHdr=el('div',{style:'display:flex;gap:8px;align-items:center;cursor:pointer',title:'Show/hide date filters',onclick:function(){ state.datesOpen=!state.datesOpen; datesBody.style.display=state.datesOpen?'block':'none'; datesChev.style.transform=state.datesOpen?'none':'rotate(-90deg)'; }},[ el('h3',{style:'margin:0'},['Dates']), datesSummary, datesChev ]);
 
-  left.appendChild(el('div',{class:'card stack'},[
+  const qcBody=el('div',{class:'cardbody stack'},[
     el('h3',{},['Queue']), qsel,
     el('h3',{},['Status']), ssel,
     datesHdr, datesBody,
     el('h3',{},['Search']),
     el('div',{style:'display:flex;gap:6px;align-items:center'},[ search, clearBtn ]),
-    el('label',{class:'inline',style:'font-size:12.5px'},[ attChk, 'Only cases with attachments' ]),
-    el('div',{style:'display:flex;gap:8px;align-items:center;margin-top:4px'},[ viewBtn, el('span',{class:'dim',style:'font-size:12px;margin-left:auto'},['Show']), limSel ]), dMsg
-  ]));
+    el('div',{style:'display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:2px'},[ el('label',{class:'inline',style:'font-size:12.5px'},[ attChk, 'Only with attachments' ]), el('span',{style:'display:inline-flex;gap:6px;align-items:center'},[ el('span',{class:'dim',style:'font-size:12px'},['Show']), limSel ]) ]),
+    el('div',{style:'margin-top:8px'},[ viewBtn ]), dMsg
+  ]);
+  qcBody.style.display=state.queueCardOpen?'':'none';
+  const qcChev=el('span',{class:'chev'},['v']); qcChev.style.transform=state.queueCardOpen?'none':'rotate(-90deg)';
+  const qcSummary=el('span',{class:'dim',style:'font-size:11px;margin-left:auto'},[ state.queue?(state.queue.name+(state.loaded?(' · '+state.cases.length+' shown'):'')):'pick a queue' ]);
+  const qcHead=el('div',{class:'cardhead',title:'Show/hide the queue & filters',onclick:function(){ state.queueCardOpen=!state.queueCardOpen; qcBody.style.display=state.queueCardOpen?'':'none'; qcChev.style.transform=state.queueCardOpen?'none':'rotate(-90deg)'; }},[ el('h3',{style:'margin:0'},['Queue & filters']), qcSummary, qcChev ]);
+  left.appendChild(el('div',{class:'card'},[ qcHead, qcBody ]));
   left.appendChild(el('div',{style:'display:flex;gap:8px;align-items:center;margin:0 0 8px'},[ el('button',{class:'btn ghost sm',onclick:triageVisible},['AI triage visible']), el('span',{id:'triProg',class:'dim',style:'font-size:12px'},[]) ]));
   left.appendChild(el('div',{id:'caseList'},[]));
   renderCases();
@@ -457,6 +477,30 @@ function renderThread(){
   });
 }
 
+function rowsToTSV(rows){ return (rows||[]).map(function(r){ return (r||[]).map(function(c){ return String(c==null?'':c); }).join('\t'); }).join('\n'); }
+async function viewContextFile(f){
+  try{ const q=state.queue?state.queue.name:'';
+    const j=await api('/api/context/file?scope='+encodeURIComponent(f.scope)+'&queue='+encodeURIComponent(q)+'&name='+encodeURIComponent(f.name));
+    var rawUrl='/api/context/raw?scope='+encodeURIComponent(f.scope)+'&queue='+encodeURIComponent(q)+'&name='+encodeURIComponent(f.name);
+    var dl=el('button',{class:'btn ghost sm',title:'Download this file'},['\u2B07 Download']);
+    dl.onclick=async function(){ try{ var resp=await fetch(rawUrl,{credentials:'same-origin'}); if(!resp.ok) throw new Error('HTTP '+resp.status); var blob=await resp.blob(); var u=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=u; a.download=(f.base||f.name); document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function(){URL.revokeObjectURL(u);},1500); }catch(e){ alert('Download failed: '+((e&&e.message)||e)); } };
+    var actions=[dl]; var body;
+    if(j.kind==='pdf'){
+      body=el('div',{},['Loading PDF...']);
+      actions.unshift(el('a',{class:'btn ghost sm',href:rawUrl,target:'_blank',rel:'noopener'},['Open in new tab \u2197']));
+      (async function(){ try{ var resp=await fetch(rawUrl,{credentials:'same-origin'}); if(!resp.ok){ throw new Error('HTTP '+resp.status); }
+        var ab=await resp.arrayBuffer(); var url=URL.createObjectURL(new Blob([ab],{type:'application/pdf'}));
+        body.innerHTML=''; var ifr=document.createElement('iframe'); ifr.src=url; ifr.title=f.name; ifr.style.cssText='width:100%;height:72vh;border:1px solid var(--line);border-radius:8px;background:#fff'; body.appendChild(ifr);
+      }catch(e){ body.innerHTML=''; body.appendChild(el('div',{class:'err'},['Could not load the PDF: '+((e&&e.message)||e)+'. Use Download or Open in new tab.'])); } })();
+    }
+    else if(j.kind==='image'){ body=el('div',{}); var img=document.createElement('img'); img.src='data:'+j.media_type+';base64,'+j.data_base64; img.style.maxWidth='100%'; img.style.borderRadius='8px'; body.appendChild(img); }
+    else if(j.kind==='table'){ body=el('div',{}); if(j.rows&&j.rows.length){ body.appendChild(rowsToTable(j.rows)); if(j.note) body.appendChild(el('div',{class:'dim',style:'font-size:11px;margin-top:4px'},[j.note])); } else body.textContent=j.note||'(no rows)';
+      var cpt=el('button',{class:'btn ghost sm'},['\uD83D\uDCCB Copy']); cpt.onclick=function(){ copyText(rowsToTSV(j.rows), null); flashCopied(cpt,'\uD83D\uDCCB Copy'); }; actions.unshift(cpt); }
+    else { var txt=(j.text||'(no extractable text)')+(j.note?('\n\n['+j.note+']'):''); body=el('pre',{class:'attext',style:'max-height:none'},[ txt ]);
+      var cp=el('button',{class:'btn ghost sm'},['\uD83D\uDCCB Copy']); cp.onclick=function(){ copyText(txt, null); flashCopied(cp,'\uD83D\uDCCB Copy'); }; actions.unshift(cp); }
+    eq_modal(f.name, body, actions);
+  }catch(e){ eq_modal(f.name, el('div',{class:'err'},[(e&&e.message)||'error'])); }
+}
 const ASK_PRESETS = ['Summarize the case','What is the customer asking?','What information is missing to answer?','Is this within our scope or should it be escalated?','Draft a brief, friendly holding reply','What are the suggested next steps?'];
 
 function acard(title, kids, collapsed){
@@ -472,16 +516,26 @@ function renderRight(){
   // Suggested response + editable reply + mock send
   const out=el('div',{},[]);
   const reply=el('textarea',{style:'min-height:220px',placeholder:'The AI draft appears here and is fully editable. You can also compose a reply yourself, even if the AI said it needs more info.'});
+  reply.addEventListener('input',function(){ autoGrow(reply,600); });
   const sendMsg=el('div',{class:'note'},[]);
   async function doDraft(){
+    draftBtn.classList.add('sel'); ackBtn.classList.remove('sel');
     out.innerHTML='<div class="dim">Thinking ('+state.provider+')...</div>';
     try{ const j=await api('/api/ai/respond',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,provider:state.provider})});
       out.innerHTML=''; out.appendChild(el('span',{class:'badge '+j.verdict},[j.verdict==='draft'?'DRAFT':'NEED INFO']));
-      reply.value=j.body||''; out.appendChild(el('div',{class:'note'},['Loaded into the editable reply below.']));
+      reply.value=j.body||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['Loaded into the editable reply below.']));
     }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; }
   }
   state._doDraft=doDraft;
-  const draftBtn=el('button',{class:'btn primary',onclick:doDraft},['Draft reply']);
+  async function doAck(){
+    ackBtn.classList.add('sel'); draftBtn.classList.remove('sel');
+    out.innerHTML='<div class="dim">Writing acknowledgement ('+state.provider+')...</div>';
+    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,queue:state.queue.name,provider:state.provider,question:'Write a brief, friendly acknowledgement / holding reply to the customer for this case: confirm we received their message and are looking into it, and that we will follow up. Do NOT promise or invent any specific timeframe, price, policy, email, phone, or other detail that is not in the context. End with the SAME closing sign-off and team signature (team name, phone number, etc.) used in the automated reply in this thread; copy it verbatim if present and do not invent contact details. If the thread has no such sign-off, close simply with "Best regards," and "USA Triathlon". 2-4 sentences plus the sign-off, ready to send.'})});
+      out.innerHTML=''; out.appendChild(el('span',{class:'badge draft'},['ACKNOWLEDGEMENT'])); reply.value=j.answer||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['A short holding reply - edit as needed.']));
+    }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; }
+  }
+  const draftBtn=el('button',{class:'btn',onclick:doDraft},['Draft reply']);
+  const ackBtn=el('button',{class:'btn',title:'Generate a short, friendly acknowledgement (no specifics) you can send now',onclick:doAck},['Acknowledge receipt']);
   const sendBtn=el('button',{class:'btn',onclick:async function(){
     sendMsg.textContent='';
     try{ await api('/api/send',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,body:reply.value})}); sendMsg.className='note ok'; sendMsg.textContent='Sent.'; }
@@ -489,7 +543,7 @@ function renderRight(){
   }},['Send reply']);
   const copyBtn=el('button',{class:'btn'},['📋 Copy reply']);
   copyBtn.onclick=function(){ if(!reply.value.trim()){ sendMsg.className='note'; sendMsg.textContent='Nothing to copy yet - draft or write a reply first.'; return; } copyText(reply.value, sendMsg); flashCopied(copyBtn,'📋 Copy reply'); };
-  right.appendChild(acard('AI suggested response', [ draftBtn, out,
+  right.appendChild(acard('AI suggested response', [ el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ draftBtn, ackBtn ]), out,
     el('h3',{style:'margin-top:6px'},['Reply (editable)']), reply,
     el('div',{style:'display:flex;gap:8px;align-items:center'},[ sendBtn, copyBtn ]), sendMsg ], false));
 
@@ -506,7 +560,7 @@ function renderRight(){
     hist.innerHTML='';
     const items=state.askHistory.slice().reverse(); const N=2;
     if(thinking) hist.appendChild(el('div',{class:'dim',style:'margin-bottom:6px'},['Thinking ('+state.provider+')...']));
-    (state.askShowAll?items:items.slice(0,N)).forEach(function(h){ hist.appendChild(el('div',{class:'askitem'},[ el('div',{class:'q'},[ el('span',{},['Q: '+h.q]), el('span',{class:'qtime'},[h.ts||'']) ]), el('div',{class:'a'},[h.a]) ])); });
+    (state.askShowAll?items:items.slice(0,N)).forEach(function(h){ var cp=el('button',{class:'btn ghost sm',title:'Copy this answer'},['\uD83D\uDCCB Copy']); cp.onclick=function(){ copyText(h.a, null); flashCopied(cp,'\uD83D\uDCCB Copy'); }; hist.appendChild(el('div',{class:'askitem'},[ el('div',{class:'q'},[ el('span',{},['Q: '+h.q]), el('span',{class:'qtime'},[h.ts||'']) ]), el('div',{class:'a'},[h.a]), el('div',{style:'margin-top:4px'},[ cp ]) ])); });
     if(items.length>N) hist.appendChild(el('button',{class:'btn ghost sm',onclick:function(){ state.askShowAll=!state.askShowAll; renderAskHist(); }},[ state.askShowAll?'See less':('See '+(items.length-N)+' earlier') ]));
     hist.scrollTop=0;
   }
@@ -529,21 +583,74 @@ function renderRight(){
 
   // Context files (list + upload)
   const fileList=el('div',{class:'filelist'},['Loading...']);
-  const scope=el('select',{style:'width:auto'},[el('option',{value:'global'},['Global (all queues)']),el('option',{value:'queue'},['This queue only'])]);
-  const fileInput=el('input',{type:'file'});
+  const scope=el('select',{style:'width:auto'},[el('option',{value:'queue'},['This queue only']),el('option',{value:'global'},['Global (all queues)'])]); scope.value='queue';
+  const fileInput=el('input',{type:'file',style:'display:none'});
+  const fileName=el('span',{class:'dim',style:'font-size:12px'},['No file chosen']);
+  fileInput.addEventListener('change',function(){ fileName.textContent=(fileInput.files&&fileInput.files[0])?fileInput.files[0].name:'No file chosen'; });
+  const chooseFileBtn=el('button',{class:'btn',title:'Choose a file from your computer'},['Choose a file']);
+  chooseFileBtn.onclick=function(){ fileInput.click(); };
   const upMsg=el('div',{class:'note'},[]);
   const grounding=el('div',{class:'note'},['Loading...']);
-  async function refreshContext(){ try{ const j=await api('/api/context?queue='+encodeURIComponent(state.queue.name)); 
-      var fk=(j.faq_chars||0)>0?('FAQ \u2713 ('+j.faq_chars+' chars)'):'FAQ none yet';
-      grounding.className='note ok'; grounding.textContent='AI is grounding on: '+fk+'  \u00b7  '+j.files.length+' context file(s)  \u00b7  '+(j.corrections||0)+' correction(s).';
-      fileList.innerHTML=''; if(!j.files.length){ fileList.appendChild(el('div',{class:'dim'},['(no uploaded context files yet)'])); } j.files.forEach(function(f){ fileList.appendChild(el('div',{class:'fi'},[ el('span',{},[f.name]), el('span',{class:'dim'},[f.scope+' · '+f.size+'b']) ])); }); }catch(e){ fileList.innerHTML='<div class="err">'+e.message+'</div>'; } }
+  function excludeKey(key, excluded){ return api('/api/context-exclude',{method:'POST',body:JSON.stringify({key:key,excluded:excluded})}); }
+  function ctxFileRow(f, indent){
+    var vb=el('button',{class:'btn ghost sm',title:'View / expand'},['view']); vb.onclick=function(){ viewContextFile(f); };
+    var tog=el('button',{class:'btn ghost sm',title: f.excluded?'Include in AI context':'Exclude from AI context (kept on disk)'},[ f.excluded?'include':'exclude' ]);
+    tog.onclick=async function(){ try{ await excludeKey(f.key, !f.excluded); refreshContext(); }catch(e){ alert(e.message); } };
+    var disp = indent ? (f.name.indexOf('/')>=0 ? f.name.split('/').slice(1).join('/') : f.base) : f.name;
+    var nameEl=el('span',{style:(f.excluded?'opacity:.5;text-decoration:line-through;':'')+(indent?'padding-left:16px;':'')},[ disp ]);
+    var meta=el('span',{class:'dim'},[ f.scope+' · '+f.size+'b'+(f.excluded?' · excluded':'') ]);
+    return el('div',{class:'fi'},[ nameEl, el('span',{style:'display:inline-flex;gap:6px;align-items:center'},[ meta, vb, tog ]) ]);
+  }
+  async function refreshContext(){ try{ const j=await api('/api/context?queue='+encodeURIComponent(state.queue.name));
+      var kc=(j.knowledge_chars||0); var files=j.files||[]; var included=files.filter(function(f){return !f.excluded;}).length;
+      grounding.className='note ok'; grounding.textContent='AI is grounding on '+included+' context file(s) ('+kc+' chars) \u00b7 '+(j.corrections||0)+' correction(s).';
+      fileList.innerHTML='';
+      if(!files.length){ fileList.appendChild(el('div',{class:'dim'},['(no context files yet)'])); }
+      var roots=[]; var folders={}; var order=[];
+      files.forEach(function(f){ if(f.folder){ if(!folders[f.folder]){ folders[f.folder]={key:f.folder_key,name:f.folder,files:[]}; order.push(f.folder); } folders[f.folder].files.push(f); } else { roots.push(f); } });
+      order.sort().forEach(function(name){ var g=folders[name]; var fx=g.files.every(function(x){return x.excluded;});
+        var tog=el('button',{class:'btn ghost sm',title:fx?'Include this whole folder':'Exclude this whole folder from context'},[ fx?'include':'exclude' ]);
+        tog.onclick=async function(){ try{ await excludeKey(g.key, !fx); refreshContext(); }catch(e){ alert(e.message); } };
+        fileList.appendChild(el('div',{class:'fi'},[ el('span',{style:fx?'opacity:.5':''},['📁 '+name+'  ('+g.files.length+' file'+(g.files.length>1?'s':'')+(fx?' · excluded':'')+')']), el('span',{},[ tog ]) ]));
+        if(!fx){ g.files.forEach(function(f){ fileList.appendChild(ctxFileRow(f, true)); }); }
+      });
+      roots.forEach(function(f){ fileList.appendChild(ctxFileRow(f, false)); });
+    }catch(e){ fileList.innerHTML='<div class="err">'+e.message+'</div>'; } }
   const upBtn=el('button',{class:'btn',onclick:function(){ const f=fileInput.files&&fileInput.files[0]; if(!f){ upMsg.textContent='Choose a file first.'; return; }
     const rd=new FileReader(); rd.onload=async function(){ const b64=String(rd.result).split(',').pop(); upMsg.className='note'; upMsg.textContent='Uploading...';
-      try{ await api('/api/context',{method:'POST',body:JSON.stringify({scope:scope.value,queue:state.queue.name,name:f.name,content_base64:b64})}); upMsg.className='note ok'; upMsg.textContent='Uploaded.'; fileInput.value=''; refreshContext(); }
+      try{ await api('/api/context',{method:'POST',body:JSON.stringify({scope:scope.value,queue:state.queue.name,name:f.name,content_base64:b64})}); upMsg.className='note ok'; upMsg.textContent='Uploaded.'; fileInput.value=''; fileName.textContent='No file chosen'; refreshContext(); }
       catch(e){ upMsg.className='note warn'; upMsg.textContent=e.message; } };
     rd.readAsDataURL(f); }},['Upload']);
-  right.appendChild(acard('Context files (knowledge the AI reads)', [ grounding, fileList,
-    el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ fileInput, scope, upBtn ]), upMsg ], true));
+  const ctxRefresh=el('button',{class:'btn ghost sm',title:'Refresh the context file list',onclick:function(){ refreshContext(); }},['↻ Refresh']);
+  function fileToB64(file){ return new Promise(function(res,rej){ var rd=new FileReader(); rd.onload=function(){ res(String(rd.result).split(',').pop()); }; rd.onerror=rej; rd.readAsDataURL(file); }); }
+  const folderMsg=el('div',{class:'note'},[]);
+  const folderScope=el('select',{style:'width:auto'},[el('option',{value:'queue'},['This queue only']),el('option',{value:'global'},['Global (all queues)'])]); folderScope.value='queue';
+  async function uploadFiles(files, folder, scopeVal){ files=files||[]; if(!files.length){ folderMsg.className='note'; folderMsg.textContent='No files found in that folder.'; return; }
+    var ok=0, skip=0, i=0;
+    for(const file of files){ i++; folderMsg.className='note'; folderMsg.textContent='Reading '+i+'/'+files.length+'...';
+      try{ const b64=await fileToB64(file); await api('/api/context',{method:'POST',body:JSON.stringify({scope:(scopeVal||scope.value),queue:state.queue.name,name:file.name,content_base64:b64,folder:folder||''})}); ok++; }
+      catch(e){ skip++; } }
+    folderMsg.className='note ok'; folderMsg.textContent='Read '+ok+' file(s)'+(skip?(' · skipped '+skip+' (unsupported/too big)'):'')+(folder?(' into folder "'+folder+'"'):'')+'.'; refreshContext(); }
+  // Fallback folder input (Safari/Firefox lack the File System Access API).
+  const folderInput=el('input',{type:'file',style:'display:none'}); folderInput.setAttribute('webkitdirectory',''); folderInput.setAttribute('directory',''); folderInput.setAttribute('multiple','multiple');
+  folderInput.addEventListener('change',function(){ var arr=folderInput.files?Array.prototype.slice.call(folderInput.files):[]; var folder=(arr[0]&&arr[0].webkitRelativePath)?arr[0].webkitRelativePath.split('/')[0]:'uploaded'; uploadFiles(arr, folder, folderScope.value); folderInput.value=''; });
+  const chooseFolderBtn=el('button',{class:'btn',title:'Let the browser read a folder on your computer'},['Choose a folder']);
+  chooseFolderBtn.onclick=async function(){
+    if(window.showDirectoryPicker){
+      let handle; try{ handle=await window.showDirectoryPicker(); }catch(e){ return; } /* cancelled */
+      folderMsg.className='note'; folderMsg.textContent='Reading folder...'; var files=[];
+      try{ for await (const entry of handle.values()){ if(entry.kind==='file'){ try{ files.push(await entry.getFile()); }catch(e){} } } }catch(e){ folderMsg.className='note warn'; folderMsg.textContent=(e&&e.message)||'Could not read folder'; return; }
+      uploadFiles(files, handle.name, folderScope.value);
+    } else { folderInput.click(); }
+  };
+  right.appendChild(acard('Context files (knowledge the AI reads)', [
+    el('div',{style:'display:flex;justify-content:space-between;align-items:center'},[ grounding, ctxRefresh ]),
+    fileList,
+    el('h3',{style:'margin:8px 0 0'},['Add a file']),
+    el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ chooseFileBtn, fileName, scope, upBtn, fileInput ]), upMsg,
+    el('h3',{style:'margin:8px 0 0'},['Add a folder (browser reads it)']),
+    el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ chooseFolderBtn, folderScope, folderInput ]), folderMsg
+  ], true));
   refreshContext();
 
   // SOQL (editable; runs read-only server-side) - last card

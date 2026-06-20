@@ -209,8 +209,9 @@ async function main() {
     console.log(r.answer);
   } else if (cmd === 'context') {
     const files = await faq.load_context_files(args[1] || '');
+    const cdir = await faq.context_dir();
     console.log(col(B, 'Context files for ' + (args[1] || '(global only)') + ':'));
-    if (!files.length) console.log(col(GRY, '  (none) - drop files in ' + faq.CONTEXT_DIR + '/_global or /<queue_slug>'));
+    if (!files.length) console.log(col(GRY, '  (none) - drop files in ' + cdir + '/_global or /<queue_slug>'));
     files.forEach(function (x) { console.log('  - ' + x.name + col(GRY, '  (' + x.text.length + ' chars)')); });
   } else if (cmd === 'corrections') {
     const rows = corrections.list(false);

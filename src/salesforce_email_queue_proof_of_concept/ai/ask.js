@@ -16,7 +16,7 @@ async function ask_about_case(opts) {
   const sender_history = sender_email ? await sf.get_sender_history(o.conn, { email: sender_email, exclude_case_id: o.case_id }) : [];
   const context = build_context({ thread: thread, sender_history: sender_history, faq: o.faq, corrections: o.corrections });
   const complete = o.complete || providers.complete;
-  const answer = await complete({ provider: o.provider, model: o.model, system: SYSTEM, prompt: build_ask_prompt(context, o.question, o.history), env: o.env });
+  const answer = await complete({ provider: o.provider, model: o.model, system: SYSTEM, prompt: build_ask_prompt(context, o.question, o.history), images: o.images, env: o.env });
   return { answer: answer, context_chars: context.length, sender_email: sender_email };
 }
 

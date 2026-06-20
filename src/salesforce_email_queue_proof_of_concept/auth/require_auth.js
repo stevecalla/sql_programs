@@ -7,6 +7,7 @@ function require_auth(req, res, next) {
   const p = session.verify(cookies[session.COOKIE], store.session_secret());
   if (!p) return res.status(401).json({ ok: false, error: 'authentication required' });
   req.user = p.user;
+  req.role = p.role || 'user';
   next();
 }
 module.exports = { require_auth };

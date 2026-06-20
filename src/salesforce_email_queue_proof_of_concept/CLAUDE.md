@@ -42,8 +42,8 @@ ai/
   triage.js         triage_case -> status (answer_ready|draft_possible|needs_info|non_actionable)
   ask.js            ask_about_case
   extract.js        attachment bytes -> text (text native; pdf/docx/xlsx via OPTIONAL deps)
-  faq.js            knowledge loader: per-queue FAQ (data/faq/) + user context files
-                    (data/context/_global + /<slug>; md/csv/txt/html native, pdf/docx/xlsx via opt deps)
+  faq.js            knowledge loader: ALL knowledge from the EXTERNAL context folder (via ../data_dir.js
+                    -> determineOSPath; _global + /<slug>; md/csv/txt/html native, pdf/docx/xlsx opt, images stored)
   index.js
 auth/
   auth_store.js     scrypt hash/verify, JSON user store, .env recovery account, session_secret
@@ -61,7 +61,8 @@ src/
   admin.js          user management (add/list/remove)
 menu.js             RRT-style launcher (color sections, prefs toggle, banners, per-suite test headers)
 tests/              node --test: text_clean, sf_threads, extract, ai, faq_corrections, auth
-data/               gitignored runtime: faq/*.md, context/** (user knowledge), corrections.json, auth.json
+data_dir.js         resolves the EXTERNAL data root (<determineOSPath()>/usat_email_queue) for ALL
+                    runtime data: context/, auth.json, corrections.json. Nothing data-related in the repo.
 plans_and_notes/    plan.md, mvp_plan.md, salesforce_api_requirements.md, build_review.md, brief.docx
 ../../server_salesforce_email_queue_8019.js   repo-root web server
 ```
@@ -98,7 +99,7 @@ node ../../server_salesforce_email_queue_8019.js   # web app at http://localhost
 ```
 
 Env (repo-root `.env`): `SF_PROD_*` (reads), `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` (AI).
-Web login: set `EQ_RECOVERY_USER` / `EQ_RECOVERY_PASS` for a bootstrap account, then add users.
+Web login: set `SF_EMAIL_QUEUE_ADMIN_USER` / `SF_EMAIL_QUEUE_ADMIN_PASS` (role admin) and/or `SF_EMAIL_QUEUE_USER` / `SF_EMAIL_QUEUE_PASS` (role user) in the repo-root `.env`; or add stored users via `node src/admin.js add`.
 
 ## Reference docs
 
@@ -111,8 +112,20 @@ identity, §12 AI tools, §13 API limits), `mvp_plan.md`, `plan.md` (full roadma
 - No `package.json` at this folder level (by request) - dependencies install at the **repo root**
   (`pdf-parse`, `mammoth` already listed there). Scripts run directly: `node menu.js`, `node src/cli.js`,
   `node ../../server_salesforce_email_queue_8019.js`.
-- `data/` is gitignored (auth.json, corrections.json, context/**). Templates kept: `data/context/_TEMPLATE_faq.md`.
+- There is NO in-repo data folder. ALL knowledge + runtime/sensitive data (context, auth.json, corrections.json) lives OUTSIDE the repo via `data_dir.js` -> `determineOSPath()` (`<base>/usat_email_queue/`). Knowledge = the context folder only (no separate FAQ). Uploads allow text/docs + images.
 - Web API additions: `/api/context` (GET list, POST upload base64), `/api/status-counts`, ask history
   param on `/api/ai/ask`; `/api/ai/triage` (per-case AI status). Admin: `node src/admin.js passwd <user>` (passwords are scrypt-hashed - never shown).
-- `/api/queues` also returns `instance_url` (for SF deep links); `/api/context` also returns `faq_chars` + `corrections` (grounding indicator). UI: queue search box, editable per-row status (mock), SOQL/Workbench card, auto-draft on `answer_ready`.
-- Tests: 8 suites / 40 unit+route tests, plus `e2e/` Playwright browser tests (API-stubbed; needs `npx playwright install chromium`).
+- `/api/queues` also returns `instance_url` (for SF deep links); `/api/context` also returns `knowledge_chars` + `corrections` (grounding indicator). UI: queue search box, editable per-row status (mock), SOQL/Workbench card, auto-draft on `answer_ready`.
+- Context storage is OUTSIDE the repo (member data never committed), via `data_dir.js` ->
+  `utilities/determineOSPath()` -> `<base>/usat_email_queue/context/` (mirrors transform `src/data_dir.js`).
+  `ai/faq.js` context fns are async (await `context_dir()`); overrides `EQ_CONTEXT_DIR`/`EQ_DATA_DIR`/
+  Server seeds a SAMPLE knowledge file (`knowledge_SAMPLE.md`) on startup and logs the folder path.
+- Auth + corrections now also live OUTSIDE the repo via `data_dir.js` (`<base>/usat_email_queue/auth.json`,
+  `corrections.json`); overrides `EQ_USERS_FILE`/`EQ_CORRECTIONS_FILE`. Resolved with `determineOSPathSync()`
+  (added to `utilities/determineOSPath.js`) since those stores are sync. In-app `data/` = curated FAQ only.
+- - **Vision enabled**: `ai/providers.js` `complete()` accepts `images` (multimodal for OpenAI + Anthropic);
+  `ai/faq.js` `load_context_images()` reads png/jpeg/gif/webp from the context folder (<=4 imgs, <=4MB);
+  `respond`/`ask` pass them via routes. Uploaded context images become real grounding.
+- - Full productionization plan: `plans_and_notes/path_to_production.md` (SF writes, per-user identity, DB).
+- Auth: `.env` accounts carry a **role** (mirrors transform `admin_store` env+store pattern):
+  `SF_EMAIL_QUEUE_ADMIN_USER/PASS` -> `a

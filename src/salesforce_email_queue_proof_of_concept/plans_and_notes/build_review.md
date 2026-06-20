@@ -225,3 +225,20 @@ E2E scaffold** in `e2e/` (stubs the API; run `npx playwright test -c e2e/playwri
   clickable links in the text; clicking opens an **in-app preview modal** (sandboxed iframe + the full
   URL + Open-in-new-tab + Copy), so the operator stays in context. Links are flagged as email-sourced.
 - Tests: **43/43**.
+
+---
+
+## Round 10 update (env logins + roles, HTML email view, server parity, more-than-25)
+
+- **Auth via `.env` accounts with roles** (mirrors the transform `admin_store` env+store pattern):
+  `SF_EMAIL_QUEUE_ADMIN_USER`/`_PASS` -> role `admin`, `SF_EMAIL_QUEUE_USER`/`_PASS` -> role `user`.
+  `valid_user` returns the role; it flows through the signed cookie -> `req.role` -> `/api/login` +
+  `/api/me`, ready for access differentiation later. The legacy `EQ_RECOVERY_*` account was **removed**.
+- **Email body view**: HTML (default) in a sandboxed, script-free iframe, or plain text via a header
+  toggle; falls back to text when there's no HTML body.
+- **Queue: more than 25** via a "Show" selector (25/50/100/200, server cap 200); rows show a 🔗 link
+  indicator (searchable) from a per-case body scan (`/api/cases?...&links=1`, `sf.cases_with_links`).
+- **Server parity**: `server_salesforce_email_queue_8019.js` rebuilt to mirror the 8018 skeleton
+  (`create_app`/`start_server`, cors, no-cache, `/api/status`, dual-stack `app.listen` so the Cloudflare
+  tunnel reaches it over IPv6 localhost, optional ngrok off by default).
+- Docs updated (README configuration + CLAUDE update notes). Tests: **43/43**.

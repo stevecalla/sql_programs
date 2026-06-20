@@ -29,26 +29,38 @@ async function complete(opts) {
   const transport = o.transport || (typeof fetch !== 'undefined' ? fetch : null);
   if (!api_key) { const e = new Error(p.label + ' API key missing (' + p.env_key + ')'); e.code = 'NO_API_KEY'; throw e; }
   if (!transport) throw new Error('No fetch transport available');
-  if (p.id === 'openai') return openai_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, transport: transport });
-  return anthropic_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, transport: transport });
+  if (p.id === 'openai') return openai_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport });
+  return anthropic_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport });
 }
 
+function openai_user_content(prompt, images) {
+  if (!images || !images.length) return prompt || '';
+  const arr = [{ type: 'text', text: prompt || '' }];
+  images.forEach(function (im) { arr.push({ type: 'image_url', image_url: { url: 'data:' + im.media_type + ';base64,' + im.data_base64 } }); });
+  return arr;
+}
 async function openai_complete(a) {
   const res = await a.transport('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + a.api_key },
-    body: JSON.stringify({ model: a.model, temperature: 0.2, messages: [{ role: 'system', content: a.system || '' }, { role: 'user', content: a.prompt || '' }] })
+    body: JSON.stringify({ model: a.model, temperature: 0.2, messages: [{ role: 'system', content: a.system || '' }, { role: 'user', content: openai_user_content(a.prompt, a.images) }] })
   });
   if (!res.ok) throw new Error('OpenAI HTTP ' + res.status + ': ' + (await safe_text(res)));
   const j = await res.json();
   return ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
 }
 
+function anthropic_user_content(prompt, images) {
+  if (!images || !images.length) return prompt || '';
+  const arr = [{ type: 'text', text: prompt || '' }];
+  images.forEach(function (im) { arr.push({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data_base64 } }); });
+  return arr;
+}
 async function anthropic_complete(a) {
   const res = await a.transport('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': a.api_key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: a.model, max_tokens: 1024, system: a.system || '', messages: [{ role: 'user', content: a.prompt || '' }] })
+    body: JSON.stringify({ model: a.model, max_tokens: 1024, system: a.system || '', messages: [{ role: 'user', content: anthropic_user_content(a.prompt, a.images) }] })
   });
   if (!res.ok) throw new Error('Anthropic HTTP ' + res.status + ': ' + (await safe_text(res)));
   const j = await res.json();

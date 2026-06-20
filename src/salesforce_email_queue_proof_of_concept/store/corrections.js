@@ -7,7 +7,10 @@
 // File path override via EQ_CORRECTIONS_FILE for tests.
 const fs = require('fs');
 const path = require('path');
-const FILE = process.env.EQ_CORRECTIONS_FILE || path.join(__dirname, '..', 'data', 'corrections.json');
+const data_dir = require('../data_dir');
+// Corrections live OUTSIDE the repo: <determineOSPath()>/usat_email_queue/corrections.json (override:
+// EQ_CORRECTIONS_FILE). Slated to move to a DB table (see plans_and_notes/path_to_production.md, Track C).
+const FILE = process.env.EQ_CORRECTIONS_FILE || data_dir.file_sync('corrections.json');
 
 let _items = null;
 function load() {

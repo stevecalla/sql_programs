@@ -227,8 +227,8 @@ src/race_results_transform/.menu_prefs.json
 admin_overrides.json
 
 # Salesforce Email Queue POC - runtime / sensitive (do not commit member data)
-src/salesforce_email_queue_proof_of_concept/data/auth.json
-src/salesforce_email_queue_proof_of_concept/data/corrections.json
-src/salesforce_email_queue_proof_of_concept/data/context/**
-!src/salesforce_email_queue_proof_of_concept/data/context/_TEMPLATE_faq.md
+# Salesforce Email Queue POC: runtime/sensitive data (auth.json, corrections.json, uploaded context)
+# now lives OUTSIDE the repo via data_dir.js -> utilities/determineOSPath() (<base>/usat_email_queue/).
+# Nothing data-related is in-repo at all (no data/ folder); knowledge is the external context folder.
 src/salesforce_email_queue_proof_of_concept/.menu_prefs.json
+

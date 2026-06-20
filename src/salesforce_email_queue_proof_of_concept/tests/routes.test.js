@@ -3,8 +3,8 @@ const os = require('os'), path = require('path'), fs = require('fs'), http = req
 process.env.EQ_USERS_FILE = path.join(os.tmpdir(), 'eq_routes_users_' + Date.now() + '.json');
 process.env.EQ_CORRECTIONS_FILE = path.join(os.tmpdir(), 'eq_routes_corr_' + Date.now() + '.json');
 process.env.EQ_CONTEXT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'eq_routes_ctx_'));
-process.env.EQ_RECOVERY_USER = 'demo';
-process.env.EQ_RECOVERY_PASS = 'demo';
+process.env.SF_EMAIL_QUEUE_ADMIN_USER = 'demo';
+process.env.SF_EMAIL_QUEUE_ADMIN_PASS = 'demo';
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
