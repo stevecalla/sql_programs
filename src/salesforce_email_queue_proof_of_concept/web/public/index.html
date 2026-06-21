@@ -190,6 +190,41 @@ function downloadCSV(filename, rows){
 function recordsToRows(records){ var cols=[]; (records||[]).forEach(function(r){ Object.keys(r).forEach(function(k){ if(cols.indexOf(k)<0) cols.push(k); }); }); return [cols].concat((records||[]).map(function(r){ return cols.map(function(c){ var v=r[c]; if(v&&typeof v==='object') v=JSON.stringify(v); return v==null?'':v; }); })); }
 function loadJSON(k,d){ try{ return JSON.parse(localStorage.getItem(k)) || d; }catch(e){ return d; } }
 function saveJSON(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+
+// ---- workspace reset helpers (snake_case) ----
+// Working state = the current queue/case context. Cleared on sign-in + sign-out so a fresh session
+// starts blank, but a same-session page refresh keeps it. Preferences (theme, model, column widths)
+// are NOT touched here. Keys: eq_queue, eq_status, eq_checked.
+function clear_working_state(){
+  try{ ['eq_queue','eq_status','eq_checked'].forEach(function(k){ localStorage.removeItem(k); }); }catch(e){}
+  state.queue=null; state.cases=[]; state.counts={}; state.case=null; state.thread=[]; state.triage={}; state.checked={};
+  state.statuses=[]; state.caseQuery=''; state.dateFrom=''; state.dateTo=''; state.dateAny=false; state.loaded=false;
+  // The SPA keeps `state` in memory across sign-out -> sign-in (no reload), so reset the view toggles
+  // too: the Queue & filters card should be OPEN on a fresh sign-in to /.
+  state.queueCardOpen=true; state.datesOpen=false; state.attOnly=false;
+  try{ M.clearCase(); }catch(e){}
+}
+// Reset button: a full blank slate (but STAY signed in) — also resets preferences to defaults.
+function reset_app(){
+  clear_working_state();
+  try{ ['eq_theme','eq_model','eq_cols'].forEach(function(k){ localStorage.removeItem(k); }); }catch(e){}
+  state.provider='openai'; state.model=null;
+  try{ M.track('app_reset',{}); }catch(e){}
+  shell();              // rebuild the blank shell (re-renders left pane + repopulates the model picker)
+  try{ apply_theme(); }catch(e){}   // after shell() so the freshly-built theme toggle shows the right label
+}
+// Clear the currently-listed cases' triage badges, then run the batch triage fresh.
+function retriage_visible(){
+  (state.cases||[]).forEach(function(cs){ try{ delete state.triage[cs.case_id]; }catch(e){} });
+  try{ renderCases(); }catch(e){}
+  try{ triageVisible(); }catch(e){}
+  try{ update_triage_refresh(); }catch(e){}
+}
+// The ↻ Refresh triage button is enabled only once triage has actually been RUN (there are results to
+// refresh). If triage was never run there's nothing to refresh, so it stays disabled even if the model
+// changed — use "AI triage visible" for the first run.
+function triage_refresh_enabled(){ return Object.keys(state.triage||{}).length > 0; }
+function update_triage_refresh(){ try{ var b=document.getElementById('triRefresh'); if(b) b.disabled = !triage_refresh_enabled(); }catch(e){} }
 var EQ_MAX_RANGE_DAYS=14, EQ_MIN_DATE='2025-01-01';
 function eq_today(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function eq_ymd_add(ymd,days){ var d=new Date(Date.parse(ymd+'T00:00:00Z')+days*86400000); return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0'); }
@@ -253,6 +288,8 @@ function renderLogin(msg) {
     ev.preventDefault(); err.textContent = '';
     try {
       var r = await api('/api/login', { method:'POST', body: JSON.stringify({ user: document.getElementById('u').value, pass: document.getElementById('p').value }) });
+      clear_working_state();   // fresh sign-in starts blank (keeps prefs); a same-session refresh keeps the queue
+      try{ if(window.UsageMetrics && UsageMetrics.new_session) UsageMetrics.new_session(); }catch(_){}   // each login = a distinct session_id (even in the same tab)
       // Role-based routing: an explicit ?next= wins (deep-link/bounce); otherwise admins go to their
       // configured landing page (set in /admin -> Settings) and everyone else loads the app in place.
       var qs = new URLSearchParams(location.search), nx = qs.get('next');
@@ -282,15 +319,19 @@ function shell() {
       state.provider = opt ? (opt.getAttribute('data-provider')||'openai') : 'openai';
       try{ localStorage.setItem('eq_model', state.model||''); }catch(_){}
       M.track('model_selected',{ ai_provider: state.provider==='anthropic'?'claude':'chatgpt', ai_model: state.model||'' });
+      // Don't auto-run triage (avoids surprise API cost). Refresh stays available only if triage was
+      // already run (its results would now be stale); if it was never run, nothing to refresh.
+      update_triage_refresh();
     }},[]);
-  const logout = el('button',{class:'btn ghost',onclick:async function(){ M.track('sign_out',{}); await fetch('/api/logout',{method:'POST'}); renderLogin('Signed out.'); }},['Sign out']);
+  const resetBtn = el('button',{class:'btn ghost',title:'Reset the workspace to a blank slate (stays signed in)',onclick:reset_app},['↻ Reset']);
+  const logout = el('button',{class:'btn ghost',onclick:async function(){ M.track('sign_out',{}); clear_working_state(); await fetch('/api/logout',{method:'POST'}); renderLogin('Signed out.'); }},['Sign out']);
   document.body.appendChild(el('div',{class:'app-header'},[
     el('span',{class:'brandmark','aria-label':'email',html:'<svg width="22" height="22" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="19" width="38" height="26" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M14 21l18 14 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg>'}),
     el('div',{},[ el('h1',{},['Email Queue Assistant']), el('div',{class:'sub'},['read-only proof of concept - nothing is sent to Salesforce']) ]),
     el('div',{class:'right'},[ el('span',{class:'dim'},['Model:']), provider,
       ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/metrics?metrics_test=1',title:'Usage dashboard (admin)'},['📊 Metrics']):null),
       ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/admin?metrics_test=1',title:'Admin hub (admin)'},['⚙ Admin']):null),
-      makeThemeBtn(), logout ])
+      makeThemeBtn(), resetBtn, logout ])
   ]));
   document.body.appendChild(el('div',{class:'wrap'},[
     el('div',{class:'pane',id:'left'},[]),
@@ -365,14 +406,14 @@ function triageBadge(t){ if(!t||!t.status) return el('span',{}); return el('span
 async function triageOne(){ const cs=state.case; if(!cs) return; state.triage[cs.case_id]={status:'pending',reason:''}; renderThread(); renderCases();
   try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; aiBannerClear(); }
   catch(e){ state.triage[cs.case_id]={status:'error',reason:'Triage failed: '+(e&&e.message||'error')}; aiBanner((e&&e.message)||'error'); }
-  renderThread(); renderCases();
+  renderThread(); renderCases(); update_triage_refresh();
   if(state.case && state.case.case_id===cs.case_id && state.triage[cs.case_id] && state.triage[cs.case_id].status==='answer_ready' && typeof state._doDraft==='function'){ state._doDraft(); } }
 async function triageVisible(){ const prog=$('#triProg'); const list=state.cases.slice(); let i=0;
   for(const cs of list){ i++; if(state.triage[cs.case_id] && state.triage[cs.case_id].status!=='pending'){ continue; } if(prog) prog.textContent='Triaging '+i+'/'+list.length+'...';
     try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
     catch(e){ state.triage[cs.case_id]={status:'error',reason:'Triage failed: '+(e&&e.message||'error')}; aiBanner((e&&e.message)||'error'); }
     renderCases(); }
-  if(prog) prog.textContent='Triage complete.'; }
+  if(prog) prog.textContent='Triage complete.'; update_triage_refresh(); }
 function triageControl(){ const cs=state.case; if(!cs) return el('span',{}); const t=state.triage[cs.case_id];
   if(t && t.status==='pending') return el('span',{class:'dim'},['Triaging...']);
   if(t) return el('span',{style:'display:inline-flex;gap:6px;align-items:center'},[ triageBadge(t), el('button',{class:'btn ghost sm',title:'Re-run the AI status check (e.g. after adding context or a correction)',onclick:triageOne},['re-run']) ]);
@@ -445,7 +486,9 @@ function renderLeft(){
   const qcSummary=el('span',{class:'dim',style:'font-size:11px;margin-left:auto'},[ state.queue?(state.queue.name+(state.loaded?(' · '+state.cases.length+' shown'):'')):'pick a queue' ]);
   const qcHead=el('div',{class:'cardhead',title:'Show/hide the queue & filters',onclick:function(){ state.queueCardOpen=!state.queueCardOpen; qcBody.style.display=state.queueCardOpen?'':'none'; qcChev.style.transform=state.queueCardOpen?'none':'rotate(-90deg)'; }},[ el('h3',{style:'margin:0'},['Queue & filters']), qcSummary, qcChev ]);
   left.appendChild(el('div',{class:'card'},[ qcHead, qcBody ]));
-  left.appendChild(el('div',{style:'display:flex;gap:8px;align-items:center;margin:0 0 8px'},[ el('button',{class:'btn ghost sm',onclick:triageVisible},['AI triage visible']), el('span',{id:'triProg',class:'dim',style:'font-size:12px'},[]) ]));
+  var triRefresh = el('button',{id:'triRefresh',class:'btn ghost sm',title:'Clear and re-run triage for the visible cases (enabled after a triage run or a model change)',onclick:retriage_visible},['↻ Refresh']);
+  triRefresh.disabled = !triage_refresh_enabled();
+  left.appendChild(el('div',{style:'display:flex;gap:8px;align-items:center;margin:0 0 8px'},[ el('button',{class:'btn ghost sm',onclick:triageVisible},['AI triage visible']), triRefresh, el('span',{id:'triProg',class:'dim',style:'font-size:12px'},[]) ]));
   left.appendChild(el('div',{id:'caseList'},[]));
   renderCases();
 }

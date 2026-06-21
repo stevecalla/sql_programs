@@ -148,10 +148,14 @@ only counts, enums, the operator's username, the queue name, and Salesforce reco
 | `status_change` | Case status changed (mocked) | status_to, sf_ok, sf_error | Salesforce-writes panel, Cases |
 | `dashboard_view` / `admin_view` | `/metrics` or `/admin` opened | logged client-side → full meta (session_id, tz, viewport, theme); `is_test=1` via the page URL | excluded from real stats |
 
-Every event carries `visitor_id` + `session_id` for end-to-end correlation: browser events from the
-analytics client, and server-logged events (`ai_call`, `send_email`, `status_change`) from ids the
-client sends on the request (page navigations like `dashboard_view` read `visitor_id` from the
-`um_visitor_id` cookie). AI calls also record the resolved `ai_model` (e.g. `gpt-4o-mini`). The app
+Every event carries `visitor_id` + `session_id` for end-to-end correlation. The three identity fields are
+layered: **`visitor_id`** is the durable, anonymous per-browser id (cookie + localStorage, ~2 years) —
+the join key for "who, over time"; **`session_id`** identifies **one sign-in/sitting** (minted per login,
+held in `sessionStorage` so it's stable across the app → `/metrics` → `/admin` page hops and tab refreshes,
+and reset on a new login or new tab) — the key for per-session rollups; **`actor`** is the signed-in
+username. Server-logged events (`ai_call`, `send_email`, `status_change`) get these from ids the client
+sends on the request; page navigations like `dashboard_view` read `visitor_id` from the `um_visitor_id`
+cookie. AI calls also record the resolved `ai_model` (e.g. `gpt-4o-mini`). The app
 header has **one model picker** (populated from `/api/ai/models` → `ai/models.js`); the chosen model is
 sent with every triage / draft / ask request, so `ai_model` reflects exactly what was selected.
 
@@ -191,6 +195,15 @@ an admin is routed to their landing page **with `?metrics_test=1`**, and the cro
 and signing out, stays flagged the whole time. Regular users get **no cross-area links and no param**,
 so their activity is always real. Test rows are separable and **deletable** later via `/admin` → Purge
 test rows, the CLI (`node metrics/metrics_cli.js purge-test`), or `npm run email_queue_metrics_purge_test`.
+
+**Workspace state + reset.** The selected queue, status filter, and checked cases are saved per browser
+(`eq_queue` / `eq_status` / `eq_checked`) so a mid-session **page refresh keeps your place**. They are
+cleared on **sign-in and sign-out** (`clear_working_state`), so a fresh sign-in always starts blank and
+nothing leaks between users on a shared browser; genuine preferences (theme, model pick, column widths)
+persist. The header **↻ Reset** button returns the app to a full blank slate (also resetting those prefs)
+without signing out. Triage never auto-runs on a model change (avoids surprise API cost); the **↻ Refresh**
+button by "AI triage visible" force-re-triages the visible cases and is enabled only once triage has been
+run (nothing to refresh otherwise).
 
 **What's tracked.** AI-call events are logged **server-side** (provider, action, verdict, latency,
 success, grounded, images, corrections applied — never message content); the browser logs page views,
