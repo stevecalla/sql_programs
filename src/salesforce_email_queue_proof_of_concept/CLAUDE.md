@@ -81,7 +81,18 @@ plans_and_notes/    plan.md, mvp_plan.md, salesforce_api_requirements.md, build_
 
 ## Conventions
 
-- **snake_case** for our identifiers (DOM/library names excepted).
+- **snake_case** is the standard for our own identifiers. Be strict where it's a data/contract surface
+  (DB columns, analytics event/prop names, `config.json` keys, model-registry fields like `price_in`,
+  and Node module functions/vars). Three pragmatic exceptions, by design — don't "fix" these:
+  (1) **DOM + library + platform APIs** stay as-is (`getElementById`, `addEventListener`, `toISOString`);
+  (2) the **JSON request contract** uses camelCase on the wire (`caseId`, `queueId`, `caseNumber`) and the
+  server maps it to snake_case for storage (`case_id`, `queue_id`) — renaming the wire keys would churn
+  client+server+tests for no gain;
+  (3) the **browser SPA (`index.html`) has legacy camelCase** render/UI functions (`renderLeft`,
+  `loadCases`, `triageVisible`); new *standalone logic* helpers there should be snake_case
+  (`clear_working_state`, `retriage_visible`, `ai_banner`), but a new function that mirrors a camelCase
+  family is allowed to match its siblings (e.g. `loadModels` next to `loadCases`/`loadCounts`).
+  No linter enforces this (a snake_case rule fights JS/DOM); it's a review convention.
 - **Injectable dependencies** so everything is unit-testable with **no network**: SF functions take a
   `conn` (mocked in tests), `respond/ask` take `complete`/`conn`, providers take a `transport`.
 - Reads reuse `race_results_transform/sf` for the connection, `run_soql`, `fetch_content_version_bytes`,

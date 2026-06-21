@@ -390,7 +390,7 @@ function statusColor(s){ s=String(s||'').toLowerCase(); if(s.indexOf('clos')>=0)
 var TRIAGE_LABEL={answer_ready:'Answer ready',draft_possible:'Draft possible',needs_info:'Needs info',awaiting_reply:'Awaiting reply',spam:'Spam?',non_actionable:'No action',pending:'Triaging...',error:'⚠ Failed'};
 // Sticky banner when an AI call fails (e.g. provider out of credits / bad key / rate limit), so a
 // failure is never silently shown as a real result. Dismissible; updates in place.
-function aiBanner(msg){ try{
+function ai_banner(msg){ try{
   var id='eqAiBanner', b=document.getElementById(id);
   if(!b){ b=document.createElement('div'); b.id=id;
     b.style.cssText='position:sticky;top:0;z-index:60;background:var(--red-bg,#3a1212);color:var(--red,#ff8a8a);border-bottom:1px solid var(--red,#a33);padding:8px 14px;font-size:13px;display:flex;gap:10px;align-items:center';
@@ -401,7 +401,7 @@ function aiBanner(msg){ try{
   document.getElementById(id+'_t').textContent='⚠ AI request failed ('+(state.provider==='anthropic'?'Claude':'ChatGPT')+'): '+msg+'  — check the model & API key in Admin → Settings.';
   b.style.display='flex';
 }catch(e){} }
-function aiBannerClear(){ try{ var b=document.getElementById('eqAiBanner'); if(b) b.remove(); }catch(e){} }
+function ai_banner_clear(){ try{ var b=document.getElementById('eqAiBanner'); if(b) b.remove(); }catch(e){} }
 function triageBadge(t){ if(!t||!t.status) return el('span',{});
   // Source: t.ai===false => decided by a LOCAL rule (no API); t.ai===true => the AI model decided.
   // Mark local-rule badges with a trailing * and explain the source + reason in the tooltip.
@@ -411,14 +411,14 @@ function triageBadge(t){ if(!t||!t.status) return el('span',{});
   var label = (TRIAGE_LABEL[t.status]||t.status) + (isLocal ? ' *' : '');
   return el('span',{class:'tstat '+t.status, title:tip},[ label ]); }
 async function triageOne(){ const cs=state.case; if(!cs) return; state.triage[cs.case_id]={status:'pending',reason:''}; renderThread(); renderCases();
-  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason,ai:j.ai,ai_model:j.ai_model}; aiBannerClear(); }
-  catch(e){ state.triage[cs.case_id]={status:'error',reason:'Triage failed: '+(e&&e.message||'error')}; aiBanner((e&&e.message)||'error'); }
+  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason,ai:j.ai,ai_model:j.ai_model}; ai_banner_clear(); }
+  catch(e){ state.triage[cs.case_id]={status:'error',reason:'Triage failed: '+(e&&e.message||'error')}; ai_banner((e&&e.message)||'error'); }
   renderThread(); renderCases(); update_triage_refresh();
   if(state.case && state.case.case_id===cs.case_id && state.triage[cs.case_id] && state.triage[cs.case_id].status==='answer_ready' && typeof state._doDraft==='function'){ state._doDraft(); } }
 async function triageVisible(){ const prog=$('#triProg'); const list=state.cases.slice(); let i=0;
   for(const cs of list){ i++; if(state.triage[cs.case_id] && state.triage[cs.case_id].status!=='pending'){ continue; } if(prog) prog.textContent='Triaging '+i+'/'+list.length+'...';
     try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason,ai:j.ai,ai_model:j.ai_model}; }
-    catch(e){ state.triage[cs.case_id]={status:'error',reason:'Triage failed: '+(e&&e.message||'error')}; aiBanner((e&&e.message)||'error'); }
+    catch(e){ state.triage[cs.case_id]={status:'error',reason:'Triage failed: '+(e&&e.message||'error')}; ai_banner((e&&e.message)||'error'); }
     renderCases(); }
   if(prog) prog.textContent='Triage complete.'; update_triage_refresh(); }
 function triageControl(){ const cs=state.case; if(!cs) return el('span',{}); const t=state.triage[cs.case_id];
@@ -689,16 +689,16 @@ function renderRight(){
     out.innerHTML='<div class="dim">Thinking ('+state.provider+')...</div>';
     try{ const j=await api('/api/ai/respond',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})});
       out.innerHTML=''; out.appendChild(el('span',{class:'badge '+j.verdict},[j.verdict==='draft'?'DRAFT':'NEED INFO']));
-      reply.value=j.body||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['Loaded into the editable reply below.'])); aiBannerClear();
-    }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; aiBanner((e&&e.message)||'error'); }
+      reply.value=j.body||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['Loaded into the editable reply below.'])); ai_banner_clear();
+    }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; ai_banner((e&&e.message)||'error'); }
   }
   state._doDraft=doDraft;
   async function doAck(){
     ackBtn.classList.add('sel'); draftBtn.classList.remove('sel');
     out.innerHTML='<div class="dim">Writing acknowledgement ('+state.provider+')...</div>';
     try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,action:'acknowledge',_test:M.t,meta:M.meta(),question:'Write a brief, friendly acknowledgement / holding reply to the customer for this case: confirm we received their message and are looking into it, and that we will follow up. Do NOT promise or invent any specific timeframe, price, policy, email, phone, or other detail that is not in the context. End with the SAME closing sign-off and team signature (team name, phone number, etc.) used in the automated reply in this thread; copy it verbatim if present and do not invent contact details. If the thread has no such sign-off, close simply with "Best regards," and "USA Triathlon". 2-4 sentences plus the sign-off, ready to send.'})});
-      out.innerHTML=''; out.appendChild(el('span',{class:'badge draft'},['ACKNOWLEDGEMENT'])); reply.value=j.answer||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['A short holding reply - edit as needed.'])); aiBannerClear();
-    }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; aiBanner((e&&e.message)||'error'); }
+      out.innerHTML=''; out.appendChild(el('span',{class:'badge draft'},['ACKNOWLEDGEMENT'])); reply.value=j.answer||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['A short holding reply - edit as needed.'])); ai_banner_clear();
+    }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; ai_banner((e&&e.message)||'error'); }
   }
   const draftBtn=el('button',{class:'btn',onclick:doDraft},['Draft reply']);
   const ackBtn=el('button',{class:'btn',title:'Generate a short, friendly acknowledgement (no specifics) you can send now',onclick:doAck},['Acknowledge receipt']);
@@ -721,7 +721,7 @@ function renderRight(){
   async function doAsk(){ const q=qbox.value.trim(); if(!q) return; const ts=new Date().toLocaleString(); renderAskHist(true);
     try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta(),question:q,history:state.askHistory.slice(-6)})});
       state.askHistory.push({q:q,a:j.answer||'',ts:ts}); qbox.value=''; renderAskHist(); }
-    catch(e){ state.askHistory.push({q:q,a:'(error) '+e.message,ts:ts}); renderAskHist(); aiBanner((e&&e.message)||'error'); } }
+    catch(e){ state.askHistory.push({q:q,a:'(error) '+e.message,ts:ts}); renderAskHist(); ai_banner((e&&e.message)||'error'); } }
   function renderAskHist(thinking){
     hist.innerHTML='';
     const items=state.askHistory.slice().reverse(); const N=2;
