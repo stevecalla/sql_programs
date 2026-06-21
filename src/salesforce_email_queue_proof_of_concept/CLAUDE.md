@@ -92,7 +92,12 @@ plans_and_notes/    plan.md, mvp_plan.md, salesforce_api_requirements.md, build_
   `loadCases`, `triageVisible`); new *standalone logic* helpers there should be snake_case
   (`clear_working_state`, `retriage_visible`, `ai_banner`), but a new function that mirrors a camelCase
   family is allowed to match its siblings (e.g. `loadModels` next to `loadCases`/`loadCounts`).
-  No linter enforces this (a snake_case rule fights JS/DOM); it's a review convention.
+  **Enforced** by `tests/lint_snake_case.test.js` (ported from the transform): it scans our source
+  (comments/strings/`<style>` stripped) for camelCase and fails on any token not in `ALLOWED` (genuine
+  DOM/Node/jsforce/Express/mysql2/crypto/analytics-client names) or a harvested DOM element id. When it
+  flags a genuine library name, add it to `ALLOWED`; otherwise rename to snake_case. (It lints the app
+  modules + `web/public/index.html` + the server + tests; the `/metrics` & `/admin` HTML are not linted,
+  matching the transform, which doesn't lint its dashboard markup either.)
 - **Injectable dependencies** so everything is unit-testable with **no network**: SF functions take a
   `conn` (mocked in tests), `respond/ask` take `complete`/`conn`, providers take a `transport`.
 - Reads reuse `race_results_transform/sf` for the connection, `run_soql`, `fetch_content_version_bytes`,

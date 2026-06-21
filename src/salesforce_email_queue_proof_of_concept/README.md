@@ -270,6 +270,11 @@ Use the "Theme:" button in the header (or on the login screen); the choice persi
 
 ## Tests
 
-`node menu.js test` (or `node --test tests/*.test.js`) runs all suites - **71 tests across 12 files**
-(adds `metrics`, `queue_access`, `analytics`, `ask`):
+**Code style:** use `snake_case` for every identifier we define — **enforced** by
+`tests/lint_snake_case.test.js` (scans our source with comments/strings/`<style>` stripped; allow-lists
+genuine DOM/Node/jsforce/Express/mysql2/crypto/analytics-client names + DOM element ids). If it flags a
+real library name, add it to that file's `ALLOWED`; otherwise rename to snake_case.
+
+`node menu.js test` (or `node --test tests/*.test.js`) runs all suites
+(includes `metrics`, `queue_access`, `analytics`, `ask`, `spam`, `lint_snake_case`):
 unit (text/threads/extract/ai/faq+context/auth) p

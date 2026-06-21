@@ -128,11 +128,11 @@ function el(tag, attrs, kids) {
 async function api(path, opts) {
   const r = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts));
   let j = {}; try { j = await r.json(); } catch (e) {}
-  if (r.status === 401) { renderLogin('Session expired - please sign in.'); throw new Error('unauthorized'); }
+  if (r.status === 401) { render_login('Session expired - please sign in.'); throw new Error('unauthorized'); }
   if (!r.ok || j.ok === false) throw new Error((j && j.error) || ('HTTP ' + r.status));
   return j;
 }
-function copyText(t, msg) {
+function copy_text(t, msg) {
   function ok() { /* success shown via the button flashing checked */ }
   function fallback() {
     try { const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); ok(); }
@@ -145,51 +145,51 @@ function copyText(t, msg) {
 function effective_dark(){ let t=null; try{t=localStorage.getItem('eq_theme');}catch(e){} if(t==='dark')return true; if(t==='light')return false; return !!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches); }
 function apply_theme(){ let t=null; try{t=localStorage.getItem('eq_theme');}catch(e){} const r=document.documentElement; if(t==='dark'||t==='light')r.setAttribute('data-theme',t); else r.removeAttribute('data-theme'); const d=effective_dark(); Array.prototype.forEach.call(document.querySelectorAll('[data-theme-toggle]'),function(b){ b.textContent=d?'☀ Light':'☾ Dark'; b.title='Switch to '+(d?'light':'dark')+' theme'; }); }
 function toggle_theme(){ const d=effective_dark(); try{localStorage.setItem('eq_theme',d?'light':'dark');}catch(e){} apply_theme(); try{ if(typeof M!=='undefined') M.track('theme_changed',{ theme: d?'light':'dark' }); }catch(e){} }
-function makeThemeBtn(){ const d=effective_dark(); return el('button',{class:'btn ghost','data-theme-toggle':'1','aria-label':'Toggle light or dark theme',onclick:toggle_theme},[d?'☀ Light':'☾ Dark']); }
+function make_theme_btn(){ const d=effective_dark(); return el('button',{class:'btn ghost','data-theme-toggle':'1','aria-label':'Toggle light or dark theme',onclick:toggle_theme},[d?'☀ Light':'☾ Dark']); }
 apply_theme(); if(window.matchMedia){try{window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',apply_theme);}catch(e){}}
 
 // ---- persisted bits ----
-function flashCopied(btn, original){ if(!btn) return; btn.textContent='✓ Copied!'; setTimeout(function(){ btn.textContent=original; }, 1500); }
-function autoGrow(ta, maxPx){ if(!ta) return; maxPx=maxPx||600; ta.style.height='auto'; var h=Math.min(ta.scrollHeight+2, maxPx); ta.style.height=h+'px'; ta.style.overflowY=(ta.scrollHeight>maxPx)?'auto':'hidden'; }
-function eq_modal(title, bodyNode, actions){
+function flash_copied(btn, original){ if(!btn) return; btn.textContent='✓ Copied!'; setTimeout(function(){ btn.textContent=original; }, 1500); }
+function auto_grow(ta, max_px){ if(!ta) return; max_px=max_px||600; ta.style.height='auto'; var h=Math.min(ta.scrollHeight+2, max_px); ta.style.height=h+'px'; ta.style.overflowY=(ta.scrollHeight>max_px)?'auto':'hidden'; }
+function eq_modal(title, body_node, actions){
   var h=el('div',{class:'modal-h'},[ el('h3',{},[title||'']) ]);
   (actions||[]).forEach(function(a){ if(a) h.appendChild(a); });
-  var closeB=el('button',{class:'btn ghost sm',title:'Close (Esc)'},['✕ Close']); h.appendChild(closeB);
-  var box=el('div',{class:'modal'},[ h, el('div',{class:'modal-b'},[ bodyNode ]) ]);
+  var close_b=el('button',{class:'btn ghost sm',title:'Close (Esc)'},['✕ Close']); h.appendChild(close_b);
+  var box=el('div',{class:'modal'},[ h, el('div',{class:'modal-b'},[ body_node ]) ]);
   var bg=el('div',{class:'modal-bg'},[ box ]);
-  function close(){ if(bg.parentNode) bg.parentNode.removeChild(bg); document.removeEventListener('keydown',onKey); }
-  function onKey(e){ if(e.key==='Escape') close(); }
+  function close(){ if(bg.parentNode) bg.parentNode.removeChild(bg); document.removeEventListener('keydown',on_key); }
+  function on_key(e){ if(e.key==='Escape') close(); }
   bg.addEventListener('click',function(e){ if(e.target===bg) close(); });
-  closeB.onclick=close; document.addEventListener('keydown',onKey); document.body.appendChild(bg);
+  close_b.onclick=close; document.addEventListener('keydown',on_key); document.body.appendChild(bg);
   return { close: close };
 }
 var EQ_URL_RE=/(https?:\/\/[^\s<>()]+|www\.[^\s<>()]+)/gi;
-function extractLinks(text){ var m=String(text==null?'':text).match(EQ_URL_RE); return m?m.map(function(u){ return u.replace(/[.,;:)\]]+$/,''); }):[]; }
-function linkifyInto(node, text){
+function extract_links(text){ var m=String(text==null?'':text).match(EQ_URL_RE); return m?m.map(function(u){ return u.replace(/[.,;:)\]]+$/,''); }):[]; }
+function linkify_into(node, text){
   var str=String(text==null?'':text); var re=new RegExp(EQ_URL_RE.source,'gi'); var last=0, m;
   while((m=re.exec(str))){ var url=m[0].replace(/[.,;:)\]]+$/,''); var end=m.index+url.length;
     if(m.index>last) node.appendChild(document.createTextNode(str.slice(last,m.index)));
-    (function(u){ var a=el('a',{href:'#',class:'elink',title:'Preview this link in-app'},[u]); a.onclick=function(ev){ ev.preventDefault(); openLinkPreview(u); }; node.appendChild(a); })(url);
+    (function(u){ var a=el('a',{href:'#',class:'elink',title:'Preview this link in-app'},[u]); a.onclick=function(ev){ ev.preventDefault(); open_link_preview(u); }; node.appendChild(a); })(url);
     last=end; re.lastIndex=end; }
   if(last<str.length) node.appendChild(document.createTextNode(str.slice(last)));
 }
-function openLinkPreview(url){
+function open_link_preview(url){
   try{ if(typeof M!=='undefined') M.track('link_previewed',{}); }catch(e){}
   var safe = /^https?:\/\//i.test(url) ? url : ('https://'+url);
   var info=el('div',{class:'note warn'},['This link came from an email - verify before trusting it: ', el('b',{},[safe])]);
-  var openTab=el('a',{class:'btn',href:safe,target:'_blank',rel:'noopener noreferrer'},['Open in new tab ↗']);
-  var copyL=el('button',{class:'btn ghost sm'},['Copy link']); copyL.onclick=function(){ copyText(safe,null); flashCopied(copyL,'Copy link'); };
+  var open_tab=el('a',{class:'btn',href:safe,target:'_blank',rel:'noopener noreferrer'},['Open in new tab ↗']);
+  var copy_l=el('button',{class:'btn ghost sm'},['Copy link']); copy_l.onclick=function(){ copy_text(safe,null); flash_copied(copy_l,'Copy link'); };
   var frame=el('iframe',{sandbox:'allow-scripts allow-forms allow-popups',referrerpolicy:'no-referrer',src:safe},[]);
   var body=el('div',{},[ info, frame, el('div',{class:'dim',style:'margin-top:6px;font-size:12px'},['If the page is blank, the site blocks embedding - use "Open in new tab".']) ]);
-  eq_modal('Link preview', body, [ copyL, openTab ]);
+  eq_modal('Link preview', body, [ copy_l, open_tab ]);
 }
-function downloadCSV(filename, rows){
+function download_csv(filename, rows){
   var csv=(rows||[]).map(function(r){ return (r||[]).map(function(c){ var x=String(c==null?'':c); return /[",\n]/.test(x)?('"'+x.replace(/"/g,'""')+'"'):x; }).join(','); }).join('\n');
   var blob=new Blob([csv],{type:'text/csv'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename||'results.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
 }
-function recordsToRows(records){ var cols=[]; (records||[]).forEach(function(r){ Object.keys(r).forEach(function(k){ if(cols.indexOf(k)<0) cols.push(k); }); }); return [cols].concat((records||[]).map(function(r){ return cols.map(function(c){ var v=r[c]; if(v&&typeof v==='object') v=JSON.stringify(v); return v==null?'':v; }); })); }
-function loadJSON(k,d){ try{ return JSON.parse(localStorage.getItem(k)) || d; }catch(e){ return d; } }
-function saveJSON(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function records_to_rows(records){ var cols=[]; (records||[]).forEach(function(r){ Object.keys(r).forEach(function(k){ if(cols.indexOf(k)<0) cols.push(k); }); }); return [cols].concat((records||[]).map(function(r){ return cols.map(function(c){ var v=r[c]; if(v&&typeof v==='object') v=JSON.stringify(v); return v==null?'':v; }); })); }
+function load_json(k,d){ try{ return JSON.parse(localStorage.getItem(k)) || d; }catch(e){ return d; } }
+function save_json(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
 
 // ---- workspace reset helpers (snake_case) ----
 // Working state = the current queue/case context. Cleared on sign-in + sign-out so a fresh session
@@ -198,11 +198,11 @@ function saveJSON(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e
 function clear_working_state(){
   try{ ['eq_queue','eq_status','eq_checked'].forEach(function(k){ localStorage.removeItem(k); }); }catch(e){}
   state.queue=null; state.cases=[]; state.counts={}; state.case=null; state.thread=[]; state.triage={}; state.checked={};
-  state.statuses=[]; state.caseQuery=''; state.dateFrom=''; state.dateTo=''; state.dateAny=false; state.loaded=false;
+  state.statuses=[]; state.case_query=''; state.date_from=''; state.date_to=''; state.date_any=false; state.loaded=false;
   // The SPA keeps `state` in memory across sign-out -> sign-in (no reload), so reset the view toggles
   // too: the Queue & filters card should be OPEN on a fresh sign-in to /.
-  state.queueCardOpen=true; state.datesOpen=false; state.attOnly=false;
-  try{ M.clearCase(); }catch(e){}
+  state.queue_card_open=true; state.dates_open=false; state.att_only=false;
+  try{ M.clear_case(); }catch(e){}
 }
 // Reset button: a full blank slate (but STAY signed in) — also resets preferences to defaults.
 function reset_app(){
@@ -216,8 +216,8 @@ function reset_app(){
 // Clear the currently-listed cases' triage badges, then run the batch triage fresh.
 function retriage_visible(){
   (state.cases||[]).forEach(function(cs){ try{ delete state.triage[cs.case_id]; }catch(e){} });
-  try{ renderCases(); }catch(e){}
-  try{ triageVisible(); }catch(e){}
+  try{ render_cases(); }catch(e){}
+  try{ triage_visible(); }catch(e){}
   try{ update_triage_refresh(); }catch(e){}
 }
 // The ↻ Refresh triage button is enabled only once triage has actually been RUN (there are results to
@@ -232,9 +232,9 @@ function eq_yesterday(){ return eq_ymd_add(eq_today(),-1); }
 function eq_days_between(a,b){ return Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000); }
 function eq_clamp_date(v,lo,hi){ return v<lo?lo:(v>hi?hi:v); }
 
-let state = { queues:[], cases:[], thread:[], queue:null, case:null, provider:'openai', model:null, models:[], statuses:[], counts:{}, askHistory:[], askShowAll:false, triage:{},
-  checked: loadJSON('eq_checked', {}), collapsed:{}, dedupe:true, viewHtml:true, instanceUrl:'', caseQuery:'',
-  dateFrom:'', dateTo:'', dateField:'LastModifiedDate', dateAny:false, loaded:false, datesOpen:false, attOnly:false, caseLimit:25, queueCardOpen:true };
+let state = { queues:[], cases:[], thread:[], queue:null, case:null, provider:'openai', model:null, models:[], statuses:[], counts:{}, ask_history:[], ask_show_all:false, triage:{},
+  checked: load_json('eq_checked', {}), collapsed:{}, dedupe:true, view_html:true, instanceUrl:'', case_query:'',
+  date_from:'', date_to:'', date_field:'LastModifiedDate', date_any:false, loaded:false, dates_open:false, att_only:false, case_limit:25, queue_card_open:true };
 
 // ---- usage analytics (UsageMetrics browser client). is_test=1 ONLY when THIS page load's URL has
 // ?metrics_test=1 — never from session/storage or any other state — so test entries stay trackable +
@@ -250,11 +250,11 @@ var M_BASE = { source:'web', is_test: M_TEST?1:0 };
 try{ if(window.UsageMetrics) UsageMetrics.init({ app:'salesforce_email_queue', endpoint:'/api/event',
   allowList:['is_test','source','queue','queue_id','case_id','case_number','thread_msg_count','has_attachment','attachment_type','correction_scope','context_action','soql_chars','actor'],
   baseProps: M_BASE, autoPageView:false }); }catch(e){}   // visit is recorded after sign-in (see boot), so it carries the actor
-var M = { t: M_TEST?1:0, track:function(n,p){ try{ if(window.UsageMetrics) UsageMetrics.track(n, p||{}); }catch(e){} }, setActor:function(a){ try{ M_BASE.actor=a||''; }catch(e){} },
+var M = { t: M_TEST?1:0, track:function(n,p){ try{ if(window.UsageMetrics) UsageMetrics.track(n, p||{}); }catch(e){} }, set_actor:function(a){ try{ M_BASE.actor=a||''; }catch(e){} },
   // Sticky current-case context: once an email is opened, every later event carries this case_id/case_number
-  // (and queue) until another email is opened (setCase) or the queue is changed (clearCase).
-  setCase:function(c){ try{ M_BASE.case_id=(c&&c.case_id)||''; M_BASE.case_number=(c&&c.case_number)||''; if(c&&c.queue!=null)M_BASE.queue=c.queue; if(c&&c.queue_id!=null)M_BASE.queue_id=c.queue_id; }catch(e){} },
-  clearCase:function(){ try{ M_BASE.case_id=''; M_BASE.case_number=''; }catch(e){} },
+  // (and queue) until another email is opened (set_case) or the queue is changed (clear_case).
+  set_case:function(c){ try{ M_BASE.case_id=(c&&c.case_id)||''; M_BASE.case_number=(c&&c.case_number)||''; if(c&&c.queue!=null)M_BASE.queue=c.queue; if(c&&c.queue_id!=null)M_BASE.queue_id=c.queue_id; }catch(e){} },
+  clear_case:function(){ try{ M_BASE.case_id=''; M_BASE.case_number=''; }catch(e){} },
   // Expose the analytics visitor/session ids so server-logged events (ai_call / send / status) can carry
   // the SAME ids as the browser events for end-to-end correlation.
   vid:function(){ try{ return (window.UsageMetrics&&UsageMetrics.ids&&UsageMetrics.ids().visitor_id)||''; }catch(e){ return ''; } },
@@ -262,7 +262,7 @@ var M = { t: M_TEST?1:0, track:function(n,p){ try{ if(window.UsageMetrics) Usage
   // Full client metadata (ids + tz/local time/viewport/theme/page) for server-logged events.
   meta:function(){ try{ return (window.UsageMetrics&&UsageMetrics.meta&&UsageMetrics.meta())||{}; }catch(e){ return {}; } } };
 
-function renderLogin(msg) {
+function render_login(msg) {
   // Styled to match the transform's sign-in page exactly (navy full-screen card, USAT-red button,
   // show-password toggle). The POC is a SPA so it posts JSON to /api/login then boot()s in place.
   document.body.innerHTML =
@@ -293,12 +293,12 @@ function renderLogin(msg) {
       // Role-based routing: an explicit ?next= wins (deep-link/bounce); otherwise admins go to their
       // configured landing page (set in /admin -> Settings) and everyone else loads the app in place.
       var qs = new URLSearchParams(location.search), nx = qs.get('next');
-      var isAdmin = r && r.role === 'admin';
+      var is_admin = r && r.role === 'admin';
       // Admins ALWAYS land (and then navigate) with ?metrics_test=1, so EVERY event in their session
       // — page_view, AI calls, sign_out, etc. — is is_test=1 and easily removable. is_test stays
       // URL-derived; we simply guarantee the param is present for admins. Regular users boot the app
       // in place with no param, so their activity is always real.
-      if (isAdmin) {
+      if (is_admin) {
         var target = (nx && /^\/(metrics|admin)\b/.test(nx)) ? nx : (r.landing || '/');
         var sep = target.indexOf('?') >= 0 ? '&' : '?';
         var url = /metrics_test=/.test(target) ? target : (target + sep + 'metrics_test=1');
@@ -323,15 +323,15 @@ function shell() {
       // already run (its results would now be stale); if it was never run, nothing to refresh.
       update_triage_refresh();
     }},[]);
-  const resetBtn = el('button',{class:'btn ghost',title:'Reset the workspace to a blank slate (stays signed in)',onclick:reset_app},['↻ Reset']);
-  const logout = el('button',{class:'btn ghost',onclick:async function(){ M.track('sign_out',{}); clear_working_state(); await fetch('/api/logout',{method:'POST'}); renderLogin('Signed out.'); }},['Sign out']);
+  const reset_btn = el('button',{class:'btn ghost',title:'Reset the workspace to a blank slate (stays signed in)',onclick:reset_app},['↻ Reset']);
+  const logout = el('button',{class:'btn ghost',onclick:async function(){ M.track('sign_out',{}); clear_working_state(); await fetch('/api/logout',{method:'POST'}); render_login('Signed out.'); }},['Sign out']);
   document.body.appendChild(el('div',{class:'app-header'},[
     el('span',{class:'brandmark','aria-label':'email',html:'<svg width="22" height="22" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="13" y="19" width="38" height="26" rx="3" fill="none" stroke="#fff" stroke-width="4"/><path d="M14 21l18 14 18-14" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg>'}),
     el('div',{},[ el('h1',{},['Email Queue Assistant']), el('div',{class:'sub'},['read-only proof of concept - nothing is sent to Salesforce']) ]),
     el('div',{class:'right'},[ el('span',{class:'dim'},['Model:']), provider,
       ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/metrics?metrics_test=1',title:'Usage dashboard (admin)'},['📊 Metrics']):null),
       ((state.me&&state.me.role==='admin')?el('a',{class:'btn ghost sm',href:'/admin?metrics_test=1',title:'Admin hub (admin)'},['⚙ Admin']):null),
-      makeThemeBtn(), resetBtn, logout ])
+      make_theme_btn(), reset_btn, logout ])
   ]));
   document.body.appendChild(el('div',{class:'wrap'},[
     el('div',{class:'pane',id:'left'},[]),
@@ -346,9 +346,9 @@ function shell() {
   // Cross-area nav links are ADMIN-ONLY and ALL carry ?metrics_test=1 (App included), so an admin
   // moving App<->Metrics<->Admin always keeps the test flag and every event stays is_test=1.
   // Regular users get NO cross-area links (they just use the app) and never carry the param.
-  var isAdmin = state.me && state.me.role === 'admin';
+  var is_admin = state.me && state.me.role === 'admin';
   var fkids = ['Email Queue Assistant'];
-  if (isAdmin) { fkids.push(' · ', el('a',{href:'/?metrics_test=1'},['App']), ' · ', el('a',{href:'/admin?metrics_test=1'},['Admin']), ' · ', el('a',{href:'/metrics?metrics_test=1'},['Metrics'])); }
+  if (is_admin) { fkids.push(' · ', el('a',{href:'/?metrics_test=1'},['App']), ' · ', el('a',{href:'/admin?metrics_test=1'},['Admin']), ' · ', el('a',{href:'/metrics?metrics_test=1'},['Metrics'])); }
   fkids.push(' · ', el('span',{id:'eqClock'},[]));
   document.body.appendChild(el('footer',{class:'eq-footer'},fkids));
   (function(){ function t(){ var c=document.getElementById('eqClock'); if(c){ try{ c.textContent='MTN '+new Intl.DateTimeFormat('en-US',{timeZone:'America/Denver',dateStyle:'medium',timeStyle:'short'}).format(new Date()); }catch(e){} } } t(); setInterval(t,30000); })();
@@ -374,12 +374,12 @@ function loadModels(){
 }
 
 function setupSplit(){
-  const wrap=$('.wrap'); const dflt_rw=Math.max(320, Math.round((window.innerWidth - 340 - 12) / 2)); const cols=loadJSON('eq_cols',{lw:340,rw:dflt_rw});
+  const wrap=$('.wrap'); const dflt_rw=Math.max(320, Math.round((window.innerWidth - 340 - 12) / 2)); const cols=load_json('eq_cols',{lw:340,rw:dflt_rw});
   function apply(){ wrap.style.gridTemplateColumns = cols.lw+'px 6px minmax(0,1fr) 6px '+cols.rw+'px'; }
   apply();
   function drag(which,e){ e.preventDefault(); const sx=e.clientX; const s0=which==='l'?cols.lw:cols.rw;
     function mv(ev){ const dx=ev.clientX-sx; if(which==='l') cols.lw=Math.max(240,Math.min(640,s0+dx)); else cols.rw=Math.max(280,Math.min(700,s0-dx)); apply(); }
-    function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); saveJSON('eq_cols',cols); }
+    function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); save_json('eq_cols',cols); }
     document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); }
   $('#splitL').addEventListener('mousedown',function(e){drag('l',e);});
   $('#splitR').addEventListener('mousedown',function(e){drag('r',e);});
@@ -410,16 +410,16 @@ function triageBadge(t){ if(!t||!t.status) return el('span',{});
   var tip = (src ? src+' — ' : '') + (t.reason || '');
   var label = (TRIAGE_LABEL[t.status]||t.status) + (isLocal ? ' *' : '');
   return el('span',{class:'tstat '+t.status, title:tip},[ label ]); }
-async function triageOne(){ const cs=state.case; if(!cs) return; state.triage[cs.case_id]={status:'pending',reason:''}; renderThread(); renderCases();
-  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason,ai:j.ai,ai_model:j.ai_model}; ai_banner_clear(); }
+async function triageOne(){ const cs=state.case; if(!cs) return; state.triage[cs.case_id]={status:'pending',reason:''}; renderThread(); render_cases();
+  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({case_id:cs.case_id,case_number:(cs&&cs.case_number)||'',queue:state.queue.name,queue_id:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason,ai:j.ai,ai_model:j.ai_model}; ai_banner_clear(); }
   catch(e){ state.triage[cs.case_id]={status:'error',reason:'Triage failed: '+(e&&e.message||'error')}; ai_banner((e&&e.message)||'error'); }
-  renderThread(); renderCases(); update_triage_refresh();
+  renderThread(); render_cases(); update_triage_refresh();
   if(state.case && state.case.case_id===cs.case_id && state.triage[cs.case_id] && state.triage[cs.case_id].status==='answer_ready' && typeof state._doDraft==='function'){ state._doDraft(); } }
-async function triageVisible(){ const prog=$('#triProg'); const list=state.cases.slice(); let i=0;
+async function triage_visible(){ const prog=$('#triProg'); const list=state.cases.slice(); let i=0;
   for(const cs of list){ i++; if(state.triage[cs.case_id] && state.triage[cs.case_id].status!=='pending'){ continue; } if(prog) prog.textContent='Triaging '+i+'/'+list.length+'...';
-    try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason,ai:j.ai,ai_model:j.ai_model}; }
+    try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({case_id:cs.case_id,case_number:(cs&&cs.case_number)||'',queue:state.queue.name,queue_id:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason,ai:j.ai,ai_model:j.ai_model}; }
     catch(e){ state.triage[cs.case_id]={status:'error',reason:'Triage failed: '+(e&&e.message||'error')}; ai_banner((e&&e.message)||'error'); }
-    renderCases(); }
+    render_cases(); }
   if(prog) prog.textContent='Triage complete.'; update_triage_refresh(); }
 function triageControl(){ const cs=state.case; if(!cs) return el('span',{}); const t=state.triage[cs.case_id];
   if(t && t.status==='pending') return el('span',{class:'dim'},['Triaging...']);
@@ -427,32 +427,32 @@ function triageControl(){ const cs=state.case; if(!cs) return el('span',{}); con
   return el('button',{class:'btn ghost sm',onclick:triageOne},['AI status']); }
 function renderLeft(){
   const left=$('#left'); left.innerHTML='';
-  if(!state.dateFrom) state.dateFrom=eq_yesterday();
-  if(!state.dateTo) state.dateTo=eq_today();
-  const qsel = el('select',{onchange:async function(e){ state.queue=state.queues.find(function(q){return q.id===e.target.value;})||null; saveJSON('eq_queue', state.queue?state.queue.id:''); state.counts={}; state.cases=[]; state.loaded=false; state.case=null; M.clearCase(); renderCases(); if(state.queue){ M.track('queue_viewed',{ queue:state.queue.name, queue_id:state.queue.id }); await loadCounts(); renderLeft(); } }},
+  if(!state.date_from) state.date_from=eq_yesterday();
+  if(!state.date_to) state.date_to=eq_today();
+  const qsel = el('select',{onchange:async function(e){ state.queue=state.queues.find(function(q){return q.id===e.target.value;})||null; save_json('eq_queue', state.queue?state.queue.id:''); state.counts={}; state.cases=[]; state.loaded=false; state.case=null; M.clear_case(); render_cases(); if(state.queue){ M.track('queue_viewed',{ queue:state.queue.name, queue_id:state.queue.id }); await loadCounts(); renderLeft(); } }},
     [el('option',{value:''},['- pick a queue -'])].concat(state.queues.map(function(q){ return el('option',{value:q.id},[q.name+'  ('+(q.open_count!=null?q.open_count:'?')+' open)']); })));
   if(state.queue) qsel.value=state.queue.id;
   const statusOpts=[el('option',{value:'open'},['Open only']), el('option',{value:'all'},['All statuses'])]
     .concat(state.statuses.map(function(s){ const n=state.counts[s]; return el('option',{value:s},[s+(n!=null?'  ('+n+')':'')]); }));
-  const ssel=el('select',{id:'statusSel',onchange:function(){ saveJSON('eq_status', ssel.value); }}, statusOpts);
-  const savedStatus=loadJSON('eq_status',''); if(savedStatus){ ssel.value=savedStatus; }
+  const ssel=el('select',{id:'statusSel',onchange:function(){ save_json('eq_status', ssel.value); }}, statusOpts);
+  const savedStatus=load_json('eq_status',''); if(savedStatus){ ssel.value=savedStatus; }
 
-  const fromI=el('input',{type:'date',value:state.dateFrom});
-  const toI=el('input',{type:'date',value:state.dateTo});
-  const anyChk=el('input',{type:'checkbox'}); anyChk.checked=!!state.dateAny;
-  const fieldSel=el('select',{},[el('option',{value:'LastModifiedDate'},['Last activity']),el('option',{value:'CreatedDate'},['Created date'])]); fieldSel.value=state.dateField||'LastModifiedDate';
+  const fromI=el('input',{type:'date',value:state.date_from});
+  const toI=el('input',{type:'date',value:state.date_to});
+  const anyChk=el('input',{type:'checkbox'}); anyChk.checked=!!state.date_any;
+  const fieldSel=el('select',{},[el('option',{value:'LastModifiedDate'},['Last activity']),el('option',{value:'CreatedDate'},['Created date'])]); fieldSel.value=state.date_field||'LastModifiedDate';
   const dMsg=el('div',{class:'note'},[]);
   function applyLimits(){ var today=eq_today();
     fromI.min=EQ_MIN_DATE; fromI.max=today; if(fromI.value) fromI.value=eq_clamp_date(fromI.value,EQ_MIN_DATE,today);
     var lo=fromI.value||EQ_MIN_DATE; var hi=eq_ymd_add(lo,EQ_MAX_RANGE_DAYS); if(hi>today)hi=today;
     toI.min=lo; toI.max=hi; if(toI.value) toI.value=eq_clamp_date(toI.value,lo,hi); else toI.value=hi;
-    state.dateFrom=fromI.value; state.dateTo=toI.value; }
-  function setAny(){ var on=anyChk.checked; state.dateAny=on; fromI.disabled=on; toI.disabled=on; fieldSel.disabled=on; }
+    state.date_from=fromI.value; state.date_to=toI.value; }
+  function setAny(){ var on=anyChk.checked; state.date_any=on; fromI.disabled=on; toI.disabled=on; fieldSel.disabled=on; }
   fromI.addEventListener('change',applyLimits); toI.addEventListener('change',applyLimits);
   fromI.addEventListener('input',applyLimits); toI.addEventListener('input',applyLimits);
-  anyChk.addEventListener('change',setAny); fieldSel.addEventListener('change',function(){ state.dateField=fieldSel.value; });
+  anyChk.addEventListener('change',setAny); fieldSel.addEventListener('change',function(){ state.date_field=fieldSel.value; });
   applyLimits(); setAny();
-  function rangeOk(){ if(state.dateAny) return true; var a=fromI.value,b=toI.value,today=eq_today();
+  function rangeOk(){ if(state.date_any) return true; var a=fromI.value,b=toI.value,today=eq_today();
     if(!a||!b){ dMsg.className='note warn'; dMsg.textContent='Pick a From and To date (or tick Any date).'; return false; }
     if(a<EQ_MIN_DATE||b<EQ_MIN_DATE){ dMsg.className='note warn'; dMsg.textContent='Dates must be on or after '+EQ_MIN_DATE+'.'; return false; }
     if(a>today||b>today){ dMsg.className='note warn'; dMsg.textContent='Dates cannot be in the future.'; return false; }
@@ -460,13 +460,13 @@ function renderLeft(){
     if(eq_days_between(a,b)>EQ_MAX_RANGE_DAYS){ dMsg.className='note warn'; dMsg.textContent='The date range can be at most '+EQ_MAX_RANGE_DAYS+' days.'; return false; }
     dMsg.textContent=''; return true; }
 
-  const search=el('input',{id:'caseSearch',placeholder:'Search (subject, status, #, sender, date)...',value:state.caseQuery||'',style:'flex:1'});
-  search.addEventListener('input',function(){ state.caseQuery=search.value; renderCases(); });
-  const clearBtn=el('button',{class:'btn ghost sm',title:'Clear search',onclick:function(){ state.caseQuery=''; search.value=''; renderCases(); search.focus(); }},['×']);
-  const attChk=el('input',{type:'checkbox'}); attChk.checked=!!state.attOnly; attChk.addEventListener('change',function(){ state.attOnly=attChk.checked; renderCases(); });
-  const limSel=el('select',{style:'width:auto'},[25,50,100,200].map(function(n){ return el('option',{value:String(n)},[String(n)]); })); limSel.value=String(state.caseLimit||25);
-  limSel.addEventListener('change',function(){ state.caseLimit=parseInt(limSel.value,10)||25; if(state.loaded && state.queue){ loadCases(); } });
-  const viewBtn=el('button',{class:'btn primary',style:'width:100%',onclick:async function(){ if(!state.queue){ dMsg.className='note warn'; dMsg.textContent='Pick a queue first.'; return; } if(!rangeOk()) return; state.caseQuery=''; state.queueCardOpen=false; await loadCounts(); renderLeft(); loadCases(); }},['View']);
+  const search=el('input',{id:'caseSearch',placeholder:'Search (subject, status, #, sender, date)...',value:state.case_query||'',style:'flex:1'});
+  search.addEventListener('input',function(){ state.case_query=search.value; render_cases(); });
+  const clearBtn=el('button',{class:'btn ghost sm',title:'Clear search',onclick:function(){ state.case_query=''; search.value=''; render_cases(); search.focus(); }},['×']);
+  const attChk=el('input',{type:'checkbox'}); attChk.checked=!!state.att_only; attChk.addEventListener('change',function(){ state.att_only=attChk.checked; render_cases(); });
+  const limSel=el('select',{style:'width:auto'},[25,50,100,200].map(function(n){ return el('option',{value:String(n)},[String(n)]); })); limSel.value=String(state.case_limit||25);
+  limSel.addEventListener('change',function(){ state.case_limit=parseInt(limSel.value,10)||25; if(state.loaded && state.queue){ loadCases(); } });
+  const viewBtn=el('button',{class:'btn primary',style:'width:100%',onclick:async function(){ if(!state.queue){ dMsg.className='note warn'; dMsg.textContent='Pick a queue first.'; return; } if(!rangeOk()) return; state.case_query=''; state.queue_card_open=false; await loadCounts(); renderLeft(); loadCases(); }},['View']);
 
   // collapsible date filters (default collapsed; default range yesterday -> today)
   const datesBody=el('div',{},[
@@ -474,10 +474,10 @@ function renderLeft(){
     el('div',{style:'display:flex;gap:6px;align-items:center;flex-wrap:wrap'},[ el('span',{class:'dim',style:'font-size:12px'},['From']), fromI, el('span',{class:'dim',style:'font-size:12px'},['To']), toI ]),
     el('div',{style:'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px'},[ el('label',{class:'inline'},[anyChk,'Any date']), el('span',{class:'dim',style:'font-size:12px'},['by']), fieldSel ])
   ]);
-  datesBody.style.display=state.datesOpen?'block':'none';
-  const datesChev=el('span',{class:'chev'},['v']); datesChev.style.transform=state.datesOpen?'none':'rotate(-90deg)';
-  const datesSummary=el('span',{class:'dim',style:'font-size:11px;margin-left:auto'},[ state.dateAny?'Any date':(state.dateFrom+' → '+state.dateTo) ]);
-  const datesHdr=el('div',{style:'display:flex;gap:8px;align-items:center;cursor:pointer',title:'Show/hide date filters',onclick:function(){ state.datesOpen=!state.datesOpen; datesBody.style.display=state.datesOpen?'block':'none'; datesChev.style.transform=state.datesOpen?'none':'rotate(-90deg)'; }},[ el('h3',{style:'margin:0'},['Dates']), datesSummary, datesChev ]);
+  datesBody.style.display=state.dates_open?'block':'none';
+  const datesChev=el('span',{class:'chev'},['v']); datesChev.style.transform=state.dates_open?'none':'rotate(-90deg)';
+  const datesSummary=el('span',{class:'dim',style:'font-size:11px;margin-left:auto'},[ state.date_any?'Any date':(state.date_from+' → '+state.date_to) ]);
+  const datesHdr=el('div',{style:'display:flex;gap:8px;align-items:center;cursor:pointer',title:'Show/hide date filters',onclick:function(){ state.dates_open=!state.dates_open; datesBody.style.display=state.dates_open?'block':'none'; datesChev.style.transform=state.dates_open?'none':'rotate(-90deg)'; }},[ el('h3',{style:'margin:0'},['Dates']), datesSummary, datesChev ]);
 
   const qcBody=el('div',{class:'cardbody stack'},[
     el('h3',{},['Queue']), qsel,
@@ -488,17 +488,17 @@ function renderLeft(){
     el('div',{style:'display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:2px'},[ el('label',{class:'inline',style:'font-size:12.5px'},[ attChk, 'Only with attachments' ]), el('span',{style:'display:inline-flex;gap:6px;align-items:center'},[ el('span',{class:'dim',style:'font-size:12px'},['Show']), limSel ]) ]),
     el('div',{style:'margin-top:8px'},[ viewBtn ]), dMsg
   ]);
-  qcBody.style.display=state.queueCardOpen?'':'none';
-  const qcChev=el('span',{class:'chev'},['v']); qcChev.style.transform=state.queueCardOpen?'none':'rotate(-90deg)';
+  qcBody.style.display=state.queue_card_open?'':'none';
+  const qcChev=el('span',{class:'chev'},['v']); qcChev.style.transform=state.queue_card_open?'none':'rotate(-90deg)';
   const qcSummary=el('span',{class:'dim',style:'font-size:11px;margin-left:auto'},[ state.queue?(state.queue.name+(state.loaded?(' · '+state.cases.length+' shown'):'')):'pick a queue' ]);
-  const qcHead=el('div',{class:'cardhead',title:'Show/hide the queue & filters',onclick:function(){ state.queueCardOpen=!state.queueCardOpen; qcBody.style.display=state.queueCardOpen?'':'none'; qcChev.style.transform=state.queueCardOpen?'none':'rotate(-90deg)'; }},[ el('h3',{style:'margin:0'},['Queue & filters']), qcSummary, qcChev ]);
+  const qcHead=el('div',{class:'cardhead',title:'Show/hide the queue & filters',onclick:function(){ state.queue_card_open=!state.queue_card_open; qcBody.style.display=state.queue_card_open?'':'none'; qcChev.style.transform=state.queue_card_open?'none':'rotate(-90deg)'; }},[ el('h3',{style:'margin:0'},['Queue & filters']), qcSummary, qcChev ]);
   left.appendChild(el('div',{class:'card'},[ qcHead, qcBody ]));
   var triRefresh = el('button',{id:'triRefresh',class:'btn ghost sm',title:'Clear and re-run triage for the visible cases (enabled after a triage run or a model change)',onclick:retriage_visible},['↻ Refresh']);
   triRefresh.disabled = !triage_refresh_enabled();
-  left.appendChild(el('div',{style:'display:flex;gap:8px;align-items:center;margin:0 0 8px'},[ el('button',{class:'btn ghost sm',onclick:triageVisible},['AI triage visible']), triRefresh, el('span',{id:'triProg',class:'dim',style:'font-size:12px'},[]) ]));
+  left.appendChild(el('div',{style:'display:flex;gap:8px;align-items:center;margin:0 0 8px'},[ el('button',{class:'btn ghost sm',onclick:triage_visible},['AI triage visible']), triRefresh, el('span',{id:'triProg',class:'dim',style:'font-size:12px'},[]) ]));
   left.appendChild(el('div',{class:'dim',style:'font-size:11px;margin:-4px 0 8px',title:'Badges marked with * were decided by a local rule (no AI / no API cost) — e.g. no inbound message, a bounce/no-reply sender, clear cold/bulk spam, or awaiting the customer. Hover any badge for the reason and source. Cheaper models (e.g. Haiku) miss more spam — pick a stronger model for better triage.'},['* = local rule (no AI) · cheaper models miss more spam. Hover a badge for the reason.']));
   left.appendChild(el('div',{id:'caseList'},[]));
-  renderCases();
+  render_cases();
 }
 async function loadCounts(){ if(!state.queue) return; try{ const j=await api('/api/status-counts?queue='+encodeURIComponent(state.queue.id)); state.counts=j.by_status||{}; }catch(e){ state.counts={}; } }
 
@@ -511,24 +511,24 @@ function caseMatches(cs,q){
   var hay=norm([cs.subject,cs.status,cs.case_number,cs.supplied_email,cs.from_address,cs.modified_mtn,(cs.message_count||0)+' msg',(cs.has_attachment?'attachment':''),(cs.link_count?'link':''),(cs.first_link||''),tl].join(' '));
   return norm(q).split(' ').filter(Boolean).every(function(w){ return hay.indexOf(w.replace(/\.+$/,''))>=0; });
 }
-function renderCases(){
+function render_cases(){
   const list=$('#caseList'); if(!list) return; list.innerHTML='';
   if(!state.loaded){ list.appendChild(el('div',{class:'dim'},['Choose queue, status and dates, then click View.'])); return; }
   if(!state.cases.length){ list.appendChild(el('div',{class:'dim'},['No cases for that queue / status / date range.'])); return; }
-  var shown=state.cases.filter(function(cs){ return (!state.attOnly || cs.has_attachment) && caseMatches(cs,state.caseQuery); });
-  if((state.caseQuery||state.attOnly) && shown.length!==state.cases.length){ list.appendChild(el('div',{class:'dim',style:'font-size:12px;margin:0 0 6px'},['Showing '+shown.length+' of '+state.cases.length+(state.attOnly?' (with attachments)':'')+(state.caseQuery?(' matching "'+state.caseQuery+'"'):'')])); }
+  var shown=state.cases.filter(function(cs){ return (!state.att_only || cs.has_attachment) && caseMatches(cs,state.case_query); });
+  if((state.case_query||state.att_only) && shown.length!==state.cases.length){ list.appendChild(el('div',{class:'dim',style:'font-size:12px;margin:0 0 6px'},['Showing '+shown.length+' of '+state.cases.length+(state.att_only?' (with attachments)':'')+(state.case_query?(' matching "'+state.case_query+'"'):'')])); }
   if(!shown.length){ list.appendChild(el('div',{class:'dim'},['No cases match your search.'])); return; }
-  if(state.cases.length>=(state.caseLimit||25)){ list.appendChild(el('div',{class:'dim',style:'font-size:12px;margin:0 0 6px'},['Showing the first '+state.cases.length+' (by recent activity). Raise "Show" to load more.'])); }
+  if(state.cases.length>=(state.case_limit||25)){ list.appendChild(el('div',{class:'dim',style:'font-size:12px;margin:0 0 6px'},['Showing the first '+state.cases.length+' (by recent activity). Raise "Show" to load more.'])); }
   shown.forEach(function(cs,i){
     const cb=el('input',{type:'checkbox'});
     cb.checked=!!state.checked[cs.case_id];
-    cb.addEventListener('click',function(ev){ ev.stopPropagation(); if(cb.checked) state.checked[cs.case_id]=true; else delete state.checked[cs.case_id]; saveJSON('eq_checked',state.checked); row.className='row'+(state.case&&state.case.case_id===cs.case_id?' sel':'')+(cb.checked?' checked':''); });
+    cb.addEventListener('click',function(ev){ ev.stopPropagation(); if(cb.checked) state.checked[cs.case_id]=true; else delete state.checked[cs.case_id]; save_json('eq_checked',state.checked); row.className='row'+(state.case&&state.case.case_id===cs.case_id?' sel':'')+(cb.checked?' checked':''); });
     const meta=el('div',{class:'meta'},[
       el('span',{class:'chip',style:'color:'+statusColor(cs.status)},[cs.status||'']),
       (state.triage[cs.case_id]?triageBadge(state.triage[cs.case_id]):null),
       el('span',{class:'chip'},[(cs.message_count||0)+' msg']),
       cs.has_attachment?el('span',{class:'chip att'},['attachment']):null,
-      (cs.link_count?(function(){ var c=el('span',{class:'chip',style:'cursor:pointer;color:var(--accent);border-color:var(--accent)',title:cs.link_count+' link(s) in this case - click to preview the first'},['🔗 '+cs.link_count]); c.addEventListener('click',function(ev){ ev.stopPropagation(); if(cs.first_link) openLinkPreview(cs.first_link); }); return c; })():null),
+      (cs.link_count?(function(){ var c=el('span',{class:'chip',style:'cursor:pointer;color:var(--accent);border-color:var(--accent)',title:cs.link_count+' link(s) in this case - click to preview the first'},['🔗 '+cs.link_count]); c.addEventListener('click',function(ev){ ev.stopPropagation(); if(cs.first_link) open_link_preview(cs.first_link); }); return c; })():null),
       (state.instanceUrl?(function(){ var a=el('a',{class:'chip',href:state.instanceUrl+'/lightning/r/Case/'+cs.case_id+'/view',target:'_blank',rel:'noopener',title:'Open this case in Salesforce'},['SF ↗']); a.addEventListener('click',function(ev){ ev.stopPropagation(); }); return a; })():null)
     ]);
     const body=el('div',{class:'body',onclick:function(){ selectCase(cs); }},[ el('div',{class:'subj'},[cs.subject||'(no subject)']), el('div',{class:'dim',style:'font-size:12px;margin-top:2px'},[cs.modified_mtn||'']), meta ]);
@@ -537,22 +537,22 @@ function renderCases(){
   });
 }
 async function loadCases(){
-  if(!state.queue){ state.cases=[]; state.loaded=false; renderCases(); return; }
+  if(!state.queue){ state.cases=[]; state.loaded=false; render_cases(); return; }
   const status=($('#statusSel')||{}).value||'open';
   if($('#caseList')) $('#caseList').innerHTML='<div class="dim">Loading...</div>';
   var dq='';
-  if(!state.dateAny && state.dateFrom && state.dateTo){ dq='&from='+encodeURIComponent(state.dateFrom)+'&to='+encodeURIComponent(state.dateTo)+'&field='+encodeURIComponent(state.dateField||'LastModifiedDate'); }
-  try{ const j=await api('/api/cases?queue='+encodeURIComponent(state.queue.id)+'&status='+encodeURIComponent(status)+dq+'&limit='+encodeURIComponent(state.caseLimit||25)+'&links=1'); state.cases=j.cases; state.loaded=true; renderCases();
+  if(!state.date_any && state.date_from && state.date_to){ dq='&from='+encodeURIComponent(state.date_from)+'&to='+encodeURIComponent(state.date_to)+'&field='+encodeURIComponent(state.date_field||'LastModifiedDate'); }
+  try{ const j=await api('/api/cases?queue='+encodeURIComponent(state.queue.id)+'&status='+encodeURIComponent(status)+dq+'&limit='+encodeURIComponent(state.case_limit||25)+'&links=1'); state.cases=j.cases; state.loaded=true; render_cases();
     M.track('cases_listed',{ queue:(state.queue&&state.queue.name)||'', queue_id:(state.queue&&state.queue.id)||'' }); }
   catch(e){ if($('#caseList')) $('#caseList').innerHTML='<div class="err">'+e.message+'</div>'; }
 }
 
 async function selectCase(cs){
-  state.case=cs; state.askHistory=[]; state.askShowAll=false; state.collapsed={}; state._doDraft=null; renderCases();
-  M.setCase({ case_id: cs.case_id, case_number: cs.case_number, queue:(state.queue&&state.queue.name)||'', queue_id:(state.queue&&state.queue.id)||'' });
+  state.case=cs; state.ask_history=[]; state.ask_show_all=false; state.collapsed={}; state._doDraft=null; render_cases();
+  M.set_case({ case_id: cs.case_id, case_number: cs.case_number, queue:(state.queue&&state.queue.name)||'', queue_id:(state.queue&&state.queue.id)||'' });
   M.track('thread_opened',{ thread_msg_count:(cs.message_count||0), has_attachment: cs.has_attachment?1:0 });
   const mid=$('#mid'); mid.innerHTML='<div class="dim">Loading thread...</div>'; $('#right').innerHTML='';
-  try{ const j=await api('/api/thread?caseId='+encodeURIComponent(cs.case_id)); state.thread=j.thread;
+  try{ const j=await api('/api/thread?case_id='+encodeURIComponent(cs.case_id)); state.thread=j.thread;
     // default: collapse all but the newest
     var openId=null;
     for(var a=state.thread.length-1;a>=0;a--){ if(!state.thread[a].automated){ openId=state.thread[a].id; break; } }
@@ -574,7 +574,7 @@ function rowsToTable(rows){
 }
 function recordsToTable(records){
   if(!records||!records.length) return el('div',{class:'dim'},['(no records)']);
-  return rowsToTable(recordsToRows(records));
+  return rowsToTable(records_to_rows(records));
 }
 function attachmentEl(a){
   var ext=String(a.file_extension||'').toLowerCase();
@@ -601,17 +601,17 @@ function renderThread(){
   const mid=$('#mid'); mid.innerHTML='';
   const collapseAll=el('button',{class:'btn sm ghost',onclick:function(){ state.thread.forEach(function(m){state.collapsed[m.id]=true;}); renderThread(); }},['Collapse all']);
   const expandAll=el('button',{class:'btn sm ghost',onclick:function(){ state.thread.forEach(function(m){state.collapsed[m.id]=false;}); renderThread(); }},['Expand all']);
-  const dedupe=el('input',{type:'checkbox'}); dedupe.checked=state.dedupe; dedupe.disabled=!!state.viewHtml; dedupe.addEventListener('change',function(){ state.dedupe=dedupe.checked; renderThread(); });
-  const htmlChk=el('input',{type:'checkbox'}); htmlChk.checked=!!state.viewHtml; htmlChk.addEventListener('change',function(){ state.viewHtml=htmlChk.checked; renderThread(); });
+  const dedupe=el('input',{type:'checkbox'}); dedupe.checked=state.dedupe; dedupe.disabled=!!state.view_html; dedupe.addEventListener('change',function(){ state.dedupe=dedupe.checked; renderThread(); });
+  const htmlChk=el('input',{type:'checkbox'}); htmlChk.checked=!!state.view_html; htmlChk.addEventListener('change',function(){ state.view_html=htmlChk.checked; renderThread(); });
   const caseTitle = state.instanceUrl
     ? el('a',{href:state.instanceUrl+'/lightning/r/Case/'+state.case.case_id+'/view',target:'_blank',rel:'noopener',title:'Open in Salesforce'},['Case '+(state.case.case_number||'')+' ↗'])
     : el('b',{},['Case '+(state.case.case_number||'')]);
   const hdrStatus=el('select',{title:'Change status (mock - not saved to Salesforce)',style:'width:auto;min-height:0;padding:2px 6px;font-size:12px'}, (state.statuses.length?state.statuses:['New','Working','Escalated','Closed']).map(function(x){return el('option',{value:x},[x]);}));
   if(state.case.status) hdrStatus.value=state.case.status;
   const hdrMsg=el('span',{class:'dim',style:'font-size:11px'},[]);
-  hdrStatus.addEventListener('change',function(){ state.case.status=hdrStatus.value; state.case._statusMock=true; hdrMsg.textContent='mock - not saved to SF'; renderCases();
+  hdrStatus.addEventListener('change',function(){ state.case.status=hdrStatus.value; state.case._statusMock=true; hdrMsg.textContent='mock - not saved to SF'; render_cases();
     // Record the status-change attempt + SF outcome (server logs status_change; currently mocked sf_ok=0).
-    api('/api/status',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:(state.queue&&state.queue.name)||'',queueId:(state.queue&&state.queue.id)||'',status:hdrStatus.value,_test:M.t,meta:M.meta()})}).catch(function(){});
+    api('/api/status',{method:'POST',body:JSON.stringify({case_id:state.case.case_id,case_number:(state.case&&state.case.case_number)||'',queue:(state.queue&&state.queue.name)||'',queue_id:(state.queue&&state.queue.id)||'',status:hdrStatus.value,_test:M.t,meta:M.meta()})}).catch(function(){});
   });
   mid.appendChild(el('div',{class:'thread-head'},[
     el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ caseTitle, el('span',{class:'dim'},['· '+state.thread.length+' msg · newest first']), triageControl(), el('span',{style:'display:inline-flex;gap:4px;align-items:center'},[el('span',{class:'dim',style:'font-size:12px'},['Status:']), hdrStatus, hdrMsg]) ]),
@@ -623,19 +623,19 @@ function renderThread(){
     const role=roleOf(m);
     const text=(state.dedupe ? (m.text_new||m.text_raw) : (m.text_raw||m.text_new)) || '(empty body)';
     const collapsed=!!state.collapsed[m.id];
-    const mlinks=extractLinks(text);
-    const linkChip=mlinks.length?(function(){ var c=el('span',{class:'chip',style:'cursor:pointer;color:var(--accent);border-color:var(--accent)',title:mlinks.length+' link(s) in this email - click to preview'},['🔗 '+mlinks.length]); c.onclick=function(ev){ ev.stopPropagation(); openLinkPreview(mlinks[0]); }; return c; })():null;
+    const mlinks=extract_links(text);
+    const linkChip=mlinks.length?(function(){ var c=el('span',{class:'chip',style:'cursor:pointer;color:var(--accent);border-color:var(--accent)',title:mlinks.length+' link(s) in this email - click to preview'},['🔗 '+mlinks.length]); c.onclick=function(ev){ ev.stopPropagation(); open_link_preview(mlinks[0]); }; return c; })():null;
     const head=el('div',{class:'mhead',onclick:function(){ state.collapsed[m.id]=!state.collapsed[m.id]; renderThread(); }},[
       el('span',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ el('span',{class:'who '+role},[ (role==='customer'?'CUSTOMER':role==='auto'?'AUTO-REPLY':'AGENT') + (m.from_address?'  ·  '+m.from_address:'') ]), linkChip ]),
       el('span',{style:'display:flex;gap:8px;align-items:center'},[ el('span',{class:'mdate'},[m.message_date_mtn||'']), el('span',{class:'chev'},['v']) ])
     ]);
     const prev=el('div',{class:'mprev'},[ String(text).replace(/\s+/g,' ').slice(0,110) ]);
     const bodyEl=el('div',{class:'mbody'},[]);
-    if(state.viewHtml && m.html_body){
+    if(state.view_html && m.html_body){
       var ifr=el('iframe',{class:'mhtml',sandbox:'allow-popups allow-popups-to-escape-sandbox',referrerpolicy:'no-referrer',title:'email HTML'});
       ifr.srcdoc='<!doctype html><html><head><meta charset="utf-8"><base target="_blank"></head><body style="margin:10px;font:14px -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111">'+m.html_body+'</body></html>';
       bodyEl.appendChild(ifr);
-    } else { linkifyInto(bodyEl, text); }
+    } else { linkify_into(bodyEl, text); }
     const kids=[ head, prev, bodyEl ];
     if(m.attachments && m.attachments.length){ kids.push(el('div',{class:'matts'}, [el('div',{class:'dim',style:'font-size:12px;margin-bottom:6px'},['📎 '+m.attachments.length+' attachment'+(m.attachments.length>1?'s':'')+' on this message:'])].concat(m.attachments.map(attachmentEl)))); }
     mid.appendChild(el('div',{class:'msg '+role+(collapsed?' collapsed':'')}, kids));
@@ -661,9 +661,9 @@ async function viewContextFile(f){
     }
     else if(j.kind==='image'){ body=el('div',{}); var img=document.createElement('img'); img.src='data:'+j.media_type+';base64,'+j.data_base64; img.style.maxWidth='100%'; img.style.borderRadius='8px'; body.appendChild(img); }
     else if(j.kind==='table'){ body=el('div',{}); if(j.rows&&j.rows.length){ body.appendChild(rowsToTable(j.rows)); if(j.note) body.appendChild(el('div',{class:'dim',style:'font-size:11px;margin-top:4px'},[j.note])); } else body.textContent=j.note||'(no rows)';
-      var cpt=el('button',{class:'btn ghost sm'},['\uD83D\uDCCB Copy']); cpt.onclick=function(){ copyText(rowsToTSV(j.rows), null); flashCopied(cpt,'\uD83D\uDCCB Copy'); }; actions.unshift(cpt); }
+      var cpt=el('button',{class:'btn ghost sm'},['\uD83D\uDCCB Copy']); cpt.onclick=function(){ copy_text(rowsToTSV(j.rows), null); flash_copied(cpt,'\uD83D\uDCCB Copy'); }; actions.unshift(cpt); }
     else { var txt=(j.text||'(no extractable text)')+(j.note?('\n\n['+j.note+']'):''); body=el('pre',{class:'attext',style:'max-height:none'},[ txt ]);
-      var cp=el('button',{class:'btn ghost sm'},['\uD83D\uDCCB Copy']); cp.onclick=function(){ copyText(txt, null); flashCopied(cp,'\uD83D\uDCCB Copy'); }; actions.unshift(cp); }
+      var cp=el('button',{class:'btn ghost sm'},['\uD83D\uDCCB Copy']); cp.onclick=function(){ copy_text(txt, null); flash_copied(cp,'\uD83D\uDCCB Copy'); }; actions.unshift(cp); }
     eq_modal(f.name, body, actions);
   }catch(e){ eq_modal(f.name, el('div',{class:'err'},[(e&&e.message)||'error'])); }
 }
@@ -682,33 +682,33 @@ function renderRight(){
   // Suggested response + editable reply + mock send
   const out=el('div',{},[]);
   const reply=el('textarea',{style:'min-height:220px',placeholder:'The AI draft appears here and is fully editable. You can also compose a reply yourself, even if the AI said it needs more info.'});
-  reply.addEventListener('input',function(){ autoGrow(reply,600); });
+  reply.addEventListener('input',function(){ auto_grow(reply,600); });
   const sendMsg=el('div',{class:'note'},[]);
   async function doDraft(){
     draftBtn.classList.add('sel'); ackBtn.classList.remove('sel');
     out.innerHTML='<div class="dim">Thinking ('+state.provider+')...</div>';
-    try{ const j=await api('/api/ai/respond',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})});
+    try{ const j=await api('/api/ai/respond',{method:'POST',body:JSON.stringify({case_id:state.case.case_id,case_number:(state.case&&state.case.case_number)||'',queue:state.queue.name,queue_id:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})});
       out.innerHTML=''; out.appendChild(el('span',{class:'badge '+j.verdict},[j.verdict==='draft'?'DRAFT':'NEED INFO']));
-      reply.value=j.body||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['Loaded into the editable reply below.'])); ai_banner_clear();
+      reply.value=j.body||''; auto_grow(reply,600); out.appendChild(el('div',{class:'note'},['Loaded into the editable reply below.'])); ai_banner_clear();
     }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; ai_banner((e&&e.message)||'error'); }
   }
   state._doDraft=doDraft;
   async function doAck(){
     ackBtn.classList.add('sel'); draftBtn.classList.remove('sel');
     out.innerHTML='<div class="dim">Writing acknowledgement ('+state.provider+')...</div>';
-    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,action:'acknowledge',_test:M.t,meta:M.meta(),question:'Write a brief, friendly acknowledgement / holding reply to the customer for this case: confirm we received their message and are looking into it, and that we will follow up. Do NOT promise or invent any specific timeframe, price, policy, email, phone, or other detail that is not in the context. End with the SAME closing sign-off and team signature (team name, phone number, etc.) used in the automated reply in this thread; copy it verbatim if present and do not invent contact details. If the thread has no such sign-off, close simply with "Best regards," and "USA Triathlon". 2-4 sentences plus the sign-off, ready to send.'})});
-      out.innerHTML=''; out.appendChild(el('span',{class:'badge draft'},['ACKNOWLEDGEMENT'])); reply.value=j.answer||''; autoGrow(reply,600); out.appendChild(el('div',{class:'note'},['A short holding reply - edit as needed.'])); ai_banner_clear();
+    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({case_id:state.case.case_id,case_number:(state.case&&state.case.case_number)||'',queue:state.queue.name,queue_id:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,action:'acknowledge',_test:M.t,meta:M.meta(),question:'Write a brief, friendly acknowledgement / holding reply to the customer for this case: confirm we received their message and are looking into it, and that we will follow up. Do NOT promise or invent any specific timeframe, price, policy, email, phone, or other detail that is not in the context. End with the SAME closing sign-off and team signature (team name, phone number, etc.) used in the automated reply in this thread; copy it verbatim if present and do not invent contact details. If the thread has no such sign-off, close simply with "Best regards," and "USA Triathlon". 2-4 sentences plus the sign-off, ready to send.'})});
+      out.innerHTML=''; out.appendChild(el('span',{class:'badge draft'},['ACKNOWLEDGEMENT'])); reply.value=j.answer||''; auto_grow(reply,600); out.appendChild(el('div',{class:'note'},['A short holding reply - edit as needed.'])); ai_banner_clear();
     }catch(e){ out.innerHTML='<div class="err">'+e.message+'</div>'; ai_banner((e&&e.message)||'error'); }
   }
   const draftBtn=el('button',{class:'btn',onclick:doDraft},['Draft reply']);
   const ackBtn=el('button',{class:'btn',title:'Generate a short, friendly acknowledgement (no specifics) you can send now',onclick:doAck},['Acknowledge receipt']);
   const sendBtn=el('button',{class:'btn',onclick:async function(){
     sendMsg.textContent='';
-    try{ await api('/api/send',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:(state.queue&&state.queue.name)||'',queueId:(state.queue&&state.queue.id)||'',body:reply.value,_test:M.t,meta:M.meta()})}); sendMsg.className='note ok'; sendMsg.textContent='Sent.'; }
+    try{ await api('/api/send',{method:'POST',body:JSON.stringify({case_id:state.case.case_id,case_number:(state.case&&state.case.case_number)||'',queue:(state.queue&&state.queue.name)||'',queue_id:(state.queue&&state.queue.id)||'',body:reply.value,_test:M.t,meta:M.meta()})}); sendMsg.className='note ok'; sendMsg.textContent='Sent.'; }
     catch(e){ sendMsg.className='note warn'; sendMsg.textContent=e.message; }
   }},['Send reply']);
   const copyBtn=el('button',{class:'btn'},['📋 Copy reply']);
-  copyBtn.onclick=function(){ if(!reply.value.trim()){ sendMsg.className='note'; sendMsg.textContent='Nothing to copy yet - draft or write a reply first.'; return; } copyText(reply.value, sendMsg); flashCopied(copyBtn,'📋 Copy reply'); M.track('reply_copied',{ ai_reply_chars: reply.value.length }); };
+  copyBtn.onclick=function(){ if(!reply.value.trim()){ sendMsg.className='note'; sendMsg.textContent='Nothing to copy yet - draft or write a reply first.'; return; } copy_text(reply.value, sendMsg); flash_copied(copyBtn,'📋 Copy reply'); M.track('reply_copied',{ ai_reply_chars: reply.value.length }); };
   right.appendChild(acard('AI suggested response', [ el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ draftBtn, ackBtn ]), out,
     el('h3',{style:'margin-top:6px'},['Reply (editable)']), reply,
     el('div',{style:'display:flex;gap:8px;align-items:center'},[ sendBtn, copyBtn ]), sendMsg ], false));
@@ -719,15 +719,15 @@ function renderRight(){
   const hist=el('div',{id:'askHist'},[]);
   const qbox=el('textarea',{placeholder:'Ask a question about this case...',style:'min-height:64px'});
   async function doAsk(){ const q=qbox.value.trim(); if(!q) return; const ts=new Date().toLocaleString(); renderAskHist(true);
-    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({caseId:state.case.case_id,caseNumber:(state.case&&state.case.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta(),question:q,history:state.askHistory.slice(-6)})});
-      state.askHistory.push({q:q,a:j.answer||'',ts:ts}); qbox.value=''; renderAskHist(); }
-    catch(e){ state.askHistory.push({q:q,a:'(error) '+e.message,ts:ts}); renderAskHist(); ai_banner((e&&e.message)||'error'); } }
+    try{ const j=await api('/api/ai/ask',{method:'POST',body:JSON.stringify({case_id:state.case.case_id,case_number:(state.case&&state.case.case_number)||'',queue:state.queue.name,queue_id:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta(),question:q,history:state.ask_history.slice(-6)})});
+      state.ask_history.push({q:q,a:j.answer||'',ts:ts}); qbox.value=''; renderAskHist(); }
+    catch(e){ state.ask_history.push({q:q,a:'(error) '+e.message,ts:ts}); renderAskHist(); ai_banner((e&&e.message)||'error'); } }
   function renderAskHist(thinking){
     hist.innerHTML='';
-    const items=state.askHistory.slice().reverse(); const N=2;
+    const items=state.ask_history.slice().reverse(); const N=2;
     if(thinking) hist.appendChild(el('div',{class:'dim',style:'margin-bottom:6px'},['Thinking ('+state.provider+')...']));
-    (state.askShowAll?items:items.slice(0,N)).forEach(function(h){ var cp=el('button',{class:'btn ghost sm',title:'Copy this answer'},['\uD83D\uDCCB Copy']); cp.onclick=function(){ copyText(h.a, null); flashCopied(cp,'\uD83D\uDCCB Copy'); }; hist.appendChild(el('div',{class:'askitem'},[ el('div',{class:'q'},[ el('span',{},['Q: '+h.q]), el('span',{class:'qtime'},[h.ts||'']) ]), el('div',{class:'a'},[h.a]), el('div',{style:'margin-top:4px'},[ cp ]) ])); });
-    if(items.length>N) hist.appendChild(el('button',{class:'btn ghost sm',onclick:function(){ state.askShowAll=!state.askShowAll; renderAskHist(); }},[ state.askShowAll?'See less':('See '+(items.length-N)+' earlier') ]));
+    (state.ask_show_all?items:items.slice(0,N)).forEach(function(h){ var cp=el('button',{class:'btn ghost sm',title:'Copy this answer'},['\uD83D\uDCCB Copy']); cp.onclick=function(){ copy_text(h.a, null); flash_copied(cp,'\uD83D\uDCCB Copy'); }; hist.appendChild(el('div',{class:'askitem'},[ el('div',{class:'q'},[ el('span',{},['Q: '+h.q]), el('span',{class:'qtime'},[h.ts||'']) ]), el('div',{class:'a'},[h.a]), el('div',{style:'margin-top:4px'},[ cp ]) ])); });
+    if(items.length>N) hist.appendChild(el('button',{class:'btn ghost sm',onclick:function(){ state.ask_show_all=!state.ask_show_all; renderAskHist(); }},[ state.ask_show_all?'See less':('See '+(items.length-N)+' earlier') ]));
     hist.scrollTop=0;
   }
   const askBtn=el('button',{class:'btn',onclick:doAsk},['Ask']);
@@ -742,13 +742,13 @@ function renderRight(){
   async function refreshCorr(){ try{ const j=await api('/api/corrections'); corrList.innerHTML=''; var items=(j.corrections||[]).filter(function(c){return c.active;}); if(!items.length){ corrList.appendChild(el('div',{class:'dim'},['(no corrections yet)'])); } items.slice().reverse().slice(0,8).forEach(function(c){ corrList.appendChild(el('div',{class:'fi'},[ el('span',{},[c.note]), el('span',{class:'dim'},[(c.scope||'global')+(c.queue?(' · '+c.queue):'')]) ])); }); }catch(e){ corrList.innerHTML='<div class="err">'+e.message+'</div>'; } }
   const corrBtn=el('button',{class:'btn'},['Add correction']);
   corrBtn.onclick=async function(){ const note=corrNote.value.trim(); if(!note){ corrMsg.className='note'; corrMsg.textContent='Type a correction first.'; return; } corrMsg.className='note'; corrMsg.textContent='Saving...';
-    try{ await api('/api/corrections',{method:'POST',body:JSON.stringify({note:note,scope:corrScope.value,queue:state.queue.name,caseId:state.case.case_id})}); M.track('correction_added',{ correction_scope:corrScope.value, queue:(state.queue&&state.queue.name)||'' }); corrNote.value=''; corrMsg.className='note ok'; corrMsg.textContent='Saved - it will ground future drafts & answers.'; refreshCorr(); if(typeof refreshContext==='function') refreshContext(); }
+    try{ await api('/api/corrections',{method:'POST',body:JSON.stringify({note:note,scope:corrScope.value,queue:state.queue.name,case_id:state.case.case_id})}); M.track('correction_added',{ correction_scope:corrScope.value, queue:(state.queue&&state.queue.name)||'' }); corrNote.value=''; corrMsg.className='note ok'; corrMsg.textContent='Saved - it will ground future drafts & answers.'; refreshCorr(); if(typeof refreshContext==='function') refreshContext(); }
     catch(e){ corrMsg.className='note warn'; corrMsg.textContent=e.message; } };
   right.appendChild(acard('Corrections (teach the AI)', [ el('div',{class:'note'},['Corrections are injected into the AI grounding so future drafts and answers honor them.']), corrList, corrNote, el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ corrScope, corrBtn ]), corrMsg ], true));
   refreshCorr();
 
   // Context files (list + upload)
-  const fileList=el('div',{class:'filelist'},['Loading...']);
+  const file_list=el('div',{class:'filelist'},['Loading...']);
   const scope=el('select',{style:'width:auto'},[el('option',{value:'queue'},['This queue only']),el('option',{value:'global'},['Global (all queues)'])]); scope.value='queue';
   const fileInput=el('input',{type:'file',style:'display:none'});
   const fileName=el('span',{class:'dim',style:'font-size:12px'},['No file chosen']);
@@ -770,18 +770,18 @@ function renderRight(){
   async function refreshContext(){ try{ const j=await api('/api/context?queue='+encodeURIComponent(state.queue.name));
       var kc=(j.knowledge_chars||0); var files=j.files||[]; var included=files.filter(function(f){return !f.excluded;}).length;
       grounding.className='note ok'; grounding.textContent='AI is grounding on '+included+' context file(s) ('+kc+' chars) \u00b7 '+(j.corrections||0)+' correction(s).';
-      fileList.innerHTML='';
-      if(!files.length){ fileList.appendChild(el('div',{class:'dim'},['(no context files yet)'])); }
+      file_list.innerHTML='';
+      if(!files.length){ file_list.appendChild(el('div',{class:'dim'},['(no context files yet)'])); }
       var roots=[]; var folders={}; var order=[];
       files.forEach(function(f){ if(f.folder){ if(!folders[f.folder]){ folders[f.folder]={key:f.folder_key,name:f.folder,files:[]}; order.push(f.folder); } folders[f.folder].files.push(f); } else { roots.push(f); } });
       order.sort().forEach(function(name){ var g=folders[name]; var fx=g.files.every(function(x){return x.excluded;});
         var tog=el('button',{class:'btn ghost sm',title:fx?'Include this whole folder':'Exclude this whole folder from context'},[ fx?'include':'exclude' ]);
         tog.onclick=async function(){ try{ await excludeKey(g.key, !fx); refreshContext(); }catch(e){ alert(e.message); } };
-        fileList.appendChild(el('div',{class:'fi'},[ el('span',{style:fx?'opacity:.5':''},['📁 '+name+'  ('+g.files.length+' file'+(g.files.length>1?'s':'')+(fx?' · excluded':'')+')']), el('span',{},[ tog ]) ]));
-        if(!fx){ g.files.forEach(function(f){ fileList.appendChild(ctxFileRow(f, true)); }); }
+        file_list.appendChild(el('div',{class:'fi'},[ el('span',{style:fx?'opacity:.5':''},['📁 '+name+'  ('+g.files.length+' file'+(g.files.length>1?'s':'')+(fx?' · excluded':'')+')']), el('span',{},[ tog ]) ]));
+        if(!fx){ g.files.forEach(function(f){ file_list.appendChild(ctxFileRow(f, true)); }); }
       });
-      roots.forEach(function(f){ fileList.appendChild(ctxFileRow(f, false)); });
-    }catch(e){ fileList.innerHTML='<div class="err">'+e.message+'</div>'; } }
+      roots.forEach(function(f){ file_list.appendChild(ctxFileRow(f, false)); });
+    }catch(e){ file_list.innerHTML='<div class="err">'+e.message+'</div>'; } }
   const upBtn=el('button',{class:'btn',onclick:function(){ const f=fileInput.files&&fileInput.files[0]; if(!f){ upMsg.textContent='Choose a file first.'; return; }
     const rd=new FileReader(); rd.onload=async function(){ const b64=String(rd.result).split(',').pop(); upMsg.className='note'; upMsg.textContent='Uploading...';
       try{ await api('/api/context',{method:'POST',body:JSON.stringify({scope:scope.value,queue:state.queue.name,name:f.name,content_base64:b64})}); M.track('context_changed',{ context_action:'upload', queue:(state.queue&&state.queue.name)||'' }); upMsg.className='note ok'; upMsg.textContent='Uploaded.'; fileInput.value=''; fileName.textContent='No file chosen'; refreshContext(); }
@@ -811,7 +811,7 @@ function renderRight(){
   };
   right.appendChild(acard('Context files (knowledge the AI reads)', [
     el('div',{style:'display:flex;justify-content:space-between;align-items:center'},[ grounding, ctxRefresh ]),
-    fileList,
+    file_list,
     el('h3',{style:'margin:8px 0 0'},['Add a file']),
     el('div',{style:'display:flex;gap:8px;align-items:center;flex-wrap:wrap'},[ chooseFileBtn, fileName, scope, upBtn, fileInput ]), upMsg,
     el('h3',{style:'margin:8px 0 0'},['Add a folder (browser reads it)']),
@@ -826,8 +826,8 @@ function renderRight(){
   const soqlResults=el('div',{class:'attext',style:'display:none'},[]);
   var lastRecords=[];
   const soqlTools=el('div',{style:'display:none;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px'},[]);
-  const dlCsv=el('button',{class:'btn ghost sm'},['⬇ Download CSV']); dlCsv.onclick=function(){ if(lastRecords.length) downloadCSV('soql_results.csv', recordsToRows(lastRecords)); };
-  const expRes=el('button',{class:'btn ghost sm',title:'Open results in a larger window'},['⤢ Expand']); expRes.onclick=function(){ if(!lastRecords.length) return; var d=el('button',{class:'btn ghost sm'},['⬇ Download CSV']); d.onclick=function(){ downloadCSV('soql_results.csv', recordsToRows(lastRecords)); }; eq_modal('SOQL results ('+lastRecords.length+')', recordsToTable(lastRecords), [ d ]); };
+  const dlCsv=el('button',{class:'btn ghost sm'},['⬇ Download CSV']); dlCsv.onclick=function(){ if(lastRecords.length) download_csv('soql_results.csv', records_to_rows(lastRecords)); };
+  const expRes=el('button',{class:'btn ghost sm',title:'Open results in a larger window'},['⤢ Expand']); expRes.onclick=function(){ if(!lastRecords.length) return; var d=el('button',{class:'btn ghost sm'},['⬇ Download CSV']); d.onclick=function(){ download_csv('soql_results.csv', records_to_rows(lastRecords)); }; eq_modal('SOQL results ('+lastRecords.length+')', recordsToTable(lastRecords), [ d ]); };
   soqlTools.appendChild(dlCsv); soqlTools.appendChild(expRes);
   async function runSoql(box){ var q=String(box.value||'').trim(); soqlResults.style.display='block'; soqlResults.textContent='Running...'; soqlTools.style.display='none';
     try{ const j=await api('/api/soql',{method:'POST',body:JSON.stringify({q:q})}); M.track('soql_run',{ soql_chars:q.length, queue:(state.queue&&state.queue.name)||'' }); lastRecords=j.records||[]; soqlResults.innerHTML='';
@@ -835,13 +835,13 @@ function renderRight(){
       soqlResults.appendChild(recordsToTable(lastRecords)); soqlTools.style.display=lastRecords.length?'flex':'none'; }
     catch(e){ lastRecords=[]; soqlResults.textContent='Error: '+e.message; } }
   const soqlCopy=el('button',{class:'btn'},['📋 Copy SOQL']);
-  soqlCopy.onclick=function(){ copyText(soqlBox.value, soqlMsg); flashCopied(soqlCopy,'📋 Copy SOQL'); };
+  soqlCopy.onclick=function(){ copy_text(soqlBox.value, soqlMsg); flash_copied(soqlCopy,'📋 Copy SOQL'); };
   const runBtn=el('button',{class:'btn',title:'Runs the (edited) query server-side via the read-only connection; results appear below'},['Run query']);
   runBtn.onclick=function(){ runSoql(soqlBox); };
   const caseSoqlBox=el('textarea',{style:'min-height:70px;font-family:monospace;font-size:12px'});
   caseSoqlBox.value="SELECT Id, CaseNumber, Subject, Status, SuppliedEmail FROM Case WHERE Id = '"+state.case.case_id+"'";
   const caseSoqlCopy=el('button',{class:'btn'},['📋 Copy case SOQL']);
-  caseSoqlCopy.onclick=function(){ copyText(caseSoqlBox.value, soqlMsg); flashCopied(caseSoqlCopy,'📋 Copy case SOQL'); };
+  caseSoqlCopy.onclick=function(){ copy_text(caseSoqlBox.value, soqlMsg); flash_copied(caseSoqlCopy,'📋 Copy case SOQL'); };
   const caseRunBtn=el('button',{class:'btn'},['Run case query']);
   caseRunBtn.onclick=function(){ runSoql(caseSoqlBox); };
   const wbLink=el('a',{class:'btn ghost',href:'https://workbench.developerforce.com/query.php',target:'_blank',rel:'noopener',title:'Workbench cannot be pre-filled from a link - click Copy SOQL, then paste it into Workbench'},['Open Workbench ↗']);
@@ -859,12 +859,12 @@ function renderRight(){
 }
 
 async function boot(){
-  try{ const me=await api('/api/me'); state.me=me; M.setActor(me&&me.user); M.track('page_view', {}); shell();
+  try{ const me=await api('/api/me'); state.me=me; M.set_actor(me&&me.user); M.track('page_view', {}); shell();
     const r=await Promise.all([ api('/api/queues'), api('/api/statuses').catch(function(){return {statuses:[]};}) ]);
     state.queues=r[0].queues; state.statuses=r[1].statuses||[]; state.instanceUrl=r[0].instance_url||'';
-    var sq=loadJSON('eq_queue',''); if(sq){ state.queue=state.queues.find(function(q){return q.id===sq;})||null; }
+    var sq=load_json('eq_queue',''); if(sq){ state.queue=state.queues.find(function(q){return q.id===sq;})||null; }
     renderLeft();
-  }catch(e){ if(e.message!=='unauthorized') renderLogin(e.message); }
+  }catch(e){ if(e.message!=='unauthorized') render_login(e.message); }
 }
 boot();
 </script>

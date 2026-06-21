@@ -62,8 +62,8 @@ function mount(app, deps) {
     const m = (body && body.meta) || {};
     return {
       actor: req.user,
-      queue: (body && body.queue) || '', queue_id: (body && body.queueId) || '',
-      case_id: (body && body.caseId) || '', case_number: (body && body.caseNumber) || '',
+      queue: (body && body.queue) || '', queue_id: (body && body.queue_id) || '',
+      case_id: (body && body.case_id) || '', case_number: (body && body.case_number) || '',
       visitor_id: m.visitor_id || null, session_id: m.session_id || null,
       is_returning: (m.is_returning != null ? m.is_returning : null),
       page_path: m.page_path || null, event_at_local: m.event_at_local || null,
@@ -151,7 +151,7 @@ function mount(app, deps) {
     } catch (e) { err(res, e); }
   });
   app.get('/api/thread', require_auth, async function (req, res) {
-    try { res.json({ ok: true, thread: await sf.get_thread(await get_conn(), req.query.caseId) }); } catch (e) { err(res, e); }
+    try { res.json({ ok: true, thread: await sf.get_thread(await get_conn(), req.query.case_id) }); } catch (e) { err(res, e); }
   });
   app.get('/api/attachment/:cvid/text', require_auth, async function (req, res) {
     try {
@@ -225,7 +225,7 @@ function mount(app, deps) {
       const knowledge = await faq.load_knowledge(b.queue);
       const images = await faq.load_context_images(b.queue);
       const corr = corrections.grounding_lines(12, { queue: b.queue, user: req.user });
-      const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, model: b.model, fetch_attachments: true, faq: knowledge, images: images, corrections: corr });
+      const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.case_id, provider: b.provider, model: b.model, fetch_attachments: true, faq: knowledge, images: images, corrections: corr });
       log_ai(req, b, Object.assign({
         ai_action: 'respond', ai_verdict: (r.verdict || '').toUpperCase(),
         ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
@@ -247,7 +247,7 @@ function mount(app, deps) {
       const knowledge = await faq.load_knowledge(b.queue);
       const images = await faq.load_context_images(b.queue);
       const corr = corrections.grounding_lines(12, { queue: b.queue, user: req.user });
-      const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, model: b.model, question: b.question, history: b.history, faq: knowledge, images: images, corrections: corr });
+      const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.case_id, provider: b.provider, model: b.model, question: b.question, history: b.history, faq: knowledge, images: images, corrections: corr });
       log_ai(req, b, Object.assign({
         ai_action: action, ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
         ai_reply_chars: (r.answer || '').length, ai_used_images: images && images.length ? 1 : 0,
@@ -265,7 +265,7 @@ function mount(app, deps) {
     const b = req.body || {};
     const t0 = Date.now();
     try {
-      const r = await ai.triage_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, model: b.model, faq: await faq.load_knowledge(b.queue) });
+      const r = await ai.triage_case({ conn: await get_conn(), case_id: b.case_id, provider: b.provider, model: b.model, faq: await faq.load_knowledge(b.queue) });
       log_ai(req, b, Object.assign({ ai_action: 'triage', ai_intent: r.status || '', ai_verdict: r.status || '',
         ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.prompt_chars || 0,
         ai_reply_chars: (r.reply_chars != null ? r.reply_chars : (r.reason || '').length), ai_ok: 1 }, token_cost(r, b)));
@@ -278,7 +278,7 @@ function mount(app, deps) {
   app.get('/api/corrections', require_auth, function (req, res) { res.json({ ok: true, corrections: corrections.list(false) }); });
   app.post('/api/corrections', require_auth, function (req, res) {
     const b = req.body || {};
-    const r = corrections.add({ note: b.note, scope: b.scope, queue: b.queue, case_id: b.caseId, question: b.question, author: req.user });
+    const r = corrections.add({ note: b.note, scope: b.scope, queue: b.queue, case_id: b.case_id, question: b.question, author: req.user });
     res.json({ ok: !!r, correction: r });
   });
 
@@ -331,8 +331,8 @@ function mount(app, deps) {
     } catch (e) { err(res, e); }
   });
   // POST sets the global default and/or a per-user override.
-  //   { default: "all" | [queueId...] }                  -> set global default
-  //   { user: "<name>", queues: "all" | [queueId...] }   -> set a per-user override
+  //   { default: "all" | [queue_id...] }                  -> set global default
+  //   { user: "<name>", queues: "all" | [queue_id...] }   -> set a per-user override
   //   { user: "<name>", clear: true }                     -> remove a per-user override
   app.post('/api/admin/queue-access', require_admin, function (req, res) {
     try {
