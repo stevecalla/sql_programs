@@ -122,6 +122,11 @@ Login (auth-gated) - 3 **resizable** panes:
   "AI · <model>"; badges decided by a **local rule** (no inbound message, bounce/no-reply sender, or
   awaiting the customer — no API call) are marked with a trailing **`*`**. Failed triage shows **⚠ Failed**
   with the provider error on hover (never a fabricated status).
+- **Spam handling:** a conservative local heuristic (`ai/spam.js`) flags **clear** cold/bulk/marketing
+  outreach (SEO/link-building/guest-post pitches, unsubscribe + promo content, link-heavy blasts) with no
+  AI call; anything ambiguous goes to the model, which is given the **sender + signals** (link count,
+  unsubscribe present) and is told to prefer SPAM for cold/bulk marketing unrelated to triathlon. Cheaper
+  models (e.g. Haiku) miss more spam — pick a stronger model for better triage.
 - **AI panel:** Draft reply (verdict + **editable** draft you can edit/compose and "Send" - mocked,
   returns the not-enabled message); Ask with **preset chips** + running **history**; **mock** case-status
   update (not connected); **context upload** (drop files the AI will read).

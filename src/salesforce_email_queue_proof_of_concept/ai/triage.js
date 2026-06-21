@@ -5,6 +5,7 @@
 // conn + provider injectable for tests. Internal tag only - never written back to Salesforce.
 const sf = require('../sf');
 const providers = require('./providers');
+const spam = require('./spam');
 
 const STATUSES = ['answer_ready', 'draft_possible', 'needs_info', 'awaiting_reply', 'spam', 'non_actionable'];
 
@@ -12,8 +13,12 @@ const STATUSES = ['answer_ready', 'draft_possible', 'needs_info', 'awaiting_repl
 function classify_local(thread) {
   const inbound = (thread || []).filter(function (m) { return m.incoming; });
   if (!inbound.length) return { status: 'non_actionable', reason: 'No inbound customer message.' };
-  const from = String((inbound[inbound.length - 1] || {}).from_address || '').toLowerCase();
+  const latest_in = inbound[inbound.length - 1] || {};
+  const from = String(latest_in.from_address || '').toLowerCase();
   if (/mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounce/.test(from)) return { status: 'non_actionable', reason: 'Automated bounce / no-reply sender.' };
+  // Conservative spam heuristic (no AI): only clear cold/bulk/marketing outreach.
+  const sp = spam.looks_like_spam(latest_in);
+  if (sp) return { status: 'spam', reason: sp.reason };
   const last = thread[thread.length - 1];
   if (last && !last.incoming && !last.automated) return { status: 'awaiting_reply', reason: 'Latest message is a staff reply; awaiting the customer.' };
   return null;
@@ -42,10 +47,17 @@ async function triage_case(opts) {
     'Classify how ready USAT staff are to answer the LATEST customer message on this case.',
     'Output ONE token, then " - ", then a reason of <=12 words. Tokens:',
     'ANSWER_READY = context fully answers it; DRAFT_POSSIBLE = mostly, minor gaps;',
-    'NEEDS_INFO = missing facts/policy to answer; SPAM = unsolicited marketing/sales/phishing;',
+    'NEEDS_INFO = missing facts/policy to answer;',
+    'SPAM = unsolicited cold/bulk/marketing/sales/SEO/phishing outreach NOT related to USA Triathlon',
+    '  membership, events, results, sanctioning, or coaching. Examples: link-building / guest-post / SEO',
+    '  pitches, cold B2B sales, web-design/app-dev offers, newsletters or promos with unsubscribe links,',
+    '  crypto / loan / investment offers. PREFER SPAM for any cold or bulk marketing unrelated to triathlon,',
+    '  even if politely worded.',
     'NON_ACTIONABLE = bounce / no action needed. (An automated auto-acknowledgement does NOT count as answered.)',
     'Already answered by a human: ' + (human_answered ? 'yes' : 'no') + '.',
     '',
+    'SENDER: ' + (latest.from_name || '') + ' <' + (latest.from_address || '') + '>',
+    'SIGNALS: ' + spam.signal_summary(latest),
     'SUBJECT: ' + (latest.subject || ''),
     'LATEST CUSTOMER MESSAGE:',
     String(latest.text_new || latest.text_raw || '').slice(0, 1200),

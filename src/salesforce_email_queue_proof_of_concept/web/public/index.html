@@ -313,7 +313,7 @@ function shell() {
   document.body.innerHTML='';
   // Single model picker for ALL AI features (triage, draft, ask). Options come from /api/ai/models
   // (the one shared registry, ai/models.js). onchange sets BOTH provider + model from the option.
-  const provider = el('select',{id:'eq-model',style:'width:auto',title:'AI model — used for triage, draft & ask',onchange:function(e){
+  const provider = el('select',{id:'eq-model',style:'width:auto',title:'AI model — used for triage, draft & ask. Tip: cheaper models (e.g. Haiku) classify spam/triage less accurately; pick a stronger model (Sonnet / GPT-5.x) for better results.',onchange:function(e){
       var opt=e.target.options[e.target.selectedIndex];
       state.model = opt ? opt.value : null;
       state.provider = opt ? (opt.getAttribute('data-provider')||'openai') : 'openai';
@@ -496,7 +496,7 @@ function renderLeft(){
   var triRefresh = el('button',{id:'triRefresh',class:'btn ghost sm',title:'Clear and re-run triage for the visible cases (enabled after a triage run or a model change)',onclick:retriage_visible},['↻ Refresh']);
   triRefresh.disabled = !triage_refresh_enabled();
   left.appendChild(el('div',{style:'display:flex;gap:8px;align-items:center;margin:0 0 8px'},[ el('button',{class:'btn ghost sm',onclick:triageVisible},['AI triage visible']), triRefresh, el('span',{id:'triProg',class:'dim',style:'font-size:12px'},[]) ]));
-  left.appendChild(el('div',{class:'dim',style:'font-size:11px;margin:-4px 0 8px',title:'Badges marked with * were decided by a local rule (no AI / no API cost) — e.g. no inbound message, a bounce/no-reply sender, or awaiting the customer. Hover any badge for the reason and source.'},['* = local rule (no AI). Hover a badge for the reason.']));
+  left.appendChild(el('div',{class:'dim',style:'font-size:11px;margin:-4px 0 8px',title:'Badges marked with * were decided by a local rule (no AI / no API cost) — e.g. no inbound message, a bounce/no-reply sender, clear cold/bulk spam, or awaiting the customer. Hover any badge for the reason and source. Cheaper models (e.g. Haiku) miss more spam — pick a stronger model for better triage.'},['* = local rule (no AI) · cheaper models miss more spam. Hover a badge for the reason.']));
   left.appendChild(el('div',{id:'caseList'},[]));
   renderCases();
 }

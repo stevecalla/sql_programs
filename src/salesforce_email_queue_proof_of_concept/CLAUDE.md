@@ -46,7 +46,12 @@ ai/
   prompt.js         SYSTEM (role + strict grounding rules) + respond/ask prompt builders
   context.js        build_context (tiers 1/2/4 + corrections); tier-3 deferred
   respond.js        respond_to_case -> verdict draft|need_info (conn + provider injected)
-  triage.js         triage_case -> status (answer_ready|draft_possible|needs_info|non_actionable)
+  triage.js         triage_case -> status (answer_ready|draft_possible|needs_info|spam|awaiting_reply|
+                    non_actionable). classify_local short-circuits (no AI): no-inbound/bounce ->
+                    non_actionable, clear cold/bulk spam (ai/spam.js) -> spam, trailing staff reply ->
+                    awaiting_reply. AI prompt gets SENDER + spam SIGNALS + strengthened SPAM criteria.
+  spam.js           CONSERVATIVE local spam heuristic (looks_like_spam/signal_summary) — cold-outreach
+                    OR opt-out+marketing OR many-links+marketing; tunable constants; no headers used.
   ask.js            ask_about_case
   extract.js        attachment bytes -> text (text native; pdf/docx/xlsx via OPTIONAL deps)
   faq.js            knowledge loader: ALL knowledge from the EXTERNAL context folder (via ../data_dir.js
