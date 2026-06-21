@@ -101,3 +101,19 @@ test('/api/admin/config rejects an empty ai_models list', async function () {
   const r = await req('POST', '/api/admin/config', { ai_models: [] }, cookie);
   assert.strictEqual(r.code, 400);
 });
+
+test('show_test_banner round-trips and is exposed on /api/me + config', async function () {
+  // default is on (true)
+  const cfg0 = await req('GET', '/api/admin/config', null, cookie);
+  assert.strictEqual(cfg0.json.show_test_banner, true);
+  const me0 = await req('GET', '/api/me', null, cookie);
+  assert.strictEqual(me0.json.show_test_banner, true);
+  // turn it off
+  const off = await req('POST', '/api/admin/config', { show_test_banner: false }, cookie);
+  assert.strictEqual(off.code, 200);
+  assert.strictEqual(off.json.show_test_banner, false);
+  assert.strictEqual((await req('GET', '/api/me', null, cookie)).json.show_test_banner, false);
+  // turn it back on (leave config clean for other tests)
+  const on = await req('POST', '/api/admin/config', { show_test_banner: true }, cookie);
+  assert.strictEqual(on.json.show_test_banner, true);
+});

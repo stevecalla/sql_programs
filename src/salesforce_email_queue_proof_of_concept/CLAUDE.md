@@ -186,6 +186,18 @@ identity, §12 AI tools, §13 API limits), `mvp_plan.md`, `plan.md` (full roadma
   user's real activity is never mis-flagged. **`?metrics_test=1`** stamps `is_test=1`; purge via `/admin`,
   CLI, or `npm run email_queue_metrics_purge_test`. **No member PII** (counts/enums + staff username +
   queue name + SF record ids only). Writes hit only the local MySQL DB.
+- **Environments + spend.** `env` column ('prod'|'sandbox') is stamped **server-side** on every row
+  (`log_event` + the `/api/event` wrapper read `config.json` `sf_env`). `/admin → Settings` switches the
+  Salesforce org: routes' `get_conn` calls `sf.sf_config({ is_test: sf_env()==='sandbox' })` (SF_DEV_* vs
+  SF_PROD_*) and `reset_conn()` on change. `render_mode_banner` shows a 🧪 SANDBOX (amber) + TEST (blue)
+  banner on the SPA **and** on `/metrics` + `/admin` (those two read `sf_env`/`show_test_banner` from
+  `/api/me`). SANDBOX is always on; the TEST banner is admin-toggleable (`/admin → Settings → Banners`,
+  `config.json` `show_test_banner`, default on, served via `/api/me` + `/api/admin/config`).
+  Test/QA AI calls cost real money, so `metrics_report` adds a **spend** block (real/test/total + by_env,
+  NOT is_test-filtered) shown on the dashboard. **Cost-aware purge:** `retention.purge_test(pool, table,
+  { protect_cost:true })` (email-queue passes it; transform doesn't) keeps test rows with `ai_cost_usd>0`
+  and deletes only the $0 noise, returning `kept_cost_rows`/`kept_cost_usd`. Heads-up: `sf_config`'s
+  `is_test` arg means "use sandbox creds" — unrelated to the analytics `is_test` QA flag.
 - **Queue allow-list** (`store/queue_access.js`, external `queue_access.json`, override
   `EQ_QUEUE_ACCESS_FILE`): general default + per-user overrides; admins bypass. Enforced in
   `/api/queues` (filter) + `/api/cases`/`/api/status-counts` (403). Managed via `/api/admin/queue-access`.

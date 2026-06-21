@@ -13,7 +13,12 @@
   try{ if(window.UsageMetrics) UsageMetrics.init({ app:'salesforce_email_queue', endpoint:'/api/event', allowList:['is_test','source','actor'], baseProps:{ source:'web', is_test: MT?1:0 }, autoPageView:false }); }catch(e){}
   var actor='';
   function view(){ try{ if(window.UsageMetrics) UsageMetrics.track('admin_view',{ actor: actor }); }catch(e){} }
-  try{ fetch('/api/me',{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(j){ actor=(j&&j.user)||''; view(); }).catch(function(){ view(); }); }catch(e){ view(); }
+  function render_mode_banner(sandbox, show_test){ try{ var test=MT && show_test!==false; if(!sandbox&&!test) return; if(document.getElementById('eqModeBanner')) return;
+    var msg = sandbox ? '🧪 SANDBOX — practice data, not production' : ''; if(test) msg=(msg?msg+'  ·  ':'')+'TEST MODE — activity is flagged is_test';
+    var b=document.createElement('div'); b.id='eqModeBanner'; b.textContent=msg;
+    b.style.cssText='position:sticky;top:0;z-index:70;padding:6px 14px;font-size:13px;font-weight:700;text-align:center;'+(sandbox?'background:#7a4d00;color:#ffd591;border-bottom:1px solid #b87500;':'background:#0e2a5e;color:#9ec5ff;border-bottom:1px solid #2e5db0;');
+    var go=function(){ if(document.body) document.body.insertBefore(b, document.body.firstChild); }; if(document.readyState!=='loading') go(); else document.addEventListener('DOMContentLoaded', go); }catch(e){} }
+  try{ fetch('/api/me',{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(j){ actor=(j&&j.user)||''; view(); render_mode_banner(j&&j.sf_env==='sandbox', !(j&&j.show_test_banner===false)); }).catch(function(){ view(); render_mode_banner(false, true); }); }catch(e){ view(); }
   // Sign-out logged CLIENT-side too (full meta), then navigate to clear the cookie.
   function wireOut(){ var a=document.getElementById('signOut'); if(!a) return; a.addEventListener('click', function(ev){ ev.preventDefault(); try{ if(window.UsageMetrics) UsageMetrics.track('sign_out',{ actor: actor }); }catch(e){} location.href=a.getAttribute('href'); }); }
   if(document.readyState!=='loading') wireOut(); else document.addEventListener('DOMContentLoaded', wireOut);
@@ -107,8 +112,8 @@
       <!-- MAINTENANCE -->
       <section class="pane" data-view="maintenance">
         <div class="ad-card"><h2>Data maintenance</h2>
-          <div class="act-row"><button class="btn warn" id="purgeTest">🗑 Purge test rows (is_test=1)</button><span class="msg" id="maintMsg"></span></div>
-          <div class="mut">Deletes only deliberate test rows (sessions opened with <code>?metrics_test=1</code>). Real + demo data are untouched.</div>
+          <div class="act-row"><button class="btn warn" id="purgeTest">🗑 Purge $0 test rows (is_test=1)</button><span class="msg" id="maintMsg"></span></div>
+          <div class="mut">Deletes deliberate test rows (sessions opened with <code>?metrics_test=1</code>) that cost <b>$0</b>. <b>Keeps</b> any test AI call that actually spent money, so your spend record / bill reconciliation survives. Real + demo data are untouched.</div>
         </div>
       </section>
 
@@ -141,6 +146,26 @@
             </select>
             <button class="btn primary" id="saveLanding">Save</button>
             <span class="msg" id="landingMsg"></span>
+          </div>
+        </div>
+        <div class="ad-card"><h2>Salesforce environment</h2>
+          <div class="mut">Which Salesforce org the app reads from. <b>Production</b> = live data (<code>SF_PROD_*</code>). <b>Sandbox</b> = practice org (<code>SF_DEV_*</code>, test.salesforce.com) — safe for testing. Switching reconnects; reload the app afterward. The app shows a 🧪 SANDBOX banner while in sandbox, and every analytics row is tagged with the environment.</div>
+          <div class="act-row" style="margin-top:10px">
+            <span class="mut">Read from:</span>
+            <select id="sfEnvSel">
+              <option value="prod">🟢 Production (live)</option>
+              <option value="sandbox">🧪 Sandbox (dev)</option>
+            </select>
+            <button class="btn primary" id="saveSfEnv">Save</button>
+            <span class="msg" id="sfEnvMsg"></span>
+          </div>
+        </div>
+        <div class="ad-card"><h2>Banners</h2>
+          <div class="mut">The <b>🧪 SANDBOX</b> banner always shows while reading from the sandbox org (safety) and can't be turned off. The <b>TEST MODE</b> banner appears on pages opened with <code>?metrics_test=1</code> (the admin nav links) — turn it off here if it gets in the way.</div>
+          <div class="act-row" style="margin-top:10px">
+            <label class="mut"><input type="checkbox" id="testBannerChk"> Show the TEST MODE banner</label>
+            <button class="btn primary" id="saveTestBanner">Save</button>
+            <span class="msg" id="testBannerMsg"></span>
           </div>
         </div>
         <div class="ad-card"><h2>AI models &amp; pricing</h2>
@@ -295,19 +320,30 @@ document.getElementById('saveUser').onclick=async function(){ var u=document.get
   if(j.ok){ ACCESS=j.access; m.textContent='Saved.'; m.className='msg ok'; renderUser(); } else { m.textContent=j.error||'error'; m.className='msg err'; } };
 
 // ---- Maintenance ----
-document.getElementById('purgeTest').onclick=async function(){ if(!confirm('Delete all test rows (is_test=1)? Real + demo data are untouched.')) return;
+document.getElementById('purgeTest').onclick=async function(){ if(!confirm('Delete $0 test rows (is_test=1)? Cost-bearing test runs are KEPT; real + demo data are untouched.')) return;
   var m=document.getElementById('maintMsg'); m.textContent='Purging…'; m.className='msg'; this.disabled=true;
-  try{ var j=await postJSON('/api/metrics-purge-test',{}); if(j.ok){ m.textContent='Deleted '+(j.deleted||0)+' test row(s).'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; } }
+  try{ var j=await postJSON('/api/metrics-purge-test',{}); if(j.ok){ m.textContent='Deleted '+(j.deleted||0)+' $0 test row(s); kept '+(j.kept_cost_rows||0)+' cost-bearing ($'+Number(j.kept_cost_usd||0).toFixed(4)+').'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; } }
   catch(e){ m.textContent='Failed: '+e.message; m.className='msg err'; } this.disabled=false; };
 
 // ---- Settings: admin default landing page + AI model registry ----
 async function loadSettings(){
-  try{ var j=await getJSON('/api/admin/config'); if(j.ok){ var sel=document.getElementById('landingSel'); sel.value=j.admin_landing||'/metrics'; renderModels(j.ai_models); } }catch(e){ if(e.message!=='auth') document.getElementById('landingMsg').textContent='Failed: '+e.message; }
+  try{ var j=await getJSON('/api/admin/config'); if(j.ok){ var sel=document.getElementById('landingSel'); sel.value=j.admin_landing||'/metrics'; var es=document.getElementById('sfEnvSel'); if(es) es.value=j.sf_env||'prod'; var tb=document.getElementById('testBannerChk'); if(tb) tb.checked=(j.show_test_banner!==false); renderModels(j.ai_models); } }catch(e){ if(e.message!=='auth') document.getElementById('landingMsg').textContent='Failed: '+e.message; }
 }
 document.getElementById('saveLanding').onclick=async function(){
   var m=document.getElementById('landingMsg'); m.textContent='Saving…'; m.className='msg';
   var j=await postJSON('/api/admin/config',{ admin_landing: document.getElementById('landingSel').value });
   if(j.ok){ m.textContent='Saved — admins will land on '+j.admin_landing+'.'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; }
+};
+document.getElementById('saveSfEnv').onclick=async function(){
+  var m=document.getElementById('sfEnvMsg'); m.textContent='Saving…'; m.className='msg';
+  var j=await postJSON('/api/admin/config',{ sf_env: document.getElementById('sfEnvSel').value });
+  if(j.ok){ m.textContent='Now reading from '+(j.sf_env==='sandbox'?'SANDBOX (dev)':'PRODUCTION')+'. Reload the app to use it.'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; }
+};
+document.getElementById('saveTestBanner').onclick=async function(){
+  var m=document.getElementById('testBannerMsg'); m.textContent='Saving…'; m.className='msg';
+  var on=document.getElementById('testBannerChk').checked;
+  var j=await postJSON('/api/admin/config',{ show_test_banner: on });
+  if(j.ok){ m.textContent='TEST banner '+(j.show_test_banner!==false?'on':'off')+'. Reload pages to apply.'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; }
 };
 
 // AI model registry editor (one shared list for app picker + Ask box; prices feed cost tracking).

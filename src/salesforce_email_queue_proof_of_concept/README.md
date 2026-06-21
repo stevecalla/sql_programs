@@ -200,7 +200,26 @@ analytics core (`utilities/analytics/*`). Both are gated by the existing session
 - **`/admin`** — config-status strip (booleans only — never secrets) plus the **queue allow-list**:
   set the **general default** (all queues, or only selected) and **per-user overrides**. Non-admins
   only see/READ queues they're permitted (`/api/queues` filters; `/api/cases` 403s otherwise). Admins
-  always see everything. Also a **🧪 Purge test rows** button.
+  always see everything. Also a **🧪 Purge test rows** button and (in **Settings**) the **Salesforce
+  environment** switch and the editable **AI models & pricing** list.
+
+**Environments (sandbox vs prod).** `/admin → Settings → Salesforce environment` selects which org the
+app reads from: **Production** (`SF_PROD_*`, live) or **Sandbox** (`SF_DEV_*`, `test.salesforce.com`,
+practice data). It's stored in `config.json` (`sf_env`); switching reconnects. While in sandbox the app
+shows a **🧪 SANDBOX banner**, and **every analytics row is tagged with `env`** (`prod`|`sandbox`,
+stamped server-side) so sandbox practice never mixes into production metrics or cost. (Note: there's no
+sandbox for the AI providers — calls always bill; only the Salesforce data source changes.) The SANDBOX
+banner shows on the app, `/metrics`, and `/admin` and **can't be turned off** (safety).
+
+**Banners.** Besides the always-on SANDBOX banner, a blue **TEST MODE** banner appears on any page opened
+with `?metrics_test=1` (the admin nav links always carry it). It's admin-toggleable at
+`/admin → Settings → Banners` (`show_test_banner` in `config.json`, default on) and is surfaced to every
+page via `/api/me`; turning it off hides only the TEST banner, never the SANDBOX one.
+
+**AI spend (real / test / total).** Test/QA runs still call the real model and **cost real money**, so the
+`/metrics` **AI spend** panel shows **Real** (production), **Test** (your `?metrics_test=1` / admin runs),
+and **Total** (= the two; matches your OpenAI/Anthropic bill), broken out per environment. Usage stats
+above still exclude `is_test`; only spend is shown in full.
 
 **Test mode + purge.** `is_test=1` is driven **only by the `?metrics_test=1` URL parameter** (never by
 session/role state) — when a page loads with it, every event from that browser session is stamped
@@ -210,6 +229,9 @@ an admin is routed to their landing page **with `?metrics_test=1`**, and the cro
 and signing out, stays flagged the whole time. Regular users get **no cross-area links and no param**,
 so their activity is always real. Test rows are separable and **deletable** later via `/admin` → Purge
 test rows, the CLI (`node metrics/metrics_cli.js purge-test`), or `npm run email_queue_metrics_purge_test`.
+**Purge is cost-aware:** it deletes only the **$0** test noise and **keeps any test AI call that spent
+money** (so the spend record / bill reconciliation survives); it reports how many cost-bearing rows it
+kept and their $ total.
 
 **Workspace state + reset.** The selected queue, status filter, and checked cases are saved per browser
 (`eq_queue` / `eq_status` / `eq_checked`) so a mid-session **page refresh keeps your place**. They are

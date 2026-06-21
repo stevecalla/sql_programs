@@ -109,11 +109,17 @@ const pool_proxy = { query: function () {
 } };
 // Server-side event logger — for events whose facts are only known on the server (AI latency /
 // verdict / success). Best-effort: never throws, no-ops when the pool isn't ready.
+// Which Salesforce org the app is currently pointed at — stamped on every analytics row as `env`
+// (server-authoritative; the same config.json setting get_conn uses). 'prod' | 'sandbox'.
+function current_env() {
+  try { const dd = require('./src/salesforce_email_queue_proof_of_concept/data_dir'); const v = (dd.read_config() || {}).sf_env; return v === 'sandbox' ? 'sandbox' : 'prod'; }
+  catch (e) { return 'prod'; }
+}
 async function log_event(props) {
   if (!METRICS_ON) return;
   try {
     await insert_event(pool_proxy, metrics_config.TABLE, ALLOW, metrics_config.REPORTING_TZ,
-      Object.assign({ app: metrics_config.APP, source: 'web' }, props || {}));
+      Object.assign({ app: metrics_config.APP, source: 'web', env: current_env() }, props || {}));
   } catch (e) { /* analytics must never break the app */ }
 }
 async function init_metrics() {
@@ -133,7 +139,8 @@ async function init_metrics() {
       { name: 'status_to', ddl: 'status_to VARCHAR(40)', after: 'sf_error' },
       { name: 'ai_prompt_tokens', ddl: 'ai_prompt_tokens INT', after: 'ai_reply_chars' },
       { name: 'ai_completion_tokens', ddl: 'ai_completion_tokens INT', after: 'ai_prompt_tokens' },
-      { name: 'ai_cost_usd', ddl: 'ai_cost_usd DECIMAL(10,6)', after: 'ai_completion_tokens' }
+      { name: 'ai_cost_usd', ddl: 'ai_cost_usd DECIMAL(10,6)', after: 'ai_completion_tokens' },
+      { name: 'env', ddl: "env VARCHAR(10)", after: 'is_test' }
     ]);
     // Ask-your-data audit log + operator corrections (mirrors 8018). Writable analytics pool.
     var _ask_log = require('./src/salesforce_email_queue_proof_of_concept/metrics/ask/ask_log');
@@ -191,7 +198,11 @@ function create_app() {
 
   // Usage analytics — fire-and-forget browser ingest. Counts/enums only; no-ops if no DB pool. Ungated
   // (contains no sensitive data), exactly like 8018's /api/event.
-  app.post('/api/event', make_event_ingest({ pool: pool_proxy, table: metrics_config.TABLE, columns: metrics_config.COLUMNS, reporting_tz: metrics_config.REPORTING_TZ }));
+  const _event_ingest = make_event_ingest({ pool: pool_proxy, table: metrics_config.TABLE, columns: metrics_config.COLUMNS, reporting_tz: metrics_config.REPORTING_TZ });
+  app.post('/api/event', function (req, res) {   // stamp env server-side (authoritative) on browser events
+    try { if (req.body && typeof req.body === 'object') req.body.env = current_env(); } catch (e) { /* ignore */ }
+    return _event_ingest(req, res);
+  });
   // Serve the shared generic analytics browser client (UsageMetrics) as a static asset.
   app.use('/analytics', express.static(path.join(__dirname, 'utilities', 'analytics')));
   // Reuse the transform's stylesheet so /metrics + /admin match it exactly (single source of truth).

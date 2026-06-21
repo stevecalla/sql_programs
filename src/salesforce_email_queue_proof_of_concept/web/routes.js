@@ -19,15 +19,32 @@ function admin_landing() {
   catch (e) { return '/metrics'; }
 }
 
-let _conn = null;
+// Salesforce environment the app reads from (configurable in /admin -> Settings; stored in config.json).
+// 'prod' -> SF_PROD_* (production); 'sandbox' -> SF_DEV_* + test.salesforce.com. Also stamped on every
+// analytics row as `env` (server-side) so sandbox practice never mixes into production metrics/cost.
+const SF_ENVS = ['prod', 'sandbox'];
+function sf_env() {
+  try { const v = (data_dir.read_config() || {}).sf_env; return v === 'sandbox' ? 'sandbox' : 'prod'; }
+  catch (e) { return 'prod'; }
+}
+// Whether the TEST-MODE banner is shown (admin-toggleable in /admin -> Settings). Default true.
+// The SANDBOX banner is always shown (safety) and is not affected by this.
+function show_test_banner() {
+  try { return (data_dir.read_config() || {}).show_test_banner !== false; } catch (e) { return true; }
+}
+
+let _conn = null, _conn_env = null;
 async function get_conn() {
-  if (_conn) return _conn;
-  const cfg = sf.sf_config({ is_test: false });
+  const env = sf_env();
+  if (_conn && _conn_env === env) return _conn;   // rebuild if the admin switched orgs
+  const cfg = sf.sf_config({ is_test: env === 'sandbox' });   // sf_config's is_test = "use sandbox/dev creds"
   const ck = sf.check_sf_config(cfg);
-  if (!ck.ok) throw new Error('Salesforce not configured: ' + ck.missing.join(', '));
+  if (!ck.ok) throw new Error('Salesforce (' + env + ') not configured: ' + ck.missing.join(', '));
   _conn = await sf.make_connection(cfg);
+  _conn_env = env;
   return _conn;
 }
+function reset_conn() { _conn = null; _conn_env = null; }
 function err(res, e) { res.status(502).json({ ok: false, error: (e && e.message) || String(e) }); }
 // Minimal RFC-4180-ish delimited parser (handles quoted fields + embedded delimiters/newlines).
 function parse_delimited(text, delim) {
@@ -107,7 +124,7 @@ function mount(app, deps) {
     res.json({ ok: true, user: v.user, role: role, landing: role === 'admin' ? admin_landing() : '/' });
   });
   app.post('/api/logout', function (req, res) { res.setHeader('Set-Cookie', session.COOKIE + '=; HttpOnly; Path=/; Max-Age=0'); res.json({ ok: true }); });
-  app.get('/api/me', require_auth, function (req, res) { res.json({ ok: true, user: req.user, role: req.role }); });
+  app.get('/api/me', require_auth, function (req, res) { res.json({ ok: true, user: req.user, role: req.role, sf_env: sf_env(), show_test_banner: show_test_banner() }); });
 
   app.get('/api/queues', require_auth, async function (req, res) {
     try {
@@ -346,7 +363,7 @@ function mount(app, deps) {
 
   // ---- /admin: settings (admin only): admin default landing page + the editable AI model registry ----
   app.get('/api/admin/config', require_admin, function (req, res) {
-    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS, ai_models: ai.list_models() });
+    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS, ai_models: ai.list_models(), sf_env: sf_env(), sf_envs: SF_ENVS, show_test_banner: show_test_banner() });
   });
   app.post('/api/admin/config', require_admin, function (req, res) {
     try {
@@ -376,8 +393,18 @@ function mount(app, deps) {
         let seen = false; clean.forEach(function (m) { if (m.is_default && seen) m.is_default = false; else if (m.is_default) seen = true; });
         cfg.ai_models = clean;
       }
+      // Show/hide the TEST-MODE banner (the SANDBOX banner is always shown).
+      if (b.show_test_banner !== undefined) { cfg.show_test_banner = !!b.show_test_banner; }
+      // Salesforce environment (prod | sandbox). Switching resets the cached SF connection so the next
+      // read uses the other org; the client should reload its queue/case view afterward.
+      if (b.sf_env !== undefined) {
+        const v = String(b.sf_env || '');
+        if (SF_ENVS.indexOf(v) < 0) return res.status(400).json({ ok: false, error: 'invalid sf_env' });
+        cfg.sf_env = v; data_dir.write_config(cfg); reset_conn();
+        return res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env() });
+      }
       data_dir.write_config(cfg);
-      res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models() });
+      res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env(), show_test_banner: show_test_banner() });
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 

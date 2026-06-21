@@ -131,6 +131,23 @@ async function build_report(pool, opts) {
   const health = (await q(pool, "SELECT COUNT(*) rows_total, SUM(CASE WHEN is_test=1 THEN 1 ELSE 0 END) test_rows, DATE_FORMAT(MAX(CASE WHEN event_name<>'dashboard_view' THEN created_at_mtn END), '%b %e, %Y %l:%i %p') latest FROM `" + T + "`"))[0] || {};
   const sizerow = (await q(pool, 'SELECT ROUND((data_length+index_length)/1024/1024,2) mb FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [T]))[0] || {};
 
+  // ---- AI spend: REAL (is_test=0) vs TEST (is_test=1) vs TOTAL — across the window, NOT is_test-filtered,
+  // so test spend (which still costs real money) is visible and the provider bill reconciles. Also per env.
+  const spend_rows = await q(pool,
+    "SELECT (is_test=1) is_t, COALESCE(env,'prod') env, SUM(ai_cost_usd) cost, SUM(ai_prompt_tokens) ptok, SUM(ai_completion_tokens) ctok, COUNT(*) calls " +
+    'FROM `' + T + '` WHERE app = ? AND ' + since + " AND event_name='ai_call' GROUP BY (is_test=1), COALESCE(env,'prod')", A);
+  const spend = { real_usd: 0, test_usd: 0, real_calls: 0, test_calls: 0, real_tok_in: 0, real_tok_out: 0, test_tok_in: 0, test_tok_out: 0 };
+  const by_env_map = {};
+  spend_rows.forEach(function (r) {
+    const is_t = Number(r.is_t) === 1, e = r.env || 'prod';
+    spend[is_t ? 'test_usd' : 'real_usd'] += n0(r.cost);
+    spend[is_t ? 'test_calls' : 'real_calls'] += n0(r.calls);
+    spend[is_t ? 'test_tok_in' : 'real_tok_in'] += n0(r.ptok);
+    spend[is_t ? 'test_tok_out' : 'real_tok_out'] += n0(r.ctok);
+    by_env_map[e] = by_env_map[e] || { env: e, real_usd: 0, test_usd: 0 };
+    by_env_map[e][is_t ? 'test_usd' : 'real_usd'] += n0(r.cost);
+  });
+
   const calls = n0(ai.calls);
   const data = {
     days: days,
@@ -188,6 +205,13 @@ async function build_report(pool, opts) {
       test_rows: n0(health.test_rows),   // is_test=1 rows (deliberate test runs) — purgeable from /admin
       mb: (sizerow.mb != null ? Number(sizerow.mb) : null),
       latest_mtn: health.latest || null
+    },
+    // AI spend: real (excluded from usage stats) + test (still real money) + total (matches the vendor bill).
+    spend: {
+      real_usd: usd6(spend.real_usd), test_usd: usd6(spend.test_usd), total_usd: usd6(spend.real_usd + spend.test_usd),
+      real_calls: spend.real_calls, test_calls: spend.test_calls,
+      real_tokens: spend.real_tok_in + spend.real_tok_out, test_tokens: spend.test_tok_in + spend.test_tok_out,
+      by_env: Object.keys(by_env_map).map(function (e) { return { env: e, real_usd: usd6(by_env_map[e].real_usd), test_usd: usd6(by_env_map[e].test_usd), total_usd: usd6(by_env_map[e].real_usd + by_env_map[e].test_usd) }; })
     }
   };
 
@@ -229,6 +253,6 @@ async function report_text(pool, opts) { return render.to_text(await build_repor
 async function size(pool) { return retention.size(pool, T); }
 async function cleanup(pool, opts) { return retention.purge_keep_years(pool, T, (opts && opts.years) || cfg.KEEP_YEARS, cfg.REPORTING_TZ); }
 async function purge_all(pool) { return retention.purge_all(pool, T); }
-async function purge_test(pool) { return retention.purge_test(pool, T); }
+async function purge_test(pool) { return retention.purge_test(pool, T, { protect_cost: true }); }
 
 module.exports = { get_pool, build_report, report_text, size, cleanup, purge_all, purge_test, TABLE: T, cfg: cfg };

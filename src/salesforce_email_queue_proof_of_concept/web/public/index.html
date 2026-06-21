@@ -309,8 +309,26 @@ function render_login(msg) {
   });
 }
 
+// Persistent mode banner: shown when the app is pointed at the SANDBOX org and/or running in test mode
+// (?metrics_test=1). Non-dismissible — it's a mode indicator so no one mistakes sandbox/test for live.
+function render_mode_banner() {
+  try {
+    var sandbox = state.me && state.me.sf_env === 'sandbox';
+    var test = !!M.t && !(state.me && state.me.show_test_banner === false);   // TEST banner hideable in /admin
+    if (!sandbox && !test) return;
+    var msg = sandbox ? '🧪 SANDBOX — practice data, not production' : '';
+    if (test) msg = (msg ? msg + '  ·  ' : '') + 'TEST MODE — activity is flagged is_test';
+    var b = document.createElement('div');
+    b.style.cssText = 'position:sticky;top:0;z-index:70;padding:6px 14px;font-size:13px;font-weight:700;text-align:center;' +
+      (sandbox ? 'background:#7a4d00;color:#ffd591;border-bottom:1px solid #b87500;' : 'background:#0e2a5e;color:#9ec5ff;border-bottom:1px solid #2e5db0;');
+    b.textContent = msg;
+    document.body.insertBefore(b, document.body.firstChild);
+  } catch (e) { /* never block the app */ }
+}
+
 function shell() {
   document.body.innerHTML='';
+  render_mode_banner();
   // Single model picker for ALL AI features (triage, draft, ask). Options come from /api/ai/models
   // (the one shared registry, ai/models.js). onchange sets BOTH provider + model from the option.
   const provider = el('select',{id:'eq-model',style:'width:auto',title:'AI model — used for triage, draft & ask. Tip: cheaper models (e.g. Haiku) classify spam/triage less accurately; pick a stronger model (Sonnet / GPT-5.x) for better results.',onchange:function(e){

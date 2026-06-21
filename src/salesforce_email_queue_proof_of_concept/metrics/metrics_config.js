@@ -28,7 +28,7 @@ const COLUMNS = [
   'attachment_type', 'correction_scope', 'context_action', 'soql_chars',
   // environment
   'event_at_local', 'client_tz', 'local_hour', 'local_dow', 'app_version', 'engine',
-  'viewport', 'theme', 'error_type', 'is_demo', 'is_test', 'source'
+  'viewport', 'theme', 'error_type', 'is_demo', 'is_test', 'env', 'source'
 ];
 
 module.exports = { APP, TABLE, KEEP_YEARS, REPORTING_TZ, COLUMNS };

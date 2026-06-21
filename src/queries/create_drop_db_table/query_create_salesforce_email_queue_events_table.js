@@ -85,6 +85,7 @@ const env_fields = `
   error_type VARCHAR(40),
   is_demo TINYINT(1),            -- 1 = event came from sample/demo data (not real activity)
   is_test TINYINT(1),            -- 1 = deliberate test run (browser opened with ?metrics_test=1); purgeable via metrics:purge-test
+  env VARCHAR(10),               -- Salesforce environment the app was pointed at: 'prod' | 'sandbox' (stamped server-side)
   source VARCHAR(16),            -- where activity originated: 'web' | 'cli' | 'demo'
 `;
 

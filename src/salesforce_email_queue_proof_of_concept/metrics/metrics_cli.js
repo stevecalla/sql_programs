@@ -47,7 +47,7 @@ async function main() {
   await with_pool(async function (pool) {
     if (cmd === 'stats') { console.log(await report.report_text(pool, { days: Number(arg) || 7 })); }
     else if (cmd === 'size') { console.log(JSON.stringify(await report.size(pool), null, 2)); }
-    else if (cmd === 'purge-test') { const r = await report.purge_test(pool); console.log('Deleted ' + r.deleted + ' test row(s) (is_test=1; would=' + r.would_delete + ').'); }
+    else if (cmd === 'purge-test') { const r = await report.purge_test(pool); console.log('Deleted ' + r.deleted + ' $0 test row(s) (is_test=1). Kept ' + (r.kept_cost_rows || 0) + ' cost-bearing test row(s) = $' + Number(r.kept_cost_usd || 0).toFixed(4) + ' (spend record preserved).'); }
     else if (cmd === 'purge-all') {
       const size = await report.size(pool);
       if (!(await confirm('Delete ALL ' + (size.rows != null ? size.rows + ' ' : '') + 'analytics row(s)? This cannot be undone. (y/N) '))) { console.log('Aborted — nothing deleted.'); return; }

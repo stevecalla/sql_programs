@@ -15,7 +15,12 @@
   try{ if(window.UsageMetrics) UsageMetrics.init({ app:'salesforce_email_queue', endpoint:'/api/event', allowList:['is_test','source','actor'], baseProps:{ source:'web', is_test: MT?1:0 }, autoPageView:false }); }catch(e){}
   var actor='';
   function view(){ try{ if(window.UsageMetrics) UsageMetrics.track('dashboard_view',{ actor: actor }); }catch(e){} }
-  try{ fetch('/api/me',{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(j){ actor=(j&&j.user)||''; view(); }).catch(function(){ view(); }); }catch(e){ view(); }
+  function render_mode_banner(sandbox, show_test){ try{ var test=MT && show_test!==false; if(!sandbox&&!test) return; if(document.getElementById('eqModeBanner')) return;
+    var msg = sandbox ? '🧪 SANDBOX — practice data, not production' : ''; if(test) msg=(msg?msg+'  ·  ':'')+'TEST MODE — activity is flagged is_test';
+    var b=document.createElement('div'); b.id='eqModeBanner'; b.textContent=msg;
+    b.style.cssText='position:sticky;top:0;z-index:70;padding:6px 14px;font-size:13px;font-weight:700;text-align:center;'+(sandbox?'background:#7a4d00;color:#ffd591;border-bottom:1px solid #b87500;':'background:#0e2a5e;color:#9ec5ff;border-bottom:1px solid #2e5db0;');
+    var go=function(){ if(document.body) document.body.insertBefore(b, document.body.firstChild); }; if(document.readyState!=='loading') go(); else document.addEventListener('DOMContentLoaded', go); }catch(e){} }
+  try{ fetch('/api/me',{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(j){ actor=(j&&j.user)||''; view(); render_mode_banner(j&&j.sf_env==='sandbox', !(j&&j.show_test_banner===false)); }).catch(function(){ view(); render_mode_banner(false, true); }); }catch(e){ view(); }
   // Sign-out logged CLIENT-side too (full meta), then navigate to clear the cookie.
   function wireOut(){ var a=document.getElementById('signOut'); if(!a) return; a.addEventListener('click', function(ev){ ev.preventDefault(); try{ if(window.UsageMetrics) UsageMetrics.track('sign_out',{ actor: actor }); }catch(e){} location.href=a.getAttribute('href'); }); }
   if(document.readyState!=='loading') wireOut(); else document.addEventListener('DOMContentLoaded', wireOut);
@@ -243,6 +248,10 @@
     <div class="mx-panel"><h2>AI errors</h2><table id="tbl_errors"><thead><tr><th class="mx-rn">#</th><th>Error</th><th>Count</th></tr></thead><tbody></tbody></table></div>
   </div>
 
+  <div class="mx-panel"><h2>AI spend <span class="tag">estimated</span></h2>
+    <div id="spendBox" class="dim">…</div>
+    <div class="dim" style="margin-top:6px">Real = production usage (excluded from the usage stats above). Test = your <code>?metrics_test=1</code> / admin runs — they still cost real money. <b>Total = Real + Test</b> and is what your OpenAI/Anthropic bill reflects.</div></div>
+
   <div class="mx-panel"><h2>AI cost by model <span class="tag">estimated</span></h2>
     <div class="mx-tablewrap"><table id="tbl_cost" class="mx-utable"><thead><tr><th class="mx-rn">#</th><th>Model</th><th>Calls</th><th>Input tokens</th><th>Output tokens</th><th>Est. cost</th></tr></thead><tbody></tbody></table></div>
     <div class="dim" style="margin-top:6px">Cost = tokens × per‑model price (set in <a href="/admin?metrics_test=1">Admin → Settings</a>). Models with no price show $0.</div></div>
@@ -352,6 +361,14 @@
     fillRows('tbl_ops', (d.top_operators||[]).map(function(o){ return [esc(o.actor||'(unknown)'), o.ai_calls, o.threads, esc(o.last_seen||'—')]; }));
     fillRows('tbl_errors', (d.ai_errors||[]).map(function(e){ return [esc(e.error), e.n]; }));
     fillRows('tbl_cost', (d.by_model||[]).map(function(m){ return [esc(m.model||'?'), m.n, (m.prompt_tokens||0), (m.completion_tokens||0), '$'+(Number(m.cost_usd)||0).toFixed(4)]; }));
+    var sp=d.spend||{real_usd:0,test_usd:0,total_usd:0,by_env:[]};
+    var spendHtml = '<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:14px">'
+      + '<div><div class="dim">Real (production)</div><div style="font-size:20px;font-weight:700">$'+(Number(sp.real_usd)||0).toFixed(4)+'</div><div class="dim">'+(sp.real_calls||0)+' calls</div></div>'
+      + '<div><div class="dim">Test / QA</div><div style="font-size:20px;font-weight:700;color:#e0a200">$'+(Number(sp.test_usd)||0).toFixed(4)+'</div><div class="dim">'+(sp.test_calls||0)+' calls</div></div>'
+      + '<div><div class="dim">Total (bill)</div><div style="font-size:20px;font-weight:700">$'+(Number(sp.total_usd)||0).toFixed(4)+'</div></div>'
+      + '</div>';
+    if(sp.by_env && sp.by_env.length>1){ spendHtml += '<div class="dim" style="margin-top:8px">By environment: '+sp.by_env.map(function(e){ return esc(e.env)+' $'+(Number(e.total_usd)||0).toFixed(4)+' (real $'+(Number(e.real_usd)||0).toFixed(4)+' · test $'+(Number(e.test_usd)||0).toFixed(4)+')'; }).join('  ·  ')+'</div>'; }
+    el('spendBox').innerHTML = spendHtml;
     fillRows('tbl_att', (d.attachments||[]).map(function(a){ return [esc(a.type), a.n]; }));
 
     el('lastData').querySelector('.mx-last-val').textContent = hl.latest_mtn ? (hl.latest_mtn + ' MTN') : 'No data yet';
