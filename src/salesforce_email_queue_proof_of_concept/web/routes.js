@@ -209,9 +209,8 @@ function mount(app, deps) {
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
-  // Current signed-in user — lets the server-rendered /metrics + /admin pages stamp their client-side
-  // dashboard_view/admin_view events with the actor (the rest of the metadata is computed in-browser).
-  app.get('/api/whoami', require_auth, function (req, res) { res.json({ ok: true, user: req.user, role: req.role }); });
+  // (the server-rendered /metrics + /admin pages stamp their client-side dashboard_view/admin_view
+  //  events with the actor via the existing /api/me route.)
 
   // Selectable AI models for the in-app picker (triage / draft / ask). Single source of truth =
   // ai/models.js (same list the metrics Ask box uses via /api/metrics-ask-models).

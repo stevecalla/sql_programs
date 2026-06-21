@@ -17,7 +17,8 @@ test('COLUMNS whitelist excludes id + stamped timestamps, includes AI-flow + is_
   ['id', 'created_at_utc', 'created_at_mtn'].forEach(function (c) {
     assert.ok(cfg.COLUMNS.indexOf(c) < 0, c + ' must NOT be insertable');
   });
-  ['is_test', 'is_demo', 'actor', 'queue', 'ai_action', 'ai_provider', 'ai_model', 'ai_verdict', 'ai_latency_ms']
+  ['is_test', 'is_demo', 'actor', 'queue', 'ai_action', 'ai_provider', 'ai_model', 'ai_verdict', 'ai_latency_ms',
+   'ai_prompt_tokens', 'ai_completion_tokens', 'ai_cost_usd']
     .forEach(function (c) { assert.ok(cfg.COLUMNS.indexOf(c) >= 0, 'missing column ' + c); });
   // case_id/case_number ARE stored — Salesforce record pointers for per-case attribution, not member
   // content. What must NEVER be stored is any actual member data (names, bodies, addresses).

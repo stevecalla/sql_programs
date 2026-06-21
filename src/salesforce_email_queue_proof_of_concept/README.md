@@ -63,6 +63,11 @@ npm install        # installs pdf-parse, mammoth, xlsx (optionalDependencies)
 
 Without them, attachments show a labeled placeholder instead of extracted text.
 
+**Viewing attachments in-app.** Images (jpg/jpeg/png/gif/webp/…) and PDFs render **inline** in the case
+view, streamed through the app's authenticated Salesforce connection via `GET /api/attachment/:cvid/raw`
+(so no separate Salesforce browser login is needed); tables (csv/tsv/xls/xlsx) render as a grid and other
+types show extracted text. A "⬇ Download" chip always links the original Salesforce file as a fallback.
+
 ## What it will NOT do (by design, this POC)
 
 - It does not send replies or change Case status in Salesforce (read-only).
@@ -141,9 +146,10 @@ only counts, enums, the operator's username, the queue name, and Salesforce reco
 | `soql_run` | a read-only SOQL is run | soql_chars | (events / Ask) |
 | `context_viewed` | a context file is opened/previewed | attachment_type | (events / Ask) |
 | `link_previewed` | a link in an email is previewed | — | (events / Ask) |
-| `model_selected` | operator switches the AI model | ai_provider, ai_model | (events / Ask) |
-| `theme_changed` | operator toggles light/dark | theme | (events / Ask) |
-| `sign_out` | operator signs out | — | (events / Ask) |
+| `model_selected` | user switches the AI model | ai_provider, ai_model | (events / Ask) |
+| `theme_changed` | user toggles light/dark | theme | (events / Ask) |
+| `sign_out` | user signs out | — | (events / Ask) |
+| `app_reset` | user clicks ↻ Reset (blank workspace) | — | (events / Ask) |
 | `send_email` | **Send reply** (mocked) | sf_action, sf_ok, sf_error | Salesforce-writes panel, Cases |
 | `status_change` | Case status changed (mocked) | status_to, sf_ok, sf_error | Salesforce-writes panel, Cases |
 | `dashboard_view` / `admin_view` | `/metrics` or `/admin` opened | logged client-side → full meta (session_id, tz, viewport, theme); `is_test=1` via the page URL | excluded from real stats |
@@ -180,7 +186,7 @@ analytics core (`utilities/analytics/*`). Both are gated by the existing session
 
 - **`/metrics`** — usage dashboard. KPI cards + Chart.js charts for the **AI flow**: calls by provider
   (ChatGPT/Claude), respond **verdicts** (DRAFT/NEED_INFO), success rate + latency, grounded %, calls
-  by queue and by action (respond/ask/acknowledge/triage), activity by day, top operators, AI errors,
+  by queue and by action (respond/ask/acknowledge/triage), activity by day, top actors, AI errors,
   attachments viewed, and a **data-health** strip. Pick a window (1/7/30/90 days).
 - **`/admin`** — config-status strip (booleans only — never secrets) plus the **queue allow-list**:
   set the **general default** (all queues, or only selected) and **per-user overrides**. Non-admins

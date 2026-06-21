@@ -40,11 +40,15 @@ test('build_report returns the report contract with the AI-flow data block', asy
   assert.match(report.title, /Email Queue/);
   assert.strictEqual(report.data.days, 14);
   assert.ok(report.data.ai && typeof report.data.ai.calls === 'number');
-  ['by_action', 'by_provider', 'by_verdict', 'by_queue', 'top_operators', 'recent_operators', 'visitors', 'cases', 'case_funnel', 'sf_errors', 'context_changes', 'corrections', 'by_day', 'funnel'].forEach(function (k) {
+  ['by_action', 'by_provider', 'by_verdict', 'by_model', 'by_queue', 'top_operators', 'recent_operators', 'visitors', 'cases', 'case_funnel', 'sf_errors', 'context_changes', 'corrections', 'by_day', 'funnel'].forEach(function (k) {
     assert.ok(Array.isArray(report.data[k]), k + ' should be an array');
   });
   assert.ok(report.data.sf && 'sends' in report.data.sf && 'status_changes' in report.data.sf, 'sf write block');
   assert.strictEqual(typeof report.data.replies_copied, 'number', 'replies_copied count');
   assert.ok(report.data.health && 'test_rows' in report.data.health);
   assert.ok(Array.isArray(report.sections), 'sections is an array');
+  // token + cost tracking block (zeros on an empty pool, but the shape must be present)
+  assert.strictEqual(typeof report.data.ai.cost_usd, 'number', 'ai.cost_usd');
+  assert.strictEqual(typeof report.data.ai.prompt_tokens, 'number', 'ai.prompt_tokens');
+  assert.strictEqual(typeof report.data.ai.completion_tokens, 'number', 'ai.completion_tokens');
 });

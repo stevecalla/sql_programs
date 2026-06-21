@@ -1,4 +1,9 @@
 'use strict';
+// Isolate the model registry from any real config.json on the machine: point EQ_DATA_DIR at an empty
+// temp dir so models.list() falls back to the built-in defaults (read_config reads this at call time).
+const os = require('os'), path = require('path'), fs = require('fs');
+process.env.EQ_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'eq_ai_data_'));
+
 const test = require('node:test');
 const assert = require('node:assert');
 const { parse_verdict, respond_to_case } = require('../ai/respond');
@@ -101,6 +106,20 @@ test('OpenAI registry entry tracks OPENAI_MODEL from env', function () {
 test('metrics Ask box shares the SAME registry (re-export)', function () {
   const ask_models = require('../metrics/ask/models');
   assert.deepStrictEqual(ask_models.list(), models.list(), 'ask/models re-exports ai/models');
+});
+test('registry reads an edited ai_models list from config.json (admin override)', function () {
+  const cfgp = path.join(process.env.EQ_DATA_DIR, 'config.json');
+  try {
+    fs.writeFileSync(cfgp, JSON.stringify({ ai_models: [
+      { provider: 'anthropic', model: 'claude-z', label: 'Z', is_default: true, price_in: 2, price_out: 9 }
+    ] }));
+    const l = models.list();
+    assert.strictEqual(l.length, 1);
+    assert.strictEqual(l[0].model, 'claude-z');
+    assert.strictEqual(l[0].is_default, true);
+    assert.strictEqual(models.price_for('claude-z').in, 2);
+    assert.strictEqual(models.cost_for('claude-z', 1e6, 1e6), 11);   // 1*2 + 1*9
+  } finally { try { fs.unlinkSync(cfgp); } catch (e) {} }   // restore built-in defaults for any later read
 });
 test('resolve_model: explicit model wins, else env, else provider default', function () {
   assert.strictEqual(providers.resolve_model('anthropic', 'claude-x'), 'claude-x', 'explicit wins');

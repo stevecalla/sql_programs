@@ -123,6 +123,16 @@ identity, §12 AI tools, §13 API limits), `mvp_plan.md`, `plan.md` (full roadma
 - Web API additions: `/api/context` (GET list, POST upload base64), `/api/status-counts`, ask history
   param on `/api/ai/ask`; `/api/ai/triage` (per-case AI status). Admin: `node src/admin.js passwd <user>` (passwords are scrypt-hashed - never shown).
 - `/api/queues` also returns `instance_url` (for SF deep links); `/api/context` also returns `knowledge_chars` + `corrections` (grounding indicator). UI: queue search box, editable per-row status (mock), SOQL/Workbench card, auto-draft on `answer_ready`.
+- More API: `/api/me` (current user/role — also used by the server-rendered /metrics & /admin pages to
+  stamp their client-side view events), `/api/ai/models` (the shared model registry for the picker),
+  `/api/admin/config` (GET+POST `admin_landing` and the editable `ai_models` list), and
+  `/api/attachment/:cvid/raw` (streams attachment bytes through our SF session so images/PDFs render
+  inline without a separate Salesforce login — the in-app image viewer + PDF iframe use it).
+- UI workspace helpers (snake_case, `index.html`): `clear_working_state` (clears queue/status/checked +
+  view toggles; runs on sign-in AND sign-out so a fresh login is blank, prefs kept), `reset_app` (↻ Reset
+  = full blank slate, stays signed in), `retriage_visible` (↻ Refresh triage — enabled only after a run).
+  `session_id` is per-login (sessionStorage via `UsageMetrics.new_session()` at login); `visitor_id` stays
+  durable. A failed AI call shows an `error` triage badge + a dismissible provider-down banner (`aiBanner`).
 - Context storage is OUTSIDE the repo (member data never committed), via `data_dir.js` ->
   `utilities/determineOSPath()` -> `<base>/usat_email_queue/context/` (mirrors transform `src/data_dir.js`).
   `ai/faq.js` context fns are async (await `context_dir()`); overrides `EQ_CONTEXT_DIR`/`EQ_DATA_DIR`/

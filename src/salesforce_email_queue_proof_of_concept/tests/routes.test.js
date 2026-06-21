@@ -3,6 +3,7 @@ const os = require('os'), path = require('path'), fs = require('fs'), http = req
 process.env.EQ_USERS_FILE = path.join(os.tmpdir(), 'eq_routes_users_' + Date.now() + '.json');
 process.env.EQ_CORRECTIONS_FILE = path.join(os.tmpdir(), 'eq_routes_corr_' + Date.now() + '.json');
 process.env.EQ_CONTEXT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'eq_routes_ctx_'));
+process.env.EQ_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'eq_routes_data_'));   // config.json (admin_landing, ai_models) -> tmp
 process.env.SF_EMAIL_QUEUE_ADMIN_USER = 'demo';
 process.env.SF_EMAIL_QUEUE_ADMIN_PASS = 'demo';
 
@@ -60,4 +61,43 @@ test('context file can be uploaded then listed via API', async function () {
   assert.ok(up.json.ok, JSON.stringify(up.json));
   const list = await req('GET', '/api/context?queue=Coaching', null, cookie);
   assert.ok(list.json.files.some(function (x) { return x.name === 'note.md'; }));
+});
+
+test('/api/ai/models returns the shared model registry (provider/model/label, one default)', async function () {
+  const r = await req('GET', '/api/ai/models', null, cookie);
+  assert.strictEqual(r.code, 200);
+  assert.ok(Array.isArray(r.json) && r.json.length >= 1);
+  r.json.forEach(function (m) { assert.ok(m.provider && m.model && m.label); });
+  assert.strictEqual(r.json.filter(function (m) { return m.is_default; }).length, 1);
+});
+
+test('/api/admin/config returns admin_landing + the editable ai_models', async function () {
+  const r = await req('GET', '/api/admin/config', null, cookie);
+  assert.strictEqual(r.code, 200);
+  assert.ok(r.json.ok);
+  assert.ok(Array.isArray(r.json.choices) && r.json.choices.indexOf('/metrics') >= 0);
+  assert.ok(Array.isArray(r.json.ai_models) && r.json.ai_models.length >= 1);
+});
+
+test('/api/admin/config saves an edited ai_models list (round-trip)', async function () {
+  const models = [
+    { provider: 'openai', model: 'gpt-x', label: 'My GPT', is_default: true, price_in: 1.5, price_out: 9 },
+    { provider: 'anthropic', model: 'claude-y', label: 'My Claude', price_in: 2, price_out: 8 }
+  ];
+  const save = await req('POST', '/api/admin/config', { ai_models: models }, cookie);
+  assert.strictEqual(save.code, 200);
+  assert.ok(save.json.ok);
+  const got = save.json.ai_models;
+  assert.strictEqual(got.length, 2);
+  assert.strictEqual(got[0].model, 'gpt-x');
+  assert.strictEqual(got[0].price_in, 1.5);
+  assert.strictEqual(got.filter(function (m) { return m.is_default; }).length, 1);
+  // and /api/ai/models now reflects the saved list
+  const list = await req('GET', '/api/ai/models', null, cookie);
+  assert.ok(list.json.some(function (m) { return m.model === 'gpt-x'; }));
+});
+
+test('/api/admin/config rejects an empty ai_models list', async function () {
+  const r = await req('POST', '/api/admin/config', { ai_models: [] }, cookie);
+  assert.strictEqual(r.code, 400);
 });

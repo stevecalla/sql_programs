@@ -15,7 +15,7 @@
   try{ if(window.UsageMetrics) UsageMetrics.init({ app:'salesforce_email_queue', endpoint:'/api/event', allowList:['is_test','source','actor'], baseProps:{ source:'web', is_test: MT?1:0 }, autoPageView:false }); }catch(e){}
   var actor='';
   function view(){ try{ if(window.UsageMetrics) UsageMetrics.track('dashboard_view',{ actor: actor }); }catch(e){} }
-  try{ fetch('/api/whoami',{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(j){ actor=(j&&j.user)||''; view(); }).catch(function(){ view(); }); }catch(e){ view(); }
+  try{ fetch('/api/me',{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(j){ actor=(j&&j.user)||''; view(); }).catch(function(){ view(); }); }catch(e){ view(); }
   // Sign-out logged CLIENT-side too (full meta), then navigate to clear the cookie.
   function wireOut(){ var a=document.getElementById('signOut'); if(!a) return; a.addEventListener('click', function(ev){ ev.preventDefault(); try{ if(window.UsageMetrics) UsageMetrics.track('sign_out',{ actor: actor }); }catch(e){} location.href=a.getAttribute('href'); }); }
   if(document.readyState!=='loading') wireOut(); else document.addEventListener('DOMContentLoaded', wireOut);

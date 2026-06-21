@@ -64,11 +64,8 @@ const eq_session = require('./src/salesforce_email_queue_proof_of_concept/auth/s
 const eq_store = require('./src/salesforce_email_queue_proof_of_concept/auth/auth_store');
 function esc_login(x){ return String(x == null ? '' : x).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function eq_current_user(req){ try { const c = eq_session.parse_cookies(req.headers.cookie); const pl = eq_session.verify(c[eq_session.COOKIE], eq_store.session_secret()); return pl ? { user: pl.user, role: pl.role || 'user' } : null; } catch (e) { return null; } }
-// The browser analytics client persists its anonymous visitor id in the `um_visitor_id` cookie, so
-// server-rendered page events (dashboard_view / admin_view / sign_out) can carry the same visitor_id.
-function um_vid(req){ try { return eq_session.parse_cookies(req.headers.cookie)['um_visitor_id'] || null; } catch (e) { return null; } }
-// is_test is 1 ONLY when the request URL carries ?metrics_test=1 — never from session or any other state.
-function qtest(req){ return String((req.query && req.query.metrics_test) || '') === '1' ? 1 : 0; }
+// (dashboard_view / admin_view / sign_out are now logged CLIENT-side with full meta, so the old
+//  server-side um_vid()/qtest() helpers were removed.)
 // ONE adaptive sign-in page (mirrors race_results_transform login_html): optional "signed in as X" banner,
 // optional error, link chips to sibling areas (all carrying ?metrics_test=1), and the sign-in form.
 function eq_login_html(err, action, title, ctx, test){
