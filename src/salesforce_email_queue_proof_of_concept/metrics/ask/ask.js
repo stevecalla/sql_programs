@@ -4,10 +4,17 @@
 // opts may carry: history [{q,sql,answer}] (follow-ups), live <string>, corrections <string>.
 const { run_query, get_schema_text } = require('./tools');
 const ctx = require('./context');
+const providers = require('../../ai/providers');   // shared transport — one place for the HTTP calls
 
+// Returns a uniform { id, default_model(), chat({system,user,model}) } backed by the shared
+// ai/providers.complete() so the Ask box uses the SAME transport as triage/draft/ask.
 function pick_provider(name) {
-  if (name === 'anthropic' || name === 'claude') return require('./providers/anthropic');
-  return require('./providers/openai');
+  const id = (name === 'anthropic' || name === 'claude') ? 'anthropic' : 'openai';
+  return {
+    id: id,
+    default_model: function () { return providers.resolve_model(id); },
+    chat: function (o) { return providers.complete({ provider: id, model: o.model, system: o.system, prompt: o.user }).then(function (r) { return providers.norm_completion(r, o.model).text; }); }
+  };
 }
 function format_history(history) {
   if (!Array.isArray(history) || !history.length) return null;

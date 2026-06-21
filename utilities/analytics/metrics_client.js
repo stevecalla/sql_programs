@@ -18,6 +18,8 @@
   }
   function ls_get(k) { try { return global.localStorage.getItem(k); } catch (e) { return null; } }
   function ls_set(k, v) { try { global.localStorage.setItem(k, v); } catch (e) { /* private mode */ } }
+  function ss_get(k) { try { return global.sessionStorage.getItem(k); } catch (e) { return null; } }
+  function ss_set(k, v) { try { global.sessionStorage.setItem(k, v); } catch (e) { /* private mode */ } }
   function ck_get(k) {
     try { var m = (global.document && global.document.cookie || '').match(new RegExp('(?:^|; )' + k + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : null; }
     catch (e) { return null; }
@@ -70,10 +72,20 @@
     ls_set('um_visitor_id', vid);
     ck_set('um_visitor_id', vid);
     ids.visitor_id = vid;
-    ids.session_id = uuid();
-    track('page_view', {});
+    // session_id = ONE sign-in/sitting: persisted in sessionStorage so it stays stable across page
+    // navigations (app -> /metrics -> /admin) and tab refreshes, but resets on a new tab or new login.
+    // (visitor_id above is the durable cross-time id; session_id groups a single visit.)
+    var sid = ss_get('um_session_id');
+    if (!sid) { sid = uuid(); ss_set('um_session_id', sid); }
+    ids.session_id = sid;
+    // Auto-fire the page_view on init unless the caller opts out (opts.autoPageView === false). Apps
+    // that gate behind a login can defer the visit until after auth so it carries the user/actor.
+    if (opts.autoPageView !== false) track('page_view', {});
   }
   function new_upload() { ids.upload_id = uuid(); return ids.upload_id; }
+  // Start a fresh session id (e.g. call this on sign-in so each login is a distinct session even within
+  // the same tab). Persists to sessionStorage so it stays stable across this login's page navigations.
+  function new_session() { var s = uuid(); ids.session_id = s; ss_set('um_session_id', s); return s; }
   function track(event_name, props) {
     if (off()) return;
     if (props && props.file_name) ids.file_name = props.file_name;   // remember for later events
@@ -98,5 +110,9 @@
       }
     } catch (e) { /* never throw from analytics */ }
   }
-  global.UsageMetrics = { init: init, track: track, new_upload: new_upload };
+  global.UsageMetrics = { init: init, track: track, new_upload: new_upload, new_session: new_session,
+    ids: function () { return { visitor_id: ids.visitor_id || null, session_id: ids.session_id || null }; },
+    // Full client env (ids + tz/local time/viewport/theme/page) so server-logged events (ai_call,
+    // send, status) can carry the SAME metadata as browser events.
+    meta: function () { try { return base_props(); } catch (e) { return {}; } } };
 })(typeof window !== 'undefined' ? window : this);

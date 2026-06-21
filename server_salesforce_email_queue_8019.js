@@ -64,6 +64,8 @@ const eq_session = require('./src/salesforce_email_queue_proof_of_concept/auth/s
 const eq_store = require('./src/salesforce_email_queue_proof_of_concept/auth/auth_store');
 function esc_login(x){ return String(x == null ? '' : x).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function eq_current_user(req){ try { const c = eq_session.parse_cookies(req.headers.cookie); const pl = eq_session.verify(c[eq_session.COOKIE], eq_store.session_secret()); return pl ? { user: pl.user, role: pl.role || 'user' } : null; } catch (e) { return null; } }
+// (dashboard_view / admin_view / sign_out are now logged CLIENT-side with full meta, so the old
+//  server-side um_vid()/qtest() helpers were removed.)
 // ONE adaptive sign-in page (mirrors race_results_transform login_html): optional "signed in as X" banner,
 // optional error, link chips to sibling areas (all carrying ?metrics_test=1), and the sign-in form.
 function eq_login_html(err, action, title, ctx, test){
@@ -73,7 +75,7 @@ function eq_login_html(err, action, title, ctx, test){
   let banner = '', chips = '';
   if (ctx && ctx.user) {
     banner = '<div class="who">Signed in as <b>' + esc_login(ctx.user) + '</b> — this account has no <b>' + ttl + '</b> access.</div>';
-    chips = '<div class="chips" style="margin-top:14px"><a class="chip" href="' + logout + '">↩ Sign out</a></div>';
+    chips = '<div class="chips" style="margin-top:14px"><a class="chip" href="' + logout + tq + '">↩ Sign out</a></div>';
   }
   return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
     + '<title>Sign in — ' + ttl + '</title>'
@@ -107,11 +109,17 @@ const pool_proxy = { query: function () {
 } };
 // Server-side event logger — for events whose facts are only known on the server (AI latency /
 // verdict / success). Best-effort: never throws, no-ops when the pool isn't ready.
+// Which Salesforce org the app is currently pointed at — stamped on every analytics row as `env`
+// (server-authoritative; the same config.json setting get_conn uses). 'prod' | 'sandbox'.
+function current_env() {
+  try { const dd = require('./src/salesforce_email_queue_proof_of_concept/data_dir'); const v = (dd.read_config() || {}).sf_env; return v === 'sandbox' ? 'sandbox' : 'prod'; }
+  catch (e) { return 'prod'; }
+}
 async function log_event(props) {
   if (!METRICS_ON) return;
   try {
     await insert_event(pool_proxy, metrics_config.TABLE, ALLOW, metrics_config.REPORTING_TZ,
-      Object.assign({ app: metrics_config.APP, source: 'web' }, props || {}));
+      Object.assign({ app: metrics_config.APP, source: 'web', env: current_env() }, props || {}));
   } catch (e) { /* analytics must never break the app */ }
 }
 async function init_metrics() {
@@ -121,6 +129,19 @@ async function init_metrics() {
     metrics_pool = mysql.createPool(cfg);
     const ddl = await query_create_salesforce_email_queue_events_table(metrics_config.TABLE);
     await ensure_table(metrics_pool, ddl);
+    // Migrate already-created tables to the per-case + SF-write columns (CREATE IF NOT EXISTS won't add them).
+    await ensure_columns(metrics_pool, metrics_config.TABLE, [
+      { name: 'case_id', ddl: 'case_id CHAR(18)', after: 'queue_id' },
+      { name: 'case_number', ddl: 'case_number VARCHAR(20)', after: 'case_id' },
+      { name: 'sf_action', ddl: 'sf_action VARCHAR(16)', after: 'ai_error' },
+      { name: 'sf_ok', ddl: 'sf_ok TINYINT(1)', after: 'sf_action' },
+      { name: 'sf_error', ddl: 'sf_error VARCHAR(120)', after: 'sf_ok' },
+      { name: 'status_to', ddl: 'status_to VARCHAR(40)', after: 'sf_error' },
+      { name: 'ai_prompt_tokens', ddl: 'ai_prompt_tokens INT', after: 'ai_reply_chars' },
+      { name: 'ai_completion_tokens', ddl: 'ai_completion_tokens INT', after: 'ai_prompt_tokens' },
+      { name: 'ai_cost_usd', ddl: 'ai_cost_usd DECIMAL(10,6)', after: 'ai_completion_tokens' },
+      { name: 'env', ddl: "env VARCHAR(10)", after: 'is_test' }
+    ]);
     // Ask-your-data audit log + operator corrections (mirrors 8018). Writable analytics pool.
     var _ask_log = require('./src/salesforce_email_queue_proof_of_concept/metrics/ask/ask_log');
     var _ask_corr = require('./src/salesforce_email_queue_proof_of_concept/metrics/ask/corrections');
@@ -177,7 +198,11 @@ function create_app() {
 
   // Usage analytics — fire-and-forget browser ingest. Counts/enums only; no-ops if no DB pool. Ungated
   // (contains no sensitive data), exactly like 8018's /api/event.
-  app.post('/api/event', make_event_ingest({ pool: pool_proxy, table: metrics_config.TABLE, columns: metrics_config.COLUMNS, reporting_tz: metrics_config.REPORTING_TZ }));
+  const _event_ingest = make_event_ingest({ pool: pool_proxy, table: metrics_config.TABLE, columns: metrics_config.COLUMNS, reporting_tz: metrics_config.REPORTING_TZ });
+  app.post('/api/event', function (req, res) {   // stamp env server-side (authoritative) on browser events
+    try { if (req.body && typeof req.body === 'object') req.body.env = current_env(); } catch (e) { /* ignore */ }
+    return _event_ingest(req, res);
+  });
   // Serve the shared generic analytics browser client (UsageMetrics) as a static asset.
   app.use('/analytics', express.static(path.join(__dirname, 'utilities', 'analytics')));
   // Reuse the transform's stylesheet so /metrics + /admin match it exactly (single source of truth).
@@ -201,17 +226,15 @@ function create_app() {
   app.post('/admin/login', function (req, res) { eq_login_post(req, res, '/admin'); });
 
   // ---- /metrics dashboard + /admin hub (admin login = existing session with role 'admin') ----
-  // Admin views of /metrics + /admin are always flagged is_test=1: they're operator/admin activity,
-  // not real end-user usage, so they're excluded from the real stats and are purgeable.
-  app.get('/metrics', require_admin_page, function (req, res) {
-    log_event({ event_name: 'dashboard_view', actor: req.user, page_path: '/metrics', is_test: 1 });
-    res.type('html').sendFile(METRICS_HTML);
-  });
-  app.get('/admin', require_admin_page, function (req, res) {
-    log_event({ event_name: 'admin_view', actor: req.user, page_path: '/admin', is_test: 1 });
-    res.type('html').sendFile(ADMIN_HTML);
-  });
-  // Sign-out for the admin pages: clears the shared session cookie, then back to the app login.
+  // is_test reflects the URL only (?metrics_test=1) — the nav/footer links to these pages carry it,
+  // so admin testing is flagged, but a plain visit is real. Never forced.
+  // dashboard_view / admin_view are logged CLIENT-side (the page loads /analytics/metrics_client.js and
+  // fires the event) so they carry the SAME rich metadata as app events — session_id, client tz, local
+  // time, viewport, theme — which the server can't see. is_test still comes from the page URL.
+  app.get('/metrics', require_admin_page, function (req, res) { res.type('html').sendFile(METRICS_HTML); });
+  app.get('/admin', require_admin_page, function (req, res) { res.type('html').sendFile(ADMIN_HTML); });
+  // Sign-out for the admin pages: clears the shared session cookie, then back to login. The sign_out
+  // event is logged CLIENT-side (full meta) by the page before it navigates here — so no server log.
   app.get(['/metrics/logout', '/admin/logout'], function (req, res) {
     res.setHeader('Set-Cookie', 'eq_session=; HttpOnly; Path=/; Max-Age=0');
     res.redirect('/');

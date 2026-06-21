@@ -5,6 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Email Queue Assistant — Admin</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<!-- Usage analytics: fire admin_view CLIENT-side so it carries session_id + tz/local-time/viewport/theme,
+     the same rich metadata as app events. is_test comes from this page's URL (?metrics_test=1). -->
+<script src="/analytics/metrics_client.js"></script>
+<script>
+(function(){ var MT=false; try{ MT = new URLSearchParams(location.search).get('metrics_test')==='1'; }catch(e){}
+  try{ if(window.UsageMetrics) UsageMetrics.init({ app:'salesforce_email_queue', endpoint:'/api/event', allowList:['is_test','source','actor'], baseProps:{ source:'web', is_test: MT?1:0 }, autoPageView:false }); }catch(e){}
+  var actor='';
+  function view(){ try{ if(window.UsageMetrics) UsageMetrics.track('admin_view',{ actor: actor }); }catch(e){} }
+  function render_mode_banner(sandbox, show_test){ try{ var test=MT && show_test!==false; if(!sandbox&&!test) return; if(document.getElementById('eqModeBanner')) return;
+    var msg = sandbox ? '🧪 SANDBOX — practice data, not production' : ''; if(test) msg=(msg?msg+'  ·  ':'')+'TEST MODE — activity is flagged is_test';
+    var b=document.createElement('div'); b.id='eqModeBanner'; b.textContent=msg;
+    b.style.cssText='position:sticky;top:0;z-index:70;padding:6px 14px;font-size:13px;font-weight:700;text-align:center;'+(sandbox?'background:#7a4d00;color:#ffd591;border-bottom:1px solid #b87500;':'background:#0e2a5e;color:#9ec5ff;border-bottom:1px solid #2e5db0;');
+    var go=function(){ if(document.body) document.body.insertBefore(b, document.body.firstChild); }; if(document.readyState!=='loading') go(); else document.addEventListener('DOMContentLoaded', go); }catch(e){} }
+  try{ fetch('/api/me',{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(j){ actor=(j&&j.user)||''; view(); render_mode_banner(j&&j.sf_env==='sandbox', !(j&&j.show_test_banner===false)); }).catch(function(){ view(); render_mode_banner(false, true); }); }catch(e){ view(); }
+  // Sign-out logged CLIENT-side too (full meta), then navigate to clear the cookie.
+  function wireOut(){ var a=document.getElementById('signOut'); if(!a) return; a.addEventListener('click', function(ev){ ev.preventDefault(); try{ if(window.UsageMetrics) UsageMetrics.track('sign_out',{ actor: actor }); }catch(e){} location.href=a.getAttribute('href'); }); }
+  if(document.readyState!=='loading') wireOut(); else document.addEventListener('DOMContentLoaded', wireOut);
+})();
+</script>
 <style>
   :root{ --bg:#f4f6fb; --card:#fff; --ink:#1c2433; --dim:#6b7686; --line:#e2e7f0; --accent:#e4002b;
     --accent-soft:rgba(228,0,43,.08); --brand:#15284e; --surface-2:rgba(127,127,127,.05);
@@ -53,6 +72,26 @@
   .foot{ text-align:center; color:var(--dim); font-size:12px; padding:16px; }
   .footer-link{ color:var(--dim); } .footer-link:hover{ color:var(--accent); }
   @media (max-width:760px){ .admin-shell{ flex-direction:column; } .admin-rail{ flex-direction:row; flex-wrap:wrap; } }
+  /* Operations + Logs panels (ported from the transform admin) */
+  .run-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .term{ background:#0b1020; color:#d6e2ff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; white-space:pre-wrap; word-break:break-word; overflow:auto; resize:vertical; min-height:240px; max-height:640px; }
+  :root[data-theme="dark"] .term{ background:#070b16; }
+  .term .l-err{ color:#ff9b9b; } .term .l-meta{ color:#8fd0ff; } .term .l-sys{ color:#ffd591; }
+  .ops-sec{ border:1px solid var(--line); border-radius:10px; margin-bottom:10px; overflow:hidden; }
+  .ops-sec > h3{ margin:0; padding:9px 12px; font-size:13px; cursor:pointer; background:var(--surface-2); display:flex; align-items:center; justify-content:space-between; }
+  .ops-sec .chev{ transition:transform .15s; } .ops-sec.collapsed .chev{ transform:rotate(-90deg); }
+  .ops-sec.collapsed .ops-item, .ops-sec.collapsed .ops-form{ display:none; }
+  .ops-item{ display:flex; align-items:center; gap:10px; padding:9px 12px; border-top:1px solid var(--line); }
+  .ops-item .meta{ flex:1; min-width:0; } .ops-item .lbl{ font-weight:600; font-size:14px; } .ops-item .dsc{ color:var(--dim); font-size:12px; }
+  .ops-item .ops-num{ color:var(--dim); font-weight:600; }
+  .ops-item .cli{ color:var(--dim); font:12px ui-monospace,Menlo,Consolas,monospace; display:none; margin-top:2px; }
+  .show-cli .ops-item .cli{ display:block; }
+  .ops-item.greyed{ opacity:.75; }
+  .ops-form{ display:flex; flex-wrap:wrap; gap:10px; padding:0 12px 12px; }
+  .ops-form label{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--dim); }
+  .badge{ font-size:11px; font-weight:700; border-radius:999px; padding:1px 8px; margin-left:6px; }
+  .badge.read{ background:rgba(46,117,182,.16); color:#2e75b6; } .badge.mutate{ background:rgba(224,162,0,.18); color:#b45309; }
+  .badge.destruct{ background:rgba(228,0,43,.14); color:var(--accent); } .badge.test{ background:rgba(127,127,127,.16); color:var(--ink); }
 </style>
 <link rel="stylesheet" href="/css/app.css">
 </head>
@@ -63,7 +102,7 @@
       <h1>⚙️ Email Queue Assistant <span class="mut" style="font-weight:400;font-size:.7em">— Admin</span></h1>
       <div class="header-btns">
         <button id="themeToggle" class="btn ghost">☾ Dark</button>
-        <a class="btn ghost" href="/admin/logout">↩ Sign out</a>
+        <a id="signOut" class="btn ghost" href="/admin/logout?metrics_test=1">↩ Sign out</a>
       </div>
     </div>
   </header>
@@ -93,24 +132,38 @@
       <!-- MAINTENANCE -->
       <section class="pane" data-view="maintenance">
         <div class="ad-card"><h2>Data maintenance</h2>
-          <div class="act-row"><button class="btn warn" id="purgeTest">🗑 Purge test rows (is_test=1)</button><span class="msg" id="maintMsg"></span></div>
-          <div class="mut">Deletes only deliberate test rows (sessions opened with <code>?metrics_test=1</code>). Real + demo data are untouched.</div>
+          <div class="act-row"><button class="btn warn" id="purgeTest">🗑 Purge $0 test rows (is_test=1)</button><span class="msg" id="maintMsg"></span></div>
+          <div class="mut">Deletes deliberate test rows (sessions opened with <code>?metrics_test=1</code>) that cost <b>$0</b>. <b>Keeps</b> any test AI call that actually spent money, so your spend record / bill reconciliation survives. Real + demo data are untouched.</div>
         </div>
       </section>
 
       <!-- OPERATIONS -->
       <section class="pane" data-view="operations">
-        <div class="ad-card"><h2>Operations</h2>
-          <div class="empty">The operator console (running menu commands with live output) is part of the transform admin
-            but is <b>not enabled in this read-only POC</b>. Use the CLI menu instead: <code>node menu.js</code>.</div>
+        <div class="ad-card">
+          <div class="run-head">
+            <h2 style="margin:0">Operations <span class="mut" style="text-transform:none;font-weight:400">— run menu commands here; output streams live</span></h2>
+            <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleCli"> show $ commands</label>
+          </div>
+          <div class="mut" style="font-size:12px;margin-bottom:8px">Commands run server-side with no shell, by id from an allow-list (admin only). Read-only except the metrics purge/cleanup items, which ask to confirm. Interactive commands are greyed out — run those from a terminal.</div>
+          <div class="run-head">
+            <div class="mut" style="font-size:12px" id="runStatus">No command running.</div>
+            <button class="btn ghost sm" id="killBtn" type="button" style="display:none">■ Kill</button>
+          </div>
+          <div class="term" id="opsOut" aria-live="polite">Pick a command below to run it.</div>
         </div>
+        <div id="opsSections"><div class="mut">Loading commands…</div></div>
       </section>
 
       <!-- LOGS -->
       <section class="pane" data-view="logs">
-        <div class="ad-card"><h2>Logs</h2>
-          <div class="empty">Live server log / pm2 process panels are part of the transform admin and are
-            <b>not enabled in this POC</b>. Tail logs from your terminal or <code>pm2 logs usat_salesforce_email_queue</code>.</div>
+        <div class="ad-card">
+          <h2>Process (pm2)</h2>
+          <div class="tiles" id="pm2Tiles"><div class="mut">Loading…</div></div>
+        </div>
+        <div class="ad-card">
+          <div class="run-head"><h2 style="margin:0">Server console <span class="mut" style="text-transform:none;font-weight:400">— auto-streaming (drag the bottom edge to resize)</span></h2>
+            <span style="display:flex;align-items:center;gap:8px"><span id="logsLive" class="mut" style="font-size:12px">○ connecting…</span><button class="btn ghost sm" id="logsReload" type="button">↻ Reconnect</button></span></div>
+          <div class="term" id="logsOut" aria-live="polite">Connecting…</div>
         </div>
       </section>
 
@@ -129,8 +182,38 @@
             <span class="msg" id="landingMsg"></span>
           </div>
         </div>
-        <div class="ad-card"><h2>Other settings</h2>
-          <div class="mut">Connectors, AI keys, and logins are configured in the repo-root <code>.env</code> (see Reference). Queue visibility is managed under <b>Access</b>.</div>
+        <div class="ad-card"><h2>Salesforce environment</h2>
+          <div class="mut">Which Salesforce org the app reads from. <b>Production</b> = live data (<code>SF_PROD_*</code>). <b>Sandbox</b> = practice org (<code>SF_DEV_*</code>, test.salesforce.com) — safe for testing. Switching reconnects; reload the app afterward. The app shows a 🧪 SANDBOX banner while in sandbox, and every analytics row is tagged with the environment.</div>
+          <div class="act-row" style="margin-top:10px">
+            <span class="mut">Read from:</span>
+            <select id="sfEnvSel">
+              <option value="prod">🟢 Production (live)</option>
+              <option value="sandbox">🧪 Sandbox (dev)</option>
+            </select>
+            <button class="btn primary" id="saveSfEnv">Save</button>
+            <span class="msg" id="sfEnvMsg"></span>
+          </div>
+        </div>
+        <div class="ad-card"><h2>Banners</h2>
+          <div class="mut">The <b>🧪 SANDBOX</b> banner always shows while reading from the sandbox org (safety) and can't be turned off. The <b>TEST MODE</b> banner appears on pages opened with <code>?metrics_test=1</code> (the admin nav links) — turn it off here if it gets in the way.</div>
+          <div class="act-row" style="margin-top:10px">
+            <label class="mut"><input type="checkbox" id="testBannerChk"> Show the TEST MODE banner</label>
+            <button class="btn primary" id="saveTestBanner">Save</button>
+            <span class="msg" id="testBannerMsg"></span>
+          </div>
+        </div>
+        <div class="ad-card"><h2>AI models &amp; pricing</h2>
+          <div class="mut">The models offered in the app's picker <i>and</i> the metrics Ask box (one shared list). Prices are <b>USD per 1M tokens</b> and drive cost tracking. Seeded from the vendor pricing pages — edit when prices change. Pick one <b>Default</b>.</div>
+          <div class="mut" style="margin-top:6px">Current vendor pricing: <a href="https://developers.openai.com/api/docs/pricing?latest-pricing=standard" target="_blank" rel="noopener">OpenAI&nbsp;↗</a> · <a href="https://platform.claude.com/docs/en/about-claude/pricing" target="_blank" rel="noopener">Anthropic&nbsp;(Claude)&nbsp;↗</a></div>
+          <div style="overflow:auto;margin-top:10px">
+            <table id="modelsTbl"><thead><tr><th>Default</th><th>Provider</th><th>Model</th><th>Label</th><th>Input&nbsp;$/1M</th><th>Output&nbsp;$/1M</th><th></th></tr></thead><tbody id="modelsBody"></tbody></table>
+          </div>
+          <div class="act-row" style="margin-top:10px">
+            <button class="btn ghost" id="addModel">+ Add model</button>
+            <button class="btn primary" id="saveModels">Save models</button>
+            <span class="msg" id="modelsMsg"></span>
+          </div>
+          <div class="mut" style="margin-top:8px">API keys (<code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>) and the <code>OPENAI_MODEL</code>/<code>ANTHROPIC_MODEL</code> defaults still live in the repo-root <code>.env</code> (see Reference).</div>
         </div>
       </section>
 
@@ -178,7 +261,7 @@
           <div class="mut" style="line-height:1.9">
             • Analytics table: <code>salesforce_email_queue_events</code> (local MySQL; created on startup).<br>
             • Ask-your-data tables: <code>salesforce_email_queue_ask_log</code>, <code>salesforce_email_queue_ask_corrections</code>.<br>
-            • Test mode: open any page with <code>?metrics_test=1</code> → events flagged <code>is_test=1</code>, purgeable under Maintenance. Admin/Metrics/App links here carry it.<br>
+            • Test mode: open a page with <code>?metrics_test=1</code> → events flagged <code>is_test=1</code> (per URL only), purgeable under Maintenance. The Admin/Metrics links carry it; the App link is real (no flag), so normal queue work always counts. Use “App (test)” in the rail to open the app in test mode deliberately.<br>
             • No member PII is stored: counts/enums + operator staff username + queue name only.<br>
             • Admin pages reuse the app session with role <code>admin</code> (no second login).<br>
             • Sensitive data lives OUTSIDE the repo: <code>auth.json</code>, <code>corrections.json</code>, <code>queue_access.json</code>.<br>
@@ -271,20 +354,148 @@ document.getElementById('saveUser').onclick=async function(){ var u=document.get
   if(j.ok){ ACCESS=j.access; m.textContent='Saved.'; m.className='msg ok'; renderUser(); } else { m.textContent=j.error||'error'; m.className='msg err'; } };
 
 // ---- Maintenance ----
-document.getElementById('purgeTest').onclick=async function(){ if(!confirm('Delete all test rows (is_test=1)? Real + demo data are untouched.')) return;
+document.getElementById('purgeTest').onclick=async function(){ if(!confirm('Delete $0 test rows (is_test=1)? Cost-bearing test runs are KEPT; real + demo data are untouched.')) return;
   var m=document.getElementById('maintMsg'); m.textContent='Purging…'; m.className='msg'; this.disabled=true;
-  try{ var j=await postJSON('/api/metrics-purge-test',{}); if(j.ok){ m.textContent='Deleted '+(j.deleted||0)+' test row(s).'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; } }
+  try{ var j=await postJSON('/api/metrics-purge-test',{}); if(j.ok){ m.textContent='Deleted '+(j.deleted||0)+' $0 test row(s); kept '+(j.kept_cost_rows||0)+' cost-bearing ($'+Number(j.kept_cost_usd||0).toFixed(4)+').'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; } }
   catch(e){ m.textContent='Failed: '+e.message; m.className='msg err'; } this.disabled=false; };
 
-// ---- Settings: admin default landing page ----
+// ---- Settings: admin default landing page + AI model registry ----
 async function loadSettings(){
-  try{ var j=await getJSON('/api/admin/config'); if(j.ok){ var sel=document.getElementById('landingSel'); sel.value=j.admin_landing||'/metrics'; } }catch(e){ if(e.message!=='auth') document.getElementById('landingMsg').textContent='Failed: '+e.message; }
+  try{ var j=await getJSON('/api/admin/config'); if(j.ok){ var sel=document.getElementById('landingSel'); sel.value=j.admin_landing||'/metrics'; var es=document.getElementById('sfEnvSel'); if(es) es.value=j.sf_env||'prod'; var tb=document.getElementById('testBannerChk'); if(tb) tb.checked=(j.show_test_banner!==false); renderModels(j.ai_models); } }catch(e){ if(e.message!=='auth') document.getElementById('landingMsg').textContent='Failed: '+e.message; }
 }
 document.getElementById('saveLanding').onclick=async function(){
   var m=document.getElementById('landingMsg'); m.textContent='Saving…'; m.className='msg';
   var j=await postJSON('/api/admin/config',{ admin_landing: document.getElementById('landingSel').value });
   if(j.ok){ m.textContent='Saved — admins will land on '+j.admin_landing+'.'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; }
 };
+document.getElementById('saveSfEnv').onclick=async function(){
+  var m=document.getElementById('sfEnvMsg'); m.textContent='Saving…'; m.className='msg';
+  var j=await postJSON('/api/admin/config',{ sf_env: document.getElementById('sfEnvSel').value });
+  if(j.ok){ m.textContent='Now reading from '+(j.sf_env==='sandbox'?'SANDBOX (dev)':'PRODUCTION')+'. Reload the app to use it.'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; }
+};
+document.getElementById('saveTestBanner').onclick=async function(){
+  var m=document.getElementById('testBannerMsg'); m.textContent='Saving…'; m.className='msg';
+  var on=document.getElementById('testBannerChk').checked;
+  var j=await postJSON('/api/admin/config',{ show_test_banner: on });
+  if(j.ok){ m.textContent='TEST banner '+(j.show_test_banner!==false?'on':'off')+'. Reload pages to apply.'; m.className='msg ok'; } else { m.textContent=j.error||'error'; m.className='msg err'; }
+};
+
+// AI model registry editor (one shared list for app picker + Ask box; prices feed cost tracking).
+function modelRow(m){
+  m = m || { provider:'openai', model:'', label:'', is_default:false, price_in:0, price_out:0 };
+  var tr=document.createElement('tr');
+  tr.innerHTML =
+    '<td style="text-align:center"><input type="radio" name="modelDefault"'+(m.is_default?' checked':'')+'></td>'+
+    '<td><select class="m-prov"><option value="openai"'+(m.provider!=='anthropic'?' selected':'')+'>openai</option><option value="anthropic"'+(m.provider==='anthropic'?' selected':'')+'>anthropic</option></select></td>'+
+    '<td><input class="m-model" value="'+esc(m.model)+'" style="min-width:190px"></td>'+
+    '<td><input class="m-label" value="'+esc(m.label)+'" style="min-width:150px"></td>'+
+    '<td><input class="m-in" type="number" step="0.01" min="0" value="'+(Number(m.price_in)||0)+'" style="width:84px"></td>'+
+    '<td><input class="m-out" type="number" step="0.01" min="0" value="'+(Number(m.price_out)||0)+'" style="width:84px"></td>'+
+    '<td><button class="btn ghost sm m-del" type="button">remove</button></td>';
+  tr.querySelector('.m-del').onclick=function(){ tr.remove(); };
+  return tr;
+}
+function renderModels(list){ var b=document.getElementById('modelsBody'); if(!b) return; b.innerHTML='';
+  (list||[]).forEach(function(m){ b.appendChild(modelRow(m)); }); if(!(list||[]).length) b.appendChild(modelRow()); }
+document.getElementById('addModel').onclick=function(){ document.getElementById('modelsBody').appendChild(modelRow()); };
+document.getElementById('saveModels').onclick=async function(){
+  var arr=[]; Array.prototype.forEach.call(document.getElementById('modelsBody').querySelectorAll('tr'),function(tr){
+    var model=tr.querySelector('.m-model').value.trim(); if(!model) return;
+    arr.push({ provider: tr.querySelector('.m-prov').value, model: model, label: tr.querySelector('.m-label').value.trim()||model,
+      is_default: tr.querySelector('input[name=modelDefault]').checked,
+      price_in: parseFloat(tr.querySelector('.m-in').value)||0, price_out: parseFloat(tr.querySelector('.m-out').value)||0 }); });
+  var m=document.getElementById('modelsMsg'); if(!arr.length){ m.textContent='Add at least one model.'; m.className='msg err'; return; }
+  m.textContent='Saving…'; m.className='msg';
+  var j=await postJSON('/api/admin/config',{ ai_models: arr });
+  if(j.ok){ m.textContent='Saved '+(j.ai_models||[]).length+' model(s).'; m.className='msg ok'; renderModels(j.ai_models); } else { m.textContent=j.error||'error'; m.className='msg err'; }
+};
+
+// ---- Operations (ported from the transform admin; uses the POC getJSON/postJSON/esc helpers) ----
+function el(id){ return document.getElementById(id); }
+var commands_loaded=false, cur_es=null, cur_run=null, REG_BY_ID={};
+el('toggleCli').addEventListener('change',function(){ el('opsSections').classList.toggle('show-cli', this.checked); });
+function opsField(p){
+  var lab='<span>'+esc(p.label||p.name)+'</span>';
+  if(p.type==='enum'){ return '<label>'+lab+'<select data-p="'+esc(p.name)+'">'+(p.options||[]).map(function(o){return '<option value="'+esc(o.value)+'"'+(String(o.value)===String(p.default||'')?' selected':'')+'>'+esc(o.label)+'</option>';}).join('')+'</select></label>'; }
+  var type=p.type==='int'?'number':(p.type==='date'?'date':'text');
+  return '<label>'+lab+'<input data-p="'+esc(p.name)+'" type="'+type+'" value="'+esc(p.default||'')+'" placeholder="'+esc(p.label||'')+'"></label>';
+}
+function renderCommands(sections){
+  el('opsSections').innerHTML = sections.map(function(s){
+    return '<div class="ops-sec collapsed"><h3><span>'+esc(s.label)+'</span><span class="chev" aria-hidden="true">▾</span></h3>'+ s.items.map(function(it){
+      var greyed = it.web==='terminal';
+      var badge = it.klass&&it.klass!=='na' ? '<span class="badge '+it.klass+'">'+esc(it.klass)+'</span>' : '';
+      var right = greyed
+        ? '<span class="mut" style="font-size:12px;max-width:260px">'+esc(it.note||'terminal only')+'</span>'
+        : '<button class="btn sm" type="button" data-run="'+it.id+'">Run</button>';
+      var form = (it.web==='form'&&it.params&&it.params.length) ? '<div class="ops-form" id="form_'+it.id+'" style="display:none">'+it.params.map(opsField).join('')+'</div>' : '';
+      return '<div class="ops-item'+(greyed?' greyed':'')+'"><div class="meta"><div class="lbl"><span class="ops-num">'+it.id+'.</span> '+esc(it.label)+' '+badge+'</div><div class="dsc">'+esc(it.desc)+'</div>'+(it.cli?'<div class="cli">$ '+esc(it.cli)+'</div>':'')+'</div>'+right+'</div>'+form;
+    }).join('')+'</div>';
+  }).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('#opsSections [data-run]'),function(b){ b.addEventListener('click',function(){ opsRun(Number(b.getAttribute('data-run')), b); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#opsSections .ops-sec > h3'),function(h){ h.addEventListener('click',function(){ h.parentNode.classList.toggle('collapsed'); }); });
+}
+function opsRun(id, btn){
+  var item=REG_BY_ID[id]; if(!item)return;
+  var form=el('form_'+id);
+  if(item.web==='form' && form && form.style.display==='none'){ form.style.display='flex'; btn.textContent='Run now'; return; }
+  var params={};
+  if(form) Array.prototype.forEach.call(form.querySelectorAll('[data-p]'),function(i){ params[i.getAttribute('data-p')]=i.value; });
+  var confirm_tok;
+  if(item.klass==='destruct'){ if(!window.confirm('This is destructive: '+item.label+'\nRun it now?'))return; confirm_tok=item.id; }
+  opsStream(id, params, confirm_tok, btn);
+}
+function opsAppend(evt){
+  var o=el('opsOut'); var div=document.createElement('div');
+  div.className = evt.stream==='err'?'l-err':(evt.stream==='meta'?'l-meta':(evt.stream==='sys'?'l-sys':''));
+  div.textContent=evt.line; o.appendChild(div); o.scrollTop=o.scrollHeight;
+}
+function opsStream(id, params, confirm_tok, btn){
+  if(cur_es){ try{cur_es.close();}catch(e){} cur_es=null; }
+  el('opsOut').textContent=''; el('runStatus').textContent='Starting…'; if(btn) btn.disabled=true;
+  postJSON('/api/admin-console/run',{id:id,params:params,confirm:confirm_tok}).then(function(j){
+    if(btn) btn.disabled=false;
+    if(!j.ok){ opsAppend({stream:'err',line:'✗ '+(j.error||'failed to start')}); el('runStatus').textContent='Failed to start.'; return; }
+    cur_run=j.run_id; el('runStatus').textContent='Running… (run '+j.run_id+')'; el('killBtn').style.display='';
+    var es=new EventSource('/api/admin-console/stream/'+encodeURIComponent(j.run_id)); cur_es=es;
+    es.addEventListener('line',function(ev){ opsAppend(JSON.parse(ev.data)); });
+    es.addEventListener('exit',function(ev){ var d=JSON.parse(ev.data); el('runStatus').textContent='Finished: '+d.status+(d.code!=null?(' (code '+d.code+')'):'')+(d.capped?' · output truncated':''); el('killBtn').style.display='none'; es.close(); cur_es=null; });
+    es.onerror=function(){ el('runStatus').textContent='Stream closed.'; el('killBtn').style.display='none'; try{es.close();}catch(e){} cur_es=null; };
+  }).catch(function(){ if(btn) btn.disabled=false; });
+}
+el('killBtn').addEventListener('click',function(){ if(cur_run) postJSON('/api/admin-console/kill/'+encodeURIComponent(cur_run),{}); });
+function loadCommands(){
+  if(commands_loaded)return; commands_loaded=true;
+  getJSON('/api/admin-console/commands').then(function(d){
+    (d.sections||[]).forEach(function(s){ s.items.forEach(function(it){ REG_BY_ID[it.id]=it; }); });
+    renderCommands(d.sections||[]);
+  }).catch(function(e){ commands_loaded=false; if(e.message!=='auth') el('opsSections').innerHTML='<div class="mut">Could not load commands.</div>'; });
+}
+
+// ---- Logs (pm2 status tiles + live server console; read-only) ----
+var logs_es=null, logs_started=false;
+function loadLogs(){
+  getJSON('/api/admin-pm2').then(function(d){
+    if(!d.under_pm2){ el('pm2Tiles').innerHTML='<div class="mut">Not running under pm2 ('+esc(d.reason||'dev mode')+') — the console tail below still works.</div>'; return; }
+    function up(ms){ if(ms==null)return '—'; var s=Math.floor(ms/1000),dd=Math.floor(s/86400),hh=Math.floor((s%86400)/3600); return dd+'d '+hh+'h'; }
+    function t(k,v){ return '<div class="tile"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>'; }
+    el('pm2Tiles').innerHTML =
+      t('Status', d.status==='online'?'<span class="pill yes">online</span>':'<span class="pill no">'+esc(d.status)+'</span>')+
+      t('Uptime', up(d.uptime_ms))+ t('Restarts', d.restarts)+
+      t('CPU', (d.cpu!=null?d.cpu+'%':'—'))+ t('Memory', d.memory_bytes!=null?Math.round(d.memory_bytes/1048576)+' MB':'—');
+  }).catch(function(){ el('pm2Tiles').innerHTML='<div class="mut">pm2 unavailable.</div>'; });
+  if(logs_started)return; logs_started=true;
+  el('logsOut').textContent='';
+  var es=new EventSource('/api/admin-logs/stream'); logs_es=es;
+  function live(on){ var s=el('logsLive'); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'#16a34a':'var(--dim)'; } }
+  es.onopen=function(){ live(true); };
+  es.addEventListener('line',function(ev){ var d=JSON.parse(ev.data); var o=el('logsOut'); var div=document.createElement('div'); div.className=d.level==='error'?'l-err':(d.level==='warn'?'l-sys':''); div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line; o.appendChild(div); while(o.childNodes.length>600)o.removeChild(o.firstChild); o.scrollTop=o.scrollHeight; });
+  es.onerror=function(){ live(false); /* browser auto-reconnects */ };
+}
+el('logsReload').addEventListener('click',function(){ logs_started=false; if(logs_es){try{logs_es.close();}catch(e){}} loadLogs(); });
+// Lazy-load each panel the first time its rail link is opened.
+var opsLink=document.querySelector('.admin-rail a[data-pane="operations"]'); if(opsLink) opsLink.addEventListener('click', loadCommands);
+var logsLink=document.querySelector('.admin-rail a[data-pane="logs"]'); if(logsLink) logsLink.addEventListener('click', loadLogs);
 
 loadStatus(); loadUsers(); loadAccess(); loadSettings();
 </script>

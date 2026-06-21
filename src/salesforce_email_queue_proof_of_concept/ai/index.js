@@ -1,6 +1,7 @@
 'use strict';
 // One import surface for the AI layer.
 const providers = require('./providers');
+const models = require('./models');
 const respond = require('./respond');
 const triage = require('./triage');
 const ask = require('./ask');
@@ -11,6 +12,9 @@ const prompt = require('./prompt');
 module.exports = {
   list_providers: providers.list_providers,
   complete: providers.complete,
+  resolve_model: providers.resolve_model,
+  list_models: models.list, default_model: models.default_model,
+  price_for: models.price_for, cost_for: models.cost_for,
   DEFAULT_PROVIDER: providers.DEFAULT_PROVIDER,
   respond_to_case: respond.respond_to_case,
   triage_case: triage.triage_case, parse_triage: triage.parse_triage,

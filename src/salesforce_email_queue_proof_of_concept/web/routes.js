@@ -10,6 +10,17 @@ const store = require('../auth/auth_store');
 const session = require('../auth/session');
 const data_dir = require('../data_dir');
 const { require_auth, require_admin } = require('../auth/require_auth');
+// /admin Operations + Logs (ported from the transform). console_* run curated menu commands with live
+// streaming output; log_ring mirrors the server console + reads pm2 status. All routes are admin-only.
+const console_registry = require('../admin/console_registry');
+const console_runner = require('../admin/console_runner');
+const log_ring = require('../admin/log_ring');
+const PM2_PROCESS_NAME = 'usat_salesforce_email_queue';
+// Open an SSE stream (Server-Sent Events) for the live Operations/Logs panels.
+function open_sse(res) {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+  if (res.flushHeaders) res.flushHeaders();
+}
 
 // Where an admin lands by default after signing in (configurable from /admin -> Settings; stored in
 // the external config.json). Non-admins always go to the app root ('/'). Valid values: /metrics | /admin | /.
@@ -19,15 +30,32 @@ function admin_landing() {
   catch (e) { return '/metrics'; }
 }
 
-let _conn = null;
+// Salesforce environment the app reads from (configurable in /admin -> Settings; stored in config.json).
+// 'prod' -> SF_PROD_* (production); 'sandbox' -> SF_DEV_* + test.salesforce.com. Also stamped on every
+// analytics row as `env` (server-side) so sandbox practice never mixes into production metrics/cost.
+const SF_ENVS = ['prod', 'sandbox'];
+function sf_env() {
+  try { const v = (data_dir.read_config() || {}).sf_env; return v === 'sandbox' ? 'sandbox' : 'prod'; }
+  catch (e) { return 'prod'; }
+}
+// Whether the TEST-MODE banner is shown (admin-toggleable in /admin -> Settings). Default true.
+// The SANDBOX banner is always shown (safety) and is not affected by this.
+function show_test_banner() {
+  try { return (data_dir.read_config() || {}).show_test_banner !== false; } catch (e) { return true; }
+}
+
+let _conn = null, _conn_env = null;
 async function get_conn() {
-  if (_conn) return _conn;
-  const cfg = sf.sf_config({ is_test: false });
+  const env = sf_env();
+  if (_conn && _conn_env === env) return _conn;   // rebuild if the admin switched orgs
+  const cfg = sf.sf_config({ is_test: env === 'sandbox' });   // sf_config's is_test = "use sandbox/dev creds"
   const ck = sf.check_sf_config(cfg);
-  if (!ck.ok) throw new Error('Salesforce not configured: ' + ck.missing.join(', '));
+  if (!ck.ok) throw new Error('Salesforce (' + env + ') not configured: ' + ck.missing.join(', '));
   _conn = await sf.make_connection(cfg);
+  _conn_env = env;
   return _conn;
 }
+function reset_conn() { _conn = null; _conn_env = null; }
 function err(res, e) { res.status(502).json({ ok: false, error: (e && e.message) || String(e) }); }
 // Minimal RFC-4180-ish delimited parser (handles quoted fields + embedded delimiters/newlines).
 function parse_delimited(text, delim) {
@@ -52,18 +80,50 @@ function mount(app, deps) {
   // Server-side analytics logger (injected by the server, which owns the DB pool). No-op in tests /
   // when analytics is off, so mount(app) keeps working unchanged.
   const analytics = (deps && deps.analytics) || { log: function () {}, enabled: function () { return false; } };
+  // Mirror the server's console output into an in-memory ring so the /admin Logs panel can tail it.
+  // Idempotent (guarded inside log_ring), so safe to call here once at mount.
+  try { log_ring.install(console); } catch (e) { /* never block startup on logging */ }
   // Normalize a provider id to the label stored in analytics.
   function provider_label(p) { return p === 'anthropic' ? 'claude' : 'chatgpt'; }
+  // Common case/session context attached to every server-logged event (so all activity after an email
+  // is opened is attributed to that case). Never throws.
+  function ctx(req, body) {
+    // The browser sends its full env in body.meta (ids + tz/local time/viewport/theme/page) so
+    // server-logged events carry the SAME metadata as browser events. insert_event whitelists columns.
+    const m = (body && body.meta) || {};
+    return {
+      actor: req.user,
+      queue: (body && body.queue) || '', queue_id: (body && body.queue_id) || '',
+      case_id: (body && body.case_id) || '', case_number: (body && body.case_number) || '',
+      visitor_id: m.visitor_id || null, session_id: m.session_id || null,
+      is_returning: (m.is_returning != null ? m.is_returning : null),
+      page_path: m.page_path || null, event_at_local: m.event_at_local || null,
+      client_tz: m.client_tz || null, local_hour: (m.local_hour != null ? m.local_hour : null),
+      local_dow: (m.local_dow != null ? m.local_dow : null),
+      viewport: m.viewport || null, theme: m.theme || null,
+      is_test: (body && (body._test === 1 || body._test === '1')) ? 1 : 0
+    };
+  }
   // Fire-and-forget AI-call event (never throws, never blocks the response).
   function log_ai(req, body, fields) {
     try {
-      analytics.log(Object.assign({
-        event_name: 'ai_call', actor: req.user,
-        queue: (body && body.queue) || '', queue_id: (body && body.queueId) || '',
-        ai_provider: provider_label(body && body.provider),
-        is_test: (body && (body._test === 1 || body._test === '1')) ? 1 : 0
-      }, fields || {}));
+      analytics.log(Object.assign(
+        { event_name: 'ai_call', ai_provider: provider_label(body && body.provider), ai_model: ai.resolve_model(body && body.provider, body && body.model) },
+        ctx(req, body), fields || {}));
     } catch (e) { /* analytics must never break the app */ }
+  }
+  // Fire-and-forget Salesforce-write event (send reply / status change) with the SF outcome.
+  function log_sf(req, body, fields) {
+    try { analytics.log(Object.assign(ctx(req, body), fields || {})); }
+    catch (e) { /* analytics must never break the app */ }
+  }
+  // Token + estimated-cost fields from an AI result's usage block. cost = tokens x per-model price
+  // (ai/models.js, editable in /admin). Tokens are 0 when the provider returns no usage (e.g. local triage).
+  function token_cost(r, body) {
+    const u = (r && r.usage) || {};
+    const pt = u.prompt_tokens || 0, ct = u.completion_tokens || 0;
+    const model = (r && r.ai_model) || ai.resolve_model(body && body.provider, body && body.model);
+    return { ai_prompt_tokens: pt, ai_completion_tokens: ct, ai_cost_usd: ai.cost_for(model, pt, ct) };
   }
 
   app.post('/api/login', function (req, res) {
@@ -78,7 +138,7 @@ function mount(app, deps) {
     res.json({ ok: true, user: v.user, role: role, landing: role === 'admin' ? admin_landing() : '/' });
   });
   app.post('/api/logout', function (req, res) { res.setHeader('Set-Cookie', session.COOKIE + '=; HttpOnly; Path=/; Max-Age=0'); res.json({ ok: true }); });
-  app.get('/api/me', require_auth, function (req, res) { res.json({ ok: true, user: req.user, role: req.role }); });
+  app.get('/api/me', require_auth, function (req, res) { res.json({ ok: true, user: req.user, role: req.role, sf_env: sf_env(), show_test_banner: show_test_banner() }); });
 
   app.get('/api/queues', require_auth, async function (req, res) {
     try {
@@ -122,13 +182,28 @@ function mount(app, deps) {
     } catch (e) { err(res, e); }
   });
   app.get('/api/thread', require_auth, async function (req, res) {
-    try { res.json({ ok: true, thread: await sf.get_thread(await get_conn(), req.query.caseId) }); } catch (e) { err(res, e); }
+    try { res.json({ ok: true, thread: await sf.get_thread(await get_conn(), req.query.case_id) }); } catch (e) { err(res, e); }
   });
   app.get('/api/attachment/:cvid/text', require_auth, async function (req, res) {
     try {
       const c = await get_conn(); const buf = await sf.fetch_content_version_bytes(c, req.params.cvid);
       const r = await ai.extract_text(buf, { file_extension: String(req.query.ext || ''), title: String(req.query.title || 'attachment') });
       res.json({ ok: true, text: r.text, note: r.note });
+    } catch (e) { err(res, e); }
+  });
+
+  // Stream the raw attachment bytes through our authenticated session (so images render inline without
+  // the browser needing a separate Salesforce login). Used by the in-app image viewer.
+  app.get('/api/attachment/:cvid/raw', require_auth, async function (req, res) {
+    try {
+      const c = await get_conn(); const buf = await sf.fetch_content_version_bytes(c, req.params.cvid);
+      const ext = String(req.query.ext || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+        bmp: 'image/bmp', svg: 'image/svg+xml', tif: 'image/tiff', tiff: 'image/tiff', heic: 'image/heic', pdf: 'application/pdf' };
+      res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'inline');
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      res.send(buf);
     } catch (e) { err(res, e); }
   });
 
@@ -165,6 +240,15 @@ function mount(app, deps) {
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
+  // (the server-rendered /metrics + /admin pages stamp their client-side dashboard_view/admin_view
+  //  events with the actor via the existing /api/me route.)
+
+  // Selectable AI models for the in-app picker (triage / draft / ask). Single source of truth =
+  // ai/models.js (same list the metrics Ask box uses via /api/metrics-ask-models).
+  app.get('/api/ai/models', require_auth, function (req, res) {
+    try { res.json(ai.list_models()); } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
+  });
+
   app.post('/api/ai/respond', require_auth, async function (req, res) {
     const b = req.body || {};
     const t0 = Date.now();
@@ -172,14 +256,14 @@ function mount(app, deps) {
       const knowledge = await faq.load_knowledge(b.queue);
       const images = await faq.load_context_images(b.queue);
       const corr = corrections.grounding_lines(12, { queue: b.queue, user: req.user });
-      const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, fetch_attachments: true, faq: knowledge, images: images, corrections: corr });
-      log_ai(req, b, {
+      const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.case_id, provider: b.provider, model: b.model, fetch_attachments: true, faq: knowledge, images: images, corrections: corr });
+      log_ai(req, b, Object.assign({
         ai_action: 'respond', ai_verdict: (r.verdict || '').toUpperCase(),
         ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
         ai_reply_chars: (r.body || '').length, ai_used_images: images && images.length ? 1 : 0,
         ai_grounded: (knowledge && knowledge.length) || (images && images.length) || (corr && corr.length) ? 1 : 0,
         ai_correction_count: (corr && corr.length) || 0, ai_ok: 1
-      });
+      }, token_cost(r, b)));
       res.json(Object.assign({ ok: true }, r));
     } catch (e) {
       log_ai(req, b, { ai_action: 'respond', ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) });
@@ -194,13 +278,13 @@ function mount(app, deps) {
       const knowledge = await faq.load_knowledge(b.queue);
       const images = await faq.load_context_images(b.queue);
       const corr = corrections.grounding_lines(12, { queue: b.queue, user: req.user });
-      const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, question: b.question, history: b.history, faq: knowledge, images: images, corrections: corr });
-      log_ai(req, b, {
+      const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.case_id, provider: b.provider, model: b.model, question: b.question, history: b.history, faq: knowledge, images: images, corrections: corr });
+      log_ai(req, b, Object.assign({
         ai_action: action, ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
         ai_reply_chars: (r.answer || '').length, ai_used_images: images && images.length ? 1 : 0,
         ai_grounded: (knowledge && knowledge.length) || (images && images.length) || (corr && corr.length) ? 1 : 0,
         ai_correction_count: (corr && corr.length) || 0, ai_ok: 1
-      });
+      }, token_cost(r, b)));
       res.json(Object.assign({ ok: true }, r));
     } catch (e) {
       log_ai(req, b, { ai_action: action, ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) });
@@ -212,8 +296,10 @@ function mount(app, deps) {
     const b = req.body || {};
     const t0 = Date.now();
     try {
-      const r = await ai.triage_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, faq: await faq.load_knowledge(b.queue) });
-      log_ai(req, b, { ai_action: 'triage', ai_intent: r.status || '', ai_verdict: r.status || '', ai_latency_ms: Date.now() - t0, ai_ok: 1 });
+      const r = await ai.triage_case({ conn: await get_conn(), case_id: b.case_id, provider: b.provider, model: b.model, faq: await faq.load_knowledge(b.queue) });
+      log_ai(req, b, Object.assign({ ai_action: 'triage', ai_intent: r.status || '', ai_verdict: r.status || '',
+        ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.prompt_chars || 0,
+        ai_reply_chars: (r.reply_chars != null ? r.reply_chars : (r.reason || '').length), ai_ok: 1 }, token_cost(r, b)));
       res.json(Object.assign({ ok: true }, r));
     } catch (e) {
       log_ai(req, b, { ai_action: 'triage', ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) });
@@ -223,7 +309,7 @@ function mount(app, deps) {
   app.get('/api/corrections', require_auth, function (req, res) { res.json({ ok: true, corrections: corrections.list(false) }); });
   app.post('/api/corrections', require_auth, function (req, res) {
     const b = req.body || {};
-    const r = corrections.add({ note: b.note, scope: b.scope, queue: b.queue, case_id: b.caseId, question: b.question, author: req.user });
+    const r = corrections.add({ note: b.note, scope: b.scope, queue: b.queue, case_id: b.case_id, question: b.question, author: req.user });
     res.json({ ok: !!r, correction: r });
   });
 
@@ -276,8 +362,8 @@ function mount(app, deps) {
     } catch (e) { err(res, e); }
   });
   // POST sets the global default and/or a per-user override.
-  //   { default: "all" | [queueId...] }                  -> set global default
-  //   { user: "<name>", queues: "all" | [queueId...] }   -> set a per-user override
+  //   { default: "all" | [queue_id...] }                  -> set global default
+  //   { user: "<name>", queues: "all" | [queue_id...] }   -> set a per-user override
   //   { user: "<name>", clear: true }                     -> remove a per-user override
   app.post('/api/admin/queue-access', require_admin, function (req, res) {
     try {
@@ -289,16 +375,50 @@ function mount(app, deps) {
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
-  // ---- /admin: settings (admin only) — currently just the admin default landing page ----
+  // ---- /admin: settings (admin only): admin default landing page + the editable AI model registry ----
   app.get('/api/admin/config', require_admin, function (req, res) {
-    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS });
+    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS, ai_models: ai.list_models(), sf_env: sf_env(), sf_envs: SF_ENVS, show_test_banner: show_test_banner() });
   });
   app.post('/api/admin/config', require_admin, function (req, res) {
     try {
-      const v = String((req.body && req.body.admin_landing) || '');
-      if (ADMIN_LANDINGS.indexOf(v) < 0) return res.status(400).json({ ok: false, error: 'invalid landing page' });
-      const cfg = data_dir.read_config() || {}; cfg.admin_landing = v; data_dir.write_config(cfg);
-      res.json({ ok: true, admin_landing: v });
+      const b = req.body || {};
+      const cfg = data_dir.read_config() || {};
+      // Admin default landing page (optional in this request).
+      if (b.admin_landing !== undefined) {
+        const v = String(b.admin_landing || '');
+        if (ADMIN_LANDINGS.indexOf(v) < 0) return res.status(400).json({ ok: false, error: 'invalid landing page' });
+        cfg.admin_landing = v;
+      }
+      // Editable model registry: array of { provider, model, label, is_default, price_in, price_out }.
+      if (b.ai_models !== undefined) {
+        if (!Array.isArray(b.ai_models)) return res.status(400).json({ ok: false, error: 'ai_models must be an array' });
+        const num = function (v) { const n = Number(v); return isFinite(n) && n >= 0 ? n : 0; };
+        const clean = b.ai_models.map(function (m) {
+          const model = String((m && m.model) || '').trim();
+          if (!model) return null;
+          return {
+            provider: (m && m.provider) === 'anthropic' ? 'anthropic' : 'openai',
+            model: model.slice(0, 60), label: String((m && m.label) || model).slice(0, 60),
+            is_default: !!(m && m.is_default), price_in: num(m && m.price_in), price_out: num(m && m.price_out)
+          };
+        }).filter(Boolean);
+        if (!clean.length) return res.status(400).json({ ok: false, error: 'at least one model is required' });
+        if (!clean.some(function (m) { return m.is_default; })) clean[0].is_default = true;
+        let seen = false; clean.forEach(function (m) { if (m.is_default && seen) m.is_default = false; else if (m.is_default) seen = true; });
+        cfg.ai_models = clean;
+      }
+      // Show/hide the TEST-MODE banner (the SANDBOX banner is always shown).
+      if (b.show_test_banner !== undefined) { cfg.show_test_banner = !!b.show_test_banner; }
+      // Salesforce environment (prod | sandbox). Switching resets the cached SF connection so the next
+      // read uses the other org; the client should reload its queue/case view afterward.
+      if (b.sf_env !== undefined) {
+        const v = String(b.sf_env || '');
+        if (SF_ENVS.indexOf(v) < 0) return res.status(400).json({ ok: false, error: 'invalid sf_env' });
+        cfg.sf_env = v; data_dir.write_config(cfg); reset_conn();
+        return res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env() });
+      }
+      data_dir.write_config(cfg);
+      res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env(), show_test_banner: show_test_banner() });
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
@@ -338,7 +458,54 @@ function mount(app, deps) {
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
-  // Salesforce writes are intentionally disabled in this POC.
-  app.post('/api/send', require_auth, function (req, res) { res.status(403).json({ ok: false, error: 'Sending to Salesforce is not enabled in this build.' }); });
+  // ---- /admin Operations console (admin-gated). The client sends only { id, params, confirm }; the
+  // server assembles argv from the registry and spawns with no shell (see admin/console_runner.js). ----
+  app.get('/api/admin-console/commands', require_admin, function (req, res) {
+    res.json({ ok: true, sections: console_runner.commands(), runs: console_runner.list_runs(), audit: console_runner.recent_audit() });
+  });
+  app.post('/api/admin-console/run', require_admin, function (req, res) {
+    const b = req.body || {};
+    const item = console_registry.by_id(b.id);
+    if (!item) return res.json({ ok: false, error: 'unknown command' });
+    res.json(console_runner.start_run(item, b.params || {}, b.confirm));
+  });
+  app.get('/api/admin-console/stream/:run_id', require_admin, function (req, res) {
+    open_sse(res);
+    console_runner.subscribe(req.params.run_id, res);
+  });
+  app.post('/api/admin-console/kill/:run_id', require_admin, function (req, res) {
+    res.json(console_runner.kill_run(req.params.run_id));
+  });
+
+  // ---- /admin Logs panel: in-memory console ring (+ SSE tail) and pm2 process stats (read-only) ----
+  app.get('/api/admin-logs', require_admin, function (req, res) {
+    res.json({ ok: true, lines: log_ring.tail(req.query.n) });
+  });
+  app.get('/api/admin-logs/stream', require_admin, function (req, res) {
+    open_sse(res);
+    log_ring.subscribe(res);
+  });
+  app.get('/api/admin-pm2', require_admin, async function (req, res) {
+    try { res.json(Object.assign({ ok: true }, await log_ring.read_pm2(PM2_PROCESS_NAME))); }
+    catch (e) { res.json({ ok: false, under_pm2: false, error: (e && e.message) || 'pm2 error' }); }
+  });
+
+  // ---- Salesforce writes: DISABLED in this POC, but the ATTEMPT + outcome are tracked so you can see
+  // the activity now and watch sf_ok flip to 1 once real writes are wired up. ----
+  // Send a reply. Mock (no real SF write) -> records send_email with sf_ok=0 + reason.
+  app.post('/api/send', require_auth, function (req, res) {
+    const b = req.body || {};
+    const reply = String(b.body || '');
+    // When real sending is enabled, set sf_ok=1 on success / 0 + sf_error on failure here.
+    log_sf(req, b, { event_name: 'send_email', sf_action: 'send', sf_ok: 0, sf_error: 'sending not enabled in this build', ai_reply_chars: reply.length });
+    res.status(403).json({ ok: false, error: 'Sending to Salesforce is not enabled in this build.' });
+  });
+  // Change a Case status. Mock (no real SF write) -> records status_change with sf_ok=0 + reason.
+  app.post('/api/status', require_auth, function (req, res) {
+    const b = req.body || {};
+    const status_to = String(b.status || '').slice(0, 40);
+    log_sf(req, b, { event_name: 'status_change', sf_action: 'status_change', status_to: status_to, sf_ok: 0, sf_error: 'status change not enabled in this build' });
+    res.status(403).json({ ok: false, error: 'Status changes are not written to Salesforce in this build.', status_to: status_to });
+  });
 }
 module.exports = mount;

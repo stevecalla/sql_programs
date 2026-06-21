@@ -1,22 +1,41 @@
 'use strict';
-// AI provider abstraction. Default = OpenAI (ChatGPT); Anthropic (Claude) selectable. Keys/models
-// come from .env. The HTTP transport is injectable (opts.transport) so respond/ask can be unit-
-// tested with no network. Returns plain text.
+// AI provider abstraction. Default = OpenAI (ChatGPT); Anthropic (Claude) selectable. The HTTP
+// transport is injectable (opts.transport) so respond/ask can be unit-tested with no network.
+// Returns plain text. This layer is ONLY transport config (API key + model env var names) — every
+// model STRING (including the last-resort default) comes from the one registry, ai/models.js.
+const models = require('./models');
 
 const PROVIDERS = {
-  openai: { id: 'openai', label: 'ChatGPT (OpenAI)', env_key: 'OPENAI_API_KEY', env_model: 'OPENAI_MODEL', default_model: 'gpt-4o-mini' },
-  anthropic: { id: 'anthropic', label: 'Claude (Anthropic)', env_key: 'ANTHROPIC_API_KEY', env_model: 'ANTHROPIC_MODEL', default_model: 'claude-3-5-sonnet-latest' }
+  openai: { id: 'openai', label: 'ChatGPT (OpenAI)', env_key: 'OPENAI_API_KEY', env_model: 'OPENAI_MODEL' },
+  anthropic: { id: 'anthropic', label: 'Claude (Anthropic)', env_key: 'ANTHROPIC_API_KEY', env_model: 'ANTHROPIC_MODEL' }
 };
+
 const DEFAULT_PROVIDER = 'openai';
 
 function list_providers() {
   return Object.keys(PROVIDERS).map(function (k) { return { id: k, label: PROVIDERS[k].label, is_default: k === DEFAULT_PROVIDER }; });
 }
+
 function resolve(provider) {
   const p = PROVIDERS[provider || DEFAULT_PROVIDER];
   if (!p) throw new Error('Unknown provider: ' + provider);
   return p;
 }
+
+// The model string a call WILL use (explicit > env override > registry default) — for analytics logging.
+function resolve_model(provider, model, env) {
+  env = env || process.env;
+  try { const p = resolve(provider); return model || env[p.env_model] || models.default_for(p.id); }
+  catch (e) { return model || ''; }
+}
+
+// complete() returns { text, usage, model }; injected test mocks may return a plain string. Normalize
+// to { text, usage, model } so callers can always read tokens + the resolved model uniformly.
+function norm_completion(raw, fallback_model) {
+  if (raw && typeof raw === 'object' && 'text' in raw) return { text: raw.text, usage: raw.usage || null, model: raw.model || fallback_model || null };
+  return { text: raw, usage: null, model: fallback_model || null };
+}
+
 async function safe_text(res) { try { return await res.text(); } catch (e) { return ''; } }
 
 // complete({ provider, model, system, prompt, env, transport })
@@ -24,13 +43,17 @@ async function complete(opts) {
   const o = opts || {};
   const p = resolve(o.provider);
   const env = o.env || process.env;
-  const model = o.model || env[p.env_model] || p.default_model;
+  const model = o.model || env[p.env_model] || models.default_for(p.id);
   const api_key = env[p.env_key];
   const transport = o.transport || (typeof fetch !== 'undefined' ? fetch : null);
   if (!api_key) { const e = new Error(p.label + ' API key missing (' + p.env_key + ')'); e.code = 'NO_API_KEY'; throw e; }
   if (!transport) throw new Error('No fetch transport available');
-  if (p.id === 'openai') return openai_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport });
-  return anthropic_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport });
+  const out = p.id === 'openai'
+    ? await openai_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport })
+    : await anthropic_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport });
+  // Uniform shape: { text, usage:{prompt_tokens,completion_tokens}|null, model }. Callers may treat
+  // the return as a string (legacy) or read .text/.usage/.model (cost tracking) — see ai/respond.js.
+  return { text: out.text, usage: out.usage || null, model: model };
 }
 
 function openai_user_content(prompt, images) {
@@ -39,6 +62,7 @@ function openai_user_content(prompt, images) {
   images.forEach(function (im) { arr.push({ type: 'image_url', image_url: { url: 'data:' + im.media_type + ';base64,' + im.data_base64 } }); });
   return arr;
 }
+
 async function openai_complete(a) {
   const res = await a.transport('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -47,7 +71,9 @@ async function openai_complete(a) {
   });
   if (!res.ok) throw new Error('OpenAI HTTP ' + res.status + ': ' + (await safe_text(res)));
   const j = await res.json();
-  return ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
+  const text = ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
+  const u = j.usage || {};
+  return { text: text, usage: { prompt_tokens: u.prompt_tokens || 0, completion_tokens: u.completion_tokens || 0 } };
 }
 
 function anthropic_user_content(prompt, images) {
@@ -56,6 +82,7 @@ function anthropic_user_content(prompt, images) {
   images.forEach(function (im) { arr.push({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data_base64 } }); });
   return arr;
 }
+
 async function anthropic_complete(a) {
   const res = await a.transport('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -64,7 +91,9 @@ async function anthropic_complete(a) {
   });
   if (!res.ok) throw new Error('Anthropic HTTP ' + res.status + ': ' + (await safe_text(res)));
   const j = await res.json();
-  return ((j.content && j.content[0] && j.content[0].text) || '').trim();
+  const text = ((j.content && j.content[0] && j.content[0].text) || '').trim();
+  const u = j.usage || {};
+  return { text: text, usage: { prompt_tokens: u.input_tokens || 0, completion_tokens: u.output_tokens || 0 } };
 }
 
-module.exports = { PROVIDERS, DEFAULT_PROVIDER, list_providers, complete };
+module.exports = { PROVIDERS, DEFAULT_PROVIDER, list_providers, complete, resolve_model, norm_completion };

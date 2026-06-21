@@ -43,13 +43,22 @@ async function purge_all(pool, table) {
   const [r] = await pool.query('DELETE FROM `' + table + '`');
   return { would_delete: would, deleted: (r && r.affectedRows != null) ? r.affectedRows : would };
 }
-// Delete only deliberate test-run rows (is_test = 1) — leaves real + demo data untouched.
-// Events from a browser opened with ?metrics_test=1 are stamped is_test=1 by the client.
-async function purge_test(pool, table) {
-  const where = 'is_test = 1';
+// Delete deliberate test-run rows (is_test = 1) — leaves real + demo data untouched.
+// opts.protect_cost (optional): KEEP test rows that cost real money (ai_cost_usd > 0) so the spend
+// record/bill reconciliation survives; only the $0 test noise is deleted. (Off by default, so callers
+// without an ai_cost_usd column — e.g. the transform — are unaffected.)
+async function purge_test(pool, table, opts) {
+  opts = opts || {};
+  let where = 'is_test = 1';
+  if (opts.protect_cost) where += ' AND COALESCE(ai_cost_usd, 0) = 0';
   const [c] = await pool.query('SELECT COUNT(*) AS n FROM `' + table + '` WHERE ' + where);
   const would = c[0] ? c[0].n : 0;
+  let kept_cost_rows = 0, kept_cost_usd = 0;
+  if (opts.protect_cost) {
+    const [k] = await pool.query('SELECT COUNT(*) AS n, COALESCE(SUM(ai_cost_usd),0) AS usd FROM `' + table + '` WHERE is_test = 1 AND COALESCE(ai_cost_usd,0) > 0');
+    kept_cost_rows = k[0] ? k[0].n : 0; kept_cost_usd = k[0] ? Math.round(Number(k[0].usd) * 1e6) / 1e6 : 0;
+  }
   const [r] = await pool.query('DELETE FROM `' + table + '` WHERE ' + where);
-  return { would_delete: would, deleted: (r && r.affectedRows != null) ? r.affectedRows : would };
+  return { would_delete: would, deleted: (r && r.affectedRows != null) ? r.affectedRows : would, kept_cost_rows: kept_cost_rows, kept_cost_usd: kept_cost_usd };
 }
 module.exports = { size, purge_keep_years, purge_all, purge_test, current_year_in_tz, YEAR_COL };

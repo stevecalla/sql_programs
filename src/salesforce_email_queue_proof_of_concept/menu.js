@@ -57,7 +57,7 @@ function run(cmd, args) {
   });
 }
 
-const ALL_TESTS = ['tests/text_clean.test.js', 'tests/sf_threads.test.js', 'tests/extract.test.js', 'tests/ai.test.js', 'tests/faq_corrections.test.js', 'tests/auth.test.js', 'tests/metrics.test.js', 'tests/queue_access.test.js', 'tests/analytics.test.js', 'tests/ask.test.js', 'tests/admin_users.test.js'];
+const ALL_TESTS = ['tests/text_clean.test.js', 'tests/sf_threads.test.js', 'tests/extract.test.js', 'tests/ai.test.js', 'tests/faq_corrections.test.js', 'tests/auth.test.js', 'tests/metrics.test.js', 'tests/queue_access.test.js', 'tests/analytics.test.js', 'tests/ask.test.js', 'tests/admin_users.test.js', 'tests/console.test.js'];
 
 async function run_all_tests() {
   const failed = [];
@@ -102,7 +102,7 @@ const SECTIONS = [
   { label: 'Metrics & analytics (needs the local analytics DB)', color: YEL, items: [
     { label: 'Metrics stats (last 7 days)', desc: 'Text usage report from the analytics table (AI calls, providers, verdicts, queues).', cli: 'node metrics/metrics_cli.js stats', action: 'metrics_stats' },
     { label: 'Metrics table size', desc: 'Row count + size + by-year breakdown of the events table.', cli: 'node metrics/metrics_cli.js size', action: 'metrics_size' },
-    { label: 'Purge TEST rows (is_test=1)', desc: 'Delete deliberate test-run rows (browser opened with ?metrics_test=1). Real + demo data untouched.', cli: 'node metrics/metrics_cli.js purge-test', action: 'metrics_purge_test' },
+    { label: 'Purge TEST rows (is_test=1, $0 only)', desc: 'Delete deliberate $0 test-run rows (browser opened with ?metrics_test=1). KEEPS test AI calls that cost money (spend record preserved); real + demo data untouched.', cli: 'node metrics/metrics_cli.js purge-test', action: 'metrics_purge_test' },
     { label: 'Cleanup — purge old years', desc: 'Keep current + prior calendar year; delete older rows.', cli: 'node metrics/metrics_cli.js cleanup', action: 'metrics_cleanup' },
     { label: 'PURGE ALL (danger)', desc: 'Delete every analytics row regardless of date.', cli: 'node metrics/metrics_cli.js purge-all', action: 'metrics_purge_all' },
     { label: 'AI ask — ask a question (read-only)', desc: 'Ask the usage data in plain English; prints the answer + the SQL it ran. Read-only guarded.', cli: 'node metrics/metrics_cli.js ask "<question>"', action: 'metrics_ask' },

@@ -12,6 +12,17 @@ async function with_pool(fn) {
   try { await fn(pool); } finally { try { await pool.end(); } catch (e) {} }
 }
 
+// y/N confirmation for destructive commands. Pass --yes to skip (e.g. for scripts/cron). If stdin
+// isn't interactive and --yes wasn't given, refuse rather than silently deleting.
+function confirm(question) {
+  if (process.argv.indexOf('--yes') >= 0 || process.argv.indexOf('-y') >= 0) return Promise.resolve(true);
+  if (!process.stdin.isTTY) { console.log('Refusing: not an interactive terminal. Re-run with --yes to confirm.'); return Promise.resolve(false); }
+  return new Promise(function (res) {
+    const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, function (a) { rl.close(); res(/^y(es)?$/i.test(String(a || '').trim())); });
+  });
+}
+
 async function main() {
   const cmd = (process.argv[2] || 'stats').toLowerCase();
   const arg = process.argv[3];
@@ -36,9 +47,16 @@ async function main() {
   await with_pool(async function (pool) {
     if (cmd === 'stats') { console.log(await report.report_text(pool, { days: Number(arg) || 7 })); }
     else if (cmd === 'size') { console.log(JSON.stringify(await report.size(pool), null, 2)); }
-    else if (cmd === 'purge-test') { const r = await report.purge_test(pool); console.log('Deleted ' + r.deleted + ' test row(s) (is_test=1; would=' + r.would_delete + ').'); }
-    else if (cmd === 'purge-all') { const r = await report.purge_all(pool); console.log('Deleted ' + r.deleted + ' row(s) (ALL).'); }
-    else if (cmd === 'cleanup') { const r = await report.cleanup(pool, {}); console.log('Deleted ' + r.deleted + ' old row(s) (kept >= cutoff year ' + r.cutoff_year + ').'); }
+    else if (cmd === 'purge-test') { const r = await report.purge_test(pool); console.log('Deleted ' + r.deleted + ' $0 test row(s) (is_test=1). Kept ' + (r.kept_cost_rows || 0) + ' cost-bearing test row(s) = $' + Number(r.kept_cost_usd || 0).toFixed(4) + ' (spend record preserved).'); }
+    else if (cmd === 'purge-all') {
+      const size = await report.size(pool);
+      if (!(await confirm('Delete ALL ' + (size.rows != null ? size.rows + ' ' : '') + 'analytics row(s)? This cannot be undone. (y/N) '))) { console.log('Aborted — nothing deleted.'); return; }
+      const r = await report.purge_all(pool); console.log('Deleted ' + r.deleted + ' row(s) (ALL).');
+    }
+    else if (cmd === 'cleanup') {
+      if (!(await confirm('Purge old rows (keep current + prior calendar year)? (y/N) '))) { console.log('Aborted — nothing deleted.'); return; }
+      const r = await report.cleanup(pool, {}); console.log('Deleted ' + r.deleted + ' old row(s) (kept >= cutoff year ' + r.cutoff_year + ').');
+    }
     else { console.log('usage: metrics_cli.js [stats [days] | size | purge-test | purge-all | cleanup | ask "<q>" | guard]'); }
   });
 }

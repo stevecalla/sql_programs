@@ -22,10 +22,10 @@ test('valid_user returns the stored role', function () {
 });
 test('env_accounts surfaces the .env recovery accounts with roles', function () {
   const env = store.env_accounts();
-  const byUser = {}; env.forEach(function (u) { byUser[u.user] = u; });
-  assert.strictEqual(byUser.envadmin.role, 'admin');
-  assert.strictEqual(byUser.envadmin.source, 'env');
-  assert.strictEqual(byUser.envuser.role, 'user');
+  const by_user = {}; env.forEach(function (u) { by_user[u.user] = u; });
+  assert.strictEqual(by_user.envadmin.role, 'admin');
+  assert.strictEqual(by_user.envadmin.source, 'env');
+  assert.strictEqual(by_user.envuser.role, 'user');
 });
 test('.env admin account still authenticates with role admin', function () {
   assert.strictEqual((store.valid_user('envadmin', 'fake-admin-pw') || {}).role, 'admin');

@@ -38,34 +38,34 @@ test('guard: a blocked keyword hidden in a comment is stripped (neutralized), no
 });
 
 // ---- ask() brain with injected provider + fake pool ----
-function fakeProvider(reply) { return { id: 'fake', default_model: function () { return 'm'; }, chat: async function () { return typeof reply === 'function' ? reply() : reply; } }; }
-function fakePool(rows) { return { query: async function () { return [rows || []]; } }; }
+function fake_provider(reply) { return { id: 'fake', default_model: function () { return 'm'; }, chat: async function () { return typeof reply === 'function' ? reply() : reply; } }; }
+function fake_pool(rows) { return { query: async function () { return [rows || []]; } }; }
 
 test('ask: plans SQL, runs it (guarded), then answers', async function () {
   let call = 0;
   const provider = { id: 'fake', default_model: function () { return 'm'; },
     chat: async function () { call++; return call === 1 ? ('SELECT ai_provider, COUNT(*) n FROM ' + T + ' GROUP BY ai_provider') : '**42** calls.'; } };
   const r = await ask.ask('how many AI calls by provider?', {
-    provider_impl: provider, schema: 'Table `' + T + '` columns: ai_provider', pool: fakePool([{ ai_provider: 'chatgpt', n: 42 }])
+    provider_impl: provider, schema: 'Table `' + T + '` columns: ai_provider', pool: fake_pool([{ ai_provider: 'chatgpt', n: 42 }])
   });
   assert.strictEqual(r.ok, true);
   assert.match(r.sql, /LIMIT/i);
   assert.match(r.answer, /42/);
 });
 test('ask: OUT_OF_SCOPE for non-events questions', async function () {
-  const r = await ask.ask('how many members paid dues?', { provider_impl: fakeProvider('OUT_OF_SCOPE'), schema: 'x', pool: fakePool([]) });
+  const r = await ask.ask('how many members paid dues?', { provider_impl: fake_provider('OUT_OF_SCOPE'), schema: 'x', pool: fake_pool([]) });
   assert.strictEqual(r.mode, 'out_of_scope');
   assert.match(r.answer, /not available|out of scope|only answer/i);
 });
 test('ask: NO_SQL definitional question answers from context, no query', async function () {
   let call = 0;
   const provider = { id: 'fake', default_model: function () { return 'm'; }, chat: async function () { call++; return call === 1 ? 'NO_SQL' : 'ai_grounded means context was injected.'; } };
-  const r = await ask.ask('what does ai_grounded mean?', { provider_impl: provider, schema: 'x', pool: fakePool([]) });
+  const r = await ask.ask('what does ai_grounded mean?', { provider_impl: provider, schema: 'x', pool: fake_pool([]) });
   assert.strictEqual(r.mode, 'definition');
   assert.match(r.answer, /grounded/i);
 });
 test('ask_sql: runs guarded user SQL directly (no LLM)', async function () {
-  const r = await ask.ask_sql('SELECT COUNT(*) n FROM ' + T, { pool: fakePool([{ n: 7 }]) });
+  const r = await ask.ask_sql('SELECT COUNT(*) n FROM ' + T, { pool: fake_pool([{ n: 7 }]) });
   assert.strictEqual(r.mode, 'sql');
   assert.match(r.sql, /LIMIT/i);
   assert.strictEqual(r.rows[0].n, 7);

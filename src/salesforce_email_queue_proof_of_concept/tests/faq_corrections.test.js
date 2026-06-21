@@ -78,10 +78,10 @@ test('corrections grounding respects scope (me / queue / global)', function () {
   corr.add({ note: 'GLOBAL fact', scope: 'global' });
   corr.add({ note: 'QUEUE fact', scope: 'queue', queue: 'Coaching' });
   corr.add({ note: 'MINE fact', scope: 'me', author: 'skip' });
-  const forSkipCoaching = corr.grounding_lines(12, { queue: 'Coaching', user: 'skip' }).join(' | ');
-  assert.ok(forSkipCoaching.indexOf('GLOBAL fact') >= 0 && forSkipCoaching.indexOf('QUEUE fact') >= 0 && forSkipCoaching.indexOf('MINE fact') >= 0);
-  const forOtherRankings = corr.grounding_lines(12, { queue: 'Rankings', user: 'other' }).join(' | ');
-  assert.ok(forOtherRankings.indexOf('GLOBAL fact') >= 0, 'global always applies');
-  assert.ok(forOtherRankings.indexOf('QUEUE fact') < 0, 'queue-scoped excluded on other queue');
-  assert.ok(forOtherRankings.indexOf('MINE fact') < 0, 'me-scoped excluded for other user');
+  const for_skip_coaching = corr.grounding_lines(12, { queue: 'Coaching', user: 'skip' }).join(' | ');
+  assert.ok(for_skip_coaching.indexOf('GLOBAL fact') >= 0 && for_skip_coaching.indexOf('QUEUE fact') >= 0 && for_skip_coaching.indexOf('MINE fact') >= 0);
+  const for_other_rankings = corr.grounding_lines(12, { queue: 'Rankings', user: 'other' }).join(' | ');
+  assert.ok(for_other_rankings.indexOf('GLOBAL fact') >= 0, 'global always applies');
+  assert.ok(for_other_rankings.indexOf('QUEUE fact') < 0, 'queue-scoped excluded on other queue');
+  assert.ok(for_other_rankings.indexOf('MINE fact') < 0, 'me-scoped excluded for other user');
 });

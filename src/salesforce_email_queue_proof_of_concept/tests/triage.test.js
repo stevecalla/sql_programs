@@ -33,6 +33,16 @@ test('classify_local does NOT treat an auto-reply as answered', function () {
   // auto-ack is the trailing message but automated -> not awaiting_reply; falls through to model (null)
   assert.strictEqual(r, null);
 });
+test('classify_local flags clear cold/marketing spam (no AI call)', function () {
+  const r = classify_local([{ incoming: true, from_address: 'seo@agency.biz', subject: 'Rank higher on Google',
+    text_new: 'We provide link building and guest post services to boost your traffic.' }]);
+  assert.strictEqual(r.status, 'spam');
+});
+test('classify_local lets a normal customer email fall through to the model', function () {
+  const r = classify_local([{ incoming: true, from_address: 'jane@gmail.com', subject: 'Renewal help',
+    text_new: 'I cannot renew my membership, the site errors out. Please help.' }]);
+  assert.strictEqual(r, null);
+});
 test('triage_case uses the model for a normal case', async function () {
   const conn = mock_conn([{ Id:'02s1', ParentId:'500', Incoming:true, MessageDate:'2026-06-01T10:00:00.000+0000', FromAddress:'coach@x.com', CreatedBy:{Name:'Coach'}, HasAttachment:false, TextBody:'Am I certified?' }]);
   let seen=null; const complete=async function(a){ seen=a; return 'NEEDS_INFO - need certification record'; };

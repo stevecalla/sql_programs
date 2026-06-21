@@ -19,7 +19,8 @@ web app (`server_salesforce_email_queue_8019.js`). **Nothing is ever written/sen
 - E — Express server + auth-gated JSON API ✅
 - F — single-page web UI ✅
 - G — per-queue FAQ + operator corrections ✅
-- Tests: 50 passing across 8 suites (unit + route-integration) (`node --test`, no network) ✅
+- Tests: unit + route-integration suites in `tests/` (`node --test`, no network), incl. `console.test.js`
+  for the /admin Operations registry/runner ✅
 
 Deferred (documented, not built): SF write-back (close/status/send), tier-3 queue-wide learning,
 per-user Salesforce identity (OAuth/Connected App).
@@ -36,10 +37,22 @@ sf/                 Salesforce reads (connection/plumbing reused from ../race_re
   text_clean.js     html_to_text, strip_quoted_history (pure, tested)
 ai/
   providers.js      OpenAI (default) + Anthropic via fetch; transport injectable for tests
+  models.js         SINGLE model registry (list/default_model/price_for/cost_for) — the one source of
+                    truth for triage/draft/ask AND the metrics Ask box. EDITABLE in /admin -> Settings
+                    (config.json `ai_models`: provider/model/label/is_default/price_in/price_out);
+                    falls back to BUILTIN (OpenAI tracks OPENAI_MODEL, Sonnet tracks ANTHROPIC_MODEL).
+                    Prices (USD/1M tok, seeded from vendor pages) drive ai_cost_usd. Served /api/ai/models.
+                    complete() returns {text,usage,model}; providers.norm_completion normalizes legacy
+                    string returns. Token+cost columns: ai_prompt_tokens/ai_completion_tokens/ai_cost_usd.
   prompt.js         SYSTEM (role + strict grounding rules) + respond/ask prompt builders
   context.js        build_context (tiers 1/2/4 + corrections); tier-3 deferred
   respond.js        respond_to_case -> verdict draft|need_info (conn + provider injected)
-  triage.js         triage_case -> status (answer_ready|draft_possible|needs_info|non_actionable)
+  triage.js         triage_case -> status (answer_ready|draft_possible|needs_info|spam|awaiting_reply|
+                    non_actionable). classify_local short-circuits (no AI): no-inbound/bounce ->
+                    non_actionable, clear cold/bulk spam (ai/spam.js) -> spam, trailing staff reply ->
+                    awaiting_reply. AI prompt gets SENDER + spam SIGNALS + strengthened SPAM criteria.
+  spam.js           CONSERVATIVE local spam heuristic (looks_like_spam/signal_summary) — cold-outreach
+                    OR opt-out+marketing OR many-links+marketing; tunable constants; no headers used.
   ask.js            ask_about_case
   extract.js        attachment bytes -> text (text native; pdf/docx/xlsx via OPTIONAL deps)
   faq.js            knowledge loader: ALL knowledge from the EXTERNAL context folder (via ../data_dir.js
@@ -59,8 +72,13 @@ web/
 src/
   cli.js            CLI: assist (guided), queues, statuses, thread, draft, ask, corrections
   admin.js          user management (add/list/remove)
+admin/              /admin Operations + Logs (ported from the transform; NOT lint-scanned, dir not in walk())
+  console_registry.js  allow-list catalog for the web Operations console (ids/web/klass/bin/argv/params/confirm)
+  console_runner.js    runs a registry item by id: validates params, spawns shell:false, SSE-streams, confirm guard
+  log_ring.js          in-memory ring of the server console (SSE tail) + `pm2 jlist` reader (read_pm2)
 menu.js             RRT-style launcher (color sections, prefs toggle, banners, per-suite test headers)
-tests/              node --test: text_clean, sf_threads, extract, ai, faq_corrections, auth
+tests/              node --test: text_clean, sf_threads, extract, ai, faq_corrections, auth, metrics,
+                    queue_access, analytics, ask, admin_users, spam, routes, console (admin ops), lint_snake_case
 data_dir.js         resolves the EXTERNAL data root (<determineOSPath()>/usat_email_queue) for ALL
                     runtime data: context/, auth.json, corrections.json. Nothing data-related in the repo.
 plans_and_notes/    plan.md, mvp_plan.md, salesforce_api_requirements.md, build_review.md, brief.docx
@@ -69,7 +87,23 @@ plans_and_notes/    plan.md, mvp_plan.md, salesforce_api_requirements.md, build_
 
 ## Conventions
 
-- **snake_case** for our identifiers (DOM/library names excepted).
+- **snake_case** is the standard for our own identifiers. Be strict where it's a data/contract surface
+  (DB columns, analytics event/prop names, `config.json` keys, model-registry fields like `price_in`,
+  and Node module functions/vars). Three pragmatic exceptions, by design — don't "fix" these:
+  (1) **DOM + library + platform APIs** stay as-is (`getElementById`, `addEventListener`, `toISOString`);
+  (2) the **JSON request contract** uses camelCase on the wire (`caseId`, `queueId`, `caseNumber`) and the
+  server maps it to snake_case for storage (`case_id`, `queue_id`) — renaming the wire keys would churn
+  client+server+tests for no gain;
+  (3) the **browser SPA (`index.html`) has legacy camelCase** render/UI functions (`renderLeft`,
+  `loadCases`, `triageVisible`); new *standalone logic* helpers there should be snake_case
+  (`clear_working_state`, `retriage_visible`, `ai_banner`), but a new function that mirrors a camelCase
+  family is allowed to match its siblings (e.g. `loadModels` next to `loadCases`/`loadCounts`).
+  **Enforced** by `tests/lint_snake_case.test.js` (ported from the transform): it scans our source
+  (comments/strings/`<style>` stripped) for camelCase and fails on any token not in `ALLOWED` (genuine
+  DOM/Node/jsforce/Express/mysql2/crypto/analytics-client names) or a harvested DOM element id. When it
+  flags a genuine library name, add it to `ALLOWED`; otherwise rename to snake_case. (It lints the app
+  modules + `web/public/index.html` + the server + tests; the `/metrics` & `/admin` HTML are not linted,
+  matching the transform, which doesn't lint its dashboard markup either.)
 - **Injectable dependencies** so everything is unit-testable with **no network**: SF functions take a
   `conn` (mocked in tests), `respond/ask` take `complete`/`conn`, providers take a `transport`.
 - Reads reuse `race_results_transform/sf` for the connection, `run_soql`, `fetch_content_version_bytes`,
@@ -116,6 +150,16 @@ identity, §12 AI tools, §13 API limits), `mvp_plan.md`, `plan.md` (full roadma
 - Web API additions: `/api/context` (GET list, POST upload base64), `/api/status-counts`, ask history
   param on `/api/ai/ask`; `/api/ai/triage` (per-case AI status). Admin: `node src/admin.js passwd <user>` (passwords are scrypt-hashed - never shown).
 - `/api/queues` also returns `instance_url` (for SF deep links); `/api/context` also returns `knowledge_chars` + `corrections` (grounding indicator). UI: queue search box, editable per-row status (mock), SOQL/Workbench card, auto-draft on `answer_ready`.
+- More API: `/api/me` (current user/role — also used by the server-rendered /metrics & /admin pages to
+  stamp their client-side view events), `/api/ai/models` (the shared model registry for the picker),
+  `/api/admin/config` (GET+POST `admin_landing` and the editable `ai_models` list), and
+  `/api/attachment/:cvid/raw` (streams attachment bytes through our SF session so images/PDFs render
+  inline without a separate Salesforce login — the in-app image viewer + PDF iframe use it).
+- UI workspace helpers (snake_case, `index.html`): `clear_working_state` (clears queue/status/checked +
+  view toggles; runs on sign-in AND sign-out so a fresh login is blank, prefs kept), `reset_app` (↻ Reset
+  = full blank slate, stays signed in), `retriage_visible` (↻ Refresh triage — enabled only after a run).
+  `session_id` is per-login (sessionStorage via `UsageMetrics.new_session()` at login); `visitor_id` stays
+  durable. A failed AI call shows an `error` triage badge + a dismissible provider-down banner (`aiBanner`).
 - Context storage is OUTSIDE the repo (member data never committed), via `data_dir.js` ->
   `utilities/determineOSPath()` -> `<base>/usat_email_queue/context/` (mirrors transform `src/data_dir.js`).
   `ai/faq.js` context fns are async (await `context_dir()`); overrides `EQ_CONTEXT_DIR`/`EQ_DATA_DIR`/
@@ -135,9 +179,31 @@ identity, §12 AI tools, §13 API limits), `mvp_plan.md`, `plan.md` (full roadma
   `src/queries/create_drop_db_table/query_create_salesforce_email_queue_events_table.js` (created on
   startup via `ensure_table`). **AI-call events are logged server-side** in `web/routes.js`
   (provider/action/verdict/latency/ok/grounded — no content); browser logs page/queue/thread/attachment/
-  correction/context/soql via `metrics_client.js` (loaded in `index.html`). **`?metrics_test=1`** stamps
-  `is_test=1`; purge via `/admin`, CLI, or `npm run email_queue_metrics_purge_test`. **No member PII**
-  (counts/enums + staff username + queue name only; no Case id). Writes hit only the local MySQL DB.
+  correction/context/soql/reply_copied via `metrics_client.js` (loaded in `index.html`).
+- **Per-case tracking + SF-write outcome**: opening an email sets a sticky `case_id`/`case_number`
+  context (browser via `M.setCase`; cleared on queue change) that rides on all later events; server
+  events get it from the request body. `/api/send` + `/api/status` log `send_email`/`status_change`
+  with `sf_action`/`sf_ok`/`sf_error`/`status_to` (mocked → sf_ok=0; flips to 1 when real). New columns
+  (`case_id, case_number, sf_action, sf_ok, sf_error, status_to`) migrate via `ensure_columns`. The
+  report excludes `is_test=1` from real stats, fixes acknowledge (counts `ai_action='acknowledge'`),
+  and adds per-case table (asks/corrections/context/sends/status/attachments), case funnel, SF-writes,
+  context-changes, corrections-by-scope, reply-copied. Browser visit fires AFTER sign-in (carries actor;
+  `metrics_client` `autoPageView:false`). `?metrics_test=1` is **per-load only** (not persisted) so a
+  user's real activity is never mis-flagged. **`?metrics_test=1`** stamps `is_test=1`; purge via `/admin`,
+  CLI, or `npm run email_queue_metrics_purge_test`. **No member PII** (counts/enums + staff username +
+  queue name + SF record ids only). Writes hit only the local MySQL DB.
+- **Environments + spend.** `env` column ('prod'|'sandbox') is stamped **server-side** on every row
+  (`log_event` + the `/api/event` wrapper read `config.json` `sf_env`). `/admin → Settings` switches the
+  Salesforce org: routes' `get_conn` calls `sf.sf_config({ is_test: sf_env()==='sandbox' })` (SF_DEV_* vs
+  SF_PROD_*) and `reset_conn()` on change. `render_mode_banner` shows a 🧪 SANDBOX (amber) + TEST (blue)
+  banner on the SPA **and** on `/metrics` + `/admin` (those two read `sf_env`/`show_test_banner` from
+  `/api/me`). SANDBOX is always on; the TEST banner is admin-toggleable (`/admin → Settings → Banners`,
+  `config.json` `show_test_banner`, default on, served via `/api/me` + `/api/admin/config`).
+  Test/QA AI calls cost real money, so `metrics_report` adds a **spend** block (real/test/total + by_env,
+  NOT is_test-filtered) shown on the dashboard. **Cost-aware purge:** `retention.purge_test(pool, table,
+  { protect_cost:true })` (email-queue passes it; transform doesn't) keeps test rows with `ai_cost_usd>0`
+  and deletes only the $0 noise, returning `kept_cost_rows`/`kept_cost_usd`. Heads-up: `sf_config`'s
+  `is_test` arg means "use sandbox creds" — unrelated to the analytics `is_test` QA flag.
 - **Queue allow-list** (`store/queue_access.js`, external `queue_access.json`, override
   `EQ_QUEUE_ACCESS_FILE`): general default + per-user overrides; admins bypass. Enforced in
   `/api/queues` (filter) + `/api/cases`/`/api/status-counts` (403). Managed via `/api/admin/queue-access`.
@@ -146,14 +212,18 @@ identity, §12 AI tools, §13 API limits), `mvp_plan.md`, `plan.md` (full roadma
   allow-listed table, blocked keywords stripped from comments/strings, row cap), `db.js` (read-only pool;
   prefers `ASK_DB_*`, else analytics creds), `tools.js`, `context.js` + `context/events_context.yaml`
   (email-queue schema grounding), `live.js` (live snapshot from build_report), `corrections.js` +
-  `ask_log.js` (MySQL tables `<APP>_ask_corrections` / `<APP>_ask_log`, created on startup), `models.js`,
-  `providers/{openai,anthropic}.js`. Server routes (require_admin): `/api/metrics-ask`, `-ask-models`,
+  `ask_log.js` (MySQL tables `<APP>_ask_corrections` / `<APP>_ask_log`, created on startup), `models.js`
+  (now a thin re-export of `ai/models.js` — one shared registry), and a `pick_provider` that delegates
+  to the shared `ai/providers.complete()` (the per-ask `providers/{openai,anthropic}.js` adapters were
+  removed — one transport for all AI). Server routes (require_admin): `/api/metrics-ask`, `-ask-models`,
   `-ask-correct`, `-ask-thread`. Dashboard has the Ask panel (model picker, SQL-mode toggle, chips,
   results table + chart, save-correction, history) + a "most recent active users" table
   (`recent_operators` in metrics_report). Consistent footer (App · Admin · Metrics, all `?metrics_test=1`)
   on all three pages.
 - New test suites: `tests/metrics.test.js`, `tests/queue_access.test.js`, `tests/analytics.test.js`,
-  `tests/ask.test.js` (71 tests / 12 files total). All pure (fake pool / temp JSON / injected provider —
-  no DB or network needed); `ask.test.js` covers the SQL guard + the ask() brain end to end.
+  `tests/ask.test.js`, `tests/console.test.js` (admin Operations registry/runner: ids, argv assembly,
+  path-traversal + confirm guards — never spawns). All pure (fake pool / temp JSON / injected provider —
+  no DB or network needed); `ask.test.js` covers the SQL guard + the ask() brain end to end. The admin
+  Operations + Logs HTTP routes are also covered in `tests/routes.test.js` (auth-gated, catalog, pm2).
 - Auth: `.env` accounts carry a **role** (mirrors transform `admin_store` env+store pattern):
   `SF_EMAIL_QUEUE_ADMIN_USER/PASS` -> `a
