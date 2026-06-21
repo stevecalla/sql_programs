@@ -10,6 +10,17 @@ const store = require('../auth/auth_store');
 const session = require('../auth/session');
 const data_dir = require('../data_dir');
 const { require_auth, require_admin } = require('../auth/require_auth');
+// /admin Operations + Logs (ported from the transform). console_* run curated menu commands with live
+// streaming output; log_ring mirrors the server console + reads pm2 status. All routes are admin-only.
+const console_registry = require('../admin/console_registry');
+const console_runner = require('../admin/console_runner');
+const log_ring = require('../admin/log_ring');
+const PM2_PROCESS_NAME = 'usat_salesforce_email_queue';
+// Open an SSE stream (Server-Sent Events) for the live Operations/Logs panels.
+function open_sse(res) {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+  if (res.flushHeaders) res.flushHeaders();
+}
 
 // Where an admin lands by default after signing in (configurable from /admin -> Settings; stored in
 // the external config.json). Non-admins always go to the app root ('/'). Valid values: /metrics | /admin | /.
@@ -69,6 +80,9 @@ function mount(app, deps) {
   // Server-side analytics logger (injected by the server, which owns the DB pool). No-op in tests /
   // when analytics is off, so mount(app) keeps working unchanged.
   const analytics = (deps && deps.analytics) || { log: function () {}, enabled: function () { return false; } };
+  // Mirror the server's console output into an in-memory ring so the /admin Logs panel can tail it.
+  // Idempotent (guarded inside log_ring), so safe to call here once at mount.
+  try { log_ring.install(console); } catch (e) { /* never block startup on logging */ }
   // Normalize a provider id to the label stored in analytics.
   function provider_label(p) { return p === 'anthropic' ? 'claude' : 'chatgpt'; }
   // Common case/session context attached to every server-logged event (so all activity after an email
@@ -442,6 +456,38 @@ function mount(app, deps) {
       try { queue_access.clear_user(user); } catch (e) { /* ignore */ }
       res.json({ ok: removed, error: removed ? null : 'no such user' });
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // ---- /admin Operations console (admin-gated). The client sends only { id, params, confirm }; the
+  // server assembles argv from the registry and spawns with no shell (see admin/console_runner.js). ----
+  app.get('/api/admin-console/commands', require_admin, function (req, res) {
+    res.json({ ok: true, sections: console_runner.commands(), runs: console_runner.list_runs(), audit: console_runner.recent_audit() });
+  });
+  app.post('/api/admin-console/run', require_admin, function (req, res) {
+    const b = req.body || {};
+    const item = console_registry.by_id(b.id);
+    if (!item) return res.json({ ok: false, error: 'unknown command' });
+    res.json(console_runner.start_run(item, b.params || {}, b.confirm));
+  });
+  app.get('/api/admin-console/stream/:run_id', require_admin, function (req, res) {
+    open_sse(res);
+    console_runner.subscribe(req.params.run_id, res);
+  });
+  app.post('/api/admin-console/kill/:run_id', require_admin, function (req, res) {
+    res.json(console_runner.kill_run(req.params.run_id));
+  });
+
+  // ---- /admin Logs panel: in-memory console ring (+ SSE tail) and pm2 process stats (read-only) ----
+  app.get('/api/admin-logs', require_admin, function (req, res) {
+    res.json({ ok: true, lines: log_ring.tail(req.query.n) });
+  });
+  app.get('/api/admin-logs/stream', require_admin, function (req, res) {
+    open_sse(res);
+    log_ring.subscribe(res);
+  });
+  app.get('/api/admin-pm2', require_admin, async function (req, res) {
+    try { res.json(Object.assign({ ok: true }, await log_ring.read_pm2(PM2_PROCESS_NAME))); }
+    catch (e) { res.json({ ok: false, under_pm2: false, error: (e && e.message) || 'pm2 error' }); }
   });
 
   // ---- Salesforce writes: DISABLED in this POC, but the ATTEMPT + outcome are tracked so you can see

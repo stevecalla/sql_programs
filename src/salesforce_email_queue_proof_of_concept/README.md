@@ -202,6 +202,16 @@ analytics core (`utilities/analytics/*`). Both are gated by the existing session
   only see/READ queues they're permitted (`/api/queues` filters; `/api/cases` 403s otherwise). Admins
   always see everything. Also a **🧪 Purge test rows** button and (in **Settings**) the **Salesforce
   environment** switch and the editable **AI models & pricing** list.
+  - **Operations** — an in-browser operator console (ported from the transform). It runs the same
+    `menu.js`-style commands (tests, read-only Salesforce checks, AI-assistant views, metrics, user
+    listing) with **live streaming output** and a **Kill** button. Security mirrors the transform: the
+    browser sends only a command **id** (never a shell string), the server rebuilds argv from an
+    allow-list (`admin/console_registry.js`) and spawns with `shell:false`, validates every form field,
+    and requires a **typed confirm** for destructive items (cleanup / purge-all). Interactive commands
+    (e.g. `assist`, add/reset user) are shown **greyed out** — run those from a terminal. Admin-only.
+  - **Logs** — read-only **pm2 process** tiles (status/uptime/restarts/CPU/memory via `pm2 jlist`;
+    degrades gracefully in dev) plus a **live server console** that tails the server's own output
+    (in-memory ring, `admin/log_ring.js`). No restart/stop controls — viewing only. Admin-only.
 
 **Environments (sandbox vs prod).** `/admin → Settings → Salesforce environment` selects which org the
 app reads from: **Production** (`SF_PROD_*`, live) or **Sandbox** (`SF_DEV_*`, `test.salesforce.com`,
@@ -298,5 +308,5 @@ genuine DOM/Node/jsforce/Express/mysql2/crypto/analytics-client names + DOM elem
 real library name, add it to that file's `ALLOWED`; otherwise rename to snake_case.
 
 `node menu.js test` (or `node --test tests/*.test.js`) runs all suites
-(includes `metrics`, `queue_access`, `analytics`, `ask`, `spam`, `lint_snake_case`):
+(includes `metrics`, `queue_access`, `analytics`, `ask`, `spam`, `routes`, `console` (admin ops), `lint_snake_case`):
 unit (text/threads/extract/ai/faq+context/auth) p

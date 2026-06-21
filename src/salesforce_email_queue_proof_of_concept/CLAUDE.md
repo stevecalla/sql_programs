@@ -19,7 +19,8 @@ web app (`server_salesforce_email_queue_8019.js`). **Nothing is ever written/sen
 - E — Express server + auth-gated JSON API ✅
 - F — single-page web UI ✅
 - G — per-queue FAQ + operator corrections ✅
-- Tests: 50 passing across 8 suites (unit + route-integration) (`node --test`, no network) ✅
+- Tests: unit + route-integration suites in `tests/` (`node --test`, no network), incl. `console.test.js`
+  for the /admin Operations registry/runner ✅
 
 Deferred (documented, not built): SF write-back (close/status/send), tier-3 queue-wide learning,
 per-user Salesforce identity (OAuth/Connected App).
@@ -71,8 +72,13 @@ web/
 src/
   cli.js            CLI: assist (guided), queues, statuses, thread, draft, ask, corrections
   admin.js          user management (add/list/remove)
+admin/              /admin Operations + Logs (ported from the transform; NOT lint-scanned, dir not in walk())
+  console_registry.js  allow-list catalog for the web Operations console (ids/web/klass/bin/argv/params/confirm)
+  console_runner.js    runs a registry item by id: validates params, spawns shell:false, SSE-streams, confirm guard
+  log_ring.js          in-memory ring of the server console (SSE tail) + `pm2 jlist` reader (read_pm2)
 menu.js             RRT-style launcher (color sections, prefs toggle, banners, per-suite test headers)
-tests/              node --test: text_clean, sf_threads, extract, ai, faq_corrections, auth
+tests/              node --test: text_clean, sf_threads, extract, ai, faq_corrections, auth, metrics,
+                    queue_access, analytics, ask, admin_users, spam, routes, console (admin ops), lint_snake_case
 data_dir.js         resolves the EXTERNAL data root (<determineOSPath()>/usat_email_queue) for ALL
                     runtime data: context/, auth.json, corrections.json. Nothing data-related in the repo.
 plans_and_notes/    plan.md, mvp_plan.md, salesforce_api_requirements.md, build_review.md, brief.docx
@@ -215,7 +221,9 @@ identity, §12 AI tools, §13 API limits), `mvp_plan.md`, `plan.md` (full roadma
   (`recent_operators` in metrics_report). Consistent footer (App · Admin · Metrics, all `?metrics_test=1`)
   on all three pages.
 - New test suites: `tests/metrics.test.js`, `tests/queue_access.test.js`, `tests/analytics.test.js`,
-  `tests/ask.test.js` (71 tests / 12 files total). All pure (fake pool / temp JSON / injected provider —
-  no DB or network needed); `ask.test.js` covers the SQL guard + the ask() brain end to end.
+  `tests/ask.test.js`, `tests/console.test.js` (admin Operations registry/runner: ids, argv assembly,
+  path-traversal + confirm guards — never spawns). All pure (fake pool / temp JSON / injected provider —
+  no DB or network needed); `ask.test.js` covers the SQL guard + the ask() brain end to end. The admin
+  Operations + Logs HTTP routes are also covered in `tests/routes.test.js` (auth-gated, catalog, pm2).
 - Auth: `.env` accounts carry a **role** (mirrors transform `admin_store` env+store pattern):
   `SF_EMAIL_QUEUE_ADMIN_USER/PASS` -> `a

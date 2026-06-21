@@ -72,6 +72,26 @@
   .foot{ text-align:center; color:var(--dim); font-size:12px; padding:16px; }
   .footer-link{ color:var(--dim); } .footer-link:hover{ color:var(--accent); }
   @media (max-width:760px){ .admin-shell{ flex-direction:column; } .admin-rail{ flex-direction:row; flex-wrap:wrap; } }
+  /* Operations + Logs panels (ported from the transform admin) */
+  .run-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .term{ background:#0b1020; color:#d6e2ff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; white-space:pre-wrap; word-break:break-word; overflow:auto; resize:vertical; min-height:240px; max-height:640px; }
+  :root[data-theme="dark"] .term{ background:#070b16; }
+  .term .l-err{ color:#ff9b9b; } .term .l-meta{ color:#8fd0ff; } .term .l-sys{ color:#ffd591; }
+  .ops-sec{ border:1px solid var(--line); border-radius:10px; margin-bottom:10px; overflow:hidden; }
+  .ops-sec > h3{ margin:0; padding:9px 12px; font-size:13px; cursor:pointer; background:var(--surface-2); display:flex; align-items:center; justify-content:space-between; }
+  .ops-sec .chev{ transition:transform .15s; } .ops-sec.collapsed .chev{ transform:rotate(-90deg); }
+  .ops-sec.collapsed .ops-item, .ops-sec.collapsed .ops-form{ display:none; }
+  .ops-item{ display:flex; align-items:center; gap:10px; padding:9px 12px; border-top:1px solid var(--line); }
+  .ops-item .meta{ flex:1; min-width:0; } .ops-item .lbl{ font-weight:600; font-size:14px; } .ops-item .dsc{ color:var(--dim); font-size:12px; }
+  .ops-item .ops-num{ color:var(--dim); font-weight:600; }
+  .ops-item .cli{ color:var(--dim); font:12px ui-monospace,Menlo,Consolas,monospace; display:none; margin-top:2px; }
+  .show-cli .ops-item .cli{ display:block; }
+  .ops-item.greyed{ opacity:.75; }
+  .ops-form{ display:flex; flex-wrap:wrap; gap:10px; padding:0 12px 12px; }
+  .ops-form label{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--dim); }
+  .badge{ font-size:11px; font-weight:700; border-radius:999px; padding:1px 8px; margin-left:6px; }
+  .badge.read{ background:rgba(46,117,182,.16); color:#2e75b6; } .badge.mutate{ background:rgba(224,162,0,.18); color:#b45309; }
+  .badge.destruct{ background:rgba(228,0,43,.14); color:var(--accent); } .badge.test{ background:rgba(127,127,127,.16); color:var(--ink); }
 </style>
 <link rel="stylesheet" href="/css/app.css">
 </head>
@@ -119,17 +139,31 @@
 
       <!-- OPERATIONS -->
       <section class="pane" data-view="operations">
-        <div class="ad-card"><h2>Operations</h2>
-          <div class="empty">The operator console (running menu commands with live output) is part of the transform admin
-            but is <b>not enabled in this read-only POC</b>. Use the CLI menu instead: <code>node menu.js</code>.</div>
+        <div class="ad-card">
+          <div class="run-head">
+            <h2 style="margin:0">Operations <span class="mut" style="text-transform:none;font-weight:400">— run menu commands here; output streams live</span></h2>
+            <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="toggleCli"> show $ commands</label>
+          </div>
+          <div class="mut" style="font-size:12px;margin-bottom:8px">Commands run server-side with no shell, by id from an allow-list (admin only). Read-only except the metrics purge/cleanup items, which ask to confirm. Interactive commands are greyed out — run those from a terminal.</div>
+          <div class="run-head">
+            <div class="mut" style="font-size:12px" id="runStatus">No command running.</div>
+            <button class="btn ghost sm" id="killBtn" type="button" style="display:none">■ Kill</button>
+          </div>
+          <div class="term" id="opsOut" aria-live="polite">Pick a command below to run it.</div>
         </div>
+        <div id="opsSections"><div class="mut">Loading commands…</div></div>
       </section>
 
       <!-- LOGS -->
       <section class="pane" data-view="logs">
-        <div class="ad-card"><h2>Logs</h2>
-          <div class="empty">Live server log / pm2 process panels are part of the transform admin and are
-            <b>not enabled in this POC</b>. Tail logs from your terminal or <code>pm2 logs usat_salesforce_email_queue</code>.</div>
+        <div class="ad-card">
+          <h2>Process (pm2)</h2>
+          <div class="tiles" id="pm2Tiles"><div class="mut">Loading…</div></div>
+        </div>
+        <div class="ad-card">
+          <div class="run-head"><h2 style="margin:0">Server console <span class="mut" style="text-transform:none;font-weight:400">— auto-streaming (drag the bottom edge to resize)</span></h2>
+            <span style="display:flex;align-items:center;gap:8px"><span id="logsLive" class="mut" style="font-size:12px">○ connecting…</span><button class="btn ghost sm" id="logsReload" type="button">↻ Reconnect</button></span></div>
+          <div class="term" id="logsOut" aria-live="polite">Connecting…</div>
         </div>
       </section>
 
@@ -375,6 +409,93 @@ document.getElementById('saveModels').onclick=async function(){
   var j=await postJSON('/api/admin/config',{ ai_models: arr });
   if(j.ok){ m.textContent='Saved '+(j.ai_models||[]).length+' model(s).'; m.className='msg ok'; renderModels(j.ai_models); } else { m.textContent=j.error||'error'; m.className='msg err'; }
 };
+
+// ---- Operations (ported from the transform admin; uses the POC getJSON/postJSON/esc helpers) ----
+function el(id){ return document.getElementById(id); }
+var commands_loaded=false, cur_es=null, cur_run=null, REG_BY_ID={};
+el('toggleCli').addEventListener('change',function(){ el('opsSections').classList.toggle('show-cli', this.checked); });
+function opsField(p){
+  var lab='<span>'+esc(p.label||p.name)+'</span>';
+  if(p.type==='enum'){ return '<label>'+lab+'<select data-p="'+esc(p.name)+'">'+(p.options||[]).map(function(o){return '<option value="'+esc(o.value)+'"'+(String(o.value)===String(p.default||'')?' selected':'')+'>'+esc(o.label)+'</option>';}).join('')+'</select></label>'; }
+  var type=p.type==='int'?'number':(p.type==='date'?'date':'text');
+  return '<label>'+lab+'<input data-p="'+esc(p.name)+'" type="'+type+'" value="'+esc(p.default||'')+'" placeholder="'+esc(p.label||'')+'"></label>';
+}
+function renderCommands(sections){
+  el('opsSections').innerHTML = sections.map(function(s){
+    return '<div class="ops-sec collapsed"><h3><span>'+esc(s.label)+'</span><span class="chev" aria-hidden="true">▾</span></h3>'+ s.items.map(function(it){
+      var greyed = it.web==='terminal';
+      var badge = it.klass&&it.klass!=='na' ? '<span class="badge '+it.klass+'">'+esc(it.klass)+'</span>' : '';
+      var right = greyed
+        ? '<span class="mut" style="font-size:12px;max-width:260px">'+esc(it.note||'terminal only')+'</span>'
+        : '<button class="btn sm" type="button" data-run="'+it.id+'">Run</button>';
+      var form = (it.web==='form'&&it.params&&it.params.length) ? '<div class="ops-form" id="form_'+it.id+'" style="display:none">'+it.params.map(opsField).join('')+'</div>' : '';
+      return '<div class="ops-item'+(greyed?' greyed':'')+'"><div class="meta"><div class="lbl"><span class="ops-num">'+it.id+'.</span> '+esc(it.label)+' '+badge+'</div><div class="dsc">'+esc(it.desc)+'</div>'+(it.cli?'<div class="cli">$ '+esc(it.cli)+'</div>':'')+'</div>'+right+'</div>'+form;
+    }).join('')+'</div>';
+  }).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('#opsSections [data-run]'),function(b){ b.addEventListener('click',function(){ opsRun(Number(b.getAttribute('data-run')), b); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('#opsSections .ops-sec > h3'),function(h){ h.addEventListener('click',function(){ h.parentNode.classList.toggle('collapsed'); }); });
+}
+function opsRun(id, btn){
+  var item=REG_BY_ID[id]; if(!item)return;
+  var form=el('form_'+id);
+  if(item.web==='form' && form && form.style.display==='none'){ form.style.display='flex'; btn.textContent='Run now'; return; }
+  var params={};
+  if(form) Array.prototype.forEach.call(form.querySelectorAll('[data-p]'),function(i){ params[i.getAttribute('data-p')]=i.value; });
+  var confirm_tok;
+  if(item.klass==='destruct'){ if(!window.confirm('This is destructive: '+item.label+'\nRun it now?'))return; confirm_tok=item.id; }
+  opsStream(id, params, confirm_tok, btn);
+}
+function opsAppend(evt){
+  var o=el('opsOut'); var div=document.createElement('div');
+  div.className = evt.stream==='err'?'l-err':(evt.stream==='meta'?'l-meta':(evt.stream==='sys'?'l-sys':''));
+  div.textContent=evt.line; o.appendChild(div); o.scrollTop=o.scrollHeight;
+}
+function opsStream(id, params, confirm_tok, btn){
+  if(cur_es){ try{cur_es.close();}catch(e){} cur_es=null; }
+  el('opsOut').textContent=''; el('runStatus').textContent='Starting…'; if(btn) btn.disabled=true;
+  postJSON('/api/admin-console/run',{id:id,params:params,confirm:confirm_tok}).then(function(j){
+    if(btn) btn.disabled=false;
+    if(!j.ok){ opsAppend({stream:'err',line:'✗ '+(j.error||'failed to start')}); el('runStatus').textContent='Failed to start.'; return; }
+    cur_run=j.run_id; el('runStatus').textContent='Running… (run '+j.run_id+')'; el('killBtn').style.display='';
+    var es=new EventSource('/api/admin-console/stream/'+encodeURIComponent(j.run_id)); cur_es=es;
+    es.addEventListener('line',function(ev){ opsAppend(JSON.parse(ev.data)); });
+    es.addEventListener('exit',function(ev){ var d=JSON.parse(ev.data); el('runStatus').textContent='Finished: '+d.status+(d.code!=null?(' (code '+d.code+')'):'')+(d.capped?' · output truncated':''); el('killBtn').style.display='none'; es.close(); cur_es=null; });
+    es.onerror=function(){ el('runStatus').textContent='Stream closed.'; el('killBtn').style.display='none'; try{es.close();}catch(e){} cur_es=null; };
+  }).catch(function(){ if(btn) btn.disabled=false; });
+}
+el('killBtn').addEventListener('click',function(){ if(cur_run) postJSON('/api/admin-console/kill/'+encodeURIComponent(cur_run),{}); });
+function loadCommands(){
+  if(commands_loaded)return; commands_loaded=true;
+  getJSON('/api/admin-console/commands').then(function(d){
+    (d.sections||[]).forEach(function(s){ s.items.forEach(function(it){ REG_BY_ID[it.id]=it; }); });
+    renderCommands(d.sections||[]);
+  }).catch(function(e){ commands_loaded=false; if(e.message!=='auth') el('opsSections').innerHTML='<div class="mut">Could not load commands.</div>'; });
+}
+
+// ---- Logs (pm2 status tiles + live server console; read-only) ----
+var logs_es=null, logs_started=false;
+function loadLogs(){
+  getJSON('/api/admin-pm2').then(function(d){
+    if(!d.under_pm2){ el('pm2Tiles').innerHTML='<div class="mut">Not running under pm2 ('+esc(d.reason||'dev mode')+') — the console tail below still works.</div>'; return; }
+    function up(ms){ if(ms==null)return '—'; var s=Math.floor(ms/1000),dd=Math.floor(s/86400),hh=Math.floor((s%86400)/3600); return dd+'d '+hh+'h'; }
+    function t(k,v){ return '<div class="tile"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>'; }
+    el('pm2Tiles').innerHTML =
+      t('Status', d.status==='online'?'<span class="pill yes">online</span>':'<span class="pill no">'+esc(d.status)+'</span>')+
+      t('Uptime', up(d.uptime_ms))+ t('Restarts', d.restarts)+
+      t('CPU', (d.cpu!=null?d.cpu+'%':'—'))+ t('Memory', d.memory_bytes!=null?Math.round(d.memory_bytes/1048576)+' MB':'—');
+  }).catch(function(){ el('pm2Tiles').innerHTML='<div class="mut">pm2 unavailable.</div>'; });
+  if(logs_started)return; logs_started=true;
+  el('logsOut').textContent='';
+  var es=new EventSource('/api/admin-logs/stream'); logs_es=es;
+  function live(on){ var s=el('logsLive'); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'#16a34a':'var(--dim)'; } }
+  es.onopen=function(){ live(true); };
+  es.addEventListener('line',function(ev){ var d=JSON.parse(ev.data); var o=el('logsOut'); var div=document.createElement('div'); div.className=d.level==='error'?'l-err':(d.level==='warn'?'l-sys':''); div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line; o.appendChild(div); while(o.childNodes.length>600)o.removeChild(o.firstChild); o.scrollTop=o.scrollHeight; });
+  es.onerror=function(){ live(false); /* browser auto-reconnects */ };
+}
+el('logsReload').addEventListener('click',function(){ logs_started=false; if(logs_es){try{logs_es.close();}catch(e){}} loadLogs(); });
+// Lazy-load each panel the first time its rail link is opened.
+var opsLink=document.querySelector('.admin-rail a[data-pane="operations"]'); if(opsLink) opsLink.addEventListener('click', loadCommands);
+var logsLink=document.querySelector('.admin-rail a[data-pane="logs"]'); if(logsLink) logsLink.addEventListener('click', loadLogs);
 
 loadStatus(); loadUsers(); loadAccess(); loadSettings();
 </script>

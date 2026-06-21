@@ -47,7 +47,7 @@ DateTimeFormat resolvedOptions timeZone formatToParts dayPeriod
 sendBeacon arrayBuffer randomUUID byteLength
 readFileSync writeFileSync readdirSync mkdirSync existsSync unlinkSync statSync isFile mkdtempSync readFile
 randomBytes scryptSync timingSafeEqual createHmac
-createInterface isTTY setEncoding removeListener unhandledRejection statusCode setHeader sendFile headersSent originalUrl
+createInterface isTTY setEncoding removeListener unhandledRejection statusCode setHeader sendFile headersSent originalUrl flushHeaders
 instanceUrl accessToken loginUrl searchRecords searchResult totalSize picklistValues maxFetch autoFetch
 createPool connectionLimit affectedRows insertId
 extractRawText

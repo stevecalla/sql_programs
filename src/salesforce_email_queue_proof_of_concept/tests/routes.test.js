@@ -117,3 +117,33 @@ test('show_test_banner round-trips and is exposed on /api/me + config', async fu
   const on = await req('POST', '/api/admin/config', { show_test_banner: true }, cookie);
   assert.strictEqual(on.json.show_test_banner, true);
 });
+
+// ---- /admin Operations + Logs (ported from the transform) ----
+test('admin-console routes are admin-gated', async function () {
+  assert.ok((await req('GET', '/api/admin-console/commands')).code >= 400, 'unauthenticated must be rejected');
+  assert.ok((await req('GET', '/api/admin-pm2')).code >= 400, 'unauthenticated must be rejected');
+});
+
+test('/api/admin-console/commands returns the allow-list catalog', async function () {
+  const r = await req('GET', '/api/admin-console/commands', null, cookie);
+  assert.strictEqual(r.code, 200);
+  assert.ok(r.json.ok);
+  assert.ok(Array.isArray(r.json.sections) && r.json.sections.length >= 1);
+  const items = r.json.sections.reduce(function (a, s) { return a.concat(s.items); }, []);
+  assert.ok(items.some(function (it) { return it.action === 'test_all' && it.web === 'run'; }), 'catalog has test_all');
+  assert.ok(items.every(function (it) { return typeof it.id === 'number' && it.label; }));
+  assert.ok(Array.isArray(r.json.runs) && Array.isArray(r.json.audit));
+});
+
+test('/api/admin-console/run rejects an unknown id without spawning', async function () {
+  const r = await req('POST', '/api/admin-console/run', { id: 999999 }, cookie);
+  assert.strictEqual(r.code, 200);
+  assert.strictEqual(r.json.ok, false);
+  assert.match(r.json.error, /unknown/i);
+});
+
+test('/api/admin-pm2 reports status (under_pm2:false in tests, no error)', async function () {
+  const r = await req('GET', '/api/admin-pm2', null, cookie);
+  assert.strictEqual(r.code, 200);
+  assert.strictEqual(typeof r.json.under_pm2, 'boolean');
+});
