@@ -116,8 +116,12 @@ Login (auth-gated) - 3 **resizable** panes:
   to tick off items, status / message-count / attachment chips.
 - **Thread:** sticky header (case # + count); newest-first, each message **collapsible** (date + role);
   a "hide quoted/repeated text" toggle to cut clutter; attachments openable.
-- **AI status (triage):** per-case badge (answer ready / draft possible / needs info / no action),
-  shown in the thread header and on queue rows; an "AI triage visible" button tags the listed cases.
+- **AI status (triage):** per-case badge (answer ready / draft possible / needs info / no action / spam /
+  awaiting reply), shown in the thread header and on queue rows; an "AI triage visible" button tags the
+  listed cases. Each badge's **tooltip** shows the reason **and the source** — "Local rule (no AI)" vs
+  "AI · <model>"; badges decided by a **local rule** (no inbound message, bounce/no-reply sender, or
+  awaiting the customer — no API call) are marked with a trailing **`*`**. Failed triage shows **⚠ Failed**
+  with the provider error on hover (never a fabricated status).
 - **AI panel:** Draft reply (verdict + **editable** draft you can edit/compose and "Send" - mocked,
   returns the not-enabled message); Ask with **preset chips** + running **history**; **mock** case-status
   update (not connected); **context upload** (drop files the AI will read).

@@ -402,15 +402,22 @@ function aiBanner(msg){ try{
   b.style.display='flex';
 }catch(e){} }
 function aiBannerClear(){ try{ var b=document.getElementById('eqAiBanner'); if(b) b.remove(); }catch(e){} }
-function triageBadge(t){ if(!t||!t.status) return el('span',{}); return el('span',{class:'tstat '+t.status, title:t.reason||''},[ TRIAGE_LABEL[t.status]||t.status ]); }
+function triageBadge(t){ if(!t||!t.status) return el('span',{});
+  // Source: t.ai===false => decided by a LOCAL rule (no API); t.ai===true => the AI model decided.
+  // Mark local-rule badges with a trailing * and explain the source + reason in the tooltip.
+  var isLocal = (t.ai===false);
+  var src = isLocal ? 'Local rule (no AI)' : (t.ai===true ? ('AI'+(t.ai_model?(' · '+t.ai_model):'')) : '');
+  var tip = (src ? src+' — ' : '') + (t.reason || '');
+  var label = (TRIAGE_LABEL[t.status]||t.status) + (isLocal ? ' *' : '');
+  return el('span',{class:'tstat '+t.status, title:tip},[ label ]); }
 async function triageOne(){ const cs=state.case; if(!cs) return; state.triage[cs.case_id]={status:'pending',reason:''}; renderThread(); renderCases();
-  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; aiBannerClear(); }
+  try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason,ai:j.ai,ai_model:j.ai_model}; aiBannerClear(); }
   catch(e){ state.triage[cs.case_id]={status:'error',reason:'Triage failed: '+(e&&e.message||'error')}; aiBanner((e&&e.message)||'error'); }
   renderThread(); renderCases(); update_triage_refresh();
   if(state.case && state.case.case_id===cs.case_id && state.triage[cs.case_id] && state.triage[cs.case_id].status==='answer_ready' && typeof state._doDraft==='function'){ state._doDraft(); } }
 async function triageVisible(){ const prog=$('#triProg'); const list=state.cases.slice(); let i=0;
   for(const cs of list){ i++; if(state.triage[cs.case_id] && state.triage[cs.case_id].status!=='pending'){ continue; } if(prog) prog.textContent='Triaging '+i+'/'+list.length+'...';
-    try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason}; }
+    try{ const j=await api('/api/ai/triage',{method:'POST',body:JSON.stringify({caseId:cs.case_id,caseNumber:(cs&&cs.case_number)||'',queue:state.queue.name,queueId:(state.queue&&state.queue.id)||'',provider:state.provider,model:state.model,_test:M.t,meta:M.meta()})}); state.triage[cs.case_id]={status:j.status,reason:j.reason,ai:j.ai,ai_model:j.ai_model}; }
     catch(e){ state.triage[cs.case_id]={status:'error',reason:'Triage failed: '+(e&&e.message||'error')}; aiBanner((e&&e.message)||'error'); }
     renderCases(); }
   if(prog) prog.textContent='Triage complete.'; update_triage_refresh(); }
@@ -489,6 +496,7 @@ function renderLeft(){
   var triRefresh = el('button',{id:'triRefresh',class:'btn ghost sm',title:'Clear and re-run triage for the visible cases (enabled after a triage run or a model change)',onclick:retriage_visible},['↻ Refresh']);
   triRefresh.disabled = !triage_refresh_enabled();
   left.appendChild(el('div',{style:'display:flex;gap:8px;align-items:center;margin:0 0 8px'},[ el('button',{class:'btn ghost sm',onclick:triageVisible},['AI triage visible']), triRefresh, el('span',{id:'triProg',class:'dim',style:'font-size:12px'},[]) ]));
+  left.appendChild(el('div',{class:'dim',style:'font-size:11px;margin:-4px 0 8px',title:'Badges marked with * were decided by a local rule (no AI / no API cost) — e.g. no inbound message, a bounce/no-reply sender, or awaiting the customer. Hover any badge for the reason and source.'},['* = local rule (no AI). Hover a badge for the reason.']));
   left.appendChild(el('div',{id:'caseList'},[]));
   renderCases();
 }
