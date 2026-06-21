@@ -13,7 +13,7 @@ function pick_provider(name) {
   return {
     id: id,
     default_model: function () { return providers.resolve_model(id); },
-    chat: function (o) { return providers.complete({ provider: id, model: o.model, system: o.system, prompt: o.user }); }
+    chat: function (o) { return providers.complete({ provider: id, model: o.model, system: o.system, prompt: o.user }).then(function (r) { return providers.norm_completion(r, o.model).text; }); }
   };
 }
 function format_history(history) {

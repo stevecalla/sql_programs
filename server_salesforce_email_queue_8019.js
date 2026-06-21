@@ -78,7 +78,7 @@ function eq_login_html(err, action, title, ctx, test){
   let banner = '', chips = '';
   if (ctx && ctx.user) {
     banner = '<div class="who">Signed in as <b>' + esc_login(ctx.user) + '</b> — this account has no <b>' + ttl + '</b> access.</div>';
-    chips = '<div class="chips" style="margin-top:14px"><a class="chip" href="' + logout + '">↩ Sign out</a></div>';
+    chips = '<div class="chips" style="margin-top:14px"><a class="chip" href="' + logout + tq + '">↩ Sign out</a></div>';
   }
   return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
     + '<title>Sign in — ' + ttl + '</title>'
@@ -133,7 +133,10 @@ async function init_metrics() {
       { name: 'sf_action', ddl: 'sf_action VARCHAR(16)', after: 'ai_error' },
       { name: 'sf_ok', ddl: 'sf_ok TINYINT(1)', after: 'sf_action' },
       { name: 'sf_error', ddl: 'sf_error VARCHAR(120)', after: 'sf_ok' },
-      { name: 'status_to', ddl: 'status_to VARCHAR(40)', after: 'sf_error' }
+      { name: 'status_to', ddl: 'status_to VARCHAR(40)', after: 'sf_error' },
+      { name: 'ai_prompt_tokens', ddl: 'ai_prompt_tokens INT', after: 'ai_reply_chars' },
+      { name: 'ai_completion_tokens', ddl: 'ai_completion_tokens INT', after: 'ai_prompt_tokens' },
+      { name: 'ai_cost_usd', ddl: 'ai_cost_usd DECIMAL(10,6)', after: 'ai_completion_tokens' }
     ]);
     // Ask-your-data audit log + operator corrections (mirrors 8018). Writable analytics pool.
     var _ask_log = require('./src/salesforce_email_queue_proof_of_concept/metrics/ask/ask_log');
@@ -217,17 +220,14 @@ function create_app() {
   // ---- /metrics dashboard + /admin hub (admin login = existing session with role 'admin') ----
   // is_test reflects the URL only (?metrics_test=1) — the nav/footer links to these pages carry it,
   // so admin testing is flagged, but a plain visit is real. Never forced.
-  app.get('/metrics', require_admin_page, function (req, res) {
-    log_event({ event_name: 'dashboard_view', actor: req.user, page_path: '/metrics', visitor_id: um_vid(req), is_test: qtest(req) });
-    res.type('html').sendFile(METRICS_HTML);
-  });
-  app.get('/admin', require_admin_page, function (req, res) {
-    log_event({ event_name: 'admin_view', actor: req.user, page_path: '/admin', visitor_id: um_vid(req), is_test: qtest(req) });
-    res.type('html').sendFile(ADMIN_HTML);
-  });
-  // Sign-out for the admin pages: clears the shared session cookie, logs sign_out, then back to login.
+  // dashboard_view / admin_view are logged CLIENT-side (the page loads /analytics/metrics_client.js and
+  // fires the event) so they carry the SAME rich metadata as app events — session_id, client tz, local
+  // time, viewport, theme — which the server can't see. is_test still comes from the page URL.
+  app.get('/metrics', require_admin_page, function (req, res) { res.type('html').sendFile(METRICS_HTML); });
+  app.get('/admin', require_admin_page, function (req, res) { res.type('html').sendFile(ADMIN_HTML); });
+  // Sign-out for the admin pages: clears the shared session cookie, then back to login. The sign_out
+  // event is logged CLIENT-side (full meta) by the page before it navigates here — so no server log.
   app.get(['/metrics/logout', '/admin/logout'], function (req, res) {
-    log_event({ event_name: 'sign_out', actor: (eq_current_user(req) || {}).user || '', page_path: req.path, visitor_id: um_vid(req), is_test: qtest(req) });
     res.setHeader('Set-Cookie', 'eq_session=; HttpOnly; Path=/; Max-Age=0');
     res.redirect('/');
   });

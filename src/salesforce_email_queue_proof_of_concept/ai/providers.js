@@ -29,6 +29,13 @@ function resolve_model(provider, model, env) {
   catch (e) { return model || ''; }
 }
 
+// complete() returns { text, usage, model }; injected test mocks may return a plain string. Normalize
+// to { text, usage, model } so callers can always read tokens + the resolved model uniformly.
+function norm_completion(raw, fallback_model) {
+  if (raw && typeof raw === 'object' && 'text' in raw) return { text: raw.text, usage: raw.usage || null, model: raw.model || fallback_model || null };
+  return { text: raw, usage: null, model: fallback_model || null };
+}
+
 async function safe_text(res) { try { return await res.text(); } catch (e) { return ''; } }
 
 // complete({ provider, model, system, prompt, env, transport })
@@ -41,8 +48,12 @@ async function complete(opts) {
   const transport = o.transport || (typeof fetch !== 'undefined' ? fetch : null);
   if (!api_key) { const e = new Error(p.label + ' API key missing (' + p.env_key + ')'); e.code = 'NO_API_KEY'; throw e; }
   if (!transport) throw new Error('No fetch transport available');
-  if (p.id === 'openai') return openai_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport });
-  return anthropic_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport });
+  const out = p.id === 'openai'
+    ? await openai_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport })
+    : await anthropic_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport });
+  // Uniform shape: { text, usage:{prompt_tokens,completion_tokens}|null, model }. Callers may treat
+  // the return as a string (legacy) or read .text/.usage/.model (cost tracking) — see ai/respond.js.
+  return { text: out.text, usage: out.usage || null, model: model };
 }
 
 function openai_user_content(prompt, images) {
@@ -60,7 +71,9 @@ async function openai_complete(a) {
   });
   if (!res.ok) throw new Error('OpenAI HTTP ' + res.status + ': ' + (await safe_text(res)));
   const j = await res.json();
-  return ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
+  const text = ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
+  const u = j.usage || {};
+  return { text: text, usage: { prompt_tokens: u.prompt_tokens || 0, completion_tokens: u.completion_tokens || 0 } };
 }
 
 function anthropic_user_content(prompt, images) {
@@ -78,7 +91,9 @@ async function anthropic_complete(a) {
   });
   if (!res.ok) throw new Error('Anthropic HTTP ' + res.status + ': ' + (await safe_text(res)));
   const j = await res.json();
-  return ((j.content && j.content[0] && j.content[0].text) || '').trim();
+  const text = ((j.content && j.content[0] && j.content[0].text) || '').trim();
+  const u = j.usage || {};
+  return { text: text, usage: { prompt_tokens: u.input_tokens || 0, completion_tokens: u.output_tokens || 0 } };
 }
 
-module.exports = { PROVIDERS, DEFAULT_PROVIDER, list_providers, complete, resolve_model };
+module.exports = { PROVIDERS, DEFAULT_PROVIDER, list_providers, complete, resolve_model, norm_completion };

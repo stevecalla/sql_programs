@@ -7,6 +7,20 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<!-- Usage analytics: fire dashboard_view CLIENT-side so it carries session_id + tz/local-time/viewport/theme,
+     the same rich metadata as app events. is_test comes from this page's URL (?metrics_test=1). -->
+<script src="/analytics/metrics_client.js"></script>
+<script>
+(function(){ var MT=false; try{ MT = new URLSearchParams(location.search).get('metrics_test')==='1'; }catch(e){}
+  try{ if(window.UsageMetrics) UsageMetrics.init({ app:'salesforce_email_queue', endpoint:'/api/event', allowList:['is_test','source','actor'], baseProps:{ source:'web', is_test: MT?1:0 }, autoPageView:false }); }catch(e){}
+  var actor='';
+  function view(){ try{ if(window.UsageMetrics) UsageMetrics.track('dashboard_view',{ actor: actor }); }catch(e){} }
+  try{ fetch('/api/whoami',{headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(j){ actor=(j&&j.user)||''; view(); }).catch(function(){ view(); }); }catch(e){ view(); }
+  // Sign-out logged CLIENT-side too (full meta), then navigate to clear the cookie.
+  function wireOut(){ var a=document.getElementById('signOut'); if(!a) return; a.addEventListener('click', function(ev){ ev.preventDefault(); try{ if(window.UsageMetrics) UsageMetrics.track('sign_out',{ actor: actor }); }catch(e){} location.href=a.getAttribute('href'); }); }
+  if(document.readyState!=='loading') wireOut(); else document.addEventListener('DOMContentLoaded', wireOut);
+})();
+</script>
 <style>
   :root{ --bg:#f4f6fb; --card:#fff; --ink:#1c2433; --dim:#6b7686; --line:#e2e7f0; --accent:#e4002b;
     --accent-soft:rgba(228,0,43,.08); --brand:#15284e; --surface-2:rgba(127,127,127,.05);
@@ -114,7 +128,7 @@
     <label class="mx-auto" title="When on, the dashboard reloads its data every 60 seconds so charts and tables stay current."><input type="checkbox" id="autoRefresh" checked> Auto-refresh</label>
     <button id="purgeTest" class="btn ghost mx-purge" type="button" hidden title="Delete ONLY the is_test=1 rows — real + demo data untouched">Purge test</button>
     <button id="themeToggle" class="btn ghost mx-head-theme" title="Toggle light or dark theme">☾ Dark</button>
-    <a id="signOut" class="btn ghost" href="/metrics/logout" title="Sign out">↩ Sign out</a>
+    <a id="signOut" class="btn ghost" href="/metrics/logout?metrics_test=1" title="Sign out">↩ Sign out</a>
   </div>
 
   <div class="mx-cards" id="cards"></div>
@@ -209,7 +223,7 @@
     <table id="tbl_recent"><thead><tr><th class="mx-rn">#</th><th>Actor</th><th>Last active (MTN)</th><th>Events</th><th>AI calls</th></tr></thead><tbody></tbody></table></div>
 
   <div class="mx-panel"><h2>Cases worked <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:400">— per email (activity after it was opened)</span></h2>
-    <div class="mx-tablewrap"><table id="tbl_cases" class="mx-utable"><thead><tr><th class="mx-rn">#</th><th>Case #</th><th>Queue</th><th>Actor</th><th>Events</th><th>AI calls</th><th>Asks</th><th>Drafts</th><th>Corr.</th><th>Context</th><th>Sends</th><th>Status chg</th><th>Attach</th><th>Last activity</th></tr></thead><tbody></tbody></table></div></div>
+    <div class="mx-tablewrap"><table id="tbl_cases" class="mx-utable"><thead><tr><th class="mx-rn">#</th><th>Case #</th><th>Queue</th><th>Actor</th><th>Events</th><th>AI calls</th><th>Asks</th><th>Drafts</th><th>Corr.</th><th>Context</th><th>Sends</th><th>Status chg</th><th>Attach</th><th>Est. cost</th><th>Last activity</th></tr></thead><tbody></tbody></table></div></div>
 
   <div class="mx-panel"><h2>Salesforce writes <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:400">— send + status change (received vs error)</span></h2>
     <div id="sfWrites" class="mx-health">—</div>
@@ -229,9 +243,13 @@
     <div class="mx-panel"><h2>AI errors</h2><table id="tbl_errors"><thead><tr><th class="mx-rn">#</th><th>Error</th><th>Count</th></tr></thead><tbody></tbody></table></div>
   </div>
 
+  <div class="mx-panel"><h2>AI cost by model <span class="tag">estimated</span></h2>
+    <div class="mx-tablewrap"><table id="tbl_cost" class="mx-utable"><thead><tr><th class="mx-rn">#</th><th>Model</th><th>Calls</th><th>Input tokens</th><th>Output tokens</th><th>Est. cost</th></tr></thead><tbody></tbody></table></div>
+    <div class="dim" style="margin-top:6px">Cost = tokens × per‑model price (set in <a href="/admin?metrics_test=1">Admin → Settings</a>). Models with no price show $0.</div></div>
+
   <div class="mx-panel"><h2>Attachments viewed</h2><table id="tbl_att"><thead><tr><th class="mx-rn">#</th><th>Type</th><th>Viewed</th></tr></thead><tbody></tbody></table></div>
 
-  <div class="app-footer"><span id="footText">Loading…</span> · <a href="/" class="footer-link">App</a> · <a href="/admin?metrics_test=1" class="footer-link">Admin</a> · <a href="/metrics?metrics_test=1" class="footer-link">Metrics</a> · <span id="footerClock"></span></div>
+  <div class="app-footer"><span id="footText">Loading…</span> · <a href="/?metrics_test=1" class="footer-link">App</a> · <a href="/admin?metrics_test=1" class="footer-link">Admin</a> · <a href="/metrics?metrics_test=1" class="footer-link">Metrics</a> · <span id="footerClock"></span></div>
 </div>
 
 <script>
@@ -284,6 +302,7 @@
       card('Avg latency', d.ai.avg_ms+' ms', 'max '+d.ai.max_ms+' ms') +
       card('Drafts ok', d.ai.ok, d.ai.failed+' failed') +
       card('Grounded', d.ai.grounded_pct+'%', d.ai.with_images+' w/ images') +
+      card('Est. cost', '$'+(d.ai.cost_usd||0).toFixed(4), (d.ai.prompt_tokens||0)+' in / '+(d.ai.completion_tokens||0)+' out tok') +
       card('Threads', d.threads_opened, '') +
       card('Acks', d.acknowledgements, 'holding replies') +
       card('Actors', d.operators, 'distinct staff') +
@@ -323,7 +342,7 @@
     var users = d.visitors || [];
     el('tbl_users').querySelector('tbody').innerHTML = users.length ? users.map(function(u,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td class="mono">'+esc(u.id)+'</td><td>'+esc(u.actor||'—')+((u.actors||0)>1?' <span class="tag" title="this browser had '+u.actors+' different logins">+'+(u.actors-1)+'</span>':'')+'</td><td>'+u.visits+'</td><td>'+u.threads+'</td><td>'+u.queues+'</td><td>'+esc(u.tz||'—')+'</td><td>'+esc(u.viewport||'—')+'</td><td>'+esc(u.last_seen||'—')+'</td><td>'+(u.returning?'<span class="tag">returning</span>':'<span class="tag new">new</span>')+'</td></tr>'; }).join('') : '<tr><td class="dim" colspan="10">no visitor activity in this window</td></tr>';
     var cs=(d.cases||[]);
-    el('tbl_cases').querySelector('tbody').innerHTML = cs.length ? cs.map(function(c,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td class="mono">'+esc(c.case_number||'—')+'</td><td>'+esc(c.queue||'—')+'</td><td>'+esc(c.actor||'—')+'</td><td>'+c.events+'</td><td>'+c.ai_calls+'</td><td>'+(c.asks||0)+'</td><td>'+c.drafts+'</td><td>'+(c.corrections||0)+'</td><td>'+(c.context_changes||0)+'</td><td>'+c.sends+'</td><td>'+c.status_changes+'</td><td>'+c.attachments+'</td><td>'+esc(c.last_seen||'—')+'</td></tr>'; }).join('') : '<tr><td class="dim" colspan="14">no case activity in this window</td></tr>';
+    el('tbl_cases').querySelector('tbody').innerHTML = cs.length ? cs.map(function(c,i){ return '<tr><td class="mx-rn">'+(i+1)+'</td><td class="mono">'+esc(c.case_number||'—')+'</td><td>'+esc(c.queue||'—')+'</td><td>'+esc(c.actor||'—')+'</td><td>'+c.events+'</td><td>'+c.ai_calls+'</td><td>'+(c.asks||0)+'</td><td>'+c.drafts+'</td><td>'+(c.corrections||0)+'</td><td>'+(c.context_changes||0)+'</td><td>'+c.sends+'</td><td>'+c.status_changes+'</td><td>'+c.attachments+'</td><td>$'+(Number(c.cost_usd)||0).toFixed(4)+'</td><td>'+esc(c.last_seen||'—')+'</td></tr>'; }).join('') : '<tr><td class="dim" colspan="15">no case activity in this window</td></tr>';
     var sf=d.sf||{sends:0,sends_ok:0,status_changes:0,status_ok:0};
     document.getElementById('sfWrites').textContent = 'Sends: '+sf.sends_ok+' / '+sf.sends+' accepted · Status changes: '+sf.status_ok+' / '+sf.status_changes+' accepted'+((sf.sends+sf.status_changes)===0?'  (none yet — SF writes are mocked in this build)':'');
     document.getElementById('tSfErr').innerHTML = (d.sf_errors&&d.sf_errors.length)? ('<table>'+'<thead><tr><th>Action</th><th>Error</th><th>Count</th></tr></thead><tbody>'+d.sf_errors.map(function(e){return '<tr><td>'+esc(e.action)+'</td><td>'+esc(e.error)+'</td><td>'+e.n+'</td></tr>';}).join('')+'</tbody></table>') : '';
@@ -332,6 +351,7 @@
     document.getElementById('repliesCopied').textContent = 'Replies copied: ' + (d.replies_copied||0);
     fillRows('tbl_ops', (d.top_operators||[]).map(function(o){ return [esc(o.actor||'(unknown)'), o.ai_calls, o.threads, esc(o.last_seen||'—')]; }));
     fillRows('tbl_errors', (d.ai_errors||[]).map(function(e){ return [esc(e.error), e.n]; }));
+    fillRows('tbl_cost', (d.by_model||[]).map(function(m){ return [esc(m.model||'?'), m.n, (m.prompt_tokens||0), (m.completion_tokens||0), '$'+(Number(m.cost_usd)||0).toFixed(4)]; }));
     fillRows('tbl_att', (d.attachments||[]).map(function(a){ return [esc(a.type), a.n]; }));
 
     el('lastData').querySelector('.mx-last-val').textContent = hl.latest_mtn ? (hl.latest_mtn + ' MTN') : 'No data yet';

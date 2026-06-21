@@ -45,6 +45,9 @@ const ai_fields = `
   ai_latency_ms INT,             -- round-trip time of the AI call
   ai_prompt_chars INT,           -- size of the assembled prompt (no content stored)
   ai_reply_chars INT,            -- size of the generated draft/answer (no content stored)
+  ai_prompt_tokens INT,          -- input tokens billed (from the provider usage block)
+  ai_completion_tokens INT,      -- output tokens billed (from the provider usage block)
+  ai_cost_usd DECIMAL(10,6),     -- estimated USD cost = tokens x per-model price (editable in /admin)
   ai_used_images TINYINT(1),     -- vision context attached?
   ai_grounded TINYINT(1),        -- knowledge/context injected?
   ai_correction_count INT,       -- operator corrections injected into grounding

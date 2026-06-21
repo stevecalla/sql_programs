@@ -36,9 +36,13 @@ sf/                 Salesforce reads (connection/plumbing reused from ../race_re
   text_clean.js     html_to_text, strip_quoted_history (pure, tested)
 ai/
   providers.js      OpenAI (default) + Anthropic via fetch; transport injectable for tests
-  models.js         SINGLE model registry (list/default_model) — the one source of truth for
-                    triage/draft/ask AND the metrics Ask box; OpenAI tracks OPENAI_MODEL,
-                    Claude Sonnet tracks ANTHROPIC_MODEL. Served via /api/ai/models.
+  models.js         SINGLE model registry (list/default_model/price_for/cost_for) — the one source of
+                    truth for triage/draft/ask AND the metrics Ask box. EDITABLE in /admin -> Settings
+                    (config.json `ai_models`: provider/model/label/is_default/price_in/price_out);
+                    falls back to BUILTIN (OpenAI tracks OPENAI_MODEL, Sonnet tracks ANTHROPIC_MODEL).
+                    Prices (USD/1M tok, seeded from vendor pages) drive ai_cost_usd. Served /api/ai/models.
+                    complete() returns {text,usage,model}; providers.norm_completion normalizes legacy
+                    string returns. Token+cost columns: ai_prompt_tokens/ai_completion_tokens/ai_cost_usd.
   prompt.js         SYSTEM (role + strict grounding rules) + respond/ask prompt builders
   context.js        build_context (tiers 1/2/4 + corrections); tier-3 deferred
   respond.js        respond_to_case -> verdict draft|need_info (conn + provider injected)

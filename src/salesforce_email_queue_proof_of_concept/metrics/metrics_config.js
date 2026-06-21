@@ -19,8 +19,8 @@ const COLUMNS = [
   'queue', 'queue_id', 'case_id', 'case_number', 'thread_msg_count', 'has_attachment',
   // AI flow
   'ai_action', 'ai_provider', 'ai_model', 'ai_verdict', 'ai_intent', 'ai_latency_ms',
-  'ai_prompt_chars', 'ai_reply_chars', 'ai_used_images', 'ai_grounded', 'ai_correction_count',
-  'ai_ok', 'ai_error',
+  'ai_prompt_chars', 'ai_reply_chars', 'ai_prompt_tokens', 'ai_completion_tokens', 'ai_cost_usd',
+  'ai_used_images', 'ai_grounded', 'ai_correction_count', 'ai_ok', 'ai_error',
   // Salesforce-write outcome (send reply / status change). Lets us see attempts + whether SF accepted
   // them or errored, even while these are mocked/disabled. No member content.
   'sf_action', 'sf_ok', 'sf_error', 'status_to',

@@ -107,3 +107,33 @@ test('resolve_model: explicit model wins, else env, else provider default', func
   assert.strictEqual(providers.resolve_model('openai', null, { OPENAI_MODEL: 'gpt-env' }), 'gpt-env', 'env override');
   assert.strictEqual(providers.resolve_model('anthropic', null, {}), 'claude-sonnet-4-6', 'provider default');
 });
+
+// --- token + cost tracking ---
+test('price_for returns seeded prices; cost_for multiplies tokens x price', function () {
+  const p = models.price_for('claude-sonnet-4-6');
+  assert.strictEqual(p.in, 3.00); assert.strictEqual(p.out, 15.00);
+  // 1,000,000 in @ $3 + 1,000,000 out @ $15 = $18.00
+  assert.strictEqual(models.cost_for('claude-sonnet-4-6', 1000000, 1000000), 18.0);
+  // unknown model -> $0 (until priced in /admin)
+  assert.strictEqual(models.cost_for('totally-unknown-model', 1000000, 1000000), 0);
+});
+test('complete() returns { text, usage, model } and captures OpenAI usage', async function () {
+  const transport = async function () { return { ok: true, json: async function () { return { choices: [{ message: { content: 'hi' } }], usage: { prompt_tokens: 11, completion_tokens: 7 } }; } }; };
+  const r = await providers.complete({ provider: 'openai', model: 'gpt-4o-mini', system: 'S', prompt: 'P', env: { OPENAI_API_KEY: 'k' }, transport: transport });
+  assert.strictEqual(r.text, 'hi');
+  assert.strictEqual(r.model, 'gpt-4o-mini');
+  assert.deepStrictEqual(r.usage, { prompt_tokens: 11, completion_tokens: 7 });
+});
+test('respond_to_case surfaces usage + ai_model (object mock) and stays back-compat (string mock)', async function () {
+  const conn = mock_conn([THREAD_ROUTE, HISTORY_ROUTE]);
+  const obj = async function () { return { text: 'VERDICT: DRAFT\n---\nHi.', usage: { prompt_tokens: 5, completion_tokens: 3 }, model: 'gpt-4o-mini' }; };
+  const r1 = await respond_to_case({ conn: conn, case_id: '500', complete: obj });
+  assert.strictEqual(r1.verdict, 'draft');
+  assert.deepStrictEqual(r1.usage, { prompt_tokens: 5, completion_tokens: 3 });
+  assert.strictEqual(r1.ai_model, 'gpt-4o-mini');
+  const str = async function () { return 'VERDICT: DRAFT\n---\nHi.'; };   // legacy string return
+  const r2 = await respond_to_case({ conn: conn, case_id: '500', model: 'm-fallback', complete: str });
+  assert.strictEqual(r2.verdict, 'draft');
+  assert.strictEqual(r2.usage, null);
+  assert.strictEqual(r2.ai_model, 'm-fallback');
+});

@@ -86,6 +86,14 @@ function mount(app, deps) {
     try { analytics.log(Object.assign(ctx(req, body), fields || {})); }
     catch (e) { /* analytics must never break the app */ }
   }
+  // Token + estimated-cost fields from an AI result's usage block. cost = tokens x per-model price
+  // (ai/models.js, editable in /admin). Tokens are 0 when the provider returns no usage (e.g. local triage).
+  function token_cost(r, body) {
+    const u = (r && r.usage) || {};
+    const pt = u.prompt_tokens || 0, ct = u.completion_tokens || 0;
+    const model = (r && r.ai_model) || ai.resolve_model(body && body.provider, body && body.model);
+    return { ai_prompt_tokens: pt, ai_completion_tokens: ct, ai_cost_usd: ai.cost_for(model, pt, ct) };
+  }
 
   app.post('/api/login', function (req, res) {
     const b = req.body || {};
@@ -186,6 +194,10 @@ function mount(app, deps) {
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
+  // Current signed-in user — lets the server-rendered /metrics + /admin pages stamp their client-side
+  // dashboard_view/admin_view events with the actor (the rest of the metadata is computed in-browser).
+  app.get('/api/whoami', require_auth, function (req, res) { res.json({ ok: true, user: req.user, role: req.role }); });
+
   // Selectable AI models for the in-app picker (triage / draft / ask). Single source of truth =
   // ai/models.js (same list the metrics Ask box uses via /api/metrics-ask-models).
   app.get('/api/ai/models', require_auth, function (req, res) {
@@ -200,13 +212,13 @@ function mount(app, deps) {
       const images = await faq.load_context_images(b.queue);
       const corr = corrections.grounding_lines(12, { queue: b.queue, user: req.user });
       const r = await ai.respond_to_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, model: b.model, fetch_attachments: true, faq: knowledge, images: images, corrections: corr });
-      log_ai(req, b, {
+      log_ai(req, b, Object.assign({
         ai_action: 'respond', ai_verdict: (r.verdict || '').toUpperCase(),
         ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
         ai_reply_chars: (r.body || '').length, ai_used_images: images && images.length ? 1 : 0,
         ai_grounded: (knowledge && knowledge.length) || (images && images.length) || (corr && corr.length) ? 1 : 0,
         ai_correction_count: (corr && corr.length) || 0, ai_ok: 1
-      });
+      }, token_cost(r, b)));
       res.json(Object.assign({ ok: true }, r));
     } catch (e) {
       log_ai(req, b, { ai_action: 'respond', ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) });
@@ -222,12 +234,12 @@ function mount(app, deps) {
       const images = await faq.load_context_images(b.queue);
       const corr = corrections.grounding_lines(12, { queue: b.queue, user: req.user });
       const r = await ai.ask_about_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, model: b.model, question: b.question, history: b.history, faq: knowledge, images: images, corrections: corr });
-      log_ai(req, b, {
+      log_ai(req, b, Object.assign({
         ai_action: action, ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
         ai_reply_chars: (r.answer || '').length, ai_used_images: images && images.length ? 1 : 0,
         ai_grounded: (knowledge && knowledge.length) || (images && images.length) || (corr && corr.length) ? 1 : 0,
         ai_correction_count: (corr && corr.length) || 0, ai_ok: 1
-      });
+      }, token_cost(r, b)));
       res.json(Object.assign({ ok: true }, r));
     } catch (e) {
       log_ai(req, b, { ai_action: action, ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) });
@@ -240,9 +252,9 @@ function mount(app, deps) {
     const t0 = Date.now();
     try {
       const r = await ai.triage_case({ conn: await get_conn(), case_id: b.caseId, provider: b.provider, model: b.model, faq: await faq.load_knowledge(b.queue) });
-      log_ai(req, b, { ai_action: 'triage', ai_intent: r.status || '', ai_verdict: r.status || '',
+      log_ai(req, b, Object.assign({ ai_action: 'triage', ai_intent: r.status || '', ai_verdict: r.status || '',
         ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.prompt_chars || 0,
-        ai_reply_chars: (r.reply_chars != null ? r.reply_chars : (r.reason || '').length), ai_ok: 1 });
+        ai_reply_chars: (r.reply_chars != null ? r.reply_chars : (r.reason || '').length), ai_ok: 1 }, token_cost(r, b)));
       res.json(Object.assign({ ok: true }, r));
     } catch (e) {
       log_ai(req, b, { ai_action: 'triage', ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) });
@@ -318,16 +330,40 @@ function mount(app, deps) {
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
-  // ---- /admin: settings (admin only) — currently just the admin default landing page ----
+  // ---- /admin: settings (admin only): admin default landing page + the editable AI model registry ----
   app.get('/api/admin/config', require_admin, function (req, res) {
-    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS });
+    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS, ai_models: ai.list_models() });
   });
   app.post('/api/admin/config', require_admin, function (req, res) {
     try {
-      const v = String((req.body && req.body.admin_landing) || '');
-      if (ADMIN_LANDINGS.indexOf(v) < 0) return res.status(400).json({ ok: false, error: 'invalid landing page' });
-      const cfg = data_dir.read_config() || {}; cfg.admin_landing = v; data_dir.write_config(cfg);
-      res.json({ ok: true, admin_landing: v });
+      const b = req.body || {};
+      const cfg = data_dir.read_config() || {};
+      // Admin default landing page (optional in this request).
+      if (b.admin_landing !== undefined) {
+        const v = String(b.admin_landing || '');
+        if (ADMIN_LANDINGS.indexOf(v) < 0) return res.status(400).json({ ok: false, error: 'invalid landing page' });
+        cfg.admin_landing = v;
+      }
+      // Editable model registry: array of { provider, model, label, is_default, price_in, price_out }.
+      if (b.ai_models !== undefined) {
+        if (!Array.isArray(b.ai_models)) return res.status(400).json({ ok: false, error: 'ai_models must be an array' });
+        const num = function (v) { const n = Number(v); return isFinite(n) && n >= 0 ? n : 0; };
+        const clean = b.ai_models.map(function (m) {
+          const model = String((m && m.model) || '').trim();
+          if (!model) return null;
+          return {
+            provider: (m && m.provider) === 'anthropic' ? 'anthropic' : 'openai',
+            model: model.slice(0, 60), label: String((m && m.label) || model).slice(0, 60),
+            is_default: !!(m && m.is_default), price_in: num(m && m.price_in), price_out: num(m && m.price_out)
+          };
+        }).filter(Boolean);
+        if (!clean.length) return res.status(400).json({ ok: false, error: 'at least one model is required' });
+        if (!clean.some(function (m) { return m.is_default; })) clean[0].is_default = true;
+        let seen = false; clean.forEach(function (m) { if (m.is_default && seen) m.is_default = false; else if (m.is_default) seen = true; });
+        cfg.ai_models = clean;
+      }
+      data_dir.write_config(cfg);
+      res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models() });
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 

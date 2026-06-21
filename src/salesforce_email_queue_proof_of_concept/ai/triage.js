@@ -34,7 +34,7 @@ async function triage_case(opts) {
   const thread = o.thread || await sf.get_thread(o.conn, o.case_id);
   const local = classify_local(thread);
   // Local (no-AI) classification: no model call, so no prompt/reply sizes.
-  if (local) return Object.assign({ case_id: o.case_id, prompt_chars: 0, reply_chars: (local.reason || '').length, ai: false }, local);
+  if (local) return Object.assign({ case_id: o.case_id, prompt_chars: 0, reply_chars: (local.reason || '').length, ai: false, usage: null, ai_model: null }, local);
   const inbound = thread.filter(function (m) { return m.incoming; });
   const latest = inbound[inbound.length - 1] || thread[0] || {};
   const human_answered = thread.some(function (m) { return !m.incoming && !m.automated; });
@@ -52,8 +52,9 @@ async function triage_case(opts) {
     o.faq ? ('\nFAQ / KNOWLEDGE AVAILABLE:\n' + String(o.faq).slice(0, 1500)) : ''
   ].join('\n');
   const complete = o.complete || providers.complete;
-  const text = await complete({ provider: o.provider, model: o.model, system: 'You are a terse triage classifier. Output only: TOKEN - reason.', prompt: prompt, env: o.env });
-  return Object.assign({ case_id: o.case_id, prompt_chars: prompt.length, reply_chars: (text || '').length, ai: true }, parse_triage(text));
+  const raw = await complete({ provider: o.provider, model: o.model, system: 'You are a terse triage classifier. Output only: TOKEN - reason.', prompt: prompt, env: o.env });
+  const c = providers.norm_completion(raw, o.model);
+  return Object.assign({ case_id: o.case_id, prompt_chars: prompt.length, reply_chars: (c.text || '').length, ai: true, usage: c.usage, ai_model: c.model }, parse_triage(c.text));
 }
 
 module.exports = { triage_case, parse_triage, classify_local, STATUSES };

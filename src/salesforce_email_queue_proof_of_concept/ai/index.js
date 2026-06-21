@@ -14,6 +14,7 @@ module.exports = {
   complete: providers.complete,
   resolve_model: providers.resolve_model,
   list_models: models.list, default_model: models.default_model,
+  price_for: models.price_for, cost_for: models.cost_for,
   DEFAULT_PROVIDER: providers.DEFAULT_PROVIDER,
   respond_to_case: respond.respond_to_case,
   triage_case: triage.triage_case, parse_triage: triage.parse_triage,

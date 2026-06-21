@@ -21,6 +21,7 @@ async function get_pool() {
 async function q(pool, sql, params) { const [rows] = await pool.query(sql, params || []); return rows; }
 function n0(v) { return v == null ? 0 : Number(v); }
 function pct(num, den) { return den ? Math.round(1000 * num / den) / 10 : 0; }
+function usd6(v) { return Math.round((Number(v) || 0) * 1e6) / 1e6; }   // USD cost, 6dp
 
 // Aggregate the last `days` days into structured data + the report contract.
 async function build_report(pool, opts) {
@@ -49,12 +50,13 @@ async function build_report(pool, opts) {
     'SUM(ai_ok=1) ok, SUM(ai_ok=0) failed, ' +
     'AVG(ai_latency_ms) avg_ms, MAX(ai_latency_ms) max_ms, ' +
     'SUM(ai_used_images=1) with_images, SUM(ai_grounded=1) grounded, ' +
-    'AVG(ai_reply_chars) avg_reply, SUM(ai_correction_count) corrections_used ' +
+    'AVG(ai_reply_chars) avg_reply, SUM(ai_correction_count) corrections_used, ' +
+    'SUM(ai_prompt_tokens) ptok, SUM(ai_completion_tokens) ctok, SUM(ai_cost_usd) cost ' +
     'FROM ' + AIW, A))[0] || {};
   const by_action = await q(pool, 'SELECT ai_action a, COUNT(*) n FROM ' + AIW + ' GROUP BY ai_action ORDER BY n DESC', A);
   const by_provider = await q(pool, 'SELECT ai_provider p, COUNT(*) n, AVG(ai_latency_ms) avg_ms FROM ' + AIW + ' GROUP BY ai_provider ORDER BY n DESC', A);
   const by_verdict = await q(pool, "SELECT ai_verdict v, COUNT(*) n FROM " + AIW + " AND ai_verdict IS NOT NULL AND ai_verdict<>'' GROUP BY ai_verdict ORDER BY n DESC", A);
-  const by_model = await q(pool, "SELECT ai_model m, COUNT(*) n FROM " + AIW + " AND ai_model IS NOT NULL AND ai_model<>'' GROUP BY ai_model ORDER BY n DESC LIMIT 8", A);
+  const by_model = await q(pool, "SELECT ai_model m, COUNT(*) n, SUM(ai_prompt_tokens) ptok, SUM(ai_completion_tokens) ctok, SUM(ai_cost_usd) cost FROM " + AIW + " AND ai_model IS NOT NULL AND ai_model<>'' GROUP BY ai_model ORDER BY cost DESC, n DESC LIMIT 8", A);
   const ai_errors = await q(pool, "SELECT ai_error e, COUNT(*) n FROM " + AIW + " AND ai_ok=0 AND ai_error IS NOT NULL AND ai_error<>'' GROUP BY ai_error ORDER BY n DESC", A);
 
   // ---- by queue / operator / time ----
@@ -114,6 +116,7 @@ async function build_report(pool, opts) {
     "SUM(event_name='ai_call' AND ai_action='respond' AND ai_verdict='DRAFT') drafts, " +
     "SUM(event_name='correction_added') corrections, SUM(event_name='context_changed') context_changes, " +
     "SUM(event_name='send_email') sends, SUM(event_name='status_change') status_changes, SUM(event_name='attachment_viewed') attachments, " +
+    "SUM(ai_cost_usd) cost, " +
     "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
     'FROM ' + W + " AND case_number IS NOT NULL AND case_number<>'' GROUP BY case_number ORDER BY MAX(created_at_mtn) DESC LIMIT 15", A);
   const cfun = (await q(pool,
@@ -139,7 +142,7 @@ async function build_report(pool, opts) {
     sf_errors: sf_errors.map(function (r) { return { action: r.a || '?', error: r.e, n: n0(r.n) }; }),
     context_changes: ctxchg.map(function (r) { return { action: r.a || '?', n: n0(r.n) }; }),
     replies_copied: replies_copied,
-    cases: cases.map(function (r) { return { case_number: String(r.cn || ''), case_id: String(r.cid || ''), queue: r.queue || '', actor: String(r.actor || ''), events: n0(r.events), ai_calls: n0(r.ai_calls), asks: n0(r.asks), drafts: n0(r.drafts), corrections: n0(r.corrections), context_changes: n0(r.context_changes), sends: n0(r.sends), status_changes: n0(r.status_changes), attachments: n0(r.attachments), last_seen: r.last_seen || null }; }),
+    cases: cases.map(function (r) { return { case_number: String(r.cn || ''), case_id: String(r.cid || ''), queue: r.queue || '', actor: String(r.actor || ''), events: n0(r.events), ai_calls: n0(r.ai_calls), asks: n0(r.asks), drafts: n0(r.drafts), corrections: n0(r.corrections), context_changes: n0(r.context_changes), sends: n0(r.sends), status_changes: n0(r.status_changes), attachments: n0(r.attachments), cost_usd: usd6(r.cost), last_seen: r.last_seen || null }; }),
     case_funnel: [
       { stage: 'Opened', n: n0(cfun.opened) },
       { stage: 'AI-assisted', n: n0(cfun.assisted) },
@@ -152,12 +155,13 @@ async function build_report(pool, opts) {
       success_pct: pct(n0(ai.ok), calls),
       avg_ms: Math.round(n0(ai.avg_ms)), max_ms: Math.round(n0(ai.max_ms)),
       with_images: n0(ai.with_images), grounded: n0(ai.grounded), grounded_pct: pct(n0(ai.grounded), calls),
-      avg_reply_chars: Math.round(n0(ai.avg_reply)), corrections_used: n0(ai.corrections_used)
+      avg_reply_chars: Math.round(n0(ai.avg_reply)), corrections_used: n0(ai.corrections_used),
+      prompt_tokens: n0(ai.ptok), completion_tokens: n0(ai.ctok), cost_usd: usd6(ai.cost)
     },
     by_action: by_action.map(function (r) { return { action: r.a || '?', n: n0(r.n) }; }),
     by_provider: by_provider.map(function (r) { return { provider: r.p || '?', n: n0(r.n), avg_ms: Math.round(n0(r.avg_ms)) }; }),
     by_verdict: by_verdict.map(function (r) { return { verdict: r.v, n: n0(r.n) }; }),
-    by_model: by_model.map(function (r) { return { model: r.m, n: n0(r.n) }; }),
+    by_model: by_model.map(function (r) { return { model: r.m, n: n0(r.n), prompt_tokens: n0(r.ptok), completion_tokens: n0(r.ctok), cost_usd: usd6(r.cost) }; }),
     ai_errors: ai_errors.map(function (r) { return { error: r.e, n: n0(r.n) }; }),
     by_queue: by_queue.map(function (r) { return { queue: r.qn, events: n0(r.events), ai_calls: n0(r.ai_calls), threads: n0(r.threads) }; }),
     top_operators: top_ops.map(function (r) { return { actor: String(r.a || ''), ai_calls: n0(r.ai_calls), threads: n0(r.threads), events: n0(r.events), last_seen: r.last_seen || null }; }),
@@ -202,7 +206,8 @@ async function build_report(pool, opts) {
         data.ai.calls + ' AI calls · ' + data.ai.success_pct + '% succeeded · avg ' + data.ai.avg_ms + ' ms',
         'providers: ' + prov_str,
         'verdicts: ' + verdict_str,
-        'grounded with context: ' + data.ai.grounded_pct + '% · ' + data.ai.with_images + ' used images · ' + data.ai.corrections_used + ' corrections applied'
+        'grounded with context: ' + data.ai.grounded_pct + '% · ' + data.ai.with_images + ' used images · ' + data.ai.corrections_used + ' corrections applied',
+        'tokens: ' + data.ai.prompt_tokens + ' in / ' + data.ai.completion_tokens + ' out · estimated cost: $' + data.ai.cost_usd.toFixed(4)
       ] },
       { heading: 'Where', lines: [
         'busiest queue: ' + (data.by_queue[0] ? data.by_queue[0].queue + ' (' + data.by_queue[0].ai_calls + ' AI calls)' : 'n/a'),

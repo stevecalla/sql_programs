@@ -39,9 +39,12 @@ Create a login first: set `.env` accounts (always valid, carry a role for future
 
 - `SF_PROD_*` — Salesforce credentials (reads run as the integration user).
 - `OPENAI_API_KEY` (default model `gpt-4o-mini`) and/or `ANTHROPIC_API_KEY` (Claude, default `claude-sonnet-4-6`).
-- Optional model overrides: `OPENAI_MODEL`, `ANTHROPIC_MODEL`. These feed the **one model registry**
+- Optional model overrides: `OPENAI_MODEL`, `ANTHROPIC_MODEL`. These seed the **one model registry**
   (`ai/models.js`) that drives every AI feature — triage, draft, ask, and the metrics Ask box.
-  Add or retire selectable models in that one file; the in-app picker and the Ask box both read it.
+  The registry (selectable models **and** their USD-per-1M-token prices) is **editable at runtime in
+  `/admin` → Settings** (saved to the external `config.json` as `ai_models`); the in-app picker and the
+  Ask box both read it. Prices feed cost tracking (`ai_cost_usd`) and are seeded from the vendors'
+  pricing pages — edit them when prices change. Models with no price simply show $0.
 - Web-app logins (`.env` accounts, always valid, each carries a role used for access control):
   - `SF_EMAIL_QUEUE_ADMIN_USER` / `SF_EMAIL_QUEUE_ADMIN_PASS` — role `admin` (also gates `/metrics` + `/admin`).
   - `SF_EMAIL_QUEUE_USER` / `SF_EMAIL_QUEUE_PASS` — role `user`.
@@ -143,7 +146,7 @@ only counts, enums, the operator's username, the queue name, and Salesforce reco
 | `sign_out` | operator signs out | — | (events / Ask) |
 | `send_email` | **Send reply** (mocked) | sf_action, sf_ok, sf_error | Salesforce-writes panel, Cases |
 | `status_change` | Case status changed (mocked) | status_to, sf_ok, sf_error | Salesforce-writes panel, Cases |
-| `dashboard_view` / `admin_view` | `/metrics` or `/admin` opened | — (always `is_test=1`) | excluded from real stats |
+| `dashboard_view` / `admin_view` | `/metrics` or `/admin` opened | logged client-side → full meta (session_id, tz, viewport, theme); `is_test=1` via the page URL | excluded from real stats |
 
 Every event carries `visitor_id` + `session_id` for end-to-end correlation: browser events from the
 analytics client, and server-logged events (`ai_call`, `send_email`, `status_change`) from ids the
@@ -151,6 +154,11 @@ client sends on the request (page navigations like `dashboard_view` read `visito
 `um_visitor_id` cookie). AI calls also record the resolved `ai_model` (e.g. `gpt-4o-mini`). The app
 header has **one model picker** (populated from `/api/ai/models` → `ai/models.js`); the chosen model is
 sent with every triage / draft / ask request, so `ai_model` reflects exactly what was selected.
+
+AI calls additionally record **token usage + estimated cost**: `ai_prompt_tokens` / `ai_completion_tokens`
+(from the provider's usage block) and `ai_cost_usd` (= tokens × the per-model price from the registry).
+The `/metrics` dashboard surfaces cost as a KPI, an **AI cost by model** table, and a per-case **Est. cost**
+column. Prices are editable in `/admin` → Settings, so cost is an estimate you control — never billed data.
 
 Salesforce writes (`send_email`, `status_change`) are **disabled** in this POC, so the **attempt** is
 recorded with `sf_ok=0` + a reason; when real writes are wired up, `sf_ok` flips to 1 on acceptance or
@@ -175,10 +183,14 @@ analytics core (`utilities/analytics/*`). Both are gated by the existing session
   only see/READ queues they're permitted (`/api/queues` filters; `/api/cases` 403s otherwise). Admins
   always see everything. Also a **🧪 Purge test rows** button.
 
-**Test mode + purge.** Open the app (or the pages) with **`?metrics_test=1`** to flag the whole
-browser session — every event is stamped `is_test=1` so test traffic is separable and **deletable**
-later via `/admin` → Purge test rows, the CLI (`node metrics/metrics_cli.js purge-test`), or
-`npm run email_queue_metrics_purge_test`.
+**Test mode + purge.** `is_test=1` is driven **only by the `?metrics_test=1` URL parameter** (never by
+session/role state) — when a page loads with it, every event from that browser session is stamped
+`is_test=1`. To make **all admin activity removable**, admins are wired to always carry it: after sign-in
+an admin is routed to their landing page **with `?metrics_test=1`**, and the cross-area nav links
+(App · Metrics · Admin) are **admin-only and all carry the param** — so an admin moving between pages,
+and signing out, stays flagged the whole time. Regular users get **no cross-area links and no param**,
+so their activity is always real. Test rows are separable and **deletable** later via `/admin` → Purge
+test rows, the CLI (`node metrics/metrics_cli.js purge-test`), or `npm run email_queue_metrics_purge_test`.
 
 **What's tracked.** AI-call events are logged **server-side** (provider, action, verdict, latency,
 success, grounded, images, corrections applied — never message content); the browser logs page views,

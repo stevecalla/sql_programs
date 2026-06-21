@@ -50,8 +50,9 @@ async function respond_to_case(opts) {
   const attachments_text = o.fetch_attachments ? await collect_attachment_text(o.conn, thread) : [];
   const context = build_context({ thread: thread, sender_history: sender_history, attachments_text: attachments_text, faq: o.faq, corrections: o.corrections });
   const complete = o.complete || providers.complete;
-  const text = await complete({ provider: o.provider, model: o.model, system: SYSTEM, prompt: build_respond_prompt(context), images: o.images, env: o.env });
-  return Object.assign({ context_chars: context.length, sender_email: sender_email, messages: thread.length }, parse_verdict(text));
+  const raw = await complete({ provider: o.provider, model: o.model, system: SYSTEM, prompt: build_respond_prompt(context), images: o.images, env: o.env });
+  const c = providers.norm_completion(raw, o.model);
+  return Object.assign({ context_chars: context.length, sender_email: sender_email, messages: thread.length, usage: c.usage, ai_model: c.model }, parse_verdict(c.text));
 }
 
 module.exports = { respond_to_case, parse_verdict, find_sender_email, collect_attachment_text };
