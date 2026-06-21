@@ -161,6 +161,21 @@ function mount(app, deps) {
     } catch (e) { err(res, e); }
   });
 
+  // Stream the raw attachment bytes through our authenticated session (so images render inline without
+  // the browser needing a separate Salesforce login). Used by the in-app image viewer.
+  app.get('/api/attachment/:cvid/raw', require_auth, async function (req, res) {
+    try {
+      const c = await get_conn(); const buf = await sf.fetch_content_version_bytes(c, req.params.cvid);
+      const ext = String(req.query.ext || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+        bmp: 'image/bmp', svg: 'image/svg+xml', tif: 'image/tiff', tiff: 'image/tiff', heic: 'image/heic', pdf: 'application/pdf' };
+      res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'inline');
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      res.send(buf);
+    } catch (e) { err(res, e); }
+  });
+
   app.get('/api/attachment/:cvid/table', require_auth, async function (req, res) {
     try {
       const c = await get_conn(); const buf = await sf.fetch_content_version_bytes(c, req.params.cvid);
