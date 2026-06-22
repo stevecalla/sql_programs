@@ -1,7 +1,7 @@
 /**
  * consolidate.js — Nickname view (c), nickname groups, + consolidated view (d).
  *
- * Additive layer (see README_NICKNAME.md). Does NOT touch the baseline detectors;
+ * Additive layer (see plans_and_notes/README_NICKNAME.md). Does NOT touch the baseline detectors;
  * it does its own "edge generation" over the COMPLETE rule-eligible pool (records
  * with gender + birthdate + composite ZIP; exact-duplicate records are NOT
  * removed), so the consolidated clusters can merge exact <-> fuzzy and

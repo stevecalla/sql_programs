@@ -148,7 +148,7 @@ from the row keys, all TEXT). REFRESHED each finder run (drop + recreate; no his
 the run table holds that). An empty view drops its table and creates nothing.
 `write_result_table` / `write_all_result_tables` in `src/database_results.js`. This is
 the explicit, no-abbreviation form of the `Duplicate_Run__c` / `Duplicate_Result__c`
-model sketched in `schema.md`. To maximize what lives in SQL, the finder also persists
+model sketched in `../schema.md`. To maximize what lives in SQL, the finder also persists
 two previously file-only review maps the same way: `salesforce_duplicate_zip_trim_mapping`
 (raw→trimmed composite ZIP) and `salesforce_duplicate_nickname_fire_mapping` (which
 nickname relationships fired). The **sweep `run`** logs a `run_type = 'sweep'` row to the
@@ -188,7 +188,7 @@ Phase 0  [DONE] Database scaffolding: src/database_snapshot.js (recreate table +
 Phase 1  [DONE] TUNING SWEEP on SQL. `snapshot` streams the fetched records into the
          table (originally with a per-snapshot meta table, since SUPERSEDED in Phase 3
          by the unified run table); `run`/`detail`/`diff` read records back from the DB;
-         `status` subcommand (menu item 17). The JSON snapshot is GONE — the database is
+         `status` subcommand (menu item 18). The JSON snapshot is GONE — the database is
          the snapshot. The matching engine is unchanged; a load->read round-trip test
          proves DB-sourced records give identical counts.
 Phase 2  [DONE, default ON] REAL FINDER sources records from the DB. step_1 (by default,

@@ -40,7 +40,7 @@ have no SOQL equivalent) on the same normalized values. Full query examples are 
 
 ## Local SQL backbone tables (`usat_sales_db`)
 
-When the SQL backbone is on (the default — see `README_SQL.md`), each run also writes to
+When the SQL backbone is on (the default — see `plans_and_notes/README_SQL.md`), each run also writes to
 these local MySQL tables in `usat_sales_db`, so as much of the output as possible lives
 in SQL (queryable and joinable), not just in files. Names are spelled out, no
 abbreviations.
@@ -57,6 +57,7 @@ abbreviations.
 | `salesforce_duplicate_consolidated_cluster` | refresh each finder run | reconciled clusters — mirrors `account_consolidated_duplicates_sf_import.csv` |
 | `salesforce_duplicate_zip_trim_mapping` | refresh each finder run | raw → trimmed composite-ZIP map — mirrors `zip_trim_mapping.csv` |
 | `salesforce_duplicate_nickname_fire_mapping` | refresh each finder run | which nickname relationships fired — mirrors `nickname_fire_mapping.csv` |
+| `salesforce_duplicate_merge_id_review` | refresh each finder run | merge ID review (QA) — one row per account, bucket `in_both`/`sf_only`/`exact_only`/`fuzzy_only`/`nickname_only`/`multi_signal`; mirrors `account_merge_id_review.csv`. See `plans_and_notes/README_MERGE_ID_REVIEW.md` |
 
 The six result tables carry the same `__c` import columns documented per file below
 (columns are inferred from the CSV-shaped rows and stored as `TEXT`). **"Refresh each

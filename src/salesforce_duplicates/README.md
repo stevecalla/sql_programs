@@ -30,7 +30,7 @@ The model is three single-signal review views (exact, fuzzy, nickname) plus one
 reconciled cluster view that merges exact + fuzzy(90) + nickname. The three baseline
 files above are left **byte-for-byte unchanged** (a regression-safe baseline); all
 new behavior is additive and review-only (no Salesforce import). See
-**`README_NICKNAME.md`** for the full design, the `nicknames-curated` package, and
+**`plans_and_notes/README_NICKNAME.md`** for the full design, the `nicknames-curated` package, and
 how cross-list overlap is managed.
 
 ## Project Structure
@@ -65,16 +65,21 @@ salesforce_duplicates/
     sweep.js                criteria tuning engine (expand_grid/run_profile/diff; pure)
     sweep_duplicates.js     duplicate criteria tuning CLI (snapshot/run/detail/diff)
     database_snapshot.js    SQL backbone: stream records into usat_sales_db + read back
-    database_results.js     run logbook + the 6 result tables (+ zip-trim/nickname-fire)
-    excel_output.js         one .xlsx workbook, one tab per view (exceljs)
+    database_results.js     run logbook + the 6 result tables (+ zip-trim/nickname-fire/
+                            merge-id-review)
+    excel_output.js         one .xlsx workbook, one tab per view, 7 tabs (exceljs)
+    merge_id_review.js      merge ID review (QA): compares our flagged accounts to the
+                            Salesforce merge IDs; buckets + duplicate-pair counts (pure
+                            builders + a DB report path)
     verify_database_snapshot.js  manual DB-loader smoke test (load/show/drop)
   tests/                    node:test unit suites (normalize, matcher, grouping, ids,
                             sf_rows, exact, fuzzy, zip_trim, file output, step_2 report,
                             report_service, step_timer, nicknames, consolidate, sweep,
                             database_snapshot, database_results, excel_output, exact_sql,
-                            sql_backbone_parity, salesforce, config)
-  README.md / README_SQL.md / README_TUNING.md / README_NICKNAME.md / README_MERGE.md
-  CLAUDE.md / schema.md
+                            sql_backbone_parity, merge_id_review, salesforce, config)
+  README.md / CLAUDE.md / schema.md
+  plans_and_notes/          README_SQL.md / README_TUNING.md / README_NICKNAME.md /
+                            README_MERGE.md / README_MERGE_ID_REVIEW.md
 ```
 
 `main()` in `step_1_find_duplicates.js` is now a thin orchestrator that calls
@@ -198,7 +203,7 @@ When the SQL backbone is on (the default — see below), the run also persists e
 six views into its own **database table** in `usat_sales_db`
 (`salesforce_duplicate_exact_group`, `_fuzzy_pair`, `_fuzzy_group`, `_nickname_pair`,
 `_nickname_group`, `_consolidated_cluster`), refreshed each run, plus a row in the run
-"logbook" (`salesforce_duplicate_detection_run`). See `README_SQL.md`.
+"logbook" (`salesforce_duplicate_detection_run`). See `plans_and_notes/README_SQL.md`.
 
 ## Salesforce Object Used
 
@@ -922,7 +927,7 @@ so every run (menu items 7-10 included) loads MySQL. The output is byte-for-byte
 identical to the in-memory path — `tests/sql_backbone_parity.test.js` proves the
 order-sensitive exact output survives the round-trip. Pass `--in-memory` to force the
 legacy in-memory path (no DB). This is the same table the tuning sweep uses, so one
-backbone serves both. See `README_SQL.md`.
+backbone serves both. See `plans_and_notes/README_SQL.md`.
 
 ```bash
 node step_1_find_duplicates.js --prod              # production, detection off the DB (default)
@@ -956,12 +961,12 @@ node src/sweep_duplicates.js run                 # replay config.js DEFAULT_SWEE
 node src/sweep_duplicates.js diff "baseline" "t88_nickON_z5_gbz"
 ```
 
-From the menu, the **DUPLICATE TUNING** section (items 14–17) runs the snapshot, the
+From the menu, the **DUPLICATE TUNING** section (items 15–19) runs the snapshot, the
 sweep, and opens the tuning folder. Production code is never touched — the matching
 runs through the self-contained engine in `src/sweep.js`. Output goes to a
 `usat_salesforce_duplicates_tuning` folder, a sibling of the output folder under the
 same external `/data` root (so it stays out of the Slack uploads and archive
-rotation). Full detail in **`README_TUNING.md`**.
+rotation). Full detail in **`plans_and_notes/README_TUNING.md`**.
 
 ## Slack Server
 
@@ -969,7 +974,7 @@ rotation). Full detail in **`README_TUNING.md`**.
 `server_*.js`, port 8017) exposes the duplicate output over Slack slash commands.
 It mirrors `server_slack_events.js` and reuses the shared Slack upload utilities.
 
-Run it from the repo root (or menu item 23):
+Run it from the repo root (or menu item 24):
 
 ```bash
 node server_salesforce_duplicates_8017.js
@@ -1288,7 +1293,7 @@ Potential improvements:
 6. [done] Nickname handling (Bill/William, Bob/Robert, Mike/Michael, etc.) via the
    `nicknames-curated` package, surfaced as a single-signal nickname view (c) plus a
    reconciled consolidated output (d) that unifies exact, fuzzy(90), and nickname
-   matches into clusters. Baseline files unchanged. See `README_NICKNAME.md`.
+   matches into clusters. Baseline files unchanged. See `plans_and_notes/README_NICKNAME.md`.
 7. Load results into MySQL for deeper review.
 8. Add Salesforce update logic only after manual review.
 ```
