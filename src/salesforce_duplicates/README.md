@@ -65,16 +65,20 @@ salesforce_duplicates/
     sweep.js                criteria tuning engine (expand_grid/run_profile/diff; pure)
     sweep_duplicates.js     duplicate criteria tuning CLI (snapshot/run/detail/diff)
     database_snapshot.js    SQL backbone: stream records into usat_sales_db + read back
-    database_results.js     run logbook + the 6 result tables (+ zip-trim/nickname-fire)
-    excel_output.js         one .xlsx workbook, one tab per view (exceljs)
+    database_results.js     run logbook + the 6 result tables (+ zip-trim/nickname-fire/
+                            merge-id-review)
+    excel_output.js         one .xlsx workbook, one tab per view, 7 tabs (exceljs)
+    merge_id_review.js      merge ID review (QA): compares our flagged accounts to the
+                            Salesforce merge IDs; buckets + duplicate-pair counts (pure
+                            builders + a DB report path)
     verify_database_snapshot.js  manual DB-loader smoke test (load/show/drop)
   tests/                    node:test unit suites (normalize, matcher, grouping, ids,
                             sf_rows, exact, fuzzy, zip_trim, file output, step_2 report,
                             report_service, step_timer, nicknames, consolidate, sweep,
                             database_snapshot, database_results, excel_output, exact_sql,
-                            sql_backbone_parity, salesforce, config)
+                            sql_backbone_parity, merge_id_review, salesforce, config)
   README.md / README_SQL.md / README_TUNING.md / README_NICKNAME.md / README_MERGE.md
-  CLAUDE.md / schema.md
+  README_MERGE_ID_REVIEW.md / CLAUDE.md / schema.md
 ```
 
 `main()` in `step_1_find_duplicates.js` is now a thin orchestrator that calls
@@ -956,7 +960,7 @@ node src/sweep_duplicates.js run                 # replay config.js DEFAULT_SWEE
 node src/sweep_duplicates.js diff "baseline" "t88_nickON_z5_gbz"
 ```
 
-From the menu, the **DUPLICATE TUNING** section (items 14–17) runs the snapshot, the
+From the menu, the **DUPLICATE TUNING** section (items 15–19) runs the snapshot, the
 sweep, and opens the tuning folder. Production code is never touched — the matching
 runs through the self-contained engine in `src/sweep.js`. Output goes to a
 `usat_salesforce_duplicates_tuning` folder, a sibling of the output folder under the
@@ -969,7 +973,7 @@ rotation). Full detail in **`README_TUNING.md`**.
 `server_*.js`, port 8017) exposes the duplicate output over Slack slash commands.
 It mirrors `server_slack_events.js` and reuses the shared Slack upload utilities.
 
-Run it from the repo root (or menu item 23):
+Run it from the repo root (or menu item 24):
 
 ```bash
 node server_salesforce_duplicates_8017.js

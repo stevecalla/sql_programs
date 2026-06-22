@@ -109,6 +109,15 @@ const NICKNAME_OUTPUT_FILE = "account_nickname_name_matches_sf_import.csv";
 const NICKNAME_GROUP_OUTPUT_FILE = "account_nickname_name_groups_sf_import.csv";
 const CONSOLIDATED_OUTPUT_FILE = "account_consolidated_duplicates_sf_import.csv";
 
+// --- Merge ID review (QA; see README_MERGE_ID_REVIEW.md) ---
+// Compares the accounts our tool flagged (the consolidated clusters) against the
+// accounts Salesforce has marked to merge (a non-blank merge ID), labeling each
+// account in_both / sf_only / exact_only / fuzzy_only / nickname_only / multi_signal.
+// Review-only (review-only QA, no Salesforce import), gated on ENABLE_NICKNAME_MATCHING
+// since it needs the consolidated clusters. Default on.
+const ENABLE_MERGE_ID_REVIEW = true;
+const MERGE_ID_REVIEW_OUTPUT_FILE = "account_merge_id_review.csv";
+
 // One Excel workbook with one tab per output view (exact / fuzzy pair / fuzzy group /
 // nickname pair / nickname group / consolidated), written alongside the CSVs each run.
 const EXCEL_OUTPUT_FILE = "account_duplicates_all_views.xlsx";
@@ -146,6 +155,8 @@ const RESULT_CONSOLIDATED_TABLE = "salesforce_duplicate_consolidated_cluster";
 // nickname-fire map. Refreshed each finder run like the six result tables.
 const RESULT_ZIP_TRIM_TABLE = "salesforce_duplicate_zip_trim_mapping";
 const RESULT_NICKNAME_FIRE_TABLE = "salesforce_duplicate_nickname_fire_mapping";
+// Merge ID review result table (one row per reviewed account). Refreshed each finder run.
+const RESULT_MERGE_ID_REVIEW_TABLE = "salesforce_duplicate_merge_id_review";
 
 // Rows per multi-row INSERT when streaming records into the snapshot table.
 const DB_INSERT_BATCH_SIZE = 2000;
@@ -217,6 +228,8 @@ module.exports = {
     NICKNAME_OUTPUT_FILE,
     NICKNAME_GROUP_OUTPUT_FILE,
     CONSOLIDATED_OUTPUT_FILE,
+    ENABLE_MERGE_ID_REVIEW,
+    MERGE_ID_REVIEW_OUTPUT_FILE,
     EXCEL_OUTPUT_FILE,
     ENABLE_EXCEL_OUTPUT,
     NICKNAME_FIRE_MAPPING_FILE,
@@ -234,6 +247,7 @@ module.exports = {
     RESULT_CONSOLIDATED_TABLE,
     RESULT_ZIP_TRIM_TABLE,
     RESULT_NICKNAME_FIRE_TABLE,
+    RESULT_MERGE_ID_REVIEW_TABLE,
     DB_INSERT_BATCH_SIZE,
     DB_LOAD_PROGRESS_EVERY,
     BULK_FETCH_PROGRESS_EVERY,

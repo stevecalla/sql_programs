@@ -57,6 +57,7 @@ abbreviations.
 | `salesforce_duplicate_consolidated_cluster` | refresh each finder run | reconciled clusters — mirrors `account_consolidated_duplicates_sf_import.csv` |
 | `salesforce_duplicate_zip_trim_mapping` | refresh each finder run | raw → trimmed composite-ZIP map — mirrors `zip_trim_mapping.csv` |
 | `salesforce_duplicate_nickname_fire_mapping` | refresh each finder run | which nickname relationships fired — mirrors `nickname_fire_mapping.csv` |
+| `salesforce_duplicate_merge_id_review` | refresh each finder run | merge ID review (QA) — one row per account, bucket `in_both`/`sf_only`/`exact_only`/`fuzzy_only`/`nickname_only`/`multi_signal`; mirrors `account_merge_id_review.csv`. See `README_MERGE_ID_REVIEW.md` |
 
 The six result tables carry the same `__c` import columns documented per file below
 (columns are inferred from the CSV-shaped rows and stored as `TEXT`). **"Refresh each

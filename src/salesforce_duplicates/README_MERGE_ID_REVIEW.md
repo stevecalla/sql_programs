@@ -1,6 +1,25 @@
-# Merge ID Review — Draft Plan
+# Merge ID Review — IMPLEMENTED
 
-**Status:** Draft plan (not built yet). Review-only feature.
+**Status:** Shipped. Review-only QA, runs every finder run (gated by
+`ENABLE_MERGE_ID_REVIEW`, default on; needs `ENABLE_NICKNAME_MATCHING` for the
+consolidated clusters).
+
+## How it runs (shipped behavior)
+
+- **Logic:** `src/merge_id_review.js` — pure builders (`build_merge_id_review_rows`,
+  `count_account_buckets`, `count_duplicate_pairs`) plus a DB report path
+  (`report_from_db`) behind an injectable executor. Account-row mapper
+  `to_sf_merge_id_review_row` lives in `src/sf_rows.js`.
+- **Every finder run** (`step_1`, after consolidation) produces, like the other views:
+  a timestamped CSV (`account_merge_id_review.csv`, archived), the DB table
+  `salesforce_duplicate_merge_id_review`, an Excel tab (`merge_id_review`), and an
+  end-of-run summary (account buckets + duplicate pairs). Computed in-memory off the
+  consolidated clusters + fetched records — no extra Salesforce query.
+- **Review on demand:** menu item 11 ("Review merge ID results") →
+  `node src/merge_id_review.js report` reads the latest run's tables back from the DB and
+  prints the account buckets, the duplicate pairs, and a preview to the console.
+- The SQL in this doc is the equivalent ad-hoc query you can run directly in SQL
+  Workbench; the shipped feature computes the same numbers in Node and persists them.
 
 ## Goal
 
@@ -333,3 +352,50 @@ exact 16,139 / fuzzy 333 / nickname 956 / total 17,398):
 
 - **Which "our list"?** The single consolidated file (recommended — simplest), or all
   the duplicate files combined.
+
+## Appendix — exploration queries (eyeball the tables)
+
+Quick ad-hoc SELECTs for poking at the underlying tables in SQL Workbench (peek rows,
+count totals, check which rows carry a merge ID, and read the review table the finder
+writes). Read-only.
+
+```sql
+USE usat_sales_db;
+
+-- Snapshot: every fetched account + its merge ID -----------------------------
+SELECT * FROM salesforce_account_duplicate_snapshot LIMIT 10;
+SELECT FORMAT(COUNT(*), 0) FROM salesforce_account_duplicate_snapshot LIMIT 10;
+
+-- Accounts Salesforce has marked to merge (merge ID filled in)
+SELECT * FROM salesforce_account_duplicate_snapshot WHERE salesforce_merge_id <> '';
+SELECT COUNT(*) FROM salesforce_account_duplicate_snapshot WHERE salesforce_merge_id <> '';
+
+-- Same name appearing under (possibly several) merge IDs
+SELECT last_name, first_name, GROUP_CONCAT(salesforce_merge_id), COUNT(*)
+FROM salesforce_account_duplicate_snapshot
+WHERE salesforce_merge_id <> ''
+GROUP BY 1, 2;
+
+-- Exact-group result table: peek, count, and which groups carry a merge ID ----
+SELECT * FROM salesforce_duplicate_exact_group LIMIT 10;
+SELECT FORMAT(COUNT(*), 0) FROM salesforce_duplicate_exact_group LIMIT 10;
+-- "carries a merge ID" = Merge_Ids__c isn't just blanks/semicolons
+SELECT * FROM salesforce_duplicate_exact_group
+WHERE Merge_ids__c IS NOT NULL AND TRIM(Merge_ids__c) <> '' AND REPLACE(TRIM(Merge_ids__c), ';', '') <> '';
+SELECT COUNT(*) FROM salesforce_duplicate_exact_group
+WHERE Merge_ids__c IS NOT NULL AND TRIM(Merge_ids__c) <> '' AND REPLACE(TRIM(Merge_ids__c), ';', '') <> '';
+
+-- Consolidated cluster table: peek, count, and which clusters carry a merge ID
+SELECT * FROM salesforce_duplicate_consolidated_cluster LIMIT 10;
+SELECT FORMAT(COUNT(*), 0) FROM salesforce_duplicate_consolidated_cluster LIMIT 10;
+SELECT * FROM salesforce_duplicate_consolidated_cluster
+WHERE Merge_ids__c IS NOT NULL AND TRIM(Merge_ids__c) <> '' AND REPLACE(TRIM(Merge_ids__c), ';', '') <> '';
+SELECT COUNT(*) FROM salesforce_duplicate_consolidated_cluster
+WHERE Merge_ids__c IS NOT NULL AND TRIM(Merge_ids__c) <> '' AND REPLACE(TRIM(Merge_ids__c), ';', '') <> '';
+
+-- Merge ID review table (what the finder writes; what menu item 11 reads back) -
+SELECT * FROM salesforce_duplicate_merge_id_review LIMIT 10;
+SELECT FORMAT(COUNT(*), 0) FROM salesforce_duplicate_merge_id_review LIMIT 10;
+-- account counts per bucket (the persisted equivalent of Phase 4a)
+SELECT Bucket__c, FORMAT(COUNT(*), 0) FROM salesforce_duplicate_merge_id_review GROUP BY 1;
+```

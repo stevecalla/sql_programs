@@ -28,6 +28,7 @@ const DIR = __dirname;
 const MAIN_SCRIPT = 'step_1_find_duplicates.js';
 const SWEEP_SCRIPT = 'src/sweep_duplicates.js';
 const VERIFY_SCRIPT = 'src/verify_database_snapshot.js';
+const MERGE_ID_REVIEW_SCRIPT = 'src/merge_id_review.js';
 const SERVER_PORT = 8017;
 
 // ── Colors ────────────────────────────────────────────────────────────────
@@ -128,59 +129,66 @@ const SECTIONS = [
     ],
   },
   {
+    label: 'MERGE ID QA — compare our duplicates to Salesforce merge IDs (read-only)',
+    color: GREEN,
+    items: [
+      { id: 11, label: 'Review merge ID results', desc: 'Latest run: account buckets + duplicate pairs + a preview, from the DB', action: 'merge_id_review', cli: `node ${MERGE_ID_REVIEW_SCRIPT} report` },
+    ],
+  },
+  {
     label: 'OUTPUT',
     color: GREEN,
     items: [
-      { id: 11,  label: 'Open output folder',  desc: `Most recent files (${OUTPUT_DIR_NAME})`, action: 'open_output' },
-      { id: 12, label: 'Open archive folder', desc: `Previous run (${ARCHIVE_DIR_NAME})`, action: 'open_archive' },
-      { id: 13, label: 'Open review folder',  desc: `ZIP trim mapping + run summary (${META_DIR_NAME})`, action: 'open_meta' },
+      { id: 12,  label: 'Open output folder',  desc: `Most recent files (${OUTPUT_DIR_NAME})`, action: 'open_output' },
+      { id: 13, label: 'Open archive folder', desc: `Previous run (${ARCHIVE_DIR_NAME})`, action: 'open_archive' },
+      { id: 14, label: 'Open review folder',  desc: `ZIP trim mapping + run summary (${META_DIR_NAME})`, action: 'open_meta' },
     ],
   },
   {
     label: 'DUPLICATE TUNING — compare duplicate counts across criteria (DB-backed, review-only)',
     color: YELLOW,
     items: [
-      { id: 14, label: 'Sweep snapshot — TEST',       desc: 'Fetch records ONCE (dev sandbox) and STREAM them into the snapshot table', action: 'sweep_snapshot_test', cli: `node ${SWEEP_SCRIPT} snapshot --test` },
-      { id: 15, label: 'Sweep snapshot — PRODUCTION', desc: 'Fetch records ONCE (production) and STREAM them into the snapshot table', action: 'sweep_snapshot_prod', cli: `node ${SWEEP_SCRIPT} snapshot --prod` },
-      { id: 16, label: 'Run sweep (grid over snapshot)', desc: 'Replay config.DEFAULT_SWEEP_GRID over the DB snapshot; prints summary + table, writes sweep_summary.csv', action: 'sweep_run', cli: `node ${SWEEP_SCRIPT} run` },
-      { id: 17, label: 'Sweep snapshot status (DB)', desc: 'Verify the DB snapshot: meta + live row count from the database', action: 'sweep_status', cli: `node ${SWEEP_SCRIPT} status` },
-      { id: 18, label: 'Open tuning folder',  desc: `Sweep CSVs (${TUNING_DIR_NAME})`, action: 'open_tuning' },
+      { id: 15, label: 'Sweep snapshot — TEST',       desc: 'Fetch records ONCE (dev sandbox) and STREAM them into the snapshot table', action: 'sweep_snapshot_test', cli: `node ${SWEEP_SCRIPT} snapshot --test` },
+      { id: 16, label: 'Sweep snapshot — PRODUCTION', desc: 'Fetch records ONCE (production) and STREAM them into the snapshot table', action: 'sweep_snapshot_prod', cli: `node ${SWEEP_SCRIPT} snapshot --prod` },
+      { id: 17, label: 'Run sweep (grid over snapshot)', desc: 'Replay config.DEFAULT_SWEEP_GRID over the DB snapshot; prints summary + table, writes sweep_summary.csv', action: 'sweep_run', cli: `node ${SWEEP_SCRIPT} run` },
+      { id: 18, label: 'Sweep snapshot status (DB)', desc: 'Verify the DB snapshot: meta + live row count from the database', action: 'sweep_status', cli: `node ${SWEEP_SCRIPT} status` },
+      { id: 19, label: 'Open tuning folder',  desc: `Sweep CSVs (${TUNING_DIR_NAME})`, action: 'open_tuning' },
     ],
   },
   {
     label: 'SQL BACKBONE — verify the Phase 0 loader against the local DB (step by step)',
     color: GREEN,
     items: [
-      { id: 19, label: 'Loader unit tests (no DB)', desc: 'tests/database_snapshot.test.js — logic only, no MySQL', action: 'run_tests', target: 'tests/database_snapshot.test.js', test_label: 'database_snapshot tests', cli: 'node --test tests/database_snapshot.test.js' },
-      { id: 20, label: 'Step 1 — Load synthetic rows', desc: `Drop+recreate ${SNAPSHOT_TABLE_NAME} in usat_sales_db and load 4 rows`, action: 'db_verify_load', cli: `node ${VERIFY_SCRIPT} load` },
-      { id: 21, label: 'Step 2 — Show rows + dup groups', desc: 'SELECT the rows and run the exact-duplicate GROUP BY (SQL output)', action: 'db_verify_show', cli: `node ${VERIFY_SCRIPT} show` },
-      { id: 22, label: 'Step 3 — Drop the table', desc: 'Remove the verification table (cleanup)', action: 'db_verify_drop', cli: `node ${VERIFY_SCRIPT} drop` },
+      { id: 20, label: 'Loader unit tests (no DB)', desc: 'tests/database_snapshot.test.js — logic only, no MySQL', action: 'run_tests', target: 'tests/database_snapshot.test.js', test_label: 'database_snapshot tests', cli: 'node --test tests/database_snapshot.test.js' },
+      { id: 21, label: 'Step 1 — Load synthetic rows', desc: `Drop+recreate ${SNAPSHOT_TABLE_NAME} in usat_sales_db and load 4 rows`, action: 'db_verify_load', cli: `node ${VERIFY_SCRIPT} load` },
+      { id: 22, label: 'Step 2 — Show rows + dup groups', desc: 'SELECT the rows and run the exact-duplicate GROUP BY (SQL output)', action: 'db_verify_show', cli: `node ${VERIFY_SCRIPT} show` },
+      { id: 23, label: 'Step 3 — Drop the table', desc: 'Remove the verification table (cleanup)', action: 'db_verify_drop', cli: `node ${VERIFY_SCRIPT} drop` },
     ],
   },
   {
     label: 'SERVER — Slack slash-command server (start, then hit from another terminal)',
     color: CYAN,
     items: [
-      { id: 23, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
-      { id: 24, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
-      { id: 25, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
-      { id: 26, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
-      { id: 27, label: 'Hit /scheduled — TEST FULL',  desc: 'is_test=true&full=true: dev sandbox, ALL records + Slack post', action: 'hit_scheduled_test_full', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true&full=true"` },
-      { id: 28, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
+      { id: 24, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
+      { id: 25, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
+      { id: 26, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
+      { id: 27, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
+      { id: 28, label: 'Hit /scheduled — TEST FULL',  desc: 'is_test=true&full=true: dev sandbox, ALL records + Slack post', action: 'hit_scheduled_test_full', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true&full=true"` },
+      { id: 29, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
     ],
   },
   {
     label: 'DISCOVERY — confirm Salesforce field names (read-only)',
     color: MAGENTA,
     items: [
-      { id: 29, label: 'Discover Salesforce fields', desc: 'Describe + Tooling SOQL for a field on an entity (prompts: entity / term / mode)', action: 'discover_fields', cli: 'node discover_account_fields.js --prod Account Merge' },
+      { id: 30, label: 'Discover Salesforce fields', desc: 'Describe + Tooling SOQL for a field on an entity (prompts: entity / term / mode)', action: 'discover_fields', cli: 'node discover_account_fields.js --prod Account Merge' },
     ],
   },
   {
     label: 'PREFERENCES',
     color: MAGENTA,
     items: [
-      { id: 30, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
+      { id: 31, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
     ],
   },
 ];
@@ -347,6 +355,12 @@ async function handle_action(item, rl) {
       const answer = (await prompt(rl, c(YELLOW, '  This triggers a PRODUCTION run + Slack post on the running server. Continue? (y/N): '))).trim().toLowerCase();
       if (answer !== 'y' && answer !== 'yes') { console.log(c(DIM, '  Cancelled.')); break; }
       await hit_endpoint('GET', '/scheduled-salesforce-duplicates?is_test=false');
+      break;
+    }
+    case 'merge_id_review': {
+      const label = 'merge ID review (latest run, from DB)';
+      const code = await run_node([MERGE_ID_REVIEW_SCRIPT, 'report'], label);
+      report(code, label, 'completed');
       break;
     }
     case 'discover_fields': {

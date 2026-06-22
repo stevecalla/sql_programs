@@ -388,6 +388,38 @@ function to_sf_nickname_group_row({
     };
 }
 
+// Merge ID review (QA) — one row per reviewed account. Review-only; columns use the
+// __c naming convention for consistency with the other views. See README_MERGE_ID_REVIEW.md.
+function to_sf_merge_id_review_row({
+    row,
+    run_id,
+    created_at_mtn,
+    created_at_utc,
+    source_file_name,
+}) {
+    return {
+        Run_Id__c: run_id,
+        External_Id__c: make_external_id(run_id, "merge_id_review", row.account_id),
+        Match_Type__c: "merge_id_review",
+        Source_File_Name__c: source_file_name,
+        Review_Status__c: REVIEW_STATUS_DEFAULT,
+
+        Row_Number__c: row.row_num,
+        Account__c: row.account_id,
+        Bucket__c: row.bucket,
+        Salesforce_Merge_Id__c: row.salesforce_merge_id,
+        Which_List__c: row.which_list,
+        First_Name__c: row.first_name,
+        Last_Name__c: row.last_name,
+        Consolidated_Group_Key__c: row.cluster_key,
+        Merge_Id_Review_Logic__c:
+            "account compared to its Salesforce merge ID: in_both / sf_only, or named by which signal flagged it (exact/fuzzy/nickname/multi)",
+
+        Created_At_Mtn__c: created_at_mtn,
+        Created_At_Utc__c: created_at_utc,
+    };
+}
+
 module.exports = {
     to_sf_exact_row,
     to_sf_fuzzy_pair_row,
@@ -395,4 +427,5 @@ module.exports = {
     to_sf_nickname_row,
     to_sf_consolidated_row,
     to_sf_nickname_group_row,
+    to_sf_merge_id_review_row,
 };

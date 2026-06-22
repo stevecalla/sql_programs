@@ -24,10 +24,13 @@ const {
     NICKNAME_OUTPUT_FILE,
     NICKNAME_GROUP_OUTPUT_FILE,
     CONSOLIDATED_OUTPUT_FILE,
+    ENABLE_MERGE_ID_REVIEW,
+    MERGE_ID_REVIEW_OUTPUT_FILE,
     EXCEL_OUTPUT_FILE,
     ENABLE_EXCEL_OUTPUT,
     RESULT_ZIP_TRIM_TABLE,
     RESULT_NICKNAME_FIRE_TABLE,
+    RESULT_MERGE_ID_REVIEW_TABLE,
 } = require("./config");
 
 const { colorize, log_info, log_success, log_warn, log_error } = require("./src/log");
@@ -36,7 +39,7 @@ const { build_fuzzy_groups } = require("./src/grouping");
 const { make_run_id } = require("./src/ids");
 const { create_step_timer } = require("./src/step_timer");
 const { add_timestamp_to_filename, write_csv, archive_previous_output_files, write_run_summary, write_zip_trim_mapping, write_nickname_fire_mapping } = require("./src/output_files");
-const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row, to_sf_nickname_row, to_sf_nickname_group_row, to_sf_consolidated_row } = require("./src/sf_rows");
+const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row, to_sf_nickname_row, to_sf_nickname_group_row, to_sf_consolidated_row, to_sf_merge_id_review_row } = require("./src/sf_rows");
 const { fetch_salesforce_accounts } = require("./src/salesforce");
 const { materialize_via_db, open_local_executor } = require("./src/database_snapshot");
 const { write_run, write_all_result_tables, write_result_table } = require("./src/database_results");
@@ -46,6 +49,7 @@ const { detect_exact_duplicates } = require("./src/exact");
 const { detect_exact_duplicates_via_local_db } = require("./src/exact_sql");
 const { run_fuzzy_matching } = require("./src/fuzzy");
 const { build_match_edges, build_nickname_groups, build_consolidated_clusters, summarize_clusters } = require("./src/consolidate");
+const { build_merge_id_review_rows, count_account_buckets, count_duplicate_pairs, log_merge_id_review } = require("./src/merge_id_review");
 const { log_run_summary, log_zip_trim_summary, log_contribution_summary } = require("./src/summaries");
 
 async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is_partial = resolve_is_partial(), use_sql_backbone = resolve_use_sql_backbone()) {
@@ -253,6 +257,11 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
     let nickname_group_sf_import = [];
     let consolidated_sf_import = [];
     let fire_summary = [];
+    let clusters = [];
+    // Merge ID review (QA) — hoisted for the Excel + DB writers and the summary.
+    let merge_id_review_sf_import = [];
+    let merge_id_bucket_counts = null;
+    let merge_id_pair_counts = null;
 
     if (ENABLE_NICKNAME_MATCHING) {
         log_info("Building nickname view + consolidated duplicate file...", script_start_ms);
@@ -306,7 +315,7 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
         log_success(`Nickname groups written (${nickname_group_count.toLocaleString()} groups): ${nickname_group_output_path}`, script_start_ms);
         timer.stage_done("nickname groups");
 
-        const clusters = build_consolidated_clusters(edges, record_lookup);
+        clusters = build_consolidated_clusters(edges, record_lookup);
         consolidated_cluster_count = clusters.length;
         cluster_summary = summarize_clusters(clusters);
 
@@ -329,6 +338,29 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
         timer.stage_done("consolidation");
     }
 
+    // Merge ID review (QA): compare our flagged accounts (the consolidated clusters)
+    // to the accounts Salesforce has marked to merge (non-blank merge ID). Needs the
+    // clusters, so it is gated on ENABLE_NICKNAME_MATCHING too. See README_MERGE_ID_REVIEW.md.
+    if (ENABLE_NICKNAME_MATCHING && ENABLE_MERGE_ID_REVIEW) {
+        log_info("Building merge ID review...", script_start_ms);
+        const merge_id_review_output_file = add_timestamp_to_filename(MERGE_ID_REVIEW_OUTPUT_FILE, file_timestamp);
+        const review_rows = build_merge_id_review_rows(clusters, result.records);
+        merge_id_bucket_counts = count_account_buckets(review_rows);
+        merge_id_pair_counts = count_duplicate_pairs(clusters);
+        merge_id_review_sf_import = review_rows.map((row) =>
+            to_sf_merge_id_review_row({
+                row,
+                run_id,
+                created_at_mtn,
+                created_at_utc,
+                source_file_name: merge_id_review_output_file,
+            })
+        );
+        const merge_id_review_output_path = await write_csv(output_dir, merge_id_review_output_file, merge_id_review_sf_import);
+        log_success(`Merge ID review written (${review_rows.length.toLocaleString()} accounts): ${merge_id_review_output_path}`, script_start_ms);
+        timer.stage_done("merge id review");
+    }
+
     // Phase 3: one Excel workbook with one tab per view, written beside the CSVs.
     if (ENABLE_EXCEL_OUTPUT) {
         const excel_file = add_timestamp_to_filename(EXCEL_OUTPUT_FILE, file_timestamp);
@@ -340,8 +372,9 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
             { name: "nickname_pair", rows: nickname_sf_import },
             { name: "nickname_group", rows: nickname_group_sf_import },
             { name: "consolidated", rows: consolidated_sf_import },
+            { name: "merge_id_review", rows: merge_id_review_sf_import },
         ]);
-        log_success(`Excel workbook written (6 tabs): ${excel_path}`, script_start_ms);
+        log_success(`Excel workbook written (7 tabs): ${excel_path}`, script_start_ms);
         timer.stage_done("excel workbook");
     }
 
@@ -398,8 +431,10 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
                 // Maximize SQL: persist the ZIP-trim + nickname-fire maps too (refresh each run).
                 await write_result_table(executor, RESULT_ZIP_TRIM_TABLE, zip_trim.mapping);
                 await write_result_table(executor, RESULT_NICKNAME_FIRE_TABLE, fire_summary);
+                // Merge ID review (QA) result table (refresh each run).
+                await write_result_table(executor, RESULT_MERGE_ID_REVIEW_TABLE, merge_id_review_sf_import);
                 const total_result_rows = Object.values(result_counts).reduce((a, b) => a + b, 0);
-                log_success(`Run logged to ${RUN_TABLE_NAME}; ${total_result_rows.toLocaleString()} rows across 6 result tables + ZIP-trim + nickname-fire tables.`, script_start_ms);
+                log_success(`Run logged to ${RUN_TABLE_NAME}; ${total_result_rows.toLocaleString()} rows across 6 result tables + ZIP-trim + nickname-fire + merge-id-review tables.`, script_start_ms);
             } finally {
                 try { pool.end(); } catch (_) { /* ignore */ }
             }
@@ -481,6 +516,12 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
             nickname_both: consolidation_counters.pairs_matched_both,
             cluster_summary,
         });
+    }
+
+    // Merge ID review (QA) summary — account buckets + duplicate pairs.
+    if (merge_id_bucket_counts) {
+        console.log("");
+        log_merge_id_review(merge_id_bucket_counts, merge_id_pair_counts);
     }
 }
 

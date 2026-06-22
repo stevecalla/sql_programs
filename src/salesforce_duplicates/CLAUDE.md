@@ -61,11 +61,24 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   `usat_Salesforce_Merge_Id__pc` (Person-Account `__pc` view of Contact's `__c`) as
   `Merge_Id_1/2__c` (pairs) or `Merge_Ids__c` (groups/clusters). This DID edit the
   baseline `exact.js`/`fuzzy.js`/`grouping.js` (a deliberate schema add, no longer
-  byte-for-byte unchanged). `discover_account_fields.js` (menu item 29) confirms the
+  byte-for-byte unchanged). `discover_account_fields.js` (menu item 30) confirms the
   field name. The query **auto-detects** the field (Account DESCRIBE) and includes it
   only if the org has it (`build_account_soql` / `account_field_exists` in
   `salesforce.js`), so an org without it still runs — merge columns just come out
   blank. See `README_MERGE.md`.
+
+## Merge ID review (QA) — IMPLEMENTED (see `README_MERGE_ID_REVIEW.md`)
+
+Compares the accounts our tool flagged (the consolidated clusters) against the accounts
+Salesforce has marked to merge (a non-blank `salesforce_merge_id`), labeling each account
+`in_both` / `sf_only` / `exact_only` / `fuzzy_only` / `nickname_only` / `multi_signal`.
+Two summaries: account counts per bucket, and duplicate-pair counts (the per-signal link
+counts from the clusters). Additive + gated by `ENABLE_MERGE_ID_REVIEW` (default on; needs
+`ENABLE_NICKNAME_MATCHING` for the clusters). Logic in `src/merge_id_review.js` (pure
+builders + a DB report path); mapper `to_sf_merge_id_review_row` in `sf_rows.js`. The
+finder writes it as a 7th view (CSV `account_merge_id_review.csv`, DB table
+`salesforce_duplicate_merge_id_review`, Excel tab, end-of-run summary). Menu item 11
+(`node src/merge_id_review.js report`) prints the latest run's review from the DB.
 
 ## Entry points
 
@@ -81,9 +94,10 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   on, else the config default. See `README_SQL.md`.
 - `menu.js` — interactive launcher (`node menu.js`): run tests, syntax check, run
   the finder in TEST or PRODUCTION mode, open the output/archive folders, run the
-  DUPLICATE TUNING sweep (items 14–18, incl. snapshot status; the sweep CLI also has
-  detail/diff subcommands), verify the SQL backbone loader step by step (items 19–22),
-  start the Slack server. Items are numbered sequentially 1–30; renumber on insert.
+  review merge IDs (item 11), DUPLICATE TUNING sweep (items 15–19, incl. snapshot status;
+  the sweep CLI also has detail/diff subcommands), verify the SQL backbone loader step by
+  step (items 20–23), start the Slack server (item 24). Items are numbered sequentially
+  1–31; renumber on insert.
 - `src/sweep_duplicates.js` — duplicate criteria tuning CLI (review-only). `snapshot`
   fetches once and STREAMS the records into the local DB (table
   `salesforce_account_duplicate_snapshot`) and logs a `snapshot` row to the unified run
@@ -131,7 +145,8 @@ salesforce_duplicates/
                             pairwise compare (+ its two summary loggers)
     zip_trim.js             build_zip_trim_mapping: reviewable raw -> trimmed
                             composite-ZIP map + counts (pure)
-    sf_rows.js              to_sf_exact/pair/group_row — Salesforce import schema mapping
+    sf_rows.js              to_sf_exact/pair/group_row (+ to_sf_merge_id_review_row) —
+                            Salesforce import schema mapping
     output_files.js         add_timestamp_to_filename, write_csv, archive rotation,
                             write_run_summary + write_zip_trim_mapping (meta folder)
     salesforce.js           jsforce connect + Account query (only networked module);
@@ -160,13 +175,19 @@ salesforce_duplicates/
                             ALSO the six per-view result tables (write_result_table /
                             write_all_result_tables) — exact_group / fuzzy_pair / fuzzy_group
                             / nickname_pair / nickname_group / consolidated_cluster, plus
-                            zip_trim_mapping + nickname_fire_mapping, refreshed (drop+recreate)
-                            each finder run. The sweep `run` also logs a run row. Injectable
-                            executor (testable).
+                            zip_trim_mapping + nickname_fire_mapping + merge_id_review,
+                            refreshed (drop+recreate) each finder run. The sweep `run` also
+                            logs a run row. Injectable executor (testable).
     excel_output.js         Phase 3: write_workbook — one .xlsx (config.EXCEL_OUTPUT_FILE)
-                            with one tab per view, written beside the CSVs via exceljs.
+                            with one tab per view (7 tabs incl. merge_id_review), via exceljs.
+    merge_id_review.js      Merge ID review (QA): build_merge_id_review_rows (Phase 3:
+                            one row per account, bucket in_both/sf_only/exact_only/
+                            fuzzy_only/nickname_only/multi_signal) + count_account_buckets
+                            (4a) + count_duplicate_pairs (4b) — pure, off the consolidated
+                            clusters + records. report_from_db reads the persisted tables
+                            back for the menu (CLI: `report`). See README_MERGE_ID_REVIEW.md.
     verify_database_snapshot.js  manual step-by-step DB loader smoke test
-                            (load/show/drop; menu items 20-22) — synthetic rows into
+                            (load/show/drop; menu items 21-23) — synthetic rows into
                             usat_sales_db, then the exact-duplicate GROUP BY
   tests/                    node:test unit tests:
     normalize.test.js  matcher.test.js  grouping.test.js  ids.test.js
@@ -179,6 +200,7 @@ salesforce_duplicates/
     sql_backbone_parity.test.js  finder order-preservation (load_sequence) parity
     database_results.test.js  unified run table + 6 result tables (fake executor)
     excel_output.test.js    .xlsx workbook writer (writes + reads back a real file)
+    merge_id_review.test.js   merge ID review bucketing + pair counts + DB report (fake executor)
   README.md                 algorithm + field reference
   README_TUNING.md          duplicate criteria tuning sweep
   README_SQL.md             SQL backbone plan (usat_sales_db) + Phase 0 loader
@@ -225,8 +247,8 @@ only `/scheduled` accepts `?is_test`.
 UNLESS the newest output file is younger than `FRESH_OUTPUT_WINDOW_MINUTES` (config) —
 within that window it returns the latest instead (the Slack reply explains this and
 points to `force=true`). `mode=run force=true` always regenerates. Run it from the repo
-root (`node server_salesforce_duplicates_8017.js`) or menu item 23; hit it with menu
-items 24–28.
+root (`node server_salesforce_duplicates_8017.js`) or menu item 24; hit it with menu
+items 25–29.
 
 The Slack stats now come from the **DB logbook** — `step_2_get_duplicate_report` reads
 the latest `run_type = 'finder'` row from `salesforce_duplicate_detection_run` for the
@@ -237,7 +259,7 @@ still also persists a small summary (total records scanned + counts, incl. ZIP-t
 counts) to `META_DIR_NAME/RUN_SUMMARY_FILE` (a sibling of the output folder, so it is
 never swept into the Slack uploads) as that fallback. The
 same meta folder also holds `ZIP_TRIM_MAPPING_FILE` (`zip_trim_mapping.csv`), the
-reviewable raw -> trimmed composite-ZIP map written each run (menu item 13 opens this
+reviewable raw -> trimmed composite-ZIP map written each run (menu item 14 opens this
 folder).
 
 ## Run modes

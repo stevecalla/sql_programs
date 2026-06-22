@@ -188,7 +188,7 @@ Phase 0  [DONE] Database scaffolding: src/database_snapshot.js (recreate table +
 Phase 1  [DONE] TUNING SWEEP on SQL. `snapshot` streams the fetched records into the
          table (originally with a per-snapshot meta table, since SUPERSEDED in Phase 3
          by the unified run table); `run`/`detail`/`diff` read records back from the DB;
-         `status` subcommand (menu item 17). The JSON snapshot is GONE — the database is
+         `status` subcommand (menu item 18). The JSON snapshot is GONE — the database is
          the snapshot. The matching engine is unchanged; a load->read round-trip test
          proves DB-sourced records give identical counts.
 Phase 2  [DONE, default ON] REAL FINDER sources records from the DB. step_1 (by default,
