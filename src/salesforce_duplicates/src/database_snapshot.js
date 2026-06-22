@@ -1,5 +1,5 @@
 /**
- * database_snapshot.js — Phase 0 of the SQL backbone (see README_SQL.md).
+ * database_snapshot.js — Phase 0 of the SQL backbone (see plans_and_notes/README_SQL.md).
  *
  * Loads the fetched Salesforce Account records into a FRESH local MySQL table
  * (`salesforce_account_duplicate_snapshot` in `usat_sales_db`), which the duplicate
@@ -10,7 +10,7 @@
  *   - Normalized keys are computed HERE in Node, reusing normalize.js, and stored as
  *     their own columns. SQL never re-normalizes — so a SQL `GROUP BY
  *     exact_duplicate_key` is guaranteed to match the in-memory JS result (no
- *     collation/charset drift). This is the safety guarantee from README_SQL.md.
+ *     collation/charset drift). This is the safety guarantee from plans_and_notes/README_SQL.md.
  *   - Records are inserted in BATCHES (multi-row INSERT). The loader is built so the
  *     real pipeline can feed it batches straight off the Salesforce Bulk stream
  *     (insert_batch as each batch fills), keeping Node memory flat at any scale.

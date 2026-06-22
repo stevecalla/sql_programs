@@ -389,7 +389,7 @@ function to_sf_nickname_group_row({
 }
 
 // Merge ID review (QA) — one row per reviewed account. Review-only; columns use the
-// __c naming convention for consistency with the other views. See README_MERGE_ID_REVIEW.md.
+// __c naming convention for consistency with the other views. See plans_and_notes/README_MERGE_ID_REVIEW.md.
 function to_sf_merge_id_review_row({
     row,
     run_id,

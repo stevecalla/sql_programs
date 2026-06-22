@@ -1,5 +1,5 @@
 /**
- * merge_id_review.js — Merge ID review (QA). See README_MERGE_ID_REVIEW.md.
+ * merge_id_review.js — Merge ID review (QA). See plans_and_notes/README_MERGE_ID_REVIEW.md.
  *
  * Compares the accounts our tool flagged (the consolidated clusters) against the
  * accounts Salesforce has marked to merge (a non-blank merge ID), and labels each

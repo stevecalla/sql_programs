@@ -148,7 +148,7 @@ from the row keys, all TEXT). REFRESHED each finder run (drop + recreate; no his
 the run table holds that). An empty view drops its table and creates nothing.
 `write_result_table` / `write_all_result_tables` in `src/database_results.js`. This is
 the explicit, no-abbreviation form of the `Duplicate_Run__c` / `Duplicate_Result__c`
-model sketched in `schema.md`. To maximize what lives in SQL, the finder also persists
+model sketched in `../schema.md`. To maximize what lives in SQL, the finder also persists
 two previously file-only review maps the same way: `salesforce_duplicate_zip_trim_mapping`
 (raw→trimmed composite ZIP) and `salesforce_duplicate_nickname_fire_mapping` (which
 nickname relationships fired). The **sweep `run`** logs a `run_type = 'sweep'` row to the

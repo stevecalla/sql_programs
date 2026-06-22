@@ -98,7 +98,7 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
     // SQL BACKBONE (Phase 2): stream the fetched records into the local DB snapshot
     // table and read them back in fetch order, so detection runs OFF the database.
     // Byte-identical to the in-memory path (read_records preserves order via
-    // load_sequence); --in-memory bypasses it. See README_SQL.md.
+    // load_sequence); --in-memory bypasses it. See plans_and_notes/README_SQL.md.
     if (use_sql_backbone) {
         log_info(`SQL backbone ON: streaming ${result.records.length.toLocaleString()} records into the snapshot table...`, script_start_ms);
         const fetched_count = result.records.length;
@@ -244,7 +244,7 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
     // The three baseline files above are untouched; this layer recomputes its own
     // exact + fuzzy + nickname edges over the COMPLETE rule-eligible pool (exact
     // records NOT removed) so the consolidated clusters can merge exact<->fuzzy
-    // and exact<->nickname links. See README_NICKNAME.md.
+    // and exact<->nickname links. See plans_and_notes/README_NICKNAME.md.
     let nickname_output_path;
     let consolidated_output_path;
     let consolidation_counters = {};
@@ -340,7 +340,7 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
 
     // Merge ID review (QA): compare our flagged accounts (the consolidated clusters)
     // to the accounts Salesforce has marked to merge (non-blank merge ID). Needs the
-    // clusters, so it is gated on ENABLE_NICKNAME_MATCHING too. See README_MERGE_ID_REVIEW.md.
+    // clusters, so it is gated on ENABLE_NICKNAME_MATCHING too. See plans_and_notes/README_MERGE_ID_REVIEW.md.
     if (ENABLE_NICKNAME_MATCHING && ENABLE_MERGE_ID_REVIEW) {
         log_info("Building merge ID review...", script_start_ms);
         const merge_id_review_output_file = add_timestamp_to_filename(MERGE_ID_REVIEW_OUTPUT_FILE, file_timestamp);

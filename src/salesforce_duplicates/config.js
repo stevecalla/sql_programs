@@ -61,7 +61,7 @@ function resolve_fetch_plan(is_test, is_full, is_partial) {
     return { max_fetch, use_rest, use_bulk: !use_rest, ordered };
 }
 
-// --- SQL backbone for the real finder (Phase 2; see README_SQL.md) ---
+// --- SQL backbone for the real finder (Phase 2; see plans_and_notes/README_SQL.md) ---
 // When on, step_1 streams the fetched records into the local DB snapshot table and
 // reads them back (in fetch order), so detection runs OFF the database. Output is
 // byte-identical to the in-memory path (proven by tests/sql_backbone_parity.test.js).
@@ -81,7 +81,7 @@ const FUZZY_THRESHOLD = 90;
 const PROGRESS_LOG_EVERY_RECORDS = 1_000;
 const PROGRESS_LOG_EVERY_PAIRS = 25_0000;
 
-// --- Nickname matching + consolidated output (additive; see README_NICKNAME.md) ---
+// --- Nickname matching + consolidated output (additive; see plans_and_notes/README_NICKNAME.md) ---
 // Master switch for the new nickname view (c) and consolidated view (d). When
 // false, the run produces only the three baseline files and behaves exactly as
 // before. The three baseline files are never changed either way.
@@ -109,7 +109,7 @@ const NICKNAME_OUTPUT_FILE = "account_nickname_name_matches_sf_import.csv";
 const NICKNAME_GROUP_OUTPUT_FILE = "account_nickname_name_groups_sf_import.csv";
 const CONSOLIDATED_OUTPUT_FILE = "account_consolidated_duplicates_sf_import.csv";
 
-// --- Merge ID review (QA; see README_MERGE_ID_REVIEW.md) ---
+// --- Merge ID review (QA; see plans_and_notes/README_MERGE_ID_REVIEW.md) ---
 // Compares the accounts our tool flagged (the consolidated clusters) against the
 // accounts Salesforce has marked to merge (a non-blank merge ID), labeling each
 // account in_both / sf_only / exact_only / fuzzy_only / nickname_only / multi_signal.
@@ -133,7 +133,7 @@ const ARCHIVE_DIR_NAME = "usat_salesforce_duplicates_archive";
 const TUNING_DIR_NAME = "usat_salesforce_duplicates_tuning";
 const SWEEP_SUMMARY_FILE = "sweep_summary.csv";
 
-// --- SQL backbone (see README_SQL.md) ---
+// --- SQL backbone (see plans_and_notes/README_SQL.md) ---
 // The disposable snapshot table lives in the local USAT database (usat_sales_db),
 // reached via create_local_db_connection(local_usat_sales_db_config()). It is dropped
 // and recreated on every run, so it never accumulates in that shared database. Name is
@@ -166,7 +166,7 @@ const DB_INSERT_BATCH_SIZE = 2000;
 const DB_LOAD_PROGRESS_EVERY = 50000;   // streaming records INTO the snapshot table
 const BULK_FETCH_PROGRESS_EVERY = 50000; // records arriving FROM the Bulk API
 
-// --- Duplicate tuning sweep default grid (see README_TUNING.md) ---
+// --- Duplicate tuning sweep default grid (see plans_and_notes/README_TUNING.md) ---
 // The sweep runs the cartesian product of these axes, with the current production
 // logic ('baseline') always included first. Edit here, or pass `--grid <file>` to the
 // sweep CLI to use a one-off JSON grid instead. rule_fields entries are subsets of

@@ -8,7 +8,11 @@ See `README.md` for the full algorithm (exact keys, fuzzy scoring, rule blocks).
 This file is the orientation map for the code + how to run/test it. Keep it current
 as the structure changes.
 
-## Nickname matching + consolidated output — IMPLEMENTED (see `README_NICKNAME.md`)
+Docs: `README.md`, `CLAUDE.md`, and `schema.md` live at the project root; all the
+design/plan docs (`README_SQL`, `README_TUNING`, `README_NICKNAME`, `README_MERGE`,
+`README_MERGE_ID_REVIEW`) live in `plans_and_notes/`.
+
+## Nickname matching + consolidated output — IMPLEMENTED (see `plans_and_notes/README_NICKNAME.md`)
 
 Shipped. A third name dimension (nicknames via the `nicknames-curated` npm package)
 plus one consolidated output that unifies exact + fuzzy(90) + nickname into a
@@ -56,7 +60,7 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   step-timer stages ("nickname matching", "consolidation") and run-summary counts.
   Review-only (no Salesforce import), but columns use `__c` naming so a future import
   is plug-and-play. A reviewable nickname-fire map is written to the meta folder
-  (`nickname_fire_mapping.csv`), like the ZIP-trim map. Full detail in `README_NICKNAME.md`.
+  (`nickname_fire_mapping.csv`), like the ZIP-trim map. Full detail in `plans_and_notes/README_NICKNAME.md`.
 - **Merge id (all files).** Every output carries the Account merge field
   `usat_Salesforce_Merge_Id__pc` (Person-Account `__pc` view of Contact's `__c`) as
   `Merge_Id_1/2__c` (pairs) or `Merge_Ids__c` (groups/clusters). This DID edit the
@@ -65,9 +69,9 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   field name. The query **auto-detects** the field (Account DESCRIBE) and includes it
   only if the org has it (`build_account_soql` / `account_field_exists` in
   `salesforce.js`), so an org without it still runs — merge columns just come out
-  blank. See `README_MERGE.md`.
+  blank. See `plans_and_notes/README_MERGE.md`.
 
-## Merge ID review (QA) — IMPLEMENTED (see `README_MERGE_ID_REVIEW.md`)
+## Merge ID review (QA) — IMPLEMENTED (see `plans_and_notes/README_MERGE_ID_REVIEW.md`)
 
 Compares the accounts our tool flagged (the consolidated clusters) against the accounts
 Salesforce has marked to merge (a non-blank `salesforce_merge_id`), labeling each account
@@ -91,7 +95,7 @@ finder writes it as a 7th view (CSV `account_merge_id_review.csv`, DB table
   those records — byte-identical to the in-memory path (proven by
   `tests/sql_backbone_parity.test.js`). Default ON (`ENABLE_SQL_BACKBONE = true`, so
   menu items 7-10 load MySQL); `resolve_use_sql_backbone`: `--in-memory` off, `--sql`
-  on, else the config default. See `README_SQL.md`.
+  on, else the config default. See `plans_and_notes/README_SQL.md`.
 - `menu.js` — interactive launcher (`node menu.js`): run tests, syntax check, run
   the finder in TEST or PRODUCTION mode, open the output/archive folders, run the
   review merge IDs (item 11), DUPLICATE TUNING sweep (items 15–19, incl. snapshot status;
@@ -111,7 +115,7 @@ finder writes it as a 7th view (CSV `account_merge_id_review.csv`, DB table
   (`usat_salesforce_duplicates_tuning`),
   a sibling of the output folder under the same external `/data` root (same pattern as
   OUTPUT/ARCHIVE/META, so it stays out of the Slack uploads + archive rotation; override
-  with `SWEEP_TUNING_DIR`). See `README_TUNING.md`.
+  with `SWEEP_TUNING_DIR`). See `plans_and_notes/README_TUNING.md`.
 - `../../server_salesforce_duplicates_8017.js` — Slack slash-command server (lives
   at the repo root with the other `server_*.js`). See "Slack server" below.
 
@@ -185,7 +189,7 @@ salesforce_duplicates/
                             fuzzy_only/nickname_only/multi_signal) + count_account_buckets
                             (4a) + count_duplicate_pairs (4b) — pure, off the consolidated
                             clusters + records. report_from_db reads the persisted tables
-                            back for the menu (CLI: `report`). See README_MERGE_ID_REVIEW.md.
+                            back for the menu (CLI: `report`). See plans_and_notes/README_MERGE_ID_REVIEW.md.
     verify_database_snapshot.js  manual step-by-step DB loader smoke test
                             (load/show/drop; menu items 21-23) — synthetic rows into
                             usat_sales_db, then the exact-duplicate GROUP BY
@@ -202,9 +206,9 @@ salesforce_duplicates/
     excel_output.test.js    .xlsx workbook writer (writes + reads back a real file)
     merge_id_review.test.js   merge ID review bucketing + pair counts + DB report (fake executor)
   README.md                 algorithm + field reference
-  README_TUNING.md          duplicate criteria tuning sweep
-  README_SQL.md             SQL backbone plan (usat_sales_db) + Phase 0 loader
   schema.md                 Salesforce custom-object/import schema notes
+  plans_and_notes/          design + plan docs (README_SQL, README_TUNING,
+                            README_NICKNAME, README_MERGE, README_MERGE_ID_REVIEW)
 ```
 
 `main()` is a thin orchestrator (~230 lines): resolve mode -> archive -> fetch ->
