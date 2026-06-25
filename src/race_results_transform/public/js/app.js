@@ -6,7 +6,8 @@
   var RRT = window.RRT || {};
   var io = RRT.io, parse = RRT.parse, match = RRT.match, transform = RRT.transform,
       reconcile = RRT.reconcile, mapper = RRT.mapping, schema = RRT.schema,
-      normalize = RRT.normalize, display = RRT.display, sort = RRT.sort, split = RRT.split, view = RRT.view_logic;
+      normalize = RRT.normalize, display = RRT.display, sort = RRT.sort, split = RRT.split, view = RRT.view_logic,
+      duplicates = RRT.duplicates;
 
   var ENUM_BUCKETS = { category: ['Age Group', 'Elite', 'Para', 'Relay', 'Open'], gender: ['M', 'F', 'NB', 'Open'] };
   // Split group-naming helpers — set either to false to disable that feature (see CLAUDE.md).
@@ -87,6 +88,7 @@
       current_source: opts.current_source || null, on_remap: opts.on_remap || null, on_edit: opts.on_edit || null,
       on_search: opts.on_search || null, on_sort: opts.on_sort || null, on_filter: opts.on_filter || null,
       deletable: !!opts.deletable, on_delete: opts.on_delete || null, on_render: opts.on_render || null, excluded: null,
+      row_class: opts.row_class || null,   // (rowIndex) -> extra <tr> class(es), e.g. 'dup-row' for duplicates
       headers: [], data: [], order: [], query: '', sort_col: null, sort_dir: 1,
       cap: opts.cap || 500, show_all: false, filter_set: null, filter_label: '', search_index: []
     };
@@ -186,7 +188,8 @@
         for (var k = 0; k < limit; k++) {
           var i = vis[k];
           var rn = T.deletable ? ((i + 1) + ' <button type="button" class="tv-del" data-i="' + i + '" title="Delete this row" aria-label="Delete row ' + (i + 1) + '">✕</button>') : (i + 1);
-          html += '<tr><td class="rownum">' + rn + '</td>';
+          var rc = T.row_class ? T.row_class(i) : '';
+          html += '<tr' + (rc ? ' class="' + esc(rc) + '"' : '') + '><td class="rownum">' + rn + '</td>';
           for (var c = 0; c < T.headers.length; c++) {
             var flag = T.get_flag ? T.get_flag(i, c) : null;
             var attrs = T.editable ? ' contenteditable="true" data-i="' + i + '" data-c="' + c + '"' : '';
@@ -1371,6 +1374,17 @@
     S.report = reconcile.build(S.parsed, S.mapping, S.result);
     S.work_rows = S.result.rows.map(function (r) { return r.slice(); });
     S.flag_info = build_flag_info();
+    S.dup_info = build_dup_info();           // rows whose Member Number repeats (cross-row)
+    S.dup_set = S.dup_info.dup_set;
+  }
+  // Find rows whose (normalized) Member Number appears in more than one converted row. Pure logic lives in
+  // src/duplicates.js; blank / 1-day / Valid placeholders never count.
+  function build_dup_info() {
+    var empty = { dup_set: {}, row_count: 0, group_count: 0, groups: {} };
+    if (!S.result || !S.result.rows || !S.work_rows) return empty;
+    var col = (S.result.headers || []).indexOf('Member Number');
+    if (col < 0) return empty;
+    return duplicates.find_duplicates(S.work_rows, col);
   }
   function render_all(first_time) {
     render_summary(); render_compare(first_time); render_scorecard(); render_mapping(); render_integrity();
@@ -1393,11 +1407,23 @@
         '<span class="chip" title="Athlete rows written to the converted file"><b>' + n(kept_out) + '</b> rows</span>' +
         (nex > 0 ? '<span class="chip chip-del" title="Rows you deleted — left out of the download. Restore them from the original table."><b>' + n(nex) + '</b> deleted</span>' : '') +
         '<span class="chip" title="Highlighted cells still needing a look — approve or edit them to clear"><b>' + n(flagged) + '</b> flagged values</span>' +
+        ((S.dup_info && S.dup_info.row_count > 0)
+          ? '<button class="chip chip-btn chip-dup" id="dup_chip" title="Member numbers listed in more than one row — click to show just those rows"><b>' + n(S.dup_info.row_count) + '</b> duplicate rows · ' + n(S.dup_info.group_count) + ' member #s ›</button>'
+          : '<span class="chip">no duplicate members</span>') +
         (skip
           ? '<button class="chip chip-btn" id="skip_chip" title="Section-header & blank rows excluded — click to view"><b>' + n(skip) + '</b> rows skipped ›</button>'
           : '<span class="chip">no rows skipped</span>') +
       '</span>';
     if (skip) $('skip_chip').addEventListener('click', reveal_skipped);
+    if (S.dup_info && S.dup_info.row_count > 0) { var dc = $('dup_chip'); if (dc) dc.addEventListener('click', filter_dups); }
+  }
+  // Show only the duplicate-member rows, in BOTH tables (set_filter on the converted table mirrors to the
+  // original via on_filter when Link tables is on). The TableView's "Showing only: … ✕" bar clears it.
+  function filter_dups() {
+    if (!S.conv_table || !S.dup_set) return;
+    S.conv_table.set_filter(S.dup_set, 'duplicate member numbers');
+    if (!S.link_tables && S.orig_table) S.orig_table.set_filter(S.dup_set, 'duplicate member numbers');
+    $('compareCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function reveal_skipped() {
     set_compare_view('integrity');
@@ -1443,7 +1469,8 @@
     var keep_orig = grid_scroll_pos('originalGrid'), keep_conv = grid_scroll_pos('resultGrid');
     var orig_rows = S.parsed.data_rows.map(function (d) { return d.cells; });
     if (!S.orig_table) S.orig_table = TableView($('originalGrid'), { top_header: true,
-      deletable: true, on_delete: delete_orig_rows, on_render: render_orig_del });
+      deletable: true, on_delete: delete_orig_rows, on_render: render_orig_del,
+      row_class: function (i) { return S.dup_set && S.dup_set[i] ? 'dup-row' : ''; } });
     S.orig_table.set_data(S.parsed.headers, orig_rows);
     S.orig_table.set_excluded(S.excluded);   // hide user-deleted rows (search → delete a subset, reversible)
     $('originalMeta').textContent = S.parsed.data_rows.length + ' rows · ' + S.parsed.headers.length + ' cols';
@@ -1453,7 +1480,8 @@
         editable: true, show_flag_filter: true, col_menu: true, top_header: true,
         current_source: function (c) { var m = S.mapping[schema.TEMPLATE_SCHEMA[c].key]; return m && m.source; },
         on_remap: function (c, val) { mapper.set_mapping(S.mapping, schema.TEMPLATE_SCHEMA[c].key, val, S.parsed.headers); track('manual_remap', { target_key: schema.TEMPLATE_SCHEMA[c].key }); recompute(false); },
-        on_edit: on_conv_edit
+        on_edit: on_conv_edit,
+        row_class: function (i) { return S.dup_set && S.dup_set[i] ? 'dup-row' : ''; }
       });
     }
     S.conv_table.source_headers = S.parsed.headers;
