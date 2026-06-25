@@ -116,4 +116,22 @@ test.describe('race_results_transform — UI interactions', () => {
     await expect(page.locator('#resultGrid table tbody tr').first()).toBeVisible();
     await expect(page.locator('#resultGrid table thead')).toContainText('Member Number');
   });
+
+  test('duplicate Member Numbers are counted, highlighted in both tables, and filterable', async ({ page }) => {
+    const csv = 'Member Number,First Name,Last Name,Gender,Recorded Time\n' +
+      '101,Amy,Lee,F,1:00:00\n202,Bob,Kim,M,1:05:00\n101,Amy,Lee,F,1:00:00\n303,Cy,Ng,M,1:10:00\n';
+    await step(page, 'Uploading a CSV where member 101 appears twice');
+    await page.setInputFiles('#fileInput', { name: 'dups.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+    await expect(page.locator('#compareCard')).toBeVisible();
+    await step(page, 'Summary chip shows the duplicate count (bold = rows)');
+    await expect(page.locator('#dup_chip')).toContainText('2 duplicate rows');
+    await expect(page.locator('#dup_chip')).toContainText('1 member');
+    await step(page, 'Both tables highlight the 2 duplicate rows');
+    await expect(page.locator('#originalGrid tbody tr.dup-row')).toHaveCount(2);
+    await expect(page.locator('#resultGrid tbody tr.dup-row')).toHaveCount(2);
+    await step(page, 'Clicking the chip filters both tables to just those rows');
+    await highlight_click(page, page.locator('#dup_chip'), 'Filter to duplicate rows');
+    await expect(page.locator('#resultGrid table tbody tr')).toHaveCount(2);
+    await expect(page.locator('#originalGrid table tbody tr')).toHaveCount(2);
+  });
 });

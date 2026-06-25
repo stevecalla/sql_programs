@@ -36,7 +36,7 @@ refreshes the committed visual baselines in `e2e/visual.spec.js-snapshots/`.)
 
 Wired into the monorepo like the other servers: repo-root `package.json` has the standard
 `race_results_transform_server` + `pm2_start/logs/stop/delete/show/restart_race_results_transform`
-scripts (pm2 name `usat_race_results_transform`, 4G, `--expose-gc`; also step 16/16 of
+scripts (pm2 name `usat_race_results_transform`, 4G, `--expose-gc`; also step 16/17 of
 `pm2_run_all_servers`), and `.vscode/tasks.json` has the `16 RACE RESULTS TRANSFORM (logs/shell)` +
 `Race Results Transform (split)` tasks (group `grp-race-results-transform`). `tests/config_wiring.test.js`
 asserts all of this stays in place (skips when run outside the monorepo).
@@ -51,6 +51,7 @@ src/race_results_transform/
     display.js         how a cell renders in the tables (Excel time -> time, not date) — TESTED
     sort.js            table-sort comparator (case/accent-insensitive, natural numbers) — TESTED
     view_logic.js      pure TableView helpers: search index, visible-row filtering, render cap — TESTED
+    duplicates.js      find rows whose Member Number repeats across rows (ignores 1-day/blank) — TESTED
     split.js           group row indices by a per-row key (split & download by column) — TESTED
     parse.js           header detection + divider/blank-row skipping
     match.js           column auto-matching (alias scoring + greedy assignment)
@@ -233,6 +234,15 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
   group-name inputs) — the `e2e/a11y.spec.js` axe scan guards against critical-impact regressions.
 - Highlight legend: collapsible + resizable; per-reason **Show rows** (`filter_by_code`) +
   **Approve**; **Approve all / Unapprove all**; value-mapping with per-value reset + bulk set.
+- **Duplicate Member Number detection** (`src/duplicates.js`, TESTED): `compute()` runs
+  `duplicates.find_duplicates(S.work_rows, memberCol)` on the **converted/normalized** Member Number column
+  (so values that only collide after conversion — `USAT-12345` vs `12345` — group together; `1-day`/blank/
+  `Valid` placeholders never count) into `S.dup_info`/`S.dup_set`. The summary bar shows a **`N duplicate rows
+  · M member #s`** chip (bold = row count); clicking it (`filter_dups`) filters BOTH tables to just those rows
+  via `set_filter` (+ the linked-tables mirror; the TableView "Showing only: … ✕" bar clears it). Rows are
+  highlighted in both the original and converted tables via a generic `TableView` `row_class(i)` hook →
+  `dup-row` (red `--accent-soft` tint + left accent bar; flag cells keep their own highlight). Recomputed
+  per-sheet on every remap/value-override.
 
 ## Naming & layout
 
