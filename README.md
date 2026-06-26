@@ -153,3 +153,62 @@ Contributor Covenant Code of Conduct
 
 [![License:  MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 This project is licensed under the terms of the <span style="color:red">The MIT License</span>. Please click on the license badge for more information.
+
+---
+
+# API Proxy & Ops (server_proxy_8000.js)
+
+A single reverse proxy (`server_proxy_8000.js`, port **8000**) fronts all the
+`server_*.js` services. One public host — `usat-api.kidderwise.org` — plus path
+prefixes replaces the per-app Cloudflare subdomains. Each backend keeps its own
+port and pm2 process; the proxy only forwards. Full design notes:
+`plans_and_notes/PROXY_PLAN.md`.
+
+## Files
+
+- `server_proxy_8000.js` — the proxy (create_app/start_server, dual-stack listen,
+  health endpoints, optional rate-limit, 404). Mirrors the other `server_*.js`.
+- `proxy_routes.js` — the route map: `'/prefix': { target, health }`. Routes are
+  commented out and enabled **one at a time**. No secrets → committed to git.
+- `menu.js` — interactive ops console (tests, health checks, pm2 controls, log
+  tailing, reminders). `node menu.js` or `npm run menu`.
+- `test/server_proxy_8000.test.js` — `node --test` suite for the proxy endpoints.
+
+## Health / status endpoints
+
+- `GET /api/test` — no-backend smoke check that the proxy is up.
+- `GET /api/status` (alias `/healthz`) — proxy uptime, memory, node, enabled routes.
+- `GET /api/health` — pings every enabled backend's health route; one up/down report.
+- `GET /admin` — login-gated browser console (status + backend health + pm2 log tail). Auth via `PROXY_ADMIN_USER`/`PROXY_ADMIN_PASS` in `.env` (cookie session, mirrors the email_queue admin).
+- `GET /api/logs` — login-gated pm2 log tail (used by /admin).
+
+## Common commands
+
+```
+npm run menu                # interactive ops console
+npm run test_proxy          # run the proxy test suite
+npm run pm2_start_proxy     # start under pm2 (cluster, 2 workers)
+npm run pm2_reload_proxy    # zero-downtime reload (after editing proxy_routes.js)
+npm run restart_proxy       # hard restart (brief blip)
+npm run logs_proxy          # tail proxy logs
+node server_proxy_8000.js   # run in the foreground (dev)
+```
+
+## Add or change a backend route
+
+1. Edit `proxy_routes.js` — uncomment or add a `{ target, health }` line.
+2. `npm run pm2_reload_proxy` (re-reads the route map, no downtime).
+3. Test `https://usat-api.kidderwise.org/<prefix>/<endpoint>`.
+
+You never restart a backend to add a route, and you never restart the proxy to
+deploy a backend (host:port is unchanged). Cron jobs are unaffected — they call
+`http://localhost:<port>` directly, bypassing the proxy.
+
+## Notes
+
+- Optional: `npm i express-rate-limit` to enable proxy-level rate limiting (the
+  proxy runs fine without it; you can rate-limit at Cloudflare instead).
+- UI apps (8016/8018/8019) and the Streamlit org_chart (8011) stay on their own
+  subdomains until the React consolidation (`plans_and_notes/REACT_PLAN.md`).
+- Slack slash-command Request URLs move to `usat-api.kidderwise.org/<prefix>/...`
+  (command names and backends unchanged). See `PROXY_PLAN.md` for the exact list.

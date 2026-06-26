@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>USAT Proxy — Admin</title>
+<style>
+  /* Palette + components mirrored from the email_queue admin (metrics/admin.html). */
+  :root{ --bg:#f4f6fb; --card:#fff; --ink:#1c2433; --dim:#6b7686; --line:#e2e7f0; --accent:#e4002b;
+    --accent-soft:rgba(228,0,43,.08); --brand:#15284e; --surface-2:rgba(127,127,127,.05);
+    --ok:#16a34a; --radius:14px; --shadow:0 1px 3px rgba(20,30,60,.06),0 6px 24px rgba(20,30,60,.05); color-scheme:light; }
+  @media (prefers-color-scheme:dark){ :root{ --bg:#0f1420; --card:#171d2b; --ink:#e7ecf5; --dim:#9aa6ba; --line:#283142; --accent-soft:rgba(228,0,43,.20); --brand:#1b2f57; --surface-2:rgba(127,127,127,.10); color-scheme:dark; } }
+  *{box-sizing:border-box} body{ margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  a{ color:var(--accent); }
+  .wrap{ width:min(1200px,96vw); margin:18px auto; }
+  .app-header{ margin-bottom:14px; }
+  .title-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .title-row h1{ font-size:clamp(18px,3vw,24px); margin:0; }
+  .dot{ width:10px; height:10px; border-radius:50%; background:var(--dim); display:inline-block; }
+  .dot.ok{ background:var(--ok); } .dot.bad{ background:var(--accent); }
+  .header-btns{ margin-left:auto; display:flex; gap:8px; }
+  .btn{ border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:9px; padding:7px 13px; font:inherit; font-weight:600; font-size:13px; line-height:1; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+  .btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn.primary{ background:var(--accent); color:#fff; border-color:transparent; }
+  .admin-shell{ display:flex; align-items:stretch; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--card); box-shadow:var(--shadow); }
+  .admin-rail{ flex:0 0 170px; display:flex; flex-direction:column; gap:2px; padding:12px 10px; border-right:1px solid var(--line); background:var(--surface-2); }
+  .admin-rail .grp{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--dim); padding:8px 10px 2px; }
+  .admin-rail a{ display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; color:var(--ink); text-decoration:none; cursor:pointer; font-size:14px; border:1px solid transparent; }
+  .admin-rail a:hover{ background:rgba(127,127,127,.10); }
+  .admin-rail a.on{ background:var(--accent-soft); border-color:var(--line); font-weight:600; }
+  .admin-main{ flex:1; min-width:0; padding:16px 18px; }
+  .pane{ display:none; } .pane.active{ display:block; }
+  .ad-card h2{ font-size:12px; margin:0 0 12px; text-transform:uppercase; letter-spacing:.5px; color:var(--dim); }
+  .mut{ color:var(--dim); font-size:13px; }
+  .tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px; }
+  .tile{ background:var(--surface-2); border-radius:10px; padding:10px 12px; }
+  .tile .k{ font-size:12px; color:var(--dim); } .tile .v{ font-size:15px; margin-top:4px; word-break:break-word; }
+  table{ border-collapse:collapse; width:100%; font-size:14px; }
+  th,td{ text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); }
+  th{ font-size:12px; text-transform:uppercase; letter-spacing:.5px; color:var(--dim); }
+  .pill{ font-size:12px; font-weight:700; border-radius:999px; padding:2px 10px; display:inline-block; }
+  .pill.yes{ background:rgba(22,163,74,.14); color:var(--ok); } .pill.no{ background:rgba(228,0,43,.14); color:var(--accent); }
+  select,pre{ font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  select{ padding:7px 10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  pre{ background:#0e1420; color:#cfe0ff; padding:12px; border-radius:10px; max-height:60vh; overflow:auto; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="app-header">
+    <div class="title-row">
+      <span id="dot" class="dot"></span>
+      <h1>USAT Proxy — Admin</h1>
+      <span id="sub" class="mut"></span>
+      <div class="header-btns">
+        <button class="btn" id="refresh">↻ Refresh</button>
+        <a class="btn" href="/admin/logout">Sign out</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-shell">
+    <nav class="admin-rail">
+      <div class="grp">Console</div>
+      <a class="on" data-pane="status">Status</a>
+      <a data-pane="health">Backends</a>
+      <a data-pane="logs">Logs</a>
+    </nav>
+    <main class="admin-main">
+      <section class="pane active" id="pane-status">
+        <div class="ad-card"><h2>Proxy status</h2><div class="tiles" id="statusTiles"></div></div>
+        <div class="ad-card"><h2>Enabled routes</h2><div id="routesList" class="mut"></div></div>
+      </section>
+      <section class="pane" id="pane-health">
+        <div class="ad-card"><h2>Backend health (/api/health)</h2>
+          <table><thead><tr><th>Prefix</th><th>Status</th><th>HTTP</th><th>ms</th><th>Error</th></tr></thead>
+          <tbody id="healthRows"></tbody></table>
+        </div>
+      </section>
+      <section class="pane" id="pane-logs">
+        <div class="ad-card"><h2>pm2 logs (no SSH)</h2>
+          <p class="mut">Pick a process to tail its recent log lines.</p>
+          <select id="logPick"></select>
+          <button class="btn" id="logLoad">Load</button>
+          <pre id="logOut">Select a process and click Load.</pre>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+(function(){
+  function $(s){ return document.querySelector(s); }
+  function pill(ok){ return '<span class="pill ' + (ok?'yes':'no') + '">' + (ok?'UP':'DOWN') + '</span>'; }
+
+  async function getJSON(url){ const r = await fetch(url, {headers:{Accept:'application/json'}}); return { status:r.status, body: await r.json().catch(function(){return {};}) }; }
+
+  async function loadStatus(){
+    try{
+      const { body:s } = await getJSON('/api/status');
+      $('#dot').className = 'dot ok'; $('#sub').textContent = 'node ' + (s.node||'') + ' · pid ' + (s.pid||'');
+      $('#statusTiles').innerHTML = [
+        ['App', s.app], ['Uptime (s)', s.uptime_seconds], ['RSS (MB)', s.memory_mb && s.memory_mb.rss],
+        ['Heap used (MB)', s.memory_mb && s.memory_mb.heap_used], ['Mountain time', s.now_mtn], ['UTC', s.now_utc]
+      ].map(function(t){ return '<div class="tile"><div class="k">'+t[0]+'</div><div class="v">'+(t[1]==null?'—':t[1])+'</div></div>'; }).join('');
+      $('#routesList').textContent = (s.routes||[]).join('   ');
+    }catch(e){ $('#dot').className='dot bad'; $('#sub').textContent='proxy unreachable'; }
+  }
+
+  async function loadHealth(){
+    const { body } = await getJSON('/api/health');
+    const checked = (body && body.checked) || {};
+    $('#healthRows').innerHTML = Object.keys(checked).map(function(k){
+      const c = checked[k];
+      return '<tr><td>'+k+'</td><td>'+pill(c.ok)+'</td><td>'+(c.status||'')+'</td><td>'+(c.ms==null?'':c.ms)+'</td><td class="mut">'+(c.error||'')+'</td></tr>';
+    }).join('') || '<tr><td colspan="5" class="mut">No routes enabled.</td></tr>';
+  }
+
+  async function loadLogList(){
+    const { status, body } = await getJSON('/api/logs');
+    if(status===401){ location.href='/admin/login'; return; }
+    const files = (body && body.files) || [];
+    $('#logPick').innerHTML = files.map(function(f){ return '<option>'+f+'</option>'; }).join('') || '<option value="">(no log files)</option>';
+  }
+  async function loadLog(){
+    const name = $('#logPick').value; if(!name){ return; }
+    $('#logOut').textContent = 'loading…';
+    const { body } = await getJSON('/api/logs?name=' + encodeURIComponent(name) + '&lines=300');
+    const logs = (body && body.logs) || {};
+    $('#logOut').textContent = Object.keys(logs).map(function(f){ return '===== '+f+' =====\n'+logs[f]; }).join('\n\n') || '(empty)';
+  }
+
+  function refreshAll(){ loadStatus(); loadHealth(); }
+  document.querySelectorAll('.admin-rail a').forEach(function(a){
+    a.addEventListener('click', function(){
+      document.querySelectorAll('.admin-rail a').forEach(function(x){ x.classList.remove('on'); });
+      a.classList.add('on');
+      document.querySelectorAll('.pane').forEach(function(p){ p.classList.remove('active'); });
+      $('#pane-'+a.dataset.pane).classList.add('active');
+      if(a.dataset.pane==='logs') loadLogList();
+    });
+  });
+  $('#refresh').addEventListener('click', refreshAll);
+  $('#logLoad').addEventListener('click', loadLog);
+  refreshAll();
+  setInterval(refreshAll, 15000); // auto-refresh status + health every 15s
+})();
+</script>
+</body>
+</html>

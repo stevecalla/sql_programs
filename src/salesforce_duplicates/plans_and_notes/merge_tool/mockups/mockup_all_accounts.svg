@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="700" viewBox="0 0 1040 700" font-family="Segoe UI, Arial, sans-serif">
+  <rect x="0" y="0" width="1040" height="700" rx="10" fill="#e5e7eb"/>
+  <rect x="0" y="0" width="1040" height="46" rx="10" fill="#d1d5db"/>
+  <circle cx="22" cy="23" r="6" fill="#ef4444"/><circle cx="42" cy="23" r="6" fill="#f59e0b"/><circle cx="62" cy="23" r="6" fill="#22c55e"/>
+  <rect x="92" y="13" width="900" height="22" rx="11" fill="#f8fafc"/>
+  <text x="106" y="28" font-size="12" fill="#6b7280">https://merge-console.usat.local/accounts</text>
+
+  <rect x="0" y="46" width="1040" height="48" fill="#1f2937"/>
+  <text x="24" y="76" font-size="16" font-weight="bold" fill="#ffffff">Account Merge Console</text>
+  <text x="250" y="76" font-size="13" fill="#cbd5e1">Dashboard</text>
+  <text x="340" y="76" font-size="13" fill="#cbd5e1">Duplicates</text>
+  <text x="430" y="76" font-size="13" fill="#cbd5e1">Merge-ID</text>
+  <text x="512" y="76" font-size="13" fill="#93c5fd" font-weight="bold">All Accounts</text>
+  <text x="620" y="76" font-size="13" fill="#cbd5e1">History</text>
+  <text x="700" y="76" font-size="13" fill="#cbd5e1">Metrics</text>
+  <text x="772" y="76" font-size="13" fill="#cbd5e1">Admin</text>
+  <text x="828" y="75" font-size="11" fill="#94a3b8" text-anchor="end">env:</text>
+  <rect x="836" y="59" width="180" height="24" rx="12" fill="#374151"/>
+  <rect x="839" y="61.5" width="86" height="19" rx="9.5" fill="#16a34a"/>
+  <text x="882" y="74.5" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="bold">Sandbox</text>
+  <text x="971" y="74.5" font-size="11" fill="#cbd5e1" text-anchor="middle">Production</text>
+
+  <text x="24" y="128" font-size="20" font-weight="bold" fill="#111827">All accounts</text>
+  <text x="24" y="148" font-size="12" fill="#6b7280">Browse the snapshot — 700,682 accounts · server-side paging · read-only (deep detail fetched on demand)</text>
+
+  <!-- search bar -->
+  <rect x="24" y="164" width="992" height="40" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="36" y="173" width="360" height="22" rx="6" fill="#f1f5f9" stroke="#e5e7eb"/>
+  <text x="48" y="188" font-size="11" fill="#9ca3af">Search name / member # / account ID …</text>
+  <rect x="408" y="173" width="150" height="22" rx="11" fill="#eff6ff" stroke="#bfdbfe"/><text x="483" y="188" font-size="11" fill="#1d4ed8" text-anchor="middle">in a cluster: any ▾</text>
+  <rect x="568" y="173" width="150" height="22" rx="11" fill="#eff6ff" stroke="#bfdbfe"/><text x="643" y="188" font-size="11" fill="#1d4ed8" text-anchor="middle">has merge ID: any ▾</text>
+
+  <!-- table -->
+  <rect x="24" y="216" width="992" height="452" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="40" y="242" font-size="11" fill="#6b7280">ACCOUNT</text>
+  <text x="200" y="242" font-size="11" fill="#6b7280">NAME</text>
+  <text x="380" y="242" font-size="11" fill="#6b7280">GENDER</text>
+  <text x="460" y="242" font-size="11" fill="#6b7280">BIRTHDATE</text>
+  <text x="580" y="242" font-size="11" fill="#6b7280">ZIP5</text>
+  <text x="650" y="242" font-size="11" fill="#6b7280">MEMBER #</text>
+  <text x="770" y="242" font-size="11" fill="#6b7280">MERGE ID</text>
+  <text x="900" y="242" font-size="11" fill="#6b7280">IN CLUSTER</text>
+  <line x1="40" y1="250" x2="1000" y2="250" stroke="#e5e7eb"/>
+  <g font-size="12" fill="#111827">
+    <text x="40" y="278">001…AAA</text><text x="200" y="278">John Smith</text><text x="380" y="278" fill="#374151">M</text><text x="460" y="278" fill="#374151">1984-02-10</text><text x="580" y="278" fill="#374151">80202</text><text x="650" y="278" fill="#374151">M-44821</text><text x="770" y="278" fill="#374151">MRG-1001</text>
+    <rect x="900" y="266" width="50" height="17" rx="8" fill="#dcfce7"/><text x="925" y="278" fill="#166534" text-anchor="middle" font-size="10">CL-1042</text>
+    <line x1="40" y1="292" x2="1000" y2="292" stroke="#f1f5f9"/>
+    <text x="40" y="318">001…BBB</text><text x="200" y="318">Jon Smith</text><text x="380" y="318" fill="#374151">M</text><text x="460" y="318" fill="#374151">1984-02-10</text><text x="580" y="318" fill="#374151">80202</text><text x="650" y="318" fill="#374151">M-51097</text><text x="770" y="318" fill="#374151">MRG-1001</text>
+    <rect x="900" y="306" width="50" height="17" rx="8" fill="#dcfce7"/><text x="925" y="318" fill="#166534" text-anchor="middle" font-size="10">CL-1042</text>
+    <line x1="40" y1="332" x2="1000" y2="332" stroke="#f1f5f9"/>
+    <text x="40" y="358">001…CCC</text><text x="200" y="358">Mary Jones</text><text x="380" y="358" fill="#374151">F</text><text x="460" y="358" fill="#374151">1990-07-22</text><text x="580" y="358" fill="#374151">94105</text><text x="650" y="358" fill="#374151">M-33410</text><text x="770" y="358" fill="#9ca3af">(blank)</text>
+    <rect x="900" y="346" width="50" height="17" rx="8" fill="#dcfce7"/><text x="925" y="358" fill="#166534" text-anchor="middle" font-size="10">CL-1098</text>
+    <line x1="40" y1="372" x2="1000" y2="372" stroke="#f1f5f9"/>
+    <text x="40" y="398">001…JKL</text><text x="200" y="398">Sara Adams</text><text x="380" y="398" fill="#374151">F</text><text x="460" y="398" fill="#374151">1977-11-03</text><text x="580" y="398" fill="#374151">10001</text><text x="650" y="398" fill="#374151">M-77820</text><text x="770" y="398" fill="#9ca3af">(blank)</text>
+    <text x="925" y="398" fill="#9ca3af" text-anchor="middle" font-size="11">—</text>
+    <line x1="40" y1="412" x2="1000" y2="412" stroke="#f1f5f9"/>
+    <text x="40" y="438">001…MNO</text><text x="200" y="438">David Park</text><text x="380" y="438" fill="#374151">M</text><text x="460" y="438" fill="#374151">2001-05-19</text><text x="580" y="438" fill="#374151">60614</text><text x="650" y="438" fill="#374151">M-90233</text><text x="770" y="438" fill="#9ca3af">(blank)</text>
+    <text x="925" y="438" fill="#9ca3af" text-anchor="middle" font-size="11">—</text>
+    <line x1="40" y1="452" x2="1000" y2="452" stroke="#f1f5f9"/>
+    <text x="40" y="478">001…PQR</text><text x="200" y="478">Emma Wilson</text><text x="380" y="478" fill="#374151">F</text><text x="460" y="478" fill="#374151">1995-09-30</text><text x="580" y="478" fill="#374151">30301</text><text x="650" y="478" fill="#374151">M-12044</text><text x="770" y="478" fill="#9ca3af">(blank)</text>
+    <text x="925" y="478" fill="#9ca3af" text-anchor="middle" font-size="11">—</text>
+    <line x1="40" y1="492" x2="1000" y2="492" stroke="#f1f5f9"/>
+    <text x="40" y="518">001…STU</text><text x="200" y="518">Liam Carter</text><text x="380" y="518" fill="#374151">M</text><text x="460" y="518" fill="#374151">1988-12-12</text><text x="580" y="518" fill="#374151">02139</text><text x="650" y="518" fill="#374151">M-66510</text><text x="770" y="518" fill="#9ca3af">(blank)</text>
+    <text x="925" y="518" fill="#9ca3af" text-anchor="middle" font-size="11">—</text>
+    <line x1="40" y1="532" x2="1000" y2="532" stroke="#f1f5f9"/>
+    <text x="40" y="558">001…VWX</text><text x="200" y="558">Olivia Reed</text><text x="380" y="558" fill="#374151">F</text><text x="460" y="558" fill="#374151">1972-04-08</text><text x="580" y="558" fill="#374151">98101</text><text x="650" y="558" fill="#374151">M-20875</text><text x="770" y="558" fill="#9ca3af">(blank)</text>
+    <text x="925" y="558" fill="#9ca3af" text-anchor="middle" font-size="11">—</text>
+  </g>
+  <line x1="40" y1="572" x2="1000" y2="572" stroke="#e5e7eb"/>
+  <text x="40" y="610" font-size="12" fill="#6b7280">Showing 1–8 of 700,682</text>
+  <text x="40" y="634" font-size="11" fill="#9ca3af">Snapshot columns are lean; click a row to fetch full Salesforce detail + child records on demand.</text>
+  <rect x="846" y="592" width="50" height="26" rx="6" fill="#f3f4f6" stroke="#d1d5db"/><text x="871" y="609" font-size="12" fill="#374151" text-anchor="middle">‹ Prev</text>
+  <rect x="906" y="592" width="50" height="26" rx="6" fill="#2563eb"/><text x="931" y="609" font-size="12" fill="#ffffff" text-anchor="middle">Next ›</text>
+</svg>
