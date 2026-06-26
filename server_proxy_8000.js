@@ -84,6 +84,24 @@ function create_app() {
   // Trust Cloudflare's forwarded headers so rate-limit sees real client IPs.
   app.set('trust proxy', 1);
 
+  // Request logging — a ">>" line when received and a "<<" line when finished
+  // (tagged OK / CLIENT ERROR / SERVER ERROR + duration); proxied requests also get
+  // "-> routed" and "<- backend responded" lines (see the route loop). pm2 captures
+  // all of it to ~/.pm2/logs. Liveness polls are skipped to keep the log readable.
+  const log_ts = function () { return new Date().toLocaleString('en-US', { timeZone: 'America/Denver' }); };
+  app.use(function (req, res, next) {
+    if (req.path === '/api/status' || req.path === '/healthz' || req.path === '/api/test') return next();
+    const t0 = Date.now();
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
+    console.log('[' + log_ts() + '] >> ' + req.method + ' ' + req.originalUrl + '  (from ' + ip + ')');
+    res.on('finish', function () {
+      const s = res.statusCode;
+      const tag = s >= 500 ? 'SERVER ERROR' : (s >= 400 ? 'CLIENT ERROR' : 'OK');
+      console.log('[' + log_ts() + '] << ' + req.method + ' ' + req.originalUrl + ' -> ' + s + ' ' + tag + ' (' + (Date.now() - t0) + 'ms)');
+    });
+    next();
+  });
+
   // -- Health check (enriched /api/status; /healthz alias) --
   app.get(['/api/status', '/healthz'], (req, res) => {
     const mem = process.memoryUsage();
@@ -183,7 +201,14 @@ function create_app() {
       proxyTimeout: 30000,
       timeout: 30000,
       on: {
+        proxyReq: (proxyReq, req) => {
+          console.log('[' + log_ts() + '] -> routed ' + prefix + '  ' + req.method + ' ' + req.url + '  to ' + target);
+        },
+        proxyRes: (proxyRes, req) => {
+          console.log('[' + log_ts() + '] <- ' + prefix + ' backend responded ' + proxyRes.statusCode);
+        },
         error: (err, req, res) => {
+          console.error('[' + log_ts() + '] !! ' + prefix + ' backend error: ' + ((err && err.message) || err));
           if (res.writeHead && !res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: false, error: 'backend unavailable', path: req.url }));
         },
@@ -214,7 +239,7 @@ async function start_server({ port = DEFAULT_PORT, silent = false } = {}) {
           console.log('  -> http://localhost:' + actual + p + '/*  ->  ' + target);
         });
         console.log('  -> https://usat-api.kidderwise.org              (Cloudflare tunnel -> ' + actual + ')');
-        console.log('  Press Ctrl-C to stop.\n');
+        console.log('  Logging one line per request below (health polls excluded). Press Ctrl-C to stop.\n');
       }
       // NGROK — best-effort; required lazily so a missing ngrok install never crashes the proxy.
       if (is_test_ngrok) {

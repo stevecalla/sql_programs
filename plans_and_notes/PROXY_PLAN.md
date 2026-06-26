@@ -296,7 +296,7 @@ function create_app() {
       target,
       changeOrigin: true,
       ws: true,                              // websockets / SSE pass through
-      pathRewrite: { [`^${prefix}`]: '' },   // /email-queue/api/x -> /api/x
+      // No pathRewrite: app.use(prefix, ...) already strips the mount prefix.
       proxyTimeout: 30000,                   // cut off a stuck backend
       timeout: 30000,
       on: {
