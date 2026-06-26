@@ -69,7 +69,7 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   field name. The query **auto-detects** the field (Account DESCRIBE) and includes it
   only if the org has it (`build_account_soql` / `account_field_exists` in
   `salesforce.js`), so an org without it still runs — merge columns just come out
-  blank. See `plans_and_notes/README_MERGE.md`.
+  blank. See `plans_and_notes/README_MERGE_ID_FIELD.md`.
 
 ## Merge ID review (QA) — IMPLEMENTED (see `plans_and_notes/README_MERGE_ID_REVIEW.md`)
 
@@ -83,6 +83,17 @@ builders + a DB report path); mapper `to_sf_merge_id_review_row` in `sf_rows.js`
 finder writes it as a 7th view (CSV `account_merge_id_review.csv`, DB table
 `salesforce_duplicate_merge_id_review`, Excel tab, end-of-run summary). Menu item 11
 (`node src/merge_id_review.js report`) prints the latest run's review from the DB.
+
+## Merge management tool — PLANNED / DRAFT (see `plans_and_notes/merge_tool/README_MERGE_TOOL.md`)
+
+Not built yet. A planned web admin tool (templated on the email-queue app's `/`, `/metrics`,
+`/admin`) to review accounts / merge-ID accounts / duplicates, manage + initiate merges, keep
+merge history, and best-effort restore. Same stack (Node/Express + MySQL + jsforce), with the
+actual merge run via a Salesforce Apex REST endpoint (`Database.merge`). This is the first
+**write** path against Salesforce — the draft leads with the read-vs-write safety model
+(read-only pipeline untouched; single write chokepoint; least-privilege SF users; writes gated
+off by default + mandatory dry-run; new tables only). Data extraction stays two-tier: keep the
+bulk snapshot lean, enrich per-cluster on demand. Phasing + decisions are deferred in the doc.
 
 ## Entry points
 

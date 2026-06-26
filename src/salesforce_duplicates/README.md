@@ -78,8 +78,9 @@ salesforce_duplicates/
                             database_snapshot, database_results, excel_output, exact_sql,
                             sql_backbone_parity, merge_id_review, salesforce, config)
   README.md / CLAUDE.md / schema.md
-  plans_and_notes/          README_SQL.md / README_TUNING.md / README_NICKNAME.md /
-                            README_MERGE.md / README_MERGE_ID_REVIEW.md
+  plans_and_notes/          README.md (index) / README_SQL.md / README_TUNING.md /
+                            README_NICKNAME.md / README_MERGE_ID_FIELD.md / README_MERGE_ID_REVIEW.md
+                            merge_tool/  (the planned merge tool: plan, mockups/, reference/)
 ```
 
 `main()` in `step_1_find_duplicates.js` is now a thin orchestrator that calls
