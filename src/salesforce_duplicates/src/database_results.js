@@ -34,6 +34,7 @@ const RUN_COLUMNS = [
     'is_full',
     'is_partial',
     'run_at',                   // ISO timestamp string
+    'run_seconds',              // wall-clock duration of the run, in seconds
     'total_records_scanned',
     'salesforce_total_size',
     'exact_duplicate_groups',
@@ -52,6 +53,7 @@ function create_run_table_sql(table = RUN_TABLE_NAME) {
   is_full                  TINYINT,
   is_partial               TINYINT,
   run_at                   VARCHAR(40),
+  run_seconds              INT,
   total_records_scanned    INT,
   salesforce_total_size    INT,
   exact_duplicate_groups   INT,
@@ -66,6 +68,9 @@ function create_run_table_sql(table = RUN_TABLE_NAME) {
 
 async function ensure_run_table(executor, table = RUN_TABLE_NAME) {
     await executor(create_run_table_sql(table), []);
+    // Additive migration: tables created before run_seconds existed need the column added so the
+    // REPLACE below (which lists every RUN_COLUMN) doesn't fail. Wrapped so it's a no-op once present.
+    try { await executor(`ALTER TABLE \`${table}\` ADD COLUMN run_seconds INT`, []); } catch (e) { /* column already exists */ }
 }
 
 function run_row_params(run) {
@@ -76,6 +81,7 @@ function run_row_params(run) {
         run.is_full ? 1 : 0,
         run.is_partial ? 1 : 0,
         run.run_at || new Date().toISOString(),
+        num(run.run_seconds),
         num(run.total_records_scanned),
         num(run.salesforce_total_size),
         num(run.exact_duplicate_groups),

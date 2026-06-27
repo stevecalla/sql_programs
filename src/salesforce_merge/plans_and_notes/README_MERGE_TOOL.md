@@ -19,6 +19,46 @@ that lets a reviewer:
 It builds on the existing read-only duplicates pipeline and reuses `usat_sales_db`. It does
 **not** change how duplicates are detected — it sits on top as a separate management layer.
 
+## Decided stack + roadmap (locked)
+
+**Decisions (locked):**
+- **Foundation now, consolidation-ready.** Build the merge tool as the **reference app** for the
+  repo's planned consolidated front-end (Project C / usat-app).
+- **Front-end: Vite + React** — first React app in the repo, deliberately, to avoid a later
+  vanilla→React rewrite. Its `/metrics` and `/admin` pages become the templates the other apps
+  copy when they fold in.
+- **Backend: mirror the email-queue app's conventions** — Express `server_salesforce_merge_8020.js`,
+  JSON API (`/api/...`), reuse its `auth/session`, the `/metrics` analytics stack
+  (`utilities/analytics/*`), `/admin` hub, MySQL, jsforce. The React app **builds to static
+  assets the Express server serves** — same runtime shape as email-queue ("static SPA + JSON
+  API"), so the proxy/Cloudflare/deploy story is unchanged; Vite just adds a build step.
+- **Master selection is deterministic:** winner = account where `Id == merge_id`; losers = same
+  `merge_id`, `Id != merge_id`.
+- **Merge execution:** prototype Node-SOAP `merge()` and the Apex wrapper in the sandbox, then pick.
+- **Restore:** two tiers (≤15-day undelete + backup recreate) from a deep pre-merge snapshot.
+- **Contact-point preservation** gated by a configurable `high_value_flags` list (donor, …).
+- **Salesforce auth:** start simple (username/password) in sandbox; add a **Connected App
+  (OAuth JWT, least-privilege write user) before production**. (Independent of the React choice.)
+- **Env switch:** Sandbox default; Production behind extra guardrails; writes off by default.
+
+**Roadmap:**
+- **Phase 0 (first step) — read-only foundation scaffold.** Express server skeleton +
+  Vite/React app shell (nav, env switch, auth gate, layout) + a working **Dashboard** reading the
+  **existing** `salesforce_duplicate_*` MySQL tables. No Salesforce calls, no writes, no Connected
+  App needed yet.
+- **Phase 1 — review pages:** duplicates, merge-ID reconciliation, all-accounts (over the JSON
+  API + DB), plus the `/metrics` and `/admin` layers (reuse `utilities/analytics`).
+- **Phase 2 — per-cluster deep fetch from Salesforce (read) + dry-run merge preview** (field
+  survivorship + child-record impact).
+- **Phase 3 — sandboxed execute** (Node-SOAP and/or Apex) + deep pre-merge snapshot + history/
+  audit. Writes gated (`ENABLE_MERGE_EXECUTION`, dry-run, confirm token).
+- **Phase 4 — restore** (two tiers) + Contact-Point preservation.
+- **Phase 5 — harden + production** behind the Connected App; later fold into Project C.
+
+**Still open (don't block Phase 0):** which apps port into Project C and in what order; shell
+SSO/auth source; Person-Accounts-only vs other objects; the donor/high-value flag API names;
+restore default when no flag matches.
+
 ## Feasibility / stack
 
 All on the existing stack: **Node/JS + Express** (same shape as the email-queue app),
@@ -303,17 +343,26 @@ records actually under review.
 - **Person Account specifics** — the underlying Contact merges too; confirm behavior in sandbox.
 - Governor limits — chunk + queue + retry.
 
-## Restore — best-effort, snapshot-based (not a native undo)
+## Restore — a core, designed-in capability (snapshot-based)
 
-Salesforce has no clean one-click un-merge. The design:
+Restore is a first-class job of this tool, not an add-on. Salesforce has no clean one-click
+un-merge, so the tool makes restore possible by capturing the data **at merge time** and
+surfacing a per-merge restore action later.
 
-- **Before** each merge, snapshot the full pre-state to `salesforce_merge_premerge_snapshot`:
-  losing accounts, every child record ID and its original parent, and the master's field values.
-- **Restore** = undelete the losing account (only within the ~15-day Recycle Bin window) + an
-  Apex routine that re-reparents the snapshotted children + reapplies the captured fields.
-- **Known limits (set expectations):** records created on the master *after* the merge, rollups,
-  and downstream automation can't be cleanly unwound; outside the 15-day window the losing
-  record may be unrecoverable. Restore is best-effort, scoped, and logged.
+- **Captured at execute (Phase 3):** before every merge, snapshot the full pre-state to
+  `salesforce_merge_premerge_snapshot` — losing accounts' fields, every child record ID + its
+  original parent, and the master's field values. This is what makes restore possible (and it
+  doubles as a backup).
+- **Surfaced in the UI (Phase 4):** merge history → pick a past merge → restore, in two tiers:
+  - **≤ ~15 days (high fidelity):** undelete the loser from the Recycle Bin (keeps its
+    **original id**), re-parent the snapshotted children, reapply overwritten fields.
+  - **beyond 15 days (approximate):** recreate the loser from the snapshot/backup — **new ids**,
+    so external links won't reconnect and children are recreated from the snapshot.
+- **Only reliable for merges done *through this tool*** — that's when the snapshot is captured. A
+  merge performed outside the tool has only Salesforce's 15-day Recycle Bin and no child map.
+- **Known limits:** records created on the master *after* the merge, roll-ups, and downstream
+  automation can't be cleanly unwound. Restore is best-effort, scoped, logged — and all the
+  restore steps run from Node (undelete + re-parent + recreate), no Apex required.
 
 ## Conventions
 
@@ -405,6 +454,93 @@ UI servers) and be folded into `usat-app` later — same `src/salesforce_merge/`
 - **Exact code + deploy steps + the Node merge driver** live in
   `reference/` (`README_MERGE_EXECUTION.md` for the Node-primary path + selection rule
   + restore; `apex/` for the optional Apex class, its test, and `DEPLOY.md` for sandbox/prod).
+
+## Process page + data refresh (R-series) — planned
+
+A top-level **Process** page that runs multi-step jobs with live progress, plus a unified
+activity log. First job: kick off the duplicate-detection run from the tool itself, so the
+review tables can be refreshed on demand instead of waiting for the separate duplicates job.
+This is still **read-only against Salesforce** — it runs the detector, which never writes to SF.
+
+Mockups saved beside this doc: `mockups/mockup_process.svg` (the hub: refresh runner + activity)
+and `mockups/mockup_merge_drawer.svg` (the future per-cluster merge flow). PNG renders are pending
+a converter (the sandbox couldn't install one this session); the SVGs open directly.
+
+### Decisions (locked)
+
+- **Page:** new top-level `Process` (its own nav item; Admin stays for users/settings). Two areas —
+  the data-refresh runner (step tracker + cancel) above a unified **Activity** log of every run.
+- **Invocation: spawn a child process.** The merge server runs `node step_1_find_duplicates.js
+  <flags>` as a tracked child from the repo root, holds a single-run lock, captures stdout, and
+  parses the `[STEP]` lines the step-timer already prints for live progress. Independent of the
+  8017 Slack server; gives a working Cancel and isolated memory.
+- **Run config = Environment × Scope = the four `menu.js` modes:**
+
+  | UI selection | Flags | menu.js item |
+  |---|---|---|
+  | Sandbox · Sample | `--test` | 7 — TEST |
+  | Sandbox · Full | `--test --full` | 8 — TEST FULL |
+  | Production · Sample | `--prod --partial` | 9 — PROD PARTIAL |
+  | Production · Full | `--prod` | 10 — PRODUCTION |
+
+- **All four modes exposed; Production requires a typed CONFIRM** + a freshness check (warn/skip if
+  the last run is newer than `FRESH_OUTPUT_WINDOW_MINUTES` unless forced). Admin-only; one run at a
+  time. The environment is recorded on the run-logbook row so the UI can show which env produced
+  the current tables.
+- **Shared step-tracker / run-status component** reused by the refresh now and the merge later.
+- **Merge initiates from a cluster** (Duplicates → preview → confirm → execute in a drawer using the
+  same tracker), then logs to the Process Activity feed. (Phase 3; writes stay off by default.)
+
+### Phasing
+
+- **R1 — backend runner.** `refresh_runner` module (spawn + single-run lock + stdout/`[STEP]`
+  parse + start/finish/env recorded), endpoints `POST /api/refresh/start {env,scope}`,
+  `GET /api/refresh/status`, `POST /api/refresh/cancel`; flag mapping; unit tests with a fake spawn.
+- **R1a — indexes (include with R1).** Add the B-tree indexes from the recommendation below
+  **in the duplicates project's table-build code** — `database_snapshot.js` (snapshot) and
+  `database_results.js` (result tables) — created right after each table is (re)built, inside the
+  existing load transaction. This is the right home because those tables are dropped/recreated every
+  run, so a hand-added DB index would vanish. It's additive and **output-preserving** (indexes don't
+  change detection results), but it does touch the read-only pipeline, so guard it as a pure
+  schema-add and re-run the parity tests. FULLTEXT on the searched columns is optional/later, only if
+  `%term%` latency shows up at full scale.
+- **R2 — Process page UI.** Selector, command preview + menu-item equivalence, Run + confirm,
+  live step tracker + elapsed + log tail, Activity log; reuses the search spinner/timer styling.
+- **R3 — docs** (+ optionally surface that the nightly scheduled job still runs).
+
+### Indexing for search/sort/filter (recommendation — no code yet)
+
+The review pages now do server-side search (`LIKE '%term%'` across a few columns), sort (`ORDER BY`),
+and per-column filters (`LIKE`) over `salesforce_account_duplicate_snapshot` (~700k rows) and the
+result tables. As data grows, add indexes — but mind two facts about how these tables are built:
+
+1. **The tables are dropped and recreated every detection run** (`database_snapshot.js` /
+   `database_results.js`). So indexes must be (re)created **as part of that build**, in code, right
+   after the load — not added by hand in the DB, or they vanish on the next run. The right place is
+   a `CREATE INDEX` step (or indexes declared in the `CREATE TABLE`) inside those modules, run once
+   per rebuild inside the existing load transaction.
+2. **`LIKE '%term%'` (leading wildcard) cannot use a normal B-tree index.** Plain indexes speed up
+   exact match, range, `ORDER BY`, and prefix `LIKE 'term%'`, but not "contains" search. Options:
+
+What I'd recommend, in order:
+
+- **Index the sort + equality/prefix columns** (cheap, high value): on the snapshot —
+  `last_name`, `first_name`, `salesforce_merge_id`, `member_number`, `composite_zip_five_digit`,
+  `birthdate_normalized`, `salesforce_account_id` (already the PK); on the result tables —
+  `Bucket__c`, `Confidence_Tier__c`, `Match_Composition__c`, `Which_List__c`, and the numeric sort
+  columns. This directly accelerates `ORDER BY`, the bucket/tier/which-list filters, and any
+  prefix search. Composite indexes (e.g. `(last_name, first_name)`) help the default sort.
+- **For "contains" search, switch those columns to a `FULLTEXT` index** and use `MATCH … AGAINST`
+  for the free-text box (word/prefix matching), keeping per-column `LIKE` for the targeted filters.
+  FULLTEXT is the only index that helps substring-ish search at this scale on MySQL/InnoDB.
+- **Or anchor the search to prefix** (`term%` instead of `%term%`) where product-acceptable — then a
+  plain B-tree index applies and no FULLTEXT is needed. Cheapest, but changes search behavior.
+- **Keep it lean:** index only the columns the UI actually sorts/filters on (every index slows the
+  per-run rebuild and uses space). Measure with `EXPLAIN` on the real row counts before adding more.
+
+Net: add B-tree indexes on the sort/filter columns inside the table-build step now; consider FULLTEXT
+for the free-text search only if `%term%` latency becomes a problem at full scale. This would be a
+small, self-contained change to `database_snapshot.js` / `database_results.js` (still read-only vs SF).
 
 ## To revisit (deferred)
 

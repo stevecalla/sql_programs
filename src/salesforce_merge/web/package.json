@@ -1,0 +1,22 @@
+{
+  "name": "salesforce-merge-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Vite + React front-end for the Salesforce merge management tool (served by server_salesforce_merge_8020.js).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "programs": "file:../../..",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.8"
+  }
+}
