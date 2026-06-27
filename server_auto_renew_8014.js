@@ -76,7 +76,8 @@ process.on('SIGTERM', cleanup);
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
-    console.log(`Tunnel using cloudflare https://usat-auto-renew.kidderwise.org/scheduled-auto-renew`)
+    // console.log(`Tunnel using cloudflare https://usat-auto-renew.kidderwise.org/scheduled-auto-renew`)   // old per-subdomain path (pre-proxy)
+    console.log(`Tunnel using cloudflare https://usat-api.kidderwise.org/auto-renew/scheduled-auto-renew`)
     // 192.168.187:8014
 });
 

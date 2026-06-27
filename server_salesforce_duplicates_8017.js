@@ -315,7 +315,8 @@ app.listen(PORT, async () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
     // CLOUDFLARE TUNNEL
-    console.log(`Tunnel using cloudflare https://usat-salesforce-duplicates.kidderwise.org/salesforce-duplicates-test`);
+    // console.log(`Tunnel using cloudflare https://usat-salesforce-duplicates.kidderwise.org/salesforce-duplicates-test`);   // old per-subdomain path (pre-proxy)
+    console.log(`Tunnel using cloudflare https://usat-api.kidderwise.org/duplicates/salesforce-duplicates-test`);
 
     // NGROK TUNNEL
     if (is_test_ngrok) {

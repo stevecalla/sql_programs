@@ -75,7 +75,8 @@ process.on('SIGTERM', cleanup);
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
-    console.log(`Tunnel using cloudflare https://usat-members.kidderwise.org/scheduled-membership-base`)
+    // console.log(`Tunnel using cloudflare https://usat-members.kidderwise.org/scheduled-membership-base`)   // old per-subdomain path (pre-proxy)
+    console.log(`Tunnel using cloudflare https://usat-api.kidderwise.org/membership-base/scheduled-membership-base`)
     // 192.168.187:8004
 });
 

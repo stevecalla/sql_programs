@@ -154,7 +154,8 @@ app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
     // CLOUDFLARE TUNNEL
-    console.log(`Tunnel using cloudflare https://usat-member-sales.kidderwise.org/scheduled-all-sales`)
+    // console.log(`Tunnel using cloudflare https://usat-member-sales.kidderwise.org/scheduled-all-sales`)   // old per-subdomain path (pre-proxy)
+    console.log(`Tunnel using cloudflare https://usat-api.kidderwise.org/sales/scheduled-all-sales`)
     // 192.168.187:8003
 
     // NGROK TUNNEL

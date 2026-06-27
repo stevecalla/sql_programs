@@ -105,7 +105,8 @@ process.on('SIGTERM', cleanup);
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
-    console.log(`Tunnel using cloudflare https://usat-scraper.kidderwise.org/scheduled-scraper`)
+    // console.log(`Tunnel using cloudflare https://usat-scraper.kidderwise.org/scheduled-scraper`)   // old per-subdomain path (pre-proxy)
+    console.log(`Tunnel using cloudflare https://usat-api.kidderwise.org/scraper/scheduled-scraper`)
     // 192.168.187:8015
 });
 
