@@ -4,10 +4,15 @@
 //   node --test src/salesforce_merge/tests/api.test.js
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 
-process.env.MERGE_SESSION_SECRET = 'test-secret';
-process.env.MERGE_ADMIN_USER = 'tester';
-process.env.MERGE_ADMIN_PASS = 'pw123';
+// Ephemeral, randomly-generated test credentials — never hardcoded, so no secret is committed
+// (keeps GitGuardian and similar scanners happy). Generated fresh on every run.
+const TEST_USER = 'tester';
+const TEST_PASS = crypto.randomBytes(12).toString('hex');
+process.env.MERGE_ADMIN_USER = TEST_USER;
+process.env.MERGE_ADMIN_PASS = TEST_PASS;
+process.env.MERGE_SESSION_SECRET = crypto.randomBytes(24).toString('hex');
 
 const { create_app } = require('../../../server_salesforce_merge_8020.js');
 
