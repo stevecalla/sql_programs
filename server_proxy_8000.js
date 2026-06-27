@@ -219,7 +219,17 @@ function create_app() {
     const psi = (file) => { try { const t = fs.readFileSync(file, 'utf8'); const s = (t.match(/some [^\n]*avg10=([\d.]+)/) || [])[1]; const fu = (t.match(/full [^\n]*avg10=([\d.]+)/) || [])[1]; return { some: s != null ? Number(s) : null, full: fu != null ? Number(fu) : null }; } catch (e) { return null; } };
     out.psi = { memory: psi('/proc/pressure/memory'), cpu: psi('/proc/pressure/cpu'), io: psi('/proc/pressure/io') };
     try { const base = '/sys/class/thermal'; const temps = {}; fs.readdirSync(base).filter((d) => d.indexOf('thermal_zone') === 0).forEach((z) => { try { const type = fs.readFileSync(base + '/' + z + '/type', 'utf8').trim(); const t = Number(fs.readFileSync(base + '/' + z + '/temp', 'utf8').trim()) / 1000; if (!isNaN(t)) temps[type] = +t.toFixed(1); } catch (e) {} }); out.temps = temps; } catch (e) { out.temps = {}; }
-    try { await new Promise((resolve) => { (fs.statfs ? fs.statfs : (p, cb) => cb(new Error('no statfs')))('/', (err, st) => { if (!err && st) { const total = st.blocks * st.bsize, free = st.bavail * st.bsize, used = total - free; out.disk = { total, free, used, used_pct: +(100 * used / total).toFixed(1) }; } resolve(); }); }); } catch (e) {}
+    try { await new Promise((resolve) => { (fs.statfs ? fs.statfs : (p, cb) => cb(new Error('no statfs')))('/', (err, st) => {
+      if (!err && st) {
+        const bs = st.bsize;
+        const total = st.blocks * bs;                 // raw filesystem size (≈ df "Size")
+        const avail = st.bavail * bs;                 // available to non-root (≈ df "Avail")
+        const used = (st.blocks - st.bfree) * bs;     // actually used (≈ df "Used", excludes root reserve)
+        const denom = used + avail || total;          // df bases Use% on used+avail, not raw size
+        out.disk = { total, avail, free: avail, used, used_pct: +(100 * used / denom).toFixed(1) };
+      }
+      resolve();
+    }); }); } catch (e) {}
     const tailText = (fp, max) => { try { const st = fs.statSync(fp); const start = Math.max(0, st.size - (max || 16000)); const len = st.size - start; const fd = fs.openSync(fp, 'r'); const b = Buffer.alloc(len); fs.readSync(fd, b, 0, len, start); fs.closeSync(fd); return { text: b.toString('utf8'), mtime: st.mtime.toISOString() }; } catch (e) { return null; } };
     // Daily health summary: env override → the cron's saved summary → the raw metrics log.
     try {
