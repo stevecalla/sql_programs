@@ -1,29 +1,31 @@
 import { NavLink } from 'react-router-dom';
 import EnvSwitch from './EnvSwitch.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import NavDropdown from './NavDropdown.jsx';
 
-const LINKS = [
-  ['/', 'Dashboard'],
-  ['/duplicates', 'Duplicates'],
-  ['/merge-id', 'Merge-ID'],
-  ['/accounts', 'All Accounts'],
-  ['/process', 'Process'],
-  ['/reference', 'Reference'],
-  ['/admin', 'Admin'],
-  ['/metrics', 'Metrics'],
+// Grouped by function: standalone links plus dropdowns for related pages.
+const REVIEW = [
+  { to: '/duplicates', label: 'Duplicates' },
+  { to: '/merge-id', label: 'Merge-ID' },
+  { to: '/accounts', label: 'All accounts' },
+];
+const ADMIN = [
+  { to: '/metrics', label: 'Metrics' },
+  { to: '/admin', label: 'Admin' },
 ];
 
 export default function TopNav({ user, env, setEnv, onLogout }) {
+  const linkClass = ({ isActive }) => (isActive ? 'link active' : 'link');
   return (
     <header className="nav">
       <span className="brandmark" aria-hidden="true">M</span>
       <div className="brand">Account Merge Console</div>
       <nav className="links">
-        {LINKS.map(([to, label]) => (
-          <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => (isActive ? 'link active' : 'link')}>
-            {label}
-          </NavLink>
-        ))}
+        <NavLink to="/" end className={linkClass}>Dashboard</NavLink>
+        <NavDropdown label="Review" items={REVIEW} />
+        <NavLink to="/process" className={linkClass}>Process</NavLink>
+        <NavDropdown label="Admin" items={ADMIN} />
+        <NavLink to="/reference" className={linkClass}>Reference</NavLink>
       </nav>
       <div className="right">
         <EnvSwitch env={env} setEnv={setEnv} />

@@ -154,7 +154,7 @@ export default function Process() {
 
       <div className="card" style={{ margin: '12px 0' }}>
         <p style={{ margin: '0 0 10px', fontWeight: 500 }}>Activity — recent runs</p>
-        <DataTable columns={ACTIVITY_COLUMNS} rows={runs} searchCols="type, environment, scope, when" minWidth={820} />
+        <DataTable columns={ACTIVITY_COLUMNS} rows={runs} searchCols="type, environment, scope, when" minWidth={820} maxHeight={360} />
       </div>
     </>
   );

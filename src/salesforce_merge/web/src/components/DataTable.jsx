@@ -21,7 +21,7 @@ function CopyButton({ value }) {
 //   filter: true renders a per-column control in the header (a dropdown if `facets[key]` exists, else a text box).
 //   wrap: true lets long cells wrap; every cell gets a title tooltip with its full value.
 // `facets` maps column key -> distinct values (for the dropdowns). `searchCols` labels what search scans.
-export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, minWidth }) {
+export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, minWidth, maxHeight }) {
   const server = typeof fetcher === 'function';
   const [q, setQ] = useState('');
   const [sortKey, setSortKey] = useState(null);
@@ -126,6 +126,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
       </div>
 
       {err && <p className="err">{err}</p>}
+      <div className="dt-scroll" style={maxHeight ? { maxHeight } : undefined}>
       <table style={minWidth ? { minWidth } : undefined}>
         <thead>
           <tr>{columns.map((col) => (
@@ -167,6 +168,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
           )}
         </tbody>
       </table>
+      </div>
       <div className="dt-footer">
         <span className="muted small">{loading ? 'Loading…' : `${Number(total).toLocaleString()} rows`}</span>
         {server && (
