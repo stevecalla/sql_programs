@@ -36,22 +36,27 @@ function push(name, level, data) {
   });
 }
 
-// Launch the pm2 bus once (lazy). Safe to call repeatedly.
+// Launch the pm2 bus once (lazy) over its OWN persistent connection. We connect and never disconnect,
+// so this socket stays alive. IMPORTANT: nothing else in the app may call pm2.disconnect() — the list
+// and control routes shell the pm2 CLI instead, precisely so they can't tear this bus down.
 function start() {
   if (started || starting) return;
   starting = true;
   let pm2;
   try { pm2 = require('pm2'); }
   catch (e) { starting = false; return; }
-  try {
-    pm2.launchBus(function (err, b) {
-      starting = false;
-      if (err || !b) return;            // fail soft — cards still get the file-tail backfill
-      started = true; bus = b;
-      bus.on('log:out', function (packet) { try { push(packet.process && packet.process.name, 'info', packet.data); } catch (e) {} });
-      bus.on('log:err', function (packet) { try { push(packet.process && packet.process.name, 'error', packet.data); } catch (e) {} });
-    });
-  } catch (e) { starting = false; }
+  pm2.connect(function (cerr) {
+    if (cerr) { starting = false; return; }   // fail soft — cards fall back to the file-tail backfill
+    try {
+      pm2.launchBus(function (err, b) {
+        starting = false;
+        if (err || !b) return;
+        started = true; bus = b;
+        bus.on('log:out', function (packet) { try { push(packet.process && packet.process.name, 'info', packet.data); } catch (e) {} });
+        bus.on('log:err', function (packet) { try { push(packet.process && packet.process.name, 'error', packet.data); } catch (e) {} });
+      });
+    } catch (e) { starting = false; }
+  });
 }
 
 // Subscribe an SSE response. name = a single process, or falsy for ALL processes.

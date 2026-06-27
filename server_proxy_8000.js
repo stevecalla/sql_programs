@@ -164,41 +164,58 @@ function create_app() {
   // Works while pm2 is running the processes; otherwise the cards fall back to the /api/logs file tail.
   app.get('/api/logs/stream', proxy_auth.require_auth, (req, res) => { open_sse(res); pm2_logs.subscribe(res, req.query.name); });
 
-  // Gated pm2 process list (status/cpu/mem/restarts) — Processes pane + fleet wall.
+  // Gated pm2 process list (status/cpu/mem/restarts/port) — Processes pane + fleet wall.
+  // Uses the pm2 CLI (`pm2 jlist`) via spawn, NOT the pm2 module — so it never calls pm2.disconnect()
+  // and therefore can't kill the launchBus log stream the Server cards rely on.
   app.get('/api/pm2', proxy_auth.require_auth, (req, res) => {
-    let pm2;
-    try { pm2 = require('pm2'); } catch (e) { return res.status(500).json({ ok: false, error: 'pm2 module not available', detail: e.message }); }
-    pm2.connect((err) => {
-      if (err) return res.status(500).json({ ok: false, error: 'pm2 connect failed', detail: (err && err.message) || String(err) });
-      pm2.list((err2, list) => {
-        pm2.disconnect();
-        if (err2) return res.status(500).json({ ok: false, error: 'pm2 list failed', detail: (err2 && err2.message) || String(err2) });
-        const processes = (list || []).map((p) => {
-          const env = p.pm2_env || {}; const mon = p.monit || {};
-          return {
-            name: p.name, status: env.status, cpu: mon.cpu,
-            memory_mb: typeof mon.memory === 'number' ? +(mon.memory / 1048576).toFixed(1) : null,
-            restarts: env.restart_time, uptime_ms: env.pm_uptime ? (Date.now() - env.pm_uptime) : null, pid: p.pid,
-          };
-        });
-        res.json({ ok: true, time: new Date().toISOString(), count: processes.length, processes });
+    const { spawn } = require('child_process');
+    let out = '', errout = '', proc;
+    try { proc = spawn('pm2', ['jlist'], { shell: process.platform === 'win32' }); }
+    catch (e) { return res.status(500).json({ ok: false, error: 'pm2 not available', detail: e.message }); }
+    const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 6000);
+    proc.stdout.on('data', (d) => { out += d.toString(); });
+    proc.stderr.on('data', (d) => { errout += d.toString(); });
+    proc.on('error', (e) => { clearTimeout(timer); res.status(500).json({ ok: false, error: 'pm2 spawn failed', detail: e.message }); });
+    proc.on('close', () => {
+      clearTimeout(timer);
+      let list;
+      try { list = JSON.parse(out); } catch (e) { return res.status(500).json({ ok: false, error: 'could not parse pm2 jlist', detail: (errout || e.message).slice(0, 300) }); }
+      const processes = (list || []).map((p) => {
+        const env = p.pm2_env || {}; const mon = p.monit || {};
+        const script = String(env.pm_exec_path || '');
+        const pm = script.match(/_(\d{3,5})\.[cm]?js$/);                 // server_<name>_<port>.js
+        const port = pm ? Number(pm[1]) : (env.env && env.env.PORT ? Number(env.env.PORT) : null);
+        return {
+          name: p.name, status: env.status, cpu: mon.cpu,
+          memory_mb: typeof mon.memory === 'number' ? +(mon.memory / 1048576).toFixed(1) : null,
+          restarts: env.restart_time, uptime_ms: env.pm_uptime ? (Date.now() - env.pm_uptime) : null,
+          pid: p.pid, port: port,
+        };
       });
+      res.json({ ok: true, time: new Date().toISOString(), count: processes.length, processes });
     });
   });
 
   // Gated control actions (mirror the menu): reload the proxy, restart a server, restart all.
+  // Shells the pm2 CLI (not the module) so it never disconnects the launchBus log stream.
   app.post('/api/control/:action', proxy_auth.require_auth, express.urlencoded({ extended: false }), (req, res) => {
+    const { spawn } = require('child_process');
     const action = req.params.action;
     const name = String((req.query.name || (req.body && req.body.name) || '')).trim();
-    let pm2; try { pm2 = require('pm2'); } catch (e) { return res.status(500).json({ ok: false, error: 'pm2 module not available', detail: e.message }); }
-    pm2.connect((err) => {
-      if (err) return res.status(500).json({ ok: false, error: 'pm2 connect failed', detail: (err && err.message) || String(err) });
-      const done = (e, msg) => { pm2.disconnect(); if (e) return res.status(500).json({ ok: false, error: (e && e.message) || String(e) }); res.json({ ok: true, action, name: name || undefined, msg }); };
-      if (action === 'reload-proxy') { console.log('[' + log_ts() + '] [control] reload usat_proxy'); pm2.reload('usat_proxy', (e) => done(e, 'reloaded usat_proxy')); }
-      else if (action === 'restart' && name) { console.log('[' + log_ts() + '] [control] restart ' + name); pm2.restart(name, (e) => done(e, 'restarted ' + name)); }
-      else if (action === 'restart-all') { console.log('[' + log_ts() + '] [control] restart all'); pm2.restart('all', (e) => done(e, 'restarted all')); }
-      else { pm2.disconnect(); res.status(400).json({ ok: false, error: 'unknown action or missing name' }); }
-    });
+    let args;
+    if (action === 'reload-proxy') args = ['reload', process.env.name || 'usat_proxy'];
+    else if (action === 'restart' && /^[\w.-]+$/.test(name)) args = ['restart', name];
+    else if (action === 'restart-all') args = ['restart', 'all'];
+    else return res.status(400).json({ ok: false, error: 'unknown action or missing/invalid name' });
+    console.log('[' + log_ts() + '] [control] pm2 ' + args.join(' '));
+    let out = '', errout = '', proc;
+    try { proc = spawn('pm2', args, { shell: process.platform === 'win32' }); }
+    catch (e) { return res.status(500).json({ ok: false, error: 'pm2 spawn failed', detail: e.message }); }
+    const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 20000);
+    proc.stdout.on('data', (d) => { out += d.toString(); });
+    proc.stderr.on('data', (d) => { errout += d.toString(); });
+    proc.on('error', (e) => { clearTimeout(timer); res.status(500).json({ ok: false, error: e.message }); });
+    proc.on('close', (code) => { clearTimeout(timer); res.json({ ok: code === 0, action, name: name || undefined, code, msg: (out || errout).slice(-500) }); });
   });
 
   // Console: registry of allowlisted ops (mirrors menu.js) + a runner (shell:false, capped+timed).
