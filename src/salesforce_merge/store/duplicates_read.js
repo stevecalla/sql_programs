@@ -3,15 +3,15 @@
 // finder). Table names are imported from the duplicates config so they stay in sync. Every query
 // is wrapped so a missing table (no finder run yet) returns null instead of crashing — the
 // dashboard then shows "—" for that figure.
-const { query } = require('./db');
+const { query: real_query } = require('./db');
 const cfg = require('../../salesforce_duplicates/config');
 
-async function safe(sql, params) {
-  try { return await query(sql, params); } catch (e) { return null; }
-}
-
 // Phase 0 dashboard figures — all read-only, all from tables the finder already produced.
-async function dashboard_counts() {
+// `query` is injectable (defaults to the real DB) so this is unit-testable without MySQL.
+async function dashboard_counts(query = real_query) {
+  const safe = async (sql, params) => {
+    try { return await query(sql, params); } catch (e) { return null; }
+  };
   const T_SNAP = cfg.SNAPSHOT_TABLE_NAME;          // salesforce_account_duplicate_snapshot
   const T_CL = cfg.RESULT_CONSOLIDATED_TABLE;      // salesforce_duplicate_consolidated_cluster
   const T_MR = cfg.RESULT_MERGE_ID_REVIEW_TABLE;   // salesforce_duplicate_merge_id_review

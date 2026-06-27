@@ -1,4 +1,5 @@
 # merge tool — local/secret/build artifacts (never commit)
 auth/.merge_session_secret.json
+.menu_prefs.json
 web/node_modules/
 web/dist/

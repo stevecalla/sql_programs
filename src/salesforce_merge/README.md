@@ -28,7 +28,12 @@ MERGE_ADMIN_USER=youradmin
 MERGE_ADMIN_PASS=somethingstrong
 # optional; auto-generated + persisted if omitted:
 # MERGE_SESSION_SECRET=...
+# optional public tunnel (off by default; Cloudflare fronts prod). Needs NGROK_AUTHTOKEN:
+# MERGE_NGROK=true
 ```
+
+The server logs one line per request, and prints a startup banner with the local URLs + ngrok
+status (same pattern as the 8018/8019 servers).
 
 The MySQL connection reuses the repo's existing `LOCAL_MYSQL_*` settings (via
 `utilities/config` → `local_usat_sales_db_config`). No new DB config needed.
@@ -65,6 +70,21 @@ Prefer separate terminals? `npm run salesforce_merge_dev` (backend) and
   http://localhost:8020/api/status (should return JSON).
 - **`login configured: false` in the server log** → `MERGE_ADMIN_USER` / `MERGE_ADMIN_PASS`
   aren't being read from the repo-root `.env`.
+
+## Testing
+
+- **Unit tests** (node:test, no DB/Salesforce needed): `npm run salesforce_merge_test`
+  — covers auth (session sign/verify, valid_user), the API routes (status/login/me + the
+  dashboard auth gate, via a real `create_app()` boot), and `duplicates_read` (injected fake query).
+- **E2E smoke** (Playwright, stubs `/api/*`): one-time `npx playwright install chromium` +
+  `npm run salesforce_merge_build`, then `npm run salesforce_merge_e2e` — login → dashboard renders
+  → dark-mode toggle.
+
+## Menu
+
+`npm run salesforce_merge_menu` (or `node src/salesforce_merge/menu.js`) — an interactive launcher
+mirroring the duplicates menu: RUN (dev / build / server), TESTING (unit / e2e), OPEN (dev/built
+UI, API status), and PM2 (start/stop/restart/logs).
 
 ## Run (production-style: one server)
 

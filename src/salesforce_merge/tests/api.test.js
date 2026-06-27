@@ -1,0 +1,63 @@
+'use strict';
+// API integration tests — boots create_app() on an ephemeral port and hits it with fetch.
+// No DB needed: status/login/me are DB-free, and /api/dashboard is checked only for its auth gate.
+//   node --test src/salesforce_merge/tests/api.test.js
+const { test, describe, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+
+process.env.MERGE_SESSION_SECRET = 'test-secret';
+process.env.MERGE_ADMIN_USER = 'tester';
+process.env.MERGE_ADMIN_PASS = 'pw123';
+
+const { create_app } = require('../../../server_salesforce_merge_8020.js');
+
+let server, base;
+before(async () => {
+  await new Promise((resolve) => {
+    server = create_app().listen(0, () => {
+      base = 'http://127.0.0.1:' + server.address().port;
+      resolve();
+    });
+  });
+});
+after(() => { if (server) server.close(); });
+
+describe('api', () => {
+  test('GET /api/status is public and ok', async () => {
+    const r = await fetch(base + '/api/status');
+    const j = await r.json();
+    assert.equal(r.status, 200);
+    assert.equal(j.ok, true);
+    assert.equal(j.app, 'salesforce_merge');
+    assert.equal(j.login_configured, true);
+  });
+
+  test('POST /api/login rejects bad credentials (401)', async () => {
+    const r = await fetch(base + '/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'x', password: 'y' }),
+    });
+    assert.equal(r.status, 401);
+  });
+
+  test('login sets a session cookie, then /api/me returns the user', async () => {
+    const r = await fetch(base + '/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'tester', password: 'pw123' }),
+    });
+    assert.equal(r.status, 200);
+    const cookie = r.headers.get('set-cookie');
+    assert.ok(cookie && cookie.includes('merge_session='), 'expected a merge_session cookie');
+
+    const me = await fetch(base + '/api/me', { headers: { cookie } });
+    const mj = await me.json();
+    assert.equal(me.status, 200);
+    assert.equal(mj.user, 'tester');
+    assert.equal(mj.role, 'admin');
+  });
+
+  test('GET /api/dashboard is auth-gated (401 without a session)', async () => {
+    const r = await fetch(base + '/api/dashboard');
+    assert.equal(r.status, 401);
+  });
+});

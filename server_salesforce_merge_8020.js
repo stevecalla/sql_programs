@@ -44,6 +44,15 @@ function create_app() {
     next();
   });
 
+  // Lightweight request log — one line per call (same pattern as 8018/8019). Flags the app
+  // root '/' so you can confirm a tunnel/proxy reaches this process.
+  app.use(function (req, res, next) {
+    const ts = new Date().toISOString();
+    if (req.path === '/') console.log('[' + ts + '] GET / -> web app (index.html)  host=' + (req.headers.host || '?'));
+    else console.log('[' + ts + '] ' + req.method + ' ' + req.originalUrl + '  host=' + (req.headers.host || '?'));
+    next();
+  });
+
   // JSON API (login/logout public; the rest auth-gated). No Salesforce writes in Phase 0.
   app.use(express.json({ limit: '5mb' }));
   mount(app);
@@ -68,14 +77,42 @@ function create_app() {
   return app;
 }
 
+// NGROK TUNNEL — optional public URL, same pattern as 8018/8019. Off by default (Cloudflare
+// fronts the app in prod). Enable with MERGE_NGROK=true and a valid NGROK_AUTHTOKEN in .env.
+const is_test_ngrok = false;
+const ngrok_enabled_flag = String(process.env.MERGE_NGROK).toLowerCase() === 'true';
+let ngrok_url = null;
+
 function start_server(port) {
   const p = port || DEFAULT_PORT;
   const app = create_app();
   // No host arg -> dual-stack bind (IPv6 + IPv4), matching the other UI servers.
-  return app.listen(p, function () {
-    console.log('[merge] listening on http://localhost:' + p + '  (login configured: ' + store.login_configured() + ')');
-    if (!fs.existsSync(WEB_DIST)) console.log('[merge] React app not built yet — see the message at /');
+  const server = app.listen(p, function () {
+    const actual = server.address().port;
+    console.log('\nSalesforce Merge tool - local server');
+    console.log('  -> http://localhost:' + actual + '/                 (web app)');
+    console.log('  -> http://localhost:' + actual + '/api/status        (health check)');
+    console.log('  login configured: ' + store.login_configured());
+    if (!fs.existsSync(WEB_DIST)) console.log('  NOTE: React app not built yet — run salesforce_merge_build (see message at /).');
+    console.log('  One log line per request below. Press Ctrl-C to stop.\n');
+
+    // NGROK — best-effort; a missing/invalid NGROK_AUTHTOKEN must NOT crash the local server.
+    if (is_test_ngrok || ngrok_enabled_flag) {
+      process.once('unhandledRejection', function (err) {
+        console.log('\n  [ngrok] tunnel not started: ' + ((err && (err.errorCode || err.message)) || String(err)));
+        console.log('  The local server above keeps running. Set NGROK_AUTHTOKEN to get a public ngrok URL.\n');
+      });
+      const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
+      create_ngrok_tunnel(actual).then(function (u) { if (u) { ngrok_url = u; console.log('  [ngrok] public URL: ' + u); } });
+    } else {
+      console.log('  [ngrok] tunnel disabled (set MERGE_NGROK=true + NGROK_AUTHTOKEN to enable).');
+    }
   });
+  server.on('error', function (e) {
+    if (e && e.code === 'EADDRINUSE') console.error('PORT ' + p + ' is already in use — stop the other process or set MERGE_PORT.');
+    else console.error(e);
+  });
+  return server;
 }
 
 if (require.main === module) start_server();
