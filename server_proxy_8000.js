@@ -279,6 +279,65 @@ function create_app() {
     proc.on('close', (code) => { clearTimeout(timer); res.json({ ok: true, user: os.userInfo ? (os.userInfo().username || '') : '', crontab: (out.trim() || ('(no crontab installed for this user)' + (err ? '\n' + err.trim() : ''))), code, time: new Date().toISOString() }); });
   });
 
+  // Gated crontab WRITE (guarded): validates every line, backs up the current crontab to a timestamped
+  // file, then installs the new one via `crontab -`. Refuses empty input and obviously-bad lines.
+  app.post('/api/system/cron', proxy_auth.require_auth, express.text({ type: '*/*', limit: '256kb' }), (req, res) => {
+    const { spawn } = require('child_process');
+    const content = String(req.body || '');
+    if (!content.trim()) return res.status(400).json({ ok: false, error: 'refusing to write an empty crontab' });
+    const bad = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => {
+      if (l[0] === '#') return false;                                              // comment
+      if (/^@(reboot|yearly|annually|monthly|weekly|daily|midnight|hourly)\s+\S/.test(l)) return false; // @shortcut + cmd
+      if (/^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(l)) return false;                     // VAR=value
+      return l.split(/\s+/).length < 6;                                           // need 5 time fields + a command
+    });
+    if (bad.length) return res.status(400).json({ ok: false, error: 'invalid cron line(s): ' + bad.slice(0, 3).join('  |  ') });
+    const dir = path.join(__dirname, '.crontab_backups');
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+    const backup = path.join(dir, 'crontab_' + new Date().toISOString().replace(/[:.]/g, '-') + '.bak');
+    let cur = '';
+    const lister = spawn('crontab', ['-l'], { shell: false, windowsHide: true });
+    lister.stdout.on('data', (d) => { cur += d.toString(); });
+    lister.on('error', writeNew);
+    lister.on('close', () => { try { fs.writeFileSync(backup, cur); } catch (e) {} writeNew(); });
+    function writeNew() {
+      let w; try { w = spawn('crontab', ['-'], { shell: false, windowsHide: true }); }
+      catch (e) { return res.status(500).json({ ok: false, error: 'crontab not available', detail: e.message }); }
+      let werr = '';
+      w.stderr.on('data', (d) => { werr += d.toString(); });
+      w.on('error', (e) => res.status(500).json({ ok: false, error: e.message }));
+      w.on('close', (code) => { if (code === 0) { console.log('[' + log_ts() + '] [cron] crontab updated (backup ' + path.basename(backup) + ')'); res.json({ ok: true, backup: path.basename(backup), time: new Date().toISOString() }); } else res.status(500).json({ ok: false, error: 'crontab write failed (code ' + code + ')' + (werr ? ': ' + werr.trim() : ''), backup: path.basename(backup) }); });
+      w.stdin.write(content.endsWith('\n') ? content : content + '\n'); w.stdin.end();
+    }
+  });
+
+  // Gated disk-usage explorer — `du -h --max-depth=1 <path> | sort -h` for an allow-listed set of paths,
+  // plus journald usage. Runs as the proxy user (no sudo), so protected dirs may be undercounted.
+  const DU_PATHS = ['/', '/var', '/var/lib', '/var/lib/mysql', '/var/log', '/var/cache', '/var/lib/docker', '/home', '/usr', '/snap', '/tmp'];
+  app.get('/api/system/du', proxy_auth.require_auth, (req, res) => {
+    const { spawn } = require('child_process');
+    const p = String(req.query.path || '');
+    if (p === 'journal') {
+      let out = '', proc;
+      try { proc = spawn('journalctl', ['--disk-usage'], { shell: false, windowsHide: true }); }
+      catch (e) { return res.json({ ok: false, error: e.message }); }
+      const t = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 8000);
+      proc.stdout.on('data', (d) => { out += d.toString(); }); proc.stderr.on('data', (d) => { out += d.toString(); });
+      proc.on('error', (e) => { clearTimeout(t); res.json({ ok: false, error: e.message }); });
+      proc.on('close', () => { clearTimeout(t); res.json({ ok: true, path: 'journal', output: out.trim() || '(no output)', time: new Date().toISOString() }); });
+      return;
+    }
+    if (DU_PATHS.indexOf(p) < 0) return res.status(400).json({ ok: false, error: 'path not allowed' });
+    let out = '', proc;
+    try { proc = spawn('bash', ['-lc', 'du -h --max-depth=1 ' + p + ' 2>/dev/null | sort -h'], { shell: false, windowsHide: true }); }
+    catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+    const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 60000);
+    proc.stdout.on('data', (d) => { out += d.toString(); });
+    proc.on('error', (e) => { clearTimeout(timer); res.json({ ok: false, error: e.message }); });
+    proc.on('close', () => { clearTimeout(timer); res.json({ ok: true, path: p, output: out.trim() || '(no readable entries — protected dirs need sudo; run in a terminal for exact numbers)', time: new Date().toISOString() }); });
+  });
+  app.get('/api/system/du-paths', proxy_auth.require_auth, (req, res) => res.json({ ok: true, paths: DU_PATHS }));
+
   // Gated pm2 process list (status/cpu/mem/restarts/port) — Processes pane + fleet wall.
   // Uses the pm2 CLI (`pm2 jlist`) via spawn, NOT the pm2 module — so it never calls pm2.disconnect()
   // and therefore can't kill the launchBus log stream the Server cards rely on.

@@ -173,7 +173,7 @@
         </div>
         <div class="ad-card">
           <div class="run-head"><h2 id="proxyLogTitle" style="margin:0">Server console</h2>
-            <span class="term-tools"><span id="ovLive" class="mut" style="font-size:12px">○ connecting…</span><button class="btn ghost sm" data-bottom="proxyLog" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="proxyLog" type="button">copy</button><button class="btn ghost sm" data-expand="proxyLog" type="button">⤢ expand</button></span></div>
+            <span class="term-tools"><span id="ovLive" class="mut" style="font-size:12px">○ connecting…</span><button class="btn ghost sm" data-top="proxyLog" type="button" title="jump to top">⤒ top</button><button class="btn ghost sm" data-bottom="proxyLog" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="proxyLog" type="button">copy</button><button class="btn ghost sm" data-expand="proxyLog" type="button">⤢ expand</button></span></div>
           <div class="term" id="proxyLog" style="min-height:240px">Loading…</div>
         </div>
       </section>
@@ -228,6 +228,7 @@
               <select class="logpick" id="logPick" title="Which process to tail"></select>
               <span id="logsLive" class="mut" style="font-size:12px">○ connecting…</span>
               <button class="btn ghost sm" id="logsReload" type="button">&#8635; Reconnect</button>
+              <button class="btn ghost sm" data-top="logsOut" type="button" title="jump to top">⤒ top</button>
               <button class="btn ghost sm" data-bottom="logsOut" type="button" title="jump to newest">⤓ bottom</button>
               <button class="btn ghost sm" data-copy="logsOut" type="button">copy</button>
               <button class="btn ghost sm" data-expand="logsOut" type="button">⤢ expand</button>
@@ -245,26 +246,38 @@
         </div>
         <div class="ad-card collapsed" id="sysCmdCard">
           <div class="run-head"><h2 class="collapser" data-collapse="sysCmdCard" style="margin:0"><span class="cx">▾</span> Live commands <span class="mut" id="sysCmdWhen" style="text-transform:none;font-weight:400"></span></h2>
-            <span class="term-tools"><button class="btn ghost sm" data-bottom="sysCmdOut" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysCmdOut" type="button">copy</button><button class="btn ghost sm" data-expand="sysCmdOut" type="button">⤢ expand</button></span></div>
+            <span class="term-tools"><button class="btn ghost sm" data-top="sysCmdOut" type="button" title="jump to top">⤒ top</button><button class="btn ghost sm" data-bottom="sysCmdOut" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysCmdOut" type="button">copy</button><button class="btn ghost sm" data-expand="sysCmdOut" type="button">⤢ expand</button></span></div>
           <div class="collapse-body">
             <div class="chips" id="sysCmdChips" style="margin-bottom:8px"></div>
             <div class="term" id="sysCmdOut" style="min-height:200px">Pick a command above.</div>
           </div>
         </div>
+        <div class="ad-card collapsed" id="sysDuCard">
+          <div class="run-head"><h2 class="collapser" data-collapse="sysDuCard" style="margin:0"><span class="cx">▾</span> Disk usage explorer <span class="mut" id="sysDuWhen" style="text-transform:none;font-weight:400"></span></h2>
+            <span class="term-tools"><button class="btn ghost sm" data-top="sysDuOut" type="button" title="jump to top">⤒ top</button><button class="btn ghost sm" data-bottom="sysDuOut" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysDuOut" type="button">copy</button><button class="btn ghost sm" data-expand="sysDuOut" type="button">⤢ expand</button></span></div>
+          <div class="collapse-body">
+            <div class="chips" id="sysDuChips" style="margin-bottom:8px"></div>
+            <div class="term" id="sysDuOut" style="min-height:180px">Pick a path above. Runs <code>du -h --max-depth=1 &lt;path&gt; | sort -h</code> as the proxy user — protected dirs (e.g. /var/lib/mysql) need sudo, so run those in a terminal for exact numbers.</div>
+          </div>
+        </div>
         <div class="ad-card collapsed" id="sysCronCard">
           <div class="run-head"><h2 class="collapser" data-collapse="sysCronCard" style="margin:0"><span class="cx">▾</span> Cron schedule <span class="mut" id="sysCronWhen" style="text-transform:none;font-weight:400"></span></h2>
-            <span class="term-tools"><button class="btn ghost sm" data-copy="sysCron" type="button">copy</button><button class="btn ghost sm" data-expand="sysCron" type="button">⤢ expand</button></span></div>
+            <span class="term-tools"><button class="btn ghost sm" data-top="sysCron" type="button" title="jump to top">⤒ top</button><button class="btn ghost sm" data-bottom="sysCron" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" id="sysCronEditBtn" type="button">✎ edit</button><button class="btn ghost sm" data-copy="sysCron" type="button">copy</button><button class="btn ghost sm" data-expand="sysCron" type="button">⤢ expand</button></span></div>
           <div class="collapse-body"><div class="term" id="sysCron" style="min-height:140px">Loading…</div>
-            <div class="mut" style="margin-top:6px">Read-only view of <code>crontab -l</code> for the server user. Editing from the panel is not enabled (see note below).</div></div>
+            <div id="sysCronEdit" style="display:none;margin-top:8px">
+              <textarea id="sysCronText" spellcheck="false" style="width:100%;min-height:220px;box-sizing:border-box;background:#0b1020;color:#d6e2ff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;resize:vertical"></textarea>
+              <div class="act-row" style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="btn primary sm" id="sysCronSave" type="button">Save crontab</button><button class="btn ghost sm" id="sysCronCancel" type="button">Cancel</button><span class="mut" id="sysCronMsg" style="font-size:12px"></span></div>
+              <div class="mut" style="margin-top:6px">Saving backs up the current crontab to <code>.crontab_backups/</code> first, validates each line, then installs via <code>crontab -</code>. A bad schedule can stop jobs — double-check before saving.</div>
+            </div></div>
         </div>
         <div class="ad-card collapsed" id="sysSummaryCard">
           <div class="run-head"><h2 class="collapser" data-collapse="sysSummaryCard" style="margin:0"><span class="cx">▾</span> Daily health summary <span class="mut" id="sysSummaryWhen" style="text-transform:none;font-weight:400"></span></h2>
-            <span class="term-tools"><button class="btn ghost sm" data-bottom="sysSummary" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysSummary" type="button">copy</button><button class="btn ghost sm" data-expand="sysSummary" type="button">⤢ expand</button></span></div>
+            <span class="term-tools"><button class="btn ghost sm" data-top="sysSummary" type="button" title="jump to top">⤒ top</button><button class="btn ghost sm" data-bottom="sysSummary" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysSummary" type="button">copy</button><button class="btn ghost sm" data-expand="sysSummary" type="button">⤢ expand</button></span></div>
           <div class="collapse-body"><div class="term" id="sysSummary" style="min-height:160px">Loading…</div></div>
         </div>
         <div class="ad-card collapsed" id="sysUbuntuCard">
           <div class="run-head"><h2 class="collapser" data-collapse="sysUbuntuCard" style="margin:0"><span class="cx">▾</span> Ubuntu update log <span class="mut" id="sysUbuntuWhen" style="text-transform:none;font-weight:400"></span></h2>
-            <span class="term-tools"><button class="btn ghost sm" data-bottom="sysUbuntu" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysUbuntu" type="button">copy</button><button class="btn ghost sm" data-expand="sysUbuntu" type="button">⤢ expand</button></span></div>
+            <span class="term-tools"><button class="btn ghost sm" data-top="sysUbuntu" type="button" title="jump to top">⤒ top</button><button class="btn ghost sm" data-bottom="sysUbuntu" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysUbuntu" type="button">copy</button><button class="btn ghost sm" data-expand="sysUbuntu" type="button">⤢ expand</button></span></div>
           <div class="collapse-body"><div class="term" id="sysUbuntu" style="min-height:120px">Loading…</div></div>
         </div>
       </section>
@@ -485,7 +498,7 @@
   function cardMeta(p){ return '<span>cpu '+(p.cpu==null?'?':p.cpu)+'%</span><span>'+(p.memory_mb==null?'?':p.memory_mb)+'MB</span><span>↺'+(p.restarts==null?'?':p.restarts)+'</span><span>'+uptime(p.uptime_ms)+'</span><span class="port">#'+esc(cardKey(p))+'</span>'; }
   function buildCard(p){
     var id=cardKey(p); var port = p.port ? ' <span class="port">:'+p.port+'</span>' : '';
-    return '<div class="fcard" data-id="'+esc(id)+'" data-name="'+esc(p.name)+'"><div class="top"><span class="drag" draggable="true" title="drag to reorder">⠿</span>'+statusPill(p.status)+'<span class="nm">'+esc(p.name)+port+'</span><span class="cardbtns"><button class="btn sm btm" data-id="'+esc(id)+'" title="jump to newest">⤓</button><button class="btn sm xpand" data-name="'+esc(p.name)+'">⤢ expand</button><button class="btn sm copy" data-id="'+esc(id)+'">copy</button></span></div>'
+    return '<div class="fcard" data-id="'+esc(id)+'" data-name="'+esc(p.name)+'"><div class="top"><span class="drag" draggable="true" title="drag to reorder">⠿</span>'+statusPill(p.status)+'<span class="nm">'+esc(p.name)+port+'</span><span class="cardbtns"><button class="btn sm tpp" data-id="'+esc(id)+'" title="jump to top">⤒</button><button class="btn sm btm" data-id="'+esc(id)+'" title="jump to newest">⤓</button><button class="btn sm xpand" data-name="'+esc(p.name)+'">⤢ expand</button><button class="btn sm copy" data-id="'+esc(id)+'">copy</button></span></div>'
       +'<div class="meta">'+cardMeta(p)+'</div>'
       +'<pre class="minilog" data-id="'+esc(id)+'" data-name="'+esc(p.name)+'">loading…</pre></div>';
   }
@@ -671,7 +684,7 @@
     if(s.ubuntu){ $('#sysUbuntuWhen').textContent='— '+mtn(s.ubuntu.mtime); renderTerm($('#sysUbuntu'), s.ubuntu.text); }
     else { $('#sysUbuntuWhen').textContent=''; renderTerm($('#sysUbuntu'), '(no ubuntu-update.log found)'); }
     try{ var cr=(await getJSON('/api/system/cron')).body||{}; renderTerm($('#sysCron'), cr.ok?(cr.crontab||'(empty)'):('(unavailable'+(cr.error?': '+cr.error:'')+')')); if($('#sysCronWhen')) $('#sysCronWhen').textContent=(cr.user?('— '+cr.user):'')+(cr.time?'  '+mtn(cr.time):''); }catch(e){}
-    loadSysCmdChips();
+    loadSysCmdChips(); loadDuChips();
     setRefresh();
   }
   // Live commands: render the chip row once, then run an allow-listed snapshot on click (+ refresh chip).
@@ -692,6 +705,37 @@
     var r=(await getJSON('/api/system/cmd?name='+encodeURIComponent(id))).body||{};
     renderTerm($('#sysCmdOut'), r.output||('error: '+(r.error||'failed'))); $('#sysCmdWhen').textContent=r.time?('— '+mtn(r.time)):'';
   }
+  // Disk usage explorer
+  var duLoaded=false, duCur=null;
+  async function loadDuChips(){
+    if(duLoaded) return; duLoaded=true;
+    var j=(await getJSON('/api/system/du-paths')).body||{}; var paths=j.paths||[];
+    $('#sysDuChips').innerHTML=paths.map(function(p){return '<button class="chip" data-du="'+esc(p)+'" style="cursor:pointer">'+esc(p)+'</button>';}).join('')
+      +'<button class="chip" data-du="journal" style="cursor:pointer" title="journalctl --disk-usage">journal</button><button class="chip" id="sysDuRefresh" style="cursor:pointer" title="re-run the current path">&#8635; refresh</button>';
+    $('#sysDuChips').addEventListener('click', function(e){ var b=e.target.closest('button'); if(!b) return; if(b.id==='sysDuRefresh'){ if(duCur) runDu(duCur); return; } if(b.dataset.du) runDu(b.dataset.du); });
+  }
+  async function runDu(p){
+    duCur=p; $('#sysDuChips').querySelectorAll('button[data-du]').forEach(function(b){ b.style.borderColor=b.dataset.du===p?'var(--accent)':''; });
+    renderTerm($('#sysDuOut'), 'scanning '+p+' … (large dirs can take a moment)'); $('#sysDuWhen').textContent='';
+    var r=(await getJSON('/api/system/du?path='+encodeURIComponent(p))).body||{};
+    renderTerm($('#sysDuOut'), r.output||('error: '+(r.error||'failed'))); $('#sysDuWhen').textContent=r.time?('— '+mtn(r.time)):'';
+  }
+  // Cron guarded editor
+  if($('#sysCronEditBtn')) $('#sysCronEditBtn').addEventListener('click', async function(){
+    var ed=$('#sysCronEdit'); if(ed.style.display!=='none'){ ed.style.display='none'; return; }
+    var r=(await getJSON('/api/system/cron')).body||{}; var txt=(r.ok&&r.crontab&&r.crontab.indexOf('(no crontab')!==0)?r.crontab:'';
+    $('#sysCronText').value=txt; $('#sysCronMsg').textContent=''; $('#sysCronMsg').style.color='var(--dim)'; ed.style.display='block'; $('#sysCronText').focus();
+  });
+  if($('#sysCronCancel')) $('#sysCronCancel').addEventListener('click', function(){ $('#sysCronEdit').style.display='none'; });
+  if($('#sysCronSave')) $('#sysCronSave').addEventListener('click', async function(){
+    var body=$('#sysCronText').value; if(!body.trim()){ $('#sysCronMsg').style.color='var(--accent)'; $('#sysCronMsg').textContent='Refusing to save an empty crontab.'; return; }
+    if(!confirm('Install this crontab? The current one is backed up first, but a bad schedule can stop jobs.')) return;
+    $('#sysCronMsg').style.color='var(--dim)'; $('#sysCronMsg').textContent='Saving…';
+    try{ var resp=await fetch('/api/system/cron',{method:'POST',headers:{'Content-Type':'text/plain'},cache:'no-store',body:body}); var j=await resp.json();
+      if(j.ok){ $('#sysCronMsg').style.color='var(--ok)'; $('#sysCronMsg').textContent='Saved (backup '+j.backup+').'; $('#sysCronEdit').style.display='none'; loadSystem(); }
+      else { $('#sysCronMsg').style.color='var(--accent)'; $('#sysCronMsg').textContent=j.error||'failed'; }
+    }catch(e){ $('#sysCronMsg').style.color='var(--accent)'; $('#sysCronMsg').textContent='error: '+e.message; }
+  });
 
   // ---- Access (env account shown as a Users-style table) ----
   async function loadAccess(){
@@ -728,9 +772,10 @@
   function growTerm(el,b){ if(!el) return; el.classList.add('big'); termBackdrop().classList.add('on'); bigTerm=el; bigBtn=b||null; if(b){ b.dataset.lbl=b.textContent; b.textContent='✕ close'; } requestAnimationFrame(function(){ el.scrollTop=el.scrollHeight; }); }
   function shrinkTerm(){ if(bigTerm) bigTerm.classList.remove('big'); var bd=$('#termBackdrop'); if(bd) bd.classList.remove('on'); if(bigBtn&&bigBtn.dataset.lbl) bigBtn.textContent=bigBtn.dataset.lbl; bigTerm=null; bigBtn=null; }
   document.addEventListener('click', function(e){
-    var b=e.target.closest&&e.target.closest('[data-copy],[data-expand],[data-bottom],[data-collapse]'); if(!b) return;
+    var b=e.target.closest&&e.target.closest('[data-copy],[data-expand],[data-top],[data-bottom],[data-collapse]'); if(!b) return;
     if(b.dataset.copy!=null) copyBtn(document.getElementById(b.dataset.copy), b);
     else if(b.dataset.expand!=null){ var el=document.getElementById(b.dataset.expand); if(el){ if(el.classList.contains('big')) shrinkTerm(); else growTerm(el,b); } }
+    else if(b.dataset.top!=null){ var e1=document.getElementById(b.dataset.top); if(e1) e1.scrollTop=0; }
     else if(b.dataset.bottom!=null){ var e2=document.getElementById(b.dataset.bottom); if(e2) e2.scrollTop=e2.scrollHeight; }
     else if(b.dataset.collapse!=null){ var c=document.getElementById(b.dataset.collapse); if(c) c.classList.toggle('collapsed'); }
   });
@@ -740,6 +785,7 @@
   // fleet card buttons
   $('#fleetCards').addEventListener('click', function(ev){ var b=ev.target.closest&&ev.target.closest('button'); if(!b) return; var nm=b.dataset.name;
     if(b.classList.contains('xpand')) openModal(nm);
+    else if(b.classList.contains('tpp')){ var elt=document.querySelector('.minilog[data-id="'+CSS.escape(b.dataset.id)+'"]'); if(elt) elt.scrollTop=0; }
     else if(b.classList.contains('btm')){ var elb=document.querySelector('.minilog[data-id="'+CSS.escape(b.dataset.id)+'"]'); if(elb) elb.scrollTop=elb.scrollHeight; }
     else if(b.classList.contains('copy')){ var el=document.querySelector('.minilog[data-id="'+CSS.escape(b.dataset.id)+'"]'); if(el&&copyText(el.textContent)){ b.textContent='copied'; setTimeout(function(){b.textContent='copy';},1200); } } });
   // Layout chooser (2 / 3 / 4 / ⅔·⅓). Clears any manual resize so the chosen layout takes effect.
