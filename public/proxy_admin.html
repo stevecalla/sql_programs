@@ -465,7 +465,11 @@
       else { cont.insertAdjacentHTML('beforeend', buildCard(p)); tailCard(p); }   // new → build + backfill once
     });
     Object.keys(have).forEach(function(id){ if(!seen[id]) have[id].remove(); });          // gone → remove
-    list.forEach(function(p){ var c=cont.querySelector('.fcard[data-id="'+CSS.escape(cardKey(p))+'"]'); if(c) cont.appendChild(c); }); // apply order
+    // Re-apply order ONLY if it actually changed — moving a card node resets its log's scroll position,
+    // so doing it every refresh was yanking every minilog back to the top.
+    var desired=list.map(cardKey).join(',');
+    var current=[].map.call(cont.querySelectorAll('.fcard'),function(c){return c.dataset.id;}).join(',');
+    if(desired!==current){ list.forEach(function(p){ var c=cont.querySelector('.fcard[data-id="'+CSS.escape(cardKey(p))+'"]'); if(c) cont.appendChild(c); }); }
     if(!fleetES) startFleetStream();
     setRefresh();
   }
