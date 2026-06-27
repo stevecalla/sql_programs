@@ -449,6 +449,7 @@ async function start_server({ port = DEFAULT_PORT, silent = false } = {}) {
         try { require('./utilities/create_ngrok_tunnel').create_ngrok_tunnel(port); }
         catch (e) { console.warn('[proxy] ngrok not available:', e.message); }
       }
+      try { require('./proxy_alerts').start(ROUTES); } catch (e) { console.warn('[proxy] alerts not started:', e.message); }
       resolve({ port: actual, server });
     });
     server.on('error', reject);
