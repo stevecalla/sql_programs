@@ -9,6 +9,12 @@
 //
 // Run:  npm run salesforce_merge_e2e
 const { defineConfig, devices } = require('@playwright/test');
+const crypto = require('node:crypto');
+
+// Random per-run creds for the spawned server — never hardcoded (the browser tests stub /api/*,
+// so the values only need to satisfy login_configured()). Keeps secret scanners happy.
+const E2E_PASS = crypto.randomBytes(12).toString('hex');
+const E2E_SECRET = crypto.randomBytes(24).toString('hex');
 
 module.exports = defineConfig({
   testDir: __dirname,
@@ -27,8 +33,8 @@ module.exports = defineConfig({
     env: {
       MERGE_PORT: '8021',
       MERGE_ADMIN_USER: 'tester',
-      MERGE_ADMIN_PASS: 'pw',
-      MERGE_SESSION_SECRET: 'e2e-secret',
+      MERGE_ADMIN_PASS: E2E_PASS,
+      MERGE_SESSION_SECRET: E2E_SECRET,
     },
   },
 });
