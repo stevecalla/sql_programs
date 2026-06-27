@@ -121,7 +121,8 @@ process.on('SIGTERM', cleanup);
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
-    console.log(`Tunnel using cloudflare https://usat-slack.kidderwise.org/get-member-sales`)
+    // console.log(`Tunnel using cloudflare https://usat-slack.kidderwise.org/get-member-sales`)   // old per-subdomain path (pre-proxy)
+    console.log(`Tunnel using cloudflare https://usat-api.kidderwise.org/slack/get-member-sales`)
     // 192.168.1.87:8001
 
     // NGROK TUNNEL

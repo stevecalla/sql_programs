@@ -200,7 +200,8 @@ app.listen(PORT, async () => {
 	console.log(`Server is running on http://localhost:${PORT}`);
 
     // CLOUDFLARE TUNNEL
-    console.log(`Tunnel using cloudflare https://usat-slack-members.kidderwise.org/slack-membership-base`)
+    // console.log(`Tunnel using cloudflare https://usat-slack-members.kidderwise.org/slack-membership-base`)   // old per-subdomain path (pre-proxy)
+    console.log(`Tunnel using cloudflare https://usat-api.kidderwise.org/slack-membership-base/slack-membership-base`)
 
     // NGROK TUNNEL
     if(is_test_ngrok) {

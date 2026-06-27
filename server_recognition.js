@@ -90,7 +90,8 @@ process.on('SIGTERM', cleanup);
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 
-    console.log(`Tunnel using cloudflare https://usat-recognition.kidderwise.org/scheduled-recognition`)
+    // console.log(`Tunnel using cloudflare https://usat-recognition.kidderwise.org/scheduled-recognition`)   // old per-subdomain path (pre-proxy)
+    console.log(`Tunnel using cloudflare https://usat-api.kidderwise.org/recognition/scheduled-recognition`)
     // 192.168.187:8006
 
     // NGROK TUNNEL
