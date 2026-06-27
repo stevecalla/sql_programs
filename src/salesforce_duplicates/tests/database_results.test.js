@@ -58,10 +58,12 @@ describe('write_run', () => {
     test('ensures the table then REPLACE INTO with all columns', async () => {
         const { executor, calls } = fake_executor();
         await write_run(executor, { run_id: 'r1', run_type: 'finder', exact_duplicate_groups: 48 });
-        assert.equal(calls.length, 2);
+        assert.equal(calls.length, 3);
         assert.ok(calls[0].sql.startsWith('CREATE TABLE IF NOT EXISTS'));
-        assert.ok(calls[1].sql.startsWith('REPLACE INTO'));
-        assert.equal(calls[1].params.length, RUN_COLUMNS.length);
+        assert.ok(/ALTER TABLE .* ADD COLUMN run_seconds/.test(calls[1].sql));
+        const ins = calls.find((c) => c.sql.startsWith('REPLACE INTO'));
+        assert.ok(ins, 'expected a REPLACE INTO');
+        assert.equal(ins.params.length, RUN_COLUMNS.length);
     });
 });
 

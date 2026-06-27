@@ -25,11 +25,15 @@ function build_clauses(opts, spec) {
   const wheres = [];
   const params = [];
 
-  // search across the configured columns
+  // search across the configured columns — split into words so a multi-word query like
+  // "Victor Lopez" matches first_name "Victor" AND last_name "Lopez" (each word must hit some
+  // column; words AND together, columns OR within a word).
   const q = (opts.q == null ? '' : String(opts.q)).trim();
   if (q && spec.search_cols.length) {
-    wheres.push('(' + spec.search_cols.map((c) => '`' + c + '` LIKE ?').join(' OR ') + ')');
-    for (const _ of spec.search_cols) params.push('%' + q + '%');
+    for (const tok of q.split(/\s+/).filter(Boolean)) {
+      wheres.push('(' + spec.search_cols.map((c) => '`' + c + '` LIKE ?').join(' OR ') + ')');
+      for (const _ of spec.search_cols) params.push('%' + tok + '%');
+    }
   }
 
   // optional extra equality filters: { col: value }

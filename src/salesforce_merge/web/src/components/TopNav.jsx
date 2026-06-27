@@ -7,6 +7,7 @@ const LINKS = [
   ['/duplicates', 'Duplicates'],
   ['/merge-id', 'Merge-ID'],
   ['/accounts', 'All Accounts'],
+  ['/process', 'Process'],
   ['/reference', 'Reference'],
   ['/admin', 'Admin'],
   ['/metrics', 'Metrics'],

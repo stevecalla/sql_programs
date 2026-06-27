@@ -8,10 +8,21 @@ export default function DatasetStamp() {
   if (d === undefined) return null;
   if (!d) return <p className="muted small">Data set: no completed detection run found yet.</p>;
   const when = d.run_at ? new Date(d.run_at).toLocaleString() : '—';
-  const recs = d.total_records != null ? ` · ${Number(d.total_records).toLocaleString()} records` : '';
+  const isProd = d.environment === 'Production';
   return (
-    <p className="muted small">
-      Data as of {when}{d.environment ? ` · ${d.environment}` : ''}{d.scope ? ` · ${d.scope}` : ''}{recs}
-    </p>
+    <div className="dataset-stamp">
+      {d.environment && (
+        <span className={'ds-badge ' + (isProd ? 'ds-prod' : 'ds-sandbox')} title="Which Salesforce environment this data came from">
+          {isProd ? '● ' : '○ '}{d.environment}
+        </span>
+      )}
+      {d.scope && <span className="ds-badge ds-scope" title="Full = all records · Sample = capped subset">{d.scope}</span>}
+      {d.total_records != null && (
+        <span className="ds-badge ds-size" title="Number of accounts in the current data set">
+          {Number(d.total_records).toLocaleString()} records
+        </span>
+      )}
+      <span className="muted small">as of {when}</span>
+    </div>
   );
 }

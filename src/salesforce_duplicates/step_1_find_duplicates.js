@@ -411,6 +411,7 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
                     is_full,
                     is_partial,
                     run_at: created_at_utc,
+                    run_seconds: Math.round((Date.now() - script_start_ms) / 1000),
                     total_records_scanned: result.records.length,
                     salesforce_total_size: result.totalSize,
                     exact_duplicate_groups: exact_duplicates_sf_import.length,

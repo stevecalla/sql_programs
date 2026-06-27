@@ -122,7 +122,7 @@
     "salesforce_merge_web": "npm --prefix src/salesforce_merge/web run dev",
     "salesforce_merge_dev_all": "concurrently -k -n api,web -c blue,green \"npm run salesforce_merge_dev\" \"npm run salesforce_merge_web\"",
     "salesforce_merge_build": "npm --prefix src/salesforce_merge/web install && npm --prefix src/salesforce_merge/web run build",
-    "salesforce_merge_test": "node --test src/salesforce_merge/tests/auth.test.js src/salesforce_merge/tests/api.test.js src/salesforce_merge/tests/duplicates_read.test.js src/salesforce_merge/tests/reviews_read.test.js",
+    "salesforce_merge_test": "node --test src/salesforce_merge/tests/auth.test.js src/salesforce_merge/tests/api.test.js src/salesforce_merge/tests/duplicates_read.test.js src/salesforce_merge/tests/reviews_read.test.js src/salesforce_merge/tests/refresh_runner.test.js",
     "salesforce_merge_e2e": "playwright test --config src/salesforce_merge/e2e/playwright.config.js",
     "salesforce_merge_menu": "node src/salesforce_merge/menu.js",
     "pm2_start_salesforce_merge": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_salesforce_merge_8020.js --name usat_salesforce_merge --no-autorestart --max-memory-restart 4G --node-args=\"--expose-gc\"",

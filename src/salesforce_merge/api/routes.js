@@ -11,9 +11,10 @@
 //   GET  /api/<view>/export    auth-gated; CSV/Excel of the current filtered/sorted view
 const session = require('../auth/session');
 const store = require('../auth/auth_store');
-const { require_auth } = require('../auth/require_auth');
+const { require_auth, require_admin } = require('../auth/require_auth');
 const dashboard = require('../store/duplicates_read');
 const reviews = require('../store/reviews_read');
+const refresh = require('../store/refresh_runner');
 
 module.exports = function mount(app) {
   app.get('/api/status', function (req, res) {
@@ -52,6 +53,25 @@ module.exports = function mount(app) {
   app.get('/api/dataset', require_auth, async function (req, res) {
     try { res.json({ ok: true, data: await dashboard.dataset_info() }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  app.get('/api/runs', require_auth, async function (req, res) {
+    try { res.json({ ok: true, runs: await dashboard.recent_runs(req.query.limit) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  // ---- R1: data-refresh runner (spawns the detection job; read-only against Salesforce) ----
+  app.post('/api/refresh/start', require_admin, function (req, res) {
+    const b = req.body || {};
+    const r = refresh.start({ env: b.env, scope: b.scope });
+    res.status(r.ok ? 202 : 409).json(r);
+  });
+  app.get('/api/refresh/status', require_auth, function (req, res) {
+    res.json({ ok: true, ...refresh.status() });
+  });
+  app.post('/api/refresh/cancel', require_admin, function (req, res) {
+    const r = refresh.cancel();
+    res.status(r.ok ? 200 : 409).json(r);
   });
 
   // ---- Phase 1 review pages (read-only, server-side paged) ----

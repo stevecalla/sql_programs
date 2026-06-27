@@ -43,8 +43,18 @@ async function dashboard_counts(query = real_query) {
   return out;
 }
 
+// Scope label for a run row. A plain --test run is a *capped sample* even though is_full/is_partial
+// are both false, so the test mode falls back to "Sample" (matches the finder's own "Fetch scope" log).
+function scope_label(row) {
+  if (row.is_full) return 'Full';
+  if (row.is_partial) return 'Sample';
+  return row.mode === 'test' ? 'Sample' : 'Full';
+}
+function env_label(mode) {
+  return mode === 'prod' ? 'Production' : (mode === 'test' ? 'Sandbox' : (mode || null));
+}
+
 // "Data as of" stamp for every page — the latest finder run from the run logbook.
-// Returns null when there's no completed finder run yet.
 async function dataset_info(query = real_query) {
   const safe = async (sql) => { try { return await query(sql); } catch (e) { return null; } };
   const r = await safe(
@@ -54,10 +64,29 @@ async function dataset_info(query = real_query) {
   const x = r[0];
   return {
     run_at: x.run_at || null,
-    environment: x.mode === 'prod' ? 'Production' : (x.mode === 'test' ? 'Sandbox' : (x.mode || null)),
-    scope: x.is_full ? 'Full' : (x.is_partial ? 'Sample' : 'Full'),
+    environment: env_label(x.mode),
+    scope: scope_label(x),
     total_records: x.total_records_scanned == null ? null : Number(x.total_records_scanned),
   };
 }
 
-module.exports = { dashboard_counts, dataset_info };
+// Recent runs for the Process page's Activity feed — durable history from the run logbook.
+async function recent_runs(limit = 12, query = real_query) {
+  const safe = async (sql) => { try { return await query(sql); } catch (e) { return null; } };
+  const n = Math.min(Math.max(parseInt(limit, 10) || 12, 1), 50);
+  // SELECT * so this stays robust if the table predates a column (e.g. run_seconds added later) —
+  // referencing a missing column by name would error and return an empty Activity feed.
+  const r = await safe('SELECT * FROM `' + cfg.RUN_TABLE_NAME + '` ORDER BY run_at DESC LIMIT ' + n);
+  if (!r) return [];
+  return r.map((x) => ({
+    run_type: x.run_type,
+    environment: env_label(x.mode),
+    scope: scope_label(x),
+    run_at: x.run_at || null,
+    duration_seconds: x.run_seconds == null ? null : Number(x.run_seconds),
+    total_records: x.total_records_scanned == null ? null : Number(x.total_records_scanned),
+    clusters: x.consolidated_clusters == null ? null : Number(x.consolidated_clusters),
+  }));
+}
+
+module.exports = { dashboard_counts, dataset_info, recent_runs };

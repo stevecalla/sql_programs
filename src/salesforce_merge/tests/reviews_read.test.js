@@ -29,6 +29,14 @@ describe('build_clauses', () => {
     assert.equal(c.params[0], '%foo%');
   });
 
+  test('multi-word search ANDs the words, ORs the columns (fixes "First Last" searches)', () => {
+    const spec = { select: '*', search_cols: ['a', 'b'], sort: { x: 'colx' }, default_sort: 'x' };
+    const c = reviews.build_clauses({ q: 'victor lopez' }, spec);
+    assert.equal((c.where_sql.match(/LIKE \?/g) || []).length, 4);   // 2 words × 2 columns
+    assert.ok(/\) AND \(/.test(c.where_sql));                        // words AND together
+    assert.deepEqual(c.params, ['%victor%', '%victor%', '%lopez%', '%lopez%']);
+  });
+
   test('rejects a non-whitelisted sort (falls back to default) and clamps page_size', () => {
     const spec = { select: '*', search_cols: [], sort: { x: 'colx' }, default_sort: 'x' };
     const c = reviews.build_clauses({ sort: 'evil; DROP TABLE', page_size: '9999' }, spec);

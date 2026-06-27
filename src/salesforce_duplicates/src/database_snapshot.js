@@ -118,9 +118,19 @@ async function recreate_table(executor, table = SNAPSHOT_TABLE_NAME) {
 const KEY_INDEX_PREFIX = 255;
 
 async function add_indexes(executor, table = SNAPSHOT_TABLE_NAME) {
+    // Detection keys (used by the SQL backbone / exact grouping).
     await executor(`CREATE INDEX idx_exact_duplicate_key ON \`${table}\` (exact_duplicate_key(${KEY_INDEX_PREFIX}))`, []);
     await executor(`CREATE INDEX idx_rule_block_key ON \`${table}\` (rule_block_key(${KEY_INDEX_PREFIX}))`, []);
     await executor(`CREATE INDEX idx_load_sequence ON \`${table}\` (load_sequence)`, []);
+    // R1a — review-page sort/filter/search columns (merge tool's All-accounts view over ~700k rows).
+    // Prefix lengths keep each key well under InnoDB's 3072-byte limit. These speed ORDER BY,
+    // equality/prefix filters, and the has-merge-id filter; they don't change detection output.
+    await executor(`CREATE INDEX idx_last_first ON \`${table}\` (last_name(100), first_name(100))`, []);
+    await executor(`CREATE INDEX idx_salesforce_merge_id ON \`${table}\` (salesforce_merge_id(64))`, []);
+    await executor(`CREATE INDEX idx_member_number ON \`${table}\` (member_number(64))`, []);
+    await executor(`CREATE INDEX idx_composite_zip5 ON \`${table}\` (composite_zip_five_digit)`, []);
+    await executor(`CREATE INDEX idx_birthdate_normalized ON \`${table}\` (birthdate_normalized)`, []);
+    await executor(`CREATE INDEX idx_gender_identity ON \`${table}\` (gender_identity(32))`, []);
 }
 
 // Build one multi-row INSERT for a batch of already-mapped rows. Returns { sql, params }.

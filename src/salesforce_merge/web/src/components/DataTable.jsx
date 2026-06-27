@@ -21,7 +21,7 @@ function CopyButton({ value }) {
 //   filter: true renders a per-column control in the header (a dropdown if `facets[key]` exists, else a text box).
 //   wrap: true lets long cells wrap; every cell gets a title tooltip with its full value.
 // `facets` maps column key -> distinct values (for the dropdowns). `searchCols` labels what search scans.
-export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {} }) {
+export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, minWidth }) {
   const server = typeof fetcher === 'function';
   const [q, setQ] = useState('');
   const [sortKey, setSortKey] = useState(null);
@@ -46,7 +46,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
   }, [loading]);
 
   useEffect(() => {
-    if (!server) { setData({ rows: rows || [], total: (rows || []).length }); return undefined; }
+    if (!server) return undefined;   // client mode reads the `rows` prop directly (see `view`)
     let cancelled = false;
     setLoading(true); setErr('');
     fetcher({ q, sort: sortKey || undefined, dir: sortDir, page, page_size: pageSize, colFilters })
@@ -59,7 +59,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
 
   const view = useMemo(() => {
     if (server) return data.rows;
-    let r = data.rows;
+    let r = rows || [];
     const t = q.trim().toLowerCase();
     if (t) r = r.filter((row) => columns.some((c) => String(row[c.key] ?? '').toLowerCase().includes(t)));
     for (const [k, v] of Object.entries(colFilters)) {
@@ -68,7 +68,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
     }
     if (sortKey) r = [...r].sort((a, b) => { const x = a[sortKey], y = b[sortKey]; if (x === y) return 0; return (x > y ? 1 : -1) * (sortDir === 'asc' ? 1 : -1); });
     return r;
-  }, [server, data.rows, q, sortKey, sortDir, colFiltersKey, columns]);
+  }, [server, data.rows, rows, q, sortKey, sortDir, colFiltersKey, columns]);
 
   const total = server ? data.total : view.length;
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -126,7 +126,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
       </div>
 
       {err && <p className="err">{err}</p>}
-      <table>
+      <table style={minWidth ? { minWidth } : undefined}>
         <thead>
           <tr>{columns.map((col) => (
             <th key={col.key} onClick={() => toggle(col)} title={col.help || undefined}
