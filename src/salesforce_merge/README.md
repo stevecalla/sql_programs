@@ -4,7 +4,7 @@ Web admin tool to review duplicate accounts and (later) initiate Salesforce merg
 and restore. Sits on top of the read-only `salesforce_duplicates` pipeline. Server lives at the
 repo root: `server_salesforce_merge_8020.js` (port 8020). Planning docs: `plans_and_notes/`.
 
-**Status: Phase 0 — read-only foundation.** No Salesforce calls, no writes. The dashboard reads
+**Status: Phase 1 — read-only review pages (on the Phase 0 foundation).** No Salesforce calls, no writes. The dashboard reads
 the existing `salesforce_duplicate_*` tables in `usat_sales_db`.
 
 ## Structure
@@ -101,9 +101,25 @@ to `proxy_routes.js` to front it through the proxy.
 - Signed-cookie login (admin from `.env`).
 - Dashboard with real counts (total accounts, accounts with merge IDs, clusters, duplicate pairs,
   merge-ID buckets) read **only** from the existing duplicate tables.
-- Nav shell with the Sandbox⇄Production toggle (cosmetic in Phase 0) and placeholder pages for
-  Duplicates / Merge-ID / All Accounts / Admin / Metrics (built in later phases).
-- Shared `DataTable` (search + sort) component ready for the review pages.
+- Nav shell with the Sandbox⇄Production toggle (cosmetic for now).
+- Shared `DataTable` (search + sort) component.
 
-Nothing here can change Salesforce. Next phases: review pages, then dry-run preview, then
-sandboxed execute + history, then restore. See `plans_and_notes/README_MERGE_TOOL.md`.
+## What Phase 1 adds (review pages — read-only)
+
+Three server-paged review pages over the existing duplicate tables (no Salesforce calls):
+
+- **Duplicates** (`/duplicates`, `GET /api/duplicates`) — consolidated clusters with size, signal,
+  confidence tier, merge-ID presence, best score. Searchable, sortable, paged.
+- **Merge-ID review** (`/merge-id`, `GET /api/merge-id`) — reconciles Salesforce merge IDs against
+  the duplicates we found: bucket cards (in_both / sf_only / multi_signal / …), duplicate-pair
+  totals (exact/fuzzy/nickname), and a per-account table with an "in our duplicates?" column and a
+  bucket filter.
+- **All accounts** (`/accounts`, `GET /api/accounts`) — browse the snapshot, search by name/ID/member
+  number, filter to "has merge ID".
+
+Server-side paging/search/sort lives in `store/reviews_read.js` (whitelisted sort columns, bound
+search params, `LIMIT/OFFSET`, totals) — safe for the ~700k-row snapshot. `DataTable` gained a
+server `fetcher` mode (pager + remote sort/search) alongside its in-memory mode.
+
+Nothing here can change Salesforce. Next phases: dry-run preview, then sandboxed execute + history,
+then restore. See `plans_and_notes/README_MERGE_TOOL.md`.

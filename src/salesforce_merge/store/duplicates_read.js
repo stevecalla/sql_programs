@@ -43,4 +43,21 @@ async function dashboard_counts(query = real_query) {
   return out;
 }
 
-module.exports = { dashboard_counts };
+// "Data as of" stamp for every page — the latest finder run from the run logbook.
+// Returns null when there's no completed finder run yet.
+async function dataset_info(query = real_query) {
+  const safe = async (sql) => { try { return await query(sql); } catch (e) { return null; } };
+  const r = await safe(
+    "SELECT run_at, mode, is_full, is_partial, total_records_scanned FROM `" +
+    cfg.RUN_TABLE_NAME + "` WHERE run_type = 'finder' ORDER BY run_at DESC LIMIT 1");
+  if (!r || !r[0]) return null;
+  const x = r[0];
+  return {
+    run_at: x.run_at || null,
+    environment: x.mode === 'prod' ? 'Production' : (x.mode === 'test' ? 'Sandbox' : (x.mode || null)),
+    scope: x.is_full ? 'Full' : (x.is_partial ? 'Sample' : 'Full'),
+    total_records: x.total_records_scanned == null ? null : Number(x.total_records_scanned),
+  };
+}
+
+module.exports = { dashboard_counts, dataset_info };

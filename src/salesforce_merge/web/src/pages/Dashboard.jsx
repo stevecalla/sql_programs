@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import StatCard from '../components/StatCard.jsx';
+import DatasetStamp from '../components/DatasetStamp.jsx';
 
 const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString());
 
@@ -18,6 +19,7 @@ export default function Dashboard() {
   return (
     <>
       <h2>Overview</h2>
+      <DatasetStamp />
       <div className="grid">
         <StatCard label="Total accounts" value={fmt(d.total_accounts)} />
         <StatCard label="Accounts with merge IDs" value={fmt(d.merge_id_accounts)} />

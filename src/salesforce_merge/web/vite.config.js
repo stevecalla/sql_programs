@@ -8,6 +8,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: { '/api': 'http://localhost:8020' },
+    // Poll for file changes — agent/synced writes don't always emit native fs events, so the
+    // default watcher can miss them and HMR stays silent. Polling re-checks mtimes on an interval.
+    watch: { usePolling: true, interval: 300 },
   },
   build: {
     outDir: 'dist',

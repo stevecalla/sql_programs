@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="600" viewBox="0 0 780 600" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <rect width="780" height="600" fill="#f4f6fb"/>
+
+  <!-- nav -->
+  <rect x="16" y="16" width="748" height="48" rx="12" fill="#ffffff" stroke="#e2e7f0"/>
+  <rect x="30" y="29" width="22" height="22" rx="6" fill="#e4002b"/>
+  <text x="41" y="44" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">M</text>
+  <text x="62" y="44" fill="#15284e" font-size="13" font-weight="600">USAT Merge</text>
+  <text x="150" y="44" fill="#6b7686" font-size="12">Dashboard</text>
+  <text x="218" y="44" fill="#6b7686" font-size="12">Duplicates</text>
+  <text x="288" y="44" fill="#6b7686" font-size="12">Merge-ID</text>
+  <text x="350" y="44" fill="#6b7686" font-size="12">All accounts</text>
+  <text x="432" y="44" fill="#e4002b" font-size="12" font-weight="600">Process</text>
+  <text x="492" y="44" fill="#6b7686" font-size="12">Admin</text>
+  <rect x="648" y="28" width="100" height="24" rx="12" fill="#fdecea" stroke="#f0c0bb"/>
+  <text x="698" y="44" fill="#c0392b" font-size="11" text-anchor="middle">⚠ Production</text>
+
+  <!-- title -->
+  <text x="20" y="92" fill="#1c2433" font-size="18" font-weight="600">Process</text>
+  <text x="20" y="110" fill="#6b7686" font-size="12">Run jobs and review what's happened. Read-only against Salesforce.</text>
+
+  <!-- refresh runner card -->
+  <rect x="16" y="124" width="748" height="210" rx="12" fill="#ffffff" stroke="#e4002b"/>
+  <text x="32" y="150" fill="#1c2433" font-size="14" font-weight="600">Data refresh — detection job</text>
+  <text x="250" y="150" fill="#6b7686" font-size="12">Production · Full · = menu 10</text>
+  <text x="748" y="150" fill="#e4002b" font-size="12" font-weight="600" text-anchor="end">⟳ Running 03:48 · ~4m left</text>
+
+  <!-- stepper -->
+  <g>
+    <circle cx="80" cy="200" r="14" fill="#e6f5ec"/><text x="80" y="205" fill="#1a8a4f" font-size="13" text-anchor="middle">✓</text><text x="80" y="232" fill="#6b7686" font-size="11" text-anchor="middle">Fetch</text>
+    <line x1="100" y1="200" x2="170" y2="200" stroke="#e2e7f0" stroke-width="2"/>
+    <circle cx="190" cy="200" r="14" fill="#e6f5ec"/><text x="190" y="205" fill="#1a8a4f" font-size="13" text-anchor="middle">✓</text><text x="190" y="232" fill="#6b7686" font-size="11" text-anchor="middle">Exact</text>
+    <line x1="210" y1="200" x2="280" y2="200" stroke="#e2e7f0" stroke-width="2"/>
+    <circle cx="300" cy="200" r="14" fill="#e4002b"/><text x="300" y="205" fill="#fff" font-size="12" text-anchor="middle">⟳</text><text x="300" y="232" fill="#e4002b" font-size="11" font-weight="600" text-anchor="middle">Fuzzy</text>
+    <line x1="320" y1="200" x2="390" y2="200" stroke="#e2e7f0" stroke-width="2"/>
+    <circle cx="410" cy="200" r="14" fill="#f1efe8"/><text x="410" y="205" fill="#888780" font-size="11" text-anchor="middle">·</text><text x="410" y="232" fill="#b4b2a9" font-size="11" text-anchor="middle">Nickname</text>
+    <line x1="430" y1="200" x2="500" y2="200" stroke="#e2e7f0" stroke-width="2"/>
+    <circle cx="520" cy="200" r="14" fill="#f1efe8"/><text x="520" y="205" fill="#888780" font-size="11" text-anchor="middle">·</text><text x="520" y="232" fill="#b4b2a9" font-size="11" text-anchor="middle">Consolidate</text>
+    <line x1="540" y1="200" x2="640" y2="200" stroke="#e2e7f0" stroke-width="2"/>
+    <circle cx="660" cy="200" r="14" fill="#f1efe8"/><text x="660" y="205" fill="#888780" font-size="11" text-anchor="middle">·</text><text x="660" y="232" fill="#b4b2a9" font-size="11" text-anchor="middle">Persist</text>
+  </g>
+
+  <rect x="32" y="252" width="716" height="30" rx="8" fill="#f4f6fb"/>
+  <text x="44" y="271" fill="#6b7686" font-size="11" font-family="monospace">[STEP] fetch — 130.4s · [STEP] exact — 18.1s · [STEP] fuzzy — comparing rule-block buckets…</text>
+  <rect x="32" y="294" width="100" height="28" rx="8" fill="#ffffff" stroke="#cfd6e2"/>
+  <text x="82" y="312" fill="#1c2433" font-size="12" text-anchor="middle">Cancel run</text>
+  <text x="146" y="312" fill="#6b7686" font-size="11">Admin only · one run at a time · production confirmed</text>
+
+  <!-- activity -->
+  <rect x="16" y="348" width="748" height="236" rx="12" fill="#ffffff" stroke="#e2e7f0"/>
+  <text x="32" y="374" fill="#1c2433" font-size="13" font-weight="600">Activity</text>
+
+  <rect x="32" y="390" width="62" height="20" rx="10" fill="#e6f1fb"/><text x="63" y="404" fill="#185fa5" font-size="11" text-anchor="middle">Refresh</text>
+  <text x="106" y="404" fill="#1c2433" font-size="12">Production · Full</text>
+  <text x="240" y="404" fill="#6b7686" font-size="12">704,231 records · 10,623 clusters</text>
+  <text x="610" y="404" fill="#6b7686" font-size="12">2h ago · 8m 12s</text>
+  <text x="748" y="404" fill="#1a8a4f" font-size="12" text-anchor="end">✓ Done</text>
+  <line x1="32" y1="418" x2="748" y2="418" stroke="#e2e7f0"/>
+
+  <rect x="32" y="430" width="62" height="20" rx="10" fill="#e6f1fb"/><text x="63" y="444" fill="#185fa5" font-size="11" text-anchor="middle">Refresh</text>
+  <text x="106" y="444" fill="#1c2433" font-size="12">Sandbox · Sample</text>
+  <text x="240" y="444" fill="#6b7686" font-size="12">5,000 records · 71 clusters</text>
+  <text x="610" y="444" fill="#6b7686" font-size="12">yesterday · 0m 39s</text>
+  <text x="748" y="444" fill="#1a8a4f" font-size="12" text-anchor="end">✓ Done</text>
+  <line x1="32" y1="458" x2="748" y2="458" stroke="#e2e7f0"/>
+
+  <g opacity="0.6">
+    <rect x="32" y="470" width="56" height="20" rx="10" fill="#eeedfe"/><text x="60" y="484" fill="#3c3489" font-size="11" text-anchor="middle">Merge</text>
+    <text x="100" y="484" fill="#1c2433" font-size="12">cluster CL-1832 · 3 → 1</text>
+    <text x="270" y="484" fill="#6b7686" font-size="12">started from Duplicates → preview → confirm</text>
+    <text x="610" y="484" fill="#888780" font-size="12">Phase 3</text>
+    <text x="748" y="484" fill="#888780" font-size="12" text-anchor="end">◷ Planned</text>
+  </g>
+</svg>

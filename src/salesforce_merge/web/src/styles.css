@@ -75,7 +75,35 @@ a { color: var(--accent); }
 
 /* data table (shared kit) */
 .datatable { overflow-x: auto; }
-.datatable .search { width: 260px; max-width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 8px; min-height: 38px; background: var(--card); color: var(--ink); }
+.dt-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.dt-count { margin-left: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dt-filter-btn.on { border-color: var(--accent); color: var(--accent); }
+.dt-filter-row th { padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--card); cursor: default; }
+.dt-filter-row input, .dt-filter-row select { width: 100%; min-width: 84px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--ink); font-size: 12px; min-height: 30px; }
+.dt-wrap { white-space: normal !important; word-break: break-word; max-width: 260px; }
+.th-info { color: var(--dim); font-size: 10px; cursor: help; }
+.dt-export { display: inline-flex; gap: 6px; margin-left: auto; }
+.copy-btn { margin-left: 6px; border: 1px solid var(--line); background: var(--card); color: var(--dim); border-radius: 6px; font-size: 11px; line-height: 1; padding: 2px 5px; cursor: pointer; vertical-align: middle; opacity: 0; transition: opacity .12s; }
+.datatable tr:hover .copy-btn { opacity: 1; }
+.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+.reference { max-width: 760px; }
+.ref-card { margin: 12px 0; }
+.ref-card h3 { color: var(--ink); text-transform: none; letter-spacing: 0; font-size: 15px; margin: 0 0 8px; }
+.ref-card p { margin: 0 0 10px; }
+.ref-card ol, .ref-card ul { margin: 0 0 10px; padding-left: 20px; }
+.ref-card li { margin: 4px 0; }
+.dt-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.pager { display: inline-flex; align-items: center; gap: 8px; }
+.pills { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.pill { font-size: 12px; border: 1px solid var(--line); background: var(--card); color: var(--dim); border-radius: 16px; padding: 4px 10px; cursor: pointer; }
+.pill.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.search-wrap { position: relative; display: inline-flex; align-items: center; }
+.datatable .search { width: 260px; max-width: 100%; padding: 8px 28px 8px 10px; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 0; min-height: 38px; background: var(--card); color: var(--ink); }
+.search-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border: 0; border-radius: 50%; background: var(--line); color: var(--ink); font-size: 15px; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0; }
+.search-clear:hover { background: var(--accent); color: var(--accent-ink); }
+.dt-loading { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.spinner { width: 13px; height: 13px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; display: inline-block; animation: dt-spin .7s linear infinite; }
+@keyframes dt-spin { to { transform: rotate(360deg); } }
 .datatable table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
 .datatable th { text-align: left; font-size: 11px; color: var(--dim); padding: 9px 10px; cursor: pointer; border-bottom: 1px solid var(--line); user-select: none; text-transform: uppercase; letter-spacing: .03em; }
 .datatable td { padding: 9px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }

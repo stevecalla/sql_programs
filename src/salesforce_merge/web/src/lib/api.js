@@ -20,5 +20,30 @@ export const api = {
     req('/api/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   logout: () => req('/api/logout', { method: 'POST' }),
   dashboard: () => req('/api/dashboard'),
+  dataset: () => req('/api/dataset'),
   status: () => req('/api/status'),
+  duplicates: (p) => req('/api/duplicates' + qs(expand(p))),
+  mergeId: (p) => req('/api/merge-id' + qs(expand(p))),
+  accounts: (p) => req('/api/accounts' + qs(expand(p))),
+  duplicatesFacets: () => req('/api/duplicates/facets'),
+  mergeIdFacets: () => req('/api/merge-id/facets'),
+  accountsFacets: () => req('/api/accounts/facets'),
 };
+
+// Flatten a { colFilters: { signal: 'exact' } } map into f_signal=exact params.
+function expand(p) {
+  const { colFilters, ...rest } = p || {};
+  const out = { ...rest };
+  for (const [k, v] of Object.entries(colFilters || {})) if (v != null && v !== '') out['f_' + k] = v;
+  return out;
+}
+
+function qs(o) {
+  const e = Object.entries(o || {}).filter(([, v]) => v != null && v !== '');
+  return e.length ? '?' + e.map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&') : '';
+}
+
+// Build a download URL (CSV/Excel export) with the same params the table is showing.
+export function exportUrl(base, params) {
+  return base + qs(expand(params));
+}

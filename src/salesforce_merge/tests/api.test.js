@@ -1,6 +1,6 @@
 'use strict';
 // API integration tests — boots create_app() on an ephemeral port and hits it with fetch.
-// No DB needed: status/login/me are DB-free, and /api/dashboard is checked only for its auth gate.
+// No DB needed: status/login/me are DB-free, and the data endpoints are checked only for auth gates.
 //   node --test src/salesforce_merge/tests/api.test.js
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -59,5 +59,19 @@ describe('api', () => {
   test('GET /api/dashboard is auth-gated (401 without a session)', async () => {
     const r = await fetch(base + '/api/dashboard');
     assert.equal(r.status, 401);
+  });
+
+  test('the Phase 1 review endpoints are auth-gated too (401 without a session)', async () => {
+    for (const p of ['/api/duplicates', '/api/merge-id', '/api/accounts']) {
+      const r = await fetch(base + p);
+      assert.equal(r.status, 401, p + ' should require auth');
+    }
+  });
+
+  test('the export endpoints are auth-gated (401 without a session)', async () => {
+    for (const p of ['/api/duplicates/export', '/api/merge-id/export', '/api/accounts/export']) {
+      const r = await fetch(base + p);
+      assert.equal(r.status, 401, p + ' should require auth');
+    }
   });
 });
