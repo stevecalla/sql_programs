@@ -108,16 +108,17 @@ function ensureStarted() {
 
 function subscribe(res, name) {
   ensureStarted();
-  // immediate backfill so the panel is never blank
+  // Immediate backfill from STDOUT ONLY, in chronological order — this mirrors the `pm2 logs` view.
+  // We deliberately do NOT backfill the stderr tail: those lines have no reliable per-line timestamp
+  // and appending them after the stdout tail made old errors look like the newest line. New stderr
+  // lines still stream live (the poller watches both files), so real errors appear when they happen.
   jlist(function (err, list) {
     (list || []).forEach(function (p) {
       if (name && p.name !== name) return;
       const env = p.pm2_env || {};
-      [['info', env.pm_out_log_path], ['error', env.pm_err_log_path]].forEach(function (pair) {
-        const fp = pair[1]; if (!fp) return;
-        tailLines(fp, name ? BACKFILL_ONE : BACKFILL_ALL).forEach(function (line) {
-          send(res, 'line', { at: new Date().toISOString(), level: pair[0], name: p.name, line: line });
-        });
+      const fp = env.pm_out_log_path; if (!fp) return;
+      tailLines(fp, name ? BACKFILL_ONE : BACKFILL_ALL).forEach(function (line) {
+        send(res, 'line', { at: new Date().toISOString(), level: 'info', name: p.name, line: line });
       });
     });
   });
