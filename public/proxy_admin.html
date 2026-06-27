@@ -285,7 +285,7 @@
       <!-- SETTINGS -->
       <section class="pane" data-view="settings">
         <div class="ad-card"><h2>Configuration</h2><div class="tiles" id="settingsTiles"><div class="mut">Loading…</div></div>
-          <div class="mut" style="margin-top:10px">Routes are edited in <code>proxy_routes.js</code> (reload to apply). Per-pane refresh intervals are saved in your browser. Rate limit is active when <code>express-rate-limit</code> is installed.</div>
+          <div class="mut" style="margin-top:10px">Routes are edited in <code>utilities/proxy/proxy_routes.js</code> (reload to apply). Per-pane refresh intervals are saved in your browser. Rate limit is active when <code>express-rate-limit</code> is installed.</div>
         </div>
       </section>
 
@@ -306,7 +306,7 @@
           <div class="mut" style="line-height:1.9">
             • <b>What this is:</b> a single reverse proxy on <code>:8000</code> fronting every <code>server_*.js</code> at <code>usat-api.kidderwise.org/&lt;prefix&gt;</code>. Backends keep their own ports; the proxy strips the prefix before forwarding.<br>
             • <b>URL pattern:</b> <code>usat-api.kidderwise.org/&lt;prefix&gt;/&lt;path&gt;</code> → backend gets <code>/&lt;path&gt;</code>. e.g. <code>/events/scheduled-events</code> → 8005 <code>/scheduled-events</code>.<br>
-            • <b>Add / change a route:</b> 1) edit <code>proxy_routes.js</code> &nbsp; 2) <code>npm run pm2_reload_proxy</code> &nbsp; 3) test the URL.<br>
+            • <b>Add / change a route:</b> 1) edit <code>utilities/proxy/proxy_routes.js</code> &nbsp; 2) <code>npm run pm2_reload_proxy</code> &nbsp; 3) test the URL.<br>
             • <b>Reload vs restart:</b> <code>pm2_reload_proxy</code> = zero-downtime; <code>restart_proxy</code> = hard, brief blip. Deploy a backend with <code>pm2 restart &lt;name&gt;</code> — the proxy is untouched.<br>
             • <b>Health:</b> <code>/api/health</code> 200 = all up; 503 = one down (the proxy log names which). <code>ECONNREFUSED</code> = backend not running.<br>
             • <b>Docs:</b> <code>plans_and_notes/PROXY_PLAN.md</code>, <code>PROXY_CUTOVER_CHECKLIST.md</code>. Ops menu: <code>npm run menu</code>.

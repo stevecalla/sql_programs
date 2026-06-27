@@ -12,7 +12,7 @@
  */
 const { spawn } = require('child_process');
 
-const RUN_DIR = __dirname;
+const RUN_DIR = require('path').join(__dirname, '..', '..');
 const MAX_LINES = 4000;
 const RUN_TIMEOUT_MS = 4 * 60 * 1000;
 
