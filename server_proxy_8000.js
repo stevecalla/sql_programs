@@ -27,7 +27,7 @@ catch (_) { console.warn('[proxy] express-rate-limit not installed — rate limi
 
 const DEFAULT_PORT = Number(process.env.PROXY_PORT) || 8000;
 const PM2_LOG_DIR = process.env.PM2_LOG_DIR || path.join(os.homedir(), '.pm2', 'logs');
-const is_test_ngrok = true;
+const is_test_ngrok = false;
 const ROUTES = require('./utilities/proxy/proxy_routes');
 let active_server = null;
 
