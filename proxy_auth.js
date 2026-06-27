@@ -21,8 +21,7 @@ function session_secret() {
   return secret;
 }
 
-// Signed-cookie sessions (HMAC-SHA256 over a small JSON payload), same scheme as
-// the email_queue's auth/session.js.
+// Signed-cookie sessions (HMAC-SHA256 over a small JSON payload).
 function sign(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const mac = crypto.createHmac('sha256', session_secret()).update(body).digest('base64url');

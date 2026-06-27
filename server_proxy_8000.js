@@ -4,13 +4,8 @@
  * services. One public host (usat-api.kidderwise.org) + path prefixes replace
  * the per-app Cloudflare subdomains. Backends keep their own ports, unchanged.
  *
- * Lives at the repo root alongside the other server_*.js services for naming
- * consistency. Port 8000 sits just below the existing sequence (8005 events,
- * 8016 event_analysis, 8017 sf_duplicates, 8018 race_results_transform,
- * 8019 email_queue).
- *
  * Patterned after server_event_analysis_8016.js / _8019.js:
- *   - create_app() builds the Express app (health, console, rate limits, proxy, 404)
+ *   - create_app() builds the Express app (logging, health, console, proxy, 404)
  *   - start_server() listens with NO host arg -> dual-stack '::' (IPv6 ::1 + IPv4)
  *   - optional ngrok tunnel (off by default), same is_test_ngrok flag as 8016/8019
  *   - cleanup() on SIGINT/SIGTERM (+ readline TTY fallback) so Ctrl-C stops cleanly
@@ -19,11 +14,7 @@
  * proxy_auth.js, a gated /admin dashboard (public/proxy_admin.html), and a gated
  * /api/logs pm2 log tail. Public: /api/test, /api/status, /api/health, app paths.
  *
- * Public URL (production): https://usat-api.kidderwise.org  (Cloudflare tunnel -> 8000)
- *
- * Usage:
- *   node server_proxy_8000.js                      # default port 8000
- *   PROXY_PORT=9000 node server_proxy_8000.js
+ * Usage:  node server_proxy_8000.js     (PROXY_PORT overrides 8000)
  */
 'use strict';
 
@@ -36,18 +27,11 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const proxy_auth = require('./proxy_auth');
-// create_ngrok_tunnel (and the native @ngrok/ngrok binary it loads) is required
-// lazily inside start_server() only when ngrok is enabled, so the proxy boots
-// fine where ngrok isn't installed.
 
-// express-rate-limit is OPTIONAL: if not installed, the proxy still runs (you
-// can rate-limit at Cloudflare instead). Enable with: npm i express-rate-limit
+// express-rate-limit is OPTIONAL: if absent the proxy still runs (rate-limit at Cloudflare instead).
 let rate_limit = null;
-try {
-  rate_limit = require('express-rate-limit');
-} catch (_) {
-  console.warn('[proxy] express-rate-limit not installed — rate limiting disabled. Run: npm i express-rate-limit');
-}
+try { rate_limit = require('express-rate-limit'); }
+catch (_) { console.warn('[proxy] express-rate-limit not installed — rate limiting disabled. Run: npm i express-rate-limit'); }
 
 const DEFAULT_PORT = Number(process.env.PROXY_PORT) || 8000;
 const PM2_LOG_DIR = process.env.PM2_LOG_DIR || path.join(os.homedir(), '.pm2', 'logs');
@@ -80,15 +64,12 @@ function login_html(err) {
 
 function create_app() {
   const app = express();
-
-  // Trust Cloudflare's forwarded headers so rate-limit sees real client IPs.
   app.set('trust proxy', 1);
 
-  // Request logging — a ">>" line when received and a "<<" line when finished
-  // (tagged OK / CLIENT ERROR / SERVER ERROR + duration); proxied requests also get
-  // "-> routed" and "<- backend responded" lines (see the route loop). pm2 captures
-  // all of it to ~/.pm2/logs. Liveness polls are skipped to keep the log readable.
   const log_ts = function () { return new Date().toLocaleString('en-US', { timeZone: 'America/Denver' }); };
+
+  // Request logging: ">>" received, "<<" finished (OK / CLIENT ERROR / SERVER ERROR + ms).
+  // Liveness polls are skipped to keep the log readable. pm2 captures to ~/.pm2/logs.
   app.use(function (req, res, next) {
     if (req.path === '/api/status' || req.path === '/healthz' || req.path === '/api/test') return next();
     const t0 = Date.now();
@@ -106,23 +87,19 @@ function create_app() {
   app.get(['/api/status', '/healthz'], (req, res) => {
     const mem = process.memoryUsage();
     res.json({
-      ok: true,
-      app: 'proxy',
+      ok: true, app: 'proxy',
       now_utc: new Date().toISOString(),
       now_mtn: new Date().toLocaleString('en-US', { timeZone: 'America/Denver' }),
       uptime_seconds: Math.round(process.uptime()),
       memory_mb: { rss: +(mem.rss / 1048576).toFixed(1), heap_used: +(mem.heapUsed / 1048576).toFixed(1) },
-      pid: process.pid,
-      node: process.version,
-      routes: Object.keys(ROUTES),
+      pid: process.pid, node: process.version, routes: Object.keys(ROUTES),
     });
   });
 
-  // -- Built-in smoke test — no backend needed. --
-  app.get('/api/test', (req, res) =>
-    res.json({ ok: true, msg: 'proxy is alive', time: new Date().toISOString() }));
+  // -- Built-in smoke test (no backend needed) --
+  app.get('/api/test', (req, res) => res.json({ ok: true, msg: 'proxy is alive', time: new Date().toISOString() }));
 
-  // -- Aggregate health — pings every ENABLED backend's health route. --
+  // -- Aggregate health — pings every enabled backend's health route --
   app.get('/api/health', async (req, res) => {
     const checked = {};
     await Promise.all(Object.entries(ROUTES).map(async ([prefix, cfg]) => {
@@ -133,8 +110,7 @@ function create_app() {
         const r = await fetch(target + health, { signal: AbortSignal.timeout(3000) });
         checked[prefix] = { ok: r.ok, status: r.status, ms: Date.now() - t0 };
       } catch (e) {
-        const code = e.name === 'TimeoutError' ? 'timeout' : ((e.cause && e.cause.code) || e.message);
-        checked[prefix] = { ok: false, error: code };
+        checked[prefix] = { ok: false, error: e.name === 'TimeoutError' ? 'timeout' : ((e.cause && e.cause.code) || e.message) };
       }
     }));
     const all_ok = Object.values(checked).every(r => r.ok);
@@ -153,12 +129,10 @@ function create_app() {
     res.setHeader('Set-Cookie', proxy_auth.make_cookie(v.user));
     res.redirect('/admin');
   });
-  app.get('/admin/logout', (req, res) => {
-    res.setHeader('Set-Cookie', proxy_auth.clear_cookie());
-    res.redirect('/admin/login');
-  });
-  app.get('/admin', proxy_auth.require_auth_page, (req, res) =>
-    res.type('html').sendFile(path.join(__dirname, 'public', 'proxy_admin.html')));
+
+  app.get('/admin/logout', (req, res) => { res.setHeader('Set-Cookie', proxy_auth.clear_cookie()); res.redirect('/admin/login'); });
+  
+  app.get('/admin', proxy_auth.require_auth_page, (req, res) => res.type('html').sendFile(path.join(__dirname, 'public', 'proxy_admin.html')));
 
   // Gated pm2 log tail (no SSH). ?name=<pm2 name> tails its log files; no name lists them.
   app.get('/api/logs', proxy_auth.require_auth, (req, res) => {
@@ -177,36 +151,25 @@ function create_app() {
     res.json({ ok: true, dir: PM2_LOG_DIR, name, lines, logs });
   });
 
-  // -- Reject bad requests early --
+  // -- Reject bad methods --
   const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'];
   app.use((req, res, next) => {
     if (!ALLOWED_METHODS.includes(req.method)) return res.status(405).json({ ok: false, error: 'method not allowed' });
     next();
   });
 
-  // -- Rate limit (skipped automatically if express-rate-limit isn't installed) --
-  if (rate_limit) {
-    app.use(rate_limit({ windowMs: 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false }));
-  }
+  // -- Rate limit (skipped if express-rate-limit isn't installed) --
+  if (rate_limit) app.use(rate_limit({ windowMs: 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false }));
 
-  // -- One forwarding rule per route-table entry (string or {target,health}) --
+  // -- One forwarding rule per route entry. app.use(prefix,...) already strips the
+  //    mount prefix, so NO pathRewrite (else the prefix is stripped twice). --
   for (const [prefix, cfg] of Object.entries(ROUTES)) {
     const target = typeof cfg === 'string' ? cfg : cfg.target;
     app.use(prefix, createProxyMiddleware({
-      target,
-      changeOrigin: true,
-      ws: true,
-      // No pathRewrite: app.use(prefix, ...) already strips the mount prefix,
-      // so the backend receives the sub-path (/events/scheduled-events -> /scheduled-events).
-      proxyTimeout: 30000,
-      timeout: 30000,
+      target, changeOrigin: true, ws: true, proxyTimeout: 30000, timeout: 30000,
       on: {
-        proxyReq: (proxyReq, req) => {
-          console.log('[' + log_ts() + '] -> routed ' + prefix + '  ' + req.method + ' ' + req.url + '  to ' + target);
-        },
-        proxyRes: (proxyRes, req) => {
-          console.log('[' + log_ts() + '] <- ' + prefix + ' backend responded ' + proxyRes.statusCode);
-        },
+        proxyReq: (proxyReq, req) => { console.log('[' + log_ts() + '] -> routed ' + prefix + '  ' + req.method + ' ' + req.url + '  to ' + target); },
+        proxyRes: (proxyRes, req) => { console.log('[' + log_ts() + '] <- ' + prefix + ' backend responded ' + proxyRes.statusCode); },
         error: (err, req, res) => {
           console.error('[' + log_ts() + '] !! ' + prefix + ' backend error: ' + ((err && err.message) || err));
           if (res.writeHead && !res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json' });
@@ -218,30 +181,26 @@ function create_app() {
 
   // -- 404 fallback --
   app.use((req, res) => res.status(404).json({ ok: false, error: 'not found', path: req.path }));
-
   return app;
 }
 
 async function start_server({ port = DEFAULT_PORT, silent = false } = {}) {
   const app = create_app();
   return await new Promise((resolve, reject) => {
-    // NO host arg -> dual-stack bind (::1 + 127.0.0.1), same as 8018/8019.
     const server = app.listen(port, () => {
       active_server = server;
       const actual = server.address().port;
       if (!silent) {
         console.log('\nUSAT Proxy — local server');
-        console.log('  -> http://localhost:' + actual + '/api/status   (health check)');
+        console.log('  -> http://localhost:' + actual + '/api/status   (health)');
         console.log('  -> http://localhost:' + actual + '/admin        (console — login)');
         Object.keys(ROUTES).forEach((p) => {
-          const cfg = ROUTES[p];
-          const target = typeof cfg === 'string' ? cfg : cfg.target;
+          const cfg = ROUTES[p]; const target = typeof cfg === 'string' ? cfg : cfg.target;
           console.log('  -> http://localhost:' + actual + p + '/*  ->  ' + target);
         });
-        console.log('  -> https://usat-api.kidderwise.org              (Cloudflare tunnel -> ' + actual + ')');
-        console.log('  Logging one line per request below (health polls excluded). Press Ctrl-C to stop.\n');
+        console.log('  -> https://usat-api.kidderwise.org   (Cloudflare tunnel -> ' + actual + ')');
+        console.log('  Press Ctrl-C to stop.\n');
       }
-      // NGROK — best-effort; required lazily so a missing ngrok install never crashes the proxy.
       if (is_test_ngrok) {
         try { require('./utilities/create_ngrok_tunnel').create_ngrok_tunnel(port); }
         catch (e) { console.warn('[proxy] ngrok not available — continuing without a tunnel:', e.message); }
@@ -252,25 +211,18 @@ async function start_server({ port = DEFAULT_PORT, silent = false } = {}) {
   });
 }
 
-// Clean up on exit — same pattern as the other server_*.js services so Ctrl-C
-// actually stops the process (without this the open listener keeps the event loop
-// alive and the terminal hangs).
+// Clean up on exit — same pattern as the other server_*.js so Ctrl-C stops cleanly.
 function cleanup() { console.log('\nGracefully shutting down...'); process.exit(); }
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
-
 // Windows fallback: some terminals don't deliver process-level SIGINT on Ctrl-C; a
 // readline interface on stdin DOES emit 'SIGINT', so wire it too when run in a TTY.
 if (require.main === module && process.stdin.isTTY) {
   require('readline').createInterface({ input: process.stdin, output: process.stdout }).on('SIGINT', cleanup);
 }
 
-// CLI entry: only run when invoked directly (not via require for tests).
 if (require.main === module) {
-  start_server({ port: DEFAULT_PORT }).catch((err) => {
-    console.error('Proxy failed to start:', err);
-    process.exit(1);
-  });
+  start_server({ port: DEFAULT_PORT }).catch((err) => { console.error('Proxy failed to start:', err); process.exit(1); });
 }
 
 module.exports = { create_app, start_server, DEFAULT_PORT };

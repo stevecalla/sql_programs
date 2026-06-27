@@ -1,7 +1,7 @@
 'use strict';
 // Tests for server_proxy_8000.js — run with: npm run test_proxy  (node --test)
 // Mounts create_app() on an ephemeral port (no backends needed) and checks the
-// proxy's own routes: /api/test, /api/status, /api/health, 404, and 405.
+// proxy's own routes: /api/test, /api/status, /api/health, 404, 405, /admin, /api/logs.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
@@ -51,7 +51,6 @@ test('/healthz is an alias of /api/status', async () => {
 
 test('/api/health returns a checked map (503 when a backend is down)', async () => {
   const res = await fetch(`${base_url}/api/health`);
-  // No backends are running in the test, so the aggregate is expected to fail.
   assert.ok(res.status === 200 || res.status === 503);
   const body = await res.json();
   assert.ok(body.checked && typeof body.checked === 'object');
