@@ -172,7 +172,7 @@ function create_app() {
     let out = '', errout = '', proc;
     try { proc = spawn('pm2', ['jlist'], { shell: process.platform === 'win32' }); }
     catch (e) { return res.status(500).json({ ok: false, error: 'pm2 not available', detail: e.message }); }
-    const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 6000);
+    const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 10000);
     proc.stdout.on('data', (d) => { out += d.toString(); });
     proc.stderr.on('data', (d) => { errout += d.toString(); });
     proc.on('error', (e) => { clearTimeout(timer); res.status(500).json({ ok: false, error: 'pm2 spawn failed', detail: e.message }); });
