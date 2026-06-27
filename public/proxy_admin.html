@@ -86,10 +86,20 @@
   .badge.read{ background:rgba(46,117,182,.16); color:#2e75b6; } .badge.mutate{ background:rgba(224,162,0,.18); color:var(--warn); }
   .badge.destruct{ background:rgba(228,0,43,.14); color:var(--accent); } .badge.test{ background:rgba(127,127,127,.16); color:var(--ink); }
   /* fleet cards */
-  .cards{ display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; }   /* 2 across by default; cards resize freely */
-  /* Fullscreen: the whole Server-cards panel fills the viewport and packs 3–4 cards across. */
+  .cards{ display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; }   /* layout chosen via data-cols; cards resize freely */
+  .cards[data-cols="2"] .fcard{ width:calc(50% - 6px); }
+  .cards[data-cols="3"] .fcard{ width:calc(33.333% - 8px); }
+  .cards[data-cols="4"] .fcard{ width:calc(25% - 9px); }
+  .cards[data-cols="split"] .fcard:nth-child(odd){ width:calc(66.666% - 6px); }
+  .cards[data-cols="split"] .fcard:nth-child(even){ width:calc(33.333% - 6px); }
+  .drag{ cursor:grab; color:var(--dim); font-size:14px; line-height:1; user-select:none; padding:0 2px; } .drag:active{ cursor:grabbing; }
+  .fcard.dragging{ opacity:.45; outline:2px dashed var(--accent); }
+  .port{ font-weight:400; color:var(--dim); }
+  .seg{ display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .seg button{ border:0; background:var(--card); color:var(--dim); font:inherit; font-size:12px; font-weight:600; padding:5px 10px; cursor:pointer; } .seg button+button{ border-left:1px solid var(--line); } .seg button.active{ background:var(--accent-soft); color:var(--accent); }
+  /* Fullscreen: the whole Server-cards panel fills the viewport; the chosen columns still apply. */
   .ad-card.fs{ position:fixed; inset:0; z-index:55; margin:0; padding:16px 20px; background:var(--bg); overflow:auto; }
-  .ad-card.fs .fcard{ width:calc(33.333% - 8px); min-width:360px; height:clamp(320px,44vh,580px); }
+  .ad-card.fs .fcard{ height:clamp(320px,44vh,580px); }
   .ad-card.fs .minilog{ font-size:12.5px; }
   .fcard{ border:1px solid var(--line); border-radius:12px; padding:11px 12px; background:var(--surface-2); width:calc(50% - 6px); min-width:300px; max-width:100%; height:300px; min-height:190px; display:flex; flex-direction:column; resize:both; overflow:hidden; }
   .fcard .top{ display:flex; align-items:center; gap:8px; flex:0 0 auto; } .fcard .nm{ font-weight:600; word-break:break-all; }
@@ -169,7 +179,12 @@
       <section class="pane" data-view="fleet">
         <div class="ad-card" id="fleetCard">
           <div class="run-head"><h2 style="margin:0">Server cards</h2>
-            <span style="display:flex;align-items:center;gap:10px"><span id="fleetLive" class="mut" style="font-size:12px">○ connecting…</span><button class="btn ghost sm" id="fleetFull" type="button">⛶ Fullscreen</button></span></div>
+            <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span class="mut" style="font-size:12px">Layout</span>
+              <span id="fleetCols" class="seg"><button data-cols="2" type="button">2</button><button data-cols="3" type="button">3</button><button data-cols="4" type="button">4</button><button data-cols="split" type="button">⅔·⅓</button></span>
+              <span id="fleetLive" class="mut" style="font-size:12px">○ connecting…</span>
+              <button class="btn ghost sm" id="fleetFull" type="button">⛶ Fullscreen</button>
+            </span></div>
           <div class="ctl" id="fleetCtl"></div>
           <div class="mut" style="margin-bottom:10px">Each card streams that server's pm2 log live (via pm2's log bus) plus status/CPU/mem. Two across; go Fullscreen for a 3–4 wide grid. Expand a card for a bigger view; copy to clipboard.</div>
           <div class="cards" id="fleetCards"><div class="mut">Loading…</div></div>
@@ -330,10 +345,9 @@
     $('#procsWhen').textContent=res.body&&res.body.ok?('updated (MTN): '+mtn(res.body.time)+' · '+res.body.count+' processes · click a row to view its log file'):('pm2 error: '+((res.body&&res.body.error)||res.status));
     procTbl.render();
   }
-  // Live "Server console" via SSE — the proxy's own console output (request log, errors, control
-  // actions). Mirrors the email_queue admin; populates in dev AND under pm2 (no log file needed).
-  // One stream feeds BOTH the Overview console (#proxyLog) and the Logs console (#logsOut).
-  var logES=null;
+  // Live "Server console" via SSE. Two independent streams:
+  //  • Overview (#proxyLog) ← /api/admin-logs/stream  = the proxy's OWN console output.
+  //  • Logs pane (#logsOut) ← /api/logs/stream?name=X  = the process picked in the dropdown (pm2 bus).
   function lineClass(d){
     if(d.level==='error' || /error|ECONNREFUSED|SERVER ERROR|✗|failed/i.test(d.line)) return 'l-err';
     if(d.level==='warn' || /CLIENT ERROR|WARN|warning/i.test(d.line)) return 'l-sys';
@@ -341,21 +355,40 @@
     if(/^\s*(>>|<<)/.test(d.line) || /\bGET\b|\bPOST\b|\bPUT\b|\bDELETE\b/.test(d.line)) return 'l-meta';
     return '';
   }
-  function appendLine(d){
-    var txt=(d.at?d.at.slice(11,19)+' ':'')+d.line; var cls=lineClass(d);
-    ['#proxyLog','#logsOut'].forEach(function(sel){ var o=$(sel); if(!o) return;
-      if(o.dataset.fresh!=='1'){ o.textContent=''; o.dataset.fresh='1'; }
-      var div=document.createElement('div'); if(cls) div.className=cls; div.textContent=txt;
-      o.appendChild(div); while(o.childNodes.length>600) o.removeChild(o.firstChild); o.scrollTop=o.scrollHeight; });
+  function appendTo(sel, d){
+    var o=$(sel); if(!o) return; var cls=lineClass(d);
+    if(o.dataset.fresh!=='1'){ o.textContent=''; o.dataset.fresh='1'; }
+    var div=document.createElement('div'); if(cls) div.className=cls; div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line;
+    o.appendChild(div); while(o.childNodes.length>700) o.removeChild(o.firstChild); o.scrollTop=o.scrollHeight;
   }
-  function setLogLive(on){ [['#ovLive',on],['#logsLive',on]].forEach(function(p){ var s=$(p[0]); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'var(--ok)':'var(--dim)'; } }); }
+  function setLive(sel, on){ var s=$(sel); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'var(--ok)':'var(--dim)'; } }
+
+  // Overview console — the proxy's own output.
+  var ovES=null;
   function startLogStream(){
-    if(logES){ try{logES.close();}catch(e){} }
-    ['#proxyLog','#logsOut'].forEach(function(sel){ var o=$(sel); if(o){ o.dataset.fresh=''; o.textContent='Connecting…'; } });
-    var es; try{ es=new EventSource('/api/admin-logs/stream'); }catch(e){ setLogLive(false); return; } logES=es;
-    es.onopen=function(){ setLogLive(true); };
-    es.addEventListener('line',function(ev){ try{ appendLine(JSON.parse(ev.data)); }catch(e){} });
-    es.onerror=function(){ setLogLive(false); /* browser auto-reconnects */ };
+    if(ovES){ try{ovES.close();}catch(e){} }
+    var o=$('#proxyLog'); if(o){ o.dataset.fresh=''; o.textContent='Connecting…'; }
+    var es; try{ es=new EventSource('/api/admin-logs/stream'); }catch(e){ setLive('#ovLive',false); return; } ovES=es;
+    es.onopen=function(){ setLive('#ovLive',true); };
+    es.addEventListener('line',function(ev){ try{ appendTo('#proxyLog', JSON.parse(ev.data)); }catch(e){} });
+    es.onerror=function(){ setLive('#ovLive',false); };
+  }
+  // Logs pane console — the SELECTED pm2 process (file backfill, then live bus).
+  var logsES=null, logsStreamName=null;
+  async function startLogsStream(name){
+    name = name || $('#logPick').value || proxyPm2Name; logsStreamName=name;
+    if(logsES){ try{logsES.close();}catch(e){} logsES=null; }
+    var o=$('#logsOut'); if(o){ o.dataset.fresh=''; o.textContent='Loading '+name+'…'; }
+    // backfill from the pm2 log file so there's immediate context
+    try{ var res=await getJSON('/api/logs?name='+encodeURIComponent(name)+'&lines=200'); var logs=(res.body&&res.body.logs)||{};
+      var txt=Object.keys(logs).map(function(fn){return logs[fn];}).join('\n').trim();
+      if(o){ o.textContent=''; o.dataset.fresh='1'; (txt?txt.split('\n'):['(no file history — waiting for live lines)']).forEach(function(ln){ appendTo('#logsOut',{line:ln}); }); }
+    }catch(e){}
+    // then live-stream that one process
+    var es; try{ es=new EventSource('/api/logs/stream?name='+encodeURIComponent(name)); }catch(e){ setLive('#logsLive',false); return; } logsES=es;
+    es.onopen=function(){ setLive('#logsLive',true); };
+    es.addEventListener('line',function(ev){ try{ if(logsStreamName===name) appendTo('#logsOut', JSON.parse(ev.data)); }catch(e){} });
+    es.onerror=function(){ setLive('#logsLive',false); };
   }
   function loadProxyLog(){ var pt=$('#proxyLogTitle'); if(pt) pt.textContent='Server console — '+(proxyPm2Name||'usat_proxy'); }
 
@@ -376,7 +409,8 @@
   var fleetNames=[], fleetES=null;
   function cardMeta(p){ return '<span>cpu '+(p.cpu==null?'?':p.cpu)+'%</span><span>'+(p.memory_mb==null?'?':p.memory_mb)+'MB</span><span>↺'+(p.restarts==null?'?':p.restarts)+'</span><span>'+uptime(p.uptime_ms)+'</span>'; }
   function buildCard(p){
-    return '<div class="fcard" data-name="'+esc(p.name)+'"><div class="top">'+statusPill(p.status)+'<span class="nm">'+esc(p.name)+'</span><span class="cardbtns"><button class="btn sm xpand" data-name="'+esc(p.name)+'">⤢ expand</button><button class="btn sm copy" data-name="'+esc(p.name)+'">copy</button></span></div>'
+    var port = p.port ? ' <span class="port">:'+p.port+'</span>' : '';
+    return '<div class="fcard" data-name="'+esc(p.name)+'"><div class="top"><span class="drag" draggable="true" title="drag to reorder">⠿</span>'+statusPill(p.status)+'<span class="nm">'+esc(p.name)+port+'</span><span class="cardbtns"><button class="btn sm xpand" data-name="'+esc(p.name)+'">⤢ expand</button><button class="btn sm copy" data-name="'+esc(p.name)+'">copy</button></span></div>'
       +'<div class="meta">'+cardMeta(p)+'</div>'
       +'<pre class="minilog" data-name="'+esc(p.name)+'">loading…</pre></div>';
   }
@@ -388,6 +422,8 @@
   async function loadFleet(){
     var res=await getJSON('/api/pm2'); var list=(res.body&&res.body.processes)||[];
     if(!list.length){ $('#fleetCards').innerHTML='<div class="mut">'+esc((res.body&&res.body.error)||'No processes / pm2 not reachable')+'</div>'; fleetNames=[]; setRefresh(); return; }
+    var ord=lsGet('proxy_fleet_order',[]);
+    if(ord.length) list.sort(function(a,b){ var ia=ord.indexOf(a.name), ib=ord.indexOf(b.name); if(ia<0)ia=1e9; if(ib<0)ib=1e9; return ia-ib || a.name.localeCompare(b.name); });
     var names=list.map(function(p){return p.name;});
     var same = names.length===fleetNames.length && names.every(function(n,i){return n===fleetNames[i];});
     if(!same){                                   // structure changed → (re)build cards + backfill once
@@ -507,11 +543,11 @@
       $('#logPick').value = proxyPm2Name || (logsPm2[0]&&logsPm2[0].name) || ''; logsPickLoaded=true;
     }
     renderTiles();
-    if(!logES) startLogStream();   // ensure the live console is connected
+    if(logsStreamName!==$('#logPick').value) startLogsStream($('#logPick').value);  // connect to the selected process
     setRefresh();
   }
-  $('#logPick').addEventListener('change', renderTiles);
-  $('#logsReload').addEventListener('click', startLogStream);
+  $('#logPick').addEventListener('change', function(){ renderTiles(); startLogsStream($('#logPick').value); });
+  $('#logsReload').addEventListener('click', function(){ startLogsStream($('#logPick').value); });
 
   // ---- Settings ----
   async function loadSettings(){
@@ -534,6 +570,7 @@
     document.querySelectorAll('.admin-rail a[data-pane]').forEach(function(x){x.classList.toggle('on',x.dataset.pane===name);});
     document.querySelectorAll('.pane').forEach(function(p){p.classList.toggle('active', p.getAttribute('data-view')===name);});
     if(name!=='fleet') stopFleetStream();   // only stream cards while the Server-cards pane is open
+    if(name!=='logs' && logsES){ try{logsES.close();}catch(e){} logsES=null; logsStreamName=null; }
     if(name==='health') loadHealth();
     else if(name==='fleet') loadFleet();
     else if(name==='operations') loadConsole();
@@ -551,6 +588,20 @@
   $('#fleetCards').addEventListener('click', function(ev){ var b=ev.target.closest&&ev.target.closest('button'); if(!b||!b.dataset.name) return; var nm=b.dataset.name;
     if(b.classList.contains('xpand')) openModal(nm);
     else if(b.classList.contains('copy')){ var el=document.querySelector('.minilog[data-name="'+CSS.escape(nm)+'"]'); if(el&&copyText(el.textContent)){ b.textContent='copied'; setTimeout(function(){b.textContent='copy';},1200); } } });
+  // Layout chooser (2 / 3 / 4 / ⅔·⅓). Clears any manual resize so the chosen layout takes effect.
+  function applyCols(c){ var el=$('#fleetCards'); if(el){ el.setAttribute('data-cols', c); el.querySelectorAll('.fcard').forEach(function(card){ card.style.width=''; card.style.height=''; }); }
+    $('#fleetCols').querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b.dataset.cols===c); }); lsSet('proxy_fleet_cols', c); }
+  $('#fleetCols').addEventListener('click', function(e){ var b=e.target.closest('button'); if(b&&b.dataset.cols) applyCols(b.dataset.cols); });
+  applyCols(lsGet('proxy_fleet_cols','2'));   // init from saved choice (default 2-up)
+
+  // Drag to reorder cards (grab the ⠿ handle); order persists per browser.
+  var draggedCard=null;
+  function saveFleetOrder(){ lsSet('proxy_fleet_order', [].map.call($('#fleetCards').querySelectorAll('.fcard'), function(c){return c.dataset.name;})); }
+  $('#fleetCards').addEventListener('dragstart', function(e){ var h=e.target.closest&&e.target.closest('.drag'); if(!h){ if(e.preventDefault) e.preventDefault(); return; } draggedCard=h.closest('.fcard'); if(draggedCard){ draggedCard.classList.add('dragging'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', draggedCard.dataset.name); }catch(_){} } });
+  $('#fleetCards').addEventListener('dragover', function(e){ if(!draggedCard) return; e.preventDefault(); var over=e.target.closest&&e.target.closest('.fcard'); if(!over||over===draggedCard) return; var r=over.getBoundingClientRect(); var before=e.clientX < (r.left + r.width/2); $('#fleetCards').insertBefore(draggedCard, before?over:over.nextSibling); });
+  $('#fleetCards').addEventListener('drop', function(e){ e.preventDefault(); });
+  $('#fleetCards').addEventListener('dragend', function(){ if(draggedCard){ draggedCard.classList.remove('dragging'); draggedCard=null; saveFleetOrder(); } });
+
   // Server-cards fullscreen toggle (denser grid for the production fleet)
   function setFleetFull(on){ var c=$('#fleetCard'); if(!c) return; c.classList.toggle('fs', on); var b=$('#fleetFull'); if(b) b.textContent=on?'⛶ Exit fullscreen':'⛶ Fullscreen'; }
   $('#fleetFull').addEventListener('click', function(){ setFleetFull(!$('#fleetCard').classList.contains('fs')); });
