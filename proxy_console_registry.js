@@ -1,0 +1,82 @@
+'use strict';
+/**
+ * proxy_console_registry.js — catalog of ops the /admin Console can run (mirrors menu.js),
+ * modeled on src/salesforce_email_queue_proof_of_concept/admin/console_registry.js + console_runner.js.
+ *
+ * Security: reached only behind require_auth. The client sends { id, params, confirm } — NEVER a
+ * command string. argv is assembled HERE from the registry and spawned with shell:false (no shell =
+ * no injection). Output is ANSI-stripped, line-capped, and timed out, then returned.
+ *   web:   'run' (spawn + return output) | 'form' (validated params, then run) | 'terminal' (greyed — streams/interactive)
+ *   klass: 'read' | 'mutate' | 'destruct' | 'test' | 'na'   (badge + confirm policy)
+ *   confirm:true => requires a confirm flag from the client before running
+ */
+const { spawn } = require('child_process');
+
+const RUN_DIR = __dirname;
+const MAX_LINES = 4000;
+const RUN_TIMEOUT_MS = 4 * 60 * 1000;
+
+const SECTIONS = [
+  { label: 'Tests', items: [
+    { id: 1, action: 'test_proxy', label: 'Run proxy tests', desc: 'node --test on the proxy suite (endpoints, auth, 404/405).', cli: 'npm run test_proxy', web: 'run', klass: 'test', bin: 'npm', argv: ['run', 'test_proxy'] }
+  ] },
+  { label: 'Proxy control', items: [
+    { id: 2, action: 'reload_proxy', label: 'Reload proxy (zero-downtime)', desc: 'Re-reads proxy_routes.js; recycles workers one at a time.', cli: 'npm run pm2_reload_proxy', web: 'run', klass: 'mutate', bin: 'npm', argv: ['run', 'pm2_reload_proxy'] },
+    { id: 3, action: 'restart_proxy', label: 'Restart proxy (hard)', desc: 'Full restart; brief blip.', cli: 'npm run restart_proxy', web: 'run', klass: 'mutate', bin: 'npm', argv: ['run', 'restart_proxy'] },
+    { id: 4, action: 'show_proxy', label: 'Show proxy', desc: 'pm2 show usat_proxy (status, restarts, memory).', cli: 'npm run show_proxy', web: 'run', klass: 'read', bin: 'npm', argv: ['run', 'show_proxy'] },
+    { id: 5, action: 'stop_proxy', label: 'Stop proxy (danger)', desc: 'pm2 stop usat_proxy — this console goes away until restarted.', cli: 'npm run stop_proxy', web: 'run', klass: 'destruct', bin: 'npm', argv: ['run', 'stop_proxy'], confirm: true }
+  ] },
+  { label: 'Fleet (all servers)', items: [
+    { id: 6, action: 'list_pm2', label: 'List pm2 processes', desc: 'Status/restarts/memory for every process.', cli: 'npx pm2 list', web: 'run', klass: 'read', bin: 'npx', argv: ['pm2', 'list'] },
+    { id: 7, action: 'restart_one', label: 'Restart ONE server', desc: 'Restart a single pm2 process by name.', cli: 'npx pm2 restart <name>', web: 'form', klass: 'mutate', bin: 'npx', argv: ['pm2', 'restart'], confirm: true, params: [{ name: 'name', label: 'pm2 name (e.g. usat_events)', type: 'name', required: true }] },
+    { id: 8, action: 'restart_all', label: 'Restart ALL servers (danger)', desc: 'Bounce every pm2 process.', cli: 'npm run pm2_restart_all', web: 'run', klass: 'destruct', bin: 'npm', argv: ['run', 'pm2_restart_all'], confirm: true },
+    { id: 9, action: 'start_all', label: 'Start ALL servers', desc: 'pm2_run_all_servers (proxy first). Long-running.', cli: 'npm run pm2_run_all_servers', web: 'run', klass: 'mutate', bin: 'npm', argv: ['run', 'pm2_run_all_servers'], confirm: true }
+  ] },
+  { label: 'Logs (use the Logs pane / a terminal)', items: [
+    { id: 10, action: 'logs_proxy', label: 'Tail proxy logs', desc: 'Streams continuously — use the Logs pane, or a terminal.', cli: 'npm run logs_proxy', web: 'terminal', klass: 'na', note: 'Streams forever; open the Logs pane or run npm run logs_proxy in a terminal.' },
+    { id: 11, action: 'logs_all', label: 'Tail ALL logs', desc: 'Streams continuously.', cli: 'npx pm2 logs', web: 'terminal', klass: 'na', note: 'Streams forever; run npx pm2 logs in a terminal.' }
+  ] }
+];
+const ALL = SECTIONS.reduce(function (a, s) { return a.concat(s.items); }, []);
+function by_id(id) { return ALL.find(function (it) { return String(it.id) === String(id); }) || null; }
+
+function strip_ansi(s) { return String(s).replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\][^\x07]*\x07/g, ''); }
+
+function assemble_argv(item, params) {
+  params = params || {};
+  const extra = [];
+  (item.params || []).forEach(function (p) {
+    let v = params[p.name];
+    if (v == null) v = (p.default != null ? p.default : '');
+    v = String(v).trim();
+    if (p.required && !v) throw new Error('missing ' + p.name);
+    if (p.type === 'name' && !/^[\w.\-]+$/.test(v)) throw new Error('invalid ' + p.name + ' (letters, digits, _ . - only)');
+    extra.push(v);
+  });
+  return item.argv.concat(extra);
+}
+
+function run(item, params) {
+  return new Promise(function (resolve) {
+    let argv;
+    try { argv = assemble_argv(item, params); } catch (e) { return resolve({ ok: false, error: e.message }); }
+    const lines = []; let truncated = false; let done = false;
+    function push(t) { strip_ansi(t).split(/\r?\n/).forEach(function (l) { if (lines.length < MAX_LINES) lines.push(l); else truncated = true; }); }
+    const p = spawn(item.bin, argv, { cwd: RUN_DIR, shell: process.platform === 'win32' }); // npm/npx need a shell on Windows; argv is validated either way
+    const to = setTimeout(function () { if (!done) { try { p.kill('SIGKILL'); } catch (e) {} push('\n[timed out after ' + (RUN_TIMEOUT_MS / 1000) + 's]'); } }, RUN_TIMEOUT_MS);
+    p.stdout.on('data', function (d) { push(d.toString()); });
+    p.stderr.on('data', function (d) { push(d.toString()); });
+    p.on('error', function (e) { done = true; clearTimeout(to); resolve({ ok: false, error: e.message, output: lines.join('\n') }); });
+    p.on('close', function (code) { done = true; clearTimeout(to); resolve({ ok: code === 0, code: code, truncated: truncated, output: lines.join('\n') }); });
+  });
+}
+
+function public_sections() {
+  return SECTIONS.map(function (s) {
+    return { label: s.label, items: s.items.map(function (it) {
+      return { id: it.id, action: it.action, label: it.label, desc: it.desc, cli: it.cli, web: it.web, klass: it.klass, confirm: !!it.confirm, note: it.note || '', params: it.params || [] };
+    }) };
+  });
+}
+
+module.exports = { SECTIONS, by_id, run, public_sections };

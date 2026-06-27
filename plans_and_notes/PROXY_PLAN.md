@@ -637,15 +637,17 @@ Microsoft SSO stage exists.
 - `GET /status`  — dashboard over `/api/status` + `/api/health` (auto-refresh).
 - `GET /logs`    — tail recent pm2 log lines per server (reads `~/.pm2/logs/*.log`).
 - `GET /login` / `POST /login` / `POST /logout` — same flow as email_queue.
-- Public (ungated): `/api/test`, `/api/status`, `/api/health`, and all proxied app paths.
+- Public (ungated): `/api/test`, `/api/status`, `/api/health`, and all proxied
+---
 
-**Open decision (security):** shared vs. separate credentials —
-1. **Separate proxy account (recommended):** new `.env` vars `PROXY_ADMIN_USER` /
-   `PROXY_ADMIN_PASS`, proxy-specific cookie name + users file. Fully independent of
-   email_queue; least coupling.
-2. **Shared:** reuse email_queue's `SF_EMAIL_QUEUE_ADMIN_*` accounts + `eq_session`
-   cookie, so one login covers both. Less to manage, but couples the two apps.
+## Console v2 — dashboard enhancements (BUILT)
 
-**Security notes:** logs can contain member PII / secrets, so `/logs` must stay
-gated; serve only tail (not full files); this console is superseded by the
-Microsoft SSO gateway in the React stage.
+Implemented on top of the management console:
+- `/api/pm2` (gated) — pm2 process list via the `pm2` module (status/cpu/mem/restarts/uptime/pid).
+- `/api/health` 503 now logs which backend(s) are down (`!! /api/health 503 — down: /x (ECONNREFUSED), ...`).
+- `app.set('json spaces', 2)` — all JSON endpoints pretty-print (readable in a browser); `/admin` header links to `/api/status` + `/api/health`.
+- `/favicon.svg` route (USAT red hub) + `<link rel=icon>` on `/admin` and the login page.
+- `proxy_admin.html` panes: Backends (numbered, sortable, MTN "last checked", refresh control default 15 min), Processes (pm2 table, refresh default 10 min), Fleet (status-wall cards, click → logs, refresh default 10 min), Logs.
+- Tests: `/favicon.svg` (200) and `/api/pm2` (401 unauth) added — suite now 10 tests.
+
+Future (Fleet phase 2/3): per-card live log streaming via SSE (`pm2.launchBus`).

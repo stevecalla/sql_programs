@@ -209,6 +209,14 @@ deploy a backend (host:port is unchanged). Cron jobs are unaffected — they cal
 - Optional: `npm i express-rate-limit` to enable proxy-level rate limiting (the
   proxy runs fine without it; you can rate-limit at Cloudflare instead).
 - UI apps (8016/8018/8019) and the Streamlit org_chart (8011) stay on their own
-  subdomains until the React consolidation (`plans_and_notes/REACT_PLAN.md`).
-- Slack slash-command Request URLs move to `usat-api.kidderwise.org/<prefix>/...`
-  (command names and backends unchanged). See `PROXY_PLAN.md` for the exact list.
+  subdomains until the React co
+## Admin console v2 (proxy /admin)
+
+The `/admin` dashboard (login-gated, `PROXY_ADMIN_*` in `.env`) has five panes:
+- **Status** — proxy uptime/memory/routes.
+- **Backends** — `/api/health` table: numbered, sortable, with a "Last checked (MTN)" stamp and an auto-refresh control (default 15 min, with a pause toggle; persisted).
+- **Processes** — `/api/pm2` table (name, status, CPU, mem, restarts, uptime, pid): numbered, sortable, auto-refresh default 10 min.
+- **Fleet** — tmux-style status wall, one card per pm2 process; click a card to tail its logs. Auto-refresh default 10 min.
+- **Logs** — pm2 log tail per process (no SSH).
+
+Header links open `/api/status` and `/api/health` as pretty-printed JSON (the proxy sets `json spaces`). A `/favicon.svg` (USAT red hub) is served for the console + login page. The `/api/health` 503 log line now names the down backend(s). Rate limiting (300 req/min/IP) is active when `express-rate-limit` is installed.

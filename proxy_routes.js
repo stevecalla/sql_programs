@@ -1,14 +1,10 @@
 // proxy_routes.js — path prefix -> { target, health } for server_proxy_8000.js.
-// Uncomment a line to route that prefix through the proxy. Start with one,
-// verify, then enable the next. `health` is pinged by the proxy /api/health
-// aggregator. No secrets here -> committed to git.
+// Uncomment a line to route that prefix through the proxy. `health` is pinged by
+// the /api/health aggregator. No secrets here -> committed to git.
 
 module.exports = {
-  // ───────────────────────────────────────────────────────────────────────
   // API SERVERS (usat-api) — headless data jobs + Slack webhook receivers.
-  // No browser UI; safe to proxy with zero app changes. Enable one at a time.
-  // ───────────────────────────────────────────────────────────────────────
-  '/events': { target: 'http://127.0.0.1:8005', health: '/events-test' },          // ← START HERE
+  '/events':                { target: 'http://127.0.0.1:8005', health: '/events-test' },
   '/sales':                 { target: 'http://127.0.0.1:8003', health: '/scheduled-all-sales-test' },
   '/participation':         { target: 'http://127.0.0.1:8004', health: '/participation-test' },
   '/recognition':           { target: 'http://127.0.0.1:8006', health: '/recognition-test' },
@@ -25,13 +21,9 @@ module.exports = {
   '/slack-news':            { target: 'http://127.0.0.1:8010', health: '/slack-news-test' },
   '/slack-membership-base': { target: 'http://127.0.0.1:8013', health: '/slack-membership-base-test' },
 
-  // ───────────────────────────────────────────────────────────────────────
-  // APP / UI SERVERS (future usat-app, React — Project C).
-  // Serve browser HTML with absolute asset paths, so they STAY on their own
-  // usat-* subdomains for now (do NOT uncomment yet). Enable in Project C.
-  // ───────────────────────────────────────────────────────────────────────
+  // APP / UI SERVERS (React — Project C). Keep on their own subdomains for now.
   // '/event-analysis': { target: 'http://127.0.0.1:8016', health: '/api/status' },
   // '/race-results':   { target: 'http://127.0.0.1:8018', health: '/api/status' },
   // '/email-queue':    { target: 'http://127.0.0.1:8019', health: '/api/status' },
-  // '/org-chart':      { target: 'http://127.0.0.1:8011', health: '/healthz' },  // Streamlit UI — keep on own subdomain; subpath is fragile
+  // '/org-chart':      { target: 'http://127.0.0.1:8011', health: '/healthz' },  // Streamlit — keep standalone
 };
