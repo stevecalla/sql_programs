@@ -243,11 +243,19 @@
             <span class="ctl" id="sysCtl" style="margin:0"></span></div>
           <div class="tiles" id="sysTiles"><div class="mut">Loading…</div></div>
         </div>
-        <div class="ad-card">
-          <div class="run-head"><h2 style="margin:0">Live commands <span class="mut" id="sysCmdWhen" style="text-transform:none;font-weight:400"></span></h2>
+        <div class="ad-card collapsed" id="sysCmdCard">
+          <div class="run-head"><h2 class="collapser" data-collapse="sysCmdCard" style="margin:0"><span class="cx">▾</span> Live commands <span class="mut" id="sysCmdWhen" style="text-transform:none;font-weight:400"></span></h2>
             <span class="term-tools"><button class="btn ghost sm" data-bottom="sysCmdOut" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysCmdOut" type="button">copy</button><button class="btn ghost sm" data-expand="sysCmdOut" type="button">⤢ expand</button></span></div>
-          <div class="chips" id="sysCmdChips" style="margin-bottom:8px"></div>
-          <div class="term" id="sysCmdOut" style="min-height:200px">Pick a command above.</div>
+          <div class="collapse-body">
+            <div class="chips" id="sysCmdChips" style="margin-bottom:8px"></div>
+            <div class="term" id="sysCmdOut" style="min-height:200px">Pick a command above.</div>
+          </div>
+        </div>
+        <div class="ad-card collapsed" id="sysCronCard">
+          <div class="run-head"><h2 class="collapser" data-collapse="sysCronCard" style="margin:0"><span class="cx">▾</span> Cron schedule <span class="mut" id="sysCronWhen" style="text-transform:none;font-weight:400"></span></h2>
+            <span class="term-tools"><button class="btn ghost sm" data-copy="sysCron" type="button">copy</button><button class="btn ghost sm" data-expand="sysCron" type="button">⤢ expand</button></span></div>
+          <div class="collapse-body"><div class="term" id="sysCron" style="min-height:140px">Loading…</div>
+            <div class="mut" style="margin-top:6px">Read-only view of <code>crontab -l</code> for the server user. Editing from the panel is not enabled (see note below).</div></div>
         </div>
         <div class="ad-card collapsed" id="sysSummaryCard">
           <div class="run-head"><h2 class="collapser" data-collapse="sysSummaryCard" style="margin:0"><span class="cx">▾</span> Daily health summary <span class="mut" id="sysSummaryWhen" style="text-transform:none;font-weight:400"></span></h2>
@@ -290,6 +298,17 @@
             • <b>Health:</b> <code>/api/health</code> 200 = all up; 503 = one down (the proxy log names which). <code>ECONNREFUSED</code> = backend not running.<br>
             • <b>Docs:</b> <code>plans_and_notes/PROXY_PLAN.md</code>, <code>PROXY_CUTOVER_CHECKLIST.md</code>. Ops menu: <code>npm run menu</code>.
           </div>
+        </div>
+        <div class="ad-card"><h2>System monitors</h2>
+          <div class="mut" style="margin-bottom:10px">Used by the <b>System health → Live commands</b> panel. The panel can render text snapshots (<code>top -b</code>, <code>atop</code>, <code>glances</code> CSV); the full-screen TUIs (<code>htop</code>, <code>btop</code>, <code>nmon</code>) can't render in a web panel — run those in a terminal/SSH session.</div>
+          <table class="grid"><thead><tr><th>Command</th><th>Install</th><th>Notes</th></tr></thead><tbody>
+            <tr><td><code>top</code></td><td>built-in</td><td>Classic process monitor, always available</td></tr>
+            <tr><td><code>htop</code></td><td><code>sudo apt install htop</code></td><td>Better interactive version of <code>top</code> (terminal only)</td></tr>
+            <tr><td><code>btop</code></td><td><code>sudo apt install btop</code></td><td>Modern, very nice UI for CPU/RAM/disk/network (terminal only)</td></tr>
+            <tr><td><code>atop</code></td><td><code>sudo apt install atop</code></td><td>Great for historical/per-process resource usage</td></tr>
+            <tr><td><code>glances</code></td><td><code>sudo apt install glances</code></td><td>All-in-one system monitor</td></tr>
+            <tr><td><code>nmon</code></td><td><code>sudo apt install nmon</code></td><td>Good for CPU, memory, disk, network summaries (terminal only)</td></tr>
+          </tbody></table>
         </div>
       </section>
     </main>
@@ -651,6 +670,7 @@
     else { $('#sysSummaryWhen').textContent=''; renderTerm($('#sysSummary'), 'No summary yet. After the daily health cron next runs it writes utilities/cron_system_metrics/latest_summary.txt, which appears here.'); }
     if(s.ubuntu){ $('#sysUbuntuWhen').textContent='— '+mtn(s.ubuntu.mtime); renderTerm($('#sysUbuntu'), s.ubuntu.text); }
     else { $('#sysUbuntuWhen').textContent=''; renderTerm($('#sysUbuntu'), '(no ubuntu-update.log found)'); }
+    try{ var cr=(await getJSON('/api/system/cron')).body||{}; renderTerm($('#sysCron'), cr.ok?(cr.crontab||'(empty)'):('(unavailable'+(cr.error?': '+cr.error:'')+')')); if($('#sysCronWhen')) $('#sysCronWhen').textContent=(cr.user?('— '+cr.user):'')+(cr.time?'  '+mtn(cr.time):''); }catch(e){}
     loadSysCmdChips();
     setRefresh();
   }
@@ -659,7 +679,7 @@
   async function loadSysCmdChips(){
     if(sysCmdLoaded) return; sysCmdLoaded=true;
     var j=(await getJSON('/api/system/cmds')).body||{}; var cmds=j.cmds||[];
-    $('#sysCmdChips').innerHTML=cmds.map(function(c){return '<button class="chip" data-cmd="'+esc(c.id)+'" style="cursor:pointer">'+esc(c.label)+'</button>';}).join('')+'<button class="chip" id="sysCmdRefresh" style="cursor:pointer" title="re-run">&#8635; refresh</button>';
+    $('#sysCmdChips').innerHTML=cmds.map(function(c){return '<button class="chip" data-cmd="'+esc(c.id)+'" title="'+esc(c.note||'')+'" style="cursor:'+(c.interactive?'help':'pointer')+(c.interactive?';opacity:.7':'')+'">'+esc(c.label)+(c.interactive?' ⧉':'')+'</button>';}).join('')+'<button class="chip" id="sysCmdRefresh" style="cursor:pointer" title="re-run the current command">&#8635; refresh</button>';
     $('#sysCmdChips').addEventListener('click', function(e){ var b=e.target.closest('button'); if(!b) return;
       if(b.id==='sysCmdRefresh'){ if(sysCmdCur) runSysCmd(sysCmdCur); return; }
       if(b.dataset.cmd) runSysCmd(b.dataset.cmd);
