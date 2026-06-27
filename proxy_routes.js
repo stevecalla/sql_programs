@@ -33,6 +33,5 @@ module.exports = {
   // '/event-analysis': { target: 'http://127.0.0.1:8016', health: '/api/status' },
   // '/race-results':   { target: 'http://127.0.0.1:8018', health: '/api/status' },
   // '/email-queue':    { target: 'http://127.0.0.1:8019', health: '/api/status' },
-  
   // '/org-chart':      { target: 'http://127.0.0.1:8011', health: '/healthz' },  // Streamlit UI — keep on own subdomain; subpath is fragile
 };
