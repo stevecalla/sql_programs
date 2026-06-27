@@ -380,7 +380,7 @@
     var o=$(sel); if(!o) return; var cls=lineClass(d);
     var fresh=o.dataset.fresh!=='1'; var follow=fresh||atBottom(o);
     if(fresh){ o.textContent=''; o.dataset.fresh='1'; }
-    var div=document.createElement('div'); if(cls) div.className=cls; div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line;
+    var div=document.createElement('div'); if(cls) div.className=cls; div.textContent=d.line;
     o.appendChild(div); while(o.childNodes.length>700) o.removeChild(o.firstChild); if(follow) pin(o);
   }
   function setLive(sel, on){ var s=$(sel); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'var(--ok)':'var(--dim)'; } }
@@ -488,7 +488,7 @@
       var fresh=el.dataset.fresh!=='1'; var follow=fresh||atBottom(el);
       if(fresh){ el.textContent=''; el.dataset.fresh='1'; }
       var div=document.createElement('div'); if(cls) div.className=cls;
-      div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line;
+      div.textContent=d.line;
       el.appendChild(div); while(el.childNodes.length>300) el.removeChild(el.firstChild); if(follow) pin(el);
     });
   }
@@ -521,7 +521,7 @@
         var fresh=pre.dataset.fresh!=='1'; var follow=fresh||atBottom(pre);
         if(fresh){ pre.textContent=''; pre.dataset.fresh='1'; }
         var div=document.createElement('div'); if(d.level==='error'||/error|ECONNREFUSED|✗|failed/i.test(d.line)) div.className='l-err';
-        div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line; pre.appendChild(div);
+        div.textContent=d.line; pre.appendChild(div);
         while(pre.childNodes.length>800) pre.removeChild(pre.firstChild); if(follow) pin(pre);
       }catch(e){} });
     }catch(e){}
