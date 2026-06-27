@@ -1,6 +1,11 @@
+// Base path the app is served under ('' at root, '/merge' behind the usat-app proxy). Vite sets
+// import.meta.env.BASE_URL from the build's `base` (e.g. `vite build --base=/merge/`), so all API
+// calls and the export URL stay correct whether the app runs at root or under /merge.
+const BASE = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
+
 // Tiny fetch wrapper for the JSON API. Same-origin cookies carry the session.
 async function req(path, opts) {
-  const r = await fetch(path, Object.assign({
+  const r = await fetch(BASE + path, Object.assign({
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
   }, opts));
@@ -12,7 +17,7 @@ async function req(path, opts) {
 export const api = {
   // returns the user object, or null when not signed in (401)
   me: async () => {
-    const r = await fetch('/api/me', { credentials: 'same-origin' });
+    const r = await fetch(BASE + '/api/me', { credentials: 'same-origin' });
     if (r.status === 401) return null;
     return r.json();
   },
@@ -49,5 +54,5 @@ function qs(o) {
 
 // Build a download URL (CSV/Excel export) with the same params the table is showing.
 export function exportUrl(base, params) {
-  return base + qs(expand(params));
+  return BASE + base + qs(expand(params));
 }

@@ -21,7 +21,11 @@ module.exports = {
   '/slack-news':            { target: 'http://127.0.0.1:8010', health: '/slack-news-test' },
   '/slack-membership-base': { target: 'http://127.0.0.1:8013', health: '/slack-membership-base-test' },
 
-  // APP / UI SERVERS (React — Project C). Keep on their own subdomains for now.
+  // APP / UI SERVERS (React — Project C / usat-app). Served under a path on the usat-app host.
+  // Merge tool (React SPA, port 8020). The web app is built path-aware (`npm run salesforce_merge_build_proxy`,
+  // i.e. Vite base '/merge/'), so the proxy strips '/merge' and :8020 serves the assets, SPA deep
+  // links, and the /merge/api/* calls correctly. Point usat-app.kidderwise.org -> :8000 in Cloudflare.
+  '/merge':                 { target: 'http://127.0.0.1:8020', health: '/api/status' },
   // '/event-analysis': { target: 'http://127.0.0.1:8016', health: '/api/status' },
   // '/race-results':   { target: 'http://127.0.0.1:8018', health: '/api/status' },
   // '/email-queue':    { target: 'http://127.0.0.1:8019', health: '/api/status' },
