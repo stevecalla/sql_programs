@@ -80,8 +80,10 @@ salesforce_duplicates/
   README.md / CLAUDE.md / schema.md
   plans_and_notes/          README.md (index) / README_SQL.md / README_TUNING.md /
                             README_NICKNAME.md / README_MERGE_ID_FIELD.md / README_MERGE_ID_REVIEW.md
-                            merge_tool/  (the planned merge tool: plan, mockups/, reference/)
 ```
+
+The planned **merge management tool** is a separate sibling project at `../salesforce_merge/`
+(its plans live in `../salesforce_merge/plans_and_notes/`).
 
 `main()` in `step_1_find_duplicates.js` is now a thin orchestrator that calls
 `detect_exact_duplicates` (exact.js) and `run_fuzzy_matching` (fuzzy.js).

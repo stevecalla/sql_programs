@@ -84,7 +84,7 @@ finder writes it as a 7th view (CSV `account_merge_id_review.csv`, DB table
 `salesforce_duplicate_merge_id_review`, Excel tab, end-of-run summary). Menu item 11
 (`node src/merge_id_review.js report`) prints the latest run's review from the DB.
 
-## Merge management tool — PLANNED / DRAFT (see `plans_and_notes/merge_tool/README_MERGE_TOOL.md`)
+## Merge management tool — PLANNED / DRAFT (own project: `../salesforce_merge/`, see `../salesforce_merge/plans_and_notes/README_MERGE_TOOL.md`)
 
 Not built yet. A planned web admin tool (templated on the email-queue app's `/`, `/metrics`,
 `/admin`) to review accounts / merge-ID accounts / duplicates, manage + initiate merges, keep

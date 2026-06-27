@@ -19,6 +19,46 @@ that lets a reviewer:
 It builds on the existing read-only duplicates pipeline and reuses `usat_sales_db`. It does
 **not** change how duplicates are detected — it sits on top as a separate management layer.
 
+## Decided stack + roadmap (locked)
+
+**Decisions (locked):**
+- **Foundation now, consolidation-ready.** Build the merge tool as the **reference app** for the
+  repo's planned consolidated front-end (Project C / usat-app).
+- **Front-end: Vite + React** — first React app in the repo, deliberately, to avoid a later
+  vanilla→React rewrite. Its `/metrics` and `/admin` pages become the templates the other apps
+  copy when they fold in.
+- **Backend: mirror the email-queue app's conventions** — Express `server_salesforce_merge_8020.js`,
+  JSON API (`/api/...`), reuse its `auth/session`, the `/metrics` analytics stack
+  (`utilities/analytics/*`), `/admin` hub, MySQL, jsforce. The React app **builds to static
+  assets the Express server serves** — same runtime shape as email-queue ("static SPA + JSON
+  API"), so the proxy/Cloudflare/deploy story is unchanged; Vite just adds a build step.
+- **Master selection is deterministic:** winner = account where `Id == merge_id`; losers = same
+  `merge_id`, `Id != merge_id`.
+- **Merge execution:** prototype Node-SOAP `merge()` and the Apex wrapper in the sandbox, then pick.
+- **Restore:** two tiers (≤15-day undelete + backup recreate) from a deep pre-merge snapshot.
+- **Contact-point preservation** gated by a configurable `high_value_flags` list (donor, …).
+- **Salesforce auth:** start simple (username/password) in sandbox; add a **Connected App
+  (OAuth JWT, least-privilege write user) before production**. (Independent of the React choice.)
+- **Env switch:** Sandbox default; Production behind extra guardrails; writes off by default.
+
+**Roadmap:**
+- **Phase 0 (first step) — read-only foundation scaffold.** Express server skeleton +
+  Vite/React app shell (nav, env switch, auth gate, layout) + a working **Dashboard** reading the
+  **existing** `salesforce_duplicate_*` MySQL tables. No Salesforce calls, no writes, no Connected
+  App needed yet.
+- **Phase 1 — review pages:** duplicates, merge-ID reconciliation, all-accounts (over the JSON
+  API + DB), plus the `/metrics` and `/admin` layers (reuse `utilities/analytics`).
+- **Phase 2 — per-cluster deep fetch from Salesforce (read) + dry-run merge preview** (field
+  survivorship + child-record impact).
+- **Phase 3 — sandboxed execute** (Node-SOAP and/or Apex) + deep pre-merge snapshot + history/
+  audit. Writes gated (`ENABLE_MERGE_EXECUTION`, dry-run, confirm token).
+- **Phase 4 — restore** (two tiers) + Contact-Point preservation.
+- **Phase 5 — harden + production** behind the Connected App; later fold into Project C.
+
+**Still open (don't block Phase 0):** which apps port into Project C and in what order; shell
+SSO/auth source; Person-Accounts-only vs other objects; the donor/high-value flag API names;
+restore default when no flag matches.
+
 ## Feasibility / stack
 
 All on the existing stack: **Node/JS + Express** (same shape as the email-queue app),
@@ -303,17 +343,26 @@ records actually under review.
 - **Person Account specifics** — the underlying Contact merges too; confirm behavior in sandbox.
 - Governor limits — chunk + queue + retry.
 
-## Restore — best-effort, snapshot-based (not a native undo)
+## Restore — a core, designed-in capability (snapshot-based)
 
-Salesforce has no clean one-click un-merge. The design:
+Restore is a first-class job of this tool, not an add-on. Salesforce has no clean one-click
+un-merge, so the tool makes restore possible by capturing the data **at merge time** and
+surfacing a per-merge restore action later.
 
-- **Before** each merge, snapshot the full pre-state to `salesforce_merge_premerge_snapshot`:
-  losing accounts, every child record ID and its original parent, and the master's field values.
-- **Restore** = undelete the losing account (only within the ~15-day Recycle Bin window) + an
-  Apex routine that re-reparents the snapshotted children + reapplies the captured fields.
-- **Known limits (set expectations):** records created on the master *after* the merge, rollups,
-  and downstream automation can't be cleanly unwound; outside the 15-day window the losing
-  record may be unrecoverable. Restore is best-effort, scoped, and logged.
+- **Captured at execute (Phase 3):** before every merge, snapshot the full pre-state to
+  `salesforce_merge_premerge_snapshot` — losing accounts' fields, every child record ID + its
+  original parent, and the master's field values. This is what makes restore possible (and it
+  doubles as a backup).
+- **Surfaced in the UI (Phase 4):** merge history → pick a past merge → restore, in two tiers:
+  - **≤ ~15 days (high fidelity):** undelete the loser from the Recycle Bin (keeps its
+    **original id**), re-parent the snapshotted children, reapply overwritten fields.
+  - **beyond 15 days (approximate):** recreate the loser from the snapshot/backup — **new ids**,
+    so external links won't reconnect and children are recreated from the snapshot.
+- **Only reliable for merges done *through this tool*** — that's when the snapshot is captured. A
+  merge performed outside the tool has only Salesforce's 15-day Recycle Bin and no child map.
+- **Known limits:** records created on the master *after* the merge, roll-ups, and downstream
+  automation can't be cleanly unwound. Restore is best-effort, scoped, logged — and all the
+  restore steps run from Node (undelete + re-parent + recreate), no Apex required.
 
 ## Conventions
 

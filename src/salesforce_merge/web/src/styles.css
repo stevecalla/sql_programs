@@ -1,0 +1,94 @@
+/* Palette + tokens mirror the email-queue app (USAT red accent, navy brand, 14px cards,
+   soft shadow) so the two apps look like one product. */
+:root {
+  --bg:#f4f6fb; --card:#ffffff; --ink:#1c2433; --dim:#6b7686; --line:#e2e7f0;
+  --accent:#e4002b; --accent-ink:#fff; --accent-soft:rgba(228,0,43,.08); --brand:#15284e; --brand-ink:#fff;
+  --green:#1a8a4f; --green-bg:#e6f5ec; --red:#c0392b; --red-bg:#fdecea;
+  --radius:14px; --shadow:0 1px 3px rgba(20,30,60,.06),0 6px 24px rgba(20,30,60,.05);
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg:#0f1420; --card:#171d2b; --ink:#e7ecf5; --dim:#9aa6ba; --line:#283142;
+  --accent-soft:rgba(228,0,43,.20); --brand:#1b2f57; --green-bg:#10301f; --red-bg:#3a1a17;
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg:#0f1420; --card:#171d2b; --ink:#e7ecf5; --dim:#9aa6ba; --line:#283142;
+    --accent-soft:rgba(228,0,43,.20); --brand:#1b2f57; --green-bg:#10301f; --red-bg:#3a1a17;
+  }
+  :root:not([data-theme="light"]) { color-scheme: dark; }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--ink);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+h2 { font-size: 18px; margin: 0 0 10px; }
+h3 { font-size: 13px; margin: 14px 0 8px; text-transform: uppercase; letter-spacing: .03em; color: var(--dim); }
+a { color: var(--accent); }
+
+.loading { padding: 40px; color: var(--dim); }
+
+/* header — mirrors the email-queue .app-header (light card bar, bottom border, brandmark) */
+.nav { display: flex; align-items: center; gap: 14px; padding: 12px 18px; background: var(--card); border-bottom: 1px solid var(--line); }
+.brandmark { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); color: #fff; display: inline-grid; place-items: center; font-weight: 700; }
+.brand { font-weight: 700; letter-spacing: -.01em; }
+.links { display: flex; gap: 14px; flex: 1; flex-wrap: wrap; }
+.link { color: var(--dim); text-decoration: none; font-size: 13px; font-weight: 600; }
+.link.active { color: var(--accent); }
+.right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.user { font-size: 12px; color: var(--dim); }
+
+/* env switch */
+.envswitch { display: inline-flex; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
+.envswitch .seg { background: var(--card); color: var(--dim); border: 0; padding: 4px 12px; font-size: 11.5px; cursor: pointer; }
+.envswitch .seg.active { background: var(--green-bg); color: var(--green); font-weight: 700; }
+.envswitch .seg.active.danger { background: var(--red-bg); color: var(--red); }
+
+.container { max-width: 1040px; margin: 0 auto; padding: 20px 18px 48px; }
+
+/* cards + grid */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 13px; margin: 8px 0 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; }
+.stat-label { font-size: 12px; color: var(--dim); }
+.stat-value { font-size: 26px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+.muted { color: var(--dim); }
+.small { font-size: 12px; }
+.err { color: var(--red); }
+
+/* buttons (mirror email-queue) */
+.btn { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-weight: 600; padding: 6px 12px; border-radius: 10px; cursor: pointer; min-height: 34px; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled, .btn[disabled] { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; width: 100%; padding: 9px; margin-top: 8px; }
+.btn.primary:hover { filter: brightness(1.05); color: var(--accent-ink); }
+
+/* login */
+.login { min-height: 100vh; display: grid; place-items: center; background: var(--brand); padding: 16px; }
+.login .card { width: 320px; padding: 24px; }
+.login input { display: block; width: 100%; margin: 8px 0; padding: 10px; border: 1px solid var(--line); border-radius: 9px; min-height: 38px; background: var(--card); color: var(--ink); }
+
+/* data table (shared kit) */
+.datatable { overflow-x: auto; }
+.datatable .search { width: 260px; max-width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 8px; min-height: 38px; background: var(--card); color: var(--ink); }
+.datatable table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+.datatable th { text-align: left; font-size: 11px; color: var(--dim); padding: 9px 10px; cursor: pointer; border-bottom: 1px solid var(--line); user-select: none; text-transform: uppercase; letter-spacing: .03em; }
+.datatable td { padding: 9px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+
+/* responsive — mirrors the email-queue's 820px header-wrap, plus small-screen stacking */
+@media (max-width: 820px) {
+  .nav { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .links { order: 3; flex-basis: 100%; gap: 12px; }
+  .right { margin-left: auto; }
+  .container { padding: 14px 12px 40px; }
+  .grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+}
+@media (max-width: 520px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+  .login .card { width: 100%; }
+}
