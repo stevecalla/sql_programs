@@ -419,20 +419,27 @@
     var top=card.querySelector('.top'); if(top){ var pill=top.querySelector('.pill'); if(pill) pill.outerHTML=statusPill(p.status); }
     var meta=card.querySelector('.meta'); if(meta) meta.innerHTML=cardMeta(p);
   }
+  // Reconcile cards instead of rebuilding: existing cards (and their accumulated logs) are NEVER wiped.
+  // New processes get a card + one-time backfill; vanished processes are removed; a transient empty/failed
+  // /api/pm2 poll (common right after a mass restart) leaves the current cards untouched.
   async function loadFleet(){
     var res=await getJSON('/api/pm2'); var list=(res.body&&res.body.processes)||[];
-    if(!list.length){ $('#fleetCards').innerHTML='<div class="mut">'+esc((res.body&&res.body.error)||'No processes / pm2 not reachable')+'</div>'; fleetNames=[]; setRefresh(); return; }
+    var cont=$('#fleetCards');
+    if(!list.length){                                  // transient hiccup — keep existing cards & logs
+      if(!cont.querySelector('.fcard')) cont.innerHTML='<div class="mut">'+esc((res.body&&res.body.error)||'No processes / pm2 not reachable')+'</div>';
+      setRefresh(); return;
+    }
     var ord=lsGet('proxy_fleet_order',[]);
     if(ord.length) list.sort(function(a,b){ var ia=ord.indexOf(a.name), ib=ord.indexOf(b.name); if(ia<0)ia=1e9; if(ib<0)ib=1e9; return ia-ib || a.name.localeCompare(b.name); });
-    var names=list.map(function(p){return p.name;});
-    var same = names.length===fleetNames.length && names.every(function(n,i){return n===fleetNames[i];});
-    if(!same){                                   // structure changed → (re)build cards + backfill once
-      fleetNames=names;
-      $('#fleetCards').innerHTML=list.map(buildCard).join('');
-      list.forEach(function(p){ tailCard(p.name); });
-    } else {                                     // same set → refresh stats in place, leave logs streaming
-      list.forEach(updateCardStats);
-    }
+    var ph=cont.querySelector('.mut'); if(ph && !ph.closest('.fcard')) ph.remove();   // drop the placeholder once we have data
+    var have={}; cont.querySelectorAll('.fcard').forEach(function(c){ have[c.dataset.name]=c; });
+    var seen={};
+    list.forEach(function(p){ seen[p.name]=1;
+      if(have[p.name]) updateCardStats(p);                          // existing → update stats only (keep log)
+      else { cont.insertAdjacentHTML('beforeend', buildCard(p)); tailCard(p.name); }   // new → build + backfill once
+    });
+    Object.keys(have).forEach(function(nm){ if(!seen[nm]) have[nm].remove(); });        // gone → remove
+    list.forEach(function(p){ var c=cont.querySelector('.fcard[data-name="'+CSS.escape(p.name)+'"]'); if(c) cont.appendChild(c); }); // apply order
     if(!fleetES) startFleetStream();
     setRefresh();
   }
@@ -440,7 +447,7 @@
   async function tailCard(name){
     var el=document.querySelector('.minilog[data-name="'+CSS.escape(name)+'"]'); if(!el) return;
     try{ var res=await getJSON('/api/logs?name='+encodeURIComponent(name)+'&lines=12'); var logs=(res.body&&res.body.logs)||{};
-      var txt=Object.keys(logs).map(function(fn){return logs[fn];}).join('\n').trim(); el.textContent=txt||'(no recent log lines)'; el.dataset.fresh='1'; el.scrollTop=el.scrollHeight;
+      var txt=Object.keys(logs).map(function(fn){return logs[fn];}).join('\n').trim(); el.textContent=txt||'(no file history yet — live lines will appear here)'; el.dataset.fresh='1'; el.scrollTop=el.scrollHeight;
     }catch(e){ el.textContent='(log unavailable)'; }
   }
   function setFleetLive(on){ var s=$('#fleetLive'); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'var(--ok)':'var(--dim)'; } }
