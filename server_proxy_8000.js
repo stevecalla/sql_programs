@@ -233,6 +233,52 @@ function create_app() {
     res.json(out);
   });
 
+  // Gated "live commands" — run one of a fixed allow-list of read-only system snapshots (htop-style).
+  // shell:false, fixed argv (no user input reaches the shell), capped output + timeout.
+  const SYS_CMDS = {
+    top:     { label: 'top',      bin: 'top',    argv: ['-b', '-n', '1'], note: 'Classic process monitor (batch snapshot). Built-in.' },
+    htop:    { label: 'htop',     interactive: true, note: 'Interactive process viewer — run in a terminal (full-screen TUI). Install: sudo apt install htop' },
+    btop:    { label: 'btop',     interactive: true, note: 'Modern CPU/RAM/disk/network monitor — run in a terminal (full-screen TUI). Install: sudo apt install btop' },
+    atop:    { label: 'atop',     bin: 'atop',   argv: ['1', '1'], note: 'One resource sample incl. per-process. Install: sudo apt install atop' },
+    glances: { label: 'glances',  bin: 'glances',argv: ['--stdout-csv', 'cpu,mem,load,uptime', '-t', '1', '--stop-after', '1'], note: 'All-in-one monitor (CSV snapshot). Install: sudo apt install glances' },
+    nmon:    { label: 'nmon',     interactive: true, note: 'Interactive CPU/mem/disk/net summary — run in a terminal (full-screen TUI). Install: sudo apt install nmon' },
+    procs:   { label: 'processes',bin: 'bash',   argv: ['-lc', 'ps -eo pid,ppid,%cpu,%mem,rss,comm --sort=-%cpu | head -n 30'], note: 'Top 30 processes by CPU.' },
+    mem:     { label: 'free -h',  bin: 'free',   argv: ['-h'], note: 'Memory + swap usage.' },
+    disk:    { label: 'df -h',    bin: 'df',     argv: ['-h'], note: 'Filesystem disk usage.' },
+    vmstat:  { label: 'vmstat',   bin: 'vmstat', argv: ['1', '2'], note: 'Virtual memory / CPU / IO sample.' },
+    uptime:  { label: 'uptime',   bin: 'uptime', argv: [], note: 'Uptime + load averages.' },
+    sensors: { label: 'sensors',  bin: 'sensors',argv: [], note: 'Hardware temperatures (lm-sensors).' },
+    pm2:     { label: 'pm2 list', bin: 'pm2',    argv: ['list'], note: 'pm2 process table.' },
+  };
+  app.get('/api/system/cmds', proxy_auth.require_auth, (req, res) => res.json({ ok: true, cmds: Object.keys(SYS_CMDS).map((id) => ({ id, label: SYS_CMDS[id].label, note: SYS_CMDS[id].note, interactive: !!SYS_CMDS[id].interactive })) }));
+  app.get('/api/system/cmd', proxy_auth.require_auth, (req, res) => {
+    const c = SYS_CMDS[String(req.query.name || '')]; if (!c) return res.status(400).json({ ok: false, error: 'unknown command' });
+    if (c.interactive) return res.json({ ok: true, name: req.query.name, label: c.label, output: c.label + ' is a full-screen terminal app — it can\'t render here.\n\n' + c.note + '\n\nRun it in a terminal/SSH session.', time: new Date().toISOString() });
+    const { spawn } = require('child_process');
+    let out = '', proc;
+    try { proc = spawn(c.bin, c.argv, { shell: false, windowsHide: true }); }
+    catch (e) { return res.status(500).json({ ok: false, error: c.bin + ' not available', detail: e.message }); }
+    const cap = () => { if (out.length > 60000) { out = out.slice(0, 60000) + '\n…(truncated)'; try { proc.kill(); } catch (e) {} } };
+    const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 8000);
+    proc.stdout.on('data', (d) => { out += d.toString(); cap(); });
+    proc.stderr.on('data', (d) => { out += d.toString(); cap(); });
+    proc.on('error', (e) => { clearTimeout(timer); res.json({ ok: false, error: c.bin + ': ' + e.message, output: out }); });
+    proc.on('close', () => { clearTimeout(timer); res.json({ ok: true, name: req.query.name, label: c.label, output: out || '(no output)', time: new Date().toISOString() }); });
+  });
+
+  // Gated crontab view (read-only). `crontab -l` for the user the proxy runs as.
+  app.get('/api/system/cron', proxy_auth.require_auth, (req, res) => {
+    const { spawn } = require('child_process');
+    let out = '', err = '', proc;
+    try { proc = spawn('crontab', ['-l'], { shell: false, windowsHide: true }); }
+    catch (e) { return res.json({ ok: false, error: 'crontab not available (Windows?)', detail: e.message }); }
+    const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 6000);
+    proc.stdout.on('data', (d) => { out += d.toString(); });
+    proc.stderr.on('data', (d) => { err += d.toString(); });
+    proc.on('error', (e) => { clearTimeout(timer); res.json({ ok: false, error: e.message }); });
+    proc.on('close', (code) => { clearTimeout(timer); res.json({ ok: true, user: os.userInfo ? (os.userInfo().username || '') : '', crontab: (out.trim() || ('(no crontab installed for this user)' + (err ? '\n' + err.trim() : ''))), code, time: new Date().toISOString() }); });
+  });
+
   // Gated pm2 process list (status/cpu/mem/restarts/port) — Processes pane + fleet wall.
   // Uses the pm2 CLI (`pm2 jlist`) via spawn, NOT the pm2 module — so it never calls pm2.disconnect()
   // and therefore can't kill the launchBus log stream the Server cards rely on.

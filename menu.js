@@ -63,6 +63,28 @@ async function pick_and_restart() {
   if (!name) { console.log(c(RED, '  No match — nothing restarted.')); return; }
   return run('npx', ['pm2', 'restart', name]);
 }
+const SYS_MONITORS = [
+  { label: 'top',     cmd: 'top',     args: [],          note: 'classic process monitor (built-in)' },
+  { label: 'htop',    cmd: 'htop',    args: [],          note: 'interactive top (apt install htop)' },
+  { label: 'btop',    cmd: 'btop',    args: [],          note: 'modern CPU/RAM/disk/net UI (apt install btop)' },
+  { label: 'atop',    cmd: 'atop',    args: [],          note: 'per-process + history (apt install atop)' },
+  { label: 'glances', cmd: 'glances', args: [],          note: 'all-in-one monitor (apt install glances)' },
+  { label: 'nmon',    cmd: 'nmon',    args: [],          note: 'cpu/mem/disk/net summaries (apt install nmon)' },
+  { label: 'free -h', cmd: 'free',    args: ['-h'],      note: 'memory + swap' },
+  { label: 'df -h',   cmd: 'df',      args: ['-h'],      note: 'filesystem disk usage' },
+  { label: 'vmstat',  cmd: 'vmstat',  args: ['1', '5'],  note: 'vm / cpu / io samples' },
+  { label: 'uptime',  cmd: 'uptime',  args: [],          note: 'uptime + load averages' },
+  { label: 'sensors', cmd: 'sensors', args: [],          note: 'hardware temperatures (lm-sensors)' }
+];
+async function pick_system_monitor() {
+  console.log(c(GRAY, '  Interactive monitors (htop/btop/atop/glances/nmon/top) take over the terminal — press q or Ctrl-C to exit.'));
+  SYS_MONITORS.forEach(function (m, i) { console.log('   ' + c(BLU, c(BOLD, '[' + (i + 1) + ']')) + ' ' + c(BOLD, m.label) + c(GRAY, ' — ' + m.note)); });
+  const ans = clean(await ask('\n  Run which # (or exact name): '));
+  let m = SYS_MONITORS[Number(ans) - 1];
+  if (!m) m = SYS_MONITORS.filter(function (x) { return x.label === ans || x.cmd === ans; })[0];
+  if (!m) { console.log(c(RED, '  No match.')); return; }
+  return run(m.cmd, m.args);   // stdio:'inherit' → interactive TUIs work; if not installed you'll see the OS error
+}
 function print_reminders() {
   const t = [
     [YEL, 'Add / change a backend route'],
@@ -88,6 +110,8 @@ const SECTIONS = [
     { label: 'Proxy status (/api/status)', desc: 'Uptime, memory, routes.', cli: 'curl ' + PROXY_BASE + '/api/status', action: 'h_status' },
     { label: 'All backends health (/api/health)', desc: 'Up/down per backend.', cli: 'curl ' + PROXY_BASE + '/api/health', action: 'h_health' },
     { label: 'Open admin console (browser)', desc: 'Opens ' + PROXY_BASE + '/admin (proxy must be running).', cli: 'open ' + PROXY_BASE + '/admin', action: 'open_admin' } ] },
+  { label: 'System health', color: GREEN, items: [
+    { label: 'System monitor (pick)', desc: 'top / htop / btop / atop / glances / nmon / free / df / vmstat / sensors.', cli: 'top | htop | btop | atop | glances | nmon | …', action: 'sys_monitor' } ] },
   { label: 'Proxy control (pm2)', color: BLU, items: [
     { label: 'Reload proxy (zero-downtime)', desc: 'After editing routes/code.', cli: 'npm run pm2_reload_proxy', action: 'p_reload' },
     { label: 'Restart proxy (hard)', desc: 'Brief blip.', cli: 'npm run restart_proxy', action: 'p_restart' },
@@ -112,6 +136,7 @@ const ACTIONS = {
   h_status: function () { return get_json('/api/status'); },
   h_health: function () { return get_json('/api/health'); },
   open_admin: function () { const url = PROXY_BASE + '/admin'; const cmd = process.platform === 'win32' ? 'cmd' : (process.platform === 'darwin' ? 'open' : 'xdg-open'); const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url]; return run(cmd, args); },
+  sys_monitor: function () { return pick_system_monitor(); },
   p_reload: function () { return run('npm', ['run', 'pm2_reload_proxy']); },
   p_restart: function () { return run('npm', ['run', 'restart_proxy']); },
   p_stop: function () { return run('npm', ['run', 'stop_proxy']); },

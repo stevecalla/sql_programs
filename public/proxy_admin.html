@@ -71,6 +71,14 @@
   :root[data-theme="dark"] .term{ background:#070b16; }
   .term .l-err{ color:#ff9b9b; } .term .l-meta{ color:#8fd0ff; } .term .l-sys{ color:#ffd591; } .term .l-ok{ color:#9be7b4; }
   .run-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .term-tools{ display:inline-flex; align-items:center; gap:6px; }
+  /* expand a console to a large overlay (live content stays in place) */
+  .term.big{ position:fixed; inset:24px; z-index:62; max-height:none !important; min-height:0; height:auto !important; box-shadow:0 16px 50px rgba(0,0,0,.55); }
+  #termBackdrop{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:61; display:none; } #termBackdrop.on{ display:block; }
+  /* collapsible + scrollable section bodies (Routes, pm2 table) */
+  .collapser{ cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:6px; } .collapser .cx{ color:var(--dim); transition:transform .15s; } .collapsed .cx{ transform:rotate(-90deg); }
+  .collapsed .collapse-body{ display:none; }
+  .scrollbox{ max-height:280px; overflow:auto; border:1px solid var(--line); border-radius:8px; } .scrollbox table.grid{ margin:0; } .scrollbox table.grid th{ position:sticky; top:0; background:var(--card); z-index:1; }
   /* operations sections */
   .ops-sec{ border:1px solid var(--line); border-radius:10px; margin-bottom:10px; overflow:hidden; }
   .ops-sec > h3{ margin:0; padding:9px 12px; font-size:13px; cursor:pointer; background:var(--surface-2); display:flex; align-items:center; justify-content:space-between; }
@@ -154,15 +162,18 @@
       <!-- OVERVIEW -->
       <section class="pane active" data-view="overview">
         <div class="ad-card"><h2>Proxy status</h2><div class="tiles" id="statusTiles"><div class="mut">Loading…</div></div></div>
-        <div class="ad-card"><h2>Routes</h2><div class="chips" id="routeChips"><div class="mut">Loading…</div></div></div>
-        <div class="ad-card"><h2>Process (pm2)</h2>
-          <div class="ctl" id="procsCtl"></div>
-          <div class="mut" id="procsWhen" style="margin-bottom:8px"></div>
-          <table class="grid"><thead><tr id="procsHead"></tr></thead><tbody id="procsRows"></tbody></table>
+        <div class="ad-card collapsed" id="routesCard"><h2 class="collapser" data-collapse="routesCard"><span class="cx">▾</span> Routes</h2>
+          <div class="collapse-body"><div class="scrollbox" style="padding:10px"><div class="chips" id="routeChips"><div class="mut">Loading…</div></div></div></div></div>
+        <div class="ad-card" id="procsCard"><h2 class="collapser" data-collapse="procsCard"><span class="cx">▾</span> Process (pm2)</h2>
+          <div class="collapse-body">
+            <div class="ctl" id="procsCtl"></div>
+            <div class="mut" id="procsWhen" style="margin-bottom:8px"></div>
+            <div class="scrollbox"><table class="grid"><thead><tr id="procsHead"></tr></thead><tbody id="procsRows"></tbody></table></div>
+          </div>
         </div>
         <div class="ad-card">
           <div class="run-head"><h2 id="proxyLogTitle" style="margin:0">Server console</h2>
-            <span id="ovLive" class="mut" style="font-size:12px">○ polling…</span></div>
+            <span class="term-tools"><span id="ovLive" class="mut" style="font-size:12px">○ connecting…</span><button class="btn ghost sm" data-bottom="proxyLog" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="proxyLog" type="button">copy</button><button class="btn ghost sm" data-expand="proxyLog" type="button">⤢ expand</button></span></div>
           <div class="term" id="proxyLog" style="min-height:240px">Loading…</div>
         </div>
       </section>
@@ -213,10 +224,13 @@
         </div>
         <div class="ad-card">
           <div class="run-head"><h2 style="margin:0">Server console <span class="mut" style="text-transform:none;font-weight:400">— auto-streaming (drag the bottom edge to resize)</span></h2>
-            <span style="display:flex;align-items:center;gap:8px">
+            <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <select class="logpick" id="logPick" title="Which process to tail"></select>
               <span id="logsLive" class="mut" style="font-size:12px">○ connecting…</span>
               <button class="btn ghost sm" id="logsReload" type="button">&#8635; Reconnect</button>
+              <button class="btn ghost sm" data-bottom="logsOut" type="button" title="jump to newest">⤓ bottom</button>
+              <button class="btn ghost sm" data-copy="logsOut" type="button">copy</button>
+              <button class="btn ghost sm" data-expand="logsOut" type="button">⤢ expand</button>
             </span></div>
           <div class="term" id="logsOut" aria-live="polite">Connecting…</div>
         </div>
@@ -229,11 +243,29 @@
             <span class="ctl" id="sysCtl" style="margin:0"></span></div>
           <div class="tiles" id="sysTiles"><div class="mut">Loading…</div></div>
         </div>
-        <div class="ad-card"><h2>Daily health summary <span class="mut" id="sysSummaryWhen" style="text-transform:none;font-weight:400"></span></h2>
-          <div class="term" id="sysSummary" style="min-height:160px">Loading…</div>
+        <div class="ad-card collapsed" id="sysCmdCard">
+          <div class="run-head"><h2 class="collapser" data-collapse="sysCmdCard" style="margin:0"><span class="cx">▾</span> Live commands <span class="mut" id="sysCmdWhen" style="text-transform:none;font-weight:400"></span></h2>
+            <span class="term-tools"><button class="btn ghost sm" data-bottom="sysCmdOut" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysCmdOut" type="button">copy</button><button class="btn ghost sm" data-expand="sysCmdOut" type="button">⤢ expand</button></span></div>
+          <div class="collapse-body">
+            <div class="chips" id="sysCmdChips" style="margin-bottom:8px"></div>
+            <div class="term" id="sysCmdOut" style="min-height:200px">Pick a command above.</div>
+          </div>
         </div>
-        <div class="ad-card"><h2>Ubuntu update log <span class="mut" id="sysUbuntuWhen" style="text-transform:none;font-weight:400"></span></h2>
-          <div class="term" id="sysUbuntu" style="min-height:120px">Loading…</div>
+        <div class="ad-card collapsed" id="sysCronCard">
+          <div class="run-head"><h2 class="collapser" data-collapse="sysCronCard" style="margin:0"><span class="cx">▾</span> Cron schedule <span class="mut" id="sysCronWhen" style="text-transform:none;font-weight:400"></span></h2>
+            <span class="term-tools"><button class="btn ghost sm" data-copy="sysCron" type="button">copy</button><button class="btn ghost sm" data-expand="sysCron" type="button">⤢ expand</button></span></div>
+          <div class="collapse-body"><div class="term" id="sysCron" style="min-height:140px">Loading…</div>
+            <div class="mut" style="margin-top:6px">Read-only view of <code>crontab -l</code> for the server user. Editing from the panel is not enabled (see note below).</div></div>
+        </div>
+        <div class="ad-card collapsed" id="sysSummaryCard">
+          <div class="run-head"><h2 class="collapser" data-collapse="sysSummaryCard" style="margin:0"><span class="cx">▾</span> Daily health summary <span class="mut" id="sysSummaryWhen" style="text-transform:none;font-weight:400"></span></h2>
+            <span class="term-tools"><button class="btn ghost sm" data-bottom="sysSummary" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysSummary" type="button">copy</button><button class="btn ghost sm" data-expand="sysSummary" type="button">⤢ expand</button></span></div>
+          <div class="collapse-body"><div class="term" id="sysSummary" style="min-height:160px">Loading…</div></div>
+        </div>
+        <div class="ad-card collapsed" id="sysUbuntuCard">
+          <div class="run-head"><h2 class="collapser" data-collapse="sysUbuntuCard" style="margin:0"><span class="cx">▾</span> Ubuntu update log <span class="mut" id="sysUbuntuWhen" style="text-transform:none;font-weight:400"></span></h2>
+            <span class="term-tools"><button class="btn ghost sm" data-bottom="sysUbuntu" type="button" title="jump to newest">⤓ bottom</button><button class="btn ghost sm" data-copy="sysUbuntu" type="button">copy</button><button class="btn ghost sm" data-expand="sysUbuntu" type="button">⤢ expand</button></span></div>
+          <div class="collapse-body"><div class="term" id="sysUbuntu" style="min-height:120px">Loading…</div></div>
         </div>
       </section>
 
@@ -266,6 +298,17 @@
             • <b>Health:</b> <code>/api/health</code> 200 = all up; 503 = one down (the proxy log names which). <code>ECONNREFUSED</code> = backend not running.<br>
             • <b>Docs:</b> <code>plans_and_notes/PROXY_PLAN.md</code>, <code>PROXY_CUTOVER_CHECKLIST.md</code>. Ops menu: <code>npm run menu</code>.
           </div>
+        </div>
+        <div class="ad-card"><h2>System monitors</h2>
+          <div class="mut" style="margin-bottom:10px">Used by the <b>System health → Live commands</b> panel. The panel can render text snapshots (<code>top -b</code>, <code>atop</code>, <code>glances</code> CSV); the full-screen TUIs (<code>htop</code>, <code>btop</code>, <code>nmon</code>) can't render in a web panel — run those in a terminal/SSH session.</div>
+          <table class="grid"><thead><tr><th>Command</th><th>Install</th><th>Notes</th></tr></thead><tbody>
+            <tr><td><code>top</code></td><td>built-in</td><td>Classic process monitor, always available</td></tr>
+            <tr><td><code>htop</code></td><td><code>sudo apt install htop</code></td><td>Better interactive version of <code>top</code> (terminal only)</td></tr>
+            <tr><td><code>btop</code></td><td><code>sudo apt install btop</code></td><td>Modern, very nice UI for CPU/RAM/disk/network (terminal only)</td></tr>
+            <tr><td><code>atop</code></td><td><code>sudo apt install atop</code></td><td>Great for historical/per-process resource usage</td></tr>
+            <tr><td><code>glances</code></td><td><code>sudo apt install glances</code></td><td>All-in-one system monitor</td></tr>
+            <tr><td><code>nmon</code></td><td><code>sudo apt install nmon</code></td><td>Good for CPU, memory, disk, network summaries (terminal only)</td></tr>
+          </tbody></table>
         </div>
       </section>
     </main>
@@ -385,14 +428,20 @@
   }
   function setLive(sel, on){ var s=$(sel); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'var(--ok)':'var(--dim)'; } }
 
-  // Overview console — the proxy's own output.
-  var ovES=null;
-  function startLogStream(){
-    if(ovES){ try{ovES.close();}catch(e){} }
-    var o=$('#proxyLog'); if(o){ o.dataset.fresh=''; o.textContent='Connecting…'; }
-    var es; try{ es=new EventSource('/api/admin-logs/stream'); }catch(e){ setLive('#ovLive',false); return; } ovES=es;
+  // Overview console — streams the SELECTED process (default the proxy). Clicking a pm2 row switches it.
+  var ovES=null, ovName=null;
+  async function startOverviewStream(name){
+    name = name || ovName || proxyPm2Name; ovName=name;
+    var pt=$('#proxyLogTitle'); if(pt) pt.textContent='Server console — '+name+(name!==(proxyPm2Name||'usat_proxy')?'  · click the proxy row to return':'');
+    if(ovES){ try{ovES.close();}catch(e){} ovES=null; }
+    var o=$('#proxyLog'); if(o){ o.dataset.fresh=''; o.textContent='Loading '+name+'…'; }
+    try{ var res=await getJSON('/api/logs?name='+encodeURIComponent(name)+'&lines=200'); var logs=(res.body&&res.body.logs)||{};
+      var txt=Object.keys(logs).map(function(fn){return logs[fn];}).join('\n').trim();
+      if(o){ o.textContent=''; o.dataset.fresh='1'; (txt?txt.split('\n'):['(waiting for log activity…)']).forEach(function(ln){ appendTo('#proxyLog',{line:ln}); }); }
+    }catch(e){}
+    var es; try{ es=new EventSource('/api/logs/stream?name='+encodeURIComponent(name)); }catch(e){ setLive('#ovLive',false); return; } ovES=es;
     es.onopen=function(){ setLive('#ovLive',true); };
-    es.addEventListener('line',function(ev){ try{ appendTo('#proxyLog', JSON.parse(ev.data)); }catch(e){} });
+    es.addEventListener('line',function(ev){ try{ if(ovName===name) appendTo('#proxyLog', JSON.parse(ev.data)); }catch(e){} });
     es.onerror=function(){ setLive('#ovLive',false); };
   }
   // Logs pane console — the SELECTED pm2 process (file backfill, then live bus).
@@ -412,7 +461,7 @@
     es.addEventListener('line',function(ev){ try{ if(logsStreamName===name) appendTo('#logsOut', JSON.parse(ev.data)); }catch(e){} });
     es.onerror=function(){ setLive('#logsLive',false); };
   }
-  function loadProxyLog(){ var pt=$('#proxyLogTitle'); if(pt) pt.textContent='Server console — '+(proxyPm2Name||'usat_proxy'); }
+  function loadProxyLog(){ if(!ovName) startOverviewStream(proxyPm2Name); }
 
   // ---- Backends ----
   var healthData=[];
@@ -436,7 +485,7 @@
   function cardMeta(p){ return '<span>cpu '+(p.cpu==null?'?':p.cpu)+'%</span><span>'+(p.memory_mb==null?'?':p.memory_mb)+'MB</span><span>↺'+(p.restarts==null?'?':p.restarts)+'</span><span>'+uptime(p.uptime_ms)+'</span><span class="port">#'+esc(cardKey(p))+'</span>'; }
   function buildCard(p){
     var id=cardKey(p); var port = p.port ? ' <span class="port">:'+p.port+'</span>' : '';
-    return '<div class="fcard" data-id="'+esc(id)+'" data-name="'+esc(p.name)+'"><div class="top"><span class="drag" draggable="true" title="drag to reorder">⠿</span>'+statusPill(p.status)+'<span class="nm">'+esc(p.name)+port+'</span><span class="cardbtns"><button class="btn sm xpand" data-name="'+esc(p.name)+'">⤢ expand</button><button class="btn sm copy" data-id="'+esc(id)+'">copy</button></span></div>'
+    return '<div class="fcard" data-id="'+esc(id)+'" data-name="'+esc(p.name)+'"><div class="top"><span class="drag" draggable="true" title="drag to reorder">⠿</span>'+statusPill(p.status)+'<span class="nm">'+esc(p.name)+port+'</span><span class="cardbtns"><button class="btn sm btm" data-id="'+esc(id)+'" title="jump to newest">⤓</button><button class="btn sm xpand" data-name="'+esc(p.name)+'">⤢ expand</button><button class="btn sm copy" data-id="'+esc(id)+'">copy</button></span></div>'
       +'<div class="meta">'+cardMeta(p)+'</div>'
       +'<pre class="minilog" data-id="'+esc(id)+'" data-name="'+esc(p.name)+'">loading…</pre></div>';
   }
@@ -600,28 +649,48 @@
 
   // ---- System health (live host stats + daily cron summary) ----
   function fmtGB(b){ return b==null?'—':(b/1073741824).toFixed(1)+' GiB'; }
-  function healthTile(k,v,state){ var cls=state==='warn'?'warn':(state==='bad'?'no':(state==='ok'?'yes':'')); var badge=state?' <span class="pill '+cls+'" style="font-size:10px">'+(state==='bad'?'HIGH':state.toUpperCase())+'</span>':''; return '<div class="tile"><div class="k">'+k+badge+'</div><div class="v">'+v+'</div></div>'; }
+  function healthTile(k,v,state,tip){ var cls=state==='warn'?'warn':(state==='bad'?'no':(state==='ok'?'yes':'')); var badge=state?' <span class="pill '+cls+'" style="font-size:10px">'+(state==='bad'?'HIGH':state.toUpperCase())+'</span>':''; return '<div class="tile"'+(tip?' title="'+esc(tip)+'"':'')+' style="cursor:help"><div class="k">'+k+badge+'</div><div class="v">'+v+'</div></div>'; }
   async function loadSystem(){
     var s=(await getJSON('/api/system')).body||{};
     $('#sysHost').textContent = s.host?('— '+s.host):'';
     var m=s.memory||{}, sw=s.swap||{}, c=s.cpu||{}, d=s.disk||{}, t=s.temps||{}, psi=s.psi||{};
     function st(pct,warn,bad){ return pct==null?'':(pct>=bad?'bad':(pct>=warn?'warn':'ok')); }
     var tiles=[];
-    tiles.push(healthTile('Memory used', (m.used_pct!=null?m.used_pct+'%':'—')+' <span class="mut">'+fmtGB(m.used)+' / '+fmtGB(m.total)+'</span>', st(m.used_pct,80,92)));
-    tiles.push(healthTile('Available', fmtGB(m.available), ''));
-    if(s.swap) tiles.push(healthTile('Swap used', sw.used_pct+'% <span class="mut">'+fmtGB(sw.used)+' / '+fmtGB(sw.total)+'</span>', st(sw.used_pct,60,85)));
-    tiles.push(healthTile('CPU load (1/5/15m)', (c.load1+' / '+c.load5+' / '+c.load15), st(c.util_pct,70,90)));
-    tiles.push(healthTile('CPU util · cores', (c.util_pct!=null?c.util_pct+'%':'—')+' <span class="mut">· '+(c.cores||'?')+' cores</span>', ''));
-    if(s.disk) tiles.push(healthTile('Disk / used', d.used_pct+'% <span class="mut">'+fmtGB(d.used)+' / '+fmtGB(d.total)+'</span>', st(d.used_pct,80,92)));
-    if(psi.memory) tiles.push(healthTile('Mem pressure (avg10)', 'some '+psi.memory.some+' · full '+psi.memory.full, st(psi.memory.some,5,20)));
-    Object.keys(t).forEach(function(k){ tiles.push(healthTile('Temp · '+k, t[k]+'°C', st(t[k],75,90))); });
-    tiles.push(healthTile('Uptime', uptime(s.uptime_sec*1000), ''));
+    tiles.push(healthTile('Memory used', (m.used_pct!=null?m.used_pct+'%':'—')+' <span class="mut">'+fmtGB(m.used)+' / '+fmtGB(m.total)+'</span>', st(m.used_pct,80,92), 'RAM in use vs total. High % means little headroom; the OS may start swapping. Amber ≥80%, red ≥92%.'));
+    tiles.push(healthTile('Available', fmtGB(m.available), '', 'Memory available to start new work without swapping (free + reclaimable cache).'));
+    if(s.swap) tiles.push(healthTile('Swap used', sw.used_pct+'% <span class="mut">'+fmtGB(sw.used)+' / '+fmtGB(sw.total)+'</span>', st(sw.used_pct,60,85), 'Disk used as overflow RAM. Sustained high swap = memory pressure and slowdowns. Amber ≥60%, red ≥85%.'));
+    tiles.push(healthTile('CPU load (1/5/15m)', (c.load1+' / '+c.load5+' / '+c.load15), st(c.util_pct,70,90), 'Run-queue load averages over 1, 5, 15 min. Compare to core count ('+(c.cores||'?')+'): load ≈ cores means fully busy.'));
+    tiles.push(healthTile('CPU util · cores', (c.util_pct!=null?c.util_pct+'%':'—')+' <span class="mut">· '+(c.cores||'?')+' cores</span>', '', 'Approx CPU utilization = 1-min load ÷ cores. Rough; load average isn\'t a direct % but trends are useful.'));
+    if(s.disk) tiles.push(healthTile('Disk / used', d.used_pct+'% <span class="mut">'+fmtGB(d.used)+' / '+fmtGB(d.total)+'</span>', st(d.used_pct,80,92), 'Root filesystem (/) usage. Running out of disk breaks logging, DBs, and updates. Amber ≥80%, red ≥92%.'));
+    if(psi.memory) tiles.push(healthTile('Mem pressure (avg10)', 'some '+psi.memory.some+' · full '+psi.memory.full, st(psi.memory.some,5,20), 'Linux PSI: % of the last 10s tasks stalled waiting on memory. "some"=any task stalled, "full"=all stalled. >0 sustained = real pressure.'));
+    Object.keys(t).forEach(function(k){ tiles.push(healthTile('Temp · '+k, t[k]+'°C', st(t[k],75,90), 'Hardware sensor temperature ('+k+'). Amber ≥75°C, red ≥90°C — sustained heat throttles the CPU.')); });
+    tiles.push(healthTile('Uptime', uptime(s.uptime_sec*1000), '', 'How long since the machine last booted. A recent reset can mean an unexpected reboot.'));
     $('#sysTiles').innerHTML=tiles.join('')||'<div class="mut">unavailable</div>';
     if(s.summary){ $('#sysSummaryWhen').textContent='— '+mtn(s.summary.mtime); renderTerm($('#sysSummary'), s.summary.text); }
     else { $('#sysSummaryWhen').textContent=''; renderTerm($('#sysSummary'), 'No summary yet. After the daily health cron next runs it writes utilities/cron_system_metrics/latest_summary.txt, which appears here.'); }
     if(s.ubuntu){ $('#sysUbuntuWhen').textContent='— '+mtn(s.ubuntu.mtime); renderTerm($('#sysUbuntu'), s.ubuntu.text); }
     else { $('#sysUbuntuWhen').textContent=''; renderTerm($('#sysUbuntu'), '(no ubuntu-update.log found)'); }
+    try{ var cr=(await getJSON('/api/system/cron')).body||{}; renderTerm($('#sysCron'), cr.ok?(cr.crontab||'(empty)'):('(unavailable'+(cr.error?': '+cr.error:'')+')')); if($('#sysCronWhen')) $('#sysCronWhen').textContent=(cr.user?('— '+cr.user):'')+(cr.time?'  '+mtn(cr.time):''); }catch(e){}
+    loadSysCmdChips();
     setRefresh();
+  }
+  // Live commands: render the chip row once, then run an allow-listed snapshot on click (+ refresh chip).
+  var sysCmdLoaded=false, sysCmdCur=null;
+  async function loadSysCmdChips(){
+    if(sysCmdLoaded) return; sysCmdLoaded=true;
+    var j=(await getJSON('/api/system/cmds')).body||{}; var cmds=j.cmds||[];
+    $('#sysCmdChips').innerHTML=cmds.map(function(c){return '<button class="chip" data-cmd="'+esc(c.id)+'" title="'+esc(c.note||'')+'" style="cursor:'+(c.interactive?'help':'pointer')+(c.interactive?';opacity:.7':'')+'">'+esc(c.label)+(c.interactive?' ⧉':'')+'</button>';}).join('')+'<button class="chip" id="sysCmdRefresh" style="cursor:pointer" title="re-run the current command">&#8635; refresh</button>';
+    $('#sysCmdChips').addEventListener('click', function(e){ var b=e.target.closest('button'); if(!b) return;
+      if(b.id==='sysCmdRefresh'){ if(sysCmdCur) runSysCmd(sysCmdCur); return; }
+      if(b.dataset.cmd) runSysCmd(b.dataset.cmd);
+    });
+  }
+  async function runSysCmd(id){
+    sysCmdCur=id;
+    $('#sysCmdChips').querySelectorAll('button[data-cmd]').forEach(function(b){ b.classList.toggle('on', b.dataset.cmd===id); b.style.borderColor=b.dataset.cmd===id?'var(--accent)':''; });
+    renderTerm($('#sysCmdOut'), '$ '+id+' …'); $('#sysCmdWhen').textContent='';
+    var r=(await getJSON('/api/system/cmd?name='+encodeURIComponent(id))).body||{};
+    renderTerm($('#sysCmdOut'), r.output||('error: '+(r.error||'failed'))); $('#sysCmdWhen').textContent=r.time?('— '+mtn(r.time)):'';
   }
 
   // ---- Access (env account shown as a Users-style table) ----
@@ -647,14 +716,31 @@
     else if(name==='access') loadAccess();
     else if(name==='reference'){}
     else loadOverview();
+    // default every visible log view to the newest line when a pane opens
+    requestAnimationFrame(function(){ document.querySelectorAll('.pane.active .term, .pane.active .minilog').forEach(function(el){ try{ el.scrollTop=el.scrollHeight; }catch(e){} }); });
   }
   document.querySelectorAll('.admin-rail a[data-pane]').forEach(function(a){a.addEventListener('click',function(){showPane(a.dataset.pane);});});
 
-  // overview: click a process row to open its full log file in the modal
-  $('#procsRows').addEventListener('click', function(ev){ var tr=ev.target.closest&&ev.target.closest('tr'); if(!tr||!tr.dataset) return; var nm=tr.getAttribute('data-name'); if(!nm) return; openModal(nm); });
+  // Console tools (copy / expand-to-overlay / jump-to-bottom) + collapsible sections — event-delegated.
+  function copyBtn(el,b){ if(el&&copyText(el.textContent)){ var t=b.textContent; b.textContent='copied'; setTimeout(function(){b.textContent=t;},1200); } }
+  var bigTerm=null, bigBtn=null;
+  function termBackdrop(){ var bd=$('#termBackdrop'); if(!bd){ bd=document.createElement('div'); bd.id='termBackdrop'; bd.addEventListener('click', shrinkTerm); document.body.appendChild(bd); } return bd; }
+  function growTerm(el,b){ if(!el) return; el.classList.add('big'); termBackdrop().classList.add('on'); bigTerm=el; bigBtn=b||null; if(b){ b.dataset.lbl=b.textContent; b.textContent='✕ close'; } requestAnimationFrame(function(){ el.scrollTop=el.scrollHeight; }); }
+  function shrinkTerm(){ if(bigTerm) bigTerm.classList.remove('big'); var bd=$('#termBackdrop'); if(bd) bd.classList.remove('on'); if(bigBtn&&bigBtn.dataset.lbl) bigBtn.textContent=bigBtn.dataset.lbl; bigTerm=null; bigBtn=null; }
+  document.addEventListener('click', function(e){
+    var b=e.target.closest&&e.target.closest('[data-copy],[data-expand],[data-bottom],[data-collapse]'); if(!b) return;
+    if(b.dataset.copy!=null) copyBtn(document.getElementById(b.dataset.copy), b);
+    else if(b.dataset.expand!=null){ var el=document.getElementById(b.dataset.expand); if(el){ if(el.classList.contains('big')) shrinkTerm(); else growTerm(el,b); } }
+    else if(b.dataset.bottom!=null){ var e2=document.getElementById(b.dataset.bottom); if(e2) e2.scrollTop=e2.scrollHeight; }
+    else if(b.dataset.collapse!=null){ var c=document.getElementById(b.dataset.collapse); if(c) c.classList.toggle('collapsed'); }
+  });
+
+  // overview: click a process row → show that process's log in the bottom Server console (no popup)
+  $('#procsRows').addEventListener('click', function(ev){ var tr=ev.target.closest&&ev.target.closest('tr'); if(!tr||!tr.dataset) return; var nm=tr.getAttribute('data-name'); if(!nm) return; startOverviewStream(nm); });
   // fleet card buttons
   $('#fleetCards').addEventListener('click', function(ev){ var b=ev.target.closest&&ev.target.closest('button'); if(!b) return; var nm=b.dataset.name;
     if(b.classList.contains('xpand')) openModal(nm);
+    else if(b.classList.contains('btm')){ var elb=document.querySelector('.minilog[data-id="'+CSS.escape(b.dataset.id)+'"]'); if(elb) elb.scrollTop=elb.scrollHeight; }
     else if(b.classList.contains('copy')){ var el=document.querySelector('.minilog[data-id="'+CSS.escape(b.dataset.id)+'"]'); if(el&&copyText(el.textContent)){ b.textContent='copied'; setTimeout(function(){b.textContent='copy';},1200); } } });
   // Layout chooser (2 / 3 / 4 / ⅔·⅓). Clears any manual resize so the chosen layout takes effect.
   function applyCols(c){ var el=$('#fleetCards'); if(el){ el.setAttribute('data-cols', c); el.querySelectorAll('.fcard').forEach(function(card){ card.style.width=''; card.style.height=''; }); }
@@ -673,7 +759,7 @@
   // Server-cards fullscreen toggle (denser grid for the production fleet)
   function setFleetFull(on){ var c=$('#fleetCard'); if(!c) return; c.classList.toggle('fs', on); var b=$('#fleetFull'); if(b) b.textContent=on?'⛶ Exit fullscreen':'⛶ Fullscreen'; }
   $('#fleetFull').addEventListener('click', function(){ setFleetFull(!$('#fleetCard').classList.contains('fs')); });
-  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ if($('#fleetCard')&&$('#fleetCard').classList.contains('fs')) setFleetFull(false); else if($('#logModal').classList.contains('on')) closeModal(); } });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ if(bigTerm) shrinkTerm(); else if($('#fleetCard')&&$('#fleetCard').classList.contains('fs')) setFleetFull(false); else if($('#logModal').classList.contains('on')) closeModal(); } });
   $('#modalClose').addEventListener('click', closeModal);
   $('#logModal').addEventListener('click', function(ev){ if(ev.target===$('#logModal')) closeModal(); });
   $('#modalCopy').addEventListener('click', function(){ copyText($('#modalPre').textContent); var b=$('#modalCopy'); b.textContent='Copied'; setTimeout(function(){b.textContent='Copy';},1200); });
@@ -685,7 +771,7 @@
   refresher('system_refresh', 15, $('#sysCtl'), loadSystem);
 
   loadOverview();
-  startLogStream();   // live console connects once and feeds Overview + Logs continuously
+  startOverviewStream();   // Overview console connects to the proxy by default
   setInterval(function(){ var ov=document.querySelector('.pane[data-view="overview"]'); if(ov&&ov.classList.contains('active')) loadOverview(); }, 60000);
 })();
 </script>
