@@ -13,7 +13,7 @@
 const { spawn } = require('child_process');
 
 let slack_message_api = null;
-try { ({ slack_message_api } = require('./utilities/slack_messaging/slack_message_api')); } catch (e) { /* optional */ }
+try { ({ slack_message_api } = require('../slack_messaging/slack_message_api')); } catch (e) { /* optional */ }
 
 const CHANNEL = process.env.PROXY_ALERT_CHANNEL || 'steve_calla_slack_channel';
 const INTERVAL_MS = Number(process.env.PROXY_ALERT_INTERVAL_MS) || 120000;

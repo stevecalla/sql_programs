@@ -88,7 +88,7 @@ async function pick_system_monitor() {
 function print_reminders() {
   const t = [
     [YEL, 'Add / change a backend route'],
-    [GRAY, '  1) edit proxy_routes.js   2) npm run pm2_reload_proxy   3) test usat-api.kidderwise.org/<prefix>/<endpoint>'],
+    [GRAY, '  1) edit utilities/proxy/proxy_routes.js   2) npm run pm2_reload_proxy   3) test usat-api.kidderwise.org/<prefix>/<endpoint>'],
     [YEL, 'Reload vs restart the proxy'],
     [GRAY, '  reload = npm run pm2_reload_proxy (zero-downtime)   restart = npm run restart_proxy (brief blip)'],
     [YEL, 'VS Code log terminals'],

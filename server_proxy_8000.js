@@ -16,10 +16,10 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const proxy_auth = require('./proxy_auth');
-const proxy_console = require('./proxy_console_registry');
-const log_ring = require('./proxy_log_ring');
-const log_tail = require('./proxy_log_tail');   // tmux-style live tail of pm2 log files (Server cards)
+const proxy_auth = require('./utilities/proxy/proxy_auth');
+const proxy_console = require('./utilities/proxy/proxy_console_registry');
+const log_ring = require('./utilities/proxy/proxy_log_ring');
+const log_tail = require('./utilities/proxy/proxy_log_tail');   // tmux-style live tail of pm2 log files (Server cards)
 
 let rate_limit = null;
 try { rate_limit = require('express-rate-limit'); }
@@ -28,7 +28,7 @@ catch (_) { console.warn('[proxy] express-rate-limit not installed — rate limi
 const DEFAULT_PORT = Number(process.env.PROXY_PORT) || 8000;
 const PM2_LOG_DIR = process.env.PM2_LOG_DIR || path.join(os.homedir(), '.pm2', 'logs');
 const is_test_ngrok = false;
-const ROUTES = require('./proxy_routes');
+const ROUTES = require('./utilities/proxy/proxy_routes');
 let active_server = null;
 
 const FAVICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#e4002b"/><circle cx="16" cy="16" r="5" fill="#fff"/><circle cx="7" cy="7" r="2.5" fill="#fff"/><circle cx="25" cy="7" r="2.5" fill="#fff"/><circle cx="7" cy="25" r="2.5" fill="#fff"/><circle cx="25" cy="25" r="2.5" fill="#fff"/></svg>';
@@ -449,7 +449,7 @@ async function start_server({ port = DEFAULT_PORT, silent = false } = {}) {
         try { require('./utilities/create_ngrok_tunnel').create_ngrok_tunnel(port); }
         catch (e) { console.warn('[proxy] ngrok not available:', e.message); }
       }
-      try { require('./proxy_alerts').start(ROUTES); } catch (e) { console.warn('[proxy] alerts not started:', e.message); }
+      try { require('./utilities/proxy/proxy_alerts').start(ROUTES); } catch (e) { console.warn('[proxy] alerts not started:', e.message); }
       resolve({ port: actual, server });
     });
     server.on('error', reject);

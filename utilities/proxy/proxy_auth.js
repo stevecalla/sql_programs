@@ -8,7 +8,7 @@ const crypto = require('crypto');
 
 const COOKIE = 'usat_proxy_session';
 const MAX_AGE_MS = 12 * 60 * 60 * 1000;
-const SECRET_FILE = path.join(__dirname, '.proxy_auth.json');
+const SECRET_FILE = path.join(__dirname, '..', '..', '.proxy_auth.json');
 
 function session_secret() {
   if (process.env.PROXY_SESSION_SECRET) return process.env.PROXY_SESSION_SECRET;
