@@ -35,7 +35,7 @@ function jlist(cb) {
   jrunning = true;
   let out = '', proc;
   const done = (err, list) => { jrunning = false; const w = jwaiters.splice(0); w.forEach((f) => { try { f(err, list); } catch (e) {} }); };
-  try { proc = spawn('pm2', ['jlist'], { shell: process.platform === 'win32' }); }
+  try { proc = spawn('pm2', ['jlist'], { shell: process.platform === 'win32', windowsHide: true }); }
   catch (e) { return done(e); }
   const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 10000);
   proc.stdout.on('data', (d) => { out += d.toString(); });

@@ -62,7 +62,7 @@ function run(item, params) {
     try { argv = assemble_argv(item, params); } catch (e) { return resolve({ ok: false, error: e.message }); }
     const lines = []; let truncated = false; let done = false;
     function push(t) { strip_ansi(t).split(/\r?\n/).forEach(function (l) { if (lines.length < MAX_LINES) lines.push(l); else truncated = true; }); }
-    const p = spawn(item.bin, argv, { cwd: RUN_DIR, shell: process.platform === 'win32' }); // npm/npx need a shell on Windows; argv is validated either way
+    const p = spawn(item.bin, argv, { cwd: RUN_DIR, shell: process.platform === 'win32', windowsHide: true }); // npm/npx need a shell on Windows; argv is validated either way
     const to = setTimeout(function () { if (!done) { try { p.kill('SIGKILL'); } catch (e) {} push('\n[timed out after ' + (RUN_TIMEOUT_MS / 1000) + 's]'); } }, RUN_TIMEOUT_MS);
     p.stdout.on('data', function (d) { push(d.toString()); });
     p.stderr.on('data', function (d) { push(d.toString()); });
