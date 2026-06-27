@@ -48,7 +48,7 @@ describe('api', () => {
   test('login sets a session cookie, then /api/me returns the user', async () => {
     const r = await fetch(base + '/api/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'tester', password: 'pw123' }),
+      body: JSON.stringify({ username: TEST_USER, password: TEST_PASS }),
     });
     assert.equal(r.status, 200);
     const cookie = r.headers.get('set-cookie');
@@ -57,7 +57,7 @@ describe('api', () => {
     const me = await fetch(base + '/api/me', { headers: { cookie } });
     const mj = await me.json();
     assert.equal(me.status, 200);
-    assert.equal(mj.user, 'tester');
+    assert.equal(mj.user, TEST_USER);
     assert.equal(mj.role, 'admin');
   });
 
