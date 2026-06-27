@@ -19,7 +19,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const proxy_auth = require('./proxy_auth');
 const proxy_console = require('./proxy_console_registry');
 const log_ring = require('./proxy_log_ring');
-const pm2_logs = require('./proxy_pm2_logs');
+const log_tail = require('./proxy_log_tail');   // tmux-style live tail of pm2 log files (Server cards)
 
 let rate_limit = null;
 try { rate_limit = require('express-rate-limit'); }
@@ -37,6 +37,30 @@ const FAVICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><re
 function open_sse(res) {
   res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
   if (res.flushHeaders) res.flushHeaders();
+}
+
+// `pm2 jlist` via the CLI with a 2s shared cache so a burst of concurrent callers (all the card
+// backfills on first load + the /api/pm2 poll) collapses into ONE spawn instead of dozens.
+let _jlist_cache = { at: 0, data: null }, _jlist_waiters = [], _jlist_running = false;
+function pm2_jlist(cb) {
+  if (_jlist_cache.data && (Date.now() - _jlist_cache.at) < 2000) return cb(null, _jlist_cache.data);
+  _jlist_waiters.push(cb);
+  if (_jlist_running) return;
+  _jlist_running = true;
+  const { spawn } = require('child_process');
+  let out = '', proc;
+  const flush = (err, list) => { _jlist_running = false; const w = _jlist_waiters.splice(0); w.forEach((f) => { try { f(err, list); } catch (e) {} }); };
+  try { proc = spawn('pm2', ['jlist'], { shell: process.platform === 'win32' }); }
+  catch (e) { return flush(e); }
+  const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 10000);
+  proc.stdout.on('data', (d) => { out += d.toString(); });
+  proc.on('error', (e) => { clearTimeout(timer); flush(e); });
+  proc.on('close', () => {
+    clearTimeout(timer);
+    let list = null, err = null;
+    try { list = JSON.parse(out); _jlist_cache = { at: Date.now(), data: list }; } catch (e) { err = e; }
+    flush(err, list);
+  });
 }
 
 function login_html(err) {
@@ -137,21 +161,37 @@ function create_app() {
   app.get('/admin/logout', (req, res) => { res.setHeader('Set-Cookie', proxy_auth.clear_cookie()); res.redirect('/admin/login'); });
   app.get('/admin', proxy_auth.require_auth_page, (req, res) => res.type('html').sendFile(path.join(__dirname, 'public', 'proxy_admin.html')));
 
-  // Gated pm2 log tail
+  // Gated pm2 log tail. Resolves each process's ACTUAL log paths from `pm2 jlist`
+  // (pm_out_log_path / pm_err_log_path) so it works regardless of where pm2 writes logs —
+  // fixes cards that were blank because the guessed PM2_LOG_DIR/<name> file didn't exist.
+  // Falls back to scanning PM2_LOG_DIR if pm2 jlist is unavailable.
   app.get('/api/logs', proxy_auth.require_auth, (req, res) => {
-    let files;
-    try { files = fs.readdirSync(PM2_LOG_DIR).filter((f) => f.endsWith('.log')); }
-    catch (e) { return res.status(500).json({ ok: false, error: 'cannot read pm2 log dir', dir: PM2_LOG_DIR, detail: e.message }); }
     const name = req.query.name;
-    if (!name) return res.json({ ok: true, dir: PM2_LOG_DIR, files });
     const lines = Math.min(Number(req.query.lines) || 200, 2000);
-    const matches = files.filter((f) => f === name || f.indexOf(name + '-') === 0 || f.indexOf(name) === 0);
-    const logs = {};
-    matches.forEach((f) => {
-      try { logs[f] = fs.readFileSync(path.join(PM2_LOG_DIR, f), 'utf8').split(/\r?\n/).slice(-lines).join('\n'); }
-      catch (e) { logs[f] = '(error reading: ' + e.message + ')'; }
+    const tailFile = (fp) => { try { return fs.readFileSync(fp, 'utf8').split(/\r?\n/).slice(-lines).join('\n'); } catch (e) { return null; } };
+    const fromDir = () => {
+      let files;
+      try { files = fs.readdirSync(PM2_LOG_DIR).filter((f) => f.endsWith('.log')); }
+      catch (e) { return res.status(500).json({ ok: false, error: 'cannot read pm2 log dir', dir: PM2_LOG_DIR, detail: e.message }); }
+      if (!name) return res.json({ ok: true, dir: PM2_LOG_DIR, files });
+      const logs = {};
+      files.filter((f) => f === name || f.indexOf(name + '-') === 0 || f.indexOf(name) === 0)
+        .forEach((f) => { const t = tailFile(path.join(PM2_LOG_DIR, f)); logs[f] = t == null ? '(error reading)' : t; });
+      res.json({ ok: true, dir: PM2_LOG_DIR, name, lines, logs });
+    };
+    pm2_jlist((err, list) => {
+      if (err) return fromDir();
+      if (!name) return res.json({ ok: true, processes: (list || []).map((p) => p.name) });
+      const logs = {};
+      (list || []).filter((p) => p && p.name === name).forEach((p) => {
+        const env = p.pm2_env || {};
+        [['out', env.pm_out_log_path], ['error', env.pm_err_log_path]].forEach(([k, fp]) => {
+          if (!fp) return; const t = tailFile(fp); if (t != null) logs[path.basename(fp)] = t;
+        });
+      });
+      if (Object.keys(logs).length === 0) return fromDir();   // nothing readable → try the dir scan
+      res.json({ ok: true, name, lines, logs });
     });
-    res.json({ ok: true, dir: PM2_LOG_DIR, name, lines, logs });
   });
 
   // Live "Server console": the proxy's own console output, mirrored into a ring buffer.
@@ -160,33 +200,52 @@ function create_app() {
   app.get('/api/admin-logs', proxy_auth.require_auth, (req, res) => res.json({ ok: true, lines: log_ring.tail(req.query.n) }));
   app.get('/api/admin-logs/stream', proxy_auth.require_auth, (req, res) => { open_sse(res); log_ring.subscribe(res); });
 
-  // Live per-process log stream from pm2's log bus (Server cards). ?name=<proc> for one, omit for all.
-  // Works while pm2 is running the processes; otherwise the cards fall back to the /api/logs file tail.
-  app.get('/api/logs/stream', proxy_auth.require_auth, (req, res) => { open_sse(res); pm2_logs.subscribe(res, req.query.name); });
+  // Live per-process log stream — tails the real pm2 log files (tmux-style). ?name=<proc> for one,
+  // omit for all (the Server-cards wall). Robust: no pm2 daemon/bus connection to keep alive.
+  app.get('/api/logs/stream', proxy_auth.require_auth, (req, res) => { open_sse(res); log_tail.subscribe(res, req.query.name); });
+
+  // Gated system health — live host stats (memory, swap, CPU load, disk, PSI, temps) read straight from
+  // the OS, plus the latest daily summary if HEALTH_SUMMARY_FILE points at the cron's output file.
+  app.get('/api/system', proxy_auth.require_auth, async (req, res) => {
+    const out = { ok: true, host: os.hostname(), now_mtn: new Date().toLocaleString('en-US', { timeZone: 'America/Denver' }), uptime_sec: Math.round(os.uptime()) };
+    const la = os.loadavg(); const cores = os.cpus().length;
+    out.cpu = { load1: +la[0].toFixed(2), load5: +la[1].toFixed(2), load15: +la[2].toFixed(2), cores: cores, util_pct: +((la[0] / cores) * 100).toFixed(1) };
+    try {
+      const kv = {}; fs.readFileSync('/proc/meminfo', 'utf8').split('\n').forEach((l) => { const m = l.match(/^(\w+):\s+(\d+)/); if (m) kv[m[1]] = Number(m[2]) * 1024; });
+      const total = kv.MemTotal, avail = (kv.MemAvailable != null ? kv.MemAvailable : kv.MemFree);
+      out.memory = { total, available: avail, used: total - avail, used_pct: +(100 * (total - avail) / total).toFixed(1) };
+      if (kv.SwapTotal) out.swap = { total: kv.SwapTotal, free: kv.SwapFree, used: kv.SwapTotal - kv.SwapFree, used_pct: +(100 * (kv.SwapTotal - kv.SwapFree) / kv.SwapTotal).toFixed(1) };
+    } catch (e) { const t = os.totalmem(), f = os.freemem(); out.memory = { total: t, available: f, used: t - f, used_pct: +(100 * (t - f) / t).toFixed(1) }; }
+    const psi = (file) => { try { const t = fs.readFileSync(file, 'utf8'); const s = (t.match(/some [^\n]*avg10=([\d.]+)/) || [])[1]; const fu = (t.match(/full [^\n]*avg10=([\d.]+)/) || [])[1]; return { some: s != null ? Number(s) : null, full: fu != null ? Number(fu) : null }; } catch (e) { return null; } };
+    out.psi = { memory: psi('/proc/pressure/memory'), cpu: psi('/proc/pressure/cpu'), io: psi('/proc/pressure/io') };
+    try { const base = '/sys/class/thermal'; const temps = {}; fs.readdirSync(base).filter((d) => d.indexOf('thermal_zone') === 0).forEach((z) => { try { const type = fs.readFileSync(base + '/' + z + '/type', 'utf8').trim(); const t = Number(fs.readFileSync(base + '/' + z + '/temp', 'utf8').trim()) / 1000; if (!isNaN(t)) temps[type] = +t.toFixed(1); } catch (e) {} }); out.temps = temps; } catch (e) { out.temps = {}; }
+    try { await new Promise((resolve) => { (fs.statfs ? fs.statfs : (p, cb) => cb(new Error('no statfs')))('/', (err, st) => { if (!err && st) { const total = st.blocks * st.bsize, free = st.bavail * st.bsize, used = total - free; out.disk = { total, free, used, used_pct: +(100 * used / total).toFixed(1) }; } resolve(); }); }); } catch (e) {}
+    const tailText = (fp, max) => { try { const st = fs.statSync(fp); const start = Math.max(0, st.size - (max || 16000)); const len = st.size - start; const fd = fs.openSync(fp, 'r'); const b = Buffer.alloc(len); fs.readSync(fd, b, 0, len, start); fs.closeSync(fd); return { text: b.toString('utf8'), mtime: st.mtime.toISOString() }; } catch (e) { return null; } };
+    // Daily health summary: env override → the cron's saved summary → the raw metrics log.
+    try {
+      const cands = [process.env.HEALTH_SUMMARY_FILE,
+        path.join(__dirname, 'utilities', 'cron_system_metrics', 'latest_summary.txt'),
+        path.join(__dirname, 'utilities', 'cron_system_metrics', 'system_metrics.log')].filter(Boolean);
+      for (const fp of cands) { if (fs.existsSync(fp)) { const r = tailText(fp, 8000); if (r) { out.summary = { path: fp, mtime: r.mtime, text: r.text }; break; } } }
+    } catch (e) {}
+    // Ubuntu update/upgrade log.
+    try { const fp = process.env.UBUNTU_UPDATE_LOG || path.join(__dirname, 'utilities', 'cron_update_ubuntu', 'ubuntu-update.log'); if (fs.existsSync(fp)) { const r = tailText(fp, 8000); if (r) out.ubuntu = { path: fp, mtime: r.mtime, text: r.text }; } } catch (e) {}
+    res.json(out);
+  });
 
   // Gated pm2 process list (status/cpu/mem/restarts/port) — Processes pane + fleet wall.
   // Uses the pm2 CLI (`pm2 jlist`) via spawn, NOT the pm2 module — so it never calls pm2.disconnect()
   // and therefore can't kill the launchBus log stream the Server cards rely on.
   app.get('/api/pm2', proxy_auth.require_auth, (req, res) => {
-    const { spawn } = require('child_process');
-    let out = '', errout = '', proc;
-    try { proc = spawn('pm2', ['jlist'], { shell: process.platform === 'win32' }); }
-    catch (e) { return res.status(500).json({ ok: false, error: 'pm2 not available', detail: e.message }); }
-    const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 10000);
-    proc.stdout.on('data', (d) => { out += d.toString(); });
-    proc.stderr.on('data', (d) => { errout += d.toString(); });
-    proc.on('error', (e) => { clearTimeout(timer); res.status(500).json({ ok: false, error: 'pm2 spawn failed', detail: e.message }); });
-    proc.on('close', () => {
-      clearTimeout(timer);
-      let list;
-      try { list = JSON.parse(out); } catch (e) { return res.status(500).json({ ok: false, error: 'could not parse pm2 jlist', detail: (errout || e.message).slice(0, 300) }); }
+    pm2_jlist((err, list) => {
+      if (err) return res.status(500).json({ ok: false, error: 'pm2 jlist failed', detail: (err && err.message) || String(err) });
       const processes = (list || []).map((p) => {
         const env = p.pm2_env || {}; const mon = p.monit || {};
         const script = String(env.pm_exec_path || '');
         const pm = script.match(/_(\d{3,5})\.[cm]?js$/);                 // server_<name>_<port>.js
         const port = pm ? Number(pm[1]) : (env.env && env.env.PORT ? Number(env.env.PORT) : null);
         return {
-          name: p.name, status: env.status, cpu: mon.cpu,
+          name: p.name, pm_id: (p.pm_id != null ? p.pm_id : env.pm_id), status: env.status, cpu: mon.cpu,
           memory_mb: typeof mon.memory === 'number' ? +(mon.memory / 1048576).toFixed(1) : null,
           restarts: env.restart_time, uptime_ms: env.pm_uptime ? (Date.now() - env.pm_uptime) : null,
           pid: p.pid, port: port,

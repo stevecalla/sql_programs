@@ -141,6 +141,7 @@
       <a data-pane="fleet"><span aria-hidden="true">&#9707;</span> Server cards</a>
       <a data-pane="operations"><span aria-hidden="true">&#9656;</span> Operations</a>
       <a data-pane="logs"><span aria-hidden="true">&#9636;</span> Logs</a>
+      <a data-pane="system"><span aria-hidden="true">&#128202;</span> System health</a>
       <a data-pane="settings"><span aria-hidden="true">&#9881;</span> Settings</a>
       <a data-pane="access"><span aria-hidden="true">&#9678;</span> Access</a>
       <a data-pane="reference"><span aria-hidden="true">&#10063;</span> Reference</a>
@@ -218,6 +219,21 @@
               <button class="btn ghost sm" id="logsReload" type="button">&#8635; Reconnect</button>
             </span></div>
           <div class="term" id="logsOut" aria-live="polite">Connecting…</div>
+        </div>
+      </section>
+
+      <!-- SYSTEM HEALTH -->
+      <section class="pane" data-view="system">
+        <div class="ad-card">
+          <div class="run-head"><h2 style="margin:0">System health <span class="mut" id="sysHost" style="text-transform:none;font-weight:400"></span></h2>
+            <span class="ctl" id="sysCtl" style="margin:0"></span></div>
+          <div class="tiles" id="sysTiles"><div class="mut">Loading…</div></div>
+        </div>
+        <div class="ad-card"><h2>Daily health summary <span class="mut" id="sysSummaryWhen" style="text-transform:none;font-weight:400"></span></h2>
+          <div class="term" id="sysSummary" style="min-height:160px">Loading…</div>
+        </div>
+        <div class="ad-card"><h2>Ubuntu update log <span class="mut" id="sysUbuntuWhen" style="text-transform:none;font-weight:400"></span></h2>
+          <div class="term" id="sysUbuntu" style="min-height:120px">Loading…</div>
         </div>
       </section>
 
@@ -406,16 +422,20 @@
   }
 
   // ---- Server cards (live per-process logs via the pm2 bus + status that refreshes in place) ----
-  var fleetNames=[], fleetES=null;
-  function cardMeta(p){ return '<span>cpu '+(p.cpu==null?'?':p.cpu)+'%</span><span>'+(p.memory_mb==null?'?':p.memory_mb)+'MB</span><span>↺'+(p.restarts==null?'?':p.restarts)+'</span><span>'+uptime(p.uptime_ms)+'</span>'; }
+  // Cards are keyed by pm2's unique pm_id (cluster instances share a NAME, so name alone collides).
+  // Logs are sourced by NAME (cluster instances share log files), so a line/backfill fans out to every
+  // card with that name.
+  var fleetES=null;
+  function cardKey(p){ return String(p.pm_id!=null?p.pm_id:p.name); }
+  function cardMeta(p){ return '<span>cpu '+(p.cpu==null?'?':p.cpu)+'%</span><span>'+(p.memory_mb==null?'?':p.memory_mb)+'MB</span><span>↺'+(p.restarts==null?'?':p.restarts)+'</span><span>'+uptime(p.uptime_ms)+'</span><span class="port">#'+esc(cardKey(p))+'</span>'; }
   function buildCard(p){
-    var port = p.port ? ' <span class="port">:'+p.port+'</span>' : '';
-    return '<div class="fcard" data-name="'+esc(p.name)+'"><div class="top"><span class="drag" draggable="true" title="drag to reorder">⠿</span>'+statusPill(p.status)+'<span class="nm">'+esc(p.name)+port+'</span><span class="cardbtns"><button class="btn sm xpand" data-name="'+esc(p.name)+'">⤢ expand</button><button class="btn sm copy" data-name="'+esc(p.name)+'">copy</button></span></div>'
+    var id=cardKey(p); var port = p.port ? ' <span class="port">:'+p.port+'</span>' : '';
+    return '<div class="fcard" data-id="'+esc(id)+'" data-name="'+esc(p.name)+'"><div class="top"><span class="drag" draggable="true" title="drag to reorder">⠿</span>'+statusPill(p.status)+'<span class="nm">'+esc(p.name)+port+'</span><span class="cardbtns"><button class="btn sm xpand" data-name="'+esc(p.name)+'">⤢ expand</button><button class="btn sm copy" data-id="'+esc(id)+'">copy</button></span></div>'
       +'<div class="meta">'+cardMeta(p)+'</div>'
-      +'<pre class="minilog" data-name="'+esc(p.name)+'">loading…</pre></div>';
+      +'<pre class="minilog" data-id="'+esc(id)+'" data-name="'+esc(p.name)+'">loading…</pre></div>';
   }
   function updateCardStats(p){
-    var card=document.querySelector('.fcard[data-name="'+CSS.escape(p.name)+'"]'); if(!card) return;
+    var card=document.querySelector('.fcard[data-id="'+CSS.escape(cardKey(p))+'"]'); if(!card) return;
     var top=card.querySelector('.top'); if(top){ var pill=top.querySelector('.pill'); if(pill) pill.outerHTML=statusPill(p.status); }
     var meta=card.querySelector('.meta'); if(meta) meta.innerHTML=cardMeta(p);
   }
@@ -430,34 +450,36 @@
       setRefresh(); return;
     }
     var ord=lsGet('proxy_fleet_order',[]);
-    if(ord.length) list.sort(function(a,b){ var ia=ord.indexOf(a.name), ib=ord.indexOf(b.name); if(ia<0)ia=1e9; if(ib<0)ib=1e9; return ia-ib || a.name.localeCompare(b.name); });
+    if(ord.length) list.sort(function(a,b){ var ia=ord.indexOf(a.name), ib=ord.indexOf(b.name); if(ia<0)ia=1e9; if(ib<0)ib=1e9; return (ia-ib) || a.name.localeCompare(b.name) || ((a.pm_id||0)-(b.pm_id||0)); });
     var ph=cont.querySelector('.mut'); if(ph && !ph.closest('.fcard')) ph.remove();   // drop the placeholder once we have data
-    var have={}; cont.querySelectorAll('.fcard').forEach(function(c){ have[c.dataset.name]=c; });
+    var have={}; cont.querySelectorAll('.fcard').forEach(function(c){ have[c.dataset.id]=c; });
     var seen={};
-    list.forEach(function(p){ seen[p.name]=1;
-      if(have[p.name]) updateCardStats(p);                          // existing → update stats only (keep log)
-      else { cont.insertAdjacentHTML('beforeend', buildCard(p)); tailCard(p.name); }   // new → build + backfill once
+    list.forEach(function(p){ var id=cardKey(p); seen[id]=1;
+      if(have[id]) updateCardStats(p);                              // existing → update stats only (keep log)
+      else { cont.insertAdjacentHTML('beforeend', buildCard(p)); tailCard(p); }   // new → build + backfill once
     });
-    Object.keys(have).forEach(function(nm){ if(!seen[nm]) have[nm].remove(); });        // gone → remove
-    list.forEach(function(p){ var c=cont.querySelector('.fcard[data-name="'+CSS.escape(p.name)+'"]'); if(c) cont.appendChild(c); }); // apply order
+    Object.keys(have).forEach(function(id){ if(!seen[id]) have[id].remove(); });          // gone → remove
+    list.forEach(function(p){ var c=cont.querySelector('.fcard[data-id="'+CSS.escape(cardKey(p))+'"]'); if(c) cont.appendChild(c); }); // apply order
     if(!fleetES) startFleetStream();
     setRefresh();
   }
   // Initial paint = last lines from the pm2 file (instant context); the live bus appends below it.
-  async function tailCard(name){
-    var el=document.querySelector('.minilog[data-name="'+CSS.escape(name)+'"]'); if(!el) return;
-    try{ var res=await getJSON('/api/logs?name='+encodeURIComponent(name)+'&lines=12'); var logs=(res.body&&res.body.logs)||{};
+  async function tailCard(p){
+    var id=cardKey(p), el=document.querySelector('.minilog[data-id="'+CSS.escape(id)+'"]'); if(!el) return;
+    try{ var res=await getJSON('/api/logs?name='+encodeURIComponent(p.name)+'&lines=20'); var logs=(res.body&&res.body.logs)||{};
       var txt=Object.keys(logs).map(function(fn){return logs[fn];}).join('\n').trim(); el.textContent=txt||'(no file history yet — live lines will appear here)'; el.dataset.fresh='1'; el.scrollTop=el.scrollHeight;
     }catch(e){ el.textContent='(log unavailable)'; }
   }
   function setFleetLive(on){ var s=$('#fleetLive'); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'var(--ok)':'var(--dim)'; } }
   function appendCardLine(d){
-    var el=document.querySelector('.minilog[data-name="'+CSS.escape(d.name)+'"]'); if(!el) return;
-    if(el.dataset.fresh!=='1'){ el.textContent=''; el.dataset.fresh='1'; }
-    var div=document.createElement('div');
-    if(d.level==='error' || /error|ECONNREFUSED|✗|failed/i.test(d.line)) div.style.color='#ff9b9b';
-    div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line;
-    el.appendChild(div); while(el.childNodes.length>200) el.removeChild(el.firstChild); el.scrollTop=el.scrollHeight;
+    var els=document.querySelectorAll('.minilog[data-name="'+CSS.escape(d.name)+'"]'); if(!els.length) return;
+    var cls=lineClass(d);
+    els.forEach(function(el){
+      if(el.dataset.fresh!=='1'){ el.textContent=''; el.dataset.fresh='1'; }
+      var div=document.createElement('div'); if(cls) div.className=cls;
+      div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line;
+      el.appendChild(div); while(el.childNodes.length>300) el.removeChild(el.firstChild); el.scrollTop=el.scrollHeight;
+    });
   }
   function startFleetStream(){
     if(fleetES){ try{fleetES.close();}catch(e){} }
@@ -564,6 +586,32 @@
     setRefresh();
   }
 
+  // ---- System health (live host stats + daily cron summary) ----
+  function fmtGB(b){ return b==null?'—':(b/1073741824).toFixed(1)+' GiB'; }
+  function healthTile(k,v,state){ var cls=state==='warn'?'warn':(state==='bad'?'no':(state==='ok'?'yes':'')); var badge=state?' <span class="pill '+cls+'" style="font-size:10px">'+(state==='bad'?'HIGH':state.toUpperCase())+'</span>':''; return '<div class="tile"><div class="k">'+k+badge+'</div><div class="v">'+v+'</div></div>'; }
+  async function loadSystem(){
+    var s=(await getJSON('/api/system')).body||{};
+    $('#sysHost').textContent = s.host?('— '+s.host):'';
+    var m=s.memory||{}, sw=s.swap||{}, c=s.cpu||{}, d=s.disk||{}, t=s.temps||{}, psi=s.psi||{};
+    function st(pct,warn,bad){ return pct==null?'':(pct>=bad?'bad':(pct>=warn?'warn':'ok')); }
+    var tiles=[];
+    tiles.push(healthTile('Memory used', (m.used_pct!=null?m.used_pct+'%':'—')+' <span class="mut">'+fmtGB(m.used)+' / '+fmtGB(m.total)+'</span>', st(m.used_pct,80,92)));
+    tiles.push(healthTile('Available', fmtGB(m.available), ''));
+    if(s.swap) tiles.push(healthTile('Swap used', sw.used_pct+'% <span class="mut">'+fmtGB(sw.used)+' / '+fmtGB(sw.total)+'</span>', st(sw.used_pct,60,85)));
+    tiles.push(healthTile('CPU load (1/5/15m)', (c.load1+' / '+c.load5+' / '+c.load15), st(c.util_pct,70,90)));
+    tiles.push(healthTile('CPU util · cores', (c.util_pct!=null?c.util_pct+'%':'—')+' <span class="mut">· '+(c.cores||'?')+' cores</span>', ''));
+    if(s.disk) tiles.push(healthTile('Disk / used', d.used_pct+'% <span class="mut">'+fmtGB(d.used)+' / '+fmtGB(d.total)+'</span>', st(d.used_pct,80,92)));
+    if(psi.memory) tiles.push(healthTile('Mem pressure (avg10)', 'some '+psi.memory.some+' · full '+psi.memory.full, st(psi.memory.some,5,20)));
+    Object.keys(t).forEach(function(k){ tiles.push(healthTile('Temp · '+k, t[k]+'°C', st(t[k],75,90))); });
+    tiles.push(healthTile('Uptime', uptime(s.uptime_sec*1000), ''));
+    $('#sysTiles').innerHTML=tiles.join('')||'<div class="mut">unavailable</div>';
+    if(s.summary){ $('#sysSummaryWhen').textContent='— '+mtn(s.summary.mtime); renderTerm($('#sysSummary'), s.summary.text); }
+    else { $('#sysSummaryWhen').textContent=''; renderTerm($('#sysSummary'), 'No summary yet. After the daily health cron next runs it writes utilities/cron_system_metrics/latest_summary.txt, which appears here.'); }
+    if(s.ubuntu){ $('#sysUbuntuWhen').textContent='— '+mtn(s.ubuntu.mtime); renderTerm($('#sysUbuntu'), s.ubuntu.text); }
+    else { $('#sysUbuntuWhen').textContent=''; renderTerm($('#sysUbuntu'), '(no ubuntu-update.log found)'); }
+    setRefresh();
+  }
+
   // ---- Access (env account shown as a Users-style table) ----
   async function loadAccess(){
     var m=(await getJSON('/api/me')).body||{};
@@ -582,6 +630,7 @@
     else if(name==='fleet') loadFleet();
     else if(name==='operations') loadConsole();
     else if(name==='logs'){ loadLogsPane(); }
+    else if(name==='system') loadSystem();
     else if(name==='settings') loadSettings();
     else if(name==='access') loadAccess();
     else if(name==='reference'){}
@@ -592,9 +641,9 @@
   // overview: click a process row to open its full log file in the modal
   $('#procsRows').addEventListener('click', function(ev){ var tr=ev.target.closest&&ev.target.closest('tr'); if(!tr||!tr.dataset) return; var nm=tr.getAttribute('data-name'); if(!nm) return; openModal(nm); });
   // fleet card buttons
-  $('#fleetCards').addEventListener('click', function(ev){ var b=ev.target.closest&&ev.target.closest('button'); if(!b||!b.dataset.name) return; var nm=b.dataset.name;
+  $('#fleetCards').addEventListener('click', function(ev){ var b=ev.target.closest&&ev.target.closest('button'); if(!b) return; var nm=b.dataset.name;
     if(b.classList.contains('xpand')) openModal(nm);
-    else if(b.classList.contains('copy')){ var el=document.querySelector('.minilog[data-name="'+CSS.escape(nm)+'"]'); if(el&&copyText(el.textContent)){ b.textContent='copied'; setTimeout(function(){b.textContent='copy';},1200); } } });
+    else if(b.classList.contains('copy')){ var el=document.querySelector('.minilog[data-id="'+CSS.escape(b.dataset.id)+'"]'); if(el&&copyText(el.textContent)){ b.textContent='copied'; setTimeout(function(){b.textContent='copy';},1200); } } });
   // Layout chooser (2 / 3 / 4 / ⅔·⅓). Clears any manual resize so the chosen layout takes effect.
   function applyCols(c){ var el=$('#fleetCards'); if(el){ el.setAttribute('data-cols', c); el.querySelectorAll('.fcard').forEach(function(card){ card.style.width=''; card.style.height=''; }); }
     $('#fleetCols').querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b.dataset.cols===c); }); lsSet('proxy_fleet_cols', c); }
@@ -621,6 +670,7 @@
   refresher('health_refresh', 900, $('#healthCtl'), loadHealth);
   refresher('procs_refresh', 600, $('#procsCtl'), loadProcs);
   refresher('fleet_refresh', 30, $('#fleetCtl'), loadFleet);
+  refresher('system_refresh', 15, $('#sysCtl'), loadSystem);
 
   loadOverview();
   startLogStream();   // live console connects once and feeds Overview + Logs continuously
