@@ -282,6 +282,11 @@
 (function(){
   function $(s){ return document.querySelector(s); }
   function esc(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  // Auto-follow newest line: true if the view is at/near the bottom (so we only pin when following,
+  // and don't yank the user back while they've scrolled up to read history).
+  function atBottom(el){ return (el.scrollHeight - el.scrollTop - el.clientHeight) < 60; }
+  // Pin to bottom AFTER layout (rAF) so the new line's height is counted — fixes "stuck above newest".
+  function pin(el){ requestAnimationFrame(function(){ try{ el.scrollTop = el.scrollHeight; }catch(e){} }); }
   function mtn(iso){ try{ return new Date(iso).toLocaleString('en-US',{timeZone:'America/Denver'}); }catch(e){ return iso||''; } }
   function nowMtn(){ return new Date().toLocaleString('en-US',{timeZone:'America/Denver'}); }
   function pillUp(ok){ return '<span class="pill '+(ok?'yes':'no')+'">'+(ok?'UP':'DOWN')+'</span>'; }
@@ -312,7 +317,7 @@
       else if(/\bOK\b|✓|online|listening|ready/i.test(ln)) d.className='l-ok';
       else if(/^\s*(>>|<<)/.test(ln) || /\[\d{4}-\d\d-\d\dT/.test(ln) || /\bGET\b|\bPOST\b/.test(ln)) d.className='l-meta';
       d.textContent=ln; el.appendChild(d); });
-    el.scrollTop=el.scrollHeight;
+    pin(el);
   }
 
   // ---- refresher control (interval + pause, persisted) ----
@@ -373,9 +378,10 @@
   }
   function appendTo(sel, d){
     var o=$(sel); if(!o) return; var cls=lineClass(d);
-    if(o.dataset.fresh!=='1'){ o.textContent=''; o.dataset.fresh='1'; }
+    var fresh=o.dataset.fresh!=='1'; var follow=fresh||atBottom(o);
+    if(fresh){ o.textContent=''; o.dataset.fresh='1'; }
     var div=document.createElement('div'); if(cls) div.className=cls; div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line;
-    o.appendChild(div); while(o.childNodes.length>700) o.removeChild(o.firstChild); o.scrollTop=o.scrollHeight;
+    o.appendChild(div); while(o.childNodes.length>700) o.removeChild(o.firstChild); if(follow) pin(o);
   }
   function setLive(sel, on){ var s=$(sel); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'var(--ok)':'var(--dim)'; } }
 
@@ -467,7 +473,7 @@
   async function tailCard(p){
     var id=cardKey(p), el=document.querySelector('.minilog[data-id="'+CSS.escape(id)+'"]'); if(!el) return;
     try{ var res=await getJSON('/api/logs?name='+encodeURIComponent(p.name)+'&lines=20'); var logs=(res.body&&res.body.logs)||{};
-      var txt=Object.keys(logs).map(function(fn){return logs[fn];}).join('\n').trim(); el.textContent=txt||'(no file history yet — live lines will appear here)'; el.dataset.fresh='1'; el.scrollTop=el.scrollHeight;
+      var txt=Object.keys(logs).map(function(fn){return logs[fn];}).join('\n').trim(); el.textContent=txt||'(no file history yet — live lines will appear here)'; el.dataset.fresh='1'; pin(el);
     }catch(e){ el.textContent='(log unavailable)'; }
   }
   function setFleetLive(on){ var s=$('#fleetLive'); if(s){ s.textContent=on?'● live':'○ reconnecting…'; s.style.color=on?'var(--ok)':'var(--dim)'; } }
@@ -475,10 +481,11 @@
     var els=document.querySelectorAll('.minilog[data-name="'+CSS.escape(d.name)+'"]'); if(!els.length) return;
     var cls=lineClass(d);
     els.forEach(function(el){
-      if(el.dataset.fresh!=='1'){ el.textContent=''; el.dataset.fresh='1'; }
+      var fresh=el.dataset.fresh!=='1'; var follow=fresh||atBottom(el);
+      if(fresh){ el.textContent=''; el.dataset.fresh='1'; }
       var div=document.createElement('div'); if(cls) div.className=cls;
       div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line;
-      el.appendChild(div); while(el.childNodes.length>300) el.removeChild(el.firstChild); el.scrollTop=el.scrollHeight;
+      el.appendChild(div); while(el.childNodes.length>300) el.removeChild(el.firstChild); if(follow) pin(el);
     });
   }
   function startFleetStream(){
@@ -507,10 +514,11 @@
     stopModalStream();
     try{ modalES=new EventSource('/api/logs/stream?name='+encodeURIComponent(name));
       modalES.addEventListener('line',function(ev){ try{ var d=JSON.parse(ev.data);
-        if(pre.dataset.fresh!=='1'){ pre.textContent=''; pre.dataset.fresh='1'; }
+        var fresh=pre.dataset.fresh!=='1'; var follow=fresh||atBottom(pre);
+        if(fresh){ pre.textContent=''; pre.dataset.fresh='1'; }
         var div=document.createElement('div'); if(d.level==='error'||/error|ECONNREFUSED|✗|failed/i.test(d.line)) div.className='l-err';
         div.textContent=(d.at?d.at.slice(11,19)+' ':'')+d.line; pre.appendChild(div);
-        while(pre.childNodes.length>800) pre.removeChild(pre.firstChild); pre.scrollTop=pre.scrollHeight;
+        while(pre.childNodes.length>800) pre.removeChild(pre.firstChild); if(follow) pin(pre);
       }catch(e){} });
     }catch(e){}
   }
