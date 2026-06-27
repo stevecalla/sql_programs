@@ -508,11 +508,11 @@
     // 1) seed instantly with whatever the card already streamed (never blank)
     var card=document.querySelector('.minilog[data-name="'+CSS.escape(name)+'"]');
     var seed=card?card.textContent.trim():'';
-    pre.textContent=seed||'loading…'; pre.dataset.fresh=seed?'1':'';
+    pre.textContent=seed||'loading…'; pre.dataset.fresh=seed?'1':''; pin(pre);
     // 2) pull deeper history from the pm2 file if it has any (more than the card's tail)
     try{ var res=await getJSON('/api/logs?name='+encodeURIComponent(name)+'&lines=400'); var logs=(res.body&&res.body.logs)||{};
       var hist=Object.keys(logs).map(function(fn){return logs[fn];}).join('\n').trim();
-      if(hist){ renderTerm(pre, hist); pre.dataset.fresh='1'; }
+      if(hist){ renderTerm(pre, hist); pre.dataset.fresh='1'; }   // renderTerm pins to bottom
     }catch(e){}
     // 3) attach the live pm2 bus stream for this one process so the big view keeps updating
     stopModalStream();
