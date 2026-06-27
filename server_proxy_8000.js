@@ -233,6 +233,33 @@ function create_app() {
     res.json(out);
   });
 
+  // Gated "live commands" — run one of a fixed allow-list of read-only system snapshots (htop-style).
+  // shell:false, fixed argv (no user input reaches the shell), capped output + timeout.
+  const SYS_CMDS = {
+    top:     { label: 'top',      bin: 'top',    argv: ['-b', '-n', '1'] },
+    procs:   { label: 'processes',bin: 'bash',   argv: ['-lc', 'ps -eo pid,ppid,%cpu,%mem,rss,comm --sort=-%cpu | head -n 30'] },
+    mem:     { label: 'free -h',  bin: 'free',   argv: ['-h'] },
+    disk:    { label: 'df -h',    bin: 'df',     argv: ['-h'] },
+    vmstat:  { label: 'vmstat',   bin: 'vmstat', argv: ['1', '2'] },
+    uptime:  { label: 'uptime',   bin: 'uptime', argv: [] },
+    sensors: { label: 'sensors',  bin: 'sensors',argv: [] },
+    pm2:     { label: 'pm2 list', bin: 'pm2',    argv: ['list'] },
+  };
+  app.get('/api/system/cmds', proxy_auth.require_auth, (req, res) => res.json({ ok: true, cmds: Object.keys(SYS_CMDS).map((id) => ({ id, label: SYS_CMDS[id].label })) }));
+  app.get('/api/system/cmd', proxy_auth.require_auth, (req, res) => {
+    const c = SYS_CMDS[String(req.query.name || '')]; if (!c) return res.status(400).json({ ok: false, error: 'unknown command' });
+    const { spawn } = require('child_process');
+    let out = '', proc;
+    try { proc = spawn(c.bin, c.argv, { shell: false, windowsHide: true }); }
+    catch (e) { return res.status(500).json({ ok: false, error: c.bin + ' not available', detail: e.message }); }
+    const cap = () => { if (out.length > 60000) { out = out.slice(0, 60000) + '\n…(truncated)'; try { proc.kill(); } catch (e) {} } };
+    const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 8000);
+    proc.stdout.on('data', (d) => { out += d.toString(); cap(); });
+    proc.stderr.on('data', (d) => { out += d.toString(); cap(); });
+    proc.on('error', (e) => { clearTimeout(timer); res.json({ ok: false, error: c.bin + ': ' + e.message, output: out }); });
+    proc.on('close', () => { clearTimeout(timer); res.json({ ok: true, name: req.query.name, label: c.label, output: out || '(no output)', time: new Date().toISOString() }); });
+  });
+
   // Gated pm2 process list (status/cpu/mem/restarts/port) — Processes pane + fleet wall.
   // Uses the pm2 CLI (`pm2 jlist`) via spawn, NOT the pm2 module — so it never calls pm2.disconnect()
   // and therefore can't kill the launchBus log stream the Server cards rely on.
