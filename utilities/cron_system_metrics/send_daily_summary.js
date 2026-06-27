@@ -317,6 +317,10 @@ Current CPU Temp: ${latest.cpu_temp_c || "n/a"}°C
 Current NVMe Temp: ${latest.nvme_temp_c || "n/a"}°C
 `;
 
+  // Also persist the exact summary to a file so the proxy /admin System-health panel can display it
+  // (best-effort — must never break the Slack send / cron).
+  try { fs.writeFileSync(path.join(__dirname, "latest_summary.txt"), message, "utf8"); } catch (e) {}
+
   await slack_message_api(message, "steve_calla_slack_channel");
 }
 
