@@ -50,7 +50,7 @@ function pm2_jlist(cb) {
   const { spawn } = require('child_process');
   let out = '', proc;
   const flush = (err, list) => { _jlist_running = false; const w = _jlist_waiters.splice(0); w.forEach((f) => { try { f(err, list); } catch (e) {} }); };
-  try { proc = spawn('pm2', ['jlist'], { shell: process.platform === 'win32' }); }
+  try { proc = spawn('pm2', ['jlist'], { shell: process.platform === 'win32', windowsHide: true }); }
   catch (e) { return flush(e); }
   const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 10000);
   proc.stdout.on('data', (d) => { out += d.toString(); });
@@ -268,7 +268,7 @@ function create_app() {
     else return res.status(400).json({ ok: false, error: 'unknown action or missing/invalid name' });
     console.log('[' + log_ts() + '] [control] pm2 ' + args.join(' '));
     let out = '', errout = '', proc;
-    try { proc = spawn('pm2', args, { shell: process.platform === 'win32' }); }
+    try { proc = spawn('pm2', args, { shell: process.platform === 'win32', windowsHide: true }); }
     catch (e) { return res.status(500).json({ ok: false, error: 'pm2 spawn failed', detail: e.message }); }
     const timer = setTimeout(() => { try { proc.kill(); } catch (e) {} }, 20000);
     proc.stdout.on('data', (d) => { out += d.toString(); });
