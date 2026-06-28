@@ -21,9 +21,9 @@ function CopyButton({ value }) {
 //   filter: true renders a per-column control in the header (a dropdown if `facets[key]` exists, else a text box).
 //   wrap: true lets long cells wrap; every cell gets a title tooltip with its full value.
 // `facets` maps column key -> distinct values (for the dropdowns). `searchCols` labels what search scans.
-export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, minWidth, maxHeight }) {
+export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, minWidth, maxHeight, initialQuery = '', rowNumbers = true }) {
   const server = typeof fetcher === 'function';
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(initialQuery || '');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
@@ -70,8 +70,11 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
     return r;
   }, [server, data.rows, rows, q, sortKey, sortDir, colFiltersKey, columns]);
 
-  const total = server ? data.total : view.length;
+  const total = Number(server ? data.total : view.length) || 0;
   const pages = Math.max(1, Math.ceil(total / pageSize));
+  // If a search/filter/chip shrinks the result below the current page, snap back into range
+  // (otherwise Prev/Next can land on an empty page and look broken).
+  useEffect(() => { if (page > pages) setPage(pages); }, [pages, page]);
   const activeFilters = Object.values(colFilters).filter((v) => v && String(v).trim()).length;
 
   const sort_key_of = (col) => (col.sort === true ? col.key : col.sort);
@@ -129,7 +132,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
       <div className="dt-scroll" style={maxHeight ? { maxHeight } : undefined}>
       <table style={minWidth ? { minWidth } : undefined}>
         <thead>
-          <tr>{columns.map((col) => (
+          <tr>{rowNumbers && <th className="dt-rownum">#</th>}{columns.map((col) => (
             <th key={col.key} onClick={() => toggle(col)} title={col.help || undefined}
               style={{ cursor: sort_key_of(col) ? 'pointer' : 'default' }}>
               {col.label}{col.help ? <span className="th-info" aria-hidden="true"> ⓘ</span> : ''}{mark(col)}
@@ -137,6 +140,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
           ))}</tr>
           {showFilters && filterable.length > 0 && (
             <tr className="dt-filter-row">
+              {rowNumbers && <th className="dt-rownum" />}
               {columns.map((col) => (
                 <th key={col.key}>
                   {col.filter ? (
@@ -155,16 +159,27 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
           )}
         </thead>
         <tbody>
-          {view.map((row, i) => (
-            <tr key={i}>{columns.map((col) => (
-              <td key={col.key} className={col.wrap ? 'dt-wrap' : undefined} title={String(row[col.key] ?? '')}>
-                {col.render ? col.render(row) : row[col.key]}
-                {col.copy && row[col.key] != null && row[col.key] !== '' ? <CopyButton value={row[col.key]} /> : null}
-              </td>
-            ))}</tr>
-          ))}
+          {loading && server ? (
+            Array.from({ length: Math.min(pageSize, 8) }).map((_, i) => (
+              <tr key={'skel' + i}>
+                {rowNumbers && <td className="dt-rownum"><span className="skel" style={{ height: 12, width: 14 }} /></td>}
+                {columns.map((col) => (
+                  <td key={col.key}><span className="skel" style={{ height: 12, width: '70%' }} /></td>
+                ))}
+              </tr>
+            ))
+          ) : (
+            view.map((row, i) => (
+              <tr key={i}>{rowNumbers && <td className="dt-rownum">{(server ? (page - 1) * pageSize : 0) + i + 1}</td>}{columns.map((col) => (
+                <td key={col.key} className={col.wrap ? 'dt-wrap' : undefined} title={String(row[col.key] ?? '')}>
+                  {col.render ? col.render(row) : row[col.key]}
+                  {col.copy && row[col.key] != null && row[col.key] !== '' ? <CopyButton value={row[col.key]} /> : null}
+                </td>
+              ))}</tr>
+            ))
+          )}
           {!loading && view.length === 0 && (
-            <tr><td colSpan={columns.length} className="muted">No rows.</td></tr>
+            <tr><td colSpan={columns.length + (rowNumbers ? 1 : 0)} className="muted">No rows.</td></tr>
           )}
         </tbody>
       </table>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { api } from './lib/api.js';
 import TopNav from './components/TopNav.jsx';
+import FooterClock from './components/FooterClock.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Duplicates from './pages/Duplicates.jsx';
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/metrics" element={<Placeholder title="Metrics" note="Phase 1" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <FooterClock />
       </main>
     </>
   );

@@ -89,6 +89,41 @@ describe('paged reads', () => {
     assert.ok(sel.params.includes('%exact%'));
     assert.ok(!/bogus/i.test(sel.sql));
   });
+
+  test('merge-id only_dupes bucket filters out in_both/sf_only (mirrors the funnel)', async () => {
+    const { q, calls } = recorder([{ account: '001' }]);
+    await reviews.list_merge_id({ filters: { bucket: 'only_dupes' } }, q);
+    const sel = calls.find((c) => /Account__c AS/.test(c.sql) && !/COUNT/.test(c.sql));
+    assert.ok(/Bucket__c NOT IN \('in_both', 'sf_only'\)/.test(sel.sql));
+  });
+
+  test('accounts use prefix search (term%) so the index applies', async () => {
+    const { q, calls } = recorder([{ account: '001' }]);
+    await reviews.list_accounts({ q: 'smi' }, q);
+    const sel = calls.find((c) => /salesforce_account_id AS/.test(c.sql) && !/COUNT/.test(c.sql));
+    assert.ok(sel.params.includes('smi%'));
+    assert.ok(!sel.params.includes('%smi%'));
+  });
+});
+
+describe('cluster_accounts', () => {
+  test('looks up Record_Ids__c then fetches those accounts by IN-list', async () => {
+    const calls = [];
+    const q = async (sql, params) => {
+      calls.push({ sql, params: params || [] });
+      if (/Record_Ids__c/.test(sql)) return [{ ids: 'A1;A2;A3' }];
+      return [{ account: 'A1' }, { account: 'A2' }, { account: 'A3' }];
+    };
+    const out = await reviews.cluster_accounts('CLKEY', q);
+    assert.equal(out.accounts.length, 3);
+    const sel = calls.find((c) => /IN \(/.test(c.sql));
+    assert.deepEqual(sel.params, ['A1', 'A2', 'A3']);
+  });
+
+  test('blank key returns no accounts', async () => {
+    const out = await reviews.cluster_accounts('', async () => []);
+    assert.deepEqual(out.accounts, []);
+  });
 });
 
 describe('facets', () => {

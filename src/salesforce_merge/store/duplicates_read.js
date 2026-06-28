@@ -20,8 +20,12 @@ async function dashboard_counts(query = real_query) {
     total_accounts: null,
     merge_id_accounts: null,
     clusters: null,
+    accounts_in_clusters: null,
     duplicate_pairs: null,
     buckets: [],
+    // Per-signal breakdown for the dashboard "By match signal" table. Each is keyed
+    // exact/fuzzy/nickname/multi. Pairs have no multi (a pair is a single signal).
+    signal_breakdown: { accounts: {}, pairs: {}, clusters: {} },
   };
 
   let r;
@@ -37,8 +41,43 @@ async function dashboard_counts(query = real_query) {
   r = await safe('SELECT SUM(CAST(Match_Link_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`');
   if (r) out.duplicate_pairs = Number(r[0].n || 0);
 
+  // Duplicate ACCOUNTS = sum of cluster sizes (the individual records in clusters) — the figure
+  // that reconciles total accounts -> clusters -> pairs on the dashboard.
+  r = await safe('SELECT SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`');
+  if (r) out.accounts_in_clusters = Number(r[0].n || 0);
+
   r = await safe('SELECT Bucket__c AS bucket, COUNT(*) AS n FROM `' + T_MR + '` GROUP BY Bucket__c');
   if (r) out.buckets = r.map(function (x) { return { bucket: x.bucket, count: Number(x.n) }; });
+
+  // Pairs by signal — the per-signal link counts summed across clusters. A pair is one
+  // signal, so these three sum to the total pairs (no multi bucket for pairs).
+  r = await safe(
+    'SELECT SUM(CAST(Exact_Link_Count__c AS UNSIGNED)) AS exact, ' +
+    'SUM(CAST(Fuzzy_Link_Count__c AS UNSIGNED)) AS fuzzy, ' +
+    'SUM(CAST(Nickname_Link_Count__c AS UNSIGNED)) AS nickname FROM `' + T_CL + '`');
+  if (r && r[0]) out.signal_breakdown.pairs = {
+    exact: Number(r[0].exact || 0), fuzzy: Number(r[0].fuzzy || 0), nickname: Number(r[0].nickname || 0),
+  };
+
+  // Accounts + clusters by composition — a cluster's Match_Composition__c is "<signal> only"
+  // for single-signal clusters, else a "a + b" mix. Fold mixes into "multi".
+  r = await safe(
+    'SELECT Match_Composition__c AS comp, COUNT(*) AS clusters, ' +
+    'SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS accounts FROM `' + T_CL + '` GROUP BY Match_Composition__c');
+  if (r) {
+    const acc = { exact: 0, fuzzy: 0, nickname: 0, multi: 0 };
+    const cls = { exact: 0, fuzzy: 0, nickname: 0, multi: 0 };
+    for (const x of r) {
+      const comp = String(x.comp || '');
+      const key = comp === 'exact only' ? 'exact'
+        : comp === 'fuzzy only' ? 'fuzzy'
+        : comp === 'nickname only' ? 'nickname' : 'multi';
+      acc[key] += Number(x.accounts || 0);
+      cls[key] += Number(x.clusters || 0);
+    }
+    out.signal_breakdown.accounts = acc;
+    out.signal_breakdown.clusters = cls;
+  }
 
   return out;
 }

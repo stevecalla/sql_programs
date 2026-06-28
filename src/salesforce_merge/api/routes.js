@@ -97,13 +97,12 @@ module.exports = function mount(app) {
     for (const r of rows) lines.push(headers.map((h) => csv_cell(r[h])).join(','));
     return lines.join('\r\n');
   };
-  const send_export = async (req, res, view, opts) => {
-    const rows = await reviews.export_rows(view, opts);
-    const fname = view.replace('-', '_') + '_export_' + new Date().toISOString().slice(0, 10);
+  // Stream a set of rows as CSV or Excel (shared by every export endpoint).
+  const write_rows = async (req, res, rows, fname, sheet) => {
     if (String(req.query.format) === 'xlsx') {
       const ExcelJS = require('exceljs');
       const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet(view);
+      const ws = wb.addWorksheet(sheet || 'export');
       const headers = rows.length ? Object.keys(rows[0]) : [];
       ws.addRow(headers);
       for (const r of rows) ws.addRow(headers.map((h) => r[h]));
@@ -117,9 +116,13 @@ module.exports = function mount(app) {
       res.send(to_csv(rows));
     }
   };
+  const send_export = async (req, res, view, opts) => {
+    const rows = await reviews.export_rows(view, opts);
+    await write_rows(req, res, rows, view.replace('-', '_') + '_export_' + new Date().toISOString().slice(0, 10), view);
+  };
 
   app.get('/api/duplicates', require_auth, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_duplicates(page_opts(req))) }); }
+    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state } })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/duplicates/facets', require_auth, async function (req, res) {
@@ -127,8 +130,20 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/duplicates/export', require_auth, async function (req, res) {
-    try { await send_export(req, res, 'duplicates', page_opts(req)); }
+    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Members of one consolidated cluster (account-level detail for the Duplicates "view group" popup).
+  app.get('/api/cluster', require_auth, async function (req, res) {
+    try { res.json({ ok: true, data: await reviews.cluster_accounts(req.query.key) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/cluster/export', require_auth, async function (req, res) {
+    try {
+      const { accounts } = await reviews.cluster_accounts(req.query.key);
+      const safe = String(req.query.key || 'group').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
+      await write_rows(req, res, accounts, 'cluster_' + safe + '_' + new Date().toISOString().slice(0, 10), 'cluster');
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
   app.get('/api/merge-id', require_auth, async function (req, res) {
@@ -149,7 +164,7 @@ module.exports = function mount(app) {
 
   app.get('/api/accounts', require_auth, async function (req, res) {
     try {
-      const opts = { ...page_opts(req), filters: { has_merge_id: req.query.has_merge_id } };
+      const opts = { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } };
       res.json({ ok: true, ...(await reviews.list_accounts(opts)) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
@@ -158,7 +173,7 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/accounts/export', require_auth, async function (req, res) {
-    try { await send_export(req, res, 'accounts', { ...page_opts(req), filters: { has_merge_id: req.query.has_merge_id } }); }
+    try { await send_export(req, res, 'accounts', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 };
