@@ -340,6 +340,63 @@ async function merge_group_account_ids(merge_id, query = real_query) {
   return (rows || []).map((r) => r.account).filter(Boolean);
 }
 
+// Resolve survivor + losers for every merge-id group matching a filter (q + bucket) or an explicit
+// list of merge ids. Survivor cascade (DB-only steps): 1) account whose Salesforce Id equals the
+// merge id; 2) lowest membership number among the group. Steps 3 (most children) and 4 (oldest)
+// need Salesforce, so bulk leaves those unresolvable for single review. Pure DB.
+async function resolve_merge_groups(opts = {}, query = real_query) {
+  const T = cfg.RESULT_MERGE_ID_REVIEW_TABLE;
+  const wheres = ["Salesforce_Merge_Id__c IS NOT NULL", "Salesforce_Merge_Id__c <> ''"];
+  const params = [];
+  const qstr = (opts.q == null ? '' : String(opts.q)).trim();
+  if (qstr) {
+    for (const tok of qstr.split(/\s+/).filter(Boolean)) {
+      wheres.push("(First_Name__c LIKE ? OR Last_Name__c LIKE ? OR Salesforce_Merge_Id__c LIKE ?)");
+      params.push("%" + tok + "%", "%" + tok + "%", "%" + tok + "%");
+    }
+  }
+  const bk = opts.bucket;
+  if (bk === "in_both" || bk === "sf_only") { wheres.push("Bucket__c = ?"); params.push(bk); }
+  else if (bk === "only_dupes") { wheres.push("Bucket__c NOT IN ('in_both', 'sf_only')"); }
+  const keys = Array.isArray(opts.keys) ? opts.keys.map(String).filter(Boolean) : null;
+  if (keys && keys.length) { wheres.push("Salesforce_Merge_Id__c IN (" + keys.map(() => "?").join(", ") + ")"); for (const k of keys) params.push(k); }
+  const where_sql = "WHERE " + wheres.join(" AND ");
+  const rows = await query("SELECT Salesforce_Merge_Id__c AS merge_id, Account__c AS account, First_Name__c AS first_name, Last_Name__c AS last_name FROM `" + T + "` " + where_sql, params);
+  const byId = new Map(); const allIds = new Set(); const nameMap = new Map();
+  for (const row of (rows || [])) {
+    if (!row.merge_id || !row.account) continue;
+    if (!byId.has(row.merge_id)) byId.set(row.merge_id, []);
+    byId.get(row.merge_id).push(row.account); allIds.add(row.account);
+    nameMap.set(row.account, ((row.first_name || '') + ' ' + (row.last_name || '')).trim());
+  }
+  const memMap = new Map(); const ids = [...allIds];
+  for (let k = 0; k < ids.length; k += 1000) {
+    const chunk = ids.slice(k, k + 1000);
+    const ph = chunk.map(() => "?").join(", ");
+    const mrows = await query("SELECT salesforce_account_id AS account, member_number FROM `" + cfg.SNAPSHOT_TABLE_NAME + "` WHERE salesforce_account_id IN (" + ph + ")", chunk);
+    for (const m of (mrows || [])) memMap.set(m.account, m.member_number);
+  }
+  const hasMem = (a) => { const v = memMap.get(a); return v != null && String(v).trim() !== ''; };
+  const out = [];
+  for (const [mid, accts] of byId) {
+    let survivor = accts.includes(mid) ? mid : null;
+    let rule = survivor ? 'merge_id' : null;
+    if (!survivor) {
+      const withMem = accts.filter(hasMem);
+      if (withMem.length) {
+        survivor = withMem.reduce((best, a) => {
+          const va = Number(memMap.get(a)); const vb = Number(memMap.get(best));
+          return (Number.isFinite(va) && (!Number.isFinite(vb) || va < vb)) ? a : best;
+        }, withMem[0]);
+        rule = 'member_number';
+      }
+    }
+    const losers = survivor ? accts.filter((a) => a !== survivor) : [];
+    out.push({ merge_id: mid, survivor, name: survivor ? (nameMap.get(survivor) || '') : '', losers, rule, resolvable: !!survivor && losers.length > 0 });
+  }
+  return out;
+}
+
 async function accounts_by_ids(ids, query = real_query) {
   const list = (ids || []).map((s) => String(s).trim()).filter(Boolean);
   if (!list.length) return [];
@@ -367,6 +424,6 @@ async function export_rows(view, opts = {}, query = real_query) {
 
 module.exports = {
   list_duplicates, list_merge_id, merge_id_summary, list_accounts, cluster_accounts, facets, export_rows,
-  list_merge_groups, merge_group_account_ids, accounts_by_ids,
+  list_merge_groups, merge_group_account_ids, accounts_by_ids, resolve_merge_groups,
   build_clauses, MAX_PAGE_SIZE, EXPORT_MAX, // exported for tests
 };

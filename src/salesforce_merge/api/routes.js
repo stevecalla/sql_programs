@@ -196,9 +196,23 @@ module.exports = function mount(app) {
     try {
       const b = req.body || {};
       const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key,
-        survivor_account: b.survivor_account, survivor_contact: b.survivor_contact,
+        survivor_account: b.survivor_account, survivor_contact: b.survivor_contact, survivor_name: b.survivor_name,
         loser_accounts: b.loser_accounts, master_rule: b.master_rule, notes: b.notes });
       res.status(201).json({ ok: true, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge-queue/bulk', require_auth, async function (req, res) {
+    try {
+      const b = req.body || {};
+      if (b.source !== 'merge_id') return res.status(400).json({ ok: false, error: 'bulk add is supported for the merge-id source only' });
+      const groups = await reviews.resolve_merge_groups({ q: b.q, bucket: b.bucket, keys: b.keys });
+      const CAP = 1000;
+      const resolvable = groups.filter((g) => g.resolvable);
+      const unresolved = groups.length - resolvable.length;
+      const capped = resolvable.length > CAP;
+      const entries = resolvable.slice(0, CAP).map((g) => ({ created_by: current_user(req), source_type: 'merge_id', source_key: g.merge_id, survivor_account: g.survivor, survivor_name: g.name, loser_accounts: g.losers, master_rule: g.rule || 'cascade' }));
+      const r = await mqueue.add_many(entries);
+      res.json({ ok: true, queued: r.queued, skipped: r.skipped, unresolved, total: groups.length, capped });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.delete('/api/merge-queue/:id', require_auth, async function (req, res) {

@@ -140,6 +140,35 @@ a { color: var(--accent); }
 /* merge queue: fixed columns with ellipsis so long ids/keys do not stretch the table */
 .mergeadmin .queue-fixed td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* sticky headers for the accounts + queue tables (opaque so rows scroll underneath) */
+.mergeadmin .acc-fixed thead th, .mergeadmin .queue-fixed thead th { position: sticky; top: 0; z-index: 2; background: var(--card); }
+
+/* collapsible card headers (Merge Admin) */
+.mergeadmin .collapse-btn { font: inherit; font-weight: 700; background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; }
+.mergeadmin .collapse-btn:hover { color: var(--accent); }
+
+/* account field comparison matrix: accounts down, fields across */
+/* border-collapse:separate is required for sticky header + frozen columns to work together (Chrome) */
+.mergeadmin .cmp-table { border-collapse: separate; border-spacing: 0; }
+.mergeadmin .cmp-table th, .mergeadmin .cmp-table td { min-width: 150px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.mergeadmin .cmp-table thead th { position: sticky; top: 0; z-index: 2; background: var(--card); }
+/* freeze the first three columns (#, Name, Account) when scrolling right */
+.mergeadmin .cmp-table th:nth-child(1), .mergeadmin .cmp-table td:nth-child(1) { position: sticky; left: 0; width: 44px; min-width: 44px; max-width: 44px; background: var(--card); z-index: 1; }
+.mergeadmin .cmp-table th:nth-child(2), .mergeadmin .cmp-table td:nth-child(2) { position: sticky; left: 44px; width: 180px; min-width: 180px; max-width: 180px; background: var(--card); z-index: 1; }
+.mergeadmin .cmp-table th:nth-child(3), .mergeadmin .cmp-table td:nth-child(3) { position: sticky; left: 224px; width: 170px; min-width: 170px; max-width: 170px; background: var(--card); z-index: 1; }
+.mergeadmin .cmp-table td:nth-child(2), .mergeadmin .cmp-table td:nth-child(3) { text-align: left; }
+/* frozen header corner cells: pin both top and left so the header tracks the frozen columns */
+.mergeadmin .cmp-table thead th:nth-child(1) { position: sticky !important; left: 0 !important; top: 0 !important; z-index: 4 !important; background: var(--card) !important; }
+.mergeadmin .cmp-table thead th:nth-child(2) { position: sticky !important; left: 44px !important; top: 0 !important; z-index: 4 !important; background: var(--card) !important; }
+.mergeadmin .cmp-table thead th:nth-child(3) { position: sticky !important; left: 224px !important; top: 0 !important; z-index: 4 !important; background: var(--card) !important; }
+/* master row frozen cells: layer the (translucent) highlight over the card so it stays opaque on scroll */
+.mergeadmin .cmp-table tr.row-sel td:nth-child(1), .mergeadmin .cmp-table tr.row-sel td:nth-child(2), .mergeadmin .cmp-table tr.row-sel td:nth-child(3) { background-color: var(--card); background-image: linear-gradient(var(--accent-soft), var(--accent-soft)); }
+
+/* rail bulk select (Merge Admin merge-id source) */
+.ma-cluster-row { display: flex; align-items: center; gap: 6px; }
+.ma-bulk { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ma-bulk-all { font-size: 12px; color: var(--dim); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+
 /* compact export controls: a small label + lightweight text links instead of bordered buttons */
 .dl-group { display: inline-flex; align-items: center; gap: 10px; }
 .dl-link { font-size: 12px; color: var(--link); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }

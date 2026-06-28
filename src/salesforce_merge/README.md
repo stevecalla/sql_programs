@@ -160,3 +160,12 @@ them in a queue. Read-only against Salesforce — nothing here executes a merge 
 executor). `store/cluster_detail.js` takes a `kind` (`merge_id` | `group`) so detail/children/preview
 work for either source. The Caveats card documents the SFMC/external-system gap and how a Salesforce
 `Database.merge` actually runs.
+
+### Bulk queueing (merge-id source)
+
+On the **Accounts with merge ids** source, the rail has a checkbox per group plus a "Page" select-all and
+(when a filter is active) a "Select all N matching" option. **Add selected** queues every chosen group in
+one batched call: the survivor is the merge id itself (no Salesforce fetch needed), losers are the rest,
+and groups without a clear survivor are skipped and reported. Backed by `reviews.resolve_merge_groups`
+(pure DB), `merge_queue.add_many` (dedupe-aware), and `POST /api/merge-queue/bulk` (capped at 1000). Bulk
+is merge-id-only because that survivor is unambiguous; Duplicate groups still queue one at a time.

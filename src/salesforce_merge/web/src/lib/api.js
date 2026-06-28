@@ -43,6 +43,7 @@ export const api = {
   mergeQueue: () => req('/api/merge-queue'),
   mergeQueueAdd: (entry) => req('/api/merge-queue', { method: 'POST', body: JSON.stringify(entry) }),
   mergeQueueRemove: (id) => req('/api/merge-queue/' + encodeURIComponent(id), { method: 'DELETE' }),
+  mergeQueueBulk: (payload) => req('/api/merge-queue/bulk', { method: 'POST', body: JSON.stringify(payload) }),
   refreshStart: (env, scope, job) => req('/api/refresh/start', { method: 'POST', body: JSON.stringify({ env, scope, job }) }),
   refreshStatus: () => req('/api/refresh/status'),
   refreshCancel: () => req('/api/refresh/cancel', { method: 'POST' }),

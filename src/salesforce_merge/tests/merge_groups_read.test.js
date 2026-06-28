@@ -47,3 +47,23 @@ test('accounts_by_ids builds an IN list and skips when empty', async () => {
   assert.equal(out.length, 1);
   assert.ok(f.calls.some((c) => /IN \(\?, \?\)/.test(c.sql)));
 });
+
+test('resolve_merge_groups cascade: merge-id match, else lowest member #, else unresolvable', async () => {
+  const query = async (sql) => {
+    if (/salesforce_account_id/i.test(sql)) return [
+      { account: 'X', member_number: '500' }, { account: 'Y', member_number: '200' },
+    ];
+    return [
+      { merge_id: 'M1', account: 'M1' }, { merge_id: 'M1', account: 'A' },
+      { merge_id: 'M2', account: 'X' }, { merge_id: 'M2', account: 'Y' },
+      { merge_id: 'M3', account: 'P' }, { merge_id: 'M3', account: 'Q' },
+    ];
+  };
+  const out = await r.resolve_merge_groups({}, query);
+  const m1 = out.find((g) => g.merge_id === 'M1');
+  const m2 = out.find((g) => g.merge_id === 'M2');
+  const m3 = out.find((g) => g.merge_id === 'M3');
+  assert.equal(m1.survivor, 'M1'); assert.equal(m1.rule, 'merge_id'); assert.deepEqual(m1.losers, ['A']);
+  assert.equal(m2.survivor, 'Y'); assert.equal(m2.rule, 'member_number'); assert.deepEqual(m2.losers, ['X']);
+  assert.equal(m3.survivor, null); assert.equal(m3.resolvable, false);
+});

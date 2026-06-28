@@ -3,6 +3,7 @@
 // Salesforce write: it only records intent (survivor + losers + provenance) in a NEW local table
 // so Phase 3 can later process the queue behind the write chokepoint. `query` is injectable for tests.
 const { query: real_query } = require('./db');
+const cfg = require('../../salesforce_duplicates/config');
 
 const TABLE = 'salesforce_merge_queue';
 
@@ -15,6 +16,7 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' source_key TEXT NOT NULL,' +                  // cluster key or merge id
   ' survivor_account VARCHAR(32) NOT NULL,' +
   ' survivor_contact VARCHAR(32),' +
+  ' survivor_name VARCHAR(255),' +
   ' loser_accounts TEXT NOT NULL,' +              // ';'-joined account ids
   ' loser_count INT NOT NULL DEFAULT 0,' +
   ' master_rule VARCHAR(60),' +                   // how the survivor was chosen
@@ -23,7 +25,7 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ')';
 
 const COLS = 'id, created_at, created_by, source_type, source_key, survivor_account, ' +
-  'survivor_contact, loser_accounts, loser_count, master_rule, status, notes';
+  'survivor_contact, survivor_name, loser_accounts, loser_count, master_rule, status, notes';
 
 function as_losers(v) {
   if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
@@ -36,6 +38,7 @@ async function ensure_table(query = real_query) {
   await query(DDL, []);
   // widen source_key on pre-existing tables created as VARCHAR(255) (idempotent; ignore failures)
   try { await query('ALTER TABLE `' + TABLE + '` MODIFY source_key TEXT NOT NULL', []); } catch (e) { /* ok */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN survivor_name VARCHAR(255)', []); } catch (e) { /* exists */ }
   _ensured = true;
 }
 
@@ -54,18 +57,22 @@ async function add(entry, query = real_query) {
   }
   const res = await query(
     'INSERT INTO `' + TABLE + '` (created_by, source_type, source_key, survivor_account, ' +
-    'survivor_contact, loser_accounts, loser_count, master_rule, status, notes) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'survivor_contact, loser_accounts, loser_count, master_rule, status, notes, survivor_name) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [entry.created_by || null, entry.source_type || 'group', String(entry.source_key || ''),
      String(entry.survivor_account || ''), entry.survivor_contact || null,
-     losers.join(';'), losers.length, entry.master_rule || null, 'queued', entry.notes || null]);
+     losers.join(';'), losers.length, entry.master_rule || null, 'queued', entry.notes || null, entry.survivor_name || null]);
   return { id: (res && res.insertId) || null, loser_count: losers.length };
 }
 
 async function list(query = real_query) {
   await ensure_table(query);
-  const rows = await query('SELECT ' + COLS + ' FROM `' + TABLE + '` ORDER BY id DESC', []);
-  return rows || [];
+  const rows = await query(
+    'SELECT q.*, ' +
+    "TRIM(CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, ''))) AS snapshot_name " +
+    'FROM `' + TABLE + '` q LEFT JOIN `' + cfg.SNAPSHOT_TABLE_NAME + '` s ON s.salesforce_account_id = q.survivor_account ' +
+    'ORDER BY q.id DESC', []);
+  return (rows || []).map((r) => ({ ...r, survivor_name: r.survivor_name || r.snapshot_name || '' }));
 }
 
 async function remove(id, query = real_query) {
@@ -74,4 +81,15 @@ async function remove(id, query = real_query) {
   return { ok: true };
 }
 
-module.exports = { add, list, remove, ensure_table, as_losers, TABLE, DDL };
+// Bulk add — insert many entries, skipping ones already queued (dedup by source_key + survivor).
+async function add_many(entries, query = real_query) {
+  await ensure_table(query);
+  let queued = 0, skipped = 0;
+  for (const e of (entries || [])) {
+    try { await add(e, query); queued += 1; }
+    catch (err) { if (err && err.code === "DUPLICATE") skipped += 1; else throw err; }
+  }
+  return { queued, skipped };
+}
+
+module.exports = { add, add_many, list, remove, ensure_table, as_losers, TABLE, DDL };

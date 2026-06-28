@@ -50,8 +50,25 @@ test('list selects newest first; remove deletes by id', async () => {
   const f = fake();
   const rows = await q.list(f.query);
   assert.equal(rows.length, 1);
-  assert.ok(f.calls.some((c) => /ORDER BY id DESC/i.test(c.sql)));
+  assert.ok(f.calls.some((c) => /ORDER BY q\.id DESC/i.test(c.sql)));
   await q.remove(7, f.query);
   const del = f.calls.find((c) => /^DELETE/i.test(c.sql));
   assert.equal(del.params[0], 7);
+});
+
+test('add_many queues each entry and counts duplicates as skipped', async () => {
+  const calls = [];
+  const query = async (sql, params) => {
+    calls.push({ sql, params });
+    if (/^INSERT/i.test(sql)) return { insertId: 1 };
+    if (/WHERE source_key = \? AND survivor_account/i.test(sql)) return (params[1] === 'DUP') ? [{ id: 1 }] : [];
+    return {};
+  };
+  const r = await q.add_many([
+    { source_key: 'M1', survivor_account: 'A', loser_accounts: ['B'] },
+    { source_key: 'M2', survivor_account: 'DUP', loser_accounts: ['C'] },
+    { source_key: 'M3', survivor_account: 'E', loser_accounts: ['F'] },
+  ], query);
+  assert.equal(r.queued, 2);
+  assert.equal(r.skipped, 1);
 });
