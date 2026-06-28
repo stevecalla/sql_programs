@@ -30,7 +30,7 @@ app.use('/', recognition_history_routes);
 // curl http://localhost:8006/recognition-test
 // https://usat-recognition.kidderwise.org/recognition-test
 app.get('/recognition-test', async (req, res) => {
-    console.log('/recognition-test route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/recognition-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response

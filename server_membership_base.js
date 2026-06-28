@@ -15,7 +15,7 @@ app.use(bodyParser.json());
 // Test endpoint
 // curl https://usat-members.kidderwise.org/membership-test
 app.get('/membership-test', async (req, res) => {
-    console.log('/membership-test route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/membership-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response

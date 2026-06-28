@@ -25,7 +25,7 @@ app.use(bodyParser.json());
 
 // Test endpoint
 app.get('/slack-races-test', async (req, res) => {
-    console.log('/slack-races-test route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/slack-races-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response

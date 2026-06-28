@@ -16,7 +16,7 @@ app.use(bodyParser.json());
 // curl http://localhost:8014/auto-renew-test
 // curl https://usat-auto-renew.kidderwise.org/auto-renew-test
 app.get('/auto-renew-test', async (req, res) => {
-    console.log('/auto-renew-test route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/auto-renew-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response
