@@ -20,7 +20,7 @@ app.use(bodyParser.json());
 // Test endpoint
 // curl http://localhost:8003/scheduled-all-sales-test
 app.get('/scheduled-all-sales-test', async (req, res) => {
-    console.log('/scheduled_all_sales-test route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/scheduled_all_sales-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response

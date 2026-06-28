@@ -33,7 +33,7 @@ app.use(bodyParser.json());
 
 // Test endpoint
 app.get('/slack-events-test', async (req, res) => {
-    console.log('/slack-events-test route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/slack-events-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response

@@ -14,7 +14,7 @@ app.use(bodyParser.json());
 
 // Test endpoint
 app.get('/participation-test', async (req, res) => {
-    console.log('/participation-test route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/participation-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response
