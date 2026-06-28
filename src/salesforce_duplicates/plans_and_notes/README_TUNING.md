@@ -191,3 +191,27 @@ node --test tests/sweep.test.js
 The engine is pure and fully unit-tested (grid expansion, the funnel/signal counts,
 threshold/nickname/rule-field behavior, and the pair-level diff). Tests never touch
 Salesforce or any output folder.
+
+## Merge console — Tuning panel (review-only UI)
+
+The sweep now also writes one row per profile to the DB table
+`salesforce_duplicate_sweep_profile` (drop + recreate each `run`, alongside the
+`salesforce_duplicate_*` result tables), so the merge console can show the results without
+re-reading the CSV. Each row carries the criteria (`fuzzy_threshold`, `nickname_enabled`,
+`rule_fields`, `zip_trim_len`) plus the counts the panel needs: `total_records`,
+`accounts_in_clusters`, `duplicate_pairs`, `exact_pairs`, `fuzzy_pairs`, `nickname_pairs`,
+`consolidated_clusters`, and the by-signal cluster composition `comp_exact / comp_fuzzy /
+comp_nickname / comp_multi` (mirrors the dashboard's exact/fuzzy/nickname/multi split). The
+baseline (production-equivalent) profile is `ordinal = 0`, `is_baseline = 1`.
+
+In the merge tool:
+- **Process page → "Run tuning sweep"** runs the sweep *replay-only* (`sweep_duplicates.js run`)
+  over the snapshot already loaded — read-only, no Salesforce fetch, and it does NOT touch the
+  shared `salesforce_account_duplicate_snapshot`. (If no snapshot exists yet, it errors; take one
+  via the finder first.)
+- **Tuning page** reads `/api/tuning` (latest profiles) and shows the baseline funnel, the selected
+  profile's funnel (with deltas vs. baseline), and a sortable/searchable table of every profile's
+  clusters by signal plus duplicate-account totals. Clicking a row loads it into the funnel.
+
+Tests: `tests/sweep_profile.test.js` (run_profile composition + `write_sweep_profiles`),
+plus `src/salesforce_merge/tests/tuning_read.test.js` and `reviews_filters.test.js`.

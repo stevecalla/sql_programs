@@ -121,5 +121,14 @@ Server-side paging/search/sort lives in `store/reviews_read.js` (whitelisted sor
 search params, `LIMIT/OFFSET`, totals) — safe for the ~700k-row snapshot. `DataTable` gained a
 server `fetcher` mode (pager + remote sort/search) alongside its in-memory mode.
 
-Nothing here can change Salesforce. Next phases: dry-run preview, then sandboxed execute + history,
-then restore. See `plans_and_notes/README_MERGE_TOOL.md`.
+Nothing here can change Salesforce.
+## Tuning panel (criteria what-if)
+
+The **Tuning** page (rail group "Analyze") reviews the duplicate-criteria **sweep**: it shows the
+baseline funnel, a selected profile's funnel with deltas, and a sortable table of every profile's
+clusters by signal (exact / fuzzy / nickname / multi) plus duplicate-account totals. Data comes
+read-only from `salesforce_duplicate_sweep_profile` (`/api/tuning`).
+
+To populate it, run the sweep from the **Process** page ("Run tuning sweep") — replay-only over the
+snapshot already loaded (no Salesforce fetch, no change to the shared snapshot). See
+`../salesforce_duplicates/plans_and_notes/README_TUNING.md`.

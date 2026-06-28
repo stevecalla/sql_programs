@@ -441,3 +441,20 @@ Created_At_Utc__c
 ```
 
 This makes timestamp auditing consistent across all outputs.
+
+## salesforce_duplicate_sweep_profile (tuning sweep)
+
+Written by `sweep_duplicates.js run` (drop + recreate each run); one row per criteria profile,
+consumed read-only by the merge console's Tuning panel.
+
+| column | meaning |
+|---|---|
+| run_id, ordinal | sweep run id; ordinal 0 = baseline |
+| label | profile label, e.g. `t88_nickON_z5_gbz` |
+| is_baseline | 1 for today's production-equivalent criteria |
+| fuzzy_threshold, nickname_enabled, rule_fields, zip_trim_len | the criteria |
+| total_records | accounts in the snapshot |
+| accounts_in_clusters | duplicate accounts (sum of cluster sizes) |
+| duplicate_pairs, exact_pairs, fuzzy_pairs, nickname_pairs | matched-pair counts |
+| consolidated_clusters | total clusters |
+| comp_exact, comp_fuzzy, comp_nickname, comp_multi | clusters by composition (sum = consolidated_clusters) |

@@ -15,6 +15,7 @@ const { require_auth, require_admin } = require('../auth/require_auth');
 const dashboard = require('../store/duplicates_read');
 const reviews = require('../store/reviews_read');
 const refresh = require('../store/refresh_runner');
+const cluster = require('../store/cluster_detail');
 
 module.exports = function mount(app) {
   app.get('/api/status', function (req, res) {
@@ -149,6 +150,16 @@ module.exports = function mount(app) {
       const safe = String(req.query.key || 'group').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
       await write_rows(req, res, accounts, 'cluster_' + safe + '_' + new Date().toISOString().slice(0, 10), 'cluster');
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  // Phase 2 — read-only deep detail (live Salesforce, snapshot fallback) + dry-run merge preview.
+  app.get('/api/cluster/detail', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await cluster.cluster_detail(req.query.key)) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/cluster/preview', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await cluster.cluster_preview(req.query.key, req.query.survivor)) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
   app.get('/api/merge-id', require_auth, async function (req, res) {
