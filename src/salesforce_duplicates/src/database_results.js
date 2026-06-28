@@ -175,10 +175,46 @@ async function write_all_result_tables(executor, sets = {}) {
     return counts;
 }
 
+// --- Tuning sweep: one row per criteria profile (review-only; consumed by the merge console) ---
+// Drop + recreate each sweep run, like the other result tables. `results` is the array of
+// run_profile() outputs ({ criteria, counts }); the baseline is first.
+async function write_sweep_profiles(executor, table, run_id, results, { batch_size = RESULT_INSERT_BATCH_SIZE } = {}) {
+    await executor('DROP TABLE IF EXISTS `' + table + '`', []);
+    await executor(
+        'CREATE TABLE `' + table + '` (\n' +
+        '  run_id VARCHAR(64), ordinal INT, label VARCHAR(120), is_baseline TINYINT,\n' +
+        '  fuzzy_threshold INT, nickname_enabled TINYINT, rule_fields VARCHAR(120), zip_trim_len INT,\n' +
+        '  total_records INT, accounts_in_clusters INT, duplicate_pairs INT, exact_pairs INT,\n' +
+        '  fuzzy_pairs INT, nickname_pairs INT, consolidated_clusters INT,\n' +
+        '  comp_exact INT, comp_fuzzy INT, comp_nickname INT, comp_multi INT\n' +
+        ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4', []);
+    if (!results || results.length === 0) return 0;
+    const cols = ['run_id', 'ordinal', 'label', 'is_baseline', 'fuzzy_threshold', 'nickname_enabled',
+        'rule_fields', 'zip_trim_len', 'total_records', 'accounts_in_clusters', 'duplicate_pairs',
+        'exact_pairs', 'fuzzy_pairs', 'nickname_pairs', 'consolidated_clusters',
+        'comp_exact', 'comp_fuzzy', 'comp_nickname', 'comp_multi'];
+    const rows = results.map((r, i) => {
+        const c = r.criteria; const k = r.counts;
+        return [run_id, i, c.label, c.is_baseline ? 1 : 0, c.fuzzy_threshold, c.nickname_enabled ? 1 : 0,
+            (c.rule_fields || []).join('+'), c.zip_trim_len, k.total_records, k.accounts_in_clusters, k.match_pairs,
+            k.exact_pairs, k.fuzzy_pairs, k.nickname_pairs, k.consolidated_clusters,
+            k.comp_exact, k.comp_fuzzy, k.comp_nickname, k.comp_multi];
+    });
+    const placeholder = '(' + cols.map(() => '?').join(', ') + ')';
+    const col_list = cols.map((c) => '`' + c + '`').join(', ');
+    for (let i = 0; i < rows.length; i += batch_size) {
+        const batch = rows.slice(i, i + batch_size);
+        await executor('INSERT INTO `' + table + '` (' + col_list + ') VALUES ' + batch.map(() => placeholder).join(', '),
+            batch.flat());
+    }
+    return rows.length;
+}
+
 module.exports = {
     RUN_COLUMNS,
     write_result_table,
     write_all_result_tables,
+    write_sweep_profiles,
     create_run_table_sql,
     ensure_run_table,
     run_row_params,

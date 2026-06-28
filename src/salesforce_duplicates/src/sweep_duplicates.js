@@ -26,10 +26,10 @@ dotenv.config({ path: path.join(__dirname, '../../../.env') });
 const fs = require('fs');
 
 const { resolve_is_test, resolve_is_full, resolve_is_partial, resolve_fetch_plan,
-        TUNING_DIR_NAME, SWEEP_SUMMARY_FILE, DEFAULT_SWEEP_GRID, DB_LOAD_PROGRESS_EVERY } = require('../config');
+        TUNING_DIR_NAME, SWEEP_SUMMARY_FILE, DEFAULT_SWEEP_GRID, DB_LOAD_PROGRESS_EVERY, RESULT_SWEEP_PROFILE_TABLE } = require('../config');
 const { fetch_salesforce_accounts } = require('./salesforce');
 const { open_local_executor, load_snapshot, read_records, count_rows } = require('./database_snapshot');
-const { write_run, read_latest_run } = require('./database_results');
+const { write_run, read_latest_run, write_sweep_profiles } = require('./database_results');
 const { make_run_id } = require('./ids');
 const { colorize, log_info } = require('./log');
 const { create_directory } = require('../../../utilities/createDirectory');
@@ -147,6 +147,7 @@ async function cmd_snapshot(argv) {
             run_at: new Date().toISOString(),
             total_records_scanned: loaded,
             salesforce_total_size: result.totalSize,
+            run_seconds: Math.round((Date.now() - script_start_ms) / 1000),
             // detection counts are null for a snapshot-only run
         });
     } finally {
@@ -163,6 +164,7 @@ async function cmd_snapshot(argv) {
 // ---------- run ----------
 
 async function cmd_run(argv) {
+    const cmd_start_ms = Date.now();
     const { meta, records } = await read_snapshot();
     const { grid, source } = resolve_grid(argv);
     const profiles = expand_grid(grid);
@@ -229,9 +231,10 @@ async function cmd_run(argv) {
     // not fail the sweep.
     try {
         const { pool, executor } = await open_local_executor();
+        const sweep_run_id = make_run_id(new Date());
         try {
             await write_run(executor, {
-                run_id: make_run_id(new Date()),
+                run_id: sweep_run_id,
                 run_type: 'sweep',
                 mode: meta.mode,
                 is_full: meta.is_full,
@@ -239,12 +242,15 @@ async function cmd_run(argv) {
                 run_at: new Date().toISOString(),
                 total_records_scanned: meta.record_count,
                 salesforce_total_size: meta.salesforce_total_size,
+                run_seconds: Math.round((Date.now() - cmd_start_ms) / 1000),
                 exact_duplicate_groups: baseline.counts.exact_groups,
                 fuzzy_pair_matches: baseline.counts.fuzzy_pairs,
                 nickname_pair_matches: baseline.counts.nickname_pairs,
                 consolidated_clusters: baseline.counts.consolidated_clusters,
             });
-            console.log(colorize('gray', 'Sweep run logged to salesforce_duplicate_detection_run.'));
+            // one row per profile for the merge console's Tuning panel (review-only)
+            await write_sweep_profiles(executor, RESULT_SWEEP_PROFILE_TABLE, sweep_run_id, results);
+            console.log(colorize('gray', 'Sweep run + ' + results.length + ' profiles written to the database.'));
         } finally {
             try { pool.end(); } catch (_) { /* ignore */ }
         }

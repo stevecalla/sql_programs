@@ -128,4 +128,19 @@ async function recent_runs(limit = 12, query = real_query) {
   }));
 }
 
-module.exports = { dashboard_counts, dataset_info, recent_runs };
+// Tuning sweep profiles (latest sweep run) for the Tuning panel — baseline first, then by ordinal.
+async function sweep_profiles(query = real_query) {
+  const safe = async (sql) => { try { return await query(sql); } catch (e) { return null; } };
+  const rows = await safe('SELECT * FROM `' + cfg.RESULT_SWEEP_PROFILE_TABLE + '` ORDER BY is_baseline DESC, ordinal ASC');
+  if (!rows) return { profiles: [] };
+  const numKeys = ['fuzzy_threshold', 'zip_trim_len', 'total_records', 'accounts_in_clusters', 'duplicate_pairs',
+    'exact_pairs', 'fuzzy_pairs', 'nickname_pairs', 'consolidated_clusters', 'comp_exact', 'comp_fuzzy', 'comp_nickname', 'comp_multi'];
+  const profiles = rows.map((r) => {
+    const o = { label: r.label, is_baseline: !!Number(r.is_baseline), nickname_enabled: !!Number(r.nickname_enabled), rule_fields: r.rule_fields };
+    for (const k of numKeys) o[k] = r[k] == null ? null : Number(r[k]);
+    return o;
+  });
+  return { profiles };
+}
+
+module.exports = { dashboard_counts, dataset_info, recent_runs, sweep_profiles };

@@ -27,6 +27,7 @@ export const api = {
   dashboard: () => req('/api/dashboard'),
   dataset: () => req('/api/dataset'),
   runs: () => req('/api/runs'),
+  tuning: () => req('/api/tuning'),
   status: () => req('/api/status'),
   duplicates: (p) => req('/api/duplicates' + qs(expand(p))),
   mergeId: (p) => req('/api/merge-id' + qs(expand(p))),
@@ -35,7 +36,7 @@ export const api = {
   duplicatesFacets: () => req('/api/duplicates/facets'),
   mergeIdFacets: () => req('/api/merge-id/facets'),
   accountsFacets: () => req('/api/accounts/facets'),
-  refreshStart: (env, scope) => req('/api/refresh/start', { method: 'POST', body: JSON.stringify({ env, scope }) }),
+  refreshStart: (env, scope, job) => req('/api/refresh/start', { method: 'POST', body: JSON.stringify({ env, scope, job }) }),
   refreshStatus: () => req('/api/refresh/status'),
   refreshCancel: () => req('/api/refresh/cancel', { method: 'POST' }),
 };

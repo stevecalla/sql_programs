@@ -189,12 +189,22 @@ function run_profile(records, criteria, { namer } = {}) {
         if (e.nickname === 1) s.nick += 1;
         root_signals.set(root, s);
     }
+    // composition (mirrors the dashboard's exact/fuzzy/nickname/multi cluster split) + cluster size
+    const comp = { exact: 0, fuzzy: 0, nickname: 0, multi: 0 };
+    let accounts_in_clusters = 0;
     for (const ids of cluster_ids) {
+        accounts_in_clusters += ids.length;
         const s = root_signals.get(uf.find(ids[0])) || { exact: 0, fuzzy: 0, nick: 0 };
         if (s.exact > 0) tier.exact += 1;
         else if (s.fuzzy > 0) tier.fuzzy += 1;
         else tier.nickname += 1;
+        const present = (s.exact > 0 ? 1 : 0) + (s.fuzzy > 0 ? 1 : 0) + (s.nick > 0 ? 1 : 0);
+        if (present > 1) comp.multi += 1;
+        else if (s.exact > 0) comp.exact += 1;
+        else if (s.fuzzy > 0) comp.fuzzy += 1;
+        else comp.nickname += 1;
     }
+    const exact_pairs = edges.reduce((acc, e) => acc + (e.type === 'exact' ? 1 : 0), 0);
 
     return {
         label: criteria.label,
@@ -210,9 +220,16 @@ function run_profile(records, criteria, { namer } = {}) {
             nickname_only,
             nickname_both,
             consolidated_clusters: cluster_ids.length,
+            accounts_in_clusters,
+            match_pairs: edges.length,
+            exact_pairs,
             tier_exact: tier.exact,
             tier_fuzzy: tier.fuzzy,
             tier_nickname: tier.nickname,
+            comp_exact: comp.exact,
+            comp_fuzzy: comp.fuzzy,
+            comp_nickname: comp.nickname,
+            comp_multi: comp.multi,
             pairs_compared,
         },
         edges,

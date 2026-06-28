@@ -113,6 +113,9 @@ a { color: var(--accent); }
 .fade-in { animation: fade-in .22s ease-out; }
 /* row-number column (all tables) */
 .dt-rownum { color: var(--dim); font-variant-numeric: tabular-nums; width: 1%; white-space: nowrap; }
+/* highlighted rows (e.g. Tuning baseline / selected profile) */
+.datatable tr.row-base td { background: var(--accent-soft); }
+.datatable tr.row-sel td { background: rgba(127,127,127,.16); }
 
 /* dashboard: funnel + by-signal table + definitions */
 .statlink { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
@@ -188,7 +191,7 @@ a { color: var(--accent); }
 /* data table (shared kit) */
 .datatable { overflow-x: auto; }
 .dt-scroll { overflow: auto; }
-.dt-scroll thead th { position: sticky; top: 0; background: var(--card); z-index: 2; }
+.dt-scroll thead tr:first-child th { position: sticky; top: 0; z-index: 3; background: var(--card); }
 .dt-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .dt-count { margin-left: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .dt-filter-btn.on { border-color: var(--accent); color: var(--accent); }
@@ -221,7 +224,7 @@ a { color: var(--accent); }
 .ds-sandbox { background: var(--green-bg); color: var(--green); border-color: transparent; }
 .ds-scope { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .ds-size { background: var(--card); color: var(--ink); font-variant-numeric: tabular-nums; }
-.proc-log { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: 11.5px; color: var(--dim); white-space: pre-wrap; max-height: 160px; overflow: auto; margin: 0; }
+.proc-log { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: 11.5px; color: var(--dim); white-space: pre-wrap; height: 220px; min-height: 120px; max-height: 75vh; overflow: auto; resize: vertical; margin: 0; }
 .activity { display: flex; flex-direction: column; gap: 6px; }
 .activity-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .activity-row:last-child { border-bottom: 0; }

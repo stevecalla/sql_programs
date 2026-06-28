@@ -58,6 +58,17 @@ describe('start / status / lock', () => {
     assert.equal(s.run.exit_code, 0);
   });
 
+  test('sweep job replays the grid over the current snapshot (no new snapshot)', () => {
+    const spawned = [];
+    const spawn = (cmd, args) => { spawned.push(args); return fake_child(); };
+    const r = refresh.start({ env: 'sandbox', scope: 'full', job: 'sweep' }, spawn);
+    assert.equal(r.ok, true);
+    assert.equal(spawned.length, 1);                 // single child: just the replay
+    assert.equal(spawned[0][0], refresh.SWEEP);
+    assert.equal(spawned[0][1], 'run');
+    assert.ok(!spawned[0].includes('snapshot'));     // does NOT re-snapshot
+  });
+
   test('cancel kills the child when running, errors otherwise', () => {
     assert.equal(refresh.cancel().ok, false);          // nothing running
     let child = null;

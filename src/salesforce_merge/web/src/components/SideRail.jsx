@@ -10,6 +10,7 @@ const GROUPS = [
     { to: '/accounts', label: 'All accounts' },
   ] },
   { grp: 'Operate', items: [{ to: '/process', label: 'Process' }] },
+  { grp: 'Analyze', items: [{ to: '/tuning', label: 'Tuning' }] },
   { grp: 'Admin', items: [
     { to: '/metrics', label: 'Metrics' },
     { to: '/admin', label: 'Admin' },

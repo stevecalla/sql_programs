@@ -9,7 +9,7 @@ const fmtDur = (s) => (s == null ? '—' : (s < 60 ? `${s}s` : `${Math.floor(s /
 
 // Activity table columns — sortable, filterable, each with a header tooltip.
 const ACTIVITY_COLUMNS = [
-  { key: 'run_type', label: 'Type', sort: true, filter: true, help: 'What ran: finder (full detection) or snapshot (data load only).' },
+  { key: 'run_type', label: 'Type', sort: true, filter: true, help: 'What ran: finder (full detection), snapshot (data load), or sweep (criteria tuning).' },
   { key: 'environment', label: 'Environment', sort: true, filter: true, help: 'Which Salesforce environment the run pulled from.',
     render: (r) => <span className={'ds-badge ' + (r.environment === 'Production' ? 'ds-prod' : 'ds-sandbox')}>{r.environment || '—'}</span> },
   { key: 'scope', label: 'Scope', sort: true, filter: true, help: 'Full = all records · Sample = capped subset.' },
@@ -79,6 +79,8 @@ export default function Process() {
 
   const running = status && status.running;
   const run = status && status.run;
+  const finderRunning = running && run && run.job !== 'sweep';   // default/legacy = finder
+  const sweepRunning = running && run && run.job === 'sweep';
 
   const start = async () => {
     setErr('');
@@ -87,6 +89,13 @@ export default function Process() {
       if (typed !== 'CONFIRM') return;
     }
     try { await api.refreshStart(env, scope); await poll(); }
+    catch (e) { setErr(e.message); }
+  };
+  // Replay-only: runs the criteria grid over the snapshot already loaded (read-only, no fetch),
+  // so it doesn't re-pull Salesforce or touch the shared snapshot. Env/scope don't apply here.
+  const startSweep = async () => {
+    setErr('');
+    try { await api.refreshStart(env, scope, 'sweep'); await poll(); }
     catch (e) { setErr(e.message); }
   };
   const cancel = async () => { try { await api.refreshCancel(); await poll(); } catch (e) { setErr(e.message); } };
@@ -104,33 +113,52 @@ export default function Process() {
       <DatasetStamp />
       {err && <p className="err">{err}</p>}
 
-      <div className="card" style={{ margin: '12px 0' }}>
-        <div className="grid" style={{ marginBottom: 8 }}>
-          <div>
-            <p className="muted small" style={{ margin: '0 0 4px' }}>Environment</p>
-            <Seg value={env} set={setEnv} options={[{ v: 'sandbox', label: 'Sandbox' }, { v: 'production', label: 'Production' }]} />
+      <div style={{ display: 'flex', gap: 12, margin: '12px 0', flexWrap: 'wrap', alignItems: 'stretch' }}>
+        <div className="card" style={{ flex: '2 1 380px', margin: 0 }}>
+          <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Duplicate detection</p>
+          <p className="muted small" style={{ margin: '0 0 8px' }}>Fetch records and rebuild the duplicate / merge-ID tables for the chosen environment and scope.</p>
+          <div className="grid" style={{ marginBottom: 8 }}>
+            <div>
+              <p className="muted small" style={{ margin: '0 0 4px' }}>Environment</p>
+              <Seg value={env} set={setEnv} options={[{ v: 'sandbox', label: 'Sandbox' }, { v: 'production', label: 'Production' }]} />
+            </div>
+            <div>
+              <p className="muted small" style={{ margin: '0 0 4px' }}>Scope</p>
+              <Seg value={scope} set={setScope} options={[{ v: 'sample', label: 'Sample' }, { v: 'full', label: 'Full' }]} />
+            </div>
           </div>
-          <div>
-            <p className="muted small" style={{ margin: '0 0 4px' }}>Scope</p>
-            <Seg value={scope} set={setScope} options={[{ v: 'sample', label: 'Sample' }, { v: 'full', label: 'Full' }]} />
+          <p className="muted small" style={{ fontFamily: 'monospace' }}>
+            node step_1_find_duplicates.js {flagsLabel(env, scope)}
+          </p>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8 }}>
+            <button className="btn primary" style={{ width: 'auto' }} disabled={running} onClick={start}>
+              {finderRunning ? 'Running…' : 'Run duplicate detection'}
+            </button>
+            {finderRunning && <button className="btn" onClick={cancel}>Cancel run</button>}
+            <span className="muted small">Admin only · one run at a time · production needs confirmation</span>
           </div>
         </div>
-        <p className="muted small" style={{ fontFamily: 'monospace' }}>
-          node step_1_find_duplicates.js {flagsLabel(env, scope)}
-        </p>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8 }}>
-          <button className="btn primary" style={{ width: 'auto' }} disabled={running} onClick={start}>
-            {running ? 'Running…' : 'Run duplicate detection'}
-          </button>
-          {running && <button className="btn" onClick={cancel}>Cancel run</button>}
-          <span className="muted small">Admin only · one run at a time · production needs confirmation</span>
+
+        <div className="card" style={{ flex: '1 1 280px', margin: 0, display: 'flex', flexDirection: 'column' }}>
+          <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Tuning sweep</p>
+          <p className="muted small" style={{ margin: '0 0 8px' }}>
+            Replays detection across many criteria combinations (fuzzy threshold, nicknames on/off, with/without ZIP)
+            over the snapshot already loaded — read-only, no Salesforce fetch. Builds the <strong>Tuning</strong> page.
+          </p>
+          <p className="muted small" style={{ margin: '0 0 10px' }}>No environment / scope needed — it uses the current snapshot.</p>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 'auto' }}>
+            <button className="btn primary" style={{ width: 'auto' }} disabled={running} onClick={startSweep}>
+              {sweepRunning ? 'Running…' : 'Run tuning sweep'}
+            </button>
+            {sweepRunning && <button className="btn" onClick={cancel}>Cancel run</button>}
+          </div>
         </div>
       </div>
 
       <div className="card" style={{ margin: '12px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <strong>{!run ? 'Progress' : (running ? 'Running' : (run.error ? 'Failed' : (run.exit_code === 0 ? 'Completed' : 'Finished')))}</strong>
-          {run && <span className="muted small">{run.env} · {run.scope} · {run.mode}</span>}
+          {run && <span className="muted small">{run.env} · {run.scope} · {run.mode}{run.job ? ' · ' + run.job : ''}</span>}
           {running && <span className="dt-loading" style={{ marginLeft: 'auto' }}><span className="spinner" /> {mmss(elapsed)} elapsed</span>}
           {run && !running && run.finished_at && <span className="muted small" style={{ marginLeft: 'auto' }}>took {mmss(ranSecs)} · exit {String(run.exit_code)}</span>}
         </div>

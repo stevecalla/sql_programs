@@ -55,6 +55,11 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
+  app.get('/api/tuning', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await dashboard.sweep_profiles()) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
   app.get('/api/runs', require_auth, async function (req, res) {
     try { res.json({ ok: true, runs: await dashboard.recent_runs(req.query.limit) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -63,7 +68,7 @@ module.exports = function mount(app) {
   // ---- R1: data-refresh runner (spawns the detection job; read-only against Salesforce) ----
   app.post('/api/refresh/start', require_admin, function (req, res) {
     const b = req.body || {};
-    const r = refresh.start({ env: b.env, scope: b.scope });
+    const r = refresh.start({ env: b.env, scope: b.scope, job: b.job });
     res.status(r.ok ? 202 : 409).json(r);
   });
   app.get('/api/refresh/status', require_auth, function (req, res) {

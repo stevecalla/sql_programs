@@ -70,6 +70,27 @@ export default function Reference() {
       </div>
 
       <div className="card ref-card">
+        <h3>Tuning — testing the match criteria</h3>
+        <p>
+          The <strong>Tuning</strong> page answers "how many duplicates would we get if we changed the
+          rules?" — without changing anything in production. A <strong>sweep</strong> replays detection over
+          the current data using many criteria combinations and shows the results side by side.
+        </p>
+        <div className="defs">
+          <div className="defs-row"><span className="defs-term lg">Fuzzy threshold</span><span className="defs-body">how close two names must score to count as a fuzzy match (88 / 90 / 92; 90 is today's).</span></div>
+          <div className="defs-row"><span className="defs-term lg">Nicknames</span><span className="defs-body">whether nickname matching is on or off.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Required fields</span><span className="defs-body">which of gender, birthdate, and ZIP must match — including a "no ZIP" experiment that loosens matching.</span></div>
+          <div className="defs-row"><span className="defs-term lg">ZIP trim</span><span className="defs-body">how many ZIP digits are compared (first 5).</span></div>
+          <div className="defs-gate">Each combination is a "profile"; <strong>baseline</strong> = today's production. The page shows the baseline funnel, the selected profile's funnel (with differences vs. today), and a table of every profile's clusters split by signal.</div>
+        </div>
+        <p className="muted small">
+          Read-only: the sweep replays over the snapshot already loaded — no Salesforce fetch — and never
+          changes production detection. Run it from the <strong>Process</strong> page (Run tuning sweep);
+          results appear on the <strong>Tuning</strong> page.
+        </p>
+      </div>
+
+      <div className="card ref-card">
         <h3>Refreshing the data</h3>
         <p>
           The pages show the most recent detection run (see the “Data as of …” line on each page). When

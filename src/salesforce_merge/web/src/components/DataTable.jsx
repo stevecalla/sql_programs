@@ -21,7 +21,7 @@ function CopyButton({ value }) {
 //   filter: true renders a per-column control in the header (a dropdown if `facets[key]` exists, else a text box).
 //   wrap: true lets long cells wrap; every cell gets a title tooltip with its full value.
 // `facets` maps column key -> distinct values (for the dropdowns). `searchCols` labels what search scans.
-export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, minWidth, maxHeight, initialQuery = '', rowNumbers = true }) {
+export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, minWidth, initialQuery = '', rowNumbers = true, onRowClick, rowClass, maxHeight = '72vh' }) {
   const server = typeof fetcher === 'function';
   const [q, setQ] = useState(initialQuery || '');
   const [sortKey, setSortKey] = useState(null);
@@ -170,7 +170,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
             ))
           ) : (
             view.map((row, i) => (
-              <tr key={i}>{rowNumbers && <td className="dt-rownum">{(server ? (page - 1) * pageSize : 0) + i + 1}</td>}{columns.map((col) => (
+              <tr key={i} className={rowClass ? rowClass(row) : undefined} onClick={onRowClick ? () => onRowClick(row) : undefined} style={onRowClick ? { cursor: 'pointer' } : undefined}>{rowNumbers && <td className="dt-rownum">{(server ? (page - 1) * pageSize : 0) + i + 1}</td>}{columns.map((col) => (
                 <td key={col.key} className={col.wrap ? 'dt-wrap' : undefined} title={String(row[col.key] ?? '')}>
                   {col.render ? col.render(row) : row[col.key]}
                   {col.copy && row[col.key] != null && row[col.key] !== '' ? <CopyButton value={row[col.key]} /> : null}

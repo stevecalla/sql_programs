@@ -13,6 +13,7 @@ import MergeId from './pages/MergeId.jsx';
 import AllAccounts from './pages/AllAccounts.jsx';
 import Reference from './pages/Reference.jsx';
 import Process from './pages/Process.jsx';
+import Tuning from './pages/Tuning.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 
 export default function App() {
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/accounts" element={<AllAccounts />} />
             <Route path="/reference" element={<Reference />} />
             <Route path="/process" element={<Process />} />
+            <Route path="/tuning" element={<Tuning />} />
             <Route path="/admin" element={<Placeholder title="Admin" note="Phase 1b" />} />
             <Route path="/metrics" element={<Placeholder title="Metrics" note="Phase 1" />} />
             <Route path="*" element={<Navigate to="/" replace />} />
