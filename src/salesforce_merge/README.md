@@ -169,3 +169,39 @@ one batched call: the survivor is the merge id itself (no Salesforce fetch neede
 and groups without a clear survivor are skipped and reported. Backed by `reviews.resolve_merge_groups`
 (pure DB), `merge_queue.add_many` (dedupe-aware), and `POST /api/merge-queue/bulk` (capped at 1000). Bulk
 is merge-id-only because that survivor is unambiguous; Duplicate groups still queue one at a time.
+
+### Queue now stores the merge *decision* (not just intent)
+
+`salesforce_merge_queue` gained `survivor_name`, `field_overrides` (JSON `{ field: winningAccountId }`),
+and `child_counts` (JSON `{ total, by: { object: n } }`, captured at queue time). "Add to merge queue"
+persists the reviewer's per-field overrides and the child-record counts alongside the survivor + losers,
+so the queue holds an *auditable, executable* merge instruction rather than just a list of clusters.
+`merge_queue.list()` parses these JSON columns back to objects (and fills the survivor name via a
+snapshot join). `merge_queue.add_many` (bulk) carries them through too. Columns are added with
+create-if-missing + idempotent `ALTER` migrations, so existing tables upgrade in place.
+
+Planned Phase 3 flow (agreed): **dry-run is the first step of "Process queue."** Processing will
+(1) re-resolve each selected entry against fresh Salesforce data, honoring the stored overrides, and
+**save a version** (the frozen plan + a pre-merge snapshot of current field values), (2) re-validate /
+flag drift, then (3) execute `Database.merge`. The heavy pre-merge snapshot (restore baseline) lives in
+its own Phase 3 table, NOT the queue — the queue stays the intent+decision record.
+
+### Queue approval + status lifecycle (Phase 2 close)
+
+The queue is a status-driven ledger, never auto-cleared: `queued → approved → (Phase 3) processing →
+done / failed → restored`. In Merge Admin:
+
+- **Approve selected** moves the selected `queued` rows to `approved` (`POST /api/merge-queue/approve`,
+  `set_status` — only queued rows transition). This is the human go-ahead; it is a local status write,
+  not a Salesforce write. Execution stays Phase 3.
+- A **status filter** (default `queued`; also approved / done / failed / all) drives `GET
+  /api/merge-queue?status=` and the panel view. The count chip reflects the active status.
+- The **✕ removes a set only while it is `queued`** (`DELETE … WHERE id = ? AND status = 'queued'`);
+  approved/done rows are kept for audit + restore.
+- Re-queue guard widened: a set is blocked from being added again while `queued` **or** `approved`
+  (a `done` set can be re-queued later).
+
+Phase 3 will process `approved` rows: re-run the dry-run on fresh data, write a pre-merge snapshot,
+execute `Database.merge`, log history, and support best-effort restore. The redundant per-cluster
+"Preview merge (dry-run)" button was removed — the live detail already previews, and authoritative
+validation moves into Phase-3 processing.

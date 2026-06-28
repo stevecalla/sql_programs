@@ -63,7 +63,7 @@ function survivorship(accounts, masterId, overrides, fields) {
 
 // Survivor cascade: 1) Salesforce Id = merge id; 2) lowest membership number; 3) most child
 // records (when counts are loaded); 4) oldest. A merge also needs at least one other account.
-function pickMaster(accounts, rule, children, groupMergeId) {
+function pickMaster(accounts, children, groupMergeId) {
   if (!accounts.length) return null;
   const gm = groupMergeId || accounts.map((a) => acctMergeId(a)).find(Boolean) || '';
   const byMerge = accounts.find((a) => gm && a.account === gm);
@@ -90,7 +90,6 @@ export default function MergeAdmin() {
   const [midState, setMidState] = useState('');
   const [memState, setMemState] = useState('');
   const [bkState, setBkState] = useState('');
-  const [rule, setRule] = useState('cascade');
 
   const [clusters, setClusters] = useState([]);
   const [total, setTotal] = useState(0);
@@ -107,6 +106,7 @@ export default function MergeAdmin() {
 
   const [queue, setQueue] = useState([]);
   const [qSel, setQSel] = useState(() => new Set());
+  const [qStatus, setQStatus] = useState('queued');
   const [err, setErr] = useState('');
   const [addErr, setAddErr] = useState('');
   const [note, setNote] = useState('');
@@ -149,8 +149,8 @@ export default function MergeAdmin() {
   useEffect(() => { setRailSel(new Set()); setSelectAllMatching(false); setBulkMsg(''); }, [source, filter, bkState]);
 
   const loadQueue = useCallback(() => {
-    api.mergeQueue().then((r) => { const rows = r.rows || []; setQueue(rows); setQSel(new Set(rows.map((x) => x.id))); }).catch((e) => setErr(e.message));
-  }, []);
+    api.mergeQueue(qStatus).then((r) => { const rows = r.rows || []; setQueue(rows); setQSel(new Set(rows.map((x) => x.id))); }).catch((e) => setErr(e.message));
+  }, [qStatus]);
   useEffect(() => { loadQueue(); }, [loadQueue]);
 
   const loadCluster = useCallback((key) => {
@@ -179,12 +179,11 @@ export default function MergeAdmin() {
       .catch((e) => setErr(e.message));
   };
   const toggleQ = (id) => setQSel((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const processQueue = () => {
+  const approveSelected = async () => {
     const ids = [...qSel];
     if (!ids.length) return;
-    const ok = window.confirm(`Process ${ids.length} selected merge${ids.length === 1 ? '' : 's'}? This will permanently merge the losing accounts into each survivor in Salesforce and cannot be undone here. (Execution is a Phase 3 capability and is not yet enabled — no changes will be made.)`);
-    if (!ok) return;
-    setNote('Processing is a Phase 3 capability — not yet enabled. No changes were made.');
+    if (!window.confirm(`Approve ${ids.length} merge${ids.length === 1 ? '' : 's'} for processing? Execution still happens in Phase 3; you can move them back by removing while queued.`)) return;
+    try { await api.mergeQueueApprove(ids); loadQueue(); } catch (e) { setErr(e.message); }
   };
 
   const accounts = (detail && detail.accounts) || [];
@@ -193,9 +192,9 @@ export default function MergeAdmin() {
   useEffect(() => {
     if (!detail || manualMaster) return;
     const gm = source === 'merge_id' ? selKey : null;
-    const m = pickMaster(accounts, rule, children, gm);
+    const m = pickMaster(accounts, children, gm);
     if (m) setMaster(m);
-  }, [detail, rule, children, manualMaster, source, selKey]);
+  }, [detail, children, manualMaster, source, selKey]);
 
   useEffect(() => {
     if (!detail || !master) return;
@@ -252,8 +251,13 @@ export default function MergeAdmin() {
     const masterAcct = accounts.find((a) => a.account === master);
     if (!master || !selLosers.length) { setAddErr('Pick a master and at least one account to merge.'); return; }
     try {
+      const childAgg = {}; let ctot = 0;
+      selLosers.forEach((id) => { const c = children && children[id]; if (c) { ctot += c.total || 0; for (const [k, v] of Object.entries(c.by || {})) childAgg[k] = (childAgg[k] || 0) + v; } });
+      const child_counts = isSf ? { total: ctot, by: childAgg } : null;
+      const field_overrides = Object.keys(overrides).length ? overrides : null;
       const r = await api.mergeQueueAdd({ source_type: source, source_key: selKey, survivor_account: master,
-        survivor_contact: masterAcct ? acctContact(masterAcct) : '', survivor_name: masterAcct ? acctName(masterAcct) : '', loser_accounts: selLosers, master_rule: 'cascade' });
+        survivor_contact: masterAcct ? acctContact(masterAcct) : '', survivor_name: masterAcct ? acctName(masterAcct) : '',
+        loser_accounts: selLosers, master_rule: 'cascade', field_overrides, child_counts });
       setNote(`Queued: master ${shortId(master)} + ${r.loser_count} account${r.loser_count === 1 ? '' : 's'}.`);
       loadQueue();
     } catch (e) { setAddErr(e.message); }
@@ -567,10 +571,13 @@ export default function MergeAdmin() {
       <div className="card" style={{ marginTop: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <button type="button" className="collapse-btn" onClick={() => setOpenQueue((v) => !v)}>{openQueue ? '▾' : '▸'} Merge queue</button>
-          <span className="pill">{queue.length} queued</span>
+          <span className="pill">{queue.length} {qStatus === 'all' ? 'total' : qStatus}</span>
+          <select className="tb-select" style={{ width: 120 }} value={qStatus} onChange={(e) => setQStatus(e.target.value)} title="Filter the queue by status">
+            <option value="queued">Queued</option><option value="approved">Approved</option><option value="done">Done</option><option value="failed">Failed</option><option value="all">All</option>
+          </select>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             {queue.length > 0 && (<span className="dl-group"><span className="muted small">Export</span><a className="dl-link" href={exportUrl('/api/merge-queue/export', { format: 'csv' })}>CSV</a><a className="dl-link" href={exportUrl('/api/merge-queue/export', { format: 'xlsx' })}>Excel</a></span>)}
-            <button className="btn primary" style={{ width: 'auto' }} disabled={qSel.size === 0} onClick={processQueue} title="Process the selected rows (Phase 3 — execution not yet enabled)">Process queue</button>
+            {qStatus === 'queued' && <button className="btn primary" style={{ width: 'auto' }} disabled={qSel.size === 0} onClick={approveSelected} title="Approve the selected sets for Phase 3 processing">Approve selected</button>}
           </span>
         </div>
         {openQueue && (<div style={{ minHeight: 180 }}>
@@ -592,7 +599,7 @@ export default function MergeAdmin() {
                     <td title={q.source_key}>{q.source_type === 'merge_id' ? 'merge id ' : 'group '}{shortId(q.source_key)}</td>
                     <td title={RULE_TOOLTIP}>{RULE_LABELS[q.master_rule] || q.master_rule || 'cascade'}</td>
                     <td><span className="pill" style={{ background: 'var(--amber-bg)', color: 'var(--amber)' }}>{q.status}</span></td>
-                    <td onClick={(e) => e.stopPropagation()}><button className="btn" style={{ width: 'auto', padding: '2px 8px' }} onClick={() => removeQueue(q.id)} aria-label="Remove">✕</button></td>
+                    <td onClick={(e) => e.stopPropagation()}>{(q.status === 'queued' || q.status === 'approved') ? <button className="btn" style={{ width: 'auto', padding: '2px 8px' }} onClick={() => removeQueue(q.id)} aria-label="Remove">✕</button> : null}</td>
                   </tr>
                 ))}
               </tbody>
@@ -609,6 +616,7 @@ export default function MergeAdmin() {
       <div className="card" style={{ marginTop: 12, background: 'rgba(127,127,127,.05)' }}>
         <p style={{ margin: '0 0 6px', fontWeight: 700 }}>Caveats</p>
         <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>
+          <li><strong>Queue, approve, then process.</strong> "Add to merge queue" stages a set with its survivor, losers, per-field overrides, and child counts — review only, no Salesforce write. "Approve selected" moves queued sets to <em>approved</em> (the human go-ahead); the status filter switches the view between queued / approved / done. The ✕ removes a set while it is <em>queued</em> or <em>approved</em>. Execution is Phase 3: processing an approved set will re-run the dry-run against fresh Salesforce data, back the records up to a pre-merge snapshot, run the Salesforce merge, record history, and enable best-effort restore from that snapshot. Nothing on this page writes to Salesforce.</li>
           <li><strong>Marketing Cloud (SFMC) and other external systems are not included.</strong> Auto-discovery only walks child relationships inside the core Salesforce CRM org — objects that hang off the Account or its Person Contact. Marketing Cloud is a separate platform connected through Marketing Cloud Connect, which syncs Contacts and Leads into SFMC and identifies each subscriber by a Subscriber Key, usually the Contact Id (or Lead Id).
             <ul style={{ marginTop: 4 }}>
               <li>When a merge deletes the losing Contact, its Subscriber Key is orphaned: subscriber records, list and data-extension rows, journey membership, and send/engagement history that referenced the old Id are not automatically repointed to the surviving Contact.</li>

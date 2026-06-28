@@ -185,7 +185,11 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/merge-queue', require_auth, async function (req, res) {
-    try { res.json({ ok: true, rows: await mqueue.list() }); }
+    try { res.json({ ok: true, rows: await mqueue.list(undefined, req.query.status) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge-queue/approve', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await mqueue.set_status((req.body || {}).ids, 'approved')) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/merge-queue/export', require_auth, async function (req, res) {
@@ -196,7 +200,7 @@ module.exports = function mount(app) {
     try {
       const b = req.body || {};
       const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key,
-        survivor_account: b.survivor_account, survivor_contact: b.survivor_contact, survivor_name: b.survivor_name,
+        survivor_account: b.survivor_account, survivor_contact: b.survivor_contact, survivor_name: b.survivor_name, field_overrides: b.field_overrides, child_counts: b.child_counts,
         loser_accounts: b.loser_accounts, master_rule: b.master_rule, notes: b.notes });
       res.status(201).json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }

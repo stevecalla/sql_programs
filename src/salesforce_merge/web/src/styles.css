@@ -253,7 +253,9 @@ a { color: var(--accent); }
 /* data table (shared kit) */
 .datatable { overflow-x: auto; }
 .dt-scroll { overflow: auto; }
-.dt-scroll thead tr:first-child th { position: sticky; top: 0; z-index: 3; background: var(--card); }
+.dt-scroll table { border-collapse: separate; border-spacing: 0; }
+.dt-scroll thead tr:first-child th { position: sticky !important; top: 0; z-index: 3; background: var(--card); box-shadow: inset 0 -1px 0 var(--line); }
+.dt-scroll thead tr.dt-filter-row th { position: sticky; top: 38px; z-index: 3; background: var(--card); }
 .dt-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .dt-count { margin-left: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .dt-filter-btn.on { border-color: var(--accent); color: var(--accent); }

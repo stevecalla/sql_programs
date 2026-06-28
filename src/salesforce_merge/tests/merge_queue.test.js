@@ -72,3 +72,45 @@ test('add_many queues each entry and counts duplicates as skipped', async () => 
   assert.equal(r.queued, 2);
   assert.equal(r.skipped, 1);
 });
+
+test('add persists field_overrides + child_counts as JSON; list parses them back', async () => {
+  let stored = null;
+  const insertQuery = async (sql, params) => {
+    if (/^INSERT/i.test(sql)) { stored = params; return { insertId: 7 }; }
+    if (/WHERE source_key = \? AND survivor_account/i.test(sql)) return [];
+    return {};
+  };
+  await q.add({ source_key: 'M1', survivor_account: 'A', loser_accounts: ['B'],
+    field_overrides: { PersonEmail: 'B' }, child_counts: { total: 5, by: { Opportunity: 5 } } }, insertQuery);
+  // last two INSERT params are the JSON-serialized overrides + child counts
+  assert.equal(stored[stored.length - 2], JSON.stringify({ PersonEmail: 'B' }));
+  assert.equal(stored[stored.length - 1], JSON.stringify({ total: 5, by: { Opportunity: 5 } }));
+
+  const listQuery = async (sql) => {
+    if (/CREATE TABLE|ALTER TABLE/i.test(sql)) return {};
+    if (/^SELECT/i.test(sql)) return [{ id: 7, survivor_account: 'A', field_overrides: '{"PersonEmail":"B"}', child_counts: '{"total":5}' }];
+    return {};
+  };
+  const rows = await q.list(listQuery);
+  assert.deepEqual(rows[0].field_overrides, { PersonEmail: 'B' });
+  assert.deepEqual(rows[0].child_counts, { total: 5 });
+});
+
+test('set_status approves only queued entries', async () => {
+  const calls = [];
+  const query = async (sql, params) => { calls.push({ sql, params }); if (/^UPDATE/i.test(sql)) return { affectedRows: 2 }; return {}; };
+  const r = await q.set_status([1, 2, 3], 'approved', query);
+  const upd = calls.find((c) => /^UPDATE/i.test(c.sql));
+  assert.ok(/status = 'queued'/.test(upd.sql), 'only queued -> approved');
+  assert.equal(upd.params[0], 'approved');
+  assert.equal(r.updated, 2);
+});
+
+test('list applies a status filter when given', async () => {
+  const calls = [];
+  const query = async (sql, params) => { calls.push({ sql, params }); if (/^SELECT/i.test(sql)) return []; return {}; };
+  await q.list(query, 'approved');
+  const sel = calls.find((c) => /^SELECT q\.\*/i.test(c.sql));
+  assert.ok(/WHERE q.status = \?/.test(sel.sql));
+  assert.deepEqual(sel.params, ['approved']);
+});
