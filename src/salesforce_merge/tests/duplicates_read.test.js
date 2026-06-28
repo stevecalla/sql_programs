@@ -10,7 +10,8 @@ describe('dashboard_counts', () => {
   test('maps query results into the dashboard shape', async () => {
     const fake = async (sql) => {
       if (/GROUP BY Bucket__c/.test(sql)) return [{ bucket: 'in_both', n: 16 }, { bucket: 'sf_only', n: 9 }];
-      if (/SUM\(/.test(sql)) return [{ n: 17398 }];
+      if (/Group_Record_Count__c/.test(sql)) return [{ n: 25121 }];   // sum of cluster sizes (duplicate accounts)
+      if (/Match_Link_Count__c/.test(sql)) return [{ n: 17398 }];     // matched pairs
       if (/consolidated_cluster/.test(sql)) return [{ n: 10623 }];
       if (/salesforce_merge_id <> ''/.test(sql)) return [{ n: 25 }];
       if (/salesforce_account_duplicate_snapshot/.test(sql)) return [{ n: 700682 }];
@@ -20,6 +21,7 @@ describe('dashboard_counts', () => {
     assert.equal(d.total_accounts, 700682);
     assert.equal(d.merge_id_accounts, 25);
     assert.equal(d.clusters, 10623);
+    assert.equal(d.accounts_in_clusters, 25121);
     assert.equal(d.duplicate_pairs, 17398);
     assert.deepEqual(d.buckets, [{ bucket: 'in_both', count: 16 }, { bucket: 'sf_only', count: 9 }]);
   });

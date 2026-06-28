@@ -31,6 +31,7 @@ export const api = {
   duplicates: (p) => req('/api/duplicates' + qs(expand(p))),
   mergeId: (p) => req('/api/merge-id' + qs(expand(p))),
   accounts: (p) => req('/api/accounts' + qs(expand(p))),
+  cluster: (key) => req('/api/cluster' + qs({ key })),
   duplicatesFacets: () => req('/api/duplicates/facets'),
   mergeIdFacets: () => req('/api/merge-id/facets'),
   accountsFacets: () => req('/api/accounts/facets'),
