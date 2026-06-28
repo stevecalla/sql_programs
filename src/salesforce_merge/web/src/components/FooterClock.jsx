@@ -9,6 +9,7 @@ const SOURCES = {
   '/accounts': ['salesforce_account_duplicate_snapshot'],
   '/process': ['salesforce_duplicate_detection_run'],
   '/tuning': ['salesforce_duplicate_sweep_profile'],
+  '/merge-admin': ['salesforce_duplicate_consolidated_cluster (+ live Salesforce)'],
 };
 
 // Footer at the bottom of the main content: source table(s) on the left, running date + clock right.

@@ -116,6 +116,34 @@ a { color: var(--accent); }
 /* highlighted rows (e.g. Tuning baseline / selected profile) */
 .datatable tr.row-base td { background: var(--accent-soft); }
 .datatable tr.row-sel td { background: rgba(127,127,127,.16); }
+.modal-table tr.row-sel td { background: var(--accent-soft); }
+
+/* small status/metadata pill (Merge Admin cluster header) */
+.pill { display: inline-block; font-size: 11px; padding: 2px 9px; border-radius: 20px; background: rgba(127,127,127,.12); color: var(--dim); white-space: nowrap; }
+
+/* segmented control (Merge Admin data-source select) */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg-btn { font: inherit; font-size: 12px; padding: 7px 12px; background: var(--card); color: var(--dim); border: 0; border-left: 1px solid var(--line); cursor: pointer; }
+.seg-btn:first-child { border-left: 0; }
+.seg-btn.on { background: var(--accent-soft); color: var(--ink); font-weight: 700; }
+
+/* Merge Admin: center table headers + data */
+.mergeadmin .modal-table th, .mergeadmin .modal-table td { text-align: center; }
+/* child-records table: keep the label (object name) column left-justified */
+.mergeadmin .ma-child-table td:first-child { text-align: left; }
+
+/* accounts-in-cluster: fixed layout with resizable columns */
+.mergeadmin .acc-fixed td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mergeadmin .col-resize { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; user-select: none; }
+.mergeadmin .col-resize:hover { background: var(--line); }
+
+/* merge queue: fixed columns with ellipsis so long ids/keys do not stretch the table */
+.mergeadmin .queue-fixed td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* compact export controls: a small label + lightweight text links instead of bordered buttons */
+.dl-group { display: inline-flex; align-items: center; gap: 10px; }
+.dl-link { font-size: 12px; color: var(--link); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.dl-link:hover { color: var(--ink); }
 
 /* dashboard: funnel + by-signal table + definitions */
 .statlink { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
@@ -153,6 +181,11 @@ a { color: var(--accent); }
 .defs-body { color: var(--dim); }
 .defs-body code { font-size: 12px; }
 .defs-gate { border-top: 1px solid var(--line); padding-top: 9px; color: var(--dim); font-size: 12px; }
+
+/* Merge Admin — left cluster list items */
+.ma-cluster { display: block; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; font: inherit; color: var(--ink); }
+.ma-cluster:hover { border-color: var(--accent); }
+.ma-cluster.on { border-color: var(--accent); background: var(--accent-soft); }
 
 /* link-styled button (e.g. the clickable cluster key on the Duplicates table) */
 .linkbtn { border: 0; background: transparent; padding: 0; font: inherit; color: var(--link); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; text-align: left; }

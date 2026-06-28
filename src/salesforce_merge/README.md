@@ -132,3 +132,31 @@ read-only from `salesforce_duplicate_sweep_profile` (`/api/tuning`).
 To populate it, run the sweep from the **Process** page ("Run tuning sweep") — replay-only over the
 snapshot already loaded (no Salesforce fetch, no change to the shared snapshot). See
 `../salesforce_duplicates/plans_and_notes/README_TUNING.md`.
+
+## Merge Admin (Phase 2 — review + stage merges)
+
+The **Merge Admin** page (rail group "Operate", `/merge-admin`) reviews candidate merges and stages
+them in a queue. Read-only against Salesforce — nothing here executes a merge (Phase 3).
+
+- **Data source** (top panel) — pick what to review:
+  - **Accounts with merge ids** (default) — distinct Salesforce merge ids from
+    `salesforce_duplicate_merge_id_review` (`GET /api/merge-groups`); each entry is the set of
+    accounts sharing one merge id.
+  - **Duplicate groups** — the consolidated clusters (`GET /api/duplicates`), with the same
+    has/none **Merge ID** and **Membership #** filters as the Duplicates page.
+- **Master survivor rule** — `Salesforce Id = merge id, else oldest` (default) or
+  `most child records`. The master is auto-picked per the rule and can be overridden by clicking a
+  radio. The rail paginates ("Prev/Next") over the full result set.
+- **Accounts table** — two selection columns: **Master** (the survivor, radio) and **Merge** (a
+  checkbox per losing account). Field survivorship, impact, and child-record counts update from the
+  selection. Detail is a read-only live Salesforce fetch (snapshot fallback); child counts load
+  asynchronously via `GET /api/cluster/children` (auto-discovered child relationships).
+- **Merge queue** — "Add to merge queue" persists the set (survivor + losers + provenance + rule) to
+  the new `salesforce_merge_queue` table via `POST /api/merge-queue` (`GET` to list,
+  `DELETE /api/merge-queue/:id` to remove). The queue is staging only; **Process queue** is disabled
+  until Phase 3 (write chokepoint, pre-merge snapshot, typed confirm).
+
+`store/merge_queue.js` owns the queue table (create-if-missing + add/list/remove, injectable
+executor). `store/cluster_detail.js` takes a `kind` (`merge_id` | `group`) so detail/children/preview
+work for either source. The Caveats card documents the SFMC/external-system gap and how a Salesforce
+`Database.merge` actually runs.

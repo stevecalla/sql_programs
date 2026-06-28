@@ -296,6 +296,59 @@ async function cluster_accounts(key, query = real_query) {
   return { key, accounts: accounts || [] };
 }
 
+// ---- Merge-ID groups (Merge Admin source): one row per distinct Salesforce merge id ----
+// Only accounts that HAVE a merge id are listed. Bucket filter mirrors the merge-id review panel
+// (the buckets with a merge id: in_both / id only [sf_only]).
+async function list_merge_groups(opts = {}, query = real_query) {
+  const page = clamp_int(opts.page, 1, 1, 1e9);
+  const page_size = clamp_int(opts.page_size, 25, 1, MAX_PAGE_SIZE);
+  const offset = (page - 1) * page_size;
+  const T = cfg.RESULT_MERGE_ID_REVIEW_TABLE;
+  const wheres = ["Salesforce_Merge_Id__c IS NOT NULL", "Salesforce_Merge_Id__c <> ''"];
+  const params = [];
+  const qstr = (opts.q == null ? '' : String(opts.q)).trim();
+  if (qstr) {
+    for (const tok of qstr.split(/\s+/).filter(Boolean)) {
+      wheres.push("(First_Name__c LIKE ? OR Last_Name__c LIKE ? OR Salesforce_Merge_Id__c LIKE ?)");
+      params.push("%" + tok + "%", "%" + tok + "%", "%" + tok + "%");
+    }
+  }
+  const bk = opts.bucket;
+  if (bk === "in_both" || bk === "sf_only") { wheres.push("Bucket__c = ?"); params.push(bk); }
+  else if (bk === "only_dupes") { wheres.push("Bucket__c NOT IN ('in_both', 'sf_only')"); }
+  const where_sql = "WHERE " + wheres.join(" AND ");
+  const totalRows = await query("SELECT COUNT(DISTINCT Salesforce_Merge_Id__c) AS n FROM `" + T + "` " + where_sql, params);
+  const total = totalRows && totalRows[0] ? Number(totalRows[0].n) : 0;
+  const rows = await query(
+    "SELECT Salesforce_Merge_Id__c AS `merge_id`, " +
+    "GROUP_CONCAT(DISTINCT NULLIF(TRIM(CONCAT(COALESCE(First_Name__c, ''), ' ', COALESCE(Last_Name__c, ''))), '') SEPARATOR ';') AS `names`, " +
+    "COUNT(*) AS `size`, MIN(Consolidated_Group_Key__c) AS `cluster_key` " +
+    "FROM `" + T + "` " + where_sql +
+    " GROUP BY Salesforce_Merge_Id__c ORDER BY COUNT(*) DESC, Salesforce_Merge_Id__c ASC LIMIT ? OFFSET ?",
+    params.concat([page_size, offset]));
+  const out = (rows || []).map((r) => ({
+    cluster: r.merge_id, merge_id: r.merge_id, names: r.names || '',
+    size: Number(r.size) || 0, signal: "merge id", cluster_key: r.cluster_key || '',
+  }));
+  return { rows: out, total, page, page_size };
+}
+
+async function merge_group_account_ids(merge_id, query = real_query) {
+  if (!merge_id) return [];
+  const rows = await query("SELECT Account__c AS account FROM `" + cfg.RESULT_MERGE_ID_REVIEW_TABLE +
+    "` WHERE Salesforce_Merge_Id__c = ?", [String(merge_id)]);
+  return (rows || []).map((r) => r.account).filter(Boolean);
+}
+
+async function accounts_by_ids(ids, query = real_query) {
+  const list = (ids || []).map((s) => String(s).trim()).filter(Boolean);
+  if (!list.length) return [];
+  const ph = list.map(() => "?").join(", ");
+  const rows = await query("SELECT " + ACC_SPEC.select + " FROM `" + cfg.SNAPSHOT_TABLE_NAME +
+    "` WHERE salesforce_account_id IN (" + ph + ")", list);
+  return rows || [];
+}
+
 const SPECS = { duplicates: DUP_SPEC, 'merge-id': MR_SPEC, accounts: ACC_SPEC };
 
 // Export: same WHERE/ORDER as the on-screen view (search + filters + sort), but no paging — all
@@ -314,5 +367,6 @@ async function export_rows(view, opts = {}, query = real_query) {
 
 module.exports = {
   list_duplicates, list_merge_id, merge_id_summary, list_accounts, cluster_accounts, facets, export_rows,
+  list_merge_groups, merge_group_account_ids, accounts_by_ids,
   build_clauses, MAX_PAGE_SIZE, EXPORT_MAX, // exported for tests
 };

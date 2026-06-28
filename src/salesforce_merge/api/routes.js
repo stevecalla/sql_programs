@@ -16,6 +16,7 @@ const dashboard = require('../store/duplicates_read');
 const reviews = require('../store/reviews_read');
 const refresh = require('../store/refresh_runner');
 const cluster = require('../store/cluster_detail');
+const mqueue = require('../store/merge_queue');
 
 module.exports = function mount(app) {
   app.get('/api/status', function (req, res) {
@@ -87,6 +88,11 @@ module.exports = function mount(app) {
     for (const [k, v] of Object.entries(req.query)) if (k.startsWith('f_')) o[k.slice(2)] = v;
     return o;
   };
+  const current_user = (req) => {
+    const cookies = session.parse_cookies(req.headers.cookie);
+    const p = session.verify(cookies[session.COOKIE], store.session_secret());
+    return p ? p.user : null;
+  };
   const page_opts = (req) => ({
     page: req.query.page, page_size: req.query.page_size, q: req.query.q,
     sort: req.query.sort, dir: req.query.dir, colFilters: col_filters(req),
@@ -154,11 +160,49 @@ module.exports = function mount(app) {
 
   // Phase 2 — read-only deep detail (live Salesforce, snapshot fallback) + dry-run merge preview.
   app.get('/api/cluster/detail', require_auth, async function (req, res) {
-    try { res.json({ ok: true, ...(await cluster.cluster_detail(req.query.key)) }); }
+    try { res.json({ ok: true, ...(await cluster.cluster_detail(req.query.key, { kind: req.query.source })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/cluster/preview', require_auth, async function (req, res) {
-    try { res.json({ ok: true, ...(await cluster.cluster_preview(req.query.key, req.query.survivor)) }); }
+    try { res.json({ ok: true, ...(await cluster.cluster_preview(req.query.key, req.query.survivor, { kind: req.query.source })) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/cluster/children', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await cluster.cluster_children(req.query.key, { kind: req.query.source })) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/cluster/detail/export', require_auth, async function (req, res) {
+    try {
+      const d = await cluster.cluster_detail(req.query.key, { kind: req.query.source });
+      const safe = String(req.query.key || 'cluster').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
+      await write_rows(req, res, d.accounts || [], 'accounts_' + safe + '_' + new Date().toISOString().slice(0, 10), 'accounts');
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  // ---- Merge Admin sources + queue ----
+  app.get('/api/merge-groups', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await reviews.list_merge_groups({ ...page_opts(req), bucket: req.query.bucket })) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge-queue', require_auth, async function (req, res) {
+    try { res.json({ ok: true, rows: await mqueue.list() }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge-queue/export', require_auth, async function (req, res) {
+    try { await write_rows(req, res, await mqueue.list(), 'merge_queue_' + new Date().toISOString().slice(0, 10), 'merge_queue'); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge-queue', require_auth, async function (req, res) {
+    try {
+      const b = req.body || {};
+      const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key,
+        survivor_account: b.survivor_account, survivor_contact: b.survivor_contact,
+        loser_accounts: b.loser_accounts, master_rule: b.master_rule, notes: b.notes });
+      res.status(201).json({ ok: true, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.delete('/api/merge-queue/:id', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await mqueue.remove(req.params.id)) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 

@@ -33,8 +33,8 @@ export default function Duplicates() {
   [mergeState, memberState]);
 
   const columns = useMemo(() => [
-    { key: 'cluster', label: 'Cluster', sort: true, filter: true, wrap: true, help: 'A group of accounts believed to be the same person. Click to see each account.', render: (r) => (<button type="button" className="linkbtn" title="View the accounts in this group" onClick={() => setOpenKey(r.cluster)}>{r.cluster}</button>) },
     { key: 'names', label: 'Names', sort: true, filter: true, wrap: true, help: 'The names of every account in this cluster. Click a name to see its account-level records.', render: (r) => namesLinks(r.names) },
+    { key: 'cluster', label: 'Cluster', sort: true, filter: true, wrap: true, help: 'A group of accounts believed to be the same person. Click to see each account.', render: (r) => (<button type="button" className="linkbtn" title="View the accounts in this group" onClick={() => setOpenKey(r.cluster)}>{r.cluster}</button>) },
     { key: 'size', label: 'Size', sort: true, filter: true, help: 'How many accounts are in this cluster (2 = a pair).' },
     { key: 'signal', label: 'Signal', sort: true, filter: true, help: 'Why they were grouped: exact match, fuzzy (similar) name, and/or nickname.' },
     { key: 'tier', label: 'Tier', sort: true, filter: true, help: 'Confidence level — how strongly the match indicates a true duplicate.' },

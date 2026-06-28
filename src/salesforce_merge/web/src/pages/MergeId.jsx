@@ -27,8 +27,8 @@ export default function MergeId() {
   [bucket]);
 
   const columns = useMemo(() => [
-    { key: 'account', label: 'Account', sort: true, filter: true, copy: true, help: 'The Salesforce account (person) record ID. Click to see the other accounts in its duplicate group (when it is in one).', render: (r) => (r.cluster ? <button type="button" className="linkbtn" title="View the accounts in this group" onClick={() => setOpenKey(r.cluster)}>{r.account}</button> : r.account) },
     { key: 'name', label: 'Name', sort: 'last_name', filter: true, help: 'The account holder\'s name. Sorts by last name.', render: full_name },
+    { key: 'account', label: 'Account', sort: true, filter: true, copy: true, help: 'The Salesforce account (person) record ID. Click to see the other accounts in its duplicate group (when it is in one).', render: (r) => (r.cluster ? <button type="button" className="linkbtn" title="View the accounts in this group" onClick={() => setOpenKey(r.cluster)}>{r.account}</button> : r.account) },
     { key: 'merge_id', label: 'Merge ID', sort: true, filter: true, wrap: true, copy: true, help: 'The Membership Platform merge ID — accounts sharing one are meant to be merged together.' },
     { key: 'in_dupes', label: 'In duplicates?', sort: 'cluster', filter: true, wrap: true, help: 'Whether the tool also flagged this account as a duplicate — shows the group it is in, or "not found" when it has a merge ID but it was not flagged (only a merge ID).', render: (r) => (r.bucket === 'sf_only' ? 'not found' : (r.cluster || 'yes')) },
     { key: 'size', label: 'Size', filter: true, help: 'How many accounts are in this account\'s duplicate group. Filter by a cluster size (blank = not in a group).', render: (r) => fmt(r.size) },
