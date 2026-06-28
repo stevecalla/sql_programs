@@ -19,7 +19,7 @@ app.use(bodyParser.json());
 // Test endpoint
 // curl http://localhost:8001/get-member-sales-test
 app.get('/get-member-sales-test', async (req, res) => {
-    console.log('/get-member-sales-test route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/get-member-sales-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response

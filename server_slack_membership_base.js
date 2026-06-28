@@ -29,7 +29,7 @@ app.use(bodyParser.json());
 // https://usat-slack-members.kidderwise.org/slack-membership-base-test
 app.get('/slack-membership-base-test', async (req, res) => {
     const ROUTE = '/slack-membership-base-test';
-    console.log(`${ROUTE} route req.rawHeaders = ${req.rawHeaders}`);
+    // console.log(`${ROUTE} route req.rawHeaders = ${req.rawHeaders}`);
 
     const status_details = {
         status: 'ok',

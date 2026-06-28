@@ -19,7 +19,7 @@ app.use(bodyParser.json());
 // curl http://localhost:8015/scraper-test
 // curl https://usat-scraper.kidderwise.org/scraper-test
 app.get('/scraper-test', async (req, res) => {
-    console.log('/scraper-test route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/scraper-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response

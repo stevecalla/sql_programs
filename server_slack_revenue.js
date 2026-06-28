@@ -27,7 +27,7 @@ app.use(bodyParser.json());
 
 // Test endpoint
 app.get('/revenue-test', async (req, res) => {
-    console.log('/revenue-test route req.rawHeaders = ', req.rawHeaders);
+    // console.log('/revenue-test route req.rawHeaders = ', req.rawHeaders);
 
     try {
         // Send a success response
