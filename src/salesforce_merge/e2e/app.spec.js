@@ -14,11 +14,20 @@ test.beforeEach(async ({ page }) => {
       body: JSON.stringify({
         ok: true,
         data: {
-          total_accounts: 700682, merge_id_accounts: 25, clusters: 10623, duplicate_pairs: 17398,
+          total_accounts: 700682, merge_id_accounts: 25, clusters: 10623,
+          accounts_in_clusters: 25121, duplicate_pairs: 17398,
           buckets: [{ bucket: 'in_both', count: 16 }, { bucket: 'sf_only', count: 9 }],
+          signal_breakdown: {
+            accounts: { exact: 21500, fuzzy: 1400, nickname: 1900, multi: 321 },
+            pairs: { exact: 14800, fuzzy: 1100, nickname: 1498 },
+            clusters: { exact: 9100, fuzzy: 600, nickname: 800, multi: 123 },
+          },
         },
       }),
     }));
+  // "data as of" stamp + header refresh — keep deterministic (no DB in the e2e server).
+  await page.route('**/api/dataset', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: null }) }));
 });
 
 async function sign_in(page) {
@@ -35,8 +44,9 @@ test('shows the login screen, then the dashboard with data after sign in', async
   await sign_in(page);
 
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
-  await expect(page.getByText('700,682')).toBeVisible();      // total accounts, formatted
-  await expect(page.getByText('17,398')).toBeVisible();       // duplicate pairs
+  // these figures can appear in more than one place (funnel + by-signal table), so match the first.
+  await expect(page.getByText('700,682').first()).toBeVisible();   // total accounts, formatted
+  await expect(page.getByText('17,398').first()).toBeVisible();    // duplicate pairs
 });
 
 test('dark mode toggle sets data-theme on <html>', async ({ page }) => {
