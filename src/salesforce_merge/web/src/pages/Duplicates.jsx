@@ -24,12 +24,13 @@ const namesLinks = (names) => {
 
 export default function Duplicates() {
   const [facets, setFacets] = useState({});
-  const [mergeState, setMergeState] = useState('');   // '' all · 'has' · 'none' (membership ID present?)
-  const [openKey, setOpenKey] = useState(null);       // cluster key whose popup is open
+  const [mergeState, setMergeState] = useState('');     // '' all · 'has' · 'none' (any merge ID in cluster?)
+  const [memberState, setMemberState] = useState('');   // '' all · 'has' · 'none' (any member # in cluster?)
+  const [openKey, setOpenKey] = useState(null);         // cluster key whose popup is open
   useEffect(() => { api.duplicatesFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
   const fetcher = useCallback((p) =>
-    api.duplicates({ ...p, merge_id_state: mergeState }).then((r) => ({ rows: r.rows, total: r.total })),
-  [mergeState]);
+    api.duplicates({ ...p, merge_id_state: mergeState, member_number_state: memberState }).then((r) => ({ rows: r.rows, total: r.total })),
+  [mergeState, memberState]);
 
   const columns = useMemo(() => [
     { key: 'cluster', label: 'Cluster', sort: true, filter: true, wrap: true, help: 'A group of accounts believed to be the same person. Click to see each account.', render: (r) => (<button type="button" className="linkbtn" title="View the accounts in this group" onClick={() => setOpenKey(r.cluster)}>{r.cluster}</button>) },
@@ -41,6 +42,15 @@ export default function Duplicates() {
     { key: 'best', label: 'Best', sort: true, help: 'Best (highest) name-similarity score among the pairs in the cluster, 0–100.' },
   ], []);
 
+  const seg = (label, state, set) => (
+    <label className="tb-select">
+      {label}
+      <select value={state} onChange={(e) => set(e.target.value)}>
+        {STATES.map(([v, t]) => (<option key={v || 'all'} value={v}>{t}</option>))}
+      </select>
+    </label>
+  );
+
   return (
     <>
       <h2>Duplicates</h2>
@@ -51,17 +61,16 @@ export default function Duplicates() {
         columns={columns}
         fetcher={fetcher}
         facets={facets}
-        deps={[mergeState]}
+        deps={[mergeState, memberState]}
         pageSize={25}
         searchCols="names, cluster, record IDs, size, tier"
         exportBase="/api/duplicates/export"
-        exportExtra={{ merge_id_state: mergeState }}
+        exportExtra={{ merge_id_state: mergeState, member_number_state: memberState }}
         toolbar={
-          <label className="tb-select">Membership ID
-            <select value={mergeState} onChange={(e) => setMergeState(e.target.value)}>
-              {STATES.map(([v, t]) => (<option key={v || 'all'} value={v}>{t}</option>))}
-            </select>
-          </label>
+          <>
+            {seg('Merge ID', mergeState, setMergeState)}
+            {seg('Member #', memberState, setMemberState)}
+          </>
         }
       />
       <ClusterModal clusterKey={openKey} onClose={() => setOpenKey(null)} />

@@ -122,7 +122,7 @@ module.exports = function mount(app) {
   };
 
   app.get('/api/duplicates', require_auth, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state } })) }); }
+    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/duplicates/facets', require_auth, async function (req, res) {
@@ -130,7 +130,7 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/duplicates/export', require_auth, async function (req, res) {
-    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state } }); }
+    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Members of one consolidated cluster (account-level detail for the Duplicates "view group" popup).

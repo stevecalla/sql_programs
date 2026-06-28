@@ -125,10 +125,12 @@ const DUP_SPEC = {
     cluster: 'Consolidated_Group_Key__c', names: 'Names_In_Group__c', size: 'Group_Record_Count__c',
     signal: 'Match_Composition__c', tier: 'Confidence_Tier__c', merge_ids: 'Merge_Ids__c', best: 'Best_Pair_Score__c',
   },
-  // membership-ID selector: does the cluster carry any merge ID? ('has' / 'none'; strip ';' separators)
+  // does the cluster carry any merge ID / member number? ('has' / 'none'; strip ';' separators)
   filter_cols: {
     merge_id_state: { build: (v) => (String(v) === 'has' ? { sql: "REPLACE(Merge_Ids__c, ';', '') <> ''" }
       : String(v) === 'none' ? { sql: "(Merge_Ids__c IS NULL OR REPLACE(Merge_Ids__c, ';', '') = '')" } : null) },
+    member_number_state: { build: (v) => (String(v) === 'has' ? { sql: "REPLACE(Member_Numbers__c, ';', '') <> ''" }
+      : String(v) === 'none' ? { sql: "(Member_Numbers__c IS NULL OR REPLACE(Member_Numbers__c, ';', '') = '')" } : null) },
   },
   facet_cols: { signal: 'Match_Composition__c', tier: 'Confidence_Tier__c', size: 'Group_Record_Count__c' },
   default_sort: 'size',
