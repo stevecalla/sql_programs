@@ -10,8 +10,8 @@ const GROUPS = [
     { to: '/accounts', label: 'All accounts' },
   ] },
   { grp: 'Operate', items: [
-    { to: '/process', label: 'Get Duplicates' },
-    { to: '/merge-admin', label: 'Merge Admin' },
+    { to: '/get-duplicates', label: 'Get Duplicates' },
+    { to: '/select-merges', label: 'Select Merges' },
     { to: '/merge-process', label: 'Process Merges' },
   ] },
   { grp: 'Analyze', items: [{ to: '/tuning', label: 'Tuning' }] },

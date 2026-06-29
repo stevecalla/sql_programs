@@ -7,9 +7,9 @@ const SOURCES = {
   '/duplicates': ['salesforce_duplicate_consolidated_cluster'],
   '/merge-id': ['salesforce_duplicate_merge_id_review'],
   '/accounts': ['salesforce_account_duplicate_snapshot'],
-  '/process': ['salesforce_duplicate_detection_run'],
+  '/get-duplicates': ['salesforce_duplicate_detection_run'],
   '/tuning': ['salesforce_duplicate_sweep_profile'],
-  '/merge-admin': ['salesforce_duplicate_consolidated_cluster (+ live Salesforce)'],
+  '/select-merges': ['salesforce_duplicate_consolidated_cluster (+ live Salesforce)'],
   '/merge-process': ['salesforce_merge_queue', 'salesforce_merge_history', 'salesforce_merge_premerge_snapshot'],
 };
 

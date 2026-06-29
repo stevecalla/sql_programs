@@ -56,7 +56,7 @@ function Seg({ value, set, options }) {
   );
 }
 
-export default function Process() {
+export default function GetDuplicates() {
   const [env, setEnv] = useState('sandbox');
   const [scope, setScope] = useState('sample');
   const [status, setStatus] = useState(null);

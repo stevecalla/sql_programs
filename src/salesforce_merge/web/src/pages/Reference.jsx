@@ -1,5 +1,5 @@
 // Plain-language reference for non-technical reviewers — kept consistent with the Dashboard
-// (same funnel, same signal definitions, same merge-ID reconciliation) and with the Merge Admin /
+// (same funnel, same signal definitions, same merge-ID reconciliation) and with the Select Merges /
 // Process Merges pages (survivor cascade, how a merge runs, what it doesn't touch). Static content,
 // no data calls.
 export default function Reference() {
@@ -56,11 +56,11 @@ export default function Reference() {
         <p>
           Merging combines a cluster’s accounts into <strong>one surviving record</strong>, reparenting all
           the history (gifts, events, cases) onto the survivor so nothing is lost. It runs as a reviewed
-          pipeline across two pages — you build a queue on <strong>Merge Admin</strong> and run it on
+          pipeline across two pages — you build a queue on <strong>Select Merges</strong> and run it on
           <strong> Process Merges</strong>:
         </p>
         <ol>
-          <li><strong>Review</strong> (Merge Admin) — pick the surviving record (the “master”) and the accounts merged into it, and set any per-field overrides.</li>
+          <li><strong>Review</strong> (Select Merges) — pick the surviving record (the “master”) and the accounts merged into it, and set any per-field overrides.</li>
           <li><strong>Add to merge queue</strong> — stages that set with its survivor, losers, overrides, and child-record counts. Review only — nothing is written to Salesforce.</li>
           <li><strong>Approve selected</strong> — moves a queued set to <em>approved</em> (the human go-ahead). The status filter switches the view between queued / approved / done; the ✕ removes a set while it is queued or approved.</li>
           <li><strong>Process</strong> (Process Merges, Phase 3) — re-runs the dry-run against fresh Salesforce data, backs the records up to a pre-merge snapshot, runs the Salesforce merge, records history, and enables best-effort restore from that snapshot.</li>

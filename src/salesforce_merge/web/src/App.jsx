@@ -12,9 +12,9 @@ import Duplicates from './pages/Duplicates.jsx';
 import MergeId from './pages/MergeId.jsx';
 import AllAccounts from './pages/AllAccounts.jsx';
 import Reference from './pages/Reference.jsx';
-import Process from './pages/Process.jsx';
+import GetDuplicates from './pages/GetDuplicates.jsx';
 import Tuning from './pages/Tuning.jsx';
-import MergeAdmin from './pages/MergeAdmin.jsx';
+import SelectMerges from './pages/SelectMerges.jsx';
 import MergeProcess from './pages/MergeProcess.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 
@@ -51,9 +51,9 @@ export default function App() {
             <Route path="/merge-id" element={<MergeId />} />
             <Route path="/accounts" element={<AllAccounts />} />
             <Route path="/reference" element={<Reference />} />
-            <Route path="/process" element={<Process />} />
+            <Route path="/get-duplicates" element={<GetDuplicates />} />
             <Route path="/tuning" element={<Tuning />} />
-            <Route path="/merge-admin" element={<MergeAdmin />} />
+            <Route path="/select-merges" element={<SelectMerges />} />
             <Route path="/merge-process" element={<MergeProcess />} />
             <Route path="/admin" element={<Placeholder title="Admin" note="Phase 1b" />} />
             <Route path="/metrics" element={<Placeholder title="Metrics" note="Phase 1" />} />

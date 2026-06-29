@@ -102,7 +102,7 @@ export default function MergeProcess() {
                   <td>{r.environment || '—'}</td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={8} className="muted small">No approved merges. Approve sets in Merge Admin first.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={8} className="muted small">No approved merges. Approve sets in Select Merges first.</td></tr>}
             </tbody>
           </table>
         </div>

@@ -85,7 +85,7 @@ function pickMaster(accounts, children, groupMergeId) {
   return accounts[0].account;
 }
 
-export default function MergeAdmin() {
+export default function SelectMerges() {
   const [source, setSource] = useState('merge_id');
   const [midState, setMidState] = useState('');
   const [memState, setMemState] = useState('');
@@ -287,7 +287,7 @@ export default function MergeAdmin() {
 
   return (
     <div className="mtbl">
-      <h2>Merge Admin</h2>
+      <h2>Select Merges</h2>
       <p className="muted small">Choose what to review, pick the surviving master, select accounts to merge, and add the set to the queue. Read-only — execution is a later phase.</p>
       <DatasetStamp />
 
