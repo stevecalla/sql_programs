@@ -10,6 +10,7 @@ export default function MergeProcess() {
   const [rows, setRows] = useState([]);
   const [sel, setSel] = useState(() => new Set());
   const [history, setHistory] = useState([]);
+  const [who, setWho] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -18,6 +19,7 @@ export default function MergeProcess() {
     api.mergeStatus().then(setStatus).catch((e) => setErr(e.message));
     api.mergeQueue('approved').then((r) => { const rs = r.rows || []; setRows(rs); setSel(new Set(rs.map((x) => x.id))); }).catch((e) => setErr(e.message));
     api.mergeHistory().then((r) => setHistory(r.rows || [])).catch(() => {});
+    api.mergeWhoami().then(setWho).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -27,6 +29,18 @@ export default function MergeProcess() {
   const ids = [...sel];
   const estOps = rows.filter((r) => sel.has(r.id)).reduce((s, r) => s + Math.ceil((Number(r.loser_count) || 0) / 2), 0);
   const safe = !status || status.safe_mode;
+
+  // The per-set pipeline that merge_execute runs, surfaced so the UI is transparent about what
+  // happens (and what is blocked) in the current mode. Step 4 is the only Salesforce write.
+  const steps = [
+    { n: 1, label: 'Re-fetch fresh data & re-run dry-run (apply saved overrides)', state: 'run' },
+    { n: 2, label: 'Re-validate — flag/skip drifted sets', state: 'run' },
+    { n: 3, label: 'Write pre-merge snapshot (restore baseline)', state: 'run' },
+    { n: 4, label: 'Execute Salesforce Database.merge', note: safe ? 'blocked by safe mode' : 'armed', state: safe ? 'locked' : 'run' },
+    { n: 5, label: safe ? 'Record history (simulated result)' : 'Record history & set status done/failed', state: safe ? 'run' : 'pending' },
+  ];
+  const stepMark = (st) => (st === 'locked' ? '🔒' : st === 'pending' ? '○' : '✓');
+  const stepColor = (st) => (st === 'run' ? 'var(--green)' : 'var(--dim)');
 
   const runDryRun = async () => {
     if (!ids.length) return;
@@ -47,6 +61,20 @@ export default function MergeProcess() {
         <strong style={{ color: safe ? 'var(--green)' : 'var(--red)' }}>{safe ? 'Safe mode is ON — no Salesforce writes' : 'Execution ENABLED'}</strong>
         <span className="muted small">{safe ? 'Processing runs the full dry-run + snapshot and records a simulated result.' : 'Real merges may run behind the remaining gates.'}</span>
         <span style={{ marginLeft: 'auto' }} className="muted small">Target environment: <strong>{status ? (status.environment || '—') : '…'}</strong>{status && status.data_as_of ? ' · data as of ' + new Date(status.data_as_of).toLocaleString() : ''}</span>
+      </div>
+
+      <div className="card" style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+        <strong>Connected Salesforce user</strong>
+        <span className="muted">{who ? (who.username || who.display_name || '—') : '…'}</span>
+        {who && (
+          <span className="pill" title="A merge needs Update + Delete on Account" style={{ color: who.can_merge ? 'var(--green)' : 'var(--amber)', borderColor: 'currentColor' }}>
+            {who.can_merge ? '✓ can merge (update + delete on Account)' : '✕ cannot merge — read-only / no delete'}
+          </span>
+        )}
+        {who && who.objects && who.objects.Account && !who.objects.Account.error && (
+          <span className="muted small">Account: {['createable', 'updateable', 'deletable'].filter((k) => who.objects.Account[k]).join(' · ') || 'no CRUD'}</span>
+        )}
+        <span className="muted small" style={{ marginLeft: 'auto' }}>Phase 3b plan: a dedicated write-enabled user performs merges.</span>
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
@@ -80,27 +108,42 @@ export default function MergeProcess() {
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Run</p>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className="btn" style={{ width: 'auto' }} disabled={busy || selCount === 0} onClick={runDryRun}>{busy ? 'Running…' : 'Run dry-run (' + selCount + ')'}</button>
-          <input placeholder="type MERGE" disabled style={{ opacity: 0.6, width: 140 }} />
-          <button className="btn primary" style={{ width: 'auto' }} disabled title="Execution is locked (safe mode / Phase 3)">Execute merges</button>
-          <span className="muted small">Gates: execution flag · sandbox · pre-merge snapshot · typed confirm{safe ? ' — all blocked in safe mode' : ''}</span>
+      {/* Steps + execute */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+        <div className="card" style={{ flex: '2 1 360px', minWidth: 0, margin: 0 }}>
+          <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Processing steps <span className="muted small" style={{ fontWeight: 400 }}>(per approved set)</span></p>
+          <ol style={{ listStyle: 'none', margin: 0, padding: 0, fontSize: 13, lineHeight: 1.5 }}>
+            {steps.map((s) => (
+              <li key={s.n} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '4px 0', opacity: s.state === 'run' ? 1 : 0.65 }}>
+                <span aria-hidden="true" style={{ width: 16, flex: '0 0 16px', textAlign: 'center', color: stepColor(s.state) }}>{stepMark(s.state)}</span>
+                <span><strong>{s.n} ·</strong> {s.label}{s.note ? <span className="muted"> — <strong>{s.note}</strong></span> : ''}</span>
+              </li>
+            ))}
+          </ol>
         </div>
-        {result && (
-          <p className="muted small" style={{ marginTop: 8, color: 'var(--accent)' }}>Run {result.run_id}: {result.simulated} simulated, {result.skipped} skipped, {result.failed} failed{result.safe_mode ? ' (safe mode — no writes)' : ''}.</p>
-        )}
+
+        <div className="card" style={{ flex: '1 1 240px', minWidth: 0, margin: 0 }}>
+          <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Run</p>
+          <p className="muted small" style={{ margin: '0 0 8px' }}>Type <strong>MERGE</strong> to confirm a real run{safe ? ' (disabled in safe mode)' : ''}.</p>
+          <input placeholder="type MERGE" disabled style={{ opacity: 0.6, width: '100%', marginBottom: 8 }} />
+          <button className="btn primary" style={{ width: '100%', marginTop: 0 }} disabled title="Execution is locked (safe mode / Phase 3)">▷ Execute merges{safe ? ' (off)' : ''}</button>
+          <button className="btn" style={{ width: '100%', marginTop: 8 }} disabled={busy || selCount === 0} onClick={runDryRun}>{busy ? 'Running…' : '👁 Run dry-run only (' + selCount + ')'}</button>
+          <p className="muted small" style={{ marginTop: 8 }}>Gates: execution flag · sandbox · snapshot ok · typed confirm</p>
+        </div>
       </div>
+      {result && (
+        <p className="muted small" style={{ marginTop: 8, color: 'var(--accent)' }}>Run {result.run_id}: {result.simulated} simulated, {result.skipped} skipped, {result.failed} failed{result.safe_mode ? ' (safe mode — no writes)' : ''}.</p>
+      )}
 
       <div className="card" style={{ marginTop: 12 }}>
         <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Merge history <span className="muted small" style={{ fontWeight: 400 }}>({history.length})</span></p>
         <div className="dt-scroll" style={{ maxHeight: 300 }}>
           <table className="modal-table">
-            <thead><tr><th>When</th><th>Survivor</th><th>Merged</th><th>Children</th><th>Env</th><th>Result</th><th>Snapshot</th><th>Reason</th></tr></thead>
+            <thead><tr><th>#</th><th>When</th><th>Survivor</th><th>Merged</th><th>Children</th><th>Env</th><th>Result</th><th>Snapshot</th><th>Reason</th></tr></thead>
             <tbody>
-              {history.map((h) => (
+              {history.map((h, i) => (
                 <tr key={h.id}>
+                  <td>{i + 1}</td>
                   <td>{h.created_at ? new Date(h.created_at).toLocaleString() : '—'}</td>
                   <td title={h.survivor_account}>{h.survivor_name || shortId(h.survivor_account)}</td>
                   <td>{h.loser_count == null ? '—' : h.loser_count}</td>

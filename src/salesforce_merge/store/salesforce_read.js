@@ -148,4 +148,26 @@ async function get_org_identity({ is_test, connect = default_connect } = {}) {
   return { org_id, is_sandbox };
 }
 
-module.exports = { fetch_accounts_by_ids, count_children_by_ids, count_children, discover_child_objects, get_org_identity, DETAIL_FIELDS, CHILD_OBJECTS };
+// Read-only capability probe: what is the CURRENTLY CONNECTED Salesforce user allowed to do?
+// sObject describe CRUD flags (createable/updateable/deletable) reflect the running user's *effective*
+// object permissions, so they answer "could this user merge?" without reading profile/permission-set
+// metadata. A merge needs UPDATE on the surviving record + DELETE on the losing records. Never writes.
+async function get_user_capabilities({ is_test, connect = default_connect, objects = ['Account', 'Contact'] } = {}) {
+  const conn = await connect(is_test);
+  const out = { is_test: !!is_test, user_id: null, username: null, display_name: null, org_id: null, objects: {}, can_merge: false };
+  try {
+    const id = await conn.identity();
+    if (id) { out.user_id = id.user_id || null; out.username = id.username || null; out.display_name = id.display_name || null; out.org_id = id.organization_id || null; }
+  } catch (e) { /* identity unavailable -> leave nulls */ }
+  for (const obj of objects) {
+    try {
+      const d = await conn.sobject(obj).describe();
+      out.objects[obj] = { createable: !!d.createable, updateable: !!d.updateable, deletable: !!d.deletable };
+    } catch (e) { out.objects[obj] = { error: 'describe failed (no access?)' }; }
+  }
+  const acct = out.objects.Account || {};
+  out.can_merge = !!(acct.updateable && acct.deletable);   // merge = update master + delete losers
+  return out;
+}
+
+module.exports = { fetch_accounts_by_ids, count_children_by_ids, count_children, discover_child_objects, get_org_identity, get_user_capabilities, DETAIL_FIELDS, CHILD_OBJECTS };

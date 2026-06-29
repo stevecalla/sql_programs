@@ -19,6 +19,7 @@ const cluster = require('../store/cluster_detail');
 const mqueue = require('../store/merge_queue');
 const mexec = require('../store/merge_execute');
 const mhist = require('../store/merge_history');
+const sfread = require('../store/salesforce_read');
 
 module.exports = function mount(app) {
   app.get('/api/status', function (req, res) {
@@ -234,6 +235,15 @@ module.exports = function mount(app) {
   app.get('/api/merge/history', require_auth, async function (req, res) {
     try { res.json({ ok: true, rows: await mhist.list({ limit: req.query.limit }) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Read-only probe: can the connected Salesforce user actually merge (update + delete on Account)?
+  // is_test follows the currently loaded dataset's environment so it checks the right org.
+  app.get('/api/merge/whoami', require_auth, async function (req, res) {
+    try {
+      const ds = await dashboard.dataset_info().catch(() => null);
+      const is_test = !ds || ds.environment !== 'Production';
+      res.json({ ok: true, environment: ds ? ds.environment : null, ...(await sfread.get_user_capabilities({ is_test })) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.delete('/api/merge-queue/:id', require_auth, async function (req, res) {
     try { res.json({ ok: true, ...(await mqueue.remove(req.params.id)) }); }

@@ -47,6 +47,7 @@ export const api = {
   mergeStatus: () => req('/api/merge/status'),
   mergeProcess: (ids, dry_run) => req('/api/merge/process', { method: 'POST', body: JSON.stringify({ ids, dry_run }) }),
   mergeHistory: () => req('/api/merge/history'),
+  mergeWhoami: () => req('/api/merge/whoami'),
   mergeQueueBulk: (payload) => req('/api/merge-queue/bulk', { method: 'POST', body: JSON.stringify(payload) }),
   refreshStart: (env, scope, job) => req('/api/refresh/start', { method: 'POST', body: JSON.stringify({ env, scope, job }) }),
   refreshStatus: () => req('/api/refresh/status'),
