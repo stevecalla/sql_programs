@@ -9,7 +9,11 @@ const GROUPS = [
     { to: '/merge-id', label: 'Merge-ID' },
     { to: '/accounts', label: 'All accounts' },
   ] },
-  { grp: 'Operate', items: [{ to: '/process', label: 'Get Duplicates' }, { to: '/merge-admin', label: 'Merge Admin' }] },
+  { grp: 'Operate', items: [
+    { to: '/process', label: 'Get Duplicates' },
+    { to: '/merge-admin', label: 'Merge Admin' },
+    { to: '/merge-process', label: 'Process Merges' },
+  ] },
   { grp: 'Analyze', items: [{ to: '/tuning', label: 'Tuning' }] },
   { grp: 'Admin', items: [
     { to: '/metrics', label: 'Metrics' },

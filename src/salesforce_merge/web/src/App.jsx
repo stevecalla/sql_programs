@@ -15,6 +15,7 @@ import Reference from './pages/Reference.jsx';
 import Process from './pages/Process.jsx';
 import Tuning from './pages/Tuning.jsx';
 import MergeAdmin from './pages/MergeAdmin.jsx';
+import MergeProcess from './pages/MergeProcess.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 
 export default function App() {
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="/process" element={<Process />} />
             <Route path="/tuning" element={<Tuning />} />
             <Route path="/merge-admin" element={<MergeAdmin />} />
+            <Route path="/merge-process" element={<MergeProcess />} />
             <Route path="/admin" element={<Placeholder title="Admin" note="Phase 1b" />} />
             <Route path="/metrics" element={<Placeholder title="Metrics" note="Phase 1" />} />
             <Route path="*" element={<Navigate to="/" replace />} />

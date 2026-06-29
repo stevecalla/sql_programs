@@ -286,7 +286,7 @@ export default function MergeAdmin() {
   };
 
   return (
-    <div className="mergeadmin">
+    <div className="mtbl">
       <h2>Merge Admin</h2>
       <p className="muted small">Choose what to review, pick the surviving master, select accounts to merge, and add the set to the queue. Read-only — execution is a later phase.</p>
       <DatasetStamp />

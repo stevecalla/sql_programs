@@ -17,6 +17,8 @@ const reviews = require('../store/reviews_read');
 const refresh = require('../store/refresh_runner');
 const cluster = require('../store/cluster_detail');
 const mqueue = require('../store/merge_queue');
+const mexec = require('../store/merge_execute');
+const mhist = require('../store/merge_history');
 
 module.exports = function mount(app) {
   app.get('/api/status', function (req, res) {
@@ -199,7 +201,8 @@ module.exports = function mount(app) {
   app.post('/api/merge-queue', require_auth, async function (req, res) {
     try {
       const b = req.body || {};
-      const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key,
+      const ds0 = await dashboard.dataset_info().catch(() => null);
+      const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key, environment: ds0 ? ds0.environment : null, org_id: b.org_id || null,
         survivor_account: b.survivor_account, survivor_contact: b.survivor_contact, survivor_name: b.survivor_name, field_overrides: b.field_overrides, child_counts: b.child_counts,
         loser_accounts: b.loser_accounts, master_rule: b.master_rule, notes: b.notes });
       res.status(201).json({ ok: true, ...r });
@@ -209,15 +212,28 @@ module.exports = function mount(app) {
     try {
       const b = req.body || {};
       if (b.source !== 'merge_id') return res.status(400).json({ ok: false, error: 'bulk add is supported for the merge-id source only' });
+      const dsb = await dashboard.dataset_info().catch(() => null);
       const groups = await reviews.resolve_merge_groups({ q: b.q, bucket: b.bucket, keys: b.keys });
       const CAP = 1000;
       const resolvable = groups.filter((g) => g.resolvable);
       const unresolved = groups.length - resolvable.length;
       const capped = resolvable.length > CAP;
-      const entries = resolvable.slice(0, CAP).map((g) => ({ created_by: current_user(req), source_type: 'merge_id', source_key: g.merge_id, survivor_account: g.survivor, survivor_name: g.name, loser_accounts: g.losers, master_rule: g.rule || 'cascade' }));
+      const entries = resolvable.slice(0, CAP).map((g) => ({ created_by: current_user(req), source_type: 'merge_id', source_key: g.merge_id, survivor_account: g.survivor, survivor_name: g.name, loser_accounts: g.losers, master_rule: g.rule || 'cascade', environment: dsb ? dsb.environment : null }));
       const r = await mqueue.add_many(entries);
       res.json({ ok: true, queued: r.queued, skipped: r.skipped, unresolved, total: groups.length, capped });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge/status', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await mexec.status()) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge/process', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await mexec.process((req.body || {}).ids, { dry_run: !!(req.body || {}).dry_run, created_by: current_user(req) })) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge/history', require_auth, async function (req, res) {
+    try { res.json({ ok: true, rows: await mhist.list({ limit: req.query.limit }) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.delete('/api/merge-queue/:id', require_auth, async function (req, res) {
     try { res.json({ ok: true, ...(await mqueue.remove(req.params.id)) }); }

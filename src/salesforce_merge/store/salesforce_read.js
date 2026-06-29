@@ -136,4 +136,16 @@ async function count_children(ids, { is_test = true, connect = default_connect, 
   return out;
 }
 
-module.exports = { fetch_accounts_by_ids, count_children_by_ids, count_children, discover_child_objects, DETAIL_FIELDS, CHILD_OBJECTS };
+// Best-effort org identity (org id + sandbox flag) for the environment-alignment guard. Read-only.
+async function get_org_identity({ is_test, connect = default_connect } = {}) {
+  const conn = await connect(is_test);
+  let org_id = null; let is_sandbox = null;
+  try { const id = await conn.identity(); org_id = (id && id.organization_id) || null; } catch (e) { /* ignore */ }
+  try {
+    const r = await conn.query('SELECT Id, IsSandbox FROM Organization LIMIT 1');
+    if (r && r.records && r.records[0]) { org_id = org_id || r.records[0].Id; is_sandbox = !!r.records[0].IsSandbox; }
+  } catch (e) { /* ignore */ }
+  return { org_id, is_sandbox };
+}
+
+module.exports = { fetch_accounts_by_ids, count_children_by_ids, count_children, discover_child_objects, get_org_identity, DETAIL_FIELDS, CHILD_OBJECTS };

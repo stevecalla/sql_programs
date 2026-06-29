@@ -205,3 +205,30 @@ Phase 3 will process `approved` rows: re-run the dry-run on fresh data, write a 
 execute `Database.merge`, log history, and support best-effort restore. The redundant per-cluster
 "Preview merge (dry-run)" button was removed — the live detail already previews, and authoritative
 validation moves into Phase-3 processing.
+
+## Phase 3 — Process merges (safe mode, no writes yet)
+
+The **Process Merges** page (Operate rail, `/merge-process`) reads the **approved** queue and runs the
+execution pipeline, but **safe mode is on by default — no Salesforce writes happen**. Each selected set
+is re-validated against fresh data, backed up to a pre-merge snapshot, and recorded as `simulated`.
+
+- **Environment/org alignment guard.** Queue entries are stamped with the `environment` (and `org_id`
+  when known) they were built from. `merge_execute.verify_alignment` compares that to the currently
+  loaded dataset's environment and the connected org id; a mismatch is **skipped** (a Sandbox-built set
+  can't run against Production, or vice-versa). Drifted sets (a record changed/removed since approval)
+  are skipped too.
+- **Pre-merge snapshot** (`salesforce_merge_premerge_snapshot`) — full record state for survivor +
+  losers, written before any merge (restore baseline). **History** (`salesforce_merge_history`) — one
+  row per processed entry (result simulated/skipped/failed/done, env, org, snapshot flag, reason).
+- **Safety model.** Single chokepoint `store/merge_execute.js`; `MERGE_ENABLE_EXECUTION` env flag
+  (default false → safe mode); the real `Database.merge` (Phase 3b) is intentionally NOT implemented, so
+  even with the flag on it records `failed` ("endpoint not configured") rather than risk a write.
+  Endpoints: `GET /api/merge/status`, `POST /api/merge/process`, `GET /api/merge/history`.
+- **Shared tables.** The Merge Admin table refinements (sticky headers, centered cells, etc.) were
+  lifted from `.mergeadmin`-scoped CSS to a shared `.mtbl` class; both Merge Admin and Process Merges
+  wrap in `.mtbl`, so their tables look and behave identically.
+
+To enable real execution later (Phase 3b): deploy an Apex `Database.merge` REST endpoint, provide a
+write-enabled least-privilege Salesforce user, wire it into the chokepoint, then flip
+`MERGE_ENABLE_EXECUTION` (sandbox first) behind the typed confirm. Phase 4 = best-effort restore from
+the snapshot.

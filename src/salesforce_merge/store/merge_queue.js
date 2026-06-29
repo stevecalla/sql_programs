@@ -22,13 +22,15 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' master_rule VARCHAR(60),' +
   ' status VARCHAR(20) NOT NULL DEFAULT "queued",' +
   ' notes TEXT,' +
+  ' environment VARCHAR(20),' +
+  ' org_id VARCHAR(32),' +
   ' field_overrides TEXT,' +
   ' child_counts TEXT' +
   ')';
 
 const COLS = 'id, created_at, created_by, source_type, source_key, survivor_account, ' +
   'survivor_contact, survivor_name, loser_accounts, loser_count, master_rule, status, notes, ' +
-  'field_overrides, child_counts';
+  'environment, org_id, field_overrides, child_counts';
 
 function as_losers(v) {
   if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
@@ -45,6 +47,8 @@ async function ensure_table(query = real_query) {
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN survivor_name VARCHAR(255)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN field_overrides TEXT', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN child_counts TEXT', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN environment VARCHAR(20)', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN org_id VARCHAR(32)', []); } catch (e) { /* exists */ }
   _ensured = true;
 }
 
@@ -64,12 +68,12 @@ async function add(entry, query = real_query) {
   const res = await query(
     'INSERT INTO `' + TABLE + '` (created_by, source_type, source_key, survivor_account, ' +
     'survivor_contact, loser_accounts, loser_count, master_rule, status, notes, survivor_name, ' +
-    'field_overrides, child_counts) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'environment, org_id, field_overrides, child_counts) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [entry.created_by || null, entry.source_type || 'group', String(entry.source_key || ''),
      String(entry.survivor_account || ''), entry.survivor_contact || null,
      losers.join(';'), losers.length, entry.master_rule || null, 'queued', entry.notes || null, entry.survivor_name || null,
-     as_json(entry.field_overrides), as_json(entry.child_counts)]);
+     entry.environment || null, entry.org_id || null, as_json(entry.field_overrides), as_json(entry.child_counts)]);
   return { id: (res && res.insertId) || null, loser_count: losers.length };
 }
 
