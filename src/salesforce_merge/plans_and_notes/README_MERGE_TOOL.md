@@ -577,6 +577,27 @@ small, self-contained change to `database_snapshot.js` / `database_results.js` (
 This section is the source of truth for the merge execution + restore work and supersedes the
 matching "To revisit" items above. Decisions here are confirmed.
 
+> **STATUS — BUILT (safe mode).** Phase 3b + 4 are implemented and unit-tested (fake jsforce/db),
+> shipping OFF by default. New stores: `salesforce_write.js` (jsforce `conn.soap.merge` / `undelete`),
+> `merge_run.js` (progress), `merge_restore.js` (Phase 4); `merge_execute.js` rewritten for the real
+> path; `merge_snapshot.js` now child-aware + keep-latest. New tables: `salesforce_merge_run`
+> (+ child rows in `salesforce_merge_premerge_snapshot`, `mode` col on `salesforce_merge_history`).
+> API: `/api/merge/progress`, `/api/merge/restore` (GET/POST), execute params on `/api/merge/process`.
+> UI: Process Merges gets the Simulate/Execute switch + typed-MERGE + progress bar/timer/ETA; new
+> **Restore** page (`/restore`). To enable real writes (sandbox first): set
+> `MERGE_ENABLE_EXECUTION=true` and (recommended) the dedicated write-user env vars
+> `SF_DEV_WRITE_USERNAME` / `SF_DEV_WRITE_PASSWORD` / `SF_DEV_WRITE_SECURITY_TOKEN` (PROD equivalents
+> for production), then choose **Execute** + type MERGE. **Verify the `conn.soap.merge` masterRecord
+> shape against the org in sandbox before production.**
+>
+> **Optional "stamp survivor as merged" (Process Merges checkbox).** When enabled, after a successful
+> merge the survivor is best-effort updated with custom fields `was_merged__c` (Checkbox) +
+> `was_merged_date__c` (DateTime). These are **NOT auto-created** — an admin adds them in Salesforce
+> (Setup → Object Manager → Account → Fields) and grants field-level security. If they're missing the
+> merge still succeeds and the run logs "stamp skipped"; the UI checks field presence
+> (`GET /api/merge/stamp-fields`) and shows a warning. Note: this is the *survivor*-side marker;
+> Salesforce already stamps each deleted loser's `MasterRecordId` with the survivor id.
+
 ### Locked decisions
 - **Merge surface:** native Salesforce `merge()` **directly from Node via jsforce** — **no Apex**.
 - **Credentials:** a **dedicated least-privilege write user** (read + update + delete on

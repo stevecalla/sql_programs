@@ -1,22 +1,47 @@
 'use strict';
-// Phase 3 — the single write chokepoint. Processes APPROVED queue entries. SAFE BY DEFAULT: unless
-// MERGE_ENABLE_EXECUTION=true, no Salesforce write ever happens — each entry is validated, snapshotted
-// (backup), and recorded as 'simulated'. The actual Database.merge (Phase 3b) is intentionally not
-// implemented here, so even with the flag on it refuses rather than risk an unconfigured write.
-// Every dependency is injectable for tests.
+// Phase 3b — the single WRITE chokepoint for merges. SAFE BY DEFAULT: a real Salesforce merge runs
+// only when the full gate stack is satisfied (MERGE_ENABLE_EXECUTION=true + mode 'execute' + typed
+// 'MERGE' confirm + environment/org alignment). Otherwise every entry is SIMULATED — the whole
+// pipeline runs (re-fetch, drift check, child-aware snapshot, field plan) but no Salesforce write
+// happens. Failure policy is FAIL-STOP, NO auto-revert. All deps are injectable for tests.
 const dashboard = require('./duplicates_read');
 const cluster = require('./cluster_detail');
-const sfread = require('./salesforce_read');
+// salesforce_read / salesforce_write are lazy-required inside runQueue (only used as injected-dep
+// defaults at run time) so the module loads without initializing the Salesforce connection layer.
 const mqueue = require('./merge_queue');
 const snapshot = require('./merge_snapshot');
 const history = require('./merge_history');
+const mrun = require('./merge_run');
 
-const EXECUTION_ENABLED = process.env.MERGE_ENABLE_EXECUTION === 'true'; // default false
-function safe_mode() { return !EXECUTION_ENABLED; }
+// Deploy-level gate, default false. Read at call time so it can be toggled (tests / env) without reload.
+function execution_enabled() { return process.env.MERGE_ENABLE_EXECUTION === 'true'; }
+const DEFAULT_OP_SECONDS = 2; // rough per merge-call estimate until real history refines it
+function safe_mode() { return !execution_enabled(); }
 function make_run_id() { return 'mrun-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7); }
+const ceil2 = (n) => Math.ceil((Number(n) || 0) / 2);
 
-// The queued entry's lineage must match the org we'd write to. Environment (Production/Sandbox) is the
-// label guard; org_id is the deterministic guard when both sides are known.
+// Survivorship: which field values to WRITE onto the master. Precedence override > master non-blank >
+// first loser non-blank (backfill). Only fields whose chosen value differs from master are returned.
+function build_master_fields(accounts, survivorId, overrides) {
+  const SKIP = new Set(['account', 'contact', 'Id', 'Name', 'CreatedDate', 'LastModifiedDate']);
+  const master = accounts.find((a) => a.account === survivorId) || {};
+  const losers = accounts.filter((a) => a.account !== survivorId);
+  const blank = (v) => v === undefined || v === null || v === '';
+  const fields = new Set();
+  for (const a of accounts) for (const k of Object.keys(a)) if (!SKIP.has(k)) fields.add(k);
+  const out = {};
+  for (const f of fields) {
+    const ov = overrides ? overrides[f] : undefined;
+    if (!blank(ov)) { if (ov !== master[f]) out[f] = ov; continue; }
+    if (blank(master[f])) {
+      const donor = losers.find((l) => !blank(l[f]));
+      if (donor) out[f] = donor[f];
+    }
+  }
+  return out;
+}
+
+// Alignment guard: a queued set must match the org we'd write to (environment label + org id).
 function verify_alignment(entry, ctx) {
   if (entry.environment && ctx.environment && entry.environment !== ctx.environment) {
     return { ok: false, reason: 'environment mismatch (queued ' + entry.environment + ', current ' + ctx.environment + ')' };
@@ -32,17 +57,17 @@ async function status(deps = {}) {
   const ds = await dash.dataset_info().catch(() => null);
   return {
     safe_mode: safe_mode(),
-    execution_enabled: EXECUTION_ENABLED,
+    execution_enabled: execution_enabled(),
     environment: ds ? ds.environment : null,
     data_as_of: ds ? ds.run_at : null,
   };
 }
 
-function histbase(runId, e, createdBy) {
+function histbase(runId, e, createdBy, mode) {
   return {
     run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
     survivor_account: e.survivor_account, survivor_name: e.survivor_name, loser_count: e.loser_count,
-    environment: e.environment, org_id: e.org_id, master_rule: e.master_rule,
+    environment: e.environment, org_id: e.org_id, master_rule: e.master_rule, mode,
   };
 }
 
@@ -51,8 +76,10 @@ async function runQueue(ids, opts = {}, deps = {}) {
   const C = deps.cluster || cluster;
   const SN = deps.snapshot || snapshot;
   const H = deps.history || history;
+  const RUN = deps.run || mrun;
+  const SF = deps.sf || require('./salesforce_read');
+  const W = deps.write || require('./salesforce_write');
   const dash = deps.dashboard || dashboard;
-  const SF = deps.sf || sfread;
   const createdBy = opts.created_by || null;
 
   const idset = new Set((ids || []).map((x) => Number(x)));
@@ -61,22 +88,41 @@ async function runQueue(ids, opts = {}, deps = {}) {
 
   const ds = await dash.dataset_info().catch(() => null);
   const env = ds ? ds.environment : null;
+  const is_test = env !== 'Production';
   let ctxOrg = opts.org_id || null;
-  try { const oi = await SF.get_org_identity({ is_test: env !== 'Production' }); if (oi && oi.org_id) ctxOrg = oi.org_id; } catch (e) { /* best effort */ }
+  try { const oi = await SF.get_org_identity({ is_test }); if (oi && oi.org_id) ctxOrg = oi.org_id; } catch (e) { /* best effort */ }
   const ctx = { environment: env, org_id: ctxOrg };
 
-  const runId = make_run_id();
-  const out = { run_id: runId, environment: env, org_id: ctxOrg, safe_mode: safe_mode(),
-    processed: 0, simulated: 0, skipped: 0, failed: 0, results: [] };
+  const wantExecute = opts.mode === 'execute' && !opts.dry_run;
+  const gates = { flag: execution_enabled(), mode: wantExecute, confirm: opts.confirm === 'MERGE' };
+  const armed = gates.flag && gates.mode && gates.confirm;
+  const mode = armed ? 'execute' : 'simulate';
 
-  for (const e of entries) {
+  const totalOps = entries.reduce((s, e) => s + Math.max(1, ceil2(e.loser_count)), 0);
+  const runId = make_run_id();
+  await RUN.start({ run_id: runId, kind: 'merge', mode, environment: env, org_id: ctxOrg,
+    total_ops: totalOps, total_sets: entries.length, est_seconds: totalOps * DEFAULT_OP_SECONDS, created_by: createdBy });
+
+  const out = { run_id: runId, environment: env, org_id: ctxOrg, mode, armed, gates,
+    processed: 0, simulated: 0, done: 0, skipped: 0, failed: 0, results: [] };
+  let completedOps = 0; let completedSets = 0;
+  let conn = null;
+
+  for (let si = 0; si < entries.length; si += 1) {
+    const e = entries[si];
     out.processed += 1;
+    const label = (n) => 'Set ' + (si + 1) + ' of ' + entries.length + (n ? ' · ' + n : '');
+    await RUN.update(runId, { current_label: label('preparing') });
+
     const align = verify_alignment(e, ctx);
     if (!align.ok) {
-      await H.write({ ...histbase(runId, e, createdBy), snapshot_saved: 0, result: 'skipped', reason: align.reason });
+      await H.write({ ...histbase(runId, e, createdBy, mode), snapshot_saved: 0, result: 'skipped', reason: align.reason });
       out.skipped += 1; out.results.push({ id: e.id, result: 'skipped', reason: align.reason });
+      completedOps += Math.max(1, ceil2(e.loser_count)); completedSets += 1;
+      await RUN.update(runId, { completed_ops: completedOps, completed_sets: completedSets });
       continue;
     }
+
     let detail = null;
     try { detail = await C.cluster_detail(e.source_key, { kind: e.source_type }); } catch (err) { detail = null; }
     const accounts = (detail && detail.accounts) || [];
@@ -85,26 +131,83 @@ async function runQueue(ids, opts = {}, deps = {}) {
     const missing = [e.survivor_account].concat(losers).filter((id) => id && !present.has(id));
     if (!accounts.length || missing.length) {
       const reason = accounts.length ? ('records changed since queueing (' + missing.length + ' missing)') : 'no records found (drift or wrong org)';
-      await H.write({ ...histbase(runId, e, createdBy), snapshot_saved: 0, result: 'skipped', reason });
+      await H.write({ ...histbase(runId, e, createdBy, mode), snapshot_saved: 0, result: 'skipped', reason });
       out.skipped += 1; out.results.push({ id: e.id, result: 'skipped', reason });
+      completedOps += Math.max(1, ceil2(e.loser_count)); completedSets += 1;
+      await RUN.update(runId, { completed_ops: completedOps, completed_sets: completedSets });
       continue;
     }
-    let snap_ok = false;
-    try { await SN.save(runId, e, accounts); snap_ok = true; } catch (err) { snap_ok = false; }
-    const childTotal = (e.child_counts && e.child_counts.total) || 0;
 
-    if (safe_mode() || opts.dry_run) {
-      await H.write({ ...histbase(runId, e, createdBy), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
-        result: 'simulated', reason: opts.dry_run ? 'dry-run' : 'safe mode — no Salesforce write' });
-      out.simulated += 1; out.results.push({ id: e.id, result: 'simulated' });
+    let snap_ok = false;
+    try {
+      const contactByAccount = {};
+      for (const a of accounts) if (a.contact) contactByAccount[a.account] = a.contact;
+      const children = await SF.fetch_children(accounts.map((a) => a.account), { is_test, contactByAccount }).catch(() => []);
+      await SN.save(runId, e, accounts, children);
+      snap_ok = true;
+    } catch (err) { snap_ok = false; }
+
+    const masterFields = build_master_fields(accounts, e.survivor_account, e.field_overrides);
+    const childTotal = (e.child_counts && e.child_counts.total) || 0;
+    const opCount = Math.max(1, ceil2(losers.length));
+
+    if (!armed) {
+      await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
+        result: 'simulated', reason: opts.dry_run ? 'dry-run' : 'safe mode / simulate — no Salesforce write',
+        planned_fields: Object.keys(masterFields).length });
+      out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', planned_field_changes: Object.keys(masterFields).length });
+      completedOps += opCount; completedSets += 1;
+      await RUN.update(runId, { completed_ops: completedOps, completed_sets: completedSets, current_label: label('simulated') });
       continue;
     }
-    // Execution path (Phase 3b) — no merge endpoint configured; refuse rather than risk a write.
-    await H.write({ ...histbase(runId, e, createdBy), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
-      result: 'failed', reason: 'merge execution endpoint not configured (Phase 3b)' });
-    out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: 'no merge endpoint' });
+
+    if (!conn) { try { conn = await W.default_write_connect(is_test); } catch (err) {
+      await H.write({ ...histbase(runId, e, createdBy, mode), snapshot_saved: snap_ok ? 1 : 0, result: 'failed', reason: 'write connection failed: ' + err.message });
+      out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
+      await RUN.finish(runId, { status: 'error', completed_ops: completedOps, completed_sets: completedSets, current_label: 'connection failed' });
+      return out;
+    } }
+
+    const merged = []; let remaining = losers.slice(); let failure = null; let first = true;
+    for (let i = 0; i < losers.length; i += 2) {
+      const batch = losers.slice(i, i + 2);
+      let res;
+      try { res = await W.merge_one(conn, e.survivor_account, batch, first ? masterFields : {}); }
+      catch (err) { failure = err.message; break; }
+      first = false;
+      completedOps += 1;
+      await RUN.update(runId, { completed_ops: completedOps, current_label: label('batch ' + ((i / 2) + 1) + '/' + opCount) });
+      if (!res.success) { failure = (res.errors && res.errors[0] && (res.errors[0].message || res.errors[0].statusCode)) || 'merge failed'; break; }
+      merged.push(...batch); remaining = remaining.filter((x) => !batch.includes(x));
+    }
+
+    if (failure) {
+      await Q.transition([e.id], 'failed', ['approved']);
+      await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
+        result: 'failed', reason: 'halted: ' + failure + ' (merged ' + merged.length + ', remaining ' + remaining.length + ')',
+        merged_count: merged.length, remaining_count: remaining.length });
+      out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: failure, merged: merged.length, remaining: remaining.length });
+    } else {
+      // Optional: stamp the survivor as merged. Done AFTER the merge as a best-effort update so a
+      // missing custom field (was_merged__c / was_merged_date__c) never fails the merge itself.
+      let stampNote = '';
+      if (opts.stamp_merged) {
+        try {
+          await W.update_record(conn, 'Account', { Id: e.survivor_account, was_merged__c: true, was_merged_date__c: new Date().toISOString() });
+          stampNote = '; stamped was_merged__c';
+        } catch (err) { stampNote = '; stamp skipped (' + err.message + ')'; }
+      }
+      await Q.transition([e.id], 'done', ['approved']);
+      await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
+        result: 'done', reason: 'merged ' + merged.length + ' record(s)' + stampNote, merged_count: merged.length, remaining_count: 0 });
+      out.done += 1; out.results.push({ id: e.id, result: 'done', merged: merged.length });
+    }
+    completedSets += 1;
+    await RUN.update(runId, { completed_sets: completedSets });
   }
+
+  await RUN.finish(runId, { status: 'done', completed_ops: completedOps, completed_sets: completedSets, current_label: 'Complete' });
   return out;
 }
 
-module.exports = { process: runQueue, status, verify_alignment, safe_mode, make_run_id, EXECUTION_ENABLED };
+module.exports = { process: runQueue, status, verify_alignment, build_master_fields, safe_mode, execution_enabled, make_run_id };

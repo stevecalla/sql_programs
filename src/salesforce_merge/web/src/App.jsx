@@ -16,6 +16,7 @@ import GetDuplicates from './pages/GetDuplicates.jsx';
 import Tuning from './pages/Tuning.jsx';
 import SelectMerges from './pages/SelectMerges.jsx';
 import MergeProcess from './pages/MergeProcess.jsx';
+import Restore from './pages/Restore.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 
 export default function App() {
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/tuning" element={<Tuning />} />
             <Route path="/select-merges" element={<SelectMerges />} />
             <Route path="/merge-process" element={<MergeProcess />} />
+            <Route path="/restore" element={<Restore />} />
             <Route path="/admin" element={<Placeholder title="Admin" note="Phase 1b" />} />
             <Route path="/metrics" element={<Placeholder title="Metrics" note="Phase 1" />} />
             <Route path="*" element={<Navigate to="/" replace />} />

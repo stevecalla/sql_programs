@@ -13,10 +13,10 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' queue_id INT,' +
   ' source_type VARCHAR(24),' +
   ' source_key TEXT,' +
-  ' role VARCHAR(12) NOT NULL,' +                 // 'survivor' | 'loser'
+  ' role VARCHAR(12) NOT NULL,' +
   ' account VARCHAR(32) NOT NULL,' +
   ' contact VARCHAR(32),' +
-  ' fields LONGTEXT' +                            // JSON of the full deep-fetched record
+  ' fields LONGTEXT' +
   ')';
 
 let _ensured = false;
@@ -26,22 +26,37 @@ async function ensure_table(query = real_query) {
   _ensured = true;
 }
 
-// Save one row per account in the set; role is derived from the survivor id.
-async function save(runId, entry, accounts, query = real_query) {
+// Save the pre-merge state for a set: one row per account (role survivor/loser) PLUS one row per
+// child record (role 'child', fields = {object,id,parent_field,parent_id}) so restore can re-point
+// children later. KEEP-LATEST: clears this entry's prior snapshot first.
+async function save(runId, entry, accounts, children = [], query = real_query) {
   await ensure_table(query);
-  const rows = accounts || [];
-  let saved = 0;
-  for (const a of rows) {
+  const qid = entry && entry.id != null ? Number(entry.id) : null;
+  if (qid != null) await query('DELETE FROM `' + TABLE + '` WHERE queue_id = ?', [qid]);
+
+  const ins = (role, account, contact, payload) => query(
+    'INSERT INTO `' + TABLE + '` (run_id, queue_id, source_type, source_key, role, account, contact, fields) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [String(runId), qid, entry.source_type || null, String(entry.source_key || ''),
+     role, String(account || ''), contact || null, JSON.stringify(payload)]);
+
+  let accN = 0; let chN = 0;
+  for (const a of (accounts || [])) {
     const role = a.account === entry.survivor_account ? 'survivor' : 'loser';
-    await query(
-      'INSERT INTO `' + TABLE + '` (run_id, queue_id, source_type, source_key, role, account, contact, fields) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [String(runId), entry.id != null ? Number(entry.id) : null, entry.source_type || null,
-       String(entry.source_key || ''), role, String(a.account || ''), a.contact || null,
-       JSON.stringify(a)]);
-    saved += 1;
+    await ins(role, a.account, a.contact, a);
+    accN += 1;
   }
-  return { saved };
+  for (const ch of (children || [])) {
+    await ins('child', ch.account || ch.parent_id, null, ch);
+    chN += 1;
+  }
+  return { saved: accN + chN, accounts: accN, children: chN };
+}
+
+async function list_for_entry(queueId, query = real_query) {
+  await ensure_table(query);
+  const rows = await query('SELECT * FROM `' + TABLE + '` WHERE queue_id = ? ORDER BY id', [Number(queueId)]);
+  return (rows || []).map((r) => ({ ...r, fields: (() => { try { return JSON.parse(r.fields); } catch (e) { return r.fields; } })() }));
 }
 
 async function list_for_run(runId, query = real_query) {
@@ -50,4 +65,4 @@ async function list_for_run(runId, query = real_query) {
   return (rows || []).map((r) => ({ ...r, fields: (() => { try { return JSON.parse(r.fields); } catch (e) { return r.fields; } })() }));
 }
 
-module.exports = { save, list_for_run, ensure_table, TABLE, DDL };
+module.exports = { save, list_for_run, list_for_entry, ensure_table, TABLE, DDL };

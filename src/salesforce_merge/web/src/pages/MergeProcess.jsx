@@ -14,12 +14,19 @@ export default function MergeProcess() {
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [mode, setMode] = useState('simulate');   // 'simulate' | 'execute'
+  const [confirmText, setConfirmText] = useState('');
+  const [progress, setProgress] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [stampMerged, setStampMerged] = useState(false);
+  const [stampFields, setStampFields] = useState(null);
 
   const load = useCallback(() => {
     api.mergeStatus().then(setStatus).catch((e) => setErr(e.message));
     api.mergeQueue('approved').then((r) => { const rs = r.rows || []; setRows(rs); setSel(new Set(rs.map((x) => x.id))); }).catch((e) => setErr(e.message));
     api.mergeHistory().then((r) => setHistory(r.rows || [])).catch(() => {});
     api.mergeWhoami().then(setWho).catch(() => {});
+    api.stampFields().then(setStampFields).catch(() => setStampFields(null));
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -36,17 +43,39 @@ export default function MergeProcess() {
     { n: 1, label: 'Re-fetch fresh data & re-run dry-run (apply saved overrides)', state: 'run' },
     { n: 2, label: 'Re-validate — flag/skip drifted sets', state: 'run' },
     { n: 3, label: 'Write pre-merge snapshot (restore baseline)', state: 'run' },
-    { n: 4, label: 'Execute Salesforce Database.merge', note: safe ? 'blocked by safe mode' : 'armed', state: safe ? 'locked' : 'run' },
-    { n: 5, label: safe ? 'Record history (simulated result)' : 'Record history & set status done/failed', state: safe ? 'run' : 'pending' },
+    { n: 4, label: 'Execute Salesforce Database.merge (master + 2 at a time)',
+      note: safe ? 'blocked by safe mode' : (mode === 'execute' ? 'armed in Execute mode' : 'Simulate mode — skipped'),
+      state: (!safe && mode === 'execute') ? 'run' : 'locked' },
+    { n: 5, label: (!safe && mode === 'execute') ? 'Record history & set status done/failed' : 'Record history (simulated result)',
+      state: 'run' },
   ];
   const stepMark = (st) => (st === 'locked' ? '🔒' : st === 'pending' ? '○' : '✓');
   const stepColor = (st) => (st === 'run' ? 'var(--green)' : 'var(--dim)');
 
-  const runDryRun = async () => {
+  // Live progress: while a run is in flight, poll the run-progress record + tick an elapsed timer.
+  useEffect(() => {
+    if (!busy) return undefined;
+    const t0 = Date.now();
+    const tick = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 1000);
+    const poll = setInterval(() => { api.mergeProgress('merge').then((r) => setProgress(r.run || null)).catch(() => {}); }, 1000);
+    return () => { clearInterval(tick); clearInterval(poll); };
+  }, [busy]);
+
+  const canExecute = !safe && mode === 'execute' && confirmText === 'MERGE' && selCount > 0;
+  const eta = (() => {
+    if (!progress || !progress.completed_ops || !progress.total_ops || !elapsed) return null;
+    const per = elapsed / progress.completed_ops;
+    const remain = Math.max(0, progress.total_ops - progress.completed_ops);
+    return Math.round(per * remain);
+  })();
+
+  const run = async (execute) => {
     if (!ids.length) return;
-    setBusy(true); setErr(''); setResult(null);
-    try { const r = await api.mergeProcess(ids, true); setResult(r); load(); }
-    catch (e) { setErr(e.message); }
+    setBusy(true); setErr(''); setResult(null); setProgress(null); setElapsed(0);
+    try {
+      const r = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged } : { mode: 'simulate', stamp_merged: stampMerged });
+      setResult(r); setConfirmText(''); load();
+    } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
 
@@ -124,15 +153,54 @@ export default function MergeProcess() {
 
         <div className="card" style={{ flex: '1 1 240px', minWidth: 0, margin: 0 }}>
           <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Run</p>
-          <p className="muted small" style={{ margin: '0 0 8px' }}>Type <strong>MERGE</strong> to confirm a real run{safe ? ' (disabled in safe mode)' : ''}.</p>
-          <input placeholder="type MERGE" disabled style={{ opacity: 0.6, width: '100%', marginBottom: 8 }} />
-          <button className="btn primary" style={{ width: '100%', marginTop: 0 }} disabled title="Execution is locked (safe mode / Phase 3)">▷ Execute merges{safe ? ' (off)' : ''}</button>
-          <button className="btn" style={{ width: '100%', marginTop: 8 }} disabled={busy || selCount === 0} onClick={runDryRun}>{busy ? 'Running…' : '👁 Run dry-run only (' + selCount + ')'}</button>
+          <div className="seg" style={{ width: '100%', marginBottom: 8 }}>
+            <button className={'seg-btn' + (mode === 'simulate' ? ' on' : '')} style={{ flex: 1 }} onClick={() => setMode('simulate')}>Simulate</button>
+            <button className={'seg-btn' + (mode === 'execute' ? ' on' : '')} style={{ flex: 1 }} disabled={safe} title={safe ? 'Execution disabled (safe mode)' : ''} onClick={() => setMode('execute')}>Execute</button>
+          </div>
+          {mode === 'execute' && !safe && (
+            <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="type MERGE to confirm"
+              style={{ width: '100%', marginBottom: 8 }} />
+          )}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
+            <input type="checkbox" checked={stampMerged} onChange={(e) => setStampMerged(e.target.checked)} style={{ marginTop: 2 }} />
+            <span>Stamp survivor as merged <code>(was_merged__c, was_merged_date__c)</code></span>
+          </label>
+          {stampMerged && stampFields && (!stampFields.was_merged__c || !stampFields.was_merged_date__c) && (
+            <p className="small" style={{ margin: '0 0 8px', color: 'var(--amber)' }}>
+              ⚠ {[!stampFields.was_merged__c && 'was_merged__c', !stampFields.was_merged_date__c && 'was_merged_date__c'].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The merge still runs; the stamp is skipped until the field exists.
+            </p>
+          )}
+          {stampMerged && stampFields && stampFields.was_merged__c && stampFields.was_merged_date__c && (
+            <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present</p>
+          )}
+          <button className="btn primary" style={{ width: '100%', marginTop: 0 }} disabled={busy || !canExecute}
+            title={safe ? 'Execution is locked (safe mode)' : 'Type MERGE and select sets to enable'} onClick={() => run(true)}>
+            ▷ Execute merges{safe ? ' (off)' : ''}
+          </button>
+          <button className="btn" style={{ width: '100%', marginTop: 8 }} disabled={busy || selCount === 0} onClick={() => run(false)}>
+            {busy ? 'Running…' : '👁 Run simulate (' + selCount + ')'}
+          </button>
           <p className="muted small" style={{ marginTop: 8 }}>Gates: execution flag · sandbox · snapshot ok · typed confirm</p>
         </div>
       </div>
+
+      {(busy || progress) && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <p style={{ margin: '0 0 6px', fontWeight: 700 }}>Progress
+            <span className="muted small" style={{ fontWeight: 400 }}> — {progress ? (progress.current_label || progress.status) : 'starting…'}</span>
+          </p>
+          <div style={{ background: 'var(--line)', borderRadius: 6, height: 10, overflow: 'hidden' }}>
+            <div style={{ height: '100%', background: 'var(--accent)', width: (progress && progress.total_ops ? Math.round(100 * (progress.completed_ops || 0) / progress.total_ops) : 0) + '%', transition: 'width .3s' }} />
+          </div>
+          <p className="muted small" style={{ marginTop: 6 }}>
+            {progress ? (progress.completed_ops || 0) + ' / ' + (progress.total_ops || 0) + ' operations' : ''}
+            {' · elapsed ' + elapsed + 's'}{eta != null ? ' · ~' + eta + 's left' : ''}
+          </p>
+        </div>
+      )}
+
       {result && (
-        <p className="muted small" style={{ marginTop: 8, color: 'var(--accent)' }}>Run {result.run_id}: {result.simulated} simulated, {result.skipped} skipped, {result.failed} failed{result.safe_mode ? ' (safe mode — no writes)' : ''}.</p>
+        <p className="muted small" style={{ marginTop: 8, color: 'var(--accent)' }}>Run {result.run_id} ({result.mode}): {result.done || 0} done, {result.simulated || 0} simulated, {result.skipped} skipped, {result.failed} failed.</p>
       )}
 
       <div className="card" style={{ marginTop: 12 }}>

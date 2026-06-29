@@ -13,6 +13,7 @@ const GROUPS = [
     { to: '/get-duplicates', label: 'Get Duplicates' },
     { to: '/select-merges', label: 'Select Merges' },
     { to: '/merge-process', label: 'Process Merges' },
+    { to: '/restore', label: 'Restore' },
   ] },
   { grp: 'Analyze', items: [{ to: '/tuning', label: 'Tuning' }] },
   { grp: 'Admin', items: [

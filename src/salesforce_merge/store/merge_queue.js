@@ -52,8 +52,6 @@ async function ensure_table(query = real_query) {
   _ensured = true;
 }
 
-// A set is identified by source_key + survivor while still pending (queued OR approved) — the same
-// records can't be staged twice; remove the existing entry to re-add. A done set can be re-queued.
 async function add(entry, query = real_query) {
   await ensure_table(query);
   const losers = as_losers(entry.loser_accounts);
@@ -77,7 +75,6 @@ async function add(entry, query = real_query) {
   return { id: (res && res.insertId) || null, loser_count: losers.length };
 }
 
-// list, optionally filtered by status ('queued' default in the UI; 'all'/null = every status).
 async function list(query = real_query, status = null) {
   await ensure_table(query);
   const filtered = status && status !== 'all';
@@ -96,8 +93,6 @@ async function list(query = real_query, status = null) {
   }));
 }
 
-// Approve: move queued entries to 'approved' (the human gate before Phase 3 execution). Only queued
-// rows transition; already-approved/done rows are untouched.
 async function set_status(ids, status, query = real_query) {
   await ensure_table(query);
   const idlist = (Array.isArray(ids) ? ids : [ids]).map((x) => Number(x)).filter((n) => Number.isFinite(n));
@@ -108,14 +103,35 @@ async function set_status(ids, status, query = real_query) {
   return { updated: (res && (res.affectedRows != null ? res.affectedRows : res.changedRows)) || 0 };
 }
 
-// Remove un-stages a queued OR approved entry; done/restored rows are kept (audit + restore).
+async function transition(ids, toStatus, fromStatuses, query = real_query) {
+  await ensure_table(query);
+  const idlist = (Array.isArray(ids) ? ids : [ids]).map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  if (!idlist.length) return { updated: 0 };
+  const ph = idlist.map(() => '?').join(', ');
+  let sql = 'UPDATE `' + TABLE + '` SET status = ? WHERE id IN (' + ph + ')';
+  const params = [String(toStatus)].concat(idlist);
+  if (fromStatuses && fromStatuses.length) {
+    sql += ' AND status IN (' + fromStatuses.map(() => '?').join(', ') + ')';
+    params.push(...fromStatuses.map(String));
+  }
+  const res = await query(sql, params);
+  return { updated: (res && (res.affectedRows != null ? res.affectedRows : res.changedRows)) || 0 };
+}
+
+async function get(id, query = real_query) {
+  await ensure_table(query);
+  const rows = await query('SELECT * FROM `' + TABLE + '` WHERE id = ?', [Number(id)]);
+  const r = rows && rows[0];
+  if (!r) return null;
+  return { ...r, field_overrides: from_json(r.field_overrides), child_counts: from_json(r.child_counts) };
+}
+
 async function remove(id, query = real_query) {
   await ensure_table(query);
   await query("DELETE FROM `" + TABLE + "` WHERE id = ? AND status IN ('queued', 'approved')", [Number(id)]);
   return { ok: true };
 }
 
-// Bulk add — insert many entries, skipping ones already queued/approved.
 async function add_many(entries, query = real_query) {
   await ensure_table(query);
   let queued = 0, skipped = 0;
@@ -126,4 +142,4 @@ async function add_many(entries, query = real_query) {
   return { queued, skipped };
 }
 
-module.exports = { add, add_many, list, set_status, remove, ensure_table, as_losers, as_json, from_json, TABLE, DDL };
+module.exports = { add, add_many, list, set_status, transition, get, remove, ensure_table, as_losers, as_json, from_json, TABLE, DDL };

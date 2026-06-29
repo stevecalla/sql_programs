@@ -19,7 +19,10 @@ const cluster = require('../store/cluster_detail');
 const mqueue = require('../store/merge_queue');
 const mexec = require('../store/merge_execute');
 const mhist = require('../store/merge_history');
+const mrun = require('../store/merge_run');
+const mrestore = require('../store/merge_restore');
 const sfread = require('../store/salesforce_read');
+const sfwrite = require('../store/salesforce_write');
 
 module.exports = function mount(app) {
   app.get('/api/status', function (req, res) {
@@ -229,12 +232,48 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.post('/api/merge/process', require_auth, async function (req, res) {
-    try { res.json({ ok: true, ...(await mexec.process((req.body || {}).ids, { dry_run: !!(req.body || {}).dry_run, created_by: current_user(req) })) }); }
-    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    try {
+      const b = req.body || {};
+      res.json({ ok: true, ...(await mexec.process(b.ids, { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, created_by: current_user(req) })) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/merge/history', require_auth, async function (req, res) {
     try { res.json({ ok: true, rows: await mhist.list({ limit: req.query.limit }) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Live progress for the latest run (UI polls this for the progress bar + timer + ETA).
+  app.get('/api/merge/progress', require_auth, async function (req, res) {
+    try { res.json({ ok: true, run: await mrun.latest(req.query.kind || null) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Phase 4 restore — list completed merges with eligibility, and process a restore.
+  app.get('/api/merge/restore', require_auth, async function (req, res) {
+    try { res.json({ ok: true, rows: await mrestore.list_restorable() }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge/restore', require_auth, async function (req, res) {
+    try {
+      const b = req.body || {};
+      res.json({ ok: true, ...(await mrestore.restore(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) })) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Read-only browse of the Recycle Bin (recently soft-deleted Accounts) for the loaded environment.
+  app.get('/api/merge/recycle-bin', require_auth, async function (req, res) {
+    try {
+      const ds = await dashboard.dataset_info().catch(() => null);
+      const is_test = !ds || ds.environment !== 'Production';
+      const r = await sfread.list_recycle_bin({ is_test, limit: req.query.limit });
+      res.json({ ok: true, environment: ds ? ds.environment : null, rows: r.rows, error: r.error });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Whether the optional "stamp survivor as merged" custom fields exist (admin creates them manually).
+  app.get('/api/merge/stamp-fields', require_auth, async function (req, res) {
+    try {
+      const ds = await dashboard.dataset_info().catch(() => null);
+      const is_test = !ds || ds.environment !== 'Production';
+      const conn = await sfwrite.default_write_connect(is_test);
+      res.json({ ok: true, fields: sfwrite.STAMP_FIELDS, ...(await sfwrite.stamp_fields_status(conn)) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Read-only probe: can the connected Salesforce user actually merge (update + delete on Account)?
   // is_test follows the currently loaded dataset's environment so it checks the right org.
