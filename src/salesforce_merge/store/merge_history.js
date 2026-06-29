@@ -59,4 +59,12 @@ async function list(opts = {}, query = real_query) {
   return rows || [];
 }
 
-module.exports = { write, list, ensure_table, TABLE, DDL };
+// Keep only the latest simulate row per entry: clear prior 'simulated' rows for a queue entry.
+async function clear_simulated(queueId, query = real_query) {
+  await ensure_table(query);
+  if (queueId == null) return { cleared: 0 };
+  const res = await query('DELETE FROM `' + TABLE + "` WHERE queue_id = ? AND result = 'simulated'", [Number(queueId)]);
+  return { cleared: (res && (res.affectedRows != null ? res.affectedRows : 0)) || 0 };
+}
+
+module.exports = { write, list, clear_simulated, ensure_table, TABLE, DDL };

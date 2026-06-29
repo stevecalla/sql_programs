@@ -1,6 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
+process.env.MERGE_LOG = 'off';
 const mr = require('../store/merge_restore');
 
 function deps(opts = {}) {
@@ -11,7 +12,8 @@ function deps(opts = {}) {
     { role: 'survivor', account: 'M', fields: { account: 'M', PersonEmail: 'm@x.com' } },
     { role: 'loser', account: 'L1', fields: { account: 'L1' } },
     { role: 'loser', account: 'L2', fields: { account: 'L2' } },
-    { role: 'child', account: 'L1', fields: { object: 'Opportunity', id: '006A', parent_field: 'AccountId', parent_id: 'L1' } },
+    { role: 'child', account: 'L1', fields: { object: 'Opportunity', id: '006A', parent_field: 'AccountId', parent_id: 'L1', child_type: 'child' } },
+    { role: 'child', account: 'L1', fields: { object: 'Account', id: 'L1', parent_field: 'PersonContactId', parent_id: 'cL1', child_type: 'self_account' } },
   ];
   const deletedIds = opts.deletedIds || ['L1', 'L2'];
   const conn = { query: async () => ({ records: ['L1', 'L2'].map((id) => ({ Id: id, IsDeleted: deletedIds.includes(id) })) }) };
@@ -71,6 +73,7 @@ test('restore execute eligible: undelete + re-point children + reset master + st
   assert.equal(childUpd.fields.AccountId, 'L1');       // re-pointed to original parent
   const masterUpd = d.calls.updates.find((u) => u.type === 'Account');
   assert.equal(masterUpd.fields.PersonEmail, 'm@x.com'); // master reset from snapshot
+  assert.ok(!d.calls.updates.find((u) => u.type === 'Account' && u.fields.Id === 'L1'), 'self-half not re-pointed');
   assert.equal(d.calls.transitions[0].to, 'restored');
   assert.equal(d.calls.history[0].result, 'restored');
   delete process.env.MERGE_ENABLE_EXECUTION;

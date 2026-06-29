@@ -18,6 +18,7 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' completed_sets INT DEFAULT 0,' +
   ' est_seconds INT DEFAULT 0,' +
   ' current_label VARCHAR(255),' +
+  ' stage VARCHAR(24),' +
   ' status VARCHAR(16) NOT NULL DEFAULT "running",' +   // 'running' | 'done' | 'error'
   ' created_by VARCHAR(128),' +
   ' started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' +
@@ -28,6 +29,7 @@ let _ensured = false;
 async function ensure_table(query = real_query) {
   if (_ensured) return;
   await query(DDL, []);
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN stage VARCHAR(24)', []); } catch (e) { /* exists */ }
   _ensured = true;
 }
 
@@ -47,7 +49,7 @@ async function start(run, query = real_query) {
 async function update(runId, patch = {}, query = real_query) {
   await ensure_table(query);
   const sets = []; const vals = [];
-  for (const k of ['completed_ops', 'completed_sets', 'current_label', 'total_ops', 'total_sets']) {
+  for (const k of ['completed_ops', 'completed_sets', 'current_label', 'total_ops', 'total_sets', 'stage']) {
     if (patch[k] !== undefined) { sets.push('`' + k + '` = ?'); vals.push(patch[k]); }
   }
   if (!sets.length) return;

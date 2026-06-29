@@ -140,6 +140,8 @@ async function fetch_children(ids, { is_test = true, connect = default_connect, 
   const contactToAccount = {};
   for (const id of list) { const cid = contactByAccount[id]; if (cid) contactToAccount[cid] = id; }
   const contactIds = Object.keys(contactToAccount);
+  const accountSet = new Set(list);
+  const contactSet = new Set(contactIds);
   const grab = async (rels, inList, mapToAccount) => {
     if (!inList) return;
     for (const oc of rels) {
@@ -151,7 +153,7 @@ async function fetch_children(ids, { is_test = true, connect = default_connect, 
           const parentId = r[oc.field];
           const account = mapToAccount(parentId);
           if (!account) continue;
-          out.push({ account, object: oc.object, id: r.Id, parent_field: oc.field, parent_id: parentId });
+          out.push({ account, object: oc.object, id: r.Id, parent_field: oc.field, parent_id: parentId, child_type: accountSet.has(r.Id) ? 'self_account' : (contactSet.has(r.Id) ? 'self_contact' : 'child') });
         }
       } catch (e) { /* skip */ }
     }

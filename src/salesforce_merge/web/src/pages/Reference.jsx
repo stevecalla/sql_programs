@@ -116,6 +116,24 @@ export default function Reference() {
       </div>
 
       <div className="card ref-card">
+        <h3>Switching environments &amp; not merging twice</h3>
+        <p>
+          The tool always works against <strong>one environment's data at a time</strong> — whichever
+          was last loaded (the “Data as of …” line). The <strong>Sandbox / Production</strong> label comes
+          from that loaded dataset, and it also decides which Salesforce login the run uses, so the place a
+          merge would write always matches the data you’re looking at.
+        </p>
+        <div className="defs">
+          <div className="defs-row"><span className="defs-term lg">Sets are stamped with their environment</span><span className="defs-body">when you add a set to the queue it records the environment it was built in. The queue is never auto-cleared, so it survives switching back and forth between Sandbox and Production.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Alignment guard</span><span className="defs-body">before processing each set, the tool compares the set’s stamped environment (and org id, when recorded) to the <em>currently loaded</em> one. A mismatch is <strong>skipped</strong> and logged — never merged. So a Sandbox-built set won’t run while Production is loaded, and vice-versa; switch the loaded data back and it becomes runnable again.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Runs once (status)</span><span className="defs-body">a set that merges successfully is marked <em>done</em> and drops out of the approved list, so it can’t be picked again. Simulate never changes status, so you can rehearse a set as many times as you like.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Drift re-check</span><span className="defs-body">every run re-reads the cluster first; if a set’s records are already gone (e.g. merged away earlier), it’s skipped as “records changed since queueing.” Re-running detection after a merge also no longer sees the removed records, so the cluster isn’t re-flagged.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Salesforce backstop</span><span className="defs-body">if a set somehow still pointed at an already-merged record, Salesforce rejects the merge — it surfaces as a <em>failed</em> step, not a silent double-merge.</span></div>
+          <div className="defs-gate">The most reliable “don’t merge twice” guard is the <em>done</em> status (set for merges run through this tool) plus refreshing the data after merges. Merges done <strong>directly in Salesforce</strong> are caught at run time by Salesforce rather than pre-skipped, since the drift check reads the last loaded dataset, not a live per-record lookup.</div>
+        </div>
+      </div>
+
+      <div className="card ref-card">
         <h3>Tuning — testing the match criteria</h3>
         <p>
           The <strong>Tuning</strong> page answers "how many duplicates would we get if we changed the

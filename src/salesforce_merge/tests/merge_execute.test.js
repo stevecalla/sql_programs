@@ -1,6 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
+process.env.MERGE_LOG = 'off';
 const mexec = require('../store/merge_execute');
 
 // Build injectable deps with in-memory fakes. mergeBehavior(batch) -> {success, errors?} to script failures.
@@ -22,7 +23,7 @@ function deps(opts = {}) {
     sf: { get_org_identity: async () => ({ org_id: 'ORG1' }), fetch_children: async () => [{ account: 'L1', object: 'Opportunity', id: '006', parent_field: 'AccountId', parent_id: 'L1' }] },
     cluster: { cluster_detail: async () => ({ accounts }) },
     snapshot: { save: async (...a) => { calls.snapshots.push(a); return { saved: accounts.length }; } },
-    history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; } },
+    history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; }, clear_simulated: async () => { calls.clearedSim = (calls.clearedSim || 0) + 1; } },
     run: { start: async () => {}, update: async () => { calls.run.updates += 1; }, finish: async (id, p) => { calls.run.finished = p; } },
     queue: { list: async () => [entry], transition: async (ids, to, from) => { calls.transitions.push({ ids, to, from }); return { updated: 1 }; } },
     write: {
@@ -59,6 +60,7 @@ test('safe mode: simulate writes snapshot + simulated history, no merge, no stat
   assert.equal(d.calls.snapshots.length, 1);       // snapshot every run
   assert.equal(d.calls.transitions.length, 0);     // status unchanged
   assert.equal(d.calls.history[0].result, 'simulated');
+  assert.equal(d.calls.clearedSim, 1); // keep-latest simulate dedupe ran
 });
 
 test('execute success: master+2 sequential, status->done', async () => {
@@ -103,6 +105,49 @@ test('execute with armed gates but environment mismatch: skipped, no merge', asy
   delete process.env.MERGE_ENABLE_EXECUTION;
 });
 
+// Switching the loaded dataset to the OTHER environment must not let a set built in one env run
+// against the other. The dataset env drives ctx; a Sandbox-built set is skipped before any write,
+// and no snapshot is taken for a skipped set (skip happens before the snapshot step).
+test('cross-environment: a Sandbox-built set is skipped when Production data is loaded', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const d = deps({ entry: { environment: 'Sandbox' } });
+  d.dashboard = { dataset_info: async () => ({ environment: 'Production', run_at: '2026-01-01' }) };
+  const out = await mexec.process([1], { mode: 'execute', confirm: 'MERGE' }, d);
+  assert.equal(out.skipped, 1);
+  assert.equal(d.calls.merges.length, 0);     // no Salesforce write
+  assert.equal(d.calls.snapshots.length, 0);  // skip is before the snapshot step
+  assert.match(d.calls.history[0].reason, /environment mismatch/);
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
+// Idempotency layer 1: only `approved` entries are processed. A set already `done` is not in the
+// approved list, so passing its id is a no-op (can't be merged twice).
+test('idempotency: a done set (not in approved list) is never reprocessed', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const approved = { id: 1, source_type: 'merge_id', source_key: 'M1', survivor_account: 'M', loser_accounts: 'L1', loser_count: 1, environment: 'Sandbox', org_id: 'ORG1', field_overrides: {} };
+  const d = deps();
+  d.queue.list = async (q, status) => (status === 'approved' ? [approved] : []); // id 2 is "done", absent here
+  d.cluster = { cluster_detail: async () => ({ accounts: [{ account: 'M' }, { account: 'L1' }] }) };
+  const out = await mexec.process([1, 2], { mode: 'execute', confirm: 'MERGE' }, d);
+  assert.equal(out.processed, 1);          // only the approved id 1 ran
+  assert.equal(out.done, 1);
+  assert.equal(d.calls.merges.length, 1);  // id 2 never touched
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
+// Idempotency layer 2: the re-fetch/drift check. If a queued loser is gone from fresh data (e.g.
+// already merged away), the set is skipped with a drift reason — no merge attempted.
+test('idempotency: drift (a queued loser missing from fresh data) is skipped, no merge', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const d = deps();
+  d.cluster = { cluster_detail: async () => ({ accounts: [{ account: 'M' }, { account: 'L1' }] }) }; // L2,L3 gone
+  const out = await mexec.process([1], { mode: 'execute', confirm: 'MERGE' }, d);
+  assert.equal(out.skipped, 1);
+  assert.equal(d.calls.merges.length, 0);
+  assert.match(d.calls.history[0].reason, /records changed since queueing/);
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
 test('gate stack: execute mode without typed confirm falls back to simulate', async () => {
   process.env.MERGE_ENABLE_EXECUTION = 'true';
   const d = deps();
@@ -132,4 +177,23 @@ test('stamp failure does not fail the merge (still done)', async () => {
   assert.equal(out.done, 1);
   assert.match(d.calls.history[0].reason, /stamp skipped/);
   delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
+test('cancel between sets: first set processes, remaining left untouched, run finishes cancelled', async () => {
+  delete process.env.MERGE_ENABLE_EXECUTION; // simulate mode is enough to exercise the set-boundary check
+  const d = deps();
+  const e1 = { id: 1, source_type: 'merge_id', source_key: 'M1', survivor_account: 'M', loser_accounts: 'L1', loser_count: 1, environment: 'Sandbox', org_id: 'ORG1', field_overrides: {} };
+  const e2 = { id: 2, source_type: 'merge_id', source_key: 'M2', survivor_account: 'N', loser_accounts: 'K1', loser_count: 1, environment: 'Sandbox', org_id: 'ORG1', field_overrides: {} };
+  d.queue.list = async () => [e1, e2];
+  d.cluster = { cluster_detail: async (key) => ({ accounts: key === 'M1' ? [{ account: 'M' }, { account: 'L1' }] : [{ account: 'N' }, { account: 'K1' }] }) };
+  // Cancel takes effect at the SECOND set-boundary check (after set 1 was processed).
+  let checks = 0;
+  d.control = { is_cancelled: () => { checks += 1; return checks >= 2; }, clear: () => {} };
+  const out = await mexec.process([1, 2], {}, d);
+  assert.equal(out.cancelled, true);
+  assert.equal(out.processed, 1);          // only set 1 ran
+  assert.equal(out.simulated, 1);
+  assert.equal(out.remaining, 1);          // set 2 left untouched
+  assert.equal(d.calls.history.length, 1); // no history row for the un-run set
+  assert.equal(d.calls.run.finished.status, 'cancelled');
 });

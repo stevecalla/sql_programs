@@ -19,6 +19,8 @@ const DEFAULT_OP_SECONDS = 2; // rough per merge-call estimate until real histor
 function safe_mode() { return !execution_enabled(); }
 function make_run_id() { return 'mrun-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7); }
 const ceil2 = (n) => Math.ceil((Number(n) || 0) / 2);
+// Server-side progress logs (stdout). Silence with MERGE_LOG=off (tests set this).
+function log(...a) { if (process.env.MERGE_LOG !== 'off') console.log('[merge]', ...a); }
 
 // Survivorship: which field values to WRITE onto the master. Precedence override > master non-blank >
 // first loser non-blank (backfill). Only fields whose chosen value differs from master are returned.
@@ -77,6 +79,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
   const SN = deps.snapshot || snapshot;
   const H = deps.history || history;
   const RUN = deps.run || mrun;
+  const CTRL = deps.control || require('./merge_control');
   const SF = deps.sf || require('./salesforce_read');
   const W = deps.write || require('./salesforce_write');
   const dash = deps.dashboard || dashboard;
@@ -103,16 +106,26 @@ async function runQueue(ids, opts = {}, deps = {}) {
   await RUN.start({ run_id: runId, kind: 'merge', mode, environment: env, org_id: ctxOrg,
     total_ops: totalOps, total_sets: entries.length, est_seconds: totalOps * DEFAULT_OP_SECONDS, created_by: createdBy });
 
+  log('run ' + runId + ' mode=' + mode + ' sets=' + entries.length + ' ops=' + totalOps + ' env=' + env);
   const out = { run_id: runId, environment: env, org_id: ctxOrg, mode, armed, gates,
     processed: 0, simulated: 0, done: 0, skipped: 0, failed: 0, results: [] };
   let completedOps = 0; let completedSets = 0;
   let conn = null;
 
   for (let si = 0; si < entries.length; si += 1) {
+    // Cooperative cancel: a Stop request flags this run id; we honor it at the SET boundary so every
+    // set is left whole (finished sets stay done/skipped/failed; remaining sets stay approved).
+    if (CTRL.is_cancelled(runId)) {
+      out.cancelled = true;
+      out.remaining = entries.length - si;
+      log('run ' + runId + ' STOP requested — halting before set ' + (si + 1) + ' of ' + entries.length);
+      break;
+    }
     const e = entries[si];
     out.processed += 1;
-    const label = (n) => 'Set ' + (si + 1) + ' of ' + entries.length + (n ? ' · ' + n : '');
-    await RUN.update(runId, { current_label: label('preparing') });
+    const label = (n) => 'Set ' + (si + 1) + ' of ' + entries.length + (e.survivor_name ? ' · ' + e.survivor_name : '') + (n ? ' · ' + n : '');
+    await RUN.update(runId, { stage: 'fetch', current_label: label('re-fetching + dry-run') });
+    log(label('re-fetching'));
 
     const align = verify_alignment(e, ctx);
     if (!align.ok) {
@@ -138,6 +151,9 @@ async function runQueue(ids, opts = {}, deps = {}) {
       continue;
     }
 
+    await RUN.update(runId, { stage: 'validate', current_label: label('re-validated') });
+    await RUN.update(runId, { stage: 'snapshot', current_label: label('gathering child records') });
+    log(label('gathering child records'));
     let snap_ok = false;
     try {
       const contactByAccount = {};
@@ -147,17 +163,20 @@ async function runQueue(ids, opts = {}, deps = {}) {
       snap_ok = true;
     } catch (err) { snap_ok = false; }
 
+    await RUN.update(runId, { stage: 'snapshot', current_label: label('snapshot saved') });
     const masterFields = build_master_fields(accounts, e.survivor_account, e.field_overrides);
     const childTotal = (e.child_counts && e.child_counts.total) || 0;
     const opCount = Math.max(1, ceil2(losers.length));
 
     if (!armed) {
+      if (H.clear_simulated) await H.clear_simulated(e.id).catch(() => {});
       await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
         result: 'simulated', reason: opts.dry_run ? 'dry-run' : 'safe mode / simulate — no Salesforce write',
         planned_fields: Object.keys(masterFields).length });
       out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', planned_field_changes: Object.keys(masterFields).length });
+      log(label('simulated — ' + Object.keys(masterFields).length + ' field change(s) planned'));
       completedOps += opCount; completedSets += 1;
-      await RUN.update(runId, { completed_ops: completedOps, completed_sets: completedSets, current_label: label('simulated') });
+      await RUN.update(runId, { stage: 'record', completed_ops: completedOps, completed_sets: completedSets, current_label: label('simulated') });
       continue;
     }
 
@@ -165,6 +184,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
       await H.write({ ...histbase(runId, e, createdBy, mode), snapshot_saved: snap_ok ? 1 : 0, result: 'failed', reason: 'write connection failed: ' + err.message });
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
       await RUN.finish(runId, { status: 'error', completed_ops: completedOps, completed_sets: completedSets, current_label: 'connection failed' });
+      CTRL.clear(runId);
       return out;
     } }
 
@@ -176,7 +196,8 @@ async function runQueue(ids, opts = {}, deps = {}) {
       catch (err) { failure = err.message; break; }
       first = false;
       completedOps += 1;
-      await RUN.update(runId, { completed_ops: completedOps, current_label: label('batch ' + ((i / 2) + 1) + '/' + opCount) });
+      await RUN.update(runId, { stage: 'merge', completed_ops: completedOps, current_label: label('batch ' + ((i / 2) + 1) + '/' + opCount) });
+      log(label('merging batch ' + ((i / 2) + 1) + '/' + opCount));
       if (!res.success) { failure = (res.errors && res.errors[0] && (res.errors[0].message || res.errors[0].statusCode)) || 'merge failed'; break; }
       merged.push(...batch); remaining = remaining.filter((x) => !batch.includes(x));
     }
@@ -187,6 +208,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
         result: 'failed', reason: 'halted: ' + failure + ' (merged ' + merged.length + ', remaining ' + remaining.length + ')',
         merged_count: merged.length, remaining_count: remaining.length });
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: failure, merged: merged.length, remaining: remaining.length });
+      log(label('FAILED — ' + failure));
     } else {
       // Optional: stamp the survivor as merged. Done AFTER the merge as a best-effort update so a
       // missing custom field (was_merged__c / was_merged_date__c) never fails the merge itself.
@@ -201,12 +223,20 @@ async function runQueue(ids, opts = {}, deps = {}) {
       await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
         result: 'done', reason: 'merged ' + merged.length + ' record(s)' + stampNote, merged_count: merged.length, remaining_count: 0 });
       out.done += 1; out.results.push({ id: e.id, result: 'done', merged: merged.length });
+      log(label('done — merged ' + merged.length + stampNote));
     }
     completedSets += 1;
-    await RUN.update(runId, { completed_sets: completedSets });
+    await RUN.update(runId, { stage: 'record', completed_sets: completedSets });
   }
 
-  await RUN.finish(runId, { status: 'done', completed_ops: completedOps, completed_sets: completedSets, current_label: 'Complete' });
+  const stopped = out.cancelled === true;
+  const finalStatus = stopped ? 'cancelled' : 'done';
+  const finalLabel = stopped
+    ? 'Stopped — ' + completedSets + ' of ' + entries.length + ' set(s) processed'
+    : 'Complete';
+  log('run ' + runId + (stopped ? ' STOPPED' : ' complete') + ': done=' + out.done + ' simulated=' + out.simulated + ' skipped=' + out.skipped + ' failed=' + out.failed + (stopped ? ' (remaining ' + (out.remaining || 0) + ')' : ''));
+  await RUN.finish(runId, { status: finalStatus, completed_ops: completedOps, completed_sets: completedSets, current_label: finalLabel });
+  CTRL.clear(runId);
   return out;
 }
 

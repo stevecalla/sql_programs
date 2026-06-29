@@ -20,7 +20,9 @@ const mqueue = require('../store/merge_queue');
 const mexec = require('../store/merge_execute');
 const mhist = require('../store/merge_history');
 const mrun = require('../store/merge_run');
+const mctl = require('../store/merge_control');
 const mrestore = require('../store/merge_restore');
+const msnap = require('../store/merge_snapshot');
 const sfread = require('../store/salesforce_read');
 const sfwrite = require('../store/salesforce_write');
 
@@ -199,7 +201,7 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/merge-queue/export', require_auth, async function (req, res) {
-    try { await write_rows(req, res, await mqueue.list(), 'merge_queue_' + new Date().toISOString().slice(0, 10), 'merge_queue'); }
+    try { await write_rows(req, res, await mqueue.list(undefined, req.query.status || null), 'merge_queue_' + new Date().toISOString().slice(0, 10), 'merge_queue'); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.post('/api/merge-queue', require_auth, async function (req, res) {
@@ -241,10 +243,25 @@ module.exports = function mount(app) {
     try { res.json({ ok: true, rows: await mhist.list({ limit: req.query.limit }) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
+  app.get('/api/merge/history/export', require_auth, async function (req, res) {
+    try { await write_rows(req, res, await mhist.list({ limit: req.query.limit || 5000 }), 'merge_history_' + new Date().toISOString().slice(0, 10), 'merge_history'); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   // Live progress for the latest run (UI polls this for the progress bar + timer + ETA).
   app.get('/api/merge/progress', require_auth, async function (req, res) {
     try { res.json({ ok: true, run: await mrun.latest(req.query.kind || null) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Cooperative stop: flag the latest RUNNING run so its loop halts at the next set boundary. The
+  // in-flight set finishes cleanly (its snapshot/history/status are already written); remaining
+  // approved sets are left untouched so they can be run again later.
+  app.post('/api/merge/cancel', require_auth, async function (req, res) {
+    try {
+      const run = await mrun.latest((req.body && req.body.kind) || 'merge');
+      if (!run || run.status !== 'running') return res.json({ ok: true, cancelled: false, reason: 'no running merge' });
+      mctl.request(run.run_id);
+      res.json({ ok: true, cancelled: true, run_id: run.run_id });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Phase 4 restore — list completed merges with eligibility, and process a restore.
   app.get('/api/merge/restore', require_auth, async function (req, res) {
@@ -273,6 +290,18 @@ module.exports = function mount(app) {
       const is_test = !ds || ds.environment !== 'Production';
       const conn = await sfwrite.default_write_connect(is_test);
       res.json({ ok: true, fields: sfwrite.STAMP_FIELDS, ...(await sfwrite.stamp_fields_status(conn)) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Pre-merge snapshot browse (DB read) + CSV/Excel export. Read-only.
+  app.get('/api/merge/snapshot', require_auth, async function (req, res) {
+    try { res.json({ ok: true, rows: await msnap.list_recent(req.query.limit) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge/snapshot/export', require_auth, async function (req, res) {
+    try {
+      let rows = await msnap.list_recent(req.query.limit || 5000);
+      if (req.query.role) rows = rows.filter((r) => r.role === req.query.role);
+      await write_rows(req, res, rows, 'premerge_snapshot_' + new Date().toISOString().slice(0, 10), 'snapshot');
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Read-only probe: can the connected Salesforce user actually merge (update + delete on Account)?

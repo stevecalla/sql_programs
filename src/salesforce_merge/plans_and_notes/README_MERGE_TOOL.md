@@ -597,6 +597,14 @@ matching "To revisit" items above. Decisions here are confirmed.
 > merge still succeeds and the run logs "stamp skipped"; the UI checks field presence
 > (`GET /api/merge/stamp-fields`) and shows a warning. Note: this is the *survivor*-side marker;
 > Salesforce already stamps each deleted loser's `MasterRecordId` with the survivor id.
+>
+> **Refinements from sandbox simulate testing.** (1) The snapshot has a `child_type` column on child
+> rows: `child` (real child to re-point) vs `self_account` / `self_contact` (the Person Account's own
+> two halves, which return automatically on undelete). (2) Restore **skips** the self-halves when
+> re-pointing — they're not writable and come back with the loser. (3) Repeated **simulate** runs keep
+> only the latest history row per entry (`merge_history.clear_simulated`); real `done`/`failed` rows
+> are always kept. (4) Live progress reports a per-set `stage` (validate → snapshot → merge → record)
+> and the survivor name, rendered as a stepper on Process Merges (like the Get Duplicates progress).
 
 ### Locked decisions
 - **Merge surface:** native Salesforce `merge()` **directly from Node via jsforce** — **no Apex**.
@@ -648,6 +656,37 @@ another merge; undo = Recycle-Bin undelete + child re-point (Phase 4), which is 
 would undo correct work. **Retry is safe:** because every run re-fetches, a retry's drift check
 sees the already-merged losers are gone and continues with the master + remaining losers (no
 double-merge).
+
+**Cross-environment safety & idempotency (switching Sandbox ⇄ Production).** The tool operates on
+*one* loaded dataset at a time; `dataset_info().environment` is the label, and it also selects the
+SF credentials used for the org-identity check and the write (`is_test = env !== 'Production'`), so
+the write target always follows the loaded data. The merge queue persists across switches (never
+auto-cleared) and every entry is stamped with its `environment` at add time (`routes.js`
+add/bulk-add, from `dataset_info`). Protection layers:
+
+1. **Alignment guard** (`verify_alignment`): each entry's stamped `environment` (and `org_id` when
+   present) is compared to the current run context; a mismatch is recorded `skipped`
+   ("environment mismatch" / "org mismatch") **before** the snapshot/merge steps — no write. A
+   Sandbox-built set therefore cannot execute while Production data is loaded, and vice-versa;
+   switch the loaded dataset back and the set is runnable again. *Caveat:* `org_id` is only stored
+   when supplied at add time (today usually blank on bulk adds), so the **environment label is the
+   live guard**; `org_id` is a secondary check that fires only when recorded. (Hardening option:
+   capture `org_id` server-side at add time to make the org guard always-on.)
+2. **Status lifecycle:** a merged set → `done` and drops out of the `approved` list, so it is never
+   reselected. Simulate never changes status (rehearsable).
+3. **Drift re-check:** every run re-fetches the cluster and skips a set whose survivor/losers are
+   missing from fresh data ("records changed since queueing") — e.g. losers already merged away. On
+   a retry of a partially-merged set, the already-merged losers are gone, so it continues with only
+   the remainder (no double-merge).
+4. **Salesforce backstop:** merging an already-deleted record errors → recorded `failed` (fail-stop),
+   not a silent re-merge.
+
+*Honest limit:* the drift check reads the **loaded dataset** (last detection run), not a live
+per-record query, so the dependable "don't merge twice" guarantees are the `done` status (for merges
+run through this tool) plus refreshing data after merges. Merges performed **directly in Salesforce**
+are caught at execute time by Salesforce (layer 4), not pre-skipped. Tests:
+`merge_execute.test.js` covers the Sandbox-set-skipped-under-Production case, the done-not-reselected
+case, and the drift skip, alongside the existing alignment/gate tests.
 
 **Timer / estimate / progress.** A run-progress record (`run_id`, `total_ops`, `completed_ops`,
 current set + batch, `status`, `started_at`, `finished_at`), updated after each call. Pre-run

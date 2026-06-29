@@ -23,8 +23,11 @@ test('snapshot.save writes account rows (survivor/loser) + child rows, with keep
   const roles = inserts.map((p) => p[4]);
   assert.deepEqual(roles, ['survivor', 'loser', 'child']);
   assert.equal(inserts[0][5], 'A');
-  assert.ok(JSON.parse(inserts[0][7]).Name === 'Keep');
-  assert.equal(JSON.parse(inserts[2][7]).object, 'Opportunity');
+  assert.ok(JSON.parse(inserts[0][9]).Name === 'Keep');
+  assert.equal(inserts[2][7], 'child');
+  assert.equal(JSON.parse(inserts[2][9]).object, 'Opportunity');
+  assert.equal(inserts[2][8], 'Opportunity'); // child_object column
+  assert.equal(inserts[0][10], 'A'); // survivor_account column
 });
 
 test('history.write inserts a row and list selects newest first', async () => {

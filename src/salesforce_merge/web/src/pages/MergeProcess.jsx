@@ -1,9 +1,37 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import DatasetStamp from '../components/DatasetStamp.jsx';
-import { api } from '../lib/api.js';
+import DataTable from '../components/DataTable.jsx';
+import CollapsibleCard from '../components/CollapsibleCard.jsx';
+import { api, exportUrl } from '../lib/api.js';
 
 const shortId = (id) => (id && id.length > 8 ? '…' + id.slice(-5) : id || '');
+
+// Tiny client-side sort for the hand-rolled tables (Approved merges, Merge history, per-account).
+function useSort(initialKey = null) {
+  const [s, setS] = useState({ key: initialKey, dir: 'asc' });
+  const onSort = (key) => setS((p) => (p.key === key ? { key, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
+  const apply = (rows) => {
+    if (!s.key) return rows;
+    return [...rows].sort((a, b) => {
+      const x = a[s.key]; const y = b[s.key];
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+      const r = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y));
+      return r * (s.dir === 'asc' ? 1 : -1);
+    });
+  };
+  const arrow = (key) => (s.key === key ? (s.dir === 'asc' ? ' ▲' : ' ▼') : '');
+  return { onSort, apply, arrow };
+}
 const RESULT_COLOR = { simulated: '#1a8a4f', done: '#1a8a4f', skipped: '#854f0b', failed: '#c0392b' };
+// Per-set pipeline stages reported live by the backend (merge_run.stage) — mirrors the static
+// "Processing steps" card 1:1, shown as a live stepper.
+const MERGE_STAGES = [
+  { key: 'fetch', label: 'Re-fetch + dry-run' },
+  { key: 'validate', label: 'Re-validate' },
+  { key: 'snapshot', label: 'Snapshot' },
+  { key: 'merge', label: 'Execute merge' },
+  { key: 'record', label: 'Record' },
+];
 
 export default function MergeProcess() {
   const [status, setStatus] = useState(null);
@@ -13,6 +41,7 @@ export default function MergeProcess() {
   const [who, setWho] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [err, setErr] = useState('');
   const [mode, setMode] = useState('simulate');   // 'simulate' | 'execute'
   const [confirmText, setConfirmText] = useState('');
@@ -20,15 +49,29 @@ export default function MergeProcess() {
   const [elapsed, setElapsed] = useState(0);
   const [stampMerged, setStampMerged] = useState(false);
   const [stampFields, setStampFields] = useState(null);
+  const [snapRows, setSnapRows] = useState([]);
 
   const load = useCallback(() => {
     api.mergeStatus().then(setStatus).catch((e) => setErr(e.message));
-    api.mergeQueue('approved').then((r) => { const rs = r.rows || []; setRows(rs); setSel(new Set(rs.map((x) => x.id))); }).catch((e) => setErr(e.message));
+    api.mergeQueue('approved').then((r) => { setRows(r.rows || []); setSel(new Set()); }).catch((e) => setErr(e.message));
     api.mergeHistory().then((r) => setHistory(r.rows || [])).catch(() => {});
     api.mergeWhoami().then(setWho).catch(() => {});
     api.stampFields().then(setStampFields).catch(() => setStampFields(null));
+    api.snapshotRows().then((r) => setSnapRows(r.rows || [])).catch(() => {});
+    // NOTE: intentionally do NOT pre-load the last run's progress here — the pipeline shows the
+    // neutral numbered (idle) state until a run starts in this session.
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // When sets are ADDED to the selection (new rows enter the progress table), reset the pipeline to
+  // idle so it reflects the new pending run rather than a previous run's result. Clearing/removing
+  // selections (e.g. after a run) does not reset, so the last run's result stays visible.
+  const prevSelRef = useRef(new Set());
+  useEffect(() => {
+    const added = [...sel].some((id) => !prevSelRef.current.has(id));
+    prevSelRef.current = new Set(sel);
+    if (added && !busy) { setProgress(null); setResult(null); setElapsed(0); }
+  }, [sel, busy]);
 
   const toggle = (id) => setSel((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const allSel = rows.length > 0 && rows.every((r) => sel.has(r.id));
@@ -36,6 +79,9 @@ export default function MergeProcess() {
   const ids = [...sel];
   const estOps = rows.filter((r) => sel.has(r.id)).reduce((s, r) => s + Math.ceil((Number(r.loser_count) || 0) / 2), 0);
   const safe = !status || status.safe_mode;
+  const apSort = useSort();    // Approved merges
+  const histSort = useSort();  // Merge history
+  const paSort = useSort();    // per-account progress
 
   // The per-set pipeline that merge_execute runs, surfaced so the UI is transparent about what
   // happens (and what is blocked) in the current mode. Step 4 is the only Salesforce write.
@@ -57,7 +103,10 @@ export default function MergeProcess() {
     if (!busy) return undefined;
     const t0 = Date.now();
     const tick = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 1000);
-    const poll = setInterval(() => { api.mergeProgress('merge').then((r) => setProgress(r.run || null)).catch(() => {}); }, 1000);
+    const poll = setInterval(() => {
+      api.mergeProgress('merge').then((r) => setProgress(r.run || null)).catch(() => {});
+      api.mergeHistory().then((r) => setHistory(r.rows || [])).catch(() => {});
+    }, 1000);
     return () => { clearInterval(tick); clearInterval(poll); };
   }, [busy]);
 
@@ -75,8 +124,18 @@ export default function MergeProcess() {
     try {
       const r = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged } : { mode: 'simulate', stamp_merged: stampMerged });
       setResult(r); setConfirmText(''); load();
+      // The 1s poller stops when busy flips false; the backend's final stage→'record' / status→'done'
+      // updates usually land after the last poll, so grab the finished progress one more time here.
+      try { const p = await api.mergeProgress('merge'); setProgress(p.run || null); } catch { /* keep last */ }
     } catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setStopping(false); }
+  };
+
+  // Cooperative stop: flag the running run; it halts at the next set boundary. The current set finishes
+  // and the in-flight POST resolves normally, so the UI stays "Running…" until then.
+  const stop = async () => {
+    setStopping(true);
+    try { await api.mergeCancel(); } catch (e) { setErr(e.message); setStopping(false); }
   };
 
   return (
@@ -111,30 +170,6 @@ export default function MergeProcess() {
         <div className="card"><div className="stat-label">Selected</div><div className="stat-value">{selCount}</div></div>
         <div className="card"><div className="stat-label">~Merge ops</div><div className="stat-value">{estOps}</div></div>
         <div className="card"><div className="stat-label">Mode</div><div className="stat-value" style={{ fontSize: 18 }}>{safe ? 'Safe' : 'Live'}</div></div>
-      </div>
-
-      <div className="card" style={{ marginTop: 12 }}>
-        <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Approved merges <span className="muted small" style={{ fontWeight: 400 }}>({rows.length})</span></p>
-        <div className="dt-scroll" style={{ maxHeight: 320 }}>
-          <table className="modal-table">
-            <thead><tr><th><input type="checkbox" checked={allSel} onChange={() => setSel(allSel ? new Set() : new Set(rows.map((r) => r.id)))} aria-label="Select all" /></th><th>#</th><th>Survivor</th><th>Account</th><th>Merging</th><th>Source</th><th>Rule</th><th>Env</th></tr></thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={r.id}>
-                  <td><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} aria-label={'Select ' + r.id} /></td>
-                  <td>{i + 1}</td>
-                  <td>{r.survivor_name || '—'}</td>
-                  <td title={r.survivor_account}>{shortId(r.survivor_account)}</td>
-                  <td>{r.loser_count} account{Number(r.loser_count) === 1 ? '' : 's'}</td>
-                  <td title={r.source_key}>{r.source_type === 'merge_id' ? 'merge id ' : 'group '}{shortId(r.source_key)}</td>
-                  <td>{r.master_rule || 'cascade'}</td>
-                  <td>{r.environment || '—'}</td>
-                </tr>
-              ))}
-              {rows.length === 0 && <tr><td colSpan={8} className="muted small">No approved merges. Approve sets in Select Merges first.</td></tr>}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       {/* Steps + execute */}
@@ -180,36 +215,169 @@ export default function MergeProcess() {
           <button className="btn" style={{ width: '100%', marginTop: 8 }} disabled={busy || selCount === 0} onClick={() => run(false)}>
             {busy ? 'Running…' : '👁 Run simulate (' + selCount + ')'}
           </button>
+          <button className="btn" style={{ width: '100%', marginTop: 8, color: 'var(--red)', borderColor: 'var(--red)' }}
+            disabled={!busy || stopping} title={busy ? 'Stop after the current set finishes; remaining sets stay approved' : 'Available once a run is in progress'} onClick={stop}>
+            {stopping ? 'Stopping after current set…' : '■ Stop'}
+          </button>
           <p className="muted small" style={{ marginTop: 8 }}>Gates: execution flag · sandbox · snapshot ok · typed confirm</p>
         </div>
       </div>
 
-      {(busy || progress) && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <p style={{ margin: '0 0 6px', fontWeight: 700 }}>Progress
-            <span className="muted small" style={{ fontWeight: 400 }}> — {progress ? (progress.current_label || progress.status) : 'starting…'}</span>
-          </p>
-          <div style={{ background: 'var(--line)', borderRadius: 6, height: 10, overflow: 'hidden' }}>
-            <div style={{ height: '100%', background: 'var(--accent)', width: (progress && progress.total_ops ? Math.round(100 * (progress.completed_ops || 0) / progress.total_ops) : 0) + '%', transition: 'width .3s' }} />
-          </div>
-          <p className="muted small" style={{ marginTop: 6 }}>
-            {progress ? (progress.completed_ops || 0) + ' / ' + (progress.total_ops || 0) + ' operations' : ''}
-            {' · elapsed ' + elapsed + 's'}{eta != null ? ' · ~' + eta + 's left' : ''}
-          </p>
+      <CollapsibleCard
+        title={<>Approved merges <span className="muted small" style={{ fontWeight: 400 }}>({rows.length})</span></>}
+        actions={rows.length > 0 ? (
+          <span className="dl-group">
+            <span className="muted small">Export</span>
+            <a className="dl-link" href={exportUrl('/api/merge-queue/export', { status: 'approved', format: 'csv' })}>CSV</a>
+            <a className="dl-link" href={exportUrl('/api/merge-queue/export', { status: 'approved', format: 'xlsx' })}>Excel</a>
+          </span>
+        ) : null}
+      >
+        <div className="dt-scroll" style={{ maxHeight: 320 }}>
+          <table className="modal-table" style={{ width: '100%' }}>
+            <thead><tr>
+              <th title="Select for processing"><input type="checkbox" checked={allSel} onChange={() => setSel(allSel ? new Set() : new Set(rows.map((r) => r.id)))} aria-label="Select all" /></th>
+              <th title="Row number">#</th>
+              <th title="Surviving record (kept as the master) — click to sort" style={{ cursor: 'pointer' }} onClick={() => apSort.onSort('survivor_name')}>Survivor<span className="th-info"> ⓘ</span>{apSort.arrow('survivor_name')}</th>
+              <th title="Survivor Salesforce account id — click to sort" style={{ minWidth: 190, cursor: 'pointer' }} onClick={() => apSort.onSort('survivor_account')}>Account<span className="th-info"> ⓘ</span>{apSort.arrow('survivor_account')}</th>
+              <th title="Number of accounts merged into the survivor — click to sort" style={{ cursor: 'pointer' }} onClick={() => apSort.onSort('loser_count')}>Merging<span className="th-info"> ⓘ</span>{apSort.arrow('loser_count')}</th>
+              <th title="Where the set came from — click to sort" style={{ cursor: 'pointer' }} onClick={() => apSort.onSort('source_key')}>Source<span className="th-info"> ⓘ</span>{apSort.arrow('source_key')}</th>
+              <th title="Survivor-selection rule — click to sort" style={{ cursor: 'pointer' }} onClick={() => apSort.onSort('master_rule')}>Rule<span className="th-info"> ⓘ</span>{apSort.arrow('master_rule')}</th>
+              <th title="Environment the set was built from — click to sort" style={{ cursor: 'pointer' }} onClick={() => apSort.onSort('environment')}>Env<span className="th-info"> ⓘ</span>{apSort.arrow('environment')}</th>
+            </tr></thead>
+            <tbody>
+              {apSort.apply(rows).map((r, i) => (
+                <tr key={r.id}>
+                  <td><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} aria-label={'Select ' + r.id} /></td>
+                  <td>{i + 1}</td>
+                  <td>{r.survivor_name || '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title={r.survivor_account}>{r.survivor_account || '—'}</td>
+                  <td>{r.loser_count} account{Number(r.loser_count) === 1 ? '' : 's'}</td>
+                  <td title={r.source_key}>{r.source_type === 'merge_id' ? 'merge id ' : 'group '}{shortId(r.source_key)}</td>
+                  <td>{r.master_rule || 'cascade'}</td>
+                  <td>{r.environment || '—'}</td>
+                </tr>
+              ))}
+              {rows.length === 0 && <tr><td colSpan={8} className="muted small">No approved merges. Approve sets in Select Merges first.</td></tr>}
+            </tbody>
+          </table>
         </div>
-      )}
+      </CollapsibleCard>
+
+      {(() => {
+        const activeIdx = progress ? MERGE_STAGES.findIndex((s) => s.key === progress.stage) : -1;
+        const pct = progress && progress.total_ops ? Math.round(100 * (progress.completed_ops || 0) / progress.total_ops) : 0;
+        const selectedRows = rows.filter((r) => sel.has(r.id));
+        const runId = progress && progress.run_id;
+        const hByQueue = {}; // history is newest-first; during a live run restrict to this run
+        for (const h of history) {
+          if (hByQueue[h.queue_id] != null) continue;
+          if (busy && runId && h.run_id !== runId) continue;
+          hByQueue[h.queue_id] = h;
+        }
+        const STATUS_COLOR = { ...RESULT_COLOR, processing: 'var(--accent)', pending: 'var(--dim)' };
+        const origIdx = new Map(selectedRows.map((r, idx) => [r.id, idx])); // processing order, independent of display sort
+        const statusFor = (row) => {
+          const h = hByQueue[row.id];
+          if (h) return h.result;
+          if (busy && progress && origIdx.get(row.id) === (progress.completed_sets || 0)) return 'processing';
+          return busy ? 'pending' : '—';
+        };
+        return (
+          <div className="card" style={{ marginTop: 12 }}>
+            <p style={{ margin: '0 0 8px', fontWeight: 700, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span>Progress</span>
+              <span className="muted small" style={{ fontWeight: 400 }}>{progress ? ' — ' + (progress.current_label || progress.status) : (busy ? ' — starting…' : ' — no run this session')}</span>
+              <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                <button type="button" className="btn" style={{ padding: '2px 8px', fontSize: 11, color: 'var(--red)', borderColor: 'var(--red)' }}
+                  disabled={!busy || stopping} title={busy ? 'Stop after the current set finishes; remaining sets stay approved' : 'Available once a run is in progress'} onClick={stop}>
+                  {stopping ? 'Stopping…' : '■ Stop'}
+                </button>
+                <button type="button" className="btn" style={{ padding: '2px 8px', fontSize: 11 }} disabled={busy} title="Clear the progress display" onClick={() => { setProgress(null); setResult(null); setElapsed(0); }}>Reset</button>
+              </span>
+            </p>
+            <div className="stepper">
+              {MERGE_STAGES.map((s, i) => {
+                const finished = progress && (progress.status === 'done' || progress.status === 'error' || progress.status === 'cancelled');
+                const isSkip = s.key === 'merge' && progress && progress.mode === 'simulate';
+                const state = isSkip ? 'skip'
+                  : (activeIdx < 0 ? ''
+                    : (i < activeIdx ? 'done' : (i === activeIdx ? (finished ? 'done' : 'running') : '')));
+                return (
+                  <div className="step-wrap" key={s.key}>
+                    <span className={'step-dot' + (state === 'done' || state === 'running' ? ' ' + state : '')}
+                      style={state === 'skip' ? { background: 'var(--red-bg)', color: 'var(--red)' } : undefined}>
+                      {state === 'done' ? '✓' : state === 'skip' ? '✕' : i + 1}</span>
+                    <span className="step-label" style={state === 'skip' ? { color: 'var(--red)' } : undefined}>{s.label}{isSkip ? ' (skipped)' : ''}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="muted small" style={{ marginTop: 6 }}>
+              {progress ? (progress.completed_ops || 0) + ' / ' + (progress.total_ops || 0) + ' operations (' + pct + '%)' : ''}
+              {' · elapsed ' + elapsed + 's'}{eta != null ? ' · ~' + eta + 's left' : ''}
+            </p>
+            <div className="dt-scroll" style={{ maxHeight: 240, marginTop: 8 }}>
+              <table className="modal-table">
+                <thead><tr>
+                  <th title="Row number">#</th>
+                  <th title="Surviving record — click to sort" style={{ cursor: 'pointer' }} onClick={() => paSort.onSort('survivor_name')}>Survivor{paSort.arrow('survivor_name')}</th>
+                  <th title="Survivor account id — click to sort" style={{ cursor: 'pointer' }} onClick={() => paSort.onSort('survivor_account')}>Account{paSort.arrow('survivor_account')}</th>
+                  <th title="Accounts merged into the survivor — click to sort" style={{ cursor: 'pointer' }} onClick={() => paSort.onSort('loser_count')}>Merging{paSort.arrow('loser_count')}</th>
+                  <th title="Live status: pending / processing / done / simulated / skipped / failed">Status</th>
+                </tr></thead>
+                <tbody>
+                  {paSort.apply(selectedRows).map((r, i) => {
+                    const st = statusFor(r);
+                    return (
+                      <tr key={r.id}>
+                        <td>{i + 1}</td>
+                        <td>{r.survivor_name || '—'}</td>
+                        <td title={r.survivor_account} style={{ whiteSpace: 'nowrap' }}>{r.survivor_account}</td>
+                        <td>{r.loser_count}</td>
+                        <td><span className="pill" style={{ color: STATUS_COLOR[st] || 'var(--dim)' }}>{st}</span></td>
+                      </tr>
+                    );
+                  })}
+                  {selectedRows.length === 0 && <tr><td colSpan={5} className="muted small">No sets selected.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       {result && (
-        <p className="muted small" style={{ marginTop: 8, color: 'var(--accent)' }}>Run {result.run_id} ({result.mode}): {result.done || 0} done, {result.simulated || 0} simulated, {result.skipped} skipped, {result.failed} failed.</p>
+        <p className="muted small" style={{ marginTop: 8, color: result.cancelled ? 'var(--red)' : 'var(--accent)' }}>
+          {result.cancelled ? '■ Stopped — ' : ''}Run {result.run_id} ({result.mode}): {result.done || 0} done, {result.simulated || 0} simulated, {result.skipped} skipped, {result.failed} failed{result.cancelled ? ', ' + (result.remaining || 0) + ' left approved (run again to finish)' : ''}.
+        </p>
       )}
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Merge history <span className="muted small" style={{ fontWeight: 400 }}>({history.length})</span></p>
+      <CollapsibleCard
+        title={<>Merge history <span className="muted small" style={{ fontWeight: 400 }}>({history.length})</span></>}
+        actions={history.length > 0 ? (
+          <span className="dl-group">
+            <span className="muted small">Export</span>
+            <a className="dl-link" href={exportUrl('/api/merge/history/export', { format: 'csv' })}>CSV</a>
+            <a className="dl-link" href={exportUrl('/api/merge/history/export', { format: 'xlsx' })}>Excel</a>
+          </span>
+        ) : null}
+      >
         <div className="dt-scroll" style={{ maxHeight: 300 }}>
           <table className="modal-table">
-            <thead><tr><th>#</th><th>When</th><th>Survivor</th><th>Merged</th><th>Children</th><th>Env</th><th>Result</th><th>Snapshot</th><th>Reason</th></tr></thead>
+            <thead><tr>
+              <th title="Row number">#</th>
+              <th title="When the run happened — click to sort" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => histSort.onSort('created_at')}>When<span className="th-info"> ⓘ</span>{histSort.arrow('created_at')}</th>
+              <th title="Surviving record — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('survivor_name')}>Survivor<span className="th-info"> ⓘ</span>{histSort.arrow('survivor_name')}</th>
+              <th title="How many accounts were merged in — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('loser_count')}>Merged<span className="th-info"> ⓘ</span>{histSort.arrow('loser_count')}</th>
+              <th title="Child records counted at run time — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('child_total')}>Children<span className="th-info"> ⓘ</span>{histSort.arrow('child_total')}</th>
+              <th title="Environment the run targeted — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('environment')}>Env<span className="th-info"> ⓘ</span>{histSort.arrow('environment')}</th>
+              <th title="Outcome — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('result')}>Result<span className="th-info"> ⓘ</span>{histSort.arrow('result')}</th>
+              <th title="Whether a pre-merge snapshot was saved — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('snapshot_saved')}>Snapshot<span className="th-info"> ⓘ</span>{histSort.arrow('snapshot_saved')}</th>
+              <th title="Detail / error / skip reason">Reason<span className="th-info"> ⓘ</span></th>
+            </tr></thead>
             <tbody>
-              {history.map((h, i) => (
+              {histSort.apply(history).map((h, i) => (
                 <tr key={h.id}>
                   <td>{i + 1}</td>
                   <td>{h.created_at ? new Date(h.created_at).toLocaleString() : '—'}</td>
@@ -229,7 +397,37 @@ export default function MergeProcess() {
         <p className="muted small" style={{ marginTop: 8, borderTop: '1px solid var(--line)', paddingTop: 7 }}>
           Every run validates environment/org alignment and writes a pre-merge snapshot before any merge. Restore is best-effort (Phase 4).
         </p>
-      </div>
+      </CollapsibleCard>
+
+      <CollapsibleCard
+        title={<>Pre-merge snapshot <span className="muted small" style={{ fontWeight: 400 }}>(restore baseline — search &amp; filter)</span></>}
+        actions={snapRows.length > 0 ? (
+          <span className="dl-group">
+            <span className="muted small">Export</span>
+            <a className="dl-link" href={exportUrl('/api/merge/snapshot/export', { format: 'csv' })}>CSV</a>
+            <a className="dl-link" href={exportUrl('/api/merge/snapshot/export', { format: 'xlsx' })}>Excel</a>
+          </span>
+        ) : null}
+      >
+        <DataTable
+          rows={snapRows}
+          searchCols="name, account, survivor, object, run"
+          minWidth={1180}
+          facets={{ role: ['survivor', 'loser', 'child'], child_type: ['child', 'self_account', 'self_contact'] }}
+          columns={[
+            { key: 'role', label: 'Role', sort: true, filter: true, help: 'survivor / loser / child' },
+            { key: 'name', label: 'Name', sort: true, help: "The record's name (child rows show their owning account's name)", render: (r) => (<span style={{ whiteSpace: 'nowrap' }}>{r.name || ''}</span>) },
+            { key: 'survivor_account', label: 'Survivor', sort: true, help: 'Surviving master account id for this set' },
+            { key: 'account', label: 'Account', sort: true, help: 'This row’s account id' },
+            { key: 'child_type', label: 'Child type', sort: true, filter: true, help: 'child / self_account / self_contact' },
+            { key: 'child_object', label: 'Object', sort: true, filter: true, help: 'SObject type of the child record' },
+            { key: 'contact', label: 'Contact', sort: true, help: 'Person Contact id' },
+            { key: 'field', label: 'Field', help: 'Captured record JSON — hover or export for the full value', render: (r) => (<span title={r.field} style={{ display: 'inline-block', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{r.field}</span>) },
+            { key: 'created_at', label: 'When', sort: true, help: 'When the snapshot row was written', render: (r) => (<span style={{ whiteSpace: 'nowrap' }}>{r.created_at ? new Date(r.created_at).toLocaleString() : '—'}</span>) },
+            { key: 'run_id', label: 'Run', sort: true, help: 'Merge run id that produced this snapshot', render: (r) => (<span style={{ whiteSpace: 'nowrap' }}>{r.run_id}</span>) },
+          ]}
+        />
+      </CollapsibleCard>
 
       <div className="card" style={{ marginTop: 12, background: 'rgba(127,127,127,.05)' }}>
         <p style={{ margin: '0 0 6px', fontWeight: 700 }}>How processing works</p>

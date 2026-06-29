@@ -11,6 +11,7 @@ const mrun = require('./merge_run');
 const dashboard = require('./duplicates_read');
 
 function execution_enabled() { return process.env.MERGE_ENABLE_EXECUTION === 'true'; }
+function log(...a) { if (process.env.MERGE_LOG !== 'off') console.log('[restore]', ...a); }
 
 // Which ids are currently in the Recycle Bin (soft-deleted)? scanAll:true => jsforce queryAll endpoint.
 async function deleted_set(conn, ids) {
@@ -101,6 +102,7 @@ async function restore(ids, opts = {}, deps = {}) {
   const runId = make_run_id();
   await RUN.start({ run_id: runId, kind: 'restore', mode, environment: env,
     total_sets: entries.length, total_ops: entries.length, created_by: createdBy });
+  log('run ' + runId + ' mode=' + mode + ' sets=' + entries.length + ' env=' + env);
 
   const out = { run_id: runId, mode, armed, processed: 0, restored: 0, simulated: 0, skipped: 0, failed: 0, results: [] };
   let conn = null; let completed = 0;
@@ -131,8 +133,9 @@ async function restore(ids, opts = {}, deps = {}) {
     if (!armed) {
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
         survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
-        result: 'simulated', reason: 'restore preview — ' + (eligible ? 'eligible' : 'not eligible') + ' (' + recoverable.length + '/' + losers.length + ' recoverable), ' + children.length + ' children to re-point' });
+        result: 'simulated', reason: 'restore preview — ' + (eligible ? 'eligible' : 'not eligible') + ' (' + recoverable.length + '/' + losers.length + ' recoverable), ' + children.filter((c) => !c.child_type || c.child_type === 'child').length + ' children to re-point' });
       out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', eligible, recoverable: recoverable.length, children: children.length });
+      log((e.survivor_name || e.id) + ' — preview ' + (eligible ? 'eligible' : 'not eligible') + ' (' + recoverable.length + '/' + losers.length + ' recoverable)');
       completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
     }
 
@@ -140,12 +143,14 @@ async function restore(ids, opts = {}, deps = {}) {
       await H.write({ run_id: runId, queue_id: e.id, environment: e.environment, mode, result: 'skipped',
         reason: 'not restorable: only ' + recoverable.length + '/' + losers.length + ' still in Recycle Bin (15-day window?)' });
       out.skipped += 1; out.results.push({ id: e.id, result: 'skipped', reason: 'window expired' });
+      log((e.survivor_name || e.id) + ' — skipped (Recycle Bin window expired)');
       completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
     }
 
     try {
       await W.undelete(conn, losers);
       for (const ch of children) {
+        if (ch && ch.child_type && ch.child_type !== 'child') continue; // self halves return with undelete
         if (ch && ch.object && ch.id && ch.parent_field) {
           await W.update_record(conn, ch.object, { Id: ch.id, [ch.parent_field]: ch.parent_id });
         }
@@ -157,6 +162,7 @@ async function restore(ids, opts = {}, deps = {}) {
         survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
         result: 'restored', reason: 'undeleted ' + losers.length + ', re-pointed ' + children.length + ' children' });
       out.restored += 1; out.results.push({ id: e.id, result: 'restored', undeleted: losers.length, children: children.length });
+      log((e.survivor_name || e.id) + ' — RESTORED: undeleted ' + losers.length + ', re-pointed children');
     } catch (err) {
       await H.write({ run_id: runId, queue_id: e.id, environment: e.environment, mode, result: 'failed', reason: 'restore halted: ' + err.message });
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
@@ -164,6 +170,7 @@ async function restore(ids, opts = {}, deps = {}) {
     completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed });
   }
 
+  log('run ' + runId + ' complete: restored=' + out.restored + ' simulated=' + out.simulated + ' skipped=' + out.skipped + ' failed=' + out.failed);
   await RUN.finish(runId, { status: 'done', completed_ops: completed, completed_sets: completed, current_label: 'Complete' });
   return out;
 }
