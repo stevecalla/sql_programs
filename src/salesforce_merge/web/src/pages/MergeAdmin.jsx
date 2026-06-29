@@ -418,7 +418,7 @@ export default function MergeAdmin() {
                   <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>
                     <li>{selLosers.length} account{selLosers.length === 1 ? '' : 's'} selected to merge into the master</li>
                     <li>{selLosers.length} losing account{selLosers.length === 1 ? '' : 's'} → Recycle Bin (~15 days)</li>
-                    <li>~{apexCalls} merge operation{apexCalls === 1 ? '' : 's'} <span className="muted">(see caveats below)</span></li>
+                    <li>~{apexCalls} merge operation{apexCalls === 1 ? '' : 's'} <span className="muted">(see the Reference page)</span></li>
                   </ul>
                 </div>
 
@@ -612,29 +612,11 @@ export default function MergeAdmin() {
         </p>
       </div>
 
-      {/* CAVEATS */}
-      <div className="card" style={{ marginTop: 12, background: 'rgba(127,127,127,.05)' }}>
-        <p style={{ margin: '0 0 6px', fontWeight: 700 }}>Caveats</p>
-        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>
-          <li><strong>Queue, approve, then process.</strong> "Add to merge queue" stages a set with its survivor, losers, per-field overrides, and child counts — review only, no Salesforce write. "Approve selected" moves queued sets to <em>approved</em> (the human go-ahead); the status filter switches the view between queued / approved / done. The ✕ removes a set while it is <em>queued</em> or <em>approved</em>. Execution is Phase 3: processing an approved set will re-run the dry-run against fresh Salesforce data, back the records up to a pre-merge snapshot, run the Salesforce merge, record history, and enable best-effort restore from that snapshot. Nothing on this page writes to Salesforce.</li>
-          <li><strong>Marketing Cloud (SFMC) and other external systems are not included.</strong> Auto-discovery only walks child relationships inside the core Salesforce CRM org — objects that hang off the Account or its Person Contact. Marketing Cloud is a separate platform connected through Marketing Cloud Connect, which syncs Contacts and Leads into SFMC and identifies each subscriber by a Subscriber Key, usually the Contact Id (or Lead Id).
-            <ul style={{ marginTop: 4 }}>
-              <li>When a merge deletes the losing Contact, its Subscriber Key is orphaned: subscriber records, list and data-extension rows, journey membership, and send/engagement history that referenced the old Id are not automatically repointed to the surviving Contact.</li>
-              <li>Reconciliation happens in Marketing Cloud after the merge — re-sync the surviving Contact, update or remap the Subscriber Key, and review any journeys, automations, or data extensions that filter on the old Id.</li>
-              <li>The same caution applies to anything else linked by Salesforce Id outside the org (data warehouse, AMS or payment systems, other marketing tools): those references are invisible to this preview and need their own reconciliation.</li>
-            </ul>
-          </li>
-          <li><strong>How the surviving master is chosen.</strong> The survivor is picked by a cascade: (1) the account whose Salesforce Id equals the merge id; (2) else the lowest membership number, if any; (3) else the account with the most Salesforce child records; (4) else the oldest account. A merge always needs the survivor plus at least one other account, so a group of one is skipped. You can override the master per cluster before queuing. Bulk queueing resolves steps 1–2 from the database (no Salesforce call); groups that would need the child-count or oldest tie-break are skipped and left for single review.</li>
-          <li><strong>How the merge actually runs.</strong> Execution (Phase 3) would use Salesforce native merge via Apex <code>Database.merge</code> — the same operation as the SOAP/REST <code>merge()</code> call and the standard UI Merge action. It is the only supported way to combine records; there is no alternate merge-by-id mechanism.
-            <ul style={{ marginTop: 4 }}>
-              <li>Each call merges at most three records: one surviving master plus up to two losing records. A cluster with N losers therefore needs about ceil(N / 2) calls — the merge-operations estimate shown above — and batching this way keeps every transaction within Salesforce Apex and DML governor limits.</li>
-              <li>Survivorship is applied by writing the chosen values onto the master before the merge: the master keeps its non-blank values, blank fields backfill from a losing record, and any value set in the override column above wins. The native merge then retains the master, reparents all child records to it, and sends the losing accounts to the Recycle Bin (about 15 days).</li>
-              <li>These are Person Accounts, so each record is an Account paired with a Person Contact; the merge collapses both sides together, which is why child records that hang off the Contact also move.</li>
-              <li>The membership-platform merge id (<code>usat_Salesforce_Merge_Id__pc</code>) is only a matching and QA field used to decide which records belong together. It is data, not the action that performs the merge.</li>
-            </ul>
-          </li>
-        </ul>
-      </div>
+      {/* Caveats and how-merge-works detail moved to the Reference page. */}
+      <p className="muted small" style={{ marginTop: 12 }}>
+        How the survivor is chosen, how a merge runs, and what it does not touch (Marketing Cloud and
+        other external systems) are explained on the <strong>Reference</strong> page.
+      </p>
     </div>
   );
 }

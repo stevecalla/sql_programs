@@ -1,5 +1,7 @@
 // Plain-language reference for non-technical reviewers — kept consistent with the Dashboard
-// (same funnel, same signal definitions, same merge-ID reconciliation). Static content, no data calls.
+// (same funnel, same signal definitions, same merge-ID reconciliation) and with the Merge Admin /
+// Process Merges pages (survivor cascade, how a merge runs, what it doesn't touch). Static content,
+// no data calls.
 export default function Reference() {
   return (
     <div className="reference">
@@ -50,23 +52,49 @@ export default function Reference() {
       </div>
 
       <div className="card ref-card">
-        <h3>Merging accounts</h3>
+        <h3>Merging accounts — review, queue, approve, process</h3>
         <p>
-          Merging combines a cluster’s accounts into <strong>one surviving record</strong>, moving all the
-          history (gifts, events, cases) onto the survivor so nothing is lost. It runs in clear steps:
+          Merging combines a cluster’s accounts into <strong>one surviving record</strong>, reparenting all
+          the history (gifts, events, cases) onto the survivor so nothing is lost. It runs as a reviewed
+          pipeline across two pages — you build a queue on <strong>Merge Admin</strong> and run it on
+          <strong> Process Merges</strong>:
         </p>
         <ol>
-          <li><strong>Review</strong> — pick the surviving record and the ones merged into it.</li>
-          <li><strong>Dry-run</strong> — a safe preview that checks for problems and shows exactly what will move, without changing anything.</li>
-          <li><strong>Confirm</strong> — you approve (production needs a typed confirmation).</li>
-          <li><strong>Execute</strong> — the merge runs in Salesforce. Losing records go to the Recycle Bin (recoverable for about 15 days).</li>
-          <li><strong>Log</strong> — every merge is recorded so it can be reviewed and, if needed, restored.</li>
+          <li><strong>Review</strong> (Merge Admin) — pick the surviving record (the “master”) and the accounts merged into it, and set any per-field overrides.</li>
+          <li><strong>Add to merge queue</strong> — stages that set with its survivor, losers, overrides, and child-record counts. Review only — nothing is written to Salesforce.</li>
+          <li><strong>Approve selected</strong> — moves a queued set to <em>approved</em> (the human go-ahead). The status filter switches the view between queued / approved / done; the ✕ removes a set while it is queued or approved.</li>
+          <li><strong>Process</strong> (Process Merges, Phase 3) — re-runs the dry-run against fresh Salesforce data, backs the records up to a pre-merge snapshot, runs the Salesforce merge, records history, and enables best-effort restore from that snapshot.</li>
         </ol>
         <p className="muted small">
-          Safety first: merging is <strong>off by default</strong>, always previewed first, tried in a
-          sandbox before production, and fully logged. Merging is the only step that changes data —
-          everything else here only reads.
+          Safety first: merge execution is <strong>off by default</strong> (safe mode) and never runs from
+          the review pages. Every set is previewed with a dry-run, tried in a sandbox before production, and
+          checked for <strong>environment/org alignment</strong> — a set built against Sandbox can’t run
+          against Production, and vice-versa. Production needs a typed confirmation, and every merge is
+          logged. Merging is the only step that changes data; everything else here only reads.
         </p>
+      </div>
+
+      <div className="card ref-card">
+        <h3>Caveats</h3>
+        <ul>
+          <li><strong>Queue, approve, then process.</strong> "Add to merge queue" stages a set with its survivor, losers, per-field overrides, and child counts — review only, no Salesforce write. "Approve selected" moves queued sets to <em>approved</em> (the human go-ahead); the status filter switches the view between queued / approved / done. The ✕ removes a set while it is <em>queued</em> or <em>approved</em>. Execution is Phase 3: processing an approved set will re-run the dry-run against fresh Salesforce data, back the records up to a pre-merge snapshot, run the Salesforce merge, record history, and enable best-effort restore from that snapshot. Nothing on this page writes to Salesforce.</li>
+          <li><strong>Marketing Cloud (SFMC) and other external systems are not included.</strong> Auto-discovery only walks child relationships inside the core Salesforce CRM org — objects that hang off the Account or its Person Contact. Marketing Cloud is a separate platform connected through Marketing Cloud Connect, which syncs Contacts and Leads into SFMC and identifies each subscriber by a Subscriber Key, usually the Contact Id (or Lead Id).
+            <ul>
+              <li>When a merge deletes the losing Contact, its Subscriber Key is orphaned: subscriber records, list and data-extension rows, journey membership, and send/engagement history that referenced the old Id are not automatically repointed to the surviving Contact.</li>
+              <li>Reconciliation happens in Marketing Cloud after the merge — re-sync the surviving Contact, update or remap the Subscriber Key, and review any journeys, automations, or data extensions that filter on the old Id.</li>
+              <li>The same caution applies to anything else linked by Salesforce Id outside the org (data warehouse, AMS or payment systems, other marketing tools): those references are invisible to this preview and need their own reconciliation.</li>
+            </ul>
+          </li>
+          <li><strong>How the surviving master is chosen.</strong> The survivor is picked by a cascade: (1) the account whose Salesforce Id equals the merge id; (2) else the lowest membership number, if any; (3) else the account with the most Salesforce child records; (4) else the oldest account. A merge always needs the survivor plus at least one other account, so a group of one is skipped. You can override the master per cluster before queuing. Bulk queueing resolves steps 1–2 from the database (no Salesforce call); groups that would need the child-count or oldest tie-break are skipped and left for single review.</li>
+          <li><strong>How the merge actually runs.</strong> Execution (Phase 3) would use Salesforce native merge via Apex <code>Database.merge</code> — the same operation as the SOAP/REST <code>merge()</code> call and the standard UI Merge action. It is the only supported way to combine records; there is no alternate merge-by-id mechanism.
+            <ul>
+              <li>Each call merges at most three records: one surviving master plus up to two losing records. A cluster with N losers therefore needs about ceil(N / 2) calls — the merge-operations estimate shown above — and batching this way keeps every transaction within Salesforce Apex and DML governor limits.</li>
+              <li>Survivorship is applied by writing the chosen values onto the master before the merge: the master keeps its non-blank values, blank fields backfill from a losing record, and any value set in the override column above wins. The native merge then retains the master, reparents all child records to it, and sends the losing accounts to the Recycle Bin (about 15 days).</li>
+              <li>These are Person Accounts, so each record is an Account paired with a Person Contact; the merge collapses both sides together, which is why child records that hang off the Contact also move.</li>
+              <li>The membership-platform merge id (<code>usat_Salesforce_Merge_Id__pc</code>) is only a matching and QA field used to decide which records belong together. It is data, not the action that performs the merge.</li>
+            </ul>
+          </li>
+        </ul>
       </div>
 
       <div className="card ref-card">
@@ -85,8 +113,8 @@ export default function Reference() {
         </div>
         <p className="muted small">
           Read-only: the sweep replays over the snapshot already loaded — no Salesforce fetch — and never
-          changes production detection. Run it from the <strong>Process</strong> page (Run tuning sweep);
-          results appear on the <strong>Tuning</strong> page.
+          changes production detection. Run it from the <strong>Get Duplicates</strong> page (Run tuning
+          sweep); results appear on the <strong>Tuning</strong> page.
         </p>
       </div>
 
@@ -94,9 +122,9 @@ export default function Reference() {
         <h3>Refreshing the data</h3>
         <p>
           The pages show the most recent detection run (see the “Data as of …” line on each page). When
-          new data is needed, the <strong>Process</strong> page re-runs detection and rebuilds these lists.
-          You choose <strong>Sandbox or Production</strong> and <strong>Sample or Full</strong>; production
-          runs ask for confirmation.
+          new data is needed, the <strong>Get Duplicates</strong> page re-runs detection and rebuilds these
+          lists. You choose <strong>Sandbox or Production</strong> and <strong>Sample or Full</strong>;
+          production runs ask for confirmation.
         </p>
       </div>
     </div>
