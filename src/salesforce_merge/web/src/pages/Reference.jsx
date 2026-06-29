@@ -98,6 +98,23 @@ export default function Reference() {
       </div>
 
       <div className="card ref-card">
+        <h3>Running and undoing merges (how Process Merges will work)</h3>
+        <p>
+          Approved sets are run from the <strong>Process Merges</strong> page. The whole flow is built to be
+          rehearsed safely first, then run for real once — and undone if needed.
+        </p>
+        <div className="defs">
+          <div className="defs-row"><span className="defs-term lg">Simulate vs Execute</span><span className="defs-body">a safety switch (default <strong>Simulate</strong>) runs everything — re-check, backup, and the merge plan — but makes no Salesforce changes. A real merge happens only in <strong>Execute</strong> mode with every gate satisfied (execution enabled, typed “MERGE” confirmation, environment match, sandbox first).</span></div>
+          <div className="defs-row"><span className="defs-term lg">Backup every run</span><span className="defs-body">before each run a snapshot captures the records and their child records, so there’s always a current restore point. Only the latest snapshot per set is kept — no stale pile-up.</span></div>
+          <div className="defs-row"><span className="defs-term lg">How a merge runs</span><span className="defs-body">Salesforce merges a master plus two records at a time, so a big set runs in several steps (a 26-account set takes 13). A live progress bar, elapsed timer, and estimated finish show as it goes.</span></div>
+          <div className="defs-row"><span className="defs-term lg">If a step fails</span><span className="defs-body">the set <strong>stops</strong> at the failed step and is marked <em>failed</em> — it is <strong>not</strong> auto-reverted, because the steps that already worked are correct. Re-running it safely continues with whatever is left. True rollback uses Restore.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Runs once</span><span className="defs-body">a successful set is marked <em>done</em> and drops out, so it can’t be merged twice. You can simulate as often as you like beforehand.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Restore (later phase)</span><span className="defs-body">a completed merge can be undone for about 15 days: the removed records are brought back from the Recycle Bin (with their original IDs), their children re-linked, and the master’s overwritten fields reset — from the snapshot. Beyond that window restore is approximate.</span></div>
+          <div className="defs-gate">Status: this is the planned behavior for execution (Phase 3b) and restore (Phase 4). Today the page runs in <strong>Simulate only</strong> — no Salesforce writes happen yet.</div>
+        </div>
+      </div>
+
+      <div className="card ref-card">
         <h3>Tuning — testing the match criteria</h3>
         <p>
           The <strong>Tuning</strong> page answers "how many duplicates would we get if we changed the
