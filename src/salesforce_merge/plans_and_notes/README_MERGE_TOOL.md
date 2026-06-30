@@ -1,8 +1,13 @@
-# Merge Management Tool — Plan (DRAFT)
+# Merge Management Tool — Plan
 
-**Status:** Draft / planning only. No code yet. Phasing and final decisions are
-deliberately deferred (see the end) — this doc captures the architecture, the read-vs-write
-safety model, and the data-extraction question.
+**Status:** BUILT and going live — this doc is retained as the original architecture/decision record.
+What shipped beyond the original draft: the review pages (Dashboard, Duplicates, Merge-ID, All
+accounts, Tuning), the staged-merge workflow (Select → Process → Restore), and **multi-user auth
+with per-panel access control** (`.env` recovery admins + file-backed scrypt users, `panel_access.json`
+default/overrides, enforced in the nav and server-side; managed from `/admin` or the `admin.js`
+CLI / menu). See the tool's `README.md` for current usage. The read-vs-write safety model below
+still holds: the duplicates pipeline is untouched and the Apex `Database.merge` call is the single
+write chokepoint.
 
 ## Purpose
 

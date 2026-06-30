@@ -4,8 +4,11 @@ Web admin tool to review duplicate accounts and (later) initiate Salesforce merg
 and restore. Sits on top of the read-only `salesforce_duplicates` pipeline. Server lives at the
 repo root: `server_salesforce_merge_8020.js` (port 8020). Planning docs: `plans_and_notes/`.
 
-**Status: Phase 1 — read-only review pages (on the Phase 0 foundation).** No Salesforce calls, no writes. The dashboard reads
-the existing `salesforce_duplicate_*` tables in `usat_sales_db`.
+**Status: multi-user admin console** — read-only review pages (Dashboard, Duplicates, Merge-ID, All
+accounts, Tuning) plus the staged-merge workflow (Select → Process → Restore) and **per-user access
+control** (see *Users & access*). Review pages read the existing `salesforce_duplicate_*` tables in
+`usat_sales_db`; merge actions are the only Salesforce writes and are gated behind login + the
+`merge-process` / `restore` panels.
 
 ## Structure
 
@@ -84,8 +87,11 @@ Prefer separate terminals? `npm run salesforce_merge_dev` (backend) and
 ## Testing
 
 - **Unit tests** (node:test, no DB/Salesforce needed): `npm run salesforce_merge_test`
-  — covers auth (session sign/verify, valid_user), the API routes (status/login/me + the
-  dashboard auth gate, via a real `create_app()` boot), and `duplicates_read` (injected fake query).
+  — covers auth (session sign/verify, `valid_user`, scrypt-hashed stored users, `.env` recovery
+  accounts), **panel access** (admin bypass, default-except-Metrics, per-user overrides), the API
+  routes (status/login/me + the dashboard auth gate **and the admin user-management / panel-access
+  routes + 403 enforcement**, via a real `create_app()` boot), and `duplicates_read` (injected fake
+  query). The API suite closes the lazily-opened MySQL pool in its teardown so the run exits cleanly.
 - **E2E smoke** (Playwright, stubs `/api/*`): one-time `npx playwright install chromium` +
   `npm run salesforce_merge_build`, then `npm run salesforce_merge_e2e` — login → dashboard renders
   → dark-mode toggle.
@@ -93,8 +99,9 @@ Prefer separate terminals? `npm run salesforce_merge_dev` (backend) and
 ## Menu
 
 `npm run salesforce_merge_menu` (or `node src/salesforce_merge/menu.js`) — an interactive launcher
-mirroring the duplicates menu: RUN (dev / build / server), TESTING (unit / e2e), OPEN (dev/built
-UI, API status), and PM2 (start/stop/restart/logs).
+mirroring the duplicates menu: RUN (dev / build / server), TESTING (unit / e2e), **SERVER & USERS**
+(add / list / passwd / remove a user, show panel access, auth tests), OPEN (dev/built UI, API
+status), and PM2 (start/stop/restart/logs).
 
 ## Run (production-style: one server)
 
@@ -108,7 +115,7 @@ to `proxy_routes.js` to front it through the proxy.
 
 ## What Phase 0 does
 
-- Signed-cookie login (admin from `.env`).
+- Signed-cookie login — `.env` recovery admins plus file-backed users with per-panel access (see *Users & access*).
 - Dashboard with real counts (total accounts, accounts with merge IDs, clusters, duplicate pairs,
   merge-ID buckets) read **only** from the existing duplicate tables.
 - Nav shell with the Sandbox⇄Production toggle (cosmetic for now).

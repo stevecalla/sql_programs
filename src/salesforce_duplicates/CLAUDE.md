@@ -88,16 +88,21 @@ finder writes it as a 7th view (CSV `account_merge_id_review.csv`, DB table
 `salesforce_duplicate_merge_id_review`, Excel tab, end-of-run summary). Menu item 11
 (`node src/merge_id_review.js report`) prints the latest run's review from the DB.
 
-## Merge management tool — PLANNED / DRAFT (own project: `../salesforce_merge/`, see `../salesforce_merge/plans_and_notes/README_MERGE_TOOL.md`)
+## Merge management tool — BUILT (own project: `../salesforce_merge/`, see its `README.md` + `plans_and_notes/README_MERGE_TOOL.md`)
 
-Not built yet. A planned web admin tool (templated on the email-queue app's `/`, `/metrics`,
-`/admin`) to review accounts / merge-ID accounts / duplicates, manage + initiate merges, keep
-merge history, and best-effort restore. Same stack (Node/Express + MySQL + jsforce), with the
-actual merge run via a Salesforce Apex REST endpoint (`Database.merge`). This is the first
-**write** path against Salesforce — the draft leads with the read-vs-write safety model
-(read-only pipeline untouched; single write chokepoint; least-privilege SF users; writes gated
-off by default + mandatory dry-run; new tables only). Data extraction stays two-tier: keep the
-bulk snapshot lean, enrich per-cluster on demand. Phasing + decisions are deferred in the doc.
+Built and going live. A web admin console (Node/Express + MySQL + jsforce, React UI, port 8020,
+`server_salesforce_merge_8020.js`) that reviews accounts / merge-ID accounts / duplicates / tuning,
+stages + runs merges (Select → Process), keeps merge history, and does best-effort restore. The
+actual merge runs via a Salesforce Apex REST endpoint (`Database.merge`) — the only **write** path
+against Salesforce; the read-only duplicates pipeline here is untouched. It reads our
+`salesforce_duplicate_*` tables + the `salesforce_account_duplicate_snapshot` for its review pages.
+
+**Multi-user + access control (shipped).** Modeled on the email-queue: `.env` recovery admins
+(`MERGE_ADMIN_*`, `MERGE_TEST_*`) plus file-backed scrypt-hashed users (gitignored `auth.json`
+outside the repo), managed from the `/admin` Access page or the `admin.js` CLI / menu. Per-user
+**panel access** (`panel_access.json`, default = every panel except Metrics, plus per-user
+overrides) is enforced both in the nav and server-side (403). Anything touching that tool's auth
+lives in `../salesforce_merge/auth/` — it does NOT affect this read-only finder.
 
 ## Entry points
 
