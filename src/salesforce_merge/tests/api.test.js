@@ -42,7 +42,11 @@ before(async () => {
     });
   });
 });
-after(() => { if (server) server.close(); });
+after(async () => {
+  if (server) server.close();
+  // The data routes lazily open the mysql2 pool; close it so node --test can exit cleanly.
+  try { await require('../store/db').end(); } catch (e) { /* never opened */ }
+});
 
 describe('api', () => {
   test('GET /api/status is public and ok', async () => {
