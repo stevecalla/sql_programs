@@ -28,46 +28,41 @@ async function dashboard_counts(query = real_query) {
     signal_breakdown: { accounts: {}, pairs: {}, clusters: {} },
   };
 
-  let r;
-  r = await safe('SELECT COUNT(*) AS n FROM `' + T_SNAP + '`');
-  if (r) out.total_accounts = Number(r[0].n);
+  // All eight figures are independent reads, so fire them concurrently (the DB layer is a pool) and
+  // assemble once — this turns the dashboard load from the SUM of the query latencies into the MAX.
+  const [rTotal, rMerge, rClusters, rPairs, rAccts, rBuckets, rSig, rComp] = await Promise.all([
+    safe('SELECT COUNT(*) AS n FROM `' + T_SNAP + '`'),
+    safe("SELECT COUNT(*) AS n FROM `" + T_SNAP + "` WHERE salesforce_merge_id <> ''"),
+    safe('SELECT COUNT(*) AS n FROM `' + T_CL + '`'),
+    safe('SELECT SUM(CAST(Match_Link_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`'),
+    // Duplicate ACCOUNTS = sum of cluster sizes (the individual records in clusters) — the figure
+    // that reconciles total accounts -> clusters -> pairs on the dashboard.
+    safe('SELECT SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`'),
+    safe('SELECT Bucket__c AS bucket, COUNT(*) AS n FROM `' + T_MR + '` GROUP BY Bucket__c'),
+    // Pairs by signal — the per-signal link counts summed across clusters. A pair is one signal,
+    // so these three sum to the total pairs (no multi bucket for pairs).
+    safe('SELECT SUM(CAST(Exact_Link_Count__c AS UNSIGNED)) AS exact, ' +
+      'SUM(CAST(Fuzzy_Link_Count__c AS UNSIGNED)) AS fuzzy, ' +
+      'SUM(CAST(Nickname_Link_Count__c AS UNSIGNED)) AS nickname FROM `' + T_CL + '`'),
+    // Accounts + clusters by composition — a cluster's Match_Composition__c is "<signal> only" for
+    // single-signal clusters, else a "a + b" mix. Fold mixes into "multi".
+    safe('SELECT Match_Composition__c AS comp, COUNT(*) AS clusters, ' +
+      'SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS accounts FROM `' + T_CL + '` GROUP BY Match_Composition__c'),
+  ]);
 
-  r = await safe("SELECT COUNT(*) AS n FROM `" + T_SNAP + "` WHERE salesforce_merge_id <> ''");
-  if (r) out.merge_id_accounts = Number(r[0].n);
-
-  r = await safe('SELECT COUNT(*) AS n FROM `' + T_CL + '`');
-  if (r) out.clusters = Number(r[0].n);
-
-  r = await safe('SELECT SUM(CAST(Match_Link_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`');
-  if (r) out.duplicate_pairs = Number(r[0].n || 0);
-
-  // Duplicate ACCOUNTS = sum of cluster sizes (the individual records in clusters) — the figure
-  // that reconciles total accounts -> clusters -> pairs on the dashboard.
-  r = await safe('SELECT SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`');
-  if (r) out.accounts_in_clusters = Number(r[0].n || 0);
-
-  r = await safe('SELECT Bucket__c AS bucket, COUNT(*) AS n FROM `' + T_MR + '` GROUP BY Bucket__c');
-  if (r) out.buckets = r.map(function (x) { return { bucket: x.bucket, count: Number(x.n) }; });
-
-  // Pairs by signal — the per-signal link counts summed across clusters. A pair is one
-  // signal, so these three sum to the total pairs (no multi bucket for pairs).
-  r = await safe(
-    'SELECT SUM(CAST(Exact_Link_Count__c AS UNSIGNED)) AS exact, ' +
-    'SUM(CAST(Fuzzy_Link_Count__c AS UNSIGNED)) AS fuzzy, ' +
-    'SUM(CAST(Nickname_Link_Count__c AS UNSIGNED)) AS nickname FROM `' + T_CL + '`');
-  if (r && r[0]) out.signal_breakdown.pairs = {
-    exact: Number(r[0].exact || 0), fuzzy: Number(r[0].fuzzy || 0), nickname: Number(r[0].nickname || 0),
+  if (rTotal) out.total_accounts = Number(rTotal[0].n);
+  if (rMerge) out.merge_id_accounts = Number(rMerge[0].n);
+  if (rClusters) out.clusters = Number(rClusters[0].n);
+  if (rPairs) out.duplicate_pairs = Number(rPairs[0].n || 0);
+  if (rAccts) out.accounts_in_clusters = Number(rAccts[0].n || 0);
+  if (rBuckets) out.buckets = rBuckets.map(function (x) { return { bucket: x.bucket, count: Number(x.n) }; });
+  if (rSig && rSig[0]) out.signal_breakdown.pairs = {
+    exact: Number(rSig[0].exact || 0), fuzzy: Number(rSig[0].fuzzy || 0), nickname: Number(rSig[0].nickname || 0),
   };
-
-  // Accounts + clusters by composition — a cluster's Match_Composition__c is "<signal> only"
-  // for single-signal clusters, else a "a + b" mix. Fold mixes into "multi".
-  r = await safe(
-    'SELECT Match_Composition__c AS comp, COUNT(*) AS clusters, ' +
-    'SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS accounts FROM `' + T_CL + '` GROUP BY Match_Composition__c');
-  if (r) {
+  if (rComp) {
     const acc = { exact: 0, fuzzy: 0, nickname: 0, multi: 0 };
     const cls = { exact: 0, fuzzy: 0, nickname: 0, multi: 0 };
-    for (const x of r) {
+    for (const x of rComp) {
       const comp = String(x.comp || '');
       const key = comp === 'exact only' ? 'exact'
         : comp === 'fuzzy only' ? 'fuzzy'
@@ -128,4 +123,38 @@ async function recent_runs(limit = 12, query = real_query) {
   }));
 }
 
-module.exports = { dashboard_counts, dataset_info, recent_runs };
+// Tuning sweep profiles (latest sweep run) for the Tuning panel — baseline first, then by ordinal.
+async function sweep_profiles(query = real_query) {
+  const safe = async (sql) => { try { return await query(sql); } catch (e) { return null; } };
+  const rows = await safe('SELECT * FROM `' + cfg.RESULT_SWEEP_PROFILE_TABLE + '` ORDER BY is_baseline DESC, ordinal ASC');
+  if (!rows) return { profiles: [] };
+  const numKeys = ['fuzzy_threshold', 'zip_trim_len', 'total_records', 'accounts_in_clusters', 'duplicate_pairs',
+    'exact_pairs', 'fuzzy_pairs', 'nickname_pairs', 'consolidated_clusters', 'comp_exact', 'comp_fuzzy', 'comp_nickname', 'comp_multi'];
+  const profiles = rows.map((r) => {
+    const o = { label: r.label, is_baseline: !!Number(r.is_baseline), nickname_enabled: !!Number(r.nickname_enabled), rule_fields: r.rule_fields };
+    for (const k of numKeys) o[k] = r[k] == null ? null : Number(r[k]);
+    return o;
+  });
+  // The sweep runs on its own (separate from the finder dataset), so surface its own
+  // "as of" timestamp — the latest run_type='sweep' row in the run logbook.
+  const meta = await safe("SELECT run_at FROM `" + cfg.RUN_TABLE_NAME + "` WHERE run_type = 'sweep' ORDER BY run_at DESC LIMIT 1");
+  const run_at = (meta && meta[0]) ? (meta[0].run_at || null) : null;
+  return { profiles, run_at };
+}
+
+// Flat rows for the Tuning CSV/Excel export — mirrors the on-screen table (profile name,
+// by-signal cluster counts, totals, and Δ vs baseline).
+async function sweep_export_rows(query = real_query) {
+  const { profiles } = await sweep_profiles(query);
+  const base = profiles.find((p) => p.is_baseline) || profiles[0];
+  return profiles.map((p) => ({
+    profile: (p.is_baseline ? 'baseline · ' : '') + 't' + p.fuzzy_threshold + ' · nick ' + (p.nickname_enabled ? 'on' : 'off') + ' · ' + p.rule_fields,
+    exact: p.comp_exact, fuzzy: p.comp_fuzzy, nickname: p.comp_nickname, multi: p.comp_multi,
+    total_clusters: p.consolidated_clusters,
+    delta_clusters: (base && !p.is_baseline) ? p.consolidated_clusters - base.consolidated_clusters : 0,
+    duplicate_accounts: p.accounts_in_clusters,
+    delta_accounts: (base && !p.is_baseline) ? p.accounts_in_clusters - base.accounts_in_clusters : 0,
+  }));
+}
+
+module.exports = { dashboard_counts, dataset_info, recent_runs, sweep_profiles, sweep_export_rows };

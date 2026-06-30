@@ -80,6 +80,22 @@ async function merge_group(conn, group) {           // group = accounts sharing 
 The only thing this gives up vs Apex is that the snapshot and the merge are two steps rather than
 one transaction — acceptable because the snapshot is also our backup (see Restore).
 
+## Environment alignment & not merging twice
+
+The tool runs against one loaded dataset; its environment label both identifies the org and selects
+the SF login used to write, so the write target always matches the data on screen. Queue entries are
+stamped with their environment at add time and the queue persists across Sandbox⇄Production switches.
+Re-merges are prevented by four layers: (1) the **alignment guard** skips any set whose stamped
+environment/org doesn't match the loaded one (so a Sandbox set can't run against Production, and
+vice-versa) — the `org_id` is captured server-side at add time (cached per env, best-effort), so the
+org pin is always-on, not just the label; (2) a merged set becomes `done` and isn't reselectable (simulate never changes status);
+(3) the per-run **drift re-fetch** skips sets whose records are already gone, and on retry continues
+with only the unmerged remainder; (4) Salesforce itself rejects merging a deleted record (recorded
+`failed`, never a silent double-merge). The drift check reads the loaded dataset rather than a live
+per-record query, so `done` status + refreshing data after merges are the dependable guards for
+tool-driven merges; direct-in-Salesforce merges are caught by layer 4 at run time. Full detail +
+the `org_id`-capture hardening note live in `../README_MERGE_TOOL.md`.
+
 ## Restore — two tiers, both from Node
 
 1. **Within ~15 days (high fidelity):** `undelete` each loser from the Recycle Bin (keeps its

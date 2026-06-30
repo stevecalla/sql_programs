@@ -27,17 +27,23 @@ const GROUP_CONCAT_MAX_LEN = 64 * 1024 * 1024;
 async function detect_exact_duplicates_sql(executor, record_lookup, { table = SNAPSHOT_TABLE_NAME } = {}) {
     await executor(`SET SESSION group_concat_max_len = ${GROUP_CONCAT_MAX_LEN}`, []);
 
-    // Total distinct exact keys (matches exact_groups.size in exact.js).
-    const size_rows = await executor(`SELECT COUNT(DISTINCT exact_duplicate_key) AS n FROM \`${table}\``, []);
+    // Total distinct exact keys (matches exact_groups.size in exact.js). The blank
+    // key marks records that failed the exact gate (has_required_exact_fields), so
+    // exclude it — that single filter is how the gate, defined once in normalize.js,
+    // reaches SQL without re-encoding the rule here.
+    const size_rows = await executor(
+        `SELECT COUNT(DISTINCT exact_duplicate_key) AS n FROM \`${table}\` WHERE exact_duplicate_key <> ''`, []);
     const exact_groups_size = Number(size_rows[0] ? size_rows[0].n : 0);
 
     // Groups with more than one record, member IDs concatenated in fetch order, and
     // the groups themselves ordered by first appearance (MIN load_sequence) so the
     // stable Node sort below reproduces exact.js's order even on full ties.
     const rows = await executor(
-        `SELECT exact_duplicate_key,
-                GROUP_CONCAT(salesforce_account_id ORDER BY load_sequence SEPARATOR ',') AS ids
+        `SELECT
+            exact_duplicate_key,
+            GROUP_CONCAT(salesforce_account_id ORDER BY load_sequence SEPARATOR ',') AS ids
          FROM \`${table}\`
+         WHERE exact_duplicate_key <> ''
          GROUP BY exact_duplicate_key
          HAVING COUNT(*) > 1
          ORDER BY MIN(load_sequence)`, []);

@@ -21,7 +21,7 @@ function CopyButton({ value }) {
 //   filter: true renders a per-column control in the header (a dropdown if `facets[key]` exists, else a text box).
 //   wrap: true lets long cells wrap; every cell gets a title tooltip with its full value.
 // `facets` maps column key -> distinct values (for the dropdowns). `searchCols` labels what search scans.
-export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, minWidth, maxHeight, initialQuery = '', rowNumbers = true }) {
+export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, minWidth, initialQuery = '', rowNumbers = true, onRowClick, rowClass, maxHeight = 'min(70vh, 600px)' }) {
   const server = typeof fetcher === 'function';
   const [q, setQ] = useState(initialQuery || '');
   const [sortKey, setSortKey] = useState(null);
@@ -87,11 +87,6 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
   };
   const mark = (col) => { const key = sort_key_of(col); return key && sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''; };
   const setFilter = (key, val) => { setPage(1); setColFilters((f) => ({ ...f, [key]: val })); };
-  const doExport = (format) => {
-    const url = exportUrl(exportBase, { q, sort: sortKey || undefined, dir: sortDir, colFilters, ...exportExtra, format });
-    window.open(url, '_blank');
-  };
-
   const placeholder = 'Search ' + (searchCols ? searchCols : 'all columns') + '…';
 
   return (
@@ -115,9 +110,12 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
         )}
         {toolbar}
         {exportBase && (
-          <span className="dt-export">
-            <button type="button" className="btn" title="Download all matching rows as CSV" onClick={() => doExport('csv')}>⬇ CSV</button>
-            <button type="button" className="btn" title="Download all matching rows as Excel" onClick={() => doExport('xlsx')}>⬇ Excel</button>
+          <span className="dl-group dt-export">
+            <span className="muted small">Export</span>
+            <a className="dl-link" title="Download all matching rows as CSV" target="_blank" rel="noreferrer"
+              href={exportUrl(exportBase, { q, sort: sortKey || undefined, dir: sortDir, colFilters, ...exportExtra, format: 'csv' })}>CSV</a>
+            <a className="dl-link" title="Download all matching rows as Excel" target="_blank" rel="noreferrer"
+              href={exportUrl(exportBase, { q, sort: sortKey || undefined, dir: sortDir, colFilters, ...exportExtra, format: 'xlsx' })}>Excel</a>
           </span>
         )}
         <span className="dt-count muted small">
@@ -170,7 +168,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
             ))
           ) : (
             view.map((row, i) => (
-              <tr key={i}>{rowNumbers && <td className="dt-rownum">{(server ? (page - 1) * pageSize : 0) + i + 1}</td>}{columns.map((col) => (
+              <tr key={i} className={rowClass ? rowClass(row) : undefined} onClick={onRowClick ? () => onRowClick(row) : undefined} style={onRowClick ? { cursor: 'pointer' } : undefined}>{rowNumbers && <td className="dt-rownum">{(server ? (page - 1) * pageSize : 0) + i + 1}</td>}{columns.map((col) => (
                 <td key={col.key} className={col.wrap ? 'dt-wrap' : undefined} title={String(row[col.key] ?? '')}>
                   {col.render ? col.render(row) : row[col.key]}
                   {col.copy && row[col.key] != null && row[col.key] !== '' ? <CopyButton value={row[col.key]} /> : null}

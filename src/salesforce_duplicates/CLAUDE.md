@@ -18,10 +18,14 @@ Shipped. A third name dimension (nicknames via the `nicknames-curated` npm packa
 plus one consolidated output that unifies exact + fuzzy(90) + nickname into a
 cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it works:
 
-- **Additive / behavior-preserving.** The three baseline files (exact, fuzzy pair,
-  fuzzy group) stay byte-for-byte unchanged as a regression baseline. `exact.js`,
-  `fuzzy.js`, `matcher.js`, and `grouping.js` were **not modified at all** — all new
-  logic lives in new modules (even more conservative than the original plan).
+- **Additive / behavior-preserving (as originally shipped).** The nickname/consolidated
+  work added only new modules; `fuzzy.js`, `matcher.js`, and `grouping.js` were not
+  touched. NOTE (later change): the **exact** rule was subsequently changed on purpose —
+  it now keys on CLEANED first/last names (so "O'Brien"=="OBrien") and requires all five
+  identity fields non-blank (the gate). So the exact baseline is no longer byte-for-byte
+  what it was; `exact.js` + `make_exact_duplicate_key` (normalize.js) carry that rule and
+  every consumer feeds off it. fuzzy/nickname ride along unchanged because they already
+  keyed "is this an exact pair?" on cleaned-name equality (similarity_score === 100).
 - **New modules**: `src/nicknames.js` (NickNamer singleton + a *symmetric*
   `are_nickname_equivalents`, since the package's relation is directional) and
   `src/consolidate.js` (`build_match_edges` does complete-pool exact+fuzzy+nickname
@@ -84,16 +88,21 @@ finder writes it as a 7th view (CSV `account_merge_id_review.csv`, DB table
 `salesforce_duplicate_merge_id_review`, Excel tab, end-of-run summary). Menu item 11
 (`node src/merge_id_review.js report`) prints the latest run's review from the DB.
 
-## Merge management tool — PLANNED / DRAFT (own project: `../salesforce_merge/`, see `../salesforce_merge/plans_and_notes/README_MERGE_TOOL.md`)
+## Merge management tool — BUILT (own project: `../salesforce_merge/`, see its `README.md` + `plans_and_notes/README_MERGE_TOOL.md`)
 
-Not built yet. A planned web admin tool (templated on the email-queue app's `/`, `/metrics`,
-`/admin`) to review accounts / merge-ID accounts / duplicates, manage + initiate merges, keep
-merge history, and best-effort restore. Same stack (Node/Express + MySQL + jsforce), with the
-actual merge run via a Salesforce Apex REST endpoint (`Database.merge`). This is the first
-**write** path against Salesforce — the draft leads with the read-vs-write safety model
-(read-only pipeline untouched; single write chokepoint; least-privilege SF users; writes gated
-off by default + mandatory dry-run; new tables only). Data extraction stays two-tier: keep the
-bulk snapshot lean, enrich per-cluster on demand. Phasing + decisions are deferred in the doc.
+Built and going live. A web admin console (Node/Express + MySQL + jsforce, React UI, port 8020,
+`server_salesforce_merge_8020.js`) that reviews accounts / merge-ID accounts / duplicates / tuning,
+stages + runs merges (Select → Process), keeps merge history, and does best-effort restore. The
+actual merge runs via a Salesforce Apex REST endpoint (`Database.merge`) — the only **write** path
+against Salesforce; the read-only duplicates pipeline here is untouched. It reads our
+`salesforce_duplicate_*` tables + the `salesforce_account_duplicate_snapshot` for its review pages.
+
+**Multi-user + access control (shipped).** Modeled on the email-queue: `.env` recovery admins
+(`MERGE_ADMIN_*`, `MERGE_TEST_*`) plus file-backed scrypt-hashed users (gitignored `auth.json`
+outside the repo), managed from the `/admin` Access page or the `admin.js` CLI / menu. Per-user
+**panel access** (`panel_access.json`, default = every panel except Metrics, plus per-user
+overrides) is enforced both in the nav and server-side (403). Anything touching that tool's auth
+lives in `../salesforce_merge/auth/` — it does NOT affect this read-only finder.
 
 ## Entry points
 
@@ -150,12 +159,19 @@ salesforce_duplicates/
     ids.js                  make_run_id, make_hash, make_external_id (pure)
     normalize.js            field cleaning + key builders (pure); composite_zip
                             trims US ZIPs to first 5 digits (trim_zip5), the single
-                            chokepoint every consumer goes through
+                            chokepoint every consumer goes through. ALSO the single
+                            source of the exact-match rule: make_exact_duplicate_key
+                            (CLEANED first+last so "O'Brien"=="OBrien", + gender +
+                            birthdate + zip5) returns "" unless has_required_exact_fields
+                            (all five non-blank). exact.js / exact_sql.js / consolidate /
+                            sweep all feed off these — no parallel exact engines.
     matcher.js              levenshtein, similarity, rule flags, reason strings (pure)
     grouping.js             UnionFind + build_fuzzy_groups
     step_timer.js           create_step_timer: live [STEP] lines + end-of-run
                             timeline (mirrors event_analysis stage timer)
-    exact.js                detect_exact_duplicates (+ its summary logger)
+    exact.js                detect_exact_duplicates (+ its summary logger); skips
+                            records failing has_required_exact_fields, groups the rest
+                            by make_exact_duplicate_key (cleaned names + gate)
     fuzzy.js                run_fuzzy_matching: candidate filter, rule blocks,
                             pairwise compare (+ its two summary loggers)
     zip_trim.js             build_zip_trim_mapping: reviewable raw -> trimmed
@@ -181,9 +197,11 @@ salesforce_duplicates/
                             transaction (open_local_connection — a dedicated connection;
                             DDL outside, inserts inside) for speed + atomicity. Injectable
                             executor so it's testable without MySQL.
-    exact_sql.js            Phase 2b: SQL-based exact grouping (GROUP BY exact_duplicate_key
-                            HAVING COUNT>1 ORDER BY MIN(load_sequence)); Node rebuilds +
-                            sorts for byte-identical output to exact.js.
+    exact_sql.js            Phase 2b: SQL-based exact grouping (WHERE exact_duplicate_key<>''
+                            GROUP BY exact_duplicate_key HAVING COUNT>1 ORDER BY MIN(load_sequence));
+                            Node rebuilds + sorts for byte-identical output to exact.js. The
+                            WHERE <>'' filter is how the exact gate (defined once in
+                            normalize.js, baked into the key) reaches SQL without re-encoding it.
     database_results.js     Phase 3: the unified run table (salesforce_duplicate_detection_run,
                             the "logbook") written by BOTH the finder and the sweep — one
                             row per run (write_run / read_latest_run); accumulates history.

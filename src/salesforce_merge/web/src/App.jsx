@@ -12,8 +12,21 @@ import Duplicates from './pages/Duplicates.jsx';
 import MergeId from './pages/MergeId.jsx';
 import AllAccounts from './pages/AllAccounts.jsx';
 import Reference from './pages/Reference.jsx';
-import Process from './pages/Process.jsx';
+import GetDuplicates from './pages/GetDuplicates.jsx';
+import Tuning from './pages/Tuning.jsx';
+import SelectMerges from './pages/SelectMerges.jsx';
+import MergeProcess from './pages/MergeProcess.jsx';
+import Restore from './pages/Restore.jsx';
+import Admin from './pages/Admin.jsx';
 import Placeholder from './pages/Placeholder.jsx';
+
+// Map each route path to the panel key the server gates it by, so the router can hide pages a user
+// can't reach (the server still enforces this — the nav/route guard is the matching UX layer).
+const ROUTE_PANEL = {
+  '/': '', '/duplicates': 'duplicates', '/merge-id': 'merge-id', '/accounts': 'accounts',
+  '/get-duplicates': 'get-duplicates', '/select-merges': 'select-merges', '/merge-process': 'merge-process',
+  '/restore': 'restore', '/tuning': 'tuning', '/metrics': 'metrics', '/admin': 'admin', '/reference': 'reference',
+};
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = loading, null = signed out
@@ -24,6 +37,16 @@ export default function App() {
 
   if (user === undefined) return <div className="loading">Loading…</div>;
   if (!user) return <Login onLogin={setUser} />;
+
+  // Panels this user may reach (admins get all incl. 'admin'). Used to hide nav + guard routes.
+  const panels = Array.isArray(user.panels) ? user.panels : [];
+  const canSee = (path) => {
+    const key = ROUTE_PANEL[path];
+    if (key === undefined) return true;
+    if (key === 'admin') return user.role === 'admin';
+    return user.role === 'admin' || panels.includes(key);
+  };
+  const guard = (path, el) => (canSee(path) ? el : <Navigate to="/" replace />);
 
   return (
     <div className="wrap">
@@ -40,17 +63,21 @@ export default function App() {
       </header>
 
       <div className="admin-shell">
-        <SideRail />
+        <SideRail user={user} />
         <main className="admin-main">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/duplicates" element={<Duplicates />} />
-            <Route path="/merge-id" element={<MergeId />} />
-            <Route path="/accounts" element={<AllAccounts />} />
+            <Route path="/duplicates" element={guard('/duplicates', <Duplicates />)} />
+            <Route path="/merge-id" element={guard('/merge-id', <MergeId />)} />
+            <Route path="/accounts" element={guard('/accounts', <AllAccounts />)} />
+            <Route path="/get-duplicates" element={guard('/get-duplicates', <GetDuplicates />)} />
+            <Route path="/select-merges" element={guard('/select-merges', <SelectMerges />)} />
+            <Route path="/merge-process" element={guard('/merge-process', <MergeProcess />)} />
+            <Route path="/restore" element={guard('/restore', <Restore />)} />
+            <Route path="/tuning" element={guard('/tuning', <Tuning />)} />
+            <Route path="/admin" element={guard('/admin', <Admin />)} />
+            <Route path="/metrics" element={guard('/metrics', <Placeholder title="Metrics" note="Phase 1" />)} />
             <Route path="/reference" element={<Reference />} />
-            <Route path="/process" element={<Process />} />
-            <Route path="/admin" element={<Placeholder title="Admin" note="Phase 1b" />} />
-            <Route path="/metrics" element={<Placeholder title="Metrics" note="Phase 1" />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <FooterClock />

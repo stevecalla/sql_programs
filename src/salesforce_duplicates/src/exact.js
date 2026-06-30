@@ -2,16 +2,17 @@
  * exact.js — Exact-duplicate detection.
  *
  * Groups fetched Account records by the exact-duplicate key
- * (last+first+gender+birthdate+composite_zip), keeps the groups with more than
- * one record, and collects the record IDs that should be excluded from fuzzy
- * matching. Pure aside from progress/console logging.
+ * (cleaned last + cleaned first + gender + birthdate + 5-digit composite ZIP),
+ * keeps the groups with more than one record, and collects the record IDs that
+ * should be excluded from fuzzy matching. Records missing any of those five
+ * fields are skipped (has_required_exact_fields). Pure aside from progress/console logging.
  */
 
 'use strict';
 
 const { PROGRESS_LOG_EVERY_RECORDS } = require('../config');
 const { log_info, log_success } = require('./log');
-const { make_exact_duplicate_key, composite_zip } = require('./normalize');
+const { make_exact_duplicate_key, has_required_exact_fields, composite_zip } = require('./normalize');
 
 function log_exact_duplicate_exclusion_summary(exact_duplicate_groups, exact_duplicate_record_ids) {
     const duplicate_group_size_summary = exact_duplicate_groups.reduce((acc, group) => {
@@ -49,6 +50,12 @@ function detect_exact_duplicates(records, { script_start_ms } = {}) {
 
     for (let i = 0; i < records.length; i++) {
         const row = records[i];
+
+        // Exact gate: skip records missing any of the five identity fields
+        // (cleaned first/last, gender, birthdate, ZIP). Single source — same
+        // check the SQL path and the snapshot key use.
+        if (!has_required_exact_fields(row)) continue;
+
         const key = make_exact_duplicate_key(row);
 
         if (!exact_groups.has(key)) {

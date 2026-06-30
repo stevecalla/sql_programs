@@ -1,8 +1,13 @@
-# Merge Management Tool — Plan (DRAFT)
+# Merge Management Tool — Plan
 
-**Status:** Draft / planning only. No code yet. Phasing and final decisions are
-deliberately deferred (see the end) — this doc captures the architecture, the read-vs-write
-safety model, and the data-extraction question.
+**Status:** BUILT and going live — this doc is retained as the original architecture/decision record.
+What shipped beyond the original draft: the review pages (Dashboard, Duplicates, Merge-ID, All
+accounts, Tuning), the staged-merge workflow (Select → Process → Restore), and **multi-user auth
+with per-panel access control** (`.env` recovery admins + file-backed scrypt users, `panel_access.json`
+default/overrides, enforced in the nav and server-side; managed from `/admin` or the `admin.js`
+CLI / menu). See the tool's `README.md` for current usage. The read-vs-write safety model below
+still holds: the duplicates pipeline is untouched and the Apex `Database.merge` call is the single
+write chokepoint.
 
 ## Purpose
 
@@ -569,3 +574,180 @@ small, self-contained change to `database_snapshot.js` / `database_results.js` (
     See `reference/README_MERGE_EXECUTION.md`.
 - **Reference inputs needed:** read the email-queue app (framework, auth, deploy) and
   `server_salesforce_duplicates_8017.js` so the scaffold matches.
+
+---
+
+## Execution & restore — LOCKED plan (Phase 3a / 3b / 4)
+
+This section is the source of truth for the merge execution + restore work and supersedes the
+matching "To revisit" items above. Decisions here are confirmed.
+
+> **STATUS — BUILT (safe mode).** Phase 3b + 4 are implemented and unit-tested (fake jsforce/db),
+> shipping OFF by default. New stores: `salesforce_write.js` (jsforce `conn.soap.merge` / `undelete`),
+> `merge_run.js` (progress), `merge_restore.js` (Phase 4); `merge_execute.js` rewritten for the real
+> path; `merge_snapshot.js` now child-aware + keep-latest. New tables: `salesforce_merge_run`
+> (+ child rows in `salesforce_merge_premerge_snapshot`, `mode` col on `salesforce_merge_history`).
+> API: `/api/merge/progress`, `/api/merge/restore` (GET/POST), execute params on `/api/merge/process`.
+> UI: Process Merges gets the Simulate/Execute switch + typed-MERGE + progress bar/timer/ETA; new
+> **Restore** page (`/restore`). To enable real writes (sandbox first): set
+> `MERGE_ENABLE_EXECUTION=true` and (recommended) the dedicated write-user env vars
+> `SF_DEV_WRITE_USERNAME` / `SF_DEV_WRITE_PASSWORD` / `SF_DEV_WRITE_SECURITY_TOKEN` (PROD equivalents
+> for production), then choose **Execute** + type MERGE. **Verify the `conn.soap.merge` masterRecord
+> shape against the org in sandbox before production.**
+>
+> **Optional "stamp survivor as merged" (Process Merges checkbox).** When enabled, after a successful
+> merge the survivor is best-effort updated with custom fields `was_merged__c` (Checkbox) +
+> `was_merged_date__c` (DateTime). These are **NOT auto-created** — an admin adds them in Salesforce
+> (Setup → Object Manager → Account → Fields) and grants field-level security. If they're missing the
+> merge still succeeds and the run logs "stamp skipped"; the UI checks field presence
+> (`GET /api/merge/stamp-fields`) and shows a warning. Note: this is the *survivor*-side marker;
+> Salesforce already stamps each deleted loser's `MasterRecordId` with the survivor id.
+>
+> **Refinements from sandbox simulate testing.** (1) The snapshot has a `child_type` column on child
+> rows: `child` (real child to re-point) vs `self_account` / `self_contact` (the Person Account's own
+> two halves, which return automatically on undelete). (2) Restore **skips** the self-halves when
+> re-pointing — they're not writable and come back with the loser. (3) Repeated **simulate** runs keep
+> only the latest history row per entry (`merge_history.clear_simulated`); real `done`/`failed` rows
+> are always kept. (4) Live progress reports a per-set `stage` (validate → snapshot → merge → record)
+> and the survivor name, rendered as a stepper on Process Merges (like the Get Duplicates progress).
+
+### Locked decisions
+- **Merge surface:** native Salesforce `merge()` **directly from Node via jsforce** — **no Apex**.
+- **Credentials:** a **dedicated least-privilege write user** (read + update + delete on
+  Account/Contact; no create), separate env vars, used only by the merge connection. The
+  read-only duplicates pipeline keeps its read user.
+- **Safety switch:** a UI **Simulate / Execute** toggle (default Simulate) on top of the
+  deploy-level `MERGE_ENABLE_EXECUTION` flag. Simulate does *everything except the Salesforce
+  writes*.
+- **Snapshot:** child-aware, written on **every run** (simulate *and* execute) so the backup
+  pipeline is exercised end-to-end each time; **kept latest-only per queue entry** (re-running an
+  entry replaces its prior snapshot — never a stack).
+- **Status lifecycle:** `approved → done` on success, `approved → failed` on a halt,
+  `done → restored` after a Phase 4 restore. Simulate never changes status.
+- **Failure handling:** **fail-stop, no auto-revert** (see below).
+
+### Phase 3a — safe-mode scaffolding (DONE)
+The whole pipeline except the write: queue → approve → process(dry-run) runs alignment check,
+drift re-fetch, snapshot, and records a `simulated` history row. `merge_execute.js` is the single
+chokepoint; with `MERGE_ENABLE_EXECUTION` unset it can never write, and the real `merge()` is not
+implemented. A `whoami` probe reports whether the connected user could merge (Account
+update+delete). UI: Process Merges page with safe-mode banner, processing-steps card, dry-run,
+history, environment/org alignment.
+
+### Phase 3b — the real merge (sandbox first)
+Per selected `approved` entry:
+1. Verify environment/org **alignment** — skip on mismatch.
+2. **Re-fetch** the cluster fresh and run the **drift check** (survivor + losers still present) —
+   skip on drift.
+3. **Save the child-aware snapshot** (replace this entry's prior snapshot).
+4. Compute the **survivorship field plan** (master keeps non-blank, blanks backfill from a loser,
+   overrides win).
+5. **Simulate →** record `simulated`, status unchanged, return. **Execute (all gates pass) →**
+   write survivor fields to the master, then merge.
+
+**Batching (the 26-account case).** `merge()` = master + up to **2 losers** per call, master
+persists. A set of N accounts = 1 master + (N-1) losers → **ceil((N-1)/2) sequential calls**
+(26 accounts → 13 calls). Sequential, not parallel (shared master would row-lock). Watch the
+per-merge related-records cap on big child counts.
+
+**Gate stack for a real write (any one missing → Simulate):** `MERGE_ENABLE_EXECUTION=true` +
+UI mode = Execute + typed **MERGE** confirm + alignment OK + sandbox-first.
+
+**Failure plan — stop, don't auto-revert.** One `merge()` call is all-or-nothing. In a multi-call
+set, if a call fails the earlier calls already applied, so the set is partway done. On first
+failure: **halt that set**, mark it `failed`, record which losers merged vs remain + the error,
+keep the snapshot, continue to the next set. **No auto-revert** — a merge can't be undone by
+another merge; undo = Recycle-Bin undelete + child re-point (Phase 4), which is itself risky and
+would undo correct work. **Retry is safe:** because every run re-fetches, a retry's drift check
+sees the already-merged losers are gone and continues with the master + remaining losers (no
+double-merge).
+
+**Cross-environment safety & idempotency (switching Sandbox ⇄ Production).** The tool operates on
+*one* loaded dataset at a time; `dataset_info().environment` is the label, and it also selects the
+SF credentials used for the org-identity check and the write (`is_test = env !== 'Production'`), so
+the write target always follows the loaded data. The merge queue persists across switches (never
+auto-cleared) and every entry is stamped with its `environment` at add time (`routes.js`
+add/bulk-add, from `dataset_info`). Protection layers:
+
+1. **Alignment guard** (`verify_alignment`): each entry's stamped `environment` (and `org_id` when
+   present) is compared to the current run context; a mismatch is recorded `skipped`
+   ("environment mismatch" / "org mismatch") **before** the snapshot/merge steps — no write. A
+   Sandbox-built set therefore cannot execute while Production data is loaded, and vice-versa;
+   switch the loaded dataset back and the set is runnable again. The `org_id` is **captured
+   server-side at add time** (`routes.js` `resolve_org_id` calls `get_org_identity` for the loaded
+   environment, cached per env, best-effort) on both the single and bulk add paths, so the org guard
+   is **always-on** — a hard org pin on top of the Sandbox/Production label, which matters if two
+   environments ever share a label (e.g. two sandboxes). If Salesforce is unreachable at add time the
+   capture falls back to null and queueing still succeeds; the environment label remains the guard
+   until a later add (cache stores positive results only, so a transient failure is retried).
+2. **Status lifecycle:** a merged set → `done` and drops out of the `approved` list, so it is never
+   reselected. Simulate never changes status (rehearsable).
+3. **Drift re-check:** every run re-fetches the cluster and skips a set whose survivor/losers are
+   missing from fresh data ("records changed since queueing") — e.g. losers already merged away. On
+   a retry of a partially-merged set, the already-merged losers are gone, so it continues with only
+   the remainder (no double-merge).
+4. **Salesforce backstop:** merging an already-deleted record errors → recorded `failed` (fail-stop),
+   not a silent re-merge.
+
+*Honest limit:* the drift check reads the **loaded dataset** (last detection run), not a live
+per-record query, so the dependable "don't merge twice" guarantees are the `done` status (for merges
+run through this tool) plus refreshing data after merges. Merges performed **directly in Salesforce**
+are caught at execute time by Salesforce (layer 4), not pre-skipped. Tests:
+`merge_execute.test.js` covers the Sandbox-set-skipped-under-Production case, the done-not-reselected
+case, and the drift skip, alongside the existing alignment/gate tests.
+
+**Timer / estimate / progress.** A run-progress record (`run_id`, `total_ops`, `completed_ops`,
+current set + batch, `status`, `started_at`, `finished_at`), updated after each call. Pre-run
+**estimate** = `total_ops × avg_op_time` (config default until real history exists, then a rolling
+average of real merge-call durations — simulate runs excluded). UI polls it for a **progress bar +
+elapsed timer + live ETA** ("Set 3 of 7 · batch 9/13"). Actual durations logged for future
+estimates.
+
+**UI transparency.** Steps card reflects mode/gates; banner shows mode + environment + which gates
+pass; type-MERGE + Execute enabled only when armed; history shows `done`/`failed` with
+completed/remaining counts, error text, duration, snapshot link.
+
+**Tests (fake jsforce):** success (status→done, snapshot incl. children), mid-set failure (halt,
+partial recorded, status→failed, no revert), retry resumes, simulate writes snapshot but no
+Salesforce write and no status change, alignment/drift skips.
+
+### Phase 4 — best-effort restore (undo a merge)
+Reverses a merge in three matching steps, reusing 3b's chokepoint, Simulate/Execute switch, gate
+stack, write user, and progress/timer:
+1. **Undelete the losers** from the Recycle Bin (restores **original ids**).
+2. **Re-point the reparented children** back to their original parents from the snapshot.
+3. **Reset the master's overwritten fields** to pre-merge values from the snapshot.
+Then log a restore record and flip `done → restored`.
+
+**Two tiers (already in the Restore section above):** ≤ ~15 days = high-fidelity undelete; beyond
+15 days = approximate recreate (new ids). **Best-effort limits:** 15-day window + Recycle-Bin
+purge, downstream automation / roll-ups / external systems (SFMC) don't auto-undo, and post-merge
+changes complicate it. Restore takes a **fresh snapshot of current state before it runs** (so a
+botched restore is itself recoverable). UI: a restore view listing past merges flagged
+**restorable vs expired** (live Recycle-Bin check), simulate then execute behind the gates.
+
+#### Phase 4b — secondary recreate-from-backup queue (BUILT, gated)
+Eligibility is **all-or-nothing per set**: a set restores from the Recycle Bin only if *every* loser
+is still there. When an **execute**-mode restore finds a set ineligible (window expired / a loser
+purged), it doesn't just skip — it **routes the whole set** to a secondary queue by transitioning
+`done → recreate_pending` and recording the reason (transparent in the UI). The user then runs a
+deliberate, separate **recreate-from-backup** process on that queue:
+- `merge_restore.list_recreatable()` lists `recreate_pending` sets + what the backup snapshot can
+  rebuild (loser count, child-link count, "no snapshot" flag).
+- `merge_restore.recreate(ids, opts)` — same gate model as restore but typed **RECREATE**. Per set:
+  `create_record` each loser Account from its snapshot fields (`account_create_fields` strips
+  system/derived fields), map old→new id, re-point the snapshotted children to the **new** ids,
+  reset the master, then `recreate_pending → recreated`. Simulate previews with no writes; fail
+  records-but-continues per set. New module method `salesforce_write.create_record`.
+- **Caveat (documented in the UI + Reference):** recreated records get **new Salesforce ids**, so
+  external references (Marketing Cloud, data warehouse) won't reconnect — this tier is approximate
+  by nature. Routing granularity is **per-set** (a partially-recoverable set goes whole to recreate),
+  per the product decision.
+- API: `GET/POST /api/merge/recreate`. UI: a "Recreate queue" card on Restore with the reason +
+  backup availability + Simulate/Execute. Tests: routing→recreate_pending, list_recreatable,
+  recreate simulate/execute, and `create_record` (in `merge_restore.test.js` / `salesforce_write.test.js`).
+
+### 3a leftover (folded in)
+With "snapshot on every run + keep latest," simulate writes a snapshot (rehearsal) but no
+Salesforce write and no status change. To avoid history pile-up from repeated simulates, keep the
+**latest simulate history row per entry** (real `done`/`failed` rows are always kept).

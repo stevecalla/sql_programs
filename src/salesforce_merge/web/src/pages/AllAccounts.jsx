@@ -15,6 +15,11 @@ const columns = [
   { key: 'zip5', label: 'ZIP5', sort: true, filter: true, help: 'First five digits of the ZIP — required for duplicate matching.' },
   { key: 'member_number', label: 'Member #', sort: true, filter: true, help: 'The membership number on the account, if any.' },
   { key: 'merge_id', label: 'Merge ID', sort: true, filter: true, copy: true, help: 'The Membership Platform merge ID, if one has been assigned.', render: (r) => r.merge_id || '—' },
+  { key: 'match_composition', label: 'Match', sort: true, filter: true, help: 'How this account matched in the consolidated view (exact / fuzzy / nickname mix). Filter by value.', render: (r) => r.match_composition || '—' },
+  { key: 'email', label: 'Email', sort: true, filter: true, copy: true, help: 'The account email (PersonEmail). Search matches anywhere in the address.', render: (r) => r.email || '—' },
+  { key: 'foundation_constituent', label: 'Foundation', sort: true, filter: true, help: 'Whether the account is a Foundation constituent. Filter by value.', render: (r) => r.foundation_constituent || '—' },
+  { key: 'created_date', label: 'Created', sort: true, filter: true, help: 'When the account was created in Salesforce.', render: (r) => r.created_date || '—' },
+  { key: 'created_by_name', label: 'Created By', sort: true, filter: true, help: 'The user or integration that created the account.', render: (r) => r.created_by_name || '—' },
 ];
 
 export default function AllAccounts() {
@@ -50,6 +55,7 @@ export default function AllAccounts() {
         facets={facets}
         deps={[mergeState, memberState]}
         pageSize={25}
+        minWidth={1400}
         exportBase="/api/accounts/export"
         exportExtra={{ merge_id_state: mergeState, member_number_state: memberState }}
         toolbar={
@@ -60,7 +66,7 @@ export default function AllAccounts() {
         }
       />
       <p className="muted small" style={{ marginTop: 8 }}>
-        Search matches the <strong>start</strong> of a name, ID, or member number (e.g. “smi” finds “Smith”) — this keeps lookups fast across all ~700k accounts.
+        Search matches the <strong>start</strong> of a name, ID, or member number (e.g. “smi” finds “Smith”) to keep lookups fast across ~700k accounts, and matches <strong>anywhere</strong> within email and match composition. Use the column filters for per-field search; “Match” is a dropdown.
       </p>
     </>
   );

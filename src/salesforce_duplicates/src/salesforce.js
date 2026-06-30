@@ -24,25 +24,38 @@
 
 const jsforce = require('jsforce');
 
-const { log_info, log_success } = require('./log');
+const { log_info, log_success, log_warn } = require('./log');
 const { format_duration, format_timestamp_utc } = require('./fmt');
 const { resolve_fetch_plan, BULK_FETCH_PROGRESS_EVERY } = require('../config');
 
 // Optional, org-dependent field (Person-Account `__pc` view of the Contact field).
 const MERGE_ID_FIELD = 'usat_Salesforce_Merge_Id__pc';
 
-// The always-present base fields. The optional merge field is inserted (when it
-// exists) right after the foundation field by build_account_soql().
+// The always-present base fields (identity, contact info, demographics, flags,
+// audit dates). All are flat Account fields — no relationship traversal — so they
+// come back the same shape from both the REST (--test) and Bulk (--prod) paths.
+// The optional merge field is inserted (when it exists) next to the foundation
+// field by build_account_soql().
 const ACCOUNT_BASE_FIELDS = [
     'Id',
-    'LastName',
+    'Name',
     'FirstName',
+    'LastName',
     'cfg_Member_Number__pc',
-    'cfg_Gender_Identity__pc',
-    'usat_Foundation_Constituent__c',
-    'PersonBirthdate',
-    'BillingPostalCode',
+    'PersonEmail',
+    'Phone',
+    'PersonMailingStreet',
+    'PersonMailingCity',
+    'PersonMailingState',
     'PersonMailingPostalCode',
+    'BillingPostalCode',
+    'cfg_Gender_Identity__pc',
+    'PersonBirthdate',
+    'usat_Foundation_Constituent__c',
+    'CreatedDate',
+    'CreatedById',
+    'LastModifiedDate',
+    'LastModifiedById',
 ];
 
 // Build the Account SOQL. `include_merge_id` adds the optional merge field;
@@ -52,7 +65,10 @@ const ACCOUNT_BASE_FIELDS = [
 // lets Salesforce stream the full ~700k extract without sorting it first.
 function build_account_soql({ include_merge_id = true, ordered = false } = {}) {
     const fields = [...ACCOUNT_BASE_FIELDS];
-    if (include_merge_id) fields.splice(6, 0, MERGE_ID_FIELD); // after usat_Foundation_Constituent__c
+    if (include_merge_id) {
+        const after = fields.indexOf('usat_Foundation_Constituent__c');
+        fields.splice(after + 1, 0, MERGE_ID_FIELD); // group it next to the foundation field
+    }
     const select = `SELECT ${fields.join(', ')} FROM Account WHERE FirstName != null AND LastName != null`;
     return ordered ? `${select} ORDER BY LastName, FirstName, Id` : select;
 }
@@ -131,6 +147,22 @@ async function bulk_query(conn, soql, max_fetch = Infinity, { script_start_ms } 
     return { records, total_size: records.length };
 }
 
+// Resolve user Ids (CreatedById / LastModifiedById) to readable names via one small
+// query, returned as an Id -> Name Map. Best-effort: if the integration user can't read
+// User, return an empty map so names just come out blank and the run still succeeds.
+async function fetch_user_name_map(conn, script_start_ms) {
+    try {
+        const res = await conn.query('SELECT Id, Name FROM User').execute({ autoFetch: true, maxFetch: 100000 });
+        const map = new Map();
+        for (const u of res.records || []) map.set(u.Id, u.Name || '');
+        log_info(`Resolved ${map.size.toLocaleString()} user names for created-by / last-modified-by.`, script_start_ms);
+        return map;
+    } catch (e) {
+        log_warn(`Could not query User names (${e.message || e}); created-by / last-modified-by names will be blank.`);
+        return new Map();
+    }
+}
+
 // Log into Salesforce (dev sandbox when is_test, else production) and run the
 // Account query. Returns the raw result plus query timing for the run summary.
 async function fetch_salesforce_accounts({ is_test, is_full = false, is_partial = false, max_fetch, script_start_ms }) {
@@ -140,7 +172,7 @@ async function fetch_salesforce_accounts({ is_test, is_full = false, is_partial 
 
     log_info("Logging into Salesforce...", script_start_ms);
 
-    await conn.login(
+    const login_user_info = await conn.login(
         is_test ? process.env.SF_DEV_USERNAME : process.env.SF_PROD_USERNAME,
         is_test ?
             process.env.SF_DEV_PASSWORD + process.env.SF_DEV_SECURITY_TOKEN :
@@ -148,6 +180,16 @@ async function fetch_salesforce_accounts({ is_test, is_full = false, is_partial 
     );
 
     log_success("Login successful.", script_start_ms);
+
+    // Source provenance for the snapshot: which environment + which org these records
+    // came from. environment is the run mode; org id/host come from the authenticated
+    // connection. Stamped on every snapshot row so the table is self-describing (it is
+    // dropped and recreated each run, so one snapshot = one environment + one org).
+    const environment = is_test ? 'test' : 'prod';
+    const org_id = (login_user_info && login_user_info.organizationId) || '';
+    let org_host = '';
+    try { org_host = conn.instanceUrl ? new URL(conn.instanceUrl).host : ''; } catch (_) { org_host = ''; }
+    log_info(`Connected org: environment=${environment} org_id=${org_id || '(unknown)'} host=${org_host || '(unknown)'}`, script_start_ms);
 
     // Only request the optional merge field if this org actually has it.
     const include_merge_id = await account_field_exists(conn, MERGE_ID_FIELD);
@@ -186,9 +228,18 @@ async function fetch_salesforce_accounts({ is_test, is_full = false, is_partial 
     console.log(`Salesforce total matching records: ${total_size}`);
     console.log(`Records actually fetched: ${records.length}`);
 
-    // Same shape the rest of the pipeline already expects.
+    // Resolve created-by / last-modified-by names (one small User query, joined in Node)
+    // and attach them to each record so to_snapshot_row can read them like any field.
+    const user_names = await fetch_user_name_map(conn, script_start_ms);
+    for (const rec of records) {
+        rec.CreatedByName = user_names.get(rec.CreatedById) || '';
+        rec.LastModifiedByName = user_names.get(rec.LastModifiedById) || '';
+    }
+
+    // Same shape the rest of the pipeline already expects, plus the source
+    // provenance (environment + org) for stamping the snapshot rows.
     const result = { records, totalSize: total_size };
-    return { result, query_start_date, query_end_date, query_duration_ms };
+    return { result, query_start_date, query_end_date, query_duration_ms, environment, org_id, org_host };
 }
 
 module.exports = {

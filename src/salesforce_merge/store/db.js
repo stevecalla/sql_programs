@@ -22,4 +22,12 @@ async function query(sql, params) {
   return rows;
 }
 
-module.exports = { get_pool, query };
+// Close the pool (releases all connections). Used by tests so the process can exit cleanly after the
+// pool has been lazily opened; a no-op if it was never created.
+async function end() {
+  if (!pool) return;
+  const p = pool; pool = null;
+  try { await p.end(); } catch (e) { /* already closing/closed */ }
+}
+
+module.exports = { get_pool, query, end };

@@ -11,10 +11,34 @@
 //   GET  /api/<view>/export    auth-gated; CSV/Excel of the current filtered/sorted view
 const session = require('../auth/session');
 const store = require('../auth/auth_store');
-const { require_auth, require_admin } = require('../auth/require_auth');
+const panel_access = require('../auth/panel_access');
+const { require_auth, require_admin, require_panel } = require('../auth/require_auth');
 const dashboard = require('../store/duplicates_read');
 const reviews = require('../store/reviews_read');
 const refresh = require('../store/refresh_runner');
+const cluster = require('../store/cluster_detail');
+const mqueue = require('../store/merge_queue');
+const mexec = require('../store/merge_execute');
+const mhist = require('../store/merge_history');
+const mrun = require('../store/merge_run');
+const mctl = require('../store/merge_control');
+const mrestore = require('../store/merge_restore');
+const msnap = require('../store/merge_snapshot');
+const sfread = require('../store/salesforce_read');
+const sfwrite = require('../store/salesforce_write');
+
+// Stamp each queued set with the connected org id so the merge-time alignment guard has a hard
+// org pin (not just the Sandbox/Production label). org id is stable per org, so cache it per
+// environment for the process lifetime; this is BEST-EFFORT — if Salesforce is unreachable we
+// store null and queueing still succeeds (the environment label remains the live guard).
+const _orgIdCache = new Map(); // is_test(boolean) -> org_id(string)
+async function resolve_org_id(is_test) {
+  if (_orgIdCache.has(is_test)) return _orgIdCache.get(is_test);
+  let org_id = null;
+  try { const oi = await sfread.get_org_identity({ is_test }); org_id = (oi && oi.org_id) || null; } catch (e) { /* best effort */ }
+  if (org_id) _orgIdCache.set(is_test, org_id); // cache positive results only, so a transient failure can be retried
+  return org_id;
+}
 
 module.exports = function mount(app) {
   app.get('/api/status', function (req, res) {
@@ -27,7 +51,7 @@ module.exports = function mount(app) {
     if (!v) return res.status(401).json({ ok: false, error: 'invalid credentials' });
     const token = session.sign({ user: v.user, role: v.role, ts: Date.now() }, store.session_secret());
     res.setHeader('Set-Cookie', session.COOKIE + '=' + token + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=' + Math.floor(session.MAX_AGE_MS / 1000));
-    res.json({ ok: true, user: v.user, role: v.role });
+    res.json({ ok: true, user: v.user, role: v.role, panels: panel_access.effective_panels(v.user, v.role) });
   });
 
   app.post('/api/logout', function (req, res) {
@@ -39,7 +63,7 @@ module.exports = function mount(app) {
     const cookies = session.parse_cookies(req.headers.cookie);
     const p = session.verify(cookies[session.COOKIE], store.session_secret());
     if (!p) return res.status(401).json({ ok: false });
-    res.json({ ok: true, user: p.user, role: p.role || 'user' });
+    res.json({ ok: true, user: p.user, role: p.role || 'user', panels: panel_access.effective_panels(p.user, p.role || 'user') });
   });
 
   app.get('/api/dashboard', require_auth, async function (req, res) {
@@ -55,6 +79,15 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
+  app.get('/api/tuning', require_panel('tuning'), async function (req, res) {
+    try { res.json({ ok: true, ...(await dashboard.sweep_profiles()) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/tuning/export', require_panel('tuning'), async function (req, res) {
+    try { await write_rows(req, res, await dashboard.sweep_export_rows(), 'tuning_' + new Date().toISOString().slice(0, 10), 'tuning'); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
   app.get('/api/runs', require_auth, async function (req, res) {
     try { res.json({ ok: true, runs: await dashboard.recent_runs(req.query.limit) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -63,7 +96,7 @@ module.exports = function mount(app) {
   // ---- R1: data-refresh runner (spawns the detection job; read-only against Salesforce) ----
   app.post('/api/refresh/start', require_admin, function (req, res) {
     const b = req.body || {};
-    const r = refresh.start({ env: b.env, scope: b.scope });
+    const r = refresh.start({ env: b.env, scope: b.scope, job: b.job });
     res.status(r.ok ? 202 : 409).json(r);
   });
   app.get('/api/refresh/status', require_auth, function (req, res) {
@@ -80,6 +113,11 @@ module.exports = function mount(app) {
     const o = {};
     for (const [k, v] of Object.entries(req.query)) if (k.startsWith('f_')) o[k.slice(2)] = v;
     return o;
+  };
+  const current_user = (req) => {
+    const cookies = session.parse_cookies(req.headers.cookie);
+    const p = session.verify(cookies[session.COOKIE], store.session_secret());
+    return p ? p.user : null;
   };
   const page_opts = (req) => ({
     page: req.query.page, page_size: req.query.page_size, q: req.query.q,
@@ -121,16 +159,16 @@ module.exports = function mount(app) {
     await write_rows(req, res, rows, view.replace('-', '_') + '_export_' + new Date().toISOString().slice(0, 10), view);
   };
 
-  app.get('/api/duplicates', require_auth, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } })) }); }
+  app.get('/api/duplicates', require_panel('duplicates'), async function (req, res) {
+    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state } })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
-  app.get('/api/duplicates/facets', require_auth, async function (req, res) {
+  app.get('/api/duplicates/facets', require_panel('duplicates'), async function (req, res) {
     try { res.json({ ok: true, facets: await reviews.facets('duplicates') }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
-  app.get('/api/duplicates/export', require_auth, async function (req, res) {
-    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } }); }
+  app.get('/api/duplicates/export', require_panel('duplicates'), async function (req, res) {
+    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Members of one consolidated cluster (account-level detail for the Duplicates "view group" popup).
@@ -146,34 +184,255 @@ module.exports = function mount(app) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
-  app.get('/api/merge-id', require_auth, async function (req, res) {
+  // Phase 2 — read-only deep detail (live Salesforce, snapshot fallback) + dry-run merge preview.
+  app.get('/api/cluster/detail', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await cluster.cluster_detail(req.query.key, { kind: req.query.source })) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/cluster/preview', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await cluster.cluster_preview(req.query.key, req.query.survivor, { kind: req.query.source })) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/cluster/children', require_auth, async function (req, res) {
+    try { res.json({ ok: true, ...(await cluster.cluster_children(req.query.key, { kind: req.query.source })) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/cluster/detail/export', require_auth, async function (req, res) {
     try {
-      const opts = { ...page_opts(req), filters: { bucket: req.query.bucket } };
+      const d = await cluster.cluster_detail(req.query.key, { kind: req.query.source });
+      const safe = String(req.query.key || 'cluster').replace(/[^a-z0-9]+/gi, '_').slice(0, 40);
+      await write_rows(req, res, d.accounts || [], 'accounts_' + safe + '_' + new Date().toISOString().slice(0, 10), 'accounts');
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  // ---- Merge Admin sources + queue ----
+  app.get('/api/merge-groups', require_panel('select-merges'), async function (req, res) {
+    try { res.json({ ok: true, ...(await reviews.list_merge_groups({ ...page_opts(req), bucket: req.query.bucket, foundation_state: req.query.foundation_state })) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge-queue', require_auth, async function (req, res) {
+    try { res.json({ ok: true, rows: await mqueue.list(undefined, req.query.status) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge-queue/approve', require_panel('select-merges'), async function (req, res) {
+    try { res.json({ ok: true, ...(await mqueue.set_status((req.body || {}).ids, 'approved')) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge-queue/export', require_auth, async function (req, res) {
+    try { await write_rows(req, res, await mqueue.list(undefined, req.query.status || null), 'merge_queue_' + new Date().toISOString().slice(0, 10), 'merge_queue'); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge-queue', require_panel('select-merges'), async function (req, res) {
+    try {
+      const b = req.body || {};
+      const ds0 = await dashboard.dataset_info().catch(() => null);
+      const org_id = b.org_id || await resolve_org_id(!ds0 || ds0.environment !== 'Production');
+      const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key, environment: ds0 ? ds0.environment : null, org_id,
+        survivor_account: b.survivor_account, survivor_contact: b.survivor_contact, survivor_name: b.survivor_name, field_overrides: b.field_overrides, child_counts: b.child_counts,
+        loser_accounts: b.loser_accounts, master_rule: b.master_rule, notes: b.notes });
+      res.status(201).json({ ok: true, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge-queue/bulk', require_panel('select-merges'), async function (req, res) {
+    try {
+      const b = req.body || {};
+      if (b.source !== 'merge_id') return res.status(400).json({ ok: false, error: 'bulk add is supported for the merge-id source only' });
+      const dsb = await dashboard.dataset_info().catch(() => null);
+      const org_id = await resolve_org_id(!dsb || dsb.environment !== 'Production'); // resolved once, reused for the whole batch
+      const groups = await reviews.resolve_merge_groups({ q: b.q, bucket: b.bucket, foundation_state: b.foundation_state, keys: b.keys });
+      const CAP = 1000;
+      const resolvable = groups.filter((g) => g.resolvable);
+      const unresolved = groups.length - resolvable.length;
+      const capped = resolvable.length > CAP;
+      const entries = resolvable.slice(0, CAP).map((g) => ({ created_by: current_user(req), source_type: 'merge_id', source_key: g.merge_id, survivor_account: g.survivor, survivor_name: g.name, loser_accounts: g.losers, master_rule: g.rule || 'cascade', environment: dsb ? dsb.environment : null, org_id }));
+      const r = await mqueue.add_many(entries);
+      res.json({ ok: true, queued: r.queued, skipped: r.skipped, unresolved, total: groups.length, capped });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge/status', require_panel('merge-process'), async function (req, res) {
+    try { res.json({ ok: true, ...(await mexec.status()) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge/process', require_panel('merge-process'), async function (req, res) {
+    try {
+      const b = req.body || {};
+      res.json({ ok: true, ...(await mexec.process(b.ids, { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, created_by: current_user(req) })) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge/history', require_panel('merge-process'), async function (req, res) {
+    try { res.json({ ok: true, rows: await mhist.list({ limit: req.query.limit }) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge/history/export', require_panel('merge-process'), async function (req, res) {
+    try { await write_rows(req, res, await mhist.list({ limit: req.query.limit || 5000 }), 'merge_history_' + new Date().toISOString().slice(0, 10), 'merge_history'); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Live progress for the latest run (UI polls this for the progress bar + timer + ETA).
+  app.get('/api/merge/progress', require_auth, async function (req, res) {
+    try { res.json({ ok: true, run: await mrun.latest(req.query.kind || null) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Cooperative stop: flag the latest RUNNING run so its loop halts at the next set boundary. The
+  // in-flight set finishes cleanly (its snapshot/history/status are already written); remaining
+  // approved sets are left untouched so they can be run again later.
+  app.post('/api/merge/cancel', require_auth, async function (req, res) {
+    try {
+      const run = await mrun.latest((req.body && req.body.kind) || 'merge');
+      if (!run || run.status !== 'running') return res.json({ ok: true, cancelled: false, reason: 'no running merge' });
+      mctl.request(run.run_id);
+      res.json({ ok: true, cancelled: true, run_id: run.run_id });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Phase 4 restore — list completed merges with eligibility, and process a restore.
+  app.get('/api/merge/restore', require_panel('restore'), async function (req, res) {
+    try { res.json({ ok: true, rows: await mrestore.list_restorable() }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge/restore', require_panel('restore'), async function (req, res) {
+    try {
+      const b = req.body || {};
+      res.json({ ok: true, ...(await mrestore.restore(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) })) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Secondary queue — sets routed to recreate-from-backup (their losers are gone from the Recycle
+  // Bin). list shows the queue + reasons; recreate is the user-initiated rebuild (typed RECREATE).
+  app.get('/api/merge/recreate', require_panel('restore'), async function (req, res) {
+    try { res.json({ ok: true, rows: await mrestore.list_recreatable() }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge/recreate', require_panel('restore'), async function (req, res) {
+    try {
+      const b = req.body || {};
+      res.json({ ok: true, ...(await mrestore.recreate(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) })) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Read-only browse of the Recycle Bin (recently soft-deleted Accounts) for the loaded environment.
+  app.get('/api/merge/recycle-bin', require_auth, async function (req, res) {
+    try {
+      const ds = await dashboard.dataset_info().catch(() => null);
+      const is_test = !ds || ds.environment !== 'Production';
+      const r = await sfread.list_recycle_bin({ is_test, limit: req.query.limit });
+      res.json({ ok: true, environment: ds ? ds.environment : null, rows: r.rows, error: r.error });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Whether the optional "stamp survivor as merged" custom fields exist (admin creates them manually).
+  app.get('/api/merge/stamp-fields', require_auth, async function (req, res) {
+    try {
+      const ds = await dashboard.dataset_info().catch(() => null);
+      const is_test = !ds || ds.environment !== 'Production';
+      const conn = await sfwrite.default_write_connect(is_test);
+      res.json({ ok: true, fields: sfwrite.STAMP_FIELDS, ...(await sfwrite.stamp_fields_status(conn)) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Pre-merge snapshot browse (DB read) + CSV/Excel export. Read-only.
+  app.get('/api/merge/snapshot', require_auth, async function (req, res) {
+    try { res.json({ ok: true, rows: await msnap.list_recent(req.query.limit) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/merge/snapshot/export', require_auth, async function (req, res) {
+    try {
+      let rows = await msnap.list_recent(req.query.limit || 5000);
+      if (req.query.role) rows = rows.filter((r) => r.role === req.query.role);
+      await write_rows(req, res, rows, 'premerge_snapshot_' + new Date().toISOString().slice(0, 10), 'snapshot');
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Read-only probe: can the connected Salesforce user actually merge (update + delete on Account)?
+  // is_test follows the currently loaded dataset's environment so it checks the right org.
+  app.get('/api/merge/whoami', require_auth, async function (req, res) {
+    try {
+      const ds = await dashboard.dataset_info().catch(() => null);
+      const is_test = !ds || ds.environment !== 'Production';
+      res.json({ ok: true, environment: ds ? ds.environment : null, ...(await sfread.get_user_capabilities({ is_test })) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.delete('/api/merge-queue/:id', require_panel('select-merges'), async function (req, res) {
+    try { res.json({ ok: true, ...(await mqueue.remove(req.params.id)) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  app.get('/api/merge-id', require_panel('merge-id'), async function (req, res) {
+    try {
+      const opts = { ...page_opts(req), filters: { bucket: req.query.bucket, foundation_state: req.query.foundation_state } };
       const [list, summary] = await Promise.all([reviews.list_merge_id(opts), reviews.merge_id_summary()]);
       res.json({ ok: true, ...list, summary });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
-  app.get('/api/merge-id/facets', require_auth, async function (req, res) {
+  app.get('/api/merge-id/facets', require_panel('merge-id'), async function (req, res) {
     try { res.json({ ok: true, facets: await reviews.facets('merge-id') }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
-  app.get('/api/merge-id/export', require_auth, async function (req, res) {
-    try { await send_export(req, res, 'merge-id', { ...page_opts(req), filters: { bucket: req.query.bucket } }); }
+  app.get('/api/merge-id/export', require_panel('merge-id'), async function (req, res) {
+    try { await send_export(req, res, 'merge-id', { ...page_opts(req), filters: { bucket: req.query.bucket, foundation_state: req.query.foundation_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
-  app.get('/api/accounts', require_auth, async function (req, res) {
+  app.get('/api/accounts', require_panel('accounts'), async function (req, res) {
     try {
       const opts = { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } };
       res.json({ ok: true, ...(await reviews.list_accounts(opts)) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
-  app.get('/api/accounts/facets', require_auth, async function (req, res) {
+  app.get('/api/accounts/facets', require_panel('accounts'), async function (req, res) {
     try { res.json({ ok: true, facets: await reviews.facets('accounts') }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
-  app.get('/api/accounts/export', require_auth, async function (req, res) {
+  app.get('/api/accounts/export', require_panel('accounts'), async function (req, res) {
     try { await send_export(req, res, 'accounts', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  // ---- Admin: user management + panel access (admin-gated). Mirrors the email-queue Access pane. ----
+  // Users: .env recovery accounts (always valid, not removable) + stored scrypt-hashed users.
+  app.get('/api/admin/users', require_admin, function (req, res) {
+    try {
+      const env = store.env_accounts().map(function (u) { return { user: u.user, role: u.role, source: 'env', removable: false }; });
+      const stored = store.list_users().map(function (u) { return { user: u.user, role: u.role || 'user', source: 'stored', removable: true }; });
+      res.json({ ok: true, users: env.concat(stored) });
+    } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  // Add/update a stored user: { user, pass, role: 'admin'|'user' }. Also used for password reset.
+  app.post('/api/admin/users', require_admin, function (req, res) {
+    try {
+      const b = req.body || {};
+      const user = String(b.user || '').trim();
+      const pass = String(b.pass || '');
+      if (!user) return res.status(400).json({ ok: false, error: 'username required' });
+      if (pass.length < 4) return res.status(400).json({ ok: false, error: 'password must be at least 4 characters' });
+      const role = b.role === 'admin' ? 'admin' : 'user';
+      const r = store.add_user(user, pass, role);
+      res.json({ ok: true, user: r.user, role: r.role });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  // Remove a stored user: { user }. .env recovery accounts can't be removed.
+  app.post('/api/admin/users/remove', require_admin, function (req, res) {
+    try {
+      const user = String((req.body && req.body.user) || '').trim();
+      if (!user) return res.status(400).json({ ok: false, error: 'username required' });
+      if (store.env_accounts().some(function (u) { return u.user === user; })) {
+        return res.status(400).json({ ok: false, error: 'cannot remove a .env recovery account' });
+      }
+      const removed = store.remove_user(user);
+      try { panel_access.clear_user(user); } catch (e) { /* drop any orphaned override */ }
+      res.json({ ok: removed, error: removed ? null : 'no such user' });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  // Panel access: the gateable panel catalog + the current default/per-user allow-list + known users.
+  app.get('/api/admin/panel-access', require_admin, function (req, res) {
+    try {
+      const users = store.env_accounts().map(function (u) { return u.user; })
+        .concat(store.list_users().map(function (u) { return u.user; }));
+      res.json({ ok: true, panels: panel_access.catalog(), access: panel_access.get(), users: users });
+    } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  // Update panel access: { default? } sets the non-admin default; { user, panels } sets/overrides one
+  // user ('all' or an array of panel keys); { user, clear:true } drops a user's override.
+  app.post('/api/admin/panel-access', require_admin, function (req, res) {
+    try {
+      const b = req.body || {};
+      if (b.default !== undefined) panel_access.set_default(b.default);
+      if (b.user && b.clear) panel_access.clear_user(b.user);
+      else if (b.user && b.panels !== undefined) panel_access.set_user(b.user, b.panels);
+      res.json({ ok: true, access: panel_access.get() });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 };

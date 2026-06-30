@@ -58,6 +58,31 @@ describe('detect_exact_duplicates', () => {
     });
 });
 
+describe('exact gate + clean-name key', () => {
+    test('punctuation/spacing name variants group together (clean key)', () => {
+        const records = [
+            rec('1', 'Anne-Marie', "O'Brien"),
+            rec('2', 'Anne Marie', 'OBrien'), // same person, different punctuation/spacing
+        ];
+        const { exact_duplicate_groups } = detect_exact_duplicates(records, { script_start_ms: Date.now() });
+        assert.equal(exact_duplicate_groups.length, 1);
+        assert.deepEqual(exact_duplicate_groups[0].record_ids, ['1', '2']);
+    });
+
+    test('records missing a required field (ZIP or gender) are skipped, not grouped', () => {
+        const records = [
+            rec('1', 'John', 'Smith', { BillingPostalCode: '', PersonMailingPostalCode: '' }), // no ZIP
+            rec('2', 'John', 'Smith', { BillingPostalCode: '', PersonMailingPostalCode: '' }), // no ZIP
+            rec('3', 'Mary', 'Jones', { cfg_Gender_Identity__pc: '' }),                         // no gender
+            rec('4', 'Mary', 'Jones', { cfg_Gender_Identity__pc: '' }),
+        ];
+        const out = detect_exact_duplicates(records, { script_start_ms: Date.now() });
+        assert.equal(out.exact_duplicate_groups.length, 0); // all gated out
+        assert.equal(out.exact_groups_size, 0);
+        assert.equal(out.exact_duplicate_record_ids.size, 0);
+    });
+});
+
 describe('exact merge ids', () => {
     test('collects per-record merge ids into the group', () => {
         const records = [

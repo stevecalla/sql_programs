@@ -6,7 +6,7 @@ import ClusterModal from '../components/ClusterModal.jsx';
 import { AccountsFunnel } from '../components/Funnels.jsx';
 import { api } from '../lib/api.js';
 
-const has_merge = (s) => (s && String(s).replace(/;/g, '').trim()) ? 'yes' : '—';
+const fmt_merge_ids = (s) => { const ids = String(s || '').split(';').map((x) => x.trim()).filter(Boolean); return ids.length ? ids.join(', ') : '—'; };
 const STATES = [['', 'all'], ['has', 'has'], ['none', "doesn't have"]];
 
 // Names_In_Group__c is a ';'-separated list. Render each name as a link into All accounts,
@@ -26,19 +26,20 @@ export default function Duplicates() {
   const [facets, setFacets] = useState({});
   const [mergeState, setMergeState] = useState('');     // '' all · 'has' · 'none' (any merge ID in cluster?)
   const [memberState, setMemberState] = useState('');   // '' all · 'has' · 'none' (any member # in cluster?)
+  const [foundationState, setFoundationState] = useState(''); // '' all · 'has' · 'none' (any Foundation constituent?)
   const [openKey, setOpenKey] = useState(null);         // cluster key whose popup is open
   useEffect(() => { api.duplicatesFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
   const fetcher = useCallback((p) =>
-    api.duplicates({ ...p, merge_id_state: mergeState, member_number_state: memberState }).then((r) => ({ rows: r.rows, total: r.total })),
-  [mergeState, memberState]);
+    api.duplicates({ ...p, merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState }).then((r) => ({ rows: r.rows, total: r.total })),
+  [mergeState, memberState, foundationState]);
 
   const columns = useMemo(() => [
-    { key: 'cluster', label: 'Cluster', sort: true, filter: true, wrap: true, help: 'A group of accounts believed to be the same person. Click to see each account.', render: (r) => (<button type="button" className="linkbtn" title="View the accounts in this group" onClick={() => setOpenKey(r.cluster)}>{r.cluster}</button>) },
     { key: 'names', label: 'Names', sort: true, filter: true, wrap: true, help: 'The names of every account in this cluster. Click a name to see its account-level records.', render: (r) => namesLinks(r.names) },
+    { key: 'cluster', label: 'Cluster', sort: true, filter: true, wrap: true, help: 'A group of accounts believed to be the same person. Click to see each account.', render: (r) => (<button type="button" className="linkbtn" title="View the accounts in this group" onClick={() => setOpenKey(r.cluster)}>{r.cluster}</button>) },
     { key: 'size', label: 'Size', sort: true, filter: true, help: 'How many accounts are in this cluster (2 = a pair).' },
     { key: 'signal', label: 'Signal', sort: true, filter: true, help: 'Why they were grouped: exact match, fuzzy (similar) name, and/or nickname.' },
     { key: 'tier', label: 'Tier', sort: true, filter: true, help: 'Confidence level — how strongly the match indicates a true duplicate.' },
-    { key: 'merge_ids', label: 'Merge ID?', sort: true, filter: true, wrap: true, help: 'Whether the Membership Platform has tagged these accounts with a merge ID. Hover a cell for the IDs.', render: (r) => has_merge(r.merge_ids) },
+    { key: 'merge_ids', label: 'Merge IDs', sort: true, filter: true, wrap: true, copy: true, help: 'The Membership Platform merge IDs tagged on the accounts in this cluster (comma-separated), or — if none.', render: (r) => fmt_merge_ids(r.merge_ids) },
     { key: 'best', label: 'Best', sort: true, help: 'Best (highest) name-similarity score among the pairs in the cluster, 0–100.' },
   ], []);
 
@@ -61,15 +62,16 @@ export default function Duplicates() {
         columns={columns}
         fetcher={fetcher}
         facets={facets}
-        deps={[mergeState, memberState]}
+        deps={[mergeState, memberState, foundationState]}
         pageSize={25}
         searchCols="names, cluster, record IDs, size, tier"
         exportBase="/api/duplicates/export"
-        exportExtra={{ merge_id_state: mergeState, member_number_state: memberState }}
+        exportExtra={{ merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState }}
         toolbar={
           <>
             {seg('Merge ID', mergeState, setMergeState)}
             {seg('Member #', memberState, setMemberState)}
+            {seg('Foundation', foundationState, setFoundationState)}
           </>
         }
       />

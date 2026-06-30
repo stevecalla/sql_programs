@@ -27,7 +27,10 @@ function build_clauses(opts, spec) {
 
   // LIKE pattern. Specs with `prefix_search` use an anchored 'term%' so the query can use a
   // B-tree index (huge on the ~700k snapshot); others keep '%term%' contains-anywhere matching.
-  const like = (v) => (spec.prefix_search ? v + '%' : '%' + v + '%');
+  // `contains_cols` opts specific columns out of the prefix rule (e.g. email, match_composition)
+  // so free-text fields still match anywhere.
+  const contains = new Set(spec.contains_cols || []);
+  const like = (v, col) => ((spec.prefix_search && !(col && contains.has(col))) ? v + '%' : '%' + v + '%');
 
   // search across the configured columns — split into words so a multi-word query like
   // "Victor Lopez" matches first_name "Victor" AND last_name "Lopez" (each word must hit some
@@ -36,7 +39,7 @@ function build_clauses(opts, spec) {
   if (q && spec.search_cols.length) {
     for (const tok of q.split(/\s+/).filter(Boolean)) {
       wheres.push('(' + spec.search_cols.map((c) => '`' + c + '` LIKE ?').join(' OR ') + ')');
-      for (const _ of spec.search_cols) params.push(like(tok));
+      for (const c of spec.search_cols) params.push(like(tok, c));
     }
   }
 
@@ -62,9 +65,10 @@ function build_clauses(opts, spec) {
     const fm = spec.filter_map && spec.filter_map[key];
     if (!fm) continue;
     // a filter_map entry is a column name (backticked) or { expr } for a raw SQL expression
-    const expr = (typeof fm === 'object' && fm.expr) ? fm.expr : '`' + fm + '`';
+    const col_name = (typeof fm === 'object' && fm.expr) ? null : fm;
+    const expr = col_name ? ('`' + fm + '`') : fm.expr;
     wheres.push(expr + ' LIKE ?');
-    params.push(like(String(val).trim()));
+    params.push(like(String(val).trim(), col_name));
   }
 
   const where_sql = wheres.length ? ('WHERE ' + wheres.join(' AND ')) : '';
@@ -131,6 +135,9 @@ const DUP_SPEC = {
       : String(v) === 'none' ? { sql: "(Merge_Ids__c IS NULL OR REPLACE(Merge_Ids__c, ';', '') = '')" } : null) },
     member_number_state: { build: (v) => (String(v) === 'has' ? { sql: "REPLACE(Member_Numbers__c, ';', '') <> ''" }
       : String(v) === 'none' ? { sql: "(Member_Numbers__c IS NULL OR REPLACE(Member_Numbers__c, ';', '') = '')" } : null) },
+    // does any member of the cluster carry a Foundation constituent flag? (values are ';'-joined true/false)
+    foundation_state: { build: (v) => (String(v) === 'has' ? { sql: "Foundation_Constituents__c LIKE '%true%'" }
+      : String(v) === 'none' ? { sql: "(Foundation_Constituents__c IS NULL OR Foundation_Constituents__c NOT LIKE '%true%')" } : null) },
   },
   facet_cols: { signal: 'Match_Composition__c', tier: 'Confidence_Tier__c', size: 'Group_Record_Count__c' },
   default_sort: 'size',
@@ -165,7 +172,7 @@ const MR_SPEC = {
   // to the page rows with one small lookup instead (so size is display-only, not SQL-sortable).
   select: 'Account__c AS `account`, First_Name__c AS `first_name`, Last_Name__c AS `last_name`, ' +
           'Salesforce_Merge_Id__c AS `merge_id`, Which_List__c AS `which_list`, Bucket__c AS `bucket`, ' +
-          'Consolidated_Group_Key__c AS `cluster`',
+          'Foundation_Constituent__c AS `foundation`, Consolidated_Group_Key__c AS `cluster`',
   search_cols: ['Account__c', 'First_Name__c', 'Last_Name__c', 'Salesforce_Merge_Id__c', 'Which_List__c'],
   // bucket filter mirrors the funnel: 'only_dupes' = flagged by us with no merge ID (every
   // non in_both / sf_only bucket); any other value is an exact bucket match.
@@ -183,6 +190,9 @@ const MR_SPEC = {
         return { sql: 'Consolidated_Group_Key__c IN (' + arr.map(() => '?').join(', ') + ')', params: arr };
       },
     },
+    // 'has' / 'none' on the account's Foundation constituent flag (per-row true/false)
+    foundation_state: { build: (v) => (String(v) === 'has' ? { sql: "Foundation_Constituent__c LIKE 'true%'" }
+      : String(v) === 'none' ? { sql: "(Foundation_Constituent__c IS NULL OR Foundation_Constituent__c NOT LIKE 'true%')" } : null) },
   },
   sort: {
     account: 'Account__c',
@@ -191,12 +201,14 @@ const MR_SPEC = {
     cluster: 'Consolidated_Group_Key__c',
     which_list: 'Which_List__c',
     bucket: 'Bucket__c',
+    foundation: 'Foundation_Constituent__c',
   },
   filter_map: {
     account: 'Account__c', name: 'Last_Name__c', merge_id: 'Salesforce_Merge_Id__c',
     in_dupes: 'Consolidated_Group_Key__c', which_list: 'Which_List__c', bucket: 'Bucket__c',
+    foundation: 'Foundation_Constituent__c',
   },
-  facet_cols: { bucket: 'Bucket__c', which_list: 'Which_List__c', size: { col: 'Group_Record_Count__c', table: cfg.RESULT_CONSOLIDATED_TABLE } },
+  facet_cols: { bucket: 'Bucket__c', which_list: 'Which_List__c', foundation: 'Foundation_Constituent__c', size: { col: 'Group_Record_Count__c', table: cfg.RESULT_CONSOLIDATED_TABLE } },
   default_sort: 'bucket',
 };
 async function list_merge_id(opts = {}, query = real_query) {
@@ -248,8 +260,10 @@ const ACC_SPEC = {
   prefix_search: true,   // 'term%' so name/ID search uses the snapshot's B-tree indexes (~700k rows)
   select: 'salesforce_account_id AS `account`, first_name, last_name, gender_identity AS `gender`, ' +
           'person_birthdate AS `birthdate`, composite_zip_five_digit AS `zip5`, member_number, ' +
-          'salesforce_merge_id AS `merge_id`',
-  search_cols: ['first_name', 'last_name', 'salesforce_account_id', 'member_number'],
+          'salesforce_merge_id AS `merge_id`, match_composition, email, foundation_constituent, created_date, created_by_name',
+  // global search hits names/ID/member (prefix, indexed) plus email + match_composition (contains).
+  search_cols: ['first_name', 'last_name', 'salesforce_account_id', 'member_number', 'email', 'match_composition'],
+  contains_cols: ['email', 'match_composition', 'created_by_name', 'created_date'],
   filter_cols: {
     has_merge_id: { sql: "salesforce_merge_id <> ''" },                 // legacy truthy toggle (kept)
     has_member_number: { sql: "member_number <> ''" },
@@ -268,12 +282,19 @@ const ACC_SPEC = {
     zip5: 'composite_zip_five_digit',
     member_number: 'member_number',
     merge_id: 'salesforce_merge_id',
+    match_composition: 'match_composition',
+    email: 'email',
+    foundation_constituent: 'foundation_constituent',
+    created_date: 'created_date',
+    created_by_name: 'created_by_name',
   },
   filter_map: {
     account: 'salesforce_account_id', name: 'last_name', gender: 'gender_identity',
     birthdate: 'person_birthdate', zip5: 'composite_zip_five_digit', member_number: 'member_number', merge_id: 'salesforce_merge_id',
+    match_composition: 'match_composition', email: 'email', foundation_constituent: 'foundation_constituent',
+    created_date: 'created_date', created_by_name: 'created_by_name',
   },
-  facet_cols: { gender: 'gender_identity' },
+  facet_cols: { gender: 'gender_identity', match_composition: 'match_composition', foundation_constituent: 'foundation_constituent' },
   default_sort: 'last_name',
 };
 async function list_accounts(opts = {}, query = real_query) {
@@ -296,6 +317,133 @@ async function cluster_accounts(key, query = real_query) {
   return { key, accounts: accounts || [] };
 }
 
+// ---- Merge-ID groups (Merge Admin source): one row per distinct Salesforce merge id ----
+// Only accounts that HAVE a merge id are listed. Bucket filter mirrors the merge-id review panel
+// (the buckets with a merge id: in_both / id only [sf_only]).
+async function list_merge_groups(opts = {}, query = real_query) {
+  const page = clamp_int(opts.page, 1, 1, 1e9);
+  const page_size = clamp_int(opts.page_size, 25, 1, MAX_PAGE_SIZE);
+  const offset = (page - 1) * page_size;
+  const T = cfg.RESULT_MERGE_ID_REVIEW_TABLE;
+  const wheres = ["Salesforce_Merge_Id__c IS NOT NULL", "Salesforce_Merge_Id__c <> ''"];
+  const params = [];
+  const qstr = (opts.q == null ? '' : String(opts.q)).trim();
+  if (qstr) {
+    for (const tok of qstr.split(/\s+/).filter(Boolean)) {
+      wheres.push("(First_Name__c LIKE ? OR Last_Name__c LIKE ? OR Salesforce_Merge_Id__c LIKE ?)");
+      params.push("%" + tok + "%", "%" + tok + "%", "%" + tok + "%");
+    }
+  }
+  const bk = opts.bucket;
+  if (bk === "in_both" || bk === "sf_only") { wheres.push("Bucket__c = ?"); params.push(bk); }
+  else if (bk === "only_dupes") { wheres.push("Bucket__c NOT IN ('in_both', 'sf_only')"); }
+  const where_sql = "WHERE " + wheres.join(" AND ");
+  // foundation filter is group-level: keep merge groups where ANY (has) / NO (none) account is a
+  // Foundation constituent — so it's a HAVING over the GROUP BY, not a row WHERE.
+  const fnd = String(opts.foundation_state || '');
+  const fnd_having = fnd === 'has' ? " HAVING SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) > 0"
+    : fnd === 'none' ? " HAVING SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) = 0" : '';
+  const totalRows = await query(
+    fnd_having
+      ? "SELECT COUNT(*) AS n FROM (SELECT Salesforce_Merge_Id__c FROM `" + T + "` " + where_sql + " GROUP BY Salesforce_Merge_Id__c" + fnd_having + ") x"
+      : "SELECT COUNT(DISTINCT Salesforce_Merge_Id__c) AS n FROM `" + T + "` " + where_sql, params);
+  const total = totalRows && totalRows[0] ? Number(totalRows[0].n) : 0;
+  const rows = await query(
+    "SELECT Salesforce_Merge_Id__c AS `merge_id`, " +
+    "GROUP_CONCAT(DISTINCT NULLIF(TRIM(CONCAT(COALESCE(First_Name__c, ''), ' ', COALESCE(Last_Name__c, ''))), '') SEPARATOR ';') AS `names`, " +
+    "COUNT(*) AS `size`, MIN(Consolidated_Group_Key__c) AS `cluster_key` " +
+    "FROM `" + T + "` " + where_sql +
+    " GROUP BY Salesforce_Merge_Id__c" + fnd_having + " ORDER BY COUNT(*) DESC, Salesforce_Merge_Id__c ASC LIMIT ? OFFSET ?",
+    params.concat([page_size, offset]));
+  const out = (rows || []).map((r) => ({
+    cluster: r.merge_id, merge_id: r.merge_id, names: r.names || '',
+    size: Number(r.size) || 0, signal: "merge id", cluster_key: r.cluster_key || '',
+  }));
+  return { rows: out, total, page, page_size };
+}
+
+async function merge_group_account_ids(merge_id, query = real_query) {
+  if (!merge_id) return [];
+  const rows = await query("SELECT Account__c AS account FROM `" + cfg.RESULT_MERGE_ID_REVIEW_TABLE +
+    "` WHERE Salesforce_Merge_Id__c = ?", [String(merge_id)]);
+  return (rows || []).map((r) => r.account).filter(Boolean);
+}
+
+// Resolve survivor + losers for every merge-id group matching a filter (q + bucket) or an explicit
+// list of merge ids. Survivor cascade (DB-only steps): 1) account whose Salesforce Id equals the
+// merge id; 2) lowest membership number among the group. Steps 3 (most children) and 4 (oldest)
+// need Salesforce, so bulk leaves those unresolvable for single review. Pure DB.
+async function resolve_merge_groups(opts = {}, query = real_query) {
+  const T = cfg.RESULT_MERGE_ID_REVIEW_TABLE;
+  const wheres = ["Salesforce_Merge_Id__c IS NOT NULL", "Salesforce_Merge_Id__c <> ''"];
+  const params = [];
+  const qstr = (opts.q == null ? '' : String(opts.q)).trim();
+  if (qstr) {
+    for (const tok of qstr.split(/\s+/).filter(Boolean)) {
+      wheres.push("(First_Name__c LIKE ? OR Last_Name__c LIKE ? OR Salesforce_Merge_Id__c LIKE ?)");
+      params.push("%" + tok + "%", "%" + tok + "%", "%" + tok + "%");
+    }
+  }
+  const bk = opts.bucket;
+  if (bk === "in_both" || bk === "sf_only") { wheres.push("Bucket__c = ?"); params.push(bk); }
+  else if (bk === "only_dupes") { wheres.push("Bucket__c NOT IN ('in_both', 'sf_only')"); }
+  const keys = Array.isArray(opts.keys) ? opts.keys.map(String).filter(Boolean) : null;
+  if (keys && keys.length) { wheres.push("Salesforce_Merge_Id__c IN (" + keys.map(() => "?").join(", ") + ")"); for (const k of keys) params.push(k); }
+  const where_sql = "WHERE " + wheres.join(" AND ");
+  const rows = await query("SELECT Salesforce_Merge_Id__c AS merge_id, Account__c AS account, First_Name__c AS first_name, Last_Name__c AS last_name, Foundation_Constituent__c AS foundation FROM `" + T + "` " + where_sql, params);
+  const byId = new Map(); const allIds = new Set(); const nameMap = new Map(); const fnd_groups = new Set();
+  for (const row of (rows || [])) {
+    if (!row.merge_id || !row.account) continue;
+    if (!byId.has(row.merge_id)) byId.set(row.merge_id, []);
+    byId.get(row.merge_id).push(row.account); allIds.add(row.account);
+    nameMap.set(row.account, ((row.first_name || '') + ' ' + (row.last_name || '')).trim());
+    if (String(row.foundation || '').toLowerCase().startsWith('true')) fnd_groups.add(row.merge_id);
+  }
+  // group-level foundation filter: keep groups with ANY (has) / NO (none) Foundation constituent.
+  const fnd = String(opts.foundation_state || '');
+  if (fnd === 'has' || fnd === 'none') {
+    for (const mid of [...byId.keys()]) {
+      const hit = fnd_groups.has(mid);
+      if ((fnd === 'has' && !hit) || (fnd === 'none' && hit)) byId.delete(mid);
+    }
+  }
+  const memMap = new Map(); const ids = [...allIds];
+  for (let k = 0; k < ids.length; k += 1000) {
+    const chunk = ids.slice(k, k + 1000);
+    const ph = chunk.map(() => "?").join(", ");
+    const mrows = await query("SELECT salesforce_account_id AS account, member_number FROM `" + cfg.SNAPSHOT_TABLE_NAME + "` WHERE salesforce_account_id IN (" + ph + ")", chunk);
+    for (const m of (mrows || [])) memMap.set(m.account, m.member_number);
+  }
+  const hasMem = (a) => { const v = memMap.get(a); return v != null && String(v).trim() !== ''; };
+  const out = [];
+  for (const [mid, accts] of byId) {
+    let survivor = accts.includes(mid) ? mid : null;
+    let rule = survivor ? 'merge_id' : null;
+    if (!survivor) {
+      const withMem = accts.filter(hasMem);
+      if (withMem.length) {
+        survivor = withMem.reduce((best, a) => {
+          const va = Number(memMap.get(a)); const vb = Number(memMap.get(best));
+          return (Number.isFinite(va) && (!Number.isFinite(vb) || va < vb)) ? a : best;
+        }, withMem[0]);
+        rule = 'member_number';
+      }
+    }
+    const losers = survivor ? accts.filter((a) => a !== survivor) : [];
+    out.push({ merge_id: mid, survivor, name: survivor ? (nameMap.get(survivor) || '') : '', losers, rule, resolvable: !!survivor && losers.length > 0 });
+  }
+  return out;
+}
+
+async function accounts_by_ids(ids, query = real_query) {
+  const list = (ids || []).map((s) => String(s).trim()).filter(Boolean);
+  if (!list.length) return [];
+  const ph = list.map(() => "?").join(", ");
+  const rows = await query("SELECT " + ACC_SPEC.select + " FROM `" + cfg.SNAPSHOT_TABLE_NAME +
+    "` WHERE salesforce_account_id IN (" + ph + ")", list);
+  return rows || [];
+}
+
 const SPECS = { duplicates: DUP_SPEC, 'merge-id': MR_SPEC, accounts: ACC_SPEC };
 
 // Export: same WHERE/ORDER as the on-screen view (search + filters + sort), but no paging — all
@@ -314,5 +462,6 @@ async function export_rows(view, opts = {}, query = real_query) {
 
 module.exports = {
   list_duplicates, list_merge_id, merge_id_summary, list_accounts, cluster_accounts, facets, export_rows,
+  list_merge_groups, merge_group_account_ids, accounts_by_ids, resolve_merge_groups,
   build_clauses, MAX_PAGE_SIZE, EXPORT_MAX, // exported for tests
 };

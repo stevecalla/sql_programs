@@ -23,6 +23,7 @@ const {
     record_from_row,
     read_records,
     count_rows,
+    update_match_composition,
 } = require('../src/database_snapshot');
 const { make_exact_duplicate_key, make_rule_key } = require('../src/normalize');
 const { SNAPSHOT_TABLE_NAME } = require('../config');
@@ -73,6 +74,65 @@ describe('to_snapshot_row', () => {
         assert.equal(row[col('composite_zip_five_digit')], '80919');
     });
 
+    test('maps the new contact + audit fields (name, email, phone, address)', () => {
+        const r = rec('1', 'Chris', 'Ruez', {
+            Name: 'Chris Ruez',
+            PersonEmail: 'ruezchristopher@gmail.com',
+            Phone: '555-1212',
+            PersonMailingStreet: '123 Main St',
+            PersonMailingCity: 'Houston',
+            PersonMailingState: 'TX',
+            PersonMailingPostalCode: '77009',
+        });
+        const row = to_snapshot_row(r);
+        assert.equal(row[col('name')], 'Chris Ruez');
+        assert.equal(row[col('email')], 'ruezchristopher@gmail.com');
+        assert.equal(row[col('phone')], '555-1212');
+        assert.equal(row[col('mailing_street')], '123 Main St');
+        assert.equal(row[col('mailing_city')], 'Houston');
+        assert.equal(row[col('mailing_state')], 'TX');
+    });
+
+    test('stamps environment + org from meta (defaults to "" when omitted)', () => {
+        const stamped = to_snapshot_row(rec('1', 'Bob', 'Smith'), new Date(), 0,
+            { environment: 'prod', org_id: '00Dabc000001XyZ', org_host: 'usat.my.salesforce.com' });
+        assert.equal(stamped[col('environment')], 'prod');
+        assert.equal(stamped[col('org_id')], '00Dabc000001XyZ');
+        assert.equal(stamped[col('org_host')], 'usat.my.salesforce.com');
+
+        const plain = to_snapshot_row(rec('2', 'Bob', 'Smith')); // no meta
+        assert.equal(plain[col('environment')], '');
+        assert.equal(plain[col('org_id')], '');
+        assert.equal(plain[col('org_host')], '');
+    });
+
+    test('SF ISO timestamps convert to MySQL DATETIME; blank -> null', () => {
+        const row = to_snapshot_row(rec('1', 'Bob', 'Smith', {
+            CreatedDate: '2025-05-22T01:59:50.000+0000',
+            LastModifiedDate: '2026-06-08T16:19:26.000+0000',
+        }));
+        assert.equal(row[col('created_date')], '2025-05-22 01:59:50');
+        assert.equal(row[col('last_modified_date')], '2026-06-08 16:19:26');
+        const blank = to_snapshot_row(rec('2', 'Bob', 'Smith')); // no dates set
+        assert.equal(blank[col('created_date')], null);
+        assert.equal(blank[col('last_modified_date')], null);
+    });
+
+    test('maps created-by / last-modified-by id + name (name resolved upstream)', () => {
+        const row = to_snapshot_row(rec('1', 'Bob', 'Smith', {
+            CreatedById: '005aaa', CreatedByName: 'Integration: Membership DB',
+            LastModifiedById: '005bbb', LastModifiedByName: 'Jane Admin',
+        }));
+        assert.equal(row[col('created_by_id')], '005aaa');
+        assert.equal(row[col('created_by_name')], 'Integration: Membership DB');
+        assert.equal(row[col('last_modified_by_id')], '005bbb');
+        assert.equal(row[col('last_modified_by_name')], 'Jane Admin');
+        // blank when the names weren't resolved
+        const blank = to_snapshot_row(rec('2', 'Bob', 'Smith'));
+        assert.equal(blank[col('created_by_name')], '');
+        assert.equal(blank[col('last_modified_by_name')], '');
+    });
+
     test('blank fields become empty strings, not undefined', () => {
         const row = to_snapshot_row({ Id: '9' });
         for (let i = 0; i < COLUMNS.length - 2; i++) { // last two cols are loaded_at (Date) + load_sequence (null when unset)
@@ -106,12 +166,12 @@ describe('add_indexes', () => {
     test('uses prefix indexes on the key columns (under InnoDB 3072-byte limit)', async () => {
         const { executor, calls } = fake_executor();
         await add_indexes(executor);
-        assert.equal(calls.length, 9);
+        assert.equal(calls.length, 11);
         assert.ok(/CREATE INDEX .*exact_duplicate_key\(255\)/.test(calls[0].sql), calls[0].sql);
         assert.ok(/CREATE INDEX .*rule_block_key\(255\)/.test(calls[1].sql), calls[1].sql);
         assert.ok(/CREATE INDEX .*load_sequence/.test(calls[2].sql), calls[2].sql);
         // R1a review-page indexes
-        assert.ok(/CREATE INDEX idx_last_first .*last_name\(100\), first_name\(100\)/.test(calls[3].sql), calls[3].sql);
+        assert.ok(/CREATE INDEX idx_last_first .*last_name, first_name\(100\)/.test(calls[3].sql), calls[3].sql);
         assert.ok(calls.some((c) => /idx_salesforce_merge_id/.test(c.sql)));
         assert.ok(calls.some((c) => /idx_composite_zip5/.test(c.sql)));
     });
@@ -154,7 +214,7 @@ describe('load_snapshot', () => {
         assert.equal(drops.length, 1);
         assert.equal(creates.length, 1);
         assert.equal(inserts.length, 3); // 2 + 2 + 1
-        assert.equal(indexes.length, 9);
+        assert.equal(indexes.length, 11);
 
         // order: drop -> create -> inserts... -> indexes
         assert.ok(calls[0].sql.startsWith('DROP TABLE'));
@@ -304,5 +364,30 @@ describe('count_rows', () => {
     test('returns the COUNT(*) value as a number', async () => {
         const executor = async () => [{ n: 42 }];
         assert.equal(await count_rows(executor), 42);
+    });
+});
+
+describe('update_match_composition', () => {
+    test('stamps each cluster member with its composition via batched UPDATEs', async () => {
+        const calls = [];
+        const executor = async (sql, params) => { calls.push({ sql, params }); return []; };
+        const clusters = [
+            { match_composition: 'exact only', record_ids: 'A;B' },
+            { match_composition: 'fuzzy + nickname', record_ids: 'C;D;E' },
+        ];
+        const updated = await update_match_composition(executor, clusters);
+        assert.equal(updated, 5);
+        assert.ok(calls.every((c) => /UPDATE .*SET match_composition = \?/.test(c.sql)));
+        assert.equal(calls[0].params[0], 'exact only');
+        assert.deepEqual(calls[0].params.slice(1), ['A', 'B']);
+        assert.equal(calls[1].params[0], 'fuzzy + nickname');
+        assert.deepEqual(calls[1].params.slice(1), ['C', 'D', 'E']);
+    });
+
+    test('no clusters -> no updates', async () => {
+        let n = 0;
+        const executor = async () => { n += 1; return []; };
+        assert.equal(await update_match_composition(executor, []), 0);
+        assert.equal(n, 0);
     });
 });

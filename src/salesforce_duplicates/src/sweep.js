@@ -117,10 +117,16 @@ function run_profile(records, criteria, { namer } = {}) {
     const wF = criteria.weight_first;
     const wL = criteria.weight_last;
 
-    // --- Exact groups: all records grouped by name + the required field values ---
+    // --- Exact groups: cleaned name + the required field values ---
+    // Same rule as production (normalize.make_exact_duplicate_key): CLEANED first +
+    // CLEANED last (so "O'Brien" == "OBrien"), and the record must be eligible —
+    // cleaned names present AND all required rule fields present. At the baseline
+    // criteria (gender+birthdate+zip) this reproduces production exactly; other
+    // profiles generalize it by varying which fields are required.
     const exact_map = new Map();
     for (const r of records) {
-        const key = `${norm(r.LastName)}|${norm(r.FirstName)}|${rule_key(r, criteria)}`;
+        if (clean_name(r.LastName) === '' || clean_name(r.FirstName) === '' || !is_eligible(r, criteria)) continue;
+        const key = `${clean_name(r.LastName)}|${clean_name(r.FirstName)}|${rule_key(r, criteria)}`;
         if (!exact_map.has(key)) exact_map.set(key, []);
         exact_map.get(key).push(r.Id);
     }
@@ -189,12 +195,22 @@ function run_profile(records, criteria, { namer } = {}) {
         if (e.nickname === 1) s.nick += 1;
         root_signals.set(root, s);
     }
+    // composition (mirrors the dashboard's exact/fuzzy/nickname/multi cluster split) + cluster size
+    const comp = { exact: 0, fuzzy: 0, nickname: 0, multi: 0 };
+    let accounts_in_clusters = 0;
     for (const ids of cluster_ids) {
+        accounts_in_clusters += ids.length;
         const s = root_signals.get(uf.find(ids[0])) || { exact: 0, fuzzy: 0, nick: 0 };
         if (s.exact > 0) tier.exact += 1;
         else if (s.fuzzy > 0) tier.fuzzy += 1;
         else tier.nickname += 1;
+        const present = (s.exact > 0 ? 1 : 0) + (s.fuzzy > 0 ? 1 : 0) + (s.nick > 0 ? 1 : 0);
+        if (present > 1) comp.multi += 1;
+        else if (s.exact > 0) comp.exact += 1;
+        else if (s.fuzzy > 0) comp.fuzzy += 1;
+        else comp.nickname += 1;
     }
+    const exact_pairs = edges.reduce((acc, e) => acc + (e.type === 'exact' ? 1 : 0), 0);
 
     return {
         label: criteria.label,
@@ -210,9 +226,16 @@ function run_profile(records, criteria, { namer } = {}) {
             nickname_only,
             nickname_both,
             consolidated_clusters: cluster_ids.length,
+            accounts_in_clusters,
+            match_pairs: edges.length,
+            exact_pairs,
             tier_exact: tier.exact,
             tier_fuzzy: tier.fuzzy,
             tier_nickname: tier.nickname,
+            comp_exact: comp.exact,
+            comp_fuzzy: comp.fuzzy,
+            comp_nickname: comp.nickname,
+            comp_multi: comp.multi,
             pairs_compared,
         },
         edges,

@@ -37,10 +37,12 @@ function lookup(records) {
 // computing the GROUP BY from `records` exactly as MySQL would (group by key, ids in
 // appearance order, groups ordered by first appearance, HAVING COUNT > 1).
 function sql_executor_for(records) {
+    // The blank key marks ineligible records; both real queries filter it with
+    // `WHERE exact_duplicate_key <> ''`, so the fake excludes it too.
     return async (sql) => {
         if (/^SET SESSION/i.test(sql)) return [];
         if (/COUNT\(DISTINCT exact_duplicate_key\)/i.test(sql)) {
-            const keys = new Set(records.map(make_exact_duplicate_key));
+            const keys = new Set(records.map(make_exact_duplicate_key).filter((k) => k !== ''));
             return [{ n: keys.size }];
         }
         // the GROUP BY query
@@ -48,6 +50,7 @@ function sql_executor_for(records) {
         const byKey = new Map();
         for (const r of records) {
             const k = make_exact_duplicate_key(r);
+            if (k === '') continue; // WHERE exact_duplicate_key <> ''
             if (!byKey.has(k)) { byKey.set(k, []); order.push(k); }
             byKey.get(k).push(r.Id);
         }
@@ -93,6 +96,22 @@ describe('detect_exact_duplicates_sql parity with exact.js', () => {
         await check([
             rec('1', 'Al', 'One'),
             rec('2', 'Bo', 'Two', { BillingPostalCode: '11111' }),
+        ]);
+    });
+
+    test('gate parity: ineligible records (blank ZIP) are excluded in both paths', async () => {
+        await check([
+            rec('A1', 'Robert', 'Smith'),                                                   // eligible pair
+            rec('A2', 'Robert', 'Smith'),
+            rec('Z1', 'Nomi', 'NoZip', { BillingPostalCode: '', PersonMailingPostalCode: '' }), // gated out
+            rec('Z2', 'Nomi', 'NoZip', { BillingPostalCode: '', PersonMailingPostalCode: '' }), // gated out
+        ]);
+    });
+
+    test('clean-name parity: punctuation variants group in both paths', async () => {
+        await check([
+            rec('P1', 'Anne-Marie', "O'Brien"),
+            rec('P2', 'Anne Marie', 'OBrien'),
         ]);
     });
 });

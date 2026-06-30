@@ -154,6 +154,7 @@ const RESULT_CONSOLIDATED_TABLE = "salesforce_duplicate_consolidated_cluster";
 // Auxiliary review data persisted to SQL too (was file-only): the ZIP-trim map and the
 // nickname-fire map. Refreshed each finder run like the six result tables.
 const RESULT_ZIP_TRIM_TABLE = "salesforce_duplicate_zip_trim_mapping";
+const RESULT_SWEEP_PROFILE_TABLE = "salesforce_duplicate_sweep_profile";
 const RESULT_NICKNAME_FIRE_TABLE = "salesforce_duplicate_nickname_fire_mapping";
 // Merge ID review result table (one row per reviewed account). Refreshed each finder run.
 const RESULT_MERGE_ID_REVIEW_TABLE = "salesforce_duplicate_merge_id_review";
@@ -246,6 +247,7 @@ module.exports = {
     RESULT_NICKNAME_GROUP_TABLE,
     RESULT_CONSOLIDATED_TABLE,
     RESULT_ZIP_TRIM_TABLE,
+    RESULT_SWEEP_PROFILE_TABLE,
     RESULT_NICKNAME_FIRE_TABLE,
     RESULT_MERGE_ID_REVIEW_TABLE,
     DB_INSERT_BATCH_SIZE,

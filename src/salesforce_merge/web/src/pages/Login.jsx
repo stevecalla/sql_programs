@@ -12,7 +12,7 @@ export default function Login({ onLogin }) {
     setErr(''); setBusy(true);
     try {
       const r = await api.login(u, p);
-      onLogin({ ok: true, user: r.user, role: r.role });
+      onLogin({ ok: true, user: r.user, role: r.role, panels: r.panels });
     } catch (ex) {
       setErr(ex.message);
     } finally {
