@@ -71,6 +71,14 @@ async function update_record(conn, type, fields) {
   return norm(res);
 }
 
+// Create a record (used by the recreate-from-backup restore path for records purged from the Recycle
+// Bin). The new record gets a NEW Salesforce id — external references to the old id won't reconnect.
+async function create_record(conn, type, fields) {
+  if (!fields || Object.keys(fields).length === 0) throw new Error('create_record: fields required');
+  const res = await conn.sobject(type).create(fields);
+  return norm(res); // { success, id (new), errors }
+}
+
 // Are the optional stamp fields present on Account for the connected user? (describe-based.) Used to
 // notify the user before/after a run whether the "stamp survivor" option will actually write.
 async function stamp_fields_status(conn) {
@@ -83,5 +91,5 @@ async function stamp_fields_status(conn) {
 
 module.exports = {
   default_write_connect, write_creds, using_dedicated_write_user,
-  merge_one, undelete, update_record, stamp_fields_status, STAMP_FIELDS,
+  merge_one, undelete, update_record, create_record, stamp_fields_status, STAMP_FIELDS,
 };

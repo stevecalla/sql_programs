@@ -87,7 +87,8 @@ the SF login used to write, so the write target always matches the data on scree
 stamped with their environment at add time and the queue persists across Sandbox⇄Production switches.
 Re-merges are prevented by four layers: (1) the **alignment guard** skips any set whose stamped
 environment/org doesn't match the loaded one (so a Sandbox set can't run against Production, and
-vice-versa); (2) a merged set becomes `done` and isn't reselectable (simulate never changes status);
+vice-versa) — the `org_id` is captured server-side at add time (cached per env, best-effort), so the
+org pin is always-on, not just the label; (2) a merged set becomes `done` and isn't reselectable (simulate never changes status);
 (3) the per-run **drift re-fetch** skips sets whose records are already gone, and on retry continues
 with only the unmerged remainder; (4) Salesforce itself rejects merging a deleted record (recorded
 `failed`, never a silent double-merge). The drift check reads the loaded dataset rather than a live

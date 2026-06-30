@@ -41,7 +41,7 @@ const { create_step_timer } = require("./src/step_timer");
 const { add_timestamp_to_filename, write_csv, archive_previous_output_files, write_run_summary, write_zip_trim_mapping, write_nickname_fire_mapping } = require("./src/output_files");
 const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row, to_sf_nickname_row, to_sf_nickname_group_row, to_sf_consolidated_row, to_sf_merge_id_review_row } = require("./src/sf_rows");
 const { fetch_salesforce_accounts } = require("./src/salesforce");
-const { materialize_via_db, open_local_executor } = require("./src/database_snapshot");
+const { materialize_via_db, open_local_executor, update_match_composition } = require("./src/database_snapshot");
 const { write_run, write_all_result_tables, write_result_table } = require("./src/database_results");
 const { write_workbook } = require("./src/excel_output");
 const { build_zip_trim_mapping } = require("./src/zip_trim");
@@ -82,9 +82,12 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
     log_success(`Output directory ready: ${output_dir}`, script_start_ms);
     timer.stage_done("archive prior outputs");
 
-    const { result, query_start_date, query_end_date, query_duration_ms } =
+    const { result, query_start_date, query_end_date, query_duration_ms, environment, org_id, org_host } =
         await fetch_salesforce_accounts({ is_test, is_full, is_partial, max_fetch, script_start_ms });
     timer.stage_done("fetch from Salesforce");
+
+    // Source provenance stamped on every snapshot row (environment + org).
+    const snapshot_meta = { environment, org_id, org_host };
 
     if (result.records.length === 0) {
         log_warn("No records returned. Ending script.");
@@ -103,6 +106,7 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
         log_info(`SQL backbone ON: streaming ${result.records.length.toLocaleString()} records into the snapshot table...`, script_start_ms);
         const fetched_count = result.records.length;
         const { records: db_records, loaded } = await materialize_via_db(result.records, {
+            meta: snapshot_meta,
             progress_every: DB_LOAD_PROGRESS_EVERY,
             on_progress: (done, total) => log_info(
                 `Loaded ${done.toLocaleString()} / ${total.toLocaleString()} rows (${total ? Math.round((done / total) * 100) : 0}%) into the snapshot table`,
@@ -429,6 +433,10 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
                     nickname_group: nickname_group_sf_import,
                     consolidated: consolidated_sf_import,
                 });
+                // Write-back: stamp each account's consolidated Match_Composition__c onto
+                // the snapshot row (blank for accounts in no cluster).
+                const stamped = await update_match_composition(executor, clusters);
+                if (stamped > 0) log_info(`Stamped match_composition on ${stamped.toLocaleString()} snapshot accounts.`, script_start_ms);
                 // Maximize SQL: persist the ZIP-trim + nickname-fire maps too (refresh each run).
                 await write_result_table(executor, RESULT_ZIP_TRIM_TABLE, zip_trim.mapping);
                 await write_result_table(executor, RESULT_NICKNAME_FIRE_TABLE, fire_summary);

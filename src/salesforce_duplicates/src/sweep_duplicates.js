@@ -124,7 +124,7 @@ async function cmd_snapshot(argv) {
     console.log(`Mode: ${is_test ? 'TEST (dev sandbox)' : 'PRODUCTION'}${is_full ? ' FULL' : ''}${is_partial ? ' PARTIAL' : ''}   max_fetch=${n(max_fetch)}`);
 
     const script_start_ms = Date.now();
-    const { result } = await fetch_salesforce_accounts({ is_test, is_full, is_partial, max_fetch, script_start_ms });
+    const { result, environment, org_id, org_host } = await fetch_salesforce_accounts({ is_test, is_full, is_partial, max_fetch, script_start_ms });
     const records = result.records;
 
     console.log(colorize('gray', `Streaming ${n(records.length)} records into the snapshot table...`));
@@ -133,6 +133,7 @@ async function cmd_snapshot(argv) {
     try {
         loaded = await load_snapshot(records, {
             executor,
+            meta: { environment, org_id, org_host },
             progress_every: DB_LOAD_PROGRESS_EVERY,
             on_progress: (done, total) => log_info(
                 `Loaded ${n(done)} / ${n(total)} rows (${total ? Math.round((done / total) * 100) : 0}%) into the snapshot table`,

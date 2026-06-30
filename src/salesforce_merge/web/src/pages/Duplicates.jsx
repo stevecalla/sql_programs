@@ -26,11 +26,12 @@ export default function Duplicates() {
   const [facets, setFacets] = useState({});
   const [mergeState, setMergeState] = useState('');     // '' all · 'has' · 'none' (any merge ID in cluster?)
   const [memberState, setMemberState] = useState('');   // '' all · 'has' · 'none' (any member # in cluster?)
+  const [foundationState, setFoundationState] = useState(''); // '' all · 'has' · 'none' (any Foundation constituent?)
   const [openKey, setOpenKey] = useState(null);         // cluster key whose popup is open
   useEffect(() => { api.duplicatesFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
   const fetcher = useCallback((p) =>
-    api.duplicates({ ...p, merge_id_state: mergeState, member_number_state: memberState }).then((r) => ({ rows: r.rows, total: r.total })),
-  [mergeState, memberState]);
+    api.duplicates({ ...p, merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState }).then((r) => ({ rows: r.rows, total: r.total })),
+  [mergeState, memberState, foundationState]);
 
   const columns = useMemo(() => [
     { key: 'names', label: 'Names', sort: true, filter: true, wrap: true, help: 'The names of every account in this cluster. Click a name to see its account-level records.', render: (r) => namesLinks(r.names) },
@@ -61,15 +62,16 @@ export default function Duplicates() {
         columns={columns}
         fetcher={fetcher}
         facets={facets}
-        deps={[mergeState, memberState]}
+        deps={[mergeState, memberState, foundationState]}
         pageSize={25}
         searchCols="names, cluster, record IDs, size, tier"
         exportBase="/api/duplicates/export"
-        exportExtra={{ merge_id_state: mergeState, member_number_state: memberState }}
+        exportExtra={{ merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState }}
         toolbar={
           <>
             {seg('Merge ID', mergeState, setMergeState)}
             {seg('Member #', memberState, setMemberState)}
+            {seg('Foundation', foundationState, setFoundationState)}
           </>
         }
       />

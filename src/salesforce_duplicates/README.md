@@ -219,33 +219,47 @@ This assumes the Salesforce org stores member/person records on `Account`, such 
 The script currently queries these fields:
 
 ```sql
-Id,
-LastName,
-FirstName,
+Id, Name,
+FirstName, LastName,
 cfg_Member_Number__pc,
-cfg_Gender_Identity__pc,
-usat_Salesforce_Merge_Id__pc,
-PersonBirthdate,
+PersonEmail, Phone,
+PersonMailingStreet, PersonMailingCity, PersonMailingState, PersonMailingPostalCode,
 BillingPostalCode,
-PersonMailingPostalCode
+cfg_Gender_Identity__pc,
+PersonBirthdate,
+usat_Foundation_Constituent__c,
+usat_Salesforce_Merge_Id__pc,
+CreatedDate, CreatedById, LastModifiedDate, LastModifiedById
 ```
 
-If any of these fields do not exist, or if your Salesforce user does not have access to them, the query will fail — **except** `usat_Salesforce_Merge_Id__pc`, which is **optional**: the run DESCRIBEs Account and includes it only if the org has it, so an org without the field still runs (the merge columns just come out blank, and the field is picked up automatically once an admin adds it).
+The created-by / last-modified-by **names** are not on Account (only the user Ids
+are), so they're resolved with one small `SELECT Id, Name FROM User` query joined
+in Node — best-effort, so the run still succeeds (names blank) if the user can't
+read User. Everything else is a **flat Account field** (no relationship traversal),
+so it comes back the same shape from both the REST (`--test`) and Bulk (`--prod`) fetch paths.
+If any field does not exist, or your Salesforce user lacks access to it, the query
+fails — **except** `usat_Salesforce_Merge_Id__pc`, which is **optional**: the run
+DESCRIBEs Account and includes it only if the org has it (so an org without the field
+still runs, merge columns just come out blank). The contact + audit fields
+(email/phone/address, created/modified dates) are reference data only — they are
+stored in the snapshot but never used by the matching logic.
 
 ## SOQL Query
 
 The script uses this Salesforce query:
 
 ```sql
-SELECT Id,
-    LastName,
-    FirstName,
+SELECT Id, Name,
+    FirstName, LastName,
     cfg_Member_Number__pc,
-    cfg_Gender_Identity__pc,
-    usat_Salesforce_Merge_Id__pc,
-    PersonBirthdate,
+    PersonEmail, Phone,
+    PersonMailingStreet, PersonMailingCity, PersonMailingState, PersonMailingPostalCode,
     BillingPostalCode,
-    PersonMailingPostalCode
+    cfg_Gender_Identity__pc,
+    PersonBirthdate,
+    usat_Foundation_Constituent__c,
+    usat_Salesforce_Merge_Id__pc,
+    CreatedDate, CreatedById, LastModifiedDate, LastModifiedById
 FROM Account
 WHERE FirstName != null
 AND LastName != null

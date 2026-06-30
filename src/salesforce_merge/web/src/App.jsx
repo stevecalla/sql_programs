@@ -51,14 +51,14 @@ export default function App() {
             <Route path="/duplicates" element={<Duplicates />} />
             <Route path="/merge-id" element={<MergeId />} />
             <Route path="/accounts" element={<AllAccounts />} />
-            <Route path="/reference" element={<Reference />} />
             <Route path="/get-duplicates" element={<GetDuplicates />} />
-            <Route path="/tuning" element={<Tuning />} />
             <Route path="/select-merges" element={<SelectMerges />} />
             <Route path="/merge-process" element={<MergeProcess />} />
             <Route path="/restore" element={<Restore />} />
+            <Route path="/tuning" element={<Tuning />} />
             <Route path="/admin" element={<Placeholder title="Admin" note="Phase 1b" />} />
             <Route path="/metrics" element={<Placeholder title="Metrics" note="Phase 1" />} />
+            <Route path="/reference" element={<Reference />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <FooterClock />

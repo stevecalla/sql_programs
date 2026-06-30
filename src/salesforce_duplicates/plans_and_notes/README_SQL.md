@@ -108,15 +108,27 @@ columns):
 
 ```text
 salesforce_account_id              (primary key — the SF Id)
-last_name
+name
 first_name
+last_name
 member_number
+email                              (PersonEmail)
+phone                              (Phone)
+mailing_street                     (PersonMailingStreet)
+mailing_city                       (PersonMailingCity)
+mailing_state                      (PersonMailingState)
+person_mailing_postal_code
+billing_postal_code
 gender_identity
+person_birthdate
 foundation_constituent
 salesforce_merge_id
-person_birthdate
-billing_postal_code
-person_mailing_postal_code
+created_date                       (CreatedDate, DATETIME)
+created_by_id                      (CreatedById — the user/integration that created it)
+created_by_name                    (resolved from User via a side lookup; blank if no access)
+last_modified_date                 (LastModifiedDate, DATETIME)
+last_modified_by_id                (LastModifiedById)
+last_modified_by_name              (resolved from User)
 -- precomputed at load time via normalize.js --
 clean_first_name
 clean_last_name
@@ -129,6 +141,12 @@ exact_duplicate_key                (CLEANED last+first + gender+birthdate+zip5; 
 rule_block_key                     (gender+birthdate+zip5 blocking key for fuzzy/nickname;
                                     "" when any is blank — same self-gating as exact_duplicate_key,
                                     so a SQL blocking path would use WHERE rule_block_key <> '')
+match_composition                  (write-back after detection: the account's consolidated
+                                    cluster Match_Composition__c, e.g. "exact only" /
+                                    "fuzzy + nickname"; blank for accounts in no cluster)
+environment                        (source provenance: 'test' or 'prod' — the run mode)
+org_id                             (the Salesforce Org Id the records came from)
+org_host                           (the org instance host, e.g. usat.my.salesforce.com)
 loaded_at
 ```
 

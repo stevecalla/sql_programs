@@ -7,6 +7,7 @@ import { api } from '../lib/api.js';
 
 const full_name = (r) => `${r.first_name || ''} ${r.last_name || ''}`.trim();
 const fmt = (n) => (n == null || n === '' ? '—' : Number(n).toLocaleString());
+const STATES = [['', 'all'], ['has', 'has'], ['none', "doesn't have"]];
 
 // Chips mirror the funnel: all, in both, only a merge ID, only in duplicates.
 const PILLS = [
@@ -18,13 +19,14 @@ const PILLS = [
 
 export default function MergeId() {
   const [bucket, setBucket] = useState('');
+  const [foundationState, setFoundationState] = useState(''); // '' all · 'has' · 'none'
   const [facets, setFacets] = useState({});
   const [openKey, setOpenKey] = useState(null);   // cluster key whose popup is open
   useEffect(() => { api.mergeIdFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
 
   const fetcher = useCallback((p) =>
-    api.mergeId({ ...p, bucket }).then((r) => ({ rows: r.rows, total: r.total })),
-  [bucket]);
+    api.mergeId({ ...p, bucket, foundation_state: foundationState }).then((r) => ({ rows: r.rows, total: r.total })),
+  [bucket, foundationState]);
 
   const columns = useMemo(() => [
     { key: 'name', label: 'Name', sort: 'last_name', filter: true, help: 'The account holder\'s name. Sorts by last name.', render: full_name },
@@ -34,6 +36,7 @@ export default function MergeId() {
     { key: 'size', label: 'Size', filter: true, help: 'How many accounts are in this account\'s duplicate group. Filter by a cluster size (blank = not in a group).', render: (r) => fmt(r.size) },
     { key: 'which_list', label: 'Which list', sort: true, filter: true, help: 'Which detection signal flagged it: exact, fuzzy, nickname, or multiple.' },
     { key: 'bucket', label: 'Bucket', sort: true, filter: true, help: 'Where the account falls when comparing Membership Platform merge IDs to the duplicates detected in Salesforce: in_both = has a merge ID & it was flagged; sf_only = has a merge ID, it was not flagged (only a merge ID); the *_only buckets = flagged with no merge ID (only in duplicates).' },
+    { key: 'foundation', label: 'Foundation', sort: true, filter: true, help: 'Whether the account is a Foundation constituent.', render: (r) => r.foundation || '—' },
   ], []);
 
   return (
@@ -48,19 +51,26 @@ export default function MergeId() {
         columns={columns}
         fetcher={fetcher}
         facets={facets}
-        deps={[bucket]}
+        deps={[bucket, foundationState]}
         pageSize={25}
         searchCols="account, name, merge ID, list"
         exportBase="/api/merge-id/export"
-        exportExtra={{ bucket }}
+        exportExtra={{ bucket, foundation_state: foundationState }}
         toolbar={
-          <span className="pills">
-            {PILLS.map((p) => (
-              <button key={p.value || 'all'} className={'pill' + (bucket === p.value ? ' active' : '')} onClick={() => setBucket(p.value)}>
-                {p.label}
-              </button>
-            ))}
-          </span>
+          <>
+            <span className="pills">
+              {PILLS.map((p) => (
+                <button key={p.value || 'all'} className={'pill' + (bucket === p.value ? ' active' : '')} onClick={() => setBucket(p.value)}>
+                  {p.label}
+                </button>
+              ))}
+            </span>
+            <label className="tb-select">Foundation
+              <select value={foundationState} onChange={(e) => setFoundationState(e.target.value)}>
+                {STATES.map(([v, t]) => (<option key={v || 'all'} value={v}>{t}</option>))}
+              </select>
+            </label>
+          </>
         }
       />
       <ClusterModal clusterKey={openKey} onClose={() => setOpenKey(null)} />

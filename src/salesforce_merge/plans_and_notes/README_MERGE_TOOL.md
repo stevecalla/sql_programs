@@ -668,10 +668,13 @@ add/bulk-add, from `dataset_info`). Protection layers:
    present) is compared to the current run context; a mismatch is recorded `skipped`
    ("environment mismatch" / "org mismatch") **before** the snapshot/merge steps — no write. A
    Sandbox-built set therefore cannot execute while Production data is loaded, and vice-versa;
-   switch the loaded dataset back and the set is runnable again. *Caveat:* `org_id` is only stored
-   when supplied at add time (today usually blank on bulk adds), so the **environment label is the
-   live guard**; `org_id` is a secondary check that fires only when recorded. (Hardening option:
-   capture `org_id` server-side at add time to make the org guard always-on.)
+   switch the loaded dataset back and the set is runnable again. The `org_id` is **captured
+   server-side at add time** (`routes.js` `resolve_org_id` calls `get_org_identity` for the loaded
+   environment, cached per env, best-effort) on both the single and bulk add paths, so the org guard
+   is **always-on** — a hard org pin on top of the Sandbox/Production label, which matters if two
+   environments ever share a label (e.g. two sandboxes). If Salesforce is unreachable at add time the
+   capture falls back to null and queueing still succeeds; the environment label remains the guard
+   until a later add (cache stores positive results only, so a transient failure is retried).
 2. **Status lifecycle:** a merged set → `done` and drops out of the `approved` list, so it is never
    reselected. Simulate never changes status (rehearsable).
 3. **Drift re-check:** every run re-fetches the cluster and skips a set whose survivor/losers are
@@ -717,6 +720,27 @@ purge, downstream automation / roll-ups / external systems (SFMC) don't auto-und
 changes complicate it. Restore takes a **fresh snapshot of current state before it runs** (so a
 botched restore is itself recoverable). UI: a restore view listing past merges flagged
 **restorable vs expired** (live Recycle-Bin check), simulate then execute behind the gates.
+
+#### Phase 4b — secondary recreate-from-backup queue (BUILT, gated)
+Eligibility is **all-or-nothing per set**: a set restores from the Recycle Bin only if *every* loser
+is still there. When an **execute**-mode restore finds a set ineligible (window expired / a loser
+purged), it doesn't just skip — it **routes the whole set** to a secondary queue by transitioning
+`done → recreate_pending` and recording the reason (transparent in the UI). The user then runs a
+deliberate, separate **recreate-from-backup** process on that queue:
+- `merge_restore.list_recreatable()` lists `recreate_pending` sets + what the backup snapshot can
+  rebuild (loser count, child-link count, "no snapshot" flag).
+- `merge_restore.recreate(ids, opts)` — same gate model as restore but typed **RECREATE**. Per set:
+  `create_record` each loser Account from its snapshot fields (`account_create_fields` strips
+  system/derived fields), map old→new id, re-point the snapshotted children to the **new** ids,
+  reset the master, then `recreate_pending → recreated`. Simulate previews with no writes; fail
+  records-but-continues per set. New module method `salesforce_write.create_record`.
+- **Caveat (documented in the UI + Reference):** recreated records get **new Salesforce ids**, so
+  external references (Marketing Cloud, data warehouse) won't reconnect — this tier is approximate
+  by nature. Routing granularity is **per-set** (a partially-recoverable set goes whole to recreate),
+  per the product decision.
+- API: `GET/POST /api/merge/recreate`. UI: a "Recreate queue" card on Restore with the reason +
+  backup availability + Simulate/Execute. Tests: routing→recreate_pending, list_recreatable,
+  recreate simulate/execute, and `create_record` (in `merge_restore.test.js` / `salesforce_write.test.js`).
 
 ### 3a leftover (folded in)
 With "snapshot on every run + keep latest," simulate writes a snapshot (rehearsal) but no

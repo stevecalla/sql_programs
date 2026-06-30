@@ -84,9 +84,10 @@ a { color: var(--accent); }
 .usermenu-item:hover { background: var(--bg); color: var(--accent); }
 .admin-shell { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--card); box-shadow: var(--shadow); }
 .admin-rail { flex: 0 0 200px; display: flex; flex-direction: column; gap: 2px; padding: 12px 10px; border-right: 1px solid var(--line); background: rgba(127,127,127,.05); }
-.admin-rail .rail-grp { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--dim); padding: 10px 10px 2px; }
-.admin-rail a { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 500; border: 1px solid transparent; }
-.admin-rail a:hover { background: rgba(127,127,127,.12); }
+.admin-rail .rail-grp { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; font-weight: 700; color: var(--ink); padding: 16px 10px 4px; }
+.admin-rail .rail-grp:first-child { padding-top: 6px; }
+.admin-rail a { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; color: var(--dim); text-decoration: none; font-size: 14px; font-weight: 500; border: 1px solid transparent; }
+.admin-rail a:hover { background: rgba(127,127,127,.12); color: var(--ink); }
 .admin-rail a.on { background: var(--accent-soft); border-color: var(--line); font-weight: 700; color: var(--ink); }
 .admin-main { flex: 1; min-width: 0; padding: 16px 18px; }
 @media (max-width: 720px) {
@@ -113,6 +114,8 @@ a { color: var(--accent); }
 .fade-in { animation: fade-in .22s ease-out; }
 /* row-number column (all tables) */
 .dt-rownum { color: var(--dim); font-variant-numeric: tabular-nums; width: 1%; white-space: nowrap; }
+/* keep DataTable column-header labels on one line (e.g. "Foundation") */
+.datatable thead th { white-space: nowrap; }
 /* highlighted rows (e.g. Tuning baseline / selected profile) */
 .datatable tr.row-base td { background: var(--accent-soft); }
 .datatable tr.row-sel td { background: rgba(127,127,127,.16); }

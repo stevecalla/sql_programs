@@ -47,3 +47,49 @@ describe('accounts 3-state selectors', () => {
     assert.ok(/member_number IS NULL OR member_number = ''/.test(sel(r.calls, /salesforce_account_id AS/).sql));
   });
 });
+
+describe('foundation filters', () => {
+  test('duplicates foundation_state -> Foundation_Constituents__c contains true', async () => {
+    let r = recorder([{ cluster: 'C' }]);
+    await reviews.list_duplicates({ filters: { foundation_state: 'has' } }, r.q);
+    assert.ok(/Foundation_Constituents__c LIKE '%true%'/.test(sel(r.calls, /Names_In_Group__c AS/).sql));
+
+    r = recorder([{ cluster: 'C' }]);
+    await reviews.list_duplicates({ filters: { foundation_state: 'none' } }, r.q);
+    assert.ok(/Foundation_Constituents__c NOT LIKE '%true%'/.test(sel(r.calls, /Names_In_Group__c AS/).sql));
+  });
+
+  test('accounts foundation column filter (dropdown value) matches', async () => {
+    const r = recorder([{ account: '1' }]);
+    await reviews.list_accounts({ colFilters: { foundation_constituent: 'true' } }, r.q);
+    const c = sel(r.calls, /salesforce_account_id AS/);
+    assert.ok(/`foundation_constituent` LIKE \?/.test(c.sql));
+    assert.ok(c.params.includes('true%')); // prefix (not a contains column)
+  });
+
+  test('merge-id foundation_state -> per-row Foundation_Constituent__c', async () => {
+    const r = recorder([{ account: '1' }]);
+    await reviews.list_merge_id({ filters: { foundation_state: 'has' } }, r.q);
+    assert.ok(r.calls.some((c) => /Foundation_Constituent__c LIKE 'true%'/.test(c.sql)));
+  });
+});
+
+describe('accounts new columns: email + match_composition', () => {
+  test('global search: names/ID/member use prefix, email + match_composition use contains', async () => {
+    const r = recorder([{ account: '1' }]);
+    await reviews.list_accounts({ q: 'smith' }, r.q);
+    const c = sel(r.calls, /salesforce_account_id AS/);
+    assert.ok(/`email` LIKE \? OR `match_composition` LIKE \?/.test(c.sql));
+    // one token -> one param per search col, in column order
+    assert.deepEqual(c.params.slice(0, 6), ['smith%', 'smith%', 'smith%', 'smith%', '%smith%', '%smith%']);
+  });
+
+  test('column filter: email is contains-anywhere, match_composition selectable', async () => {
+    const r = recorder([{ account: '1' }]);
+    await reviews.list_accounts({ colFilters: { email: 'gmail', match_composition: 'exact only' } }, r.q);
+    const c = sel(r.calls, /salesforce_account_id AS/);
+    assert.ok(/`email` LIKE \?/.test(c.sql) && /`match_composition` LIKE \?/.test(c.sql));
+    assert.ok(c.params.includes('%gmail%'));
+    assert.ok(c.params.includes('%exact only%'));
+  });
+});

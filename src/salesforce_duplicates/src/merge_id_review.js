@@ -111,6 +111,7 @@ function build_merge_id_review_rows(clusters, records) {
             which_list: which_list(sig),
             first_name: rec.FirstName || '',
             last_name: rec.LastName || '',
+            foundation_constituent: rec.usat_Foundation_Constituent__c || '',
             cluster_key: sig.cluster_key,
         });
     }
@@ -126,6 +127,7 @@ function build_merge_id_review_rows(clusters, records) {
             which_list: '',
             first_name: rec.FirstName || '',
             last_name: rec.LastName || '',
+            foundation_constituent: rec.usat_Foundation_Constituent__c || '',
             cluster_key: '',
         });
     }

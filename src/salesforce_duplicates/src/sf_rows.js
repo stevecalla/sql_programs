@@ -411,6 +411,7 @@ function to_sf_merge_id_review_row({
         Which_List__c: row.which_list,
         First_Name__c: row.first_name,
         Last_Name__c: row.last_name,
+        Foundation_Constituent__c: row.foundation_constituent,
         Consolidated_Group_Key__c: row.cluster_key,
         Merge_Id_Review_Logic__c:
             "account compared to its Salesforce merge ID: in_both / sf_only, or named by which signal flagged it (exact/fuzzy/nickname/multi)",

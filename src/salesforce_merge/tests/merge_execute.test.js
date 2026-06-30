@@ -120,6 +120,19 @@ test('cross-environment: a Sandbox-built set is skipped when Production data is 
   delete process.env.MERGE_ENABLE_EXECUTION;
 });
 
+// org_id is captured server-side at queue-add time, so the org guard is always-on: a set whose
+// stamped org id differs from the connected org is skipped even if the environment label matches
+// (protects against two same-labeled orgs, e.g. two sandboxes).
+test('org guard: a set whose org id differs from the connected org is skipped', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const d = deps({ entry: { org_id: 'ORGX' } }); // connected org is ORG1 (sf.get_org_identity), env matches
+  const out = await mexec.process([1], { mode: 'execute', confirm: 'MERGE' }, d);
+  assert.equal(out.skipped, 1);
+  assert.equal(d.calls.merges.length, 0);
+  assert.match(d.calls.history[0].reason, /org mismatch/);
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
 // Idempotency layer 1: only `approved` entries are processed. A set already `done` is not in the
 // approved list, so passing its id is a no-op (can't be merged twice).
 test('idempotency: a done set (not in approved list) is never reprocessed', async () => {

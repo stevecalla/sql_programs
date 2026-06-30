@@ -96,6 +96,18 @@ test('add persists field_overrides + child_counts as JSON; list parses them back
   assert.deepEqual(rows[0].child_counts, { total: 5 });
 });
 
+test('add persists environment + org_id (alignment lineage for cross-env safety)', async () => {
+  let stored = null;
+  const query = async (sql, params) => {
+    if (/^INSERT/i.test(sql)) { stored = params; return { insertId: 8 }; }
+    if (/WHERE source_key = \? AND survivor_account/i.test(sql)) return [];
+    return {};
+  };
+  await q.add({ source_key: 'M1', survivor_account: 'A', loser_accounts: ['B'], environment: 'Sandbox', org_id: '00DSB000' }, query);
+  assert.equal(stored[11], 'Sandbox'); // environment column
+  assert.equal(stored[12], '00DSB000'); // org_id column
+});
+
 test('set_status approves only queued entries', async () => {
   const calls = [];
   const query = async (sql, params) => { calls.push({ sql, params }); if (/^UPDATE/i.test(sql)) return { affectedRows: 2 }; return {}; };

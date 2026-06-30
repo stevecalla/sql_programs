@@ -52,6 +52,8 @@ export const api = {
   mergeCancel: (kind = 'merge') => req('/api/merge/cancel', { method: 'POST', body: JSON.stringify({ kind }) }),
   mergeRestoreList: () => req('/api/merge/restore'),
   mergeRestore: (ids, opts = {}) => req('/api/merge/restore', { method: 'POST', body: JSON.stringify({ ids, ...opts }) }),
+  mergeRecreateList: () => req('/api/merge/recreate'),
+  mergeRecreate: (ids, opts = {}) => req('/api/merge/recreate', { method: 'POST', body: JSON.stringify({ ids, ...opts }) }),
   recycleBin: () => req('/api/merge/recycle-bin'),
   stampFields: () => req('/api/merge/stamp-fields'),
   snapshotRows: () => req('/api/merge/snapshot'),

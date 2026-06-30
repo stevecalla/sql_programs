@@ -90,6 +90,7 @@ export default function SelectMerges() {
   const [midState, setMidState] = useState('');
   const [memState, setMemState] = useState('');
   const [bkState, setBkState] = useState('');
+  const [foundationState, setFoundationState] = useState(''); // '' all · 'has' · 'none' (both sources)
 
   const [clusters, setClusters] = useState([]);
   const [total, setTotal] = useState(0);
@@ -141,12 +142,12 @@ export default function SelectMerges() {
 
   useEffect(() => {
     const load = source === 'merge_id'
-      ? api.mergeGroups({ page, page_size: PAGE, q: filter, bucket: bkState })
-      : api.duplicates({ page, page_size: PAGE, sort: 'size', dir: 'desc', q: filter, merge_id_state: midState, member_number_state: memState });
+      ? api.mergeGroups({ page, page_size: PAGE, q: filter, bucket: bkState, foundation_state: foundationState })
+      : api.duplicates({ page, page_size: PAGE, sort: 'size', dir: 'desc', q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState });
     load.then((r) => { setClusters(r.rows || []); setTotal(Number(r.total) || 0); }).catch((e) => setErr(e.message));
-  }, [source, page, filter, midState, memState, bkState]);
+  }, [source, page, filter, midState, memState, bkState, foundationState]);
 
-  useEffect(() => { setRailSel(new Set()); setSelectAllMatching(false); setBulkMsg(''); }, [source, filter, bkState]);
+  useEffect(() => { setRailSel(new Set()); setSelectAllMatching(false); setBulkMsg(''); }, [source, filter, bkState, foundationState]);
 
   const loadQueue = useCallback(() => {
     api.mergeQueue(qStatus).then((r) => { const rows = r.rows || []; setQueue(rows); setQSel(new Set(rows.map((x) => x.id))); }).catch((e) => setErr(e.message));
@@ -277,7 +278,7 @@ export default function SelectMerges() {
     if (!window.confirm(`Add ${n} merge${n === 1 ? '' : 's'} to the queue using the survivor cascade (merge id, then lowest membership number)? Groups that need a child-count or oldest tie-break are skipped for single review.`)) return;
     setErr(''); setBulkMsg('');
     try {
-      const payload = selectAllMatching ? { source: 'merge_id', q: filter, bucket: bkState } : { source: 'merge_id', keys: [...railSel] };
+      const payload = selectAllMatching ? { source: 'merge_id', q: filter, bucket: bkState, foundation_state: foundationState } : { source: 'merge_id', keys: [...railSel] };
       const r = await api.mergeQueueBulk(payload);
       setBulkMsg(`Queued ${r.queued}` + (r.skipped ? `, ${r.skipped} already queued` : '') + (r.unresolved ? `, ${r.unresolved} skipped (no clear survivor)` : '') + (r.capped ? ' — capped at 1000' : '') + '.');
       setRailSel(new Set()); setSelectAllMatching(false);
@@ -320,15 +321,29 @@ export default function SelectMerges() {
                   <option value="">All</option><option value="has">Has member #</option><option value="none">No member #</option>
                 </select>
               </div>
+              <div>
+                <div className="muted small" style={{ marginBottom: 3 }}>Foundation</div>
+                <select className="tb-select" value={foundationState} onChange={(e) => { setFoundationState(e.target.value); setPage(1); }}>
+                  <option value="">All</option><option value="has">Is foundation</option><option value="none">Not foundation</option>
+                </select>
+              </div>
             </>
           )}
           {source === 'merge_id' && (
-            <div>
-              <div className="muted small" style={{ marginBottom: 3 }}>Bucket</div>
-              <select className="tb-select" value={bkState} onChange={(e) => { setBkState(e.target.value); setPage(1); }}>
-                <option value="">All</option><option value="in_both">In both</option><option value="sf_only">ID only</option>
-              </select>
-            </div>
+            <>
+              <div>
+                <div className="muted small" style={{ marginBottom: 3 }}>Bucket</div>
+                <select className="tb-select" value={bkState} onChange={(e) => { setBkState(e.target.value); setPage(1); }}>
+                  <option value="">All</option><option value="in_both">In both</option><option value="sf_only">ID only</option>
+                </select>
+              </div>
+              <div>
+                <div className="muted small" style={{ marginBottom: 3 }}>Foundation</div>
+                <select className="tb-select" value={foundationState} onChange={(e) => { setFoundationState(e.target.value); setPage(1); }}>
+                  <option value="">All</option><option value="has">Is foundation</option><option value="none">Not foundation</option>
+                </select>
+              </div>
+            </>
           )}
           <div title={RULE_TOOLTIP} style={{ cursor: 'help' }}>
             <div className="muted small" style={{ marginBottom: 3 }}>Master survivor rule</div>

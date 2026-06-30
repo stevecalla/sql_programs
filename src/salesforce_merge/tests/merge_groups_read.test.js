@@ -33,6 +33,16 @@ test('list_merge_groups applies the bucket filter (in_both / sf_only)', async ()
   assert.ok(f.calls.some((c) => /Bucket__c = \?/i.test(c.sql) && (c.params || []).includes('sf_only')));
 });
 
+test('list_merge_groups foundation_state adds a group-level HAVING', async () => {
+  let f = fake({ groups: [] });
+  await r.list_merge_groups({ foundation_state: 'has' }, f.query);
+  assert.ok(f.calls.some((c) => /HAVING SUM\(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END\) > 0/.test(c.sql)));
+
+  f = fake({ groups: [] });
+  await r.list_merge_groups({ foundation_state: 'none' }, f.query);
+  assert.ok(f.calls.some((c) => /HAVING SUM\(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END\) = 0/.test(c.sql)));
+});
+
 test('merge_group_account_ids returns ids for a merge id', async () => {
   const f = fake({ ids: [{ account: 'A' }, { account: 'B' }, { account: '' }] });
   const ids = await r.merge_group_account_ids('M1', f.query);

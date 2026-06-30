@@ -3,8 +3,9 @@ import { NavLink } from 'react-router-dom';
 
 // Left-rail navigation (mirrors the proxy admin rail): grouped links with an active state.
 const GROUPS = [
-  { items: [{ to: '/', label: 'Dashboard', end: true }] },
+  // { items: [{ to: '/', label: 'Dashboard', end: true }] },
   { grp: 'Review', items: [
+    { to: '/', label: 'Dashboard' },
     { to: '/duplicates', label: 'Duplicates' },
     { to: '/merge-id', label: 'Merge-ID' },
     { to: '/accounts', label: 'All accounts' },
@@ -15,12 +16,16 @@ const GROUPS = [
     { to: '/merge-process', label: 'Process Merges' },
     { to: '/restore', label: 'Restore' },
   ] },
-  { grp: 'Analyze', items: [{ to: '/tuning', label: 'Tuning' }] },
+  { grp: 'Analyze', items: [
+    { to: '/tuning', label: 'Tuning' }
+  ] },
   { grp: 'Admin', items: [
     { to: '/metrics', label: 'Metrics' },
     { to: '/admin', label: 'Admin' },
   ] },
-  { grp: 'Help', items: [{ to: '/reference', label: 'Reference' }] },
+  { grp: 'Help', items: [
+    { to: '/reference', label: 'Reference' }
+  ] },
 ];
 
 const cls = ({ isActive }) => (isActive ? 'on' : undefined);

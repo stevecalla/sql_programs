@@ -12,7 +12,10 @@ function fakeConn(overrides = {}) {
       merge: async (req) => { calls.merge.push(req); return overrides.mergeResult || { success: true, id: req.masterRecord.Id, mergedRecordIds: req.recordToMergeIds }; },
       undelete: async (ids) => { calls.undelete.push(ids); return (overrides.undeleteResult || ids.map((id) => ({ id, success: true }))); },
     },
-    sobject: (type) => ({ update: async (fields) => { calls.update.push({ type, fields }); return overrides.updateResult || { success: true, id: fields.Id }; } }),
+    sobject: (type) => ({
+      update: async (fields) => { calls.update.push({ type, fields }); return overrides.updateResult || { success: true, id: fields.Id }; },
+      create: async (fields) => { calls.create = calls.create || []; calls.create.push({ type, fields }); return overrides.createResult || { success: true, id: 'NEW001' }; },
+    }),
   };
   return conn;
 }
@@ -60,6 +63,17 @@ test('update_record requires Id and passes through', async () => {
   assert.equal(conn.calls.update[0].type, 'Opportunity');
   assert.equal(conn.calls.update[0].fields.AccountId, '001L1');
   assert.equal(r.success, true);
+});
+
+test('create_record requires fields and returns the new id', async () => {
+  const conn = fakeConn();
+  await assert.rejects(() => sw.create_record(conn, 'Account', {}));
+  const r = await sw.create_record(conn, 'Account', { FirstName: 'Lee', LastName: 'One' });
+  assert.equal(conn.calls.create[0].type, 'Account');
+  assert.equal(conn.calls.create[0].fields.LastName, 'One');
+  assert.ok(!conn.calls.create[0].fields.Id, 'no Id on create payload');
+  assert.equal(r.success, true);
+  assert.equal(r.id, 'NEW001');
 });
 
 test('using_dedicated_write_user reflects env', () => {

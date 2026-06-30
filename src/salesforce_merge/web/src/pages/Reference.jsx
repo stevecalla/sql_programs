@@ -125,11 +125,27 @@ export default function Reference() {
         </p>
         <div className="defs">
           <div className="defs-row"><span className="defs-term lg">Sets are stamped with their environment</span><span className="defs-body">when you add a set to the queue it records the environment it was built in. The queue is never auto-cleared, so it survives switching back and forth between Sandbox and Production.</span></div>
-          <div className="defs-row"><span className="defs-term lg">Alignment guard</span><span className="defs-body">before processing each set, the tool compares the set’s stamped environment (and org id, when recorded) to the <em>currently loaded</em> one. A mismatch is <strong>skipped</strong> and logged — never merged. So a Sandbox-built set won’t run while Production is loaded, and vice-versa; switch the loaded data back and it becomes runnable again.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Alignment guard</span><span className="defs-body">before processing each set, the tool compares the set’s stamped environment <em>and org id</em> (both captured when the set was queued) to the <em>currently loaded</em> one. A mismatch is <strong>skipped</strong> and logged — never merged. So a Sandbox-built set won’t run while Production is loaded, and vice-versa; switch the loaded data back and it becomes runnable again.</span></div>
           <div className="defs-row"><span className="defs-term lg">Runs once (status)</span><span className="defs-body">a set that merges successfully is marked <em>done</em> and drops out of the approved list, so it can’t be picked again. Simulate never changes status, so you can rehearse a set as many times as you like.</span></div>
           <div className="defs-row"><span className="defs-term lg">Drift re-check</span><span className="defs-body">every run re-reads the cluster first; if a set’s records are already gone (e.g. merged away earlier), it’s skipped as “records changed since queueing.” Re-running detection after a merge also no longer sees the removed records, so the cluster isn’t re-flagged.</span></div>
           <div className="defs-row"><span className="defs-term lg">Salesforce backstop</span><span className="defs-body">if a set somehow still pointed at an already-merged record, Salesforce rejects the merge — it surfaces as a <em>failed</em> step, not a silent double-merge.</span></div>
           <div className="defs-gate">The most reliable “don’t merge twice” guard is the <em>done</em> status (set for merges run through this tool) plus refreshing the data after merges. Merges done <strong>directly in Salesforce</strong> are caught at run time by Salesforce rather than pre-skipped, since the drift check reads the last loaded dataset, not a live per-record lookup.</div>
+        </div>
+      </div>
+
+      <div className="card ref-card">
+        <h3>Recycle Bin &amp; restoring a merge</h3>
+        <p>
+          A “completed merge” in the restore list is a whole <strong>merge set</strong> — one surviving
+          record plus every account that was merged into it (the “Merged” count) — not a single account.
+          Restoring a set brings <em>all</em> of its merged accounts back together.
+        </p>
+        <div className="defs">
+          <div className="defs-row"><span className="defs-term lg">What the Recycle Bin holds</span><span className="defs-body">when a merge runs, the losing accounts are <strong>soft-deleted</strong> to Salesforce’s Recycle Bin for about <strong>15 days</strong>, each stamped with <code>MasterRecordId</code> = the survivor (that’s the “Merged into” column). While they’re there, they can be brought back with their <em>original ids</em>.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Restore (Recycle-Bin tier)</span><span className="defs-body">the only restore path built today. For an eligible set it <code>undelete</code>s the losers (original ids), re-points their children to the original parents from the pre-merge snapshot, and resets the survivor’s overwritten fields from that snapshot. The set flips <em>done → restored</em>.</span></div>
+          <div className="defs-row"><span className="defs-term lg">All-or-nothing eligibility</span><span className="defs-body">a set is flagged <strong>✓ restorable</strong> only if <em>every</em> loser in it is still in the Recycle Bin. If even one is gone (purged or already restored), the whole set shows <strong>✕ expired</strong> and is skipped; <strong>— unknown</strong> means the eligibility check couldn’t reach Salesforce.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Needs a snapshot</span><span className="defs-body">undelete only brings the records back; the pre-merge <strong>snapshot</strong> supplies where each child reattaches and the survivor’s pre-merge field values. A set with no saved snapshot is skipped even if its losers are still in the bin.</span></div>
+          <div className="defs-gate">Beyond the ~15-day window, or once records are purged, Recycle-Bin restore is impossible — the records no longer exist to undelete. Re-creating them from the backup (with <em>new</em> ids) is a separate, approximate path; see the plan docs for status.</div>
         </div>
       </div>
 

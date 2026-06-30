@@ -87,11 +87,6 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
   };
   const mark = (col) => { const key = sort_key_of(col); return key && sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''; };
   const setFilter = (key, val) => { setPage(1); setColFilters((f) => ({ ...f, [key]: val })); };
-  const doExport = (format) => {
-    const url = exportUrl(exportBase, { q, sort: sortKey || undefined, dir: sortDir, colFilters, ...exportExtra, format });
-    window.open(url, '_blank');
-  };
-
   const placeholder = 'Search ' + (searchCols ? searchCols : 'all columns') + '…';
 
   return (
@@ -115,9 +110,12 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
         )}
         {toolbar}
         {exportBase && (
-          <span className="dt-export">
-            <button type="button" className="btn" title="Download all matching rows as CSV" onClick={() => doExport('csv')}>⬇ CSV</button>
-            <button type="button" className="btn" title="Download all matching rows as Excel" onClick={() => doExport('xlsx')}>⬇ Excel</button>
+          <span className="dl-group dt-export">
+            <span className="muted small">Export</span>
+            <a className="dl-link" title="Download all matching rows as CSV" target="_blank" rel="noreferrer"
+              href={exportUrl(exportBase, { q, sort: sortKey || undefined, dir: sortDir, colFilters, ...exportExtra, format: 'csv' })}>CSV</a>
+            <a className="dl-link" title="Download all matching rows as Excel" target="_blank" rel="noreferrer"
+              href={exportUrl(exportBase, { q, sort: sortKey || undefined, dir: sortDir, colFilters, ...exportExtra, format: 'xlsx' })}>Excel</a>
           </span>
         )}
         <span className="dt-count muted small">

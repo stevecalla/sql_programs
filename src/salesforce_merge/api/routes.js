@@ -26,6 +26,19 @@ const msnap = require('../store/merge_snapshot');
 const sfread = require('../store/salesforce_read');
 const sfwrite = require('../store/salesforce_write');
 
+// Stamp each queued set with the connected org id so the merge-time alignment guard has a hard
+// org pin (not just the Sandbox/Production label). org id is stable per org, so cache it per
+// environment for the process lifetime; this is BEST-EFFORT — if Salesforce is unreachable we
+// store null and queueing still succeeds (the environment label remains the live guard).
+const _orgIdCache = new Map(); // is_test(boolean) -> org_id(string)
+async function resolve_org_id(is_test) {
+  if (_orgIdCache.has(is_test)) return _orgIdCache.get(is_test);
+  let org_id = null;
+  try { const oi = await sfread.get_org_identity({ is_test }); org_id = (oi && oi.org_id) || null; } catch (e) { /* best effort */ }
+  if (org_id) _orgIdCache.set(is_test, org_id); // cache positive results only, so a transient failure can be retried
+  return org_id;
+}
+
 module.exports = function mount(app) {
   app.get('/api/status', function (req, res) {
     res.json({ ok: true, app: 'salesforce_merge', login_configured: store.login_configured(), time: new Date().toISOString() });
@@ -142,7 +155,7 @@ module.exports = function mount(app) {
   };
 
   app.get('/api/duplicates', require_auth, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } })) }); }
+    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state } })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/duplicates/facets', require_auth, async function (req, res) {
@@ -150,7 +163,7 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/duplicates/export', require_auth, async function (req, res) {
-    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } }); }
+    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Members of one consolidated cluster (account-level detail for the Duplicates "view group" popup).
@@ -189,7 +202,7 @@ module.exports = function mount(app) {
 
   // ---- Merge Admin sources + queue ----
   app.get('/api/merge-groups', require_auth, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_merge_groups({ ...page_opts(req), bucket: req.query.bucket })) }); }
+    try { res.json({ ok: true, ...(await reviews.list_merge_groups({ ...page_opts(req), bucket: req.query.bucket, foundation_state: req.query.foundation_state })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/merge-queue', require_auth, async function (req, res) {
@@ -208,7 +221,8 @@ module.exports = function mount(app) {
     try {
       const b = req.body || {};
       const ds0 = await dashboard.dataset_info().catch(() => null);
-      const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key, environment: ds0 ? ds0.environment : null, org_id: b.org_id || null,
+      const org_id = b.org_id || await resolve_org_id(!ds0 || ds0.environment !== 'Production');
+      const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key, environment: ds0 ? ds0.environment : null, org_id,
         survivor_account: b.survivor_account, survivor_contact: b.survivor_contact, survivor_name: b.survivor_name, field_overrides: b.field_overrides, child_counts: b.child_counts,
         loser_accounts: b.loser_accounts, master_rule: b.master_rule, notes: b.notes });
       res.status(201).json({ ok: true, ...r });
@@ -219,12 +233,13 @@ module.exports = function mount(app) {
       const b = req.body || {};
       if (b.source !== 'merge_id') return res.status(400).json({ ok: false, error: 'bulk add is supported for the merge-id source only' });
       const dsb = await dashboard.dataset_info().catch(() => null);
-      const groups = await reviews.resolve_merge_groups({ q: b.q, bucket: b.bucket, keys: b.keys });
+      const org_id = await resolve_org_id(!dsb || dsb.environment !== 'Production'); // resolved once, reused for the whole batch
+      const groups = await reviews.resolve_merge_groups({ q: b.q, bucket: b.bucket, foundation_state: b.foundation_state, keys: b.keys });
       const CAP = 1000;
       const resolvable = groups.filter((g) => g.resolvable);
       const unresolved = groups.length - resolvable.length;
       const capped = resolvable.length > CAP;
-      const entries = resolvable.slice(0, CAP).map((g) => ({ created_by: current_user(req), source_type: 'merge_id', source_key: g.merge_id, survivor_account: g.survivor, survivor_name: g.name, loser_accounts: g.losers, master_rule: g.rule || 'cascade', environment: dsb ? dsb.environment : null }));
+      const entries = resolvable.slice(0, CAP).map((g) => ({ created_by: current_user(req), source_type: 'merge_id', source_key: g.merge_id, survivor_account: g.survivor, survivor_name: g.name, loser_accounts: g.losers, master_rule: g.rule || 'cascade', environment: dsb ? dsb.environment : null, org_id }));
       const r = await mqueue.add_many(entries);
       res.json({ ok: true, queued: r.queued, skipped: r.skipped, unresolved, total: groups.length, capped });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -274,6 +289,18 @@ module.exports = function mount(app) {
       res.json({ ok: true, ...(await mrestore.restore(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) })) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
+  // Secondary queue — sets routed to recreate-from-backup (their losers are gone from the Recycle
+  // Bin). list shows the queue + reasons; recreate is the user-initiated rebuild (typed RECREATE).
+  app.get('/api/merge/recreate', require_auth, async function (req, res) {
+    try { res.json({ ok: true, rows: await mrestore.list_recreatable() }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/merge/recreate', require_auth, async function (req, res) {
+    try {
+      const b = req.body || {};
+      res.json({ ok: true, ...(await mrestore.recreate(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) })) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   // Read-only browse of the Recycle Bin (recently soft-deleted Accounts) for the loaded environment.
   app.get('/api/merge/recycle-bin', require_auth, async function (req, res) {
     try {
@@ -320,7 +347,7 @@ module.exports = function mount(app) {
 
   app.get('/api/merge-id', require_auth, async function (req, res) {
     try {
-      const opts = { ...page_opts(req), filters: { bucket: req.query.bucket } };
+      const opts = { ...page_opts(req), filters: { bucket: req.query.bucket, foundation_state: req.query.foundation_state } };
       const [list, summary] = await Promise.all([reviews.list_merge_id(opts), reviews.merge_id_summary()]);
       res.json({ ok: true, ...list, summary });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -330,7 +357,7 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/merge-id/export', require_auth, async function (req, res) {
-    try { await send_export(req, res, 'merge-id', { ...page_opts(req), filters: { bucket: req.query.bucket } }); }
+    try { await send_export(req, res, 'merge-id', { ...page_opts(req), filters: { bucket: req.query.bucket, foundation_state: req.query.foundation_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
