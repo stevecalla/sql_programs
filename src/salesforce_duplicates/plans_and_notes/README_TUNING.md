@@ -7,7 +7,10 @@ fuzzy, nickname, and the reconciled consolidated clusters, with the criteria sho
 
 It never touches production: the matching runs through a self-contained engine
 (`src/sweep.js`) that reuses the low-level scoring primitives but does **not** modify
-`exact.js` / `fuzzy.js` / `consolidate.js`. The fetched records are streamed once into
+`exact.js` / `fuzzy.js` / `consolidate.js`. Its exact grouping uses the same rule as
+production — **cleaned** first/last names (so `O'Brien`==`OBrien`) and a non-blank gate
+on the required fields — so the `baseline` profile reproduces the production exact
+output; other profiles generalize it by varying which fields are required. The fetched records are streamed once into
 the local DB (table `salesforce_account_duplicate_snapshot`, plus a row in the unified
 run table `salesforce_duplicate_detection_run`) and every
 replay reads from there — there is no JSON snapshot file. The CSV results go to a

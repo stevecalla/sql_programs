@@ -123,8 +123,12 @@ clean_last_name
 gender_normalized
 birthdate_normalized
 composite_zip_five_digit
-exact_duplicate_key                (last+first+gender+birthdate+composite-zip key)
-rule_block_key                     (gender+birthdate+composite-zip blocking key)
+exact_duplicate_key                (CLEANED last+first + gender+birthdate+zip5; "" when
+                                    any is blank — that blank marks an ineligible record,
+                                    so the exact grouping adds WHERE exact_duplicate_key <> '')
+rule_block_key                     (gender+birthdate+zip5 blocking key for fuzzy/nickname;
+                                    "" when any is blank — same self-gating as exact_duplicate_key,
+                                    so a SQL blocking path would use WHERE rule_block_key <> '')
 loaded_at
 ```
 
@@ -233,15 +237,17 @@ Node-side rebuild + sort matches the baseline independently of MySQL.
 ```sql
 SET SESSION group_concat_max_len = 67108864;
 
--- exact_groups_size (all distinct keys)
+-- exact_groups_size (distinct eligible keys; '' = ineligible, excluded)
 SELECT COUNT(DISTINCT exact_duplicate_key) AS n
-FROM salesforce_account_duplicate_snapshot;
+FROM salesforce_account_duplicate_snapshot
+WHERE exact_duplicate_key <> '';
 
 -- the duplicate groups: 2+ records, member IDs in fetch order,
 -- groups ordered by first appearance
 SELECT exact_duplicate_key,
        GROUP_CONCAT(salesforce_account_id ORDER BY load_sequence SEPARATOR ',') AS ids
 FROM salesforce_account_duplicate_snapshot
+WHERE exact_duplicate_key <> ''
 GROUP BY exact_duplicate_key
 HAVING COUNT(*) > 1
 ORDER BY MIN(load_sequence);

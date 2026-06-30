@@ -43,8 +43,13 @@ function composite_zip_raw(row) {
     return billing_zip !== "" ? billing_zip : mailing_zip;
 }
 
+// The composite ZIP used by ALL matching: billing-or-mailing, trimmed to 5 digits,
+// then uppercased/trimmed (norm) so case never splits a match — "M4p1e8" and
+// "M4P1E8" are the same postal code. This is the ONE place ZIP is normalized, so
+// the exact key, the rule-block key, both eligibility gates, and the snapshot's
+// composite_zip_five_digit column all see the identical value.
 function composite_zip(row) {
-    return trim_zip5(composite_zip_raw(row));
+    return norm(trim_zip5(composite_zip_raw(row)));
 }
 
 function make_full_name(row) {
@@ -55,21 +60,52 @@ function make_clean_full_name(row) {
     return `${clean_name(row.FirstName)} ${clean_name(row.LastName)}`.trim();
 }
 
+// Exact-duplicate eligibility — the single, explicit gate. A record can only be
+// an exact duplicate if all five identity fields are present (cleaned first +
+// cleaned last, gender, birthdate, 5-digit ZIP). Every consumer (in-memory
+// exact.js, the SQL path, the snapshot's precomputed key column) goes through
+// this one definition.
+function has_required_exact_fields(row) {
+    return (
+        clean_name(row.LastName) !== "" &&
+        clean_name(row.FirstName) !== "" &&
+        norm(row.cfg_Gender_Identity__pc) !== "" &&
+        norm(row.PersonBirthdate) !== "" &&
+        composite_zip(row) !== ""
+    );
+}
+
+// The exact-duplicate key: CLEANED first + CLEANED last (punctuation/spacing
+// insensitive, so "O'Brien" == "OBrien" and "Anne Marie" == "AnneMarie") +
+// gender + birthdate + 5-digit composite ZIP. Returns "" for any record that
+// fails has_required_exact_fields, so ineligible records never form an exact
+// group — the blank key is the single signal the SQL path filters on
+// (WHERE exact_duplicate_key <> ''). This function is the one source of truth
+// for "what makes two records exact duplicates."
 function make_exact_duplicate_key(row) {
+    if (!has_required_exact_fields(row)) return "";
     return [
-        norm(row.LastName),
-        norm(row.FirstName),
+        clean_name(row.LastName),
+        clean_name(row.FirstName),
         norm(row.cfg_Gender_Identity__pc),
         norm(row.PersonBirthdate),
-        norm(composite_zip(row)),
+        composite_zip(row),
     ].join("|");
 }
 
+// The rule-block key: gender + birthdate + 5-digit composite ZIP — the blocking
+// key for fuzzy/nickname (records sharing it are candidates for name comparison).
+// Mirrors make_exact_duplicate_key: returns "" unless has_required_rule_fields
+// (all three present), so an ineligible record never forms a rule block, and the
+// blank key is the single signal a SQL fuzzy-blocking path filters on
+// (WHERE rule_block_key <> ''). Aligned with the exact key so both keys gate on
+// their required fields the same way.
 function make_rule_key(row) {
+    if (!has_required_rule_fields(row)) return "";
     return [
         norm(row.cfg_Gender_Identity__pc),
         norm(row.PersonBirthdate),
-        norm(composite_zip(row)),
+        composite_zip(row),
     ].join("|");
 }
 
@@ -77,7 +113,7 @@ function has_required_rule_fields(row) {
     return (
         norm(row.cfg_Gender_Identity__pc) !== "" &&
         norm(row.PersonBirthdate) !== "" &&
-        norm(composite_zip(row)) !== ""
+        composite_zip(row) !== ""
     );
 }
 
@@ -91,6 +127,7 @@ module.exports = {
     make_full_name,
     make_clean_full_name,
     make_exact_duplicate_key,
+    has_required_exact_fields,
     make_rule_key,
     has_required_rule_fields,
 };

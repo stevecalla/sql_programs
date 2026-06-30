@@ -18,10 +18,14 @@ Shipped. A third name dimension (nicknames via the `nicknames-curated` npm packa
 plus one consolidated output that unifies exact + fuzzy(90) + nickname into a
 cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it works:
 
-- **Additive / behavior-preserving.** The three baseline files (exact, fuzzy pair,
-  fuzzy group) stay byte-for-byte unchanged as a regression baseline. `exact.js`,
-  `fuzzy.js`, `matcher.js`, and `grouping.js` were **not modified at all** — all new
-  logic lives in new modules (even more conservative than the original plan).
+- **Additive / behavior-preserving (as originally shipped).** The nickname/consolidated
+  work added only new modules; `fuzzy.js`, `matcher.js`, and `grouping.js` were not
+  touched. NOTE (later change): the **exact** rule was subsequently changed on purpose —
+  it now keys on CLEANED first/last names (so "O'Brien"=="OBrien") and requires all five
+  identity fields non-blank (the gate). So the exact baseline is no longer byte-for-byte
+  what it was; `exact.js` + `make_exact_duplicate_key` (normalize.js) carry that rule and
+  every consumer feeds off it. fuzzy/nickname ride along unchanged because they already
+  keyed "is this an exact pair?" on cleaned-name equality (similarity_score === 100).
 - **New modules**: `src/nicknames.js` (NickNamer singleton + a *symmetric*
   `are_nickname_equivalents`, since the package's relation is directional) and
   `src/consolidate.js` (`build_match_edges` does complete-pool exact+fuzzy+nickname
@@ -150,12 +154,19 @@ salesforce_duplicates/
     ids.js                  make_run_id, make_hash, make_external_id (pure)
     normalize.js            field cleaning + key builders (pure); composite_zip
                             trims US ZIPs to first 5 digits (trim_zip5), the single
-                            chokepoint every consumer goes through
+                            chokepoint every consumer goes through. ALSO the single
+                            source of the exact-match rule: make_exact_duplicate_key
+                            (CLEANED first+last so "O'Brien"=="OBrien", + gender +
+                            birthdate + zip5) returns "" unless has_required_exact_fields
+                            (all five non-blank). exact.js / exact_sql.js / consolidate /
+                            sweep all feed off these — no parallel exact engines.
     matcher.js              levenshtein, similarity, rule flags, reason strings (pure)
     grouping.js             UnionFind + build_fuzzy_groups
     step_timer.js           create_step_timer: live [STEP] lines + end-of-run
                             timeline (mirrors event_analysis stage timer)
-    exact.js                detect_exact_duplicates (+ its summary logger)
+    exact.js                detect_exact_duplicates (+ its summary logger); skips
+                            records failing has_required_exact_fields, groups the rest
+                            by make_exact_duplicate_key (cleaned names + gate)
     fuzzy.js                run_fuzzy_matching: candidate filter, rule blocks,
                             pairwise compare (+ its two summary loggers)
     zip_trim.js             build_zip_trim_mapping: reviewable raw -> trimmed
@@ -181,9 +192,11 @@ salesforce_duplicates/
                             transaction (open_local_connection — a dedicated connection;
                             DDL outside, inserts inside) for speed + atomicity. Injectable
                             executor so it's testable without MySQL.
-    exact_sql.js            Phase 2b: SQL-based exact grouping (GROUP BY exact_duplicate_key
-                            HAVING COUNT>1 ORDER BY MIN(load_sequence)); Node rebuilds +
-                            sorts for byte-identical output to exact.js.
+    exact_sql.js            Phase 2b: SQL-based exact grouping (WHERE exact_duplicate_key<>''
+                            GROUP BY exact_duplicate_key HAVING COUNT>1 ORDER BY MIN(load_sequence));
+                            Node rebuilds + sorts for byte-identical output to exact.js. The
+                            WHERE <>'' filter is how the exact gate (defined once in
+                            normalize.js, baked into the key) reaches SQL without re-encoding it.
     database_results.js     Phase 3: the unified run table (salesforce_duplicate_detection_run,
                             the "logbook") written by BOTH the finder and the sweep — one
                             row per run (write_run / read_latest_run); accumulates history.

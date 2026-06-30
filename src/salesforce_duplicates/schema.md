@@ -28,9 +28,11 @@ The fetch is read-only — it never updates, merges, or deletes anything in Sale
 
 The **exact** rule can be approximated natively in SOQL with
 `GROUP BY ... HAVING COUNT(Id) > 1` over last name, first name, gender, birthdate,
-and ZIP — useful for a quick in-platform count. SOQL has no string functions, so it
+and ZIP — useful for a quick in-platform count, but only an approximation. The Node
+rule keys on **cleaned** names (punctuation/spacing removed, so `O'Brien`==`OBrien`)
+and **requires all five fields non-blank** (the gate); SOQL has no string functions, so it
 cannot trim the ZIP to 5 digits (`LEFT()`/`SUBSTRING()` are unavailable and
-`GROUP BY` rejects expressions), fall back to mailing ZIP, or uppercase/trim names.
+`GROUP BY` rejects expressions), fall back to mailing ZIP, strip punctuation, or uppercase/trim names.
 To get the ZIP trim natively, add an Account **formula field** `Zip5__c` =
 `LEFT(BLANKVALUE(BillingPostalCode, PersonMailingPostalCode), 5)` and group on it
 (formula fields are allowed in `GROUP BY`). The Node tool recreates this logic in
@@ -160,14 +162,16 @@ For `Review_Status__c`, use a picklist such as:
 
 This file contains exact duplicate groups.
 
-A group is included when multiple Account records share the same exact duplicate key:
+A group is included when multiple Account records share the same exact duplicate key
+(and every field is present — records missing any are excluded):
 
 ```text
-Exact First Name
-+ Exact Last Name
-+ Exact Gender
-+ Exact Birthdate
-+ Exact Composite ZIP
+Cleaned First Name   (punctuation/spacing removed: "O'Brien" == "OBrien")
++ Cleaned Last Name
++ Gender
++ Birthdate
++ 5-digit Composite ZIP
+(all five required non-blank)
 ```
 
 ### Exact Duplicate Schema

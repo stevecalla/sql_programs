@@ -117,10 +117,16 @@ function run_profile(records, criteria, { namer } = {}) {
     const wF = criteria.weight_first;
     const wL = criteria.weight_last;
 
-    // --- Exact groups: all records grouped by name + the required field values ---
+    // --- Exact groups: cleaned name + the required field values ---
+    // Same rule as production (normalize.make_exact_duplicate_key): CLEANED first +
+    // CLEANED last (so "O'Brien" == "OBrien"), and the record must be eligible —
+    // cleaned names present AND all required rule fields present. At the baseline
+    // criteria (gender+birthdate+zip) this reproduces production exactly; other
+    // profiles generalize it by varying which fields are required.
     const exact_map = new Map();
     for (const r of records) {
-        const key = `${norm(r.LastName)}|${norm(r.FirstName)}|${rule_key(r, criteria)}`;
+        if (clean_name(r.LastName) === '' || clean_name(r.FirstName) === '' || !is_eligible(r, criteria)) continue;
+        const key = `${clean_name(r.LastName)}|${clean_name(r.FirstName)}|${rule_key(r, criteria)}`;
         if (!exact_map.has(key)) exact_map.set(key, []);
         exact_map.get(key).push(r.Id);
     }

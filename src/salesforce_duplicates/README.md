@@ -332,13 +332,16 @@ function composite_zip_raw(row) {
 }
 
 function composite_zip(row) {
-    return trim_zip5(composite_zip_raw(row));
+    return norm(trim_zip5(composite_zip_raw(row)));   // norm = uppercase + trim
 }
 ```
 
 `composite_zip()` is the single place ZIP normalization happens; every consumer
-(the exact key, the fuzzy rule-block key, the required-field check, the matcher
-flags, and all output rows) goes through it, so the trim propagates everywhere.
+(the exact key, the fuzzy rule-block key, both eligibility gates, the matcher
+flags, and all output rows) goes through it, so the trim **and** the uppercasing
+propagate everywhere — the exact key and the rule-block key give the ZIP (and
+gender and birthdate) identical treatment. The `norm()` (uppercase) matters for
+non-US codes: `M4p1e8` and `M4P1E8` are the same postal code and must match.
 
 This is done in Node.js because Salesforce formula fields may not be usable in
 SOQL `GROUP BY` queries.
@@ -367,23 +370,48 @@ for inspection.
 The exact duplicate logic builds a key using:
 
 ```text
-LastName
-FirstName
+Cleaned LastName     (clean_name: uppercased, punctuation/spacing removed)
+Cleaned FirstName    (clean_name)
 Gender
 Birthdate
-Composite ZIP
+5-digit Composite ZIP
 ```
 
-In code:
+Two important properties:
+
+- **Names are cleaned, not just normalized.** `clean_name` strips punctuation and
+  spacing, so `O'Brien` == `OBrien` and `Anne Marie` == `AnneMarie` are treated as
+  the same name. (`norm` — uppercase + trim only — is still used for gender and
+  birthdate.)
+- **All five fields are required (the gate).** A record is only eligible to be an
+  exact duplicate if cleaned first, cleaned last, gender, birthdate, and ZIP are all
+  non-blank. Records missing any of them are skipped — they never form a blank-field
+  "exact" group.
+
+Both rules live in **one place** — `make_exact_duplicate_key` /
+`has_required_exact_fields` in `src/normalize.js` — and every consumer (the
+in-memory `exact.js`, the SQL path `exact_sql.js`, the consolidated view, and the
+tuning sweep's baseline) feeds off that single definition. The key function returns
+`""` for an ineligible record, which is exactly how the SQL path filters them
+(`WHERE exact_duplicate_key <> ''`) without re-encoding the rule.
+
+In code (`src/normalize.js`):
 
 ```js
-function makeExactDuplicateKey(row) {
+function has_required_exact_fields(row) {
+    return clean_name(row.LastName) !== "" && clean_name(row.FirstName) !== ""
+        && norm(row.cfg_Gender_Identity__pc) !== "" && norm(row.PersonBirthdate) !== ""
+        && composite_zip(row) !== "";
+}
+
+function make_exact_duplicate_key(row) {
+    if (!has_required_exact_fields(row)) return "";   // ineligible -> no exact key
     return [
-        norm(row.LastName),
-        norm(row.FirstName),
+        clean_name(row.LastName),
+        clean_name(row.FirstName),
         norm(row.cfg_Gender_Identity__pc),
         norm(row.PersonBirthdate),
-        norm(compositeZip(row)),
+        composite_zip(row),
     ].join("|");
 }
 ```

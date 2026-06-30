@@ -20,6 +20,7 @@ const {
     make_full_name,
     make_clean_full_name,
     make_exact_duplicate_key,
+    has_required_exact_fields,
     make_rule_key,
     has_required_rule_fields,
 } = require('../src/normalize');
@@ -90,7 +91,9 @@ describe('composite_zip', () => {
         assert.equal(composite_zip({ BillingPostalCode: '80919-1234' }), '80919');
         assert.equal(composite_zip({ BillingPostalCode: '', PersonMailingPostalCode: '809191234' }), '80919');
     });
-    test('leaves non-US postal codes untouched', () => {
+    test('uppercases non-US codes (case-insensitive) but keeps their shape', () => {
+        assert.equal(composite_zip({ BillingPostalCode: 'M4p1e8' }), 'M4P1E8');
+        assert.equal(composite_zip({ BillingPostalCode: 'k1a 0b1' }), 'K1A 0B1');
         assert.equal(composite_zip({ BillingPostalCode: 'K1A 0B1' }), 'K1A 0B1');
     });
 });
@@ -117,6 +120,18 @@ describe('keys + required fields', () => {
     test('make_rule_key is gender|birthdate|zip', () => {
         assert.equal(make_rule_key(row), 'MALE|1990-01-01|80301');
     });
+    test('make_rule_key returns "" when gender/birthdate/zip is blank (aligned with exact key)', () => {
+        assert.equal(make_rule_key({ ...row, cfg_Gender_Identity__pc: '' }), '');
+        assert.equal(make_rule_key({ ...row, PersonBirthdate: '' }), '');
+        assert.equal(make_rule_key({ ...row, BillingPostalCode: '', PersonMailingPostalCode: '' }), '');
+    });
+    test('exact key and rule key give gender/birthdate/zip identical treatment (incl. case)', () => {
+        const r = { FirstName: 'Bianca', LastName: 'Roth', cfg_Gender_Identity__pc: 'Female', PersonBirthdate: '1985-08-09', BillingPostalCode: 'M4p1e8' };
+        assert.equal(make_exact_duplicate_key(r), 'ROTH|BIANCA|FEMALE|1985-08-09|M4P1E8');
+        assert.equal(make_rule_key(r), 'FEMALE|1985-08-09|M4P1E8');
+        // the gender|birthdate|zip tail of the exact key IS the rule key
+        assert.ok(make_exact_duplicate_key(r).endsWith(make_rule_key(r)));
+    });
     test('has_required_rule_fields needs gender + birthdate + zip', () => {
         assert.equal(has_required_rule_fields(row), true);
         assert.equal(has_required_rule_fields({ ...row, PersonBirthdate: '' }), false);
@@ -127,5 +142,41 @@ describe('keys + required fields', () => {
         const zip4 = make_exact_duplicate_key({ ...row, BillingPostalCode: '80301-1234' });
         assert.equal(zip4, plain);
         assert.equal(make_rule_key({ ...row, BillingPostalCode: '80301-1234' }), 'MALE|1990-01-01|80301');
+    });
+});
+
+describe('make_exact_duplicate_key — cleaned names + gate', () => {
+    const full = {
+        FirstName: 'Jon', LastName: 'Snow',
+        cfg_Gender_Identity__pc: 'Male', PersonBirthdate: '1990-01-01',
+        BillingPostalCode: '80301',
+    };
+    test('uses cleaned names, so punctuation/spacing variants share a key', () => {
+        const a = make_exact_duplicate_key({ ...full, FirstName: 'Anne Marie', LastName: "O'Brien" });
+        const b = make_exact_duplicate_key({ ...full, FirstName: 'AnneMarie',  LastName: 'OBrien' });
+        assert.equal(a, b);
+        assert.equal(a, 'OBRIEN|ANNEMARIE|MALE|1990-01-01|80301');
+    });
+    test('returns "" when any required field is blank (the gate)', () => {
+        assert.equal(make_exact_duplicate_key({ ...full, BillingPostalCode: '', PersonMailingPostalCode: '' }), '');
+        assert.equal(make_exact_duplicate_key({ ...full, cfg_Gender_Identity__pc: '' }), '');
+        assert.equal(make_exact_duplicate_key({ ...full, PersonBirthdate: '' }), '');
+        assert.equal(make_exact_duplicate_key({ ...full, FirstName: '' }), '');
+        assert.equal(make_exact_duplicate_key({ ...full, LastName: '.' }), ''); // clean_name('.') === ''
+    });
+});
+
+describe('has_required_exact_fields', () => {
+    const full = {
+        FirstName: 'Jon', LastName: 'Snow',
+        cfg_Gender_Identity__pc: 'Male', PersonBirthdate: '1990-01-01',
+        BillingPostalCode: '80301',
+    };
+    test('true only when cleaned first/last + gender + birthdate + ZIP are all present', () => {
+        assert.equal(has_required_exact_fields(full), true);
+        assert.equal(has_required_exact_fields({ ...full, BillingPostalCode: '', PersonMailingPostalCode: '' }), false);
+        assert.equal(has_required_exact_fields({ ...full, cfg_Gender_Identity__pc: '' }), false);
+        assert.equal(has_required_exact_fields({ ...full, PersonBirthdate: '' }), false);
+        assert.equal(has_required_exact_fields({ ...full, FirstName: ' ' }), false); // clean -> ''
     });
 });
