@@ -97,12 +97,14 @@ describe('paged reads', () => {
     assert.ok(/Bucket__c NOT IN \('in_both', 'sf_only'\)/.test(sel.sql));
   });
 
-  test('accounts use prefix search (term%) so the index applies', async () => {
+  test('accounts use prefix search (term%) on indexed columns; email + match are contains', async () => {
     const { q, calls } = recorder([{ account: '001' }]);
     await reviews.list_accounts({ q: 'smi' }, q);
     const sel = calls.find((c) => /salesforce_account_id AS/.test(c.sql) && !/COUNT/.test(c.sql));
+    // name / ID / member columns use the anchored 'smi%' so the snapshot B-tree index applies
     assert.ok(sel.params.includes('smi%'));
-    assert.ok(!sel.params.includes('%smi%'));
+    // email + match_composition are opted into contains-anywhere ('%smi%') on purpose (contains_cols)
+    assert.ok(sel.params.includes('%smi%'));
   });
 });
 

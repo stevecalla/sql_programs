@@ -12,9 +12,12 @@ the existing `salesforce_duplicate_*` tables in `usat_sales_db`.
 ```
 server_salesforce_merge_8020.js   (repo root)  Express host: JSON API + serves the React build
 src/salesforce_merge/
+  menu.js      interactive launcher (run/build/test + Server & users)
+  admin.js     user-management CLI (add / list / passwd / remove / access)
+  data_dir.js  resolves the external data dir (auth.json + panel_access.json live OUTSIDE the repo)
   auth/        session.js · auth_store.js · panel_access.js · require_auth.js   (signed-cookie auth, file-backed users + .env recovery, per-panel access)
   store/       db.js (shared MySQL pool) · duplicates_read.js (read existing duplicate tables)
-  api/         routes.js  (/api/status, /api/login, /api/logout, /api/me, /api/dashboard)
+  api/         routes.js  (/api/status, /api/login, /api/logout, /api/me, /api/dashboard, /api/admin/*)
   web/         Vite + React app -> builds to web/dist/, which the server serves
   plans_and_notes/   plan, mockups, execution reference, apex
 ```

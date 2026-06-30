@@ -8,9 +8,11 @@ const { sweep_profiles } = require('../store/duplicates_read');
 
 describe('sweep_profiles', () => {
   test('orders baseline first, maps booleans + numbers', async () => {
-    let captured = null;
+    // sweep_profiles issues two reads: the profile table, then the latest sweep run_at. Capture all
+    // calls and assert the profile query is among them (the run_at row has no run_at here -> null).
+    const calls = [];
     const fake = async (sql) => {
-      captured = sql;
+      calls.push(sql);
       return [
         { label: 'baseline', is_baseline: 1, nickname_enabled: 1, rule_fields: 'gender+birthdate+zip',
           fuzzy_threshold: '90', zip_trim_len: '5', total_records: '700682', accounts_in_clusters: '25121',
@@ -19,7 +21,7 @@ describe('sweep_profiles', () => {
       ];
     };
     const { profiles } = await sweep_profiles(fake);
-    assert.match(captured, /ORDER BY is_baseline DESC, ordinal ASC/);
+    assert.ok(calls.some((s) => /ORDER BY is_baseline DESC, ordinal ASC/.test(s)), 'should query the profile table');
     assert.equal(profiles.length, 1);
     assert.equal(profiles[0].is_baseline, true);
     assert.equal(profiles[0].nickname_enabled, true);
