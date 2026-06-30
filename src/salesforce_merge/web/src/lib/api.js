@@ -61,6 +61,12 @@ export const api = {
   refreshStart: (env, scope, job) => req('/api/refresh/start', { method: 'POST', body: JSON.stringify({ env, scope, job }) }),
   refreshStatus: () => req('/api/refresh/status'),
   refreshCancel: () => req('/api/refresh/cancel', { method: 'POST' }),
+  // ---- Admin: user management + panel access (admin only) ----
+  adminUsers: () => req('/api/admin/users'),
+  adminUserSave: (user, pass, role) => req('/api/admin/users', { method: 'POST', body: JSON.stringify({ user, pass, role }) }),
+  adminUserRemove: (user) => req('/api/admin/users/remove', { method: 'POST', body: JSON.stringify({ user }) }),
+  adminPanelAccess: () => req('/api/admin/panel-access'),
+  adminPanelAccessSave: (payload) => req('/api/admin/panel-access', { method: 'POST', body: JSON.stringify(payload) }),
 };
 
 // Flatten a { colFilters: { signal: 'exact' } } map into f_signal=exact params.

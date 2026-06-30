@@ -40,6 +40,17 @@ function run_npm(script, label) {
   });
 }
 
+function run_node(args, label) {
+  console.log(c(DIM, `  Running: node ${args.join(' ')}  (Ctrl-C to stop)\n`));
+  return new Promise((resolve) => {
+    const proc = spawn('node', args, { cwd: REPO_ROOT, stdio: 'inherit', shell: false });
+    proc.on('close', (code) => {
+      console.log(code === 0 ? c(GREEN, `\n  ✓ ${label} done.`) : c(RED, `\n  ✗ ${label} exited (${code}).`));
+      resolve(code);
+    });
+  });
+}
+
 function open_url(url) {
   const cmd = process.platform === 'win32' ? `start "" "${url}"`
             : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
@@ -69,6 +80,14 @@ const SECTIONS = [
   { label: 'TESTING', color: CYAN, items: [
     { id: 8, label: 'Unit tests (node:test)', desc: 'Auth, API routes, dashboard reads — no DB needed', run: 'salesforce_merge_test', cli: 'npm run salesforce_merge_test' },
     { id: 9, label: 'E2E (Playwright)', desc: 'Browser smoke: login -> dashboard (stubs the API)', run: 'salesforce_merge_e2e', cli: 'npm run salesforce_merge_e2e' },
+  ]},
+  { label: 'SERVER & USERS', color: CYAN, items: [
+    { id: 18, label: 'Add / update a user', desc: 'Create a web-app login (username, password, role)', node: ['src/salesforce_merge/admin.js', 'add'], cli: 'node src/salesforce_merge/admin.js add' },
+    { id: 19, label: 'List users', desc: 'Show .env recovery + stored web-app logins', node: ['src/salesforce_merge/admin.js', 'list'], cli: 'node src/salesforce_merge/admin.js list' },
+    { id: 20, label: 'Reset a user password', desc: 'Set a new password for an existing login (hashed)', node: ['src/salesforce_merge/admin.js', 'passwd'], cli: 'node src/salesforce_merge/admin.js passwd' },
+    { id: 21, label: 'Remove a user', desc: 'Delete a stored login (prompts + confirm)', node: ['src/salesforce_merge/admin.js', 'remove'], cli: 'node src/salesforce_merge/admin.js remove' },
+    { id: 22, label: 'Show panel access', desc: 'Print the default + per-user panel allow-list', node: ['src/salesforce_merge/admin.js', 'access'], cli: 'node src/salesforce_merge/admin.js access' },
+    { id: 23, label: 'Auth + access tests', desc: 'auth_store roles, .env recovery, panel access', node: ['--test', 'src/salesforce_merge/tests/auth.test.js'], cli: 'node --test src/salesforce_merge/tests/auth.test.js' },
   ]},
   { label: 'OPEN', color: GREEN, items: [
     { id: 10, label: 'Open dev UI', desc: 'Vite dev server (hot reload) at :5173', open: 'http://localhost:5173', cli: 'open http://localhost:5173' },
@@ -112,6 +131,7 @@ async function main() {
     console.log('');
     if (!it) console.log(c(YELLOW, '  Invalid choice.'));
     else if (it.run) await run_npm(it.run, it.label);
+    else if (it.node) await run_node(it.node, it.label);
     else if (it.open) open_url(it.open);
     else if (it.status) await hit_status();
     await prompt(rl, c(DIM, '\n  Press Enter to continue…'));

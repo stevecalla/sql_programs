@@ -12,7 +12,7 @@ the existing `salesforce_duplicate_*` tables in `usat_sales_db`.
 ```
 server_salesforce_merge_8020.js   (repo root)  Express host: JSON API + serves the React build
 src/salesforce_merge/
-  auth/        session.js · auth_store.js · require_auth.js   (signed-cookie auth, .env admin)
+  auth/        session.js · auth_store.js · panel_access.js · require_auth.js   (signed-cookie auth, file-backed users + .env recovery, per-panel access)
   store/       db.js (shared MySQL pool) · duplicates_read.js (read existing duplicate tables)
   api/         routes.js  (/api/status, /api/login, /api/logout, /api/me, /api/dashboard)
   web/         Vite + React app -> builds to web/dist/, which the server serves
@@ -26,11 +26,18 @@ Add to the repo-root `.env`:
 ```
 MERGE_ADMIN_USER=youradmin
 MERGE_ADMIN_PASS=somethingstrong
+# optional second always-valid recovery admin (e.g. for testing):
+# MERGE_TEST_USER=tester
+# MERGE_TEST_PASS=somethingstrong
 # optional; auto-generated + persisted if omitted:
 # MERGE_SESSION_SECRET=...
 # optional public tunnel (off by default; Cloudflare fronts prod). Needs NGROK_AUTHTOKEN:
 # MERGE_NGROK=true
 ```
+
+`MERGE_ADMIN_*` and `MERGE_TEST_*` are **`.env` recovery accounts** (always valid, role `admin`,
+can't be removed — so you can't lock yourself out). Additional logins are managed at runtime, not in
+`.env` (see **Users & access** below).
 
 The server logs one line per request, and prints a startup banner with the local URLs + ngrok
 status (same pattern as the 8018/8019 servers).
@@ -103,6 +110,26 @@ to `proxy_routes.js` to front it through the proxy.
   merge-ID buckets) read **only** from the existing duplicate tables.
 - Nav shell with the Sandbox⇄Production toggle (cosmetic for now).
 - Shared `DataTable` (search + sort) component.
+
+## Users & access (Admin page)
+
+Modeled on the email-queue's Access pane. Two layers:
+
+- **Logins.** `.env` recovery accounts (`MERGE_ADMIN_*`, `MERGE_TEST_*`, role `admin`, always valid,
+  not removable) plus **stored users** kept in a gitignored `auth.json` OUTSIDE the repo
+  (`<determineOSPath()>/usat_salesforce_merge/auth.json`, override `MERGE_USERS_FILE`) with
+  scrypt-hashed passwords. Manage them on the **Admin** page (`/admin`, admin-only) or from the CLI:
+  `node src/salesforce_merge/admin.js add|list|passwd|remove|access` (also menu items 18–22).
+- **Panel access.** Each non-admin user is governed by a panel allow-list (`panel_access.json`,
+  override `MERGE_PANEL_ACCESS_FILE`): a general **default** (out of the box: every panel except
+  Metrics) plus optional **per-user overrides** (grant Metrics, or restrict to a subset). Admins
+  always see every panel. The **Admin** page itself is gated by the `admin` role, never grantable via
+  panel access. Enforced in two places: the nav hides panels a user can't reach, and the API routes
+  return **403** for a disallowed panel (so it's real, not cosmetic). `GET /api/me` returns the
+  caller's `panels` array for the nav.
+
+Endpoints (all admin-gated): `GET/POST /api/admin/users`, `POST /api/admin/users/remove`,
+`GET/POST /api/admin/panel-access`.
 
 ## What Phase 1 adds (review pages — read-only)
 

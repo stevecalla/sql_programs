@@ -248,6 +248,33 @@ a { color: var(--accent); }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; width: 100%; padding: 9px; margin-top: 8px; }
 .btn.primary:hover { filter: brightness(1.05); color: var(--accent-ink); }
 
+/* Admin / Access pane — ported 1:1 from the email-queue admin Access pane for visual parity.
+   Scoped under .access-pane so it never collides with the global .grid (a CSS grid) or the
+   full-width .btn.primary used elsewhere in this app. */
+.access-pane .ad-card { background: transparent; margin-bottom: 16px; }
+.access-pane .ad-card h2 { font-size: 12px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--dim); }
+.access-pane .mut { color: var(--dim); font-size: 13px; }
+.access-pane .pill { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 10px; display: inline-block; }
+.access-pane .pill.admin { background: var(--accent-soft); color: var(--accent); }
+.access-pane .pill.user { background: rgba(46,117,182,.16); color: #2e75b6; }
+.access-pane .pill.env { border: 1px solid var(--line); color: var(--dim); }
+.access-pane .pill.stored { background: rgba(127,127,127,.12); color: var(--ink); }
+.access-pane table.acl-grid { width: 100%; border-collapse: collapse; font-size: 14px; }
+.access-pane table.acl-grid td, .access-pane table.acl-grid th { padding: 7px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+.access-pane table.acl-grid th { font-size: 12px; color: var(--dim); font-weight: 600; }
+.access-pane .act-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.access-pane .qlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 16px; margin: 12px 0; }
+.access-pane .qlist label { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink); }
+.access-pane .btn { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 9px; padding: 7px 13px; font: inherit; font-weight: 600; font-size: 13px; line-height: 1; cursor: pointer; min-height: 0; width: auto; margin: 0; }
+.access-pane .btn:hover { border-color: var(--accent); color: var(--accent); }
+.access-pane .btn.primary { background: var(--accent); color: #fff; border-color: transparent; width: auto; padding: 7px 13px; margin: 0; }
+.access-pane .btn.primary:hover { filter: brightness(1.05); color: #fff; }
+.access-pane .btn.ghost.sm { padding: 4px 9px; font-size: 12px; }
+.access-pane input[type="text"], .access-pane input[type="password"], .access-pane select { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px; }
+.access-pane .msg { font-size: 13px; margin-left: 8px; }
+.access-pane .msg.ok { color: #16a34a; }
+.access-pane .msg.err { color: var(--accent); }
+
 /* login */
 .login { min-height: 100vh; display: grid; place-items: center; background: var(--brand); padding: 16px; }
 .login .card { width: 320px; padding: 24px; }
