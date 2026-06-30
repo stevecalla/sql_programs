@@ -157,7 +157,7 @@ function create_table_sql(table = SNAPSHOT_TABLE_NAME) {
   billing_postal_code          VARCHAR(32),
   gender_identity              VARCHAR(255),
   person_birthdate             VARCHAR(32),
-  foundation_constituent       VARCHAR(255),
+  foundation_constituent       VARCHAR(32),
   salesforce_merge_id          VARCHAR(255),
   created_date                 DATETIME,
   created_by_id                VARCHAR(20),
@@ -201,16 +201,20 @@ async function add_indexes(executor, table = SNAPSHOT_TABLE_NAME) {
     // R1a — review-page sort/filter/search columns (merge tool's All-accounts view over ~700k rows).
     // Prefix lengths keep each key well under InnoDB's 3072-byte limit. These speed ORDER BY,
     // equality/prefix filters, and the has-merge-id filter; they don't change detection output.
-    await executor(`CREATE INDEX idx_last_first ON \`${table}\` (last_name(100), first_name(100))`, []);
+    // last_name is FULL (no prefix) so the All Accounts default `ORDER BY last_name LIMIT 25`
+    // reads 25 rows from the index instead of filesorting all ~700k rows; first_name stays a
+    // prefix (keeps the key small + still serves prefix name search).
+    await executor(`CREATE INDEX idx_last_first ON \`${table}\` (last_name, first_name(100))`, []);
     await executor(`CREATE INDEX idx_salesforce_merge_id ON \`${table}\` (salesforce_merge_id(64))`, []);
     await executor(`CREATE INDEX idx_member_number ON \`${table}\` (member_number(64))`, []);
     await executor(`CREATE INDEX idx_composite_zip5 ON \`${table}\` (composite_zip_five_digit)`, []);
     await executor(`CREATE INDEX idx_birthdate_normalized ON \`${table}\` (birthdate_normalized)`, []);
     await executor(`CREATE INDEX idx_gender_identity ON \`${table}\` (gender_identity(32))`, []);
-    // Keeps the merge tool's "Match" facet (GROUP BY match_composition) fast over ~700k rows.
-    await executor(`CREATE INDEX idx_match_composition ON \`${table}\` (match_composition(32))`, []);
-    // Keeps the "Foundation" facet/filter fast.
-    await executor(`CREATE INDEX idx_foundation_constituent ON \`${table}\` (foundation_constituent(16))`, []);
+    // Full single-column indexes (no prefix) so the merge tool's "Match" and "Foundation"
+    // facet dropdowns use a loose index scan (a few index reads) instead of a ~700k table
+    // scan per GROUP BY — this is what made All Accounts slow once these facets were added.
+    await executor(`CREATE INDEX idx_match_composition ON \`${table}\` (match_composition)`, []);
+    await executor(`CREATE INDEX idx_foundation_constituent ON \`${table}\` (foundation_constituent)`, []);
 }
 
 // Build one multi-row INSERT for a batch of already-mapped rows. Returns { sql, params }.

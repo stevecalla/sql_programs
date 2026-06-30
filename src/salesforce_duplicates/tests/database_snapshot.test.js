@@ -171,7 +171,7 @@ describe('add_indexes', () => {
         assert.ok(/CREATE INDEX .*rule_block_key\(255\)/.test(calls[1].sql), calls[1].sql);
         assert.ok(/CREATE INDEX .*load_sequence/.test(calls[2].sql), calls[2].sql);
         // R1a review-page indexes
-        assert.ok(/CREATE INDEX idx_last_first .*last_name\(100\), first_name\(100\)/.test(calls[3].sql), calls[3].sql);
+        assert.ok(/CREATE INDEX idx_last_first .*last_name, first_name\(100\)/.test(calls[3].sql), calls[3].sql);
         assert.ok(calls.some((c) => /idx_salesforce_merge_id/.test(c.sql)));
         assert.ok(calls.some((c) => /idx_composite_zip5/.test(c.sql)));
     });

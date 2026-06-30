@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import DatasetStamp from '../components/DatasetStamp.jsx';
 import DataTable from '../components/DataTable.jsx';
-import { api } from '../lib/api.js';
+import { api, exportUrl } from '../lib/api.js';
+
+const fmtAsOf = (s) => { if (!s) return '—'; const d = new Date(s); return Number.isNaN(d.getTime()) ? String(s) : d.toLocaleString(); };
 
 const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString());
 const fmtDelta = (d) => (d === 0 ? '±0' : d > 0 ? '▲ +' + Number(d).toLocaleString() : '▼ −' + Number(Math.abs(d)).toLocaleString());
@@ -55,10 +57,11 @@ const COLUMNS = [
 
 export default function Tuning() {
   const [profiles, setProfiles] = useState(null);
+  const [runAt, setRunAt] = useState(null);
   const [err, setErr] = useState('');
   const [sel, setSel] = useState(null);
   useEffect(() => {
-    api.tuning().then((r) => { setProfiles(r.profiles || []); if (r.profiles && r.profiles[0]) setSel(r.profiles[0].label); })
+    api.tuning().then((r) => { setProfiles(r.profiles || []); setRunAt(r.run_at || null); if (r.profiles && r.profiles[0]) setSel(r.profiles[0].label); })
       .catch((e) => setErr(e.message));
   }, []);
 
@@ -99,6 +102,14 @@ export default function Tuning() {
       </div>
 
       <h3>Profiles — duplicate clusters by signal <span className="muted small" style={{ textTransform: 'none', letterSpacing: 0 }}>(click a row to load it into the funnel)</span></h3>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+        <span className="muted small">Tuning sweep as of <strong>{fmtAsOf(runAt)}</strong> <span style={{ opacity: .7 }}>(runs separately from the dataset above)</span></span>
+        <span className="dl-group" style={{ marginLeft: 'auto' }}>
+          <span className="muted small">Export</span>
+          <a className="dl-link" href={exportUrl('/api/tuning/export', { format: 'csv' })}>CSV</a>
+          <a className="dl-link" href={exportUrl('/api/tuning/export', { format: 'xlsx' })}>Excel</a>
+        </span>
+      </div>
       <DataTable
         columns={COLUMNS}
         rows={rows}
@@ -107,10 +118,13 @@ export default function Tuning() {
         onRowClick={(r) => setSel(r.label)}
         rowClass={rowClass}
       />
-      <div className="card ref-card" style={{ marginTop: 12 }}>
-        <h3>Key</h3>
+      <h3>How to read this table</h3>
+      <div className="defs">
         <div className="defs-row"><span className="defs-term lg">Profile</span><span className="defs-body"><code>t90</code> = fuzzy threshold · <code>nick on/off</code> = nickname matching · fields: <strong>G</strong> gender, <strong>B</strong> birthdate, <strong>ZIP</strong> postal code (so <code>G+B</code> = no ZIP).</span></div>
-        <div className="defs-row"><span className="defs-term lg">Exact / Fuzzy / Nickname / Multi</span><span className="defs-body">consolidated clusters by the signal that formed them (Multi = more than one signal); they sum to Total clusters.</span></div>
+        <div className="defs-row"><span className="defs-term lg exact">Exact</span><span className="defs-body">consolidated clusters formed only by exact matches.</span></div>
+        <div className="defs-row"><span className="defs-term lg fuzzy">Fuzzy</span><span className="defs-body">consolidated clusters formed only by fuzzy matches.</span></div>
+        <div className="defs-row"><span className="defs-term lg nickname">Nickname</span><span className="defs-body">consolidated clusters formed only by nickname matches.</span></div>
+        <div className="defs-row"><span className="defs-term lg">Multi</span><span className="defs-body">clusters formed by more than one signal. Exact + Fuzzy + Nickname + Multi sum to Total clusters.</span></div>
         <div className="defs-row"><span className="defs-term lg">Δ vs baseline</span><span className="defs-body">difference in total clusters and in duplicate accounts from the baseline.</span></div>
         <div className="defs-row"><span className="defs-term lg">Duplicate accounts</span><span className="defs-body">total account records inside clusters (sum of cluster sizes).</span></div>
         <div className="defs-gate">

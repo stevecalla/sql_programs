@@ -82,6 +82,10 @@ module.exports = function mount(app) {
     try { res.json({ ok: true, ...(await dashboard.sweep_profiles()) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
+  app.get('/api/tuning/export', require_auth, async function (req, res) {
+    try { await write_rows(req, res, await dashboard.sweep_export_rows(), 'tuning_' + new Date().toISOString().slice(0, 10), 'tuning'); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
 
   app.get('/api/runs', require_auth, async function (req, res) {
     try { res.json({ ok: true, runs: await dashboard.recent_runs(req.query.limit) }); }

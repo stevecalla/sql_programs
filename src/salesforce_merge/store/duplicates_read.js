@@ -140,7 +140,26 @@ async function sweep_profiles(query = real_query) {
     for (const k of numKeys) o[k] = r[k] == null ? null : Number(r[k]);
     return o;
   });
-  return { profiles };
+  // The sweep runs on its own (separate from the finder dataset), so surface its own
+  // "as of" timestamp — the latest run_type='sweep' row in the run logbook.
+  const meta = await safe("SELECT run_at FROM `" + cfg.RUN_TABLE_NAME + "` WHERE run_type = 'sweep' ORDER BY run_at DESC LIMIT 1");
+  const run_at = (meta && meta[0]) ? (meta[0].run_at || null) : null;
+  return { profiles, run_at };
 }
 
-module.exports = { dashboard_counts, dataset_info, recent_runs, sweep_profiles };
+// Flat rows for the Tuning CSV/Excel export — mirrors the on-screen table (profile name,
+// by-signal cluster counts, totals, and Δ vs baseline).
+async function sweep_export_rows(query = real_query) {
+  const { profiles } = await sweep_profiles(query);
+  const base = profiles.find((p) => p.is_baseline) || profiles[0];
+  return profiles.map((p) => ({
+    profile: (p.is_baseline ? 'baseline · ' : '') + 't' + p.fuzzy_threshold + ' · nick ' + (p.nickname_enabled ? 'on' : 'off') + ' · ' + p.rule_fields,
+    exact: p.comp_exact, fuzzy: p.comp_fuzzy, nickname: p.comp_nickname, multi: p.comp_multi,
+    total_clusters: p.consolidated_clusters,
+    delta_clusters: (base && !p.is_baseline) ? p.consolidated_clusters - base.consolidated_clusters : 0,
+    duplicate_accounts: p.accounts_in_clusters,
+    delta_accounts: (base && !p.is_baseline) ? p.accounts_in_clusters - base.accounts_in_clusters : 0,
+  }));
+}
+
+module.exports = { dashboard_counts, dataset_info, recent_runs, sweep_profiles, sweep_export_rows };
