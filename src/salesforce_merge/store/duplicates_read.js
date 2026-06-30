@@ -28,46 +28,41 @@ async function dashboard_counts(query = real_query) {
     signal_breakdown: { accounts: {}, pairs: {}, clusters: {} },
   };
 
-  let r;
-  r = await safe('SELECT COUNT(*) AS n FROM `' + T_SNAP + '`');
-  if (r) out.total_accounts = Number(r[0].n);
+  // All eight figures are independent reads, so fire them concurrently (the DB layer is a pool) and
+  // assemble once — this turns the dashboard load from the SUM of the query latencies into the MAX.
+  const [rTotal, rMerge, rClusters, rPairs, rAccts, rBuckets, rSig, rComp] = await Promise.all([
+    safe('SELECT COUNT(*) AS n FROM `' + T_SNAP + '`'),
+    safe("SELECT COUNT(*) AS n FROM `" + T_SNAP + "` WHERE salesforce_merge_id <> ''"),
+    safe('SELECT COUNT(*) AS n FROM `' + T_CL + '`'),
+    safe('SELECT SUM(CAST(Match_Link_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`'),
+    // Duplicate ACCOUNTS = sum of cluster sizes (the individual records in clusters) — the figure
+    // that reconciles total accounts -> clusters -> pairs on the dashboard.
+    safe('SELECT SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`'),
+    safe('SELECT Bucket__c AS bucket, COUNT(*) AS n FROM `' + T_MR + '` GROUP BY Bucket__c'),
+    // Pairs by signal — the per-signal link counts summed across clusters. A pair is one signal,
+    // so these three sum to the total pairs (no multi bucket for pairs).
+    safe('SELECT SUM(CAST(Exact_Link_Count__c AS UNSIGNED)) AS exact, ' +
+      'SUM(CAST(Fuzzy_Link_Count__c AS UNSIGNED)) AS fuzzy, ' +
+      'SUM(CAST(Nickname_Link_Count__c AS UNSIGNED)) AS nickname FROM `' + T_CL + '`'),
+    // Accounts + clusters by composition — a cluster's Match_Composition__c is "<signal> only" for
+    // single-signal clusters, else a "a + b" mix. Fold mixes into "multi".
+    safe('SELECT Match_Composition__c AS comp, COUNT(*) AS clusters, ' +
+      'SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS accounts FROM `' + T_CL + '` GROUP BY Match_Composition__c'),
+  ]);
 
-  r = await safe("SELECT COUNT(*) AS n FROM `" + T_SNAP + "` WHERE salesforce_merge_id <> ''");
-  if (r) out.merge_id_accounts = Number(r[0].n);
-
-  r = await safe('SELECT COUNT(*) AS n FROM `' + T_CL + '`');
-  if (r) out.clusters = Number(r[0].n);
-
-  r = await safe('SELECT SUM(CAST(Match_Link_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`');
-  if (r) out.duplicate_pairs = Number(r[0].n || 0);
-
-  // Duplicate ACCOUNTS = sum of cluster sizes (the individual records in clusters) — the figure
-  // that reconciles total accounts -> clusters -> pairs on the dashboard.
-  r = await safe('SELECT SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`');
-  if (r) out.accounts_in_clusters = Number(r[0].n || 0);
-
-  r = await safe('SELECT Bucket__c AS bucket, COUNT(*) AS n FROM `' + T_MR + '` GROUP BY Bucket__c');
-  if (r) out.buckets = r.map(function (x) { return { bucket: x.bucket, count: Number(x.n) }; });
-
-  // Pairs by signal — the per-signal link counts summed across clusters. A pair is one
-  // signal, so these three sum to the total pairs (no multi bucket for pairs).
-  r = await safe(
-    'SELECT SUM(CAST(Exact_Link_Count__c AS UNSIGNED)) AS exact, ' +
-    'SUM(CAST(Fuzzy_Link_Count__c AS UNSIGNED)) AS fuzzy, ' +
-    'SUM(CAST(Nickname_Link_Count__c AS UNSIGNED)) AS nickname FROM `' + T_CL + '`');
-  if (r && r[0]) out.signal_breakdown.pairs = {
-    exact: Number(r[0].exact || 0), fuzzy: Number(r[0].fuzzy || 0), nickname: Number(r[0].nickname || 0),
+  if (rTotal) out.total_accounts = Number(rTotal[0].n);
+  if (rMerge) out.merge_id_accounts = Number(rMerge[0].n);
+  if (rClusters) out.clusters = Number(rClusters[0].n);
+  if (rPairs) out.duplicate_pairs = Number(rPairs[0].n || 0);
+  if (rAccts) out.accounts_in_clusters = Number(rAccts[0].n || 0);
+  if (rBuckets) out.buckets = rBuckets.map(function (x) { return { bucket: x.bucket, count: Number(x.n) }; });
+  if (rSig && rSig[0]) out.signal_breakdown.pairs = {
+    exact: Number(rSig[0].exact || 0), fuzzy: Number(rSig[0].fuzzy || 0), nickname: Number(rSig[0].nickname || 0),
   };
-
-  // Accounts + clusters by composition — a cluster's Match_Composition__c is "<signal> only"
-  // for single-signal clusters, else a "a + b" mix. Fold mixes into "multi".
-  r = await safe(
-    'SELECT Match_Composition__c AS comp, COUNT(*) AS clusters, ' +
-    'SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS accounts FROM `' + T_CL + '` GROUP BY Match_Composition__c');
-  if (r) {
+  if (rComp) {
     const acc = { exact: 0, fuzzy: 0, nickname: 0, multi: 0 };
     const cls = { exact: 0, fuzzy: 0, nickname: 0, multi: 0 };
-    for (const x of r) {
+    for (const x of rComp) {
       const comp = String(x.comp || '');
       const key = comp === 'exact only' ? 'exact'
         : comp === 'fuzzy only' ? 'fuzzy'

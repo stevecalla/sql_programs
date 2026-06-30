@@ -35,7 +35,16 @@ function write(o) { fs.mkdirSync(path.dirname(FILE), { recursive: true }); fs.wr
 function load_or_init() { const had = fs.existsSync(FILE); const o = read(); if (!had) write(o); return o; }
 
 // Cookie-signing secret: MERGE_SESSION_SECRET if set, else the one persisted in auth.json.
-function session_secret() { return process.env.MERGE_SESSION_SECRET || load_or_init().session_secret; }
+// Cached in memory after the first resolve — the secret never changes during a process, and this
+// is called on EVERY authenticated request (via require_auth/require_panel), so we must not hit the
+// disk each time (auth.json lives under the OS data dir, where per-request reads are slow on Windows).
+let _secret_cache = null;
+function session_secret() {
+  if (process.env.MERGE_SESSION_SECRET) return process.env.MERGE_SESSION_SECRET;
+  if (_secret_cache) return _secret_cache;
+  _secret_cache = load_or_init().session_secret;
+  return _secret_cache;
+}
 function list_users() { return read().users.map(function (u) { return { user: u.user, role: u.role || 'user' }; }); }
 // .env accounts surfaced for the /admin Access pane (recovery accounts — always valid, never removable).
 function env_accounts() {
