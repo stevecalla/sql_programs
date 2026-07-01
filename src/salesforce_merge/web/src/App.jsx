@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { api } from './lib/api.js';
+import { trackPanelView, trackSession } from './lib/track.js';
 import SideRail from './components/SideRail.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import UserMenu from './components/UserMenu.jsx';
@@ -18,6 +19,7 @@ import SelectMerges from './pages/SelectMerges.jsx';
 import MergeProcess from './pages/MergeProcess.jsx';
 import Restore from './pages/Restore.jsx';
 import Admin from './pages/Admin.jsx';
+import Metrics from './pages/Metrics.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 
 // Map each route path to the panel key the server gates it by, so the router can hide pages a user
@@ -30,10 +32,14 @@ const ROUTE_PANEL = {
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = loading, null = signed out
+  const location = useLocation();
 
   useEffect(() => {
     api.me().then((m) => setUser(m && m.ok ? m : null)).catch(() => setUser(null));
   }, []);
+
+  // Usage analytics: emit a panel_view on every route change once signed in.
+  useEffect(() => { if (user && user.ok) trackPanelView(location.pathname); }, [location.pathname, user]);
 
   if (user === undefined) return <div className="loading">Loading…</div>;
   if (!user) return <Login onLogin={setUser} />;
@@ -57,7 +63,7 @@ export default function App() {
           <span className="header-btns">
             <HeaderRefresh />
             <ThemeToggle />
-            <UserMenu user={user} onLogout={async () => { await api.logout(); setUser(null); }} />
+            <UserMenu user={user} onLogout={async () => { trackSession('logout'); await api.logout(); setUser(null); }} />
           </span>
         </div>
       </header>
@@ -76,7 +82,7 @@ export default function App() {
             <Route path="/restore" element={guard('/restore', <Restore />)} />
             <Route path="/tuning" element={guard('/tuning', <Tuning />)} />
             <Route path="/admin" element={guard('/admin', <Admin />)} />
-            <Route path="/metrics" element={guard('/metrics', <Placeholder title="Metrics" note="Phase 1" />)} />
+            <Route path="/metrics" element={guard('/metrics', <Metrics user={user} />)} />
             <Route path="/reference" element={<Reference />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

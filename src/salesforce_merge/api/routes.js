@@ -13,6 +13,8 @@ const session = require('../auth/session');
 const store = require('../auth/auth_store');
 const panel_access = require('../auth/panel_access');
 const { require_auth, require_admin, require_panel } = require('../auth/require_auth');
+const analytics = require('../metrics/events');
+const metrics_report = require('../metrics/metrics_report');
 const dashboard = require('../store/duplicates_read');
 const reviews = require('../store/reviews_read');
 const refresh = require('../store/refresh_runner');
@@ -40,6 +42,13 @@ async function resolve_org_id(is_test) {
   return org_id;
 }
 
+// is_test for a server-side action log is driven ONLY by the metrics_test=1 parameter (the client
+// attaches it to every request when the admin "flag as test" toggle is on). Nothing else sets is_test.
+function mtest(req) {
+  try { return (String((req.query && req.query.metrics_test) || (req.body && req.body.metrics_test) || '') === '1') ? 1 : 0; }
+  catch (e) { return 0; }
+}
+
 module.exports = function mount(app) {
   app.get('/api/status', function (req, res) {
     res.json({ ok: true, app: 'salesforce_merge', login_configured: store.login_configured(), time: new Date().toISOString() });
@@ -64,6 +73,50 @@ module.exports = function mount(app) {
     const p = session.verify(cookies[session.COOKIE], store.session_secret());
     if (!p) return res.status(401).json({ ok: false });
     res.json({ ok: true, user: p.user, role: p.role || 'user', panels: panel_access.effective_panels(p.user, p.role || 'user') });
+  });
+
+  // ---- Usage analytics (mirrors the email-queue's /api/event + /metrics stack) ----
+  // Browser event ingest — fire-and-forget, counts/enums only. Gated by require_auth so we can stamp
+  // the authoritative actor from the session; the server also stamps env/is_test. Always 204.
+  app.post('/api/event', require_auth, function (req, res) {
+    analytics.ingest_http(req, req.user, req.role).finally(function () { try { res.status(204).end(); } catch (e) { /* gone */ } });
+  });
+  // Metrics dashboard data (the report contract the React /metrics page renders). Panel-gated.
+  app.get('/api/metrics-report', require_panel('metrics'), async function (req, res) {
+    try {
+      const pool = await require('../store/db').get_pool();
+      await analytics.ensure(pool);   // create the events table if no event has been logged yet
+      res.json({ ok: true, report: await metrics_report.build_report(pool, { days: Number(req.query.days) || 7 }) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Purge deliberate test rows (Sandbox / ?metrics_test=1). Admin only.
+  app.post('/api/metrics-purge-test', require_admin, async function (req, res) {
+    try {
+      const pool = await require('../store/db').get_pool();
+      res.json({ ok: true, ...(await metrics_report.purge_test(pool)) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Ask-your-data — NL question -> guarded read-only SELECT over the events table (+ NL answer,
+  // conversation history, raw-SQL mode, model picker, corrections). Panel-gated.
+  app.get('/api/metrics-ask-models', require_panel('metrics'), function (req, res) {
+    try { res.json({ ok: true, ...require('../metrics/ask').list_models() }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/metrics-ask', require_panel('metrics'), async function (req, res) {
+    try {
+      const b = req.body || {};
+      const pool = await require('../store/db').get_pool();
+      res.json(await require('../metrics/ask').ask(pool, { question: b.question, model: b.model, history: b.history, mode: b.mode, sql: b.sql }));
+    } catch (e) { res.status(e.code === 'NO_AI_KEY' ? 501 : 400).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/metrics-ask-correct', require_panel('metrics'), function (req, res) {
+    try {
+      const b = req.body || {};
+      const note = String(b.note || '').trim();
+      if (!note) return res.status(400).json({ ok: false, error: 'no correction text' });
+      const n = require('../metrics/ask').add_correction(note, b.question, b.answer, req.user);
+      res.json({ ok: true, count: n });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
   app.get('/api/dashboard', require_auth, async function (req, res) {
@@ -97,6 +150,7 @@ module.exports = function mount(app) {
   app.post('/api/refresh/start', require_admin, function (req, res) {
     const b = req.body || {};
     const r = refresh.start({ env: b.env, scope: b.scope, job: b.job });
+    analytics.log({ event_name: 'data_build', actor: req.user, role: req.role, panel: 'get-duplicates', is_test: mtest(req), mode: b.scope || null, outcome: r.ok ? 'started' : 'skipped' });
     res.status(r.ok ? 202 : 409).json(r);
   });
   app.get('/api/refresh/status', require_auth, function (req, res) {
@@ -215,8 +269,12 @@ module.exports = function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.post('/api/merge-queue/approve', require_panel('select-merges'), async function (req, res) {
-    try { res.json({ ok: true, ...(await mqueue.set_status((req.body || {}).ids, 'approved')) }); }
-    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    try {
+      const ids = (req.body || {}).ids || [];
+      const r = await mqueue.set_status(ids, 'approved');
+      analytics.log({ event_name: 'queue_approve', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), set_count: Array.isArray(ids) ? ids.length : undefined, outcome: 'ok' });
+      res.json({ ok: true, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/merge-queue/export', require_auth, async function (req, res) {
     try { await write_rows(req, res, await mqueue.list(undefined, req.query.status || null), 'merge_queue_' + new Date().toISOString().slice(0, 10), 'merge_queue'); }
@@ -230,6 +288,7 @@ module.exports = function mount(app) {
       const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key, environment: ds0 ? ds0.environment : null, org_id,
         survivor_account: b.survivor_account, survivor_contact: b.survivor_contact, survivor_name: b.survivor_name, field_overrides: b.field_overrides, child_counts: b.child_counts,
         loser_accounts: b.loser_accounts, master_rule: b.master_rule, notes: b.notes });
+      analytics.log({ event_name: 'queue_add', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), source_type: b.source_type, source_key: b.source_key, set_count: 1, outcome: 'ok' });
       res.status(201).json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
@@ -246,6 +305,7 @@ module.exports = function mount(app) {
       const capped = resolvable.length > CAP;
       const entries = resolvable.slice(0, CAP).map((g) => ({ created_by: current_user(req), source_type: 'merge_id', source_key: g.merge_id, survivor_account: g.survivor, survivor_name: g.name, loser_accounts: g.losers, master_rule: g.rule || 'cascade', environment: dsb ? dsb.environment : null, org_id }));
       const r = await mqueue.add_many(entries);
+      analytics.log({ event_name: 'queue_bulk_add', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), source_type: 'merge_id', set_count: r.queued, outcome: 'ok' });
       res.json({ ok: true, queued: r.queued, skipped: r.skipped, unresolved, total: groups.length, capped });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
@@ -256,7 +316,12 @@ module.exports = function mount(app) {
   app.post('/api/merge/process', require_panel('merge-process'), async function (req, res) {
     try {
       const b = req.body || {};
-      res.json({ ok: true, ...(await mexec.process(b.ids, { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, created_by: current_user(req) })) });
+      const r = await mexec.process(b.ids, { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, created_by: current_user(req) });
+      analytics.log({ event_name: 'merge_run', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req),
+        mode: r.mode || (b.dry_run || b.mode !== 'execute' ? 'simulate' : 'execute'),
+        set_count: r.processed != null ? r.processed : r.sets, account_count: r.merged != null ? r.merged : r.accounts,
+        outcome: r.failed ? 'failed' : 'done' });
+      res.json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/merge/history', require_panel('merge-process'), async function (req, res) {
@@ -291,7 +356,10 @@ module.exports = function mount(app) {
   app.post('/api/merge/restore', require_panel('restore'), async function (req, res) {
     try {
       const b = req.body || {};
-      res.json({ ok: true, ...(await mrestore.restore(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) })) });
+      const r = await mrestore.restore(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) });
+      analytics.log({ event_name: 'restore_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req),
+        mode: r.mode, set_count: r.processed, outcome: r.failed ? 'failed' : (r.armed ? 'done' : 'ok') });
+      res.json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Secondary queue — sets routed to recreate-from-backup (their losers are gone from the Recycle
@@ -303,7 +371,10 @@ module.exports = function mount(app) {
   app.post('/api/merge/recreate', require_panel('restore'), async function (req, res) {
     try {
       const b = req.body || {};
-      res.json({ ok: true, ...(await mrestore.recreate(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) })) });
+      const r = await mrestore.recreate(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) });
+      analytics.log({ event_name: 'recreate_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req),
+        mode: r.mode, set_count: r.processed, account_count: r.recreated, outcome: r.failed ? 'failed' : (r.armed ? 'done' : 'ok') });
+      res.json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Read-only browse of the Recycle Bin (recently soft-deleted Accounts) for the loaded environment.
@@ -346,8 +417,11 @@ module.exports = function mount(app) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.delete('/api/merge-queue/:id', require_panel('select-merges'), async function (req, res) {
-    try { res.json({ ok: true, ...(await mqueue.remove(req.params.id)) }); }
-    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    try {
+      const r = await mqueue.remove(req.params.id);
+      analytics.log({ event_name: 'queue_remove', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), set_count: 1, outcome: 'ok' });
+      res.json({ ok: true, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
   app.get('/api/merge-id', require_panel('merge-id'), async function (req, res) {

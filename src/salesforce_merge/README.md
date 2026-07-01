@@ -141,6 +141,37 @@ Modeled on the email-queue's Access pane. Two layers:
 Endpoints (all admin-gated): `GET/POST /api/admin/users`, `POST /api/admin/users/remove`,
 `GET/POST /api/admin/panel-access`.
 
+## Usage tracking (Metrics page)
+
+Mirrors the email-queue's analytics stack, reusing the shared core (`utilities/analytics/*`: ingest,
+table/migrate, retention, report contract). App-specific bits live in `metrics/`:
+
+- `metrics/metrics_config.js` — `APP`, `TABLE` (`salesforce_merge_events`), retention, and the
+  insertable-column whitelist. **No member PII** — actor (staff username), panel, record-pointer keys
+  and counts/enums only.
+- `metrics/events.js` — server-side fire-and-forget logger (`log`) + the `/api/event` HTTP ingest
+  (`ingest_http`, stamps actor from the session + Sandbox/Production env).
+- `metrics/metrics_report.js` — `build_report()` aggregations (the report contract the dashboard renders).
+- `metrics/ask.js` — "Ask your data": an LLM turns a question into ONE read-only `SELECT` over the
+  events table, a hardened guard enforces read-only/single-statement/this-table-only/`LIMIT`, then it runs.
+
+Events are logged two ways: **server-side + authoritative** for the actions that matter — data
+builds, queue add/approve/bulk/remove, merge runs, restore/recreate (logged from the routes, off the
+result objects) — and **client-side** for views via `web/src/lib/track.js` (`panel_view` on every
+route change, `filter_run`/`search_run`/`report_export` centrally from `DataTable`, `login`/`logout`).
+
+The **Metrics** page (`/metrics`, React, gated by the `metrics` panel) is a faithful React port of
+the email-queue `metrics_dashboard.html` — same intentional layout and Chart.js chart cards
+(`components/ChartCard.jsx`, with the Expand / PNG / CSV / Table toolbar), restyled for merge data via
+the ported `.mx-*` classes and Chart.js loaded from CDN in `web/index.html`. It fetches
+`/api/metrics-report` and renders the stat-card grid, Ask-your-data, a merge funnel, activity-by-day,
+by-panel / by-environment / top-filters / exports charts, most-recent-active-users, an anonymous
+Visitors table (timezone + device + new/returning), top actors, errors, and Health with period
+buttons (Today/7/30/90/1y), auto-refresh, and a purge-test button. Endpoints (all
+gated): `POST /api/event`, `GET /api/metrics-report`, `POST /api/metrics-purge-test`,
+`POST /api/metrics-ask`. Ask-your-data needs `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in the
+repo-root `.env` (optional `MERGE_ASK_MODEL`). See `plans_and_notes/README_TRACKING.md`.
+
 ## What Phase 1 adds (review pages — read-only)
 
 Three server-paged review pages over the existing duplicate tables (no Salesforce calls):
