@@ -3,9 +3,18 @@
 // calls and the export URL stay correct whether the app runs at root or under /merge.
 const BASE = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
 
+// When the metrics_test flag is on, attach metrics_test=1 to EVERY request so all activity (browser
+// events + server-side action logs) is flagged is_test by the single parameter.
+function withMetricsTest(path) {
+  let on = false;
+  try { on = /(?:^|[?&])metrics_test=1(?:&|$)/.test(location.search) || localStorage.getItem('merge_metrics_test') === '1'; } catch (e) { on = false; }
+  if (!on) return path;
+  return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'metrics_test=1';
+}
+
 // Tiny fetch wrapper for the JSON API. Same-origin cookies carry the session.
 async function req(path, opts) {
-  const r = await fetch(BASE + path, Object.assign({
+  const r = await fetch(BASE + withMetricsTest(path), Object.assign({
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
   }, opts));
@@ -67,6 +76,12 @@ export const api = {
   adminUserRemove: (user) => req('/api/admin/users/remove', { method: 'POST', body: JSON.stringify({ user }) }),
   adminPanelAccess: () => req('/api/admin/panel-access'),
   adminPanelAccessSave: (payload) => req('/api/admin/panel-access', { method: 'POST', body: JSON.stringify(payload) }),
+  // ---- Metrics / usage analytics ----
+  metricsReport: (days) => req('/api/metrics-report' + qs({ days })),
+  metricsPurgeTest: () => req('/api/metrics-purge-test', { method: 'POST' }),
+  metricsAskModels: () => req('/api/metrics-ask-models'),
+  metricsAsk: (payload) => req('/api/metrics-ask', { method: 'POST', body: JSON.stringify(payload) }),
+  metricsAskCorrect: (payload) => req('/api/metrics-ask-correct', { method: 'POST', body: JSON.stringify(payload) }),
 };
 
 // Flatten a { colFilters: { signal: 'exact' } } map into f_signal=exact params.

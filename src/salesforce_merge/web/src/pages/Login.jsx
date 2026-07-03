@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../lib/api.js';
+import { trackSession } from '../lib/track.js';
 
 export default function Login({ onLogin }) {
   const [u, setU] = useState('');
@@ -12,6 +13,7 @@ export default function Login({ onLogin }) {
     setErr(''); setBusy(true);
     try {
       const r = await api.login(u, p);
+      trackSession('login');
       onLogin({ ok: true, user: r.user, role: r.role, panels: r.panels });
     } catch (ex) {
       setErr(ex.message);

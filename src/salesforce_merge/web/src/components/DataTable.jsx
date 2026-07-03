@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { exportUrl } from '../lib/api.js';
+import { trackExport, trackFilter, trackSearch, panelForPath } from '../lib/track.js';
 
 // Small inline "copy to clipboard" button for ID-ish cells.
 function CopyButton({ value }) {
@@ -33,6 +35,24 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [elapsed, setElapsed] = useState(0);
+
+  // Usage analytics: derive panel from the route + view from the export base ('/api/duplicates/export'
+  // -> 'duplicates'). Emit filter_run / search_run (debounced) and report_export centrally so every
+  // panel's table is tracked without per-page wiring.
+  const _loc = useLocation();
+  const _panel = panelForPath(_loc.pathname);
+  const _view = (exportBase || '').replace(/^\/api\//, '').replace(/\/export$/, '') || _panel;
+  const _activeFilters = Object.entries(colFilters).filter(([, v]) => v && String(v).trim());
+  useEffect(() => {
+    if (!_activeFilters.length) return;
+    const id = setTimeout(() => { _activeFilters.forEach(([k]) => trackFilter(_panel, _view, k)); }, 800);
+    return () => clearTimeout(id);
+  }, [JSON.stringify(colFilters)]);
+  useEffect(() => {
+    if (!q || !String(q).trim()) return;
+    const id = setTimeout(() => trackSearch(_panel, _view), 800);
+    return () => clearTimeout(id);
+  }, [q]);
 
   const filterable = columns.filter((c) => c.filter);
   const colFiltersKey = JSON.stringify(colFilters);
@@ -113,8 +133,10 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
           <span className="dl-group dt-export">
             <span className="muted small">Export</span>
             <a className="dl-link" title="Download all matching rows as CSV" target="_blank" rel="noreferrer"
+              onClick={() => trackExport(_panel, _view, 'csv')}
               href={exportUrl(exportBase, { q, sort: sortKey || undefined, dir: sortDir, colFilters, ...exportExtra, format: 'csv' })}>CSV</a>
             <a className="dl-link" title="Download all matching rows as Excel" target="_blank" rel="noreferrer"
+              onClick={() => trackExport(_panel, _view, 'xlsx')}
               href={exportUrl(exportBase, { q, sort: sortKey || undefined, dir: sortDir, colFilters, ...exportExtra, format: 'xlsx' })}>Excel</a>
           </span>
         )}
