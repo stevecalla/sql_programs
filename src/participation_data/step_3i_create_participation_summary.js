@@ -94,8 +94,8 @@ async function execute_create_participation_summary() {
     let steps_to_run = {
         create_summary: true,
         index_summary: true,
-        create_flows: false,
-        index_flows: false,
+        create_flows: true,
+        index_flows: true,
     };
 
     try {
