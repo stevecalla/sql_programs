@@ -10,6 +10,9 @@ const { participation_summary_schema } = require('../google_cloud/schemas/schema
 const { query_participation_flows } = require('../google_cloud/queries/query_participation_flows');
 const { participation_flows_schema } = require('../google_cloud/schemas/schema_participation_flows');
 
+const { query_participation_events } = require('../google_cloud/queries/query_participation_events');
+const { participation_events_schema } = require('../google_cloud/schemas/schema_participation_events');
+
 const { execute_load_data_to_bigquery } = require('../google_cloud/step_0_load_main_job');
 
 // EXECUTE LOAD BIQ QUERY — loads the reporting summary + flows tables to BigQuery (mirrors step_3b).
@@ -46,6 +49,19 @@ async function execute_load_big_query_participation_summary_metrics() {
     await execute_load_data_to_bigquery(
         flows_options, datasetId, bucketName, participation_flows_schema,
         `usat_bigquery_${flows_options[0].fileName}`
+    );
+
+    // 3) Events table
+    const events_options = [
+        {
+            fileName: 'all_participation_data_with_membership_match_events',
+            query: (retrieval_batch_size, offset) => query_participation_events(retrieval_batch_size, offset),
+            tableId: 'all_participation_data_with_membership_match_events',
+        }
+    ];
+    await execute_load_data_to_bigquery(
+        events_options, datasetId, bucketName, participation_events_schema,
+        `usat_bigquery_${events_options[0].fileName}`
     );
 
     await logPM2MemoryUsage(app_name);
