@@ -89,6 +89,14 @@ function start_server(port) {
     console.log('  login configured: ' + store.login_configured());
     if (!fs.existsSync(WEB_DIST)) console.log('  NOTE: React app not built yet — run reporting_build (see message at /).');
     console.log('  One log line per request below. Press Ctrl-C to stop.\n');
+
+    // Warm the participation payload cache in the background so the first page load isn't the slow
+    // (first) MySQL build. Best-effort — failures just mean the first request builds on demand.
+    try {
+      require('./src/reporting/store/participation_read').get_bootstrap()
+        .then(function (r) { console.log('  [data] participation payload ready (source: ' + r.source + ')'); })
+        .catch(function (e) { console.warn('  [data] participation warm-up failed: ' + e.message); });
+    } catch (e) { /* ignore */ }
   });
   server.on('error', function (e) {
     if (e && e.code === 'EADDRINUSE') console.error('PORT ' + p + ' is already in use — stop the other process or set REPORTING_PORT.');
