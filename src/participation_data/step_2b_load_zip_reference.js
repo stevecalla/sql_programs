@@ -1,5 +1,5 @@
 // step_2b_load_zip_reference.js
-// Builds usat_zip_lat_lng_reference (ZIP -> lat/lng/city/state/county) directly from BigQuery's public
+// Builds zip_lat_lng_reference (ZIP -> lat/lng/city/state/county) directly from BigQuery's public
 // dataset, then batch-INSERTs it straight into MySQL (no CSV, no file path). Refreshes on every run, so
 // new ZIPs appear automatically. Mirrors step_2a_load_region_table structure (connection/helper/main/exports)
 // but swaps the CSV LOAD for a BigQuery pull + direct multi-row INSERT.
@@ -69,7 +69,7 @@ async function get_zip_rows_from_bigquery() {
     return rows.map((r) => [r.zip_code, r.lat, r.lng, r.city, r.state_code, r.county]);
 }
 
-// Main: drop + create usat_zip_lat_lng_reference, pull from BigQuery, batch-INSERT directly.
+// Main: drop + create zip_lat_lng_reference, pull from BigQuery, batch-INSERT directly.
 async function execute_load_zip_reference() {
     let pool;
     const startTime = performance.now();

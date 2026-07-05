@@ -107,7 +107,7 @@ async function main() {
   const run_step_1  = false; // get all participation data
   const run_step_2  = false; // load participation data
   // const run_step_2a = true; // load region table
-  const run_step_2b = true; // load zip lat/lng reference from BigQuery (usat_zip_lat_lng_reference)
+  const run_step_2b = true; // load zip lat/lng reference from BigQuery (zip_lat_lng_reference)
 
   const run_step_3  = false; // create table participation with membership sales match
   const run_step_3a_1 = false; // load participation with membership sales match to bigquery

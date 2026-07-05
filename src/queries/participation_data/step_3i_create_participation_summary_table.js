@@ -103,13 +103,13 @@ async function create_participation_flows_table(flows_table, base_table) {
 
 // CREATE the events table (Path A: one row per year × sanctioning event, monthly + annual via ROLLUP).
 // Same metric set + logic as the summary (consistent by construction), plus the event's name/city/state/
-// region and a lat/lng for the map pin. lat/lng come from usat_zip_lat_lng_reference (ZIP5 centroid), with
+// region and a lat/lng for the map pin. lat/lng come from zip_lat_lng_reference (ZIP5 centroid), with
 // a ZIP3-average fallback for any event ZIP not present at the 5-digit level. The descriptive event fields
 // are aggregated with MAX (one value per event) so they survive the GROUP BY / ROLLUP.
 async function create_participation_events_table(events_table, base_table) {
     const W = `WHERE t.state_code_events IN (${STATE_LIST}) AND t.start_date_year_races >= ${MIN_YEAR}`;
     const home_state = 't.member_state_code_addresses = t.state_code_events';
-    const zip_ref = 'usat_zip_lat_lng_reference';
+    const zip_ref = 'zip_lat_lng_reference';
 
     return `
         CREATE TABLE ${events_table} AS
