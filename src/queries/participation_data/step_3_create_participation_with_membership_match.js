@@ -463,7 +463,11 @@ async function query_append_index_fields(table_name) {
             ADD INDEX idx_ends_mp (ends_mp),
 
             ADD INDEX idx_real_membership_types_sa (real_membership_types_sa),
-            ADD INDEX idx_new_member_category_6_sa (new_member_category_6_sa)
+            ADD INDEX idx_new_member_category_6_sa (new_member_category_6_sa),
+
+            -- reporting composites: annual GROUP BY (year, event-state) + home/away split
+            ADD INDEX idx_rpt_yr_evstate (start_date_year_races, state_code_events),
+            ADD INDEX idx_rpt_evstate_yr_home (state_code_events, start_date_year_races, member_state_code_addresses)
         ;
     `;
 }
