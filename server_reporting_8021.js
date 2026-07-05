@@ -1,0 +1,102 @@
+#!/usr/bin/env node
+/**
+ * server_reporting_8021.js — web host for the USAT Reporting app (participation maps + future reports).
+ *
+ * Lives at the repo root beside the other server_*.js services (port 8021 follows 8020 salesforce_merge).
+ * Mirrors server_salesforce_merge_8020.js exactly:
+ *   - create_app() builds the Express app (cors, no-cache, JSON API, serves the built React SPA)
+ *   - start_server() listens with NO host arg -> dual-stack '::' (IPv6 ::1 + IPv4 127.0.0.1),
+ *     matching 8018/8019/8020 so a Cloudflare tunnel / the :8000 proxy dialing localhost works.
+ *
+ * Phase 0/1 — READ-ONLY. Reads the participation table in the local MySQL (usat_sales_db). No writes.
+ * The umbrella prefix is '/reporting'; the first page is '/reporting/participation-maps'.
+ * See src/reporting/plans_and_notes/README_REPORTING.md and PHASE_PLAN.md.
+ *
+ * Usage:
+ *   node server_reporting_8021.js                  # default port 8021 (REPORTING_PORT overrides)
+ *   (build the React app first: cd src/reporting/web && npm install && npm run build)
+ *
+ * Importable: tests can call create_app() and listen on port 0.
+ */
+'use strict';
+
+const path = require('path');
+const fs = require('fs');
+const dotenv = require('dotenv');
+// Repo-root .env (LOCAL_MYSQL_*, REPORTING_ADMIN_USER/PASS, REPORTING_SESSION_SECRET) regardless of cwd.
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+const express = require('express');
+const cors = require('cors');
+const mount = require('./src/reporting/api/routes');
+const store = require('./src/reporting/auth/auth_store');
+
+const DEFAULT_PORT = Number(process.env.REPORTING_PORT) || 8021;
+const WEB_DIST = path.join(__dirname, 'src', 'reporting', 'web', 'dist');
+
+function create_app() {
+  const app = express();
+  app.use(cors());
+
+  // No-cache so SPA edits show on reload (same as 8020).
+  app.use(function (req, res, next) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    next();
+  });
+
+  // Lightweight request log — one line per call (same pattern as 8020). Flags the app root '/'
+  // so you can confirm a tunnel/proxy reaches this process.
+  app.use(function (req, res, next) {
+    const ts = new Date().toISOString();
+    if (req.path === '/') console.log('[' + ts + '] GET / -> web app (index.html)  host=' + (req.headers.host || '?'));
+    else console.log('[' + ts + '] ' + req.method + ' ' + req.originalUrl + '  host=' + (req.headers.host || '?'));
+    next();
+  });
+
+  // JSON API (status/login/logout public; the rest auth-gated). Read-only.
+  app.use(express.json({ limit: '5mb' }));
+  mount(app);
+
+  // Serve the built React app (static) with a SPA fallback for client-side routes.
+  if (fs.existsSync(WEB_DIST)) {
+    app.use(express.static(WEB_DIST));
+    app.get(/^\/(?!api\/).*/, function (req, res) {
+      res.sendFile(path.join(WEB_DIST, 'index.html'));
+    });
+  } else {
+    app.get('/', function (req, res) {
+      res.type('html').send(
+        '<h1>USAT Reporting</h1>' +
+        '<p>The React app is not built yet. Run:</p>' +
+        '<pre>cd src/reporting/web\nnpm install\nnpm run build</pre>' +
+        '<p>The JSON API is live now — try <a href="/api/status">/api/status</a>.</p>'
+      );
+    });
+  }
+
+  return app;
+}
+
+function start_server(port) {
+  const p = port || DEFAULT_PORT;
+  const app = create_app();
+  // No host arg -> dual-stack bind (IPv6 + IPv4), matching the other UI servers.
+  const server = app.listen(p, function () {
+    const actual = server.address().port;
+    console.log('\nUSAT Reporting - local server');
+    console.log('  -> http://localhost:' + actual + '/                 (web app)');
+    console.log('  -> http://localhost:' + actual + '/api/status        (health check)');
+    console.log('  login configured: ' + store.login_configured());
+    if (!fs.existsSync(WEB_DIST)) console.log('  NOTE: React app not built yet — run reporting_build (see message at /).');
+    console.log('  One log line per request below. Press Ctrl-C to stop.\n');
+  });
+  server.on('error', function (e) {
+    if (e && e.code === 'EADDRINUSE') console.error('PORT ' + p + ' is already in use — stop the other process or set REPORTING_PORT.');
+    else console.error(e);
+  });
+  return server;
+}
+
+if (require.main === module) start_server();
+
+module.exports = { create_app, start_server };
