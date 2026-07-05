@@ -75,20 +75,25 @@ function toRaw(key, o) {
 async function build_from_mysql() {
   const W = 'WHERE state_code_events IN (' + STATE_LIST + ') AND start_date_year_races IS NOT NULL';
   const homeState = 'member_state_code_addresses = state_code_events';
-  const homeRegion = regionCase('member_state_code_addresses') + ' = ' + regionCase('state_code_events');
 
   const full = process.env.REPORTING_FULL_BUILD === '1';
-  const H = '/*+ MAX_EXECUTION_TIME(60000) */ ';   // cap each query so a slow scan errors instead of hanging
+  const TMO = Number(process.env.REPORTING_QUERY_TIMEOUT_MS) || 120000;
+  const H = '/*+ MAX_EXECUTION_TIME(' + TMO + ') */ ';   // cap each query so a slow scan errors instead of hanging
 
-  // Essential annual aggregates drive byYear + the map — kept lean so bootstrap is fast. The heavier
-  // per-month / flows / events queries are gated behind REPORTING_FULL_BUILD (they want indexes + the
-  // native tabs that consume them, which are still being built).
-  const [annState, annRegion, annNat, upd] = await Promise.all([
-    db.query('SELECT ' + H + 'start_date_year_races AS yr, state_code_events AS k, ' + metricCols(homeState) + ' FROM ' + TABLE + ' ' + W + ' GROUP BY yr, k'),
-    db.query('SELECT ' + H + 'start_date_year_races AS yr, ' + regionCase('state_code_events') + ' AS k, ' + metricCols(homeRegion) + ' FROM ' + TABLE + ' ' + W + ' GROUP BY yr, k'),
+  // Essential annual aggregates drive byYear + the map — kept lean so bootstrap is fast. The region
+  // roll-up (compared two 50-branch CASEs per row) and the monthly / flows / events queries are gated
+  // behind REPORTING_FULL_BUILD; they want indexes / a pre-aggregate table + the native tabs that use them.
+  const state_q = ['SELECT ' + H + 'start_date_year_races AS yr, state_code_events AS k, ' + metricCols(homeState) + ' FROM ' + TABLE + ' ' + W + ' GROUP BY yr, k'];
+  const [annState, annNat, upd] = await Promise.all([
+    db.query(state_q[0]),
     db.query('SELECT ' + H + 'start_date_year_races AS yr, COUNT(id_rr) AS part, COUNT(DISTINCT id_profiles) AS uniq FROM ' + TABLE + ' ' + W + ' GROUP BY yr'),
     db.query('SELECT ' + H + 'MAX(created_at_mtn) AS mx FROM ' + TABLE),
   ]);
+  let annRegion = [];
+  if (full) {
+    annRegion = await db.query('SELECT ' + H + 'start_date_year_races AS yr, ' + regionCase('state_code_events') + ' AS k, ' +
+      metricCols(regionCase('member_state_code_addresses') + ' = ' + regionCase('state_code_events')) + ' FROM ' + TABLE + ' ' + W + ' GROUP BY yr, k');
+  }
 
   const byYear = {}, annualUnique = {}, nat = {};
   annNat.forEach((r) => { nat[r.yr] = { uniq: Number(r.uniq), part: Number(r.part) }; });
@@ -148,24 +153,45 @@ function withTimeout(p, ms) {
   });
 }
 
-async function assemble() {
+let _lastLiveTry = 0;
+const RETRY_MS = Number(process.env.REPORTING_LIVE_RETRY_MS) || 5 * 60 * 1000;
+const BUILD_TIMEOUT_MS = Number(process.env.REPORTING_BUILD_TIMEOUT_MS) || 180000;
+
+// Background live build — upgrades the cache from fixture to MySQL when it succeeds; on failure the
+// cache keeps whatever it had (fixture / last-good live). Never throws to callers (except strict mode).
+async function refreshLive() {
+  _lastLiveTry = Date.now();
   try {
-    const ms = Number(process.env.REPORTING_BUILD_TIMEOUT_MS) || 90000;
-    return { payload: await withTimeout(build_from_mysql(), ms), source: 'mysql' };
+    const payload = await withTimeout(build_from_mysql(), BUILD_TIMEOUT_MS);
+    _cache = { payload, source: 'mysql', at: Date.now() };
+    console.log('[reporting] live participation payload cached from MySQL');
   } catch (e) {
-    if (process.env.REPORTING_STRICT_DB === '1') throw e;
-    console.warn('[reporting] MySQL build failed (' + (e.code || 'error') + '), using fixture: ' + e.message);
-    return load_fixture();
-  }
+    console.warn('[reporting] live build failed (' + (e.code || 'error') + '): ' + e.message + ' — keeping ' + (_cache ? _cache.source : 'no cache'));
+    if (process.env.REPORTING_STRICT_DB === '1') { _building = null; throw e; }
+  } finally { _building = null; }
 }
 
+function seedFixture() {
+  if (_cache) return;
+  try { const r = load_fixture(); _cache = { payload: r.payload, source: 'fixture', at: Date.now() }; } catch (e) { /* no fixture */ }
+}
+
+// Stale-while-revalidate: return the current cache (fixture or last-good live) immediately, and kick a
+// background live build if we don't yet have fresh MySQL data (throttled). Strict mode builds inline so
+// DB/column errors surface for tuning.
 async function get_bootstrap() {
-  if (_cache && (Date.now() - _cache.at) < TTL_MS) return _cache;
-  if (_building) return _building;
-  _building = assemble()
-    .then((r) => { _cache = { payload: r.payload, source: r.source, at: Date.now() }; _building = null; return _cache; })
-    .catch((e) => { _building = null; throw e; });
-  return _building;
+  if (process.env.REPORTING_STRICT_DB === '1') {
+    const payload = await withTimeout(build_from_mysql(), BUILD_TIMEOUT_MS);
+    _cache = { payload, source: 'mysql', at: Date.now() };
+    return _cache;
+  }
+  if (!_cache) seedFixture();
+  const stale = !_cache || _cache.source !== 'mysql' || (Date.now() - _cache.at) > TTL_MS;
+  if (stale && !_building && (Date.now() - _lastLiveTry) > (_cache ? RETRY_MS : 0)) _building = refreshLive();
+  if (_cache) return _cache;
+  if (_building) { try { await _building; } catch (e) { /* fall through */ } }
+  if (_cache) return _cache;
+  const e = new Error('no participation data available'); e.code = 'NO_DATA'; throw e;
 }
 
 module.exports = { get_bootstrap, build_from_mysql, FIXTURE };
