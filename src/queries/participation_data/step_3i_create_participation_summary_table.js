@@ -124,6 +124,8 @@ async function create_participation_events_table(events_table, base_table) {
                    MAX(t.state_code_events) AS event_state,
                    MAX(t.region_name)       AS region_name,
                    LEFT(MAX(t.zip_events), 5) AS zip5,
+                   MAX(DATE(t.start_date_races)) AS event_date,
+                   SUM(t.member_state_code_addresses IN (${STATE_LIST}) AND t.member_state_code_addresses <> t.state_code_events) AS away,
                    ${metric_cols(home_state)}
             FROM ${base_table} t ${W}
             GROUP BY t.start_date_year_races, t.id_sanctioning_events, t.start_date_month_races WITH ROLLUP

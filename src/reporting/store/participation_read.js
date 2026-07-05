@@ -4,6 +4,7 @@
  * reporting tables in local MySQL (usat_sales_db), built by the ETL step_3i:
  *   all_participation_data_with_membership_match_summary  (per year/month x state|region|national)
  *   all_participation_data_with_membership_match_flows     (per year/month x home->event)
+ *   all_participation_data_with_membership_match_events    (per year/month x sanctioning event, + lat/lng)
  * These are a few hundred / few thousand rows, so loads are instant (vs aggregating ~6M rows).
  *
  * The per-year roll-up (36 metrics) is participation_agg.buildYear (a 1:1 port of the POC's build_year);
@@ -19,6 +20,7 @@ const META = require('./mapmeta.json');
 const DB_NAME = 'usat_sales_db';
 const SUMMARY_TABLE = 'all_participation_data_with_membership_match_summary';
 const FLOWS_TABLE = 'all_participation_data_with_membership_match_flows';
+const EVENTS_TABLE = 'all_participation_data_with_membership_match_events';
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'participation_bootstrap.json');
 const TTL_MS = Number(process.env.REPORTING_BOOTSTRAP_TTL_MS) || 60 * 60 * 1000;
@@ -37,10 +39,37 @@ function sumToRaw(r) {
     n(r.home), n(r.turnout) - n(r.home), n(r.ironman), n(r.new_count), n(r.unique_athletes)];
 }
 
+// One events-table row -> the 32-col event array the dashboard expects (mirrors the POC build3 EVCOLS):
+// [state, region, name, sanction_id, date, IRONMAN, participants, races, per-race, adult/race, female%,
+//  male%, female_n, male_n, age%(4-19..60+), home, away, home%, away%, new, repeat, new%, repeat%, unique,
+//  per-participant, lat, lng]. Event %s are integers of turnout; home% is over the known-home base
+//  (home + away), away% = 100 - home% — matching the POC build3 output exactly.
+function evToRow(r) {
+  const n = (x) => (x == null ? 0 : Number(x));
+  const t = n(r.turnout), races = n(r.races), home = n(r.home), away = n(r.away);
+  const fem = n(r.female), male = n(r.male), uniq = n(r.unique_athletes), newc = n(r.new_count);
+  const p0 = (x) => (t ? Math.round(100 * x / t) : 0);          // integer % of turnout
+  const knownHome = home + away;
+  const homep = knownHome ? Math.round(100 * home / knownHome) : 0;
+  const d = r.event_date == null ? null
+    : (r.event_date instanceof Date ? r.event_date.toISOString().slice(0, 10) : String(r.event_date).slice(0, 10));
+  return [
+    r.event_state, r.region_name, r.event_name, n(r.event_id), d, (n(r.ironman) > 0 ? 'Yes' : 'No'),
+    t, races, races ? Math.round(t / races) : 0, races ? Math.round(n(r.adult) / races) : 0,
+    p0(fem), p0(male), fem, male,
+    p0(n(r.age_4_19)), p0(n(r.age_20_29)), p0(n(r.age_30_39)), p0(n(r.age_40_49)), p0(n(r.age_50_59)), p0(n(r.age_60_plus)),
+    home, away, homep, 100 - homep,
+    newc, t - newc, p0(newc), 100 - p0(newc),
+    uniq, uniq ? Math.round(10 * t / uniq) / 10 : 0,
+    r.lat == null ? null : Number(r.lat), r.lng == null ? null : Number(r.lng),
+  ];
+}
+
 async function build_from_mysql() {
-  const [sumRows, flowRows, metaRows] = await Promise.all([
+  const [sumRows, flowRows, evRows, metaRows] = await Promise.all([
     db.query('SELECT * FROM ' + SUMMARY_TABLE),
     db.query('SELECT * FROM ' + FLOWS_TABLE),
+    db.query('SELECT * FROM ' + EVENTS_TABLE),
     db.query("SELECT CREATE_TIME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?", [DB_NAME, SUMMARY_TABLE]),
   ]);
 
@@ -52,7 +81,7 @@ async function build_from_mysql() {
     const yr = String(r.start_date_year_races);
     const mo = r.start_date_month_races; // null = annual roll-up
     if (mo == null) {
-      if (r.geo_level === 'state') { const raw = sumToRaw(r); (stateAnnual[yr] = stateAnnual[yr] || []).push(raw); if (raw[1] > maxParts) maxParts = raw[1]; }
+      if (r.geo_level === 'state') { (stateAnnual[yr] = stateAnnual[yr] || []).push(sumToRaw(r)); }
       else if (r.geo_level === 'region') (regionAnnual[yr] = regionAnnual[yr] || []).push(sumToRaw(r));
       else if (r.geo_level === 'national') nationalAnnual[yr] = r;
     } else {
@@ -71,6 +100,17 @@ async function build_from_mysql() {
     annualUnique[yr] = { s };
   }
 
+  // Events: annual roll-up rows only (one row per event/year) -> pins + Events tab. maxParts = the largest
+  // single-event turnout, which the map uses as the pin size reference.
+  const eventsByYear = {};
+  for (const r of evRows) {
+    if (r.start_date_month_races != null) continue;
+    const yr = String(r.start_date_year_races);
+    const row = evToRow(r);
+    (eventsByYear[yr] = eventsByYear[yr] || []).push(row);
+    if (row[6] > maxParts) maxParts = row[6];
+  }
+
   const odByYM = {};
   for (const f of flowRows) {
     if (f.start_date_month_races == null) continue; // annual rows are redundant (app sums months)
@@ -86,7 +126,7 @@ async function build_from_mysql() {
     colors: META.colors, evcols: META.evcols, fips2region: META.fips2region, ab2region: META.ab2region,
     rshead: META.rshead, names: META.names, abbr: META.abbr, regs: META.regs, regOrder: META.regOrder,
     centroid: META.centroid, name2ab: META.name2ab, meta: META.meta,
-  }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear: {}, lastUpdated, maxParts });
+  }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear, lastUpdated, maxParts });
 }
 
 function load_fixture() {
