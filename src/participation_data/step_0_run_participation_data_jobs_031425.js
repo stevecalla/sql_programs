@@ -13,6 +13,10 @@ const { execute_create_participation_with_membership_match } = require("./step_3
 // TODO: LOAD ALL PARTICIPATION DATA TO BQ / CREATE AGE BUCKETS & BREAKOUT
 const { execute_load_big_query_participation_membership_sales_match } = require('./step_3a_1_load_bq_participation_match_profiles_metrics');
 
+// CREATE & LOAD REPORTING SUMMARY (pre-aggregate for the participation maps dashboard)
+const { execute_create_participation_summary } = require("./step_3i_create_participation_summary");
+const { execute_load_big_query_participation_summary_metrics } = require('./step_3j_load_bq_participation_summary_metrics');
+
 // CREATE & LOAD PARTICIPATION USER PROFILE
 const { execute_create_participation_profile_table } = require("./step_3a_create_participation_match_profile");
 const { execute_load_big_query_participation_profile_metrics } = require('./step_3b_load_bq_participation_match_profiles_metrics');
@@ -99,27 +103,31 @@ async function main() {
 
   console.log(`\n\nPROGRAM START TIME = ${getCurrentDateTime()}`);
 
-  const run_step_1  = true; // get all participation data
-  const run_step_2  = true; // load participation data
+  const run_step_1  = false; // get all participation data
+  const run_step_2  = false; // load participation data
   // const run_step_2a = true; // load region table
 
-  const run_step_3  = true; // create table participation with membership sales match
-  const run_step_3a_1 = true; // load participation with membership sales match to bigquery
+  const run_step_3  = false; // create table participation with membership sales match
+  const run_step_3a_1 = false; // load participation with membership sales match to bigquery
 
-  const run_step_3a = true; // create participation profile (profile_id) table
-  const run_step_3b = true; // load membership participation match profile to bigquery
-  const run_step_3c = true; // create membership participation race (race_id) profile table
-  const run_step_3d = true; // load membership participation match race to bigquery
+  const run_step_3a = false; // create participation profile (profile_id) table
+  const run_step_3b = false; // load membership participation match profile to bigquery
+  const run_step_3c = false; // create membership participation race (race_id) profile table
+  const run_step_3d = false; // load membership participation match race to bigquery
 
-  const run_step_3e = true;  // create ironman behavior profile tables (#1-#3) + CSV export
+  const run_step_3e = false;  // create ironman behavior profile tables (#1-#3) + CSV export
   const run_step_3f = false; // load ironman behavior profile (#3) to bigquery — OFF for now (CSV only)
-  const run_step_3g = true;  // create ironman behavior time-series (#4-#5) + CSV export
+  const run_step_3g = false;  // create ironman behavior time-series (#4-#5) + CSV export
   const run_step_3h = false; // load ironman behavior time-series to bigquery — OFF for now (CSV only)
+
+  // CREATE SUMMARY TABLES FOR PARTICIPATION MAP SERVER
+  const run_step_3i = true; // create reporting summary + flows tables (participation maps pre-aggregate)
+  const run_step_3j = true; // load reporting summary + flows to bigquery
 
   // const run_step_4 = true; // create table membership with participation match
 
-  const run_step_10 = true; // create all_participation_state_rankings_results
-  const run_step_11 = true; // load all_participation_state_rankings_results to bigquery
+  const run_step_10 = false; // create all_participation_state_rankings_results
+  const run_step_11 = false; // load all_participation_state_rankings_results to bigquery
 
   try {
     const stepFunctions = [
@@ -140,6 +148,10 @@ async function main() {
       run_step_3f ? execute_load_big_query_ironman_profile_metrics : null,
       run_step_3g ? execute_create_ironman_timeseries_tables : null,
       run_step_3h ? execute_load_big_query_ironman_timeseries_metrics : null,
+      
+      // CREATE SUMMARY TABLES FOR PARTICIPATION MAP SERVER
+      run_step_3i ? execute_create_participation_summary : null,
+      run_step_3j ? execute_load_big_query_participation_summary_metrics : null,
 
       // run_step_4 ? execute_create_membership_with_participation_match : null,
 
@@ -166,6 +178,10 @@ async function main() {
       `Step #3f - Load ironman behavior profile to BQ: `,
       `Step #3g - Created ironman behavior time-series (#4-#5)`,
       `Step #3h - Load ironman behavior time-series to BQ: `,
+
+      // CREATE SUMMARY TABLES FOR PARTICIPATION MAP SERVER
+      `Step #3i - Created reporting summary + flows tables`,
+      `Step #3j - Load reporting summary + flows to BQ: `,
 
       // `Step #4 - Created membership data with participation match`,
 

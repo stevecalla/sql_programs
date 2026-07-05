@@ -1,5 +1,23 @@
 # Field mapping — participation maps (live MySQL)
 
+## Architecture (Phase 1, final)
+The dashboard reads **pre-aggregated summary tables**, not the 6M-row raw table (which times out on
+live `COUNT(DISTINCT)`). The ETL builds them right after the parent table:
+
+- **step_3i** (`src/participation_data/step_3i_create_participation_summary.js`) creates
+  `all_participation_data_with_membership_match_summary` (per year/month × state|region|national) and
+  `all_participation_data_with_membership_match_flows` (per year/month × home→event), then indexes them.
+- **step_3j** loads both to BigQuery (`membership_reporting`), same pattern as the other tables.
+- Both are wired into `step_0_run_participation_data_jobs_031425.js` right after the parent build.
+- The reporting app (`store/participation_read.js`) reads the summary/flows tables (a few hundred rows)
+  → instant loads. `store/participation_agg.js` rolls the summary rows up into the 36 metrics.
+
+**Region note:** the event region uses the parent's **`region_name`** column (from the `region_data`
+join on `state_code_events`) — it's complete and correct for all 50 states (incl. TN = Southeast). Do
+NOT use `region_name_events` (a different, patchy source). Home region = `region_data` joined on
+`member_state_code_addresses`.
+
+## Raw source
 Source table: **`usat_sales_db.all_participation_data_with_membership_match`** (read-only).
 Grain: one row per participation = **`id_rr`**. Query lives in `store/participation_read.js`; the
 per-year roll-up (36 metrics) is `store/participation_agg.js` (a 1:1 port of the POC's `build3`).
