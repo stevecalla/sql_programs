@@ -92,13 +92,13 @@ async function execute_create_participation_summary() {
     let base_table = 'all_participation_data_with_membership_match';
     let summary_table = 'all_participation_data_with_membership_match_summary';
     let flows_table = 'all_participation_data_with_membership_match_flows';
-    let events_table = 'all_participation_data_with_membership_events';
+    let events_table = 'all_participation_data_with_membership_match_events';
 
     let steps_to_run = {
-        create_summary: true,
-        index_summary: true,
-        create_flows: true,
-        index_flows: true,
+        create_summary: false,
+        index_summary: false,
+        create_flows: false,
+        index_flows: false,
         create_events: true,
         index_events: true,
     };
