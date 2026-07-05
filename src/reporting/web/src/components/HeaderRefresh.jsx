@@ -11,8 +11,10 @@ export default function HeaderRefresh() {
     weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
   }) : null);
   const live = d.source === 'mysql';
+  const tip = (live ? 'Live from local MySQL' : 'Seed fixture — MySQL not wired yet')
+    + (d.last_updated_utc ? ' · source built ' + d.last_updated_utc + ' UTC' : '');
   return (
-    <span className="refresh-badge" title={live ? 'Live from local MySQL' : 'Seed fixture — MySQL not wired yet'}>
+    <span className="refresh-badge" title={tip}>
       <span className={'dot ' + (live ? 'ok' : 'warn')} aria-hidden="true" />
       Last refresh: {when || '—'}{live ? '' : ' (fixture)'}
     </span>

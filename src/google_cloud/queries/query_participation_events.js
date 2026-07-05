@@ -12,7 +12,7 @@ async function query_participation_events(batch_size = 50000, offset = 0) {
             event_state,
             region_name,
             zip5,
-            event_date,
+            DATE_FORMAT(event_date, '%Y-%m-%d') AS event_date,
             away,
             turnout,
             events,
@@ -33,7 +33,9 @@ async function query_participation_events(batch_size = 50000, offset = 0) {
             new_count,
             unique_athletes,
             lat,
-            lng
+            lng,
+            DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') AS created_at_mtn,
+            DATE_FORMAT(created_at_utc, '%Y-%m-%d %H:%i:%s') AS created_at_utc
         FROM all_participation_data_with_membership_match_events
         ORDER BY start_date_year_races, event_id, start_date_month_races
         LIMIT ${batch_size} OFFSET ${offset}

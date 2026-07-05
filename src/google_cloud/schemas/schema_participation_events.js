@@ -32,6 +32,8 @@ const participation_events_schema = [
   { "name": "unique_athletes", "mode": "NULLABLE", "type": "INTEGER", "description": "Distinct athletes (id_profiles)", "fields": [] },
   { "name": "lat", "mode": "NULLABLE", "type": "FLOAT", "description": "Event latitude (ZIP5 centroid; ZIP3 fallback)", "fields": [] },
   { "name": "lng", "mode": "NULLABLE", "type": "FLOAT", "description": "Event longitude (ZIP5 centroid; ZIP3 fallback)", "fields": [] },
+  { "name": "created_at_mtn", "mode": "NULLABLE", "type": "DATETIME", "description": "Source data build timestamp (Mountain), carried from the parent participation table", "fields": [] },
+  { "name": "created_at_utc", "mode": "NULLABLE", "type": "DATETIME", "description": "Source data build timestamp (UTC), carried from the parent participation table", "fields": [] },
 ];
 
 module.exports = {

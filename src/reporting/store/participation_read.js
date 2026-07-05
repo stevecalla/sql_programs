@@ -66,11 +66,10 @@ function evToRow(r) {
 }
 
 async function build_from_mysql() {
-  const [sumRows, flowRows, evRows, metaRows] = await Promise.all([
+  const [sumRows, flowRows, evRows] = await Promise.all([
     db.query('SELECT * FROM ' + SUMMARY_TABLE),
     db.query('SELECT * FROM ' + FLOWS_TABLE),
     db.query('SELECT * FROM ' + EVENTS_TABLE),
-    db.query("SELECT CREATE_TIME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?", [DB_NAME, SUMMARY_TABLE]),
   ]);
 
   const stateAnnual = {}, regionAnnual = {}, nationalAnnual = {};
@@ -118,15 +117,20 @@ async function build_from_mysql() {
     (odByYM[key] = odByYM[key] || []).push([f.home_state, f.event_state, Number(f.participations)]);
   }
 
-  const lastUpdated = metaRows && metaRows[0] && metaRows[0].t ? new Date(metaRows[0].t).toLocaleString('en-US', {
+  // "Last refresh" = the source data's own build timestamp, carried from the parent participation table
+  // into the summary/flows/events tables (identical across all rows). MTN is shown; UTC feeds the tooltip.
+  const fmtTs = (v) => (v == null ? null : new Date(v).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
-  }) : null;
+  }));
+  const src0 = sumRows[0] || {};
+  const lastUpdated = fmtTs(src0.created_at_mtn);
+  const lastUpdatedUtc = fmtTs(src0.created_at_utc);
 
   return Object.assign({}, {
     colors: META.colors, evcols: META.evcols, fips2region: META.fips2region, ab2region: META.ab2region,
     rshead: META.rshead, names: META.names, abbr: META.abbr, regs: META.regs, regOrder: META.regOrder,
     centroid: META.centroid, name2ab: META.name2ab, meta: META.meta,
-  }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear, lastUpdated, maxParts });
+  }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear, lastUpdated, lastUpdatedUtc, maxParts });
 }
 
 function load_fixture() {

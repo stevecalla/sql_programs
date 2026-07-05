@@ -81,7 +81,8 @@ module.exports = function mount(app) {
     try {
       const r = await participation.get_bootstrap();
       res.json({ ok: true, source: r.source, generated_at: new Date(r.at).toISOString(),
-        last_updated: (r.payload && r.payload.lastUpdated) || null });
+        last_updated: (r.payload && r.payload.lastUpdated) || null,
+        last_updated_utc: (r.payload && r.payload.lastUpdatedUtc) || null });
     } catch (e) {
       res.status(e.code === 'NO_DATA' ? 503 : 500).json({ ok: false, error: e.message, code: e.code || null });
     }

@@ -95,10 +95,10 @@ async function execute_create_participation_summary() {
     let events_table = 'all_participation_data_with_membership_match_events';
 
     let steps_to_run = {
-        create_summary: false,
-        index_summary: false,
-        create_flows: false,
-        index_flows: false,
+        create_summary: true,
+        index_summary: true,
+        create_flows: true,
+        index_flows: true,
         create_events: true,
         index_events: true,
     };

@@ -23,6 +23,8 @@ const participation_summary_schema = [
   { "name": "ironman", "mode": "NULLABLE", "type": "INTEGER", "description": "IRONMAN participations", "fields": [] },
   { "name": "new_count", "mode": "NULLABLE", "type": "INTEGER", "description": "New athletes (created_year)", "fields": [] },
   { "name": "unique_athletes", "mode": "NULLABLE", "type": "INTEGER", "description": "Distinct athletes (id_profiles)", "fields": [] },
+  { "name": "created_at_mtn", "mode": "NULLABLE", "type": "DATETIME", "description": "Source data build timestamp (Mountain), carried from the parent participation table", "fields": [] },
+  { "name": "created_at_utc", "mode": "NULLABLE", "type": "DATETIME", "description": "Source data build timestamp (UTC), carried from the parent participation table", "fields": [] },
 ];
 
 module.exports = {

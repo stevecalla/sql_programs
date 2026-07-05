@@ -6,6 +6,8 @@ const participation_flows_schema = [
   { "name": "home_state", "mode": "NULLABLE", "type": "STRING", "description": "Athlete home state (member_state_code_addresses)", "fields": [] },
   { "name": "event_state", "mode": "NULLABLE", "type": "STRING", "description": "Event state (state_code_events)", "fields": [] },
   { "name": "participations", "mode": "NULLABLE", "type": "INTEGER", "description": "Cross-state participations (home != event)", "fields": [] },
+  { "name": "created_at_mtn", "mode": "NULLABLE", "type": "DATETIME", "description": "Source data build timestamp (Mountain), carried from the parent participation table", "fields": [] },
+  { "name": "created_at_utc", "mode": "NULLABLE", "type": "DATETIME", "description": "Source data build timestamp (UTC), carried from the parent participation table", "fields": [] },
 ];
 
 module.exports = {
