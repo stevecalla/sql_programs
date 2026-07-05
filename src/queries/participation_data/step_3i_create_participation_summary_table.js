@@ -101,6 +101,54 @@ async function create_participation_flows_table(flows_table, base_table) {
     `;
 }
 
+// CREATE the events table (Path A: one row per year × sanctioning event, monthly + annual via ROLLUP).
+// Same metric set + logic as the summary (consistent by construction), plus the event's name/city/state/
+// region and a lat/lng for the map pin. lat/lng come from usat_zip_lat_lng_reference (ZIP5 centroid), with
+// a ZIP3-average fallback for any event ZIP not present at the 5-digit level. The descriptive event fields
+// are aggregated with MAX (one value per event) so they survive the GROUP BY / ROLLUP.
+async function create_participation_events_table(events_table, base_table) {
+    const W = `WHERE t.state_code_events IN (${STATE_LIST}) AND t.start_date_year_races >= ${MIN_YEAR}`;
+    const home_state = 't.member_state_code_addresses = t.state_code_events';
+    const zip_ref = 'usat_zip_lat_lng_reference';
+
+    return `
+        CREATE TABLE ${events_table} AS
+        SELECT ev.*,
+               ROUND(COALESCE(z.lat, z3.lat), 6) AS lat,
+               ROUND(COALESCE(z.lng, z3.lng), 6) AS lng
+        FROM (
+            SELECT t.start_date_year_races, t.start_date_month_races,
+                   t.id_sanctioning_events AS event_id,
+                   MAX(t.name_events)       AS event_name,
+                   MAX(t.city_events)       AS event_city,
+                   MAX(t.state_code_events) AS event_state,
+                   MAX(t.region_name)       AS region_name,
+                   LEFT(MAX(t.zip_events), 5) AS zip5,
+                   ${metric_cols(home_state)}
+            FROM ${base_table} t ${W}
+            GROUP BY t.start_date_year_races, t.id_sanctioning_events, t.start_date_month_races WITH ROLLUP
+            HAVING t.id_sanctioning_events IS NOT NULL
+        ) ev
+        LEFT JOIN ${zip_ref} z ON z.zip5 = ev.zip5
+        LEFT JOIN (
+            SELECT LEFT(zip5, 3) AS zip3, AVG(lat) AS lat, AVG(lng) AS lng
+            FROM ${zip_ref}
+            GROUP BY LEFT(zip5, 3)
+        ) z3 ON z3.zip3 = LEFT(ev.zip5, 3)
+        ;
+    `;
+}
+
+async function query_append_index_fields_events(events_table) {
+    return `
+        ALTER TABLE ${events_table}
+            ADD INDEX idx_events_yr_month (start_date_year_races, start_date_month_races),
+            ADD INDEX idx_events_yr_event (start_date_year_races, event_id),
+            ADD INDEX idx_events_yr_state (start_date_year_races, event_state)
+        ;
+    `;
+}
+
 async function query_append_index_fields_summary(summary_table) {
     return `
         ALTER TABLE ${summary_table}
@@ -122,6 +170,8 @@ async function query_append_index_fields_flows(flows_table) {
 module.exports = {
     create_participation_summary_table,
     create_participation_flows_table,
+    create_participation_events_table,
     query_append_index_fields_summary,
     query_append_index_fields_flows,
+    query_append_index_fields_events,
 };

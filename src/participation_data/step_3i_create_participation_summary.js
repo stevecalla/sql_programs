@@ -10,8 +10,10 @@ const { query_drop_table } = require("../queries/create_drop_db_table/queries_dr
 const {
     create_participation_summary_table,
     create_participation_flows_table,
+    create_participation_events_table,
     query_append_index_fields_summary,
     query_append_index_fields_flows,
+    query_append_index_fields_events,
 } = require("../queries/participation_data/step_3i_create_participation_summary_table");
 
 const { runTimer, stopTimer } = require('../../utilities/timer');
@@ -90,12 +92,15 @@ async function execute_create_participation_summary() {
     let base_table = 'all_participation_data_with_membership_match';
     let summary_table = 'all_participation_data_with_membership_match_summary';
     let flows_table = 'all_participation_data_with_membership_match_flows';
+    let events_table = 'all_participation_data_with_membership_match_events';
 
     let steps_to_run = {
         create_summary: true,
         index_summary: true,
         create_flows: true,
         index_flows: true,
+        create_events: true,
+        index_events: true,
     };
 
     try {
@@ -115,6 +120,13 @@ async function execute_create_participation_summary() {
             if (steps_to_run.index_flows) {
                 console.log('Appending indexes to flows table');
                 await execute_mysql_working_query(pool, db_name, await query_append_index_fields_flows(flows_table));
+            }
+            if (steps_to_run.create_events) {
+                await create_table_from_builder(pool, db_name, create_participation_events_table, events_table, base_table);
+            }
+            if (steps_to_run.index_events) {
+                console.log('Appending indexes to events table');
+                await execute_mysql_working_query(pool, db_name, await query_append_index_fields_events(events_table));
             }
 
             console.log('All queries executed successfully.');

@@ -7,6 +7,7 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 const { execute_get_participation_data } = require('./step_1_get_participation_data');
 const { execute_load_participation_data } = require('./step_2_load_participation_data');
 // const { execute_load_region_data } = require('./step_2a_load_region_table');
+const { execute_load_zip_reference } = require('./step_2b_load_zip_reference'); // load zip lat/lng reference from BigQuery
 
 // MATCH PARTICIPATION & MEMBERSHIP DATA; 
 const { execute_create_participation_with_membership_match } = require("./step_3_create_participation_with_membership_match");
@@ -106,6 +107,7 @@ async function main() {
   const run_step_1  = false; // get all participation data
   const run_step_2  = false; // load participation data
   // const run_step_2a = true; // load region table
+  const run_step_2b = true; // load zip lat/lng reference from BigQuery (usat_zip_lat_lng_reference)
 
   const run_step_3  = false; // create table participation with membership sales match
   const run_step_3a_1 = false; // load participation with membership sales match to bigquery
@@ -121,8 +123,8 @@ async function main() {
   const run_step_3h = false; // load ironman behavior time-series to bigquery — OFF for now (CSV only)
 
   // CREATE SUMMARY TABLES FOR PARTICIPATION MAP SERVER
-  const run_step_3i = true; // create reporting summary + flows tables (participation maps pre-aggregate)
-  const run_step_3j = true; // load reporting summary + flows to bigquery
+  const run_step_3i = false; // create reporting summary + flows tables (participation maps pre-aggregate)
+  const run_step_3j = false; // load reporting summary + flows to bigquery
 
   // const run_step_4 = true; // create table membership with participation match
 
@@ -134,6 +136,7 @@ async function main() {
       run_step_1  ? execute_get_participation_data : null,
       run_step_2  ? execute_load_participation_data : null,
       // run_step_2a ? execute_load_region_data : null,
+      run_step_2b ? execute_load_zip_reference : null,
 
       run_step_3 ? execute_create_participation_with_membership_match : null,
       run_step_3a_1 ? execute_load_big_query_participation_membership_sales_match : null,
@@ -163,7 +166,8 @@ async function main() {
     const stepName = [
       `Step #1 - Get participation Data:`, 
       `Step #2 - Load participation Data: `, 
-      // `Step #2a - Load Region Data: `, 
+      // `Step #2a - Load Region Data: `,
+      `Step #2b - Load ZIP lat/lng reference from BigQuery: `,
 
       `Step #3 - Created participation data with membership match`,
       `Step #3a_1 - Load participation membership sales match to BQ: `,
