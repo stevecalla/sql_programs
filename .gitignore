@@ -13,6 +13,10 @@ test.txt
 # GENERATED FILES / EXPORTS
 # =========================================================
 
+# Reporting fallback cache — now self-generated into the app data dir (outside the repo). The old
+# committed copy is dead; remove it with: git rm src/reporting/store/fixtures/participation_bootstrap.json
+src/reporting/store/fixtures/
+
 *.png
 *.xlsx
 *.pdf

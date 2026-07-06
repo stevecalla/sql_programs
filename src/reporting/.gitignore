@@ -1,0 +1,17 @@
+# App-level ignores for the reporting app. Repo-wide ignores (node_modules, .env, logs, PM2) live
+# in the root .gitignore — don't duplicate them here. This file only covers THIS app's build output
+# and local artifacts.
+
+# React build + deps
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Local data seed (generated from a standalone build; not source of truth)
+store/fixtures/*.json
+
+# Local auth/session secret, if ever written inside the app (normally lives outside the repo)
+auth/.reporting_session_secret.json
+
+# menu.js UI preference (show/hide CLI commands)
+.menu_prefs.json

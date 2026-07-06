@@ -7,11 +7,16 @@ const { getCurrentDateTime } = require('../../utilities/getCurrentDate');
 const { execute_get_participation_data } = require('./step_1_get_participation_data');
 const { execute_load_participation_data } = require('./step_2_load_participation_data');
 // const { execute_load_region_data } = require('./step_2a_load_region_table');
+const { execute_load_zip_reference } = require('./step_2b_load_zip_reference'); // load zip lat/lng reference from BigQuery
 
 // MATCH PARTICIPATION & MEMBERSHIP DATA; 
 const { execute_create_participation_with_membership_match } = require("./step_3_create_participation_with_membership_match");
 // TODO: LOAD ALL PARTICIPATION DATA TO BQ / CREATE AGE BUCKETS & BREAKOUT
 const { execute_load_big_query_participation_membership_sales_match } = require('./step_3a_1_load_bq_participation_match_profiles_metrics');
+
+// CREATE & LOAD REPORTING SUMMARY (pre-aggregate for the participation maps dashboard)
+const { execute_create_participation_summary } = require("./step_3i_create_participation_summary");
+const { execute_load_big_query_participation_summary_metrics } = require('./step_3j_load_bq_participation_summary_metrics');
 
 // CREATE & LOAD PARTICIPATION USER PROFILE
 const { execute_create_participation_profile_table } = require("./step_3a_create_participation_match_profile");
@@ -102,6 +107,7 @@ async function main() {
   const run_step_1  = true; // get all participation data
   const run_step_2  = true; // load participation data
   // const run_step_2a = true; // load region table
+  const run_step_2b = true; // load zip lat/lng reference from BigQuery (zip_lat_lng_reference)
 
   const run_step_3  = true; // create table participation with membership sales match
   const run_step_3a_1 = true; // load participation with membership sales match to bigquery
@@ -116,6 +122,10 @@ async function main() {
   const run_step_3g = true;  // create ironman behavior time-series (#4-#5) + CSV export
   const run_step_3h = false; // load ironman behavior time-series to bigquery — OFF for now (CSV only)
 
+  // CREATE SUMMARY TABLES FOR PARTICIPATION MAP SERVER
+  const run_step_3i = true; // create reporting summary + flows tables (participation maps pre-aggregate)
+  const run_step_3j = true; // load reporting summary + flows to bigquery
+
   // const run_step_4 = true; // create table membership with participation match
 
   const run_step_10 = true; // create all_participation_state_rankings_results
@@ -126,6 +136,7 @@ async function main() {
       run_step_1  ? execute_get_participation_data : null,
       run_step_2  ? execute_load_participation_data : null,
       // run_step_2a ? execute_load_region_data : null,
+      run_step_2b ? execute_load_zip_reference : null,
 
       run_step_3 ? execute_create_participation_with_membership_match : null,
       run_step_3a_1 ? execute_load_big_query_participation_membership_sales_match : null,
@@ -140,6 +151,10 @@ async function main() {
       run_step_3f ? execute_load_big_query_ironman_profile_metrics : null,
       run_step_3g ? execute_create_ironman_timeseries_tables : null,
       run_step_3h ? execute_load_big_query_ironman_timeseries_metrics : null,
+      
+      // CREATE SUMMARY TABLES FOR PARTICIPATION MAP SERVER
+      run_step_3i ? execute_create_participation_summary : null,
+      run_step_3j ? execute_load_big_query_participation_summary_metrics : null,
 
       // run_step_4 ? execute_create_membership_with_participation_match : null,
 
@@ -151,7 +166,8 @@ async function main() {
     const stepName = [
       `Step #1 - Get participation Data:`, 
       `Step #2 - Load participation Data: `, 
-      // `Step #2a - Load Region Data: `, 
+      // `Step #2a - Load Region Data: `,
+      `Step #2b - Load ZIP lat/lng reference from BigQuery: `,
 
       `Step #3 - Created participation data with membership match`,
       `Step #3a_1 - Load participation membership sales match to BQ: `,
@@ -166,6 +182,10 @@ async function main() {
       `Step #3f - Load ironman behavior profile to BQ: `,
       `Step #3g - Created ironman behavior time-series (#4-#5)`,
       `Step #3h - Load ironman behavior time-series to BQ: `,
+
+      // CREATE SUMMARY TABLES FOR PARTICIPATION MAP SERVER
+      `Step #3i - Created reporting summary + flows tables`,
+      `Step #3j - Load reporting summary + flows to BQ: `,
 
       // `Step #4 - Created membership data with participation match`,
 

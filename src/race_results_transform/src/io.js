@@ -13,12 +13,12 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('exceljs'));
+    module.exports = factory(require('exceljs'), require('./csv_sniff'));
   } else {
     root.RRT = root.RRT || {};
-    root.RRT.io = factory(root.ExcelJS);
+    root.RRT.io = factory(root.ExcelJS, root.RRT.csv_sniff);
   }
-}(typeof self !== 'undefined' ? self : this, function (ExcelJS) {
+}(typeof self !== 'undefined' ? self : this, function (ExcelJS, csv_sniff) {
   'use strict';
 
   function strip_mailto(s) { return String(s).replace(/^mailto:/i, '').replace(/\?.*$/, ''); }
@@ -147,7 +147,8 @@
 
   // ---- CSV support (RFC-4180-ish; handles quoted fields with embedded
   // commas and newlines, e.g. multi-line column headers) ----
-  function parse_csv(text) {
+  function parse_csv(text, delim) {
+    delim = delim || ',';
     text = String(text).replace(/^\uFEFF/, ''); // strip BOM
     var rows = [], row = [], field = '', in_q = false, i = 0, n = text.length;
     while (i < n) {
@@ -160,7 +161,7 @@
         field += ch; i++; continue;
       }
       if (ch === '"') { in_q = true; i++; continue; }
-      if (ch === ',') { row.push(field); field = ''; i++; continue; }
+      if (ch === delim) { row.push(field); field = ''; i++; continue; }
       if (ch === '\r') { i++; continue; }
       if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
       field += ch; i++;
@@ -171,11 +172,29 @@
     return rows;
   }
 
+  // Read a CSV into an IR, tolerating non-comma delimiters (semicolon/tab/pipe) and the "CSV of a CSV"
+  // double-encoding (each row written as one quoted field of an inner delimited string). Sets ir.csv_note
+  // with a short human-readable message when the file had to be reshaped, so the UI can flag it.
   function csv_to_ir(text) {
-    var rows = parse_csv(text).map(function (r) {
-      return r.map(function (v) { return (v === '' ? null : v); });
-    });
-    return { sheet_name: 'CSV', rows: rows };
+    var t = String(text == null ? '' : text).replace(/^\uFEFF/, '');
+    var delim = csv_sniff ? csv_sniff.sniff_delimiter(t) : ',';
+    var rows = parse_csv(t, delim);
+    var note = null;
+    var inner = csv_sniff ? csv_sniff.looks_double_encoded(rows) : null;
+    if (inner) {
+      rows = rows.map(function (r) {
+        if (r.length === 1 && typeof r[0] === 'string') { var p = parse_csv(r[0], inner); return p.length ? p[0] : r; }
+        return r;
+      });
+      note = 'Re-wrapped CSV detected \u2014 each row was one quoted field of ' + csv_sniff.delim_name(inner) +
+        '-separated values. Auto-unwrapped into columns.';
+    } else if (delim !== ',') {
+      note = csv_sniff.delim_name(delim) + '-delimited CSV detected \u2014 parsed on the ' + csv_sniff.delim_name(delim) + '.';
+    }
+    var out = rows.map(function (r) { return r.map(function (v) { return (v === '' ? null : v); }); });
+    var ir = { sheet_name: 'CSV', rows: out };
+    if (note) ir.csv_note = note;
+    return ir;
   }
 
   // ---- CSV writing (RFC-4180): quote any field containing a comma/quote/newline and double

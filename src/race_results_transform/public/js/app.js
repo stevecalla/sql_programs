@@ -1235,6 +1235,8 @@
   }
 
   function on_workbook(irs) {
+    S.csv_note = null;   // a short message when the CSV reader had to reshape the file (delimiter / re-wrap)
+    (irs || []).some(function (ir) { if (ir && ir.csv_note) { S.csv_note = ir.csv_note; return true; } return false; });
     S.sheets = irs.map(make_bundle);
     S.active = null; S.first_render = true;
     render_sheet_bar();
@@ -1304,6 +1306,7 @@
     track('start_over', {});
     S.is_demo = false;
     S.source = null;
+    S.csv_note = null;
     S.active_sanction = '';
     S.dl_fields = Object.assign({}, S.dl_fields, { id: '' });   // sanction is SF-only; don't carry it past Start over
     S.ir = S.parsed = S.mapping = S.result = S.report = S.work_rows = null;
@@ -1403,6 +1406,7 @@
       '<span class="verdict">' + esc(sc.verdict) + '</span>' +
       '<span class="chips">' +
         '<span class="chip filechip" title="Uploaded file">📄 ' + esc(S.file_display || S.file_name) + '</span>' +
+        (S.csv_note ? '<span class="chip chip-note" title="' + esc(S.csv_note) + '">ℹ CSV reshaped</span>' : '') +
         ((is_sf_download_source(S.source) && S.active_sanction) ? '<span class="chip sanctionchip" title="Salesforce Sanctioning ID (Program.cfg_Id__c) — leads the download filename">🏷 Sanction <b>' + esc(S.active_sanction) + '</b></span>' : '') +
         '<span class="chip" title="Athlete rows written to the converted file"><b>' + n(kept_out) + '</b> rows</span>' +
         (nex > 0 ? '<span class="chip chip-del" title="Rows you deleted — left out of the download. Restore them from the original table."><b>' + n(nex) + '</b> deleted</span>' : '') +

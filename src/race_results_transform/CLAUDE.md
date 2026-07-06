@@ -36,7 +36,7 @@ refreshes the committed visual baselines in `e2e/visual.spec.js-snapshots/`.)
 
 Wired into the monorepo like the other servers: repo-root `package.json` has the standard
 `race_results_transform_server` + `pm2_start/logs/stop/delete/show/restart_race_results_transform`
-scripts (pm2 name `usat_race_results_transform`, 4G, `--expose-gc`; also step 16/17 of
+scripts (pm2 name `usat_race_results_transform`, 4G, `--expose-gc`; also step 17/20 of
 `pm2_run_all_servers`), and `.vscode/tasks.json` has the `16 RACE RESULTS TRANSFORM (logs/shell)` +
 `Race Results Transform (split)` tasks (group `grp-race-results-transform`). `tests/config_wiring.test.js`
 asserts all of this stays in place (skips when run outside the monorepo).
@@ -53,6 +53,8 @@ src/race_results_transform/
     view_logic.js      pure TableView helpers: search index, visible-row filtering, render cap — TESTED
     duplicates.js      find rows whose Member Number repeats across rows (ignores 1-day/blank) — TESTED
     split.js           group row indices by a per-row key (split & download by column) — TESTED
+    csv_sniff.js       CSV delimiter detection (comma/semicolon/tab/pipe) + "CSV of a CSV" double-
+                       encoding detection; io.csv_to_ir uses it — TESTED
     parse.js           header detection + divider/blank-row skipping
     match.js           column auto-matching (alias scoring + greedy assignment)
     transform.js       apply mapping -> output grid + stats + flags + distinct enum values
@@ -68,6 +70,13 @@ src/race_results_transform/
                        names sanitized to <=31 chars, unique); output centered, wide, frozen header.
                        grid_to_csv (header + rows -> RFC-4180 CSV text, CRLF; all cells text so long
                        member #s stay intact) backs the CSV-default downloads + CLI `--format csv`.
+                       **Smart CSV read:** `csv_to_ir` uses `csv_sniff` to detect the delimiter
+                       (comma/semicolon/tab/pipe — `parse_csv(text, delim)` is now delimiter-aware) and to
+                       spot the **"CSV of a CSV" double-encoding** (each row written as ONE quoted field of
+                       an inner delimited string — e.g. a semicolon export re-saved as a comma-CSV), which it
+                       auto-unwraps into real columns. When it reshapes a file it sets `ir.csv_note` (a short
+                       message), which `app.js` surfaces as a small **"ℹ CSV reshaped"** chip in the summary
+                       bar (hover for detail); ordinary comma CSVs parse unchanged with no note.
                        Legacy .xls via SheetJS (xls_to_irs/sheetjs_available). The browser build is
                        **bundled** at public/vendor/xlsx.full.min.js (committed, like exceljs.min.js) so
                        .xls works on any deploy WITHOUT npm install (incl. prod with a locked registry);
