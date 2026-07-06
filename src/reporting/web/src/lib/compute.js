@@ -158,6 +158,81 @@ export function availableYears(payload) {
   return payload && payload.byYear ? Object.keys(payload.byYear).sort() : [];
 }
 
+// Unique athletes for one year restricted to a month list (mirrors the POC uqForYear). Exact when the
+// months cover the whole year (uses annualUnique); otherwise sums the per-month raw unique counts (approx).
+function uqForYear(p, y, mos) {
+  const full = mos.length === (p.monthsByYear[y] || []).length;
+  if (full) { const au = p.annualUnique[y] || { s: {}, r: {}, n: 0 }; return { state: au.s || {}, region: au.r || {}, nat: au.n, approx: false }; }
+  const st = {}, rg = {}; let nat = 0;
+  mos.forEach((m) => {
+    const d = p.rawByYM[y + '-' + m]; if (!d) return;
+    for (const ab in d.s) st[ab] = (st[ab] || 0) + d.s[ab][18];
+    for (const r in d.r) rg[r] = (rg[r] || 0) + d.r[r][18];
+    nat += (p.monthlyNat[y + '-' + m] || 0);
+  });
+  return { state: st, region: rg, nat, approx: true };
+}
+
+// Year-over-year change per state for one metric (mirrors the POC applyYoY). Compares fromYear -> toYear.
+// Only months present in BOTH years are used (so a partial "to" year compares like-for-like against the
+// same months of the baseline). Returns per-state colored z (zc), true change (z, null = n/a), the label
+// text, hover customdata rows, and a "new" mask for states that went 0 -> n (no % is defined there).
+//   mode: 'pct' (% change, 1 dp) | 'abs' (absolute change). metricIdx selects which metric.
+export function computeYoY(p, fromYear, toYear, selMonths, metricIdx, mode) {
+  const abbr = p.abbr, names = p.names, regOrder = p.regOrder, ab2region = p.ab2region, abs = mode === 'abs';
+  const fromMos = p.monthsByYear[fromYear] || [], toMos = p.monthsByYear[toYear] || [];
+  const mos = (selMonths.indexOf('all') >= 0)
+    ? fromMos.filter((m) => toMos.indexOf(m) >= 0)
+    : selMonths.map(Number).filter((m) => fromMos.indexOf(m) >= 0 && toMos.indexOf(m) >= 0);
+  const fs = mos.map((m) => fromYear + '-' + m), ts = mos.map((m) => toYear + '-' + m);
+  const fa = computeAgg(fs, uqForYear(p, fromYear, mos), p);
+  const ta = computeAgg(ts, uqForYear(p, toYear, mos), p);
+  const label = fa.metrics[metricIdx].label;
+  const A = fa.metrics[metricIdx].statez, B = ta.metrics[metricIdx].statez;
+
+  // Region from/to values (regionz is per-abbr; the same value repeats for every state in a region).
+  const rvA = {}, rvB = {};
+  abbr.forEach((ab, i) => { const rg = ab2region[ab]; rvA[rg] = fa.metrics[metricIdx].regionz[i]; rvB[rg] = ta.metrics[metricIdx].regionz[i]; });
+  const AR = regOrder.map((rg) => rvA[rg]), BR = regOrder.map((rg) => rvB[rg]);
+
+  // Build a change series for a set of entities (states or regions). short = label code, name = hover name.
+  const mk = (Aa, Ba, shortArr, nameArr) => {
+    const newmask = shortArr.map((s, i) => !abs && (Aa[i] || 0) === 0 && (Ba[i] || 0) > 0);
+    const z = shortArr.map((s, i) => {
+      const a = Aa[i] || 0, b = Ba[i] || 0;
+      if (a === 0 && b === 0) return null;
+      if (abs) return b - a;
+      if (a === 0) return null;
+      return Math.round(1000 * (b - a) / a) / 10;
+    });
+    const fp = z.filter((v) => v != null && v > 0);
+    const maxPos = fp.length ? Math.max.apply(null, fp) : 100;
+    const zc = shortArr.map((s, i) => (newmask[i] ? maxPos : z[i]));
+    const chStr = (i) => (newmask[i]
+      ? '0 → ' + (Ba[i] || 0).toLocaleString() + ' (new)'
+      : (z[i] == null ? 'n/a' : (z[i] > 0 ? '+' : '') + z[i].toLocaleString() + (abs ? '' : '%')));
+    const cd = shortArr.map((s, i) => [nameArr[i], (Aa[i] || 0).toLocaleString(), (Ba[i] || 0).toLocaleString(), chStr(i)]);
+    const lbl = shortArr.map((s, i) => (newmask[i]
+      ? s + '<br>0 → ' + (Ba[i] || 0).toLocaleString()
+      : (z[i] == null ? s : s + '<br>' + (z[i] > 0 ? '+' : '') + z[i].toLocaleString() + (abs ? '' : '%'))));
+    const maxAbs = Math.max.apply(null, zc.map((v) => (v == null ? 0 : Math.abs(v))).concat([1]));
+    return { z, zc, cd, lbl, newmask, maxAbs };
+  };
+
+  const S = mk(A, B, abbr, names);
+  const R = mk(AR, BR, regOrder, regOrder);
+  // Per-state view of the region values, so the choropleth can shade each state by its region's growth.
+  const abbrRegZc = abbr.map((ab) => { const j = regOrder.indexOf(ab2region[ab]); return j >= 0 ? R.zc[j] : null; });
+  const abbrRegCd = abbr.map((ab) => { const j = regOrder.indexOf(ab2region[ab]); return j >= 0 ? R.cd[j] : [ab2region[ab], '', '', 'n/a']; });
+
+  return {
+    mos, label, abs, approx: fa.approxUniq || ta.approxUniq,
+    z: S.z, zc: S.zc, cd: S.cd, lbl: S.lbl, maxAbs: S.maxAbs,
+    regZ: R.z, regZc: R.zc, regCd: R.cd, regLbl: R.lbl, regMaxAbs: R.maxAbs,
+    abbrRegZc, abbrRegCd,
+  };
+}
+
 // Sum the home->event flow rows (odByYM) across slices -> { flows:[home,event,n], inb, outb }.
 export function aggregateFlows(keys, odByYM) {
   const agg = {}, inb = {}, outb = {};

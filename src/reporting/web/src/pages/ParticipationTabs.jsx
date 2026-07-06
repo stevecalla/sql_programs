@@ -1,5 +1,6 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveSlices, aggregateFlows, homeByState } from '../lib/compute.js';
+import Reference from './Reference.jsx';
 
 // Native port of the POC's lower tabs: Summary (region stats + Top-N cards), Region matrix, State matrix
 // (sortable home->event cross-tabs with frozen totals, net importer/exporter shading, crosshair highlight),
@@ -68,12 +69,13 @@ const TABS = [
   { key: 'statemtx', label: 'State matrix' },
   { key: 'stateflows', label: 'State flows' },
   { key: 'events', label: 'Events' },
+  { key: 'reference', label: 'Reference' },
 ];
 const seg = { padding: '4px 12px', border: '1px solid var(--line)', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: 'inherit', fontSize: 13 };
 
 // Sortable home->event matrix with frozen totals + crosshair. travCols: right total columns {key,label,vals}.
 // bottomRows: {label, key?, vals, grand?:{colKey,value}}. narrative: text block. csvName: file base.
-function MatrixTable({ entities, data, travCols, bottomRows, narrative, csvName, rowHdrW, colMinW, fill }) {
+function MatrixTable({ entities, data, travCols, bottomRows, narrative, csvName, rowHdrW, colMinW, fill, fsBtn }) {
   const [sort, setSort] = useState({ row: null, rdir: -1, col: null, cdir: -1 });
   const [hover, setHover] = useState({ r: null, c: null });
   const { Mx, rowTot, colTot, net, maxNet, maxv } = data;
@@ -123,6 +125,7 @@ function MatrixTable({ entities, data, travCols, bottomRows, narrative, csvName,
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         <button style={seg} onClick={reset}>Reset</button>
         <button style={seg} onClick={doCSV}>CSV</button>
+        {fsBtn || null}
       </div>
       <div style={{ overflow: 'auto', maxHeight: 560, border: '1px solid var(--line)', borderRadius: 8 }}>
         <table style={{ borderCollapse: 'collapse', fontSize: 11, width: fill ? '100%' : undefined }}>
@@ -172,6 +175,16 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
   const [sfState, setSfState] = useState(firstState);
   const [sfSort, setSfSort] = useState(3);
   const [sfDir, setSfDir] = useState(-1);
+  const evFsRef = useRef(null); const mxFsRef = useRef(null); const smFsRef = useRef(null);
+  const [evFull, setEvFull] = useState(false); const [mxFull, setMxFull] = useState(false); const [smFull, setSmFull] = useState(false);
+  useEffect(() => {
+    const onFs = () => { setEvFull(document.fullscreenElement === evFsRef.current); setMxFull(document.fullscreenElement === mxFsRef.current); setSmFull(document.fullscreenElement === smFsRef.current); };
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+  const fsToggle = (ref) => { if (document.fullscreenElement) document.exitFullscreen && document.exitFullscreen(); else if (ref.current && ref.current.requestFullscreen) ref.current.requestFullscreen(); };
+  const toggleEvFs = () => fsToggle(evFsRef);
+  const fsWrap = (full) => (full ? { background: dark ? '#0b1220' : '#ffffff', padding: 16, height: '100vh', overflow: 'auto', boxSizing: 'border-box' } : undefined);
 
   const COLS = p.evcols;
   // Only build the heavy flow/matrix structures for the tab that needs them (default tab is Events).
@@ -183,6 +196,29 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
   const EV = useMemo(() => { let a = []; (selYears || []).forEach((y) => { a = a.concat(p.eventsByYear[y] || []); }); return a; }, [selYears, p]);
   const stateMx = useMemo(() => (tab === 'statemtx' ? buildStateMatrix(p.abbr, flowAgg.flows, HB) : null), [tab, p, flowAgg, HB]);
   const regionMx = useMemo(() => (tab === 'regionmtx' ? buildRegionMatrix(REGN, flowAgg.flows, HB, p.ab2region, p.abbr) : null), [tab, p, flowAgg, HB]);
+  // Summary KPI cards (POC "Summary totals" scorecards): national totals for the selected period.
+  const sumKpis = useMemo(() => {
+    if (tab !== 'summary' || !yb || !yb.metrics) return null;
+    const sA = (a) => (a || []).reduce((t, v) => t + (Number(v) || 0), 0);
+    const mx = yb.metrics; const g = (i) => sA(mx[i] ? mx[i].statez : []);
+    const T = g(0), E = g(1), R = g(2), FN = g(9), MN = g(10), H = g(23), A = g(24), IM = g(27), NW = g(29), RP = g(30);
+    const uniq = yb.nat ? (yb.nat.uniq || 0) : 0, part = yb.nat ? (yb.nat.part || T) : T;
+    return [
+      ['Participants', T.toLocaleString(), 'Count of participation records (event starts) in the period. One athlete racing 3 times counts as 3.'],
+      ['Unique' + (yb.approxUniq ? ' ~' : ''), uniq.toLocaleString(), 'Distinct athletes (deduplicated). The ~ appears when several periods are combined and this is summed per period.'],
+      ['% unique', part ? Math.round(100 * uniq / part) + '%' : '-', 'Unique participants ÷ Participants.'],
+      ['Races/participant', uniq ? (part / uniq).toFixed(1) : '-', 'Participants ÷ Unique — average races per athlete.'],
+      ['Events', E.toLocaleString(), 'Distinct events in the period.'],
+      ['Races', R.toLocaleString(), 'Distinct races (an event can contain multiple races).'],
+      ['Per race', R ? Math.round(T / R) : '-', 'Participants ÷ Races — average field size.'],
+      ['Female', (FN + MN) ? Math.round(100 * FN / (FN + MN)) + '%' : '-', 'Female ÷ (Female + Male) participations.'],
+      ['IRONMAN', T ? Math.round(100 * IM / T) + '%' : '-', 'IRONMAN participations ÷ all participations.'],
+      ['Home', (H + A) ? Math.round(100 * H / (H + A)) + '%' : '-', 'In-state ÷ (in-state + away) — share racing in their home state.'],
+      ['Traveled away', A.toLocaleString(), 'Participations where home state ≠ event state (cross-state travel).'],
+      ['New', T ? Math.round(100 * NW / T) + '%' : '-', 'First-time athletes ÷ Participants.'],
+      ['Repeat', T ? Math.round(100 * RP / T) + '%' : '-', 'Returning athletes ÷ Participants.'],
+    ];
+  }, [tab, yb]);
 
   // ---- Events ----
   const filtered = useMemo(() => {
@@ -249,9 +285,21 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
       </div>
 
       {tab === 'summary' ? (
-        <div>
-          <div style={{ marginBottom: 8 }}>
+        <div ref={smFsRef} style={fsWrap(smFull)}>
+          {sumKpis ? (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', margin: '0 0 14px' }}>
+              {sumKpis.map((c, i) => (
+                <div key={i} title={c[2]} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: '10px 16px', minWidth: 92, cursor: 'help' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)' }}>{c[1]}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.03em' }}>{c[0]} ⓘ</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {yb && yb.approxUniq ? <p className="muted small" style={{ margin: '0 0 10px' }}>Multi-period totals sum the selected months. Participations, gender, age, home/away, IRONMAN and new/repeat are exact; distinct counts (Unique, Events, Races) are summed per period, so someone spanning two periods can be counted more than once.</p> : null}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             <button style={seg} onClick={() => downloadCSV('region_stats.csv', p.rshead, yb.rsrows)}>CSV</button>
+            <button style={seg} title="Fullscreen summary" onClick={() => fsToggle(smFsRef)}>{smFull ? 'Exit ⛶' : '⛶ Full'}</button>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
@@ -296,9 +344,12 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
       ) : null}
 
       {tab === 'statemtx' ? (
-        <MatrixTable entities={p.abbr} data={stateMx} rowHdrW={48} narrative={stateNarr} csvName="state_flow_matrix"
-          travCols={[{ key: 'Trav', label: 'Traveled out', vals: stateMx.travOut }]}
-          bottomRows={[{ label: 'Hosted here', key: 'In', vals: stateMx.colTot }, { label: 'Traveled in', vals: stateMx.travIn, grand: { colKey: 'Trav', value: stateMx.grandTrav } }]} />
+        <div ref={mxFsRef} style={fsWrap(mxFull)}>
+          <MatrixTable entities={p.abbr} data={stateMx} rowHdrW={48} narrative={stateNarr} csvName="state_flow_matrix"
+            travCols={[{ key: 'Trav', label: 'Traveled out', vals: stateMx.travOut }]}
+            bottomRows={[{ label: 'Hosted here', key: 'In', vals: stateMx.colTot }, { label: 'Traveled in', vals: stateMx.travIn, grand: { colKey: 'Trav', value: stateMx.grandTrav } }]}
+            fsBtn={<button style={seg} title="Fullscreen matrix" onClick={() => fsToggle(mxFsRef)}>{mxFull ? 'Exit ⛶' : '⛶ Full'}</button>} />
+        </div>
       ) : null}
 
       {tab === 'stateflows' ? (
@@ -326,7 +377,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
       ) : null}
 
       {tab === 'events' ? (
-        <div>
+        <div ref={evFsRef} style={evFull ? { background: dark ? '#0b1220' : '#ffffff', padding: 16, height: '100vh', overflow: 'auto', boxSizing: 'border-box' } : undefined}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 10 }}>
             <span style={{ position: 'relative', display: 'inline-block' }}>
               <input placeholder="Search events…" value={searchTxt} onChange={(e) => setSearchTxt(e.target.value)} style={{ padding: '6px 24px 6px 10px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 14, background: 'var(--panel)', color: 'var(--ink)' }} />
@@ -346,10 +397,11 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><input type="checkbox" checked={showSanc} onChange={(e) => setShowSanc(e.target.checked)} /> Sanction ID &amp; Start Date</label>
             <button style={seg} onClick={resetEvents}>Reset</button>
             <button style={seg} onClick={() => downloadCSV('events.csv', ['#'].concat(visCols.map((ec) => COLS[ec])), filtered.map((r, i) => [i + 1].concat(visCols.map((ec) => r[ec]))))}>CSV</button>
+            <button style={seg} title="Fullscreen table" onClick={toggleEvFs}>{evFull ? 'Exit ⛶' : '⛶ Full'}</button>
             <span className="muted small" style={{ marginLeft: 'auto' }}>{filtered.length.toLocaleString()} of {EV.length.toLocaleString()} events{filtered.length > EV_PAGE ? ` · showing ${(evP * EV_PAGE + 1).toLocaleString()}–${Math.min((evP + 1) * EV_PAGE, filtered.length).toLocaleString()}` : ''}</span>
           </div>
           {chips.length ? <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>{chips.map((c, i) => <span key={i} style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 999, padding: '3px 8px 3px 12px', fontSize: 13, color: '#3730a3', display: 'inline-flex', alignItems: 'center', gap: 6 }}>{c.label}<button onClick={c.clear} title="Remove" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 15, lineHeight: 1, color: '#3730a3' }}>×</button></span>)}</div> : null}
-          <div style={{ maxHeight: 520, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 10 }}>
+          <div style={{ maxHeight: evFull ? 'calc(100vh - 130px)' : 520, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 10 }}>
             <table className="hltbl" style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
               <thead><tr>
                 <th style={{ ...th, position: 'sticky', top: 0, left: 0, zIndex: 6, background: 'var(--panel)', minWidth: HASHW }}>#</th>
@@ -375,6 +427,8 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
           ) : null}
         </div>
       ) : null}
+
+      {tab === 'reference' ? <Reference /> : null}
     </div>
   );
 }

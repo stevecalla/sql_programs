@@ -2,10 +2,16 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
 // Source DB table(s) feeding each page — shown on the left of the footer. Mirrors the merge footer.
+// usat_sales_db summary/flows/events tables (built by step_3i from all_participation_data_with_membership_match).
+const PART_SRC = [
+  'all_participation_data_with_membership_match_summary',
+  'all_participation_data_with_membership_match_flows',
+  'all_participation_data_with_membership_match_events',
+];
 const SOURCES = {
-  '/': ['participation (usat_sales_db)'],
-  '/participation-maps': ['participation (usat_sales_db)'],
-  '/reference': [],
+  '/': PART_SRC,
+  '/participation-maps': PART_SRC,
+  '/reference': PART_SRC,
   '/admin': ['reporting auth + reporting_events'],
 };
 
