@@ -8,7 +8,8 @@
 //
 // Raw 19-col order (per state / per region, matches participation_read.js, geo_key stripped):
 //   [turnout, events, races, adult, adultEvents, adultRaces, female, male,
-//    age4_19, age20_29, age30_39, age40_49, age50_59, age60, home, away, ironman, new, unique]
+//    age4_19, age20_29, age30_39, age40_49, age50_59, age60, home, away, ironman, new, unique, unknown_home]
+//   away = turnout - home - unknown_home (unknown = home state missing or not one of the 50 states).
 
 const sum = (a) => (a || []).reduce((t, v) => t + (Number(v) || 0), 0);
 
@@ -41,6 +42,7 @@ function mv(r, idx, uq) {
     case 27: return r[16]; case 28: return T ? Math.round(100 * r[16] / T) : null;
     case 29: return r[17]; case 30: return r[0] - r[17]; case 31: return T ? Math.round(100 * r[17] / T) : null; case 32: return T ? Math.round(100 * (r[0] - r[17]) / T) : null;
     case 33: return uq == null ? null : uq; case 34: return (uq != null && T) ? Math.round(100 * uq / T) : null; case 35: return (uq != null && uq) ? Math.round(r[0] / uq * 10) / 10 : null;
+    case 36: return r[19]; case 37: return T ? Math.round(100 * r[19] / T) : null;   // unknown_home count / %
     default: return null;
   }
 }
@@ -50,8 +52,8 @@ function aggregate(keys, rawByYM) {
   const S = {}, R = {};
   keys.forEach((k) => {
     const d = rawByYM[k]; if (!d) return;
-    for (const ab in d.s) { if (!S[ab]) S[ab] = new Array(19).fill(0); const v = d.s[ab]; for (let i = 0; i < 19; i++) S[ab][i] += v[i]; }
-    for (const rg in d.r) { if (!R[rg]) R[rg] = new Array(19).fill(0); const w = d.r[rg]; for (let i = 0; i < 19; i++) R[rg][i] += w[i]; }
+    for (const ab in d.s) { if (!S[ab]) S[ab] = new Array(20).fill(0); const v = d.s[ab]; for (let i = 0; i < 20; i++) S[ab][i] += v[i]; }
+    for (const rg in d.r) { if (!R[rg]) R[rg] = new Array(20).fill(0); const w = d.r[rg]; for (let i = 0; i < 20; i++) R[rg][i] += w[i]; }
   });
   return { S, R };
 }
@@ -114,14 +116,14 @@ function computeAgg(keys, uq, p) {
   const ti = present.slice().sort((a, b) => S[b][16] - S[a][16]).slice(0, 8).map((ab) => [ab, nm(ab), S[ab][16]]);
   const cards = { 'Top participation states': tt, 'Highest home share': th, 'Top IRONMAN states': ti };
 
-  const rsrows = []; let Tt = 0, Et = 0, Rt = 0, Ht = 0, At = 0, IMt = 0, Nt = 0, RPt = 0, FNt = 0, MNt = 0, C4 = 0;
+  const rsrows = []; let Tt = 0, Et = 0, Rt = 0, Ht = 0, At = 0, IMt = 0, Nt = 0, RPt = 0, FNt = 0, MNt = 0, C4 = 0, Ut = 0;
   Object.keys(R).sort((a, b) => R[b][0] - R[a][0]).forEach((rg) => {
     const v = R[rg]; const hp = (v[14] + v[15]) ? Math.round(100 * v[14] / (v[14] + v[15])) : 0; const u = uq.region[rg]; const per = u ? Math.round(v[0] / u * 10) / 10 : null;
-    rsrows.push([rg, v[0], v[1], (v[1] ? Math.round(v[0] / v[1]) : 0), (v[2] ? Math.round(v[0] / v[2]) : 0), (v[0] ? Math.round(100 * v[6] / v[0]) : 0), v[6], v[7], (v[0] ? Math.round(100 * v[8] / v[0]) : 0), hp, 100 - hp, v[16], v[17], v[0] - v[17], u, per]);
-    Tt += v[0]; Et += v[1]; Rt += v[2]; Ht += v[14]; At += v[15]; IMt += v[16]; Nt += v[17]; RPt += (v[0] - v[17]); FNt += v[6]; MNt += v[7]; C4 += v[8];
+    rsrows.push([rg, v[0], v[1], (v[1] ? Math.round(v[0] / v[1]) : 0), (v[2] ? Math.round(v[0] / v[2]) : 0), (v[0] ? Math.round(100 * v[6] / v[0]) : 0), v[6], v[7], (v[0] ? Math.round(100 * v[8] / v[0]) : 0), hp, 100 - hp, v[16], v[17], v[0] - v[17], u, per, (v[0] ? Math.round(100 * v[19] / v[0]) : 0)]);
+    Tt += v[0]; Et += v[1]; Rt += v[2]; Ht += v[14]; At += v[15]; IMt += v[16]; Nt += v[17]; RPt += (v[0] - v[17]); FNt += v[6]; MNt += v[7]; C4 += v[8]; Ut += v[19];
   });
   const hpT = (Ht + At) ? Math.round(100 * Ht / (Ht + At)) : 0, natU = uq.nat;
-  rsrows.push(['US total', Tt, Et, (Et ? Math.round(Tt / Et) : 0), (Rt ? Math.round(Tt / Rt) : 0), (Tt ? Math.round(100 * FNt / Tt) : 0), FNt, MNt, (Tt ? Math.round(100 * C4 / Tt) : 0), hpT, 100 - hpT, IMt, Nt, RPt, natU, (natU ? Math.round(Tt / natU * 10) / 10 : null)]);
+  rsrows.push(['US total', Tt, Et, (Et ? Math.round(Tt / Et) : 0), (Rt ? Math.round(Tt / Rt) : 0), (Tt ? Math.round(100 * FNt / Tt) : 0), FNt, MNt, (Tt ? Math.round(100 * C4 / Tt) : 0), hpT, 100 - hpT, IMt, Nt, RPt, natU, (natU ? Math.round(Tt / natU * 10) / 10 : null), (Tt ? Math.round(100 * Ut / Tt) : 0)]);
 
   return { metrics, cards, rsrows, nat: { uniq: natU, part: Tt }, approxUniq: uq.approx };
 }

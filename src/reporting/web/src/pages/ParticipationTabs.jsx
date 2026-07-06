@@ -13,7 +13,7 @@ const REGN = ['Northeast', 'Southeast', 'Midwest', 'Central', 'Rockies', 'Pacifi
 const EV_PAGE = 100; // events table page size (paginated for responsiveness); CSV exports everything
 const commafy = (x) => (x == null || x === '') ? '' : Number(x).toLocaleString();
 const pctify = (x) => (x == null || x === '') ? '' : x + '%';
-const CNT = ['Participants', 'Races', 'Female n', 'Male n', 'Home', 'Away', 'New', 'Repeat', 'Unique'];
+const CNT = ['Participants', 'Races', 'Female n', 'Male n', 'Home', 'Away', 'Unknown', 'New', 'Repeat', 'Unique'];
 function colType(nm) {
   if (/%$/.test(nm)) return 'pct';
   if (CNT.indexOf(nm) >= 0) return 'cnt';
@@ -201,7 +201,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
     if (tab !== 'summary' || !yb || !yb.metrics) return null;
     const sA = (a) => (a || []).reduce((t, v) => t + (Number(v) || 0), 0);
     const mx = yb.metrics; const g = (i) => sA(mx[i] ? mx[i].statez : []);
-    const T = g(0), E = g(1), R = g(2), FN = g(9), MN = g(10), H = g(23), A = g(24), IM = g(27), NW = g(29), RP = g(30);
+    const T = g(0), E = g(1), R = g(2), FN = g(9), MN = g(10), H = g(23), A = g(24), IM = g(27), NW = g(29), RP = g(30), UNK = g(36);
     const uniq = yb.nat ? (yb.nat.uniq || 0) : 0, part = yb.nat ? (yb.nat.part || T) : T;
     return [
       ['Participants', T.toLocaleString(), 'Count of participation records (event starts) in the period. One athlete racing 3 times counts as 3.'],
@@ -213,8 +213,10 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
       ['Per race', R ? Math.round(T / R) : '-', 'Participants ÷ Races — average field size.'],
       ['Female', (FN + MN) ? Math.round(100 * FN / (FN + MN)) + '%' : '-', 'Female ÷ (Female + Male) participations.'],
       ['IRONMAN', T ? Math.round(100 * IM / T) + '%' : '-', 'IRONMAN participations ÷ all participations.'],
-      ['Home', (H + A) ? Math.round(100 * H / (H + A)) + '%' : '-', 'In-state ÷ (in-state + away) — share racing in their home state.'],
-      ['Traveled away', A.toLocaleString(), 'Participations where home state ≠ event state (cross-state travel).'],
+      ['Home', (H + A) ? Math.round(100 * H / (H + A)) + '%' : '-', 'In-state ÷ (in-state + away, excludes unknown) — share racing in their home state.'],
+      ['Traveled away', A.toLocaleString(), 'Participations where home state is one of the 50 and ≠ event state (cross-state travel).'],
+      ['Unknown home', UNK.toLocaleString(), 'Home state missing or not one of the 50 states — excluded from home/away. Reconciles: home + away + unknown = participants.'],
+      ['Unknown home %', T ? Math.round(100 * UNK / T) + '%' : '-', 'Unknown home ÷ Participants.'],
       ['New', T ? Math.round(100 * NW / T) + '%' : '-', 'First-time athletes ÷ Participants.'],
       ['Repeat', T ? Math.round(100 * RP / T) + '%' : '-', 'Returning athletes ÷ Participants.'],
     ];

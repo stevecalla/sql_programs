@@ -15,6 +15,8 @@ async function query_participation_events(batch_size = 50000, offset = 0) {
             DATE_FORMAT(event_date, '%Y-%m-%d') AS event_date,
             is_ironman_event,
             away,
+            unknown_home_count,
+            unknown_home_pct,
             turnout,
             events,
             races,

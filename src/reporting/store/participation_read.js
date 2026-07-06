@@ -31,19 +31,22 @@ let _lastLiveTry = 0;
 const RETRY_MS = Number(process.env.REPORTING_LIVE_RETRY_MS) || 5 * 60 * 1000;
 const BUILD_TIMEOUT_MS = Number(process.env.REPORTING_BUILD_TIMEOUT_MS) || 60000;
 
-// One summary row -> the 20-col raw array participation_agg expects (away = turnout - home).
+// One summary row -> the raw array participation_agg expects. away = turnout - home - unknown_home_count
+// (unknown = home state missing or not one of the 50 states). unknown_home_count is appended at the end so
+// existing indices (home=14, away=15, ironman=16, new=17, unique=18) are unchanged; unknown=19.
 function sumToRaw(r) {
   const n = (x) => (x == null ? 0 : Number(x));
   return [r.geo_key, n(r.turnout), n(r.events), n(r.races), n(r.adult), n(r.adult_events), n(r.adult_races),
     n(r.female), n(r.male), n(r.age_4_19), n(r.age_20_29), n(r.age_30_39), n(r.age_40_49), n(r.age_50_59), n(r.age_60_plus),
-    n(r.home), n(r.turnout) - n(r.home), n(r.ironman), n(r.new_count), n(r.unique_athletes)];
+    n(r.home), n(r.turnout) - n(r.home) - n(r.unknown_home_count), n(r.ironman), n(r.new_count), n(r.unique_athletes),
+    n(r.unknown_home_count)];
 }
 
-// One events-table row -> the 32-col event array the dashboard expects (mirrors the POC build3 EVCOLS).
-// All metrics are computed in SQL (step_3i events builder) — this is a straight column -> array map, no math.
+// One events-table row -> the 34-col event array the dashboard expects (mirrors the POC build3 EVCOLS +
+// the new Unknown-home columns). All metrics are computed in SQL (step_3i events builder) — straight map.
 // [state, region, name, sanction_id, date, IRONMAN, participants, races, per-race, adult/race, female%,
 //  male%, female_n, male_n, age%(4-19..60+), home, away, home%, away%, new, repeat, new%, repeat%, unique,
-//  per-participant, lat, lng].
+//  per-participant, unknown_home_count(30), unknown_home_pct(31), lat(32), lng(33)].
 function evToRow(r) {
   const n = (x) => (x == null ? 0 : Number(x));
   const d = r.event_date == null ? null
@@ -56,6 +59,7 @@ function evToRow(r) {
     n(r.home), n(r.away), n(r.home_pct), n(r.away_pct),
     n(r.new_count), n(r.repeat_count), n(r.new_pct), n(r.repeat_pct),
     n(r.unique_athletes), n(r.per_participant),
+    n(r.unknown_home_count), n(r.unknown_home_pct),
     r.lat == null ? null : Number(r.lat), r.lng == null ? null : Number(r.lng),
   ];
 }

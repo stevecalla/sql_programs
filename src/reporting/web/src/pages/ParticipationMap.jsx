@@ -288,7 +288,7 @@ export default function ParticipationMap() {
     let a = [];
     selYears.forEach((y) => { a = a.concat(st.p.eventsByYear[y] || []); });
     return a.filter((r) => {
-      if (r[30] == null || r[31] == null) return false;                 // needs lat/lng
+      if (r[32] == null || r[33] == null) return false;                 // needs lat/lng (32/33 after Unknown cols)
       if (!allM && r[4] && selMonths.indexOf(String(+String(r[4]).substr(5, 2))) < 0) return false;
       if (regionSel && r[1] !== regionSel) return false;
       if (stateSel && r[0] !== stateSel) return false;
@@ -522,7 +522,7 @@ export default function ParticipationMap() {
         const rows = pinEvents.filter((r) => r[5] === flag);
         if (!rows.length) return;
         traces.push({
-          type: 'scattergeo', mode: 'markers', lon: rows.map((r) => r[31]), lat: rows.map((r) => r[30]),
+          type: 'scattergeo', mode: 'markers', lon: rows.map((r) => r[33]), lat: rows.map((r) => r[32]),
           marker: {
             size: rows.map((r) => r[6] || 0), sizemode: 'area', sizeref: sr, sizemin: 3,
             color, opacity: 0.62, line: { width: 0.4, color: 'white' },

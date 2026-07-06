@@ -22,6 +22,7 @@ async function query_participation_summary(batch_size = 50000, offset = 0) {
             age_50_59,
             age_60_plus,
             home,
+            unknown_home_count,
             ironman,
             new_count,
             unique_athletes,
