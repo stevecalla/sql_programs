@@ -43,6 +43,9 @@ function mv(r, idx, uq) {
     case 29: return r[17]; case 30: return r[0] - r[17]; case 31: return T ? Math.round(100 * r[17] / T) : null; case 32: return T ? Math.round(100 * (r[0] - r[17]) / T) : null;
     case 33: return uq == null ? null : uq; case 34: return (uq != null && T) ? Math.round(100 * uq / T) : null; case 35: return (uq != null && uq) ? Math.round(r[0] / uq * 10) / 10 : null;
     case 36: return r[19]; case 37: return T ? Math.round(100 * r[19] / T) : null;   // unknown_home count / %
+    case 38: return r[14]; case 39: return r[15];                                     // known-home / known-away count (= home / away count)
+    case 40: { const kn = r[14] + r[15]; return kn ? Math.round(100 * r[14] / kn) : null; }  // known-home % = home / (home+away)
+    case 41: { const kn = r[14] + r[15]; return kn ? Math.round(100 * r[15] / kn) : null; }  // known-away % = away / (home+away)
     default: return null;
   }
 }

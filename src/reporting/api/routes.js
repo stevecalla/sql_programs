@@ -69,7 +69,7 @@ module.exports = function mount(app) {
   // ---- Participation-maps data ----
   app.get('/api/bootstrap', require_panel('participation-maps'), async function (req, res) {
     try {
-      const r = await participation.get_bootstrap();
+      const r = await participation.get_bootstrap({ force: req.query.force === '1' });
       res.json({ ok: true, source: r.source, generated_at: new Date(r.at).toISOString(), data: r.payload });
     } catch (e) {
       res.status(e.code === 'NO_DATA' ? 503 : 500).json({ ok: false, error: e.message, code: e.code || null });

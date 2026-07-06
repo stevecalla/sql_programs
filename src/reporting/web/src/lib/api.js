@@ -25,7 +25,7 @@ export const api = {
   me: () => jget('/api/me'),
   login: (username, password) => jpost('/api/login', { username, password }),
   logout: () => jpost('/api/logout', {}),
-  bootstrap: () => jget('/api/bootstrap'),
+  bootstrap: (force) => jget('/api/bootstrap' + (force ? '?force=1' : '')),
   dataset: () => jget('/api/dataset'),
   event: (evt) => jpost('/api/event', evt),
   metricsReport: (days) => jget('/api/metrics-report?days=' + (days || 7)),

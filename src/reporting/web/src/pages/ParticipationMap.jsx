@@ -17,9 +17,15 @@ const METRIC_DESC = {
   'Female (count)': 'Number of female participations.',
   'Male (count)': 'Number of male participations.',
   'Home (count)': 'In-state participations (athlete home state = event state).',
-  'Away (count)': 'Cross-state participations (home state ≠ event state).',
-  'Home %': 'In-state share of participations (of home + away).',
-  'Away %': '100 − Home %.',
+  'Away (count)': 'Cross-state participations (home is a 50-state code ≠ event state).',
+  'Home %': 'In-state share of ALL participations (home ÷ total). Sums with Away % and Unknown home % to 100%.',
+  'Away %': 'Cross-state share of ALL participations (away ÷ total).',
+  'Unknown home (count)': 'Participations whose home state is missing or not a 50-state code.',
+  'Unknown home %': 'Unknown-home share of ALL participations (unknown ÷ total).',
+  'Known home (count)': 'In-state participations (same value as Home count; shown on the known-home basis).',
+  'Known away (count)': 'Cross-state participations (same value as Away count; shown on the known-home basis).',
+  'Known home %': 'In-state share of KNOWN-home participations — home ÷ (home + away), excludes Unknown. This is the deck definition.',
+  'Known away %': 'Cross-state share of KNOWN-home participations — away ÷ (home + away), excludes Unknown.',
   'IRONMAN (count)': 'IRONMAN-race participations.',
   'IRONMAN share %': 'IRONMAN participations ÷ all participations.',
   'New (count)': 'First-time athletes (joined this year).',
@@ -30,6 +36,21 @@ const METRIC_DESC = {
   '% unique participants': 'Unique ÷ Participants.',
   'Avg races / participant': 'Participants ÷ Unique — average races per athlete.',
 };
+// Metric dropdown grouping — related metrics sit together with an <optgroup> divider between them.
+// Each entry lists the metric INDICES (into the meta / metrics array) shown under that heading, in
+// display order. Participation (0-6) stays first, in its original order. Values are the true metric
+// index so metricIdx semantics are unchanged; a group is skipped if none of its metrics exist yet.
+const METRIC_GROUPS = [
+  { label: 'Participation', idxs: [0, 1, 2, 3, 4, 5, 6] },
+  { label: 'Gender', idxs: [7, 8, 9, 10] },
+  { label: 'Age bands', idxs: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22] },
+  { label: 'Home / Away — of total', idxs: [23, 24, 36, 25, 26, 37] },
+  { label: 'Home / Away — known basis (excl. Unknown)', idxs: [38, 39, 40, 41] },
+  { label: 'IRONMAN', idxs: [27, 28] },
+  { label: 'New vs Repeat', idxs: [29, 30, 31, 32] },
+  { label: 'Unique athletes', idxs: [33, 34, 35] },
+];
+
 function metricDesc(label) {
   if (!label) return '';
   if (METRIC_DESC[label]) return METRIC_DESC[label];
@@ -81,11 +102,37 @@ function fmtVal(v, ispct, dec) {
   return ispct ? v + '%' : Number(v).toLocaleString();
 }
 function fmtShort(v) { if (v >= 1e6) return (v / 1e6) + 'M'; if (v >= 1e3) return (v / 1e3) + 'k'; return '' + v; }
-function labColor(vals, mn, mx) {
-  return vals.map((v) => {
-    if (v == null) return '#0f172a';
-    const t = mx > mn ? (v - mn) / (mx - mn) : 0;
-    return t > 0.66 ? '#ffffff' : '#0f172a';
+function parseRGB(c) {
+  if (c[0] === '#') { const h = c.slice(1); const n = h.length === 3 ? h.split('').map((x) => x + x).join('') : h; return [parseInt(n.slice(0, 2), 16), parseInt(n.slice(2, 4), 16), parseInt(n.slice(4, 6), 16)]; }
+  const m = c.match(/[\d.]+/g); return m ? [+m[0], +m[1], +m[2]] : [0, 0, 0];
+}
+function sampleScale(scale, t) {
+  t = Math.max(0, Math.min(1, t));
+  for (let i = 1; i < scale.length; i++) {
+    if (t <= scale[i][0]) {
+      const a = scale[i - 1], b = scale[i];
+      const f = b[0] > a[0] ? (t - a[0]) / (b[0] - a[0]) : 0;
+      const ca = parseRGB(a[1]), cb = parseRGB(b[1]);
+      return [0, 1, 2].map((k) => ca[k] + (cb[k] - ca[k]) * f);
+    }
+  }
+  return parseRGB(scale[scale.length - 1][1]);
+}
+// Contrast-aware label color. Samples the ACTUAL fill each state receives — it mirrors Plotly's
+// z -> [zmin,zmax] -> colorscale mapping (so it respects log / clip / rank / reverse and any palette)
+// then picks dark or light text by luminance. No-data states fall back to the theme foreground so
+// they stay legible. This is what makes every label dark-mode aware, not just the spotlighted ones.
+function labColor(zArr, zmin, zmax, scale, reverse, dark) {
+  const vals = zArr.filter((v) => v != null);
+  const lo = (zmin == null || isNaN(zmin)) ? (vals.length ? Math.min.apply(null, vals) : 0) : zmin;
+  const hi = (zmax == null || isNaN(zmax)) ? (vals.length ? Math.max.apply(null, vals) : 1) : zmax;
+  return zArr.map((v) => {
+    if (v == null) return dark ? '#e2e8f0' : '#334155';
+    let t = hi > lo ? (v - lo) / (hi - lo) : 0;
+    t = Math.max(0, Math.min(1, t));
+    if (reverse) t = 1 - t;
+    const [r, g, b] = sampleScale(scale, t);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#0f172a' : '#ffffff';
   });
 }
 function logTicks(mx) {
@@ -162,6 +209,32 @@ export default function ParticipationMap() {
   const flowGeoRef = useRef(null);     // cached us-states GeoJSON
   const flowViewRef = useRef({ ...FLOW_VIEW0 });
   const spinRaf = useRef(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNote, setRefreshNote] = useState('');
+
+  // Force-live refresh: ask the server to rebuild from MySQL now (bypassing the TTL) and swap in the fresh
+  // data WITHOUT resetting the user's current metric / year / view. If MySQL is unreachable the server keeps
+  // (and returns) the last cached payload — source stays 'fixture' and the backup is never overwritten — so
+  // we just tell the user we kept the cached copy.
+  const doRefresh = async () => {
+    setRefreshing(true); setRefreshNote('');
+    try {
+      const { status, body } = await api.bootstrap(true);
+      if (status === 200 && body.ok) {
+        setSt({ loading: false, p: body.data, source: body.source });
+        setRefreshNote(body.source === 'mysql'
+          ? ('✓ Live · as of ' + (body.data.lastUpdated || 'now'))
+          : '⚠ Database unreachable — kept last cached data');
+      } else {
+        setRefreshNote('⚠ Refresh failed: ' + (body.error || ('HTTP ' + status)));
+      }
+    } catch (e) {
+      setRefreshNote('⚠ Refresh failed: ' + e.message);
+    } finally {
+      setRefreshing(false);
+      setTimeout(() => setRefreshNote(''), 7000);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -402,7 +475,7 @@ export default function ParticipationMap() {
         type: 'scattergeo', locationmode: 'USA-states', mode: 'text',
         lon: abbr.map((ab) => (centroid[ab] ? centroid[ab][0] : null)),
         lat: abbr.map((ab) => (centroid[ab] ? centroid[ab][1] : null)),
-        text: m.labels, textfont: { size: 11, color: fillOn ? labColor(m.statez, m.mn, m.mx) : (dark ? '#e2e8f0' : '#334155') },
+        text: m.labels, textfont: { size: 11, color: fillOn ? labColor(z, zauto ? null : zmin, zauto ? null : zmax, scale, reverse, dark) : (dark ? '#e2e8f0' : '#334155') },
         hoverinfo: 'skip', showlegend: false,
       });
     }
@@ -803,7 +876,13 @@ export default function ParticipationMap() {
       <div className="toolbar" style={{ gap: 6 }}>
         <label title={metricDesc(metrics[metricIdx] && metrics[metricIdx].label)}>Metric&nbsp;
           <select value={metricIdx} onChange={(e) => setMetricIdx(Number(e.target.value))}>
-            {metrics.map((m, i) => <option key={i} value={i} title={metricDesc(m.label)}>{m.label}</option>)}
+            {METRIC_GROUPS.map((g) => {
+              const opts = g.idxs.filter((i) => metrics[i]);
+              if (!opts.length) return null;
+              return <optgroup key={g.label} label={g.label}>
+                {opts.map((i) => <option key={i} value={i} title={metricDesc(metrics[i].label)}>{metrics[i].label}</option>)}
+              </optgroup>;
+            })}
           </select>
         </label>
         <Link to="/reference" title="Metric definitions & data notes" className="muted small" style={{ textDecoration: 'none' }}>ⓘ Reference</Link>
@@ -940,7 +1019,9 @@ export default function ParticipationMap() {
 
       <div className="toolbar">
         <button style={seg(advOpen)} onClick={() => setAdvOpen((o) => !o)}>⚙ Display options {advOpen ? '▾' : '▸'}</button>
-        <span style={{ display: 'inline-flex', gap: 4, marginLeft: 'auto' }}>
+        {refreshNote ? <span className="small" style={{ alignSelf: 'center', marginLeft: 'auto', marginRight: 6, opacity: 0.9 }}>{refreshNote}</span> : null}
+        <span style={{ display: 'inline-flex', gap: 4, marginLeft: refreshNote ? 0 : 'auto' }}>
+          <button style={mini(false)} title="Pull the latest data live from the database now (bypasses the hourly cache)" disabled={refreshing} onClick={doRefresh}>{refreshing ? '⟳ …' : '⟳ Refresh data'}</button>
           <button style={mini(false)} title="Zoom out" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.max(1.5, flowViewRef.current.zoom - 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else setZoom((z) => Math.max(1, z / 1.4)); }}>−</button>
           <button style={mini(false)} title="Zoom in" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.min(9, flowViewRef.current.zoom + 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else setZoom((z) => Math.min(10, z * 1.4)); }}>+</button>
           <button style={mini(false)} title="Reset everything to defaults (map type, zoom, filters)" onClick={resetAll}>⟲</button>

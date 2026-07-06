@@ -13,6 +13,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const db = require('./db');
 const META = require('./mapmeta.json');
 const data_dir = require('../data_dir');
@@ -33,10 +34,25 @@ const EVENTS_TABLE = 'all_participation_data_with_membership_match_events';
 const FIXTURE = process.env.REPORTING_FIXTURE_FILE || data_dir.file_sync('participation_bootstrap.json');
 const TTL_MS = Number(process.env.REPORTING_BOOTSTRAP_TTL_MS) || 60 * 60 * 1000;
 
-// Persist the live payload to the fallback cache (best-effort; a read-only data dir must not crash the app).
+// Fingerprint of a serialized payload — lets us persist the fallback cache ONLY when the data actually
+// changed, so the file (and its mtime) tracks real data updates instead of churning every refresh.
+function sig(json) { return crypto.createHash('sha1').update(json).digest('hex'); }
+let _fixtureSig = null;   // sig of whatever is currently on disk; seeded on load, updated on write.
+
+// Persist the live payload to the fallback cache. Best-effort (a read-only data dir must not crash the app)
+// and change-guarded: if the new payload is byte-identical to what's already cached we skip the write, so
+// an unchanged hourly rebuild is a no-op. Only ever called after a SUCCESSFUL live build, so a MySQL outage
+// never overwrites the last known-good file.
 function writeFixture(payload) {
-  try { fs.mkdirSync(path.dirname(FIXTURE), { recursive: true }); fs.writeFileSync(FIXTURE, JSON.stringify(payload)); }
-  catch (e) { console.warn('[reporting] could not write fallback cache: ' + e.message); }
+  try {
+    const json = JSON.stringify(payload);
+    const s = sig(json);
+    if (s === _fixtureSig) return;   // data unchanged — leave the cache (and its timestamp) alone
+    fs.mkdirSync(path.dirname(FIXTURE), { recursive: true });
+    fs.writeFileSync(FIXTURE, json);
+    _fixtureSig = s;
+    console.log('[reporting] fallback cache updated — live data changed');
+  } catch (e) { console.warn('[reporting] could not write fallback cache: ' + e.message); }
 }
 
 let _cache = null;
@@ -157,7 +173,9 @@ function load_fixture() {
     const e = new Error('no participation data: MySQL unreachable and no fixture at ' + FIXTURE);
     e.code = 'NO_DATA'; throw e;
   }
-  return { payload: JSON.parse(fs.readFileSync(FIXTURE, 'utf8')), source: 'fixture' };
+  const raw = fs.readFileSync(FIXTURE, 'utf8');
+  _fixtureSig = sig(raw);   // baseline: don't rewrite an identical payload after a restart
+  return { payload: JSON.parse(raw), source: 'fixture' };
 }
 
 function withTimeout(p, ms) {
@@ -185,7 +203,8 @@ function seedFixture() {
   try { const r = load_fixture(); _cache = { payload: r.payload, source: 'fixture', at: Date.now() }; } catch (e) { /* no fixture */ }
 }
 
-async function get_bootstrap() {
+async function get_bootstrap(opts) {
+  const force = !!(opts && opts.force);
   if (process.env.REPORTING_STRICT_DB === '1') {
     const payload = await withTimeout(build_from_mysql(), BUILD_TIMEOUT_MS);
     _cache = { payload, source: 'mysql', at: Date.now() };
@@ -193,6 +212,16 @@ async function get_bootstrap() {
     return _cache;
   }
   if (!_cache) seedFixture();
+  // Force-live: rebuild from MySQL now, ignoring the TTL and the retry throttle. Reuses any in-flight
+  // build. On failure refreshLive keeps the existing cache and does NOT write the fixture, so the caller
+  // just gets the last known-good payload back (source stays 'fixture') — the connection being down never
+  // corrupts or overwrites the backup.
+  if (force) {
+    if (!_building) _building = refreshLive();
+    try { await _building; } catch (e) { /* MySQL unreachable — keep whatever cache we have */ }
+    if (_cache) return _cache;
+    const e = new Error('no participation data available'); e.code = 'NO_DATA'; throw e;
+  }
   const stale = !_cache || _cache.source !== 'mysql' || (Date.now() - _cache.at) > TTL_MS;
   if (stale && !_building && (Date.now() - _lastLiveTry) > (_cache ? RETRY_MS : 0)) _building = refreshLive();
   if (_cache) return _cache;
