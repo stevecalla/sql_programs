@@ -14,16 +14,30 @@
 const fs = require('fs');
 const path = require('path');
 const db = require('./db');
-const agg = require('./participation_agg');
 const META = require('./mapmeta.json');
+const data_dir = require('../data_dir');
+
+// Single aggregator: the per-year roll-up is built by the SAME compute.js the client uses (ESM, lazy-imported
+// once). Proven byte-identical to the old participation_agg.buildYear via store/verify_agg_parity.js.
+let _compute = null;
+async function getCompute() { if (!_compute) _compute = await import('../web/src/lib/compute.js'); return _compute; }
 
 const DB_NAME = 'usat_sales_db';
 const SUMMARY_TABLE = 'all_participation_data_with_membership_match_summary';
 const FLOWS_TABLE = 'all_participation_data_with_membership_match_flows';
 const EVENTS_TABLE = 'all_participation_data_with_membership_match_events';
 
-const FIXTURE = path.join(__dirname, 'fixtures', 'participation_bootstrap.json');
+// Self-healing fallback cache — lives in the app data dir (OUTSIDE the repo, next to auth.json), so it never
+// churns git and is never committed. The server rewrites it after every successful live MySQL build, so the
+// fallback is always the last known-good live payload (no stale/phantom data). Override: REPORTING_FIXTURE_FILE.
+const FIXTURE = process.env.REPORTING_FIXTURE_FILE || data_dir.file_sync('participation_bootstrap.json');
 const TTL_MS = Number(process.env.REPORTING_BOOTSTRAP_TTL_MS) || 60 * 60 * 1000;
+
+// Persist the live payload to the fallback cache (best-effort; a read-only data dir must not crash the app).
+function writeFixture(payload) {
+  try { fs.mkdirSync(path.dirname(FIXTURE), { recursive: true }); fs.writeFileSync(FIXTURE, JSON.stringify(payload)); }
+  catch (e) { console.warn('[reporting] could not write fallback cache: ' + e.message); }
+}
 
 let _cache = null;
 let _building = null;
@@ -94,12 +108,14 @@ async function build_from_mysql() {
   Object.keys(monthsByYear).forEach((y) => { monthsByYear[y] = Array.from(monthsByYear[y]).sort((a, b) => a - b); });
 
   const byYear = {}, annualUnique = {};
+  const compute = await getCompute();
+  const P = { meta: META.meta, abbr: META.abbr, ab2region: META.ab2region, regOrder: META.regOrder, names: META.names, rawByYM: {} };
   for (const yr of Object.keys(nationalAnnual)) {
     const nat = { uniq: Number(nationalAnnual[yr].unique_athletes), part: Number(nationalAnnual[yr].turnout) };
-    byYear[yr] = agg.buildYear(stateAnnual[yr] || [], regionAnnual[yr] || [], nat);
     const s = {}; (stateAnnual[yr] || []).forEach((row) => { s[row[0]] = row[19]; });
     const rr = {}; (regionAnnual[yr] || []).forEach((row) => { rr[row[0]] = row[19]; });
     annualUnique[yr] = { s, r: rr, n: nat.uniq };
+    byYear[yr] = compute.buildYearBlock(stateAnnual[yr] || [], regionAnnual[yr] || [], { state: s, region: rr, nat: nat.uniq, approx: false }, P);
   }
 
   // Events: annual roll-up rows only (one row per event/year) -> pins + Events tab. maxParts = the largest
@@ -156,6 +172,7 @@ async function refreshLive() {
   try {
     const payload = await withTimeout(build_from_mysql(), BUILD_TIMEOUT_MS);
     _cache = { payload, source: 'mysql', at: Date.now() };
+    writeFixture(payload);   // refresh the fallback cache with this known-good live build
     console.log('[reporting] live participation payload cached from MySQL (summary tables)');
   } catch (e) {
     console.warn('[reporting] live build failed (' + (e.code || 'error') + '): ' + e.message + ' — keeping ' + (_cache ? _cache.source : 'no cache'));
@@ -172,6 +189,7 @@ async function get_bootstrap() {
   if (process.env.REPORTING_STRICT_DB === '1') {
     const payload = await withTimeout(build_from_mysql(), BUILD_TIMEOUT_MS);
     _cache = { payload, source: 'mysql', at: Date.now() };
+    writeFixture(payload);
     return _cache;
   }
   if (!_cache) seedFixture();

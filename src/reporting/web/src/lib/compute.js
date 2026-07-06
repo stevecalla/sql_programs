@@ -112,12 +112,13 @@ function computeAgg(keys, uq, p) {
   const present = abbr.filter((ab) => S[ab]);
   const nm = (ab) => names[abbr.indexOf(ab)];
   const tt = present.slice().sort((a, b) => S[b][0] - S[a][0]).slice(0, 8).map((ab) => [ab, nm(ab), S[ab][0]]);
-  const th = present.filter((ab) => (S[ab][14] + S[ab][15]) > 0).sort((a, b) => (S[b][14] / (S[b][14] + S[b][15])) - (S[a][14] / (S[a][14] + S[a][15]))).slice(0, 8).map((ab) => [ab, nm(ab), Math.round(100 * S[ab][14] / (S[ab][14] + S[ab][15]))]);
+  const hs = (ab) => Math.round(100 * S[ab][14] / S[ab][0]);   // rounded home share % (sort + value, matches server)
+  const th = present.filter((ab) => S[ab][0] > 0).sort((a, b) => hs(b) - hs(a)).slice(0, 8).map((ab) => [ab, nm(ab), hs(ab)]);
   const ti = present.slice().sort((a, b) => S[b][16] - S[a][16]).slice(0, 8).map((ab) => [ab, nm(ab), S[ab][16]]);
   const cards = { 'Top participation states': tt, 'Highest home share': th, 'Top IRONMAN states': ti };
 
   const rsrows = []; let Tt = 0, Et = 0, Rt = 0, Ht = 0, At = 0, IMt = 0, Nt = 0, RPt = 0, FNt = 0, MNt = 0, C4 = 0, Ut = 0;
-  Object.keys(R).sort((a, b) => R[b][0] - R[a][0]).forEach((rg) => {
+  regOrder.filter((rg) => R[rg]).forEach((rg) => {
     const v = R[rg]; const hp = v[0] ? Math.round(100 * v[14] / v[0]) : 0; const awp = v[0] ? Math.round(100 * v[15] / v[0]) : 0; const u = uq.region[rg]; const per = u ? Math.round(v[0] / u * 10) / 10 : null;
     rsrows.push([rg, v[0], v[1], (v[1] ? Math.round(v[0] / v[1]) : 0), (v[2] ? Math.round(v[0] / v[2]) : 0), (v[0] ? Math.round(100 * v[6] / v[0]) : 0), v[6], v[7], (v[0] ? Math.round(100 * v[8] / v[0]) : 0), hp, awp, (v[0] ? Math.round(100 * v[19] / v[0]) : 0), v[16], v[17], v[0] - v[17], u, per]);
     Tt += v[0]; Et += v[1]; Rt += v[2]; Ht += v[14]; At += v[15]; IMt += v[16]; Nt += v[17]; RPt += (v[0] - v[17]); FNt += v[6]; MNt += v[7]; C4 += v[8]; Ut += v[19];
@@ -133,6 +134,19 @@ export function getYearBlock(p, selYears, selMonths) {
   if (selYears.length === 1 && selMonths.indexOf('all') >= 0 && p.byYear[selYears[0]]) return p.byYear[selYears[0]];
   const keys = resolveSlices(selYears, selMonths, p.monthsByYear);
   return computeAgg(keys, resolveUniq(selYears, selMonths, keys, p), p);
+}
+
+// Build one year's block from its ANNUAL raw rows (the summary month=NULL ROLLUP rows, which carry EXACT
+// distinct counts). A thin wrapper over computeAgg — feeds the annual state/region slices as a single key,
+// so there is ONE aggregation implementation (replaces the separate server participation_agg.buildYear).
+//   annualStateRows / annualRegionRows: raw rows WITH the geo_key at index 0 (i.e. sumToRaw output).
+//   uq: { state:{ab:uniq}, region:{rg:uniq}, nat:uniq } (from annualUnique). p: meta bundle + rawByYM.
+export function buildYearBlock(annualStateRows, annualRegionRows, uq, p) {
+  const slot = { s: {}, r: {} };
+  (annualStateRows || []).forEach((row) => { slot.s[row[0]] = row.slice(1); });
+  (annualRegionRows || []).forEach((row) => { slot.r[row[0]] = row.slice(1); });
+  const pp = Object.assign({}, p, { rawByYM: Object.assign({}, p.rawByYM, { __annual__: slot }) });
+  return computeAgg(['__annual__'], uq, pp);
 }
 
 // Headline KPIs from a year-block (works for single or multi selection).
