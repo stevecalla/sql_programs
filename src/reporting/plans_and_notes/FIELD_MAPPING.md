@@ -69,7 +69,7 @@ selections re-aggregate — the raw counts themselves still come from SQL.
 | Adult (per event/race) | age bin ≥ 20 (`age_as_race_results_bin IN 20-29 … 90-99`) |
 | Female / Male | `gender_code = 'F'` / `'M'` (NB excluded from the split) |
 | Age bands | `age_as_race_results_bin`: **4-19** = (4-9)+(10-19); 20-29; 30-39; 40-49; 50-59; **60+** = (60-69…90-99); `bad_age` excluded |
-| Home / Away | Home = `member_state_code_addresses = state_code_events`; Away = turnout − Home (unknown home counts as away) |
+| Home / Away / Unknown | Home = `member_state_code_addresses = state_code_events`; **Unknown home** = `member_state_code_addresses IS NULL OR NOT IN (50 states)`; **Away = turnout − Home − Unknown** (member is one of the 50 and ≠ event). Reconciles: Home + Away + Unknown = turnout. Home % = Home ÷ (Home + Away), the known-home basis. |
 | IRONMAN | `is_ironman = 1` |
 | New / Repeat | New = `member_created_at_category_starts_mp = 'created_year'`; Repeat = turnout − New |
 | Unique athletes | `COUNT(DISTINCT id_profiles)` |
@@ -83,8 +83,9 @@ selections re-aggregate — the raw counts themselves still come from SQL.
 
 ## Coverage (populated share, 2025 on BigQuery)
 - event state, gender, age, IRONMAN, new/repeat: **~100%**
-- home state (`member_state_code_addresses`): **~90%** (the ~10% without a membership-address match
-  count as "away"/unknown origin, same as the POC)
+- home state (`member_state_code_addresses`): **~90%** populated with a 50-state code. The remainder
+  (~11% in 2024: ~9% null/blank + ~2.5% a non-50 code like DC/territory/foreign/military) is now bucketed
+  as **Unknown home** — its own metric — NOT folded into Away (that was the old behavior)
 - `id_profiles` (unique): ~96%
 
 ## Notes

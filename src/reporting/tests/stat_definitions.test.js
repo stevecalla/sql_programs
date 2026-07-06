@@ -19,6 +19,16 @@ test('summary Events uses race-side id_events_rr, not sales-side id_events', asy
   assert.ok(!/t\.id_events\)/.test(sql), 'must not use the sales-side id_events for a metric');
 });
 
+test('summary + events define unknown_home_count (home + away + unknown = turnout)', async () => {
+  const sql = await create_participation_summary_table('summary', 'base');
+  // unknown_home = home state missing OR not one of the 50 states (bucketed separately, not folded into away).
+  assert.match(sql, /member_state_code_addresses IS NULL OR t\.member_state_code_addresses NOT IN/, 'unknown_home = null OR not-in-50');
+  assert.match(sql, /AS unknown_home_count/, 'summary must expose unknown_home_count');
+  const ev = await create_participation_events_table('events', 'base');
+  assert.match(ev, /AS unknown_home_count/, 'events must expose unknown_home_count');
+  assert.match(ev, /AS unknown_home_pct/, 'events must expose unknown_home_pct');
+});
+
 test('events builder uses race-side name + is_ironman flag, de-quoted, at sanctioning-event grain', async () => {
   const sql = await create_participation_events_table('events', 'base');
   assert.match(sql, /name_events_rr/, 'event name must come from name_events_rr');

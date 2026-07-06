@@ -44,6 +44,10 @@ Reporting stats must use the **race-side** columns:
   per event — never a JS/name regex. `step_3c` uses the flag the same way.
 - Event-row derived metrics (per-race, %s, home %, per-participant) are computed in **SQL**
   (`step_3i` events builder); `store/participation_read.js:evToRow` is a plain column→array map.
+- **Home / Away / Unknown home** (reconciles: home + away + unknown = turnout):
+  `home = SUM(member_state = event_state)`; `unknown_home_count = SUM(member_state IS NULL OR NOT IN 50-states)`;
+  `away = turnout − home − unknown_home_count` (member is one of the 50 and ≠ event). `home_pct = home/(home+away)`
+  — the **known-home basis** (excludes unknown). Old behavior folded unknown into away — do not revert.
 
 Using the sales-side columns caused real bugs (every race mislabeled "Visit Panama City Beach…";
 Events inflated ~3×). Full detail + the trap table: `plans_and_notes/FIELD_MAPPING.md`. Guarded by
