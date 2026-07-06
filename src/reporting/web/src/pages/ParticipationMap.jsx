@@ -483,19 +483,6 @@ export default function ParticipationMap() {
             </div>
           ) : null}
         </span>
-        <label title={metricDesc(metrics[metricIdx] && metrics[metricIdx].label)}>Metric&nbsp;
-          <select value={metricIdx} onChange={(e) => setMetricIdx(Number(e.target.value))}>
-            {metrics.map((m, i) => <option key={i} value={i} title={metricDesc(m.label)}>{m.label}</option>)}
-          </select>
-        </label>
-        <Link to="/reference" title="Metric definitions & data notes" className="muted small" style={{ textDecoration: 'none' }}>ⓘ Reference</Link>
-        <span style={{ display: 'inline-flex', gap: 4 }}>
-          {['state', 'region', 'both'].map((v) => (
-            <button key={v} style={seg(view === v)} onClick={() => pickView(v)}>
-              {v === 'state' ? 'State' : v === 'region' ? 'Region' : 'Both'}
-            </button>
-          ))}
-        </span>
       </div>
 
       <div className="toolbar">
