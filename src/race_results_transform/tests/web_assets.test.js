@@ -22,7 +22,7 @@ function resolve_src(s) {
 
 const REQUIRED = ['vendor/exceljs.min.js', 'src/schema.js', 'src/normalize.js', 'src/display.js',
   'src/sort.js', 'src/view_logic.js', 'src/duplicates.js', 'src/split.js', 'src/parse.js', 'src/match.js', 'src/transform.js',
-  'src/reconcile.js', 'src/mapping.js', 'src/pipeline.js', 'src/io.js', 'js/app.js',
+  'src/reconcile.js', 'src/mapping.js', 'src/pipeline.js', 'src/csv_sniff.js', 'src/io.js', 'js/app.js',
   'js/metrics.js', '/analytics/metrics_client.js'];
 
 describe('web_assets', () => {
