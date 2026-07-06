@@ -113,9 +113,35 @@ function start_server(port) {
     // Warm the participation payload cache in the background so the first page load isn't the slow
     // (first) MySQL build. Best-effort — failures just mean the first request builds on demand.
     try {
-      require('./src/reporting/store/participation_read').get_bootstrap()
-        .then(function (r) { console.log('  [data] participation payload ready (source: ' + r.source + ')'); })
-        .catch(function (e) { console.warn('  [data] participation warm-up failed: ' + e.message); });
+      var pr = require('./src/reporting/store/participation_read');
+      // Report the FINAL served source, not the transient one. get_bootstrap() may hand back the fixture
+      // immediately (stale-while-revalidate) while the live MySQL build finishes in the background — so we
+      // only shout "fixture" if it's STILL fixture after that background build has had time to settle.
+      var announce = function (r, isFinal) {
+        if (r && r.source === 'mysql') {
+          console.log('\x1b[42m\x1b[1;30m');
+          console.log('  ============================================================');
+          console.log('   ✓  LIVE DATA — participation payload cached from MySQL  ✓');
+          console.log('  ============================================================\x1b[0m');
+          return true;
+        }
+        if (!isFinal) { console.log('\x1b[33m  [data] warming… live MySQL build in progress (temporarily serving fixture)\x1b[0m'); return false; }
+        // Still fixture after the live attempt settled -> genuine fallback. LOUD banner.
+        console.log('\x1b[41m\x1b[1;37m');
+        console.log('  ============================================================');
+        console.log('   ⚠  SERVING FALLBACK FIXTURE DATA — NOT LIVE  ⚠');
+        console.log('  ============================================================\x1b[0m');
+        console.log('\x1b[33m  MySQL was unreachable or the build failed, so the app is serving');
+        console.log('  src/reporting/store/fixtures/participation_bootstrap.json (may be STALE).');
+        console.log('  Fix the DB / re-run step_3i, then restart to load live data.\x1b[0m');
+        return false;
+      };
+      pr.get_bootstrap()
+        .then(function (r) {
+          if (announce(r, false)) return;                 // already live
+          setTimeout(function () { pr.get_bootstrap().then(function (r2) { announce(r2, true); }).catch(function () {}); }, 12000);
+        })
+        .catch(function (e) { console.warn('\x1b[31m  [data] participation warm-up failed: ' + e.message + '\x1b[0m'); });
     } catch (e) { /* ignore */ }
   });
   server.on('error', function (e) {

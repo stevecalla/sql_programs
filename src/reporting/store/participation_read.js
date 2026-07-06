@@ -43,10 +43,10 @@ function sumToRaw(r) {
 }
 
 // One events-table row -> the 34-col event array the dashboard expects (mirrors the POC build3 EVCOLS +
-// the new Unknown-home columns). All metrics are computed in SQL (step_3i events builder) — straight map.
+// the new Unknown-home columns, grouped with home/away). All metrics computed in SQL — straight map.
 // [state, region, name, sanction_id, date, IRONMAN, participants, races, per-race, adult/race, female%,
-//  male%, female_n, male_n, age%(4-19..60+), home, away, home%, away%, new, repeat, new%, repeat%, unique,
-//  per-participant, unknown_home_count(30), unknown_home_pct(31), lat(32), lng(33)].
+//  male%, female_n, male_n, age%(4-19..60+), home(20), away(21), unknown_home(22), home%(23), away%(24),
+//  unknown_home%(25), new, repeat, new%, repeat%, unique(30), per-participant(31), lat(32), lng(33)].
 function evToRow(r) {
   const n = (x) => (x == null ? 0 : Number(x));
   const d = r.event_date == null ? null
@@ -56,10 +56,10 @@ function evToRow(r) {
     n(r.turnout), n(r.races), n(r.per_race), n(r.adult_per_race),
     n(r.female_pct), n(r.male_pct), n(r.female), n(r.male),
     n(r.age_4_19_pct), n(r.age_20_29_pct), n(r.age_30_39_pct), n(r.age_40_49_pct), n(r.age_50_59_pct), n(r.age_60_plus_pct),
-    n(r.home), n(r.away), n(r.home_pct), n(r.away_pct),
+    n(r.home), n(r.away), n(r.unknown_home_count),
+    n(r.home_pct), n(r.away_pct), n(r.unknown_home_pct),
     n(r.new_count), n(r.repeat_count), n(r.new_pct), n(r.repeat_pct),
     n(r.unique_athletes), n(r.per_participant),
-    n(r.unknown_home_count), n(r.unknown_home_pct),
     r.lat == null ? null : Number(r.lat), r.lng == null ? null : Number(r.lng),
   ];
 }

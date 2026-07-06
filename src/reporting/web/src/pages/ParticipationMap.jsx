@@ -529,7 +529,7 @@ export default function ParticipationMap() {
           },
           customdata: rows.map((r) => [
             '<b>' + r[2] + '</b><br>' + r[0] + ' · ' + r[1] + ' · ' + fmtEvDate(r[4])
-            + '<br>' + (r[6] || 0).toLocaleString() + ' participants · ' + (r[28] || 0).toLocaleString() + ' unique'
+            + '<br>' + (r[6] || 0).toLocaleString() + ' participants · ' + (r[30] || 0).toLocaleString() + ' unique'
             + (flag === 'Yes' ? '<br><b>IRONMAN</b>' : ''),
             r[0],
           ]),
@@ -627,7 +627,7 @@ export default function ParticipationMap() {
         if (flowDir !== 'out') A.flows.filter((r) => r[1] === flowFocus).forEach((r) => { by[r[0]] = (by[r[0]] || 0) + r[2]; });
         if (flowDir !== 'in') A.flows.filter((r) => r[0] === flowFocus).forEach((r) => { by[r[1]] = (by[r[1]] || 0) + r[2]; });
         Object.keys(by).map((ab) => [ab, by[ab]]).sort((a, b) => b[1] - a[1]).slice(0, flowTop).forEach((x, i) => {
-          if (p.centroid[x[0]]) badgeRows.push({ ab: x[0], rank: i + 1, n: x[1], pos: [p.centroid[x[0]][0], p.centroid[x[0]][1] + 1.4] });
+          if (p.centroid[x[0]]) badgeRows.push({ ab: x[0], rank: i + 1, n: x[1], pos: p.centroid[x[0]] });
         });
       }
       const badgeSet = {}; badgeRows.forEach((b) => { badgeSet[b.ab] = true; });
@@ -637,13 +637,15 @@ export default function ParticipationMap() {
         lineWidthUnits: 'pixels', getLineWidth: 2.5, lineWidthMinPixels: 2,
         updateTriggers: { getLineColor: [Object.keys(badgeSet).join()] },
       }));
-      layers.push(new deck.ScatterplotLayer({
-        id: 'badgeC', data: badgeRows, getPosition: (d) => d.pos, getRadius: 11, radiusUnits: 'pixels',
-        getFillColor: [212, 146, 10], stroked: true, getLineColor: [255, 255, 255], lineWidthMinPixels: 1.2, pickable: false,
-      }));
+      // One billboarded badge (gold pill + white rank), raised above the state label in SCREEN space via
+      // getPixelOffset so it stays readable when the map is tilted (billboard = always faces the camera).
       layers.push(new deck.TextLayer({
-        id: 'badgeT', data: badgeRows, getPosition: (d) => d.pos, getText: (d) => '' + d.rank,
-        getSize: 12, fontWeight: 700, getColor: [255, 255, 255], getTextAnchor: 'middle', getAlignmentBaseline: 'center',
+        id: 'badge', data: badgeRows, getPosition: (d) => d.pos, getText: (d) => '' + d.rank,
+        getSize: 14, fontWeight: 700, getColor: [255, 255, 255], getTextAnchor: 'middle', getAlignmentBaseline: 'center',
+        billboard: true, getPixelOffset: [22, -24],
+        background: true, getBackgroundColor: [212, 146, 10, 255], backgroundPadding: [6, 3, 6, 3],
+        fontSettings: { sdf: true }, outlineWidth: 2, outlineColor: [255, 255, 255],
+        parameters: { depthTest: false }, characterSet: '0123456789',
       }));
 
       const tooltip = (o) => {
@@ -778,6 +780,12 @@ export default function ParticipationMap() {
 
   return (
     <div className="page">
+      {st.source === 'fixture' ? (
+        <div role="alert" style={{ background: dark ? '#4a1d1d' : '#fef2f2', border: '1px solid ' + (dark ? '#7f1d1d' : '#fecaca'), color: dark ? '#fecaca' : '#991b1b', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 14, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <span style={{ fontSize: 18, lineHeight: 1 }}>⚠</span>
+          <span><b>Showing fallback sample data (not live).</b> The database was unreachable or the last build failed, so these figures come from a baked fixture and may be stale. Restart the server / re-run the pipeline to load live data.</span>
+        </div>
+      ) : null}
       <div className="page-head">
         <h2>Participation maps</h2>
         <span className="muted small">{p.abbr.length} states · {metrics.length} metrics · {labelText(selYears, selMonths)}</span>
@@ -787,7 +795,7 @@ export default function ParticipationMap() {
         <div className="kpis">
           <Kpi v={fmt(kpis.participants)} l={`Participants (${labelText(selYears, selMonths)})`} t="Count of participation records (event starts) for the selected period. One athlete racing 3× counts as 3." />
           <Kpi v={fmt(kpis.unique) + (kpis.approx ? ' ~' : '')} l="Unique athletes" t="Distinct athletes (deduplicated). ~ means summed across periods (approximate) for a multi-period selection." />
-          <Kpi v={kpis.homePct == null ? '—' : kpis.homePct + '%'} l="Home (in-state)" t="Share of participations where the athlete raced in their home state (of home + away)." />
+          <Kpi v={kpis.homePct == null ? '—' : kpis.homePct + '%'} l="Home (in-state)" t="Share of total participations where the athlete raced in their home state (home ÷ total participants)." />
           <Kpi v={fmt(kpis.away)} l="Traveled away" t="Participations where the athlete’s home state differs from the event state (cross-state travel)." />
         </div>
       ) : null}

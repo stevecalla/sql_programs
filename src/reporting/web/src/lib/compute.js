@@ -37,8 +37,8 @@ function mv(r, idx, uq) {
     case 14: return T ? Math.round(100 * r[11] / T) : null; case 15: return T ? Math.round(100 * r[12] / T) : null; case 16: return T ? Math.round(100 * r[13] / T) : null;
     case 17: return r[8]; case 18: return r[9]; case 19: return r[10]; case 20: return r[11]; case 21: return r[12]; case 22: return r[13];
     case 23: return r[14]; case 24: return r[15];
-    case 25: return (r[14] + r[15]) ? Math.round(100 * r[14] / (r[14] + r[15])) : null;
-    case 26: return (r[14] + r[15]) ? (100 - Math.round(100 * r[14] / (r[14] + r[15]))) : null;
+    case 25: return T ? Math.round(100 * r[14] / T) : null;
+    case 26: return T ? Math.round(100 * r[15] / T) : null;
     case 27: return r[16]; case 28: return T ? Math.round(100 * r[16] / T) : null;
     case 29: return r[17]; case 30: return r[0] - r[17]; case 31: return T ? Math.round(100 * r[17] / T) : null; case 32: return T ? Math.round(100 * (r[0] - r[17]) / T) : null;
     case 33: return uq == null ? null : uq; case 34: return (uq != null && T) ? Math.round(100 * uq / T) : null; case 35: return (uq != null && uq) ? Math.round(r[0] / uq * 10) / 10 : null;
@@ -118,12 +118,12 @@ function computeAgg(keys, uq, p) {
 
   const rsrows = []; let Tt = 0, Et = 0, Rt = 0, Ht = 0, At = 0, IMt = 0, Nt = 0, RPt = 0, FNt = 0, MNt = 0, C4 = 0, Ut = 0;
   Object.keys(R).sort((a, b) => R[b][0] - R[a][0]).forEach((rg) => {
-    const v = R[rg]; const hp = (v[14] + v[15]) ? Math.round(100 * v[14] / (v[14] + v[15])) : 0; const u = uq.region[rg]; const per = u ? Math.round(v[0] / u * 10) / 10 : null;
-    rsrows.push([rg, v[0], v[1], (v[1] ? Math.round(v[0] / v[1]) : 0), (v[2] ? Math.round(v[0] / v[2]) : 0), (v[0] ? Math.round(100 * v[6] / v[0]) : 0), v[6], v[7], (v[0] ? Math.round(100 * v[8] / v[0]) : 0), hp, 100 - hp, v[16], v[17], v[0] - v[17], u, per, (v[0] ? Math.round(100 * v[19] / v[0]) : 0)]);
+    const v = R[rg]; const hp = v[0] ? Math.round(100 * v[14] / v[0]) : 0; const awp = v[0] ? Math.round(100 * v[15] / v[0]) : 0; const u = uq.region[rg]; const per = u ? Math.round(v[0] / u * 10) / 10 : null;
+    rsrows.push([rg, v[0], v[1], (v[1] ? Math.round(v[0] / v[1]) : 0), (v[2] ? Math.round(v[0] / v[2]) : 0), (v[0] ? Math.round(100 * v[6] / v[0]) : 0), v[6], v[7], (v[0] ? Math.round(100 * v[8] / v[0]) : 0), hp, awp, (v[0] ? Math.round(100 * v[19] / v[0]) : 0), v[16], v[17], v[0] - v[17], u, per]);
     Tt += v[0]; Et += v[1]; Rt += v[2]; Ht += v[14]; At += v[15]; IMt += v[16]; Nt += v[17]; RPt += (v[0] - v[17]); FNt += v[6]; MNt += v[7]; C4 += v[8]; Ut += v[19];
   });
-  const hpT = (Ht + At) ? Math.round(100 * Ht / (Ht + At)) : 0, natU = uq.nat;
-  rsrows.push(['US total', Tt, Et, (Et ? Math.round(Tt / Et) : 0), (Rt ? Math.round(Tt / Rt) : 0), (Tt ? Math.round(100 * FNt / Tt) : 0), FNt, MNt, (Tt ? Math.round(100 * C4 / Tt) : 0), hpT, 100 - hpT, IMt, Nt, RPt, natU, (natU ? Math.round(Tt / natU * 10) / 10 : null), (Tt ? Math.round(100 * Ut / Tt) : 0)]);
+  const hpT = Tt ? Math.round(100 * Ht / Tt) : 0, awpT = Tt ? Math.round(100 * At / Tt) : 0, natU = uq.nat;
+  rsrows.push(['US total', Tt, Et, (Et ? Math.round(Tt / Et) : 0), (Rt ? Math.round(Tt / Rt) : 0), (Tt ? Math.round(100 * FNt / Tt) : 0), FNt, MNt, (Tt ? Math.round(100 * C4 / Tt) : 0), hpT, awpT, (Tt ? Math.round(100 * Ut / Tt) : 0), IMt, Nt, RPt, natU, (natU ? Math.round(Tt / natU * 10) / 10 : null)]);
 
   return { metrics, cards, rsrows, nat: { uniq: natU, part: Tt }, approxUniq: uq.approx };
 }
@@ -145,7 +145,7 @@ export function kpisFromYB(yb) {
     participants,
     unique: yb.nat ? yb.nat.uniq : null,
     home, away,
-    homePct: (home + away) ? Math.round((100 * home) / (home + away)) : null,
+    homePct: participants ? Math.round((100 * home) / participants) : null,
     approx: !!yb.approxUniq,
   };
 }

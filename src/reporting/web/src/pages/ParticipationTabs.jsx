@@ -213,10 +213,11 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
       ['Per race', R ? Math.round(T / R) : '-', 'Participants ÷ Races — average field size.'],
       ['Female', (FN + MN) ? Math.round(100 * FN / (FN + MN)) + '%' : '-', 'Female ÷ (Female + Male) participations.'],
       ['IRONMAN', T ? Math.round(100 * IM / T) + '%' : '-', 'IRONMAN participations ÷ all participations.'],
-      ['Home', (H + A) ? Math.round(100 * H / (H + A)) + '%' : '-', 'In-state ÷ (in-state + away, excludes unknown) — share racing in their home state.'],
-      ['Traveled away', A.toLocaleString(), 'Participations where home state is one of the 50 and ≠ event state (cross-state travel).'],
-      ['Unknown home', UNK.toLocaleString(), 'Home state missing or not one of the 50 states — excluded from home/away. Reconciles: home + away + unknown = participants.'],
-      ['Unknown home %', T ? Math.round(100 * UNK / T) + '%' : '-', 'Unknown home ÷ Participants.'],
+      ['Home', T ? Math.round(100 * H / T) + '%' : '-', 'In-state ÷ total participants — share racing in their home state. Home % + Away % + Unknown home % = 100%.'],
+      ['Away %', T ? Math.round(100 * A / T) + '%' : '-', 'Cross-state travel (home is one of the 50 and ≠ event state) ÷ total participants.'],
+      ['Traveled away', A.toLocaleString(), 'Count of cross-state participations.'],
+      ['Unknown home', UNK.toLocaleString(), 'Home state missing or not one of the 50 states. Reconciles: home + away + unknown = participants.'],
+      ['Unknown home %', T ? Math.round(100 * UNK / T) + '%' : '-', 'Unknown home ÷ total participants.'],
       ['New', T ? Math.round(100 * NW / T) + '%' : '-', 'First-time athletes ÷ Participants.'],
       ['Repeat', T ? Math.round(100 * RP / T) + '%' : '-', 'Returning athletes ÷ Participants.'],
     ];
@@ -235,6 +236,26 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
   }, [EV, selMonths, regionSel, stateSel, imSel, searchTxt, sortEc, sortDir]);
   const visCols = useMemo(() => { const a = []; for (let i = 0; i < COLS.length; i++) { if ((i === 3 || i === 4) && !showSanc) continue; a.push(i); } return a; }, [COLS, showSanc]);
   const cellFmt = (ec, c) => { if (c == null || c === '') return ''; if (COLS[ec] === 'Date') return fmtDate(c); const t = colType(COLS[ec]); if (t === 'cnt') return commafy(c); if (t === 'pct') return pctify(c); return c; };
+  // Totals over ALL filtered events (not just the page). Count columns sum; % columns are recomputed on the
+  // summed counts (weighted); ratios use the totals; unique is summed (approx — dedupes only within an event).
+  const evTot = useMemo(() => {
+    const s = { part: 0, races: 0, fn: 0, mn: 0, home: 0, away: 0, unk: 0, nw: 0, rp: 0, uniq: 0 };
+    filtered.forEach((r) => { s.part += r[6] || 0; s.races += r[7] || 0; s.fn += r[12] || 0; s.mn += r[13] || 0; s.home += r[20] || 0; s.away += r[21] || 0; s.unk += r[22] || 0; s.nw += r[26] || 0; s.rp += r[27] || 0; s.uniq += r[30] || 0; });
+    return s;
+  }, [filtered]);
+  const totalCell = (ec) => {
+    const L = COLS[ec], t = evTot, P = t.part, pc = (n) => (P ? Math.round(100 * n / P) + '%' : '');
+    switch (L) {
+      case 'Participants': return commafy(t.part); case 'Races': return commafy(t.races);
+      case 'Per race': return t.races ? Math.round(t.part / t.races) : ''; case 'Per participant': return t.uniq ? (t.part / t.uniq).toFixed(1) : '';
+      case 'Female n': return commafy(t.fn); case 'Male n': return commafy(t.mn); case 'Female %': return pc(t.fn); case 'Male %': return pc(t.mn);
+      case 'Home': return commafy(t.home); case 'Away': return commafy(t.away); case 'Unknown home': return commafy(t.unk);
+      case 'Home %': return pc(t.home); case 'Away %': return pc(t.away); case 'Unknown home %': return pc(t.unk);
+      case 'New': return commafy(t.nw); case 'Repeat': return commafy(t.rp); case 'New %': return pc(t.nw); case 'Repeat %': return pc(t.rp);
+      case 'Unique': return commafy(t.uniq);
+      default: return '';
+    }
+  };
   const clickCol = (ec) => { if (ec < 0) return; if (sortEc === ec) setSortDir(-sortDir); else { setSortEc(ec); setSortDir(1); } };
   // Freeze the identity block (#, State, Region, Event) to the left; Event is width-capped + ellipsized.
   const HASHW = 34, FCOLW = [44, 84, 170];
@@ -417,6 +438,16 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
                   </tr>
                 ); })}
               </tbody>
+              {filtered.length ? (
+                <tfoot>
+                  <tr>
+                    <td style={{ ...td, position: 'sticky', bottom: 0, left: 0, zIndex: 6, background: 'var(--panel)', fontWeight: 700, minWidth: HASHW, borderTop: '2px solid var(--border-strong, #94a3b8)' }} />
+                    {visCols.map((ec, j) => { const fz = j < 3; return (
+                      <td key={ec} style={{ ...td, fontWeight: 700, textAlign: ec >= 3 ? 'center' : 'left', position: 'sticky', bottom: 0, left: fz ? evLeft(j) : undefined, zIndex: fz ? 6 : 5, background: 'var(--panel)', minWidth: fz ? FCOLW[j] : undefined, maxWidth: j === 2 ? FCOLW[2] : undefined, borderTop: '2px solid var(--border-strong, #94a3b8)' }}>{j === 0 ? 'Total' : totalCell(ec)}</td>
+                    ); })}
+                  </tr>
+                </tfoot>
+              ) : null}
             </table>
             {filtered.length === 0 ? <p className="muted" style={{ padding: 16, textAlign: 'center' }}>No events match the current filters{period ? ' for ' + period : ''}.</p> : null}
           </div>
