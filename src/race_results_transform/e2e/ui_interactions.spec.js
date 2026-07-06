@@ -118,9 +118,10 @@ test.describe('race_results_transform — UI interactions', () => {
   });
 
   test('duplicate Member Numbers are counted, highlighted in both tables, and filterable', async ({ page }) => {
+    // Member numbers must be >=4 digits or n_member treats them as "1-day" placeholders (never counted).
     const csv = 'Member Number,First Name,Last Name,Gender,Recorded Time\n' +
-      '101,Amy,Lee,F,1:00:00\n202,Bob,Kim,M,1:05:00\n101,Amy,Lee,F,1:00:00\n303,Cy,Ng,M,1:10:00\n';
-    await step(page, 'Uploading a CSV where member 101 appears twice');
+      '100101,Amy,Lee,F,1:00:00\n200202,Bob,Kim,M,1:05:00\n100101,Amy,Lee,F,1:00:00\n300303,Cy,Ng,M,1:10:00\n';
+    await step(page, 'Uploading a CSV where member 100101 appears twice');
     await page.setInputFiles('#fileInput', { name: 'dups.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
     await expect(page.locator('#compareCard')).toBeVisible();
     await step(page, 'Summary chip shows the duplicate count (bold = rows)');
