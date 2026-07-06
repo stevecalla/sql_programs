@@ -845,10 +845,41 @@ export default function ParticipationMap() {
   };
 
   // Export the current map data (every state, all metrics for the selected year/month) to CSV.
+  // Context-aware CSV: export the data behind whatever map style is active, so the file matches the screen.
   const exportCsv = () => {
-    const header = ['State', 'Name', 'Region'].concat(metrics.map((m) => m.label));
-    const rows = p.abbr.map((ab, i) => [ab, p.names[i], p.regs[i]].concat(metrics.map((m) => (m.statez[i] == null ? '' : m.statez[i]))));
-    downloadCSV('participation_map_' + suf(selYears, selMonths) + '.csv', header, rows);
+    const per = suf(selYears, selMonths);
+    // Flows map → the focused state's inbound + outbound routes (what the arcs show).
+    if (showFlows && flowRoutes) {
+      const header = ['Direction', 'Focus state', 'Partner state', 'Participants'];
+      const rows = flowRoutes.inb.map((r) => ['Inbound (raced in ' + flowRoutes.focusName + ')', flowRoutes.focusName, r[0], r[1]])
+        .concat(flowRoutes.outb.map((r) => ['Outbound (left ' + flowRoutes.focusName + ')', flowRoutes.focusName, r[0], r[1]]));
+      downloadCSV('participation_flows_' + flowFocus + '_' + per + '.csv', header, rows);
+      return;
+    }
+    // YoY map → from / to / change per state and per region (matches the growth fill + top movers).
+    if (fillMode === 'yoy' && yoyData) {
+      const unit = yoyData.abs ? 'abs' : '%';
+      const header = ['Level', 'Code', 'Name', 'From (' + yoyFrom + ')', 'To (' + yoyTo + ')', 'Change (' + unit + ')'];
+      const rows = p.abbr.map((ab, i) => { const c = yoyData.cd[i] || []; return ['State', ab, c[0] || p.names[i], c[1] || '', c[2] || '', c[3] || '']; });
+      p.regOrder.forEach((rg, j) => { const c = yoyData.regCd[j] || []; rows.push(['Region', rg, rg, c[1] || '', c[2] || '', c[3] || '']); });
+      downloadCSV('participation_yoy_' + yoyFrom + '_to_' + yoyTo + '_' + (metrics[metricIdx] ? metrics[metricIdx].label.replace(/[^a-z0-9]+/gi, '') : '') + '_' + per + '.csv', header, rows);
+      return;
+    }
+    // Pins-only (neutral) map → the event pins on screen (event roll-ups with coords), same filters as the pins.
+    if (fillMode === 'none' && showPins && pinEvents && pinEvents.length) {
+      const header = ['State', 'Region', 'Event', 'Date', 'IRONMAN', 'Participants', 'Home', 'Away', 'Unknown home', 'Lat', 'Lng'];
+      const rows = pinEvents.map((r) => [r[0], r[1], r[2], r[4], r[5], r[6], r[20], r[21], r[22], r[32], r[33]]);
+      downloadCSV('participation_event_pins_' + per + '.csv', header, rows);
+      return;
+    }
+    // Choropleth → only the metric currently shown, at the grain(s) on screen (states for State/Both,
+    // regions for Region/Both). The full all-metrics matrix lives on the State-matrix / Region-matrix tabs.
+    const m = metrics[metricIdx] || metrics[0];
+    const header = ['Level', 'Code', 'Name', 'Region', m.label];
+    const rows = [];
+    if (view !== 'region') p.abbr.forEach((ab, i) => rows.push(['State', ab, p.names[i], p.regs[i], m.statez[i] == null ? '' : m.statez[i]]));
+    if (view !== 'state') p.regOrder.forEach((rg) => { const i = p.regs.indexOf(rg); rows.push(['Region', rg, rg, rg, (i < 0 || m.regionz[i] == null) ? '' : m.regionz[i]]); });
+    downloadCSV('participation_' + (m.label || 'metric').replace(/[^a-z0-9]+/gi, '') + '_' + per + '.csv', header, rows);
   };
 
   return (
@@ -909,7 +940,7 @@ export default function ParticipationMap() {
             {selMonths.indexOf('all') >= 0 ? 'All months' : selMonths.length + ' month' + (selMonths.length > 1 ? 's' : '')} ▾
           </button>
           {monthOpen ? (
-            <div style={{ position: 'absolute', zIndex: 60, top: '110%', left: 0, background: 'var(--card-bg, #fff)', color: 'inherit', border: '1px solid #cbd5e1', borderRadius: 6, padding: 6, maxHeight: 260, overflow: 'auto', minWidth: 150, boxShadow: '0 8px 20px rgba(0,0,0,.2)' }}>
+            <div style={{ position: 'absolute', zIndex: 60, top: '110%', left: 0, background: 'var(--panel)', color: 'inherit', border: '1px solid var(--line, #cbd5e1)', borderRadius: 6, padding: 6, maxHeight: 260, overflow: 'auto', minWidth: 150, boxShadow: '0 8px 20px rgba(0,0,0,.2)' }}>
               <label style={{ display: 'flex', gap: 6, padding: '3px 6px' }}>
                 <input type="checkbox" checked={selMonths.indexOf('all') >= 0} onChange={() => setSelMonths(['all'])} /> All months
               </label>
@@ -1025,7 +1056,7 @@ export default function ParticipationMap() {
           <button style={mini(false)} title="Zoom out" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.max(1.5, flowViewRef.current.zoom - 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else setZoom((z) => Math.max(1, z / 1.4)); }}>−</button>
           <button style={mini(false)} title="Zoom in" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.min(9, flowViewRef.current.zoom + 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else setZoom((z) => Math.min(10, z * 1.4)); }}>+</button>
           <button style={mini(false)} title="Reset everything to defaults (map type, zoom, filters)" onClick={resetAll}>⟲</button>
-          <button style={mini(false)} title="Download data (CSV)" onClick={exportCsv}>CSV</button>
+          <button style={mini(false)} title={showFlows ? 'Download the focused state’s inbound/outbound flow routes (CSV)' : fillMode === 'yoy' ? 'Download YoY from/to/change by state & region (CSV)' : (fillMode === 'none' && showPins) ? 'Download the event pins on screen (CSV)' : 'Download the metric shown, by ' + (view === 'region' ? 'region' : view === 'both' ? 'state & region' : 'state') + ' (CSV)'} onClick={exportCsv}>CSV</button>
           <button style={mini(false)} title="Download PNG" onClick={exportPng}>PNG</button>
           <button style={mini(false)} title="Fullscreen" onClick={toggleFs}>⛶</button>
         </span>
