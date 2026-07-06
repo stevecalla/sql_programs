@@ -47,7 +47,7 @@ export default function Reference() {
           ['Event state', 'state_code_events (50 states)'],
           ['Home state', 'member_state_code_addresses — Home = home state equals event state'],
           ['Year / Month', 'start_date_year_races / start_date_month_races'],
-          ['Participants / Events / Races', 'COUNT(id_rr) / COUNT(DISTINCT id_events) / COUNT(DISTINCT id_race_rr)'],
+          ['Participants / Events / Races', 'COUNT(id_rr) / COUNT(DISTINCT id_events_rr) / COUNT(DISTINCT id_race_rr)'],
           ['Gender', "gender_code = 'F' / 'M'"],
           ['Age bands', 'age_as_race_results_bin (4-19 = 4-9+10-19; 60+ = 60-69…90-99; bad_age excluded)'],
           ['IRONMAN', 'is_ironman = 1'],

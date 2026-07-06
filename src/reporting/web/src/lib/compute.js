@@ -1,6 +1,14 @@
-// Minimal derivations from the bootstrap payload — enough to prove the data pipe end-to-end and
-// show headline numbers. The full aggregation logic (computeAgg, flows, matrices, YoY) ports here
-// in the next Phase-2 increment; this file intentionally stays small for now.
+// Client-side aggregation ported 1:1 from the POC dashboard so the native page supports multi-year and
+// month multi-select. Given selected years + months, it sums the per-(year,month) raw slices in the
+// bootstrap payload (rawByYM) and re-derives the 36 metrics — identical math to the standalone build.
+//
+// Payload pieces used: byYear (exact single-year blocks), rawByYM {s:{ab:[19]}, r:{region:[19]}},
+// monthlyNat (national turnout/month), annualUnique {s,r,n}, monthsByYear, meta ([label,fmt]), abbr,
+// ab2region, regOrder, names.
+//
+// Raw 19-col order (per state / per region, matches participation_read.js, geo_key stripped):
+//   [turnout, events, races, adult, adultEvents, adultRaces, female, male,
+//    age4_19, age20_29, age30_39, age40_49, age50_59, age60, home, away, ironman, new, unique]
 
 const sum = (a) => (a || []).reduce((t, v) => t + (Number(v) || 0), 0);
 
@@ -9,30 +17,166 @@ function metricByLabel(yearBlock, label) {
   return m ? m.statez : [];
 }
 
-// National headline numbers for a single year (all months), mirroring the dashboard's KPIs.
-export function headlineKPIs(payload, year) {
-  const yb = payload && payload.byYear && payload.byYear[String(year)];
+function fmtLab(v, fmt) {
+  if (v == null) return 'n/a';
+  if (fmt === 2) return v.toFixed(1);
+  return fmt === 1 ? v + '%' : Number(v).toLocaleString();
+}
+
+// Metric value #idx for a summed raw array r (+ its unique count uq). Mirrors the POC mv() switch.
+function mv(r, idx, uq) {
+  const T = r[0];
+  switch (idx) {
+    case 0: return r[0]; case 1: return r[1]; case 2: return r[2];
+    case 3: return r[1] ? Math.round(r[0] / r[1]) : null; case 4: return r[2] ? Math.round(r[0] / r[2]) : null;
+    case 5: return r[4] ? Math.round(r[3] / r[4]) : null; case 6: return r[5] ? Math.round(r[3] / r[5]) : null;
+    case 7: return T ? Math.round(100 * r[6] / T) : null; case 8: return T ? Math.round(100 * r[7] / T) : null;
+    case 9: return r[6]; case 10: return r[7];
+    case 11: return T ? Math.round(100 * r[8] / T) : null; case 12: return T ? Math.round(100 * r[9] / T) : null; case 13: return T ? Math.round(100 * r[10] / T) : null;
+    case 14: return T ? Math.round(100 * r[11] / T) : null; case 15: return T ? Math.round(100 * r[12] / T) : null; case 16: return T ? Math.round(100 * r[13] / T) : null;
+    case 17: return r[8]; case 18: return r[9]; case 19: return r[10]; case 20: return r[11]; case 21: return r[12]; case 22: return r[13];
+    case 23: return r[14]; case 24: return r[15];
+    case 25: return (r[14] + r[15]) ? Math.round(100 * r[14] / (r[14] + r[15])) : null;
+    case 26: return (r[14] + r[15]) ? (100 - Math.round(100 * r[14] / (r[14] + r[15]))) : null;
+    case 27: return r[16]; case 28: return T ? Math.round(100 * r[16] / T) : null;
+    case 29: return r[17]; case 30: return r[0] - r[17]; case 31: return T ? Math.round(100 * r[17] / T) : null; case 32: return T ? Math.round(100 * (r[0] - r[17]) / T) : null;
+    case 33: return uq == null ? null : uq; case 34: return (uq != null && T) ? Math.round(100 * uq / T) : null; case 35: return (uq != null && uq) ? Math.round(r[0] / uq * 10) / 10 : null;
+    default: return null;
+  }
+}
+
+// Sum the raw state/region arrays across the selected (year-month) keys.
+function aggregate(keys, rawByYM) {
+  const S = {}, R = {};
+  keys.forEach((k) => {
+    const d = rawByYM[k]; if (!d) return;
+    for (const ab in d.s) { if (!S[ab]) S[ab] = new Array(19).fill(0); const v = d.s[ab]; for (let i = 0; i < 19; i++) S[ab][i] += v[i]; }
+    for (const rg in d.r) { if (!R[rg]) R[rg] = new Array(19).fill(0); const w = d.r[rg]; for (let i = 0; i < 19; i++) R[rg][i] += w[i]; }
+  });
+  return { S, R };
+}
+
+// (year,month) keys for the current selection, intersected with the months that exist per year.
+export function resolveSlices(selYears, selMonths, monthsByYear) {
+  const keys = [];
+  selYears.forEach((y) => {
+    const mos = (selMonths.indexOf('all') >= 0)
+      ? (monthsByYear[y] || [])
+      : selMonths.map(Number).filter((m) => (monthsByYear[y] || []).indexOf(m) >= 0);
+    mos.forEach((m) => keys.push(y + '-' + m));
+  });
+  return keys;
+}
+
+// Unique counts for the selection. Exact for a single full year or single month; summed (approx) otherwise.
+function resolveUniq(selYears, selMonths, keys, p) {
+  if (selYears.length === 1 && selMonths.indexOf('all') >= 0) {
+    const au = p.annualUnique[selYears[0]] || { s: {}, r: {}, n: 0 };
+    return { state: au.s || {}, region: au.r || {}, nat: au.n, approx: false };
+  }
+  if (keys.length === 1) {
+    const d = p.rawByYM[keys[0]] || { s: {}, r: {} }, st = {}, rg = {};
+    for (const ab in d.s) st[ab] = d.s[ab][18];
+    for (const r in d.r) rg[r] = d.r[r][18];
+    return { state: st, region: rg, nat: p.monthlyNat[keys[0]], approx: false };
+  }
+  const st = {}, rg = {}; let nat = 0;
+  keys.forEach((k) => {
+    const d = p.rawByYM[k]; if (!d) return;
+    for (const ab in d.s) st[ab] = (st[ab] || 0) + d.s[ab][18];
+    for (const r in d.r) rg[r] = (rg[r] || 0) + d.r[r][18];
+    nat += (p.monthlyNat[k] || 0);
+  });
+  return { state: st, region: rg, nat, approx: true };
+}
+
+// Aggregate a set of slices into a year-block { metrics, cards, rsrows, nat, approxUniq }. Mirrors POC computeAgg.
+function computeAgg(keys, uq, p) {
+  const { S, R } = aggregate(keys, p.rawByYM);
+  const meta = p.meta, abbr = p.abbr, ab2region = p.ab2region, regOrder = p.regOrder, names = p.names;
+
+  const metrics = meta.map((mm, idx) => {
+    const fmt = mm[1];
+    const statez = abbr.map((ab) => (S[ab] ? mv(S[ab], idx, uq.state[ab]) : null));
+    const rvals = {}; for (const rg in R) rvals[rg] = mv(R[rg], idx, uq.region[rg]);
+    const regionz = abbr.map((ab) => { const rg = ab2region[ab]; return (rg in rvals) ? rvals[rg] : null; });
+    const vals = statez.filter((v) => v != null);
+    const mn = vals.length ? Math.min.apply(null, vals) : 0, mx = vals.length ? Math.max.apply(null, vals) : 0;
+    const labels = abbr.map((ab, i) => (statez[i] == null ? ab : (ab + '<br>' + fmtLab(statez[i], fmt))));
+    const regionlabels = regOrder.map((rg) => ((rg in rvals && rvals[rg] != null) ? (rg + '<br>' + fmtLab(rvals[rg], fmt)) : (rg + '<br>n/a')));
+    return { label: mm[0], ispct: fmt === 1, dec: fmt === 2, statez, regionz, mn, mx, labels, regionlabels };
+  });
+
+  const present = abbr.filter((ab) => S[ab]);
+  const nm = (ab) => names[abbr.indexOf(ab)];
+  const tt = present.slice().sort((a, b) => S[b][0] - S[a][0]).slice(0, 8).map((ab) => [ab, nm(ab), S[ab][0]]);
+  const th = present.filter((ab) => (S[ab][14] + S[ab][15]) > 0).sort((a, b) => (S[b][14] / (S[b][14] + S[b][15])) - (S[a][14] / (S[a][14] + S[a][15]))).slice(0, 8).map((ab) => [ab, nm(ab), Math.round(100 * S[ab][14] / (S[ab][14] + S[ab][15]))]);
+  const ti = present.slice().sort((a, b) => S[b][16] - S[a][16]).slice(0, 8).map((ab) => [ab, nm(ab), S[ab][16]]);
+  const cards = { 'Top participation states': tt, 'Highest home share': th, 'Top IRONMAN states': ti };
+
+  const rsrows = []; let Tt = 0, Et = 0, Rt = 0, Ht = 0, At = 0, IMt = 0, Nt = 0, RPt = 0, FNt = 0, MNt = 0, C4 = 0;
+  Object.keys(R).sort((a, b) => R[b][0] - R[a][0]).forEach((rg) => {
+    const v = R[rg]; const hp = (v[14] + v[15]) ? Math.round(100 * v[14] / (v[14] + v[15])) : 0; const u = uq.region[rg]; const per = u ? Math.round(v[0] / u * 10) / 10 : null;
+    rsrows.push([rg, v[0], v[1], (v[1] ? Math.round(v[0] / v[1]) : 0), (v[2] ? Math.round(v[0] / v[2]) : 0), (v[0] ? Math.round(100 * v[6] / v[0]) : 0), v[6], v[7], (v[0] ? Math.round(100 * v[8] / v[0]) : 0), hp, 100 - hp, v[16], v[17], v[0] - v[17], u, per]);
+    Tt += v[0]; Et += v[1]; Rt += v[2]; Ht += v[14]; At += v[15]; IMt += v[16]; Nt += v[17]; RPt += (v[0] - v[17]); FNt += v[6]; MNt += v[7]; C4 += v[8];
+  });
+  const hpT = (Ht + At) ? Math.round(100 * Ht / (Ht + At)) : 0, natU = uq.nat;
+  rsrows.push(['US total', Tt, Et, (Et ? Math.round(Tt / Et) : 0), (Rt ? Math.round(Tt / Rt) : 0), (Tt ? Math.round(100 * FNt / Tt) : 0), FNt, MNt, (Tt ? Math.round(100 * C4 / Tt) : 0), hpT, 100 - hpT, IMt, Nt, RPt, natU, (natU ? Math.round(Tt / natU * 10) / 10 : null)]);
+
+  return { metrics, cards, rsrows, nat: { uniq: natU, part: Tt }, approxUniq: uq.approx };
+}
+
+// The current year-block for a selection. Single full year -> exact prebuilt block; otherwise aggregate.
+export function getYearBlock(p, selYears, selMonths) {
+  if (selYears.length === 1 && selMonths.indexOf('all') >= 0 && p.byYear[selYears[0]]) return p.byYear[selYears[0]];
+  const keys = resolveSlices(selYears, selMonths, p.monthsByYear);
+  return computeAgg(keys, resolveUniq(selYears, selMonths, keys, p), p);
+}
+
+// Headline KPIs from a year-block (works for single or multi selection).
+export function kpisFromYB(yb) {
   if (!yb) return null;
   const participants = sum(metricByLabel(yb, 'Participants'));
   const home = sum(metricByLabel(yb, 'Home (count)'));
   const away = sum(metricByLabel(yb, 'Away (count)'));
-  const uniq = yb.nat && yb.nat.uniq;
   return {
-    year: String(year),
     participants,
-    unique: uniq != null ? uniq : null,
-    home,
-    away,                       // cross-state travel (Traveled away)
+    unique: yb.nat ? yb.nat.uniq : null,
+    home, away,
     homePct: (home + away) ? Math.round((100 * home) / (home + away)) : null,
-    caParticipants: (() => {
-      const abbr = payload.abbr || [];
-      const i = abbr.indexOf('CA');
-      const statez = metricByLabel(yb, 'Participants');
-      return i >= 0 ? statez[i] : null;
-    })(),
+    approx: !!yb.approxUniq,
   };
+}
+
+// National headline numbers for a single year (all months) — kept for callers that pass a year string.
+export function headlineKPIs(payload, year) {
+  const yb = payload && payload.byYear && payload.byYear[String(year)];
+  return kpisFromYB(yb);
 }
 
 export function availableYears(payload) {
   return payload && payload.byYear ? Object.keys(payload.byYear).sort() : [];
+}
+
+// Sum the home->event flow rows (odByYM) across slices -> { flows:[home,event,n], inb, outb }.
+export function aggregateFlows(keys, odByYM) {
+  const agg = {}, inb = {}, outb = {};
+  keys.forEach((k) => {
+    const rows = odByYM[k]; if (!rows) return;
+    rows.forEach((r) => {
+      const kk = r[0] + '|' + r[1];
+      agg[kk] = (agg[kk] || 0) + r[2];
+      outb[r[0]] = (outb[r[0]] || 0) + r[2];
+      inb[r[1]] = (inb[r[1]] || 0) + r[2];
+    });
+  });
+  const flows = Object.keys(agg).map((k) => { const pr = k.split('|'); return [pr[0], pr[1], agg[k]]; });
+  return { flows, inb, outb };
+}
+
+// In-state (home) participations per state across slices (raw index 14). Used for matrix diagonals.
+export function homeByState(keys, rawByYM) {
+  const h = {};
+  keys.forEach((k) => { const d = rawByYM[k]; if (!d) return; for (const ab in d.s) h[ab] = (h[ab] || 0) + d.s[ab][14]; });
+  return h;
 }

@@ -11,6 +11,7 @@ const participation_events_schema = [
   { "name": "region_name", "mode": "NULLABLE", "type": "STRING", "description": "Event region", "fields": [] },
   { "name": "zip5", "mode": "NULLABLE", "type": "STRING", "description": "Event ZIP (5-digit)", "fields": [] },
   { "name": "event_date", "mode": "NULLABLE", "type": "DATE", "description": "Event start date (MAX start_date_races)", "fields": [] },
+  { "name": "is_ironman_event", "mode": "NULLABLE", "type": "INTEGER", "description": "1 if the event is IRONMAN (MAX of the parent is_ironman flag)", "fields": [] },
   { "name": "away", "mode": "NULLABLE", "type": "INTEGER", "description": "Participations from out-of-state athletes (member state in US, <> event state)", "fields": [] },
   { "name": "turnout", "mode": "NULLABLE", "type": "INTEGER", "description": "Participations (COUNT id_rr)", "fields": [] },
   { "name": "events", "mode": "NULLABLE", "type": "INTEGER", "description": "Distinct events (id_events)", "fields": [] },

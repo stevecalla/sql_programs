@@ -39,28 +39,23 @@ function sumToRaw(r) {
     n(r.home), n(r.turnout) - n(r.home), n(r.ironman), n(r.new_count), n(r.unique_athletes)];
 }
 
-// One events-table row -> the 32-col event array the dashboard expects (mirrors the POC build3 EVCOLS):
+// One events-table row -> the 32-col event array the dashboard expects (mirrors the POC build3 EVCOLS).
+// All metrics are computed in SQL (step_3i events builder) — this is a straight column -> array map, no math.
 // [state, region, name, sanction_id, date, IRONMAN, participants, races, per-race, adult/race, female%,
 //  male%, female_n, male_n, age%(4-19..60+), home, away, home%, away%, new, repeat, new%, repeat%, unique,
-//  per-participant, lat, lng]. Event %s are integers of turnout; home% is over the known-home base
-//  (home + away), away% = 100 - home% — matching the POC build3 output exactly.
+//  per-participant, lat, lng].
 function evToRow(r) {
   const n = (x) => (x == null ? 0 : Number(x));
-  const t = n(r.turnout), races = n(r.races), home = n(r.home), away = n(r.away);
-  const fem = n(r.female), male = n(r.male), uniq = n(r.unique_athletes), newc = n(r.new_count);
-  const p0 = (x) => (t ? Math.round(100 * x / t) : 0);          // integer % of turnout
-  const knownHome = home + away;
-  const homep = knownHome ? Math.round(100 * home / knownHome) : 0;
   const d = r.event_date == null ? null
     : (r.event_date instanceof Date ? r.event_date.toISOString().slice(0, 10) : String(r.event_date).slice(0, 10));
   return [
-    r.event_state, r.region_name, r.event_name, n(r.event_id), d, (n(r.ironman) > 0 ? 'Yes' : 'No'),
-    t, races, races ? Math.round(t / races) : 0, races ? Math.round(n(r.adult) / races) : 0,
-    p0(fem), p0(male), fem, male,
-    p0(n(r.age_4_19)), p0(n(r.age_20_29)), p0(n(r.age_30_39)), p0(n(r.age_40_49)), p0(n(r.age_50_59)), p0(n(r.age_60_plus)),
-    home, away, homep, 100 - homep,
-    newc, t - newc, p0(newc), 100 - p0(newc),
-    uniq, uniq ? Math.round(10 * t / uniq) / 10 : 0,
+    r.event_state, r.region_name, r.event_name, n(r.event_id), d, (n(r.is_ironman_event) > 0 ? 'Yes' : 'No'),
+    n(r.turnout), n(r.races), n(r.per_race), n(r.adult_per_race),
+    n(r.female_pct), n(r.male_pct), n(r.female), n(r.male),
+    n(r.age_4_19_pct), n(r.age_20_29_pct), n(r.age_30_39_pct), n(r.age_40_49_pct), n(r.age_50_59_pct), n(r.age_60_plus_pct),
+    n(r.home), n(r.away), n(r.home_pct), n(r.away_pct),
+    n(r.new_count), n(r.repeat_count), n(r.new_pct), n(r.repeat_pct),
+    n(r.unique_athletes), n(r.per_participant),
     r.lat == null ? null : Number(r.lat), r.lng == null ? null : Number(r.lng),
   ];
 }
@@ -85,7 +80,10 @@ async function build_from_mysql() {
       else if (r.geo_level === 'national') nationalAnnual[yr] = r;
     } else {
       const key = yr + '-' + mo;
-      if (r.geo_level === 'state') (rawByYM[key] = rawByYM[key] || []).push(sumToRaw(r));
+      // rawByYM shape mirrors the POC: { s: {stateCode: raw19}, r: {region: raw19} }, geo_key stripped.
+      const slot = (rawByYM[key] = rawByYM[key] || { s: {}, r: {} });
+      if (r.geo_level === 'state') slot.s[r.geo_key] = sumToRaw(r).slice(1);
+      else if (r.geo_level === 'region') slot.r[r.geo_key] = sumToRaw(r).slice(1);
       else if (r.geo_level === 'national') { monthlyNat[key] = Number(r.turnout); (monthsByYear[yr] = monthsByYear[yr] || new Set()).add(Number(mo)); }
     }
   }
@@ -96,7 +94,8 @@ async function build_from_mysql() {
     const nat = { uniq: Number(nationalAnnual[yr].unique_athletes), part: Number(nationalAnnual[yr].turnout) };
     byYear[yr] = agg.buildYear(stateAnnual[yr] || [], regionAnnual[yr] || [], nat);
     const s = {}; (stateAnnual[yr] || []).forEach((row) => { s[row[0]] = row[19]; });
-    annualUnique[yr] = { s };
+    const rr = {}; (regionAnnual[yr] || []).forEach((row) => { rr[row[0]] = row[19]; });
+    annualUnique[yr] = { s, r: rr, n: nat.uniq };
   }
 
   // Events: annual roll-up rows only (one row per event/year) -> pins + Events tab. maxParts = the largest

@@ -25,11 +25,37 @@ per-year roll-up (36 metrics) is `store/participation_agg.js` (a 1:1 port of the
 Validated against the POC on BigQuery (2025): **CA (by event state) = 33,236**, **US 50-state total =
 292,675**. The dev MySQL is an older snapshot, so numbers won't match exactly — but the *logic* does.
 
+## ⚠ Race-side vs membership-side columns (critical — this caused real bugs)
+The parent table carries **two** sets of event columns: each participation row is joined both to the
+**race the athlete ran** and to the **event tied to that athlete's membership purchase**. Reporting
+stats must always use the **race-side** columns.
+
+| Use (race-side) | NOT (membership/sales-side) | Why it matters |
+|---|---|---|
+| `name_events_rr` | `name_events` | `name_events` is the membership-purchase event, not the race. `MAX(name_events)` per event mislabeled everything as the alphabetical max — e.g. every race showed "Visit Panama City Beach IRONMAN…". |
+| `id_events_rr` | `id_events` | `id_events` is the sales event id (~3× more distinct), so `COUNT(DISTINCT id_events)` inflated the **Events** metric (CA 2024: 471 vs correct 78). |
+| `id_race_rr` | — | race id — already correct (Races metric). |
+| `id_sanctioning_events` | — | **event grain** (1:1 with a physical race event); the events table groups on this. |
+| `state_code_events`, `city_events`, `zip_events`, `region_name`, `start_date_races` | member address fields | already race-side. |
+
+**IRONMAN:** use the existing **`is_ironman` flag**, materialized upstream in `step_1` from the single
+source of truth `src/queries/ironman_rule.js`, rolled up as `MAX(is_ironman = 1)` per event. Do **not**
+re-derive a name regex in JS/React — that both over- and under-flags (`step_3c` uses the flag the same way).
+
+**De-quoting:** `name_events_rr` / `city_events` are stored quoted; strip in SQL with
+`TRIM(BOTH '"' FROM TRIM(col))` (same pattern as `step_3c`), not in React.
+
+**Where metrics are computed:** event-row derived metrics (per-race, %s, home %, per-participant) are
+computed in the **SQL** (`step_3i` events builder); the app read `evToRow` is a straight column→array map.
+Summary/matrix ratios are derived client-side on **aggregated raw counts** only because multi-year/month
+selections re-aggregate — the raw counts themselves still come from SQL.
+
 ## Keys & buckets
 | Concept | Column |
 |---|---|
 | Participation (grain) | `id_rr` |
-| Race / Event ids | `id_race_rr` / `id_events` |
+| Race / Event ids (race-side) | `id_race_rr` / `id_events_rr` (NOT `id_events`) |
+| Event grain (one row per event) | `id_sanctioning_events` |
 | Year / Month | `start_date_year_races` / `start_date_month_races` |
 | **Event state** (the map keys on this) | `state_code_events` — restricted to the 50 states |
 | **Home state** (the athlete) | `member_state_code_addresses` |
@@ -39,7 +65,7 @@ Validated against the POC on BigQuery (2025): **CA (by event state) = 33,236**, 
 | Metric | Logic |
 |---|---|
 | Participants (turnout) | `COUNT(id_rr)` |
-| Events / Races | `COUNT(DISTINCT id_events)` / `COUNT(DISTINCT id_race_rr)` |
+| Events / Races | `COUNT(DISTINCT id_events_rr)` / `COUNT(DISTINCT id_race_rr)` (race-side ids) |
 | Adult (per event/race) | age bin ≥ 20 (`age_as_race_results_bin IN 20-29 … 90-99`) |
 | Female / Male | `gender_code = 'F'` / `'M'` (NB excluded from the split) |
 | Age bands | `age_as_race_results_bin`: **4-19** = (4-9)+(10-19); 20-29; 30-39; 40-49; 50-59; **60+** = (60-69…90-99); `bad_age` excluded |

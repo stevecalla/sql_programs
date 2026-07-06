@@ -32,10 +32,10 @@ const MIN_YEAR = process.env.REPORTING_SUMMARY_MIN_YEAR
 function metric_cols(home_expr) {
     return `
             COUNT(t.id_rr) AS turnout,
-            COUNT(DISTINCT t.id_events) AS events,
+            COUNT(DISTINCT t.id_events_rr) AS events,
             COUNT(DISTINCT t.id_race_rr) AS races,
             SUM(t.age_as_race_results_bin IN ${ADULT_BINS}) AS adult,
-            COUNT(DISTINCT CASE WHEN t.age_as_race_results_bin IN ${ADULT_BINS} THEN t.id_events END) AS adult_events,
+            COUNT(DISTINCT CASE WHEN t.age_as_race_results_bin IN ${ADULT_BINS} THEN t.id_events_rr END) AS adult_events,
             COUNT(DISTINCT CASE WHEN t.age_as_race_results_bin IN ${ADULT_BINS} THEN t.id_race_rr END) AS adult_races,
             SUM(t.gender_code = 'F') AS female,
             SUM(t.gender_code = 'M') AS male,
@@ -118,17 +118,34 @@ async function create_participation_events_table(events_table, base_table) {
     return `
         CREATE TABLE ${events_table} AS
         SELECT ev.*,
+               ROUND(ev.turnout / NULLIF(ev.races, 0))                       AS per_race,
+               ROUND(ev.adult   / NULLIF(ev.races, 0))                       AS adult_per_race,
+               ROUND(100 * ev.female / NULLIF(ev.turnout, 0))                AS female_pct,
+               ROUND(100 * ev.male   / NULLIF(ev.turnout, 0))                AS male_pct,
+               ROUND(100 * ev.age_4_19    / NULLIF(ev.turnout, 0))           AS age_4_19_pct,
+               ROUND(100 * ev.age_20_29   / NULLIF(ev.turnout, 0))           AS age_20_29_pct,
+               ROUND(100 * ev.age_30_39   / NULLIF(ev.turnout, 0))           AS age_30_39_pct,
+               ROUND(100 * ev.age_40_49   / NULLIF(ev.turnout, 0))           AS age_40_49_pct,
+               ROUND(100 * ev.age_50_59   / NULLIF(ev.turnout, 0))           AS age_50_59_pct,
+               ROUND(100 * ev.age_60_plus / NULLIF(ev.turnout, 0))           AS age_60_plus_pct,
+               COALESCE(ROUND(100 * ev.home / NULLIF(ev.home + ev.away, 0)), 0)         AS home_pct,
+               (100 - COALESCE(ROUND(100 * ev.home / NULLIF(ev.home + ev.away, 0)), 0)) AS away_pct,
+               (ev.turnout - ev.new_count)                                   AS repeat_count,
+               COALESCE(ROUND(100 * ev.new_count / NULLIF(ev.turnout, 0)), 0)           AS new_pct,
+               (100 - COALESCE(ROUND(100 * ev.new_count / NULLIF(ev.turnout, 0)), 0))   AS repeat_pct,
+               ROUND(ev.turnout / NULLIF(ev.unique_athletes, 0), 1)          AS per_participant,
                ROUND(COALESCE(z.lat, z3.lat), 6) AS lat,
                ROUND(COALESCE(z.lng, z3.lng), 6) AS lng
         FROM (
             SELECT t.start_date_year_races, t.start_date_month_races,
                    t.id_sanctioning_events AS event_id,
-                   MAX(t.name_events)       AS event_name,
-                   MAX(t.city_events)       AS event_city,
+                   MAX(TRIM(BOTH '"' FROM TRIM(t.name_events_rr))) AS event_name,
+                   MAX(TRIM(BOTH '"' FROM TRIM(t.city_events))) AS event_city,
                    MAX(t.state_code_events) AS event_state,
                    MAX(t.region_name)       AS region_name,
                    LEFT(MAX(t.zip_events), 5) AS zip5,
                    MAX(DATE(t.start_date_races)) AS event_date,
+                   MAX(t.is_ironman = 1) AS is_ironman_event,
                    SUM(t.member_state_code_addresses IN (${STATE_LIST}) AND t.member_state_code_addresses <> t.state_code_events) AS away,
                    ${metric_cols(home_state)}
             FROM ${base_table} t ${W}

@@ -32,5 +32,22 @@ reads local MySQL. The SPA is client-side over one `/api/bootstrap` payload.
   `deck.gl` (for the maps).
 - Validate server files with `node --check` and run `node --test src/reporting/tests` before shipping.
 
+## Stat definitions (critical — read before touching participation SQL)
+The parent participation table has **race-side** and **membership/sales-side** event columns; each
+participation row joins to both the race the athlete ran and the event of their membership purchase.
+Reporting stats must use the **race-side** columns:
+- Event **name** → `name_events_rr` (not `name_events`); de-quote in SQL with `TRIM(BOTH '"' …)`.
+- **Events** count → `COUNT(DISTINCT id_events_rr)` (not `id_events`, which is sales-side and inflates it);
+  **Races** → `COUNT(DISTINCT id_race_rr)`.
+- Event **grain** → `id_sanctioning_events` (1:1 with a physical race event).
+- **IRONMAN** → the existing `is_ironman` flag (from `src/queries/ironman_rule.js`), `MAX(is_ironman = 1)`
+  per event — never a JS/name regex. `step_3c` uses the flag the same way.
+- Event-row derived metrics (per-race, %s, home %, per-participant) are computed in **SQL**
+  (`step_3i` events builder); `store/participation_read.js:evToRow` is a plain column→array map.
+
+Using the sales-side columns caused real bugs (every race mislabeled "Visit Panama City Beach…";
+Events inflated ~3×). Full detail + the trap table: `plans_and_notes/FIELD_MAPPING.md`. Guarded by
+`tests/stat_definitions.test.js` (asserts the builders use the race-side columns).
+
 ## Roadmap
 See `plans_and_notes/PHASE_PLAN.md` (phases + acceptance) and `STATUS.md` (what's done / next).
