@@ -71,7 +71,12 @@ async function execute_load_big_query_participation_summary_metrics() {
     return true; // placeholder to return to ensure success msg
 }
 
-// execute_load_big_query_participation_summary_metrics();
+if (require.main === module) {
+  execute_load_big_query_participation_summary_metrics().catch((error) => {
+    console.error("error loading BigQuery participation summary metrics:", error);
+    process.exitCode = 1;
+  });
+}
 
 module.exports = {
     execute_load_big_query_participation_summary_metrics,

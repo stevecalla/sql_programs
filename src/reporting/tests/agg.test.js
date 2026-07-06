@@ -1,38 +1,60 @@
 'use strict';
-// Unit test for the aggregation port (participation_agg.buildYear) — no DB needed. Feeds synthetic
-// raw rows and checks the derived metrics match the POC math.
-const test = require('node:test');
+// Unit test for the single aggregator (compute.buildYearBlock) — no DB needed. Feeds synthetic annual
+// rows and checks the derived metrics match the POC math. compute.js is ESM, so it's dynamic-imported.
+// (This replaces the old participation_agg.buildYear test; the two were proven byte-identical by
+// store/verify_agg_parity.js before participation_agg.js was removed.)
+const { test, before } = require('node:test');
 const assert = require('node:assert');
-const agg = require('../store/participation_agg.js');
+const META = require('../store/mapmeta.json');
 
-// raw row order: [key,turnout,events,races,adult,aev,arc,fem,male,a4_19,a20_29,a30_39,a40_49,a50_59,a60,home,away,im,new,uniq]
-function stateRow(k, turnout, home, im, uniq, fem, male) {
-  return [k, turnout, 10, 20, turnout, 8, 15, fem, male, 0, turnout, 0, 0, 0, 0, home, turnout - home, im, 0, uniq];
+const ABBR = META.abbr, REG = META.regOrder, AB2R = META.ab2region;
+let compute;
+before(async () => { compute = await import('../web/src/lib/compute.js'); });
+
+// Raw row = [key, 20 cols]: turnout,events,races,adult,aev,arc,fem,male,a4_19..a60(6),home,away,im,new,uniq,unknown.
+// home + away + unknown must sum to turnout (the reconciliation the ETL now guarantees).
+function row(k, turnout, home, away, unknown, im, uniq, fem, male) {
+  return [k, turnout, 10, 20, turnout, 8, 15, fem, male, 0, turnout, 0, 0, 0, 0, home, away, im, 0, uniq, unknown];
 }
+const pBundle = () => ({ meta: META.meta, abbr: ABBR, ab2region: AB2R, regOrder: REG, names: META.names, rawByYM: {} });
 
-test('buildYear derives Participants / Home% / IRONMAN correctly', () => {
-  const CA = stateRow('CA', 1000, 700, 100, 800, 400, 600);
-  const TX = stateRow('TX', 500, 500, 50, 450, 200, 300);
-  const region = [['Pacific', 1000, 10, 20, 1000, 8, 15, 400, 600, 0, 1000, 0, 0, 0, 0, 700, 300, 100, 0, 800]];
-  const y = agg.buildYear([CA, TX], region, { uniq: 1200, part: 1500 });
+test('buildYearBlock derives Participants / Home% / IRONMAN / Female% correctly', () => {
+  const CA = row('CA', 1000, 700, 200, 100, 100, 800, 400, 600);   // CA -> Pacific
+  const TX = row('TX', 500, 500, 0, 0, 50, 450, 200, 300);         // TX -> Central
+  // Region rows must reconcile with the state rows (national Tt is summed over regions): Pacific=CA, Central=TX.
+  const region = [row('Pacific', 1000, 700, 200, 100, 100, 800, 400, 600), row('Central', 500, 500, 0, 0, 50, 450, 200, 300)];
+  const uq = { state: { CA: 800, TX: 450 }, region: { Pacific: 800, Central: 450 }, nat: 1200, approx: false };
+  const y = compute.buildYearBlock([CA, TX], region, uq, pBundle());
 
   const byLabel = (l) => y.metrics.find((m) => m.label === l);
-  const ci = agg.ABBR.indexOf('CA');
-  const ti = agg.ABBR.indexOf('TX');
+  const ci = ABBR.indexOf('CA'), ti = ABBR.indexOf('TX');
 
   assert.strictEqual(byLabel('Participants').statez[ci], 1000);
   assert.strictEqual(byLabel('Participants').statez[ti], 500);
-  // Home % = home / (home+away) = 700/1000 = 70
+  // Home % is now of TOTAL participants (home / turnout) = 700 / 1000 = 70.
   assert.strictEqual(byLabel('Home %').statez[ci], 70);
+  // Known home % excludes Unknown (home / (home + away)) = 700 / 900 = 78 (rounded).
+  assert.strictEqual(byLabel('Known home %').statez[ci], 78);
   assert.strictEqual(byLabel('IRONMAN (count)').statez[ci], 100);
-  // Female % = 400/1000 = 40
+  // Female % = 400 / 1000 = 40.
   assert.strictEqual(byLabel('Female %').statez[ci], 40);
   assert.strictEqual(y.nat.part, 1500);
-  // states with no data are null
-  assert.strictEqual(byLabel('Participants').statez[agg.ABBR.indexOf('WY')], null);
+  // States with no data are null.
+  assert.strictEqual(byLabel('Participants').statez[ABBR.indexOf('WY')], null);
 });
 
-test('metric list has the expected 36 labels', () => {
-  assert.strictEqual(agg.MET_LABELS.length, 36);
-  assert.strictEqual(agg.MET_LABELS[0], 'Participants');
+test('home + away + unknown reconcile to Participants', () => {
+  const CA = row('CA', 1000, 700, 200, 100, 100, 800, 400, 600);
+  const uq = { state: { CA: 800 }, region: { Pacific: 800 }, nat: 800, approx: false };
+  const y = compute.buildYearBlock([CA], [row('Pacific', 1000, 700, 200, 100, 100, 800, 400, 600)], uq, pBundle());
+  const val = (l) => y.metrics.find((m) => m.label === l).statez[ABBR.indexOf('CA')];
+  assert.strictEqual(val('Home (count)') + val('Away (count)') + val('Unknown home (count)'), val('Participants'));
+});
+
+test('metric list matches mapmeta.json and starts with Participants', () => {
+  const CA = row('CA', 100, 60, 30, 10, 5, 90, 40, 60);
+  const y = compute.buildYearBlock([CA], [row('Pacific', 100, 60, 30, 10, 5, 90, 40, 60)],
+    { state: { CA: 90 }, region: { Pacific: 90 }, nat: 90, approx: false }, pBundle());
+  assert.strictEqual(y.metrics.length, META.meta.length);
+  assert.strictEqual(y.metrics[0].label, 'Participants');
 });

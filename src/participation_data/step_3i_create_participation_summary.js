@@ -149,7 +149,12 @@ async function execute_create_participation_summary() {
     }
 }
 
-// execute_create_participation_summary();
+if (require.main === module) {
+  execute_create_participation_summary().catch((error) => {
+    console.error("error creating participation summary:", error);
+    process.exitCode = 1;
+  });
+}
 
 module.exports = {
     execute_create_participation_summary,
