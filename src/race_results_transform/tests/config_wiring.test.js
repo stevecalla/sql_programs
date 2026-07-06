@@ -35,12 +35,12 @@ describe('config_wiring', () => {
     assert.ok((sc.restart_race_results_transform || '').indexOf('pm2 restart ' + PM2) >= 0, 'restart');
   });
 
-  test('pm2_run_all_servers starts the server as 17 of 19', () => {
+  test('pm2_run_all_servers starts the server as 17 of 20', () => {
     if (!in_monorepo()) { console.log('  (not in monorepo — skipped)'); return; }
     const run_all = JSON.parse(fs.readFileSync(PKG, 'utf8')).scripts.pm2_run_all_servers;
     assert.ok(run_all.indexOf('npm run pm2_start_race_results_transform') >= 0, 'not in run-all chain');
-    assert.ok(run_all.indexOf('(17 of 19)') >= 0, 'not labeled 17 of 19');
-    assert.ok(run_all.indexOf(' of 17)') < 0 && run_all.indexOf(' of 16)') < 0, 'stale "of 17"/"of 16" counts remain');
+    assert.ok(run_all.indexOf('(17 of 20)') >= 0, 'not labeled 17 of 20');
+    assert.ok(run_all.indexOf(' of 19)') < 0 && run_all.indexOf(' of 18)') < 0, 'stale "of 19"/"of 18" counts remain');
   });
 
   test('.vscode/tasks.json has the RACE RESULTS TRANSFORM tasks (event_analysis pattern)', () => {

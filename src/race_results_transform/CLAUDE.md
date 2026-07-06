@@ -36,7 +36,7 @@ refreshes the committed visual baselines in `e2e/visual.spec.js-snapshots/`.)
 
 Wired into the monorepo like the other servers: repo-root `package.json` has the standard
 `race_results_transform_server` + `pm2_start/logs/stop/delete/show/restart_race_results_transform`
-scripts (pm2 name `usat_race_results_transform`, 4G, `--expose-gc`; also step 17/19 of
+scripts (pm2 name `usat_race_results_transform`, 4G, `--expose-gc`; also step 17/20 of
 `pm2_run_all_servers`), and `.vscode/tasks.json` has the `16 RACE RESULTS TRANSFORM (logs/shell)` +
 `Race Results Transform (split)` tasks (group `grp-race-results-transform`). `tests/config_wiring.test.js`
 asserts all of this stays in place (skips when run outside the monorepo).
