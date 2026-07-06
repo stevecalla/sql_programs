@@ -60,12 +60,12 @@ function downloadCSV(fname, header, rows) {
   const b = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a');
   a.href = URL.createObjectURL(b); a.download = fname; a.click();
 }
-const STYLES = [
-  { key: 'choro', label: 'Choropleth', ready: true },
-  { key: 'pins', label: 'Pins', ready: false },
-  { key: 'yoy', label: 'YoY', ready: false },
-  { key: 'flows', label: 'Flows', ready: false },
-];
+const PIN_NON = '#082240', PIN_IM = '#C20E2F';
+function fmtEvDate(v) {
+  if (!v) return '';
+  const s = String(v); const m = +s.substr(5, 2), d = +s.substr(8, 2), y = s.substr(0, 4);
+  return (MON3[m] || '') + ' ' + d + ', ' + y;
+}
 
 function fmtVal(v, ispct, dec) {
   if (v == null) return 'n/a';
@@ -115,7 +115,9 @@ export default function ParticipationMap() {
   const [clipMax, setClipMax] = useState('');
   const [reverse, setReverse] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [mapStyle, setMapStyle] = useState('choro');
+  const [fillMode, setFillMode] = useState('choro'); // 'none' (neutral) | 'choro' (metric fill) | 'yoy' (growth fill)
+  const [showPins, setShowPins] = useState(false);   // independent event-pins overlay (on/off)
+  const [pinIm, setPinIm] = useState('');            // '' all | 'Yes' IRONMAN only | 'No' non-IRONMAN only
   const [stateSel, setStateSel] = useState(null);
   const [regionSel, setRegionSel] = useState('');
   const [regionMesh, setRegionMesh] = useState(null);
@@ -221,12 +223,32 @@ export default function ParticipationMap() {
     return Array.from(set).sort((a, b) => a - b);
   }, [st.p, selYears]);
 
+  // Pins layer: event roll-ups across the selected years, honoring the same filters as the Events tab
+  // (Year, Month, region/state cross-filter, IRONMAN). Only events with resolved coordinates get a pin.
+  const pinEvents = useMemo(() => {
+    if (!st.p || !showPins || !selYears || !selYears.length) return [];
+    const allM = selMonths.indexOf('all') >= 0;
+    let a = [];
+    selYears.forEach((y) => { a = a.concat(st.p.eventsByYear[y] || []); });
+    return a.filter((r) => {
+      if (r[30] == null || r[31] == null) return false;                 // needs lat/lng
+      if (!allM && r[4] && selMonths.indexOf(String(+String(r[4]).substr(5, 2))) < 0) return false;
+      if (regionSel && r[1] !== regionSel) return false;
+      if (stateSel && r[0] !== stateSel) return false;
+      if (pinIm && r[5] !== pinIm) return false;
+      return true;
+    });
+  }, [st.p, showPins, selYears, selMonths, regionSel, stateSel, pinIm]);
+
   useEffect(() => {
     if (st.loading || st.error || !yb || !mapRef.current) return;
     const p = st.p;
     const m = yb.metrics[metricIdx] || yb.metrics[0];
     const { abbr, names, regs, regOrder, centroid } = p;
     const scale = (p.colors[colorIdx] && p.colors[colorIdx].scale) || [[0, '#eef2ff'], [1, '#082240']];
+    // Choropleth/YoY paint the state fill; "none" leaves a neutral map (the POC "Pins" look). Pins overlay
+    // independently via showPins, so any combination (fill+pins, neutral+pins, fill only, neutral) is valid.
+    const fillOn = fillMode !== 'none';
 
     const order = m.statez.map((v, k) => [v == null ? -Infinity : v, k]).sort((a, b) => b[0] - a[0]);
     const rank = new Array(m.statez.length); let valid = 0;
@@ -272,7 +294,8 @@ export default function ParticipationMap() {
       if (clipMax !== '' && !isNaN(parseFloat(clipMax))) { zauto = false; zmin = tz(m.mn); zmax = tz(parseFloat(clipMax)); }
     }
 
-    const traces = [{
+    const neutralFill = dark ? '#1e293b' : '#e5e9f0';
+    const traces = [fillOn ? {
       type: 'choropleth', locationmode: 'USA-states', locations: abbr, z,
       customdata: isRegion ? cdRegion : cdState, hovertemplate: '%{customdata}<extra></extra>',
       colorscale: scale, reversescale: reverse, zauto, zmin, zmax,
@@ -282,6 +305,12 @@ export default function ParticipationMap() {
         ticksuffix: (m.ispct && colorMode === 'value' && !canLog) ? '%' : '',
         tickvals, ticktext,
       },
+    } : {
+      // Neutral base map (Pins-only): uniform light fill, no colorbar; states still hover for context.
+      type: 'choropleth', locationmode: 'USA-states', locations: abbr, z: abbr.map(() => 0),
+      customdata: isRegion ? cdRegion : cdState, hovertemplate: '%{customdata}<extra></extra>',
+      colorscale: [[0, neutralFill], [1, neutralFill]], showscale: false,
+      marker: { line: { color: dark ? '#334155' : '#cbd5e1', width: 0.5 } },
     }];
 
     // Region borders (merged outline).
@@ -297,7 +326,7 @@ export default function ParticipationMap() {
         type: 'scattergeo', locationmode: 'USA-states', mode: 'text',
         lon: abbr.map((ab) => (centroid[ab] ? centroid[ab][0] : null)),
         lat: abbr.map((ab) => (centroid[ab] ? centroid[ab][1] : null)),
-        text: m.labels, textfont: { size: 11, color: labColor(m.statez, m.mn, m.mx) },
+        text: m.labels, textfont: { size: 11, color: fillOn ? labColor(m.statez, m.mn, m.mx) : (dark ? '#e2e8f0' : '#334155') },
         hoverinfo: 'skip', showlegend: false,
       });
     }
@@ -327,8 +356,8 @@ export default function ParticipationMap() {
         hoverinfo: 'skip', showlegend: false,
       });
     }
-    // Top-N spotlight: gold outline + numbers.
-    if (spotN) {
+    // Top-N spotlight: gold outline + numbers. Skipped on the neutral Pins map (it ranks the fill metric).
+    if (spotN && fillOn) {
       const top = order.filter((x) => x[0] !== -Infinity).slice(0, spotN);
       // Gold outline only on the top 10 (even when more are numbered) — keeps the map from getting busy.
       const goldAbbr = top.slice(0, 10).map((x) => abbr[x[1]]);
@@ -348,6 +377,31 @@ export default function ParticipationMap() {
       });
     }
 
+    // Event pins overlay (Pins map style): two layers, sized by participants against maxParts. Navy =
+    // non-IRONMAN, red = IRONMAN. Hover shows event detail; click cross-filters the Events tab (state).
+    if (showPins && pinEvents.length) {
+      const sr = (2 * (p.maxParts || 1)) / (40 * 40);   // sizeref so the biggest event ~= 40px (area mode)
+      const layers = [['No', PIN_NON], ['Yes', PIN_IM]];
+      layers.forEach(([flag, color]) => {
+        const rows = pinEvents.filter((r) => r[5] === flag);
+        if (!rows.length) return;
+        traces.push({
+          type: 'scattergeo', mode: 'markers', lon: rows.map((r) => r[31]), lat: rows.map((r) => r[30]),
+          marker: {
+            size: rows.map((r) => r[6] || 0), sizemode: 'area', sizeref: sr, sizemin: 3,
+            color, opacity: 0.62, line: { width: 0.4, color: 'white' },
+          },
+          customdata: rows.map((r) => [
+            '<b>' + r[2] + '</b><br>' + r[0] + ' · ' + r[1] + ' · ' + fmtEvDate(r[4])
+            + '<br>' + (r[6] || 0).toLocaleString() + ' participants · ' + (r[28] || 0).toLocaleString() + ' unique'
+            + (flag === 'Yes' ? '<br><b>IRONMAN</b>' : ''),
+            r[0],
+          ]),
+          hovertemplate: '%{customdata[0]}<extra></extra>', showlegend: false,
+        });
+      });
+    }
+
     Plotly.react(mapRef.current, traces, {
       geo: { scope: 'usa', bgcolor: 'rgba(0,0,0,0)', lakecolor: 'rgba(0,0,0,0)', projection: { scale: zoom } },
       margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: 'rgba(0,0,0,0)', height: 560,
@@ -356,12 +410,15 @@ export default function ParticipationMap() {
       if (!gd || !gd.on) return;
       gd.removeAllListeners && gd.removeAllListeners('plotly_click');
       gd.on('plotly_click', (ev) => {
-        const pt = ev.points && ev.points[0]; if (!pt || !pt.location) return;
+        const pt = ev.points && ev.points[0]; if (!pt) return;
+        // Pin click: customdata is [tooltip, state] -> cross-filter that event's state.
+        if (Array.isArray(pt.customdata)) { setStateSel(pt.customdata[1]); setRegionSel(''); return; }
+        if (!pt.location) return;
         if (view === 'region') { setRegionSel(p.ab2region[pt.location] || ''); setStateSel(null); }
         else { setStateSel(pt.location); setRegionSel(''); }
       });
     });
-  }, [st, yb, metricIdx, view, showLabels, showOutlines, spotN, colorIdx, colorMode, logMode, clipMax, reverse, zoom, dark, regionMesh, regionCentroids]);
+  }, [st, yb, metricIdx, view, showLabels, showOutlines, spotN, colorIdx, colorMode, logMode, clipMax, reverse, zoom, dark, regionMesh, regionCentroids, fillMode, showPins, pinEvents]);
 
   const kpis = useMemo(() => (yb ? kpisFromYB(yb) : null), [yb]);
 
@@ -422,7 +479,7 @@ export default function ParticipationMap() {
     setSelYears([years[years.length - 1]]); setSelMonths(['all']);
     setMetricIdx(0); setView('state'); setShowLabels(true); setShowOutlines(false);
     setSpotN(10); setColorMode('value'); setLogMode(false); setClipMax(''); setReverse(false);
-    setZoom(1); setMapStyle('choro'); setStateSel(null); setRegionSel('');
+    setZoom(1); setFillMode('choro'); setShowPins(false); setPinIm(''); setStateSel(null); setRegionSel('');
     const ci = (p.colors || []).findIndex((c) => /blues/i.test(c.name || ''));
     setColorIdx(ci >= 0 ? ci : 0);
   };
@@ -493,12 +550,12 @@ export default function ParticipationMap() {
           ) : null}
         </span>
         <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
-        {STYLES.map((s) => (
-          <button key={s.key}
-            style={{ ...seg(mapStyle === s.key), opacity: s.ready ? 1 : 0.4, cursor: s.ready ? 'pointer' : 'not-allowed' }}
-            title={s.ready ? '' : 'Coming next'} disabled={!s.ready}
-            onClick={() => s.ready && setMapStyle(s.key)}>{s.label}</button>
-        ))}
+        <button style={seg(fillMode === 'choro')} title="Metric choropleth fill (on/off)"
+          onClick={() => setFillMode((f) => (f === 'choro' ? 'none' : 'choro'))}>Choropleth</button>
+        <button style={seg(showPins)} title="Event pins overlay (on/off)"
+          onClick={() => setShowPins((s) => !s)}>Pins</button>
+        <button style={{ ...seg(fillMode === 'yoy'), opacity: 0.4, cursor: 'not-allowed' }} disabled title="Coming next">YoY</button>
+        <button style={{ ...seg(false), opacity: 0.4, cursor: 'not-allowed' }} disabled title="Coming next">Flows</button>
         <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
         <span style={{ display: 'inline-flex', gap: 4 }}>
           {['state', 'region', 'both'].map((v) => (
@@ -508,6 +565,27 @@ export default function ParticipationMap() {
           ))}
         </span>
       </div>
+
+      {showPins ? (
+        <div className="toolbar" style={{ alignItems: 'center' }}>
+          <span className="small muted">IRONMAN</span>
+          <span style={{ display: 'inline-flex', gap: 4 }}>
+            <button style={mini(pinIm === '')} onClick={() => setPinIm('')}>All</button>
+            <button style={mini(pinIm === 'Yes')} onClick={() => setPinIm('Yes')}>IRONMAN</button>
+            <button style={mini(pinIm === 'No')} onClick={() => setPinIm('No')}>Non-IRONMAN</button>
+          </span>
+          <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
+          <span className="small" style={{ display: 'inline-flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 11, height: 11, borderRadius: '50%', background: PIN_NON, display: 'inline-block' }} /> Non-IRONMAN
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 11, height: 11, borderRadius: '50%', background: PIN_IM, display: 'inline-block' }} /> IRONMAN
+            </span>
+            <span className="muted">· circle size = participants · {pinEvents.length.toLocaleString()} events</span>
+          </span>
+        </div>
+      ) : null}
 
       <div className="toolbar">
         <button style={seg(advOpen)} onClick={() => setAdvOpen((o) => !o)}>⚙ Display options {advOpen ? '▾' : '▸'}</button>
@@ -562,6 +640,14 @@ export default function ParticipationMap() {
       ) : null}
 
       <div className="card" ref={cardRef}><div ref={mapRef} className="mapdiv" /></div>
+
+      {showPins ? (
+        <p className="muted small" style={{ margin: '8px 2px 0' }}>
+          Pins: each dot is one event at its ZIP-code location. ZIPs with no mapped area (PO-box, campus, or
+          government ZIPs) fall back to the ZIP-prefix area centroid, so a few pins are approximate. Events
+          without a resolved U.S. location are excluded; {pinEvents.length.toLocaleString()} events are shown.
+        </p>
+      ) : null}
 
       {tabsReady ? (
         <ParticipationTabs
