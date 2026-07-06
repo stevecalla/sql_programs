@@ -33,6 +33,13 @@ const store = require('./src/reporting/auth/auth_store');
 
 const DEFAULT_PORT = Number(process.env.REPORTING_PORT) || 8021;
 const WEB_DIST = path.join(__dirname, 'src', 'reporting', 'web', 'dist');
+const PROD_URL = 'https://usat-app.kidderwise.org/reporting/participation-maps';
+
+// NGROK TUNNEL — optional public URL, same pattern as 8020/8018/8019. Off by default (Cloudflare
+// fronts the app in prod). Enable with REPORTING_NGROK=true and a valid NGROK_AUTHTOKEN in .env.
+const is_test_ngrok = false;
+const ngrok_enabled_flag = String(process.env.REPORTING_NGROK).toLowerCase() === 'true';
+let ngrok_url = null;
 
 function create_app() {
   const app = express();
@@ -84,11 +91,24 @@ function start_server(port) {
   const server = app.listen(p, function () {
     const actual = server.address().port;
     console.log('\nUSAT Reporting - local server');
-    console.log('  -> http://localhost:' + actual + '/                 (web app)');
+    console.log('  -> http://localhost:' + actual + '/                 (web app, local)');
     console.log('  -> http://localhost:' + actual + '/api/status        (health check)');
+    console.log('  -> ' + PROD_URL + '   (production — :8000 proxy / Cloudflare)');
     console.log('  login configured: ' + store.login_configured());
     if (!fs.existsSync(WEB_DIST)) console.log('  NOTE: React app not built yet — run reporting_build (see message at /).');
     console.log('  One log line per request below. Press Ctrl-C to stop.\n');
+
+    // NGROK — best-effort; a missing/invalid NGROK_AUTHTOKEN must NOT crash the local server.
+    if (is_test_ngrok || ngrok_enabled_flag) {
+      process.once('unhandledRejection', function (err) {
+        console.log('\n  [ngrok] tunnel not started: ' + ((err && (err.errorCode || err.message)) || String(err)));
+        console.log('  The local server above keeps running. Set NGROK_AUTHTOKEN to get a public ngrok URL.\n');
+      });
+      const { create_ngrok_tunnel } = require('./utilities/create_ngrok_tunnel');
+      create_ngrok_tunnel(actual).then(function (u) { if (u) { ngrok_url = u; console.log('  [ngrok] public URL: ' + u + '/   (this tunnel serves the app at ROOT, not /reporting)'); } });
+    } else {
+      console.log('  [ngrok] tunnel disabled (set REPORTING_NGROK=true + NGROK_AUTHTOKEN to enable).');
+    }
 
     // Warm the participation payload cache in the background so the first page load isn't the slow
     // (first) MySQL build. Best-effort — failures just mean the first request builds on demand.
