@@ -9,6 +9,7 @@ import { resolveSlices, aggregateFlows, homeByState } from '../lib/compute.js';
 const MON3 = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW3 = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const REGN = ['Northeast', 'Southeast', 'Midwest', 'Central', 'Rockies', 'Pacific'];
+const EV_PAGE = 100; // events table page size (paginated for responsiveness); CSV exports everything
 const commafy = (x) => (x == null || x === '') ? '' : Number(x).toLocaleString();
 const pctify = (x) => (x == null || x === '') ? '' : x + '%';
 const CNT = ['Participants', 'Races', 'Female n', 'Male n', 'Home', 'Away', 'New', 'Repeat', 'Unique'];
@@ -166,6 +167,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
   const [showSanc, setShowSanc] = useState(false);
   const [sortEc, setSortEc] = useState(-1);
   const [sortDir, setSortDir] = useState(1);
+  const [evPage, setEvPage] = useState(0);
   const firstState = p.abbr.slice().sort((a, b) => (p.names[p.abbr.indexOf(a)] < p.names[p.abbr.indexOf(b)] ? -1 : 1))[0];
   const [sfState, setSfState] = useState(firstState);
   const [sfSort, setSfSort] = useState(3);
@@ -222,6 +224,11 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
   const sfOut = sfState ? (flowAgg.outb[sfState] || 0) : 0;
   const clickSf = (c) => { if (sfSort === c) setSfDir(-sfDir); else { setSfSort(c); setSfDir(c === 3 ? -1 : 1); } };
   useEffect(() => { if (stateSel) setSfState(stateSel); }, [stateSel]);
+  // Back to page 1 whenever the events filter/sort/period changes.
+  useEffect(() => { setEvPage(0); }, [regionSel, stateSel, imSel, searchTxt, sortEc, sortDir, selYears, selMonths]);
+  const evPageCount = Math.max(1, Math.ceil(filtered.length / EV_PAGE));
+  const evP = Math.min(evPage, evPageCount - 1);
+  const evSlice = filtered.slice(evP * EV_PAGE, evP * EV_PAGE + EV_PAGE);
 
   const th = { padding: '5px 8px', borderBottom: '2px solid var(--line)', textAlign: 'center', cursor: 'pointer', whiteSpace: 'nowrap' };
   const td = { padding: '4px 8px', borderBottom: '1px solid var(--line)', textAlign: 'center', whiteSpace: 'nowrap' };
@@ -339,7 +346,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><input type="checkbox" checked={showSanc} onChange={(e) => setShowSanc(e.target.checked)} /> Sanction ID &amp; Start Date</label>
             <button style={seg} onClick={resetEvents}>Reset</button>
             <button style={seg} onClick={() => downloadCSV('events.csv', ['#'].concat(visCols.map((ec) => COLS[ec])), filtered.map((r, i) => [i + 1].concat(visCols.map((ec) => r[ec]))))}>CSV</button>
-            <span className="muted small" style={{ marginLeft: 'auto' }}>showing {filtered.length} of {EV.length} events</span>
+            <span className="muted small" style={{ marginLeft: 'auto' }}>{filtered.length.toLocaleString()} of {EV.length.toLocaleString()} events{filtered.length > EV_PAGE ? ` · showing ${(evP * EV_PAGE + 1).toLocaleString()}–${Math.min((evP + 1) * EV_PAGE, filtered.length).toLocaleString()}` : ''}</span>
           </div>
           {chips.length ? <div style={{ marginBottom: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>{chips.map((c, i) => <span key={i} style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 999, padding: '3px 8px 3px 12px', fontSize: 13, color: '#3730a3', display: 'inline-flex', alignItems: 'center', gap: 6 }}>{c.label}<button onClick={c.clear} title="Remove" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 15, lineHeight: 1, color: '#3730a3' }}>×</button></span>)}</div> : null}
           <div style={{ maxHeight: 520, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 10 }}>
@@ -349,9 +356,9 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
                 {visCols.map((ec, j) => { const fz = j < 3; return <th key={ec} style={{ ...th, position: 'sticky', top: 0, left: fz ? evLeft(j) : undefined, zIndex: fz ? 6 : 3, background: 'var(--panel)', minWidth: fz ? FCOLW[j] : undefined, maxWidth: j === 2 ? FCOLW[2] : undefined, textAlign: ec >= 3 ? 'center' : 'left' }} onClick={() => clickCol(ec)}>{COLS[ec] === 'Date' ? 'Start Date' : COLS[ec]}{ec === sortEc ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>; })}
               </tr></thead>
               <tbody>
-                {filtered.map((r, i) => { const bg = r[5] === 'Yes' ? imFrozen : 'var(--panel)'; return (
-                  <tr key={i} style={r[5] === 'Yes' ? { background: imRow } : null}>
-                    <td style={{ ...td, position: 'sticky', left: 0, zIndex: 2, background: bg, minWidth: HASHW }}>{i + 1}</td>
+                {evSlice.map((r, i) => { const gi = evP * EV_PAGE + i; const bg = r[5] === 'Yes' ? imFrozen : 'var(--panel)'; return (
+                  <tr key={gi} style={r[5] === 'Yes' ? { background: imRow } : null}>
+                    <td style={{ ...td, position: 'sticky', left: 0, zIndex: 2, background: bg, minWidth: HASHW }}>{gi + 1}</td>
                     {visCols.map((ec, j) => { const fz = j < 3; return <td key={ec} style={{ ...td, textAlign: ec >= 3 ? 'center' : 'left', position: fz ? 'sticky' : undefined, left: fz ? evLeft(j) : undefined, zIndex: fz ? 2 : undefined, background: fz ? bg : undefined, minWidth: fz ? FCOLW[j] : undefined, maxWidth: j === 2 ? FCOLW[2] : undefined, overflow: j === 2 ? 'hidden' : undefined, textOverflow: j === 2 ? 'ellipsis' : undefined }} title={ec === 2 ? ((r[2] || '') + ' · Sanction #' + r[3] + ' · ' + fmtDate(r[4])) : undefined}>{cellFmt(ec, r[ec])}</td>; })}
                   </tr>
                 ); })}
@@ -359,6 +366,13 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
             </table>
             {filtered.length === 0 ? <p className="muted" style={{ padding: 16, textAlign: 'center' }}>No events match the current filters{period ? ' for ' + period : ''}.</p> : null}
           </div>
+          {evPageCount > 1 ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', marginTop: 8 }}>
+              <button style={{ ...seg, opacity: evP === 0 ? 0.4 : 1 }} disabled={evP === 0} onClick={() => setEvPage(evP - 1)}>‹ Prev</button>
+              <span className="muted small">Page {evP + 1} of {evPageCount}</span>
+              <button style={{ ...seg, opacity: evP >= evPageCount - 1 ? 0.4 : 1 }} disabled={evP >= evPageCount - 1} onClick={() => setEvPage(evP + 1)}>Next ›</button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

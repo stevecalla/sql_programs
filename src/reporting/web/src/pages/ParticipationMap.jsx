@@ -103,6 +103,7 @@ export default function ParticipationMap() {
   const [monthOpen, setMonthOpen] = useState(false);
   const [yearOpen, setYearOpen] = useState(false);
   const [advOpen, setAdvOpen] = useState(false);
+  const [tabsReady, setTabsReady] = useState(false);
   const [metricIdx, setMetricIdx] = useState(0);
   const [view, setView] = useState('state');       // state | region | both
   const [showLabels, setShowLabels] = useState(true);
@@ -147,6 +148,13 @@ export default function ParticipationMap() {
     return () => obs.disconnect();
   }, []);
 
+  // Mount the (heavy) tables a beat after the map/controls paint, so the controls are interactive on load.
+  useEffect(() => {
+    if (st.loading || st.error) return;
+    const id = setTimeout(() => setTabsReady(true), 60);
+    return () => clearTimeout(id);
+  }, [st.loading, st.error]);
+
   // Close the month / year dropdowns on any outside click.
   useEffect(() => {
     if (!monthOpen && !yearOpen) return;
@@ -168,9 +176,12 @@ export default function ParticipationMap() {
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
-  // Merge state borders -> region outlines (us-atlas TopoJSON + fips2region), once data is loaded.
+  // Merge state borders -> region outlines (us-atlas TopoJSON + fips2region). Lazy: only fetch when
+  // outlines are actually shown (Region/Both view or the toggle), and only once — keeps the default
+  // State-view load light (no CDN fetch, no extra map redraw).
   useEffect(() => {
-    if (!st.p) return;
+    if (!st.p || regionMesh) return;
+    if (!(showOutlines || view === 'region' || view === 'both')) return;
     let cancelled = false;
     loadTopojson()
       .then((topojson) => fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json').then((r) => r.json()).then((topo) => {
@@ -182,7 +193,7 @@ export default function ParticipationMap() {
       }))
       .catch((e) => console.warn('region outline load failed', e));
     return () => { cancelled = true; };
-  }, [st.p]);
+  }, [st.p, showOutlines, view, regionMesh]);
 
   // Region label anchors = mean of member-state centroids (AK/HI excluded — insets on albers-usa).
   const regionCentroids = useMemo(() => {
@@ -292,10 +303,25 @@ export default function ParticipationMap() {
     }
     // Region labels.
     if (showLabels && (view === 'region' || view === 'both')) {
+      const rlon = regOrder.map((rg) => (regionCentroids[rg] ? regionCentroids[rg][0] : null));
+      const rlat = regOrder.map((rg) => (regionCentroids[rg] ? regionCentroids[rg][1] : null));
+      // In "both" view, give each region label a halo (offset copies in a contrasting color behind the red
+      // text) so it stays legible over the state fill — an outline hugs any name length, unlike a fixed chip.
+      if (view === 'both') {
+        const halo = dark ? '#0b1220' : '#ffffff';
+        const offs = [[0.55, 0], [-0.55, 0], [0, 0.4], [0, -0.4], [0.42, 0.32], [-0.42, 0.32], [0.42, -0.32], [-0.42, -0.32]];
+        offs.forEach(([dx, dy]) => {
+          traces.push({
+            type: 'scattergeo', mode: 'text',
+            lon: rlon.map((v) => (v == null ? null : v + dx)),
+            lat: rlat.map((v) => (v == null ? null : v + dy)),
+            text: m.regionlabels, textfont: { size: 16, color: halo },
+            hoverinfo: 'skip', showlegend: false,
+          });
+        });
+      }
       traces.push({
-        type: 'scattergeo', mode: 'text',
-        lon: regOrder.map((rg) => (regionCentroids[rg] ? regionCentroids[rg][0] : null)),
-        lat: regOrder.map((rg) => (regionCentroids[rg] ? regionCentroids[rg][1] : null)),
+        type: 'scattergeo', mode: 'text', lon: rlon, lat: rlat,
         text: m.regionlabels,
         textfont: { size: view === 'both' ? 16 : 14, color: view === 'both' ? '#C20E2F' : (dark ? '#e2e8f0' : '#0f172a') },
         hoverinfo: 'skip', showlegend: false,
@@ -425,23 +451,6 @@ export default function ParticipationMap() {
       ) : null}
 
       <div className="toolbar" style={{ gap: 6 }}>
-        {STYLES.map((s) => (
-          <button key={s.key}
-            style={{ ...seg(mapStyle === s.key), opacity: s.ready ? 1 : 0.4, cursor: s.ready ? 'pointer' : 'not-allowed' }}
-            title={s.ready ? '' : 'Coming next'} disabled={!s.ready}
-            onClick={() => s.ready && setMapStyle(s.key)}>{s.label}</button>
-        ))}
-        <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 8px' }} />
-        <span style={{ display: 'inline-flex', gap: 4 }}>
-          {['state', 'region', 'both'].map((v) => (
-            <button key={v} style={seg(view === v)} onClick={() => pickView(v)}>
-              {v === 'state' ? 'State' : v === 'region' ? 'Region' : 'Both'}
-            </button>
-          ))}
-        </span>
-      </div>
-
-      <div className="toolbar">
         <label title={metricDesc(metrics[metricIdx] && metrics[metricIdx].label)}>Metric&nbsp;
           <select value={metricIdx} onChange={(e) => setMetricIdx(Number(e.target.value))}>
             {metrics.map((m, i) => <option key={i} value={i} title={metricDesc(m.label)}>{m.label}</option>)}
@@ -482,6 +491,21 @@ export default function ParticipationMap() {
               ))}
             </div>
           ) : null}
+        </span>
+        <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
+        {STYLES.map((s) => (
+          <button key={s.key}
+            style={{ ...seg(mapStyle === s.key), opacity: s.ready ? 1 : 0.4, cursor: s.ready ? 'pointer' : 'not-allowed' }}
+            title={s.ready ? '' : 'Coming next'} disabled={!s.ready}
+            onClick={() => s.ready && setMapStyle(s.key)}>{s.label}</button>
+        ))}
+        <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
+        <span style={{ display: 'inline-flex', gap: 4 }}>
+          {['state', 'region', 'both'].map((v) => (
+            <button key={v} style={seg(view === v)} onClick={() => pickView(v)}>
+              {v === 'state' ? 'State' : v === 'region' ? 'Region' : 'Both'}
+            </button>
+          ))}
         </span>
       </div>
 
@@ -539,11 +563,13 @@ export default function ParticipationMap() {
 
       <div className="card" ref={cardRef}><div ref={mapRef} className="mapdiv" /></div>
 
-      <ParticipationTabs
-        p={p} yb={yb} selYears={selYears} selMonths={selMonths} period={labelText(selYears, selMonths)} dark={dark}
-        stateSel={stateSel} setStateSel={setStateSel}
-        regionSel={regionSel} setRegionSel={setRegionSel}
-      />
+      {tabsReady ? (
+        <ParticipationTabs
+          p={p} yb={yb} selYears={selYears} selMonths={selMonths} period={labelText(selYears, selMonths)} dark={dark}
+          stateSel={stateSel} setStateSel={setStateSel}
+          regionSel={regionSel} setRegionSel={setRegionSel}
+        />
+      ) : <div className="muted small" style={{ padding: 16, marginTop: 16 }}>Loading tables…</div>}
     </div>
   );
 }
