@@ -869,10 +869,14 @@ export default function ParticipationMap() {
     return () => { cancelled = true; };
   }, [showFlows, st.p, flowFocus, flowDir, flowTop, selYears, selMonths, showLabels, showOutlines, regionMesh, dark]);
 
-  // Dispose the deck instance when leaving Flows so the Plotly map shows cleanly.
+  // Dispose the deck instance when leaving Flows so the Plotly map shows cleanly. Also empty the container:
+  // finalize() stops the render loop but leaves its <canvas> in the DOM, and with preserveDrawingBuffer that
+  // canvas keeps the old arcs painted. Re-entering Flows builds a NEW DeckGL (new canvas) on top of it, so the
+  // previous state's arcs stay visible and new picks pile on. Clearing innerHTML drops the stale canvas.
   useEffect(() => {
     if (showFlows) return;
     if (deckInst.current) { try { deckInst.current.finalize(); } catch (e) { /* noop */ } deckInst.current = null; }
+    if (deckRef.current) deckRef.current.innerHTML = '';
   }, [showFlows]);
 
   // Auto-rotate (bearing spin) while Flows + spin are on.
