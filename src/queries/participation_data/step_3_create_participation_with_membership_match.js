@@ -467,7 +467,12 @@ async function query_append_index_fields(table_name) {
 
             -- reporting composites: annual GROUP BY (year, event-state) + home/away split
             ADD INDEX idx_rpt_yr_evstate (start_date_year_races, state_code_events),
-            ADD INDEX idx_rpt_evstate_yr_home (state_code_events, start_date_year_races, member_state_code_addresses)
+            ADD INDEX idx_rpt_evstate_yr_home (state_code_events, start_date_year_races, member_state_code_addresses),
+
+            -- on-demand exact unique athletes: WHERE year [AND month] [AND state] GROUP BY event-state,
+            -- COUNT(DISTINCT id_profiles). Covering (year, event-state, id_profiles) makes the all-months
+            -- path index-only; month filter is applied as a residual.
+            ADD INDEX idx_rpt_unique (start_date_year_races, state_code_events, id_profiles)
         ;
     `;
 }

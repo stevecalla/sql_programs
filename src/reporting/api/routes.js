@@ -76,6 +76,22 @@ module.exports = function mount(app) {
     }
   });
 
+  // Exact unique athletes for a selection (non-additive metric counted live from the base table).
+  app.get('/api/unique', require_panel('participation-maps'), async function (req, res) {
+    try {
+      const q = req.query;
+      const sel = {
+        years: (q.years || '').split(',').filter(Boolean),
+        months: (q.months || 'all').split(',').filter(Boolean),
+        region: q.region || null, state: q.state || null, ironman: q.ironman || null,
+      };
+      const r = await participation.unique_for_selection(sel);
+      res.json({ ok: true, national: r.national, byState: r.byState, byRegion: r.byRegion });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   // "Data as of" for the header badge: the source + the participation table's own timestamp.
   app.get('/api/dataset', require_panel('participation-maps'), async function (req, res) {
     try {

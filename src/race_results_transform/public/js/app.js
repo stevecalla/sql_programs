@@ -1275,7 +1275,7 @@
     S.value_overrides = b.value_overrides; S.vm_expanded = b.vm_expanded; S.approved = b.approved; S.excluded = b.excluded || {};
     show_profile_bar(b.used_profile);
     if (!b.computed) { compute(); b.result = S.result; b.report = S.report; b.work_rows = S.work_rows; b.computed = true; }
-    else { S.result = b.result; S.report = b.report; S.work_rows = b.work_rows; S.flag_info = build_flag_info(); }
+    else { S.result = b.result; S.report = b.report; S.work_rows = b.work_rows; S.flag_info = build_flag_info(); S.dup_info = build_dup_info(); S.dup_set = S.dup_info.dup_set; }
     render_all(S.first_render);
     S.first_render = false;
     update_sheet_bar();

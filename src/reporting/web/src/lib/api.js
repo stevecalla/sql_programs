@@ -26,6 +26,11 @@ export const api = {
   login: (username, password) => jpost('/api/login', { username, password }),
   logout: () => jpost('/api/logout', {}),
   bootstrap: (force) => jget('/api/bootstrap' + (force ? '?force=1' : '')),
+  uniqueFor: (sel) => jget('/api/unique?' + new URLSearchParams(Object.assign(
+    { years: (sel.years || []).join(','), months: (sel.months && sel.months.length ? sel.months.join(',') : 'all') },
+    sel.region ? { region: sel.region } : {},
+    sel.state ? { state: sel.state } : {},
+    sel.ironman ? { ironman: sel.ironman } : {})).toString()),
   dataset: () => jget('/api/dataset'),
   event: (evt) => jpost('/api/event', evt),
   metricsReport: (days) => jget('/api/metrics-report?days=' + (days || 7)),

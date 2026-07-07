@@ -172,7 +172,7 @@ function MatrixTable({ entities, data, travCols, bottomRows, narrative, csvName,
   );
 }
 
-function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel, setStateSel, regionSel, setRegionSel }) {
+function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel, setStateSel, regionSel, setRegionSel, uniqueData }) {
   const imRow = dark ? 'rgba(220,38,38,0.20)' : 'rgba(194,14,47,0.06)';
   const imFrozen = dark ? '#3a1e24' : '#fbe9ec';
   const rowHL = dark ? '#26364d' : '#eef2ff';
@@ -209,16 +209,33 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
   const EV = useMemo(() => { let a = []; (selYears || []).forEach((y) => { a = a.concat(p.eventsByYear[y] || []); }); return a; }, [selYears, p]);
   const stateMx = useMemo(() => (tab === 'statemtx' ? buildStateMatrix(p.abbr, flowAgg.flows, HB) : null), [tab, p, flowAgg, HB]);
   const regionMx = useMemo(() => (tab === 'regionmtx' ? buildRegionMatrix(REGN, flowAgg.flows, HB, p.ab2region, p.abbr) : null), [tab, p, flowAgg, HB]);
+  // Region-stats table: swap the summed Unique (col 15) + Per-part (col 16) for the exact live distinct
+  // (per region + national for the US-total row) when the endpoint has answered.
+  const rsAdj = useMemo(() => {
+    const rows = yb ? yb.rsrows : null;
+    if (!rows || !uniqueData) return rows;
+    const isTot = (nm) => /total/i.test(nm || '');
+    return rows.map((r) => {
+      const rr = r.slice(); const part = Number(r[1]) || 0;
+      const u = isTot(r[0]) ? uniqueData.national : (uniqueData.byRegion ? uniqueData.byRegion[r[0]] : null);
+      if (u != null) { rr[15] = u; rr[16] = u ? Math.round((part / u) * 10) / 10 : null; }
+      return rr;
+    });
+  }, [yb, uniqueData]);
   // Summary KPI cards (POC "Summary totals" scorecards): national totals for the selected period.
   const sumKpis = useMemo(() => {
     if (tab !== 'summary' || !yb || !yb.metrics) return null;
     const sA = (a) => (a || []).reduce((t, v) => t + (Number(v) || 0), 0);
     const mx = yb.metrics; const g = (i) => sA(mx[i] ? mx[i].statez : []);
     const T = g(0), E = g(1), R = g(2), FN = g(9), MN = g(10), H = g(23), A = g(24), IM = g(27), NW = g(29), RP = g(30), UNK = g(36);
-    const uniq = yb.nat ? (yb.nat.uniq || 0) : 0, part = yb.nat ? (yb.nat.part || T) : T;
+    const part = yb.nat ? (yb.nat.part || T) : T;
+    // Exact distinct from the live endpoint when available; else the approximate summed count (~).
+    const uExact = uniqueData && uniqueData.national != null;
+    const uniq = uExact ? uniqueData.national : (yb.nat ? (yb.nat.uniq || 0) : 0);
+    const uSuffix = uExact ? '' : (yb.approxUniq ? ' ~' : '');
     return [
       ['Participants', T.toLocaleString(), 'Count of participation records (event starts) in the period. One athlete racing 3 times counts as 3.'],
-      ['Unique' + (yb.approxUniq ? ' ~' : ''), uniq.toLocaleString(), 'Distinct athletes (deduplicated). The ~ appears when several periods are combined and this is summed per period.'],
+      ['Unique' + uSuffix, uniq.toLocaleString(), 'Distinct athletes for the selection, counted live from the base data (COUNT DISTINCT id_profiles = active members). Exact — not a sum of per-slice counts. ~ = fell back to the approximate summed count.'],
       ['% unique', part ? Math.round(100 * uniq / part) + '%' : '-', 'Unique participants ÷ Participants.'],
       ['Races/participant', uniq ? (part / uniq).toFixed(1) : '-', 'Participants ÷ Unique — average races per athlete.'],
       ['Events', E.toLocaleString(), 'Distinct events in the period.'],
@@ -283,16 +300,24 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
     filtered.forEach((r) => { s.part += r[6] || 0; s.races += r[7] || 0; s.fn += r[12] || 0; s.mn += r[13] || 0; s.home += r[20] || 0; s.away += r[21] || 0; s.unk += r[22] || 0; s.nw += r[26] || 0; s.rp += r[27] || 0; s.uniq += r[30] || 0; });
     return s;
   }, [filtered]);
+  // Exact distinct athletes for the events total: derive from the live endpoint's selection counts by the
+  // SQL-expressible filters (state > region > none). IRONMAN or text-search filters can't be derived from
+  // the whole-selection counts, so those fall back to the (over)summed column with a caveat.
+  const evUniq = (imSel || searchTxt || !uniqueData) ? null
+    : (stateSel ? (uniqueData.byState ? uniqueData.byState[stateSel] : null)
+      : regionSel ? (uniqueData.byRegion ? uniqueData.byRegion[regionSel] : null)
+      : uniqueData.national);
   const totalCell = (ec) => {
     const L = COLS[ec], t = evTot, P = t.part, pc = (n) => (P ? Math.round(100 * n / P) + '%' : '');
+    const u = (evUniq == null ? t.uniq : evUniq);   // exact distinct when available, else summed
     switch (L) {
       case 'Participants': return commafy(t.part); case 'Races': return commafy(t.races);
-      case 'Per race': return t.races ? Math.round(t.part / t.races) : ''; case 'Per participant': return t.uniq ? (t.part / t.uniq).toFixed(1) : '';
+      case 'Per race': return t.races ? Math.round(t.part / t.races) : ''; case 'Per participant': return u ? (t.part / u).toFixed(1) : '';
       case 'Female n': return commafy(t.fn); case 'Male n': return commafy(t.mn); case 'Female %': return pc(t.fn); case 'Male %': return pc(t.mn);
       case 'Home': return commafy(t.home); case 'Away': return commafy(t.away); case 'Unknown home': return commafy(t.unk);
       case 'Home %': return pc(t.home); case 'Away %': return pc(t.away); case 'Unknown home %': return pc(t.unk);
       case 'New': return commafy(t.nw); case 'Repeat': return commafy(t.rp); case 'New %': return pc(t.nw); case 'Repeat %': return pc(t.rp);
-      case 'Unique': return commafy(t.uniq);
+      case 'Unique': return commafy(u);
       default: return '';
     }
   };
@@ -363,14 +388,14 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
           ) : null}
           {yb && yb.approxUniq ? <p className="muted small" style={{ margin: '0 0 10px' }}>Multi-period totals sum the selected months. Participations, gender, age, home/away, IRONMAN and new/repeat are exact; distinct counts (Unique, Events, Races) are summed per period, so someone spanning two periods can be counted more than once.</p> : null}
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <button style={seg} onClick={() => downloadCSV('region_stats.csv', p.rshead, yb.rsrows)}>CSV</button>
+            <button style={seg} onClick={() => downloadCSV('region_stats.csv', p.rshead, rsAdj || yb.rsrows)}>CSV</button>
             <button style={seg} title="Fullscreen summary" onClick={() => fsToggle(smFsRef)}>{smFull ? 'Exit ⛶' : '⛶ Full'}</button>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
               <thead><tr>{p.rshead.map((h, i) => <th key={i} style={{ ...th, textAlign: i === 0 ? 'left' : 'center' }}>{h}</th>)}</tr></thead>
               <tbody>
-                {yb.rsrows.map((r, ri) => {
+                {(rsAdj || yb.rsrows).map((r, ri) => {
                   const tot = r[0] === 'US total';
                   return (
                     <tr key={ri} style={tot ? { fontWeight: 700, background: 'var(--bg)' } : null}>

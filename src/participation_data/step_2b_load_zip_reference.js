@@ -128,6 +128,13 @@ async function execute_load_zip_reference() {
 
 // execute_load_zip_reference();
 
+if (require.main === module) {
+  execute_load_zip_reference().catch((error) => {
+    console.error("error creating participation summary:", error);
+    process.exitCode = 1;
+  });
+}
+
 module.exports = {
     execute_load_zip_reference,
 };
