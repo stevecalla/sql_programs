@@ -20,7 +20,7 @@ function metricByLabel(yearBlock, label) {
 
 function fmtLab(v, fmt) {
   if (v == null) return 'n/a';
-  if (fmt === 2) return v.toFixed(1);
+  if (fmt === 2) return v.toFixed(2);
   return fmt === 1 ? v + '%' : Number(v).toLocaleString();
 }
 
@@ -41,7 +41,7 @@ function mv(r, idx, uq) {
     case 26: return T ? Math.round(100 * r[15] / T) : null;
     case 27: return r[16]; case 28: return T ? Math.round(100 * r[16] / T) : null;
     case 29: return r[17]; case 30: return r[0] - r[17]; case 31: return T ? Math.round(100 * r[17] / T) : null; case 32: return T ? Math.round(100 * (r[0] - r[17]) / T) : null;
-    case 33: return uq == null ? null : uq; case 34: return (uq != null && T) ? Math.round(100 * uq / T) : null; case 35: return (uq != null && uq) ? Math.round(r[0] / uq * 10) / 10 : null;
+    case 33: return uq == null ? null : uq; case 34: return (uq != null && T) ? Math.round(100 * uq / T) : null; case 35: return (uq != null && uq) ? Math.round(r[0] / uq * 100) / 100 : null;
     case 36: return r[19]; case 37: return T ? Math.round(100 * r[19] / T) : null;   // unknown_home count / %
     case 38: return r[14]; case 39: return r[15];                                     // known-home / known-away count (= home / away count)
     case 40: { const kn = r[14] + r[15]; return kn ? Math.round(100 * r[14] / kn) : null; }  // known-home % = home / (home+away)
@@ -122,12 +122,12 @@ function computeAgg(keys, uq, p) {
 
   const rsrows = []; let Tt = 0, Et = 0, Rt = 0, Ht = 0, At = 0, IMt = 0, Nt = 0, RPt = 0, FNt = 0, MNt = 0, C4 = 0, Ut = 0;
   regOrder.filter((rg) => R[rg]).forEach((rg) => {
-    const v = R[rg]; const hp = v[0] ? Math.round(100 * v[14] / v[0]) : 0; const awp = v[0] ? Math.round(100 * v[15] / v[0]) : 0; const u = uq.region[rg]; const per = u ? Math.round(v[0] / u * 10) / 10 : null;
+    const v = R[rg]; const hp = v[0] ? Math.round(100 * v[14] / v[0]) : 0; const awp = v[0] ? Math.round(100 * v[15] / v[0]) : 0; const u = uq.region[rg]; const per = u ? Math.round(v[0] / u * 100) / 100 : null;
     rsrows.push([rg, v[0], v[1], (v[1] ? Math.round(v[0] / v[1]) : 0), (v[2] ? Math.round(v[0] / v[2]) : 0), (v[0] ? Math.round(100 * v[6] / v[0]) : 0), v[6], v[7], (v[0] ? Math.round(100 * v[8] / v[0]) : 0), hp, awp, (v[0] ? Math.round(100 * v[19] / v[0]) : 0), v[16], v[17], v[0] - v[17], u, per]);
     Tt += v[0]; Et += v[1]; Rt += v[2]; Ht += v[14]; At += v[15]; IMt += v[16]; Nt += v[17]; RPt += (v[0] - v[17]); FNt += v[6]; MNt += v[7]; C4 += v[8]; Ut += v[19];
   });
   const hpT = Tt ? Math.round(100 * Ht / Tt) : 0, awpT = Tt ? Math.round(100 * At / Tt) : 0, natU = uq.nat;
-  rsrows.push(['US total', Tt, Et, (Et ? Math.round(Tt / Et) : 0), (Rt ? Math.round(Tt / Rt) : 0), (Tt ? Math.round(100 * FNt / Tt) : 0), FNt, MNt, (Tt ? Math.round(100 * C4 / Tt) : 0), hpT, awpT, (Tt ? Math.round(100 * Ut / Tt) : 0), IMt, Nt, RPt, natU, (natU ? Math.round(Tt / natU * 10) / 10 : null)]);
+  rsrows.push(['US total', Tt, Et, (Et ? Math.round(Tt / Et) : 0), (Rt ? Math.round(Tt / Rt) : 0), (Tt ? Math.round(100 * FNt / Tt) : 0), FNt, MNt, (Tt ? Math.round(100 * C4 / Tt) : 0), hpT, awpT, (Tt ? Math.round(100 * Ut / Tt) : 0), IMt, Nt, RPt, natU, (natU ? Math.round(Tt / natU * 100) / 100 : null)]);
 
   return { metrics, cards, rsrows, nat: { uniq: natU, part: Tt }, approxUniq: uq.approx };
 }
@@ -219,7 +219,7 @@ export function computeYoY(p, fromYear, toYear, selMonths, metricIdx, mode, uniq
   const UF = { 33: 'count', 34: 'pct', 35: 'perpart' };
   if (uniqOv && (metricIdx in UF)) {
     const kind = UF[metricIdx];
-    const calc = (u, t) => (u == null ? null : (kind === 'count' ? u : (kind === 'pct' ? (t ? Math.round(100 * u / t) : null) : (u ? Math.round((t / u) * 10) / 10 : null))));
+    const calc = (u, t) => (u == null ? null : (kind === 'count' ? u : (kind === 'pct' ? (t ? Math.round(100 * u / t) : null) : (u ? Math.round((t / u) * 100) / 100 : null))));
     const fT = fa.metrics[0].statez, tT = ta.metrics[0].statez;
     A = abbr.map((ab, i) => calc((uniqOv.from && uniqOv.from.byState) ? uniqOv.from.byState[ab] : null, fT[i]));
     B = abbr.map((ab, i) => calc((uniqOv.to && uniqOv.to.byState) ? uniqOv.to.byState[ab] : null, tT[i]));

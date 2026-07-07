@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apply_theme, effective_dark, toggle_theme, watch_system } from '../lib/theme.js';
+import { track } from '../lib/track.js';
 
 // ☀/☾ light-dark toggle, mirroring the merge app. Stored choice wins; otherwise follows the OS.
 export default function ThemeToggle() {
@@ -10,7 +11,7 @@ export default function ThemeToggle() {
     watch_system(() => setDark(effective_dark()));
   }, []);
 
-  const onClick = () => { toggle_theme(); setDark(effective_dark()); };
+  const onClick = () => { toggle_theme(); const d = effective_dark(); setDark(d); try { track('theme_change', { panel: 'app', view: d ? 'dark' : 'light', filter_name: d ? 'dark' : 'light' }); } catch (e) { /* analytics best-effort */ } };
 
   return (
     <button

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { api } from './lib/api.js';
+import { trackPanelView } from './lib/track.js';
 import SideRail from './components/SideRail.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import UserMenu from './components/UserMenu.jsx';
@@ -26,7 +27,9 @@ export default function App() {
     api.me().then((r) => setUser(r.status === 200 && r.body.ok ? r.body : null)).catch(() => setUser(null));
   }, []);
 
-  useEffect(() => { if (user && user.ok) api.event({ event_name: 'page_view', view: location.pathname }); }, [location.pathname, user]);
+  // Fire a rich panel_view (visitor_id / tz / viewport / metrics_test) so the Metrics dashboard's
+  // visitor + activity tables populate. track.js POSTs to the same /api/event endpoint.
+  useEffect(() => { if (user && user.ok) trackPanelView(location.pathname); }, [location.pathname, user]);
 
   if (user === undefined) return <div className="loading">Loading…</div>;
   if (!user) return <Login onLogin={setUser} />;
@@ -60,7 +63,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={guard('/', <ParticipationMap />)} />
             <Route path="/reference" element={<Reference />} />
-            <Route path="/metrics" element={guard('/metrics', <Metrics />)} />
+            <Route path="/metrics" element={guard('/metrics', <Metrics user={user} />)} />
             <Route path="/admin" element={guard('/admin', <Admin />)} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

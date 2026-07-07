@@ -9,6 +9,10 @@ import { api } from '../lib/api.js';
 
 const sbtn = { padding: '3px 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)', color: 'var(--ink)', cursor: 'pointer', fontSize: 12 };
 const rlab = { display: 'inline-flex', gap: 6, alignItems: 'center' };
+// Role / source pills (parity with the merge Admin). Semi-transparent fills read fine in light + dark.
+const pill = (bg, fg) => ({ display: 'inline-block', padding: '1px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: bg, color: fg, textTransform: 'capitalize' });
+const rolePill = (r) => (r === 'admin' ? pill('rgba(194,14,47,.15)', '#c20e2f') : pill('rgba(59,130,246,.16)', '#2563eb'));
+const srcPill = (s) => (s === 'env' ? pill('rgba(212,146,10,.20)', '#b45309') : pill('rgba(100,116,139,.20)', 'var(--muted, #64748b)'));
 
 export default function Admin() {
   const [users, setUsers] = useState(null);
@@ -116,7 +120,9 @@ export default function Admin() {
             {!users && <tr><td className="muted">Loading…</td></tr>}
             {users && users.map((u) => (
               <tr key={u.user + u.source}>
-                <td>{u.user}</td><td>{u.role}</td><td className="muted">{u.source}</td>
+                <td>{u.user}</td>
+                <td><span style={rolePill(u.role)}>{u.role}</span></td>
+                <td><span style={srcPill(u.source)}>{u.source === 'env' ? 'recovery' : 'stored'}</span></td>
                 <td>{u.removable
                   ? (<><button style={sbtn} onClick={() => resetPw(u.user)}>reset pw</button>{' '}
                      <button style={{ ...sbtn, color: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => removeUser(u.user)}>remove</button></>)

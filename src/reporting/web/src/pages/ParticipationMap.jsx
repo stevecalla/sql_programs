@@ -3,6 +3,7 @@ import Plotly from 'plotly.js-dist-min';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { getYearBlock, kpisFromYB, computeYoY, resolveSlices, aggregateFlows } from '../lib/compute.js';
+import { trackFilter, trackExport, track } from '../lib/track.js';
 import ParticipationTabs from './ParticipationTabs.jsx';
 
 // Plain-language description per metric (for hover tooltips). Full definitions live on the Reference tab.
@@ -76,6 +77,7 @@ function labelText(sy, sm) {
 }
 function suf(sy, sm) { return (sy || []).join('-') + ((!sm || sm.indexOf('all') >= 0) ? '' : '_' + sm.join('-')); }
 function downloadCSV(fname, header, rows) {
+  try { trackExport('participation-maps', 'map', 'csv'); } catch (e) { /* analytics best-effort */ }
   const esc = (v) => { v = (v == null) ? '' : ('' + v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const csv = header.map(esc).join(',') + '\n' + rows.map((r) => r.map(esc).join(',')).join('\n');
   const b = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a');
@@ -97,9 +99,9 @@ function adjustUnique(base, idx, yb, uniqueData, p) {
     if (u == null) return null;
     if (kind === 'count') return u;
     if (kind === 'pct') return t ? Math.round(100 * u / t) : null;
-    return u ? Math.round((t / u) * 10) / 10 : null;   // races per participant
+    return u ? Math.round((t / u) * 100) / 100 : null;   // races per participant (2 dp)
   };
-  const lab = (v) => (v == null ? 'n/a' : (fmt === 2 ? v.toFixed(1) : (fmt === 1 ? v + '%' : Number(v).toLocaleString())));
+  const lab = (v) => (v == null ? 'n/a' : (fmt === 2 ? v.toFixed(2) : (fmt === 1 ? v + '%' : Number(v).toLocaleString())));
   const statez = abbr.map((ab, i) => calc(uState[ab] == null ? null : uState[ab], turn[i]));
   const regionz = abbr.map((ab, i) => calc(uRegion[ab2region[ab]] == null ? null : uRegion[ab2region[ab]], regTurn[i]));
   const vals = statez.filter((v) => v != null);
@@ -125,7 +127,7 @@ function fmtEvDate(v) {
 
 function fmtVal(v, ispct, dec) {
   if (v == null) return 'n/a';
-  if (dec) return Number(v).toFixed(1);
+  if (dec) return Number(v).toFixed(2);
   return ispct ? v + '%' : Number(v).toLocaleString();
 }
 function fmtShort(v) { if (v >= 1e6) return (v / 1e6) + 'M'; if (v >= 1e3) return (v / 1e3) + 'k'; return '' + v; }
@@ -213,6 +215,7 @@ export default function ParticipationMap() {
   const [fillMode, setFillMode] = useState('choro'); // 'none' (neutral) | 'choro' (metric fill) | 'yoy' (growth fill)
   const [showPins, setShowPins] = useState(false);   // independent event-pins overlay (on/off)
   const [pinIm, setPinIm] = useState('');            // '' all | 'Yes' IRONMAN only | 'No' non-IRONMAN only
+  const [basemap, setBasemap] = useState(false);     // Pins map: overlay a real carto tile basemap (vs the clean vector map)
   const [yoyFrom, setYoyFrom] = useState('');        // YoY baseline year
   const [yoyTo, setYoyTo] = useState('');            // YoY comparison year
   const [yoyMode, setYoyMode] = useState('pct');     // 'pct' (% change) | 'abs' (absolute change)
@@ -248,7 +251,8 @@ export default function ParticipationMap() {
     try {
       const { status, body } = await api.bootstrap(true);
       if (status === 200 && body.ok) {
-        setSt({ loading: false, p: body.data, source: body.source });
+        setSt({ loading: false, p: body.data, source: body.source });   // new payload re-triggers the exact-unique fetch
+        window.dispatchEvent(new CustomEvent('reporting:refreshed'));   // update the header "Last refresh" badge
         setRefreshNote(body.source === 'mysql'
           ? ('✓ Live · as of ' + (body.data.lastUpdated || 'now'))
           : '⚠ Database unreachable — kept last cached data');
@@ -360,15 +364,21 @@ export default function ParticipationMap() {
   // Only the whole-map selection (years + months) drives this; cross-filters stay with pins/events.
   const [uniqueData, setUniqueData] = useState(null);
   const [uniqLoading, setUniqLoading] = useState(false);
+  const [flowLoading, setFlowLoading] = useState(false);
+  const uniqSeq = useRef(0);
+  const yoySeq = useRef(0);
+  const mapModeRef = useRef('geo');   // 'geo' | 'mapbox' — purge when switching so Plotly changes subplot type cleanly
+  const BASEMAP_VIEW0 = { center: { lon: -96, lat: 38.7 }, zoom: 3.2 };
+  const basemapViewRef = useRef({ ...BASEMAP_VIEW0 });   // persist basemap pan/zoom across re-renders
   useEffect(() => {
-    if (!st.p || !selYears || !selYears.length) { setUniqueData(null); return; }
-    let cancelled = false;
-    setUniqLoading(true); setUniqueData(null);
+    if (!st.p || !selYears || !selYears.length) { setUniqueData(null); setUniqLoading(false); return; }
+    if (fillMode === 'yoy') { setUniqLoading(false); return; }   // YoY uses yoyUniq; don't also fire the choropleth-unique query
+    const seq = ++uniqSeq.current;   // latest-wins: only the newest request clears the spinner, so it can't get stuck on rapid re-fires
+    setUniqLoading(true);   // keep the last-good exact values visible (under the loading overlay) — no flash to the summed approximation
     api.uniqueFor({ years: selYears, months: selMonths })
-      .then(({ status, body }) => { if (!cancelled) { setUniqueData(status === 200 && body && body.ok ? body : null); setUniqLoading(false); } })
-      .catch(() => { if (!cancelled) { setUniqueData(null); setUniqLoading(false); } });
-    return () => { cancelled = true; };
-  }, [st.p, selYears, selMonths]);
+      .then(({ status, body }) => { if (seq !== uniqSeq.current) return; setUniqueData(status === 200 && body && body.ok ? body : null); setUniqLoading(false); })
+      .catch(() => { if (seq === uniqSeq.current) { setUniqueData(null); setUniqLoading(false); } });
+  }, [st.p, selYears, selMonths, fillMode]);
   const availMonths = useMemo(() => {
     if (!st.p || !selYears) return [];
     const set = new Set();
@@ -392,21 +402,24 @@ export default function ParticipationMap() {
   // Exact from/to distincts for the YoY unique family (33/34/35) so % change uses true distincts, not the
   // summed approximation. Months are the like-for-like overlap (same rule computeYoY uses for turnout).
   const [yoyUniq, setYoyUniq] = useState(null);
+  const [yoyUniqLoading, setYoyUniqLoading] = useState(false);
   useEffect(() => {
-    if (fillMode !== 'yoy' || !(metricIdx in UNIQ_IDX) || !st.p || !yoyFrom || !yoyTo) { setYoyUniq(null); return; }
+    if (fillMode !== 'yoy' || !(metricIdx in UNIQ_IDX) || !st.p || !yoyFrom || !yoyTo) { setYoyUniq(null); setYoyUniqLoading(false); return; }
     const fromMos = st.p.monthsByYear[yoyFrom] || [], toMos = st.p.monthsByYear[yoyTo] || [];
     const mos = (selMonths.indexOf('all') >= 0) ? fromMos.filter((m) => toMos.indexOf(m) >= 0) : selMonths.map(Number).filter((m) => fromMos.indexOf(m) >= 0 && toMos.indexOf(m) >= 0);
     const monthsArg = mos.map(String);
-    let cancelled = false; setYoyUniq(null);
-    Promise.all([api.uniqueFor({ years: [yoyFrom], months: monthsArg }), api.uniqueFor({ years: [yoyTo], months: monthsArg })])
-      .then(([f, t]) => {
-        if (cancelled) return;
-        const okF = (f.status === 200 && f.body && f.body.ok) ? f.body : null;
-        const okT = (t.status === 200 && t.body && t.body.ok) ? t.body : null;
+    const seq = ++yoySeq.current; setYoyUniqLoading(true);   // latest-wins guard (keeps last-good under the overlay, spinner can't stick)
+    const bail = new Promise((res) => setTimeout(() => res('__t'), 25000));   // failsafe: a slow/stale DB can't hang the loader forever
+    Promise.race([Promise.all([api.uniqueFor({ years: [yoyFrom], months: monthsArg }), api.uniqueFor({ years: [yoyTo], months: monthsArg })]), bail])
+      .then((r) => {
+        if (seq !== yoySeq.current) return;
+        if (r === '__t') { setYoyUniqLoading(false); return; }   // timed out -> keep the summed fallback, clear the loader
+        const okF = (r[0].status === 200 && r[0].body && r[0].body.ok) ? r[0].body : null;
+        const okT = (r[1].status === 200 && r[1].body && r[1].body.ok) ? r[1].body : null;
         setYoyUniq(okF && okT ? { from: okF, to: okT } : null);
+        setYoyUniqLoading(false);
       })
-      .catch(() => { if (!cancelled) setYoyUniq(null); });
-    return () => { cancelled = true; };
+      .catch(() => { if (seq === yoySeq.current) { setYoyUniq(null); setYoyUniqLoading(false); } });
   }, [fillMode, metricIdx, st.p, yoyFrom, yoyTo, selMonths]);
 
   const yoyData = useMemo(() => {
@@ -434,6 +447,42 @@ export default function ParticipationMap() {
   useEffect(() => {
     if (st.loading || st.error || !yb || !mapRef.current || showFlows) return;  // Flows uses the deck canvas
     const p = st.p;
+    // Tiled basemap mode for the Pins map: event pins over a carto basemap (real geographic detail, free/no token).
+    const wantMapbox = basemap && showPins && pinEvents.length > 0;
+    if (mapModeRef.current !== (wantMapbox ? 'mapbox' : 'geo')) { try { Plotly.purge(mapRef.current); } catch (e) { /* switch subplot type cleanly */ } mapModeRef.current = wantMapbox ? 'mapbox' : 'geo'; }
+    if (wantMapbox) {
+      const sr = (2 * (p.maxParts || 1)) / (40 * 40);
+      const bmt = [];
+      [['No', PIN_NON], ['Yes', PIN_IM]].forEach(([flag, color]) => {
+        const rows = pinEvents.filter((r) => r[5] === flag);
+        if (!rows.length) return;
+        bmt.push({
+          type: 'scattermapbox', mode: 'markers', lon: rows.map((r) => r[33]), lat: rows.map((r) => r[32]),
+          marker: { size: rows.map((r) => r[6] || 0), sizemode: 'area', sizeref: sr, sizemin: 3, color, opacity: 0.82 },
+          customdata: rows.map((r) => ['<b>' + r[2] + '</b><br>' + r[0] + ' · ' + r[1] + ' · ' + fmtEvDate(r[4]) + '<br>' + (r[6] || 0).toLocaleString() + ' participants · ' + (r[30] || 0).toLocaleString() + ' unique' + (flag === 'Yes' ? '<br><b>IRONMAN</b>' : ''), r[0]]),
+          hovertemplate: '%{customdata[0]}<extra></extra>', showlegend: false,
+        });
+      });
+      Plotly.react(mapRef.current, bmt, {
+        mapbox: { style: dark ? 'carto-darkmatter' : 'carto-positron', center: basemapViewRef.current.center, zoom: basemapViewRef.current.zoom },
+        margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: 'rgba(0,0,0,0)', height: 560,
+      }, { displayModeBar: false, responsive: true, scrollZoom: true }).then((gd) => {
+        if (!gd || !gd.on) return;
+        gd.removeAllListeners && gd.removeAllListeners('plotly_click');
+        gd.removeAllListeners && gd.removeAllListeners('plotly_relayout');
+        // Remember pan/zoom so a re-render (e.g. a click cross-filter) doesn't snap the basemap back.
+        gd.on('plotly_relayout', (e) => {
+          if (e['mapbox.center']) basemapViewRef.current.center = e['mapbox.center'];
+          if (e['mapbox.zoom'] != null) basemapViewRef.current.zoom = e['mapbox.zoom'];
+        });
+        gd.on('plotly_click', (ev) => {
+          const pt = ev.points && ev.points[0]; if (!pt) return;
+          // Click a pin to cross-filter its state (toggle). No auto-zoom — pan/zoom stays where the user left it.
+          if (Array.isArray(pt.customdata)) { setStateSel((c) => (c === pt.customdata[1] ? null : pt.customdata[1])); setRegionSel(''); }
+        });
+      });
+      return;
+    }
     const m = adjustUnique(yb.metrics[metricIdx] || yb.metrics[0], metricIdx, yb, uniqueData, p);
     const { abbr, names, regs, regOrder, centroid } = p;
     const scale = (p.colors[colorIdx] && p.colors[colorIdx].scale) || [[0, '#eef2ff'], [1, '#082240']];
@@ -601,8 +650,9 @@ export default function ParticipationMap() {
         hoverinfo: 'skip', showlegend: false,
       });
     }
-    // Top-N spotlight: gold outline + numbers. Skipped on the neutral Pins map (it ranks the fill metric).
-    if (spotN && fillOn && !yoyOn) {
+    // Top-N spotlight: gold outline + numbers, ranking the selected metric. Works on the choropleth AND the
+    // neutral Pins map (ranks the same metric even with no fill). Not applicable to YoY (uses its own movers).
+    if (spotN && (fillOn || showPins) && !yoyOn) {
       const top = order.filter((x) => x[0] !== -Infinity).slice(0, spotN);
       // Gold outline only on the top 10 (even when more are numbered) — keeps the map from getting busy.
       const goldAbbr = top.slice(0, 10).map((x) => abbr[x[1]]);
@@ -683,26 +733,28 @@ export default function ParticipationMap() {
         const pt = ev.points && ev.points[0]; if (!pt) return;
         // Choropleth click (normal/YoY): pt.location is the state/region code. YoY is state-only.
         if (pt.location) {
-          if (view === 'region') { setRegionSel(p.ab2region[pt.location] || ''); setStateSel(null); }
-          else { setStateSel(pt.location); setRegionSel(''); }
+          if (view === 'region') { const rg = p.ab2region[pt.location] || ''; setRegionSel((c) => (c === rg ? '' : rg)); setStateSel(null); }
+          else { setStateSel((c) => (c === pt.location ? null : pt.location)); setRegionSel(''); }
           return;
         }
-        // Pin marker (scattergeo): customdata is [tooltip, state] -> cross-filter that event's state.
-        if (Array.isArray(pt.customdata)) { setStateSel(pt.customdata[1]); setRegionSel(''); }
+        // Pin marker (scattergeo): customdata is [tooltip, state] -> toggle cross-filter to that event's state.
+        if (Array.isArray(pt.customdata)) { setStateSel((c) => (c === pt.customdata[1] ? null : pt.customdata[1])); setRegionSel(''); }
       });
     });
-  }, [st, yb, metricIdx, view, showLabels, showOutlines, spotN, colorIdx, colorMode, logMode, clipMax, reverse, zoom, dark, regionMesh, regionCentroids, fillMode, showPins, pinEvents, yoyData, yoyTop, yoyFrom, yoyTo, yoyColorIdx, showFlows, uniqueData]);
+  }, [st, yb, metricIdx, view, showLabels, showOutlines, spotN, colorIdx, colorMode, logMode, clipMax, reverse, zoom, dark, regionMesh, regionCentroids, fillMode, showPins, pinEvents, yoyData, yoyTop, yoyFrom, yoyTo, yoyColorIdx, showFlows, uniqueData, basemap]);
 
   // FLOWS map (deck.gl 3D arcs). Base states shade by net flow (red = net destination, blue = net feeder);
   // picking a focus state traces its top inbound (red) + outbound (blue) routes as arcs. Ported from the POC.
   useEffect(() => {
     if (!showFlows || !st.p || !deckRef.current) return;
     let cancelled = false;
+    if (!deckInst.current) setFlowLoading(true);   // first build: deck.gl + base map fetch can take a few seconds
     const p = st.p;
     const name2ab = {}; p.abbr.forEach((ab, i) => { name2ab[p.names[i]] = ab; });
 
     const render = (deck, geo) => {
       if (cancelled || !deckRef.current) return;
+      setFlowLoading(false);   // deck.gl + geojson are ready and we're about to draw
       const keys = resolveSlices(selYears, selMonths, p.monthsByYear);
       const A = aggregateFlows(keys, p.odByYM);
       const net = {}; p.abbr.forEach((ab) => { net[ab] = (A.inb[ab] || 0) - (A.outb[ab] || 0); });
@@ -808,11 +860,11 @@ export default function ParticipationMap() {
     };
 
     loadDeck().then((deck) => {
-      if (!deck) { setFlowStat('deck.gl failed to load (needs internet).'); return; }
+      if (!deck) { setFlowLoading(false); setFlowStat('deck.gl failed to load (needs internet).'); return; }
       if (flowGeoRef.current) return render(deck, flowGeoRef.current);
       fetch(FLOW_GEO_URL).then((r) => r.json()).then((g) => { flowGeoRef.current = g; render(deck, g); })
-        .catch(() => setFlowStat('Could not load the base map (needs internet).'));
-    }).catch(() => setFlowStat('deck.gl failed to load (needs internet).'));
+        .catch(() => { setFlowLoading(false); setFlowStat('Could not load the base map (needs internet).'); });
+    }).catch(() => { setFlowLoading(false); setFlowStat('deck.gl failed to load (needs internet).'); });
 
     return () => { cancelled = true; };
   }, [showFlows, st.p, flowFocus, flowDir, flowTop, selYears, selMonths, showLabels, showOutlines, regionMesh, dark]);
@@ -960,14 +1012,14 @@ export default function ParticipationMap() {
         <div className="kpis">
           <Kpi v={fmt(kpis.participants)} l={`Participants (${labelText(selYears, selMonths)})`} t="Count of participation records (event starts) for the selected period. One athlete racing 3× counts as 3." />
           <Kpi v={uniqLoading ? '…' : (fmt(uniqueData ? uniqueData.national : kpis.unique) + ((!uniqueData && kpis.approx) ? ' ~' : ''))} l="Unique athletes" t="Distinct athletes for the exact selection, counted live from the base data (COUNT DISTINCT id_profiles = active members). Exact — not the sum of per-slice counts. ‘…’ = loading; ‘~’ = fell back to the approximate summed count if the live count was unavailable." />
-          <Kpi v={kpis.homePct == null ? '—' : kpis.homePct + '%'} l="Home (in-state)" t="Share of total participations where the athlete raced in their home state (home ÷ total participants)." />
+          <Kpi v={(kpis.home + kpis.away) ? Math.round(100 * kpis.home / (kpis.home + kpis.away)) + '%' : '—'} l="Known home (in-state)" t="Share of KNOWN-home participations that raced in the athlete's home state — home ÷ (home + away), excluding the ~10% whose home state is unknown/unmapped. This is the known-home basis (the deck definition); the of-total home % (÷ all participants) runs lower." />
           <Kpi v={fmt(kpis.away)} l="Traveled away" t="Participations where the athlete’s home state differs from the event state (cross-state travel)." />
         </div>
       ) : null}
 
       <div className="toolbar" style={{ gap: 6 }}>
         <label title={metricDesc(metrics[metricIdx] && metrics[metricIdx].label)}>Metric&nbsp;
-          <select value={metricIdx} onChange={(e) => setMetricIdx(Number(e.target.value))}>
+          <select value={metricIdx} onChange={(e) => { setMetricIdx(Number(e.target.value)); trackFilter('participation-maps', 'map', 'metric'); }}>
             {METRIC_GROUPS.map((g) => {
               const opts = g.idxs.filter((i) => metrics[i]);
               if (!opts.length) return null;
@@ -1015,13 +1067,13 @@ export default function ParticipationMap() {
         </span>
         <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
         <button style={seg(fillMode === 'choro' && !showFlows)} title="Metric choropleth fill (on/off)"
-          onClick={() => { if (showFlows) { setShowFlows(false); setFillMode('choro'); } else setFillMode((f) => (f === 'choro' ? 'none' : 'choro')); }}>Choropleth</button>
-        <button style={seg(showPins && !showFlows)} title="Event pins overlay (on/off)"
-          onClick={() => { if (showFlows) { setShowFlows(false); setShowPins(true); } else setShowPins((s) => !s); }}>Pins</button>
+          onClick={() => { track('map_style', { panel: 'participation-maps', view: 'choropleth' }); if (showFlows) { setShowFlows(false); setFillMode('choro'); } else setFillMode((f) => (f === 'choro' ? 'none' : 'choro')); }}>Choropleth</button>
+        <button style={seg(showPins && !showFlows)} title="Event pins map (turns the choropleth fill off; re-select Choropleth to bring it back)"
+          onClick={() => { if (showFlows) { setShowFlows(false); setShowPins(true); setFillMode('none'); } else { const on = !showPins; setShowPins(on); if (on) setFillMode('none'); } }}>Pins</button>
         <button style={seg(fillMode === 'yoy' && !showFlows)} title="Year-over-year change fill (on/off)"
-          onClick={() => { if (showFlows) { setShowFlows(false); setFillMode('yoy'); } else setFillMode((f) => (f === 'yoy' ? 'none' : 'yoy')); }}>YoY</button>
+          onClick={() => { track('map_style', { panel: 'participation-maps', view: 'yoy' }); if (showFlows) { setShowFlows(false); setFillMode('yoy'); } else setFillMode((f) => (f === 'yoy' ? 'none' : 'yoy')); }}>YoY</button>
         <button style={seg(showFlows)} title="Athlete travel arcs (3D) — replaces the map"
-          onClick={() => setShowFlows((s) => !s)}>Flows</button>
+          onClick={() => { track('map_style', { panel: 'participation-maps', view: 'flows' }); setShowFlows((s) => !s); }}>Flows</button>
         <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
         <span style={{ display: 'inline-flex', gap: 4 }}>
           {['state', 'region', 'both'].map((v) => (
@@ -1039,6 +1091,13 @@ export default function ParticipationMap() {
             <button style={mini(pinIm === '')} onClick={() => setPinIm('')}>All</button>
             <button style={mini(pinIm === 'Yes')} onClick={() => setPinIm('Yes')}>IRONMAN</button>
             <button style={mini(pinIm === 'No')} onClick={() => setPinIm('No')}>Non-IRONMAN</button>
+          </span>
+          <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
+          <span className="small muted">Basemap</span>
+          <span style={{ display: 'inline-flex', gap: 4 }}>
+            <button style={mini(!basemap)} onClick={() => setBasemap(false)} title="Clean vector map (no tiles)">Off</button>
+            <button style={mini(basemap)} onClick={() => setBasemap(true)} title="Event pins over a real carto basemap (streets/terrain) — free, no token, theme-aware">On</button>
+            {basemap ? <button style={mini(false)} title="Recenter & zoom the basemap back to the whole US" onClick={() => { basemapViewRef.current = { center: { ...BASEMAP_VIEW0.center }, zoom: BASEMAP_VIEW0.zoom }; if (mapRef.current) Plotly.relayout(mapRef.current, { 'mapbox.center': BASEMAP_VIEW0.center, 'mapbox.zoom': BASEMAP_VIEW0.zoom }); }}>⟲ Reset view</button> : null}
           </span>
           <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
           <span className="small" style={{ display: 'inline-flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -1079,7 +1138,13 @@ export default function ParticipationMap() {
               <option value="off">Off</option>
             </select>
           </label>
-          {yoyData && yoyData.approx ? <span className="small muted" title="Unique-athlete figures are summed across months and may double-count people racing in more than one month.">· approx. unique</span> : null}
+          {(metricIdx in UNIQ_IDX) ? <span className="small muted" title="Unique athletes for each year are counted live from the base data (exact distinct), then compared.">{yoyUniq ? '· exact unique' : '· counting unique…'}</span> : null}
+        </div>
+      ) : null}
+
+      {fillMode === 'yoy' && yoyData && yoyData.mos && yoyData.mos.length ? (
+        <div className="small muted" style={{ margin: '-4px 0 8px', paddingLeft: 2 }}>
+          Year-over-year compares the <b>same period in both years</b> — {(() => { const ms = yoyData.mos.slice().sort((a, b) => a - b); return ms.length >= 12 ? 'full year (Jan–Dec)' : (MON3[ms[0]] + (ms.length > 1 ? '–' + MON3[ms[ms.length - 1]] : '')); })()} of {yoyFrom} vs {yoyTo}. Months present in only one year are excluded, so a partial year (e.g. the current one) is a like-for-like year-to-date comparison.
         </div>
       ) : null}
 
@@ -1114,8 +1179,8 @@ export default function ParticipationMap() {
         {refreshNote ? <span className="small" style={{ alignSelf: 'center', marginLeft: 'auto', marginRight: 6, opacity: 0.9 }}>{refreshNote}</span> : null}
         <span style={{ display: 'inline-flex', gap: 4, marginLeft: refreshNote ? 0 : 'auto' }}>
           <button style={mini(false)} title="Pull the latest data live from the database now (bypasses the hourly cache)" disabled={refreshing} onClick={doRefresh}>{refreshing ? '⟳ …' : '⟳ Refresh data'}</button>
-          <button style={mini(false)} title="Zoom out" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.max(1.5, flowViewRef.current.zoom - 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else setZoom((z) => Math.max(1, z / 1.4)); }}>−</button>
-          <button style={mini(false)} title="Zoom in" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.min(9, flowViewRef.current.zoom + 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else setZoom((z) => Math.min(10, z * 1.4)); }}>+</button>
+          <button style={mini(false)} title="Zoom out" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.max(1.5, flowViewRef.current.zoom - 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else if (basemap && showPins) { basemapViewRef.current = { ...basemapViewRef.current, zoom: Math.max(1.5, basemapViewRef.current.zoom - 0.6) }; if (mapRef.current) Plotly.relayout(mapRef.current, { 'mapbox.zoom': basemapViewRef.current.zoom }); } else setZoom((z) => Math.max(1, z / 1.4)); }}>−</button>
+          <button style={mini(false)} title="Zoom in" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.min(9, flowViewRef.current.zoom + 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else if (basemap && showPins) { basemapViewRef.current = { ...basemapViewRef.current, zoom: Math.min(16, basemapViewRef.current.zoom + 0.6) }; if (mapRef.current) Plotly.relayout(mapRef.current, { 'mapbox.zoom': basemapViewRef.current.zoom }); } else setZoom((z) => Math.min(10, z * 1.4)); }}>+</button>
           <button style={mini(false)} title="Reset everything to defaults (map type, zoom, filters)" onClick={resetAll}>⟲</button>
           <button style={mini(false)} title={showFlows ? 'Download the focused state’s inbound/outbound flow routes (CSV)' : fillMode === 'yoy' ? 'Download YoY from/to/change by state & region (CSV)' : (fillMode === 'none' && showPins) ? 'Download the event pins on screen (CSV)' : 'Download the metric shown, by ' + (view === 'region' ? 'region' : view === 'both' ? 'state & region' : 'state') + ' (CSV)'} onClick={exportCsv}>CSV</button>
           <button style={mini(false)} title="Download PNG" onClick={exportPng}>PNG</button>
@@ -1125,7 +1190,7 @@ export default function ParticipationMap() {
 
       {advOpen ? (
         <div className="toolbar">
-          {(() => { const dz = fillMode === 'yoy' || showFlows; const dst = dz ? { opacity: 0.4, cursor: 'not-allowed' } : {}; const dt = showFlows ? 'Not used on the Flows map' : (dz ? 'Not used on the YoY map (fixed diverging scale)' : ''); return (
+          {(() => { const dz = fillMode !== 'choro' || showFlows; const dst = dz ? { opacity: 0.4, cursor: 'not-allowed' } : {}; const dt = showFlows ? 'Not used on the Flows map' : (fillMode === 'yoy' ? 'Not used on the YoY map (fixed diverging scale)' : (fillMode === 'none' ? 'Not used without a choropleth fill (colors shade the metric)' : '')); return (
           <>
           <span style={{ display: 'inline-flex', gap: 4 }} title={dt}>
             <button style={{ ...mini(colorMode === 'value'), ...dst }} disabled={dz} onClick={() => setColorMode('value')}>Value</button>
@@ -1137,19 +1202,19 @@ export default function ParticipationMap() {
           </span>
           </>
           ); })()}
-          <label style={showFlows ? { opacity: 0.4 } : undefined} title={showFlows ? 'Flow colors are fixed (red = destination, blue = feeder)' : ''}>Colors&nbsp;
+          <label style={(fillMode === 'none' || showFlows) ? { opacity: 0.4 } : undefined} title={showFlows ? 'Flow colors are fixed (red = destination, blue = feeder)' : (fillMode === 'none' ? 'No choropleth fill to shade on the Pins map' : '')}>Colors&nbsp;
             {fillMode === 'yoy' ? (
               <select value={yoyColorIdx} disabled={showFlows} onChange={(e) => setYoyColorIdx(Number(e.target.value))} title="Diverging palette for the growth map">
                 {YOY_SCALES.map((c, i) => <option key={i} value={i}>{c.name}</option>)}
               </select>
             ) : (
-              <select value={colorIdx} disabled={showFlows} onChange={(e) => setColorIdx(Number(e.target.value))}>
+              <select value={colorIdx} disabled={fillMode === 'none' || showFlows} onChange={(e) => setColorIdx(Number(e.target.value))}>
                 {(p.colors || []).map((c, i) => <option key={i} value={i}>{c.name}</option>)}
               </select>
             )}
           </label>
-          <label style={(fillMode === 'yoy' || showFlows) ? { opacity: 0.4 } : undefined} title={showFlows ? 'Use the Flows “Top routes” control' : (fillMode === 'yoy' ? 'Use the YoY “Top movers” control instead' : '')}>Top&nbsp;
-            <select value={spotN} disabled={fillMode === 'yoy' || showFlows} onChange={(e) => setSpotN(Number(e.target.value))}>
+          <label style={(fillMode === 'yoy' || showFlows || (basemap && showPins)) ? { opacity: 0.4 } : undefined} title={showFlows ? 'Use the Flows “Top routes” control' : (fillMode === 'yoy' ? 'Use the YoY “Top movers” control instead' : ((basemap && showPins) ? 'Gold top-N badges aren’t drawn on the tile basemap' : ''))}>Top&nbsp;
+            <select value={spotN} disabled={fillMode === 'yoy' || showFlows || (basemap && showPins)} onChange={(e) => setSpotN(Number(e.target.value))}>
               <option value={0}>Off</option>
               <option value={5}>Top 5</option>
               <option value={10}>Top 10</option>
@@ -1157,18 +1222,18 @@ export default function ParticipationMap() {
               <option value={50}>All</option>
             </select>
           </label>
-          <label style={(fillMode === 'yoy' || showFlows) ? { opacity: 0.4 } : undefined} title={(fillMode === 'yoy' || showFlows) ? 'Not used on this map' : ''}>Max&nbsp;
-            <input type="number" value={clipMax} placeholder="auto" disabled={fillMode === 'yoy' || showFlows} style={{ width: 80 }} onChange={(e) => setClipMax(e.target.value)} />
+          <label style={(fillMode !== 'choro' || showFlows) ? { opacity: 0.4 } : undefined} title={(fillMode !== 'choro' || showFlows) ? 'Not used on this map' : ''}>Max&nbsp;
+            <input type="number" value={clipMax} placeholder="auto" disabled={fillMode !== 'choro' || showFlows} style={{ width: 80 }} onChange={(e) => setClipMax(e.target.value)} />
           </label>
-          <button style={{ ...mini(false), ...((fillMode === 'yoy' || showFlows) ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={fillMode === 'yoy' || showFlows} onClick={() => setClipMax('')}>Auto</button>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} /> Labels
+          <button style={{ ...mini(false), ...((fillMode !== 'choro' || showFlows) ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={fillMode !== 'choro' || showFlows} onClick={() => setClipMax('')}>Auto</button>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...((basemap && showPins) ? { opacity: 0.4 } : {}) }} title={(basemap && showPins) ? 'State labels aren’t shown on the tile basemap' : ''}>
+            <input type="checkbox" checked={showLabels} disabled={basemap && showPins} onChange={(e) => setShowLabels(e.target.checked)} /> Labels
           </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <input type="checkbox" checked={showOutlines} onChange={(e) => setShowOutlines(e.target.checked)} /> Region borders
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...((basemap && showPins) ? { opacity: 0.4 } : {}) }} title={(basemap && showPins) ? 'Region borders aren’t drawn on the tile basemap' : ''}>
+            <input type="checkbox" checked={showOutlines} disabled={basemap && showPins} onChange={(e) => setShowOutlines(e.target.checked)} /> Region borders
           </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...(showFlows ? { opacity: 0.4 } : {}) }} title={showFlows ? 'Flow colors are fixed' : 'Reverse the color scale (high values shade light instead of dark)'}>
-            <input type="checkbox" checked={reverse} disabled={showFlows} onChange={(e) => setReverse(e.target.checked)} /> Reverse shades
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...((fillMode === 'none' || showFlows) ? { opacity: 0.4 } : {}) }} title={showFlows ? 'Flow colors are fixed' : (fillMode === 'none' ? 'No fill scale to reverse on the Pins map' : 'Reverse the color scale (high values shade light instead of dark)')}>
+            <input type="checkbox" checked={reverse} disabled={fillMode === 'none' || showFlows} onChange={(e) => setReverse(e.target.checked)} /> Reverse shades
           </label>
         </div>
       ) : null}
@@ -1176,6 +1241,13 @@ export default function ParticipationMap() {
       <div className="card" ref={cardRef} style={{ position: 'relative' }}>
         <div ref={mapRef} className="mapdiv" style={{ visibility: showFlows ? 'hidden' : 'visible' }} />
         <div ref={deckRef} style={{ position: 'absolute', inset: 0, height: 560, visibility: showFlows ? 'visible' : 'hidden', borderRadius: 10, overflow: 'hidden' }} />
+        {((!showFlows && (metricIdx in UNIQ_IDX) && (fillMode === 'yoy' ? yoyUniqLoading : uniqLoading)) || (showFlows && flowLoading)) ? (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: dark ? 'rgba(11,18,32,.45)' : 'rgba(255,255,255,.55)', borderRadius: 10, zIndex: 5, pointerEvents: 'none' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'var(--panel)', color: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: '0 6px 18px rgba(0,0,0,.22)' }}>
+              {showFlows ? 'Loading flow map…' : 'Counting unique athletes…'}
+            </span>
+          </div>
+        ) : null}
       </div>
       {showFlows ? <p className="muted small" style={{ margin: '8px 2px 0' }}>{flowStat}</p> : null}
       {showFlows && flowRoutes ? (

@@ -135,9 +135,12 @@ async function create_participation_events_table(events_table, base_table) {
                (ev.turnout - ev.new_count)                                   AS repeat_count,
                COALESCE(ROUND(100 * ev.new_count / NULLIF(ev.turnout, 0)), 0)           AS new_pct,
                (100 - COALESCE(ROUND(100 * ev.new_count / NULLIF(ev.turnout, 0)), 0))   AS repeat_pct,
-               ROUND(ev.turnout / NULLIF(ev.unique_athletes, 0), 1)          AS per_participant,
-               ROUND(COALESCE(z.lat, z3.lat), 6) AS lat,
-               ROUND(COALESCE(z.lng, z3.lng), 6) AS lng
+               ROUND(ev.turnout / NULLIF(ev.unique_athletes, 0), 2)          AS per_participant,
+               -- Pin location: use the event's ZIP5 centroid ONLY when the ZIP's state matches the event
+               -- state. Bad-data ZIPs land an event in the wrong state (e.g. Boulder CO tagged 88030 = NM),
+               -- so on a mismatch fall back to a ZIP3 centroid within the event state, then the state centroid.
+               ROUND(COALESCE(IF(z.state_code = ev.event_state, z.lat, NULL), z3.lat, zs.lat), 6) AS lat,
+               ROUND(COALESCE(IF(z.state_code = ev.event_state, z.lng, NULL), z3.lng, zs.lng), 6) AS lng
         FROM (
             SELECT t.start_date_year_races, t.start_date_month_races,
                    t.id_sanctioning_events AS event_id,
@@ -156,10 +159,15 @@ async function create_participation_events_table(events_table, base_table) {
         ) ev
         LEFT JOIN ${zip_ref} z ON z.zip5 = ev.zip5
         LEFT JOIN (
-            SELECT LEFT(zip5, 3) AS zip3, AVG(lat) AS lat, AVG(lng) AS lng
+            SELECT LEFT(zip5, 3) AS zip3, state_code AS st, AVG(lat) AS lat, AVG(lng) AS lng
             FROM ${zip_ref}
-            GROUP BY LEFT(zip5, 3)
-        ) z3 ON z3.zip3 = LEFT(ev.zip5, 3)
+            GROUP BY LEFT(zip5, 3), state_code
+        ) z3 ON z3.zip3 = LEFT(ev.zip5, 3) AND z3.st = ev.event_state
+        LEFT JOIN (
+            SELECT state_code AS st, AVG(lat) AS lat, AVG(lng) AS lng
+            FROM ${zip_ref}
+            GROUP BY state_code
+        ) zs ON zs.st = ev.event_state
         ;
     `;
 }

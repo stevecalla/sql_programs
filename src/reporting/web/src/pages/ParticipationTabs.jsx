@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveSlices, aggregateFlows, homeByState } from '../lib/compute.js';
+import { trackFilter, trackExport } from '../lib/track.js';
 import Reference from './Reference.jsx';
 
 // Native port of the POC's lower tabs: Summary (region stats + Top-N cards), Region matrix, State matrix
@@ -38,6 +39,7 @@ function fmtDate(v) {
   return dow + ' ' + (MON3[m] || '') + ' ' + d + ', ' + y;
 }
 function downloadCSV(fname, header, rows) {
+  try { trackExport('participation-maps', (fname || 'table').replace(/\.csv$/, ''), 'csv'); } catch (e) { /* analytics best-effort */ }
   const esc = (v) => { v = (v == null) ? '' : ('' + v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const csv = header.map(esc).join(',') + '\n' + rows.map((r) => r.map(esc).join(',')).join('\n');
   const b = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a');
@@ -218,7 +220,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
     return rows.map((r) => {
       const rr = r.slice(); const part = Number(r[1]) || 0;
       const u = isTot(r[0]) ? uniqueData.national : (uniqueData.byRegion ? uniqueData.byRegion[r[0]] : null);
-      if (u != null) { rr[15] = u; rr[16] = u ? Math.round((part / u) * 10) / 10 : null; }
+      if (u != null) { rr[15] = u; rr[16] = u ? Math.round((part / u) * 100) / 100 : null; }
       return rr;
     });
   }, [yb, uniqueData]);
@@ -237,7 +239,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
       ['Participants', T.toLocaleString(), 'Count of participation records (event starts) in the period. One athlete racing 3 times counts as 3.'],
       ['Unique' + uSuffix, uniq.toLocaleString(), 'Distinct athletes for the selection, counted live from the base data (COUNT DISTINCT id_profiles = active members). Exact — not a sum of per-slice counts. ~ = fell back to the approximate summed count.'],
       ['% unique', part ? Math.round(100 * uniq / part) + '%' : '-', 'Unique participants ÷ Participants.'],
-      ['Races/participant', uniq ? (part / uniq).toFixed(1) : '-', 'Participants ÷ Unique — average races per athlete.'],
+      ['Races/participant', uniq ? (part / uniq).toFixed(2) : '-', 'Participants ÷ Unique — average races per athlete.'],
       ['Events', E.toLocaleString(), 'Distinct events in the period.'],
       ['Races', R.toLocaleString(), 'Distinct races (an event can contain multiple races).'],
       ['Per race', R ? Math.round(T / R) : '-', 'Participants ÷ Races — average field size.'],
@@ -292,7 +294,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
     return d;
   }, [EV, selMonths, regionSel, stateSel, imSel, searchTxt, sortEc, sortDir]);
   const visCols = useMemo(() => { const a = []; for (let i = 0; i < COLS.length; i++) { if ((i === 3 || i === 4) && !showSanc) continue; a.push(i); } return a; }, [COLS, showSanc]);
-  const cellFmt = (ec, c) => { if (c == null || c === '') return ''; if (COLS[ec] === 'Date') return fmtDate(c); const t = colType(COLS[ec]); if (t === 'cnt') return commafy(c); if (t === 'pct') return pctify(c); return c; };
+  const cellFmt = (ec, c) => { if (c == null || c === '') return ''; if (COLS[ec] === 'Date') return fmtDate(c); if (COLS[ec] === 'Per participant') return Number(c).toFixed(2); const t = colType(COLS[ec]); if (t === 'cnt') return commafy(c); if (t === 'pct') return pctify(c); return c; };
   // Totals over ALL filtered events (not just the page). Count columns sum; % columns are recomputed on the
   // summed counts (weighted); ratios use the totals; unique is summed (approx — dedupes only within an event).
   const evTot = useMemo(() => {
@@ -312,7 +314,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
     const u = (evUniq == null ? t.uniq : evUniq);   // exact distinct when available, else summed
     switch (L) {
       case 'Participants': return commafy(t.part); case 'Races': return commafy(t.races);
-      case 'Per race': return t.races ? Math.round(t.part / t.races) : ''; case 'Per participant': return u ? (t.part / u).toFixed(1) : '';
+      case 'Per race': return t.races ? Math.round(t.part / t.races) : ''; case 'Per participant': return u ? (t.part / u).toFixed(2) : '';
       case 'Female n': return commafy(t.fn); case 'Male n': return commafy(t.mn); case 'Female %': return pc(t.fn); case 'Male %': return pc(t.mn);
       case 'Home': return commafy(t.home); case 'Away': return commafy(t.away); case 'Unknown home': return commafy(t.unk);
       case 'Home %': return pc(t.home); case 'Away %': return pc(t.away); case 'Unknown home %': return pc(t.unk);
@@ -366,7 +368,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
       <style>{`.hltbl tbody tr:hover>td{background:${rowHL}!important}`}</style>
       <div style={{ display: 'flex', gap: 4, borderBottom: '2px solid var(--line)', marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)}
+          <button key={t.key} onClick={() => { setTab(t.key); try { trackFilter('participation-maps', t.key, 'tab'); } catch (e) { /* noop */ } }}
             style={{ padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 700, color: tab === t.key ? 'var(--ink)' : 'var(--muted)', borderBottom: tab === t.key ? '3px solid #C20E2F' : '3px solid transparent', marginBottom: -2 }}>
             {t.label}
           </button>
@@ -401,7 +403,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
                     <tr key={ri} style={tot ? { fontWeight: 700, background: 'var(--bg)' } : null}>
                       <td style={{ ...td, textAlign: 'left', cursor: tot ? 'default' : 'pointer', color: tot ? 'inherit' : '#3b82f6' }}
                         onClick={() => { if (!tot) { setRegionSel(r[0]); setStateSel(null); setTab('events'); } }}>{r[0]}</td>
-                      {r.slice(1).map((c, i) => { const h = p.rshead[i + 1]; return <td key={i} style={td}>{c == null ? 'n/a' : (h.indexOf('%') >= 0 ? c + '%' : Number(c).toLocaleString())}</td>; })}
+                      {r.slice(1).map((c, i) => { const h = p.rshead[i + 1]; return <td key={i} style={td}>{c == null ? 'n/a' : (h.indexOf('%') >= 0 ? c + '%' : (h === 'Per part' ? Number(c).toFixed(2) : Number(c).toLocaleString()))}</td>; })}
                     </tr>
                   );
                 })}

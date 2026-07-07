@@ -7,6 +7,7 @@ Start here:
 
 - **PHASE_PLAN.md** — the phases (0–5), what each delivers, and acceptance criteria.
 - **STATUS.md** — what's built so far and the exact next steps.
+- **METRICS.md** — the Usage Metrics dashboard: what it shows, the `reporting_events` schema, endpoints, Ask/LLM key-gating, and a deploy checklist.
 - **METRICS_AND_ADMIN_OVERLAP.md** — how auth/metrics/admin relate to the merge app (decision + options).
 - **DEPLOY_AND_PROXY.md** — npm scripts, build, PM2, and the manual go-live (uncomment the proxy line).
 
