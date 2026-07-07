@@ -29,9 +29,9 @@ const REF = [
   ] },
   { title: 'Core metrics & how they are calculated', items: [
     ['Participants', 'Count of participation records (event starts) in the period. One athlete racing 3 times counts as 3.'],
-    ['Unique participants', 'Distinct athletes (deduplicated).'],
-    ['% unique', 'Unique participants ÷ Participants.'],
-    ['Races / participant', 'Participants ÷ Unique participants.'],
+    ['Unique participants', 'Distinct athletes for the exact selection — COUNT(DISTINCT id_profiles), i.e. athletes who raced while holding an active USAT membership. This is the one non-additive metric (an athlete spans many events/states/months), so it is counted live from the base table for whatever years / months / filters you pick — never summed from per-slice counts. It updates a beat after the additive metrics (brief “…”).'],
+    ['% unique', 'Unique participants ÷ Participants (uses the exact live unique).'],
+    ['Races / participant', 'Participants ÷ Unique participants (uses the exact live unique).'],
     ['Home (in-state)', 'Participations where the athlete’s home state = the event state.'],
     ['Away (cross-state travel)', 'Participations where the home state is one of the 50 states and ≠ the event state.'],
     ['Unknown home', 'Participations whose home state is missing/blank or not one of the 50 states (e.g. DC, territories, foreign, military) — can’t be placed as home or away.'],
@@ -82,7 +82,7 @@ const REF = [
     ['Age bands', 'age_as_race_results_bin (4-19 = 4-9+10-19; 60+ = 60-69…90-99; bad_age excluded)'],
     ['IRONMAN', 'is_ironman = 1 (curated allow-list materialized upstream; rolled up MAX per event)'],
     ['New / Repeat', "member_created_at_category_starts_mp = 'created_year' is new; else repeat"],
-    ['Unique athletes', 'COUNT(DISTINCT id_profiles)'],
+    ['Unique athletes', 'COUNT(DISTINCT id_profiles) — active-member profile; counted live per selection via /api/unique, restricted to the 50 event-states to match the participant basis.'],
     ['Cross-state flows', 'home → event COUNT(id_rr), both 50-state, home ≠ event'],
   ] },
   { title: 'Source tables & freshness', note: 'Live, read-only local ' + 'usat_sales_db' + '. Full detail: plans_and_notes/FIELD_MAPPING.md.', items: [
@@ -92,7 +92,7 @@ const REF = [
     ['Events table', SRC.events + ' — per-event roll-ups (feeds the Events tab + Pins).'],
     ['Last updated', 'Shown in the header — the source table’s timestamp (created_at).'],
     ['Partial years', 'The current year is year-to-date (partial) — not comparable to full years.'],
-    ['Multi-period selections', 'Participations, gender, age, home/away, IRONMAN and new/repeat are exact. Distinct counts (Unique, Events, Races) are summed per period, so an athlete or event spanning two periods can be counted more than once. A single year with all/one month is exact.'],
+    ['Multi-period selections', 'Participations, gender, age, home/away, IRONMAN and new/repeat are exact. Unique athletes (and % unique, races/participant) are counted live from the base table for the exact selection, so they are exact too — including multi-month and multi-year. Events and Races are still distinct counts summed per period. The Events-tab unique total shows the live distinct across the filtered events, not the column sum.'],
     ['Coverage', 'Event state / gender / age / IRONMAN / new-repeat ~100%; home state ~90% (the rest count as away/unknown).'],
   ] },
 ];

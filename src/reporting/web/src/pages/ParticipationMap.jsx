@@ -81,6 +81,33 @@ function downloadCSV(fname, header, rows) {
   const b = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a');
   a.href = URL.createObjectURL(b); a.download = fname; a.click();
 }
+// The unique family (Unique participants / % unique / Avg races per participant) is non-additive, so its
+// per-slice values can't be summed. When the server has returned exact distincts for the current selection
+// (uniqueData: { national, byState, byRegion }), this rebuilds those three metrics' statez/regionz/labels
+// from the true distinct counts. Any other metric passes through unchanged.
+const UNIQ_IDX = { 33: 'count', 34: 'pct', 35: 'perpart' };
+function adjustUnique(base, idx, yb, uniqueData, p) {
+  if (!base || !uniqueData || !yb || !(idx in UNIQ_IDX)) return base;
+  const kind = UNIQ_IDX[idx];
+  const abbr = p.abbr, ab2region = p.ab2region, regOrder = p.regOrder;
+  const turn = yb.metrics[0].statez, regTurn = yb.metrics[0].regionz;   // participants (additive) per state / region
+  const uState = uniqueData.byState || {}, uRegion = uniqueData.byRegion || {};
+  const fmt = base.ispct ? 1 : (base.dec ? 2 : 0);
+  const calc = (u, t) => {
+    if (u == null) return null;
+    if (kind === 'count') return u;
+    if (kind === 'pct') return t ? Math.round(100 * u / t) : null;
+    return u ? Math.round((t / u) * 10) / 10 : null;   // races per participant
+  };
+  const lab = (v) => (v == null ? 'n/a' : (fmt === 2 ? v.toFixed(1) : (fmt === 1 ? v + '%' : Number(v).toLocaleString())));
+  const statez = abbr.map((ab, i) => calc(uState[ab] == null ? null : uState[ab], turn[i]));
+  const regionz = abbr.map((ab, i) => calc(uRegion[ab2region[ab]] == null ? null : uRegion[ab2region[ab]], regTurn[i]));
+  const vals = statez.filter((v) => v != null);
+  const mn = vals.length ? Math.min.apply(null, vals) : 0, mx = vals.length ? Math.max.apply(null, vals) : 0;
+  const labels = abbr.map((ab, i) => (statez[i] == null ? ab : ab + '<br>' + lab(statez[i])));
+  const regionlabels = regOrder.map((rg) => { const i = abbr.findIndex((ab) => ab2region[ab] === rg); const v = i >= 0 ? regionz[i] : null; return v == null ? rg + '<br>n/a' : rg + '<br>' + lab(v); });
+  return Object.assign({}, base, { statez, regionz, mn, mx, labels, regionlabels });
+}
 const PIN_NON = '#082240', PIN_IM = '#C20E2F';
 // Diverging palettes for the YoY map (a growth map needs +/- around 0, not a sequential ramp). The mid is
 // injected theme-aware at render; "Reverse shades" swaps the negative/positive ends.
@@ -328,6 +355,20 @@ export default function ParticipationMap() {
 
   // Aggregated year-block for the current selection (single full year is exact; else computeAgg).
   const yb = useMemo(() => (st.p && selYears && selYears.length ? getYearBlock(st.p, selYears, selMonths) : null), [st.p, selYears, selMonths]);
+
+  // Exact unique athletes for the current period, counted live from the base table (non-additive metric).
+  // Only the whole-map selection (years + months) drives this; cross-filters stay with pins/events.
+  const [uniqueData, setUniqueData] = useState(null);
+  const [uniqLoading, setUniqLoading] = useState(false);
+  useEffect(() => {
+    if (!st.p || !selYears || !selYears.length) { setUniqueData(null); return; }
+    let cancelled = false;
+    setUniqLoading(true); setUniqueData(null);
+    api.uniqueFor({ years: selYears, months: selMonths })
+      .then(({ status, body }) => { if (!cancelled) { setUniqueData(status === 200 && body && body.ok ? body : null); setUniqLoading(false); } })
+      .catch(() => { if (!cancelled) { setUniqueData(null); setUniqLoading(false); } });
+    return () => { cancelled = true; };
+  }, [st.p, selYears, selMonths]);
   const availMonths = useMemo(() => {
     if (!st.p || !selYears) return [];
     const set = new Set();
@@ -348,10 +389,30 @@ export default function ParticipationMap() {
 
   // YoY change per state (only computed when the YoY fill is active). Uses the selected months so a
   // partial period compares like-for-like against the same months of the baseline year.
+  // Exact from/to distincts for the YoY unique family (33/34/35) so % change uses true distincts, not the
+  // summed approximation. Months are the like-for-like overlap (same rule computeYoY uses for turnout).
+  const [yoyUniq, setYoyUniq] = useState(null);
+  useEffect(() => {
+    if (fillMode !== 'yoy' || !(metricIdx in UNIQ_IDX) || !st.p || !yoyFrom || !yoyTo) { setYoyUniq(null); return; }
+    const fromMos = st.p.monthsByYear[yoyFrom] || [], toMos = st.p.monthsByYear[yoyTo] || [];
+    const mos = (selMonths.indexOf('all') >= 0) ? fromMos.filter((m) => toMos.indexOf(m) >= 0) : selMonths.map(Number).filter((m) => fromMos.indexOf(m) >= 0 && toMos.indexOf(m) >= 0);
+    const monthsArg = mos.map(String);
+    let cancelled = false; setYoyUniq(null);
+    Promise.all([api.uniqueFor({ years: [yoyFrom], months: monthsArg }), api.uniqueFor({ years: [yoyTo], months: monthsArg })])
+      .then(([f, t]) => {
+        if (cancelled) return;
+        const okF = (f.status === 200 && f.body && f.body.ok) ? f.body : null;
+        const okT = (t.status === 200 && t.body && t.body.ok) ? t.body : null;
+        setYoyUniq(okF && okT ? { from: okF, to: okT } : null);
+      })
+      .catch(() => { if (!cancelled) setYoyUniq(null); });
+    return () => { cancelled = true; };
+  }, [fillMode, metricIdx, st.p, yoyFrom, yoyTo, selMonths]);
+
   const yoyData = useMemo(() => {
     if (!st.p || fillMode !== 'yoy' || !yoyFrom || !yoyTo) return null;
-    return computeYoY(st.p, yoyFrom, yoyTo, selMonths, metricIdx, yoyMode);
-  }, [st.p, fillMode, yoyFrom, yoyTo, selMonths, metricIdx, yoyMode]);
+    return computeYoY(st.p, yoyFrom, yoyTo, selMonths, metricIdx, yoyMode, yoyUniq);
+  }, [st.p, fillMode, yoyFrom, yoyTo, selMonths, metricIdx, yoyMode, yoyUniq]);
 
   // Pins layer: event roll-ups across the selected years, honoring the same filters as the Events tab
   // (Year, Month, region/state cross-filter, IRONMAN). Only events with resolved coordinates get a pin.
@@ -373,7 +434,7 @@ export default function ParticipationMap() {
   useEffect(() => {
     if (st.loading || st.error || !yb || !mapRef.current || showFlows) return;  // Flows uses the deck canvas
     const p = st.p;
-    const m = yb.metrics[metricIdx] || yb.metrics[0];
+    const m = adjustUnique(yb.metrics[metricIdx] || yb.metrics[0], metricIdx, yb, uniqueData, p);
     const { abbr, names, regs, regOrder, centroid } = p;
     const scale = (p.colors[colorIdx] && p.colors[colorIdx].scale) || [[0, '#eef2ff'], [1, '#082240']];
     // Choropleth/YoY paint the state fill; "none" leaves a neutral map (the POC "Pins" look). Pins overlay
@@ -630,7 +691,7 @@ export default function ParticipationMap() {
         if (Array.isArray(pt.customdata)) { setStateSel(pt.customdata[1]); setRegionSel(''); }
       });
     });
-  }, [st, yb, metricIdx, view, showLabels, showOutlines, spotN, colorIdx, colorMode, logMode, clipMax, reverse, zoom, dark, regionMesh, regionCentroids, fillMode, showPins, pinEvents, yoyData, yoyTop, yoyFrom, yoyTo, yoyColorIdx, showFlows]);
+  }, [st, yb, metricIdx, view, showLabels, showOutlines, spotN, colorIdx, colorMode, logMode, clipMax, reverse, zoom, dark, regionMesh, regionCentroids, fillMode, showPins, pinEvents, yoyData, yoyTop, yoyFrom, yoyTo, yoyColorIdx, showFlows, uniqueData]);
 
   // FLOWS map (deck.gl 3D arcs). Base states shade by net flow (red = net destination, blue = net feeder);
   // picking a focus state traces its top inbound (red) + outbound (blue) routes as arcs. Ported from the POC.
@@ -874,7 +935,7 @@ export default function ParticipationMap() {
     }
     // Choropleth → only the metric currently shown, at the grain(s) on screen (states for State/Both,
     // regions for Region/Both). The full all-metrics matrix lives on the State-matrix / Region-matrix tabs.
-    const m = metrics[metricIdx] || metrics[0];
+    const m = adjustUnique(metrics[metricIdx] || metrics[0], metricIdx, yb, uniqueData, p);
     const header = ['Level', 'Code', 'Name', 'Region', m.label];
     const rows = [];
     if (view !== 'region') p.abbr.forEach((ab, i) => rows.push(['State', ab, p.names[i], p.regs[i], m.statez[i] == null ? '' : m.statez[i]]));
@@ -898,7 +959,7 @@ export default function ParticipationMap() {
       {kpis ? (
         <div className="kpis">
           <Kpi v={fmt(kpis.participants)} l={`Participants (${labelText(selYears, selMonths)})`} t="Count of participation records (event starts) for the selected period. One athlete racing 3× counts as 3." />
-          <Kpi v={fmt(kpis.unique) + (kpis.approx ? ' ~' : '')} l="Unique athletes" t="Distinct athletes (deduplicated). ~ means summed across periods (approximate) for a multi-period selection." />
+          <Kpi v={uniqLoading ? '…' : (fmt(uniqueData ? uniqueData.national : kpis.unique) + ((!uniqueData && kpis.approx) ? ' ~' : ''))} l="Unique athletes" t="Distinct athletes for the exact selection, counted live from the base data (COUNT DISTINCT id_profiles = active members). Exact — not the sum of per-slice counts. ‘…’ = loading; ‘~’ = fell back to the approximate summed count if the live count was unavailable." />
           <Kpi v={kpis.homePct == null ? '—' : kpis.homePct + '%'} l="Home (in-state)" t="Share of total participations where the athlete raced in their home state (home ÷ total participants)." />
           <Kpi v={fmt(kpis.away)} l="Traveled away" t="Participations where the athlete’s home state differs from the event state (cross-state travel)." />
         </div>
@@ -1161,6 +1222,7 @@ export default function ParticipationMap() {
           p={p} yb={yb} selYears={selYears} selMonths={selMonths} period={labelText(selYears, selMonths)} dark={dark}
           stateSel={stateSel} setStateSel={setStateSel}
           regionSel={regionSel} setRegionSel={setRegionSel}
+          uniqueData={uniqueData}
         />
       ) : <div className="muted small" style={{ padding: 16, marginTop: 16 }}>Loading tables…</div>}
     </div>

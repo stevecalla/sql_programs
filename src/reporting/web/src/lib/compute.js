@@ -197,7 +197,7 @@ function uqForYear(p, y, mos) {
 // same months of the baseline). Returns per-state colored z (zc), true change (z, null = n/a), the label
 // text, hover customdata rows, and a "new" mask for states that went 0 -> n (no % is defined there).
 //   mode: 'pct' (% change, 1 dp) | 'abs' (absolute change). metricIdx selects which metric.
-export function computeYoY(p, fromYear, toYear, selMonths, metricIdx, mode) {
+export function computeYoY(p, fromYear, toYear, selMonths, metricIdx, mode, uniqOv) {
   const abbr = p.abbr, names = p.names, regOrder = p.regOrder, ab2region = p.ab2region, abs = mode === 'abs';
   const fromMos = p.monthsByYear[fromYear] || [], toMos = p.monthsByYear[toYear] || [];
   const mos = (selMonths.indexOf('all') >= 0)
@@ -207,11 +207,25 @@ export function computeYoY(p, fromYear, toYear, selMonths, metricIdx, mode) {
   const fa = computeAgg(fs, uqForYear(p, fromYear, mos), p);
   const ta = computeAgg(ts, uqForYear(p, toYear, mos), p);
   const label = fa.metrics[metricIdx].label;
-  const A = fa.metrics[metricIdx].statez, B = ta.metrics[metricIdx].statez;
+  let A = fa.metrics[metricIdx].statez, B = ta.metrics[metricIdx].statez;
 
   // Region from/to values (regionz is per-abbr; the same value repeats for every state in a region).
   const rvA = {}, rvB = {};
   abbr.forEach((ab, i) => { const rg = ab2region[ab]; rvA[rg] = fa.metrics[metricIdx].regionz[i]; rvB[rg] = ta.metrics[metricIdx].regionz[i]; });
+
+  // Unique family (33/34/35) is non-additive — replace the summed from/to values with the exact live
+  // distincts (per state + region) so the growth map + top movers are correct. uniqOv months are already
+  // the like-for-like overlap, so they align with fa/ta turnout.
+  const UF = { 33: 'count', 34: 'pct', 35: 'perpart' };
+  if (uniqOv && (metricIdx in UF)) {
+    const kind = UF[metricIdx];
+    const calc = (u, t) => (u == null ? null : (kind === 'count' ? u : (kind === 'pct' ? (t ? Math.round(100 * u / t) : null) : (u ? Math.round((t / u) * 10) / 10 : null))));
+    const fT = fa.metrics[0].statez, tT = ta.metrics[0].statez;
+    A = abbr.map((ab, i) => calc((uniqOv.from && uniqOv.from.byState) ? uniqOv.from.byState[ab] : null, fT[i]));
+    B = abbr.map((ab, i) => calc((uniqOv.to && uniqOv.to.byState) ? uniqOv.to.byState[ab] : null, tT[i]));
+    const fRT = {}, tRT = {}; abbr.forEach((ab, i) => { const rg = ab2region[ab]; if (fRT[rg] == null) fRT[rg] = fa.metrics[0].regionz[i]; if (tRT[rg] == null) tRT[rg] = ta.metrics[0].regionz[i]; });
+    regOrder.forEach((rg) => { rvA[rg] = calc((uniqOv.from && uniqOv.from.byRegion) ? uniqOv.from.byRegion[rg] : null, fRT[rg]); rvB[rg] = calc((uniqOv.to && uniqOv.to.byRegion) ? uniqOv.to.byRegion[rg] : null, tRT[rg]); });
+  }
   const AR = regOrder.map((rg) => rvA[rg]), BR = regOrder.map((rg) => rvB[rg]);
 
   // Build a change series for a set of entities (states or regions). short = label code, name = hover name.
