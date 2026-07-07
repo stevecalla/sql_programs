@@ -372,12 +372,13 @@ export default function ParticipationMap() {
   const basemapViewRef = useRef({ ...BASEMAP_VIEW0 });   // persist basemap pan/zoom across re-renders
   useEffect(() => {
     if (!st.p || !selYears || !selYears.length) { setUniqueData(null); setUniqLoading(false); return; }
+    if (fillMode === 'yoy') { setUniqLoading(false); return; }   // YoY uses yoyUniq; don't also fire the choropleth-unique query
     const seq = ++uniqSeq.current;   // latest-wins: only the newest request clears the spinner, so it can't get stuck on rapid re-fires
     setUniqLoading(true);   // keep the last-good exact values visible (under the loading overlay) — no flash to the summed approximation
     api.uniqueFor({ years: selYears, months: selMonths })
       .then(({ status, body }) => { if (seq !== uniqSeq.current) return; setUniqueData(status === 200 && body && body.ok ? body : null); setUniqLoading(false); })
       .catch(() => { if (seq === uniqSeq.current) { setUniqueData(null); setUniqLoading(false); } });
-  }, [st.p, selYears, selMonths]);
+  }, [st.p, selYears, selMonths, fillMode]);
   const availMonths = useMemo(() => {
     if (!st.p || !selYears) return [];
     const set = new Set();
@@ -408,11 +409,13 @@ export default function ParticipationMap() {
     const mos = (selMonths.indexOf('all') >= 0) ? fromMos.filter((m) => toMos.indexOf(m) >= 0) : selMonths.map(Number).filter((m) => fromMos.indexOf(m) >= 0 && toMos.indexOf(m) >= 0);
     const monthsArg = mos.map(String);
     const seq = ++yoySeq.current; setYoyUniqLoading(true);   // latest-wins guard (keeps last-good under the overlay, spinner can't stick)
-    Promise.all([api.uniqueFor({ years: [yoyFrom], months: monthsArg }), api.uniqueFor({ years: [yoyTo], months: monthsArg })])
-      .then(([f, t]) => {
+    const bail = new Promise((res) => setTimeout(() => res('__t'), 25000));   // failsafe: a slow/stale DB can't hang the loader forever
+    Promise.race([Promise.all([api.uniqueFor({ years: [yoyFrom], months: monthsArg }), api.uniqueFor({ years: [yoyTo], months: monthsArg })]), bail])
+      .then((r) => {
         if (seq !== yoySeq.current) return;
-        const okF = (f.status === 200 && f.body && f.body.ok) ? f.body : null;
-        const okT = (t.status === 200 && t.body && t.body.ok) ? t.body : null;
+        if (r === '__t') { setYoyUniqLoading(false); return; }   // timed out -> keep the summed fallback, clear the loader
+        const okF = (r[0].status === 200 && r[0].body && r[0].body.ok) ? r[0].body : null;
+        const okT = (r[1].status === 200 && r[1].body && r[1].body.ok) ? r[1].body : null;
         setYoyUniq(okF && okT ? { from: okF, to: okT } : null);
         setYoyUniqLoading(false);
       })
@@ -474,10 +477,7 @@ export default function ParticipationMap() {
         });
         gd.on('plotly_click', (ev) => {
           const pt = ev.points && ev.points[0]; if (!pt) return;
-          if (pt.lon != null && pt.lat != null) {   // clicking a pin zooms in to it
-            basemapViewRef.current = { center: { lon: pt.lon, lat: pt.lat }, zoom: Math.max(6.5, basemapViewRef.current.zoom) };
-            Plotly.relayout(mapRef.current, { 'mapbox.center': basemapViewRef.current.center, 'mapbox.zoom': basemapViewRef.current.zoom });
-          }
+          // Click a pin to cross-filter its state (toggle). No auto-zoom — pan/zoom stays where the user left it.
           if (Array.isArray(pt.customdata)) { setStateSel((c) => (c === pt.customdata[1] ? null : pt.customdata[1])); setRegionSel(''); }
         });
       });
@@ -1012,7 +1012,7 @@ export default function ParticipationMap() {
         <div className="kpis">
           <Kpi v={fmt(kpis.participants)} l={`Participants (${labelText(selYears, selMonths)})`} t="Count of participation records (event starts) for the selected period. One athlete racing 3× counts as 3." />
           <Kpi v={uniqLoading ? '…' : (fmt(uniqueData ? uniqueData.national : kpis.unique) + ((!uniqueData && kpis.approx) ? ' ~' : ''))} l="Unique athletes" t="Distinct athletes for the exact selection, counted live from the base data (COUNT DISTINCT id_profiles = active members). Exact — not the sum of per-slice counts. ‘…’ = loading; ‘~’ = fell back to the approximate summed count if the live count was unavailable." />
-          <Kpi v={kpis.homePct == null ? '—' : kpis.homePct + '%'} l="Home (in-state)" t="Share of total participations where the athlete raced in their home state (home ÷ total participants)." />
+          <Kpi v={(kpis.home + kpis.away) ? Math.round(100 * kpis.home / (kpis.home + kpis.away)) + '%' : '—'} l="Known home (in-state)" t="Share of KNOWN-home participations that raced in the athlete's home state — home ÷ (home + away), excluding the ~10% whose home state is unknown/unmapped. This is the known-home basis (the deck definition); the of-total home % (÷ all participants) runs lower." />
           <Kpi v={fmt(kpis.away)} l="Traveled away" t="Participations where the athlete’s home state differs from the event state (cross-state travel)." />
         </div>
       ) : null}
@@ -1202,19 +1202,19 @@ export default function ParticipationMap() {
           </span>
           </>
           ); })()}
-          <label style={showFlows ? { opacity: 0.4 } : undefined} title={showFlows ? 'Flow colors are fixed (red = destination, blue = feeder)' : ''}>Colors&nbsp;
+          <label style={(fillMode === 'none' || showFlows) ? { opacity: 0.4 } : undefined} title={showFlows ? 'Flow colors are fixed (red = destination, blue = feeder)' : (fillMode === 'none' ? 'No choropleth fill to shade on the Pins map' : '')}>Colors&nbsp;
             {fillMode === 'yoy' ? (
               <select value={yoyColorIdx} disabled={showFlows} onChange={(e) => setYoyColorIdx(Number(e.target.value))} title="Diverging palette for the growth map">
                 {YOY_SCALES.map((c, i) => <option key={i} value={i}>{c.name}</option>)}
               </select>
             ) : (
-              <select value={colorIdx} disabled={showFlows} onChange={(e) => setColorIdx(Number(e.target.value))}>
+              <select value={colorIdx} disabled={fillMode === 'none' || showFlows} onChange={(e) => setColorIdx(Number(e.target.value))}>
                 {(p.colors || []).map((c, i) => <option key={i} value={i}>{c.name}</option>)}
               </select>
             )}
           </label>
-          <label style={(fillMode === 'yoy' || showFlows) ? { opacity: 0.4 } : undefined} title={showFlows ? 'Use the Flows “Top routes” control' : (fillMode === 'yoy' ? 'Use the YoY “Top movers” control instead' : '')}>Top&nbsp;
-            <select value={spotN} disabled={fillMode === 'yoy' || showFlows} onChange={(e) => setSpotN(Number(e.target.value))}>
+          <label style={(fillMode === 'yoy' || showFlows || (basemap && showPins)) ? { opacity: 0.4 } : undefined} title={showFlows ? 'Use the Flows “Top routes” control' : (fillMode === 'yoy' ? 'Use the YoY “Top movers” control instead' : ((basemap && showPins) ? 'Gold top-N badges aren’t drawn on the tile basemap' : ''))}>Top&nbsp;
+            <select value={spotN} disabled={fillMode === 'yoy' || showFlows || (basemap && showPins)} onChange={(e) => setSpotN(Number(e.target.value))}>
               <option value={0}>Off</option>
               <option value={5}>Top 5</option>
               <option value={10}>Top 10</option>
@@ -1222,18 +1222,18 @@ export default function ParticipationMap() {
               <option value={50}>All</option>
             </select>
           </label>
-          <label style={(fillMode === 'yoy' || showFlows) ? { opacity: 0.4 } : undefined} title={(fillMode === 'yoy' || showFlows) ? 'Not used on this map' : ''}>Max&nbsp;
-            <input type="number" value={clipMax} placeholder="auto" disabled={fillMode === 'yoy' || showFlows} style={{ width: 80 }} onChange={(e) => setClipMax(e.target.value)} />
+          <label style={(fillMode !== 'choro' || showFlows) ? { opacity: 0.4 } : undefined} title={(fillMode !== 'choro' || showFlows) ? 'Not used on this map' : ''}>Max&nbsp;
+            <input type="number" value={clipMax} placeholder="auto" disabled={fillMode !== 'choro' || showFlows} style={{ width: 80 }} onChange={(e) => setClipMax(e.target.value)} />
           </label>
-          <button style={{ ...mini(false), ...((fillMode === 'yoy' || showFlows) ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={fillMode === 'yoy' || showFlows} onClick={() => setClipMax('')}>Auto</button>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} /> Labels
+          <button style={{ ...mini(false), ...((fillMode !== 'choro' || showFlows) ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={fillMode !== 'choro' || showFlows} onClick={() => setClipMax('')}>Auto</button>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...((basemap && showPins) ? { opacity: 0.4 } : {}) }} title={(basemap && showPins) ? 'State labels aren’t shown on the tile basemap' : ''}>
+            <input type="checkbox" checked={showLabels} disabled={basemap && showPins} onChange={(e) => setShowLabels(e.target.checked)} /> Labels
           </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <input type="checkbox" checked={showOutlines} onChange={(e) => setShowOutlines(e.target.checked)} /> Region borders
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...((basemap && showPins) ? { opacity: 0.4 } : {}) }} title={(basemap && showPins) ? 'Region borders aren’t drawn on the tile basemap' : ''}>
+            <input type="checkbox" checked={showOutlines} disabled={basemap && showPins} onChange={(e) => setShowOutlines(e.target.checked)} /> Region borders
           </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...(showFlows ? { opacity: 0.4 } : {}) }} title={showFlows ? 'Flow colors are fixed' : 'Reverse the color scale (high values shade light instead of dark)'}>
-            <input type="checkbox" checked={reverse} disabled={showFlows} onChange={(e) => setReverse(e.target.checked)} /> Reverse shades
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, ...((fillMode === 'none' || showFlows) ? { opacity: 0.4 } : {}) }} title={showFlows ? 'Flow colors are fixed' : (fillMode === 'none' ? 'No fill scale to reverse on the Pins map' : 'Reverse the color scale (high values shade light instead of dark)')}>
+            <input type="checkbox" checked={reverse} disabled={fillMode === 'none' || showFlows} onChange={(e) => setReverse(e.target.checked)} /> Reverse shades
           </label>
         </div>
       ) : null}
@@ -1241,7 +1241,7 @@ export default function ParticipationMap() {
       <div className="card" ref={cardRef} style={{ position: 'relative' }}>
         <div ref={mapRef} className="mapdiv" style={{ visibility: showFlows ? 'hidden' : 'visible' }} />
         <div ref={deckRef} style={{ position: 'absolute', inset: 0, height: 560, visibility: showFlows ? 'visible' : 'hidden', borderRadius: 10, overflow: 'hidden' }} />
-        {((!showFlows && (metricIdx in UNIQ_IDX) && (uniqLoading || yoyUniqLoading)) || (showFlows && flowLoading)) ? (
+        {((!showFlows && (metricIdx in UNIQ_IDX) && (fillMode === 'yoy' ? yoyUniqLoading : uniqLoading)) || (showFlows && flowLoading)) ? (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: dark ? 'rgba(11,18,32,.45)' : 'rgba(255,255,255,.55)', borderRadius: 10, zIndex: 5, pointerEvents: 'none' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'var(--panel)', color: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: '0 6px 18px rgba(0,0,0,.22)' }}>
               {showFlows ? 'Loading flow map…' : 'Counting unique athletes…'}
