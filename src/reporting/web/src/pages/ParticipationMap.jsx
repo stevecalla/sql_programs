@@ -226,6 +226,7 @@ export default function ParticipationMap() {
   const [flowTop, setFlowTop] = useState(5);         // top-N routes per direction
   const [flowSpin, setFlowSpin] = useState(false);   // auto-rotate (bearing animation)
   const [flowStat, setFlowStat] = useState('');      // footer stat line
+  const [flowKeyOpen, setFlowKeyOpen] = useState(true); // Flow-map legend collapsed/expanded
   const [stateSel, setStateSel] = useState(null);
   const [regionSel, setRegionSel] = useState('');
   const [regionMesh, setRegionMesh] = useState(null);
@@ -1250,6 +1251,37 @@ export default function ParticipationMap() {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'var(--panel)', color: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: '0 6px 18px rgba(0,0,0,.22)' }}>
               {showFlows ? 'Loading flow map…' : 'Counting unique athletes…'}
             </span>
+          </div>
+        ) : null}
+        {showFlows && !flowLoading ? (
+          <div style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 4, pointerEvents: 'none', background: dark ? 'rgba(11,18,32,.86)' : 'rgba(255,255,255,.92)', border: '1px solid var(--line)', borderRadius: 8, padding: '8px 10px', fontSize: 11, lineHeight: 1.55, color: 'var(--ink)', boxShadow: '0 4px 14px rgba(0,0,0,.20)', maxWidth: 232 }}>
+            <button
+              onClick={() => setFlowKeyOpen((o) => !o)}
+              title={flowKeyOpen ? 'Collapse the key' : 'Expand the key'}
+              style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: 0, margin: 0, border: 'none', background: 'transparent', color: 'var(--ink)', font: 'inherit', fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}
+            >
+              <span style={{ fontSize: 9, opacity: 0.7 }}>{flowKeyOpen ? '▾' : '▸'}</span> Flow key
+            </button>
+            {flowKeyOpen ? (
+              <div style={{ marginTop: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ display: 'inline-block', width: 46, height: 9, borderRadius: 2, border: '1px solid var(--line)', background: 'linear-gradient(90deg,#185FA5,' + (dark ? '#334155' : '#f1f5f9') + ',#C20E2F)' }} />
+                  <span>State shade = net flow</span>
+                </div>
+                <div style={{ marginTop: 2 }}>
+                  <span style={{ color: '#185FA5', fontWeight: 700 }}>■</span> net feeder (sends out) &nbsp;
+                  <span style={{ color: '#C20E2F', fontWeight: 700 }}>■</span> net destination (draws in)
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  Arcs (when a state is focused):<br />
+                  <span style={{ color: '#C20E2F', fontWeight: 700 }}>—</span> inbound (races here) &nbsp;
+                  <span style={{ color: '#185FA5', fontWeight: 700 }}>—</span> outbound (races away)
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <span style={{ color: '#D4920A', fontWeight: 700 }}>▬</span> gold outline / <span style={{ color: '#D4920A', fontWeight: 700 }}>①</span> badge = top-ranked route
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
