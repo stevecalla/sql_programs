@@ -5,7 +5,15 @@ import { api } from '../lib/api.js';
 // it's coming from live MySQL or the seed fixture. Mirrors the merge app's HeaderRefresh.
 export default function HeaderRefresh() {
   const [d, setD] = useState(undefined);
-  useEffect(() => { api.dataset().then((r) => setD(r.status === 200 ? r.body : null)).catch(() => setD(null)); }, []);
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.dataset().then((r) => { if (alive) setD(r.status === 200 ? r.body : null); }).catch(() => { if (alive) setD(null); });
+    load();
+    // Re-read the "data as of" stamp whenever the map's ⟳ Refresh data button forces a live pull.
+    const onRefreshed = () => load();
+    window.addEventListener('reporting:refreshed', onRefreshed);
+    return () => { alive = false; window.removeEventListener('reporting:refreshed', onRefreshed); };
+  }, []);
   if (!d || !d.ok) return null;
   const when = d.last_updated || (d.generated_at ? new Date(d.generated_at).toLocaleString(undefined, {
     weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',

@@ -136,9 +136,9 @@ export default function Reference() {
         </div>
       </div>
 
-      <div className="ref-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginTop: 12 }}>
+      <div className="ref-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gridAutoRows: '300px', gap: 16, marginTop: 12 }}>
         {REF.map((s) => (
-          <div className="card ref-card" key={s.title}>
+          <div className="card ref-card" key={s.title} style={{ height: 300, overflowY: 'auto' }}>
             <h3>{s.title}</h3>
             {s.note ? <p className="muted small" style={{ marginTop: 0 }}>{s.note}</p> : null}
             <ul className="ref-dl">

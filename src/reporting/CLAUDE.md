@@ -53,5 +53,22 @@ Using the sales-side columns caused real bugs (every race mislabeled "Visit Pana
 Events inflated ~3×). Full detail + the trap table: `plans_and_notes/FIELD_MAPPING.md`. Guarded by
 `tests/stat_definitions.test.js` (asserts the builders use the race-side columns).
 
+## Usage Metrics (the /metrics dashboard)
+Self-contained usage analytics: browser events -> `POST /api/event` -> `metrics/events.js` inserts into
+`reporting_events` (stamped `app='reporting'`); `metrics/metrics_report.js:build_report()` aggregates
+them for the `/metrics` page; `metrics/ask.js` powers the LLM "Ask your data" panel (guarded read-only
+SQL). Confined to `src/reporting/` — no merge-app code, no shared table, no shared login. Full detail:
+`plans_and_notes/METRICS.md`.
+
+- **Endpoints** (`api/routes.js`): `POST /api/event` (auth) · `GET /api/metrics-report` · 
+  `POST /api/metrics-purge-test` (admin) · `GET /api/metrics-ask-models` · `POST /api/metrics-ask`
+  (501 without an LLM key) · `POST /api/metrics-ask-correct` — all metrics endpoints panel-gated
+  (`require_panel('metrics')`) except purge (admin).
+- **`reporting_events` columns:** `id`, `ts`, `app`, `event_name`, `actor`, `role`, `panel`, `is_test`,
+  `meta` (JSON) + flat: `view`, `filter_name`, `export_format`, `visitor_id`, `is_returning`,
+  `client_tz`, `viewport`, `local_hour`, `local_dow`, `duration_ms`, `row_count`, `error_type`.
+- **Ask key-gating:** reads `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (+ optional `REPORTING_ASK_MODEL`);
+  no key => models empty + graceful 501. Tests: `tests/metrics.test.js` (no DB, no key).
+
 ## Roadmap
 See `plans_and_notes/PHASE_PLAN.md` (phases + acceptance) and `STATUS.md` (what's done / next).

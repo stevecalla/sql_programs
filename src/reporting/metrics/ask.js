@@ -1,30 +1,28 @@
 'use strict';
-// "Ask your data" — natural-language questions over the salesforce_merge_events table. Ported in
-// spirit from the email-queue metrics/ask stack: model picker, an LLM that writes ONE read-only
-// SELECT (with schema + conversation grounding), a hardened guard, execution, a natural-language
-// answer summarizing the rows, a raw-SQL mode, and lightweight "correct this" feedback. Needs an
-// API key (ANTHROPIC_API_KEY or OPENAI_API_KEY); degrades gracefully.
+// "Ask your data" — natural-language questions over the reporting_events table. Ported from the
+// merge tool's metrics/ask (model picker, an LLM that writes ONE read-only SELECT with schema +
+// conversation grounding, a hardened guard, execution, a natural-language answer, a raw-SQL mode,
+// and lightweight "correct this" feedback). Needs an API key (ANTHROPIC_API_KEY or OPENAI_API_KEY);
+// degrades gracefully — no key => list_models() returns none and ask() throws NO_AI_KEY.
 const fs = require('fs');
 const path = require('path');
-const cfg = require('./metrics_config');
 const data_dir = require('../data_dir');
 
-const TABLE = cfg.TABLE;
+const TABLE = 'reporting_events';
 const MAX_LIMIT = 500;
-const CORRECTIONS_FILE = process.env.MERGE_ASK_CORRECTIONS_FILE || data_dir.file_sync('metrics_ask_corrections.json');
+const CORRECTIONS_FILE = process.env.REPORTING_ASK_CORRECTIONS_FILE || data_dir.file_sync('metrics_ask_corrections.json');
 
 const SCHEMA = [
-  'event_name (panel_view|filter_run|search_run|report_export|login|logout|access_change|data_build|queue_add|queue_bulk_add|queue_approve|queue_remove|merge_run|restore_run|recreate_run|error)',
-  'created_at_utc DATETIME, created_at_mtn DATETIME (Mountain time — use for date grouping)',
+  'event_name (page_view|panel_view|filter_run|search_run|report_export|login|logout|error)',
+  'ts DATETIME (server local time — use for date grouping)',
   'actor (staff username), role, visitor_id, is_returning',
-  'panel (dashboard|duplicates|merge-id|accounts|tuning|select-merges|merge-process|restore|admin|metrics)',
-  'view, filter_name, export_format (csv|xlsx)',
-  'source_type (merge_id|duplicate|cluster), mode (simulate|execute), outcome (done|failed|skipped|routed|eligible|not_eligible|ok|started)',
-  'set_count, account_count, child_count, row_count, duration_ms (all INT)',
-  'local_hour, local_dow (0=Sun), env (prod|sandbox), is_test (1=flagged via metrics_test=1)',
+  'panel (participation-maps|metrics|admin|reference), view, filter_name, export_format (csv|xlsx)',
+  'client_tz, viewport (sm|md|lg), local_hour, local_dow (0=Sun)',
+  'duration_ms, row_count (INT), error_type',
+  'is_test (1=flagged via metrics_test=1)',
 ].join('\n  ');
 
-// ---- available models (mirrors the email-queue model picker); driven by which API keys exist ----
+// ---- available models (mirrors the merge model picker); driven by which API keys exist ----
 function list_models() {
   const out = [];
   if (process.env.ANTHROPIC_API_KEY) {
@@ -36,9 +34,10 @@ function list_models() {
     out.push({ id: 'gpt-4o-mini', label: 'ChatGPT · gpt-4o-mini', provider: 'openai' });
     out.push({ id: 'gpt-4o', label: 'ChatGPT · gpt-4o', provider: 'openai' });
   }
-  const def = process.env.MERGE_ASK_MODEL || process.env.OPENAI_MODEL || (out[0] && out[0].id) || null;
+  const def = process.env.REPORTING_ASK_MODEL || process.env.OPENAI_MODEL || (out[0] && out[0].id) || null;
   return { models: out, default: def };
 }
+function have_key() { return !!(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY); }
 function provider_for(model) { return String(model || '').indexOf('claude') === 0 ? 'anthropic' : (String(model || '').indexOf('gpt') === 0 ? 'openai' : null); }
 
 // ---- read-only guard (single SELECT over the events table only, LIMIT enforced) ----
@@ -92,7 +91,7 @@ async function call_llm(model, system, user) {
   }
   throw no_key();
 }
-function no_key() { const e = new Error('Ask-your-data needs an AI key. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in the repo-root .env.'); e.code = 'NO_AI_KEY'; return e; }
+function no_key() { const e = new Error('AI assistant not configured — set ANTHROPIC_API_KEY or OPENAI_API_KEY in the repo-root .env.'); e.code = 'NO_AI_KEY'; return e; }
 
 function extract_sql(text) {
   const t = String(text || '');
@@ -118,7 +117,7 @@ async function nl_to_sql(model, question, history) {
   const corr = corrections_text();
   const sys = 'You translate a question into ONE read-only MySQL query over a single table. Output ONLY the SQL ' +
     '(no prose); a single SELECT (or WITH); read ONLY the table `' + TABLE + '`; always include a LIMIT (<= ' + MAX_LIMIT + '); ' +
-    'group dates by created_at_mtn; exclude test rows with (is_test IS NULL OR is_test=0) unless the question is about test/sandbox activity.\n\n' +
+    'group dates by ts; exclude test rows with (is_test IS NULL OR is_test=0) unless the question is about test activity.\n\n' +
     'Table `' + TABLE + '` columns:\n  ' + SCHEMA + (corr ? ('\n\nAnalyst corrections to respect:\n' + corr) : '');
   let user = '';
   if (Array.isArray(history) && history.length) {
@@ -137,6 +136,7 @@ async function summarize(model, question, sql, rows) {
 
 async function ask(pool, opts) {
   opts = opts || {};
+  if (!have_key()) throw no_key();
   const models = list_models();
   const model = opts.model || models.default;
   if (!model) throw no_key();
@@ -157,4 +157,4 @@ async function ask(pool, opts) {
   return { ok: true, question, sql, rows: rows || [], row_count: (rows || []).length, answer, model, provider: provider_for(model) };
 }
 
-module.exports = { ask, assert_safe_select, list_models, add_correction, TABLE, MAX_LIMIT };
+module.exports = { ask, assert_safe_select, list_models, have_key, add_correction, TABLE, MAX_LIMIT };

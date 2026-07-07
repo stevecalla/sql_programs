@@ -17,6 +17,8 @@ const store = require('../auth/auth_store');
 const panel_access = require('../auth/panel_access');
 const { require_auth, require_admin, require_panel } = require('../auth/require_auth');
 const analytics = require('../metrics/events');
+const metrics_report = require('../metrics/metrics_report');
+const ask = require('../metrics/ask');
 const participation = require('../store/participation_read');
 const db = require('../store/db');
 const fs = require('fs');
@@ -56,13 +58,40 @@ module.exports = function mount(app) {
   app.get('/api/metrics-report', require_panel('metrics'), async function (req, res) {
     try {
       const pool = await db.get_pool();
-      await analytics.ensure(pool);
+      await analytics.ensure(pool);   // create/migrate the events table if nothing has been logged yet
       const days = Number(req.query.days) || 7;
-      const [byEvent] = await pool.query(
-        'SELECT event_name, COUNT(*) AS n FROM reporting_events WHERE ts >= (NOW() - INTERVAL ? DAY) AND is_test = 0 GROUP BY event_name ORDER BY n DESC', [days]);
-      const [byDay] = await pool.query(
-        'SELECT DATE(ts) AS day, COUNT(*) AS n FROM reporting_events WHERE ts >= (NOW() - INTERVAL ? DAY) AND is_test = 0 GROUP BY DATE(ts) ORDER BY day', [days]);
-      res.json({ ok: true, report: { days, byEvent, byDay } });
+      const report = await metrics_report.build_report(pool, { days });
+      res.json({ ok: true, report });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Purge deliberate test rows (?metrics_test=1). Admin only.
+  app.post('/api/metrics-purge-test', require_admin, async function (req, res) {
+    try {
+      const pool = await db.get_pool();
+      await analytics.ensure(pool);
+      res.json({ ok: true, ...(await metrics_report.purge_test(pool)) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Ask-your-data — NL question -> guarded read-only SELECT over reporting_events (+ NL answer,
+  // conversation history, raw-SQL mode, model picker, corrections). Panel-gated; degrades without a key.
+  app.get('/api/metrics-ask-models', require_panel('metrics'), function (req, res) {
+    try { res.json({ ok: true, ...ask.list_models() }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/metrics-ask', require_panel('metrics'), async function (req, res) {
+    try {
+      const b = req.body || {};
+      const pool = await db.get_pool();
+      res.json(await ask.ask(pool, { question: b.question, model: b.model, history: b.history, mode: b.mode, sql: b.sql }));
+    } catch (e) { res.status(e.code === 'NO_AI_KEY' ? 501 : 400).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/metrics-ask-correct', require_panel('metrics'), function (req, res) {
+    try {
+      const b = req.body || {};
+      const note = String(b.note || '').trim();
+      if (!note) return res.status(400).json({ ok: false, error: 'no correction text' });
+      const n = ask.add_correction(note, b.question, b.answer, req.user);
+      res.json({ ok: true, count: n });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
