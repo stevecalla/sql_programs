@@ -1079,7 +1079,13 @@ export default function ParticipationMap() {
               <option value="off">Off</option>
             </select>
           </label>
-          {yoyData && yoyData.approx ? <span className="small muted" title="Unique-athlete figures are summed across months and may double-count people racing in more than one month.">· approx. unique</span> : null}
+          {(metricIdx in UNIQ_IDX) ? <span className="small muted" title="Unique athletes for each year are counted live from the base data (exact distinct), then compared.">{yoyUniq ? '· exact unique' : '· counting unique…'}</span> : null}
+        </div>
+      ) : null}
+
+      {fillMode === 'yoy' && yoyData && yoyData.mos && yoyData.mos.length ? (
+        <div className="small muted" style={{ margin: '-4px 0 8px', paddingLeft: 2 }}>
+          Year-over-year compares the <b>same period in both years</b> — {(() => { const ms = yoyData.mos.slice().sort((a, b) => a - b); return ms.length >= 12 ? 'full year (Jan–Dec)' : (MON3[ms[0]] + (ms.length > 1 ? '–' + MON3[ms[ms.length - 1]] : '')); })()} of {yoyFrom} vs {yoyTo}. Months present in only one year are excluded, so a partial year (e.g. the current one) is a like-for-like year-to-date comparison.
         </div>
       ) : null}
 
