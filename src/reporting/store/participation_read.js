@@ -38,6 +38,7 @@ const TTL_MS = Number(process.env.REPORTING_BOOTSTRAP_TTL_MS) || 60 * 60 * 1000;
 // changed, so the file (and its mtime) tracks real data updates instead of churning every refresh.
 function sig(json) { return crypto.createHash('sha1').update(json).digest('hex'); }
 let _fixtureSig = null;   // sig of whatever is currently on disk; seeded on load, updated on write.
+const _uniqueCache = new Map();   // exact-distinct results keyed by selection; cleared on each live rebuild.
 
 // Persist the live payload to the fallback cache. Best-effort (a read-only data dir must not crash the app)
 // and change-guarded: if the new payload is byte-identical to what's already cached we skip the write, so
@@ -191,6 +192,7 @@ async function refreshLive() {
     const payload = await withTimeout(build_from_mysql(), BUILD_TIMEOUT_MS);
     _cache = { payload, source: 'mysql', at: Date.now() };
     writeFixture(payload);   // refresh the fallback cache with this known-good live build
+    _uniqueCache.clear();    // new data build -> drop memoized exact-distinct results
     console.log('[reporting] live participation payload cached from MySQL (summary tables)');
   } catch (e) {
     console.warn('[reporting] live build failed (' + (e.code || 'error') + '): ' + e.message + ' — keeping ' + (_cache ? _cache.source : 'no cache'));
@@ -230,4 +232,44 @@ async function get_bootstrap(opts) {
   const e = new Error('no participation data available'); e.code = 'NO_DATA'; throw e;
 }
 
-module.exports = { get_bootstrap, build_from_mysql, FIXTURE };
+// ---- On-demand EXACT unique athletes ---------------------------------------------------------------
+// unique_athletes is the one non-additive metric: a distinct athlete can appear in many events/states/
+// months, so it can't be summed from the pre-aggregated summary. For any selection we count it straight
+// from the base athlete-grain table (all_participation_data_with_membership_match) at state + region +
+// national grain in one pass each (WITH ROLLUP -> the NULL group row IS the true national distinct).
+// Restricted to the app's 50 states so national matches the summary's participant basis. Memoized by
+// selection; the cache is cleared whenever a fresh live build lands.
+const BASE_TABLE = 'all_participation_data_with_membership_match';
+async function unique_for_selection(sel) {
+  sel = sel || {};
+  const years = (sel.years || []).map(Number).filter((y) => y);
+  if (!years.length) return { national: 0, byState: {}, byRegion: {} };
+  const months = (sel.months && sel.months.indexOf('all') < 0)
+    ? sel.months.map(Number).filter((m) => m >= 1 && m <= 12) : null;
+  const region = sel.region || null, state = sel.state || null, ironman = sel.ironman || null;
+  const key = JSON.stringify({ y: years.slice().sort((a, b) => a - b), m: months ? months.slice().sort((a, b) => a - b) : 'all', region, state, ironman });
+  if (_uniqueCache.has(key)) return _uniqueCache.get(key);
+
+  const where = ['start_date_year_races IN (?)'];
+  const params = [years];
+  if (state) { where.push('state_code_events = ?'); params.push(state); }
+  else { where.push('state_code_events IN (?)'); params.push(META.abbr); }   // 50 states -> match summary basis
+  if (months) { where.push('start_date_month_races IN (?)'); params.push(months); }
+  if (region) { where.push('region_name = ?'); params.push(region); }
+  if (ironman === 'Yes') where.push("is_ironman = 'Y'");
+  else if (ironman === 'No') where.push("(is_ironman IS NULL OR is_ironman <> 'Y')");
+  const W = where.join(' AND ');
+
+  const [stRows, rgRows] = await Promise.all([
+    db.query('SELECT state_code_events AS k, COUNT(DISTINCT id_profiles) AS u FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY state_code_events WITH ROLLUP', params),
+    db.query('SELECT region_name AS k, COUNT(DISTINCT id_profiles) AS u FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY region_name WITH ROLLUP', params),
+  ]);
+  const byState = {}; let national = 0;
+  for (const r of stRows) { if (r.k == null) national = Number(r.u); else byState[r.k] = Number(r.u); }
+  const byRegion = {}; for (const r of rgRows) { if (r.k != null && r.k !== '') byRegion[r.k] = Number(r.u); }
+  const out = { national, byState, byRegion };
+  _uniqueCache.set(key, out);
+  return out;
+}
+
+module.exports = { get_bootstrap, build_from_mysql, unique_for_selection, FIXTURE };
