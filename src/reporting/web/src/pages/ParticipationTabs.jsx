@@ -14,7 +14,7 @@ const REGN = ['Northeast', 'Southeast', 'Midwest', 'Central', 'Rockies', 'Pacifi
 const EV_PAGE = 100; // events table page size (paginated for responsiveness); CSV exports everything
 const commafy = (x) => (x == null || x === '') ? '' : Number(x).toLocaleString();
 const pctify = (x) => (x == null || x === '') ? '' : x + '%';
-const CNT = ['Participants', 'Races', 'Female n', 'Male n', 'Home', 'Away', 'Unknown', 'New', 'Repeat', 'Unique'];
+const CNT = ['Participants', 'Races', 'Female n', 'Male n', 'Home', 'Away', 'Unknown', 'Known-home', 'Known-away', 'New', 'Repeat', 'Unique'];
 function colType(nm) {
   if (/%$/.test(nm)) return 'pct';
   if (CNT.indexOf(nm) >= 0) return 'cnt';
@@ -26,11 +26,11 @@ const HA_COLS = [['st', 'State'], ['part', 'Participants'], ['home', 'Home'], ['
 const HA_PCT = { hpT: 1, apT: 1, upT: 1, kh: 1, ka: 1 };
 // Home vs Away event-table columns: label + value(row). Known-home/away are computed from home/away counts.
 const HA_EVCOLS = [
-  ['State', (r) => r[0], 'l'], ['Region', (r) => r[1], 'l'], ['Event', (r) => r[2], 'l'],
-  ['Participants', (r) => commafy(r[6]), 'c'], ['Home', (r) => commafy(r[20]), 'c'], ['Away', (r) => commafy(r[21]), 'c'], ['Unknown', (r) => commafy(r[22]), 'c'],
-  ['Home %', (r) => r[23] + '%', 'c'], ['Away %', (r) => r[24] + '%', 'c'], ['Unk %', (r) => r[25] + '%', 'c'],
-  ['Known-home %', (r) => { const kn = r[20] + r[21]; return kn ? Math.round(100 * r[20] / kn) + '%' : ''; }, 'c'],
-  ['Known-away %', (r) => { const kn = r[20] + r[21]; return kn ? Math.round(100 * r[21] / kn) + '%' : ''; }, 'c'],
+  ['State', (r) => r[0], 'l', (r) => r[0]], ['Region', (r) => r[1], 'l', (r) => r[1]], ['Event', (r) => r[2], 'l', (r) => r[2]],
+  ['Participants', (r) => commafy(r[6]), 'c', (r) => r[6]], ['Home', (r) => commafy(r[20]), 'c', (r) => r[20]], ['Away', (r) => commafy(r[21]), 'c', (r) => r[21]], ['Unknown', (r) => commafy(r[22]), 'c', (r) => r[22]],
+  ['Home %', (r) => r[23] + '%', 'c', (r) => r[23]], ['Away %', (r) => r[24] + '%', 'c', (r) => r[24]], ['Unk %', (r) => r[25] + '%', 'c', (r) => r[25]],
+  ['Known-home %', (r) => { const kn = r[20] + r[21]; return kn ? Math.round(100 * r[20] / kn) + '%' : ''; }, 'c', (r) => { const kn = r[20] + r[21]; return kn ? r[20] / kn : -1; }],
+  ['Known-away %', (r) => { const kn = r[20] + r[21]; return kn ? Math.round(100 * r[21] / kn) + '%' : ''; }, 'c', (r) => { const kn = r[20] + r[21]; return kn ? r[21] / kn : -1; }],
 ];
 function fmtDate(v) {
   if (!v) return '';
@@ -192,6 +192,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
   const evFsRef = useRef(null); const mxFsRef = useRef(null); const smFsRef = useRef(null); const haFsRef = useRef(null);
   const [evFull, setEvFull] = useState(false); const [mxFull, setMxFull] = useState(false); const [smFull, setSmFull] = useState(false); const [haFull, setHaFull] = useState(false);
   const [haSort, setHaSort] = useState('part'); const [haDir, setHaDir] = useState(-1);   // Home vs Away state table sort
+  const [haEvSort, setHaEvSort] = useState(-1); const [haEvDir, setHaEvDir] = useState(1);   // Home vs Away EVENT table sort (per column)
   useEffect(() => {
     const onFs = () => { setEvFull(document.fullscreenElement === evFsRef.current); setMxFull(document.fullscreenElement === mxFsRef.current); setSmFull(document.fullscreenElement === smFsRef.current); setHaFull(document.fullscreenElement === haFsRef.current); };
     document.addEventListener('fullscreenchange', onFs);
@@ -201,14 +202,29 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
   const toggleEvFs = () => fsToggle(evFsRef);
   const fsWrap = (full) => (full ? { background: dark ? '#0b1220' : '#ffffff', padding: 16, height: '100vh', overflow: 'auto', boxSizing: 'border-box' } : undefined);
 
-  const COLS = p.evcols;
+  // evcols (32 raw cols, 0-31) + a derived "known residency" block appended at 34-37 (home/away counts on the
+  // known basis + their %s). Indices 32/33 are the row's lat/lng (not shown), padded with blanks; visCols
+  // skips those and re-inserts the known block right after the Unknown-home stats.
+  const COLS = useMemo(() => p.evcols.concat(['', '', 'Known-home', 'Known-away', 'Known-home %', 'Known-away %']), [p.evcols]);
   // Only build the heavy flow/matrix structures for the tab that needs them (default tab is Events).
   const needFlow = tab === 'stateflows' || tab === 'regionmtx' || tab === 'statemtx';
   const needMx = tab === 'regionmtx' || tab === 'statemtx';
   const keys = useMemo(() => resolveSlices(selYears, selMonths, p.monthsByYear), [selYears, selMonths, p]);
   const flowAgg = useMemo(() => (needFlow ? aggregateFlows(keys, p.odByYM) : { flows: [], inb: {}, outb: {} }), [needFlow, keys, p]);
   const HB = useMemo(() => (needMx ? homeByState(keys, p.rawByYM) : {}), [needMx, keys, p]);
-  const EV = useMemo(() => { let a = []; (selYears || []).forEach((y) => { a = a.concat(p.eventsByYear[y] || []); }); return a; }, [selYears, p]);
+  // Append the known-residency block to each event row at 34-37: Known-home count (= home 20), Known-away
+  // count (= away 21), Known-home % and Known-away % (of home+away). Derived here from counts step_3i already
+  // materializes — no ETL, mirrors the Home-vs-Away tab.
+  const EV = useMemo(() => {
+    const a = [];
+    (selYears || []).forEach((y) => {
+      (p.eventsByYear[y] || []).forEach((row) => {
+        const h = row[20] || 0, aw = row[21] || 0, kn = h + aw;
+        a.push(row.concat([h, aw, kn ? Math.round(100 * h / kn) : null, kn ? Math.round(100 * aw / kn) : null]));
+      });
+    });
+    return a;
+  }, [selYears, p]);
   const stateMx = useMemo(() => (tab === 'statemtx' ? buildStateMatrix(p.abbr, flowAgg.flows, HB) : null), [tab, p, flowAgg, HB]);
   const regionMx = useMemo(() => (tab === 'regionmtx' ? buildRegionMatrix(REGN, flowAgg.flows, HB, p.ab2region, p.abbr) : null), [tab, p, flowAgg, HB]);
   // Region-stats table: swap the summed Unique (col 15) + Per-part (col 16) for the exact live distinct
@@ -293,7 +309,17 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
     if (sortEc >= 0) d = d.slice().sort((a, b) => { let x = a[sortEc], y = b[sortEc]; if (typeof x === 'number' && typeof y === 'number') return (x - y) * sortDir; if (x == null) x = ''; if (y == null) y = ''; return ('' + x).localeCompare('' + y) * sortDir; });
     return d;
   }, [EV, selMonths, regionSel, stateSel, imSel, searchTxt, sortEc, sortDir]);
-  const visCols = useMemo(() => { const a = []; for (let i = 0; i < COLS.length; i++) { if ((i === 3 || i === 4) && !showSanc) continue; a.push(i); } return a; }, [COLS, showSanc]);
+  const visCols = useMemo(() => {
+    const a = [];
+    for (let i = 0; i < COLS.length; i++) {
+      if ((i === 3 || i === 4) && !showSanc) continue;   // sanction ID / date
+      if (i === 32 || i === 33) continue;                // lat/lng (not shown)
+      if (i >= 34) continue;                             // known block placed manually below
+      a.push(i);
+      if (i === 25) a.push(34, 35, 36, 37);              // group known-home/away (counts + %s) after Unknown-home %
+    }
+    return a;
+  }, [COLS, showSanc]);
   const cellFmt = (ec, c) => { if (c == null || c === '') return ''; if (COLS[ec] === 'Date') return fmtDate(c); if (COLS[ec] === 'Per participant') return Number(c).toFixed(2); const t = colType(COLS[ec]); if (t === 'cnt') return commafy(c); if (t === 'pct') return pctify(c); return c; };
   // Totals over ALL filtered events (not just the page). Count columns sum; % columns are recomputed on the
   // summed counts (weighted); ratios use the totals; unique is summed (approx — dedupes only within an event).
@@ -319,6 +345,9 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
       case 'Home': return commafy(t.home); case 'Away': return commafy(t.away); case 'Unknown home': return commafy(t.unk);
       case 'Home %': return pc(t.home); case 'Away %': return pc(t.away); case 'Unknown home %': return pc(t.unk);
       case 'New': return commafy(t.nw); case 'Repeat': return commafy(t.rp); case 'New %': return pc(t.nw); case 'Repeat %': return pc(t.rp);
+      case 'Known-home': return commafy(t.home); case 'Known-away': return commafy(t.away);
+      case 'Known-home %': { const kn = t.home + t.away; return kn ? Math.round(100 * t.home / kn) + '%' : ''; }
+      case 'Known-away %': { const kn = t.home + t.away; return kn ? Math.round(100 * t.away / kn) + '%' : ''; }
       case 'Unique': return commafy(u);
       default: return '';
     }
@@ -328,7 +357,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
   const HASHW = 34, FCOLW = [44, 84, 170];
   const evLeft = (j) => HASHW + FCOLW.slice(0, j).reduce((a, b) => a + b, 0);
   const clearFilters = () => { setRegionSel(''); setStateSel(null); setImSel(''); setSearchTxt(''); };
-  const resetEvents = () => { clearFilters(); setSortEc(-1); setSortDir(1); setShowSanc(false); };
+  const resetEvents = () => { clearFilters(); setSortEc(-1); setSortDir(1); setShowSanc(false); setHaEvSort(-1); setHaEvDir(1); };
   const haClick = (key) => { if (haSort === key) setHaDir(-haDir); else { setHaSort(key); setHaDir(key === 'st' ? 1 : -1); } };
   const haCell = (key, r) => (key === 'st' ? r.st : (HA_PCT[key] ? r[key] + '%' : commafy(r[key])));
   const chips = [];
@@ -357,6 +386,14 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
   const evPageCount = Math.max(1, Math.ceil(filtered.length / EV_PAGE));
   const evP = Math.min(evPage, evPageCount - 1);
   const evSlice = filtered.slice(evP * EV_PAGE, evP * EV_PAGE + EV_PAGE);
+  // Home vs Away event table: independent per-column sort over the same filtered set.
+  const haFiltered = useMemo(() => {
+    if (haEvSort < 0) return filtered;
+    const sv = HA_EVCOLS[haEvSort][3];
+    return filtered.slice().sort((a, b) => { const x = sv(a), y = sv(b); if (typeof x === 'number' && typeof y === 'number') return (x - y) * haEvDir; return ('' + x).localeCompare('' + y) * haEvDir; });
+  }, [filtered, haEvSort, haEvDir]);
+  const haEvSlice = haFiltered.slice(evP * EV_PAGE, evP * EV_PAGE + EV_PAGE);
+  const haEvClick = (j) => { if (haEvSort === j) setHaEvDir(-haEvDir); else { setHaEvSort(j); setHaEvDir(j < 3 ? 1 : -1); } };
 
   const th = { padding: '5px 8px', borderBottom: '2px solid var(--line)', textAlign: 'center', cursor: 'pointer', whiteSpace: 'nowrap' };
   const td = { padding: '4px 8px', borderBottom: '1px solid var(--line)', textAlign: 'center', whiteSpace: 'nowrap' };
@@ -491,7 +528,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
                     {HA_COLS.map(([key, label]) => <th key={key} style={{ ...th, position: 'sticky', top: 0, background: 'var(--panel)', cursor: 'pointer', textAlign: key === 'st' ? 'left' : 'center' }} onClick={() => haClick(key)}>{label}{haSort === key ? (haDir > 0 ? ' ▲' : ' ▼') : ''}</th>)}
                   </tr></thead>
                   <tbody>
-                    {haSorted.map((r) => <tr key={r.st}>{HA_COLS.map(([key]) => <td key={key} style={{ ...td, textAlign: key === 'st' ? 'left' : 'center' }}>{haCell(key, r)}</td>)}</tr>)}
+                    {haSorted.map((r) => <tr key={r.st} className="hltbl" style={{ cursor: 'pointer', ...(stateSel === r.st ? { background: 'var(--accent-soft, rgba(59,130,246,.12))' } : {}) }} title="Click to filter the by-event table below to this state" onClick={() => { setStateSel((c) => (c === r.st ? null : r.st)); setRegionSel(''); }}>{HA_COLS.map(([key]) => <td key={key} style={{ ...td, textAlign: key === 'st' ? 'left' : 'center' }}>{haCell(key, r)}</td>)}</tr>)}
                   </tbody>
                   <tfoot><tr>{HA_COLS.map(([key]) => <td key={key} style={{ ...td, fontWeight: 700, position: 'sticky', bottom: 0, background: 'var(--panel)', borderTop: '2px solid var(--border-strong, #94a3b8)', textAlign: key === 'st' ? 'left' : 'center' }}>{key === 'st' ? 'US total' : haCell(key, haRows.total)}</td>)}</tr></tfoot>
                 </table>
@@ -515,10 +552,10 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
             <table className="hltbl" style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
               <thead><tr>
                 <th style={{ ...th, position: 'sticky', top: 0, left: 0, zIndex: 6, background: 'var(--panel)', minWidth: HASHW }}>#</th>
-                {HA_EVCOLS.map(([label, , al], j) => { const fz = j < 3; return <th key={label} style={{ ...th, position: 'sticky', top: 0, left: fz ? evLeft(j) : undefined, zIndex: fz ? 6 : 3, background: 'var(--panel)', minWidth: fz ? FCOLW[j] : undefined, maxWidth: j === 2 ? FCOLW[2] : undefined, textAlign: al === 'c' ? 'center' : 'left' }}>{label}</th>; })}
+                {HA_EVCOLS.map(([label, , al], j) => { const fz = j < 3; return <th key={label} style={{ ...th, position: 'sticky', top: 0, left: fz ? evLeft(j) : undefined, zIndex: fz ? 6 : 3, background: 'var(--panel)', minWidth: fz ? FCOLW[j] : undefined, maxWidth: j === 2 ? FCOLW[2] : undefined, cursor: 'pointer', textAlign: al === 'c' ? 'center' : 'left' }} title="Click to sort" onClick={() => haEvClick(j)}>{label}{haEvSort === j ? (haEvDir > 0 ? ' ▲' : ' ▼') : ' ↕'}</th>; })}
               </tr></thead>
               <tbody>
-                {evSlice.map((r, i) => { const gi = evP * EV_PAGE + i; const bg = r[5] === 'Yes' ? imFrozen : 'var(--panel)'; return (
+                {haEvSlice.map((r, i) => { const gi = evP * EV_PAGE + i; const bg = r[5] === 'Yes' ? imFrozen : 'var(--panel)'; return (
                   <tr key={gi} style={r[5] === 'Yes' ? { background: imRow } : null}>
                     <td style={{ ...td, position: 'sticky', left: 0, zIndex: 2, background: bg, minWidth: HASHW }}>{gi + 1}</td>
                     {HA_EVCOLS.map(([label, fn, al], j) => { const fz = j < 3; return <td key={label} style={{ ...td, textAlign: al === 'c' ? 'center' : 'left', position: fz ? 'sticky' : undefined, left: fz ? evLeft(j) : undefined, zIndex: fz ? 2 : undefined, background: fz ? bg : undefined, minWidth: fz ? FCOLW[j] : undefined, maxWidth: j === 2 ? FCOLW[2] : undefined, overflow: j === 2 ? 'hidden' : undefined, textOverflow: j === 2 ? 'ellipsis' : undefined }} title={j === 2 ? r[2] : undefined}>{fn(r)}</td>; })}
