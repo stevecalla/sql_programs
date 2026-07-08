@@ -7,7 +7,7 @@ import { api } from '../../lib/api.js';
 // per-card top/bottom/expand/copy.
 const INTS = [[10, '10s'], [30, '30s'], [60, '1m'], [300, '5m'], [600, '10m'], [900, '15m']];
 const LAYOUTS = [['2', '2'], ['3', '3'], ['4', '4'], ['split', '⅔·⅓']];
-const LS_LAYOUT = 'usatapps_ops_cards_layout', LS_ORDER = 'usatapps_ops_cards_order', LS_REF = 'usatapps_ops_cards_refresh', LS_EXP = 'usatapps_ops_cards_expanded';
+const LS_LAYOUT = 'usatapps_ops_cards_layout', LS_ORDER = 'usatapps_ops_cards_order', LS_REF = 'usatapps_ops_cards_refresh_15m', LS_EXP = 'usatapps_ops_cards_expanded';
 function lsGet(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
 function fmtUptime(ms) { if (ms == null) return '—'; const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); if (d) return d + 'd ' + h + 'h'; if (h) return h + 'h ' + m + 'm'; if (m) return m + 'm'; return s + 's'; }
@@ -24,7 +24,7 @@ export default function OpsServerCards() {
   const [when, setWhen] = useState('');
   const [layout, setLayout] = useState(() => lsGet(LS_LAYOUT, '2'));
   const [order, setOrder] = useState(() => lsGet(LS_ORDER, []));
-  const [refresh, setRefresh] = useState(() => lsGet(LS_REF, { sec: 30, paused: false }));
+  const [refresh, setRefresh] = useState(() => lsGet(LS_REF, { sec: 900, paused: false }));
   const [expanded, setExpanded] = useState(() => lsGet(LS_EXP, {}));
   const [live, setLive] = useState(false);
   const [full, setFull] = useState(false);
@@ -46,13 +46,19 @@ export default function OpsServerCards() {
     return () => { if (timer.current) clearInterval(timer.current); };
   }, [refresh]);
 
+  // Route each line to EVERY card whose process name matches (cards are keyed by unique pm_id, but the
+  // log stream is tagged by name — so two same-named processes both receive their shared output).
   const appendLine = (name, line) => {
-    const o = logRefs.current[name]; if (!o) return;
-    if (o.dataset.fresh !== '1') { o.textContent = ''; o.dataset.fresh = '1'; }
-    const atBottom = o.scrollHeight - o.scrollTop - o.clientHeight < 40;
-    const div = document.createElement('div'); const cls = lineClass(line); if (cls) div.className = cls; div.textContent = line;
-    o.appendChild(div); while (o.childNodes.length > 500) o.removeChild(o.firstChild);
-    if (atBottom) o.scrollTop = o.scrollHeight;
+    const cls = lineClass(line);
+    Object.keys(logRefs.current).forEach((k) => {
+      const o = logRefs.current[k];
+      if (!o || o.dataset.pname !== name) return;
+      if (o.dataset.fresh !== '1') { o.textContent = ''; o.dataset.fresh = '1'; }
+      const atBottom = o.scrollHeight - o.scrollTop - o.clientHeight < 40;
+      const div = document.createElement('div'); if (cls) div.className = cls; div.textContent = line;
+      o.appendChild(div); while (o.childNodes.length > 500) o.removeChild(o.firstChild);
+      if (atBottom) o.scrollTop = o.scrollHeight;
+    });
   };
   // One SSE stream for ALL processes; route each line to its card by name.
   useEffect(() => {
@@ -127,23 +133,26 @@ export default function OpsServerCards() {
 
       {!cards ? <div className="muted">Loading…</div> : (
         <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 12, alignItems: 'start' }}>
-          {cards.map((p, i) => (
-            <div key={p.name} className="card" style={{ margin: 0, padding: 10 }} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(p.name)}>
+          {cards.map((p, i) => {
+            const uid = p.pm_id != null ? String(p.pm_id) : (p.name + '#' + i);
+            return (
+            <div key={uid} className="card" style={{ margin: 0, padding: 10 }} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(p.name)}>
               <div draggable onDragStart={() => { dragName.current = p.name; }} onDragEnd={() => { dragName.current = null; }} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'grab', flexWrap: 'wrap' }}>
                 <span aria-hidden="true" title="drag to reorder" style={{ color: 'var(--muted)' }}>⣿</span>
                 <span style={{ display: 'inline-block', padding: '0 7px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: p.status === 'online' ? 'rgba(22,121,74,.15)' : 'rgba(194,14,47,.15)', color: p.status === 'online' ? '#16794a' : 'var(--red)' }}>{p.status || '—'}</span>
                 <b style={{ fontSize: 13 }}>{p.name}</b>{p.port ? <span className="muted small">:{p.port}</span> : null}
                 <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                  <button className="btn" style={cbtn} title="top" onClick={() => { const o = logRefs.current[p.name]; if (o) o.scrollTop = 0; }}>⤒</button>
-                  <button className="btn" style={cbtn} title="bottom" onClick={() => { const o = logRefs.current[p.name]; if (o) o.scrollTop = o.scrollHeight; }}>⤓</button>
-                  <button className="btn" style={cbtn} title="expand" onClick={() => toggleExp(p.name)}>⤢</button>
-                  <button className="btn" style={cbtn} title="copy" onClick={() => copyCard(p.name)}>copy</button>
+                  <button className="btn" style={cbtn} title="top" onClick={() => { const o = logRefs.current[uid]; if (o) o.scrollTop = 0; }}>⤒</button>
+                  <button className="btn" style={cbtn} title="bottom" onClick={() => { const o = logRefs.current[uid]; if (o) o.scrollTop = o.scrollHeight; }}>⤓</button>
+                  <button className="btn" style={cbtn} title="expand" onClick={() => toggleExp(uid)}>⤢</button>
+                  <button className="btn" style={cbtn} title="copy" onClick={() => copyCard(uid)}>copy</button>
                 </span>
               </div>
               <div className="muted small" style={{ margin: '2px 0 6px' }}>cpu {p.cpu != null ? p.cpu + '%' : '—'} · {p.memory_mb != null ? p.memory_mb + 'MB' : '—'} · ↺{p.restarts != null ? p.restarts : '—'} · {fmtUptime(p.uptime_ms)} · #{i + 1}</div>
-              <div ref={(el) => { logRefs.current[p.name] = el; }} className="term" style={{ height: expanded[p.name] ? 460 : 180, fontSize: 11 }}>Loading…</div>
+              <div ref={(el) => { if (el) { logRefs.current[uid] = el; el.dataset.pname = p.name; } else { delete logRefs.current[uid]; } }} className="term" style={{ height: expanded[uid] ? 460 : 180, fontSize: 11 }}>Loading…</div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

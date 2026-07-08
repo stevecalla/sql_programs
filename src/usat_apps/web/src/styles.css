@@ -43,7 +43,7 @@ code { background: var(--accent-soft); padding: 1px 5px; border-radius: 5px; fon
 .rail-ext:hover { color: var(--accent); }
 
 /* ---- terminal / server console ---- */
-.term { font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; background: #0b1220; color: #cbd5e1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.term { font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; background: #0b1220; color: #cbd5e1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow: auto; resize: vertical; min-height: 80px; white-space: pre-wrap; word-break: break-word; }
 .term .l-err { color: #f87171; }
 .term .l-ok { color: #34d399; }
 .term .l-meta { color: #93c5fd; }
