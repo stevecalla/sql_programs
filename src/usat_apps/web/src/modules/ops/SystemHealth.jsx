@@ -22,22 +22,31 @@ function Tile({ k, v, sub, state }) {
   );
 }
 
-function TermBox({ title, note, text, controls }) {
+function TermBox({ title, note, text, chips }) {
   const ref = useRef(null);
+  const [open, setOpen] = useState(false);   // collapsed by default
   const [big, setBig] = useState(false);
   return (
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <h3 style={{ margin: 0 }}>{title}{note ? <span className="muted small" style={{ fontWeight: 400 }}> — {note}</span> : null}</h3>
-        <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {controls}
-          <button className="btn" onClick={() => { if (ref.current) ref.current.scrollTop = 0; }}>⤒ top</button>
-          <button className="btn" onClick={() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }}>⤓ bottom</button>
-          <button className="btn" onClick={() => { try { navigator.clipboard.writeText(ref.current ? ref.current.innerText : ''); } catch (e) { /* ignore */ } }}>copy</button>
-          <button className="btn" onClick={() => setBig((b) => !b)}>{big ? '⤢ shrink' : '⤢ expand'}</button>
-        </span>
+        <button type="button" className="rail-group" style={{ padding: 0, textTransform: 'none', fontSize: 15, color: 'var(--ink)', width: 'auto', fontWeight: 700 }} onClick={() => setOpen((o) => !o)}>
+          <span className="rail-caret" aria-hidden="true">{open ? '▾' : '▸'}</span> {title}{note ? <span className="muted small" style={{ fontWeight: 400 }}> — {note}</span> : null}
+        </button>
+        {open ? (
+          <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={() => { if (ref.current) ref.current.scrollTop = 0; }}>⤒ top</button>
+            <button className="btn" onClick={() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }}>⤓ bottom</button>
+            <button className="btn" onClick={() => { try { navigator.clipboard.writeText(ref.current ? ref.current.innerText : ''); } catch (e) { /* ignore */ } }}>copy</button>
+            <button className="btn" onClick={() => setBig((b) => !b)}>{big ? '⤢ shrink' : '⤢ expand'}</button>
+          </span>
+        ) : null}
       </div>
-      <div ref={ref} className="term" style={{ height: big ? 520 : 220, marginTop: 8 }}>{text}</div>
+      {open ? (
+        <>
+          {chips ? <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', margin: '8px 0 0' }}>{chips}</div> : null}
+          <div ref={ref} className="term" style={{ height: big ? 520 : 220, marginTop: 8 }}>{text}</div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -51,6 +60,7 @@ export default function OpsSystemHealth() {
   const [duPaths, setDuPaths] = useState([]);
   const [duOut, setDuOut] = useState('Pick a path above. Protected dirs (e.g. /var/lib/mysql) need sudo — run those in a terminal for exact numbers.');
   const [cron, setCron] = useState('');
+  const [cronOpen, setCronOpen] = useState(false);   // collapsed by default
   const [cronEdit, setCronEdit] = useState(false);
   const [cronDraft, setCronDraft] = useState('');
   const [cronMsg, setCronMsg] = useState('');
@@ -113,23 +123,31 @@ export default function OpsSystemHealth() {
       </div>
 
       <TermBox title="Live commands" text={cmdOut}
-        controls={<span style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginRight: 6 }}>{cmds.map((cc) => <button key={cc.id} style={chip} onClick={() => runCmd(cc.id)} title={cc.interactive ? 'terminal only' : ''}>{cc.label}{cc.interactive ? ' ⎘' : ''}</button>)}</span>} />
+        chips={cmds.map((cc) => <button key={cc.id} style={chip} onClick={() => runCmd(cc.id)} title={cc.interactive ? 'terminal only' : ''}>{cc.label}{cc.interactive ? ' ⎘' : ''}</button>)} />
 
       <TermBox title="Disk usage explorer" text={duOut}
-        controls={<span style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginRight: 6 }}>{duPaths.concat(['journal']).map((p) => <button key={p} style={chip} onClick={() => runDu(p)}>{p}</button>)}</span>} />
+        chips={duPaths.concat(['journal']).map((p) => <button key={p} style={chip} onClick={() => runDu(p)}>{p}</button>)} />
 
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <h3 style={{ margin: 0 }}>Cron schedule</h3>
-          <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {!cronEdit ? <button className="btn" onClick={() => { setCronDraft(cron); setCronEdit(true); setCronMsg(''); }}>✎ edit</button>
-              : (<><button className="btn primary" onClick={saveCron}>Save</button><button className="btn" onClick={() => { setCronEdit(false); setCronMsg(''); }}>Cancel</button></>)}
-          </span>
+          <button type="button" className="rail-group" style={{ padding: 0, textTransform: 'none', fontSize: 15, color: 'var(--ink)', width: 'auto', fontWeight: 700 }} onClick={() => setCronOpen((o) => !o)}>
+            <span className="rail-caret" aria-hidden="true">{cronOpen ? '▾' : '▸'}</span> Cron schedule
+          </button>
+          {cronOpen ? (
+            <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {!cronEdit ? <button className="btn" onClick={() => { setCronDraft(cron); setCronEdit(true); setCronMsg(''); }}>✎ edit</button>
+                : (<><button className="btn primary" onClick={saveCron}>Save</button><button className="btn" onClick={() => { setCronEdit(false); setCronMsg(''); }}>Cancel</button></>)}
+            </span>
+          ) : null}
         </div>
-        {cronMsg ? <p className="muted small" style={{ marginTop: 6 }}>{cronMsg}</p> : null}
-        {cronEdit
-          ? <textarea value={cronDraft} onChange={(e) => setCronDraft(e.target.value)} spellCheck={false} style={{ width: '100%', height: 300, marginTop: 8, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12 }} />
-          : <div className="term" style={{ height: 300, marginTop: 8 }}>{cron || '(loading crontab…)'}</div>}
+        {cronOpen ? (
+          <>
+            {cronMsg ? <p className="muted small" style={{ marginTop: 6 }}>{cronMsg}</p> : null}
+            {cronEdit
+              ? <textarea value={cronDraft} onChange={(e) => setCronDraft(e.target.value)} spellCheck={false} style={{ width: '100%', height: 300, marginTop: 8, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12 }} />
+              : <div className="term" style={{ height: 300, marginTop: 8 }}>{cron || '(loading crontab…)'}</div>}
+          </>
+        ) : null}
       </div>
 
       {s && s.summary ? <TermBox title="Daily health summary" note={s.summary.mtime ? new Date(s.summary.mtime).toLocaleString() : ''} text={s.summary.text} /> : null}
