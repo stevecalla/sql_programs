@@ -179,8 +179,11 @@ port and pm2 process; the proxy only forwards. Full design notes:
 - `GET /api/test` — no-backend smoke check that the proxy is up.
 - `GET /api/status` (alias `/healthz`) — proxy uptime, memory, node, enabled routes.
 - `GET /api/health` — pings every enabled backend's health route; one up/down report.
-- `GET /admin` — login-gated browser console (status + backend health + pm2 log tail). Auth via `PROXY_ADMIN_USER`/`PROXY_ADMIN_PASS` in `.env` (cookie session, mirrors the email_queue admin).
-- `GET /api/logs` — login-gated pm2 log tail (used by /admin).
+
+The proxy is now a **pure router** — it no longer serves a management console. The old
+`/admin` dashboard (and its `/api/logs`, `/api/pm2`, `/api/system*`, `/api/console`,
+`/api/control` endpoints) was retired; that console now lives in the **usat_apps** platform
+(Ops module, port 8022), reached through the `/` route.
 
 ## Common commands
 
@@ -210,13 +213,15 @@ deploy a backend (host:port is unchanged). Cron jobs are unaffected — they cal
   proxy runs fine without it; you can rate-limit at Cloudflare instead).
 - UI apps (8016/8018/8019) and the Streamlit org_chart (8011) stay on their own
   subdomains until the React co
-## Admin console v2 (proxy /admin)
+## Ops console (moved to usat_apps)
 
-The `/admin` dashboard (login-gated, `PROXY_ADMIN_*` in `.env`) has five panes:
-- **Status** — proxy uptime/memory/routes.
-- **Backends** — `/api/health` table: numbered, sortable, with a "Last checked (MTN)" stamp and an auto-refresh control (default 15 min, with a pause toggle; persisted).
-- **Processes** — `/api/pm2` table (name, status, CPU, mem, restarts, uptime, pid): numbered, sortable, auto-refresh default 10 min.
-- **Fleet** — tmux-style status wall, one card per pm2 process; click a card to tail its logs. Auto-refresh default 10 min.
-- **Logs** — pm2 log tail per process (no SSH).
+The proxy's old browser console was **retired and rebuilt in the usat_apps platform** (port
+8022), where it's the **Ops** module: Overview, Backends, Server cards, Operations, Logs,
+System health, Settings, and Reference panes — reached at `/ops/*` behind the platform's own
+auth + access model (no more `PROXY_ADMIN_*` env login). `public/proxy_admin.html`,
+`utilities/proxy/proxy_auth.js`, `proxy_console_registry.js`, `proxy_log_ring.js`,
+`proxy_log_tail.js`, and `proxy_pm2_logs.js` were removed.
 
-Header links open `/api/status` and `/api/health` as pretty-printed JSON (the proxy sets `json spaces`). A `/favicon.svg` (USAT red hub) is served for the console + login page. The `/api/health` 503 log line now names the down backend(s). Rate limiting (300 req/min/IP) is active when `express-rate-limit` is installed.
+The proxy still serves `/api/status`, `/healthz`, and `/api/health` (pretty-printed JSON) for
+uptime checks, and the `/api/health` 503 log line names the down backend(s). Rate limiting
+(300 req/min/IP) is active when `express-rate-limit` is installed.

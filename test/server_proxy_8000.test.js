@@ -31,23 +31,13 @@ test('/favicon.svg serves svg', async () => {
   const r = await fetch(base_url + '/favicon.svg'); assert.strictEqual(r.status, 200);
   assert.ok((r.headers.get('content-type') || '').includes('svg'));
 });
-test('unknown path -> 404 json', async () => {
-  const r = await fetch(base_url + '/nope'); assert.strictEqual(r.status, 404); assert.strictEqual((await r.json()).ok, false);
-});
 test('disallowed method -> 405', async () => {
   const r = await fetch(base_url + '/api/test', { method: 'PATCH' }); assert.strictEqual(r.status, 405);
 });
-test('/admin requires auth (302)', async () => {
-  const r = await fetch(base_url + '/admin', { redirect: 'manual' }); assert.strictEqual(r.status, 302);
-});
-test('/api/logs requires auth (401)', async () => {
-  const r = await fetch(base_url + '/api/logs'); assert.strictEqual(r.status, 401);
-});
-test('/api/pm2 requires auth (401)', async () => {
-  const r = await fetch(base_url + '/api/pm2'); assert.strictEqual(r.status, 401);
-});
-
-test('/api/control requires auth (401)', async () => {
-  const r = await fetch(base_url + '/api/control/reload-proxy', { method: 'POST' });
-  assert.strictEqual(r.status, 401);
+test('unknown path is forwarded to the / catch-all (usat_apps)', async () => {
+  // The management console was retired from the proxy; '/' now routes to usat_apps (:8022).
+  // With no backend running in the test harness, the proxy returns 502 (backend unavailable);
+  // if usat_apps is up it returns its own 404. Either way it's no longer the proxy's own 404.
+  const r = await fetch(base_url + '/nope');
+  assert.ok(r.status === 502 || r.status === 404, 'expected forwarded 502/404, got ' + r.status);
 });
