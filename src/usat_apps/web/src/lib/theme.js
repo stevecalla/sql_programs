@@ -12,10 +12,11 @@ export function effective_dark() {
 }
 
 export function apply_theme() {
-  const t = stored();
-  const r = document.documentElement;
-  if (t === 'dark' || t === 'light') r.setAttribute('data-theme', t);
-  else r.removeAttribute('data-theme');
+  // Always write an explicit data-theme matching the effective choice, so the DOM never disagrees
+  // with the toggle button. (The CSS only darkens on [data-theme="dark"] — there's no
+  // prefers-color-scheme rule — so removing the attribute would render light even when the OS is dark,
+  // which made the first click appear to do nothing.)
+  document.documentElement.setAttribute('data-theme', effective_dark() ? 'dark' : 'light');
 }
 
 export function toggle_theme() {

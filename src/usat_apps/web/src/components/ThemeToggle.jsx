@@ -8,7 +8,8 @@ export default function ThemeToggle() {
 
   useEffect(() => {
     apply_theme();
-    watch_system(() => setDark(effective_dark()));
+    // When following the OS (no stored choice) and the OS theme flips, re-apply AND resync the button.
+    watch_system(() => { apply_theme(); setDark(effective_dark()); });
   }, []);
 
   const onClick = () => { toggle_theme(); const d = effective_dark(); setDark(d); try { track('theme_change', { panel: 'app', view: d ? 'dark' : 'light', filter_name: d ? 'dark' : 'light' }); } catch (e) { /* best-effort */ } };
