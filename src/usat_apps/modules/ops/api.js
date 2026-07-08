@@ -6,6 +6,8 @@
 const { require_admin } = require('../../auth/require_auth');
 const console_ring = require('./console_ring');
 const log_tail = require('./log_tail');
+const ops_console = require('./console');
+const ops_system = require('./system');
 console_ring.install(console);   // capture usat_apps console output into the ring for the Server console
 
 // The shared route table the proxy forwards on — required read-only (not moved).
@@ -111,6 +113,10 @@ function mount(app) {
     if (res.flushHeaders) res.flushHeaders();
     log_tail.subscribe(res, req.query.name);
   });
+
+  // Operations (fleet command runner) + System health (host stats / live commands / du / cron).
+  ops_console.mount(app);
+  ops_system.mount(app);
 }
 
 module.exports = { mount };
