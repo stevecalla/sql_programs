@@ -42,4 +42,13 @@ export const api = {
   opsRoutes: () => jget('/api/ops/routes'),
   opsStatus: () => jget('/api/ops/status'),
   opsPm2: () => jget('/api/ops/pm2'),
+  opsSystem: () => jget('/api/ops/system'),
+  opsSystemCmds: () => jget('/api/ops/system/cmds'),
+  opsSystemCmd: (name) => jget('/api/ops/system/cmd?name=' + encodeURIComponent(name)),
+  opsSystemDuPaths: () => jget('/api/ops/system/du-paths'),
+  opsSystemDu: (p) => jget('/api/ops/system/du?path=' + encodeURIComponent(p)),
+  opsCron: () => jget('/api/ops/system/cron'),
+  opsCronSave: (crontab) => jpost('/api/ops/system/cron', { crontab }),
+  opsConsole: () => jget('/api/ops/console'),
+  opsConsoleRun: (payload) => jpost('/api/ops/console/run', payload),
 };
