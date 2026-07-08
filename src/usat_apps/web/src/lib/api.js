@@ -1,6 +1,6 @@
 // Tiny fetch helper for the usat_apps platform API. All calls are same-origin (the Express server
-// serves this SPA and the /api/* routes), so cookies ride along. Base-aware: at root the base is '/',
-// behind the proxy it's '/apps/', so '/api/x' becomes '/apps/api/x' when deployed under the proxy.
+// serves this SPA and the /api/* routes), so cookies ride along. Base-aware via import.meta.env.BASE_URL,
+// so it works at '/' (current) or any sub-path if the app is ever built with a different --base.
 const BASE = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
 const url = (p) => BASE + p;
 

@@ -72,9 +72,9 @@ const SECTIONS = [
     { id: 2, label: 'Dev — backend only (nodemon)', desc: 'Express API on :8022, auto-restarts on change', bin: 'npm', args: ['run', 'usat_apps_dev'], cli: 'npm run usat_apps_dev' },
     { id: 3, label: 'Dev — web only (Vite)', desc: 'React UI on :5175, proxies /api to :8022', bin: 'npm', args: ['run', 'usat_apps_web'], cli: 'npm run usat_apps_web' },
     { id: 4, label: 'Build the web app', desc: 'npm install + compile React to web/dist (served at :8022)', bin: 'npm', args: ['run', 'usat_apps_build'], cli: 'npm run usat_apps_build' },
-    { id: 5, label: 'Build for proxy (/apps base)', desc: 'Build with Vite base /apps/ for the :8000 proxy', bin: 'npm', args: ['run', 'usat_apps_build_proxy'], cli: 'npm run usat_apps_build_proxy' },
+    { id: 5, label: 'Build for proxy (root base)', desc: 'Build with Vite base / for the :8000 proxy (served at usat-app root)', bin: 'npm', args: ['run', 'usat_apps_build_proxy'], cli: 'npm run usat_apps_build_proxy' },
     { id: 6, label: 'Start built server (:8022)', desc: 'Express serves the built UI + API on one port', bin: 'npm', args: ['run', 'usat_apps_server'], cli: 'npm run usat_apps_server' },
-    { id: 7, label: 'Start proxy (:8000)', desc: 'Reverse proxy; serves the app at :8000/apps/', bin: 'npm', args: ['run', 'proxy_server'], cli: 'npm run proxy_server' },
+    { id: 7, label: 'Start proxy (:8000)', desc: 'Reverse proxy; serves the app at :8000/ (usat-app host)', bin: 'npm', args: ['run', 'proxy_server'], cli: 'npm run proxy_server' },
   ]},
   { label: 'TESTING', color: CYAN, items: [
     { id: 8, label: 'Auth + access tests', desc: 'auth_store roles, .env recovery, session, panel access — no DB', bin: 'npm', args: ['run', 'usat_apps_test'], cli: 'npm run usat_apps_test' },
@@ -89,7 +89,7 @@ const SECTIONS = [
   { label: 'OPEN', color: GREEN, items: [
     { id: 14, label: 'Open built UI', desc: 'Production-style single-port app at :8022', open: `http://localhost:${PORT}`, cli: `open http://localhost:${PORT}` },
     { id: 15, label: 'Open dev UI', desc: 'Vite dev server (hot reload) at :5175', open: 'http://localhost:5175', cli: 'open http://localhost:5175' },
-    { id: 16, label: 'Open via proxy (/apps)', desc: 'The app through the proxy at :8000/apps/', open: 'http://localhost:8000/apps/', cli: 'open http://localhost:8000/apps/' },
+    { id: 16, label: 'Open via proxy (/)', desc: 'The app through the proxy at :8000/', open: 'http://localhost:8000/', cli: 'open http://localhost:8000/' },
     { id: 17, label: 'Check API status', desc: 'GET /api/status — backend health (public)', endpoint: '/api/status', cli: `curl http://localhost:${PORT}/api/status` },
     { id: 18, label: 'Check login / whoami', desc: 'GET /api/me — current user + role + panels (needs a signed-in session)', endpoint: '/api/me', cli: `curl http://localhost:${PORT}/api/me` },
     { id: 19, label: 'Show your modules', desc: 'GET /api/modules — the module catalog the nav is built from (needs a session)', endpoint: '/api/modules', cli: `curl http://localhost:${PORT}/api/modules` },

@@ -30,6 +30,20 @@ const is_test_ngrok = false;
 const ROUTES = require('./utilities/proxy/proxy_routes');
 let active_server = null;
 
+// Per-route host gating. Each proxy_routes entry is tagged host:'api' (usat-api) or host:'app'
+// (usat-app). A request on the wrong hostname 404s; localhost is always allowed (dev). Untagged
+// routes stay reachable on both hosts. Override the hostnames with API_HOST / APP_HOST in .env.
+const API_HOST = (process.env.API_HOST || 'usat-api.kidderwise.org').toLowerCase();
+const APP_HOST = (process.env.APP_HOST || 'usat-app.kidderwise.org').toLowerCase();
+function host_gate(which) {
+  const wanted = which === 'app' ? APP_HOST : API_HOST;
+  return function (req, res, next) {
+    const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0].toLowerCase();
+    if (host === wanted || host === 'localhost' || host === '127.0.0.1') return next();
+    return res.status(404).json({ ok: false, error: 'not found', path: req.path });
+  };
+}
+
 const FAVICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#e4002b"/><circle cx="16" cy="16" r="5" fill="#fff"/><circle cx="7" cy="7" r="2.5" fill="#fff"/><circle cx="25" cy="7" r="2.5" fill="#fff"/><circle cx="7" cy="25" r="2.5" fill="#fff"/><circle cx="25" cy="25" r="2.5" fill="#fff"/></svg>';
 
 function create_app() {
@@ -109,7 +123,7 @@ function create_app() {
   // so they match first; '/' forwards everything else to usat_apps (:8022).
   for (const [prefix, cfg] of Object.entries(ROUTES)) {
     const target = typeof cfg === 'string' ? cfg : cfg.target;
-    app.use(prefix, createProxyMiddleware({
+    const mw = createProxyMiddleware({
       target, changeOrigin: true, ws: true, proxyTimeout: 30000, timeout: 30000,
       on: {
         proxyReq: (pr, req) => { console.log('[' + log_ts() + '] -> routed ' + prefix + '  ' + req.method + ' ' + req.url + '  to ' + target); },
@@ -120,7 +134,11 @@ function create_app() {
           res.end(JSON.stringify({ ok: false, error: 'backend unavailable', path: req.url }));
         },
       },
-    }));
+    });
+    // Gate each route to its tagged host (host:'api' | 'app'); untagged routes stay on both hosts.
+    const gate = cfg.host === 'app' ? host_gate('app') : (cfg.host === 'api' ? host_gate('api') : null);
+    if (gate) app.use(prefix, gate, mw);
+    else app.use(prefix, mw);
   }
 
   app.use((req, res) => res.status(404).json({ ok: false, error: 'not found', path: req.path }));
