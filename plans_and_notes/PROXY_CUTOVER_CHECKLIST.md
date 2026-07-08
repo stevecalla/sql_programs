@@ -10,11 +10,14 @@ Legend: `$` = run on the server.  "menu" = `npm run menu` option.
 
 ## 0. Pre-flight (one-time, on the server)
 
-- [ ] Pull the new files: `server_proxy_8000.js`, `proxy_routes.js`, `proxy_auth.js`,
-      `public/proxy_admin.html`, `menu.js`, `test/server_proxy_8000.test.js`, and the
+> **NOTE (2026):** the proxy's `/admin` console was retired — it now lives in the usat_apps
+> platform (Ops module, :8022). `proxy_auth.js`, `public/proxy_admin.html`, and the
+> `PROXY_ADMIN_*` credentials are gone. The steps below that mention them are historical.
+
+- [ ] Pull the new files: `server_proxy_8000.js`, `proxy_routes.js`, `menu.js`,
+      `test/server_proxy_8000.test.js`, and the
       `package.json` / `.vscode/tasks.json` / `README.md` / `.gitignore` changes.
-- [ ] Set real console credentials in `.env` (placeholders were added):
-      `PROXY_ADMIN_USER=...` and a strong `PROXY_ADMIN_PASS=...`
+      (The console now lives in usat_apps — no `proxy_auth.js` / `proxy_admin.html`.)
 - [ ] (Optional) enable proxy rate limiting: `$ npm i express-rate-limit`
       (proxy runs fine without it; skip if you'll rate-limit at Cloudflare).
 - [ ] Confirm `proxy_routes.js` has ONLY `/events` uncommented (day-one config).
@@ -109,5 +112,5 @@ their own ports). If anything misbehaves, point traffic back at the old subdomai
 ## Daily ops (after go-live)
 
 - `npm run menu` → health checks, fleet start/restart, restart-one (pick), log tails, reminders.
-- Browser console: `https://usat-api.kidderwise.org/admin` (login = PROXY_ADMIN_*).
+- Browser console: `https://usat-api.kidderwise.org/ops/overview` (usat_apps Ops — platform login).
 - Add a route later: edit `proxy_routes.js` → `npm run pm2_reload_proxy` → test.
