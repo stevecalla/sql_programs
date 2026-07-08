@@ -73,8 +73,8 @@ function mount(app) {
     const timer = setTimeout(() => { try { proc.kill(); } catch (e) { /* noop */ } }, 8000);
     proc.stdout.on('data', (d) => { out += d.toString(); cap(); });
     proc.stderr.on('data', (d) => { out += d.toString(); cap(); });
-    proc.on('error', (e) => { clearTimeout(timer); res.json({ ok: false, error: c.bin + ': ' + e.message, output: out }); });
-    proc.on('close', () => { clearTimeout(timer); res.json({ ok: true, name: req.query.name, label: c.label, output: stripAnsi(out).trim() || '(no output)', time: new Date().toISOString() }); });
+    proc.on('error', (e) => { clearTimeout(timer); if (res.headersSent) return; res.json({ ok: false, error: c.bin + ': ' + e.message, output: stripAnsi(out) }); });
+    proc.on('close', () => { clearTimeout(timer); if (res.headersSent) return; res.json({ ok: true, name: req.query.name, label: c.label, output: stripAnsi(out).trim() || '(no output)', time: new Date().toISOString() }); });
   });
 
   app.get('/api/ops/system/du-paths', require_admin, function (req, res) { res.json({ ok: true, paths: DU_PATHS }); });
@@ -85,8 +85,8 @@ function mount(app) {
       try { proc = spawn('journalctl', ['--disk-usage'], { shell: false, windowsHide: true }); } catch (e) { return res.json({ ok: false, error: e.message }); }
       const t = setTimeout(() => { try { proc.kill(); } catch (e) { /* noop */ } }, 8000);
       proc.stdout.on('data', (d) => { out += d.toString(); }); proc.stderr.on('data', (d) => { out += d.toString(); });
-      proc.on('error', (e) => { clearTimeout(t); res.json({ ok: false, error: e.message }); });
-      proc.on('close', () => { clearTimeout(t); res.json({ ok: true, path: 'journal', output: out.trim() || '(no output)', time: new Date().toISOString() }); });
+      proc.on('error', (e) => { clearTimeout(t); if (res.headersSent) return; res.json({ ok: false, error: e.message }); });
+      proc.on('close', () => { clearTimeout(t); if (res.headersSent) return; res.json({ ok: true, path: 'journal', output: out.trim() || '(no output)', time: new Date().toISOString() }); });
       return;
     }
     if (DU_PATHS.indexOf(p) < 0) return res.status(400).json({ ok: false, error: 'path not allowed' });
@@ -94,8 +94,8 @@ function mount(app) {
     try { proc = spawn('bash', ['-lc', 'du -h --max-depth=1 ' + p + ' 2>/dev/null | sort -h'], { shell: false, windowsHide: true }); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
     const timer = setTimeout(() => { try { proc.kill(); } catch (e) { /* noop */ } }, 60000);
     proc.stdout.on('data', (d) => { out += d.toString(); });
-    proc.on('error', (e) => { clearTimeout(timer); res.json({ ok: false, error: e.message }); });
-    proc.on('close', () => { clearTimeout(timer); res.json({ ok: true, path: p, output: out.trim() || '(no readable entries — protected dirs need sudo; run in a terminal for exact numbers)', time: new Date().toISOString() }); });
+    proc.on('error', (e) => { clearTimeout(timer); if (res.headersSent) return; res.json({ ok: false, error: e.message }); });
+    proc.on('close', () => { clearTimeout(timer); if (res.headersSent) return; res.json({ ok: true, path: p, output: out.trim() || '(no readable entries — protected dirs need sudo; run in a terminal for exact numbers)', time: new Date().toISOString() }); });
   });
 
   // Crontab view (read-only)
@@ -104,8 +104,8 @@ function mount(app) {
     try { proc = spawn('crontab', ['-l'], { shell: false, windowsHide: true }); } catch (e) { return res.json({ ok: false, error: 'crontab not available', detail: e.message }); }
     const timer = setTimeout(() => { try { proc.kill(); } catch (e) { /* noop */ } }, 6000);
     proc.stdout.on('data', (d) => { out += d.toString(); }); proc.stderr.on('data', (d) => { err += d.toString(); });
-    proc.on('error', (e) => { clearTimeout(timer); res.json({ ok: false, error: e.message }); });
-    proc.on('close', (code) => { clearTimeout(timer); res.json({ ok: true, user: (os.userInfo && os.userInfo().username) || '', crontab: (out.trim() || ('(no crontab installed)' + (err ? '\n' + err.trim() : ''))), code, time: new Date().toISOString() }); });
+    proc.on('error', (e) => { clearTimeout(timer); if (res.headersSent) return; res.json({ ok: false, error: e.message }); });
+    proc.on('close', (code) => { clearTimeout(timer); if (res.headersSent) return; res.json({ ok: true, user: (os.userInfo && os.userInfo().username) || '', crontab: (out.trim() || ('(no crontab installed)' + (err ? '\n' + err.trim() : ''))), code, time: new Date().toISOString() }); });
   });
   // Crontab write (guarded): validate every line, back up the current crontab, then install via `crontab -`.
   app.post('/api/ops/system/cron', require_admin, function (req, res) {
@@ -121,16 +121,17 @@ function mount(app) {
     const dir = path.join(RUN_DIR, '.crontab_backups');
     try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { /* noop */ }
     const backup = path.join(dir, 'crontab_' + new Date().toISOString().replace(/[:.]/g, '-') + '.bak');
-    let cur = '';
+    let cur = '', started = false;
     const lister = spawn('crontab', ['-l'], { shell: false, windowsHide: true });
     lister.stdout.on('data', (d) => { cur += d.toString(); });
     lister.on('error', writeNew);
     lister.on('close', () => { try { fs.writeFileSync(backup, cur); } catch (e) { /* noop */ } writeNew(); });
     function writeNew() {
+      if (started) return; started = true;
       let w; try { w = spawn('crontab', ['-'], { shell: false, windowsHide: true }); } catch (e) { return res.status(500).json({ ok: false, error: 'crontab not available', detail: e.message }); }
       let werr = ''; w.stderr.on('data', (d) => { werr += d.toString(); });
-      w.on('error', (e) => res.status(500).json({ ok: false, error: e.message }));
-      w.on('close', (code) => { if (code === 0) res.json({ ok: true, backup: path.basename(backup), time: new Date().toISOString() }); else res.status(500).json({ ok: false, error: 'crontab write failed (code ' + code + ')' + (werr ? ': ' + werr.trim() : '') }); });
+      w.on('error', (e) => { if (res.headersSent) return; res.status(500).json({ ok: false, error: e.message }); });
+      w.on('close', (code) => { if (res.headersSent) return; if (code === 0) res.json({ ok: true, backup: path.basename(backup), time: new Date().toISOString() }); else res.status(500).json({ ok: false, error: 'crontab write failed (code ' + code + ')' + (werr ? ': ' + werr.trim() : '') }); });
       w.stdin.write(content.endsWith('\n') ? content : content + '\n'); w.stdin.end();
     }
   });
