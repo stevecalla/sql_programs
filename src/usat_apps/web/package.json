@@ -1,0 +1,22 @@
+{
+  "name": "usat-apps-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Vite + React front-end for the USAT Apps platform shell (served by server_usat_apps_8022.js). The shell hosts feature modules (reporting, merge, …) listed in src/modules/registry.js.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "programs": "file:../../..",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.0"
+  }
+}

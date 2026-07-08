@@ -30,6 +30,7 @@ module.exports = {
   // (`npm run reporting_build_proxy`, Vite base '/reporting/'). Uncomment once :8021 is running
   // (pm2 start usat_reporting). See src/reporting/plans_and_notes/DEPLOY_AND_PROXY.md.
   '/reporting':             { target: 'http://127.0.0.1:8021', health: '/api/status' },
+  '/':                      { target: 'http://127.0.0.1:8022', health: '/api/status' },
   // '/event-analysis': { target: 'http://127.0.0.1:8016', health: '/api/status' },
   // '/race-results':   { target: 'http://127.0.0.1:8018', health: '/api/status' },
   // '/email-queue':    { target: 'http://127.0.0.1:8019', health: '/api/status' },
