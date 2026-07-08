@@ -152,6 +152,7 @@
     "delete_salesforce_merge": "npx pm2 delete usat_salesforce_merge",
     "show_salesforce_merge": "npx pm2 show usat_salesforce_merge",
     "restart_salesforce_merge": "npx pm2 restart usat_salesforce_merge",
+
     "//=== REPORTING ===": "",
     "reporting_menu": "node src/reporting/menu.js",
     "reporting_server": "node server_reporting_8021.js",
@@ -169,6 +170,7 @@
     "delete_reporting": "npx pm2 delete usat_reporting",
     "show_reporting": "npx pm2 show usat_reporting",
     "restart_reporting": "npx pm2 restart usat_reporting",
+
     "//=== USAT APPS (platform) ===": "",
     "usat_apps_menu": "node src/usat_apps/menu.js",
     "usat_apps_server": "node server_usat_apps_8022.js",
@@ -179,10 +181,14 @@
     "usat_apps_build_proxy": "npm --prefix src/usat_apps/web install && npm --prefix src/usat_apps/web run build -- --base=/apps/",
     "usat_apps_test": "node --test src/usat_apps/tests",
     "usat_apps_local_proxy": "npm run usat_apps_build && concurrently -k -n app,proxy -c blue,magenta \"npm run usat_apps_server\" \"npm run proxy_server\"",
+    "usat_apps_deploy": "npm run usat_apps_build_proxy && (npm run restart_usat_apps || npm run pm2_start_usat_apps) && npm run pm2_reload_proxy && npx pm2 save",
     "pm2_start_usat_apps": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_usat_apps_8022.js --name usat_apps --no-autorestart --max-memory-restart 4G --node-args=\"--expose-gc\"",
     "pm2_logs_usat_apps": "npx pm2 logs usat_apps",
     "stop_usat_apps": "npx pm2 stop usat_apps",
+    "delete_usat_apps": "npx pm2 delete usat_reporting",
+    "show_usat_apps": "npx pm2 show usat_reporting",
     "restart_usat_apps": "npx pm2 restart usat_apps",
+
     "//=== SALESFORCE EMAIL QUEUE ===": "",
     "salesforce_email_queue_server": "node server_salesforce_email_queue_8019.js",
     "pm2_start_salesforce_email_queue": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_salesforce_email_queue_8019.js --name usat_salesforce_email_queue --no-autorestart --max-memory-restart 4G --node-args=\"--expose-gc\"",
@@ -198,6 +204,7 @@
     "delete_salesforce_duplicates": "npx pm2 delete usat_salesforce_duplicates",
     "show_salesforce_duplicates": "npx pm2 show usat_salesforce_duplicates",
     "restart_salesforce_duplicates": "npx pm2 restart usat_salesforce_duplicates",
+    
     "//=== PROXY ===": "",
     "pm2_start_proxy": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_proxy_8000.js --name usat_proxy -i 2 --max-memory-restart 500M",
     "pm2_reload_proxy": "npx pm2 reload usat_proxy",

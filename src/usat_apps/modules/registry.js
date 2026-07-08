@@ -17,9 +17,11 @@
  * Nothing else in the platform changes — panel access, nav, and API mounting all read from here.
  */
 const reporting = require('./reporting/module');
+const ops = require('./ops/module');
 
 const MODULES = [
   reporting,
+  ops,
   // merge,            // (Phase 5) port src/salesforce_merge as a module here
   // event_analysis,   // (Phase 5)
 ];

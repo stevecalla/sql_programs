@@ -37,4 +37,9 @@ export const api = {
   adminRemoveUser: (user) => jpost('/api/admin/users/remove', { user }),
   adminPanelAccess: () => jget('/api/admin/panel-access'),
   adminSetPanelAccess: (body) => jpost('/api/admin/panel-access', body),
+  // Ops (infrastructure console) — read-only for now.
+  opsHealth: () => jget('/api/ops/health'),
+  opsRoutes: () => jget('/api/ops/routes'),
+  opsStatus: () => jget('/api/ops/status'),
+  opsPm2: () => jget('/api/ops/pm2'),
 };

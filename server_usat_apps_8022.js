@@ -37,7 +37,7 @@ const PROD_URL = 'https://usat-app.kidderwise.org/apps/';
 
 // NGROK TUNNEL — optional public URL, same pattern as 8020/8021. Off by default (Cloudflare fronts the
 // app in prod). Enable with USATAPPS_NGROK=true and a valid NGROK_AUTHTOKEN in .env.
-const is_test_ngrok = false;
+const is_test_ngrok = true;
 const ngrok_enabled_flag = String(process.env.USATAPPS_NGROK).toLowerCase() === 'true';
 let ngrok_url = null;
 

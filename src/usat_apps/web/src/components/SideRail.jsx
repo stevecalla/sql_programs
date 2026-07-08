@@ -2,11 +2,16 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { NAV, canSee } from '../nav.js';
 
-// Left rail: a fixed HOME link, then the NAV entries. Groups are collapsible (open/closed persisted in
-// localStorage) and only show the panels the user can reach; a group with no reachable panels is
-// hidden. Solos (e.g. Metrics) render as a single gated link.
+// Left rail: a fixed HOME link, then the NAV entries (each with an icon). Groups are collapsible
+// (open/closed persisted in localStorage) and only show panels the user can reach. A LINKS section at
+// the bottom (external, new-tab) mirrors the proxy console — shown to users who can reach Ops.
 const LSKEY = 'usatapps_rail_collapsed';
 function loadCollapsed() { try { return JSON.parse(localStorage.getItem(LSKEY)) || {}; } catch (e) { return {}; } }
+
+const LINKS = [
+  ['/api/status', '/api/status'],
+  ['/api/ops/health', '/api/ops/health'],
+];
 
 export default function SideRail({ user }) {
   const [collapsed, setCollapsed] = useState(loadCollapsed);
@@ -16,11 +21,13 @@ export default function SideRail({ user }) {
     return n;
   });
   const linkClass = ({ isActive }) => 'rail-link' + (isActive ? ' on' : '');
+  const ico = (g) => <span className="rail-ico" aria-hidden="true">{g}</span>;
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
 
   return (
     <nav className="siderail" aria-label="Primary">
       <div className="rail-section">
-        <NavLink to="/" end className={linkClass}>Home</NavLink>
+        <NavLink to="/" end className={linkClass}>{ico('⌂')}Home</NavLink>
       </div>
 
       {NAV.map(function (n) {
@@ -28,7 +35,7 @@ export default function SideRail({ user }) {
           if (!canSee(user, n.panel)) return null;
           return (
             <div className="rail-section" key={n.path}>
-              <NavLink to={n.path} className={linkClass}>{n.label}</NavLink>
+              <NavLink to={n.path} className={linkClass}>{ico(n.icon)}{n.label}</NavLink>
             </div>
           );
         }
@@ -41,11 +48,20 @@ export default function SideRail({ user }) {
               <span className="rail-caret" aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>{n.label}
             </button>
             {!isCollapsed && items.map(function (it) {
-              return <NavLink key={it.path} to={it.path} className={({ isActive }) => 'rail-link rail-sub' + (isActive ? ' on' : '')}>{it.label}</NavLink>;
+              return <NavLink key={it.path} to={it.path} className={({ isActive }) => 'rail-link rail-sub' + (isActive ? ' on' : '')}>{ico(it.icon)}{it.label}</NavLink>;
             })}
           </div>
         );
       })}
+
+      {canSee(user, 'ops') ? (
+        <div className="rail-section">
+          <div className="rail-label">LINKS</div>
+          {LINKS.map(([href, label]) => (
+            <a key={href} className="rail-link rail-ext" href={base + href} target="_blank" rel="noopener">{label} ↗</a>
+          ))}
+        </div>
+      ) : null}
     </nav>
   );
 }
