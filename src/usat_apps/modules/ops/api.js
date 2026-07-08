@@ -99,8 +99,10 @@ function mount(app) {
     });
   });
 
-  // Server console — usat_apps's own console output. Snapshot + SSE live stream.
-  app.get('/api/ops/console', require_admin, function (req, res) { res.json({ ok: true, lines: console_ring.tail(req.query.n) }); });
+  // Server console — usat_apps's own console output. Snapshot (/console-log) + SSE live stream.
+  // NOTE: /api/ops/console (no suffix) is the Operations command catalog (modules/ops/console.js), so
+  // the log snapshot lives at /api/ops/console-log to avoid a route collision.
+  app.get('/api/ops/console-log', require_admin, function (req, res) { res.json({ ok: true, lines: console_ring.tail(req.query.n) }); });
   app.get('/api/ops/console/stream', require_admin, function (req, res) {
     res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
     if (res.flushHeaders) res.flushHeaders();

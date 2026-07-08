@@ -54,14 +54,6 @@ export default function SideRail({ user }) {
         );
       })}
 
-      {canSee(user, 'ops') ? (
-        <div className="rail-section">
-          <div className="rail-label">LINKS</div>
-          {LINKS.map(([href, label]) => (
-            <a key={href} className="rail-link rail-ext" href={base + href} target="_blank" rel="noopener">{label} ↗</a>
-          ))}
-        </div>
-      ) : null}
     </nav>
   );
 }

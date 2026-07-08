@@ -11,25 +11,43 @@ const RUN_DIR = path.join(__dirname, '..', '..', '..', '..');  // repo root
 const MAX_LINES = 4000;
 const RUN_TIMEOUT_MS = 4 * 60 * 1000;
 
+// Mirrors the root menu.js sections/items (the terminal fleet console) for the web Operations panel.
+// web: 'run' (spawn + capture) | 'form' (validated param, then run) | 'link' (open a URL) |
+//      'terminal' (greyed — interactive/streaming, run in a terminal / another pane).
 const SECTIONS = [
   { label: 'Tests', items: [
-    { id: 1, action: 'test_proxy', label: 'Run proxy tests', desc: 'node --test on the proxy suite (endpoints, auth, 404/405).', cli: 'npm run test_proxy', web: 'run', klass: 'test', bin: 'npm', argv: ['run', 'test_proxy'] },
+    { id: 1, action: 'test_proxy', label: 'Run proxy tests', desc: 'node --test on the proxy suite.', cli: 'npm run test_proxy', web: 'run', klass: 'test', bin: 'npm', argv: ['run', 'test_proxy'] },
   ] },
-  { label: 'Proxy control', items: [
-    { id: 2, action: 'reload_proxy', label: 'Reload proxy (zero-downtime)', desc: 'Re-reads proxy_routes.js; recycles workers one at a time.', cli: 'npm run pm2_reload_proxy', web: 'run', klass: 'mutate', bin: 'npm', argv: ['run', 'pm2_reload_proxy'] },
-    { id: 3, action: 'restart_proxy', label: 'Restart proxy (hard)', desc: 'Full restart; brief blip.', cli: 'npm run restart_proxy', web: 'run', klass: 'mutate', bin: 'npm', argv: ['run', 'restart_proxy'] },
-    { id: 4, action: 'show_proxy', label: 'Show proxy', desc: 'pm2 show usat_proxy (status, restarts, memory).', cli: 'npm run show_proxy', web: 'run', klass: 'read', bin: 'npm', argv: ['run', 'show_proxy'] },
-    { id: 5, action: 'stop_proxy', label: 'Stop proxy (danger)', desc: 'pm2 stop usat_proxy — that host goes away until restarted.', cli: 'npm run stop_proxy', web: 'run', klass: 'destruct', bin: 'npm', argv: ['run', 'stop_proxy'], confirm: true },
+  { label: 'Start the local server', items: [
+    { id: 2, action: 'p_fg', label: 'Run proxy in FOREGROUND (dev)', desc: 'node server_proxy_8000.js — long-running.', cli: 'node server_proxy_8000.js', web: 'terminal', klass: 'na', note: 'Long-running foreground process — run it in a terminal.' },
+    { id: 3, action: 'p_start', label: 'Start proxy under pm2', desc: 'Background, cluster workers.', cli: 'npm run pm2_start_proxy', web: 'run', klass: 'mutate', bin: 'npm', argv: ['run', 'pm2_start_proxy'], confirm: true },
+  ] },
+  { label: 'Health & status', items: [
+    { id: 4, action: 'h_status', label: 'Proxy status (/api/status)', desc: 'Uptime, memory, routes.', cli: 'open /api/status', web: 'link', klass: 'read', href: '/api/status' },
+    { id: 5, action: 'h_health', label: 'All backends health', desc: 'Up/down per backend.', cli: 'open /api/ops/health', web: 'link', klass: 'read', href: '/api/ops/health' },
+  ] },
+  { label: 'System health', items: [
+    { id: 6, action: 'sys_monitor', label: 'System monitor (top/htop/…)', desc: 'CPU/mem/disk/net snapshots.', cli: 'top | htop | btop | …', web: 'terminal', klass: 'na', note: 'Use the System health pane → Live commands (or a terminal for the full-screen TUIs).' },
+  ] },
+  { label: 'Proxy control (pm2)', items: [
+    { id: 7, action: 'reload_proxy', label: 'Reload proxy (zero-downtime)', desc: 'Re-reads proxy_routes.js; recycles workers.', cli: 'npm run pm2_reload_proxy', web: 'run', klass: 'mutate', bin: 'npm', argv: ['run', 'pm2_reload_proxy'] },
+    { id: 8, action: 'restart_proxy', label: 'Restart proxy (hard)', desc: 'Full restart; brief blip.', cli: 'npm run restart_proxy', web: 'run', klass: 'mutate', bin: 'npm', argv: ['run', 'restart_proxy'] },
+    { id: 9, action: 'stop_proxy', label: 'Stop proxy (danger)', desc: 'pm2 stop usat_proxy.', cli: 'npm run stop_proxy', web: 'run', klass: 'destruct', bin: 'npm', argv: ['run', 'stop_proxy'], confirm: true },
+    { id: 10, action: 'show_proxy', label: 'Show proxy', desc: 'pm2 show usat_proxy (status, restarts, memory).', cli: 'npm run show_proxy', web: 'run', klass: 'read', bin: 'npm', argv: ['run', 'show_proxy'] },
   ] },
   { label: 'Fleet (all servers)', items: [
-    { id: 6, action: 'list_pm2', label: 'List pm2 processes', desc: 'Status/restarts/memory for every process.', cli: 'npx pm2 list', web: 'run', klass: 'read', bin: 'npx', argv: ['pm2', 'list'] },
-    { id: 7, action: 'restart_one', label: 'Restart ONE server', desc: 'Restart a single pm2 process by name.', cli: 'npx pm2 restart <name>', web: 'form', klass: 'mutate', bin: 'npx', argv: ['pm2', 'restart'], confirm: true, params: [{ name: 'name', label: 'pm2 name (e.g. usat_events)', type: 'name', required: true }] },
-    { id: 8, action: 'restart_all', label: 'Restart ALL servers (danger)', desc: 'Bounce every pm2 process.', cli: 'npm run pm2_restart_all', web: 'run', klass: 'destruct', bin: 'npm', argv: ['run', 'pm2_restart_all'], confirm: true },
-    { id: 9, action: 'start_all', label: 'Start ALL servers', desc: 'pm2_run_all_servers (proxy first). Long-running.', cli: 'npm run pm2_run_all_servers', web: 'run', klass: 'mutate', bin: 'npm', argv: ['run', 'pm2_run_all_servers'], confirm: true },
+    { id: 11, action: 'start_all', label: 'Start ALL servers', desc: 'pm2_run_all_servers (proxy first). Long-running.', cli: 'npm run pm2_run_all_servers', web: 'run', klass: 'mutate', bin: 'npm', argv: ['run', 'pm2_run_all_servers'], confirm: true },
+    { id: 12, action: 'restart_all', label: 'Restart ALL servers (danger)', desc: 'Bounce every pm2 process.', cli: 'npm run pm2_restart_all', web: 'run', klass: 'destruct', bin: 'npm', argv: ['run', 'pm2_restart_all'], confirm: true },
+    { id: 13, action: 'restart_one', label: 'Restart ONE server', desc: 'Restart a single pm2 process by name.', cli: 'npx pm2 restart <name>', web: 'form', klass: 'mutate', bin: 'npx', argv: ['pm2', 'restart'], confirm: true, params: [{ name: 'name', label: 'pm2 name (e.g. usat_events)', type: 'name', required: true }] },
   ] },
-  { label: 'Logs (use the Logs pane / a terminal)', items: [
-    { id: 10, action: 'logs_proxy', label: 'Tail proxy logs', desc: 'Streams continuously — use the Logs pane, or a terminal.', cli: 'npm run logs_proxy', web: 'terminal', klass: 'na', note: 'Streams forever; open the Logs pane or run npm run logs_proxy in a terminal.' },
-    { id: 11, action: 'logs_all', label: 'Tail ALL logs', desc: 'Streams continuously.', cli: 'npx pm2 logs', web: 'terminal', klass: 'na', note: 'Streams forever; run npx pm2 logs in a terminal.' },
+  { label: 'Logs', items: [
+    { id: 14, action: 'list_pm2', label: 'List pm2 processes', desc: 'Status/restarts/memory for every process.', cli: 'npx pm2 list', web: 'run', klass: 'read', bin: 'npx', argv: ['pm2', 'list'] },
+    { id: 15, action: 'logs_proxy', label: 'Tail proxy logs', desc: 'Streams continuously.', cli: 'npm run logs_proxy', web: 'terminal', klass: 'na', note: 'Streams forever — use the Logs pane (pick the proxy) or a terminal.' },
+    { id: 16, action: 'logs_all', label: 'Tail ALL logs', desc: 'Streams continuously.', cli: 'npx pm2 logs', web: 'terminal', klass: 'na', note: 'Streams forever — use the Server cards pane or a terminal.' },
+    { id: 17, action: 'logs_one', label: 'Tail one server by name', desc: 'Streams one pm2 process.', cli: 'npx pm2 logs <name>', web: 'terminal', klass: 'na', note: 'Streams forever — use the Logs pane (pick the process) or a terminal.' },
+  ] },
+  { label: 'Help', items: [
+    { id: 18, action: 'reminders', label: 'Reminders / cheat-sheet', desc: 'Routes, reload vs restart, tasks, console.', cli: '', web: 'terminal', klass: 'na', note: 'See the Reference pane for routes, reload-vs-restart, and the cheat-sheet.' },
   ] },
 ];
 const ALL = SECTIONS.reduce(function (a, s) { return a.concat(s.items); }, []);
@@ -66,7 +84,7 @@ function run(item, params) {
 function public_sections() {
   return SECTIONS.map(function (s) {
     return { label: s.label, items: s.items.map(function (it) {
-      return { id: it.id, action: it.action, label: it.label, desc: it.desc, cli: it.cli, web: it.web, klass: it.klass, confirm: !!it.confirm, note: it.note || '', params: it.params || [] };
+      return { id: it.id, action: it.action, label: it.label, desc: it.desc, cli: it.cli, web: it.web, klass: it.klass, confirm: !!it.confirm, note: it.note || '', href: it.href || '', params: it.params || [] };
     }) };
   });
 }
