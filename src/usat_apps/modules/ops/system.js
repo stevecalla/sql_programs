@@ -9,6 +9,7 @@ const { spawn } = require('child_process');
 const { require_admin } = require('../../auth/require_auth');
 
 function fmtGB(bytes) { if (bytes == null) return '—'; return (bytes / 1073741824).toFixed(1) + ' GiB'; }
+function stripAnsi(s) { return String(s).replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\][^\x07]*\x07/g, ''); }
 
 function build_system() {
   const out = { ok: true, host: os.hostname(), now_mtn: new Date().toLocaleString('en-US', { timeZone: 'America/Denver' }), uptime_sec: Math.round(os.uptime()) };
@@ -73,7 +74,7 @@ function mount(app) {
     proc.stdout.on('data', (d) => { out += d.toString(); cap(); });
     proc.stderr.on('data', (d) => { out += d.toString(); cap(); });
     proc.on('error', (e) => { clearTimeout(timer); res.json({ ok: false, error: c.bin + ': ' + e.message, output: out }); });
-    proc.on('close', () => { clearTimeout(timer); res.json({ ok: true, name: req.query.name, label: c.label, output: out || '(no output)', time: new Date().toISOString() }); });
+    proc.on('close', () => { clearTimeout(timer); res.json({ ok: true, name: req.query.name, label: c.label, output: stripAnsi(out).trim() || '(no output)', time: new Date().toISOString() }); });
   });
 
   app.get('/api/ops/system/du-paths', require_admin, function (req, res) { res.json({ ok: true, paths: DU_PATHS }); });
