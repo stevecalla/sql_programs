@@ -8,7 +8,7 @@ const PCOLS = [
   ['n', '#', false], ['name', 'Name', true], ['status', 'Status', true], ['cpu', 'CPU %', true],
   ['memory_mb', 'Mem MB', true], ['restarts', '↺', true], ['uptime_ms', 'Uptime', true], ['pid', 'PID', true],
 ];
-const LS_REF = 'usatapps_ops_ov_refresh';
+const LS_REF = 'usatapps_ops_ov_refresh_15m';
 const LS_SORT = 'usatapps_ops_ov_sort';
 function lsGet(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
@@ -28,7 +28,7 @@ export default function OpsOverview() {
   const [procWhen, setProcWhen] = useState('');
   const [routesOpen, setRoutesOpen] = useState(false);
   const [procsOpen, setProcsOpen] = useState(true);
-  const [refresh, setRefresh] = useState(() => lsGet(LS_REF, { sec: 30, paused: false }));
+  const [refresh, setRefresh] = useState(() => lsGet(LS_REF, { sec: 900, paused: false }));
   const [sort, setSort] = useState(() => lsGet(LS_SORT, { key: 'name', dir: 1 }));
   const [live, setLive] = useState(false);
   const [expanded, setExpanded] = useState(false);

@@ -17,7 +17,7 @@ const COLS = [
   ['error', 'Error', true],
 ];
 const LS_SORT = 'usatapps_ops_backends_sort_v2';
-const LS_REF = 'usatapps_ops_backends_refresh';
+const LS_REF = 'usatapps_ops_backends_refresh_15m';
 function lsGet(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
 function portOf(t) { const m = String(t || '').match(/:(\d+)(?:\/|$)/); return m ? Number(m[1]) : ''; }
@@ -29,7 +29,7 @@ export default function OpsBackends() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [sort, setSort] = useState(() => lsGet(LS_SORT, { key: 'prefix', dir: 1 }));
-  const [refresh, setRefresh] = useState(() => lsGet(LS_REF, { sec: 30, paused: false }));
+  const [refresh, setRefresh] = useState(() => lsGet(LS_REF, { sec: 900, paused: false }));
   const timer = useRef(null);
 
   const load = () => {

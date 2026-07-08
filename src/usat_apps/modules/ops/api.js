@@ -12,16 +12,23 @@ console_ring.install(console);   // capture usat_apps console output into the ri
 let ROUTES = {};
 try { ROUTES = require('../../../../utilities/proxy/proxy_routes'); } catch (e) { ROUTES = {}; }
 
-// pm2 jlist (read-only) — mirrors the proxy's process reader.
+// pm2 jlist (read-only). The pm2 CLI spawn is slow (~1-3s), so we keep a 2s cache and collapse a burst
+// of callers into ONE spawn — so refreshes / concurrent loads return instantly instead of re-spawning.
+let _jc = { at: 0, data: null }, _jw = [], _jr = false;
 function pm2_jlist(cb) {
+  if (_jc.data && (Date.now() - _jc.at) < 2000) return cb(null, _jc.data);
+  _jw.push(cb);
+  if (_jr) return;
+  _jr = true;
   const { spawn } = require('child_process');
   let out = ''; let proc;
+  const done = function (err, list) { _jr = false; const w = _jw.splice(0); w.forEach(function (f) { try { f(err, list); } catch (e) { /* noop */ } }); };
   try { proc = spawn('pm2', ['jlist'], { shell: process.platform === 'win32', windowsHide: true }); }
-  catch (e) { return cb(e); }
+  catch (e) { return done(e); }
   const timer = setTimeout(function () { try { proc.kill(); } catch (e) { /* noop */ } }, 10000);
   proc.stdout.on('data', function (d) { out += d.toString(); });
-  proc.on('error', function (e) { clearTimeout(timer); cb(e); });
-  proc.on('close', function () { clearTimeout(timer); let list = null, err = null; try { list = JSON.parse(out); } catch (e) { err = e; } cb(err, list); });
+  proc.on('error', function (e) { clearTimeout(timer); done(e); });
+  proc.on('close', function () { clearTimeout(timer); let list = null, err = null; try { list = JSON.parse(out); if (list) _jc = { at: Date.now(), data: list }; } catch (e) { err = e; } done(err, list); });
 }
 function mapProc(p) {
   const env = p.pm2_env || {}; const mon = p.monit || {};
