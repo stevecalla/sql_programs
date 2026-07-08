@@ -93,8 +93,8 @@ function print_reminders() {
     [GRAY, '  reload = npm run pm2_reload_proxy (zero-downtime)   restart = npm run restart_proxy (brief blip)'],
     [YEL, 'VS Code log terminals'],
     [GRAY, '  Ctrl+Shift+P -> "Tasks: Run Task" -> "All Logs (19 groups)"  (or "Test").'],
-    [YEL, 'Admin console'],
-    [GRAY, '  Start the proxy, then ' + PROXY_BASE + '/admin  (login: PROXY_ADMIN_USER / PROXY_ADMIN_PASS in .env).'],
+    [YEL, 'Ops console (moved to usat_apps)'],
+    [GRAY, '  Start the proxy + usat_apps (:8022), then ' + PROXY_BASE + '/ops/overview  (platform login — no PROXY_ADMIN_* anymore).'],
     [YEL, 'Rate limiter (optional, server)'],
     [GRAY, '  npm i express-rate-limit  -> 300 req/min/IP. Without it, rate limiting is off.']
   ];
@@ -109,7 +109,7 @@ const SECTIONS = [
     { label: 'Proxy alive (/api/test)', desc: 'No-backend smoke check.', cli: 'curl ' + PROXY_BASE + '/api/test', action: 'h_test' },
     { label: 'Proxy status (/api/status)', desc: 'Uptime, memory, routes.', cli: 'curl ' + PROXY_BASE + '/api/status', action: 'h_status' },
     { label: 'All backends health (/api/health)', desc: 'Up/down per backend.', cli: 'curl ' + PROXY_BASE + '/api/health', action: 'h_health' },
-    { label: 'Open admin console (browser)', desc: 'Opens ' + PROXY_BASE + '/admin (proxy must be running).', cli: 'open ' + PROXY_BASE + '/admin', action: 'open_admin' } ] },
+    { label: 'Open Ops console (browser)', desc: 'Opens ' + PROXY_BASE + '/ops/overview (usat_apps :8022 must be running).', cli: 'open ' + PROXY_BASE + '/ops/overview', action: 'open_admin' } ] },
   { label: 'System health', color: GREEN, items: [
     { label: 'System monitor (pick)', desc: 'top / htop / btop / atop / glances / nmon / free / df / vmstat / sensors.', cli: 'top | htop | btop | atop | glances | nmon | …', action: 'sys_monitor' } ] },
   { label: 'Proxy control (pm2)', color: BLU, items: [
@@ -135,7 +135,7 @@ const ACTIONS = {
   h_test: function () { return get_json('/api/test'); },
   h_status: function () { return get_json('/api/status'); },
   h_health: function () { return get_json('/api/health'); },
-  open_admin: function () { const url = PROXY_BASE + '/admin'; const cmd = process.platform === 'win32' ? 'cmd' : (process.platform === 'darwin' ? 'open' : 'xdg-open'); const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url]; return run(cmd, args); },
+  open_admin: function () { const url = PROXY_BASE + '/ops/overview'; const cmd = process.platform === 'win32' ? 'cmd' : (process.platform === 'darwin' ? 'open' : 'xdg-open'); const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url]; return run(cmd, args); },
   sys_monitor: function () { return pick_system_monitor(); },
   p_reload: function () { return run('npm', ['run', 'pm2_reload_proxy']); },
   p_restart: function () { return run('npm', ['run', 'restart_proxy']); },
