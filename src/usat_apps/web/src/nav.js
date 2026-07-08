@@ -11,6 +11,8 @@ const ComingSoon = lazy(() => import('./pages/ComingSoon.jsx'));
 const OpsOverview = lazy(() => import('./modules/ops/Overview.jsx'));
 const OpsBackends = lazy(() => import('./modules/ops/Backends.jsx'));
 const OpsServerCards = lazy(() => import('./modules/ops/ServerCards.jsx'));
+const OpsLogs = lazy(() => import('./modules/ops/Logs.jsx'));
+const OpsSettings = lazy(() => import('./modules/ops/Settings.jsx'));
 const OpsReference = lazy(() => import('./modules/ops/Reference.jsx'));
 
 export const NAV = [
@@ -30,9 +32,9 @@ export const NAV = [
     { label: 'Backends',      path: '/ops/backends',     panel: 'ops', icon: '⚡', Component: OpsBackends },
     { label: 'Server cards',  path: '/ops/server-cards', panel: 'ops', icon: '◧', Component: OpsServerCards },
     { label: 'Operations',    path: '/ops/operations',   panel: 'ops', icon: '▸', Component: ComingSoon },
-    { label: 'Logs',          path: '/ops/logs',         panel: 'ops', icon: '▤', Component: ComingSoon },
+    { label: 'Logs',          path: '/ops/logs',         panel: 'ops', icon: '▤', Component: OpsLogs },
     { label: 'System health', path: '/ops/system',       panel: 'ops', icon: '📊', Component: ComingSoon },
-    { label: 'Settings',      path: '/ops/settings',     panel: 'ops', icon: '⚙', Component: ComingSoon },
+    { label: 'Settings',      path: '/ops/settings',     panel: 'ops', icon: '⚙', Component: OpsSettings },
     { label: 'Reference',     path: '/ops/reference',    panel: 'ops', icon: '❏', Component: OpsReference },
   ] },
 ];

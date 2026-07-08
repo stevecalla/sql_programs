@@ -81,6 +81,8 @@ function mount(app) {
       uptime_seconds: Math.round(process.uptime()),
       memory_mb: { rss: +(mem.rss / 1048576).toFixed(1), heap_used: +(mem.heapUsed / 1048576).toFixed(1) },
       node: process.version, pid: process.pid, pm2_name: process.env.name || 'usat_apps',
+      pm2_log_dir: process.env.PM2_LOG_DIR || require('path').join(require('os').homedir(), '.pm2', 'logs'),
+      rate_limit: false,
       now_mtn: new Date().toLocaleString('en-US', { timeZone: 'America/Denver' }),
       now_utc: new Date().toISOString(),
     });
