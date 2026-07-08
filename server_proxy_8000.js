@@ -30,6 +30,44 @@ const is_test_ngrok = false;
 const ROUTES = require('./utilities/proxy/proxy_routes');
 let active_server = null;
 
+// Per-route host gating. Each proxy_routes entry is tagged host:'api' (usat-api) or host:'app'
+// (usat-app). A request on the wrong hostname 404s; localhost is always allowed (dev). Untagged
+// routes stay reachable on both hosts. Override the hostnames with API_HOST / APP_HOST in .env.
+const API_HOST = (process.env.API_HOST || 'usat-api.kidderwise.org').toLowerCase();
+const APP_HOST = (process.env.APP_HOST || 'usat-app.kidderwise.org').toLowerCase();
+// 404 responder — a styled HTML page for browsers (Accept: text/html), JSON for API clients.
+function not_found(req, res) {
+  res.status(404);
+  // req.path is stripped of the mount prefix inside app.use(prefix,…); originalUrl keeps the full path.
+  const shown = req.originalUrl || req.path;
+  if ((req.headers.accept || '').includes('text/html')) {
+    const p = String(shown).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+    return res.type('html').send(
+      '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+      + '<title>404 &mdash; not found</title><link rel="icon" type="image/svg+xml" href="/favicon.svg">'
+      + '<style>html,body{height:100%}body{margin:0;background:#0e1b3a;color:#fff;font:16px system-ui,\'Segoe UI\',Arial,sans-serif;display:grid;place-items:center;text-align:center}'
+      + '.hub{width:52px;height:52px;margin:0 auto 22px}h1{font-size:26px;font-weight:500;margin:0 0 10px}'
+      + 'p{color:#9fb0d0;margin:0 0 6px}.sub{color:#6f80a3;font-size:13px;margin-bottom:26px}'
+      + 'code{background:#1b2c4e;color:#cdd8ee;padding:2px 8px;border-radius:5px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}'
+      + 'a{display:inline-block;background:#e4002b;color:#fff;text-decoration:none;font-weight:500;padding:10px 22px;border-radius:8px}</style>'
+      + '<div><svg class="hub" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="#e4002b"/><circle cx="16" cy="16" r="5" fill="#fff"/><circle cx="7" cy="7" r="2.5" fill="#fff"/><circle cx="25" cy="7" r="2.5" fill="#fff"/><circle cx="7" cy="25" r="2.5" fill="#fff"/><circle cx="25" cy="25" r="2.5" fill="#fff"/></svg>'
+      + '<h1>404 &mdash; not found</h1><p><code>' + p + '</code> isn\'t here.</p>'
+      + '<p class="sub">The app lives at ' + APP_HOST + '.</p>'
+      + '<a href="https://' + APP_HOST + '/">Go to the app</a></div>'
+    );
+  }
+  return res.json({ ok: false, error: 'not found', path: shown });
+}
+
+function host_gate(which) {
+  const wanted = which === 'app' ? APP_HOST : API_HOST;
+  return function (req, res, next) {
+    const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0].toLowerCase();
+    if (host === wanted || host === 'localhost' || host === '127.0.0.1') return next();
+    return not_found(req, res);
+  };
+}
+
 const FAVICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#e4002b"/><circle cx="16" cy="16" r="5" fill="#fff"/><circle cx="7" cy="7" r="2.5" fill="#fff"/><circle cx="25" cy="7" r="2.5" fill="#fff"/><circle cx="7" cy="25" r="2.5" fill="#fff"/><circle cx="25" cy="25" r="2.5" fill="#fff"/></svg>';
 
 function create_app() {
@@ -109,7 +147,7 @@ function create_app() {
   // so they match first; '/' forwards everything else to usat_apps (:8022).
   for (const [prefix, cfg] of Object.entries(ROUTES)) {
     const target = typeof cfg === 'string' ? cfg : cfg.target;
-    app.use(prefix, createProxyMiddleware({
+    const mw = createProxyMiddleware({
       target, changeOrigin: true, ws: true, proxyTimeout: 30000, timeout: 30000,
       on: {
         proxyReq: (pr, req) => { console.log('[' + log_ts() + '] -> routed ' + prefix + '  ' + req.method + ' ' + req.url + '  to ' + target); },
@@ -120,10 +158,14 @@ function create_app() {
           res.end(JSON.stringify({ ok: false, error: 'backend unavailable', path: req.url }));
         },
       },
-    }));
+    });
+    // Gate each route to its tagged host (host:'api' | 'app'); untagged routes stay on both hosts.
+    const gate = cfg.host === 'app' ? host_gate('app') : (cfg.host === 'api' ? host_gate('api') : null);
+    if (gate) app.use(prefix, gate, mw);
+    else app.use(prefix, mw);
   }
 
-  app.use((req, res) => res.status(404).json({ ok: false, error: 'not found', path: req.path }));
+  app.use(not_found);
   return app;
 }
 

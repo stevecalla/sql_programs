@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import './styles.css';
 
-// Router base = the build's base path ('' at root, '/apps' behind the usat-app proxy).
+// Router base = the build's base path (defaults to '/'; pass --base at build time for a sub-path).
 const basename = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '') || '/';
 
 createRoot(document.getElementById('root')).render(

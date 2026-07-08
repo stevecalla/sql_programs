@@ -8,7 +8,8 @@
  *   - create_app() builds the Express app (cors, no-cache, JSON API, serves the built React SPA)
  *   - start_server() listens with NO host arg -> dual-stack '::' (IPv6 + IPv4), matching the others.
  *
- * The umbrella prefix (behind the :8000 proxy / Cloudflare) is '/apps'. Local login uses the existing
+ * Served at the root '/' of the app host (usat-app.kidderwise.org) behind the :8000 proxy / Cloudflare.
+ * The API host (usat-api) does NOT serve the app — the proxy host-gates '/'. Local login uses the existing
  * .env recovery accounts (USATAPPS_* or, as a fallback, REPORTING_*). Microsoft/Entra SSO is deferred
  * — see src/usat_apps/plans_and_notes/README_USAT_APPS.md.
  *
@@ -33,7 +34,7 @@ const store = require('./src/usat_apps/auth/auth_store');
 
 const DEFAULT_PORT = Number(process.env.USATAPPS_PORT) || Number(process.env.USAT_APPS_PORT) || 8022;
 const WEB_DIST = path.join(__dirname, 'src', 'usat_apps', 'web', 'dist');
-const PROD_URL = 'https://usat-app.kidderwise.org/apps/';
+const PROD_URL = 'https://usat-app.kidderwise.org/';
 
 // NGROK TUNNEL — optional public URL, same pattern as 8020/8021. Off by default (Cloudflare fronts the
 // app in prod). Enable with USATAPPS_NGROK=true and a valid NGROK_AUTHTOKEN in .env.

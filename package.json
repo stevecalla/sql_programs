@@ -178,7 +178,7 @@
     "usat_apps_web": "npm --prefix src/usat_apps/web run dev",
     "usat_apps_dev_all": "concurrently -k -n api,web -c blue,green \"npm run usat_apps_dev\" \"npm run usat_apps_web\"",
     "usat_apps_build": "npm --prefix src/usat_apps/web install && npm --prefix src/usat_apps/web run build",
-    "usat_apps_build_proxy": "npm --prefix src/usat_apps/web install && npm --prefix src/usat_apps/web run build -- --base=/apps/",
+    "usat_apps_build_proxy": "npm --prefix src/usat_apps/web install && npm --prefix src/usat_apps/web run build -- --base=/",
     "usat_apps_test": "node --test src/usat_apps/tests",
     "usat_apps_local_proxy": "npm run usat_apps_build && concurrently -k -n app,proxy -c blue,magenta \"npm run usat_apps_server\" \"npm run proxy_server\"",
     "usat_apps_deploy": "npm run usat_apps_build_proxy && (npm run restart_usat_apps || npm run pm2_start_usat_apps) && npm run pm2_reload_proxy && npx pm2 save",
