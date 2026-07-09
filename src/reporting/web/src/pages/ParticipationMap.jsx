@@ -1501,4 +1501,29 @@ export default function ParticipationMap() {
               </div>
             </div>
           ) : null}
-   
+        </div>
+      ) : null}
+
+      {showPins ? (
+        <p className="muted small" style={{ margin: '8px 2px 0' }}>
+          Pins: each dot is one event at its ZIP-code location. ZIPs with no mapped area (PO-box, campus, or
+          government ZIPs) fall back to the ZIP-prefix area centroid, so a few pins are approximate. Events
+          without a resolved U.S. location are excluded; {pinEvents.length.toLocaleString()} events are shown.
+        </p>
+      ) : null}
+
+      {tabsReady ? (
+        <ParticipationTabs
+          p={p} yb={yb} selYears={selYears} selMonths={selMonths} period={labelText(selYears, selMonths)} dark={dark}
+          stateSel={stateSel} setStateSel={setStateSel}
+          regionSel={regionSel} setRegionSel={setRegionSel}
+          uniqueData={uniqueData}
+        />
+      ) : <div className="muted small" style={{ padding: 16, marginTop: 16 }}>Loading tables…</div>}
+    </div>
+  );
+}
+
+function Kpi({ v, l, t }) {
+  return <div className="kpi" title={t || undefined} style={t ? { cursor: 'help' } : undefined}><div className="v">{v}</div><div className="l">{l}{t ? ' ⓘ' : ''}</div></div>;
+}
