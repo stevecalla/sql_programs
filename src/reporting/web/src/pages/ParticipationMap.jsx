@@ -1128,7 +1128,7 @@ export default function ParticipationMap() {
 
       <div className="toolbar" style={{ gap: 6, flexWrap: 'wrap', rowGap: 6 }}>
         <label title={metricDesc(metrics[metricIdx] && metrics[metricIdx].label)}>Metric&nbsp;
-          <select value={metricIdx} disabled={showRegions} title={showRegions ? 'Not used on the Regions reference map' : undefined} style={{ maxWidth: 220 }} onChange={(e) => { setMetricIdx(Number(e.target.value)); trackFilter('participation-maps', 'map', 'metric'); }}>
+          <select value={metricIdx} style={{ maxWidth: 220 }} onChange={(e) => { setMetricIdx(Number(e.target.value)); if (showFlows || showRegions) { setShowFlows(false); setShowRegions(false); setFillMode('choro'); }  /* metric doesn't apply to Flows/Regions -> jump to Heatmap so the change is visible (Pins/YoY keep the metric) */ trackFilter('participation-maps', 'map', 'metric'); }}>
             {METRIC_GROUPS.map((g) => {
               const opts = g.idxs.filter((i) => metrics[i]);
               if (!opts.length) return null;
