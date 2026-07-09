@@ -15,5 +15,19 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Plotly (~4 MB) is inherently large; splitting the heavy vendors into their own chunks lets the browser
+    // cache them independently (they change far less often than app code) and download them in parallel,
+    // instead of one 5 MB blob. Raise the warn limit so the (expected) big Plotly chunk isn't flagged.
+    chunkSizeWarningLimit: 4500,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('plotly')) return 'plotly';
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react';
+          return 'vendor';
+        },
+      },
+    },
   },
 });
