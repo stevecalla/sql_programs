@@ -267,11 +267,16 @@ export function computeYoY(p, fromYear, toYear, selMonths, metricIdx, mode, uniq
 }
 
 // Sum the home->event flow rows (odByYM) across slices -> { flows:[home,event,n], inb, outb }.
-export function aggregateFlows(keys, odByYM) {
+// imFilter (optional): 'im' keeps only IRONMAN-destination flows, 'nonim' only non-IRONMAN; anything else
+// (undefined/'all') keeps everything. The IRONMAN flag is the 4th tuple element (r[3] = 1) added by the flows
+// ETL; if the loaded data predates that column, r[3] is undefined so 'im' yields nothing and 'nonim' yields all.
+export function aggregateFlows(keys, odByYM, imFilter) {
   const agg = {}, inb = {}, outb = {};
+  const wantIM = imFilter === 'im', wantNon = imFilter === 'nonim';
   keys.forEach((k) => {
     const rows = odByYM[k]; if (!rows) return;
     rows.forEach((r) => {
+      if (wantIM || wantNon) { const im = r[3] === 1 || r[3] === true; if (wantIM && !im) return; if (wantNon && im) return; }
       const kk = r[0] + '|' + r[1];
       agg[kk] = (agg[kk] || 0) + r[2];
       outb[r[0]] = (outb[r[0]] || 0) + r[2];
@@ -280,6 +285,14 @@ export function aggregateFlows(keys, odByYM) {
   });
   const flows = Object.keys(agg).map((k) => { const pr = k.split('|'); return [pr[0], pr[1], agg[k]]; });
   return { flows, inb, outb };
+}
+
+// Does the loaded flows data carry the per-flow IRONMAN flag (4th tuple element)? Drives whether the
+// IM/non-IM travel toggle is usable or shows a "needs data refresh" hint until the flows ETL is reloaded.
+export function flowsHaveIM(odByYM) {
+  if (!odByYM) return false;
+  for (const k in odByYM) { const rows = odByYM[k]; if (rows && rows.length) return rows[0].length > 3; }
+  return false;
 }
 
 // In-state (home) participations per state across slices (raw index 14). Used for matrix diagonals.

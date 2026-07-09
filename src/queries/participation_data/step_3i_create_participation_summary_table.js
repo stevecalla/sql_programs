@@ -96,11 +96,13 @@ async function create_participation_flows_table(flows_table, base_table) {
         CREATE TABLE ${flows_table} AS
         SELECT t.start_date_year_races, t.start_date_month_races,
                t.member_state_code_addresses AS home_state, t.state_code_events AS event_state,
+               (t.is_ironman = 1) AS is_ironman,
                COUNT(t.id_rr) AS participations,
                MAX(t.created_at_mtn) AS created_at_mtn,
                MAX(t.created_at_utc) AS created_at_utc
         FROM ${base_table} t ${W}
-        GROUP BY t.start_date_year_races, t.member_state_code_addresses, t.state_code_events, t.start_date_month_races WITH ROLLUP
+        GROUP BY t.start_date_year_races, t.member_state_code_addresses, t.state_code_events,
+                 (t.is_ironman = 1), t.start_date_month_races WITH ROLLUP
         HAVING t.state_code_events IS NOT NULL
         ;
     `;
