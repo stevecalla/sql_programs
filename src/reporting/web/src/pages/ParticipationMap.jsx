@@ -192,6 +192,7 @@ function loadDeck() {
 }
 const FLOW_VIEW0 = { longitude: -96, latitude: 38.5, zoom: 3.4, pitch: 38, bearing: 0 };
 const FLOW_VIEW_FLAT = { longitude: -96, latitude: 38.5, zoom: 3.5, pitch: 0, bearing: 0 };  // Net view: top-down so nothing is clipped
+const REGION_PALETTE = ['#4C78A8', '#F58518', '#54A24B', '#B279A2', '#E45756', '#72B7B2', '#EECA3B', '#9D755D'];  // categorical region colors (Regions reference map)
 const FLOW_GEO_URL = 'https://cdn.jsdelivr.net/gh/PublicaMundi/MappingAPI@master/data/geojson/us-states.json';
 
 export default function ParticipationMap() {
@@ -227,6 +228,7 @@ export default function ParticipationMap() {
   const [flowDir, setFlowDir] = useState('both');    // both | in | out
   const [flowTop, setFlowTop] = useState(5);         // top-N routes per direction
   const [flowLayer, setFlowLayer] = useState('arcs'); // (b) arcs (routes) | net (choropleth shading only)
+  const [showRegions, setShowRegions] = useState(false);  // Regions reference map (states shaded by their region)
   const [flowIM, setFlowIM] = useState('all');       // (c) all | im | nonim — IRONMAN-destination filter
   const [flowSpin, setFlowSpin] = useState(false);   // auto-rotate (bearing animation)
   const [flowStat, setFlowStat] = useState('');      // footer stat line
@@ -417,7 +419,7 @@ export default function ParticipationMap() {
 
   // Focus state's top routes (readable list under the map — arcs are hard to hover). Honors direction.
   const flowRoutes = useMemo(() => {
-    if (!st.p || !showFlows || !flowFocus || flowLayer !== 'arcs') return null;
+    if (!st.p || !showFlows || !flowFocus) return null;
     const keys = resolveSlices(selYears, selMonths, st.p.monthsByYear);
     const A = aggregateFlows(keys, st.p.odByYM, flowIM);
     const nm = (ab) => st.p.names[st.p.abbr.indexOf(ab)] || ab;
@@ -504,6 +506,43 @@ export default function ParticipationMap() {
     // Tiled basemap mode for the Pins map: event pins over a carto basemap (real geographic detail, free/no token).
     const wantMapbox = basemap && showPins && pinEvents.length > 0;
     if (mapModeRef.current !== (wantMapbox ? 'mapbox' : 'geo')) { try { Plotly.purge(mapRef.current); } catch (e) { /* switch subplot type cleanly */ } mapModeRef.current = wantMapbox ? 'mapbox' : 'geo'; }
+    // Regions reference map: states tinted by their region (categorical), region borders + both labels on.
+    // Time-invariant (region membership never changes), so it ignores the metric / year / month selectors.
+    if (showRegions) {
+      const { abbr, names, regs, regOrder, centroid } = p;
+      const nR = regOrder.length || 1;
+      const cs = []; regOrder.forEach((rg, i) => { const c = REGION_PALETTE[i % REGION_PALETTE.length]; cs.push([i / nR, c]); cs.push([(i + 1) / nR, c]); });
+      const rgi = (rg) => { const i = regOrder.indexOf(rg); return i < 0 ? 0 : i; };
+      const z = abbr.map((ab, k) => (rgi(regs[k]) + 0.5) / nR);
+      const cd = abbr.map((ab, k) => '<b>' + names[k] + '</b><br>' + regs[k] + ' region');
+      const traces = [{
+        type: 'choropleth', locationmode: 'USA-states', locations: abbr, z, zmin: 0, zmax: 1,
+        customdata: cd, hovertemplate: '%{customdata}<extra></extra>',
+        colorscale: cs, showscale: false, opacity: 0.5,
+        marker: { line: { color: dark ? '#334155' : '#cbd5e1', width: 0.5 } },
+      }];
+      if (regionMesh) traces.push({ type: 'scattergeo', mode: 'lines', lon: regionMesh.lon, lat: regionMesh.lat, line: { width: 2.4, color: dark ? '#e2e8f0' : '#0f172a' }, hoverinfo: 'skip', showlegend: false });
+      traces.push({ type: 'scattergeo', locationmode: 'USA-states', mode: 'text',
+        lon: abbr.map((ab) => (centroid[ab] ? centroid[ab][0] : null)), lat: abbr.map((ab) => (centroid[ab] ? centroid[ab][1] : null)),
+        text: abbr, textfont: { size: 11, color: dark ? '#e2e8f0' : '#334155' }, hoverinfo: 'skip', showlegend: false });
+      const rlon = regOrder.map((rg) => (regionCentroids[rg] ? regionCentroids[rg][0] : null));
+      const rlat = regOrder.map((rg) => (regionCentroids[rg] ? regionCentroids[rg][1] : null));
+      const halo = dark ? '#0b1220' : '#ffffff';
+      const rlabels = regOrder.map((rg) => rg.toUpperCase());
+      const D = 0.18;  // tight outline offsets (a crisp halo, not spread-out duplicate copies)
+      [[D, 0], [-D, 0], [0, D], [0, -D], [D, D], [D, -D], [-D, D], [-D, -D]].forEach(([dx, dy]) => {
+        traces.push({ type: 'scattergeo', mode: 'text', lon: rlon.map((v) => (v == null ? null : v + dx)), lat: rlat.map((v) => (v == null ? null : v + dy)), text: rlabels, textfont: { size: 17, color: halo, family: 'Arial Black, Arial, sans-serif' }, hoverinfo: 'skip', showlegend: false });
+      });
+      traces.push({ type: 'scattergeo', mode: 'text', lon: rlon, lat: rlat, text: rlabels, textfont: { size: 17, color: dark ? '#f1f5f9' : '#0f172a', family: 'Arial Black, Arial, sans-serif' }, hoverinfo: 'skip', showlegend: false });
+      Plotly.react(mapRef.current, traces, {
+        geo: { scope: 'usa', bgcolor: 'rgba(0,0,0,0)', lakecolor: 'rgba(0,0,0,0)', projection: { scale: zoom } },
+        margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: 'rgba(0,0,0,0)', height: 560,
+      }, { displayModeBar: false, responsive: true }).then((gd) => {
+        if (!gd || !gd.on) return; gd.removeAllListeners && gd.removeAllListeners('plotly_click');
+        gd.on('plotly_click', (ev) => { const pt = ev.points && ev.points[0]; if (pt && pt.location) { setStateSel((c) => (c === pt.location ? null : pt.location)); setRegionSel(''); } });
+      });
+      return;
+    }
     if (wantMapbox) {
       const sr = (2 * (p.maxParts || 1)) / (40 * 40);
       const bmt = [];
@@ -795,7 +834,7 @@ export default function ParticipationMap() {
         if (Array.isArray(pt.customdata)) { setStateSel((c) => (c === pt.customdata[1] ? null : pt.customdata[1])); setRegionSel(''); }
       });
     });
-  }, [st, yb, metricIdx, view, showLabels, showOutlines, spotN, colorIdx, colorMode, logMode, clipMax, reverse, zoom, dark, regionMesh, regionCentroids, fillMode, showPins, pinEvents, yoyData, yoyTop, yoyFrom, yoyTo, yoyColorIdx, showFlows, uniqueData, basemap]);
+  }, [st, yb, metricIdx, view, showLabels, showOutlines, spotN, colorIdx, colorMode, logMode, clipMax, reverse, zoom, dark, regionMesh, regionCentroids, fillMode, showPins, pinEvents, yoyData, yoyTop, yoyFrom, yoyTo, yoyColorIdx, showFlows, showRegions, uniqueData, basemap]);
 
   // FLOWS map (deck.gl 3D arcs). Base states shade by net flow (red = net destination, blue = net feeder);
   // picking a focus state traces its top inbound (red) + outbound (blue) routes as arcs. Ported from the POC.
@@ -900,7 +939,7 @@ export default function ParticipationMap() {
       // Click a state on the flow map to make it the focus (arcs recenter on it).
       const onClick = (info) => {
         const ob = info && info.object;
-        if (ob && ob.properties) { const ab = name2ab[ob.properties.name]; if (ab) setFlowFocus(ab); }
+        if (ob && ob.properties) { const ab = name2ab[ob.properties.name]; if (ab) setFlowFocus((c) => (c === ab ? '' : ab)); }
       };
       if (!deckInst.current) {
         deckInst.current = new deck.DeckGL({
@@ -912,9 +951,9 @@ export default function ParticipationMap() {
         deckInst.current.setProps({ layers, viewState: flowViewRef.current, getTooltip: tooltip, onClick });
       }
       const imTag = flowIM === 'im' ? ' · IRONMAN destinations only' : (flowIM === 'nonim' ? ' · non-IRONMAN destinations only' : '');
-      setFlowStat((flowFocus && arcsOn)
-        ? (p.names[p.abbr.indexOf(flowFocus)] || flowFocus) + ': ' + (A.inb[flowFocus] || 0).toLocaleString() + ' travel in, ' + (A.outb[flowFocus] || 0).toLocaleString() + ' race elsewhere' + imTag + '. Drag to tilt, scroll to zoom.'
-        : 'States shaded by net flow (red = destination, blue = feeder)' + imTag + '. ' + (arcsOn ? 'Pick a focus state to trace routes. ' : 'Net view — route arcs hidden. ') + 'Drag to tilt, scroll to zoom.');
+      setFlowStat(flowFocus
+        ? (p.names[p.abbr.indexOf(flowFocus)] || flowFocus) + ': ' + (A.inb[flowFocus] || 0).toLocaleString() + ' travel in, ' + (A.outb[flowFocus] || 0).toLocaleString() + ' race elsewhere · net ' + ((net[flowFocus] || 0) >= 0 ? '+' : '') + (net[flowFocus] || 0).toLocaleString() + imTag + '.'
+        : 'States shaded by net flow (red = destination, blue = feeder)' + imTag + '. ' + (arcsOn ? 'Pick a focus state to trace routes. ' : 'Click a state to see its top routes. ') + 'Drag to tilt, scroll to zoom.');
     };
 
     loadDeck().then((deck) => {
@@ -1087,9 +1126,9 @@ export default function ParticipationMap() {
         </div>
       ) : null}
 
-      <div className="toolbar" style={{ gap: 6 }}>
+      <div className="toolbar" style={{ gap: 6, flexWrap: 'wrap', rowGap: 6 }}>
         <label title={metricDesc(metrics[metricIdx] && metrics[metricIdx].label)}>Metric&nbsp;
-          <select value={metricIdx} onChange={(e) => { setMetricIdx(Number(e.target.value)); trackFilter('participation-maps', 'map', 'metric'); }}>
+          <select value={metricIdx} disabled={showRegions} title={showRegions ? 'Not used on the Regions reference map' : undefined} style={{ maxWidth: 220 }} onChange={(e) => { setMetricIdx(Number(e.target.value)); trackFilter('participation-maps', 'map', 'metric'); }}>
             {METRIC_GROUPS.map((g) => {
               const opts = g.idxs.filter((i) => metrics[i]);
               if (!opts.length) return null;
@@ -1136,18 +1175,20 @@ export default function ParticipationMap() {
           ) : null}
         </span>
         <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
-        <button style={seg(fillMode === 'choro' && !showFlows)} title="Metric choropleth fill (on/off)"
-          onClick={() => { track('map_style', { panel: 'participation-maps', view: 'choropleth' }); if (showFlows) { setShowFlows(false); setFillMode('choro'); } else setFillMode((f) => (f === 'choro' ? 'none' : 'choro')); }}>Choropleth</button>
-        <button style={seg(showPins && !showFlows)} title="Event pins map (turns the choropleth fill off; re-select Choropleth to bring it back)"
-          onClick={() => { if (showFlows) { setShowFlows(false); setShowPins(true); setFillMode('none'); } else { const on = !showPins; setShowPins(on); if (on) setFillMode('none'); } }}>Pins</button>
-        <button style={seg(fillMode === 'yoy' && !showFlows)} title="Year-over-year change fill (on/off)"
-          onClick={() => { track('map_style', { panel: 'participation-maps', view: 'yoy' }); if (showFlows) { setShowFlows(false); setFillMode('yoy'); } else setFillMode((f) => (f === 'yoy' ? 'none' : 'yoy')); }}>YoY</button>
+        <button style={seg(fillMode === 'choro' && !showFlows && !showRegions)} title="Metric heatmap fill (on/off)"
+          onClick={() => { setShowRegions(false); track('map_style', { panel: 'participation-maps', view: 'choropleth' }); if (showFlows) { setShowFlows(false); setFillMode('choro'); } else setFillMode((f) => (f === 'choro' ? 'none' : 'choro')); }}>Heatmap</button>
+        <button style={seg(showPins && !showFlows && !showRegions)} title="Event pins map (turns the fill off; re-select Heatmap to bring it back)"
+          onClick={() => { setShowRegions(false); if (showFlows) { setShowFlows(false); setShowPins(true); setFillMode('none'); } else { const on = !showPins; setShowPins(on); if (on) setFillMode('none'); } }}>Pins</button>
+        <button style={seg(fillMode === 'yoy' && !showFlows && !showRegions)} title="Year-over-year change fill (on/off)"
+          onClick={() => { setShowRegions(false); track('map_style', { panel: 'participation-maps', view: 'yoy' }); if (showFlows) { setShowFlows(false); setFillMode('yoy'); } else setFillMode((f) => (f === 'yoy' ? 'none' : 'yoy')); }}>YoY</button>
         <button style={seg(showFlows)} title="Athlete travel arcs (3D) — replaces the map"
-          onClick={() => { track('map_style', { panel: 'participation-maps', view: 'flows' }); setShowFlows((s) => !s); }}>Flows</button>
+          onClick={() => { track('map_style', { panel: 'participation-maps', view: 'flows' }); setShowRegions(false); setShowFlows((s) => !s); }}>Flows</button>
+        <button style={seg(showRegions)} title="Reference map: states shaded by their region"
+          onClick={() => { track('map_style', { panel: 'participation-maps', view: 'regions' }); setShowRegions((s) => { const on = !s; if (on) { setShowFlows(false); setShowPins(false); } return on; }); }}>Regions</button>
         <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
         <span style={{ display: 'inline-flex', gap: 4 }}>
           {['state', 'region', 'both'].map((v) => (
-            <button key={v} style={{ ...seg(view === v && !showFlows), ...(showFlows ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={showFlows} onClick={() => pickView(v)}>
+            <button key={v} style={{ ...seg(view === v && !showFlows && !showRegions), ...((showFlows || showRegions) ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={showFlows || showRegions} onClick={() => pickView(v)}>
               {v === 'state' ? 'State' : v === 'region' ? 'Region' : 'Both'}
             </button>
           ))}
@@ -1182,7 +1223,7 @@ export default function ParticipationMap() {
         </div>
       ) : null}
 
-      {fillMode === 'yoy' && !showFlows ? (
+      {fillMode === 'yoy' && !showFlows && !showRegions ? (
         <div className="toolbar" style={{ alignItems: 'center' }}>
           <span className="small muted">Compare</span>
           <select value={yoyFrom} onChange={(e) => setYoyFrom(e.target.value)} title="Baseline year">
@@ -1212,7 +1253,7 @@ export default function ParticipationMap() {
         </div>
       ) : null}
 
-      {fillMode === 'yoy' && !showFlows && yoyData && yoyData.mos && yoyData.mos.length ? (
+      {fillMode === 'yoy' && !showFlows && !showRegions && yoyData && yoyData.mos && yoyData.mos.length ? (
         <div className="small muted" style={{ margin: '-4px 0 8px', paddingLeft: 2 }}>
           Year-over-year compares the <b>same period in both years</b> — {(() => { const ms = yoyData.mos.slice().sort((a, b) => a - b); return ms.length >= 12 ? 'full year (Jan–Dec)' : (MON3[ms[0]] + (ms.length > 1 ? '–' + MON3[ms[ms.length - 1]] : '')); })()} of {yoyFrom} vs {yoyTo}. Months present in only one year are excluded, so a partial year (e.g. the current one) is a like-for-like year-to-date comparison.
         </div>
@@ -1289,7 +1330,7 @@ export default function ParticipationMap() {
       ) : null}
 
       <div className="toolbar">
-        <button style={seg(advOpen)} onClick={() => setAdvOpen((o) => !o)}>⚙ Display options {advOpen ? '▾' : '▸'}</button>
+        {!showRegions ? <button style={seg(advOpen)} onClick={() => setAdvOpen((o) => !o)}>⚙ Display options {advOpen ? '▾' : '▸'}</button> : null}
         {refreshNote ? <span className="small" style={{ alignSelf: 'center', marginLeft: 'auto', marginRight: 6, opacity: 0.9 }}>{refreshNote}</span> : null}
         <span style={{ display: 'inline-flex', gap: 4, marginLeft: refreshNote ? 0 : 'auto' }}>
           <button style={mini(false)} title="Pull the latest data live from the database now (bypasses the hourly cache)" disabled={refreshing} onClick={doRefresh}>{refreshing ? '⟳ …' : '⟳ Refresh data'}</button>
@@ -1302,7 +1343,7 @@ export default function ParticipationMap() {
         </span>
       </div>
 
-      {advOpen ? (
+      {advOpen && !showRegions ? (
         <div className="toolbar">
           {(() => { const dz = fillMode !== 'choro' || showFlows; const dst = dz ? { opacity: 0.4, cursor: 'not-allowed' } : {}; const dt = showFlows ? 'Not used on the Flows map' : (fillMode === 'yoy' ? 'Not used on the YoY map (fixed diverging scale)' : (fillMode === 'none' ? 'Not used without a choropleth fill (colors shade the metric)' : '')); return (
           <>
@@ -1394,8 +1435,20 @@ export default function ParticipationMap() {
           </div>
         ) : null}
       </div>
+      {showRegions ? (
+        <div className="toolbar" style={{ gap: 12, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
+          <span className="small muted" style={{ fontWeight: 700 }}>Regions:</span>
+          {(st.p ? st.p.regOrder : []).map((rg, i) => (
+            <span key={rg} className="small" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: REGION_PALETTE[i % REGION_PALETTE.length], opacity: 0.75, display: 'inline-block', border: '1px solid var(--line)' }} />
+              {rg}
+            </span>
+          ))}
+          <span className="small muted" style={{ marginLeft: 6 }}>Reference map — regions by state (not affected by year / month).</span>
+        </div>
+      ) : null}
       {showFlows ? <p className="muted small" style={{ margin: '8px 2px 0' }}>{flowStat}</p> : null}
-      {showFlows && flowNetStats ? (
+      {showFlows && flowNetStats && !flowFocus ? (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8 }}>
           {[['dest', '#C20E2F', 'Top net destinations — draw racers in', '+'],
             ['feed', '#185FA5', 'Top net feeders — send racers out', '']].map(([key, color, title]) => (
