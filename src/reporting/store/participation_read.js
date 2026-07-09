@@ -127,9 +127,23 @@ async function build_from_mysql() {
   }
   Object.keys(monthsByYear).forEach((y) => { monthsByYear[y] = Array.from(monthsByYear[y]).sort((a, b) => a - b); });
 
+  // Build the geography maps from region_data (single source of truth with step_3i). mapmeta.json now only
+  // supplies the static geometry region_data lacks: centroids (+ colors/evcols/fips2region). A geo with no
+  // centroid is table-only (DC still fills via Plotly's built-in state geometry; PR/GU/VI are table/total
+  // only). Falls back to the static mapmeta lists if region_data is somehow unavailable.
+  const useReg = Array.isArray(regionRows) && regionRows.length >= 40;
+  const gAbbr = [], gNames = [], gAb2region = {}, gName2ab = {}, gRegs = [], gCentroid = {};
+  if (useReg) for (const r of regionRows) {
+    gAbbr.push(r.state_code); gNames.push(r.state_name);
+    gAb2region[r.state_code] = r.region_name; gName2ab[r.state_name] = r.state_code; gRegs.push(r.region_name);
+    if (r.lat != null && r.lng != null) gCentroid[r.state_code] = [Number(r.lng), Number(r.lat)];  // [lng,lat]
+  }
+  const gRegOrder = (META.regOrder || []).slice();
+  if (useReg) for (const rg of gRegs) if (gRegOrder.indexOf(rg) < 0) gRegOrder.push(rg);
+
   const byYear = {}, annualUnique = {};
   const compute = await getCompute();
-  const P = { meta: META.meta, abbr: META.abbr, ab2region: META.ab2region, regOrder: META.regOrder, names: META.names, rawByYM: {} };
+  const P = { meta: META.meta, abbr: useReg ? gAbbr : META.abbr, ab2region: useReg ? gAb2region : META.ab2region, regOrder: useReg ? gRegOrder : META.regOrder, names: useReg ? gNames : META.names, rawByYM: {} };
   for (const yr of Object.keys(nationalAnnual)) {
     const nat = { uniq: Number(nationalAnnual[yr].unique_athletes), part: Number(nationalAnnual[yr].turnout) };
     const s = {}; (stateAnnual[yr] || []).forEach((row) => { s[row[0]] = row[19]; });
@@ -176,19 +190,6 @@ async function build_from_mysql() {
   const lastUpdated = fmtTs(src0.created_at_mtn);
   const lastUpdatedUtc = fmtTs(src0.created_at_utc);
 
-  // Build the geography maps from region_data (single source of truth with step_3i). mapmeta.json now only
-  // supplies the static geometry region_data lacks: centroids (+ colors/evcols/fips2region). A geo with no
-  // centroid is table-only (DC still fills via Plotly's built-in state geometry; PR/GU/VI are table/total
-  // only). Falls back to the static mapmeta lists if region_data is somehow unavailable.
-  const useReg = Array.isArray(regionRows) && regionRows.length >= 40;
-  const gAbbr = [], gNames = [], gAb2region = {}, gName2ab = {}, gRegs = [], gCentroid = {};
-  if (useReg) for (const r of regionRows) {
-    gAbbr.push(r.state_code); gNames.push(r.state_name);
-    gAb2region[r.state_code] = r.region_name; gName2ab[r.state_name] = r.state_code; gRegs.push(r.region_name);
-    if (r.lat != null && r.lng != null) gCentroid[r.state_code] = [Number(r.lng), Number(r.lat)];  // [lng,lat]
-  }
-  const gRegOrder = (META.regOrder || []).slice();
-  if (useReg) for (const rg of gRegs) if (gRegOrder.indexOf(rg) < 0) gRegOrder.push(rg);
 
   return Object.assign({}, {
     colors: META.colors, evcols: META.evcols, fips2region: META.fips2region, ab2region: useReg ? gAb2region : META.ab2region,
