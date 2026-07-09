@@ -18,7 +18,7 @@ export default defineConfig({
     // Plotly (~4 MB) is inherently large; splitting the heavy vendors into their own chunks lets the browser
     // cache them independently (they change far less often than app code) and download them in parallel,
     // instead of one 5 MB blob. Raise the warn limit so the (expected) big Plotly chunk isn't flagged.
-    chunkSizeWarningLimit: 4500,
+    chunkSizeWarningLimit: 5000,
     rollupOptions: {
       output: {
         manualChunks(id) {
