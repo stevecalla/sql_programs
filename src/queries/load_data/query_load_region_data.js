@@ -5,7 +5,9 @@
       state_code,	
       region_name,
       region_abbr,
-      @created_at
+      @created_at,
+      lat,
+      lng
   `;
 
   const transform_fields = `

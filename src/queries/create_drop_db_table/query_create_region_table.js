@@ -5,7 +5,9 @@ const region_fields = `
   state_code VARCHAR(10),	
   region_name VARCHAR(100),
   region_abbr VARCHAR(10),
-  created_at DATE
+  created_at DATE,
+  lat DECIMAL(9,4),
+  lng DECIMAL(9,4)
 `;
 
 async function query_create_region_table(table_name) {

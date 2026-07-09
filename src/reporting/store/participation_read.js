@@ -96,10 +96,13 @@ function evToRow(r) {
 }
 
 async function build_from_mysql() {
-  const [sumRows, flowRows, evRows] = await Promise.all([
+  const [sumRows, flowRows, evRows, regionRows] = await Promise.all([
     db.query('SELECT * FROM ' + SUMMARY_TABLE),
     db.query('SELECT * FROM ' + FLOWS_TABLE),
     db.query('SELECT * FROM ' + EVENTS_TABLE),
+    // Geography (state list + region membership) from the SAME region_data table step_3i uses, so the app
+    // can't drift from the ETL scope. Blank-region codes (military/foreign) are excluded, matching summary.
+    db.query("SELECT state_code, state_name, region_name, region_abbr, lat, lng FROM region_data WHERE state_code IS NOT NULL AND region_name IS NOT NULL AND region_name <> '' ORDER BY state_name"),
   ]);
 
   const stateAnnual = {}, regionAnnual = {}, nationalAnnual = {};
@@ -173,10 +176,24 @@ async function build_from_mysql() {
   const lastUpdated = fmtTs(src0.created_at_mtn);
   const lastUpdatedUtc = fmtTs(src0.created_at_utc);
 
+  // Build the geography maps from region_data (single source of truth with step_3i). mapmeta.json now only
+  // supplies the static geometry region_data lacks: centroids (+ colors/evcols/fips2region). A geo with no
+  // centroid is table-only (DC still fills via Plotly's built-in state geometry; PR/GU/VI are table/total
+  // only). Falls back to the static mapmeta lists if region_data is somehow unavailable.
+  const useReg = Array.isArray(regionRows) && regionRows.length >= 40;
+  const gAbbr = [], gNames = [], gAb2region = {}, gName2ab = {}, gRegs = [], gCentroid = {};
+  if (useReg) for (const r of regionRows) {
+    gAbbr.push(r.state_code); gNames.push(r.state_name);
+    gAb2region[r.state_code] = r.region_name; gName2ab[r.state_name] = r.state_code; gRegs.push(r.region_name);
+    if (r.lat != null && r.lng != null) gCentroid[r.state_code] = [Number(r.lng), Number(r.lat)];  // [lng,lat]
+  }
+  const gRegOrder = (META.regOrder || []).slice();
+  if (useReg) for (const rg of gRegs) if (gRegOrder.indexOf(rg) < 0) gRegOrder.push(rg);
+
   return Object.assign({}, {
-    colors: META.colors, evcols: META.evcols, fips2region: META.fips2region, ab2region: META.ab2region,
-    rshead: META.rshead, names: META.names, abbr: META.abbr, regs: META.regs, regOrder: META.regOrder,
-    centroid: META.centroid, name2ab: META.name2ab, meta: META.meta,
+    colors: META.colors, evcols: META.evcols, fips2region: META.fips2region, ab2region: useReg ? gAb2region : META.ab2region,
+    rshead: META.rshead, names: useReg ? gNames : META.names, abbr: useReg ? gAbbr : META.abbr, regs: useReg ? gRegs : META.regs, regOrder: useReg ? gRegOrder : META.regOrder,
+    centroid: useReg ? Object.assign({}, META.centroid, gCentroid) : META.centroid, name2ab: useReg ? gName2ab : META.name2ab, meta: META.meta,
   }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear, lastUpdated, lastUpdatedUtc, maxParts });
 }
 
