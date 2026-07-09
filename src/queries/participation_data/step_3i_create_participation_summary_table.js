@@ -10,14 +10,15 @@
 //   gender = gender_code ('F'/'M')          IRONMAN = is_ironman = 1
 //   age bands = age_as_race_results_bin     new = member_created_at_category_starts_mp = 'created_year'
 //   unique = id_profiles
-// Scope: the 50 US states (excludes the 'NA' / territory rows), matching the dashboard's US total.
+// Scope: driven by region_data (rows with a non-blank region_name) — the 50 states + DC + territories
+// (GU/PR/VI); excludes blank-region codes (military APO/FPO, Canadian provinces, foreign).
 
-const STATES = [
-    'AK','AL','AR','AZ','CA','CO','CT','DE','FL','GA','HI','IA','ID','IL','IN','KS','KY','LA','MA','MD',
-    'ME','MI','MN','MO','MS','MT','NC','ND','NE','NH','NJ','NM','NV','NY','OH','OK','OR','PA','RI','SC',
-    'SD','TN','TX','UT','VA','VT','WA','WI','WV','WY',
-];
-const STATE_LIST = STATES.map((s) => `'${s}'`).join(',');
+// State scope is driven by the region_data reference table (single source of truth), so it stays consistent
+// with the region definitions and can't drift from a hand-maintained array. Includes every jurisdiction
+// region_data assigns a region to — the 50 states + DC + territories (GU, PR, VI) — and excludes the
+// blank-region codes (military APO/FPO, Canadian provinces, foreign). Used inline as `... IN (${STATE_LIST})`.
+const STATE_LIST = 'SELECT DISTINCT state_code FROM region_data '
+    + "WHERE state_code IS NOT NULL AND region_name IS NOT NULL AND region_name <> ''";
 const ADULT_BINS = "('20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99')";
 
 // Rolling last five calendar years (current year + 4 prior) — keeps the summary small + fast and
