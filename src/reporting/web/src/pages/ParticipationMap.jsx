@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
-import { getYearBlock, kpisFromYB, computeYoY, resolveSlices, aggregateFlows } from '../lib/compute.js';
+import { getYearBlock, kpisFromYB, computeYoY, resolveSlices, aggregateFlows, flowsHaveIM } from '../lib/compute.js';
 import { trackFilter, trackExport, track } from '../lib/track.js';
 import ParticipationTabs from './ParticipationTabs.jsx';
 
@@ -50,6 +50,7 @@ const METRIC_GROUPS = [
   { label: 'IRONMAN', idxs: [27, 28] },
   { label: 'New vs Repeat', idxs: [29, 30, 31, 32] },
   { label: 'Unique athletes', idxs: [33, 34, 35] },
+  { label: 'Travel flow (state ↔ state)', idxs: [42, 43, 44] },
 ];
 
 function metricDesc(label) {
@@ -190,6 +191,7 @@ function loadDeck() {
   });
 }
 const FLOW_VIEW0 = { longitude: -96, latitude: 38.5, zoom: 3.4, pitch: 38, bearing: 0 };
+const FLOW_VIEW_FLAT = { longitude: -96, latitude: 38.5, zoom: 3.5, pitch: 0, bearing: 0 };  // Net view: top-down so nothing is clipped
 const FLOW_GEO_URL = 'https://cdn.jsdelivr.net/gh/PublicaMundi/MappingAPI@master/data/geojson/us-states.json';
 
 export default function ParticipationMap() {
@@ -224,6 +226,8 @@ export default function ParticipationMap() {
   const [flowFocus, setFlowFocus] = useState('');    // focus state abbr ('' = net-flow shading only)
   const [flowDir, setFlowDir] = useState('both');    // both | in | out
   const [flowTop, setFlowTop] = useState(5);         // top-N routes per direction
+  const [flowLayer, setFlowLayer] = useState('arcs'); // (b) arcs (routes) | net (choropleth shading only)
+  const [flowIM, setFlowIM] = useState('all');       // (c) all | im | nonim — IRONMAN-destination filter
   const [flowSpin, setFlowSpin] = useState(false);   // auto-rotate (bearing animation)
   const [flowStat, setFlowStat] = useState('');      // footer stat line
   const [flowKeyOpen, setFlowKeyOpen] = useState(true); // Flow-map legend collapsed/expanded
@@ -359,7 +363,31 @@ export default function ParticipationMap() {
   }, [st.p]);
 
   // Aggregated year-block for the current selection (single full year is exact; else computeAgg).
-  const yb = useMemo(() => (st.p && selYears && selYears.length ? getYearBlock(st.p, selYears, selMonths) : null), [st.p, selYears, selMonths]);
+  // Then append three OD-derived "travel flow" metrics (idx 42/43/44) from the home->event matrix so the
+  // dropdown/choropleth/tables can shade & sort by Inbound / Outbound / Net without any server change.
+  const yb = useMemo(() => {
+    if (!(st.p && selYears && selYears.length)) return null;
+    const base = getYearBlock(st.p, selYears, selMonths);
+    if (!base || !st.p.odByYM) return base;
+    const p = st.p, { abbr, ab2region, regOrder } = p;
+    const A = aggregateFlows(resolveSlices(selYears, selMonths, p.monthsByYear), p.odByYM);
+    const rIn = {}, rOut = {};
+    abbr.forEach((ab) => { const rg = ab2region[ab]; rIn[rg] = (rIn[rg] || 0) + (A.inb[ab] || 0); rOut[rg] = (rOut[rg] || 0) + (A.outb[ab] || 0); });
+    const build = (label, stFn, rgFn) => {
+      const statez = abbr.map(stFn);
+      const regionz = abbr.map((ab) => rgFn(ab2region[ab]));
+      const vals = statez.filter((v) => v != null);
+      const mn = vals.length ? Math.min.apply(null, vals) : 0, mx = vals.length ? Math.max.apply(null, vals) : 0;
+      const labels = abbr.map((ab, i) => (statez[i] == null ? ab : ab + '<br>' + Number(statez[i]).toLocaleString()));
+      const regionlabels = regOrder.map((rg) => rg + '<br>' + Number(rgFn(rg) || 0).toLocaleString());
+      return { label, ispct: false, dec: false, statez, regionz, mn, mx, labels, regionlabels };
+    };
+    const metrics = base.metrics.slice();
+    metrics[42] = build('Inbound — races drawn in', (ab) => A.inb[ab] || 0, (rg) => rIn[rg] || 0);
+    metrics[43] = build('Outbound — residents racing away', (ab) => A.outb[ab] || 0, (rg) => rOut[rg] || 0);
+    metrics[44] = build('Net flow (in − out)', (ab) => (A.inb[ab] || 0) - (A.outb[ab] || 0), (rg) => (rIn[rg] || 0) - (rOut[rg] || 0));
+    return Object.assign({}, base, { metrics });
+  }, [st.p, selYears, selMonths]);
 
   // Exact unique athletes for the current period, counted live from the base table (non-additive metric).
   // Only the whole-map selection (years + months) drives this; cross-filters stay with pins/events.
@@ -389,14 +417,39 @@ export default function ParticipationMap() {
 
   // Focus state's top routes (readable list under the map — arcs are hard to hover). Honors direction.
   const flowRoutes = useMemo(() => {
-    if (!st.p || !showFlows || !flowFocus) return null;
+    if (!st.p || !showFlows || !flowFocus || flowLayer !== 'arcs') return null;
     const keys = resolveSlices(selYears, selMonths, st.p.monthsByYear);
-    const A = aggregateFlows(keys, st.p.odByYM);
+    const A = aggregateFlows(keys, st.p.odByYM, flowIM);
     const nm = (ab) => st.p.names[st.p.abbr.indexOf(ab)] || ab;
-    const inb = A.flows.filter((r) => r[1] === flowFocus).sort((a, b) => b[2] - a[2]).slice(0, flowTop).map((r) => [nm(r[0]), r[2]]);
-    const outb = A.flows.filter((r) => r[0] === flowFocus).sort((a, b) => b[2] - a[2]).slice(0, flowTop).map((r) => [nm(r[1]), r[2]]);
+    const inb = A.flows.filter((r) => r[1] === flowFocus).sort((a, b) => b[2] - a[2]).slice(0, flowTop).map((r) => [nm(r[0]), r[2], A.inb[r[0]] || 0, A.outb[r[0]] || 0]);
+    const outb = A.flows.filter((r) => r[0] === flowFocus).sort((a, b) => b[2] - a[2]).slice(0, flowTop).map((r) => [nm(r[1]), r[2], A.inb[r[1]] || 0, A.outb[r[1]] || 0]);
     return { inb, outb, focusName: nm(flowFocus) };
-  }, [st.p, showFlows, flowFocus, flowTop, selYears, selMonths]);
+  }, [st.p, showFlows, flowFocus, flowLayer, flowTop, flowIM, selYears, selMonths]);
+
+  // (c) IRONMAN vs non-IRONMAN cross-state travel totals for the current year/month selection — feeds the
+  // summary card above the flow map. Independent of focus/direction so the split reflects the whole slice.
+  const imAvailable = useMemo(() => (st.p ? flowsHaveIM(st.p.odByYM) : false), [st.p]);
+  const flowIMSummary = useMemo(() => {
+    if (!st.p || !showFlows || !imAvailable) return null;
+    const keys = resolveSlices(selYears, selMonths, st.p.monthsByYear);
+    const sum = (o) => Object.keys(o).reduce((a, k) => a + o[k], 0);
+    const total = sum(aggregateFlows(keys, st.p.odByYM, 'all').outb);
+    const im = sum(aggregateFlows(keys, st.p.odByYM, 'im').outb);
+    return { total, im, nonim: total - im };
+  }, [st.p, showFlows, imAvailable, selYears, selMonths]);
+
+  // (b) Net-view stats: ranked net destinations (draw racers in) vs net feeders (send racers out) for the
+  // current selection + IM filter. Gives the Net view a concrete read-out instead of just on-map shading.
+  const flowNetStats = useMemo(() => {
+    if (!st.p || !showFlows || flowLayer !== 'net') return null;
+    const keys = resolveSlices(selYears, selMonths, st.p.monthsByYear);
+    const A = aggregateFlows(keys, st.p.odByYM, flowIM);
+    const nm = (ab) => st.p.names[st.p.abbr.indexOf(ab)] || ab;
+    const rows = st.p.abbr.map((ab) => ({ ab, name: nm(ab), inb: A.inb[ab] || 0, outb: A.outb[ab] || 0, net: (A.inb[ab] || 0) - (A.outb[ab] || 0) }));
+    const dest = rows.filter((r) => r.net > 0).sort((a, b) => b.net - a.net).slice(0, 10);
+    const feed = rows.filter((r) => r.net < 0).sort((a, b) => a.net - b.net).slice(0, 10);
+    return { dest, feed };
+  }, [st.p, showFlows, flowLayer, flowIM, selYears, selMonths]);
 
   // YoY change per state (only computed when the YoY fill is active). Uses the selected months so a
   // partial period compares like-for-like against the same months of the baseline year.
@@ -757,12 +810,13 @@ export default function ParticipationMap() {
       if (cancelled || !deckRef.current) return;
       setFlowLoading(false);   // deck.gl + geojson are ready and we're about to draw
       const keys = resolveSlices(selYears, selMonths, p.monthsByYear);
-      const A = aggregateFlows(keys, p.odByYM);
+      const A = aggregateFlows(keys, p.odByYM, flowIM);
       const net = {}; p.abbr.forEach((ab) => { net[ab] = (A.inb[ab] || 0) - (A.outb[ab] || 0); });
       const maxNet = Math.max.apply(null, p.abbr.map((ab) => Math.abs(net[ab])).concat([1]));
+      const arcsOn = flowLayer === 'arcs';   // (b) Net view = choropleth shading only (no route arcs/badges)
 
       const arcs = []; let maxArc = 1;
-      if (flowFocus) {
+      if (flowFocus && arcsOn) {
         let IN = A.flows.filter((r) => r[1] === flowFocus).sort((a, b) => b[2] - a[2]).slice(0, flowTop);
         let OUT = A.flows.filter((r) => r[0] === flowFocus).sort((a, b) => b[2] - a[2]).slice(0, flowTop);
         maxArc = Math.max.apply(null, IN.concat(OUT).map((r) => r[2]).concat([1]));
@@ -796,20 +850,22 @@ export default function ParticipationMap() {
         getSourceColor: (d) => d.c, getTargetColor: (d) => d.c, getWidth: (d) => 1 + 6 * Math.sqrt(d.n / maxArc),
         getHeight: 0.4, pickable: true, updateTriggers: { getWidth: [maxArc] },
       }));
-      if (showLabels) layers.push(new deck.TextLayer({
+      if (showLabels || !arcsOn) layers.push(new deck.TextLayer({   // Net view always labels the net numbers
         id: 'lab', data: p.abbr.filter((ab) => p.centroid[ab]), getPosition: (ab) => p.centroid[ab],
-        getText: (ab) => { const n = net[ab] || 0; return ab + '\n' + (n > 0 ? '+' : '') + n.toLocaleString(); },
-        getSize: 12, fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 700,
+        // Net view: single-line "AB +1,234" (guaranteed to render, unlike a subtle 2nd line). Arcs view keeps
+        // the two-line abbr / net stack. getSize is bumped in Net view so the number reads at a glance.
+        getText: (ab) => { const n = net[ab] || 0; const s = (n > 0 ? '+' : '') + n.toLocaleString(); return arcsOn ? ab + '\n' + s : ab + '  ' + s; },
+        getSize: arcsOn ? 12 : 13, fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 700,
         getColor: (ab) => { const n = net[ab] || 0; return n > 0 ? [19, 78, 10] : (n < 0 ? [122, 20, 20] : [15, 23, 42]); },
         getTextAnchor: 'middle', getAlignmentBaseline: 'center', lineHeight: 1.05, fontSettings: { sdf: true },
         outlineWidth: 3, outlineColor: [255, 255, 255], background: true, getBackgroundColor: [255, 255, 255, 228],
-        backgroundPadding: [4, 2, 4, 2], updateTriggers: { getText: [keys.join()], getColor: [keys.join()] },
+        backgroundPadding: [4, 2, 4, 2], updateTriggers: { getText: [keys.join(), arcsOn, flowIM], getColor: [keys.join(), flowIM], getSize: [arcsOn] },
       }));
 
       // Top-N partner states (per the "Top routes" dropdown) by flow volume with the focus -> gold outline +
       // numbered rank badges (parity with the choropleth Top-N spotlight). Only when a focus state is picked.
       const badgeRows = [];
-      if (flowFocus) {
+      if (flowFocus && arcsOn) {
         const by = {};
         if (flowDir !== 'out') A.flows.filter((r) => r[1] === flowFocus).forEach((r) => { by[r[0]] = (by[r[0]] || 0) + r[2]; });
         if (flowDir !== 'in') A.flows.filter((r) => r[0] === flowFocus).forEach((r) => { by[r[1]] = (by[r[1]] || 0) + r[2]; });
@@ -855,9 +911,10 @@ export default function ParticipationMap() {
       } else {
         deckInst.current.setProps({ layers, viewState: flowViewRef.current, getTooltip: tooltip, onClick });
       }
-      setFlowStat(flowFocus
-        ? (p.names[p.abbr.indexOf(flowFocus)] || flowFocus) + ': ' + (A.inb[flowFocus] || 0).toLocaleString() + ' travel in, ' + (A.outb[flowFocus] || 0).toLocaleString() + ' race elsewhere. Drag to tilt, scroll to zoom.'
-        : 'States shaded by net flow (red = destination, blue = feeder). Pick a focus state to trace routes. Drag to tilt, scroll to zoom.');
+      const imTag = flowIM === 'im' ? ' · IRONMAN destinations only' : (flowIM === 'nonim' ? ' · non-IRONMAN destinations only' : '');
+      setFlowStat((flowFocus && arcsOn)
+        ? (p.names[p.abbr.indexOf(flowFocus)] || flowFocus) + ': ' + (A.inb[flowFocus] || 0).toLocaleString() + ' travel in, ' + (A.outb[flowFocus] || 0).toLocaleString() + ' race elsewhere' + imTag + '. Drag to tilt, scroll to zoom.'
+        : 'States shaded by net flow (red = destination, blue = feeder)' + imTag + '. ' + (arcsOn ? 'Pick a focus state to trace routes. ' : 'Net view — route arcs hidden. ') + 'Drag to tilt, scroll to zoom.');
     };
 
     loadDeck().then((deck) => {
@@ -868,7 +925,7 @@ export default function ParticipationMap() {
     }).catch(() => { setFlowLoading(false); setFlowStat('deck.gl failed to load (needs internet).'); });
 
     return () => { cancelled = true; };
-  }, [showFlows, st.p, flowFocus, flowDir, flowTop, selYears, selMonths, showLabels, showOutlines, regionMesh, dark]);
+  }, [showFlows, st.p, flowFocus, flowDir, flowTop, flowLayer, flowIM, selYears, selMonths, showLabels, showOutlines, regionMesh, dark]);
 
   // Dispose the deck instance when leaving Flows so the Plotly map shows cleanly. Also empty the container:
   // finalize() stops the render loop but leaves its <canvas> in the DOM, and with preserveDrawingBuffer that
@@ -882,7 +939,7 @@ export default function ParticipationMap() {
 
   // Auto-rotate (bearing spin) while Flows + spin are on.
   useEffect(() => {
-    if (!showFlows || !flowSpin) return;
+    if (!showFlows || !flowSpin || flowLayer === 'net') return;
     const tick = () => {
       const v = flowViewRef.current; flowViewRef.current = { ...v, bearing: ((v.bearing || 0) + 0.4) % 360 };
       if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current });
@@ -891,6 +948,14 @@ export default function ParticipationMap() {
     spinRaf.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(spinRaf.current);
   }, [showFlows, flowSpin]);
+
+  // Net view reads best flat & top-down (the 3D tilt clips the southern states); Arcs keeps the 3D camera.
+  // Reset the deck camera whenever the view mode flips.
+  useEffect(() => {
+    if (!showFlows) return;
+    flowViewRef.current = flowLayer === 'net' ? { ...FLOW_VIEW_FLAT } : { ...FLOW_VIEW0 };
+    if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current });
+  }, [flowLayer, showFlows]);
 
   const kpis = useMemo(() => (yb ? kpisFromYB(yb) : null), [yb]);
 
@@ -1117,7 +1182,7 @@ export default function ParticipationMap() {
         </div>
       ) : null}
 
-      {fillMode === 'yoy' ? (
+      {fillMode === 'yoy' && !showFlows ? (
         <div className="toolbar" style={{ alignItems: 'center' }}>
           <span className="small muted">Compare</span>
           <select value={yoyFrom} onChange={(e) => setYoyFrom(e.target.value)} title="Baseline year">
@@ -1147,7 +1212,7 @@ export default function ParticipationMap() {
         </div>
       ) : null}
 
-      {fillMode === 'yoy' && yoyData && yoyData.mos && yoyData.mos.length ? (
+      {fillMode === 'yoy' && !showFlows && yoyData && yoyData.mos && yoyData.mos.length ? (
         <div className="small muted" style={{ margin: '-4px 0 8px', paddingLeft: 2 }}>
           Year-over-year compares the <b>same period in both years</b> — {(() => { const ms = yoyData.mos.slice().sort((a, b) => a - b); return ms.length >= 12 ? 'full year (Jan–Dec)' : (MON3[ms[0]] + (ms.length > 1 ? '–' + MON3[ms[ms.length - 1]] : '')); })()} of {yoyFrom} vs {yoyTo}. Months present in only one year are excluded, so a partial year (e.g. the current one) is a like-for-like year-to-date comparison.
         </div>
@@ -1155,27 +1220,71 @@ export default function ParticipationMap() {
 
       {showFlows ? (
         <div className="toolbar" style={{ alignItems: 'center' }}>
-          <label className="small">Focus state&nbsp;
-            <select value={flowFocus} onChange={(e) => setFlowFocus(e.target.value)}>
+          {/* (b) View toggle: Arcs traces focus-state routes; Net shows only the net-flow choropleth shading. */}
+          <span className="small muted">View</span>
+          <span style={{ display: 'inline-flex', gap: 4 }} title="Arcs = trace a focus state's routes · Net = net-flow shading only (no arcs)">
+            <button style={mini(flowLayer === 'arcs')} onClick={() => setFlowLayer('arcs')}>Arcs</button>
+            <button style={mini(flowLayer === 'net')} onClick={() => setFlowLayer('net')}>Net</button>
+          </span>
+          <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
+          {(() => { const arcsOn = flowLayer === 'arcs'; const dim = arcsOn ? undefined : { opacity: 0.4 }; const dt = arcsOn ? '' : 'Switch to Arcs view to trace routes'; return (
+          <>
+          <label className="small" style={dim} title={dt}>Focus state&nbsp;
+            <select value={flowFocus} disabled={!arcsOn} onChange={(e) => setFlowFocus(e.target.value)}>
               <option value="">— net flow (no focus) —</option>
               {p.abbr.slice().sort((a, b) => (p.names[p.abbr.indexOf(a)] < p.names[p.abbr.indexOf(b)] ? -1 : 1)).map((ab) => <option key={ab} value={ab}>{p.names[p.abbr.indexOf(ab)]}</option>)}
             </select>
           </label>
-          <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
-          <span className="small muted">Direction</span>
-          <span style={{ display: 'inline-flex', gap: 4 }}>
-            <button style={mini(flowDir === 'both')} onClick={() => setFlowDir('both')}>Both</button>
-            <button style={mini(flowDir === 'in')} onClick={() => setFlowDir('in')}>Inbound</button>
-            <button style={mini(flowDir === 'out')} onClick={() => setFlowDir('out')}>Outbound</button>
+          <span className="small muted" style={dim}>Direction</span>
+          <span style={{ display: 'inline-flex', gap: 4 }} title={dt}>
+            <button style={{ ...mini(flowDir === 'both'), ...dim }} disabled={!arcsOn} onClick={() => setFlowDir('both')}>Both</button>
+            <button style={{ ...mini(flowDir === 'in'), ...dim }} disabled={!arcsOn} onClick={() => setFlowDir('in')}>Inbound</button>
+            <button style={{ ...mini(flowDir === 'out'), ...dim }} disabled={!arcsOn} onClick={() => setFlowDir('out')}>Outbound</button>
           </span>
-          <label className="small">Top routes&nbsp;
-            <select value={flowTop} onChange={(e) => setFlowTop(Number(e.target.value))}>
+          <label className="small" style={dim} title={dt}>Top routes&nbsp;
+            <select value={flowTop} disabled={!arcsOn} onChange={(e) => setFlowTop(Number(e.target.value))}>
               {[5, 10, 20, 30, 50].map((n) => <option key={n} value={n}>Top {n}</option>)}
             </select>
           </label>
+          </>
+          ); })()}
+          <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
+          {/* (c) IRONMAN vs non-IRONMAN destination filter — applies to shading, arcs, routes and the summary card. */}
+          <span className="small muted">Destinations</span>
+          <span style={{ display: 'inline-flex', gap: 4 }} title={imAvailable ? 'Filter flows by whether the destination event is an IRONMAN race' : 'Reload the flows data (Refresh data) to enable the IRONMAN split'}>
+            <button style={mini(flowIM === 'all')} disabled={!imAvailable} onClick={() => setFlowIM('all')}>All</button>
+            <button style={mini(flowIM === 'im')} disabled={!imAvailable} onClick={() => setFlowIM('im')}>IRONMAN</button>
+            <button style={mini(flowIM === 'nonim')} disabled={!imAvailable} onClick={() => setFlowIM('nonim')}>Non-IM</button>
+          </span>
+          {!imAvailable ? <span className="small muted" style={{ fontStyle: 'italic' }}>needs data refresh</span> : null}
           <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
           <button style={mini(flowSpin)} title="Auto-rotate the 3D view" onClick={() => setFlowSpin((s) => !s)}>⟳ Rotate</button>
           <button style={mini(false)} title="Reset the 3D camera" onClick={() => { flowViewRef.current = { ...FLOW_VIEW0 }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); }}>Reset view</button>
+        </div>
+      ) : null}
+      {showFlows && flowIMSummary ? (
+        <div className="toolbar" style={{ gap: 10, flexWrap: 'wrap' }}>
+          {(() => {
+            const { total, im, nonim } = flowIMSummary;
+            const pct = (n) => (total ? Math.round((100 * n) / total) : 0);
+            const card = (label, val, sub, active, on, color) => (
+              <button onClick={on} title={'Filter the map to ' + label}
+                style={{ flex: '1 1 150px', minWidth: 140, textAlign: 'left', cursor: 'pointer', padding: '8px 12px',
+                  border: '1px solid ' + (active ? color : 'var(--line)'), borderLeft: '4px solid ' + color, borderRadius: 8,
+                  background: active ? (dark ? 'rgba(148,163,184,.14)' : 'rgba(15,23,42,.04)') : 'var(--panel)', color: 'var(--ink)' }}>
+                <div className="small muted" style={{ fontWeight: 700 }}>{label}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.1 }}>{val.toLocaleString()}</div>
+                <div className="small muted">{sub}</div>
+              </button>
+            );
+            return (
+              <>
+                {card('All cross-state travelers', total, 'home ≠ event, this selection', flowIM === 'all', () => setFlowIM('all'), '#334155')}
+                {card('IRONMAN destinations', im, pct(im) + '% of travelers', flowIM === 'im', () => setFlowIM('im'), '#C20E2F')}
+                {card('Non-IRONMAN destinations', nonim, pct(nonim) + '% of travelers', flowIM === 'nonim', () => setFlowIM('nonim'), '#185FA5')}
+              </>
+            );
+          })()}
         </div>
       ) : null}
 
@@ -1286,17 +1395,40 @@ export default function ParticipationMap() {
         ) : null}
       </div>
       {showFlows ? <p className="muted small" style={{ margin: '8px 2px 0' }}>{flowStat}</p> : null}
+      {showFlows && flowNetStats ? (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8 }}>
+          {[['dest', '#C20E2F', 'Top net destinations — draw racers in', '+'],
+            ['feed', '#185FA5', 'Top net feeders — send racers out', '']].map(([key, color, title]) => (
+            <div key={key} style={{ flex: '1 1 260px', minWidth: 240 }}>
+              <div className="small" style={{ fontWeight: 700, marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <span><span style={{ color }}>●</span> {title}</span>
+                <button style={mini(false)} title="Download net flow by state (CSV)"
+                  onClick={() => downloadCSV('flows_net_' + key + '_' + flowIM + '.csv', ['Rank', 'State', 'In', 'Out', 'Net'],
+                    flowNetStats[key].map((r, i) => [i + 1, r.name, r.inb, r.outb, r.net]))}>CSV</button>
+              </div>
+              <div style={{ maxHeight: 240, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+                {flowNetStats[key].length ? flowNetStats[key].map((r, i) => (
+                  <div key={r.ab} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '3px 10px', fontSize: 12, borderBottom: '1px solid var(--line)' }}>
+                    <span>{i + 1}. {r.name} <span className="muted">({r.inb.toLocaleString()} in · {r.outb.toLocaleString()} out)</span></span>
+                    <b style={{ color }}>{r.net > 0 ? '+' : ''}{r.net.toLocaleString()}</b>
+                  </div>
+                )) : <div className="muted small" style={{ padding: '6px 10px' }}>None</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {showFlows && flowRoutes ? (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 8 }}>
           {flowDir !== 'out' ? (
             <div style={{ flex: '1 1 240px', minWidth: 220 }}>
               <div className="small" style={{ fontWeight: 700, marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                 <span><span style={{ color: '#C20E2F' }}>●</span> Top inbound — who races in {flowRoutes.focusName}</span>
-                <button style={mini(false)} title="Download inbound routes (CSV)" onClick={() => downloadCSV('flows_inbound_' + (flowFocus || 'state') + '.csv', ['Rank', 'State', 'Athletes'], flowRoutes.inb.map(([n, c], i) => [i + 1, n, c]))}>CSV</button>
+                <button style={mini(false)} title="Download inbound routes (CSV)" onClick={() => downloadCSV('flows_inbound_' + (flowFocus || 'state') + '.csv', ['Rank', 'State', 'Athletes', 'State total in', 'State total out'], flowRoutes.inb.map(([n, c, pin, pout], i) => [i + 1, n, c, pin, pout]))}>CSV</button>
               </div>
               <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
-                {flowRoutes.inb.length ? flowRoutes.inb.map(([n, c], i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '3px 10px', fontSize: 12, borderBottom: '1px solid var(--line)' }}><span>{i + 1}. {n}</span><b>{c.toLocaleString()}</b></div>
+                {flowRoutes.inb.length ? flowRoutes.inb.map(([n, c, pin, pout], i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '3px 10px', fontSize: 12, borderBottom: '1px solid var(--line)' }}><span>{i + 1}. {n} <span className="muted">({pin.toLocaleString()} in · {pout.toLocaleString()} out)</span></span><b>{c.toLocaleString()}</b></div>
                 )) : <div className="muted small" style={{ padding: '6px 10px' }}>None</div>}
               </div>
             </div>
@@ -1305,11 +1437,11 @@ export default function ParticipationMap() {
             <div style={{ flex: '1 1 240px', minWidth: 220 }}>
               <div className="small" style={{ fontWeight: 700, marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                 <span><span style={{ color: '#185FA5' }}>●</span> Top outbound — where {flowRoutes.focusName} races</span>
-                <button style={mini(false)} title="Download outbound routes (CSV)" onClick={() => downloadCSV('flows_outbound_' + (flowFocus || 'state') + '.csv', ['Rank', 'State', 'Athletes'], flowRoutes.outb.map(([n, c], i) => [i + 1, n, c]))}>CSV</button>
+                <button style={mini(false)} title="Download outbound routes (CSV)" onClick={() => downloadCSV('flows_outbound_' + (flowFocus || 'state') + '.csv', ['Rank', 'State', 'Athletes', 'State total in', 'State total out'], flowRoutes.outb.map(([n, c, pin, pout], i) => [i + 1, n, c, pin, pout]))}>CSV</button>
               </div>
               <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
-                {flowRoutes.outb.length ? flowRoutes.outb.map(([n, c], i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '3px 10px', fontSize: 12, borderBottom: '1px solid var(--line)' }}><span>{i + 1}. {n}</span><b>{c.toLocaleString()}</b></div>
+                {flowRoutes.outb.length ? flowRoutes.outb.map(([n, c, pin, pout], i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '3px 10px', fontSize: 12, borderBottom: '1px solid var(--line)' }}><span>{i + 1}. {n} <span className="muted">({pin.toLocaleString()} in · {pout.toLocaleString()} out)</span></span><b>{c.toLocaleString()}</b></div>
                 )) : <div className="muted small" style={{ padding: '6px 10px' }}>None</div>}
               </div>
             </div>

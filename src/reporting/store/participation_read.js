@@ -147,10 +147,21 @@ async function build_from_mysql() {
   }
 
   const odByYM = {};
+  // The IRONMAN flag is only present once the flows ETL has been rebuilt with the is_ironman column. Detect
+  // it from the row shape so PRE-reload data still yields full flows (3-tuples) and the IM toggle just stays
+  // disabled — rather than dropping every row and blanking the map.
+  const flowsHaveIM = flowRows.length > 0 && Object.prototype.hasOwnProperty.call(flowRows[0], 'is_ironman');
   for (const f of flowRows) {
     if (f.start_date_month_races == null) continue; // annual rows are redundant (app sums months)
     const key = f.start_date_year_races + '-' + f.start_date_month_races;
-    (odByYM[key] = odByYM[key] || []).push([f.home_state, f.event_state, Number(f.participations)]);
+    if (flowsHaveIM) {
+      // ROLLUP also emits IRONMAN super-aggregate rows (is_ironman NULL) — skip them so the IM + non-IM
+      // leaves aren't double-counted; the app re-sums the two flags itself.
+      if (f.is_ironman == null) continue;
+      (odByYM[key] = odByYM[key] || []).push([f.home_state, f.event_state, Number(f.participations), Number(f.is_ironman)]);
+    } else {
+      (odByYM[key] = odByYM[key] || []).push([f.home_state, f.event_state, Number(f.participations)]);
+    }
   }
 
   // "Last refresh" = the source data's own build timestamp, carried from the parent participation table
