@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+giimport { useEffect, useMemo, useRef, useState } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
@@ -347,13 +347,14 @@ export default function ParticipationMap() {
     return () => { cancelled = true; };
   }, [st.p, showOutlines, view, regionMesh]);
 
-  // Region label anchors = mean of member-state centroids (AK/HI excluded — insets on albers-usa).
+  // Region label anchors = mean of member-state centroids. AK/HI (albers-usa insets) and the off-map
+  // territories GU/PR/VI are excluded so a far-flung member (e.g. Guam at +144° lng) can't drag the label.
   const regionCentroids = useMemo(() => {
     if (!st.p) return {};
     const { centroid, ab2region, abbr } = st.p;
     const acc = {};
     abbr.forEach((ab) => {
-      if (ab === 'AK' || ab === 'HI') return;
+      if (ab === 'AK' || ab === 'HI' || ab === 'GU' || ab === 'PR' || ab === 'VI') return;
       const rg = ab2region[ab]; const c = centroid[ab];
       if (!rg || !c) return;
       acc[rg] = acc[rg] || { lon: 0, lat: 0, n: 0 };
@@ -721,6 +722,7 @@ export default function ParticipationMap() {
     if (!yoyOn && showLabels && (view === 'region' || view === 'both')) {
       const rlon = regOrder.map((rg) => (regionCentroids[rg] ? regionCentroids[rg][0] : null));
       const rlat = regOrder.map((rg) => (regionCentroids[rg] ? regionCentroids[rg][1] : null));
+      const regZ = regOrder.map((rg) => tz(regVal[rg]));   // region fill value per label -> contrast-aware text
       // In "both" view, give each region label a halo (offset copies in a contrasting color behind the red
       // text) so it stays legible over the state fill — an outline hugs any name length, unlike a fixed chip.
       if (view === 'both') {
@@ -739,7 +741,7 @@ export default function ParticipationMap() {
       traces.push({
         type: 'scattergeo', mode: 'text', lon: rlon, lat: rlat,
         text: m.regionlabels,
-        textfont: { size: view === 'both' ? 16 : 14, color: view === 'both' ? '#C20E2F' : (dark ? '#e2e8f0' : '#0f172a') },
+        textfont: { size: view === 'both' ? 16 : 14, color: view === 'both' ? '#C20E2F' : (fillOn ? labColor(regZ, zauto ? null : zmin, zauto ? null : zmax, scale, reverse, dark) : (dark ? '#e2e8f0' : '#0f172a')) },
         hoverinfo: 'skip', showlegend: false,
       });
     }
