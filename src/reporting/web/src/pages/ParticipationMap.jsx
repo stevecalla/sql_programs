@@ -1,4 +1,4 @@
-giimport { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
