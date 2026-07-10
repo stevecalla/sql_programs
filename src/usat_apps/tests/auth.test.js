@@ -10,7 +10,8 @@ const fs = require('fs');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'usat_apps_test_'));
 process.env.USATAPPS_DATA_DIR = TMP;
 process.env.USATAPPS_ADMIN_USER = 'recovery_admin';
-process.env.USATAPPS_ADMIN_PASS = 'secret123';
+const RECOVERY_PASS = require('node:crypto').randomBytes(12).toString('hex');  // random => no committed secret
+process.env.USATAPPS_ADMIN_PASS = RECOVERY_PASS;
 delete process.env.USATAPPS_USERS_FILE;
 delete process.env.USATAPPS_PANEL_ACCESS_FILE;
 
@@ -26,7 +27,7 @@ test('password hash round-trips and rejects wrong password', () => {
 });
 
 test('.env recovery account is valid and is admin', () => {
-  const v = store.valid_user('recovery_admin', 'secret123');
+  const v = store.valid_user('recovery_admin', RECOVERY_PASS);
   assert.ok(v && v.role === 'admin' && v.env === true);
   assert.strictEqual(store.valid_user('recovery_admin', 'wrong'), null);
 });

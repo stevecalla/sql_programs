@@ -140,6 +140,13 @@ coverage
 *.lcov
 .nyc_output
 
+# Playwright UI/UX test output — generated, never commit (matches anywhere in the tree).
+# The e2e-local report/ and .auth/ (session state + throwaway creds) are also covered by
+# src/reporting/e2e/.gitignore where they're generated.
+test-results/
+playwright-report/
+playwright/.cache/
+
 # =========================================================
 # BUILD / CACHE
 # =========================================================

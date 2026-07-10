@@ -2,9 +2,14 @@
 // Auth-flow test: env recovery admin can log in, /api/me reflects it, and a gated endpoint is
 // reachable once signed in. No DB needed — bootstrap returns 503 NO_DATA (auth passed, data layer
 // has no fixture/MySQL in the test env), which proves the gate opened.
-process.env.REPORTING_ADMIN_USER = process.env.REPORTING_ADMIN_USER || 'test_admin';
-process.env.REPORTING_ADMIN_PASS = process.env.REPORTING_ADMIN_PASS || 'test_pass';
-process.env.REPORTING_SESSION_SECRET = process.env.REPORTING_SESSION_SECRET || 'test_secret_do_not_use_in_prod';
+const crypto = require('node:crypto');
+// Random per-run test credentials — never hardcoded, so nothing password-like is committed (GitGuardian-
+// safe) and there's no env var to manage. The same values feed the login call below.
+const TEST_USER = process.env.REPORTING_ADMIN_USER || 'e2e-tester';
+const TEST_PASS = process.env.REPORTING_ADMIN_PASS || crypto.randomBytes(12).toString('hex');
+process.env.REPORTING_ADMIN_USER = TEST_USER;
+process.env.REPORTING_ADMIN_PASS = TEST_PASS;
+process.env.REPORTING_SESSION_SECRET = process.env.REPORTING_SESSION_SECRET || crypto.randomBytes(24).toString('hex');
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -24,7 +29,7 @@ test('login -> me -> gated endpoint reachable', async () => {
     // login
     const lr = await fetch(base + '/api/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'test_admin', password: 'test_pass' }),
+      body: JSON.stringify({ username: TEST_USER, password: TEST_PASS }),
     });
     assert.strictEqual(lr.status, 200);
     const cookie = (lr.headers.get('set-cookie') || '').split(';')[0];
@@ -35,7 +40,7 @@ test('login -> me -> gated endpoint reachable', async () => {
     const mr = await fetch(base + '/api/me', { headers: { cookie } });
     const mb = await mr.json();
     assert.strictEqual(mr.status, 200);
-    assert.strictEqual(mb.user, 'test_admin');
+    assert.strictEqual(mb.user, TEST_USER);   // whoever logged in (random/default creds above)
     assert.strictEqual(mb.role, 'admin');
   } finally { server.close(); }
 });

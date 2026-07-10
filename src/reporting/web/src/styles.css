@@ -14,6 +14,9 @@
 * { box-sizing: border-box; }
 body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: var(--bg); }
 .loading { padding: 40px; color: var(--muted); }
+@keyframes mapspin { to { transform: rotate(360deg); } }
+.mapspin { width: 11px; height: 11px; border: 2px solid var(--line); border-top-color: var(--muted); border-radius: 50%; display: inline-block; animation: mapspin .7s linear infinite; }
+.opphl tbody tr:hover > td { background: var(--hover); }
 a { color: var(--accent); }
 code { background: var(--hover); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
 .muted { color: var(--muted); } .small { font-size: 12px; } .err { color: var(--red); }
