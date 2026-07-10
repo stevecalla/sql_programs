@@ -146,8 +146,9 @@ coverage
 test-results/
 playwright-report/
 playwright/.cache/
-# isolated e2e web build — kept separate from the production web/dist so tests never clobber it
-src/reporting/web/dist-e2e/
+# isolated e2e web build — repo-root throwaway, outside every dev watch path so tests never clobber
+# web/dist nor trigger nodemon/vite restarts
+.reporting_e2e_dist/
 
 # =========================================================
 # BUILD / CACHE

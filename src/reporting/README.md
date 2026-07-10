@@ -32,8 +32,9 @@ REPORTING_SESSION_SECRET=...    # optional; else auto-generated + persisted
 
 ## Data note
 
-`store/participation_read.js` builds the `/api/bootstrap` payload from MySQL. Until the query is
-finished (Phase 1) it falls back to a fixture so the app runs — seed it once with:
+`store/participation_read.js` builds the `/api/bootstrap` payload from MySQL (live, from the
+pre-aggregated summary tables). A fixture is used only as an offline fallback if the DB is
+unreachable — seed it once with:
 
 ```
 node src/reporting/store/make_fixture.js "<path-to>/usat_participation_dashboard_LATEST.html"

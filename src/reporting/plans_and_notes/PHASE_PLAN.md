@@ -13,13 +13,13 @@ Folder structure mirroring merge; `server_reporting_8021.js`; auth/store/metrics
 React app; `/api/status`; meta files (notes.txt, README, CLAUDE.md, .gitignore, menu.js, these docs).
 **Done when** `/reporting` shows a page and `/api/status` returns ok.
 
-## Phase 1 — MySQL data pipe (`/api/bootstrap`) — scaffolded, SQL pending
+## Phase 1 — MySQL data pipe (`/api/bootstrap`) — DONE
 `store/db.js` (shared pool) + `store/participation_read.js` + `/api/bootstrap` returning the
-`DASH`-shaped payload. `build_from_mysql()` is stubbed and falls back to a fixture so the app runs.
-**Remaining:** confirm the participation table/columns in `usat_sales_db`, then implement the
-aggregation queries (per year+month state rows + cross-state flows; roll-ups computed in JS).
-**Done when** the payload matches the standalone build for a period — **CA 33,236; US 292,675**, plus
-the flow + travel grand totals.
+`DASH`-shaped payload. `build_from_mysql()` is **live** — it reads the pre-aggregated summary tables
+(built by `step_3i`) into per year+month state rows + cross-state flows, with roll-ups computed in JS;
+a fixture remains only as an offline fallback. Verified in production: the app boots on the live
+payload (`"live participation payload cached from MySQL"`) and the maps/metrics match the standalone
+build. Covered by the unit suite (bootstrap auth-gating) and the Playwright e2e suite (renders live).
 
 ## Phase 2 — participation-maps page (parity) — shell done, map pending
 `web/` SPA with login, routing, and a `ParticipationMaps` page that fetches `/api/bootstrap` and

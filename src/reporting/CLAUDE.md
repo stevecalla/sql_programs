@@ -21,8 +21,8 @@ reads local MySQL. The SPA is client-side over one `/api/bootstrap` payload.
 
 ## Where things live
 - `api/routes.js` — all endpoints. Add report endpoints here, panel-gated.
-- `store/participation_read.js` — builds the bootstrap payload. **Phase 1 TODO:** finish
-  `build_from_mysql()` against the confirmed participation table; until then a fixture is served.
+- `store/participation_read.js` — builds the bootstrap payload. `build_from_mysql()` is **live**
+  (reads the pre-aggregated summary tables); a fixture remains only as an offline fallback.
 - `web/src/pages/` — one file per report page. `web/src/lib/` — pure data logic (portable).
 
 ## Guardrails
