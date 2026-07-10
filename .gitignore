@@ -146,6 +146,8 @@ coverage
 test-results/
 playwright-report/
 playwright/.cache/
+# isolated e2e web build — kept separate from the production web/dist so tests never clobber it
+src/reporting/web/dist-e2e/
 
 # =========================================================
 # BUILD / CACHE

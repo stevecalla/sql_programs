@@ -58,13 +58,16 @@ module.exports = defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run reporting_build && node server_reporting_8021.js',
+    // Build into an ISOLATED dist-e2e and serve THAT (REPORTING_WEB_DIST) — never touches the production
+    // web/dist, so running the suite (even on the prod server) can't clobber the deployed bundle.
+    command: 'npm run reporting_build_e2e && node server_reporting_8021.js',
     url: `${BASE}/api/status`,
     reuseExistingServer: true,        // if a server is already on :8099, use it instead of erroring
     cwd: repoRoot,
     timeout: 180000,
     env: {
       REPORTING_PORT: PORT,
+      REPORTING_WEB_DIST: path.join(repoRoot, 'src', 'reporting', 'web', 'dist-e2e'),
       REPORTING_TEST_USER: CREDS.user,
       REPORTING_TEST_PASS: CREDS.pass,
       REPORTING_SESSION_SECRET: CREDS.secret,
