@@ -1195,7 +1195,7 @@ export default function ParticipationMap() {
               const opts = g.idxs.filter((i) => metrics[i]);
               if (!opts.length) return null;
               return <optgroup key={g.label} label={g.label}>
-                {opts.map((i) => <option key={i} value={i} title={metricDesc(metrics[i].label)}>{metrics[i].label}</option>)}
+                {opts.map((i) => <option key={i} value={i} title={metricDesc(metrics[i].label, p.populationSource)}>{metrics[i].label}</option>)}
               </optgroup>;
             })}
           </select>
