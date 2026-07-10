@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { getYearBlock, kpisFromYB, computeYoY, resolveSlices, aggregateFlows, flowsHaveIM } from '../lib/compute.js';
 import { trackFilter, trackExport, track } from '../lib/track.js';
 import ParticipationTabs from './ParticipationTabs.jsx';
+import { OPP_C, OPP_TXT, OPP_LABEL, OPP_ORDER, classifyBand, OppCard, OppTable } from './opportunity.jsx';
 
 // Plain-language description per metric (for hover tooltips). Full definitions live on the Reference tab.
 const METRIC_DESC = {
@@ -243,6 +244,12 @@ export default function ParticipationMap() {
   const [flowTop, setFlowTop] = useState(5);         // top-N routes per direction
   const [flowLayer, setFlowLayer] = useState('arcs'); // (b) arcs (routes) | net (choropleth shading only)
   const [showRegions, setShowRegions] = useState(false);  // Regions reference map (states shaded by their region)
+  const [oppBandMode, setOppBandMode] = useState('rel');   // Opportunity bands: 'rel' (national-relative, default) | 'stat' | 'abs'
+  const [oppStatMethod, setOppStatMethod] = useState('quantile'); // Statistical mode: 'quantile' | 'sigma'
+  const [oppSigmaK, setOppSigmaK] = useState(1);           // Statistical σ multiplier for the 'sigma' method
+  const [oppLeaderCut, setOppLeaderCut] = useState(0.60);  // Absolute-mode: Leader ≥ this
+  const [oppFloorCut, setOppFloorCut] = useState(0.27);    // Absolute-mode: Floor ≤ this
+  const [oppValues, setOppValues] = useState(true);        // Opportunity map: print penetration values on states (default on, like the heatmap)
   const [flowIM, setFlowIM] = useState('all');       // (c) all | im | nonim — IRONMAN-destination filter
   const [flowSpin, setFlowSpin] = useState(false);   // auto-rotate (bearing animation)
   const [flowStat, setFlowStat] = useState('');      // footer stat line
@@ -352,6 +359,23 @@ export default function ParticipationMap() {
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
+  // Entering/leaving Opportunity narrows the map into a flex column; Plotly drew at the old width, so
+  // reflow it once the new layout has applied (fixes the map spilling over the stat card).
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const t = setTimeout(() => { try { Plotly.Plots.resize(mapRef.current); } catch (e) { /* not drawn yet */ } }, 90);
+    return () => clearTimeout(t);
+  }, [fillMode, showRegions, showFlows]);
+
+  // Mask the ~1s where the map redraws + reflows to its new column width (the "small then large" flash) with
+  // a brief veil + spinner, so switching views reads as a clean fade instead of a jump.
+  const [mapBusy, setMapBusy] = useState(false);
+  useEffect(() => {
+    setMapBusy(true);
+    const t = setTimeout(() => setMapBusy(false), 1000);
+    return () => clearTimeout(t);
+  }, [fillMode, showRegions, showFlows, basemap]);
+
   // Merge state borders -> region outlines (us-atlas TopoJSON + fips2region). Lazy: only fetch when
   // outlines are actually shown (Region/Both view or the toggle), and only once — keeps the default
   // State-view load light (no CDN fetch, no extra map redraw).
@@ -390,6 +414,7 @@ export default function ParticipationMap() {
   }, [st.p]);
 
   const [homeData, setHomeData] = useState(null);   // on-demand home-side distinct adult athletes (penetration numerator)
+  const [homeLoading, setHomeLoading] = useState(false);  // true while /api/home is in flight (drives the Opportunity map spinner)
   // Aggregated year-block for the current selection (single full year is exact; else computeAgg).
   // Then append travel-flow metrics (46/47/48) + penetration metrics (49 adult-pen, 50 population, 51 home-
   // penetration from homeData) so the dropdown/choropleth/tables can shade & sort them without a server change.
@@ -438,6 +463,73 @@ export default function ParticipationMap() {
     return Object.assign({}, base, { metrics });
   }, [st.p, selYears, selMonths, homeData]);
 
+  // Opportunity classification — derives, per state, the demand-side home-penetration (/1,000 pop), a
+  // POPULATION-WEIGHTED national benchmark (Σ resident athletes ÷ Σ population × 1,000, so big states pull
+  // the mean correctly), a band (leader ≥ national · under-penetrated below · floor < half national), the
+  // gap to national, and the headroom = estimated additional resident athletes needed to reach the national
+  // rate ((national − pen)/1000 × population). Returns null until home data + population are present.
+  const oppData = useMemo(() => {
+    if (!st.p || !yb) return null;
+    const m = yb.metrics[51];                       // 'Home penetration / 1,000 pop' (built above)
+    const hs = homeData && homeData.byHomeState;
+    const pop = st.p.population || {};
+    if (!m || !hs) return null;                      // needs the on-demand home counts + Census population
+    const { abbr, names, regs } = st.p;
+    const round2 = (v) => Math.round(v * 100) / 100;
+    // Extra per-state context fields for the merged stat card, pulled from the already-built metrics
+    // (no new definitions): 49 = adult participation/1k (event penetration), 48 = net flow (in−out),
+    // 3 = per event, 12 = age 20-29 %, 1 = events, 2 = races.
+    const mEvp = yb.metrics[49], mNet = yb.metrics[48], mPer = yb.metrics[3], mAge = yb.metrics[12], mEv = yb.metrics[1], mRc = yb.metrics[2];
+    const at = (mm, i) => (mm && mm.statez[i] != null ? mm.statez[i] : null);
+    let numSum = 0, popSum = 0;
+    abbr.forEach((ab) => { const h = hs[ab], pp = pop[ab]; if (h != null && pp) { numSum += h; popSum += pp; } });
+    if (!popSum) return null;
+    const national = round2((numSum / popSum) * 1000);
+    // Band cutoffs by mode. midCut is the Mid/Under boundary:
+    //   rel   — Leader ≥ national · Floor ≤ ½ national (Mid collapses to empty; midCut = national)
+    //   stat  — from the distribution of state penetration values: quantiles (p80/p50/p20) or mean ± kσ
+    //   abs   — the fixed cutoffs the user typed (Mid/Under split at the national rate)
+    const relMode = oppBandMode === 'rel';
+    const vals = [];
+    abbr.forEach((ab, i) => { const v = m.statez[i]; if (v != null && (pop[ab] || 0)) vals.push(v); });
+    vals.sort((a, b) => a - b);
+    const pctl = (q) => { if (!vals.length) return national; const idx = q * (vals.length - 1); const lo = Math.floor(idx), hi = Math.ceil(idx); return round2(vals[lo] + (vals[hi] - vals[lo]) * (idx - lo)); };
+    const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : national;
+    const sd = vals.length ? Math.sqrt(vals.reduce((a, s) => a + (s - mean) * (s - mean), 0) / vals.length) : 0;
+    let leaderCut, midCut, floorCut, stat = null;
+    if (relMode) { leaderCut = national; midCut = national; floorCut = round2(national / 2); }
+    else if (oppBandMode === 'stat') {
+      if (oppStatMethod === 'sigma') { leaderCut = round2(mean + oppSigmaK * sd); midCut = round2(mean); floorCut = round2(Math.max(0, mean - oppSigmaK * sd)); stat = { method: 'sigma', mean: round2(mean), sd: round2(sd), k: oppSigmaK }; }
+      else { leaderCut = pctl(0.8); midCut = pctl(0.5); floorCut = pctl(0.2); stat = { method: 'quantile', p20: floorCut, p50: midCut, p80: leaderCut }; }
+    } else { leaderCut = round2(oppLeaderCut); midCut = national; floorCut = round2(oppFloorCut); }
+    const rows = abbr.map((ab, i) => {
+      const pen = m.statez[i], pp = pop[ab] || 0;
+      const ctx = { reg: regs[i], res: hs[ab] != null ? hs[ab] : null, evp: at(mEvp, i),
+        net: at(mNet, i) == null ? null : -at(mNet, i),  // net flow home−event = −(in−out): negative = destination
+        perEvent: at(mPer, i), age2029: at(mAge, i), events: at(mEv, i), races: at(mRc, i) };
+      if (pen == null || !pp) return { ab, name: names[i], pen: null, pop: pp, gap: null, band: null, headroom: 0, ...ctx };
+      const band = classifyBand(pen, midCut, leaderCut, floorCut);
+      const headroom = pen < national ? Math.round(((national - pen) / 1000) * pp) : 0;
+      return { ab, name: names[i], pen, pop: pp, gap: round2(pen - national), band, headroom, ...ctx };
+    });
+    const counts = { leader: 0, mid: 0, under: 0, floor: 0 };
+    rows.forEach((r) => { if (r.band) counts[r.band]++; });
+    return { national, rows, counts, leaderCut, midCut, floorCut, relMode, mode: oppBandMode, stat };
+  }, [st.p, yb, homeData, oppBandMode, oppStatMethod, oppSigmaK, oppLeaderCut, oppFloorCut]);
+  // The state shown in the card / highlighted in the table: the clicked state if valid, else a sensible
+  // default (the biggest-headroom opportunity) so the card is never empty when Opportunity opens.
+  const oppSel = useMemo(() => {
+    if (!oppData) return stateSel;
+    if (stateSel && oppData.rows.some((r) => r.ab === stateSel && r.band != null)) return stateSel;
+    const top = oppData.rows.filter((r) => r.band).slice().sort((a, b) => b.headroom - a.headroom)[0];
+    return (top && top.ab) || stateSel || null;
+  }, [oppData, stateSel]);
+  // Opportunity is "active" only when its tab is the current view — Flows/Regions take over the canvas, so
+  // the card/table/bands must hide even though fillMode is still 'opp' underneath.
+  const oppView = fillMode === 'opp' && !showFlows && !showRegions;
+  // Stable selector shared with the Opportunity ranking (now a bottom tab) so map ↔ table ↔ card stay in sync.
+  const onOppSelect = useCallback((ab) => { setStateSel((c) => (c === ab ? null : ab)); setRegionSel(''); }, []);
+
   // Exact unique athletes for the current period, counted live from the base table (non-additive metric).
   // Only the whole-map selection (years + months) drives this; cross-filters stay with pins/events.
   const [uniqueData, setUniqueData] = useState(null);
@@ -463,9 +555,10 @@ export default function ParticipationMap() {
   useEffect(() => {
     if (!st.p || !selYears || !selYears.length) { setHomeData(null); return; }
     let live = true;
+    setHomeLoading(true);
     api.homeFor({ years: selYears, months: selMonths })
-      .then(({ status, body }) => { if (live) setHomeData(status === 200 && body && body.ok ? body : null); })
-      .catch(() => { if (live) setHomeData(null); });
+      .then(({ status, body }) => { if (live) { setHomeData(status === 200 && body && body.ok ? body : null); setHomeLoading(false); } })
+      .catch(() => { if (live) { setHomeData(null); setHomeLoading(false); } });
     return () => { live = false; };
   }, [st.p, selYears, selMonths]);
   const availMonths = useMemo(() => {
@@ -592,6 +685,56 @@ export default function ParticipationMap() {
         traces.push({ type: 'scattergeo', mode: 'text', lon: rlon.map((v) => (v == null ? null : v + dx)), lat: rlat.map((v) => (v == null ? null : v + dy)), text: rlabels, textfont: { size: 17, color: halo, family: 'Arial Black, Arial, sans-serif' }, hoverinfo: 'skip', showlegend: false });
       });
       traces.push({ type: 'scattergeo', mode: 'text', lon: rlon, lat: rlat, text: rlabels, textfont: { size: 17, color: dark ? '#f1f5f9' : '#0f172a', family: 'Arial Black, Arial, sans-serif' }, hoverinfo: 'skip', showlegend: false });
+      Plotly.react(mapRef.current, traces, {
+        geo: { scope: 'usa', bgcolor: 'rgba(0,0,0,0)', lakecolor: 'rgba(0,0,0,0)', projection: { scale: zoom } },
+        margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: 'rgba(0,0,0,0)', height: 560,
+      }, { displayModeBar: false, responsive: true }).then((gd) => {
+        if (!gd || !gd.on) return; gd.removeAllListeners && gd.removeAllListeners('plotly_click');
+        gd.on('plotly_click', (ev) => { const pt = ev.points && ev.points[0]; if (pt && pt.location) { setStateSel((c) => (c === pt.location ? null : pt.location)); setRegionSel(''); } });
+      });
+      return;
+    }
+    // Opportunity classification map: states shaded by band (leader / under-penetrated / floor) against the
+    // national home-penetration benchmark. Self-contained (its own discrete scale + hover + click), like the
+    // Regions block. Falls back to a neutral map until the penetration data has loaded.
+    if (fillMode === 'opp') {
+      const { abbr, names, centroid } = p;
+      const byAb = {}; if (oppData) oppData.rows.forEach((r) => { byAb[r.ab] = r; });
+      const BAND_I = { floor: 0, under: 1, mid: 2, leader: 3 };
+      const C = [OPP_C.floor, OPP_C.under, OPP_C.mid, OPP_C.leader];
+      const cs = [[0, C[0]], [0.249, C[0]], [0.251, C[1]], [0.499, C[1]], [0.501, C[2]], [0.749, C[2]], [0.751, C[3]], [1, C[3]]];
+      const z = abbr.map((ab) => { const r = byAb[ab]; return r && r.band ? BAND_I[r.band] : null; });
+      const cd = abbr.map((ab, k) => {
+        const r = byAb[ab];
+        if (!r || r.band == null) return '<b>' + names[k] + '</b><br>No penetration data';
+        return '<b>' + names[k] + '</b> — ' + OPP_LABEL[r.band]
+          + '<br>Home penetration: ' + r.pen + ' / 1k  (national ' + oppData.national + ')'
+          + '<br>Gap: ' + (r.gap > 0 ? '+' : '') + r.gap + ' / 1k'
+          + (r.headroom ? '<br>Headroom: ~' + r.headroom.toLocaleString() + ' more athletes to reach national' : '<br>At or above the national rate');
+      });
+      const traces = [{
+        type: 'choropleth', locationmode: 'USA-states', locations: abbr, z, zmin: 0, zmax: 3,
+        customdata: cd, hovertemplate: '%{customdata}<extra></extra>',
+        colorscale: cs, showscale: false, opacity: 0.96,
+        marker: { line: { color: dark ? '#334155' : '#cbd5e1', width: 0.5 } },
+      }];
+      if (regionMesh && showOutlines) traces.push({ type: 'scattergeo', mode: 'lines', lon: regionMesh.lon, lat: regionMesh.lat, line: { width: 2.2, color: dark ? '#e2e8f0' : '#0f172a' }, hoverinfo: 'skip', showlegend: false });
+      if (showLabels || oppValues) {
+        // Two-line abbr/value labels (heatmap convention), colored for contrast against each band fill:
+        // white on the dark green/red/gray bands, ink on the light amber + on blank/no-data states.
+        const groups = {};
+        abbr.forEach((ab) => {
+          const c = centroid[ab]; if (!c) return; const r = byAb[ab]; const band = r && r.band;
+          const col = (band === 'leader' || band === 'floor' || band === 'mid') ? '#ffffff'
+            : band === 'under' ? '#3f2d00' : (dark ? '#e2e8f0' : '#1e293b');
+          const t = (oppValues && r && r.pen != null) ? ab + '<br>' + r.pen.toFixed(2) : ab;
+          (groups[col] = groups[col] || { lon: [], lat: [], text: [] });
+          groups[col].lon.push(c[0]); groups[col].lat.push(c[1]); groups[col].text.push(t);
+        });
+        Object.keys(groups).forEach((col) => traces.push({ type: 'scattergeo', locationmode: 'USA-states', mode: 'text',
+          lon: groups[col].lon, lat: groups[col].lat, text: groups[col].text,
+          textfont: { size: 11, color: col, family: 'Arial, sans-serif' }, hoverinfo: 'skip', showlegend: false }));
+      }
       Plotly.react(mapRef.current, traces, {
         geo: { scope: 'usa', bgcolor: 'rgba(0,0,0,0)', lakecolor: 'rgba(0,0,0,0)', projection: { scale: zoom } },
         margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: 'rgba(0,0,0,0)', height: 560,
@@ -893,7 +1036,7 @@ export default function ParticipationMap() {
         if (Array.isArray(pt.customdata)) { setStateSel((c) => (c === pt.customdata[1] ? null : pt.customdata[1])); setRegionSel(''); }
       });
     });
-  }, [st, yb, metricIdx, view, showLabels, showOutlines, spotN, colorIdx, colorMode, logMode, clipMax, reverse, zoom, dark, regionMesh, regionCentroids, fillMode, showPins, pinEvents, yoyData, yoyTop, yoyFrom, yoyTo, yoyColorIdx, showFlows, showRegions, uniqueData, basemap]);
+  }, [st, yb, metricIdx, view, showLabels, showOutlines, spotN, colorIdx, colorMode, logMode, clipMax, reverse, zoom, dark, regionMesh, regionCentroids, fillMode, showPins, pinEvents, yoyData, yoyTop, yoyFrom, yoyTo, yoyColorIdx, showFlows, showRegions, oppData, oppValues, uniqueData, basemap]);
 
   // FLOWS map (deck.gl 3D arcs). Base states shade by net flow (red = net destination, blue = net feeder);
   // picking a focus state traces its top inbound (red) + outbound (blue) routes as arcs. Ported from the POC.
@@ -1125,7 +1268,8 @@ export default function ParticipationMap() {
     setSelYears([years[years.length - 1]]); setSelMonths(['all']);
     setMetricIdx(0); setView('state'); setShowLabels(true); setShowOutlines(false);
     setSpotN(10); setColorMode('value'); setLogMode(false); setClipMax(''); setReverse(false);
-    setZoom(1); setFillMode('choro'); setShowPins(false); setShowFlows(false);
+    setZoom(1); setFillMode('choro'); setShowPins(false); setShowFlows(false); setShowRegions(false);
+    setOppBandMode('rel'); setOppStatMethod('quantile'); setOppSigmaK(1); setOppLeaderCut(0.60); setOppFloorCut(0.27); setOppValues(true);
     setPinIm(''); setStateSel(null); setRegionSel('');
     setFlowFocus((p.abbr && p.abbr.indexOf('CA') >= 0) ? 'CA' : ((p.abbr && p.abbr[0]) || '')); setFlowDir('both'); setFlowTop(5); setFlowSpin(false);
     flowViewRef.current = { ...FLOW_VIEW0 };
@@ -1210,7 +1354,7 @@ export default function ParticipationMap() {
 
       <div className="toolbar" style={{ gap: 6, flexWrap: 'wrap', rowGap: 6 }}>
         <label title={metricDesc(metrics[metricIdx] && metrics[metricIdx].label, p.populationSource)}>Metric&nbsp;
-          <select value={metricIdx} style={{ maxWidth: 220 }} onChange={(e) => { setMetricIdx(Number(e.target.value)); if (showFlows || showRegions) { setShowFlows(false); setShowRegions(false); setFillMode('choro'); }  /* metric doesn't apply to Flows/Regions -> jump to Heatmap so the change is visible (Pins/YoY keep the metric) */ trackFilter('participation-maps', 'map', 'metric'); }}>
+          <select value={metricIdx} style={{ maxWidth: 220 }} onChange={(e) => { setMetricIdx(Number(e.target.value)); if (showFlows || showRegions || fillMode === 'opp') { setShowFlows(false); setShowRegions(false); setFillMode('choro'); }  /* metric doesn't apply to Flows/Regions/Opportunity -> jump to Heatmap so the change is visible (Pins/YoY keep the metric) */ trackFilter('participation-maps', 'map', 'metric'); }}>
             {METRIC_GROUPS.map((g) => {
               const opts = g.idxs.filter((i) => metrics[i]);
               if (!opts.length) return null;
@@ -1280,10 +1424,12 @@ export default function ParticipationMap() {
           onClick={() => { track('map_style', { panel: 'participation-maps', view: 'flows' }); setShowRegions(false); setShowFlows((s) => !s); }}>Flows</button>
         <button style={tab(showRegions)} title="Reference map: states shaded by their region"
           onClick={() => { track('map_style', { panel: 'participation-maps', view: 'regions' }); setShowRegions((s) => { const on = !s; if (on) { setShowFlows(false); setShowPins(false); } return on; }); }}>Regions</button>
+        <button style={tab(fillMode === 'opp' && !showFlows && !showRegions)} title="Opportunity map: states classified leader / under-penetrated / floor vs the national home-penetration rate"
+          onClick={() => { track('map_style', { panel: 'participation-maps', view: 'opportunity' }); setShowFlows(false); setShowRegions(false); setShowPins(false); setFillMode('opp'); }}>Opportunity</button>
         <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 8px 6px' }} />
         <span style={{ display: 'inline-flex', gap: 4 }}>
           {['state', 'region', 'both'].map((v) => (
-            <button key={v} style={{ ...seg(view === v && !showFlows && !showRegions), ...((showFlows || showRegions) ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={showFlows || showRegions} onClick={() => pickView(v)}>
+            <button key={v} style={{ ...seg(view === v && !showFlows && !showRegions && fillMode !== 'opp'), ...((showFlows || showRegions || fillMode === 'opp') ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={showFlows || showRegions || fillMode === 'opp'} onClick={() => pickView(v)}>
               {v === 'state' ? 'State' : v === 'region' ? 'Region' : 'Both'}
             </button>
           ))}
@@ -1476,14 +1622,21 @@ export default function ParticipationMap() {
         </div>
       ) : null}
 
-      <div className="card" ref={cardRef} style={{ position: 'relative' }}>
+      <div style={oppView ? { display: 'flex', gap: 12, alignItems: 'stretch', flexWrap: 'wrap' } : { display: 'contents' }}>
+      <div className="card" ref={cardRef} style={{ position: 'relative', ...(oppView ? { flex: '2.6 1 400px', minWidth: 360, marginBottom: 0 } : {}) }}>
         <div ref={mapRef} className="mapdiv" style={{ visibility: showFlows ? 'hidden' : 'visible' }} />
         <div ref={deckRef} style={{ position: 'absolute', inset: 0, height: 560, visibility: showFlows ? 'visible' : 'hidden', borderRadius: 10, overflow: 'hidden' }} />
         {((!showFlows && (metricIdx in UNIQ_IDX) && (fillMode === 'yoy' ? yoyUniqLoading : uniqLoading)) || (showFlows && flowLoading)) ? (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: dark ? 'rgba(11,18,32,.45)' : 'rgba(255,255,255,.55)', borderRadius: 10, zIndex: 5, pointerEvents: 'none' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'var(--panel)', color: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: '0 6px 18px rgba(0,0,0,.22)' }}>
-              {showFlows ? 'Loading flow map…' : 'Counting unique athletes…'}
+          <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 5, pointerEvents: 'none' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--panel)', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 999, fontSize: 11, fontWeight: 600, boxShadow: '0 2px 8px rgba(0,0,0,.14)' }}>
+              <span className="mapspin" />{showFlows ? 'Loading…' : 'Counting…'}
             </span>
+          </div>
+        ) : null}
+        {(mapBusy || (oppView && homeLoading)) && !showFlows ? (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', justifyContent: 'center', background: 'var(--panel)', borderRadius: 10, zIndex: 6, pointerEvents: 'none' }}>
+            <span className="mapspin" style={{ width: 22, height: 22, borderWidth: 3 }} />
+            {oppView && homeLoading ? <span className="small muted">Loading penetration data…</span> : null}
           </div>
         ) : null}
         {showFlows && !flowLoading ? (
@@ -1517,7 +1670,73 @@ export default function ParticipationMap() {
             ) : null}
           </div>
         ) : null}
+        {oppView ? (
+          <div style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 4, background: dark ? 'rgba(11,18,32,.9)' : 'rgba(255,255,255,.95)', border: '1px solid var(--line)', borderRadius: 8, padding: '8px 11px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink)', boxShadow: '0 4px 14px rgba(0,0,0,.20)' }}>
+            <div style={{ fontWeight: 700, marginBottom: 3 }}>Home penetration / 1k{oppData ? ' · nat’l ' + oppData.national : ''}<span style={{ fontWeight: 400, opacity: 0.75 }}>{oppData ? (oppData.mode === 'rel' ? ' · national-relative' : oppData.mode === 'stat' ? (' · ' + (oppData.stat && oppData.stat.method === 'sigma' ? 'mean ± ' + oppData.stat.k + 'σ' : 'quantile')) : ' · absolute') : ''}</span></div>
+            {OPP_ORDER.map((b) => {
+              if (oppData && oppData.relMode && b === 'mid') return null;   // Mid is empty when Leader = national
+              const lc = oppData ? oppData.leaderCut : oppLeaderCut, fc = oppData ? oppData.floorCut : oppFloorCut;
+              const sub = b === 'leader' ? (oppData && oppData.relMode ? ' ≥ national' : ' ≥ ' + lc.toFixed(2))
+                : b === 'floor' ? (oppData && oppData.relMode ? ' ≤ ½ national (' + fc.toFixed(2) + ')' : ' ≤ ' + fc.toFixed(2))
+                : b === 'under' ? (oppData && oppData.relMode ? ' below national' : '') : '';
+              return (
+                <div key={b} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 11, height: 11, borderRadius: 3, background: OPP_C[b], display: 'inline-block' }} />
+                  <span>{OPP_LABEL[b]}{sub}{oppData ? ' · ' + oppData.counts[b] : ''}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
+      {oppView ? (
+        <OppCard row={oppData ? oppData.rows.find((r) => r.ab === oppSel) : null} national={oppData ? oppData.national : 0} flex="0.9 1 220px" />
+      ) : null}
+      </div>
+      {oppView ? (
+        <div className="toolbar" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+          <span className="small muted" style={{ fontWeight: 700 }}>Bands</span>
+          <span style={{ display: 'inline-flex', gap: 4 }}>
+            <button style={mini(oppBandMode === 'rel')} title="Leader ≥ the national rate · Floor ≤ half the national rate — adapts to the current selection" onClick={() => setOppBandMode('rel')}>National-relative</button>
+            <button style={mini(oppBandMode === 'stat')} title="Cutoffs from the distribution of state penetration values (quantiles or mean ± σ)" onClick={() => setOppBandMode('stat')}>Statistical</button>
+            <button style={mini(oppBandMode === 'abs')} title="Fixed absolute cutoffs you set" onClick={() => setOppBandMode('abs')}>Absolute</button>
+          </span>
+          {oppBandMode === 'abs' ? (
+            <>
+              <label className="small">Leader ≥&nbsp;
+                <input type="number" step="0.01" min="0" value={oppLeaderCut} onChange={(e) => setOppLeaderCut(Math.max(0, parseFloat(e.target.value) || 0))} style={{ width: 66 }} />
+              </label>
+              <label className="small">Floor ≤&nbsp;
+                <input type="number" step="0.01" min="0" value={oppFloorCut} onChange={(e) => setOppFloorCut(Math.max(0, parseFloat(e.target.value) || 0))} style={{ width: 66 }} />
+              </label>
+            </>
+          ) : oppBandMode === 'stat' ? (
+            <>
+              <span style={{ display: 'inline-flex', gap: 4 }}>
+                <button style={mini(oppStatMethod === 'quantile')} title="Leader = top 20% · Floor = bottom 20% · Mid/Under split at the median" onClick={() => setOppStatMethod('quantile')}>Quantile</button>
+                <button style={mini(oppStatMethod === 'sigma')} title="Leader ≥ mean + σ · Floor ≤ mean − σ · Mid/Under split at the mean" onClick={() => setOppStatMethod('sigma')}>Std-dev</button>
+              </span>
+              {oppStatMethod === 'sigma' ? (
+                <label className="small">σ×&nbsp;
+                  <select value={oppSigmaK} onChange={(e) => setOppSigmaK(parseFloat(e.target.value))}>
+                    <option value={0.5}>0.5</option><option value={1}>1.0</option><option value={1.5}>1.5</option>
+                  </select>
+                </label>
+              ) : null}
+              <span className="small muted">{oppData ? (oppData.stat && oppData.stat.method === 'sigma'
+                ? 'μ ' + oppData.stat.mean + ' · σ ' + oppData.stat.sd + ' → Leader ≥ ' + oppData.leaderCut.toFixed(2) + ' · Floor ≤ ' + oppData.floorCut.toFixed(2)
+                : 'p20 ' + oppData.floorCut.toFixed(2) + ' · median ' + oppData.midCut.toFixed(2) + ' · p80 ' + oppData.leaderCut.toFixed(2)) : '—'}</span>
+            </>
+          ) : (
+            <span className="small muted">Leader ≥ {oppData ? oppData.leaderCut.toFixed(2) : '—'} · Floor ≤ {oppData ? oppData.floorCut.toFixed(2) : '—'} (nat’l {oppData ? oppData.national : '—'})</span>
+          )}
+          <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 4px' }} />
+          <label className="small" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <input type="checkbox" checked={oppValues} onChange={(e) => setOppValues(e.target.checked)} /> Show values on map
+          </label>
+        </div>
+      ) : null}
+      {oppView && oppData ? <div className="small muted" style={{ marginTop: 6 }}>Full ranking with sortable columns + CSV is in the <b>Opportunity</b> tab below.</div> : null}
       {showRegions ? (
         <div className="toolbar" style={{ gap: 12, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
           <span className="small muted" style={{ fontWeight: 700 }}>Regions:</span>
@@ -1599,6 +1818,7 @@ export default function ParticipationMap() {
           stateSel={stateSel} setStateSel={setStateSel}
           regionSel={regionSel} setRegionSel={setRegionSel}
           uniqueData={uniqueData}
+          oppData={oppData} oppSel={oppSel} onOppSelect={onOppSelect} oppView={oppView}
         />
       ) : <div className="muted small" style={{ padding: 16, marginTop: 16 }}>Loading tables…</div>}
     </div>

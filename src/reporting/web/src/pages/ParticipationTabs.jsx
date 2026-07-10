@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveSlices, aggregateFlows, homeByState } from '../lib/compute.js';
 import { trackFilter, trackExport } from '../lib/track.js';
 import Reference from './Reference.jsx';
+import { OppTable } from './opportunity.jsx';
 
 // Native port of the POC's lower tabs: Summary (region stats + Top-N cards), Region matrix, State matrix
 // (sortable home->event cross-tabs with frozen totals, net importer/exporter shading, crosshair highlight),
@@ -81,6 +82,7 @@ const TABS = [
   { key: 'regionmtx', label: 'Region matrix' },
   { key: 'statemtx', label: 'State matrix' },
   { key: 'stateflows', label: 'State flows' },
+  { key: 'opportunity', label: 'Opportunity' },
   { key: 'homeaway', label: 'Home vs Away' },
   { key: 'events', label: 'Events' },
   { key: 'reference', label: 'Reference' },
@@ -174,11 +176,15 @@ function MatrixTable({ entities, data, travCols, bottomRows, narrative, csvName,
   );
 }
 
-function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel, setStateSel, regionSel, setRegionSel, uniqueData }) {
+function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel, setStateSel, regionSel, setRegionSel, uniqueData, oppData, oppSel, onOppSelect, oppView }) {
   const imRow = dark ? 'rgba(220,38,38,0.20)' : 'rgba(194,14,47,0.06)';
   const imFrozen = dark ? '#3a1e24' : '#fbe9ec';
   const rowHL = dark ? '#26364d' : '#eef2ff';
   const [tab, setTab] = useState('events');
+  // Auto-open the Opportunity tab when the map view switches into Opportunity (rising edge only, so switching
+  // the map away — or manually picking another tab — leaves this tab where the user left it).
+  const prevOppView = useRef(false);
+  useEffect(() => { if (oppView && !prevOppView.current) setTab('opportunity'); prevOppView.current = oppView; }, [oppView]);
   const [imSel, setImSel] = useState('');
   const [searchTxt, setSearchTxt] = useState('');
   const [showSanc, setShowSanc] = useState(false);
@@ -640,6 +646,12 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
             </div>
           ) : null}
         </div>
+      ) : null}
+
+      {tab === 'opportunity' ? (
+        oppData
+          ? <OppTable rows={oppData.rows} national={oppData.national} sel={oppSel} onSelect={onOppSelect} dark={dark} />
+          : <p className="muted" style={{ padding: 8 }}>Opportunity needs the home-penetration data (Census population + resident-athlete counts). Run the Census step (2c), rebuild the summary, then Refresh.</p>
       ) : null}
 
       {tab === 'reference' ? <Reference /> : null}

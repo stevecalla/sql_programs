@@ -283,9 +283,13 @@ async function get_bootstrap(opts) {
 // months, so it can't be summed from the pre-aggregated summary. For any selection we count it straight
 // from the base athlete-grain table (all_participation_data_with_membership_match) at state + region +
 // national grain in one pass each (WITH ROLLUP -> the NULL group row IS the true national distinct).
-// Restricted to the app's 50 states so national matches the summary's participant basis. Memoized by
-// selection; the cache is cleared whenever a fresh live build lands.
+// Restricted to the app's known-home jurisdictions — the 54 (50 states + DC + GU/PR/VI) from region_data,
+// the SAME set the ETL uses — so national matches the summary basis. Memoized by selection; the cache is
+// cleared whenever a fresh live build lands.
 const BASE_TABLE = 'all_participation_data_with_membership_match';
+// The 54-jurisdiction "known home/event" set, region_data-driven (identical to step_3i's STATE_LIST), so the
+// live unique/home counts track the summary scope (incl. DC + territories) instead of a hardcoded 50 states.
+const STATE_LIST_SQL = "SELECT DISTINCT state_code FROM region_data WHERE state_code IS NOT NULL AND region_name IS NOT NULL AND region_name <> ''";
 async function unique_for_selection(sel) {
   sel = sel || {};
   const years = (sel.years || []).map(Number).filter((y) => y);
@@ -299,7 +303,7 @@ async function unique_for_selection(sel) {
   const where = ['start_date_year_races IN (?)'];
   const params = [years];
   if (state) { where.push('state_code_events = ?'); params.push(state); }
-  else { where.push('state_code_events IN (?)'); params.push(META.abbr); }   // 50 states -> match summary basis
+  else { where.push('state_code_events IN (' + STATE_LIST_SQL + ')'); }   // 54 jurisdictions (region_data) -> match summary basis
   if (months) { where.push('start_date_month_races IN (?)'); params.push(months); }
   if (region) { where.push('region_name = ?'); params.push(region); }
   if (ironman === 'Yes') where.push("is_ironman = 'Y'");
@@ -319,8 +323,8 @@ async function unique_for_selection(sel) {
 }
 
 // Home-side distinct ADULT athletes by home state / home region (the penetration numerator: residents who
-// race, per home state — regardless of where they raced). Restricted to known-home in the 50 states +
-// adult bins to match the deck's penetration definition. Memoized alongside the unique cache.
+// race, per home state — regardless of where they raced). Restricted to known-home in the 54 jurisdictions
+// (region_data) + adult bins to match the summary/penetration definition. Memoized alongside the unique cache.
 const HOME_ADULT_BINS = "('20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99')";
 async function home_athletes_for_selection(sel) {
   sel = sel || {};
@@ -332,8 +336,8 @@ async function home_athletes_for_selection(sel) {
   const key = 'home:' + JSON.stringify({ y: years.slice().sort((a, b) => a - b), m: months ? months.slice().sort((a, b) => a - b) : 'all', ironman });
   if (_uniqueCache.has(key)) return _uniqueCache.get(key);
 
-  const where = ['start_date_year_races IN (?)', 'member_state_code_addresses IN (?)', 'age_as_race_results_bin IN ' + HOME_ADULT_BINS];
-  const params = [years, META.abbr];
+  const where = ['start_date_year_races IN (?)', 'member_state_code_addresses IN (' + STATE_LIST_SQL + ')', 'age_as_race_results_bin IN ' + HOME_ADULT_BINS];
+  const params = [years];
   if (months) { where.push('start_date_month_races IN (?)'); params.push(months); }
   if (ironman === 'Yes') where.push("is_ironman = 'Y'");
   else if (ironman === 'No') where.push("(is_ironman IS NULL OR is_ironman <> 'Y')");
