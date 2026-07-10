@@ -67,7 +67,7 @@ module.exports = defineConfig({
     timeout: 180000,
     env: {
       REPORTING_PORT: PORT,
-      REPORTING_WEB_DIST: path.join(repoRoot, 'src', 'reporting', 'web', 'dist-e2e'),
+      REPORTING_WEB_DIST: path.join(repoRoot, '.reporting_e2e_dist'),
       REPORTING_TEST_USER: CREDS.user,
       REPORTING_TEST_PASS: CREDS.pass,
       REPORTING_SESSION_SECRET: CREDS.secret,

@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * make_fixture.js — one-off helper to seed the participation bootstrap fixture from the current
- * standalone dashboard build, so the reporting app runs before the MySQL query is wired (Phase 1).
+ * make_fixture.js — helper to seed the participation bootstrap fixture from a standalone dashboard
+ * build. `build_from_mysql()` is now live, so this fixture is only an OFFLINE FALLBACK used when the
+ * DB is unreachable — keep it (optional), no longer required for the app to run.
  *
  * Usage:
  *   node src/reporting/store/make_fixture.js "<path-to>/usat_participation_dashboard_LATEST.html"
  *
  * It extracts the baked `window.DASH = { ... };` object from the HTML and writes it to
- * store/fixtures/participation_bootstrap.json. Delete the fixture once build_from_mysql() is live.
+ * store/fixtures/participation_bootstrap.json.
  */
 const fs = require('fs');
 const path = require('path');
