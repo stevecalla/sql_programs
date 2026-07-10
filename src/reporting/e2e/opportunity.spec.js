@@ -33,13 +33,18 @@ test('state card collapses and expands', async ({ page }) => {
 
 test('map key collapses', async ({ page }) => {
   const key = page.getByRole('button', { name: /Home penetration \/ 1k/ });
-  // The Leader band ROW is exactly "Leader ≥ 0.60". The collapsed summary ("Leader ≥ 0.42 · Floor ≤ …")
-  // has trailing text, so an anchored full-text match hits only the row and disappears when collapsed.
-  const leaderRow = page.getByText(/^Leader ≥ [\d.]+$/);
-  await expect(leaderRow).toBeVisible();  // band rows visible
-  await key.click();                      // collapse the key
-  await expect(leaderRow).toBeHidden();   // band rows hidden
-  await key.click();                      // expand
+  // The toggle button's own title flips Collapse<->Expand — the deterministic signal. In the default
+  // National-relative mode the key rows read "Under-penetrated below national" etc. (NOT a numeric cut;
+  // the numeric "Leader ≥ 0.44" text lives in the bottom toolbar and is unrelated to this key), so we
+  // match a row-only phrase to confirm the rows themselves appear/disappear.
+  const bandRow = page.getByText(/below national/);
+  await expect(key).toHaveAttribute('title', 'Collapse the key');  // starts expanded
+  await expect(bandRow).toBeVisible();                             // band rows visible
+  await key.click();                                               // collapse the key
+  await expect(key).toHaveAttribute('title', 'Expand the key');    // toggled to collapsed
+  await expect(bandRow).toBeHidden();                              // band rows removed
+  await key.click();                                               // expand again
+  await expect(key).toHaveAttribute('title', 'Collapse the key');
 });
 
 test('ranking tab shows the sortable table', async ({ page }) => {
