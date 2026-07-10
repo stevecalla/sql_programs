@@ -32,7 +32,11 @@ const mount = require('./src/reporting/api/routes');
 const store = require('./src/reporting/auth/auth_store');
 
 const DEFAULT_PORT = Number(process.env.REPORTING_PORT) || 8021;
-const WEB_DIST = path.join(__dirname, 'src', 'reporting', 'web', 'dist');
+// Which built web bundle to serve. Defaults to the production dist; the e2e suite points this at a
+// throwaway dist-e2e (via REPORTING_WEB_DIST) so running tests never overwrites the production build.
+const WEB_DIST = process.env.REPORTING_WEB_DIST
+  ? path.resolve(process.env.REPORTING_WEB_DIST)
+  : path.join(__dirname, 'src', 'reporting', 'web', 'dist');
 const PROD_URL = 'https://usat-app.kidderwise.org/reporting/participation-maps';
 
 // NGROK TUNNEL — optional public URL, same pattern as 8020/8018/8019. Off by default (Cloudflare
