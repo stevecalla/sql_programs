@@ -1236,7 +1236,20 @@ export default function ParticipationMap() {
             </div>
           ) : null}
         </span>
-        <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
+        {!showRegions ? <button style={seg(advOpen)} onClick={() => setAdvOpen((o) => !o)}>⚙ Display options {advOpen ? '▾' : '▸'}</button> : null}
+        {refreshNote ? <span className="small" style={{ alignSelf: 'center', marginLeft: 'auto', marginRight: 6, opacity: 0.9 }}>{refreshNote}</span> : null}
+        <span style={{ display: 'inline-flex', gap: 4, marginLeft: refreshNote ? 0 : 'auto' }}>
+          <button style={mini(false)} title="Pull the latest data live from the database now (bypasses the hourly cache)" disabled={refreshing} onClick={doRefresh}>{refreshing ? '⟳ …' : '⟳ Refresh data'}</button>
+          <button style={mini(false)} title="Zoom out" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.max(1.5, flowViewRef.current.zoom - 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else if (basemap && showPins) { basemapViewRef.current = { ...basemapViewRef.current, zoom: Math.max(1.5, basemapViewRef.current.zoom - 0.6) }; if (mapRef.current) Plotly.relayout(mapRef.current, { 'mapbox.zoom': basemapViewRef.current.zoom }); } else setZoom((z) => Math.max(1, z / 1.4)); }}>−</button>
+          <button style={mini(false)} title="Zoom in" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.min(9, flowViewRef.current.zoom + 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else if (basemap && showPins) { basemapViewRef.current = { ...basemapViewRef.current, zoom: Math.min(16, basemapViewRef.current.zoom + 0.6) }; if (mapRef.current) Plotly.relayout(mapRef.current, { 'mapbox.zoom': basemapViewRef.current.zoom }); } else setZoom((z) => Math.min(10, z * 1.4)); }}>+</button>
+          <button style={mini(false)} title="Reset everything to defaults (map type, zoom, filters)" onClick={resetAll}>⟲</button>
+          <button style={mini(false)} title={showFlows ? 'Download the focused state’s inbound/outbound flow routes (CSV)' : fillMode === 'yoy' ? 'Download YoY from/to/change by state & region (CSV)' : (fillMode === 'none' && showPins) ? 'Download the event pins on screen (CSV)' : 'Download the metric shown, by ' + (view === 'region' ? 'region' : view === 'both' ? 'state & region' : 'state') + ' (CSV)'} onClick={exportCsv}>CSV</button>
+          <button style={mini(false)} title="Download PNG" onClick={exportPng}>PNG</button>
+          <button style={mini(false)} title="Fullscreen" onClick={toggleFs}>⛶</button>
+        </span>
+      </div>
+
+      <div className="toolbar" style={{ gap: 6, flexWrap: 'wrap', rowGap: 6 }}>
         <button style={seg(fillMode === 'choro' && !showFlows && !showRegions)} title="Metric heatmap fill (on/off)"
           onClick={() => { setShowRegions(false); track('map_style', { panel: 'participation-maps', view: 'choropleth' }); if (showFlows) { setShowFlows(false); setFillMode('choro'); } else setFillMode((f) => (f === 'choro' ? 'none' : 'choro')); }}>Heatmap</button>
         <button style={seg(showPins && !showFlows && !showRegions)} title="Event pins map (turns the fill off; re-select Heatmap to bring it back)"
@@ -1391,19 +1404,7 @@ export default function ParticipationMap() {
         </div>
       ) : null}
 
-      <div className="toolbar">
-        {!showRegions ? <button style={seg(advOpen)} onClick={() => setAdvOpen((o) => !o)}>⚙ Display options {advOpen ? '▾' : '▸'}</button> : null}
-        {refreshNote ? <span className="small" style={{ alignSelf: 'center', marginLeft: 'auto', marginRight: 6, opacity: 0.9 }}>{refreshNote}</span> : null}
-        <span style={{ display: 'inline-flex', gap: 4, marginLeft: refreshNote ? 0 : 'auto' }}>
-          <button style={mini(false)} title="Pull the latest data live from the database now (bypasses the hourly cache)" disabled={refreshing} onClick={doRefresh}>{refreshing ? '⟳ …' : '⟳ Refresh data'}</button>
-          <button style={mini(false)} title="Zoom out" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.max(1.5, flowViewRef.current.zoom - 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else if (basemap && showPins) { basemapViewRef.current = { ...basemapViewRef.current, zoom: Math.max(1.5, basemapViewRef.current.zoom - 0.6) }; if (mapRef.current) Plotly.relayout(mapRef.current, { 'mapbox.zoom': basemapViewRef.current.zoom }); } else setZoom((z) => Math.max(1, z / 1.4)); }}>−</button>
-          <button style={mini(false)} title="Zoom in" onClick={() => { if (showFlows) { flowViewRef.current = { ...flowViewRef.current, zoom: Math.min(9, flowViewRef.current.zoom + 0.5) }; if (deckInst.current) deckInst.current.setProps({ viewState: flowViewRef.current }); } else if (basemap && showPins) { basemapViewRef.current = { ...basemapViewRef.current, zoom: Math.min(16, basemapViewRef.current.zoom + 0.6) }; if (mapRef.current) Plotly.relayout(mapRef.current, { 'mapbox.zoom': basemapViewRef.current.zoom }); } else setZoom((z) => Math.min(10, z * 1.4)); }}>+</button>
-          <button style={mini(false)} title="Reset everything to defaults (map type, zoom, filters)" onClick={resetAll}>⟲</button>
-          <button style={mini(false)} title={showFlows ? 'Download the focused state’s inbound/outbound flow routes (CSV)' : fillMode === 'yoy' ? 'Download YoY from/to/change by state & region (CSV)' : (fillMode === 'none' && showPins) ? 'Download the event pins on screen (CSV)' : 'Download the metric shown, by ' + (view === 'region' ? 'region' : view === 'both' ? 'state & region' : 'state') + ' (CSV)'} onClick={exportCsv}>CSV</button>
-          <button style={mini(false)} title="Download PNG" onClick={exportPng}>PNG</button>
-          <button style={mini(false)} title="Fullscreen" onClick={toggleFs}>⛶</button>
-        </span>
-      </div>
+      {/* Display options + actions (Refresh / zoom / reset / CSV / PNG / fullscreen) moved to the top global row. */}
 
       {advOpen && !showRegions ? (
         <div className="toolbar">
