@@ -121,6 +121,24 @@ module.exports = function mount(app) {
     }
   });
 
+  // Home-side distinct ADULT athletes for a selection (penetration numerator: residents who race, by home
+  // state — regardless of where they raced). Counted live from the base table; same on-demand pattern as
+  // /api/unique. Powers the "Home penetration / 1,000 pop" metric.
+  app.get('/api/home', require_panel('participation-maps'), async function (req, res) {
+    try {
+      const q = req.query;
+      const sel = {
+        years: (q.years || '').split(',').filter(Boolean),
+        months: (q.months || 'all').split(',').filter(Boolean),
+        ironman: q.ironman || null,
+      };
+      const r = await participation.home_athletes_for_selection(sel);
+      res.json({ ok: true, national: r.national, byHomeState: r.byHomeState, byHomeRegion: r.byHomeRegion });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
   // "Data as of" for the header badge: the source + the participation table's own timestamp.
   app.get('/api/dataset', require_panel('participation-maps'), async function (req, res) {
     try {

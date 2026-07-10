@@ -318,4 +318,37 @@ async function unique_for_selection(sel) {
   return out;
 }
 
-module.exports = { get_bootstrap, build_from_mysql, unique_for_selection, FIXTURE };
+// Home-side distinct ADULT athletes by home state / home region (the penetration numerator: residents who
+// race, per home state — regardless of where they raced). Restricted to known-home in the 50 states +
+// adult bins to match the deck's penetration definition. Memoized alongside the unique cache.
+const HOME_ADULT_BINS = "('20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99')";
+async function home_athletes_for_selection(sel) {
+  sel = sel || {};
+  const years = (sel.years || []).map(Number).filter((y) => y);
+  if (!years.length) return { national: 0, byHomeState: {}, byHomeRegion: {} };
+  const months = (sel.months && sel.months.indexOf('all') < 0)
+    ? sel.months.map(Number).filter((m) => m >= 1 && m <= 12) : null;
+  const ironman = sel.ironman || null;
+  const key = 'home:' + JSON.stringify({ y: years.slice().sort((a, b) => a - b), m: months ? months.slice().sort((a, b) => a - b) : 'all', ironman });
+  if (_uniqueCache.has(key)) return _uniqueCache.get(key);
+
+  const where = ['start_date_year_races IN (?)', 'member_state_code_addresses IN (?)', 'age_as_race_results_bin IN ' + HOME_ADULT_BINS];
+  const params = [years, META.abbr];
+  if (months) { where.push('start_date_month_races IN (?)'); params.push(months); }
+  if (ironman === 'Yes') where.push("is_ironman = 'Y'");
+  else if (ironman === 'No') where.push("(is_ironman IS NULL OR is_ironman <> 'Y')");
+  const W = where.join(' AND ');
+
+  const [stRows, rgRows] = await Promise.all([
+    db.query('SELECT member_state_code_addresses AS k, COUNT(DISTINCT id_profiles) AS u FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY member_state_code_addresses WITH ROLLUP', params),
+    db.query('SELECT region_name_member AS k, COUNT(DISTINCT id_profiles) AS u FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY region_name_member WITH ROLLUP', params),
+  ]);
+  const byHomeState = {}; let national = 0;
+  for (const r of stRows) { if (r.k == null) national = Number(r.u); else byHomeState[r.k] = Number(r.u); }
+  const byHomeRegion = {}; for (const r of rgRows) { if (r.k != null && r.k !== '') byHomeRegion[r.k] = Number(r.u); }
+  const out = { national, byHomeState, byHomeRegion };
+  _uniqueCache.set(key, out);
+  return out;
+}
+
+module.exports = { get_bootstrap, build_from_mysql, unique_for_selection, home_athletes_for_selection, FIXTURE };

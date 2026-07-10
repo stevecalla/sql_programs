@@ -36,6 +36,13 @@ const METRIC_DESC = {
   'Unique participants': 'Distinct athletes (deduplicated).',
   '% unique participants': 'Unique ÷ Participants.',
   'Avg races / participant': 'Participants ÷ Unique — average races per athlete.',
+  'Adult participants': 'Participations by athletes aged 20+ (age bins 20-29…90-99). Count of race entries, not unique athletes.',
+  'Non-adult participants': 'Participations by athletes under 20 (youth 4-19), plus any with no age recorded — i.e. Participants − Adult participants.',
+  'Adult %': 'Adult participations ÷ all participations. Adult % + Non-adult % = 100%.',
+  'Non-adult %': 'Non-adult (youth / unknown-age) participations ÷ all participations. Adult % + Non-adult % = 100%.',
+  'Adult participation / 1,000 pop': 'Adult participations at in-state events ÷ state population × 1,000 (US Census, from step 2c). Supply-side per-capita reach.',
+  'Population (Census)': 'State resident population (US Census ACS 1-year, loaded by step 2c).',
+  'Home penetration / 1,000 pop': 'Distinct adult residents who race ÷ state population × 1,000 — residents racing per 1,000, counted once whether they race at home or away (demand-side reach).',
 };
 // Metric dropdown grouping — related metrics sit together with an <optgroup> divider between them.
 // Each entry lists the metric INDICES (into the meta / metrics array) shown under that heading, in
@@ -43,6 +50,7 @@ const METRIC_DESC = {
 // index so metricIdx semantics are unchanged; a group is skipped if none of its metrics exist yet.
 const METRIC_GROUPS = [
   { label: 'Participation', idxs: [0, 1, 2, 3, 4, 5, 6] },
+  { label: 'Adult vs non-adult', idxs: [42, 43, 44, 45] },
   { label: 'Gender', idxs: [7, 8, 9, 10] },
   { label: 'Age bands', idxs: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22] },
   { label: 'Home / Away — of total', idxs: [23, 24, 36, 25, 26, 37] },
@@ -50,17 +58,23 @@ const METRIC_GROUPS = [
   { label: 'IRONMAN', idxs: [27, 28] },
   { label: 'New vs Repeat', idxs: [29, 30, 31, 32] },
   { label: 'Unique athletes', idxs: [33, 34, 35] },
-  { label: 'Travel flow (state ↔ state)', idxs: [42, 43, 44] },
+  { label: 'Travel flow (state ↔ state)', idxs: [46, 47, 48] },
+  { label: 'Penetration & Opportunity', idxs: [51, 49, 50] },
 ];
 
-function metricDesc(label) {
+function metricDesc(label, popSrc) {
   if (!label) return '';
-  if (METRIC_DESC[label]) return METRIC_DESC[label];
-  if (/^Age .* %$/.test(label)) return 'Share of participations in the ' + label.replace(' %', '') + ' age band.';
-  if (/^Age .* \(count\)$/.test(label)) return 'Number of participations in the ' + label.replace(' (count)', '') + ' age band.';
-  if (/%$/.test(label)) return label.replace(' %', '') + ' as a percentage of participations.';
-  if (/\(count\)$/.test(label)) return 'Number of ' + label.replace(' (count)', '') + ' participations.';
-  return label;
+  let d = METRIC_DESC[label];
+  if (!d) {
+    if (/^Age .* %$/.test(label)) d = 'Share of participations in the ' + label.replace(' %', '') + ' age band.';
+    else if (/^Age .* \(count\)$/.test(label)) d = 'Number of participations in the ' + label.replace(' (count)', '') + ' age band.';
+    else if (/%$/.test(label)) d = label.replace(' %', '') + ' as a percentage of participations.';
+    else if (/\(count\)$/.test(label)) d = 'Number of ' + label.replace(' (count)', '') + ' participations.';
+    else d = label;
+  }
+  // Append the live Census population source to the population / penetration metric tooltips.
+  if (popSrc && /(Population|penetration|\/ 1,000 pop)/i.test(label)) d += '  ·  Population source: ' + popSrc;
+  return d;
 }
 
 // Native participation map — state choropleth at POC parity: metric fill (value / rank, linear / log,
@@ -365,9 +379,10 @@ export default function ParticipationMap() {
     return out;
   }, [st.p]);
 
+  const [homeData, setHomeData] = useState(null);   // on-demand home-side distinct adult athletes (penetration numerator)
   // Aggregated year-block for the current selection (single full year is exact; else computeAgg).
-  // Then append three OD-derived "travel flow" metrics (idx 42/43/44) from the home->event matrix so the
-  // dropdown/choropleth/tables can shade & sort by Inbound / Outbound / Net without any server change.
+  // Then append travel-flow metrics (46/47/48) + penetration metrics (49 adult-pen, 50 population, 51 home-
+  // penetration from homeData) so the dropdown/choropleth/tables can shade & sort them without a server change.
   const yb = useMemo(() => {
     if (!(st.p && selYears && selYears.length)) return null;
     const base = getYearBlock(st.p, selYears, selMonths);
@@ -386,11 +401,32 @@ export default function ParticipationMap() {
       return { label, ispct: false, dec: false, statez, regionz, mn, mx, labels, regionlabels };
     };
     const metrics = base.metrics.slice();
-    metrics[42] = build('Inbound — races drawn in', (ab) => A.inb[ab] || 0, (rg) => rIn[rg] || 0);
-    metrics[43] = build('Outbound — residents racing away', (ab) => A.outb[ab] || 0, (rg) => rOut[rg] || 0);
-    metrics[44] = build('Net flow (in − out)', (ab) => (A.inb[ab] || 0) - (A.outb[ab] || 0), (rg) => (rIn[rg] || 0) - (rOut[rg] || 0));
+    metrics[46] = build('Inbound — races drawn in', (ab) => A.inb[ab] || 0, (rg) => rIn[rg] || 0);
+    metrics[47] = build('Outbound — residents racing away', (ab) => A.outb[ab] || 0, (rg) => rOut[rg] || 0);
+    metrics[48] = build('Net flow (in − out)', (ab) => (A.inb[ab] || 0) - (A.outb[ab] || 0), (rg) => (rIn[rg] || 0) - (rOut[rg] || 0));
+
+    // Penetration & Opportunity metrics (need Census population from step_2c on the payload as p.population).
+    // Adult participation / 1,000 pop = adult participations at in-state events ÷ population — the supply-side
+    // per-capita reach, adult basis to match the deck. Home penetration (residents racing / 1k) is a distinct-
+    // athlete count and is appended from the on-demand home data (homePen) separately, as metric 51.
+    const pop = p.population || {};
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const idxOf = {}; abbr.forEach((ab, i) => { idxOf[ab] = i; });
+    const regPop = {}; abbr.forEach((ab) => { const rg = ab2region[ab]; regPop[rg] = (regPop[rg] || 0) + (pop[ab] || 0); });
+    const mAdult = base.metrics[42] || null;       // 'Adult participants' count (null if payload predates the new meta)
+    const regAdult = {}; if (mAdult) abbr.forEach((ab, i) => { regAdult[ab2region[ab]] = mAdult.regionz[i]; });
+    metrics[49] = build('Adult participation / 1,000 pop',
+      (ab) => { const pp = pop[ab], v = mAdult ? mAdult.statez[idxOf[ab]] : null; return (pp && v != null) ? round2(v / pp * 1000) : null; },
+      (rg) => { const pp = regPop[rg], v = regAdult[rg]; return (pp && v != null) ? round2(v / pp * 1000) : null; });
+    metrics[50] = build('Population (Census)', (ab) => pop[ab] || null, (rg) => regPop[rg] || null);
+    // Home penetration / 1,000 pop — distinct adult residents who race ÷ population (demand-side reach). Uses
+    // the on-demand home-athlete counts (homeData) when loaded; null until then / if population is absent.
+    const hs = (homeData && homeData.byHomeState) || null, hr = (homeData && homeData.byHomeRegion) || null;
+    metrics[51] = build('Home penetration / 1,000 pop',
+      (ab) => { const pp = pop[ab], v = hs ? hs[ab] : null; return (pp && v != null) ? round2(v / pp * 1000) : null; },
+      (rg) => { const pp = regPop[rg], v = hr ? hr[rg] : null; return (pp && v != null) ? round2(v / pp * 1000) : null; });
     return Object.assign({}, base, { metrics });
-  }, [st.p, selYears, selMonths]);
+  }, [st.p, selYears, selMonths, homeData]);
 
   // Exact unique athletes for the current period, counted live from the base table (non-additive metric).
   // Only the whole-map selection (years + months) drives this; cross-filters stay with pins/events.
@@ -411,6 +447,17 @@ export default function ParticipationMap() {
       .then(({ status, body }) => { if (seq !== uniqSeq.current) return; setUniqueData(status === 200 && body && body.ok ? body : null); setUniqLoading(false); })
       .catch(() => { if (seq === uniqSeq.current) { setUniqueData(null); setUniqLoading(false); } });
   }, [st.p, selYears, selMonths, fillMode]);
+
+  // Home-side distinct adult athletes (penetration numerator) for the current selection — feeds the
+  // 'Home penetration / 1,000 pop' metric. Latest-wins guard so a stale response can't overwrite a newer one.
+  useEffect(() => {
+    if (!st.p || !selYears || !selYears.length) { setHomeData(null); return; }
+    let live = true;
+    api.homeFor({ years: selYears, months: selMonths })
+      .then(({ status, body }) => { if (live) setHomeData(status === 200 && body && body.ok ? body : null); })
+      .catch(() => { if (live) setHomeData(null); });
+    return () => { live = false; };
+  }, [st.p, selYears, selMonths]);
   const availMonths = useMemo(() => {
     if (!st.p || !selYears) return [];
     const set = new Set();
@@ -1142,7 +1189,7 @@ export default function ParticipationMap() {
       ) : null}
 
       <div className="toolbar" style={{ gap: 6, flexWrap: 'wrap', rowGap: 6 }}>
-        <label title={metricDesc(metrics[metricIdx] && metrics[metricIdx].label)}>Metric&nbsp;
+        <label title={metricDesc(metrics[metricIdx] && metrics[metricIdx].label, p.populationSource)}>Metric&nbsp;
           <select value={metricIdx} style={{ maxWidth: 220 }} onChange={(e) => { setMetricIdx(Number(e.target.value)); if (showFlows || showRegions) { setShowFlows(false); setShowRegions(false); setFillMode('choro'); }  /* metric doesn't apply to Flows/Regions -> jump to Heatmap so the change is visible (Pins/YoY keep the metric) */ trackFilter('participation-maps', 'map', 'metric'); }}>
             {METRIC_GROUPS.map((g) => {
               const opts = g.idxs.filter((i) => metrics[i]);
