@@ -1,7 +1,7 @@
 'use strict';
 // Smoke tests for the reporting API — no DB, no build required. Mirrors the merge tool's test style
 // (create_app + listen on port 0). Run: node --test src/reporting/tests
-process.env.REPORTING_SESSION_SECRET = process.env.REPORTING_SESSION_SECRET || 'test_secret_do_not_use_in_prod';
+process.env.REPORTING_SESSION_SECRET = process.env.REPORTING_SESSION_SECRET || require('node:crypto').randomBytes(24).toString('hex');
 const test = require('node:test');
 const assert = require('node:assert');
 const { create_app } = require('../../../server_reporting_8021.js');

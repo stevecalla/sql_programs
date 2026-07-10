@@ -12,11 +12,13 @@ test.beforeEach(async ({ page }) => {
 
 test('on-map key + band modes switch cleanly', async ({ page }) => {
   await expect(page.getByText(/Home penetration \/ 1k/)).toBeVisible();          // on-map key
-  await expect(page.getByRole('button', { name: 'National-relative' })).toBeVisible();
-  await page.getByRole('button', { name: 'Statistical' }).click();
-  await expect(page.getByRole('button', { name: 'Quantile' })).toBeVisible();     // stat sub-controls appear
-  await page.getByRole('button', { name: 'Absolute' }).click();
-  await page.getByRole('button', { name: 'National-relative' }).click();
+  // exact:true — the collapse-key button's label embeds the active mode name (e.g. "…· National-relative"),
+  // so a loose match would collide with it.
+  await expect(page.getByRole('button', { name: 'National-relative', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Statistical', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Quantile', exact: true })).toBeVisible();  // stat sub-controls appear
+  await page.getByRole('button', { name: 'Absolute', exact: true }).click();
+  await page.getByRole('button', { name: 'National-relative', exact: true }).click();
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });
 
@@ -31,10 +33,13 @@ test('state card collapses and expands', async ({ page }) => {
 
 test('map key collapses', async ({ page }) => {
   const key = page.getByRole('button', { name: /Home penetration \/ 1k/ });
-  await expect(page.getByText(/Leader/)).toBeVisible();     // band rows visible
-  await key.click();                                        // collapse the key
-  await expect(page.getByText(/Leader ≥/)).toHaveCount(0);  // band rows hidden
-  await key.click();                                        // expand
+  // The Leader band ROW is exactly "Leader ≥ 0.60". The collapsed summary ("Leader ≥ 0.42 · Floor ≤ …")
+  // has trailing text, so an anchored full-text match hits only the row and disappears when collapsed.
+  const leaderRow = page.getByText(/^Leader ≥ [\d.]+$/);
+  await expect(leaderRow).toBeVisible();  // band rows visible
+  await key.click();                      // collapse the key
+  await expect(leaderRow).toBeHidden();   // band rows hidden
+  await key.click();                      // expand
 });
 
 test('ranking tab shows the sortable table', async ({ page }) => {

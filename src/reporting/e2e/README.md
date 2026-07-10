@@ -13,14 +13,10 @@ npm i -D @playwright/test        # already in the repo-root package.json
 npx playwright install chromium  # the browser binary
 ```
 
-Set a valid reporting login (used once by `auth.setup.js`, then reused via a saved session):
-
-```
-# PowerShell
-$env:E2E_USER="you"; $env:E2E_PASS="yourpass"
-# bash
-export E2E_USER=you E2E_PASS=yourpass
-```
+**No credentials to set.** Like the merge suite, the config generates random throwaway credentials each
+run (`crypto.randomBytes`), builds the web app, and starts a fresh reporting server on a dedicated port
+(:8099) that accepts those creds. Nothing is hardcoded, so nothing password-like is committed and there's
+no env var to manage. (DB creds are read from the machine's `.env` exactly as the app normally does.)
 
 ## Run
 
@@ -29,9 +25,7 @@ npm run reporting_e2e        # headless
 npm run reporting_e2e_ui     # interactive runner (watch / step / time-travel)
 ```
 
-It targets the dev server at `http://localhost:5174` (override with `E2E_BASE_URL`) and starts
-`reporting_dev_all` if it isn't already running. Also available from the menu: `npm run reporting_menu`
-→ TESTING → "UI/UX tests (Playwright)".
+Also available from the menu: `npm run reporting_menu` → TESTING → "UI/UX tests (Playwright)".
 
 ## What's covered
 

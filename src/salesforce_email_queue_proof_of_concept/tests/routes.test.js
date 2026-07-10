@@ -5,7 +5,8 @@ process.env.EQ_CORRECTIONS_FILE = path.join(os.tmpdir(), 'eq_routes_corr_' + Dat
 process.env.EQ_CONTEXT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'eq_routes_ctx_'));
 process.env.EQ_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'eq_routes_data_'));   // config.json (admin_landing, ai_models) -> tmp
 process.env.SF_EMAIL_QUEUE_ADMIN_USER = 'demo';
-process.env.SF_EMAIL_QUEUE_ADMIN_PASS = 'demo';
+const ADMIN_PASS = require('node:crypto').randomBytes(12).toString('hex');  // random => no committed secret
+process.env.SF_EMAIL_QUEUE_ADMIN_PASS = ADMIN_PASS;
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
@@ -33,7 +34,7 @@ after(function () { if (server) server.close(); });
 test('unauthenticated /api/me is 401', async function () { assert.strictEqual((await req('GET', '/api/me')).code, 401); });
 test('bad login is 401', async function () { assert.strictEqual((await req('POST', '/api/login', { user: 'x', pass: 'y' })).code, 401); });
 test('good login sets a session cookie', async function () {
-  const r = await req('POST', '/api/login', { user: 'demo', pass: 'demo' });
+  const r = await req('POST', '/api/login', { user: 'demo', pass: ADMIN_PASS });
   assert.strictEqual(r.code, 200);
   cookie = (r.headers['set-cookie'] || [''])[0].split(';')[0];
   assert.ok(cookie.indexOf('eq_session=') === 0);
