@@ -40,7 +40,7 @@ const miniBtn = { padding: '3px 9px', border: '1px solid var(--line)', borderRad
 // Merged stat card (mockup context fields + the opportunity block). Not collapsible; resizable (CSS).
 // Fields run population → down, with the headroom payoff called out at the bottom.
 export function OppCard({ row, national, flex }) {
-  const base = { flex: flex || '0.9 1 220px', minWidth: 210, resize: 'both', overflow: 'auto', margin: 0 };
+  const base = { flex: flex || '1 1 300px', minWidth: 280, resize: 'both', overflow: 'auto', margin: 0 };
   if (!row || row.band == null) {
     return <div className="card" style={base}><div className="small muted">Select a state on the map or table to see its penetration detail.</div></div>;
   }
@@ -62,7 +62,7 @@ export function OppCard({ row, national, flex }) {
         <span style={{ fontSize: 40, fontWeight: 800, lineHeight: 1 }}>{f2(row.pen)}</span>
         <span className="muted" style={{ fontSize: 12.5 }}>/1k home penetration · nat’l {f2(national)} · gap {row.gap > 0 ? '+' : ''}{f2(row.gap)}</span>
       </div>
-      <table style={{ width: '100%', marginTop: 8, fontSize: 14.5, borderCollapse: 'collapse' }}><tbody>
+      <table className="opphl" style={{ width: '100%', marginTop: 8, fontSize: 14.5, borderCollapse: 'collapse' }}><tbody>
         {rowEl('Population', fmtPop(row.pop), { tip: 'State resident population — US Census ACS 1-year (the per-capita denominator).' })}
         {rowEl('Home athletes', fmtInt(row.res), { tip: 'Distinct adult residents of the state who race (home or away), counted once — the penetration numerator, member-matched. Different from the “Home (count)” metric, which counts in-state race entries.' })}
         {rowEl('Event penetration /1k', f2(row.evp), { tip: 'Adult participations at in-state events ÷ population × 1,000 — supply-side reach (where events are held), vs. home penetration which counts residents.' })}
@@ -130,7 +130,7 @@ export function OppTable({ rows, national, sel, onSelect, dark }) {
             <button style={{ ...miniBtn, marginBottom: 4 }} title="Download this ranking (CSV)" onClick={exportCsv}>CSV</button>
           </div>
           <div style={{ maxHeight: 320, minHeight: 120, overflow: 'auto', resize: 'vertical' }}>
-            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+            <table className="opphl" style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
               <thead><tr style={{ position: 'sticky', top: 0, background: 'var(--panel)', borderBottom: '1px solid var(--line)' }}>
                 <th title="Rank in this list" style={{ padding: '5px 6px', textAlign: 'center', color: 'var(--muted)', fontWeight: 600 }}>#</th>
                 {th('name', 'State', 'State')}

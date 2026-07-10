@@ -1353,8 +1353,8 @@ export default function ParticipationMap() {
       ) : null}
 
       <div className="toolbar" style={{ gap: 6, flexWrap: 'wrap', rowGap: 6 }}>
-        <label title={metricDesc(metrics[metricIdx] && metrics[metricIdx].label, p.populationSource)}>Metric&nbsp;
-          <select value={metricIdx} style={{ maxWidth: 220 }} onChange={(e) => { setMetricIdx(Number(e.target.value)); if (showFlows || showRegions || fillMode === 'opp') { setShowFlows(false); setShowRegions(false); setFillMode('choro'); }  /* metric doesn't apply to Flows/Regions/Opportunity -> jump to Heatmap so the change is visible (Pins/YoY keep the metric) */ trackFilter('participation-maps', 'map', 'metric'); }}>
+        <label title={(showFlows || showRegions || fillMode === 'opp') ? 'Metric doesn’t apply to this view — switch to Heatmap, Pins, or YoY to pick a metric' : metricDesc(metrics[metricIdx] && metrics[metricIdx].label, p.populationSource)} style={(showFlows || showRegions || fillMode === 'opp') ? { opacity: 0.4 } : undefined}>Metric&nbsp;
+          <select value={metricIdx} disabled={showFlows || showRegions || fillMode === 'opp'} style={{ maxWidth: 220 }} onChange={(e) => { setMetricIdx(Number(e.target.value)); trackFilter('participation-maps', 'map', 'metric'); }}>
             {METRIC_GROUPS.map((g) => {
               const opts = g.idxs.filter((i) => metrics[i]);
               if (!opts.length) return null;
@@ -1623,7 +1623,7 @@ export default function ParticipationMap() {
       ) : null}
 
       <div style={oppView ? { display: 'flex', gap: 12, alignItems: 'stretch', flexWrap: 'wrap' } : { display: 'contents' }}>
-      <div className="card" ref={cardRef} style={{ position: 'relative', ...(oppView ? { flex: '2.6 1 400px', minWidth: 360, marginBottom: 0 } : {}) }}>
+      <div className="card" ref={cardRef} style={{ position: 'relative', ...(oppView ? { flex: '1.8 1 440px', minWidth: 400, marginBottom: 0, overflow: 'hidden' } : {}) }}>
         <div ref={mapRef} className="mapdiv" style={{ visibility: showFlows ? 'hidden' : 'visible' }} />
         <div ref={deckRef} style={{ position: 'absolute', inset: 0, height: 560, visibility: showFlows ? 'visible' : 'hidden', borderRadius: 10, overflow: 'hidden' }} />
         {((!showFlows && (metricIdx in UNIQ_IDX) && (fillMode === 'yoy' ? yoyUniqLoading : uniqLoading)) || (showFlows && flowLoading)) ? (
@@ -1690,7 +1690,7 @@ export default function ParticipationMap() {
         ) : null}
       </div>
       {oppView ? (
-        <OppCard row={oppData ? oppData.rows.find((r) => r.ab === oppSel) : null} national={oppData ? oppData.national : 0} flex="0.9 1 220px" />
+        <OppCard row={oppData ? oppData.rows.find((r) => r.ab === oppSel) : null} national={oppData ? oppData.national : 0} flex="1 1 300px" />
       ) : null}
       </div>
       {oppView ? (
