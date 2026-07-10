@@ -131,6 +131,18 @@ function cardText(s) {
   s.items.forEach(([t, d]) => lines.push('• ' + t + ' — ' + d));
   return lines.join('\n');
 }
+// Highlight every occurrence of q (already lowercased) within text; returns strings + <mark> nodes.
+function highlight(text, q) {
+  if (!q) return text;
+  const low = text.toLowerCase(); const out = []; let idx = 0; let pos = low.indexOf(q);
+  while (pos >= 0) {
+    if (pos > idx) out.push(text.slice(idx, pos));
+    out.push(<mark key={out.length} style={{ background: '#fde68a', color: 'inherit', padding: 0, borderRadius: 2 }}>{text.slice(pos, pos + q.length)}</mark>);
+    idx = pos + q.length; pos = low.indexOf(q, idx);
+  }
+  if (idx < text.length) out.push(text.slice(idx));
+  return out;
+}
 
 export default function Reference() {
   const fsRef = useRef(null);
@@ -138,6 +150,7 @@ export default function Reference() {
   const [copied, setCopied] = useState('');
   const [order, setOrder] = useState(REF.map((s) => s.title));   // card order (drag to rearrange)
   const [expanded, setExpanded] = useState({});                  // per-card expand/collapse
+  const [query, setQuery] = useState('');                        // search across every definition
   const dragTitle = useRef(null);
   const dark = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark';
   useEffect(() => {
@@ -168,38 +181,52 @@ export default function Reference() {
           <h2 style={{ marginBottom: 2 }}>Reference &amp; definitions</h2>
           <p className="muted" style={{ marginTop: 0 }}>What the data means, how each number is calculated, and what to watch for. Cards are copyable and resizeable (drag the corner).</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search all definitions…"
+            aria-label="Search reference definitions"
+            style={{ width: 240, padding: '7px 12px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)', color: 'var(--ink)', fontSize: 14 }} />
           <button onClick={toggleFs} title="Fullscreen" style={btn}>{full ? 'Exit ⛶' : '⛶ Full'}</button>
           <button onClick={exportRef} title="Download every definition as CSV" style={btn}>Download CSV</button>
         </div>
       </div>
 
-      <div className="ref-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gridAutoRows: 'min-content', gap: 16, marginTop: 12, alignItems: 'start' }}>
-        {order.map((title) => {
-          const s = REF_BY_TITLE[title]; if (!s) return null;
-          const isExp = !!expanded[title];
-          return (
-            <div className="card ref-card" key={title}
-              onDragOver={onDragOver} onDrop={onDrop(title)}
-              style={{ height: isExp ? 'auto' : 300, minWidth: 240, minHeight: 150, maxHeight: isExp ? 'none' : undefined, overflow: 'auto', resize: 'both', gridColumn: isExp ? '1 / -1' : 'auto' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span draggable onDragStart={onDragStart(title)} title="Drag to rearrange" style={{ cursor: 'grab', color: 'var(--muted)', fontSize: 14, userSelect: 'none' }}>⠿</span>
-                  {s.title}
-                </h3>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => toggleExpand(title)} title={isExp ? 'Collapse' : 'Expand to full width'} style={miniBtn}>{isExp ? '× Collapse' : '⤢ Expand'}</button>
-                  <button onClick={() => copyCard(s)} title="Copy this card to the clipboard" style={miniBtn}>{copied === s.title ? '✓ Copied' : 'Copy'}</button>
+      {(() => {
+        const q = query.trim().toLowerCase();
+        const shown = order.map((title) => REF_BY_TITLE[title]).filter(Boolean).map((s) => {
+          if (!q) return s;
+          const titleHit = s.title.toLowerCase().includes(q) || (s.note && s.note.toLowerCase().includes(q));
+          const items = titleHit ? s.items : s.items.filter(([t, d]) => (t + ' ' + d).toLowerCase().includes(q));
+          return (titleHit || items.length) ? Object.assign({}, s, { items }) : null;
+        }).filter(Boolean);
+        return (<>
+          {q ? <p className="muted small" style={{ marginTop: 8, marginBottom: 0 }}>{shown.length ? (shown.length + ' matching card' + (shown.length === 1 ? '' : 's')) : 'No matches — try another term.'}</p> : null}
+          <div className="ref-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gridAutoRows: 'min-content', gap: 16, marginTop: 12, alignItems: 'start' }}>
+            {shown.map((s) => {
+              const title = s.title; const isExp = !!expanded[title];
+              return (
+                <div className="card ref-card" key={title}
+                  onDragOver={onDragOver} onDrop={onDrop(title)}
+                  style={{ height: isExp ? 'auto' : 300, minWidth: 240, minHeight: 150, maxHeight: isExp ? 'none' : undefined, overflow: 'auto', resize: 'both', gridColumn: isExp ? '1 / -1' : 'auto' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span draggable onDragStart={onDragStart(title)} title="Drag to rearrange" style={{ cursor: 'grab', color: 'var(--muted)', fontSize: 14, userSelect: 'none' }}>⠿</span>
+                      {highlight(s.title, q)}
+                    </h3>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => toggleExpand(title)} title={isExp ? 'Collapse' : 'Expand to full width'} style={miniBtn}>{isExp ? '× Collapse' : '⤢ Expand'}</button>
+                      <button onClick={() => copyCard(s)} title="Copy this card to the clipboard" style={miniBtn}>{copied === s.title ? '✓ Copied' : 'Copy'}</button>
+                    </div>
+                  </div>
+                  {s.note ? <p className="muted small" style={{ marginTop: 4 }}>{highlight(s.note, q)}</p> : null}
+                  <ul className="ref-dl">
+                    {s.items.map(([t, d]) => <li key={t}><b>{highlight(t, q)}</b> — {highlight(d, q)}</li>)}
+                  </ul>
                 </div>
-              </div>
-              {s.note ? <p className="muted small" style={{ marginTop: 4 }}>{s.note}</p> : null}
-              <ul className="ref-dl">
-                {s.items.map(([t, d]) => <li key={t}><b>{t}</b> — {d}</li>)}
-              </ul>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </>);
+      })()}
     </div>
   );
 }
