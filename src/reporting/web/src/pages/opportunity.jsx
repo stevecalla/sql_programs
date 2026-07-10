@@ -40,7 +40,7 @@ const miniBtn = { padding: '3px 9px', border: '1px solid var(--line)', borderRad
 // Merged stat card (mockup context fields + the opportunity block). Not collapsible; resizable (CSS).
 // Fields run population → down, with the headroom payoff called out at the bottom.
 export function OppCard({ row, national, flex }) {
-  const base = { flex: flex || '1 1 300px', minWidth: 280, resize: 'both', overflow: 'auto', margin: 0 };
+  const base = { flex: '1 1 auto', minWidth: 260, resize: 'both', overflow: 'auto', margin: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 };
   if (!row || row.band == null) {
     return <div className="card" style={base}><div className="small muted">Select a state on the map or table to see its penetration detail.</div></div>;
   }

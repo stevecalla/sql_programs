@@ -88,6 +88,8 @@ const SECTIONS = [
   ]},
   { label: 'TESTING', color: CYAN, items: [
     { id: 12, label: 'Unit tests (node:test)', desc: 'Status, auth flow, bootstrap gating — no DB needed', run: 'reporting_test', cli: 'npm run reporting_test' },
+    { id: 12, label: 'UI/UX tests (Playwright)', desc: 'Browser-driven UX suite — loads each map view + the Opportunity flows and fails on any render/console error. SEPARATE from the unit tests above. Needs E2E_USER / E2E_PASS set + a one-time `npx playwright install chromium`; runs against the dev server (starts it if needed).', run: 'reporting_e2e', cli: 'npm run reporting_e2e' },
+    { id: 12, label: 'UI/UX tests — interactive runner', desc: 'The same Playwright suite in the --ui runner (watch, step through, time-travel debugging).', run: 'reporting_e2e_ui', cli: 'npm run reporting_e2e_ui' },
   ]},
   { label: 'SERVER & USERS', color: CYAN, items: [
     { id: 13, label: 'Add / update a user', desc: 'Create a web-app login (username, password, role)', node: ['src/reporting/admin.js', 'add'], cli: 'node src/reporting/admin.js add' },
