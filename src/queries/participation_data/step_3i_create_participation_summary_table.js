@@ -29,6 +29,17 @@ const MIN_YEAR = process.env.REPORTING_SUMMARY_MIN_YEAR
     ? String(Number(process.env.REPORTING_SUMMARY_MIN_YEAR))
     : '(YEAR(CURDATE()) - 4)';
 
+// TEST MODE: when the step_3i runner is passed a "test" arg, build only 2024 & 2025 (fast dev runs).
+// Off (default) = the full MIN_YEAR window (all data). The runner calls set_test_mode(true) BEFORE the
+// CREATE builders run; year_filter() is used in every base-table WHERE so all three tables stay in sync.
+let TEST_MODE = false;
+function set_test_mode(v) { TEST_MODE = !!v; }
+function year_filter(alias) {
+    return TEST_MODE
+        ? `${alias}.start_date_year_races IN (2024, 2025)`
+        : `${alias}.start_date_year_races >= ${MIN_YEAR}`;
+}
+
 // Shared metric expressions. home_expr defines "home" (in-state for state rows, in-region for region rows).
 function metric_cols(home_expr) {
     return `
@@ -59,7 +70,7 @@ function metric_cols(home_expr) {
 // monthly rows AND the annual (month = NULL) subtotal — with COUNT(DISTINCT) computed correctly at both
 // levels. HAVING drops the extra ROLLUP super-aggregate rows. 3 scans instead of 6.
 async function create_participation_summary_table(summary_table, base_table) {
-    const W = `WHERE t.state_code_events IN (${STATE_LIST}) AND t.start_date_year_races >= ${MIN_YEAR}`;
+    const W = `WHERE t.state_code_events IN (${STATE_LIST}) AND ${year_filter('t')}`;
     const home_state = 't.member_state_code_addresses = t.state_code_events';
     const home_region = 'rm.region_name = t.region_name';   // member region (join) = event region (parent)
     const member_join = `LEFT JOIN region_data rm ON t.member_state_code_addresses = rm.state_code`;
@@ -92,7 +103,7 @@ async function create_participation_summary_table(summary_table, base_table) {
 
 // CREATE the flows table (home -> event cross-state counts). ROLLUP gives monthly + annual in one scan.
 async function create_participation_flows_table(flows_table, base_table) {
-    const W = `WHERE t.state_code_events IN (${STATE_LIST}) AND t.member_state_code_addresses IN (${STATE_LIST}) AND t.member_state_code_addresses <> t.state_code_events AND t.start_date_year_races >= ${MIN_YEAR}`;
+    const W = `WHERE t.state_code_events IN (${STATE_LIST}) AND t.member_state_code_addresses IN (${STATE_LIST}) AND t.member_state_code_addresses <> t.state_code_events AND ${year_filter('t')}`;
     return `
         CREATE TABLE ${flows_table} AS
         SELECT t.start_date_year_races, t.start_date_month_races,
@@ -115,7 +126,7 @@ async function create_participation_flows_table(flows_table, base_table) {
 // a ZIP3-average fallback for any event ZIP not present at the 5-digit level. The descriptive event fields
 // are aggregated with MAX (one value per event) so they survive the GROUP BY / ROLLUP.
 async function create_participation_events_table(events_table, base_table) {
-    const W = `WHERE t.state_code_events IN (${STATE_LIST}) AND t.start_date_year_races >= ${MIN_YEAR}`;
+    const W = `WHERE t.state_code_events IN (${STATE_LIST}) AND ${year_filter('t')}`;
     const home_state = 't.member_state_code_addresses = t.state_code_events';
     const zip_ref = 'zip_lat_lng_reference';
 
@@ -204,6 +215,7 @@ async function query_append_index_fields_flows(flows_table) {
 }
 
 module.exports = {
+    set_test_mode,
     create_participation_summary_table,
     create_participation_flows_table,
     create_participation_events_table,

@@ -6,8 +6,10 @@ const { create_local_db_connection } = require('../../utilities/connectionLocalD
 const { triggerGarbageCollection } = require('../../utilities/garbage_collection/trigger_garbage_collection');
 
 const { query_drop_table } = require("../queries/create_drop_db_table/queries_drop_db_tables");
+const { query_create_reporting_build_meta_table } = require("../queries/create_drop_db_table/query_create_reporting_build_meta_table");
 
 const {
+    set_test_mode,
     create_participation_summary_table,
     create_participation_flows_table,
     create_participation_events_table,
@@ -86,13 +88,22 @@ async function with_connection(callback) {
 }
 
 // Main: build the reporting summary + flows tables from the parent participation table, then index them.
-async function execute_create_participation_summary() {
+async function execute_create_participation_summary(options = {}) {
+    // TEST MODE: pass { test: true } (or a "test" CLI arg) to build only 2024 & 2025 for fast dev runs.
+    // Otherwise the full window (all data) is built. Set before the CREATE builders run.
+    const test_mode = !!options.test;
+    set_test_mode(test_mode);
+    console.log(test_mode
+        ? '*** step_3i TEST MODE: building 2024 & 2025 only ***'
+        : 'step_3i FULL run: building all data');
+
     let start_time = performance.now();
     let db_name = 'usat_sales_db';
     let base_table = 'all_participation_data_with_membership_match';
     let summary_table = 'all_participation_data_with_membership_match_summary';
     let flows_table = 'all_participation_data_with_membership_match_flows';
     let events_table = 'all_participation_data_with_membership_match_events';
+    let build_meta_table = 'reporting_build_meta';
 
     let steps_to_run = {
         create_summary: true,
@@ -129,6 +140,15 @@ async function execute_create_participation_summary() {
                 await execute_mysql_working_query(pool, db_name, await query_append_index_fields_events(events_table));
             }
 
+            // STAMP BUILD META: record test-vs-full mode + the actual year range, so the reporting app can
+            // display which data scope it is serving (id is always 1 -> REPLACE overwrites the single row).
+            console.log('Recording build meta (mode + year range)');
+            await execute_mysql_working_query(pool, db_name, await query_create_reporting_build_meta_table(build_meta_table));
+            await execute_mysql_working_query(pool, db_name,
+                `REPLACE INTO ${build_meta_table} (id, build_mode, min_year, max_year, built_at) ` +
+                `SELECT 1, '${test_mode ? 'test' : 'full'}', MIN(start_date_year_races), MAX(start_date_year_races), NOW() ` +
+                `FROM ${summary_table};`);
+
             console.log('All queries executed successfully.');
         });
     } catch (error) {
@@ -150,7 +170,8 @@ async function execute_create_participation_summary() {
 }
 
 if (require.main === module) {
-  execute_create_participation_summary().catch((error) => {
+  const test = process.argv.slice(2).includes('test');
+  execute_create_participation_summary({ test }).catch((error) => {
     console.error("error creating participation summary:", error);
     process.exitCode = 1;
   });

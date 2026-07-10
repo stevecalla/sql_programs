@@ -190,12 +190,29 @@ async function build_from_mysql() {
   const lastUpdated = fmtTs(src0.created_at_mtn);
   const lastUpdatedUtc = fmtTs(src0.created_at_utc);
 
+  // Build scope marker (test vs full data) stamped by step_3i. Guarded: the table is absent on ETL
+  // builds that predate it, so a lookup failure just leaves buildMeta null (app falls back to "full").
+  let buildMeta = null;
+  try {
+    const bm = await db.query("SELECT build_mode, min_year, max_year, built_at FROM reporting_build_meta WHERE id = 1");
+    const r0 = Array.isArray(bm) ? bm[0] : null;
+    if (r0) buildMeta = { mode: r0.build_mode || 'full', minYear: r0.min_year, maxYear: r0.max_year, builtAt: fmtTs(r0.built_at) };
+  } catch (e) { /* reporting_build_meta not present yet — ignore */ }
+
+  // Per-state population (Census, from step_2c) for penetration / per-capita metrics. Guarded: the table
+  // is absent on ETL builds that predate step_2c, so population stays {} and penetration just won't populate.
+  const population = {};
+  let populationSource = null;
+  try {
+    const pop = await db.query("SELECT state_code, population, source FROM census_state_population WHERE state_code IS NOT NULL AND population IS NOT NULL");
+    if (Array.isArray(pop)) for (const r of pop) { population[r.state_code] = Number(r.population); if (!populationSource) populationSource = r.source; }
+  } catch (e) { /* census_state_population not present yet — ignore */ }
 
   return Object.assign({}, {
     colors: META.colors, evcols: META.evcols, fips2region: META.fips2region, ab2region: useReg ? gAb2region : META.ab2region,
     rshead: META.rshead, names: useReg ? gNames : META.names, abbr: useReg ? gAbbr : META.abbr, regs: useReg ? gRegs : META.regs, regOrder: useReg ? gRegOrder : META.regOrder,
     centroid: useReg ? Object.assign({}, META.centroid, gCentroid) : META.centroid, name2ab: useReg ? gName2ab : META.name2ab, meta: META.meta,
-  }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear, lastUpdated, lastUpdatedUtc, maxParts });
+  }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear, lastUpdated, lastUpdatedUtc, maxParts, buildMeta, population, populationSource });
 }
 
 function load_fixture() {
@@ -301,4 +318,37 @@ async function unique_for_selection(sel) {
   return out;
 }
 
-module.exports = { get_bootstrap, build_from_mysql, unique_for_selection, FIXTURE };
+// Home-side distinct ADULT athletes by home state / home region (the penetration numerator: residents who
+// race, per home state — regardless of where they raced). Restricted to known-home in the 50 states +
+// adult bins to match the deck's penetration definition. Memoized alongside the unique cache.
+const HOME_ADULT_BINS = "('20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99')";
+async function home_athletes_for_selection(sel) {
+  sel = sel || {};
+  const years = (sel.years || []).map(Number).filter((y) => y);
+  if (!years.length) return { national: 0, byHomeState: {}, byHomeRegion: {} };
+  const months = (sel.months && sel.months.indexOf('all') < 0)
+    ? sel.months.map(Number).filter((m) => m >= 1 && m <= 12) : null;
+  const ironman = sel.ironman || null;
+  const key = 'home:' + JSON.stringify({ y: years.slice().sort((a, b) => a - b), m: months ? months.slice().sort((a, b) => a - b) : 'all', ironman });
+  if (_uniqueCache.has(key)) return _uniqueCache.get(key);
+
+  const where = ['start_date_year_races IN (?)', 'member_state_code_addresses IN (?)', 'age_as_race_results_bin IN ' + HOME_ADULT_BINS];
+  const params = [years, META.abbr];
+  if (months) { where.push('start_date_month_races IN (?)'); params.push(months); }
+  if (ironman === 'Yes') where.push("is_ironman = 'Y'");
+  else if (ironman === 'No') where.push("(is_ironman IS NULL OR is_ironman <> 'Y')");
+  const W = where.join(' AND ');
+
+  const [stRows, rgRows] = await Promise.all([
+    db.query('SELECT member_state_code_addresses AS k, COUNT(DISTINCT id_profiles) AS u FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY member_state_code_addresses WITH ROLLUP', params),
+    db.query('SELECT region_name_member AS k, COUNT(DISTINCT id_profiles) AS u FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY region_name_member WITH ROLLUP', params),
+  ]);
+  const byHomeState = {}; let national = 0;
+  for (const r of stRows) { if (r.k == null) national = Number(r.u); else byHomeState[r.k] = Number(r.u); }
+  const byHomeRegion = {}; for (const r of rgRows) { if (r.k != null && r.k !== '') byHomeRegion[r.k] = Number(r.u); }
+  const out = { national, byHomeState, byHomeRegion };
+  _uniqueCache.set(key, out);
+  return out;
+}
+
+module.exports = { get_bootstrap, build_from_mysql, unique_for_selection, home_athletes_for_selection, FIXTURE };

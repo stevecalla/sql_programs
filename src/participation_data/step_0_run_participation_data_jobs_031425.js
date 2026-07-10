@@ -8,6 +8,7 @@ const { execute_get_participation_data } = require('./step_1_get_participation_d
 const { execute_load_participation_data } = require('./step_2_load_participation_data');
 // const { execute_load_region_data } = require('./step_2a_load_region_table');
 const { execute_load_zip_reference } = require('./step_2b_load_zip_reference'); // load zip lat/lng reference from BigQuery
+const { execute_load_census_population } = require('./step_2c_load_census_population'); // load census state population from BigQuery
 
 // MATCH PARTICIPATION & MEMBERSHIP DATA; 
 const { execute_create_participation_with_membership_match } = require("./step_3_create_participation_with_membership_match");
@@ -108,6 +109,7 @@ async function main() {
   const run_step_2  = true; // load participation data
   // const run_step_2a = true; // load region table
   const run_step_2b = true; // load zip lat/lng reference from BigQuery (zip_lat_lng_reference)
+  const run_step_2c = true; // load census state population from BigQuery (census_state_population)
 
   const run_step_3  = true; // create table participation with membership sales match
   const run_step_3a_1 = true; // load participation with membership sales match to bigquery
@@ -137,6 +139,7 @@ async function main() {
       run_step_2  ? execute_load_participation_data : null,
       // run_step_2a ? execute_load_region_data : null,
       run_step_2b ? execute_load_zip_reference : null,
+      run_step_2c ? execute_load_census_population : null,
 
       run_step_3 ? execute_create_participation_with_membership_match : null,
       run_step_3a_1 ? execute_load_big_query_participation_membership_sales_match : null,
@@ -168,6 +171,7 @@ async function main() {
       `Step #2 - Load participation Data: `, 
       // `Step #2a - Load Region Data: `,
       `Step #2b - Load ZIP lat/lng reference from BigQuery: `,
+      `Step #2c - Load Census state population from BigQuery: `,
 
       `Step #3 - Created participation data with membership match`,
       `Step #3a_1 - Load participation membership sales match to BQ: `,

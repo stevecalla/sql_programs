@@ -46,6 +46,10 @@ function mv(r, idx, uq) {
     case 38: return r[14]; case 39: return r[15];                                     // known-home / known-away count (= home / away count)
     case 40: { const kn = r[14] + r[15]; return kn ? Math.round(100 * r[14] / kn) : null; }  // known-home % = home / (home+away)
     case 41: { const kn = r[14] + r[15]; return kn ? Math.round(100 * r[15] / kn) : null; }  // known-away % = away / (home+away)
+    case 42: return r[3];                                                                     // adult participants (count, age 20+)
+    case 43: return r[0] - r[3];                                                              // non-adult participants (count) = turnout − adult
+    case 44: return r[0] ? Math.round(100 * r[3] / r[0]) : null;                              // adult %
+    case 45: return r[0] ? Math.round(100 * (r[0] - r[3]) / r[0]) : null;                     // non-adult %
     default: return null;
   }
 }
