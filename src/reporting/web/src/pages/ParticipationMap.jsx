@@ -336,7 +336,17 @@ export default function ParticipationMap() {
   useEffect(() => {
     const onFs = () => {
       const full = !!document.fullscreenElement;
-      if (mapRef.current) { Plotly.relayout(mapRef.current, { height: full ? window.innerHeight - 90 : 560 }); setTimeout(() => Plotly.Plots.resize(mapRef.current), 120); }
+      const h = full ? window.innerHeight - 90 : 560;
+      if (mapRef.current) {
+        // A Plotly geo map keeps the US's fixed ~1.6:1 aspect and never stretches to fill. On a wide
+        // fullscreen it fits to the height and strands the colorbar + a big empty band on the right.
+        // Cap the map to the US aspect (height * 1.6) and center it so it fills the screen height
+        // instead of hugging the left edge.
+        mapRef.current.style.maxWidth = full ? Math.round(h * 1.6) + 'px' : '';
+        mapRef.current.style.margin = full ? '0 auto' : '';
+        Plotly.relayout(mapRef.current, { height: h });
+        setTimeout(() => Plotly.Plots.resize(mapRef.current), 120);
+      }
     };
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
@@ -938,7 +948,7 @@ export default function ParticipationMap() {
         getSourceColor: (d) => d.c, getTargetColor: (d) => d.c, getWidth: (d) => 1 + 6 * Math.sqrt(d.n / maxArc),
         getHeight: 0.4, pickable: true, updateTriggers: { getWidth: [maxArc] },
       }));
-      if (showLabels || !arcsOn) layers.push(new deck.TextLayer({   // Net view always labels the net numbers
+      if (showLabels) layers.push(new deck.TextLayer({   // Labels toggle controls net + arcs labels alike
         id: 'lab', data: p.abbr.filter((ab) => p.centroid[ab]), getPosition: (ab) => p.centroid[ab],
         // Net view: single-line "AB +1,234" (guaranteed to render, unlike a subtle 2nd line). Arcs view keeps
         // the two-line abbr / net stack. getSize is bumped in Net view so the number reads at a glance.
@@ -1098,6 +1108,16 @@ export default function ParticipationMap() {
     background: active ? '#082240' : 'transparent', color: active ? '#fff' : 'inherit', fontSize: 13,
   });
   const mini = (active) => ({ ...seg(active), padding: '3px 9px', fontSize: 12 });
+  // Folder-style tabs (map-view switcher). The active tab is outlined (top + sides), sits on the row's
+  // baseline rule with its bottom open, and is filled with the panel color so it reads as connected to the
+  // content below. Inactive tabs are borderless + muted so only the active one pops.
+  const tab = (active) => ({
+    padding: '8px 15px', fontSize: 13, fontWeight: 500, cursor: 'pointer', marginBottom: -1,
+    borderRadius: '7px 7px 0 0', borderBottom: 'none',
+    border: active ? '1px solid var(--line)' : '1px solid transparent',
+    background: active ? 'var(--panel)' : 'transparent',
+    color: active ? 'var(--ink)' : 'var(--muted)',
+  });
 
   // General reset (the ⟲ button): return EVERYTHING to defaults — map type, layer, zoom/size, filters,
   // colors and cross-filters. Use the map-type buttons to change views without resetting.
@@ -1249,18 +1269,18 @@ export default function ParticipationMap() {
         </span>
       </div>
 
-      <div className="toolbar" style={{ gap: 6, flexWrap: 'wrap', rowGap: 6 }}>
-        <button style={seg(fillMode === 'choro' && !showFlows && !showRegions)} title="Metric heatmap fill (on/off)"
+      <div className="toolbar" style={{ gap: 4, flexWrap: 'wrap', rowGap: 6, alignItems: 'flex-end', borderBottom: '1px solid var(--line)' }}>
+        <button style={tab(fillMode === 'choro' && !showFlows && !showRegions)} title="Metric heatmap fill (on/off)"
           onClick={() => { setShowRegions(false); track('map_style', { panel: 'participation-maps', view: 'choropleth' }); if (showFlows) { setShowFlows(false); setFillMode('choro'); } else setFillMode((f) => (f === 'choro' ? 'none' : 'choro')); }}>Heatmap</button>
-        <button style={seg(showPins && !showFlows && !showRegions)} title="Event pins map (turns the fill off; re-select Heatmap to bring it back)"
+        <button style={tab(showPins && !showFlows && !showRegions)} title="Event pins map (turns the fill off; re-select Heatmap to bring it back)"
           onClick={() => { setShowRegions(false); if (showFlows) { setShowFlows(false); setShowPins(true); setFillMode('none'); } else { const on = !showPins; setShowPins(on); if (on) setFillMode('none'); } }}>Pins</button>
-        <button style={seg(fillMode === 'yoy' && !showFlows && !showRegions)} title="Year-over-year change fill (on/off)"
+        <button style={tab(fillMode === 'yoy' && !showFlows && !showRegions)} title="Year-over-year change fill (on/off)"
           onClick={() => { setShowRegions(false); track('map_style', { panel: 'participation-maps', view: 'yoy' }); if (showFlows) { setShowFlows(false); setFillMode('yoy'); } else setFillMode((f) => (f === 'yoy' ? 'none' : 'yoy')); }}>YoY</button>
-        <button style={seg(showFlows)} title="Athlete travel arcs (3D) — replaces the map"
+        <button style={tab(showFlows)} title="Athlete travel arcs (3D) — replaces the map"
           onClick={() => { track('map_style', { panel: 'participation-maps', view: 'flows' }); setShowRegions(false); setShowFlows((s) => !s); }}>Flows</button>
-        <button style={seg(showRegions)} title="Reference map: states shaded by their region"
+        <button style={tab(showRegions)} title="Reference map: states shaded by their region"
           onClick={() => { track('map_style', { panel: 'participation-maps', view: 'regions' }); setShowRegions((s) => { const on = !s; if (on) { setShowFlows(false); setShowPins(false); } return on; }); }}>Regions</button>
-        <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 6px' }} />
+        <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 8px 6px' }} />
         <span style={{ display: 'inline-flex', gap: 4 }}>
           {['state', 'region', 'both'].map((v) => (
             <button key={v} style={{ ...seg(view === v && !showFlows && !showRegions), ...((showFlows || showRegions) ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }} disabled={showFlows || showRegions} onClick={() => pickView(v)}>
@@ -1270,7 +1290,7 @@ export default function ParticipationMap() {
         </span>
       </div>
 
-      {showPins ? (
+      {showPins && !showFlows && !showRegions ? (
         <div className="toolbar" style={{ alignItems: 'center' }}>
           <span className="small muted">IRONMAN</span>
           <span style={{ display: 'inline-flex', gap: 4 }}>
