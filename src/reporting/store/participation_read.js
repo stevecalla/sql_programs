@@ -190,12 +190,29 @@ async function build_from_mysql() {
   const lastUpdated = fmtTs(src0.created_at_mtn);
   const lastUpdatedUtc = fmtTs(src0.created_at_utc);
 
+  // Build scope marker (test vs full data) stamped by step_3i. Guarded: the table is absent on ETL
+  // builds that predate it, so a lookup failure just leaves buildMeta null (app falls back to "full").
+  let buildMeta = null;
+  try {
+    const bm = await db.query("SELECT build_mode, min_year, max_year, built_at FROM reporting_build_meta WHERE id = 1");
+    const r0 = Array.isArray(bm) ? bm[0] : null;
+    if (r0) buildMeta = { mode: r0.build_mode || 'full', minYear: r0.min_year, maxYear: r0.max_year, builtAt: fmtTs(r0.built_at) };
+  } catch (e) { /* reporting_build_meta not present yet — ignore */ }
+
+  // Per-state population (Census, from step_2c) for penetration / per-capita metrics. Guarded: the table
+  // is absent on ETL builds that predate step_2c, so population stays {} and penetration just won't populate.
+  const population = {};
+  let populationSource = null;
+  try {
+    const pop = await db.query("SELECT state_code, population, source FROM census_state_population WHERE state_code IS NOT NULL AND population IS NOT NULL");
+    if (Array.isArray(pop)) for (const r of pop) { population[r.state_code] = Number(r.population); if (!populationSource) populationSource = r.source; }
+  } catch (e) { /* census_state_population not present yet — ignore */ }
 
   return Object.assign({}, {
     colors: META.colors, evcols: META.evcols, fips2region: META.fips2region, ab2region: useReg ? gAb2region : META.ab2region,
     rshead: META.rshead, names: useReg ? gNames : META.names, abbr: useReg ? gAbbr : META.abbr, regs: useReg ? gRegs : META.regs, regOrder: useReg ? gRegOrder : META.regOrder,
     centroid: useReg ? Object.assign({}, META.centroid, gCentroid) : META.centroid, name2ab: useReg ? gName2ab : META.name2ab, meta: META.meta,
-  }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear, lastUpdated, lastUpdatedUtc, maxParts });
+  }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear, lastUpdated, lastUpdatedUtc, maxParts, buildMeta, population, populationSource });
 }
 
 function load_fixture() {

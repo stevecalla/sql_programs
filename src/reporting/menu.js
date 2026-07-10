@@ -80,8 +80,11 @@ const SECTIONS = [
   { label: 'DATA PIPELINE (ETL)', color: YELLOW, items: [
     { id: 8, label: 'Reload region_data (from CSV)', desc: 'MySQL: drop + recreate region_data and load the usat_region_data CSV (state ⇄ region ⇄ lat/lng). Run after editing the region CSV, before step 3i.', node: ['reload_region_data.js'], cli: 'node reload_region_data.js' },
     { id: 9, label: 'Create ZIP code table (step 2b)', desc: 'MySQL: rebuild zip_lat_lng_reference (ZIP → lat/lng/city/state/county) from BigQuery public data', node: ['src/participation_data/step_2b_load_zip_reference.js'], cli: 'node src/participation_data/step_2b_load_zip_reference.js' },
-    { id: 10, label: 'Build participation summary (step 3i)', desc: 'MySQL: rebuild summary + flows + events tables from the base data', node: ['src/participation_data/step_3i_create_participation_summary.js'], cli: 'node src/participation_data/step_3i_create_participation_summary.js' },
-    { id: 11, label: 'Load metrics to BigQuery (step 3j)', desc: 'Upload summary / flows / events tables to BigQuery (WRITE_TRUNCATE)', node: ['src/participation_data/step_3j_load_bq_participation_summary_metrics.js'], cli: 'node src/participation_data/step_3j_load_bq_participation_summary_metrics.js' },
+    { id: 10, label: 'Create Census population table (step 2c)', desc: 'MySQL: rebuild census_state_population (state → population). Primary: US Census API (most current — needs CENSUS_API_KEY in .env); falls back to BigQuery public census (2021) if no key. Powers penetration / per-capita.', node: ['src/participation_data/step_2c_load_census_population.js'], cli: 'node src/participation_data/step_2c_load_census_population.js' },
+    { id: 11, label: 'Build participation summary (step 3i)', desc: 'MySQL: rebuild summary + flows + events tables from the base data (all years)', node: ['src/participation_data/step_3i_create_participation_summary.js'], cli: 'node src/participation_data/step_3i_create_participation_summary.js' },
+    { id: 12, label: 'Build participation summary — TEST (step 3i, 2024 & 2025)', desc: 'Same as step 3i above but in TEST mode (2024 & 2025 only) — faster dev run, same summary/flows/events tables, less data. Passes the "test" arg.', node: ['src/participation_data/step_3i_create_participation_summary.js', 'test'], cli: 'node src/participation_data/step_3i_create_participation_summary.js test' },
+    { id: 13, label: 'Load metrics to BigQuery (step 3j)', desc: 'Upload summary / flows / events tables to BigQuery (WRITE_TRUNCATE)', node: ['src/participation_data/step_3j_load_bq_participation_summary_metrics.js'], cli: 'node src/participation_data/step_3j_load_bq_participation_summary_metrics.js' },
+    { id: 14, label: 'Show data build scope (test vs full)', desc: 'Print the current reporting data scope recorded by step 3i — TEST (2024 & 2025) vs FULL, year range, and built-at.', node: ['show_build_scope.js'], cli: 'node show_build_scope.js' },
   ]},
   { label: 'TESTING', color: CYAN, items: [
     { id: 12, label: 'Unit tests (node:test)', desc: 'Status, auth flow, bootstrap gating — no DB needed', run: 'reporting_test', cli: 'npm run reporting_test' },
@@ -99,6 +102,8 @@ const SECTIONS = [
     { id: 20, label: 'Open built UI', desc: 'Production-style single-port app at :8021', open: 'http://localhost:8021', cli: 'open http://localhost:8021' },
     { id: 21, label: 'Open via proxy (/reporting)', desc: 'The app through the proxy at :8000/reporting/', open: 'http://localhost:8000/reporting/', cli: 'open http://localhost:8000/reporting/' },
     { id: 22, label: 'Check API status', desc: 'Ping the backend health endpoint', status: true, cli: 'curl http://localhost:8021/api/status' },
+    { id: 23, label: 'Census API — get a free key', desc: 'Opens the US Census API key signup. Add the key as CENSUS_API_KEY in .env to pull current population (ACS 1-yr) in step 2c; without it, step 2c uses the BigQuery 2021 fallback.', open: 'https://api.census.gov/data/key_signup.html', cli: 'open https://api.census.gov/data/key_signup.html' },
+    { id: 24, label: 'About the Census ACS 1-year data', desc: 'Opens the US Census ACS 1-year documentation — the source of the state population used for penetration / per-capita metrics.', open: 'https://www.census.gov/data/developers/data-sets/acs-1year.html', cli: 'open https://www.census.gov/data/developers/data-sets/acs-1year.html' },
   ]},
   { label: 'PM2 (production)', color: RED, items: [
     { id: 23, label: 'pm2 start', desc: 'Run the server under pm2 (production)', run: 'pm2_start_reporting', cli: 'npm run pm2_start_reporting' },
@@ -107,6 +112,9 @@ const SECTIONS = [
     { id: 26, label: 'pm2 logs', desc: 'Tail the pm2 logs', run: 'pm2_logs_reporting', cli: 'npm run pm2_logs_reporting' },
   ]},
 ];
+// Renumber ids sequentially in display order so inserting/removing items never needs a manual renumber.
+let _seq = 0;
+for (const s of SECTIONS) for (const it of s.items) it.id = ++_seq;
 const ALL = SECTIONS.flatMap((s) => s.items);
 
 function print_menu() {
