@@ -12,6 +12,22 @@ function fmtUptime(sec) { if (sec == null) return '—'; const d = Math.floor(se
 function st(v, warn, bad) { if (v == null) return ''; if (v >= bad) return 'bad'; if (v >= warn) return 'warn'; return 'ok'; }
 const badgeColor = { ok: ['rgba(22,121,74,.15)', '#16794a'], warn: ['rgba(212,146,10,.20)', '#b45309'], bad: ['rgba(194,14,47,.15)', '#c20e2f'] };
 
+// Colorize pm2 / process status words in command output the way a terminal would (pm2 disables its
+// own colors when piped): online = green, stopped/errored = red, launching/waiting = amber.
+const STATUS_RE = /\b(online)\b|\b(stopped|errored|error|stopping)\b|\b(launching|waiting restart|one-launch-status)\b/gi;
+function colorize(text) {
+  if (typeof text !== 'string' || !text) return text;
+  const out = []; let last = 0, m, i = 0; STATUS_RE.lastIndex = 0;
+  while ((m = STATUS_RE.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const cls = m[1] ? 'l-ok' : (m[2] ? 'l-err' : 'l-sys');
+    out.push(<span key={i++} className={cls}>{m[0]}</span>);
+    last = STATUS_RE.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
 function Tile({ k, v, sub, state }) {
   const bc = state && badgeColor[state];
   return (
@@ -44,7 +60,7 @@ function TermBox({ title, note, text, chips }) {
       {open ? (
         <>
           {chips ? <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', margin: '8px 0 0' }}>{chips}</div> : null}
-          <div ref={ref} className="term" style={{ height: big ? 520 : 220, marginTop: 8 }}>{text}</div>
+          <div ref={ref} className="term" style={{ height: big ? 520 : 220, marginTop: 8 }}>{colorize(text)}</div>
         </>
       ) : null}
     </div>

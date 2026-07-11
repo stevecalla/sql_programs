@@ -68,7 +68,7 @@ export default function ConsolePanel({ title, subtitle, fetcher, runner }) {
     setOut(b.output || b.error || '(no output)');
   };
 
-  const lines = out.split('\n');
+  const lines = out.replace(/\r\n?/g, '\n').split('\n');
 
   return (
     <div className="page">
@@ -87,7 +87,7 @@ export default function ConsolePanel({ title, subtitle, fetcher, runner }) {
         </span>
       </div>
       <div ref={outRef} className="term" style={{ height: expanded ? '70vh' : 260, margin: '6px 0 16px' }}>
-        {lines.map((ln, i) => <div key={i} className={classify(ln)}>{ln === '' ? ' ' : ln}</div>)}
+        {lines.map((ln, i) => <span key={i} className={classify(ln)}>{ln}{i < lines.length - 1 ? '\n' : ''}</span>)}
       </div>
 
       {!sections ? <div className="muted">Loading…</div> : sections.map((s) => {
