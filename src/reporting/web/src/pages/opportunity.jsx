@@ -9,11 +9,11 @@ import { useState, useMemo } from 'react';
 //   leader ≥ leaderCut · mid  national..leaderCut · under  floorCut..national · floor ≤ floorCut
 export const OPP_C = { floor: '#C0392B', under: '#E0A030', mid: '#888780', leader: '#1A7A4C' };
 export const OPP_TXT = { floor: '#A32D2D', under: '#854F0B', mid: '#5F5E5A', leader: '#0F6E56' };
-export const OPP_LABEL = { floor: 'Floor', under: 'Under-penetrated', mid: 'Mid', leader: 'Leader' };
+export const OPP_LABEL = { floor: 'Lagging', under: 'Under-penetrated', mid: 'On-par', leader: 'Leader' };
 export const OPP_ORDER = ['leader', 'mid', 'under', 'floor'];
 
 // leader ≥ leaderCut · mid  midCut..leaderCut · under  floorCut..midCut · floor ≤ floorCut.
-// midCut is the Mid/Under boundary (national rate for rel/absolute; the median or mean for statistical).
+// midCut is the On-par/Under-penetrated boundary (national rate for rel/absolute; the median or mean for statistical).
 export function classifyBand(pen, midCut, leaderCut, floorCut) {
   if (pen == null) return null;
   if (pen >= leaderCut) return 'leader';
@@ -210,7 +210,7 @@ export function OppTable({ rows, national, sel, onSelect, dark, opp, period, age
   const C = {
     name: { key: 'name', label: 'State', tip: 'State', l: true, r: (x) => x.name },
     reg: { key: 'reg', label: 'Region', tip: 'USAT region', l: true, r: (x) => x.reg },
-    band: { key: 'pen', label: 'Band', tip: 'Leader / Mid / Under-penetrated / Floor', r: (x) => <span title={OPP_LABEL[x.band]} style={{ width: 10, height: 10, borderRadius: 2, background: OPP_C[x.band], display: 'inline-block' }} /> },
+    band: { key: 'pen', label: 'Band', tip: 'Leader / On-par / Under-penetrated / Lagging', r: (x) => <span title={OPP_LABEL[x.band]} style={{ width: 10, height: 10, borderRadius: 2, background: OPP_C[x.band], display: 'inline-block' }} /> },
     pop: { key: 'pop', label: popHdr, tip: (youth ? 'Youth (4–19)' : 'Adult (20+)') + ' Census population — the /1k denominator', r: (x) => fmtPop(x.pop) },
     allCnt: { key: 'allCnt', label: 'All ath.', tip: 'Distinct residents who raced anywhere (all-states numerator)', r: (x) => fmtInt(x.allCnt) },
     pen: { key: 'pen', label: 'All /1k', tip: 'All-states athletes ÷ population × 1,000', r: (x) => <b>{f2(x.pen)}</b> },

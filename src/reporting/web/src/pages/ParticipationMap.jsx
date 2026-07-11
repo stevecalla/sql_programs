@@ -54,7 +54,7 @@ export default function ParticipationMap() {
   const [oppStatMethod, setOppStatMethod] = useState('quantile'); // Statistical mode: 'quantile' | 'sigma'
   const [oppSigmaK, setOppSigmaK] = useState(1);           // Statistical σ multiplier for the 'sigma' method
   const [oppLeaderCut, setOppLeaderCut] = useState(0.60);  // Absolute-mode: Leader ≥ this
-  const [oppFloorCut, setOppFloorCut] = useState(0.27);    // Absolute-mode: Floor ≤ this
+  const [oppFloorCut, setOppFloorCut] = useState(0.27);    // Absolute-mode: Lagging ≤ this
   const [oppValues, setOppValues] = useState(true);        // Opportunity map: print penetration values on states (default on, like the heatmap)
   const [oppCardOpen, setOppCardOpen] = useState(true);    // Opportunity: state card open beside the map, or collapsed to a strip so the map enlarges
   const [oppKeyOpen, setOppKeyOpen] = useState(true);      // Opportunity: on-map band key expanded/collapsed
@@ -326,7 +326,7 @@ export default function ParticipationMap() {
     const dNational = basisIn ? inNational : national;
     const penAll = (ab, pp) => { const R = rOf(ab); return (R && pp) ? round2((R.all / pp) * 1000) : null; };
     const penIn = (ab, pp) => { const R = rOf(ab); return (R && pp) ? round2((R.onlyIn / pp) * 1000) : null; };
-    // Band cutoffs by mode, computed on the ACTIVE basis so the map/band follow the toggle. midCut = Mid/Under boundary.
+    // Band cutoffs by mode, computed on the ACTIVE basis so the map/band follow the toggle. midCut = On-par/Under-penetrated boundary.
     const relMode = oppBandMode === 'rel';
     const vals = [];
     abbr.forEach((ab) => { const pp = pop[ab] || 0; const v = basisIn ? penIn(ab, pp) : penAll(ab, pp); if (v != null && pp) vals.push(v); });
@@ -1162,7 +1162,7 @@ export default function ParticipationMap() {
               <span>{oppData && oppData.basisIn ? 'In-state' : 'All-states'} penetration / 1k{oppData ? ' · nat’l ' + oppData.dNational : ''}<span style={{ fontWeight: 400, opacity: 0.75 }}>{oppData ? (oppData.mode === 'rel' ? ' · national-relative' : oppData.mode === 'stat' ? (' · ' + (oppData.stat && oppData.stat.method === 'sigma' ? 'mean ± ' + oppData.stat.k + 'σ' : 'quantile')) : ' · absolute') : ''}</span></span>
             </button>
             {oppKeyOpen ? OPP_ORDER.map((b) => {
-              if (oppData && oppData.relMode && b === 'mid') return null;   // Mid is empty when Leader = national
+              if (oppData && oppData.relMode && b === 'mid') return null;   // On-par is empty when Leader = national
               const lc = oppData ? oppData.leaderCut : oppLeaderCut, fc = oppData ? oppData.floorCut : oppFloorCut;
               const sub = b === 'leader' ? (oppData && oppData.relMode ? ' ≥ national' : ' ≥ ' + lc.toFixed(2))
                 : b === 'floor' ? (oppData && oppData.relMode ? ' ≤ ½ national (' + fc.toFixed(2) + ')' : ' ≤ ' + fc.toFixed(2))
@@ -1205,7 +1205,7 @@ export default function ParticipationMap() {
           <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 4px' }} />
           <span className="small muted" style={{ fontWeight: 700 }}>Bands</span>
           <span style={{ display: 'inline-flex', gap: 4 }}>
-            <button style={mini(oppBandMode === 'rel')} title="Leader ≥ the national rate · Floor ≤ half the national rate — adapts to the current selection" onClick={() => setOppBandMode('rel')}>National-relative</button>
+            <button style={mini(oppBandMode === 'rel')} title="Leader ≥ the national rate · Lagging ≤ half the national rate — adapts to the current selection" onClick={() => setOppBandMode('rel')}>National-relative</button>
             <button style={mini(oppBandMode === 'stat')} title="Cutoffs from the distribution of state penetration values (quantiles or mean ± σ)" onClick={() => setOppBandMode('stat')}>Statistical</button>
             <button style={mini(oppBandMode === 'abs')} title="Fixed absolute cutoffs you set" onClick={() => setOppBandMode('abs')}>Absolute</button>
           </span>
@@ -1214,15 +1214,15 @@ export default function ParticipationMap() {
               <label className="small">Leader ≥&nbsp;
                 <input type="number" step="0.01" min="0" value={oppLeaderCut} onChange={(e) => setOppLeaderCut(Math.max(0, parseFloat(e.target.value) || 0))} style={{ width: 66 }} />
               </label>
-              <label className="small">Floor ≤&nbsp;
+              <label className="small">Lagging ≤&nbsp;
                 <input type="number" step="0.01" min="0" value={oppFloorCut} onChange={(e) => setOppFloorCut(Math.max(0, parseFloat(e.target.value) || 0))} style={{ width: 66 }} />
               </label>
             </>
           ) : oppBandMode === 'stat' ? (
             <>
               <span style={{ display: 'inline-flex', gap: 4 }}>
-                <button style={mini(oppStatMethod === 'quantile')} title="Leader = top 20% · Floor = bottom 20% · Mid/Under split at the median" onClick={() => setOppStatMethod('quantile')}>Quantile</button>
-                <button style={mini(oppStatMethod === 'sigma')} title="Leader ≥ mean + σ · Floor ≤ mean − σ · Mid/Under split at the mean" onClick={() => setOppStatMethod('sigma')}>Std-dev</button>
+                <button style={mini(oppStatMethod === 'quantile')} title="Leader = top 20% · Lagging = bottom 20% · On-par/Under-penetrated split at the median" onClick={() => setOppStatMethod('quantile')}>Quantile</button>
+                <button style={mini(oppStatMethod === 'sigma')} title="Leader ≥ mean + σ · Lagging ≤ mean − σ · On-par/Under-penetrated split at the mean" onClick={() => setOppStatMethod('sigma')}>Std-dev</button>
               </span>
               {oppStatMethod === 'sigma' ? (
                 <label className="small">σ×&nbsp;
@@ -1232,11 +1232,11 @@ export default function ParticipationMap() {
                 </label>
               ) : null}
               <span className="small muted">{oppData ? (oppData.stat && oppData.stat.method === 'sigma'
-                ? 'μ ' + oppData.stat.mean + ' · σ ' + oppData.stat.sd + ' → Leader ≥ ' + oppData.leaderCut.toFixed(2) + ' · Floor ≤ ' + oppData.floorCut.toFixed(2)
+                ? 'μ ' + oppData.stat.mean + ' · σ ' + oppData.stat.sd + ' → Leader ≥ ' + oppData.leaderCut.toFixed(2) + ' · Lagging ≤ ' + oppData.floorCut.toFixed(2)
                 : 'p20 ' + oppData.floorCut.toFixed(2) + ' · median ' + oppData.midCut.toFixed(2) + ' · p80 ' + oppData.leaderCut.toFixed(2)) : '—'}</span>
             </>
           ) : (
-            <span className="small muted">Leader ≥ {oppData ? oppData.leaderCut.toFixed(2) : '—'} · Floor ≤ {oppData ? oppData.floorCut.toFixed(2) : '—'} (nat’l {oppData ? oppData.dNational : '—'})</span>
+            <span className="small muted">Leader ≥ {oppData ? oppData.leaderCut.toFixed(2) : '—'} · Lagging ≤ {oppData ? oppData.floorCut.toFixed(2) : '—'} (nat’l {oppData ? oppData.dNational : '—'})</span>
           )}
           <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 4px' }} />
           <label className="small" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
