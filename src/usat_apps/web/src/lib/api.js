@@ -66,4 +66,6 @@ export const api = {
   opsCronSave: (crontab) => jpost('/api/ops/system/cron', { crontab }),
   opsConsole: () => jget('/api/ops/console'),
   opsConsoleRun: (payload) => jpost('/api/ops/console/run', payload),
+  opsConsoleUsat: () => jget('/api/ops/console-usat'),
+  opsConsoleUsatRun: (payload) => jpost('/api/ops/console-usat/run', payload),
 };

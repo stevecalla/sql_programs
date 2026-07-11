@@ -37,9 +37,10 @@ test('disallowed method -> 405', async () => {
 test('unknown path is forwarded to the / catch-all (usat_apps)', async () => {
   // The management console was retired from the proxy; '/' now routes to usat_apps (:8022).
   // With no backend running in the test harness, the proxy returns 502 (backend unavailable);
-  // if usat_apps is up it returns its own 404. Either way it's no longer the proxy's own 404.
+  // if usat_apps is up it's a SPA: unknown non-/api paths hit its server-side SPA fallback and
+  // return 200 (index.html; the client shows its own 404). Either way it's forwarded, not the proxy's 404.
   const r = await fetch(base_url + '/nope');
-  assert.ok(r.status === 502 || r.status === 404, 'expected forwarded 502/404, got ' + r.status);
+  assert.ok(r.status === 200 || r.status === 502, 'expected forwarded 200/502, got ' + r.status);
 });
 
 // --- Per-host routing + 404 page (host tag in proxy_routes.js: 'api' = usat-api, 'app' = usat-app) ---

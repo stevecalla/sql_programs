@@ -71,14 +71,18 @@ function run(item, params) {
   return new Promise(function (resolve) {
     let argv;
     try { argv = assemble_argv(item, params); } catch (e) { return resolve({ ok: false, error: e.message }); }
-    const lines = []; let truncated = false; let done = false;
-    function push(t) { strip_ansi(t).split(/\r?\n/).forEach(function (l) { if (lines.length < MAX_LINES) lines.push(l); else truncated = true; }); }
+    const timeout_ms = item.timeout_ms || RUN_TIMEOUT_MS;
+    const lines = []; let buf = ''; let truncated = false; let done = false;
+    function emit(l) { if (lines.length < MAX_LINES) lines.push(l); else truncated = true; }
+    // Buffer partial lines across chunk boundaries so a chunk's trailing newline doesn't inject a blank line.
+    function push(t) { buf += strip_ansi(t); const parts = buf.split(/\r?\n/); buf = parts.pop(); parts.forEach(emit); }
+    function flush() { if (buf.length) { emit(buf); buf = ''; } }
     const p = spawn(item.bin, argv, { cwd: RUN_DIR, shell: process.platform === 'win32', windowsHide: true });
-    const to = setTimeout(function () { if (!done) { try { p.kill('SIGKILL'); } catch (e) { /* noop */ } push('\n[timed out after ' + (RUN_TIMEOUT_MS / 1000) + 's]'); } }, RUN_TIMEOUT_MS);
+    const to = setTimeout(function () { if (!done) { try { p.kill('SIGKILL'); } catch (e) { /* noop */ } push('\n[timed out after ' + (timeout_ms / 1000) + 's]'); } }, timeout_ms);
     p.stdout.on('data', function (d) { push(d.toString()); });
     p.stderr.on('data', function (d) { push(d.toString()); });
-    p.on('error', function (e) { done = true; clearTimeout(to); resolve({ ok: false, error: e.message, output: lines.join('\n') }); });
-    p.on('close', function (code) { done = true; clearTimeout(to); resolve({ ok: code === 0, code: code, truncated: truncated, output: lines.join('\n') }); });
+    p.on('error', function (e) { done = true; clearTimeout(to); flush(); resolve({ ok: false, error: e.message, output: lines.join('\n') }); });
+    p.on('close', function (code) { done = true; clearTimeout(to); flush(); resolve({ ok: code === 0, code: code, truncated: truncated, output: lines.join('\n') }); });
   });
 }
 function public_sections() {
