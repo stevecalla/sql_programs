@@ -26,6 +26,21 @@ export const api = {
   login: (username, password) => jpost('/api/login', { username, password }),
   logout: () => jpost('/api/logout', {}),
   modules: () => jget('/api/modules'),
+  // participation_maps module (report data): /api/participation-maps/*
+  bootstrap: (force) => jget('/api/participation-maps/bootstrap' + (force ? '?force=1' : '')),
+  uniqueFor: (sel) => jget('/api/participation-maps/unique?' + new URLSearchParams(Object.assign(
+    { years: (sel.years || []).join(','), months: (sel.months && sel.months.length ? sel.months.join(',') : 'all') },
+    sel.region ? { region: sel.region } : {},
+    sel.state ? { state: sel.state } : {},
+    sel.ironman ? { ironman: sel.ironman } : {})).toString()),
+  homeFor: (sel) => jget('/api/participation-maps/home?' + new URLSearchParams(Object.assign(
+    { years: (sel.years || []).join(','), months: (sel.months && sel.months.length ? sel.months.join(',') : 'all') },
+    sel.ironman ? { ironman: sel.ironman } : {})).toString()),
+  reachFor: (sel) => jget('/api/participation-maps/reach?' + new URLSearchParams(Object.assign(
+    { years: (sel.years || []).join(','), months: (sel.months && sel.months.length ? sel.months.join(',') : 'all'),
+      ageGroup: sel.ageGroup === 'youth' ? 'youth' : 'adult' },
+    sel.ironman ? { ironman: sel.ironman } : {})).toString()),
+  dataset: () => jget('/api/participation-maps/dataset'),
   event: (evt) => jpost('/api/event', evt),
   metricsReport: (days) => jget('/api/metrics-report?days=' + (days || 7)),
   metricsPurgeTest: () => jpost('/api/metrics-purge-test', {}),

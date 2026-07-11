@@ -31,9 +31,13 @@ module.exports = {
   '/merge':                 { target: 'http://127.0.0.1:8020', health: '/api/status', host: 'app' },
   // Reporting app (React SPA, port 8021 — participation maps + future reports). Built path-aware
   // (`npm run reporting_build_proxy`, Vite base '/reporting/'). See src/reporting/plans_and_notes/DEPLOY_AND_PROXY.md.
-  '/reporting':             { target: 'http://127.0.0.1:8021', health: '/api/status', host: 'app' },
+
+  // '/reporting':             { target: 'http://127.0.0.1:8021', health: '/api/status', host: 'app' }, legacy version when /reporting existed
+
   // usat_apps platform (React SPA, port 8022) — the app front door + Ops console. Built at root base '/'.
+  // catch all => handles /reporting & /ops; see src\usat_apps\web\src\nav.js
   '/':                      { target: 'http://127.0.0.1:8022', health: '/api/status', host: 'app' },
+
   // '/event-analysis': { target: 'http://127.0.0.1:8016', health: '/api/status', host: 'app' },
   // '/race-results':   { target: 'http://127.0.0.1:8018', health: '/api/status', host: 'app' },
   // '/email-queue':    { target: 'http://127.0.0.1:8019', health: '/api/status', host: 'app' },
