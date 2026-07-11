@@ -248,3 +248,5 @@ admin_overrides.json
 src/salesforce_email_queue_proof_of_concept/.menu_prefs.json
 # proxy management console session secret (generated)
 .proxy_auth.json
+src/usat_apps/.menu_prefs.json
+src/usat_apps/modules/participation_maps/.menu_prefs.json

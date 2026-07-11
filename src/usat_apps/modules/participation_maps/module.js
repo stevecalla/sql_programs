@@ -5,6 +5,7 @@
 // Convention: module = report; "Reporting" is only the nav-group label (see
 // plans_and_notes/PARTICIPATION_MAPS_PORT_PLAN.md).
 const api = require('./api');
+const participation = require('./store/participation_read');
 
 module.exports = {
   id: 'participation-maps',                 // stable slug -> /api/participation-maps/* + panel namespace
@@ -16,4 +17,7 @@ module.exports = {
   // Share the platform analytics table (usat_apps_events). Phase 2 finalizes metrics continuity.
   metricsTable: null,
   mount: function (app) { api.mount(app); },
+  // Prebuild live MySQL data at server startup so the FIRST request already has it — avoids the
+  // "fallback sample data" banner for the first visitor after a deploy. Best-effort (see registry.warm_all).
+  warm: function () { return participation.get_bootstrap({ force: true }); },
 };

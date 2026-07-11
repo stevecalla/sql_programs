@@ -42,4 +42,15 @@ function mount_all(app) {
   MODULES.forEach(function (m) { if (typeof m.mount === 'function') m.mount(app); });
 }
 
-module.exports = { list, panels, mount_all };
+// Prebuild each module's data caches at server startup (best-effort, non-blocking) so the first request
+// serves live data instead of the fixture fallback. Called from start_server AFTER listen — NEVER from
+// create_app, so tests that build the app don't trigger a MySQL connection.
+function warm_all() {
+  MODULES.forEach(function (m) {
+    if (typeof m.warm === 'function') {
+      try { Promise.resolve(m.warm()).catch(function () {}); } catch (e) { /* ignore */ }
+    }
+  });
+}
+
+module.exports = { list, panels, mount_all, warm_all };

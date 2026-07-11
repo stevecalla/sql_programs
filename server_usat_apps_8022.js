@@ -97,6 +97,9 @@ function start_server(port) {
     console.log('  login configured: ' + store.login_configured());
     if (!fs.existsSync(WEB_DIST)) console.log('  NOTE: React app not built yet — run the build (see message at /).');
     console.log('  One log line per request below. Press Ctrl-C to stop.\n');
+    // Warm module data caches so the first request already has live MySQL data (no fallback banner in prod).
+    try { require('./src/usat_apps/modules/registry').warm_all(); console.log('  [warm] prebuilding module data caches…'); }
+    catch (e) { console.warn('  [warm] module warm-up skipped: ' + e.message); }
 
     // NGROK — best-effort; a missing/invalid NGROK_AUTHTOKEN must NOT crash the local server.
     if (is_test_ngrok || ngrok_enabled_flag) {

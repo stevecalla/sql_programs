@@ -103,6 +103,9 @@ const SECTIONS = [
     { id: 25, label: 'pm2 stop', desc: 'Stop the pm2 process', bin: 'npm', args: ['run', 'stop_usat_apps'], cli: 'npm run stop_usat_apps' },
     { id: 26, label: 'pm2 logs', desc: 'Tail the pm2 logs', bin: 'npm', args: ['run', 'pm2_logs_usat_apps'], cli: 'npm run pm2_logs_usat_apps' },
   ]},
+  { label: 'MODULES', color: CYAN, items: [
+    { id: 27, label: 'Participation maps — data pipeline & ops →', desc: 'Rebuild region/zip/census/summary data, BigQuery load, build scope (opens the module menu)', bin: 'node', args: ['src/usat_apps/modules/participation_maps/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/participation_maps/menu.js' },
+  ]},
 ];
 const ALL = SECTIONS.flatMap((s) => s.items);
 
@@ -123,7 +126,7 @@ function print_menu() {
 
 async function main() {
   load_prefs();
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+  let rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
   while (true) {
     print_menu();
     const ans = (await prompt(rl, c(BOLD, '\n  Select: '))).trim().toLowerCase();
@@ -131,6 +134,14 @@ async function main() {
     if (ans === 't') { _show_cli = !_show_cli; save_prefs(); continue; }
     const it = ALL.find((x) => x.id === parseInt(ans, 10));
     console.log('');
+    if (it && it.interactive && it.bin) {
+      // Interactive sub-menu: release our readline so the child's readline owns stdin, then recreate
+      // ours when it returns. Without this the parent readline steals the child's t/q keystrokes.
+      rl.close();
+      await run_cmd(it.bin, it.args, it.label, it.cwd);
+      rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+      continue;
+    }
     if (!it) console.log(c(YELLOW, '  Invalid choice.'));
     else if (it.bin) await run_cmd(it.bin, it.args, it.label, it.cwd);
     else if (it.open) open_url(it.open);
