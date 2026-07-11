@@ -3,10 +3,10 @@
    Imported by Section.jsx (loads with the lazy module chunk). */
 
 :root {
-  --navy: #082240;
-  --hover: #eef2f7;
-  --header: #082240;
-  --header-ink: #ffffff;
+  /* Map-specific aliases ONLY. Platform theme vars (--hover, --header, --header-ink, --navy, --ink, ...)
+     are owned by web/src/styles.css and must NOT be redefined here: a :root redefinition overrides the
+     platform's [data-theme="dark"] block (equal specificity, later in the cascade) and breaks dark mode
+     on this page (e.g. the rail hover went unreadable). */
   --card: var(--panel);
   --dim: var(--muted);
   --radius: 10px;
