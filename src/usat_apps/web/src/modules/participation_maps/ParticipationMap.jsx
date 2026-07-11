@@ -5,6 +5,7 @@ import { api } from '../../lib/api.js';
 import { getYearBlock, kpisFromYB, computeYoY, resolveSlices, aggregateFlows, flowsHaveIM } from './lib/compute.js';
 import { trackFilter, trackExport, track } from '../../lib/track.js';
 import ParticipationTabs from './ParticipationTabs.jsx';
+import HeaderRefresh from './HeaderRefresh.jsx';
 import { OPP_C, OPP_TXT, OPP_LABEL, OPP_ORDER, classifyBand, OppCard, OppTable } from './opportunity.jsx';
 
 // Pure constants + helpers live in mapHelpers.js (extracted to keep this file focused on the component).
@@ -812,19 +813,7 @@ export default function ParticipationMap() {
       <div className="page-head">
         <h2>Participation maps</h2>
         <span className="muted small">{p.abbr.length} states · {metrics.length} metrics · {labelText(selYears, selMonths)}</span>
-        {p.buildMeta ? (
-          <span
-            title={'Reporting data build: ' + (p.buildMeta.mode === 'test' ? 'TEST (2024 & 2025 only) — re-run the FULL step 3i before sharing' : 'full data') + ' · years ' + p.buildMeta.minYear + '–' + p.buildMeta.maxYear + (p.buildMeta.builtAt ? (' · built ' + p.buildMeta.builtAt) : '')}
-            style={{
-              marginLeft: 8, padding: '2px 8px', borderRadius: 20, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-              background: p.buildMeta.mode === 'test' ? (dark ? '#4a3a1d' : '#fff7e6') : (dark ? '#14351f' : '#e8f3e8'),
-              color: p.buildMeta.mode === 'test' ? (dark ? '#f5c86a' : '#8a6400') : (dark ? '#8fd39f' : '#2e7d32'),
-              border: '1px solid ' + (p.buildMeta.mode === 'test' ? (dark ? '#7a5a1d' : '#f0d28a') : (dark ? '#2f6b3f' : '#bfe0bf')),
-            }}
-          >
-            {(p.buildMeta.mode === 'test' ? 'TEST DATA' : 'FULL DATA') + ' · ' + p.buildMeta.minYear + '–' + p.buildMeta.maxYear}
-          </span>
-        ) : null}
+        <HeaderRefresh />
       </div>
 
       {kpis ? (
@@ -918,6 +907,19 @@ export default function ParticipationMap() {
             </button>
           ))}
         </span>
+        {p.buildMeta ? (
+          <span
+            title={'Reporting data build: ' + (p.buildMeta.mode === 'test' ? 'TEST (2024 & 2025 only) — re-run the FULL step 3i before sharing' : 'full data') + ' · years ' + p.buildMeta.minYear + '–' + p.buildMeta.maxYear + (p.buildMeta.builtAt ? (' · built ' + p.buildMeta.builtAt) : '')}
+            style={{
+              marginLeft: 'auto', padding: '2px 8px', borderRadius: 20, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+              background: p.buildMeta.mode === 'test' ? (dark ? '#4a3a1d' : '#fff7e6') : (dark ? '#14351f' : '#e8f3e8'),
+              color: p.buildMeta.mode === 'test' ? (dark ? '#f5c86a' : '#8a6400') : (dark ? '#8fd39f' : '#2e7d32'),
+              border: '1px solid ' + (p.buildMeta.mode === 'test' ? (dark ? '#7a5a1d' : '#f0d28a') : (dark ? '#2f6b3f' : '#bfe0bf')),
+            }}
+          >
+            {(p.buildMeta.mode === 'test' ? 'TEST DATA' : 'FULL DATA') + ' · ' + p.buildMeta.minYear + '–' + p.buildMeta.maxYear}
+          </span>
+        ) : null}
       </div>
 
       {showPins && !showFlows && !showRegions ? (

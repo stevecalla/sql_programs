@@ -15,7 +15,7 @@
 @keyframes mapspin { to { transform: rotate(360deg); } }
 .mapspin { width: 11px; height: 11px; border: 2px solid var(--line); border-top-color: var(--muted); border-radius: 50%; display: inline-block; animation: mapspin .7s linear infinite; }
 .opphl tbody tr:hover > td { background: var(--hover); }
-.refresh-badge { font-size: 12px; color: var(--header-ink); opacity: 0.85; display: inline-flex; align-items: center; gap: 6px; }
+.refresh-badge { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .dot.ok { background: #34d399; }
 .dot.warn { background: #fbbf24; }
