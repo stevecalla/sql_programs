@@ -123,7 +123,7 @@ module.exports = function mount(app) {
 
   // Home-side distinct ADULT athletes for a selection (penetration numerator: residents who race, by home
   // state — regardless of where they raced). Counted live from the base table; same on-demand pattern as
-  // /api/unique. Powers the "Home penetration / 1,000 pop" metric.
+  // /api/unique. Powers the all-states + in-state penetration metrics (byHomeState + byHomeStateOnlyIn).
   app.get('/api/home', require_panel('participation-maps'), async function (req, res) {
     try {
       const q = req.query;
@@ -133,7 +133,26 @@ module.exports = function mount(app) {
         ironman: q.ironman || null,
       };
       const r = await participation.home_athletes_for_selection(sel);
-      res.json({ ok: true, national: r.national, byHomeState: r.byHomeState, byHomeRegion: r.byHomeRegion });
+      res.json({ ok: true, national: r.national, byHomeState: r.byHomeState, byHomeRegion: r.byHomeRegion, byHomeStateOnlyIn: r.byHomeStateOnlyIn, byHomeRegionOnlyIn: r.byHomeRegionOnlyIn });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Resident "reach" split for the Opportunity card: per home state, distinct residents (ageGroup = adult|youth)
+  // who raced anywhere (all) / in-state at least once (in) / out-of-state at least once (out). The card derives
+  // only-in / both / only-out from these. Same live on-demand pattern as /api/home.
+  app.get('/api/reach', require_panel('participation-maps'), async function (req, res) {
+    try {
+      const q = req.query;
+      const sel = {
+        years: (q.years || '').split(',').filter(Boolean),
+        months: (q.months || 'all').split(',').filter(Boolean),
+        ironman: q.ironman || null,
+        ageGroup: q.ageGroup === 'youth' ? 'youth' : 'adult',
+      };
+      const r = await participation.reach_for_selection(sel);
+      res.json({ ok: true, national: r.national, byHomeState: r.byHomeState });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
     }

@@ -201,18 +201,25 @@ async function build_from_mysql() {
 
   // Per-state population (Census, from step_2c) for penetration / per-capita metrics. Guarded: the table
   // is absent on ETL builds that predate step_2c, so population stays {} and penetration just won't populate.
-  const population = {};
+  // population (all ages) + the age-split columns from step_2c (population_adult = 20+, population_youth = <20).
+  // SELECT * so a table that predates the age-split (no adult/youth columns) still loads total population.
+  const population = {}, populationAdult = {}, populationYouth = {};
   let populationSource = null;
   try {
-    const pop = await db.query("SELECT state_code, population, source FROM census_state_population WHERE state_code IS NOT NULL AND population IS NOT NULL");
-    if (Array.isArray(pop)) for (const r of pop) { population[r.state_code] = Number(r.population); if (!populationSource) populationSource = r.source; }
+    const pop = await db.query("SELECT * FROM census_state_population WHERE state_code IS NOT NULL AND population IS NOT NULL");
+    if (Array.isArray(pop)) for (const r of pop) {
+      population[r.state_code] = Number(r.population);
+      if (r.population_adult != null) populationAdult[r.state_code] = Number(r.population_adult);
+      if (r.population_youth != null) populationYouth[r.state_code] = Number(r.population_youth);
+      if (!populationSource) populationSource = r.source;
+    }
   } catch (e) { /* census_state_population not present yet — ignore */ }
 
   return Object.assign({}, {
     colors: META.colors, evcols: META.evcols, fips2region: META.fips2region, ab2region: useReg ? gAb2region : META.ab2region,
     rshead: META.rshead, names: useReg ? gNames : META.names, abbr: useReg ? gAbbr : META.abbr, regs: useReg ? gRegs : META.regs, regOrder: useReg ? gRegOrder : META.regOrder,
     centroid: useReg ? Object.assign({}, META.centroid, gCentroid) : META.centroid, name2ab: useReg ? gName2ab : META.name2ab, meta: META.meta,
-  }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear, lastUpdated, lastUpdatedUtc, maxParts, buildMeta, population, populationSource });
+  }, { byYear, monthsByYear, rawByYM, odByYM, annualUnique, monthlyNat, eventsByYear, lastUpdated, lastUpdatedUtc, maxParts, buildMeta, population, populationAdult, populationYouth, populationSource });
 }
 
 function load_fixture() {
@@ -343,16 +350,62 @@ async function home_athletes_for_selection(sel) {
   else if (ironman === 'No') where.push("(is_ironman IS NULL OR is_ironman <> 'Y')");
   const W = where.join(' AND ');
 
+  // u = residents who raced anywhere (all-states numerator); o = residents who raced OUT of their home state at
+  // least once. In-state (home-only) = u − o. Powers both the all-states and the in-state penetration metrics.
   const [stRows, rgRows] = await Promise.all([
-    db.query('SELECT member_state_code_addresses AS k, COUNT(DISTINCT id_profiles) AS u FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY member_state_code_addresses WITH ROLLUP', params),
-    db.query('SELECT region_name_member AS k, COUNT(DISTINCT id_profiles) AS u FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY region_name_member WITH ROLLUP', params),
+    db.query('SELECT member_state_code_addresses AS k, COUNT(DISTINCT id_profiles) AS u, COUNT(DISTINCT IF(state_code_events <> member_state_code_addresses, id_profiles, NULL)) AS o FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY member_state_code_addresses WITH ROLLUP', params),
+    db.query('SELECT region_name_member AS k, COUNT(DISTINCT id_profiles) AS u, COUNT(DISTINCT IF(state_code_events <> member_state_code_addresses, id_profiles, NULL)) AS o FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY region_name_member WITH ROLLUP', params),
   ]);
-  const byHomeState = {}; let national = 0;
-  for (const r of stRows) { if (r.k == null) national = Number(r.u); else byHomeState[r.k] = Number(r.u); }
-  const byHomeRegion = {}; for (const r of rgRows) { if (r.k != null && r.k !== '') byHomeRegion[r.k] = Number(r.u); }
-  const out = { national, byHomeState, byHomeRegion };
+  const byHomeState = {}, byHomeStateOnlyIn = {}; let national = 0;
+  for (const r of stRows) { if (r.k == null) national = Number(r.u); else { byHomeState[r.k] = Number(r.u); byHomeStateOnlyIn[r.k] = Number(r.u) - Number(r.o); } }
+  const byHomeRegion = {}, byHomeRegionOnlyIn = {}; for (const r of rgRows) { if (r.k != null && r.k !== '') { byHomeRegion[r.k] = Number(r.u); byHomeRegionOnlyIn[r.k] = Number(r.u) - Number(r.o); } }
+  const out = { national, byHomeState, byHomeRegion, byHomeStateOnlyIn, byHomeRegionOnlyIn };
   _uniqueCache.set(key, out);
   return out;
 }
 
-module.exports = { get_bootstrap, build_from_mysql, unique_for_selection, home_athletes_for_selection, FIXTURE };
+// Resident "reach" split for the Opportunity card. Per HOME state, counts DISTINCT member-matched residents
+// (age group: adult 20+ or youth 4-19) who, in the selection:
+//   all = raced ANYWHERE (any event state, incl. home)   — the all-states numerator
+//   in  = raced IN their home state at least once
+//   out = raced OUT of their home state at least once
+// The card's mutually-exclusive buckets derive from these: only-in (home-only) = all − out, only-out
+// (away-only) = all − in, both = in + out − all. Restricted to member residents in the 54 jurisdictions so it
+// tracks the penetration basis. Age is filtered on the numeric `age` column (matches the census split at 20).
+// Memoized alongside the unique cache; cleared on each live rebuild.
+async function reach_for_selection(sel) {
+  sel = sel || {};
+  const years = (sel.years || []).map(Number).filter((y) => y);
+  if (!years.length) return { national: { all: 0, in: 0, out: 0 }, byHomeState: {} };
+  const months = (sel.months && sel.months.indexOf('all') < 0)
+    ? sel.months.map(Number).filter((m) => m >= 1 && m <= 12) : null;
+  const ironman = sel.ironman || null;
+  const youth = sel.ageGroup === 'youth';
+  const key = 'reach:' + JSON.stringify({ y: years.slice().sort((a, b) => a - b), m: months ? months.slice().sort((a, b) => a - b) : 'all', ironman, g: youth ? 'y' : 'a' });
+  if (_uniqueCache.has(key)) return _uniqueCache.get(key);
+
+  const where = ['start_date_year_races IN (?)', 'member_state_code_addresses IN (' + STATE_LIST_SQL + ')',
+    (youth ? 'age BETWEEN 4 AND 19' : 'age >= 20')];
+  const params = [years];
+  if (months) { where.push('start_date_month_races IN (?)'); params.push(months); }
+  if (ironman === 'Yes') where.push("is_ironman = 'Y'");
+  else if (ironman === 'No') where.push("(is_ironman IS NULL OR is_ironman <> 'Y')");
+  const W = where.join(' AND ');
+
+  const rows = await db.query(
+    'SELECT member_state_code_addresses AS k, ' +
+    'COUNT(DISTINCT id_profiles) AS a, ' +
+    'COUNT(DISTINCT IF(state_code_events = member_state_code_addresses, id_profiles, NULL)) AS i, ' +
+    'COUNT(DISTINCT IF(state_code_events <> member_state_code_addresses, id_profiles, NULL)) AS o ' +
+    'FROM ' + BASE_TABLE + ' WHERE ' + W + ' GROUP BY member_state_code_addresses WITH ROLLUP', params);
+  const byHomeState = {}; let national = { all: 0, in: 0, out: 0 };
+  for (const r of rows) {
+    if (r.k == null) national = { all: Number(r.a), in: Number(r.i), out: Number(r.o) };
+    else byHomeState[r.k] = { all: Number(r.a), in: Number(r.i), out: Number(r.o) };
+  }
+  const out = { national, byHomeState };
+  _uniqueCache.set(key, out);
+  return out;
+}
+
+module.exports = { get_bootstrap, build_from_mysql, unique_for_selection, home_athletes_for_selection, reach_for_selection, FIXTURE };

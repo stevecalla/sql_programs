@@ -34,6 +34,10 @@ export const api = {
   homeFor: (sel) => jget('/api/home?' + new URLSearchParams(Object.assign(
     { years: (sel.years || []).join(','), months: (sel.months && sel.months.length ? sel.months.join(',') : 'all') },
     sel.ironman ? { ironman: sel.ironman } : {})).toString()),
+  reachFor: (sel) => jget('/api/reach?' + new URLSearchParams(Object.assign(
+    { years: (sel.years || []).join(','), months: (sel.months && sel.months.length ? sel.months.join(',') : 'all'),
+      ageGroup: sel.ageGroup === 'youth' ? 'youth' : 'adult' },
+    sel.ironman ? { ironman: sel.ironman } : {})).toString()),
   dataset: () => jget('/api/dataset'),
   event: (evt) => jpost('/api/event', evt),
   metricsReport: (days) => jget('/api/metrics-report?days=' + (days || 7)),

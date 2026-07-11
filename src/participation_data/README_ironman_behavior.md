@@ -97,6 +97,7 @@ over calendar time**, within the Ironman population.
 
 ## The IRONMAN classification rule (single source of truth)
 
+**Quick reference:** `src/queries/ironman_definition_reference_card.md`
 **File:** `src/queries/ironman_rule.js` → `ironman_event_predicate(col)`
 
 An event is IRONMAN if the name contains **"ironman"**, OR it is on a curated allow-list of official
