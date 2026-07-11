@@ -289,6 +289,46 @@ code {
   font-size: 15px;
 }
 
+/* ---- status pages: 404 / 403 (in-shell) ---- */
+.state-page {
+  max-width: 520px;
+  margin: 8vh auto 0;
+  text-align: center;
+}
+
+.state-code {
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+
+.state-code.danger {
+  color: var(--red);
+}
+
+.state-page h2 {
+  margin: 10px 0 6px;
+}
+
+.state-page p {
+  margin: 6px 0;
+}
+
+.state-page code {
+  word-break: break-all;
+}
+
+.state-page a.btn,
+.state-page .btn.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+  text-decoration: none;
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--line);

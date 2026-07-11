@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { api } from './lib/api.js';
 import { trackPanelView } from './lib/track.js';
 import { allPanels, canSee } from './nav.js';
@@ -9,6 +9,8 @@ import UserMenu from './components/UserMenu.jsx';
 import FooterClock from './components/FooterClock.jsx';
 import Login from './pages/Login.jsx';
 import Home from './pages/Home.jsx';
+import NotFound from './pages/NotFound.jsx';
+import NotAuthorized from './pages/NotAuthorized.jsx';
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = loading, null = signed out
@@ -23,7 +25,7 @@ export default function App() {
   if (user === undefined) return <div className="loading">Loading…</div>;
   if (!user) return <Login onLogin={setUser} />;
 
-  const guard = (panel, el) => (canSee(user, panel) ? el : <Navigate to="/" replace />);
+  const guard = (panel, el) => (canSee(user, panel) ? el : <NotAuthorized panel={panel} />);
 
   return (
     <div className="wrap">
@@ -47,7 +49,7 @@ export default function App() {
               {allPanels().map((p) => (
                 <Route key={p.path} path={p.path} element={guard(p.panel, <p.Component title={p.label} user={user} />)} />
               ))}
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
           <FooterClock />
