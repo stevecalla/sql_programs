@@ -18,27 +18,35 @@ const OpsSystemHealth = lazy(() => import('./modules/ops/SystemHealth.jsx'));
 const OpsReference = lazy(() => import('./modules/ops/Reference.jsx'));
 
 export const NAV = [
-  { type: 'group', label: 'Reporting', items: [
-    { label: 'Participation maps', path: '/reporting/participation-maps', panel: 'participation-maps', icon: '🗺', Component: ParticipationMaps },
-    { label: 'Event analysis',     path: '/reporting/event-analysis',     panel: 'event-analysis',     icon: '📈', Component: ComingSoon },
-  ] },
-  { type: 'group', label: 'Salesforce', items: [
-    { label: 'Merge', path: '/salesforce/merge', panel: 'merge', icon: '⇄', Component: ComingSoon },
-  ] },
+  {
+    type: 'group', label: 'Reporting', items: [
+      { label: 'Participation maps', path: '/reporting/participation-maps', panel: 'participation-maps', icon: '🗺', Component: ParticipationMaps },
+      { label: 'Event analysis', path: '/reporting/event-analysis', panel: 'event-analysis', icon: '📈', Component: ComingSoon },
+    ]
+  },
+  {
+    type: 'group', label: 'Salesforce', items: [
+      { label: 'Merge', path: '/salesforce/merge', panel: 'merge', icon: '⇄', Component: ComingSoon },
+    ]
+  },
   { type: 'solo', label: 'Metrics', path: '/metrics', panel: 'metrics', icon: '📊', Component: Metrics },
-  { type: 'group', label: 'Admin', items: [
-    { label: 'Users & access', path: '/admin/users', panel: 'admin', icon: '👤', Component: Admin },
-  ] },
-  { type: 'group', label: 'Ops', items: [
-    { label: 'Overview',      path: '/ops/overview',     panel: 'ops', icon: '▦', Component: OpsOverview },
-    { label: 'Backends',      path: '/ops/backends',     panel: 'ops', icon: '⚡', Component: OpsBackends },
-    { label: 'Server cards',  path: '/ops/server-cards', panel: 'ops', icon: '◧', Component: OpsServerCards },
-    { label: 'Operations',    path: '/ops/operations',   panel: 'ops', icon: '▸', Component: OpsOperations },
-    { label: 'Logs',          path: '/ops/logs',         panel: 'ops', icon: '▤', Component: OpsLogs },
-    { label: 'System health', path: '/ops/system',       panel: 'ops', icon: '📊', Component: OpsSystemHealth },
-    { label: 'Settings',      path: '/ops/settings',     panel: 'ops', icon: '⚙', Component: OpsSettings },
-    { label: 'Reference',     path: '/ops/reference',    panel: 'ops', icon: '❏', Component: OpsReference },
-  ] },
+  {
+    type: 'group', label: 'Admin', items: [
+      { label: 'Users & access', path: '/admin/users', panel: 'admin', icon: '👤', Component: Admin },
+    ]
+  },
+  {
+    type: 'group', label: 'Ops', items: [
+      { label: 'Overview', path: '/ops/overview', panel: 'ops', icon: '▦', Component: OpsOverview },
+      { label: 'Backends', path: '/ops/backends', panel: 'ops', icon: '⚡', Component: OpsBackends },
+      { label: 'Server cards', path: '/ops/server-cards', panel: 'ops', icon: '◧', Component: OpsServerCards },
+      { label: 'Operations', path: '/ops/operations', panel: 'ops', icon: '▸', Component: OpsOperations },
+      { label: 'Logs', path: '/ops/logs', panel: 'ops', icon: '▤', Component: OpsLogs },
+      { label: 'System health', path: '/ops/system', panel: 'ops', icon: '📊', Component: OpsSystemHealth },
+      { label: 'Settings', path: '/ops/settings', panel: 'ops', icon: '⚙', Component: OpsSettings },
+      { label: 'Reference', path: '/ops/reference', panel: 'ops', icon: '❏', Component: OpsReference },
+    ]
+  },
 ];
 
 // Can this user reach a panel? Admins see all; 'admin' panel is admin-only; else needs the grant.
