@@ -33,7 +33,7 @@ const mount = require('./src/usat_apps/api/routes');
 const store = require('./src/usat_apps/auth/auth_store');
 
 const DEFAULT_PORT = Number(process.env.USATAPPS_PORT) || Number(process.env.USAT_APPS_PORT) || 8022;
-const WEB_DIST = path.join(__dirname, 'src', 'usat_apps', 'web', 'dist');
+const WEB_DIST = process.env.USATAPPS_WEB_DIST || path.join(__dirname, 'src', 'usat_apps', 'web', 'dist');
 const PROD_URL = 'https://usat-app.kidderwise.org/';
 
 // NGROK TUNNEL — optional public URL, same pattern as 8020/8021. Off by default (Cloudflare fronts the
