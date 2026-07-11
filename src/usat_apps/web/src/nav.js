@@ -29,10 +29,10 @@ export const NAV = [
       { label: 'Merge', path: '/salesforce/merge', panel: 'merge', icon: '⇄', Component: ComingSoon },
     ]
   },
-  { type: 'solo', label: 'Metrics', path: '/metrics', panel: 'metrics', icon: '📊', Component: Metrics },
   {
-    type: 'group', label: 'Admin', items: [
-      { label: 'Users & access', path: '/admin/users', panel: 'admin', icon: '👤', Component: Admin },
+    type: 'group', label: 'Metrics', items: [
+      { label: 'Usat apps', path: '/metrics/usat-apps', panel: 'metrics', icon: '👤', Component: Metrics },
+      { label: 'Participation maps', path: '/metrics/participation-maps', panel: 'metrics', icon: '👤', Component: Metrics },
     ]
   },
   {
@@ -45,6 +45,11 @@ export const NAV = [
       { label: 'System health', path: '/ops/system', panel: 'ops', icon: '📊', Component: OpsSystemHealth },
       { label: 'Settings', path: '/ops/settings', panel: 'ops', icon: '⚙', Component: OpsSettings },
       { label: 'Reference', path: '/ops/reference', panel: 'ops', icon: '❏', Component: OpsReference },
+    ]
+  },
+  {
+    type: 'group', label: 'Admin', items: [
+      { label: 'Users & access', path: '/admin/users', panel: 'admin', icon: '👤', Component: Admin },
     ]
   },
 ];

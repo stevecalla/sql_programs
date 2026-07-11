@@ -76,3 +76,5 @@ export function trackFilter(panel, view, filter_name) { track('filter_run', { pa
 export function trackSearch(panel, view) { track('search_run', { panel: panel, view: view, filter_name: 'search' }); }
 export function trackExport(panel, view, export_format) { track('report_export', { panel: panel, view: view, export_format: export_format }); }
 export function trackSession(event_name) { track(event_name, {}); }
+export function trackNotFound(pathname) { track('not_found', { panel: panelForPath(pathname), view: pathname }); }
+export function trackNotAuthorized(panel, pathname) { track('not_authorized', { panel: panel || panelForPath(pathname), view: pathname }); }

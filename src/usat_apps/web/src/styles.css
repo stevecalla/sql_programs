@@ -26,7 +26,7 @@
   --navy: #082240;
   --accent: #4f7fd0;
   --accent-soft: rgba(79, 127, 208, .18);
-  --red: #f87171;
+  --red: #c20e2f;
   --shadow: 0 1px 2px rgba(0, 0, 0, .4);
   --header: #0a1526;
   --header-ink: #e5eaf3;
@@ -180,7 +180,7 @@ code {
 }
 
 .rail-link.on {
-  background: var(--navy);
+  background: var(--accent);
   color: #fff;
   font-weight: 700;
 }
@@ -289,6 +289,46 @@ code {
   font-size: 15px;
 }
 
+/* ---- status pages: 404 / 403 (in-shell) ---- */
+.state-page {
+  max-width: 520px;
+  margin: 8vh auto 0;
+  text-align: center;
+}
+
+.state-code {
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+
+.state-code.danger {
+  color: var(--red);
+}
+
+.state-page h2 {
+  margin: 10px 0 6px;
+}
+
+.state-page p {
+  margin: 6px 0;
+}
+
+.state-page code {
+  word-break: break-all;
+}
+
+.state-page a.btn,
+.state-page .btn.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+  text-decoration: none;
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -331,24 +371,32 @@ table.grid th {
 }
 
 /* ---- buttons / forms ---- */
-/* background: var(--card);
-    color: var(--ink); */
 .btn,
 button.btn {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    border: 1px solid var(--line);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font: inherit;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  min-height: 34px;
+}
 
-    background: #ffffff1f;
-    color: #fff;
-    font: inherit;
-    font-weight: 600;
-    padding: 6px 12px;
-    border: 1px red;
-    border-radius: 10px;
-    cursor: pointer;
-    min-height: 34px;
+/* Header controls sit on the navy header — keep them light in both themes. */
+.header-btns .btn {
+  background: #ffffff1f;
+  color: #fff;
+  border-color: rgba(255, 255, 255, .35);
+}
+
+.header-btns .btn:hover {
+  background: #ffffff33;
+  border-color: rgba(255, 255, 255, .6);
 }
 
 .btn:hover {

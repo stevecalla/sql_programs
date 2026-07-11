@@ -45,6 +45,8 @@ export default function Metrics() {
         {kpi('Unique users', d.unique_users || 0)}
         {kpi('Filters run', d.filters_run || 0)}
         {kpi('Exports', d.exports || 0)}
+        {kpi('Not found (404)', d.not_found || 0)}
+        {kpi('Access denied (403)', d.not_authorized || 0)}
       </div>
 
       <div className="card">
@@ -56,6 +58,28 @@ export default function Metrics() {
               : d.by_panel.map((r) => (
                 <tr key={r.panel}><td>{r.panel}</td><td>{r.views}</td><td>{r.filters}</td><td>{r.exports}</td><td>{r.events}</td></tr>
               ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        <h3>Not found (404) — top paths</h3>
+        <table className="grid">
+          <thead><tr><th>Path</th><th>Hits</th></tr></thead>
+          <tbody>
+            {(d.top_not_found || []).length === 0 ? <tr><td className="muted" colSpan={2}>No 404s in this window.</td></tr>
+              : d.top_not_found.map((r) => (<tr key={r.path}><td><code>{r.path}</code></td><td>{r.n}</td></tr>))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        <h3>Access denied (403)</h3>
+        <table className="grid">
+          <thead><tr><th>Panel</th><th>User</th><th>Attempts</th></tr></thead>
+          <tbody>
+            {(d.access_denied || []).length === 0 ? <tr><td className="muted" colSpan={3}>No access denials in this window.</td></tr>
+              : d.access_denied.map((r, i) => (<tr key={r.panel + r.actor + i}><td>{r.panel}</td><td>{r.actor}</td><td>{r.n}</td></tr>))}
           </tbody>
         </table>
       </div>

@@ -149,6 +149,7 @@ playwright/.cache/
 # isolated e2e web build — repo-root throwaway, outside every dev watch path so tests never clobber
 # web/dist nor trigger nodemon/vite restarts
 .reporting_e2e_dist/
+.usat_apps_e2e_dist/
 
 # =========================================================
 # BUILD / CACHE

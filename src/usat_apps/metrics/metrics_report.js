@@ -66,6 +66,10 @@ async function build_report(pool, opts) {
 
   const errors = await q(pool, "SELECT error_type e, COUNT(*) n FROM " + W + " AND event_name='error' AND error_type IS NOT NULL GROUP BY error_type ORDER BY n DESC", A);
 
+  // ---- broken links (404) + access denials (403) ----
+  const not_found = await q(pool, "SELECT view, COUNT(*) n FROM " + W + " AND event_name='not_found' AND view IS NOT NULL AND view<>'' GROUP BY view ORDER BY n DESC LIMIT 10", A);
+  const access_denied = await q(pool, "SELECT panel, actor, COUNT(*) n FROM " + W + " AND event_name='not_authorized' GROUP BY panel, actor ORDER BY n DESC LIMIT 10", A);
+
   // ---- recent active users + anonymous visitors ----
   const recent_users = await q(pool,
     "SELECT actor a, COUNT(*) events, SUM(event_name='report_export') exports, " +
@@ -97,6 +101,10 @@ async function build_report(pool, opts) {
     top_operators: top_ops.map(function (r) { return { actor: String(r.a || ''), exports: n0(r.exports), filters: n0(r.filters), events: n0(r.events), last_seen: r.last_seen || null }; }),
     by_day: by_day.map(function (r) { var d = r.d, day = (d && d.toISOString) ? d.toISOString().slice(0, 10) : String(d).slice(0, 10); return { day: day, views: n0(r.views), filters: n0(r.filters), exports: n0(r.exports) }; }),
     errors: errors.map(function (r) { return { type: r.e || '?', n: n0(r.n) }; }),
+    not_found: cmap.not_found || 0,
+    not_authorized: cmap.not_authorized || 0,
+    top_not_found: not_found.map(function (r) { return { path: r.view, n: n0(r.n) }; }),
+    access_denied: access_denied.map(function (r) { return { panel: r.panel || '\u2014', actor: String(r.actor || 'anon'), n: n0(r.n) }; }),
     recent_active_users: recent_users.map(function (r) { return { actor: String(r.a || ''), events: n0(r.events), exports: n0(r.exports), last_seen: r.last_seen || null }; }),
     visitors: visitors.map(function (r) { return { id: String(r.v || ''), returning: n0(r.ret), actor: String(r.actor || ''), tz: r.tz || null, device: device(r.viewport), visits: n0(r.visits), events: n0(r.events), last_seen: r.last_seen || null }; }),
     health: { rows: n0(health.rows_total), test_rows: n0(health.test_rows), mb: (sizerow.mb != null ? Number(sizerow.mb) : null), latest_mtn: health.latest || null },
@@ -112,6 +120,9 @@ async function build_report(pool, opts) {
       ] },
       { heading: 'Where', lines: [
         'busiest panel: ' + (data.by_panel[0] ? data.by_panel[0].panel + ' (' + data.by_panel[0].events + ' events)' : 'n/a'),
+      ] },
+      { heading: 'Issues', lines: [
+        data.not_found + ' not-found (404) \u00b7 ' + data.not_authorized + ' access-denied (403)',
       ] },
       { heading: 'Health', lines: [
         data.health.rows + ' rows · ' + data.health.test_rows + ' test rows' + (data.health.mb != null ? ' · ' + data.health.mb + ' MB' : ''),
