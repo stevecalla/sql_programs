@@ -51,7 +51,9 @@ test('ranking tab shows the sortable table', async ({ page }) => {
   // The bottom "Opportunity" tab (ranking) is the last button with that name.
   await page.getByRole('button', { name: 'Opportunity', exact: true }).last().click();
   await expect(page.getByText(/State ranking/)).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: /\/1k/ })).toBeVisible();
+  // The 'all' tab shows both "All /1k" and "In /1k" headers — assert the first to avoid a
+  // strict-mode multi-match; presence of a /1k column confirms the metric table rendered.
+  await expect(page.getByRole('columnheader', { name: /\/1k/ }).first()).toBeVisible();
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });
 
