@@ -22,7 +22,7 @@
   --ink: #e5eaf3;
   --muted: #94a3b8;
   --line: #22304a;
-  --hover: #182338;
+  --hover: #26364f;
   --navy: #082240;
   --accent: #4f7fd0;
   --accent-soft: rgba(79, 127, 208, .18);
@@ -177,6 +177,7 @@ code {
 
 .rail-link:hover {
   background: var(--hover);
+  color: var(--ink);
 }
 
 .rail-link.on {
