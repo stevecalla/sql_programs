@@ -109,7 +109,7 @@ export function OppCard({ row, opp }) {
           <table className="opphl" style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}><tbody>
             {rowEl('All-states athletes', fmtInt(row.allCnt), { tip: 'Distinct ' + grpLbl + ' residents of the state who raced ANYWHERE (home or away), counted once — the all-states numerator, member-matched.' })}
             {rowEl('All-states /1k', f2(row.pen), { tip: 'All-states athletes ÷ ' + popLbl.toLowerCase() + ' × 1,000 — residents racing per 1,000 people, wherever they race.' })}
-            {rowEl('National /1k', f2(national), { tip: 'Population-weighted national all-states rate — the benchmark the band + headroom compare to.' })}
+            {rowEl('National /1k', f2(national), { tip: 'Population-weighted national all-states rate over the 50 states + DC (excludes foreign/invalid home codes) — the benchmark the band + headroom compare to.' })}
             {rowEl('/1k gap *', f2s(row.gap), { col: row.gap == null ? null : (row.gap < 0 ? OPP_TXT.floor : OPP_TXT.leader), tip: 'All-states /1k − national /1k. Negative = below national. * This gap sets the band.' })}
             {rowEl('Headroom', row.headroom ? '~' + fmtInt(row.headroom) : '—', { strong: true, col: row.headroom ? OPP_TXT.under : null, tip: 'Athletes to reach the national rate = (national − /1k) ÷ 1,000 × population.' })}
           </tbody></table>
@@ -164,7 +164,7 @@ export function OppCard({ row, opp }) {
         ) : null}
 
         <div className="small muted" style={{ fontSize: 10.5, lineHeight: 1.5, marginTop: 10, borderTop: '1px solid var(--line)', paddingTop: 6 }}>
-          * Band set by the active-basis /1k gap vs national. Athletes are member-matched {grpLbl} residents; all-states = raced anywhere, in-state = raced only at home (a subset). Denominator is the matching Census population ({youth ? 'youth 4–19' : 'adults 20+'}), so /1k is per 1,000 {youth ? 'youth' : 'adults'}. Age &amp; sex shares are of all participations. Rates population-weighted. Valid for a single year; multi-year selections sum the numerator against one-year population.
+          * Band set by the active-basis /1k gap vs national. Athletes are member-matched {grpLbl} residents of the 50 states + DC (home codes outside those — foreign/military/invalid, ~12% — are excluded since they have no Census population). All-states = raced anywhere, in-state = raced only at home (a subset). Denominator is the matching Census population ({youth ? 'youth 4–19' : 'adults 20+'}), so /1k is per 1,000 {youth ? 'youth' : 'adults'}. Age &amp; sex shares are of all participations. Rates population-weighted over the 50 states + DC. Valid for a single year; multi-year selections sum the numerator against one-year population.
         </div>
       </div>
     </div>

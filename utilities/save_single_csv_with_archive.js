@@ -8,7 +8,6 @@ const { local_usat_sales_db_config } = require('./config');
 const { create_local_db_connection } = require('./connectionLocalDB');
 const { streamQueryToCsv } = require('./stream_query_to_csv');
 const { create_directory } = require('./createDirectory');
-const { determineOSPath } = require('./determineOSPath');
 const { getCurrentDateTimeForFileNaming } = require('./getCurrentDate');
 const { triggerGarbageCollection } = require('./garbage_collection/trigger_garbage_collection');
 
