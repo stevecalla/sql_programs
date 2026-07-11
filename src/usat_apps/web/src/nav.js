@@ -32,7 +32,7 @@ export const NAV = [
   {
     type: 'group', label: 'Metrics', items: [
       { label: 'Usat apps', path: '/metrics/usat-apps', panel: 'metrics', icon: '👤', Component: Metrics },
-      { label: 'Participation maps', path: '/metrics/participation-mpas', panel: 'metrics', icon: '👤', Component: Metrics },
+      { label: 'Participation maps', path: '/metrics/participation-maps', panel: 'metrics', icon: '👤', Component: Metrics },
     ]
   },
   {
