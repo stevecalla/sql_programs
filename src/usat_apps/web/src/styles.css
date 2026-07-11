@@ -331,15 +331,24 @@ table.grid th {
 }
 
 /* ---- buttons / forms ---- */
+/* background: var(--card);
+    color: var(--ink); */
 .btn,
 button.btn {
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  color: var(--ink);
-  cursor: pointer;
-  font-size: 13px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    border: 1px solid var(--line);
+
+    background: #ffffff1f;
+    color: #fff;
+    font: inherit;
+    font-weight: 600;
+    padding: 6px 12px;
+    border: 1px red;
+    border-radius: 10px;
+    cursor: pointer;
+    min-height: 34px;
 }
 
 .btn:hover {
@@ -377,16 +386,16 @@ select {
 }
 
 .usermenu-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--ink);
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .45);
+  background: #ffffff1f;
+  color: #fff;
+  display: inline-grid;
+  place-items: center;
   cursor: pointer;
+  padding: 0;
 }
 
 .usermenu-menu {
@@ -439,6 +448,181 @@ select {
   color: var(--muted);
   font-size: 12px;
 }
-.footer-src { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.footer-src code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
-.fc-when { white-space: nowrap; flex: none; margin-left: auto; }
+
+.footer-src {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footer-src code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.fc-when {
+  white-space: nowrap;
+  flex: none;
+  margin-left: auto;
+}
+
+/* ---- restored: rules lost in the styles.css truncation (login + brand + base) ---- */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--accent);
+  display: inline-block;
+}
+
+.brand.big {
+  justify-content: center;
+  margin-bottom: 8px;
+  font-size: 22px;
+}
+
+.btn.primary,
+.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* Login — mirrors the /merge console: centered card on a branded navy backdrop. */
+.login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--navy);
+  padding: 16px;
+}
+
+.login .card {
+  width: 320px;
+  padding: 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  box-sizing: border-box;
+}
+
+.login h1 {
+  font-size: 20px;
+  margin: 0;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.login .muted {
+  margin: 4px 0 8px;
+}
+
+.login input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  min-height: 38px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+.login .btn.primary {
+  background: var(--red);
+  color: #fff;
+  border-color: transparent;
+  width: 100%;
+  padding: 9px;
+  margin-top: 8px;
+  min-height: 38px;
+  font-weight: 600;
+}
+
+.login .btn.primary:hover {
+  filter: brightness(1.05);
+  color: #fff;
+}
+
+.login .btn.primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.login .err {
+  margin: 6px 0 0;
+  color: var(--red);
+}
+
+.login .login-note {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.login .pw-field {
+  position: relative;
+  margin: 8px 0;
+}
+
+.login .pw-field input {
+  margin: 0;
+  padding-right: 42px;
+}
+
+.login .pw-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.login .pw-toggle:hover {
+  color: var(--ink);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+input,
+select {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+table.grid th,
+table.grid td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
