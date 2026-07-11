@@ -574,6 +574,35 @@ select {
   font-size: 13px;
 }
 
+.login .pw-field {
+  position: relative;
+  margin: 8px 0;
+}
+
+.login .pw-field input {
+  margin: 0;
+  padding-right: 42px;
+}
+
+.login .pw-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.login .pw-toggle:hover {
+  color: var(--ink);
+}
+
 html,
 body,
 #root {
