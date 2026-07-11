@@ -58,6 +58,8 @@ export default function ParticipationMap() {
   const [oppValues, setOppValues] = useState(true);        // Opportunity map: print penetration values on states (default on, like the heatmap)
   const [oppCardOpen, setOppCardOpen] = useState(true);    // Opportunity: state card open beside the map, or collapsed to a strip so the map enlarges
   const [oppKeyOpen, setOppKeyOpen] = useState(true);      // Opportunity: on-map band key expanded/collapsed
+  const [oppBasis, setOppBasis] = useState('all');         // Opportunity basis driving the map/band/hero: 'all' = all-states (residents racing anywhere) · 'in' = in-state (residents racing only at home)
+  const [oppAgeGroup, setOppAgeGroup] = useState('adult'); // Opportunity age group: 'adult' (20+) | 'youth' (4-19) — drives the reach numerator's age filter + the population denominator
   const [flowIM, setFlowIM] = useState('all');       // (c) all | im | nonim — IRONMAN-destination filter
   const [flowSpin, setFlowSpin] = useState(false);   // auto-rotate (bearing animation)
   const [flowStat, setFlowStat] = useState('');      // footer stat line
@@ -235,6 +237,7 @@ export default function ParticipationMap() {
 
   const [homeData, setHomeData] = useState(null);   // on-demand home-side distinct adult athletes (penetration numerator)
   const [homeLoading, setHomeLoading] = useState(false);  // true while /api/home is in flight (drives the Opportunity map spinner)
+  const [reachData, setReachData] = useState(null); // on-demand resident-reach split (all/in/out per home state, by age group) — feeds the Opportunity card
   // Aggregated year-block for the current selection (single full year is exact; else computeAgg).
   // Then append travel-flow metrics (46/47/48) + penetration metrics (49 adult-pen, 50 population, 51 home-
   // penetration from homeData) so the dropdown/choropleth/tables can shade & sort them without a server change.
@@ -260,26 +263,32 @@ export default function ParticipationMap() {
     metrics[47] = build('Outbound — residents racing away', (ab) => A.outb[ab] || 0, (rg) => rOut[rg] || 0);
     metrics[48] = build('Net flow (in − out)', (ab) => (A.inb[ab] || 0) - (A.outb[ab] || 0), (rg) => (rIn[rg] || 0) - (rOut[rg] || 0));
 
-    // Penetration & Opportunity metrics (need Census population from step_2c on the payload as p.population).
-    // Adult participation / 1,000 pop = adult participations at in-state events ÷ population — the supply-side
-    // per-capita reach, adult basis to match the deck. Home penetration (residents racing / 1k) is a distinct-
-    // athlete count and is appended from the on-demand home data (homePen) separately, as metric 51.
+    // Penetration & Opportunity metrics (need Census population from step_2c). Both are resident penetrations,
+    // matching the Opportunity tab: metric 51 All-states penetration / 1,000 adults (residents who raced anywhere)
+    // and metric 49 In-state penetration / 1,000 adults (residents who raced only at home = home-only). Numerators
+    // come from the on-demand home data (/api/home: byHomeState + byHomeStateOnlyIn), divided by adult population.
     const pop = p.population || {};
     const round2 = (v) => Math.round(v * 100) / 100;
     const idxOf = {}; abbr.forEach((ab, i) => { idxOf[ab] = i; });
     const regPop = {}; abbr.forEach((ab) => { const rg = ab2region[ab]; regPop[rg] = (regPop[rg] || 0) + (pop[ab] || 0); });
-    const mAdult = base.metrics[42] || null;       // 'Adult participants' count (null if payload predates the new meta)
-    const regAdult = {}; if (mAdult) abbr.forEach((ab, i) => { regAdult[ab2region[ab]] = mAdult.regionz[i]; });
-    metrics[49] = build('Adult participation / 1,000 pop',
-      (ab) => { const pp = pop[ab], v = mAdult ? mAdult.statez[idxOf[ab]] : null; return (pp && v != null) ? round2(v / pp * 1000) : null; },
-      (rg) => { const pp = regPop[rg], v = regAdult[rg]; return (pp && v != null) ? round2(v / pp * 1000) : null; });
-    metrics[50] = build('Population (Census)', (ab) => pop[ab] || null, (rg) => regPop[rg] || null);
-    // Home penetration / 1,000 pop — distinct adult residents who race ÷ population (demand-side reach). Uses
-    // the on-demand home-athlete counts (homeData) when loaded; null until then / if population is absent.
+    // Adult population (20+) for the resident-penetration metric — matches the Opportunity tab's denominator.
+    // Falls back to total population if the age-split columns aren't loaded (pre step_2c rerun).
+    const popA = p.populationAdult || {};
+    const regAdultPop = {}; abbr.forEach((ab) => { const rg = ab2region[ab]; regAdultPop[rg] = (regAdultPop[rg] || 0) + ((popA[ab] != null ? popA[ab] : pop[ab]) || 0); });
+    const adPop = (ab) => (popA[ab] != null ? popA[ab] : pop[ab]);
     const hs = (homeData && homeData.byHomeState) || null, hr = (homeData && homeData.byHomeRegion) || null;
-    metrics[51] = build('Home penetration / 1,000 pop',
-      (ab) => { const pp = pop[ab], v = hs ? hs[ab] : null; return (pp && v != null) ? round2(v / pp * 1000) : null; },
-      (rg) => { const pp = regPop[rg], v = hr ? hr[rg] : null; return (pp && v != null) ? round2(v / pp * 1000) : null; });
+    const hsIn = (homeData && homeData.byHomeStateOnlyIn) || null, hrIn = (homeData && homeData.byHomeRegionOnlyIn) || null;
+    // In-state penetration / 1,000 adults — distinct adult residents who raced ONLY in their home state (home-only)
+    // ÷ ADULT population. Same definition as the Opportunity tab's in-state; a subset of all-states.
+    metrics[49] = build('In-state penetration / 1,000 adults',
+      (ab) => { const pp = adPop(ab), v = hsIn ? hsIn[ab] : null; return (pp && v != null) ? round2(v / pp * 1000) : null; },
+      (rg) => { const pp = regAdultPop[rg], v = hrIn ? hrIn[rg] : null; return (pp && v != null) ? round2(v / pp * 1000) : null; });
+    metrics[50] = build('Population (Census)', (ab) => pop[ab] || null, (rg) => regPop[rg] || null);
+    // All-states penetration / 1,000 adults — distinct adult residents who raced anywhere ÷ ADULT population.
+    // Identical calc to the Opportunity tab's all-states penetration (same numerator source, adult denominator).
+    metrics[51] = build('All-states penetration / 1,000 adults',
+      (ab) => { const pp = adPop(ab), v = hs ? hs[ab] : null; return (pp && v != null) ? round2(v / pp * 1000) : null; },
+      (rg) => { const pp = regAdultPop[rg], v = hr ? hr[rg] : null; return (pp && v != null) ? round2(v / pp * 1000) : null; });
     return Object.assign({}, base, { metrics });
   }, [st.p, selYears, selMonths, homeData]);
 
@@ -290,52 +299,72 @@ export default function ParticipationMap() {
   // rate ((national − pen)/1000 × population). Returns null until home data + population are present.
   const oppData = useMemo(() => {
     if (!st.p || !yb) return null;
-    const m = yb.metrics[51];                       // 'Home penetration / 1,000 pop' (built above)
-    const hs = homeData && homeData.byHomeState;
-    const pop = st.p.population || {};
-    if (!m || !hs) return null;                      // needs the on-demand home counts + Census population
+    const rs = reachData && reachData.byHomeState;
+    if (!rs) return null;                            // needs the on-demand resident-reach split (/api/reach)
+    const youth = oppAgeGroup === 'youth';
+    // Denominator: adult (20+) or youth (<20) population from step_2c; falls back to all-ages if the age-split
+    // columns aren't loaded yet (pre-rerun) so the card still renders (with a caveat) rather than blanking.
+    const pop = youth ? (st.p.populationYouth || {}) : (st.p.populationAdult || st.p.population || {});
     const { abbr, names, regs } = st.p;
     const round2 = (v) => Math.round(v * 100) / 100;
-    // Extra per-state context fields for the merged stat card, pulled from the already-built metrics
-    // (no new definitions): 49 = adult participation/1k (event penetration), 48 = net flow (in−out),
-    // 3 = per event, 12 = age 20-29 %, 1 = events, 2 = races.
-    const mEvp = yb.metrics[49], mNet = yb.metrics[48], mPer = yb.metrics[3], mAge = yb.metrics[12], mEv = yb.metrics[1], mRc = yb.metrics[2];
+    // Context fields from the metrics dropdown: 48 = net flow (in−out), 3 = per event, 12 = age 20-29 %,
+    // 11 = age 4-19 %, 7 = female %, 8 = male %, 1 = events, 2 = races.
+    const mNet = yb.metrics[48], mPer = yb.metrics[3], mAge = yb.metrics[12], mA419 = yb.metrics[11],
+          mFem = yb.metrics[7], mMal = yb.metrics[8], mEv = yb.metrics[1], mRc = yb.metrics[2];
     const at = (mm, i) => (mm && mm.statez[i] != null ? mm.statez[i] : null);
-    let numSum = 0, popSum = 0;
-    abbr.forEach((ab) => { const h = hs[ab], pp = pop[ab]; if (h != null && pp) { numSum += h; popSum += pp; } });
+    // Resident-reach split per home state (distinct member residents, ageGroup-filtered) from /api/reach:
+    //   all = raced anywhere · onlyIn = raced ONLY in-state (home-only) · both = raced in AND out · onlyOut = raced ONLY out.
+    // onlyIn / both / onlyOut are mutually exclusive and sum to all. In-state penetration uses onlyIn (home-only).
+    const rOf = (ab) => { const r = rs[ab]; if (!r) return null; return { all: r.all, onlyIn: r.all - r.out, both: r.in + r.out - r.all, onlyOut: r.all - r.in }; };
+    // Population-weighted national benchmarks: all-states from `all`, in-state from `onlyIn`, same denominator.
+    let numSum = 0, popSum = 0, inNumSum = 0;
+    abbr.forEach((ab) => { const R = rOf(ab), pp = pop[ab]; if (R && pp) { numSum += R.all; inNumSum += R.onlyIn; popSum += pp; } });
     if (!popSum) return null;
     const national = round2((numSum / popSum) * 1000);
-    // Band cutoffs by mode. midCut is the Mid/Under boundary:
-    //   rel   — Leader ≥ national · Floor ≤ ½ national (Mid collapses to empty; midCut = national)
-    //   stat  — from the distribution of state penetration values: quantiles (p80/p50/p20) or mean ± kσ
-    //   abs   — the fixed cutoffs the user typed (Mid/Under split at the national rate)
+    const inNational = round2((inNumSum / popSum) * 1000);
+    const basisIn = oppBasis === 'in';
+    const dNational = basisIn ? inNational : national;
+    const penAll = (ab, pp) => { const R = rOf(ab); return (R && pp) ? round2((R.all / pp) * 1000) : null; };
+    const penIn = (ab, pp) => { const R = rOf(ab); return (R && pp) ? round2((R.onlyIn / pp) * 1000) : null; };
+    // Band cutoffs by mode, computed on the ACTIVE basis so the map/band follow the toggle. midCut = Mid/Under boundary.
     const relMode = oppBandMode === 'rel';
     const vals = [];
-    abbr.forEach((ab, i) => { const v = m.statez[i]; if (v != null && (pop[ab] || 0)) vals.push(v); });
+    abbr.forEach((ab) => { const pp = pop[ab] || 0; const v = basisIn ? penIn(ab, pp) : penAll(ab, pp); if (v != null && pp) vals.push(v); });
     vals.sort((a, b) => a - b);
-    const pctl = (q) => { if (!vals.length) return national; const idx = q * (vals.length - 1); const lo = Math.floor(idx), hi = Math.ceil(idx); return round2(vals[lo] + (vals[hi] - vals[lo]) * (idx - lo)); };
-    const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : national;
+    const pctl = (q) => { if (!vals.length) return dNational; const idx = q * (vals.length - 1); const lo = Math.floor(idx), hi = Math.ceil(idx); return round2(vals[lo] + (vals[hi] - vals[lo]) * (idx - lo)); };
+    const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : dNational;
     const sd = vals.length ? Math.sqrt(vals.reduce((a, s) => a + (s - mean) * (s - mean), 0) / vals.length) : 0;
     let leaderCut, midCut, floorCut, stat = null;
-    if (relMode) { leaderCut = national; midCut = national; floorCut = round2(national / 2); }
+    if (relMode) { leaderCut = dNational; midCut = dNational; floorCut = round2(dNational / 2); }
     else if (oppBandMode === 'stat') {
       if (oppStatMethod === 'sigma') { leaderCut = round2(mean + oppSigmaK * sd); midCut = round2(mean); floorCut = round2(Math.max(0, mean - oppSigmaK * sd)); stat = { method: 'sigma', mean: round2(mean), sd: round2(sd), k: oppSigmaK }; }
       else { leaderCut = pctl(0.8); midCut = pctl(0.5); floorCut = pctl(0.2); stat = { method: 'quantile', p20: floorCut, p50: midCut, p80: leaderCut }; }
-    } else { leaderCut = round2(oppLeaderCut); midCut = national; floorCut = round2(oppFloorCut); }
+    } else { leaderCut = round2(oppLeaderCut); midCut = dNational; floorCut = round2(oppFloorCut); }
     const rows = abbr.map((ab, i) => {
-      const pen = m.statez[i], pp = pop[ab] || 0;
-      const ctx = { reg: regs[i], res: hs[ab] != null ? hs[ab] : null, evp: at(mEvp, i),
+      const R = rOf(ab), pp = pop[ab] || 0;
+      const a419 = at(mA419, i), a2029 = at(mAge, i);
+      const allPen = penAll(ab, pp), inPen = penIn(ab, pp);
+      const allGap = allPen != null ? round2(allPen - national) : null;
+      const allHead = (allPen != null && allPen < national && pp) ? Math.round(((national - allPen) / 1000) * pp) : 0;
+      const inGap = inPen != null ? round2(inPen - inNational) : null;
+      const inHead = (inPen != null && inPen < inNational && pp) ? Math.round(((inNational - inPen) / 1000) * pp) : 0;
+      const ctx = { reg: regs[i],
+        allCnt: R ? R.all : null, onlyInCnt: R ? R.onlyIn : null, bothCnt: R ? R.both : null, onlyOutCnt: R ? R.onlyOut : null,
         net: at(mNet, i) == null ? null : -at(mNet, i),  // net flow home−event = −(in−out): negative = destination
-        perEvent: at(mPer, i), age2029: at(mAge, i), events: at(mEv, i), races: at(mRc, i) };
-      if (pen == null || !pp) return { ab, name: names[i], pen: null, pop: pp, gap: null, band: null, headroom: 0, ...ctx };
-      const band = classifyBand(pen, midCut, leaderCut, floorCut);
-      const headroom = pen < national ? Math.round(((national - pen) / 1000) * pp) : 0;
-      return { ab, name: names[i], pen, pop: pp, gap: round2(pen - national), band, headroom, ...ctx };
+        perEvent: at(mPer, i), age2029: a2029, age419: a419,
+        age30: (a419 != null && a2029 != null) ? Math.max(0, Math.round(100 - a419 - a2029)) : null,
+        male: at(mMal, i), female: at(mFem, i), events: at(mEv, i), races: at(mRc, i),
+        pen: allPen, gap: allGap, headroom: allHead, inPen, inGap, inHeadroom: inHead };
+      const activePen = basisIn ? inPen : allPen;
+      const dGap = basisIn ? inGap : allGap, dHeadroom = basisIn ? inHead : allHead, dNum = basisIn ? (R ? R.onlyIn : null) : (R ? R.all : null);
+      if (activePen == null || !pp) return { ab, name: names[i], band: null, pop: pp, dPen: null, dGap: null, dHeadroom: 0, dNum, ...ctx };
+      const band = classifyBand(activePen, midCut, leaderCut, floorCut);
+      return { ab, name: names[i], band, pop: pp, dPen: activePen, dGap, dHeadroom, dNum, ...ctx };
     });
     const counts = { leader: 0, mid: 0, under: 0, floor: 0 };
     rows.forEach((r) => { if (r.band) counts[r.band]++; });
-    return { national, rows, counts, leaderCut, midCut, floorCut, relMode, mode: oppBandMode, stat };
-  }, [st.p, yb, homeData, oppBandMode, oppStatMethod, oppSigmaK, oppLeaderCut, oppFloorCut]);
+    return { national, inNational, dNational, basisIn, ageGroup: oppAgeGroup, natNum: numSum, natPop: popSum, inNatNum: inNumSum, inNatPop: popSum, rows, counts, leaderCut, midCut, floorCut, relMode, mode: oppBandMode, stat };
+  }, [st.p, yb, reachData, oppBandMode, oppStatMethod, oppSigmaK, oppLeaderCut, oppFloorCut, oppBasis, oppAgeGroup]);
   // The state shown in the card / highlighted in the table: the clicked state if valid, else a sensible
   // default (the biggest-headroom opportunity) so the card is never empty when Opportunity opens.
   const oppSel = useMemo(() => {
@@ -371,7 +400,7 @@ export default function ParticipationMap() {
   }, [st.p, selYears, selMonths, fillMode]);
 
   // Home-side distinct adult athletes (penetration numerator) for the current selection — feeds the
-  // 'Home penetration / 1,000 pop' metric. Latest-wins guard so a stale response can't overwrite a newer one.
+  // the all-states + in-state penetration metrics. Latest-wins guard so a stale response can't overwrite a newer one.
   useEffect(() => {
     if (!st.p || !selYears || !selYears.length) { setHomeData(null); return; }
     let live = true;
@@ -381,6 +410,17 @@ export default function ParticipationMap() {
       .catch(() => { if (live) { setHomeData(null); setHomeLoading(false); } });
     return () => { live = false; };
   }, [st.p, selYears, selMonths]);
+
+  // Resident-reach split (all-states / in-state / out-of-state per home state) for the current selection + age
+  // group — feeds the Opportunity card. Latest-wins guard; refetched when Adult/Youth toggles.
+  useEffect(() => {
+    if (!st.p || !selYears || !selYears.length) { setReachData(null); return; }
+    let live = true;
+    api.reachFor({ years: selYears, months: selMonths, ageGroup: oppAgeGroup })
+      .then(({ status, body }) => { if (live) setReachData(status === 200 && body && body.ok ? body : null); })
+      .catch(() => { if (live) setReachData(null); });
+    return () => { live = false; };
+  }, [st.p, selYears, selMonths, oppAgeGroup]);
   const availMonths = useMemo(() => {
     if (!st.p || !selYears) return [];
     const set = new Set();
@@ -685,9 +725,14 @@ export default function ParticipationMap() {
     if (on) v = [...v, String(mo)]; else v = v.filter((x) => x !== String(mo));
     setSelMonths(v.length ? v : ['all']);
   };
+  // Selected state must read clearly in BOTH themes: dark navy fill on light, a bright accent fill on dark
+  // (dark-on-dark was hard to distinguish). Active also gets a matching border + bold + subtle glow.
   const seg = (active) => ({
-    padding: '4px 12px', border: '1px solid var(--border, #cbd5e1)', borderRadius: 6, cursor: 'pointer',
-    background: active ? '#082240' : 'transparent', color: active ? '#fff' : 'inherit', fontSize: 13,
+    padding: '4px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 13,
+    border: '1px solid ' + (active ? (dark ? '#60a5fa' : '#082240') : 'var(--border, #cbd5e1)'),
+    background: active ? (dark ? '#2563eb' : '#082240') : 'transparent',
+    color: active ? '#fff' : 'inherit', fontWeight: active ? 700 : 400,
+    boxShadow: active && dark ? '0 0 0 1px #60a5fa' : 'none',
   });
   const mini = (active) => ({ ...seg(active), padding: '3px 9px', fontSize: 12 });
   // Folder-style tabs (map-view switcher). The active tab is outlined (top + sides), sits on the row's
@@ -708,7 +753,7 @@ export default function ParticipationMap() {
     setMetricIdx(0); setView('state'); setShowLabels(true); setShowOutlines(false);
     setSpotN(10); setColorMode('value'); setLogMode(false); setClipMax(''); setReverse(false);
     setZoom(1); setFillMode('choro'); setShowPins(false); setShowFlows(false); setShowRegions(false);
-    setOppBandMode('rel'); setOppStatMethod('quantile'); setOppSigmaK(1); setOppLeaderCut(0.60); setOppFloorCut(0.27); setOppValues(true); setOppCardOpen(true);
+    setOppBandMode('rel'); setOppStatMethod('quantile'); setOppSigmaK(1); setOppLeaderCut(0.60); setOppFloorCut(0.27); setOppValues(true); setOppCardOpen(true); setOppBasis('all'); setOppAgeGroup('adult');
     setPinIm(''); setStateSel(null); setRegionSel('');
     setFlowFocus((p.abbr && p.abbr.indexOf('CA') >= 0) ? 'CA' : ((p.abbr && p.abbr[0]) || '')); setFlowDir('both'); setFlowTop(5); setFlowSpin(false);
     flowViewRef.current = { ...FLOW_VIEW0 };
@@ -1114,7 +1159,7 @@ export default function ParticipationMap() {
             <button onClick={() => setOppKeyOpen((o) => !o)} title={oppKeyOpen ? 'Collapse the key' : 'Expand the key'}
               style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: 0, border: 'none', background: 'transparent', color: 'var(--ink)', font: 'inherit', fontWeight: 700, cursor: 'pointer', textAlign: 'left', marginBottom: oppKeyOpen ? 3 : 0 }}>
               <span style={{ fontSize: 9, opacity: 0.7 }}>{oppKeyOpen ? '▾' : '▸'}</span>
-              <span>Home penetration / 1k{oppData ? ' · nat’l ' + oppData.national : ''}<span style={{ fontWeight: 400, opacity: 0.75 }}>{oppData ? (oppData.mode === 'rel' ? ' · national-relative' : oppData.mode === 'stat' ? (' · ' + (oppData.stat && oppData.stat.method === 'sigma' ? 'mean ± ' + oppData.stat.k + 'σ' : 'quantile')) : ' · absolute') : ''}</span></span>
+              <span>{oppData && oppData.basisIn ? 'In-state' : 'All-states'} penetration / 1k{oppData ? ' · nat’l ' + oppData.dNational : ''}<span style={{ fontWeight: 400, opacity: 0.75 }}>{oppData ? (oppData.mode === 'rel' ? ' · national-relative' : oppData.mode === 'stat' ? (' · ' + (oppData.stat && oppData.stat.method === 'sigma' ? 'mean ± ' + oppData.stat.k + 'σ' : 'quantile')) : ' · absolute') : ''}</span></span>
             </button>
             {oppKeyOpen ? OPP_ORDER.map((b) => {
               if (oppData && oppData.relMode && b === 'mid') return null;   // Mid is empty when Leader = national
@@ -1134,7 +1179,7 @@ export default function ParticipationMap() {
       </div>
       {oppView ? (
         <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, flex: oppCardOpen ? '0 1 360px' : '0 0 auto', minWidth: oppCardOpen ? 300 : 'auto' }}>
-          {oppCardOpen ? <OppCard row={oppData ? oppData.rows.find((r) => r.ab === oppSel) : null} national={oppData ? oppData.national : 0} /> : null}
+          {oppCardOpen ? <OppCard row={oppData ? oppData.rows.find((r) => r.ab === oppSel) : null} opp={oppData} /> : null}
           <button onClick={() => setOppCardOpen((o) => !o)}
             title={oppCardOpen ? 'Collapse the state card — enlarge the map' : 'Show the state card'}
             style={{ flex: '0 0 26px', alignSelf: 'stretch', border: '1px solid var(--line)', borderLeft: oppCardOpen ? 'none' : '1px solid var(--line)', borderRadius: oppCardOpen ? '0 10px 10px 0' : 10, background: 'var(--panel)', color: 'var(--muted)', cursor: 'pointer', writingMode: 'vertical-rl', fontSize: 11.5, fontWeight: 700, letterSpacing: '.03em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 0' }}>
@@ -1145,6 +1190,19 @@ export default function ParticipationMap() {
       </div>
       {oppView ? (
         <div className="toolbar" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+          {selYears && selYears.length > 1 ? <div className="small" style={{ flexBasis: '100%', color: '#854F0B', background: 'rgba(224,160,48,.12)', border: '1px solid rgba(224,160,48,.45)', borderRadius: 6, padding: '5px 9px' }}>⚠ Penetration is only exact for a single year — {selYears.length} years are selected, so /1k and headroom sum the numerator against one-year population. Pick a single year for accurate rates.</div> : null}
+          <span className="small muted" style={{ fontWeight: 700 }}>Map</span>
+          <span style={{ display: 'inline-flex', gap: 4 }}>
+            <button style={mini(oppBasis === 'all')} title="Colour the map + bands by all-states penetration — residents of each state racing anywhere (home or away)." onClick={() => setOppBasis('all')}>All-states</button>
+            <button style={mini(oppBasis === 'in')} title="Colour the map + bands by in-state penetration — race participations held in each state (includes out-of-state visitors)." onClick={() => setOppBasis('in')}>In-state</button>
+          </span>
+          <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 4px' }} />
+          <span className="small muted" style={{ fontWeight: 700 }}>Age</span>
+          <span style={{ display: 'inline-flex', gap: 4 }}>
+            <button style={mini(oppAgeGroup === 'adult')} title="Adults 20+ — resident athletes aged 20 and up, over adult population." onClick={() => setOppAgeGroup('adult')}>Adult</button>
+            <button style={mini(oppAgeGroup === 'youth')} title="Youth 4–19 — resident athletes aged 4 to 19, over youth (under-20) population." onClick={() => setOppAgeGroup('youth')}>Youth</button>
+          </span>
+          <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 4px' }} />
           <span className="small muted" style={{ fontWeight: 700 }}>Bands</span>
           <span style={{ display: 'inline-flex', gap: 4 }}>
             <button style={mini(oppBandMode === 'rel')} title="Leader ≥ the national rate · Floor ≤ half the national rate — adapts to the current selection" onClick={() => setOppBandMode('rel')}>National-relative</button>
@@ -1178,7 +1236,7 @@ export default function ParticipationMap() {
                 : 'p20 ' + oppData.floorCut.toFixed(2) + ' · median ' + oppData.midCut.toFixed(2) + ' · p80 ' + oppData.leaderCut.toFixed(2)) : '—'}</span>
             </>
           ) : (
-            <span className="small muted">Leader ≥ {oppData ? oppData.leaderCut.toFixed(2) : '—'} · Floor ≤ {oppData ? oppData.floorCut.toFixed(2) : '—'} (nat’l {oppData ? oppData.national : '—'})</span>
+            <span className="small muted">Leader ≥ {oppData ? oppData.leaderCut.toFixed(2) : '—'} · Floor ≤ {oppData ? oppData.floorCut.toFixed(2) : '—'} (nat’l {oppData ? oppData.dNational : '—'})</span>
           )}
           <span style={{ width: 0, borderLeft: '2px solid var(--line)', alignSelf: 'stretch', margin: '0 4px' }} />
           <label className="small" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -1269,6 +1327,7 @@ export default function ParticipationMap() {
           regionSel={regionSel} setRegionSel={setRegionSel}
           uniqueData={uniqueData}
           oppData={oppData} oppSel={oppSel} onOppSelect={onOppSelect} oppView={oppView}
+          oppAgeGroup={oppAgeGroup} setOppAgeGroup={setOppAgeGroup} oppBasis={oppBasis}
         />
       ) : <div className="muted small" style={{ padding: 16, marginTop: 16 }}>Loading tables…</div>}
     </div>

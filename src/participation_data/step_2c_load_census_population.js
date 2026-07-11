@@ -65,31 +65,38 @@ async function execute_mysql_working_query(pool, db_name, query, values) {
     });
 }
 
-// PRIMARY: US Census Bureau API — ACS 1-year total population (variable B01003_001E). Auto-detects the
-// newest available vintage by probing from (this year - 1) downward and using the first year that returns
-// data. Returns ordered value arrays, or null to signal "use the BigQuery fallback".
+// PRIMARY: US Census Bureau API — ACS 1-year Sex-by-Age (table B01001). We pull the total plus the five
+// under-20 male + five under-20 female brackets so we can split population at age 20 to match the app's
+// adult (20+) / youth (under-20) athlete definitions:
+//   B01001_001E = total; male under-20 = _003E.._007E (<5, 5-9, 10-14, 15-17, 18-19);
+//   female under-20 = _027E.._031E. adult(20+) = total − under20; youth = under20.
+// Auto-detects the newest vintage by probing from (this year - 1) downward. Returns
+// [state, name, total, adult, youth, source] rows, or null to signal "use the BigQuery fallback".
 async function get_population_from_census_api() {
     const key = process.env.CENSUS_API_KEY;
     if (!key) { console.log('No CENSUS_API_KEY set — skipping Census API, using BigQuery fallback.'); return null; }
     if (typeof fetch !== 'function') { console.log('global fetch unavailable (Node < 18) — using BigQuery fallback.'); return null; }
 
+    const U20 = 'B01001_003E,B01001_004E,B01001_005E,B01001_006E,B01001_007E,B01001_027E,B01001_028E,B01001_029E,B01001_030E,B01001_031E';
     const thisYear = new Date().getFullYear();
     for (let y = thisYear - 1; y >= thisYear - 4; y--) {
-        // https://api.census.gov/data/${y}/acs/acs1?get=NAME,B01003_001E&for=state:*&key=<key>
-        // Colorado = 08 https://api.census.gov/data/${y}/acs/acs1?get=NAME,B01003_001E&for=state:08&key=<key>
-        // https://api.census.gov/data/2024/acs/acs1?get=NAME,B01003_001E&for=state:*&key=<key>
-        const url = `https://api.census.gov/data/${y}/acs/acs1?get=NAME,B01003_001E&for=state:*&key=${key}`;
+        // https://api.census.gov/data/${y}/acs/acs1?get=NAME,B01001_001E,<under-20 brackets>&for=state:*&key=<key>
+        const url = `https://api.census.gov/data/${y}/acs/acs1?get=NAME,B01001_001E,${U20}&for=state:*&key=${key}`;
         try {
             const res = await fetch(url);
             if (!res.ok) continue;                                   // year not published yet -> try older
-            const data = await res.json();                           // [["NAME","B01003_001E","state"], ...rows]
+            const data = await res.json();                           // [["NAME","B01001_001E",...,"state"], ...rows]
             if (!Array.isArray(data) || data.length < 2) continue;
-            const source = `US Census ACS 1-yr ${y} (api.census.gov)`;
-            const rows = data.slice(1).map(([name, pop, fips]) => {
-                const st = FIPS_TO_ABBR[fips];
-                return st ? [st, name, Number(pop), source] : null;
+            const source = `US Census ACS 1-yr ${y} B01001 (api.census.gov)`;
+            const rows = data.slice(1).map((r) => {
+                const name = r[0], total = Number(r[1]);
+                let under20 = 0;
+                for (let k = 2; k <= 11; k++) under20 += Number(r[k]) || 0;   // 10 under-20 brackets
+                const fips = r[r.length - 1], st = FIPS_TO_ABBR[fips];
+                const adult = total - under20;
+                return st ? [st, name, total, adult, under20, source] : null;
             }).filter(Boolean);
-            if (rows.length >= 50) { console.log(`Census API: ACS 1-year ${y} — ${rows.length} states`); return rows; }
+            if (rows.length >= 50) { console.log(`Census API: ACS 1-year ${y} (B01001, age-split at 20) — ${rows.length} states`); return rows; }
         } catch (e) { /* network/parse issue for this year — try the previous year */ }
     }
     console.log('Census API returned no usable ACS 1-year vintage — using BigQuery fallback.');
@@ -128,7 +135,8 @@ async function get_population_rows_from_bigquery() {
         ORDER BY population DESC
     `;
     const [rows] = await bigqueryClient.query({ query: sql, location: 'US' });
-    return rows.map((r) => [r.state_code, r.state_name, r.population, r.source]);
+    // Fallback carries total only; adult/youth are null (the app then uses total population as the denominator).
+    return rows.map((r) => [r.state_code, r.state_name, r.population, null, null, r.source]);
 }
 
 // Main: drop + create census_state_population, pull population (Census API primary, BigQuery fallback),
@@ -159,7 +167,7 @@ async function execute_load_census_population() {
         // STEP #3: BATCH INSERT DIRECTLY (no CSV, no file path)
         const batch_size = 5000;
         let rows_added = 0;
-        const insert_query = `INSERT INTO ${table_name} (state_code, state_name, population, source) VALUES ?`;
+        const insert_query = `INSERT INTO ${table_name} (state_code, state_name, population, population_adult, population_youth, source) VALUES ?`;
 
         for (let i = 0; i < rows.length; i += batch_size) {
             const batch = rows.slice(i, i + batch_size);

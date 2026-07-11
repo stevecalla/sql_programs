@@ -176,7 +176,7 @@ function MatrixTable({ entities, data, travCols, bottomRows, narrative, csvName,
   );
 }
 
-function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel, setStateSel, regionSel, setRegionSel, uniqueData, oppData, oppSel, onOppSelect, oppView }) {
+function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel, setStateSel, regionSel, setRegionSel, uniqueData, oppData, oppSel, onOppSelect, oppView, oppAgeGroup, setOppAgeGroup, oppBasis }) {
   const imRow = dark ? 'rgba(220,38,38,0.20)' : 'rgba(194,14,47,0.06)';
   const imFrozen = dark ? '#3a1e24' : '#fbe9ec';
   const rowHL = dark ? '#26364d' : '#eef2ff';
@@ -267,7 +267,7 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
       ['Per race', R ? Math.round(T / R) : '-', 'Participants ÷ Races — average field size.'],
       ['Female', (FN + MN) ? Math.round(100 * FN / (FN + MN)) + '%' : '-', 'Female ÷ (Female + Male) participations.'],
       ['IRONMAN', T ? Math.round(100 * IM / T) + '%' : '-', 'IRONMAN participations ÷ all participations.'],
-      ['Home', T ? Math.round(100 * H / T) + '%' : '-', 'In-state ÷ total participants — share racing in their home state. Home % + Away % + Unknown home % = 100%.'],
+      ['Home', T ? Math.round(100 * H / T) + '%' : '-', 'In-state ÷ total participations — share of race entries in the athlete’s home state (participations, not unique athletes). Home % + Away % + Unknown home % = 100%.'],
       ['Away %', T ? Math.round(100 * A / T) + '%' : '-', 'Cross-state travel (home is one of the 50 and ≠ event state) ÷ total participants.'],
       ['Traveled away', A.toLocaleString(), 'Count of cross-state participations.'],
       ['Unknown home', UNK.toLocaleString(), 'Home state missing or not one of the 50 states. Reconciles: home + away + unknown = participants.'],
@@ -650,8 +650,8 @@ function ParticipationTabs({ p, yb, selYears, selMonths, period, dark, stateSel,
 
       {tab === 'opportunity' ? (
         oppData
-          ? <OppTable rows={oppData.rows} national={oppData.national} sel={oppSel} onSelect={onOppSelect} dark={dark} />
-          : <p className="muted" style={{ padding: 8 }}>Opportunity needs the home-penetration data (Census population + resident-athlete counts). Run the Census step (2c), rebuild the summary, then Refresh.</p>
+          ? <OppTable rows={oppData.rows} national={oppData.national} sel={oppSel} onSelect={onOppSelect} dark={dark} opp={oppData} period={period} ageGroup={oppAgeGroup} onAgeChange={setOppAgeGroup} basis={oppBasis} />
+          : <p className="muted" style={{ padding: 8 }}>Opportunity needs the resident-reach data (Census population from step 2c + the live /api/reach resident counts). Run the Census step (2c), then Refresh.</p>
       ) : null}
 
       {tab === 'reference' ? <Reference /> : null}

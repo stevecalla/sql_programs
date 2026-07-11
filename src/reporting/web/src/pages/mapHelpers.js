@@ -15,8 +15,8 @@ export const METRIC_DESC = {
   'Adult per race': 'Adult participations ÷ Races.',
   'Female (count)': 'Number of female participations.',
   'Male (count)': 'Number of male participations.',
-  'Home (count)': 'In-state participations (athlete home state = event state).',
-  'Away (count)': 'Cross-state participations (home is a 50-state code ≠ event state).',
+  'Home (count)': 'In-state PARTICIPATIONS (race entries where athlete home state = event state) — not unique athletes. Home + Away + Unknown home = total participations.',
+  'Away (count)': 'Cross-state PARTICIPATIONS (race entries where home is a 50-state code ≠ event state) — not unique athletes.',
   'Home %': 'In-state share of ALL participations (home ÷ total). Sums with Away % and Unknown home % to 100%.',
   'Away %': 'Cross-state share of ALL participations (away ÷ total).',
   'Unknown home (count)': 'Participations whose home state is missing or not a 50-state code.',
@@ -38,9 +38,9 @@ export const METRIC_DESC = {
   'Non-adult participants': 'Participations by athletes under 20 (youth 4-19), plus any with no age recorded — i.e. Participants − Adult participants.',
   'Adult %': 'Adult participations ÷ all participations. Adult % + Non-adult % = 100%.',
   'Non-adult %': 'Non-adult (youth / unknown-age) participations ÷ all participations. Adult % + Non-adult % = 100%.',
-  'Adult participation / 1,000 pop': 'Adult participations at in-state events ÷ state population × 1,000 (US Census, from step 2c). Supply-side per-capita reach.',
-  'Population (Census)': 'State resident population (US Census ACS 1-year, loaded by step 2c).',
-  'Home penetration / 1,000 pop': 'Distinct adult residents who race ÷ state population × 1,000 — residents racing per 1,000, counted once whether they race at home or away (demand-side reach).',
+  'In-state penetration / 1,000 adults': 'Distinct adult (20+) residents who raced ONLY in their home state (home-only, never traveled out) ÷ ADULT population × 1,000 — identical to the Opportunity tab’s in-state penetration. A subset of all-states.',
+  'Population (Census)': 'State resident population (US Census ACS 1-year, loaded by step 2c; also split into adult 20+ / youth <20).',
+  'All-states penetration / 1,000 adults': 'Distinct adult (20+) residents who raced anywhere ÷ ADULT population × 1,000 — identical to the Opportunity tab’s all-states penetration (member-matched residents, adult denominator), counted once whether they raced at home or away.',
 };
 // Metric dropdown grouping — related metrics sit together with an <optgroup> divider between them.
 // Each entry lists the metric INDICES (into the meta / metrics array) shown under that heading, in
@@ -253,10 +253,11 @@ export function buildOpportunityTraces(p, oppData, { dark, showLabels, showOutli
   const cd = abbr.map((ab, k) => {
     const r = byAb[ab];
     if (!r || r.band == null) return '<b>' + names[k] + '</b><br>No penetration data';
+    const bl = oppData.basisIn ? 'In-state' : 'All-states';
     return '<b>' + names[k] + '</b> — ' + OPP_LABEL[r.band]
-      + '<br>Home penetration: ' + r.pen + ' / 1k  (national ' + oppData.national + ')'
-      + '<br>Gap: ' + (r.gap > 0 ? '+' : '') + r.gap + ' / 1k'
-      + (r.headroom ? '<br>Headroom: ~' + r.headroom.toLocaleString() + ' more athletes to reach national' : '<br>At or above the national rate');
+      + '<br>' + bl + ' penetration: ' + r.dPen + ' / 1k  (national ' + oppData.dNational + ')'
+      + '<br>Gap: ' + (r.dGap > 0 ? '+' : '') + r.dGap + ' / 1k'
+      + (r.dHeadroom ? '<br>Headroom: ~' + r.dHeadroom.toLocaleString() + ' more athletes to reach national' : '<br>At or above the national rate');
   });
   const traces = [{
     type: 'choropleth', locationmode: 'USA-states', locations: abbr, z, zmin: 0, zmax: 3,
@@ -271,7 +272,7 @@ export function buildOpportunityTraces(p, oppData, { dark, showLabels, showOutli
       const c = centroid[ab]; if (!c) return; const r = byAb[ab]; const band = r && r.band;
       const col = (band === 'leader' || band === 'floor' || band === 'mid') ? '#ffffff'
         : band === 'under' ? '#3f2d00' : (dark ? '#e2e8f0' : '#1e293b');
-      const t = (oppValues && r && r.pen != null) ? ab + '<br>' + r.pen.toFixed(2) : ab;
+      const t = (oppValues && r && r.dPen != null) ? ab + '<br>' + r.dPen.toFixed(2) : ab;
       (groups[col] = groups[col] || { lon: [], lat: [], text: [] });
       groups[col].lon.push(c[0]); groups[col].lat.push(c[1]); groups[col].text.push(t);
     });
