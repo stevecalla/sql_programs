@@ -16,11 +16,11 @@
  * To add a module: create modules/<id>/module.js against the contract and add it to MODULES below.
  * Nothing else in the platform changes — panel access, nav, and API mounting all read from here.
  */
-const reporting = require('./reporting/module');
+const participation_maps = require('./participation_maps/module');
 const ops = require('./ops/module');
 
 const MODULES = [
-  reporting,
+  participation_maps,
   ops,
   // merge,            // (Phase 5) port src/salesforce_merge as a module here
   // event_analysis,   // (Phase 5)

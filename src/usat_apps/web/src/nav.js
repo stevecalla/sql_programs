@@ -6,7 +6,7 @@ import Admin from './pages/Admin.jsx';
 // sections; solos are standalone links. Access is enforced per panel key (admins see everything).
 // Panels without a live module yet point at ComingSoon until they're ported. Groups can hold panels
 // from more than one module (e.g. Reporting = Participation maps + Event analysis).
-const ParticipationMaps = lazy(() => import('./modules/reporting/Section.jsx'));
+const ParticipationMaps = lazy(() => import('./modules/participation_maps/Section.jsx'));
 const ComingSoon = lazy(() => import('./pages/ComingSoon.jsx'));
 const OpsOverview = lazy(() => import('./modules/ops/Overview.jsx'));
 const OpsBackends = lazy(() => import('./modules/ops/Backends.jsx'));
