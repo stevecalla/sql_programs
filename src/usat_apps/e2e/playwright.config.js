@@ -36,9 +36,10 @@ const repoRoot = path.resolve(__dirname, "..", "..", "..");
 
 module.exports = defineConfig({
   testDir: __dirname,
-  timeout: 45000,
-  expect: { timeout: 10000 },
+  timeout: 120000,
+  expect: { timeout: 30000 },
   fullyParallel: false,
+  workers: 1,   // serialize: the participation COUNT(DISTINCT) queries are heavy; parallel workers contend on the DB and time out
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"], ["html", { open: "never", outputFolder: path.join(__dirname, "report") }]],
   use: {
