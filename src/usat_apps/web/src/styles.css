@@ -180,7 +180,7 @@ code {
 }
 
 .rail-link.on {
-  background: var(--navy);
+  background: var(--accent);
   color: #fff;
   font-weight: 700;
 }
@@ -331,24 +331,32 @@ table.grid th {
 }
 
 /* ---- buttons / forms ---- */
-/* background: var(--card);
-    color: var(--ink); */
 .btn,
 button.btn {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    border: 1px solid var(--line);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font: inherit;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  min-height: 34px;
+}
 
-    background: #ffffff1f;
-    color: #fff;
-    font: inherit;
-    font-weight: 600;
-    padding: 6px 12px;
-    border: 1px red;
-    border-radius: 10px;
-    cursor: pointer;
-    min-height: 34px;
+/* Header controls sit on the navy header — keep them light in both themes. */
+.header-btns .btn {
+  background: #ffffff1f;
+  color: #fff;
+  border-color: rgba(255, 255, 255, .35);
+}
+
+.header-btns .btn:hover {
+  background: #ffffff33;
+  border-color: rgba(255, 255, 255, .6);
 }
 
 .btn:hover {
