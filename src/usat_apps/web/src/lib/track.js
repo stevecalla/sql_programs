@@ -40,6 +40,8 @@ export function withMetricsTest(body) {
 
 const SESSION_ID = uuid();
 const RETURNING = isReturning();
+const APP_VERSION = '1.0.0';
+function fmtLocal(d) { const p = (x) => (x < 10 ? '0' : '') + x; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); }
 
 function meta() {
   const d = new Date();
@@ -52,6 +54,7 @@ function meta() {
     page_path: (typeof location !== 'undefined' ? location.pathname : null),
     client_tz: tz, local_hour: d.getHours(), local_dow: d.getDay(),
     viewport: vw, engine: 'react', theme: theme, source: 'web',
+    event_at_local: fmtLocal(d), app_version: APP_VERSION,
     metrics_test: isMetricsTest() || undefined,
   };
 }
@@ -71,7 +74,7 @@ export function panelForPath(pathname) {
   const seg = (pathname || '').replace(/^\//, '').split('/')[0];
   return seg || 'home';
 }
-export function trackPanelView(pathname) { track('panel_view', { panel: panelForPath(pathname), view: pathname }); }
+export function trackPanelView(pathname, panel) { track('panel_view', { panel: panel || panelForPath(pathname), view: pathname }); }
 export function trackFilter(panel, view, filter_name) { track('filter_run', { panel: panel, view: view, filter_name: filter_name }); }
 export function trackSearch(panel, view) { track('search_run', { panel: panel, view: view, filter_name: 'search' }); }
 export function trackExport(panel, view, export_format) { track('report_export', { panel: panel, view: view, export_format: export_format }); }

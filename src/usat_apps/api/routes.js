@@ -71,7 +71,9 @@ module.exports = function mount(app) {
       const pool = await db.get_pool();
       await analytics.ensure(pool);
       const days = Number(req.query.days) || 7;
-      const report = await metrics_report.build_report(pool, { days });
+      const panel = req.query.panel ? String(req.query.panel) : null;
+      const include_test = String(req.query.test || '') === '1';
+      const report = await metrics_report.build_report(pool, { days, panel, include_test });
       res.json({ ok: true, report });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });

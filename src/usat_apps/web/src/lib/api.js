@@ -42,7 +42,7 @@ export const api = {
     sel.ironman ? { ironman: sel.ironman } : {})).toString()),
   dataset: () => jget('/api/participation-maps/dataset'),
   event: (evt) => jpost('/api/event', evt),
-  metricsReport: (days) => jget('/api/metrics-report?days=' + (days || 7)),
+  metricsReport: (days, panel, includeTest) => jget('/api/metrics-report?days=' + (days || 7) + (panel ? '&panel=' + encodeURIComponent(panel) : '') + (includeTest ? '&test=1' : '')),
   metricsPurgeTest: () => jpost('/api/metrics-purge-test', {}),
   metricsAskModels: () => jget('/api/metrics-ask-models'),
   metricsAsk: (payload) => jpost('/api/metrics-ask', payload),

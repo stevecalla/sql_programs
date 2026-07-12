@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../lib/api.js';
+import { trackSession } from '../lib/track.js';
 
 // Local username/password login. Layout/style mirrors the /merge (salesforce_merge) console:
 // a centered card on a branded navy backdrop. Microsoft/Entra SSO is deferred — the "coming soon"
@@ -17,7 +18,7 @@ export default function Login({ onLogin }) {
     setBusy(true); setErr('');
     const { status, body } = await api.login(username, password);
     setBusy(false);
-    if (status === 200 && body.ok) onLogin(body);
+    if (status === 200 && body.ok) { try { trackSession('login'); } catch (e) { /* best-effort */ } onLogin(body); }
     else setErr(body.error || 'Sign in failed');
   }
 
