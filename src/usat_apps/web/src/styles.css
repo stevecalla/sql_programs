@@ -140,14 +140,20 @@ code {
   flex: 1;
   display: flex;
   min-height: 0;
+  width: calc(100% - 32px);
   max-width: 1440px;
-  margin: 0 auto;
-  width: 100%;
+  margin: 16px auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--panel);
+  box-shadow: 0 1px 3px rgba(8, 34, 64, .06), 0 10px 30px rgba(8, 34, 64, .06);
 }
 
 .siderail {
   width: 210px;
   flex-shrink: 0;
+  background: rgba(127, 127, 127, .035);
   border-right: 1px solid var(--line);
   padding: 16px 10px;
   display: flex;
