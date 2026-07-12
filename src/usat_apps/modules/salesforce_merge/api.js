@@ -15,7 +15,6 @@ const mqueue = require('./store/merge_queue');
 const mexec = require('./store/merge_execute');
 const mhist = require('./store/merge_history');
 const mrun = require('./store/merge_run');
-const mctl = require('./store/merge_control');
 const mrestore = require('./store/merge_restore');
 const msnap = require('./store/merge_snapshot');
 const sfread = require('./store/salesforce_read');
@@ -244,12 +243,12 @@ function mount(app) {
   app.post('/api/salesforce-merge/merge/process', gate, async function (req, res) {
     try {
       const b = req.body || {};
-      const r = await mexec.process(b.ids, { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, created_by: current_user(req) });
+      // Phase 3: don't run inline — enqueue a queued salesforce_merge_run; the merge worker claims + runs it.
+      const r = await mrun.enqueue({ kind: 'merge', mode: b.mode, created_by: current_user(req),
+        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, created_by: current_user(req) } } });
       analytics.log({ event_name: 'merge_run', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req),
-        mode: r.mode || (b.dry_run || b.mode !== 'execute' ? 'simulate' : 'execute'),
-        set_count: r.processed != null ? r.processed : r.sets, account_count: r.merged != null ? r.merged : r.accounts,
-        outcome: r.failed ? 'failed' : 'done' });
-      res.json({ ok: true, ...r });
+        mode: (b.dry_run || b.mode !== 'execute') ? 'simulate' : 'execute', outcome: 'queued' });
+      res.json({ ok: true, queued: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge/history', gate, async function (req, res) {
@@ -262,7 +261,7 @@ function mount(app) {
   });
   // Live progress for the latest run (UI polls this for the progress bar + timer + ETA).
   app.get('/api/salesforce-merge/merge/progress', gate, async function (req, res) {
-    try { res.json({ ok: true, run: await mrun.latest(req.query.kind || null) }); }
+    try { res.json({ ok: true, run: req.query.run_id ? await mrun.get(req.query.run_id) : await mrun.latest(req.query.kind || null) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Cooperative stop: flag the latest RUNNING run so its loop halts at the next set boundary. The
@@ -272,7 +271,7 @@ function mount(app) {
     try {
       const run = await mrun.latest((req.body && req.body.kind) || 'merge');
       if (!run || run.status !== 'running') return res.json({ ok: true, cancelled: false, reason: 'no running merge' });
-      mctl.request(run.run_id);
+      await mrun.request_cancel(run.run_id);
       res.json({ ok: true, cancelled: true, run_id: run.run_id });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
@@ -284,10 +283,10 @@ function mount(app) {
   app.post('/api/salesforce-merge/merge/restore', gate, async function (req, res) {
     try {
       const b = req.body || {};
-      const r = await mrestore.restore(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) });
-      analytics.log({ event_name: 'restore_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req),
-        mode: r.mode, set_count: r.processed, outcome: r.failed ? 'failed' : (r.armed ? 'done' : 'ok') });
-      res.json({ ok: true, ...r });
+      const r = await mrun.enqueue({ kind: 'restore', mode: b.mode, created_by: current_user(req),
+        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, created_by: current_user(req) } } });
+      analytics.log({ event_name: 'restore_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req), mode: b.mode, outcome: 'queued' });
+      res.json({ ok: true, queued: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Secondary queue — sets routed to recreate-from-backup (their losers are gone from the Recycle
@@ -299,10 +298,10 @@ function mount(app) {
   app.post('/api/salesforce-merge/merge/recreate', gate, async function (req, res) {
     try {
       const b = req.body || {};
-      const r = await mrestore.recreate(b.ids, { mode: b.mode, confirm: b.confirm, created_by: current_user(req) });
-      analytics.log({ event_name: 'recreate_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req),
-        mode: r.mode, set_count: r.processed, account_count: r.recreated, outcome: r.failed ? 'failed' : (r.armed ? 'done' : 'ok') });
-      res.json({ ok: true, ...r });
+      const r = await mrun.enqueue({ kind: 'recreate', mode: b.mode, created_by: current_user(req),
+        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, created_by: current_user(req) } } });
+      analytics.log({ event_name: 'recreate_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req), mode: b.mode, outcome: 'queued' });
+      res.json({ ok: true, queued: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Read-only browse of the Recycle Bin (recently soft-deleted Accounts) for the loaded environment.

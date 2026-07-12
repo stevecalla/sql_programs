@@ -3,6 +3,7 @@ import DatasetStamp from '../components/DatasetStamp.jsx';
 import DataTable from '../components/DataTable.jsx';
 import CollapsibleCard from '../components/CollapsibleCard.jsx';
 import { api, exportUrl } from '../lib/api.js';
+import { awaitRun, summarize } from '../lib/run_poll.js';
 
 const shortId = (id) => (id && id.length > 8 ? '…' + id.slice(-5) : id || '');
 
@@ -104,7 +105,6 @@ export default function MergeProcess() {
     const t0 = Date.now();
     const tick = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 1000);
     const poll = setInterval(() => {
-      api.mergeProgress('merge').then((r) => setProgress(r.run || null)).catch(() => {});
       api.mergeHistory().then((r) => setHistory(r.rows || [])).catch(() => {});
     }, 1000);
     return () => { clearInterval(tick); clearInterval(poll); };
@@ -122,11 +122,11 @@ export default function MergeProcess() {
     if (!ids.length) return;
     setBusy(true); setErr(''); setResult(null); setProgress(null); setElapsed(0);
     try {
-      const r = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged } : { mode: 'simulate', stamp_merged: stampMerged });
-      setResult(r); setConfirmText(''); load();
-      // The 1s poller stops when busy flips false; the backend's final stage→'record' / status→'done'
-      // updates usually land after the last poll, so grab the finished progress one more time here.
-      try { const p = await api.mergeProgress('merge'); setProgress(p.run || null); } catch { /* keep last */ }
+      const q = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged } : { mode: 'simulate', stamp_merged: stampMerged });
+      setConfirmText('');
+      // Phase 3: the merge worker runs it out-of-process — poll this run until it reaches a terminal status.
+      const finalRun = await awaitRun(api, 'merge', q.run_id, (rr) => setProgress(rr));
+      setResult(summarize(finalRun)); load();
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); setStopping(false); }
   };

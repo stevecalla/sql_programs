@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import DatasetStamp from '../components/DatasetStamp.jsx';
 import { api } from '../lib/api.js';
+import { awaitRun, summarize } from '../lib/run_poll.js';
 
 const shortId = (id) => (id && id.length > 8 ? '…' + id.slice(-5) : id || '');
 const RESULT_COLOR = { restored: '#1a8a4f', simulated: '#1a8a4f', skipped: '#854f0b', failed: '#c0392b' };
@@ -45,8 +46,10 @@ export default function Restore() {
     if (!ids.length) return;
     setBusy(true); setErr(''); setResult(null);
     try {
-      const r = await api.mergeRestore(ids, execute ? { mode: 'execute', confirm: confirmText } : { mode: 'simulate' });
-      setResult(r); setConfirmText(''); load();
+      const q = await api.mergeRestore(ids, execute ? { mode: 'execute', confirm: confirmText } : { mode: 'simulate' });
+      setConfirmText('');
+      const finalRun = await awaitRun(api, 'restore', q.run_id);
+      setResult(summarize(finalRun)); load();
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
@@ -58,8 +61,10 @@ export default function Restore() {
     if (!recIds.length) return;
     setRecBusy(true); setErr(''); setRecResult(null);
     try {
-      const r = await api.mergeRecreate(recIds, execute ? { mode: 'execute', confirm: recConfirm } : { mode: 'simulate' });
-      setRecResult(r); setRecConfirm(''); load();
+      const q = await api.mergeRecreate(recIds, execute ? { mode: 'execute', confirm: recConfirm } : { mode: 'simulate' });
+      setRecConfirm('');
+      const finalRun = await awaitRun(api, 'recreate', q.run_id);
+      setRecResult(summarize(finalRun)); load();
     } catch (e) { setErr(e.message); }
     finally { setRecBusy(false); }
   };

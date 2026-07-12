@@ -102,9 +102,13 @@ async function runQueue(ids, opts = {}, deps = {}) {
   const mode = armed ? 'execute' : 'simulate';
 
   const totalOps = entries.reduce((s, e) => s + Math.max(1, ceil2(e.loser_count)), 0);
-  const runId = make_run_id();
-  await RUN.start({ run_id: runId, kind: 'merge', mode, environment: env, org_id: ctxOrg,
-    total_ops: totalOps, total_sets: entries.length, est_seconds: totalOps * DEFAULT_OP_SECONDS, created_by: createdBy });
+  const runId = opts.run_id || make_run_id();
+  if (opts.run_id) {
+    await RUN.update(runId, { mode, environment: env, org_id: ctxOrg, total_ops: totalOps, total_sets: entries.length, est_seconds: totalOps * DEFAULT_OP_SECONDS });
+  } else {
+    await RUN.start({ run_id: runId, kind: 'merge', mode, environment: env, org_id: ctxOrg,
+      total_ops: totalOps, total_sets: entries.length, est_seconds: totalOps * DEFAULT_OP_SECONDS, created_by: createdBy });
+  }
 
   log('run ' + runId + ' mode=' + mode + ' sets=' + entries.length + ' ops=' + totalOps + ' env=' + env);
   const out = { run_id: runId, environment: env, org_id: ctxOrg, mode, armed, gates,
@@ -115,7 +119,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
   for (let si = 0; si < entries.length; si += 1) {
     // Cooperative cancel: a Stop request flags this run id; we honor it at the SET boundary so every
     // set is left whole (finished sets stay done/skipped/failed; remaining sets stay approved).
-    if (CTRL.is_cancelled(runId)) {
+    if (await CTRL.is_cancelled(runId)) {
       out.cancelled = true;
       out.remaining = entries.length - si;
       log('run ' + runId + ' STOP requested — halting before set ' + (si + 1) + ' of ' + entries.length);

@@ -21,6 +21,10 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' stage VARCHAR(24),' +
   ' status VARCHAR(16) NOT NULL DEFAULT "running",' +   // 'running' | 'done' | 'error'
   ' created_by VARCHAR(128),' +
+  ' claimed_by VARCHAR(64) NULL,' +
+  ' claimed_at DATETIME NULL,' +
+  ' cancel_requested TINYINT NOT NULL DEFAULT 0,' +
+  ' params TEXT NULL,' +
   ' started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' +
   ' finished_at DATETIME NULL' +
   ')';
@@ -30,6 +34,10 @@ async function ensure_table(query = real_query) {
   if (_ensured) return;
   await query(DDL, []);
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN stage VARCHAR(24)', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN claimed_by VARCHAR(64) NULL', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN claimed_at DATETIME NULL', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN cancel_requested TINYINT NOT NULL DEFAULT 0', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN params TEXT NULL', []); } catch (e) { /* exists */ }
   _ensured = true;
 }
 
@@ -49,7 +57,7 @@ async function start(run, query = real_query) {
 async function update(runId, patch = {}, query = real_query) {
   await ensure_table(query);
   const sets = []; const vals = [];
-  for (const k of ['completed_ops', 'completed_sets', 'current_label', 'total_ops', 'total_sets', 'stage']) {
+  for (const k of ['completed_ops', 'completed_sets', 'current_label', 'total_ops', 'total_sets', 'stage', 'mode', 'environment', 'org_id', 'est_seconds']) {
     if (patch[k] !== undefined) { sets.push('`' + k + '` = ?'); vals.push(patch[k]); }
   }
   if (!sets.length) return;
@@ -81,4 +89,47 @@ async function latest(kind, query = real_query) {
   return (rows && rows[0]) || null;
 }
 
-module.exports = { start, update, finish, get, latest, ensure_table, TABLE, DDL };
+// ---- Phase 3: worker job queue on THIS table (user-triggered; no new table) ----
+// Enqueue a run for the worker to pick up. status 'queued'; params holds { ids, opts } for the executor.
+async function enqueue(job, query = real_query) {
+  await ensure_table(query);
+  const pfx = job.kind === 'restore' ? 'rrun-' : job.kind === 'recreate' ? 'crun-' : 'mrun-';
+  const runId = job.run_id || (pfx + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7));
+  await query(
+    'INSERT INTO `' + TABLE + '` (run_id, kind, mode, environment, org_id, total_ops, total_sets, est_seconds, ' +
+    'completed_ops, completed_sets, current_label, status, created_by, params, started_at, finished_at) ' +
+    'VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, ?, "queued", ?, ?, NOW(), NULL)',
+    [String(runId), job.kind || 'merge', job.mode || 'simulate', job.environment || null, job.org_id || null,
+     job.current_label || 'Queued', job.created_by || null, JSON.stringify(job.params || {})]);
+  return { run_id: runId, status: 'queued' };
+}
+
+// Atomically claim the oldest queued run of one of `kinds` for this worker `token`. Row or null.
+async function claim_next(kinds, token, query = real_query) {
+  await ensure_table(query);
+  const ks = (kinds && kinds.length) ? kinds : ['merge', 'restore', 'recreate'];
+  const inClause = ks.map(function () { return '?'; }).join(',');
+  const res = await query(
+    'UPDATE `' + TABLE + '` SET status = "running", claimed_by = ?, claimed_at = NOW() ' +
+    'WHERE status = "queued" AND claimed_by IS NULL AND kind IN (' + inClause + ') ' +
+    'ORDER BY started_at ASC LIMIT 1',
+    [String(token)].concat(ks));
+  const affected = (res && res.affectedRows) || 0;
+  if (!affected) return null;
+  const rows = await query('SELECT * FROM `' + TABLE + '` WHERE claimed_by = ? AND status = "running" ORDER BY claimed_at DESC LIMIT 1', [String(token)]);
+  return (rows && rows[0]) || null;
+}
+
+// DB-backed cancellation (cross-process: the web sets the flag, the worker reads it between sets).
+async function request_cancel(runId, query = real_query) {
+  await ensure_table(query);
+  await query('UPDATE `' + TABLE + '` SET cancel_requested = 1 WHERE run_id = ? AND status = "running"', [String(runId)]);
+  return { run_id: runId };
+}
+async function is_cancelled(runId, query = real_query) {
+  if (runId == null) return false;
+  const rows = await query('SELECT cancel_requested FROM `' + TABLE + '` WHERE run_id = ? LIMIT 1', [String(runId)]);
+  return !!(rows && rows[0] && Number(rows[0].cancel_requested) === 1);
+}
+
+module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, request_cancel, is_cancelled, TABLE, DDL };

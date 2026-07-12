@@ -57,7 +57,7 @@ export const api = {
   mergeProcess: (ids, opts = {}) => req('/api/salesforce-merge/merge/process', { method: 'POST', body: JSON.stringify({ ids, ...opts }) }),
   mergeHistory: () => req('/api/salesforce-merge/merge/history'),
   mergeWhoami: () => req('/api/salesforce-merge/merge/whoami'),
-  mergeProgress: (kind) => req('/api/salesforce-merge/merge/progress' + (kind ? ('?kind=' + encodeURIComponent(kind)) : '')),
+  mergeProgress: (kind, runId) => req('/api/salesforce-merge/merge/progress' + (runId ? ('?run_id=' + encodeURIComponent(runId)) : (kind ? ('?kind=' + encodeURIComponent(kind)) : ''))),
   mergeCancel: (kind = 'merge') => req('/api/salesforce-merge/merge/cancel', { method: 'POST', body: JSON.stringify({ kind }) }),
   mergeRestoreList: () => req('/api/salesforce-merge/merge/restore'),
   mergeRestore: (ids, opts = {}) => req('/api/salesforce-merge/merge/restore', { method: 'POST', body: JSON.stringify({ ids, ...opts }) }),

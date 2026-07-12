@@ -146,9 +146,13 @@ async function restore(ids, opts = {}, deps = {}) {
 
   const armed = execution_enabled() && opts.mode === 'execute' && opts.confirm === 'RESTORE';
   const mode = armed ? 'execute' : 'simulate';
-  const runId = make_run_id();
-  await RUN.start({ run_id: runId, kind: 'restore', mode, environment: env,
-    total_sets: entries.length, total_ops: entries.length, created_by: createdBy });
+  const runId = opts.run_id || make_run_id();
+  if (opts.run_id) {
+    await RUN.update(runId, { mode, environment: env, total_sets: entries.length, total_ops: entries.length });
+  } else {
+    await RUN.start({ run_id: runId, kind: 'restore', mode, environment: env,
+      total_sets: entries.length, total_ops: entries.length, created_by: createdBy });
+  }
   log('run ' + runId + ' mode=' + mode + ' sets=' + entries.length + ' env=' + env);
 
   const out = { run_id: runId, mode, armed, processed: 0, restored: 0, simulated: 0, skipped: 0, failed: 0, results: [] };
@@ -250,8 +254,12 @@ async function recreate(ids, opts = {}, deps = {}) {
 
   const armed = execution_enabled() && opts.mode === 'execute' && opts.confirm === 'RECREATE';
   const mode = armed ? 'execute' : 'simulate';
-  const runId = make_recreate_run_id();
-  await RUN.start({ run_id: runId, kind: 'recreate', mode, environment: env, total_sets: entries.length, total_ops: entries.length, created_by: createdBy });
+  const runId = opts.run_id || make_recreate_run_id();
+  if (opts.run_id) {
+    await RUN.update(runId, { mode, environment: env, total_sets: entries.length, total_ops: entries.length });
+  } else {
+    await RUN.start({ run_id: runId, kind: 'recreate', mode, environment: env, total_sets: entries.length, total_ops: entries.length, created_by: createdBy });
+  }
   log('recreate run ' + runId + ' mode=' + mode + ' sets=' + entries.length + ' env=' + env);
 
   const out = { run_id: runId, mode, armed, processed: 0, recreated: 0, simulated: 0, skipped: 0, failed: 0, results: [] };
