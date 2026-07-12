@@ -28,7 +28,7 @@ export const NAV = [
   },
   {
     type: 'group', label: 'Salesforce', items: [
-      { label: 'Merge', path: '/salesforce/merge', panel: 'merge', icon: '⇄', Component: MergeSection },
+      { label: 'Merge', path: '/salesforce/merge', panel: 'merge', icon: '⇄', Component: MergeSection, nested: true },
     ]
   },
   {

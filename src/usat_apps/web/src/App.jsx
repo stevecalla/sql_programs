@@ -4,6 +4,7 @@ import { api } from './lib/api.js';
 import { trackPanelView, trackSession } from './lib/track.js';
 import { allPanels, canSee, panelForPathname } from './nav.js';
 import SideRail from './components/SideRail.jsx';
+import MergeRail from './modules/salesforce_merge/MergeRail.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import UserMenu from './components/UserMenu.jsx';
 import FooterClock from './components/FooterClock.jsx';
@@ -41,13 +42,13 @@ export default function App() {
       </header>
 
       <div className="admin-shell">
-        <SideRail user={user} />
+        {location.pathname.startsWith('/salesforce/merge') ? <MergeRail user={user} /> : <SideRail user={user} />}
         <main className="admin-main">
           <Suspense fallback={<div className="loading">Loading…</div>}>
             <Routes>
               <Route path="/" element={<Home user={user} />} />
               {allPanels().map((p) => (
-                <Route key={p.path} path={p.path} element={guard(p.panel, <p.Component title={p.label} user={user} />)} />
+                <Route key={p.path} path={p.nested ? p.path + '/*' : p.path} element={guard(p.panel, <p.Component title={p.label} user={user} />)} />
               ))}
               <Route path="*" element={<NotFound />} />
             </Routes>
