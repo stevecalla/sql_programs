@@ -52,6 +52,7 @@ git commit -m "Retire /reporting (8021): folded into usat_apps participation_map
 - **Keep `src/participation_data/`** — that's the ETL the maps still consume; it does NOT move.
 - `src/reporting` is ~209MB (its `node_modules`), so the delete takes a moment.
 - Recoverable with `git checkout -- src/reporting server_reporting_8021.js` until you commit; after commit, via git history.
+- **Verified 2026-07-12 (full-repo scan):** those three paths are the *complete* delete set — nothing else needs removing. No module imports or requires them; the salesforce_merge e2e config's `:8021` is its own throwaway test port (`MERGE_PORT=8021` launching `server_salesforce_merge_8020.js`), unrelated to reporting. The only leftover mentions are cosmetic `// Copied from src/reporting/…` header comments in the ported usat_apps files — harmless, safe to leave.
 
 **3. Drop the events table (MySQL, once after cutover):**
 ```
