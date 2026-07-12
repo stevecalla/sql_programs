@@ -25,6 +25,7 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' claimed_at DATETIME NULL,' +
   ' cancel_requested TINYINT NOT NULL DEFAULT 0,' +
   ' params TEXT NULL,' +
+  ' result TEXT NULL,' +
   ' started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' +
   ' finished_at DATETIME NULL' +
   ')';
@@ -38,6 +39,7 @@ async function ensure_table(query = real_query) {
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN claimed_at DATETIME NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN cancel_requested TINYINT NOT NULL DEFAULT 0', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN params TEXT NULL', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN result TEXT NULL', []); } catch (e) { /* exists */ }
   _ensured = true;
 }
 
@@ -132,4 +134,11 @@ async function is_cancelled(runId, query = real_query) {
   return !!(rows && rows[0] && Number(rows[0].cancel_requested) === 1);
 }
 
-module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, request_cancel, is_cancelled, TABLE, DDL };
+// Persist the executor's own result object onto the run row so the UI shows the SAME counts the old
+// synchronous response returned (done/simulated/skipped/failed/...). Parity with the pre-worker version.
+async function set_result(runId, obj, query = real_query) {
+  await ensure_table(query);
+  await query('UPDATE `' + TABLE + '` SET result = ? WHERE run_id = ?', [JSON.stringify(obj || {}), String(runId)]);
+}
+
+module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, request_cancel, is_cancelled, set_result, TABLE, DDL };
