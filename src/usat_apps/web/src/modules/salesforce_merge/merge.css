@@ -46,7 +46,7 @@
 .sfmerge, .sfmerge { margin: 0; padding: 0; }
 
 
-.sfmerge { background: var(--bg); color: var(--ink);
+.sfmerge { background: transparent; color: var(--ink);
   font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 
 
