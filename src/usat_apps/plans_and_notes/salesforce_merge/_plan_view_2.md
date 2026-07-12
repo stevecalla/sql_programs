@@ -361,6 +361,31 @@ copy → repoint imports → re-namespace routes → drop the shell/auth dupes �
 
 ---
 
+## Auth UX & shared run visibility (workstream — added 2026-07-12)
+
+Small, high-value polish that sits alongside Phase 4. Three parts:
+
+**1. Rolling session + redirect to login.** Today the session is **12h absolute** (`session.js` `MAX_AGE_MS`, `ts` stamped once at login, never refreshed) — an active user is kicked mid-work with no warning, and a mid-session 401 just renders "authentication required" on the page with no way back. Fixes:
+- **Rolling (sliding) 12h** — re-stamp `ts` on each authenticated request so active users never time out; only idle sessions expire. Optional **hard cap** (e.g. 24h absolute) so an abandoned polling tab can't live forever.
+- **Central 401 interceptor** in the client `req()` wrapper → sets `user=null` → the existing `<Login>` screen shows automatically. **401 only** (expired) bounces to login; **403** (panel not allowed) stays an in-app "access restricted" message. On re-login, return to the prior route.
+
+**2. Merges survive auth events (already true — by design).** merge/restore run in the worker (:8021), decoupled from the browser session. Logout / expiry / closed tab never stop or lose a run — the worker owns it; the run row + result persist, and the result lands in Merge History. Only the *live view* is affected, and rolling auth keeps it alive (the 1s progress poll re-stamps the session while watching). **Cancellation stays explicit** (DB `cancel_requested`, user-initiated) — logout must never signal a cancel.
+
+**3. Shared run visibility + auto-resume.** The Process/Restore live view shows the **active run regardless of who started it** (`salesforce_merge_run.created_by` + `status`; `/merge/progress` already supports `latest(kind)`), labeled *"started by {created_by}"*:
+- Starter (**+ admin**) gets **Stop**; everyone else sees the same pipeline **read-only**; a second Process **queues behind** (FIFO) — "queued behind Jane's run".
+- Same mechanism **auto-resumes the in-flight run view on re-login / page return** (find the active run → attach the stepper), so a user never loses their place.
+- **Decided (2026-07-12):** any **admin can Stop *any* run** (not just the run's starter); build a **global "a merge is running" shell indicator** (visible platform-wide, e.g. in the header/rail), in addition to the per-page active-run view.
+
+### Reference card (surface in the app Reference page)
+
+- **Session:** rolling 12 hours — you stay signed in while active; idle sessions expire. If your session lapses you're taken to the login screen, then back to where you were.
+- **A running merge/restore keeps going even if you log out, your session expires, or you close the tab** — it runs on the server (worker :8021). The result lands in **Merge History**.
+- **Reopen Process/Restore and the live pipeline reattaches** to the running job — you don't lose your place.
+- **Everyone sees the same active run and who started it.** Only the starter (or an admin) can **Stop** it; a second person's set queues behind.
+- **Logging out never cancels a merge** — cancelling is always an explicit **Stop**.
+
+---
+
 ## Appendix — Create the Salesforce External Client App (OPTIONAL — NOT part of the port)
 
 _Not required to fold merge in. The port ships with today's username/password + token auth. Do this **later**
