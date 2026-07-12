@@ -8,6 +8,7 @@ import Admin from './pages/Admin.jsx';
 // from more than one module (e.g. Reporting = Participation maps + Event analysis).
 const ParticipationMaps = lazy(() => import('./modules/participation_maps/Section.jsx'));
 const ComingSoon = lazy(() => import('./pages/ComingSoon.jsx'));
+const MergeSection = lazy(() => import('./modules/salesforce_merge/Section.jsx'));
 const OpsOverview = lazy(() => import('./modules/ops/Overview.jsx'));
 const OpsBackends = lazy(() => import('./modules/ops/Backends.jsx'));
 const OpsServerCards = lazy(() => import('./modules/ops/ServerCards.jsx'));
@@ -27,7 +28,7 @@ export const NAV = [
   },
   {
     type: 'group', label: 'Salesforce', items: [
-      { label: 'Merge', path: '/salesforce/merge', panel: 'merge', icon: '⇄', Component: ComingSoon },
+      { label: 'Merge', path: '/salesforce/merge', panel: 'merge', icon: '⇄', Component: MergeSection },
     ]
   },
   {
