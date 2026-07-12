@@ -11,6 +11,7 @@ Verify parity on your box **before** stopping 8021:
 If the numbers match, proceed. If not, **do not retire**.
 
 ## Already done (in the repo, staged with step 2)
+- **Code already git-removed:** `src/reporting/` and `server_reporting_8021.js` were removed from git tracking in commit **`2c140f0`** ("Retire /reporting (8021)..."), already on `create/usat_app_v16`. `git ls-tree HEAD` shows neither. So the step-2 `rm` commands only clear leftover **untracked** copies on disk and produce **no** git change — expected, not a problem.
 - **Proxy:** `/reporting` was already commented out in `utilities/proxy/proxy_routes.js` — not publicly routed.
 - **`package.json`:** removed all 20 `reporting_*` / `*_reporting` scripts. Also fixed two bugs: `delete_usat_apps` / `show_usat_apps` were targeting `usat_reporting` -> now `usat_apps`.
 - **VS Code task json:** removed the `20 REPORTING (logs)` + `(shell)` tasks, the `Reporting (split)` compound, and its entries in the master "start-all" tasks — in **both `.vscode/tasks.json` and `.vscode/tasks_backup.json`** (both re-validated as JSON, 0 reporting refs remaining).
