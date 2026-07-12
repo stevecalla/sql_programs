@@ -37,18 +37,32 @@ npx pm2 save
 ```
 `/reporting` isn't proxied, so nothing routes to it — low risk. (The old `stop_reporting`/`delete_reporting` npm scripts are gone; use pm2 directly.)
 
-**2. Delete the code + record it (run in your terminal — the desktop bridge can't delete):**
-```
-# delete the app + its e2e build artifact (Linux / prod)
-rm -rf src/reporting server_reporting_8021.js .reporting_e2e_dist
-#   Windows PowerShell:  Remove-Item -Recurse -Force .\src\reporting,.\.reporting_e2e_dist ; Remove-Item -Force .\server_reporting_8021.js
-#   Windows cmd:         rmdir /s /q src\reporting .reporting_e2e_dist  &  del /f server_reporting_8021.js
+**2. Delete the code + record it** — run in your terminal (the desktop bridge can't delete). Do these one at a time; each block below is a single command.
 
-# stage: the deletions + the repo cleanup already made this session
-#   (package.json scripts + bug fix, .vscode/tasks.json, .vscode/tasks_backup.json)
+_Windows PowerShell (your dev box) — run from the repo root:_
+
+2a — delete the reporting app folder:
+```
+Remove-Item -Recurse -Force .\src\reporting
+```
+2b — delete the reporting server file:
+```
+Remove-Item -Force .\server_reporting_8021.js
+```
+2c — delete the e2e build artifact:
+```
+Remove-Item -Recurse -Force .\.reporting_e2e_dist
+```
+2d — stage everything (the deletions + this session's package.json / .vscode cleanup):
+```
 git add -A
+```
+2e — commit:
+```
 git commit -m "Retire /reporting (8021): folded into usat_apps participation_maps module"
 ```
+_On the Linux prod host you don't delete by hand — `git pull` (step 5) removes the tracked files. To clear the leftover build artifact there:_ `rm -rf .reporting_e2e_dist`
+
 - **Keep `src/participation_data/`** — that's the ETL the maps still consume; it does NOT move.
 - `src/reporting` is ~209MB (its `node_modules`), so the delete takes a moment.
 - Recoverable with `git checkout -- src/reporting server_reporting_8021.js` until you commit; after commit, via git history.
