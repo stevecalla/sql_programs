@@ -3,6 +3,7 @@
 // losers) before a merge runs, plus each child record, so it can serve as the restore baseline.
 // Written on every run (even simulate). `query` injectable for tests.
 const { query: real_query } = require('../../../store/db');
+const { now_mtn_utc } = require('./timestamps');
 
 const TABLE = 'salesforce_merge_premerge_snapshot';
 
@@ -19,7 +20,9 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' child_type VARCHAR(20),' +                    // child rows: 'child' | 'self_account' | 'self_contact'
   ' child_object VARCHAR(80),' +                  // child rows: SObject API name
   ' fields LONGTEXT,' +
-  ' survivor_account VARCHAR(32)' +               // the set's surviving master id (same for every row in the set)
+  ' survivor_account VARCHAR(32),' +              // the set's surviving master id (same for every row in the set)
+  ' created_at_mtn DATETIME NULL,' +              // Denver wall-clock, written by the app (event-table convention)
+  ' created_at_utc DATETIME NULL' +               // UTC wall-clock, written by the app
   ')';
 
 let _ensured = false;
@@ -29,6 +32,8 @@ async function ensure_table(query = real_query) {
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN child_type VARCHAR(20)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN child_object VARCHAR(80)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN survivor_account VARCHAR(32)', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_mtn DATETIME NULL', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_utc DATETIME NULL', []); } catch (e) { /* exists */ }
   _ensured = true;
 }
 
@@ -37,13 +42,14 @@ async function save(runId, entry, accounts, children = [], query = real_query) {
   await ensure_table(query);
   const qid = entry && entry.id != null ? Number(entry.id) : null;
   const surv = String(entry.survivor_account || '');
+  const ts = now_mtn_utc();   // one timestamp for the whole snapshot set
   if (qid != null) await query('DELETE FROM `' + TABLE + '` WHERE queue_id = ?', [qid]);
 
   const ins = (role, account, contact, childType, childObject, payload) => query(
-    'INSERT INTO `' + TABLE + '` (run_id, queue_id, source_type, source_key, role, account, contact, child_type, child_object, fields, survivor_account) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO `' + TABLE + '` (run_id, queue_id, source_type, source_key, role, account, contact, child_type, child_object, fields, survivor_account, created_at_mtn, created_at_utc) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [String(runId), qid, entry.source_type || null, String(entry.source_key || ''),
-     role, String(account || ''), contact || null, childType || null, childObject || null, JSON.stringify(payload), surv]);
+     role, String(account || ''), contact || null, childType || null, childObject || null, JSON.stringify(payload), surv, ts.mtn, ts.utc]);
 
   let accN = 0; let chN = 0;
   for (const a of (accounts || [])) {

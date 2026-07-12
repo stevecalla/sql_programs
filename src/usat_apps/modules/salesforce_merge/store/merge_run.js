@@ -3,6 +3,7 @@
 // while a merge/restore runs server-side (sequential calls). One row per run, updated as each call
 // completes. `query` injectable for tests. Read-only of Salesforce — this only tracks our own run.
 const { query: real_query } = require('../../../store/db');
+const { now_mtn_utc } = require('./timestamps');
 
 const TABLE = 'salesforce_merge_run';
 
@@ -27,7 +28,9 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' params TEXT NULL,' +
   ' result TEXT NULL,' +
   ' started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' +
-  ' finished_at DATETIME NULL' +
+  ' finished_at DATETIME NULL,' +
+  ' created_at_mtn DATETIME NULL,' +              // Denver wall-clock, written by the app (event-table convention)
+  ' created_at_utc DATETIME NULL' +               // UTC wall-clock, written by the app
   ')';
 
 let _ensured = false;
@@ -40,18 +43,21 @@ async function ensure_table(query = real_query) {
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN cancel_requested TINYINT NOT NULL DEFAULT 0', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN params TEXT NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN result TEXT NULL', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_mtn DATETIME NULL', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_utc DATETIME NULL', []); } catch (e) { /* exists */ }
   _ensured = true;
 }
 
 async function start(run, query = real_query) {
   await ensure_table(query);
+  const ts = now_mtn_utc();
   await query(
     'REPLACE INTO `' + TABLE + '` (run_id, kind, mode, environment, org_id, total_ops, total_sets, est_seconds, ' +
-    'completed_ops, completed_sets, current_label, status, created_by, started_at, finished_at) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, "running", ?, NOW(), NULL)',
+    'completed_ops, completed_sets, current_label, status, created_by, started_at, finished_at, created_at_mtn, created_at_utc) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, "running", ?, NOW(), NULL, ?, ?)',
     [String(run.run_id), run.kind || 'merge', run.mode || 'simulate', run.environment || null, run.org_id || null,
      Number(run.total_ops) || 0, Number(run.total_sets) || 0, Number(run.est_seconds) || 0,
-     run.current_label || null, run.created_by || null]);
+     run.current_label || null, run.created_by || null, ts.mtn, ts.utc]);
   return { run_id: run.run_id };
 }
 
@@ -97,12 +103,13 @@ async function enqueue(job, query = real_query) {
   await ensure_table(query);
   const pfx = job.kind === 'restore' ? 'rrun-' : job.kind === 'recreate' ? 'crun-' : 'mrun-';
   const runId = job.run_id || (pfx + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7));
+  const ts = now_mtn_utc();
   await query(
     'INSERT INTO `' + TABLE + '` (run_id, kind, mode, environment, org_id, total_ops, total_sets, est_seconds, ' +
-    'completed_ops, completed_sets, current_label, status, created_by, params, started_at, finished_at) ' +
-    'VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, ?, "queued", ?, ?, NOW(), NULL)',
+    'completed_ops, completed_sets, current_label, status, created_by, params, started_at, finished_at, created_at_mtn, created_at_utc) ' +
+    'VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, ?, "queued", ?, ?, NOW(), NULL, ?, ?)',
     [String(runId), job.kind || 'merge', job.mode || 'simulate', job.environment || null, job.org_id || null,
-     job.current_label || 'Queued', job.created_by || null, JSON.stringify(job.params || {})]);
+     job.current_label || 'Queued', job.created_by || null, JSON.stringify(job.params || {}), ts.mtn, ts.utc]);
   return { run_id: runId, status: 'queued' };
 }
 

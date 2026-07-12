@@ -18,6 +18,30 @@ destructive/long-running work out to an isolated server-side worker. Companion t
 
 Still open (recommendations at the end): metrics table, merge-history handling.
 
+## Implementation status — as built (2026-07-12)
+
+Phases 1–2 are in and **Phase 3 (worker breakout) is implemented** (verified by a minimal smoke path).
+This table is the source of truth for what actually shipped; the phase sections below remain the design.
+
+| Area | Status | As built |
+|---|---|---|
+| Phase 1 — backend module | ✅ Done | `modules/salesforce_merge/{module.js, api.js, store/*}`; `/api/salesforce-merge/*`; gated on the `merge` panel |
+| Phase 2 — frontend drill-in | ✅ Done | `web/.../salesforce_merge/{Section.jsx, MergeRail.jsx, pages/*, components/*}`; nested routes under `/salesforce/merge` |
+| Phase 3 — write worker | ✅ Implemented | `src/salesforce_merge_worker/loop.js` + `server_salesforce_merge_worker_8021.js` — a **full Express server mirroring the fleet** (create_app/start_server, ngrok off, request log, clean SIGTERM/SIGINT, EADDRINUSE), not just a `/health` stub. Endpoints enqueue; the worker claims + runs; the UI polls by exact `run_id`. |
+| Job queue | ✅ On `salesforce_merge_run` (no new table) | Added a `queued` status + `claimed_by`, `claimed_at`, `cancel_requested`, `params`, `result`. Claim/cancel helpers live in **`store/merge_run.js`** (`enqueue`, `claim_next`, `request_cancel`, `is_cancelled`, `set_result`) — **not** a separate `claim.js`. |
+| Cancellation | ✅ DB-backed | `cancel_requested` column (spans web + worker; the original in-memory Set only worked single-process) |
+| Result parity | ✅ | The worker stores the executor's own summary object on the run row (`set_result`), so the UI shows the same counts as the pre-worker synchronous version |
+| Multi-worker | ✅ Built in | Atomic claim + per-process token; scale via pm2 cluster — `pm2_start_salesforce_merge_worker_cluster` (`-i 2`). Autorestart ON. Cancel still works (DB-coordinated). |
+| Tests | ✅ | `src/salesforce_merge_worker/smoke.js` (enqueue→claim→run→done→result parity) and `worker_down_test.js` (stays `queued` when 8021 is down, drains when it returns). Scripts: `salesforce_merge_worker_smoke`, `salesforce_merge_worker_down_test`. |
+| **`created_at_mtn` / `created_at_utc`** | ✅ New | Added as the **last columns** on **run, queue, history, premerge_snapshot** — event-table convention (app-written Denver + UTC wall-clock via `store/timestamps.js`). Migration: `src/queries/create_drop_db_table/alter_salesforce_merge_timestamps.js` (also auto-applied on boot via `ensure_table`). **`salesforce_merge_events` is not a code table** — nothing to alter (see Open decisions). |
+| **Module menu** | ✅ New | `modules/salesforce_merge/menu.js` — worker start/stop/logs/cluster, smoke + worker-down tests, DB migrations, status/open. Ported like the participation-maps menu; wired into the platform menu **MODULES → item 28**. No admin/users (platform owns auth). |
+| **"No worker online" banner** | ✅ New | `GET /api/salesforce-merge/worker/health` (platform proxies :8021 with a short timeout) + `WorkerBanner.jsx` (polls every 15s, renders a scoped banner while the worker is down) so a queued-but-not-running job is visible. |
+| Fleet wiring | ✅ New | Worker added to `pm2_run_all_servers`; `restart_ / stop_ / pm2_logs_salesforce_merge_worker` scripts; `.vscode/tasks.json` group **20 SALESFORCE MERGE WORKER** (logs/shell/split) + **All Logs (23 groups)**. |
+
+**Worker-down behavior:** a merge never *fails* when :8021 is offline — it's accepted and sits `queued` until a worker claims it (a silent hang), which is exactly what the banner surfaces.
+
+**Not yet done:** Phase 4 (metrics fold-in), Phase 5 (port unit tests), Phase 6 (retire 8020), optional SF API-usage card, the stamp-actor field, and the External Client App.
+
 ## Feasibility — the slot is already reserved
 
 | Signal | Where |

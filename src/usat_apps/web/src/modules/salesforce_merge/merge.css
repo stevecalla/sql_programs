@@ -1074,3 +1074,20 @@
 
 }
 
+/* No-worker-online banner (Phase 3). Shown across the merge module when the isolated write worker
+   (:8021) is down, since enqueued merges would sit 'queued' and never run. Scoped under .sfmerge. */
+.sfmerge .sfmerge-worker-banner {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 0 0 12px; padding: 10px 14px;
+  background: #fdecec; border: 1px solid #e4002b; border-left: 4px solid #e4002b;
+  border-radius: 6px; color: #7a0016; font-size: 13px; line-height: 1.45;
+}
+.sfmerge .sfmerge-worker-banner code {
+  background: rgba(228,0,43,0.10); padding: 1px 5px; border-radius: 4px; font-size: 12px;
+}
+.sfmerge .sfmerge-worker-banner__dot {
+  flex: 0 0 auto; width: 9px; height: 9px; margin-top: 4px; border-radius: 50%;
+  background: #e4002b; box-shadow: 0 0 0 3px rgba(228,0,43,0.18);
+}
+.sfmerge .sfmerge-worker-banner__text { flex: 1 1 auto; }
+

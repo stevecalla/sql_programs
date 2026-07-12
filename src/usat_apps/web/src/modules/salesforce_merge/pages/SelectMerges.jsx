@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import DatasetStamp from '../components/DatasetStamp.jsx';
+import WorkerBanner from '../components/WorkerBanner.jsx';
 import { api, exportUrl } from '../lib/api.js';
 
 const PAGE = 200;
@@ -291,6 +292,7 @@ export default function SelectMerges() {
       <h2>Select Merges</h2>
       <p className="muted small">Choose what to review, pick the surviving master, select accounts to merge, and add the set to the queue. Read-only — execution is a later phase.</p>
       <DatasetStamp />
+      <WorkerBanner />
 
       <div style={{ background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 12px', margin: '8px 0 12px', fontSize: 13 }}>
         <strong>Merge execution is OFF</strong> — the queue stages merge sets only. Processing is locked until Phase 3 (write chokepoint, snapshot + history, typed confirm).

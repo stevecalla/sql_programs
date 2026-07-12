@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import DatasetStamp from '../components/DatasetStamp.jsx';
+import WorkerBanner from '../components/WorkerBanner.jsx';
 import DataTable from '../components/DataTable.jsx';
 import CollapsibleCard from '../components/CollapsibleCard.jsx';
 import { api, exportUrl } from '../lib/api.js';
@@ -143,6 +144,7 @@ export default function MergeProcess() {
       <h2>Process Merges</h2>
       <p className="muted small">Validate, back up, and (in Phase 3) execute approved merges. Safe mode performs no Salesforce writes.</p>
       <DatasetStamp />
+      <WorkerBanner />
       {err && <p className="err">{err}</p>}
 
       <div className="card" style={{ margin: '8px 0 12px', borderColor: safe ? 'var(--green)' : 'var(--red)', background: safe ? 'var(--green-bg)' : 'var(--red-bg)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

@@ -105,6 +105,7 @@ const SECTIONS = [
   ]},
   { label: 'MODULES', color: CYAN, items: [
     { id: 27, label: 'Participation maps — data pipeline & ops →', desc: 'Rebuild region/zip/census/summary data, BigQuery load, build scope (opens the module menu)', bin: 'node', args: ['src/usat_apps/modules/participation_maps/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/participation_maps/menu.js' },
+    { id: 28, label: 'Salesforce merge — worker & ops →', desc: 'Start/stop the :8021 write worker, run smoke / worker-down tests, DB migrations, status (opens the module menu)', bin: 'node', args: ['src/usat_apps/modules/salesforce_merge/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/salesforce_merge/menu.js' },
   ]},
 ];
 const ALL = SECTIONS.flatMap((s) => s.items);

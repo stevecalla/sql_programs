@@ -66,6 +66,7 @@ export const api = {
   recycleBin: () => req('/api/salesforce-merge/merge/recycle-bin'),
   stampFields: () => req('/api/salesforce-merge/merge/stamp-fields'),
   snapshotRows: () => req('/api/salesforce-merge/merge/snapshot'),
+  workerHealth: () => req('/api/salesforce-merge/worker/health'),
   mergeQueueBulk: (payload) => req('/api/salesforce-merge/merge-queue/bulk', { method: 'POST', body: JSON.stringify(payload) }),
   refreshStart: (env, scope, job) => req('/api/salesforce-merge/refresh/start', { method: 'POST', body: JSON.stringify({ env, scope, job }) }),
   refreshStatus: () => req('/api/salesforce-merge/refresh/status'),

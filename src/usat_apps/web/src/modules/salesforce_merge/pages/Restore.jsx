@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import DatasetStamp from '../components/DatasetStamp.jsx';
+import WorkerBanner from '../components/WorkerBanner.jsx';
 import { api } from '../lib/api.js';
 import { awaitRun, summarize } from '../lib/run_poll.js';
 
@@ -74,6 +75,7 @@ export default function Restore() {
       <h2>Restore</h2>
       <p className="muted small">Undo a completed merge — bring losers back from the Recycle Bin, re-link their children, and reset the master. Best-effort, ~15-day window. Safe mode performs no Salesforce writes.</p>
       <DatasetStamp />
+      <WorkerBanner />
       {err && <p className="err">{err}</p>}
 
       <div className="card" style={{ margin: '8px 0 12px', borderColor: safe ? 'var(--green)' : 'var(--red)', background: safe ? 'var(--green-bg)' : 'var(--red-bg)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

@@ -4,6 +4,7 @@
 // local table. Lifecycle: queued -> approved -> (Phase 3) processing -> done/failed -> restored.
 // Rows are never auto-cleared (audit + restore baseline). `query` is injectable for tests.
 const { query: real_query } = require('../../../store/db');
+const { now_mtn_utc } = require('./timestamps');
 const cfg = require('../../../../salesforce_duplicates/config');
 
 const TABLE = 'salesforce_merge_queue';
@@ -25,12 +26,14 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' environment VARCHAR(20),' +
   ' org_id VARCHAR(32),' +
   ' field_overrides TEXT,' +
-  ' child_counts TEXT' +
+  ' child_counts TEXT,' +
+  ' created_at_mtn DATETIME NULL,' +              // Denver wall-clock, written by the app (event-table convention)
+  ' created_at_utc DATETIME NULL' +               // UTC wall-clock, written by the app
   ')';
 
 const COLS = 'id, created_at, created_by, source_type, source_key, survivor_account, ' +
   'survivor_contact, survivor_name, loser_accounts, loser_count, master_rule, status, notes, ' +
-  'environment, org_id, field_overrides, child_counts';
+  'environment, org_id, field_overrides, child_counts, created_at_mtn, created_at_utc';
 
 function as_losers(v) {
   if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
@@ -49,6 +52,8 @@ async function ensure_table(query = real_query) {
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN child_counts TEXT', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN environment VARCHAR(20)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN org_id VARCHAR(32)', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_mtn DATETIME NULL', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_utc DATETIME NULL', []); } catch (e) { /* exists */ }
   _ensured = true;
 }
 
@@ -63,15 +68,16 @@ async function add(entry, query = real_query) {
     e.code = 'DUPLICATE';
     throw e;
   }
+  const ts = now_mtn_utc();
   const res = await query(
     'INSERT INTO `' + TABLE + '` (created_by, source_type, source_key, survivor_account, ' +
     'survivor_contact, loser_accounts, loser_count, master_rule, status, notes, survivor_name, ' +
-    'environment, org_id, field_overrides, child_counts) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'environment, org_id, field_overrides, child_counts, created_at_mtn, created_at_utc) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [entry.created_by || null, entry.source_type || 'group', String(entry.source_key || ''),
      String(entry.survivor_account || ''), entry.survivor_contact || null,
      losers.join(';'), losers.length, entry.master_rule || null, 'queued', entry.notes || null, entry.survivor_name || null,
-     entry.environment || null, entry.org_id || null, as_json(entry.field_overrides), as_json(entry.child_counts)]);
+     entry.environment || null, entry.org_id || null, as_json(entry.field_overrides), as_json(entry.child_counts), ts.mtn, ts.utc]);
   return { id: (res && res.insertId) || null, loser_count: losers.length };
 }
 

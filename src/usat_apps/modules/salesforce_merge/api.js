@@ -6,6 +6,7 @@
 // a no-op shim here; Phase 4 reroutes merge events into the platform analytics (usat_apps_events).
 // Salesforce writes stay guarded by MERGE_ENABLE_EXECUTION in the store layer; Phase 3 moves
 // execute/restore/refresh to a worker.
+const http = require('http');
 const { require_panel } = require('../../auth/require_auth');
 const dashboard = require('./store/duplicates_read');
 const reviews = require('./store/reviews_read');
@@ -23,6 +24,10 @@ const sfwrite = require('./store/salesforce_write');
 // Phase 1: server-side event logging is a no-op (Phase 4 wires merge usage into usat_apps_events via the
 // platform analytics). Kept as a shim so the ported handler bodies stay byte-for-byte.
 const analytics = { log: function () {} };
+
+// Port of the isolated Salesforce write worker (server_salesforce_merge_worker_8021.js). The web tier
+// only ENQUEUES jobs; this worker drains them. Overridable for non-default deployments.
+const WORKER_PORT = Number(process.env.MERGE_WORKER_PORT) || 8021;
 
 // Stamp each queued set with the connected org id so the merge-time alignment guard has a hard
 // org pin (not just the Sandbox/Production label). org id is stable per org, so cache it per
@@ -49,6 +54,24 @@ function mount(app) {
 
   // Skeleton health check retained for smoke tests.
   app.get('/api/salesforce-merge/ping', gate, function (req, res) { res.json({ ok: true, module: 'merge' }); });
+
+  // Worker liveness — the web tier only ENQUEUES; the isolated worker (:8021) drains the queue. If it's
+  // down, jobs sit 'queued' and never run, so the UI shows a "no worker online" banner. This proxies the
+  // worker's own /api/status with a short timeout; online:false on any error/timeout (fail-safe = offline).
+  app.get('/api/salesforce-merge/worker/health', gate, function (req, res) {
+    let finished = false;
+    const done = function (online, detail) { if (finished) return; finished = true; res.json({ ok: true, online: !!online, port: WORKER_PORT, detail: detail || null }); };
+    const wreq = http.get({ host: '127.0.0.1', port: WORKER_PORT, path: '/api/status', timeout: 1500 }, function (r) {
+      let b = ''; r.on('data', function (d) { b += d; });
+      r.on('end', function () {
+        let parsed = null; try { parsed = JSON.parse(b); } catch (e) { /* non-json */ }
+        const online = r.statusCode < 400 && !!(parsed && parsed.ok);
+        done(online, parsed ? { app: parsed.app, pid: parsed.pid, execution_enabled: parsed.execution_enabled, worker: parsed.worker } : null);
+      });
+    });
+    wreq.on('timeout', function () { wreq.destroy(); done(false, { error: 'timeout' }); });
+    wreq.on('error', function (e) { done(false, { error: (e && (e.code || e.message)) || 'error' }); });
+  });
 
   app.get('/api/salesforce-merge/dashboard', gate, async function (req, res) {
     try {

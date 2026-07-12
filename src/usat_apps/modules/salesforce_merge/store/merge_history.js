@@ -3,6 +3,7 @@
 // actually happened). Records the environment + org id the run targeted, whether a snapshot was
 // saved, and the result (simulated / done / failed / skipped). `query` injectable for tests.
 const { query: real_query } = require('../../../store/db');
+const { now_mtn_utc } = require('./timestamps');
 
 const TABLE = 'salesforce_merge_history';
 
@@ -24,31 +25,38 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' result VARCHAR(20) NOT NULL,' +
   ' mode VARCHAR(16),' +
   ' reason TEXT,' +
-  ' master_rule VARCHAR(60)' +
+  ' master_rule VARCHAR(60),' +
+  ' created_at_mtn DATETIME NULL,' +              // Denver wall-clock, written by the app (event-table convention)
+  ' created_at_utc DATETIME NULL' +               // UTC wall-clock, written by the app
   ')';
 
 const COLS = 'id, created_at, run_id, queue_id, created_by, source_type, source_key, survivor_account, ' +
-  'survivor_name, loser_count, child_total, environment, org_id, snapshot_saved, result, mode, reason, master_rule';
+  'survivor_name, loser_count, child_total, environment, org_id, snapshot_saved, result, mode, reason, master_rule, ' +
+  'created_at_mtn, created_at_utc';
 
 let _ensured = false;
 async function ensure_table(query = real_query) {
   if (_ensured) return;
   await query(DDL, []);
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN mode VARCHAR(16)', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_mtn DATETIME NULL', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_utc DATETIME NULL', []); } catch (e) { /* exists */ }
   _ensured = true;
 }
 
 async function write(row, query = real_query) {
   await ensure_table(query);
+  const ts = now_mtn_utc();
   const res = await query(
     'INSERT INTO `' + TABLE + '` (run_id, queue_id, created_by, source_type, source_key, survivor_account, ' +
-    'survivor_name, loser_count, child_total, environment, org_id, snapshot_saved, result, mode, reason, master_rule) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'survivor_name, loser_count, child_total, environment, org_id, snapshot_saved, result, mode, reason, master_rule, ' +
+    'created_at_mtn, created_at_utc) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [String(row.run_id || ''), row.queue_id != null ? Number(row.queue_id) : null, row.created_by || null,
      row.source_type || null, String(row.source_key || ''), row.survivor_account || null, row.survivor_name || null,
      row.loser_count != null ? Number(row.loser_count) : null, row.child_total != null ? Number(row.child_total) : null,
      row.environment || null, row.org_id || null, row.snapshot_saved ? 1 : 0,
-     String(row.result || 'simulated'), row.mode || null, row.reason || null, row.master_rule || null]);
+     String(row.result || 'simulated'), row.mode || null, row.reason || null, row.master_rule || null, ts.mtn, ts.utc]);
   return { id: (res && res.insertId) || null };
 }
 
