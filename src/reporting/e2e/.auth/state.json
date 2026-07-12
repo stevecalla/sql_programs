@@ -1,0 +1,15 @@
+{
+  "cookies": [
+    {
+      "name": "reporting_session",
+      "value": "eyJ1c2VyIjoiZTJlLXRlc3RlciIsInJvbGUiOiJhZG1pbiIsInRzIjoxNzgzNzM0MjcwMjI2fQ.g1luHPf2PYhkZmS_sph0pZt7ylwuc7mwmi7OaHTWNWY",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1783777470.228,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}
