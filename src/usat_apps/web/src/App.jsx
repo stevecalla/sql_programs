@@ -1,8 +1,8 @@
 import { Suspense, useEffect, useState } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { api } from './lib/api.js';
-import { trackPanelView } from './lib/track.js';
-import { allPanels, canSee } from './nav.js';
+import { trackPanelView, trackSession } from './lib/track.js';
+import { allPanels, canSee, panelForPathname } from './nav.js';
 import SideRail from './components/SideRail.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import UserMenu from './components/UserMenu.jsx';
@@ -20,7 +20,7 @@ export default function App() {
     api.me().then((r) => setUser(r.status === 200 && r.body.ok ? r.body : null)).catch(() => setUser(null));
   }, []);
 
-  useEffect(() => { if (user && user.ok) trackPanelView(location.pathname); }, [location.pathname, user]);
+  useEffect(() => { if (user && user.ok) trackPanelView(location.pathname, panelForPathname(location.pathname)); }, [location.pathname, user]);
 
   if (user === undefined) return <div className="loading">Loading…</div>;
   if (!user) return <Login onLogin={setUser} />;
@@ -35,7 +35,7 @@ export default function App() {
           <h1>USAT Apps</h1>
           <span className="header-btns">
             <ThemeToggle />
-            <UserMenu user={user} onLogout={async () => { await api.logout(); setUser(null); }} />
+            <UserMenu user={user} onLogout={async () => { try { trackSession('logout'); } catch (e) { /* best-effort */ } await api.logout(); setUser(null); }} />
           </span>
         </div>
       </header>

@@ -33,7 +33,7 @@ export const NAV = [
   {
     type: 'group', label: 'Metrics', items: [
       { label: 'Usat apps', path: '/metrics/usat-apps', panel: 'metrics', icon: '👤', Component: Metrics },
-      { label: 'Participation maps', path: '/metrics/participation-maps', panel: 'metrics', icon: '👤', Component: Metrics },
+      // { label: 'Participation maps', path: '/metrics/participation-maps', panel: 'metrics', icon: '👤', Component: Metrics },
     ]
   },
   {
@@ -63,6 +63,18 @@ export function canSee(user, panel) {
   if (user.role === 'admin') return true;
   if (panel === 'admin') return false;
   return Array.isArray(user.panels) && user.panels.includes(panel);
+}
+
+// Resolve a URL pathname to its nav PANEL key. Page-view tracking must tag this (e.g.
+// /reporting/participation-maps -> "participation-maps"), NOT the URL's first segment ("reporting").
+export function panelForPathname(pathname) {
+  var p = pathname || '/';
+  var best = null;
+  allPanels().forEach(function (it) {
+    if (!it.path) return;
+    if (p === it.path || p.indexOf(it.path + '/') === 0) { if (!best || it.path.length > best.path.length) best = it; }
+  });
+  return best ? best.panel : (p.replace(/^\//, '').split('/')[0] || 'home');
 }
 
 // Every leaf panel flattened — used to build the routes.

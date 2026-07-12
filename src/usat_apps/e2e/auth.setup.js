@@ -24,4 +24,18 @@ setup("authenticate", async ({ request }) => {
   try { await request.get("/api/participation-maps/bootstrap?force=1", { timeout: 100000 }); } catch (e) { /* leave to the specs */ }
   fs.mkdirSync(path.dirname(STATE), { recursive: true });
   await request.storageState({ path: STATE });
+
+  // Flag ALL E2E browser activity as test (is_test=1) so the events specs generate are excluded from
+  // the real metrics and are purgeable. The client reads usatapps_metrics_test from localStorage, so we
+  // inject it into the saved storageState for the app origin — every spec inherits it. Best-effort.
+  try {
+    const BASE = "http://localhost:" + (process.env.E2E_PORT || "8099");
+    const st = JSON.parse(fs.readFileSync(STATE, "utf8"));
+    st.origins = st.origins || [];
+    let o = st.origins.find((x) => x.origin === BASE);
+    if (!o) { o = { origin: BASE, localStorage: [] }; st.origins.push(o); }
+    o.localStorage = o.localStorage || [];
+    if (!o.localStorage.some((e) => e.name === "usatapps_metrics_test")) { o.localStorage.push({ name: "usatapps_metrics_test", value: "1" }); }
+    fs.writeFileSync(STATE, JSON.stringify(st, null, 2));
+  } catch (e) { /* worst case: E2E rows are is_test=0 as before */ }
 });

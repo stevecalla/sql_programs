@@ -45,13 +45,17 @@ function makePoolStub() {
           { event_name: "not_found", n: 6 },
           { event_name: "not_authorized", n: 2 },
         ];
+      } else if (/COUNT\(DISTINCT session_id\)/.test(s)) {
+        rows = [{ sessions: 7 }];
       } else if (/COUNT\(DISTINCT visitor_id\)/.test(s)) {
         rows = [{ uniq: 9, ret_u: 4, actors: 3 }];
+      } else if (/GROUP BY view ORDER BY n DESC/.test(s)) {
+        rows = [{ view: "choropleth", n: 20 }, { view: "opportunity", n: 15 }];
       } else if (/GROUP BY filter_name/.test(s)) {
         rows = [{ f: "year", n: 8 }, { f: "state", n: 5 }];
       } else if (/GROUP BY actor ORDER BY events DESC/.test(s)) {
         rows = [{ a: "alice", exports: 5, filters: 6, events: 30, last_seen: "2026-07-01 9:00 AM" }];
-      } else if (/GROUP BY actor ORDER BY MAX\(ts\) DESC/.test(s)) {
+      } else if (/GROUP BY actor ORDER BY MAX\(created_at_mtn\) DESC/.test(s)) {
         rows = [{ a: "carol", events: 12, exports: 1, last_seen: "2026-07-02 8:00 AM" }];
       } else if (/GROUP BY d ORDER BY d/.test(s)) {
         rows = [
@@ -96,6 +100,7 @@ test("build_report returns the full report contract, incl. the not_found / not_a
   assert.strictEqual(d.unique_users, 9);
   assert.strictEqual(d.repeat_users, 4);
   assert.strictEqual(d.actors, 3);
+  assert.strictEqual(d.sessions, 7);
 
   // The 404/403 additions.
   assert.strictEqual(d.not_found, 6);
@@ -108,7 +113,7 @@ test("build_report returns the full report contract, incl. the not_found / not_a
   assert.strictEqual(d.access_denied[0].actor, "bob");
   assert.strictEqual(d.access_denied[0].n, 2);
 
-  for (const key of ["by_panel", "by_day", "top_operators", "recent_active_users", "visitors",
+  for (const key of ["by_panel", "by_view", "by_day", "top_operators", "recent_active_users", "visitors",
     "errors", "exports_by_view", "top_filters"]) {
     assert.ok(Array.isArray(d[key]), "block " + key + " is an array");
   }
@@ -116,6 +121,7 @@ test("build_report returns the full report contract, incl. the not_found / not_a
   assert.strictEqual(d.by_panel[0].panel, "participation-maps");
   assert.strictEqual(d.by_panel[0].events, 45);
   assert.strictEqual(d.by_day.length, 2);
+  assert.strictEqual(d.by_view[0].view, "choropleth");
   assert.strictEqual(d.top_operators[0].actor, "alice");
   assert.strictEqual(d.recent_active_users[0].actor, "carol");
   assert.strictEqual(d.visitors[0].device, "desktop");   // viewport 'lg' -> 'desktop'

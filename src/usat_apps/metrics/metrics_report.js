@@ -24,11 +24,16 @@ function fmt_dt(v) {
 async function build_report(pool, opts) {
   opts = opts || {};
   const days = Number(opts.days) || 7;
-  const since = 'ts >= (NOW() - INTERVAL ' + days + ' DAY)';
+  const since = 'created_at_mtn >= (NOW() - INTERVAL ' + days + ' DAY)';
   // Headline window EXCLUDES is_test=1 (?metrics_test=1) so flagged test activity never inflates the
   // dashboard. Test rows are still counted in `health` and are purgeable.
-  const W = '`' + TABLE + '` WHERE app = ? AND ' + since + ' AND (is_test IS NULL OR is_test = 0)';
+  const panel = opts.panel && String(opts.panel).trim();
+  // Headline EXCLUDES is_test=1 (?metrics_test=1) by default so flagged test activity never inflates
+  // the figures. include_test flips that on so you can review test rows before purging them.
+  const test_filter = opts.include_test ? '' : ' AND (is_test IS NULL OR is_test = 0)';
+  let W = '`' + TABLE + '` WHERE app = ? AND ' + since + test_filter;
   const A = [APP];
+  if (panel) { W += ' AND panel = ?'; A.push(panel); }   // scope the whole report to one panel (tabs)
 
   // ---- headline event counts ----
   const counts = await q(pool, 'SELECT event_name, COUNT(*) n FROM ' + W + ' GROUP BY event_name', A);
@@ -41,6 +46,8 @@ async function build_report(pool, opts) {
     'COUNT(DISTINCT actor) actors ' +
     'FROM ' + W, A))[0] || {};
 
+  const sessions_row = (await q(pool, 'SELECT COUNT(DISTINCT session_id) sessions FROM ' + W + " AND session_id IS NOT NULL AND session_id<>''", A))[0] || {};
+
   // ---- where in the app: panel views / filters / exports ----
   const by_panel = await q(pool,
     "SELECT panel, SUM(event_name IN ('panel_view','page_view')) views, SUM(event_name='filter_run') filters, " +
@@ -50,17 +57,19 @@ async function build_report(pool, opts) {
     "SELECT view, export_format fmt, COUNT(*) n FROM " + W + " AND event_name='report_export' AND view IS NOT NULL GROUP BY view, export_format ORDER BY n DESC", A);
   const top_filters = await q(pool,
     "SELECT filter_name f, COUNT(*) n FROM " + W + " AND event_name IN ('filter_run','search_run') AND filter_name IS NOT NULL AND filter_name<>'' GROUP BY filter_name ORDER BY n DESC LIMIT 10", A);
+  const by_view = await q(pool,
+    "SELECT view, COUNT(*) n FROM " + W + " AND view IS NOT NULL AND view<>'' GROUP BY view ORDER BY n DESC LIMIT 20", A);
 
   // ---- per-user leaderboard ----
   const top_ops = await q(pool,
     "SELECT actor a, " +
     "SUM(event_name='report_export') exports, SUM(event_name IN ('filter_run','search_run')) filters, " +
-    "COUNT(*) events, DATE_FORMAT(MAX(ts), '%Y-%m-%d %l:%i %p') last_seen " +
+    "COUNT(*) events, DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
     'FROM ' + W + " AND actor IS NOT NULL AND actor<>'' GROUP BY actor ORDER BY events DESC LIMIT 10", A);
 
   // ---- time series ----
   const by_day = await q(pool,
-    "SELECT DATE(ts) d, SUM(event_name IN ('panel_view','page_view')) views, " +
+    "SELECT DATE(created_at_mtn) d, SUM(event_name IN ('panel_view','page_view')) views, " +
     "SUM(event_name IN ('filter_run','search_run')) filters, SUM(event_name='report_export') exports " +
     'FROM ' + W + ' GROUP BY d ORDER BY d', A);
 
@@ -73,31 +82,33 @@ async function build_report(pool, opts) {
   // ---- recent active users + anonymous visitors ----
   const recent_users = await q(pool,
     "SELECT actor a, COUNT(*) events, SUM(event_name='report_export') exports, " +
-    "DATE_FORMAT(MAX(ts), '%Y-%m-%d %l:%i %p') last_seen " +
-    'FROM ' + W + " AND actor IS NOT NULL AND actor<>'' GROUP BY actor ORDER BY MAX(ts) DESC LIMIT 10", A);
+    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
+    'FROM ' + W + " AND actor IS NOT NULL AND actor<>'' GROUP BY actor ORDER BY MAX(created_at_mtn) DESC LIMIT 10", A);
   const visitors = await q(pool,
     "SELECT visitor_id v, MAX(is_returning) ret, " +
-    "SUBSTRING_INDEX(GROUP_CONCAT(NULLIF(actor,'') ORDER BY ts DESC SEPARATOR 0x1f), 0x1f, 1) actor, " +
+    "SUBSTRING_INDEX(GROUP_CONCAT(NULLIF(actor,'') ORDER BY created_at_mtn DESC SEPARATOR 0x1f), 0x1f, 1) actor, " +
     "MAX(client_tz) tz, MAX(viewport) viewport, SUM(event_name IN ('panel_view','page_view')) visits, COUNT(*) events, " +
-    "DATE_FORMAT(MAX(ts), '%Y-%m-%d %l:%i %p') last_seen " +
+    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
     'FROM ' + W + " AND visitor_id IS NOT NULL GROUP BY visitor_id ORDER BY events DESC LIMIT 15", A);
   const device = function (vp) { return vp === 'sm' ? 'mobile' : vp === 'md' ? 'tablet' : vp === 'lg' ? 'desktop' : (vp || '—'); };
 
   // ---- health (whole table) ----
   const health = (await q(pool,
     "SELECT COUNT(*) rows_total, SUM(CASE WHEN is_test=1 THEN 1 ELSE 0 END) test_rows, " +
-    "DATE_FORMAT(MAX(ts), '%b %e, %Y %l:%i %p') latest FROM `" + TABLE + "`"))[0] || {};
+    "DATE_FORMAT(MAX(created_at_mtn), '%b %e, %Y %l:%i %p') latest FROM `" + TABLE + "`"))[0] || {};
   const sizerow = (await q(pool, 'SELECT ROUND((data_length+index_length)/1024/1024,2) mb FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [TABLE]))[0] || {};
 
   const data = {
     days: days,
     panel_views: panel_views,
     unique_users: n0(users.uniq), repeat_users: n0(users.ret_u), actors: n0(users.actors),
+    sessions: n0(sessions_row.sessions),
     filters_run: (cmap.filter_run || 0) + (cmap.search_run || 0),
     exports: cmap.report_export || 0,
     by_panel: by_panel.map(function (r) { return { panel: r.panel, views: n0(r.views), filters: n0(r.filters), exports: n0(r.exports), events: n0(r.events) }; }),
     exports_by_view: exports_by_view.map(function (r) { return { view: r.view, format: r.fmt || '?', n: n0(r.n) }; }),
     top_filters: top_filters.map(function (r) { return { filter: r.f, n: n0(r.n) }; }),
+    by_view: by_view.map(function (r) { return { view: r.view, n: n0(r.n) }; }),
     top_operators: top_ops.map(function (r) { return { actor: String(r.a || ''), exports: n0(r.exports), filters: n0(r.filters), events: n0(r.events), last_seen: r.last_seen || null }; }),
     by_day: by_day.map(function (r) { var d = r.d, day = (d && d.toISOString) ? d.toISOString().slice(0, 10) : String(d).slice(0, 10); return { day: day, views: n0(r.views), filters: n0(r.filters), exports: n0(r.exports) }; }),
     errors: errors.map(function (r) { return { type: r.e || '?', n: n0(r.n) }; }),
@@ -112,10 +123,10 @@ async function build_report(pool, opts) {
 
   const report = {
     title: 'USAT Apps — Metrics (last ' + days + ' days)',
-    range: 'app=' + APP,
+    range: 'app=' + APP + (panel ? ' panel=' + panel : ''),
     sections: [
       { heading: 'Usage', lines: [
-        data.panel_views + ' panel views · ' + data.unique_users + ' unique users · ' + data.actors + ' actors',
+        data.panel_views + ' panel views · ' + data.sessions + ' sessions · ' + data.unique_users + ' unique users · ' + data.actors + ' actors',
         data.filters_run + ' filters run · ' + data.exports + ' exports',
       ] },
       { heading: 'Where', lines: [
@@ -137,7 +148,7 @@ async function report_text(pool, opts) { return render.to_text(await build_repor
 // Table size — computed directly (retention.size() assumes created_at_*, which this table lacks).
 async function size(pool) {
   const info = (await q(pool, 'SELECT ROUND((data_length+index_length)/1024/1024,2) mb FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [TABLE]))[0] || {};
-  const range = (await q(pool, 'SELECT COUNT(*) rows_total, MIN(ts) min_ts, MAX(ts) max_ts FROM `' + TABLE + '`'))[0] || {};
+  const range = (await q(pool, 'SELECT COUNT(*) rows_total, MIN(created_at_mtn) min_ts, MAX(created_at_mtn) max_ts FROM `' + TABLE + '`'))[0] || {};
   return { mb: info.mb != null ? info.mb : 0, rows: n0(range.rows_total), min_ts: fmt_dt(range.min_ts), max_ts: fmt_dt(range.max_ts) };
 }
 async function purge_all(pool) { return retention.purge_all(pool, TABLE); }
