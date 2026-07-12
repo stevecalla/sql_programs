@@ -37,10 +37,11 @@ This table is the source of truth for what actually shipped; the phase sections 
 | **Module menu** | ✅ New | `modules/salesforce_merge/menu.js` — worker start/stop/logs/cluster, smoke + worker-down tests, DB migrations, status/open. Ported like the participation-maps menu; wired into the platform menu **MODULES → item 28**. No admin/users (platform owns auth). |
 | **"No worker online" banner** | ✅ New | `GET /api/salesforce-merge/worker/health` (platform proxies :8021 with a short timeout) + `WorkerBanner.jsx` (polls every 15s, renders a scoped banner while the worker is down) so a queued-but-not-running job is visible. |
 | Fleet wiring | ✅ New | Worker added to `pm2_run_all_servers`; `restart_ / stop_ / pm2_logs_salesforce_merge_worker` scripts; `.vscode/tasks.json` group **20 SALESFORCE MERGE WORKER** (logs/shell/split) + **All Logs (23 groups)**. |
+| **Phase 5 — tests** | ✅ Done | 17 files under `modules/salesforce_merge/tests/` (98 tests): 15 ported clean, `api.test.js` rebuilt around the module mount + panel gate, new `worker_queue.test.js` (Phase-3 enqueue/claim/cancel/result). Playwright `e2e/salesforce_merge/smoke.spec.js` (drill-in rail, dashboard, no-worker banner) wired into the platform suite. **Full platform suite: 125 tests green.** Test menus added (platform + module). |
 
 **Worker-down behavior:** a merge never *fails* when :8021 is offline — it's accepted and sits `queued` until a worker claims it (a silent hang), which is exactly what the banner surfaces.
 
-**Not yet done:** Phase 4 (metrics fold-in), Phase 5 (port unit tests), Phase 6 (retire 8020), optional SF API-usage card, the stamp-actor field, and the External Client App.
+**Not yet done:** Phase 4 (metrics fold-in), Phase 6 (retire 8020), optional SF API-usage card, the stamp-actor field, and the External Client App.
 
 ## Feasibility — the slot is already reserved
 
