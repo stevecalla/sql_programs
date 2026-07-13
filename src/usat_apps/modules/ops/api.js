@@ -45,13 +45,20 @@ function mapProc(p) {
   };
 }
 
+// Internal services that aren't publicly proxied (no proxy_routes entry) but should still show in the
+// Backends health view — the Salesforce merge WRITE WORKER (queue drainer, :8021, /api/status health).
+// The retired /merge monolith (:8020) drops out automatically once its proxy_routes line is removed.
+const INTERNAL_SERVICES = [
+  { prefix: '(internal) salesforce_merge_worker', target: 'http://127.0.0.1:' + (Number(process.env.MERGE_WORKER_PORT) || 8021), health: '/api/status', internal: true },
+];
 function routeList() {
-  return Object.keys(ROUTES).map(function (prefix) {
+  const proxied = Object.keys(ROUTES).map(function (prefix) {
     const cfg = ROUTES[prefix];
     const target = typeof cfg === 'string' ? cfg : cfg.target;
     const health = (typeof cfg === 'object' && cfg.health) || '/api/status';
     return { prefix: prefix, target: target, health: health };
   });
+  return proxied.concat(INTERNAL_SERVICES);
 }
 
 function mount(app) {

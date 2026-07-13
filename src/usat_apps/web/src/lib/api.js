@@ -4,9 +4,21 @@
 const BASE = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
 const url = (p) => BASE + p;
 
+// Central auth-expiry signal: when any DATA call returns 401 (session expired / missing), tell the
+// app to redirect to the login screen. 403 (panel access denied) is intentionally NOT handled here —
+// those stay in-app and render the access-denied view. login/me/logout are exempt so a signed-out
+// user landing on the app doesn't loop.
+const AUTH_PATHS = ['/api/login', '/api/me', '/api/logout'];
+function noteStatus(path, status) {
+  if (status === 401 && !AUTH_PATHS.some((a) => String(path).indexOf(a) === 0)) {
+    try { window.dispatchEvent(new CustomEvent('usatapps:unauthorized')); } catch (e) { /* non-browser */ }
+  }
+}
+
 async function jget(path) {
   const r = await fetch(url(path), { credentials: 'same-origin' });
   const body = await r.json().catch(() => ({}));
+  noteStatus(path, r.status);
   return { status: r.status, body };
 }
 async function jpost(path, data) {
@@ -17,6 +29,7 @@ async function jpost(path, data) {
     body: JSON.stringify(data || {}),
   });
   const body = await r.json().catch(() => ({}));
+  noteStatus(path, r.status);
   return { status: r.status, body };
 }
 

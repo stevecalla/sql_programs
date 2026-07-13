@@ -18,11 +18,12 @@
  */
 const participation_maps = require('./participation_maps/module');
 const ops = require('./ops/module');
+const salesforce_merge = require('./salesforce_merge/module');
 
 const MODULES = [
   participation_maps,
   ops,
-  // merge,            // (Phase 5) port src/salesforce_merge as a module here
+  salesforce_merge,   // Salesforce merge (walking skeleton; domain code ports in Phase 1-2)
   // event_analysis,   // (Phase 5)
 ];
 

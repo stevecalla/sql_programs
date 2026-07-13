@@ -137,7 +137,8 @@ test("headline windows exclude is_test rows and are scoped to app=usat_apps", as
   const headline = seen.find((q) => /GROUP BY event_name/.test(q.sql));
   assert.ok(headline, "headline event-count query was issued");
   assert.match(headline.sql, /is_test IS NULL OR is_test\s*=\s*0/i, "headline WHERE excludes is_test=1 rows");
-  assert.deepStrictEqual(headline.params, ["usat_apps"]);
+  assert.strictEqual(headline.params[0], "usat_apps");
+  assert.match(String(headline.params[1]), /^\d{4}-\d\d-\d\d 00:00:00$/, "2nd param is the MTN calendar-day window start");
 
   const health = seen.find((q) => /SUM\(CASE WHEN is_test=1/.test(q.sql));
   assert.ok(health, "health query was issued");
@@ -147,12 +148,15 @@ test("headline windows exclude is_test rows and are scoped to app=usat_apps", as
 test("build_report respects the days window and defaults to 7", async () => {
   const { pool, seen } = makePoolStub();
   await metrics_report.build_report(pool, { days: 90 });
-  assert.ok(seen.some((q) => /INTERVAL 90 DAY/.test(q.sql)), "uses the requested 90-day interval");
+  const q90 = seen.find((q) => /GROUP BY event_name/.test(q.sql));
+  assert.match(q90.sql, /created_at_mtn >= \?/, "window is a parameterized MTN boundary (not a UTC INTERVAL)");
+  const start90 = q90.params[1];
 
   const { pool: p2, seen: s2 } = makePoolStub();
   const rep = await metrics_report.build_report(p2, {});
   assert.strictEqual(rep.data.days, 7, "defaults to 7 days");
-  assert.ok(s2.some((q) => /INTERVAL 7 DAY/.test(q.sql)));
+  const start7 = s2.find((q) => /GROUP BY event_name/.test(q.sql)).params[1];
+  assert.ok(start90 < start7, "a 90-day window starts earlier than the default 7-day window");
 });
 
 // ---- ask.js — key gating + read-only SELECT guard (scoped to usat_apps_events) ---------------------

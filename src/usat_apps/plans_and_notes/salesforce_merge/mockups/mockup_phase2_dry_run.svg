@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="620" height="640" viewBox="0 0 620 640" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <rect width="620" height="640" fill="#f4f6fb"/>
+  <text x="20" y="30" fill="#6b7686" font-size="12">Duplicates › cluster CL-1832 › Preview merge  (Phase 2 — read-only dry run)</text>
+
+  <rect x="20" y="44" width="580" height="576" rx="12" fill="#ffffff" stroke="#e2e7f0"/>
+
+  <!-- header -->
+  <text x="38" y="74" fill="#1c2433" font-size="15" font-weight="600">Merge preview — CL-1832</text>
+  <text x="582" y="74" fill="#6b7686" font-size="14" text-anchor="end">✕</text>
+  <rect x="38" y="86" width="64" height="20" rx="10" fill="#faeeda"/><text x="70" y="100" fill="#854f0b" font-size="11" text-anchor="middle">dry run</text>
+  <rect x="108" y="86" width="150" height="20" rx="10" fill="#e6f5ec"/><text x="183" y="100" fill="#0f6e56" font-size="11" text-anchor="middle">read-only · no changes</text>
+  <rect x="264" y="86" width="180" height="20" rx="10" fill="#f1efe8"/><text x="354" y="100" fill="#5f5e5a" font-size="11" text-anchor="middle">fetched live from Salesforce</text>
+
+  <!-- survivorship -->
+  <text x="38" y="130" fill="#6b7686" font-size="11" letter-spacing="1">SURVIVORSHIP</text>
+  <rect x="38" y="138" width="544" height="34" rx="8" fill="#e6f5ec" stroke="#9fd9bd"/>
+  <text x="52" y="159" fill="#1a8a4f" font-size="13">🏆</text>
+  <text x="74" y="159" fill="#1c2433" font-size="13" font-weight="600">Jon Smith</text>
+  <text x="168" y="159" fill="#6b7686" font-size="12" font-family="monospace">001A…7Qa</text>
+  <text x="568" y="159" fill="#1a8a4f" font-size="11" text-anchor="end">Winner · Id = merge_id · survives</text>
+
+  <rect x="38" y="176" width="544" height="30" rx="8" fill="#ffffff" stroke="#e2e7f0"/>
+  <text x="74" y="195" fill="#1c2433" font-size="13">Jonathan Smith</text>
+  <text x="188" y="195" fill="#6b7686" font-size="12" font-family="monospace">001B…3Lk</text>
+  <text x="568" y="195" fill="#c0392b" font-size="11" text-anchor="end">merges in → Recycle Bin (15d)</text>
+
+  <rect x="38" y="210" width="544" height="30" rx="8" fill="#ffffff" stroke="#e2e7f0"/>
+  <text x="74" y="229" fill="#1c2433" font-size="13">J Smith</text>
+  <text x="188" y="229" fill="#6b7686" font-size="12" font-family="monospace">001C…9Rd</text>
+  <text x="568" y="229" fill="#c0392b" font-size="11" text-anchor="end">merges in → Recycle Bin (15d)</text>
+
+  <!-- what would move -->
+  <text x="38" y="270" fill="#6b7686" font-size="11" letter-spacing="1">WHAT WOULD MOVE ONTO THE WINNER</text>
+  <text x="52" y="294" fill="#1c2433" font-size="13">Opportunities</text><text x="300" y="294" fill="#1c2433" font-size="13" text-anchor="end">4</text>
+  <text x="320" y="294" fill="#1c2433" font-size="13">Cases</text><text x="568" y="294" fill="#1c2433" font-size="13" text-anchor="end">2</text>
+  <text x="52" y="316" fill="#1c2433" font-size="13">Activities</text><text x="300" y="316" fill="#1c2433" font-size="13" text-anchor="end">9</text>
+  <text x="320" y="316" fill="#1c2433" font-size="13">Memberships</text><text x="568" y="316" fill="#1c2433" font-size="13" text-anchor="end">3</text>
+  <text x="38" y="340" fill="#888780" font-size="12">18 child records reparent to 001A…7Qa. Nothing deleted except the losing account shells.</text>
+
+  <!-- contact point preservation -->
+  <rect x="38" y="354" width="544" height="34" rx="8" fill="#eeedfe" stroke="#cecbf6"/>
+  <text x="52" y="375" fill="#3c3489" font-size="12">🛡 Donor flag on 001B — its email + phone would be preserved on the winner as Contact Points.</text>
+
+  <!-- dry-run checks -->
+  <text x="38" y="416" fill="#6b7686" font-size="11" letter-spacing="1">DRY-RUN CHECKS</text>
+  <text x="52" y="438" fill="#1a8a4f" font-size="13">✓ No blocking issues — all three are Person Accounts, same record type.</text>
+  <text x="52" y="460" fill="#a3760b" font-size="13">⚠ Conflicting email on 2 records — winner's kept; losers' saved as Contact Points.</text>
+
+  <!-- footer -->
+  <line x1="38" y1="486" x2="582" y2="486" stroke="#e2e7f0"/>
+  <rect x="38" y="500" width="170" height="38" rx="8" fill="#eceae3"/>
+  <text x="123" y="524" fill="#a8a59c" font-size="13" font-weight="600" text-anchor="middle">⑃ Execute merge</text>
+  <text x="220" y="524" fill="#6b7686" font-size="12">Disabled — execution arrives in Phase 3 (writes off by default)</text>
+
+  <text x="38" y="576" fill="#6b7686" font-size="12" font-weight="600">Phase 2 = the safe bridge:</text>
+  <text x="38" y="596" fill="#888780" font-size="12">read the cluster live, show exactly what a merge would do — but never execute.</text>
+</svg>

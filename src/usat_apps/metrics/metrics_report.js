@@ -20,11 +20,24 @@ function fmt_dt(v) {
   catch (e) { return String(v); }
 }
 
+// MTN calendar-day window start: midnight (America/Denver) of (today - (days-1) days), formatted for the
+// created_at_mtn column. DST-safe (pure calendar-date arithmetic, no epoch/tz drift), so 'Today' (days=1)
+// means since 00:00 MTN today, NOT a UTC rolling 24h window (the old NOW()-INTERVAL bug straddled days).
+function mtn_window_start(days) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Denver', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const p = {}; for (const x of parts) p[x.type] = x.value;
+  const base = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day));
+  const start = new Date(base - (Math.max(1, Number(days) || 1) - 1) * 86400000);
+  const y = start.getUTCFullYear(), m = String(start.getUTCMonth() + 1).padStart(2, '0'), d = String(start.getUTCDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d + ' 00:00:00';
+}
+
 // Aggregate the last `days` days into structured data + the report contract.
 async function build_report(pool, opts) {
   opts = opts || {};
   const days = Number(opts.days) || 7;
-  const since = 'created_at_mtn >= (NOW() - INTERVAL ' + days + ' DAY)';
+  const window_start = mtn_window_start(days);   // MTN calendar-day boundary (not a UTC rolling window)
+  const since = 'created_at_mtn >= ?';
   // Headline window EXCLUDES is_test=1 (?metrics_test=1) so flagged test activity never inflates the
   // dashboard. Test rows are still counted in `health` and are purgeable.
   const panel = opts.panel && String(opts.panel).trim();
@@ -32,7 +45,7 @@ async function build_report(pool, opts) {
   // the figures. include_test flips that on so you can review test rows before purging them.
   const test_filter = opts.include_test ? '' : ' AND (is_test IS NULL OR is_test = 0)';
   let W = '`' + TABLE + '` WHERE app = ? AND ' + since + test_filter;
-  const A = [APP];
+  const A = [APP, window_start];
   if (panel) { W += ' AND panel = ?'; A.push(panel); }   // scope the whole report to one panel (tabs)
 
   // ---- headline event counts ----
@@ -64,7 +77,7 @@ async function build_report(pool, opts) {
   const top_ops = await q(pool,
     "SELECT actor a, " +
     "SUM(event_name='report_export') exports, SUM(event_name IN ('filter_run','search_run')) filters, " +
-    "COUNT(*) events, DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
+    "COUNT(*) events, DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') last_seen " +
     'FROM ' + W + " AND actor IS NOT NULL AND actor<>'' GROUP BY actor ORDER BY events DESC LIMIT 10", A);
 
   // ---- time series ----
@@ -82,20 +95,20 @@ async function build_report(pool, opts) {
   // ---- recent active users + anonymous visitors ----
   const recent_users = await q(pool,
     "SELECT actor a, COUNT(*) events, SUM(event_name='report_export') exports, " +
-    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
+    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') last_seen " +
     'FROM ' + W + " AND actor IS NOT NULL AND actor<>'' GROUP BY actor ORDER BY MAX(created_at_mtn) DESC LIMIT 10", A);
   const visitors = await q(pool,
     "SELECT visitor_id v, MAX(is_returning) ret, " +
     "SUBSTRING_INDEX(GROUP_CONCAT(NULLIF(actor,'') ORDER BY created_at_mtn DESC SEPARATOR 0x1f), 0x1f, 1) actor, " +
     "MAX(client_tz) tz, MAX(viewport) viewport, SUM(event_name IN ('panel_view','page_view')) visits, COUNT(*) events, " +
-    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
+    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') last_seen " +
     'FROM ' + W + " AND visitor_id IS NOT NULL GROUP BY visitor_id ORDER BY events DESC LIMIT 15", A);
   const device = function (vp) { return vp === 'sm' ? 'mobile' : vp === 'md' ? 'tablet' : vp === 'lg' ? 'desktop' : (vp || '—'); };
 
   // ---- health (whole table) ----
   const health = (await q(pool,
     "SELECT COUNT(*) rows_total, SUM(CASE WHEN is_test=1 THEN 1 ELSE 0 END) test_rows, " +
-    "DATE_FORMAT(MAX(created_at_mtn), '%b %e, %Y %l:%i %p') latest FROM `" + TABLE + "`"))[0] || {};
+    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') latest FROM `" + TABLE + "`"))[0] || {};
   const sizerow = (await q(pool, 'SELECT ROUND((data_length+index_length)/1024/1024,2) mb FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [TABLE]))[0] || {};
 
   const data = {
