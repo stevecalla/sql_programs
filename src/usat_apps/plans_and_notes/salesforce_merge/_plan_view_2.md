@@ -500,3 +500,30 @@ left-border + message) when the approved queue's estimated cost exceeds the rema
 OVERHEAD_PER_SET (=3) is a conservative default; calibrate from measured run costs (Recent runs table)
 later. Last mile (optional): surface the same pre-flight warning inline on the Process-Merges page at
 arm time — a small hook into MergeProcess.jsx using the same /sf-api/usage preflight payload.
+
+### SF API usage — Phase 4 last mile (2026-07-13): inline pre-flight on Process Merges
+
+`MergeProcess.jsx` now shows a selection-aware pre-flight line above the Execute button (execute mode,
+≥1 set selected): "{n} sets ≈ {calls} API calls · {remaining} remaining today", turning red with a
+"⚠ exceeds remaining budget; split the run" warning when the estimate exceeds the last captured reading
+for the target org. Estimate mirrors the engine (max(1, ceil(loser/2)) merge calls + 3 overhead + stamp);
+remaining comes from the cached `/sf-api/usage` (target env) — no live SF call at arm time. Merge port:
+the SF API-usage workstream (Phases 1-4) is complete.
+
+### Consistent MTN timestamps (2026-07-13)
+
+Shared `web/src/lib/mtnDate.js` `formatMtn(raw)` — one formatter for all date displays: weekday + month
+day, year, 12-hour AM/PM (e.g. "Mon, Jul 13, 2026 · 4:52 PM"). tz-safe (parses the Denver wall-clock
+string's parts; weekday via Date.UTC — never new Date(str)). 3 unit tests. The metrics reports (platform
++ merge) now emit RAW sortable MTN ('%Y-%m-%d %H:%i:%s') instead of pre-formatting in SQL, and the SF API
+panel, platform Metrics, and merge MergeMetrics all render through formatMtn — so the SF usage panel is
+now AM/PM (was 24h) and all three show the weekday + year consistently.
+
+### Reference panel search + scroll; timestamp robustness (2026-07-13)
+
+Reference.jsx refactored: the 12 sections became a SECTIONS data array (title + auto-derived search
+text from the stripped body + body JSX). Added a search box (matches all typed words against title +
+body) and a fixed-height vertical-scroll container (maxHeight calc(100vh - 260px)) with a "no sections
+match" note. formatMtn now also normalizes the legacy report formats ('%Y-%m-%d %l:%i %p',
+'%b %e, %Y %l:%i %p') to the canonical "Mon, Jul 13, 2026 · 4:52 PM", so the usat-apps / SF-merge /
+SF-API "last activity" stamps are consistent regardless of the backend-restart timing.

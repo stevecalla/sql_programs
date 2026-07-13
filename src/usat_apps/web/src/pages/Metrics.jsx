@@ -6,6 +6,7 @@ import ChartCard, { TablePanel } from '../components/ChartCard.jsx';
 import AskData from '../components/AskData.jsx';
 import MetricsControls, { AskPanel } from '../components/MetricsControls.jsx';
 import { useMetricsTheme } from '../lib/useMetricsTheme.js';
+import { formatMtn } from '../lib/mtnDate.js';
 
 // Usage-analytics dashboard for the usat_apps platform — the full charted view ported from the
 // reporting app (header + last-activity, period buttons, stat cards, Ask, activity-by-day, 2x2 chart
@@ -76,7 +77,7 @@ export default function Metrics({ user }) {
     <div className="page">
       <MetricsControls
         title="📊 Usage metrics"
-        lastActivity={d.health.latest_mtn}
+        lastActivity={formatMtn(d.health.latest_mtn)}
         scopeSlot={scopeTabs}
         days={days} onDays={setDays}
         auto={auto} onAuto={setAuto}
@@ -165,36 +166,36 @@ export default function Metrics({ user }) {
         </TablePanel>
       </div>
 
-      <TablePanel id="tbl_recent" title="Most recent active users" headers={['Actor', 'Last active', 'Events', 'Exports']} rows={d.recent_active_users.map((u) => [u.actor || '—', u.last_seen || '—', u.events, u.exports])}>
+      <TablePanel id="tbl_recent" title="Most recent active users" headers={['Actor', 'Last active', 'Events', 'Exports']} rows={d.recent_active_users.map((u) => [u.actor || '—', formatMtn(u.last_seen), u.events, u.exports])}>
         <table>
           <thead><tr><th className="mx-rn">#</th><th>Actor</th><th>Last active</th><th>Events</th><th>Exports</th></tr></thead>
           <tbody>
             {d.recent_active_users.length === 0 && <tr><td className="dim" colSpan={5}>none</td></tr>}
-            {d.recent_active_users.map((u, i) => (<tr key={u.actor + i}><td className="mx-rn">{i + 1}</td><td>{u.actor || '—'}</td><td>{u.last_seen || '—'}</td><td>{fmt(u.events)}</td><td>{fmt(u.exports)}</td></tr>))}
+            {d.recent_active_users.map((u, i) => (<tr key={u.actor + i}><td className="mx-rn">{i + 1}</td><td>{u.actor || '—'}</td><td>{formatMtn(u.last_seen)}</td><td>{fmt(u.events)}</td><td>{fmt(u.exports)}</td></tr>))}
           </tbody>
         </table>
       </TablePanel>
 
-      <TablePanel id="tbl_visitors" title={<>Visitors <span className="mx-tag">anonymous</span> — with location (timezone)</>} headers={['Visitor', 'Actor', 'Visits', 'Events', 'Location (tz)', 'Device', 'Last activity', 'Type']} rows={d.visitors.map((v) => [v.id, v.actor || '—', v.visits, v.events, v.tz || '—', v.device, v.last_seen || '—', v.returning ? 'returning' : 'new'])}>
+      <TablePanel id="tbl_visitors" title={<>Visitors <span className="mx-tag">anonymous</span> — with location (timezone)</>} headers={['Visitor', 'Actor', 'Visits', 'Events', 'Location (tz)', 'Device', 'Last activity', 'Type']} rows={d.visitors.map((v) => [v.id, v.actor || '—', v.visits, v.events, v.tz || '—', v.device, formatMtn(v.last_seen), v.returning ? 'returning' : 'new'])}>
         <div className="mx-tablewrap">
           <table className="mx-utable">
             <thead><tr><th className="mx-rn">#</th><th>Visitor</th><th>Actor</th><th>Visits</th><th>Events</th><th>Location (tz)</th><th>Device</th><th>Last activity</th><th>Type</th></tr></thead>
             <tbody>
               {d.visitors.length === 0 && <tr><td className="dim" colSpan={9}>none</td></tr>}
               {d.visitors.map((v, i) => (
-                <tr key={v.id}><td className="mx-rn">{i + 1}</td><td className="mono">{v.id.slice(0, 18)}</td><td>{v.actor || '—'}</td><td>{fmt(v.visits)}</td><td>{fmt(v.events)}</td><td>{v.tz || '—'}</td><td>{v.device}</td><td>{v.last_seen || '—'}</td><td><span className={'mx-tag' + (v.returning ? '' : ' new')}>{v.returning ? 'returning' : 'new'}</span></td></tr>
+                <tr key={v.id}><td className="mx-rn">{i + 1}</td><td className="mono">{v.id.slice(0, 18)}</td><td>{v.actor || '—'}</td><td>{fmt(v.visits)}</td><td>{fmt(v.events)}</td><td>{v.tz || '—'}</td><td>{v.device}</td><td>{formatMtn(v.last_seen)}</td><td><span className={'mx-tag' + (v.returning ? '' : ' new')}>{v.returning ? 'returning' : 'new'}</span></td></tr>
               ))}
             </tbody>
           </table>
         </div>
       </TablePanel>
 
-      <TablePanel id="tbl_actors" title="Top actors (by events)" headers={['Actor', 'Events', 'Filters', 'Exports', 'Last seen']} rows={d.top_operators.map((o) => [o.actor || '—', o.events, o.filters, o.exports, o.last_seen || '—'])}>
+      <TablePanel id="tbl_actors" title="Top actors (by events)" headers={['Actor', 'Events', 'Filters', 'Exports', 'Last seen']} rows={d.top_operators.map((o) => [o.actor || '—', o.events, o.filters, o.exports, formatMtn(o.last_seen)])}>
         <table>
           <thead><tr><th className="mx-rn">#</th><th>Actor</th><th>Events</th><th>Filters</th><th>Exports</th><th>Last seen</th></tr></thead>
           <tbody>
             {d.top_operators.length === 0 && <tr><td className="dim" colSpan={6}>none</td></tr>}
-            {d.top_operators.map((o, i) => (<tr key={o.actor + i}><td className="mx-rn">{i + 1}</td><td>{o.actor || '—'}</td><td>{fmt(o.events)}</td><td>{fmt(o.filters)}</td><td>{fmt(o.exports)}</td><td>{o.last_seen || '—'}</td></tr>))}
+            {d.top_operators.map((o, i) => (<tr key={o.actor + i}><td className="mx-rn">{i + 1}</td><td>{o.actor || '—'}</td><td>{fmt(o.events)}</td><td>{fmt(o.filters)}</td><td>{fmt(o.exports)}</td><td>{formatMtn(o.last_seen)}</td></tr>))}
           </tbody>
         </table>
       </TablePanel>

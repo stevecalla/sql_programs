@@ -53,6 +53,7 @@ export default function MergeProcess() {
   const [stampFields, setStampFields] = useState(null);
   const [snapRows, setSnapRows] = useState([]);
   const [runRows, setRunRows] = useState(null);   // sets the current/last run processed — drives the live progress table, independent of the checkbox selection
+  const [apiBudget, setApiBudget] = useState(null);   // last captured Daily-API-Requests reading for the target org (cached, no live SF call)
 
   const load = useCallback(() => {
     api.mergeStatus().then(setStatus).catch((e) => setErr(e.message));
@@ -65,6 +66,18 @@ export default function MergeProcess() {
     // neutral numbered (idle) state until a run starts in this session.
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Pull the last captured API-usage reading for the target org (cached — no live SF call) so the
+  // pre-flight estimate below can compare against the remaining daily budget.
+  useEffect(() => {
+    if (!status) return undefined;
+    let alive = true;
+    const envKey = status.environment === 'Production' ? 'production' : 'sandbox';
+    api.sfApiUsage(envKey).then((r) => {
+      const da = r && r.latest && r.latest.daily_api;
+      if (alive) setApiBudget(da ? { remaining: da.remaining, max: da.max, at: r.latest.at_mtn } : null);
+    }).catch(() => { if (alive) setApiBudget(null); });
+    return () => { alive = false; };
+  }, [status]);
 
   // When sets are ADDED to the selection (new rows enter the progress table), reset the pipeline to
   // idle so it reflects the new pending run rather than a previous run's result. Clearing/removing
@@ -81,6 +94,9 @@ export default function MergeProcess() {
   const selCount = sel.size;
   const ids = [...sel];
   const estOps = rows.filter((r) => sel.has(r.id)).reduce((s, r) => s + Math.ceil((Number(r.loser_count) || 0) / 2), 0);
+  const estApiCalls = rows.filter((r) => sel.has(r.id)).reduce((acc, r) => acc + Math.max(1, Math.ceil((Number(r.loser_count) || 0) / 2)), 0) + selCount * (3 + (stampMerged ? 1 : 0));
+  const apiRemaining = apiBudget ? apiBudget.remaining : null;
+  const apiWouldExceed = apiRemaining != null && estApiCalls > apiRemaining;
   const safe = !status || status.safe_mode;
   const apSort = useSort();    // Approved merges
   const histSort = useSort();  // Merge history
@@ -211,6 +227,13 @@ export default function MergeProcess() {
           )}
           {stampMerged && stampFields && stampFields.was_merged__c && stampFields.was_merged_date__c && (
             <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present</p>
+          )}
+          {mode === 'execute' && selCount > 0 && (
+            <div className="muted small" style={{ margin: '0 0 8px', padding: '6px 8px', borderRadius: 6, border: '1px solid ' + (apiWouldExceed ? 'var(--red)' : 'var(--line, #e4e7ec)'), color: apiWouldExceed ? 'var(--red)' : undefined }}>
+              Pre-flight: {selCount} set{selCount === 1 ? '' : 's'} ≈ <strong>{estApiCalls.toLocaleString()}</strong> API call{estApiCalls === 1 ? '' : 's'}
+              {apiRemaining != null ? ' · ' + apiRemaining.toLocaleString() + ' remaining today' : ' · no recent reading (see SF API panel)'}
+              {apiWouldExceed && ' — ⚠ exceeds remaining budget; split the run or wait for the daily reset'}
+            </div>
           )}
           <button className="btn primary" style={{ width: '100%', marginTop: 0 }} disabled={busy || !canExecute}
             title={safe ? 'Execution is locked (safe mode)' : 'Type MERGE and select sets to enable'} onClick={() => run(true)}>

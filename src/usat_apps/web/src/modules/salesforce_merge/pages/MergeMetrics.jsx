@@ -5,6 +5,7 @@ import ChartCard from '../components/ChartCard.jsx';
 import AskData from '../components/AskData.jsx';
 import MetricsControls, { AskPanel } from '../../../components/MetricsControls.jsx';
 import { useMetricsTheme } from '../../../lib/useMetricsTheme.js';
+import { formatMtn } from '../../../lib/mtnDate.js';
 
 // Usage analytics dashboard — a React port of the email-queue metrics_dashboard.html: the same
 // intentional layout (stat cards → ask → funnel → activity-by-day → 2x2 charts → recent users →
@@ -50,7 +51,7 @@ export default function Metrics({ user }) {
     <>
       <MetricsControls
         title="📊 Metrics"
-        lastActivity={d.health.latest_mtn}
+        lastActivity={formatMtn(d.health.latest_mtn)}
         days={days} onDays={setDays}
         auto={auto} onAuto={setAuto}
         includeTest={{ checked: showTest, onChange: setShowTest, title: 'Include is_test=1 rows in every card/table so you can review flagged test activity before purging.' }}
@@ -121,7 +122,7 @@ export default function Metrics({ user }) {
           <thead><tr><th className="mx-rn">#</th><th>Actor</th><th>Last active (MTN)</th><th>Events</th><th>Merges</th></tr></thead>
           <tbody>
             {d.recent_active_users.length === 0 && <tr><td className="dim" colSpan={5}>none</td></tr>}
-            {d.recent_active_users.map((u, i) => (<tr key={u.actor + i}><td className="mx-rn">{i + 1}</td><td>{u.actor || '—'}</td><td>{u.last_seen || '—'}</td><td>{fmt(u.events)}</td><td>{fmt(u.merges)}</td></tr>))}
+            {d.recent_active_users.map((u, i) => (<tr key={u.actor + i}><td className="mx-rn">{i + 1}</td><td>{u.actor || '—'}</td><td>{formatMtn(u.last_seen)}</td><td>{fmt(u.events)}</td><td>{fmt(u.merges)}</td></tr>))}
           </tbody>
         </table>
       </div>
@@ -135,7 +136,7 @@ export default function Metrics({ user }) {
             <tbody>
               {d.visitors.length === 0 && <tr><td className="dim" colSpan={9}>none</td></tr>}
               {d.visitors.map((v, i) => (
-                <tr key={v.id}><td className="mx-rn">{i + 1}</td><td className="mono">{v.id.slice(0, 18)}</td><td>{v.actor || '—'}</td><td>{fmt(v.visits)}</td><td>{fmt(v.events)}</td><td>{v.tz || '—'}</td><td>{v.device}</td><td>{v.last_seen || '—'}</td><td><span className={'mx-tag' + (v.returning ? '' : ' new')}>{v.returning ? 'returning' : 'new'}</span></td></tr>
+                <tr key={v.id}><td className="mx-rn">{i + 1}</td><td className="mono">{v.id.slice(0, 18)}</td><td>{v.actor || '—'}</td><td>{fmt(v.visits)}</td><td>{fmt(v.events)}</td><td>{v.tz || '—'}</td><td>{v.device}</td><td>{formatMtn(v.last_seen)}</td><td><span className={'mx-tag' + (v.returning ? '' : ' new')}>{v.returning ? 'returning' : 'new'}</span></td></tr>
               ))}
             </tbody>
           </table>
@@ -150,7 +151,7 @@ export default function Metrics({ user }) {
             <thead><tr><th className="mx-rn">#</th><th>Actor</th><th>Merges</th><th>Restores</th><th>Exports</th><th>Last seen</th></tr></thead>
             <tbody>
               {d.top_operators.length === 0 && <tr><td className="dim" colSpan={6}>none</td></tr>}
-              {d.top_operators.map((o, i) => (<tr key={o.actor + i}><td className="mx-rn">{i + 1}</td><td>{o.actor || '—'}</td><td>{fmt(o.merges)}</td><td>{fmt(o.restores)}</td><td>{fmt(o.exports)}</td><td>{o.last_seen || '—'}</td></tr>))}
+              {d.top_operators.map((o, i) => (<tr key={o.actor + i}><td className="mx-rn">{i + 1}</td><td>{o.actor || '—'}</td><td>{fmt(o.merges)}</td><td>{fmt(o.restores)}</td><td>{fmt(o.exports)}</td><td>{formatMtn(o.last_seen)}</td></tr>))}
             </tbody>
           </table>
         </div>

@@ -77,7 +77,7 @@ async function build_report(pool, opts) {
   const top_ops = await q(pool,
     "SELECT actor a, " +
     "SUM(event_name='report_export') exports, SUM(event_name IN ('filter_run','search_run')) filters, " +
-    "COUNT(*) events, DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
+    "COUNT(*) events, DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') last_seen " +
     'FROM ' + W + " AND actor IS NOT NULL AND actor<>'' GROUP BY actor ORDER BY events DESC LIMIT 10", A);
 
   // ---- time series ----
@@ -95,20 +95,20 @@ async function build_report(pool, opts) {
   // ---- recent active users + anonymous visitors ----
   const recent_users = await q(pool,
     "SELECT actor a, COUNT(*) events, SUM(event_name='report_export') exports, " +
-    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
+    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') last_seen " +
     'FROM ' + W + " AND actor IS NOT NULL AND actor<>'' GROUP BY actor ORDER BY MAX(created_at_mtn) DESC LIMIT 10", A);
   const visitors = await q(pool,
     "SELECT visitor_id v, MAX(is_returning) ret, " +
     "SUBSTRING_INDEX(GROUP_CONCAT(NULLIF(actor,'') ORDER BY created_at_mtn DESC SEPARATOR 0x1f), 0x1f, 1) actor, " +
     "MAX(client_tz) tz, MAX(viewport) viewport, SUM(event_name IN ('panel_view','page_view')) visits, COUNT(*) events, " +
-    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
+    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') last_seen " +
     'FROM ' + W + " AND visitor_id IS NOT NULL GROUP BY visitor_id ORDER BY events DESC LIMIT 15", A);
   const device = function (vp) { return vp === 'sm' ? 'mobile' : vp === 'md' ? 'tablet' : vp === 'lg' ? 'desktop' : (vp || '—'); };
 
   // ---- health (whole table) ----
   const health = (await q(pool,
     "SELECT COUNT(*) rows_total, SUM(CASE WHEN is_test=1 THEN 1 ELSE 0 END) test_rows, " +
-    "DATE_FORMAT(MAX(created_at_mtn), '%b %e, %Y %l:%i %p') latest FROM `" + TABLE + "`"))[0] || {};
+    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') latest FROM `" + TABLE + "`"))[0] || {};
   const sizerow = (await q(pool, 'SELECT ROUND((data_length+index_length)/1024/1024,2) mb FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [TABLE]))[0] || {};
 
   const data = {

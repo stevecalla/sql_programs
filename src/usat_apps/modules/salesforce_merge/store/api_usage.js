@@ -79,7 +79,7 @@ async function run_cost(pool, run_id) {
 async function latest(pool, env) {
   const args = []; let w = '';
   if (env) { w = ' WHERE env = ?'; args.push(env); }
-  const rows = (await pool.query('SELECT created_at_mtn, created_at_utc, env, org_id, op, api_used, api_max FROM ' + TABLE + w + ' ORDER BY created_at_utc DESC LIMIT 1', args))[0];
+  const rows = (await pool.query("SELECT DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') created_at_mtn, created_at_utc, env, org_id, op, api_used, api_max FROM " + TABLE + w + ' ORDER BY created_at_utc DESC LIMIT 1', args))[0];
   return rows[0] || null;
 }
 
@@ -90,7 +90,7 @@ async function recent_runs(pool, { days = 7, env = null, limit = 20 } = {}) {
   if (env) { where.push('env = ?'); args.push(env); }
   const rows = (await pool.query(
     'SELECT run_id, MAX(op) op, MAX(env) env, MAX(actor) actor, COUNT(*) snapshots, MIN(api_used) start_used, ' +
-    'MAX(api_used) end_used, (MAX(api_used) - MIN(api_used)) cost, MAX(created_at_mtn) last_seen FROM ' + TABLE +
+    "MAX(api_used) end_used, (MAX(api_used) - MIN(api_used)) cost, DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') last_seen FROM " + TABLE +
     ' WHERE ' + where.join(' AND ') + ' GROUP BY run_id ORDER BY MAX(created_at_utc) DESC LIMIT ' + (Number(limit) || 20), args))[0];
   return rows;
 }

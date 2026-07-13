@@ -10,7 +10,7 @@
 // redirect to login once the session goes idle."
 const crypto = require('crypto');
 const COOKIE = 'usat_apps_session';
-const MAX_AGE_MS = 12 * 60 * 60 * 1000;      // idle timeout: expire this long after the LAST request
+const MAX_AGE_MS = 48 * 60 * 60 * 1000;      // idle timeout: expire this long after the LAST request
 const REFRESH_AFTER_MS = 5 * 60 * 1000;      // re-issue the cookie at most once per 5 min of activity
 
 function sign(payload, secret) {

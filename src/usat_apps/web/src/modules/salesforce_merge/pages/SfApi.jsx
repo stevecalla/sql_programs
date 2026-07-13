@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import { formatMtn } from '../../../lib/mtnDate.js';
 
 // SF API usage (Phases 1-4). On open it shows the LAST CAPTURED reading (cheap DB read — NO Salesforce
 // call); Refresh is the only live call, and it records a fresh snapshot for the next viewer. Sandbox /
@@ -76,7 +77,7 @@ export default function SfApi() {
         <h2 style={{ fontSize: 20, textTransform: 'none', letterSpacing: 0, color: 'var(--ink)' }}>📡 SF API usage</h2>
         <span className="mx-last" style={{ marginLeft: 'auto' }}>
           <span className="mx-last-label">{isLive ? 'Live reading' : 'Last reading'}</span>
-          <span className="mx-last-val">{view && view.at_mtn ? view.at_mtn : '—'}</span>
+          <span className="mx-last-val">{view && view.at_mtn ? formatMtn(view.at_mtn) + ' MTN' : '—'}</span>
         </span>
       </div>
 
@@ -135,7 +136,7 @@ export default function SfApi() {
             <p className="err" style={{ marginTop: 8 }}>⚠ Estimated cost ({fmt(preflight.estimate)}) exceeds the remaining budget ({fmt(preflight.remaining)}). Split the run or wait for the daily reset.</p>
           )}
           {preflight.would_exceed === false && (
-            <p className="muted small" style={{ marginTop: 8 }}>Fits within today's remaining budget{preflight.reading_at ? ' (reading as of ' + preflight.reading_at + ')' : ''}. Estimate is conservative — it refines as measured run costs accumulate below.</p>
+            <p className="muted small" style={{ marginTop: 8 }}>Fits within today's remaining budget{preflight.reading_at ? ' (reading as of ' + formatMtn(preflight.reading_at) + ' MTN)' : ''}. Estimate is conservative — it refines as measured run costs accumulate below.</p>
           )}
           {preflight.remaining == null && (
             <p className="muted small" style={{ marginTop: 8 }}>No live reading yet — hit Refresh to compare the estimate against the remaining budget.</p>
@@ -181,7 +182,7 @@ export default function SfApi() {
                   <td>{r.op}</td>
                   <td>{r.actor || '—'}</td>
                   <td>{r.cost != null ? fmt(r.cost) : '—'}</td>
-                  <td>{r.last_seen || '—'}</td>
+                  <td>{formatMtn(r.last_seen)}</td>
                 </tr>
               ))}
             </tbody>
