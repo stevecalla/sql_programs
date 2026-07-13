@@ -29,7 +29,8 @@ module.exports = {
   // Merge tool (React SPA, port 8020). Built path-aware (`npm run salesforce_merge_build_proxy`,
   // Vite base '/merge/'), so the proxy strips '/merge' and :8020 serves the assets, SPA deep links,
   // and the /merge/api/* calls correctly. Point usat-app.kidderwise.org -> :8000 in Cloudflare.
-  '/merge':                 { target: 'http://127.0.0.1:8020', health: '/api/status', host: 'app' },
+  // RETIRED 2026-07-13 — folded into usat_apps (/apps/salesforce/merge); monolith 8020 un-routed.
+  // '/merge':                 { target: 'http://127.0.0.1:8020', health: '/api/status', host: 'app' },
 
   // Reporting app (React SPA, port 8021 — participation maps + future reports). Built path-aware
   // (`npm run reporting_build_proxy`, Vite base '/reporting/'). See src/reporting/plans_and_notes/DEPLOY_AND_PROXY.md.
