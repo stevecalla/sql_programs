@@ -415,3 +415,88 @@ server-to-server, no redirect URI._
 
 **Sequencing:** port first (Phases 1–6) with existing auth; introduce the External Client App any time after —
 ideally right after fold-in, when the SF creds consolidate into the single usat_apps `.env` (8022).
+
+
+---
+
+## 2026-07-13 — metrics fixes, shared controls refactor, rolling auth
+
+**Queue metrics.** Fixed the SF Merge funnel `Queued` stage (was `NaN`/blank when `queue_bulk_add`
+was absent: `1 + undefined`). Audited every queue event end-to-end (`queue_add` / `queue_bulk_add` /
+`queue_approve` / `queue_remove`) on both the emit side (`api.js` `analytics.log`) and the aggregation
+side (`metrics/metrics_report.js`) — line 53 was the only NaN-class bug; all other sums are `|| 0` /
+`n0()` guarded. **Surfaced `queue_remove`** as its own stat: `metrics_report.js` now exposes
+`data.queue_removes`, and `MergeMetrics.jsx` shows a "Queue removes" card.
+
+**Shared metrics controls.** Extracted the duplicated top control surface shared by the platform
+Usage-metrics page and the SF Merge page into `web/src/components/MetricsControls.jsx` (header +
+last-activity, optional scope slot, period buttons, Refresh, Auto-refresh, optional Include-test,
+Purge, admin flag-as-test) + `AskPanel`, plus a `web/src/lib/useMetricsTheme.js` hook. Both
+`pages/Metrics.jsx` and `modules/salesforce_merge/pages/MergeMetrics.jsx` now compose them; their
+cards / funnels / charts / tables stay page-specific.
+
+**Rolling auth (stay live while active, redirect to login on expiry).** `auth/session.js` is now a
+sliding session: `ts` = last-activity, `refresh()` re-issues the cookie once it is older than
+`REFRESH_AFTER_MS` (5 min), so an active user never times out and an idle one expires `MAX_AGE_MS`
+(12h) after their last request. `require_auth`/`require_admin`/`require_panel` call `refresh()`;
+login/logout use the shared `session.issue()`/`session.clear()`. Client: any DATA call that returns
+**401** dispatches `usatapps:unauthorized` (platform `lib/api.js` + merge `lib/api.js`); `App.jsx`
+listens and flips to the Login screen. **403 stays in-app** (access-denied view) — deliberately not
+redirected.
+
+**Tests.** New `tests/session.test.js` (7) and `modules/salesforce_merge/tests/metrics_report.test.js`
+(4, incl. a NaN-regression guard for Queued + the `queue_removes` stat). All touched JSX esbuild-
+clean; both API clients `node --check` clean as ESM; 21/21 no-DB tests green.
+
+### SF API usage panel — Phase 1 (2026-07-13)
+
+New merge-rail page under **Help → SF API** (`/salesforce/merge/sf-api`): a live headroom gauge for the
+org's daily Salesforce API-request budget. Backend `store/salesforce_read.js` gains a pure
+`parse_limits()` (jsforce Limits object → used / max / remaining / pct, plus DailyBulk* etc.) and
+`get_api_limits({is_test, connect})` (one `conn.limits()` call with a `conn.request()` fallback,
+injectable connect); route `GET /api/salesforce-merge/sf-api/limits` (merge panel gate, env-aware via
+the loaded dataset). Client `sfApiLimits()`; page `pages/SfApi.jsx` (used / max / percent / remaining
+cards + a colour-banded budget bar + an other-limits table). 5 unit tests in
+`salesforce_api_limits.test.js` (pure math, injected connect, request fallback, identity-failure
+tolerance). **Live values need your box** (real SF creds) — the sandbox here can't make a live SF call.
+
+Next phases (agreed): (2) capture `Sforce-Limit-Info` off existing SF responses into a
+`salesforce_merge_api_usage` table → intraday trend; (3) per-run footprint (start/end delta, actor /
+run); (4) pre-flight guardrail (estimate vs remaining before a bulk merge, warn / soft-block).
+
+### SF API usage — Phase 2 (2026-07-13): passive capture + cached-open + trend
+
+Added `salesforce_merge_api_usage` (append-only; dual timestamps, env, org_id, op, run_id, actor,
+api_used, api_max) + `store/api_usage.js` (`ensure` / `record` (fire-and-forget) / `usage_from_conn`
+(reads jsforce `conn.limitInfo.apiUsage`) / `latest` / `list_recent` / `summary_by_op` / `run_cost`).
+8 unit tests.
+
+Capture points: the live `/sf-api/limits` call (Refresh) records an `op=probe` snapshot; `merge_execute`
+records `op=merge` snapshots (start after connect + end after the run, tagged with `run_id`) so
+`run_cost` = max-min used gives per-run DailyApiRequests consumption. All guarded / fire-and-forget.
+
+Behaviour change (per request): the panel no longer calls Salesforce on open. It loads the LAST captured
+reading via the cached `GET /sf-api/usage?env=&days=` (latest snapshot + intraday trend + per-op summary
+- zero SF calls). Refresh (live) is the only thing that hits Salesforce, and it records a fresh snapshot
+so the next viewer sees it for free. SfApi.jsx shows a cached-or-live gauge with a Last/Live reading
+stamp, a usage-today sparkline, and a By-activity attribution table. Client: sfApiUsage(env, days).
+
+Needs your box for live numbers + the merge-run capture (real SF creds / a real run). Next: Phase 3
+surfaces per-run cost on the run history; Phase 4 the pre-flight guardrail.
+
+### SF API usage — Phases 3 & 4 (2026-07-13): per-run cost + pre-flight
+
+Phase 3 (per-run cost): `api_usage.recent_runs(pool,{days,env})` groups snapshots by run_id, cost =
+MAX(api_used)-MIN(api_used). Surfaced as a "Recent runs — measured API cost" table on the panel.
+
+Phase 4 (pre-flight): `store/api_estimate.js` — pure `merge_calls_for(loser)=max(1,ceil(loser/2))`
+(mirrors the engine's 2-losers-per-merge_one batching) and `estimate_run_calls(entries,{overhead_per_set,
+stamp_merged})` (merge calls + per-set read overhead + optional stamp). The cached `/sf-api/usage`
+endpoint now also returns `runs` and `preflight` (estimate the approved queue vs remaining budget from
+the last reading; `would_exceed` flag + `pct_after`). Panel shows a "Pre-flight" card that warns (red
+left-border + message) when the approved queue's estimated cost exceeds the remaining daily budget.
+4 estimator tests + 1 recent_runs test (13 in the api_usage/api_estimate suites total).
+
+OVERHEAD_PER_SET (=3) is a conservative default; calibrate from measured run costs (Recent runs table)
+later. Last mile (optional): surface the same pre-flight warning inline on the Process-Merges page at
+arm time — a small hook into MergeProcess.jsx using the same /sf-api/usage preflight payload.

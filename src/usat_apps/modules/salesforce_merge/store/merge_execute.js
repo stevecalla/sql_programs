@@ -12,6 +12,7 @@ const mqueue = require('./merge_queue');
 const snapshot = require('./merge_snapshot');
 const history = require('./merge_history');
 const mrun = require('./merge_run');
+const APIUSE = require('./api_usage');
 
 // Deploy-level gate, default false. Read at call time so it can be toggled (tests / env) without reload.
 function execution_enabled() { return process.env.MERGE_ENABLE_EXECUTION === 'true'; }
@@ -115,6 +116,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
     processed: 0, simulated: 0, done: 0, skipped: 0, failed: 0, results: [] };
   let completedOps = 0; let completedSets = 0;
   let conn = null;
+  let apiStartLogged = false;
 
   for (let si = 0; si < entries.length; si += 1) {
     // Cooperative cancel: a Stop request flags this run id; we honor it at the SET boundary so every
@@ -192,6 +194,8 @@ async function runQueue(ids, opts = {}, deps = {}) {
       return out;
     } }
 
+    if (!apiStartLogged) { apiStartLogged = true; try { const u0 = APIUSE.usage_from_conn(conn); if (u0) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: u0.used, max: u0.max }); } catch (e) { /* fire-and-forget */ } }
+
     const merged = []; let remaining = losers.slice(); let failure = null; let first = true;
     for (let i = 0; i < losers.length; i += 2) {
       const batch = losers.slice(i, i + 2);
@@ -239,6 +243,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
     ? 'Stopped — ' + completedSets + ' of ' + entries.length + ' set(s) processed'
     : 'Complete';
   log('run ' + runId + (stopped ? ' STOPPED' : ' complete') + ': done=' + out.done + ' simulated=' + out.simulated + ' skipped=' + out.skipped + ' failed=' + out.failed + (stopped ? ' (remaining ' + (out.remaining || 0) + ')' : ''));
+  try { const uEnd = APIUSE.usage_from_conn(conn); if (uEnd) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: uEnd.used, max: uEnd.max }); } catch (e) { /* fire-and-forget */ }
   await RUN.finish(runId, { status: finalStatus, completed_ops: completedOps, completed_sets: completedSets, current_label: finalLabel });
   CTRL.clear(runId);
   return out;

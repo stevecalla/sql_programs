@@ -7,7 +7,7 @@
 // Salesforce writes stay guarded by MERGE_ENABLE_EXECUTION in the store layer; Phase 3 moves
 // execute/restore/refresh to a worker.
 const http = require('http');
-const { require_panel } = require('../../auth/require_auth');
+const { require_panel, require_auth, require_admin } = require('../../auth/require_auth');
 const dashboard = require('./store/duplicates_read');
 const reviews = require('./store/reviews_read');
 const refresh = require('./store/refresh_runner');
@@ -20,10 +20,13 @@ const mrestore = require('./store/merge_restore');
 const msnap = require('./store/merge_snapshot');
 const sfread = require('./store/salesforce_read');
 const sfwrite = require('./store/salesforce_write');
+const api_usage = require('./store/api_usage');
+const api_estimate = require('./store/api_estimate');
 
 // Phase 1: server-side event logging is a no-op (Phase 4 wires merge usage into usat_apps_events via the
 // platform analytics). Kept as a shim so the ported handler bodies stay byte-for-byte.
-const analytics = { log: function () {} };
+const analytics = require('./metrics/events');
+const metrics_report = require('./metrics/metrics_report');
 
 // Port of the isolated Salesforce write worker (server_salesforce_merge_worker_8021.js). The web tier
 // only ENQUEUES jobs; this worker drains them. Overridable for non-default deployments.
@@ -73,6 +76,43 @@ function mount(app) {
     wreq.on('error', function (e) { done(false, { error: (e && (e.code || e.message)) || 'error' }); });
   });
 
+  // ---- SF Merge metrics panel: usage analytics on salesforce_merge_events (its own table) ----
+  app.post('/api/salesforce-merge/event', gate, function (req, res) {
+    analytics.ingest_http(req, req.user, req.role).finally(function () { try { res.status(204).end(); } catch (e) { /* gone */ } });
+  });
+  app.get('/api/salesforce-merge/metrics-report', require_panel('merge-metrics'), async function (req, res) {
+    try {
+      const pool = await require('../../store/db').get_pool();
+      await analytics.ensure(pool);
+      res.json({ ok: true, report: await metrics_report.build_report(pool, { days: Number(req.query.days) || 7, include_test: String(req.query.test) === '1' }) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/salesforce-merge/metrics-purge-test', require_admin, async function (req, res) {
+    try {
+      const pool = await require('../../store/db').get_pool();
+      res.json({ ok: true, ...(await metrics_report.purge_test(pool)) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/salesforce-merge/metrics-ask-models', require_panel('merge-metrics'), function (req, res) {
+    try { res.json({ ok: true, ...require('./metrics/ask').list_models() }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/salesforce-merge/metrics-ask', require_panel('merge-metrics'), async function (req, res) {
+    try {
+      const b = req.body || {};
+      const pool = await require('../../store/db').get_pool();
+      res.json(await require('./metrics/ask').ask(pool, { question: b.question, model: b.model, history: b.history, mode: b.mode, sql: b.sql }));
+    } catch (e) { res.status(e.code === 'NO_AI_KEY' ? 501 : 400).json({ ok: false, error: e.message }); }
+  });
+  app.post('/api/salesforce-merge/metrics-ask-correct', require_panel('merge-metrics'), function (req, res) {
+    try {
+      const b = req.body || {};
+      const note = String(b.note || '').trim();
+      if (!note) return res.status(400).json({ ok: false, error: 'no correction text' });
+      const n = require('./metrics/ask').add_correction(note, b.question, b.answer, req.user);
+      res.json({ ok: true, count: n });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   app.get('/api/salesforce-merge/dashboard', gate, async function (req, res) {
     try {
       res.json({ ok: true, data: await dashboard.dashboard_counts() });
@@ -359,6 +399,66 @@ function mount(app) {
   });
   // Read-only probe: can the connected Salesforce user actually merge (update + delete on Account)?
   // is_test follows the currently loaded dataset's environment so it checks the right org.
+  // ---- SF API usage (Phase 1): live daily API-request headroom from the SF Limits resource. Env-aware
+  // (follows the loaded dataset's org), read-only, one lightweight call. Lives in the merge rail's Help section (merge panel gate).
+  app.get('/api/salesforce-merge/sf-api/limits', gate, async function (req, res) {
+    try {
+      // env param picks the org explicitly (the Sandbox / Production tabs); with no param it follows
+      // the loaded dataset. is_test=true -> Sandbox creds, false -> Production creds (default_connect).
+      const envParam = String((req.query && req.query.env) || '').toLowerCase();
+      let is_test;
+      if (envParam === 'production' || envParam === 'prod') is_test = false;
+      else if (envParam === 'sandbox' || envParam === 'test') is_test = true;
+      else { const ds = await dashboard.dataset_info().catch(() => null); is_test = !ds || ds.environment !== 'Production'; }
+      const lim = await sfread.get_api_limits({ is_test });
+      const env = is_test ? 'Sandbox' : 'Production';
+      const t = require('./store/timestamps').now_mtn_utc();
+      // Record this live reading so the panel can show it later WITHOUT another SF call (op=probe).
+      api_usage.record({ env: env, org_id: lim.org_id, op: 'probe', actor: req.user, used: lim.daily_api.used, max: lim.daily_api.max });
+      res.json({ ok: true, environment: env, at: t.utc, at_mtn: t.mtn, ...lim });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // SF API usage — CACHED (no live SF call): the latest captured snapshot + intraday trend + per-op
+  // attribution, read from salesforce_merge_api_usage. This is what the panel loads on open; a live
+  // reading only happens when the user hits Refresh (the /sf-api/limits route above).
+  app.get('/api/salesforce-merge/sf-api/usage', gate, async function (req, res) {
+    try {
+      const pool = await require('../../store/db').get_pool();
+      const days = Number(req.query.days) || 1;
+      const ep = String((req.query && req.query.env) || '').toLowerCase();
+      const env = (ep === 'production' || ep === 'prod') ? 'Production' : (ep === 'sandbox' || ep === 'test') ? 'Sandbox' : null;
+      const [lat, points, by_op, runs, approved] = await Promise.all([
+        api_usage.latest(pool, env),
+        api_usage.list_recent(pool, { days: days, env: env }),
+        api_usage.summary_by_op(pool, { days: days, env: env }),
+        api_usage.recent_runs(pool, { days: 7, env: env }),
+        mqueue.list(undefined, 'approved'),
+      ]);
+      const shape = (used, max) => {
+        const u = used == null ? null : Number(used); const m = max == null ? null : Number(max);
+        const has = u != null && m != null;
+        return { used: u, max: m, remaining: has ? Math.max(0, m - u) : null, pct_used: (has && m > 0) ? Math.round(1000 * u / m) / 10 : null };
+      };
+      const latest = lat ? { environment: lat.env, org_id: lat.org_id, at: lat.created_at_utc, at_mtn: lat.created_at_mtn, op: lat.op, daily_api: shape(lat.api_used, lat.api_max) } : null;
+      // Pre-flight: estimate the DailyApiRequests cost of running the approved queue vs the remaining
+      // budget (from the last captured reading). Read-only, no SF call.
+      const est = api_estimate.estimate_run_calls(approved, {});
+      const da = latest && latest.daily_api ? latest.daily_api : null;
+      const remaining = da ? da.remaining : null;
+      const preflight = {
+        approved_sets: est.sets,
+        estimate: est.total,
+        merge_calls: est.merge_calls,
+        overhead_calls: est.overhead_calls,
+        remaining: remaining,
+        max: da ? da.max : null,
+        would_exceed: (remaining != null) ? est.total > remaining : null,
+        pct_after: (da && da.max && da.used != null) ? Math.round(1000 * (da.used + est.total) / da.max) / 10 : null,
+        reading_at: latest ? latest.at_mtn : null,
+      };
+      res.json({ ok: true, env: env, days: days, latest: latest, points: points, by_op: by_op, runs: runs, preflight: preflight });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   app.get('/api/salesforce-merge/merge/whoami', gate, async function (req, res) {
     try {
       const ds = await dashboard.dataset_info().catch(() => null);

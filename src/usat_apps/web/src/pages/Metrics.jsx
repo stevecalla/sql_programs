@@ -4,6 +4,8 @@ import { api } from '../lib/api.js';
 import { metricsTestOn, setMetricsTest } from '../lib/track.js';
 import ChartCard, { TablePanel } from '../components/ChartCard.jsx';
 import AskData from '../components/AskData.jsx';
+import MetricsControls, { AskPanel } from '../components/MetricsControls.jsx';
+import { useMetricsTheme } from '../lib/useMetricsTheme.js';
 
 // Usage-analytics dashboard for the usat_apps platform — the full charted view ported from the
 // reporting app (header + last-activity, period buttons, stat cards, Ask, activity-by-day, 2x2 chart
@@ -32,7 +34,7 @@ export default function Metrics({ user }) {
   const [auto, setAuto] = useState(false);
   const [showTest, setShowTest] = useState(true);   // default ON — show everything incl. test rows
   const [purgeMsg, setPurgeMsg] = useState('');
-  const [theme, setTheme] = useState('');
+  const theme = useMetricsTheme();
   const [mtestOn, setMtestOn] = useState(metricsTestOn());
   const isAdmin = !!(user && user.role === 'admin');
   const panelParam = scope === 'all' ? null : scope;
@@ -44,12 +46,6 @@ export default function Metrics({ user }) {
   const toggleMtest = () => { const next = !mtestOn; setMetricsTest(next); setMtestOn(next); load(); };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [days, scope, showTest]);
   useEffect(() => { if (!auto) return; const id = setInterval(load, 60000); return () => clearInterval(id); /* eslint-disable-next-line */ }, [auto, days, scope, showTest]);
-  useEffect(() => {
-    const read = () => setTheme(document.documentElement.getAttribute('data-theme') || 'light');
-    read(); const obs = new MutationObserver(read);
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => obs.disconnect();
-  }, []);
 
   const d = rep && rep.data;
   const dayLabels = useMemo(() => (d ? d.by_day.map((r) => r.day) : []), [d]);
@@ -78,33 +74,18 @@ export default function Metrics({ user }) {
 
   return (
     <div className="page">
-      <div className="mx-ph" style={{ marginBottom: 12 }}>
-        <h2 style={{ fontSize: 20, textTransform: 'none', letterSpacing: 0, color: 'var(--ink)' }}>📊 Usage metrics</h2>
-        <span className="mx-last" style={{ marginLeft: 'auto' }}>
-          <span className="mx-last-label">Last user activity</span>
-          <span className="mx-last-val">{d.health.latest_mtn || '—'}</span>
-        </span>
-      </div>
-
-      {scopeTabs}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '10px 0 16px' }}>
-        <div className="mx-periods">
-          {[[1, 'Today'], [7, '7 days'], [30, '30 days'], [90, '90 days'], [365, '1 year']].map(([n, lbl]) => (
-            <button key={n} className={days === n ? 'active' : ''} onClick={() => setDays(n)}>{lbl}</button>
-          ))}
-        </div>
-        <button className="btn" onClick={load}>↻ Refresh</button>
-        <label className="mx-auto"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Auto-refresh</label>
-        <label className="mx-auto" title="Include is_test=1 rows in every card/table so you can review flagged test activity before purging."><input type="checkbox" checked={showTest} onChange={(e) => setShowTest(e.target.checked)} /> Include test rows</label>
-        {isAdmin && <button className="btn mx-purge" onClick={purge}>Purge test</button>}
-        {purgeMsg && <span className="muted small">{purgeMsg}</span>}
-        {isAdmin && (
-          <label className="mx-auto" style={{ marginLeft: 'auto' }} title="Turns on ?metrics_test=1 for ALL your activity so it is flagged is_test and kept out of the real figures.">
-            <input type="checkbox" checked={mtestOn} onChange={toggleMtest} /> Flag my activity as test (?metrics_test=1)
-          </label>
-        )}
-      </div>
+      <MetricsControls
+        title="📊 Usage metrics"
+        lastActivity={d.health.latest_mtn}
+        scopeSlot={scopeTabs}
+        days={days} onDays={setDays}
+        auto={auto} onAuto={setAuto}
+        includeTest={{ checked: showTest, onChange: setShowTest, title: 'Include is_test=1 rows in every card/table so you can review flagged test activity before purging.' }}
+        onRefresh={load}
+        isAdmin={isAdmin}
+        showPurge={isAdmin} onPurge={purge} purgeMsg={purgeMsg}
+        mtestOn={mtestOn} onToggleMtest={toggleMtest}
+      />
 
       <div className="mx-cards">
         <Card k="Visits" v={fmt(d.panel_views)} s={fmt(d.unique_users) + ' users · ' + fmt(d.unique_users - d.repeat_users) + ' new / ' + fmt(d.repeat_users) + ' return'} />
@@ -117,10 +98,7 @@ export default function Metrics({ user }) {
         <Card k="Row count DB" v={fmt(d.health.rows)} s={(d.health.mb != null ? d.health.mb + ' MB' : '')} />
       </div>
 
-      <div className="mx-panel">
-        <h2>Ask your data <span className="dim" style={{ fontWeight: 400, fontSize: 13, textTransform: 'none', letterSpacing: 0 }}>— read-only AI</span></h2>
-        <AskData />
-      </div>
+      <AskPanel><AskData /></AskPanel>
 
       <ChartCard id="chart_days" title="Activity by day — views · filters · exports" type="multibar" theme={theme}
         labels={dayLabels}

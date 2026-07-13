@@ -7,7 +7,7 @@ const BASE = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
 // events + server-side action logs) is flagged is_test by the single parameter.
 function withMetricsTest(path) {
   let on = false;
-  try { on = /(?:^|[?&])metrics_test=1(?:&|$)/.test(location.search) || localStorage.getItem('merge_metrics_test') === '1'; } catch (e) { on = false; }
+  try { on = /(?:^|[?&])metrics_test=1(?:&|$)/.test(location.search) || localStorage.getItem('usatapps_metrics_test') === '1'; } catch (e) { on = false; }
   if (!on) return path;
   return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'metrics_test=1';
 }
@@ -19,6 +19,10 @@ async function req(path, opts) {
     credentials: 'same-origin',
   }, opts));
   const j = await r.json().catch(() => ({}));
+  // Session expired mid-use -> signal the platform shell to redirect to login (403 stays in-app).
+  if (r.status === 401 && !/\/(login|me|logout)$/.test(path.split('?')[0])) {
+    try { window.dispatchEvent(new CustomEvent('usatapps:unauthorized')); } catch (e) { /* non-browser */ }
+  }
   if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
   return j;
 }
@@ -67,6 +71,8 @@ export const api = {
   stampFields: () => req('/api/salesforce-merge/merge/stamp-fields'),
   snapshotRows: () => req('/api/salesforce-merge/merge/snapshot'),
   workerHealth: () => req('/api/salesforce-merge/worker/health'),
+  sfApiLimits: (env) => req('/api/salesforce-merge/sf-api/limits' + qs({ env })),
+  sfApiUsage: (env, days) => req('/api/salesforce-merge/sf-api/usage' + qs({ env, days })),
   mergeQueueBulk: (payload) => req('/api/salesforce-merge/merge-queue/bulk', { method: 'POST', body: JSON.stringify(payload) }),
   refreshStart: (env, scope, job) => req('/api/salesforce-merge/refresh/start', { method: 'POST', body: JSON.stringify({ env, scope, job }) }),
   refreshStatus: () => req('/api/salesforce-merge/refresh/status'),
@@ -78,7 +84,7 @@ export const api = {
   adminPanelAccess: () => req('/api/salesforce-merge/admin/panel-access'),
   adminPanelAccessSave: (payload) => req('/api/salesforce-merge/admin/panel-access', { method: 'POST', body: JSON.stringify(payload) }),
   // ---- Metrics / usage analytics ----
-  metricsReport: (days) => req('/api/salesforce-merge/metrics-report' + qs({ days })),
+  metricsReport: (days, includeTest) => req('/api/salesforce-merge/metrics-report' + qs({ days, test: includeTest ? 1 : undefined })),
   metricsPurgeTest: () => req('/api/salesforce-merge/metrics-purge-test', { method: 'POST' }),
   metricsAskModels: () => req('/api/salesforce-merge/metrics-ask-models'),
   metricsAsk: (payload) => req('/api/salesforce-merge/metrics-ask', { method: 'POST', body: JSON.stringify(payload) }),

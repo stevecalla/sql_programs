@@ -200,4 +200,43 @@ async function get_user_capabilities({ is_test, connect = default_connect, objec
   return out;
 }
 
-module.exports = { fetch_accounts_by_ids, count_children_by_ids, count_children, fetch_children, discover_child_objects, get_org_identity, get_user_capabilities, list_recycle_bin, DETAIL_FIELDS, CHILD_OBJECTS };
+// ---- SF API usage: the org's daily API-request budget (used/max/remaining) from the Salesforce
+// Limits REST resource, plus a few other useful limits. parse_limits is PURE (jsforce limits object
+// -> our shape) so it unit-tests without a live org; get_api_limits does one lightweight limits call
+// + identity. connect is injectable for testing (default_connect in prod).
+const OTHER_LIMITS = ['DailyBulkApiBatches', 'DailyBulkV2QueryJobs', 'DailyAsyncApexExecutions'];
+function parse_limits(lim) {
+  const d = (lim && lim.DailyApiRequests) || {};
+  const max = Number(d.Max);
+  const remaining = Number(d.Remaining);
+  const has = Number.isFinite(max) && Number.isFinite(remaining);
+  const used = has ? Math.max(0, max - remaining) : null;
+  const other = {};
+  OTHER_LIMITS.forEach(function (k) {
+    const v = lim && lim[k];
+    if (v && v.Max != null) other[k] = { max: Number(v.Max), remaining: Number(v.Remaining), used: Math.max(0, Number(v.Max) - Number(v.Remaining)) };
+  });
+  return {
+    daily_api: {
+      max: has ? max : null,
+      remaining: has ? remaining : null,
+      used: used,
+      pct_used: (has && max > 0) ? Math.round(1000 * used / max) / 10 : null,
+    },
+    other: other,
+  };
+}
+async function fetch_limits(conn) {
+  if (typeof conn.limits === 'function') return conn.limits();
+  const v = conn.version || '59.0';
+  return conn.request('/services/data/v' + v + '/limits');
+}
+async function get_api_limits({ is_test, connect = default_connect } = {}) {
+  const conn = await connect(is_test);
+  let org_id = null;
+  try { const id = await conn.identity(); org_id = (id && id.organization_id) || null; } catch (e) { /* identity optional */ }
+  const lim = await fetch_limits(conn);
+  return Object.assign({ org_id: org_id }, parse_limits(lim));
+}
+
+module.exports = { fetch_accounts_by_ids, count_children_by_ids, count_children, fetch_children, discover_child_objects, get_org_identity, get_user_capabilities, list_recycle_bin, parse_limits, get_api_limits, DETAIL_FIELDS, CHILD_OBJECTS };

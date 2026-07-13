@@ -21,6 +21,15 @@ export default function App() {
     api.me().then((r) => setUser(r.status === 200 && r.body.ok ? r.body : null)).catch(() => setUser(null));
   }, []);
 
+  // Auth-expiry redirect: any data call that 401s dispatches 'usatapps:unauthorized' (see lib/api.js
+  // and the merge api). Flip to signed-out so the Login screen renders. 403s do NOT fire this — they
+  // stay in-app as the access-denied view.
+  useEffect(() => {
+    const onUnauth = () => setUser(null);
+    window.addEventListener('usatapps:unauthorized', onUnauth);
+    return () => window.removeEventListener('usatapps:unauthorized', onUnauth);
+  }, []);
+
   useEffect(() => { if (user && user.ok) trackPanelView(location.pathname, panelForPathname(location.pathname)); }, [location.pathname, user]);
 
   if (user === undefined) return <div className="loading">Loading…</div>;

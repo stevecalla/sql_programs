@@ -10,6 +10,7 @@ import MergeProcess from './pages/MergeProcess.jsx';
 import Restore from './pages/Restore.jsx';
 import Tuning from './pages/Tuning.jsx';
 import Reference from './pages/Reference.jsx';
+import SfApi from './pages/SfApi.jsx';
 
 // salesforce_merge module — front-end entry. Renders merge's pages under the platform shell via merge's
 // own nested routes (the drill-in rail lives in App.jsx / MergeRail.jsx). All merge CSS is scoped under
@@ -28,6 +29,7 @@ export default function MergeSection() {
         <Route path="restore" element={<Restore />} />
         <Route path="tuning" element={<Tuning />} />
         <Route path="reference" element={<Reference />} />
+        <Route path="sf-api" element={<SfApi />} />
         <Route path="*" element={<Navigate to="/salesforce/merge" replace />} />
       </Routes>
     </div>

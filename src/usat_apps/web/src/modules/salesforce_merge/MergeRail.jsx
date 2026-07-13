@@ -22,6 +22,7 @@ const GROUPS = [
     { to: BASE + '/tuning', label: 'Tuning', icon: '☷' },
   ] },
   { grp: 'Help', items: [
+    { to: BASE + '/sf-api', label: 'SF API', icon: '📡' },
     { to: BASE + '/reference', label: 'Reference', icon: '❏' },
   ] },
 ];

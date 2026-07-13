@@ -15,6 +15,7 @@ function require_auth(req, res, next) {
   if (!p) return res.status(401).json({ ok: false, error: 'authentication required' });
   req.user = p.user;
   req.role = p.role || 'user';
+  session.refresh(res, p, store.session_secret());
   next();
 }
 
@@ -24,6 +25,7 @@ function require_admin(req, res, next) {
   if ((p.role || 'user') !== 'admin') return res.status(403).json({ ok: false, error: 'admin access required' });
   req.user = p.user;
   req.role = p.role;
+  session.refresh(res, p, store.session_secret());
   next();
 }
 
@@ -37,6 +39,7 @@ function require_panel(panel) {
     }
     req.user = p.user;
     req.role = role;
+    session.refresh(res, p, store.session_secret());
     next();
   };
 }

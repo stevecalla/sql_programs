@@ -13,6 +13,6 @@ module.exports = {
   panels: [
     { key: 'merge', label: 'Merge' },
   ],
-  metricsTable: null,                   // share the platform analytics table (usat_apps_events)
+  metricsTable: 'salesforce_merge_events',  // merge keeps its OWN events table (the dedicated SF Merge metrics panel)
   mount: function (app) { api.mount(app); },
 };

@@ -30,13 +30,12 @@ module.exports = function mount(app) {
     const body = req.body || {};
     const v = store.valid_user(body.username, body.password);
     if (!v) return res.status(401).json({ ok: false, error: 'invalid credentials' });
-    const token = session.sign({ user: v.user, role: v.role, ts: Date.now() }, store.session_secret());
-    res.setHeader('Set-Cookie', session.COOKIE + '=' + token + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=' + Math.floor(session.MAX_AGE_MS / 1000));
+    session.issue(res, v.user, v.role, store.session_secret());
     res.json({ ok: true, user: v.user, role: v.role, panels: panel_access.effective_panels(v.user, v.role) });
   });
 
   app.post('/api/logout', function (req, res) {
-    res.setHeader('Set-Cookie', session.COOKIE + '=; HttpOnly; Path=/; Max-Age=0');
+    session.clear(res);
     res.json({ ok: true });
   });
 
