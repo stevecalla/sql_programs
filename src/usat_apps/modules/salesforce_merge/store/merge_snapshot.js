@@ -7,8 +7,14 @@ const { now_mtn_utc } = require('./timestamps');
 
 const TABLE = 'salesforce_merge_premerge_snapshot';
 
+// Self-documenting column (visible in SELECT *) so future readers know what this table is for.
+const PURPOSE = 'Pre-merge backup: the full field values of every record in a set (survivor/loser/child, '
+  + 'incl. the Person-Account self-halves) captured right before a merge runs, so a restore/recreate can '
+  + 'rebuild them. Keyed by run_id + queue_id; keep-latest per queue entry. Read-only backstop.';
+
 const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+  " purpose VARCHAR(400) NOT NULL DEFAULT '" + PURPOSE.replace(/'/g, "''") + "'," +
   ' created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' +
   ' run_id VARCHAR(64) NOT NULL,' +
   ' queue_id INT,' +
@@ -29,6 +35,7 @@ let _ensured = false;
 async function ensure_table(query = real_query) {
   if (_ensured) return;
   await query(DDL, []);
+  try { await query("ALTER TABLE `" + TABLE + "` ADD COLUMN purpose VARCHAR(400) NOT NULL DEFAULT '" + PURPOSE.replace(/'/g, "''") + "'", []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN child_type VARCHAR(20)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN child_object VARCHAR(80)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN survivor_account VARCHAR(32)', []); } catch (e) { /* exists */ }

@@ -7,8 +7,14 @@ const { now_mtn_utc } = require('./timestamps');
 
 const TABLE = 'salesforce_merge_run';
 
+// Self-documenting column (visible in SELECT *) so future readers know what this table is for.
+const PURPOSE = 'Run log + live progress + job queue for merge/restore/recreate. Rows start "queued"; the '
+  + 'isolated worker atomically claims one, flips it "running", and drains it — one row per run with '
+  + 'stage/progress/heartbeat/result. Also carries the cross-process cancel flag and the stale-claim reaper anchor.';
+
 const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' run_id VARCHAR(64) PRIMARY KEY,' +
+  " purpose VARCHAR(400) NOT NULL DEFAULT '" + PURPOSE.replace(/'/g, "''") + "'," +
   ' kind VARCHAR(16) NOT NULL,' +                 // 'merge' | 'restore'
   ' mode VARCHAR(16) NOT NULL,' +                 // 'simulate' | 'execute'
   ' environment VARCHAR(24),' +
@@ -38,6 +44,7 @@ let _ensured = false;
 async function ensure_table(query = real_query) {
   if (_ensured) return;
   await query(DDL, []);
+  try { await query("ALTER TABLE `" + TABLE + "` ADD COLUMN purpose VARCHAR(400) NOT NULL DEFAULT '" + PURPOSE.replace(/'/g, "''") + "'", []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN stage VARCHAR(24)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN claimed_by VARCHAR(64) NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN claimed_at DATETIME NULL', []); } catch (e) { /* exists */ }

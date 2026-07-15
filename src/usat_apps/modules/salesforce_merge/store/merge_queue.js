@@ -9,8 +9,14 @@ const cfg = require('../../../../salesforce_duplicates/config');
 
 const TABLE = 'salesforce_merge_queue';
 
+// Self-documenting column (visible in SELECT *) so future readers know what this table is for.
+const PURPOSE = 'Staged merge sets: one row per set (chosen survivor, losing accounts, per-field overrides, '
+  + 'child counts, environment/org lineage, status queued->approved->done/failed/restored/recreated). Drives '
+  + 'Select Merges + Process Merges; never auto-cleared (audit + restore baseline).';
+
 const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+  " purpose VARCHAR(400) NOT NULL DEFAULT '" + PURPOSE.replace(/'/g, "''") + "'," +
   ' created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' +
   ' created_by VARCHAR(120),' +
   ' source_type VARCHAR(24) NOT NULL,' +
@@ -46,6 +52,7 @@ let _ensured = false;
 async function ensure_table(query = real_query) {
   if (_ensured) return;
   await query(DDL, []);
+  try { await query("ALTER TABLE `" + TABLE + "` ADD COLUMN purpose VARCHAR(400) NOT NULL DEFAULT '" + PURPOSE.replace(/'/g, "''") + "'", []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` MODIFY source_key TEXT NOT NULL', []); } catch (e) { /* ok */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN survivor_name VARCHAR(255)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN field_overrides TEXT', []); } catch (e) { /* exists */ }
