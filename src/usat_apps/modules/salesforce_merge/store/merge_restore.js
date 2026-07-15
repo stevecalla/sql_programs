@@ -195,7 +195,7 @@ async function restore(ids, opts = {}, deps = {}) {
     }
 
     try { if (!conn) conn = await W.default_write_connect(is_test); } catch (err) {
-      await H.write({ run_id: runId, queue_id: e.id, environment: e.environment, mode, result: 'failed', reason: 'connection failed: ' + err.message });
+      await H.write({ run_id: runId, queue_id: e.id, environment: e.environment, org_id: e.org_id, mode, result: 'failed', reason: 'connection failed: ' + err.message });
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
       await RUN.finish(runId, { status: 'error' }); return out;
     }
@@ -360,7 +360,7 @@ async function recreate(ids, opts = {}, deps = {}) {
     }
 
     try { if (!conn) conn = await W.default_write_connect(is_test); } catch (err) {
-      await H.write({ run_id: runId, queue_id: e.id, environment: e.environment, mode, result: 'failed', reason: 'connection failed: ' + err.message });
+      await H.write({ run_id: runId, queue_id: e.id, environment: e.environment, org_id: e.org_id, mode, result: 'failed', reason: 'connection failed: ' + err.message });
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
       await RUN.finish(runId, { status: 'error' }); return out;
     }
@@ -394,7 +394,7 @@ async function recreate(ids, opts = {}, deps = {}) {
       log((e.survivor_name || e.id) + ' — RECREATED ' + losers.length + ' accounts (new ids)');
     } catch (err) {
       log((e.survivor_name || e.id) + ' — RECREATE FAILED: ' + (err && err.message));
-      await H.write({ run_id: runId, queue_id: e.id, environment: e.environment, mode, result: 'failed', reason: 'recreate halted: ' + err.message });
+      await H.write({ run_id: runId, queue_id: e.id, environment: e.environment, org_id: e.org_id, mode, result: 'failed', reason: 'recreate halted: ' + err.message });
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
     }
     completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed });
