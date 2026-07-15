@@ -204,7 +204,7 @@ function mount(app) {
   };
 
   app.get('/api/salesforce-merge/duplicates', gate, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state } })) }); }
+    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state, size_eq: req.query.size, match_type: req.query.match_type, best_min: req.query.best_min, tier: req.query.tier } })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/duplicates/facets', gate, async function (req, res) {
@@ -212,7 +212,7 @@ function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/duplicates/export', gate, async function (req, res) {
-    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state } }); }
+    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state, size_eq: req.query.size, match_type: req.query.match_type, best_min: req.query.best_min, tier: req.query.tier } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Members of one consolidated cluster (account-level detail for the Duplicates "view group" popup).
@@ -251,7 +251,7 @@ function mount(app) {
 
   // ---- Merge Admin sources + queue ----
   app.get('/api/salesforce-merge/merge-groups', gate, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_merge_groups({ ...page_opts(req), bucket: req.query.bucket, foundation_state: req.query.foundation_state })) }); }
+    try { res.json({ ok: true, ...(await reviews.list_merge_groups({ ...page_opts(req), bucket: req.query.bucket, foundation_state: req.query.foundation_state, size: req.query.size, which_list: req.query.which_list })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge-queue', gate, async function (req, res) {
@@ -285,18 +285,25 @@ function mount(app) {
   app.post('/api/salesforce-merge/merge-queue/bulk', gate, async function (req, res) {
     try {
       const b = req.body || {};
-      if (b.source !== 'merge_id') return res.status(400).json({ ok: false, error: 'bulk add is supported for the merge-id source only' });
+      const src = b.source === 'group' ? 'group' : (b.source === 'merge_id' ? 'merge_id' : null);
+      if (!src) return res.status(400).json({ ok: false, error: 'bulk add supports the merge_id or group source' });
       const dsb = await dashboard.dataset_info().catch(() => null);
       const org_id = await resolve_org_id(!dsb || dsb.environment !== 'Production'); // resolved once, reused for the whole batch
-      const groups = await reviews.resolve_merge_groups({ q: b.q, bucket: b.bucket, foundation_state: b.foundation_state, keys: b.keys });
+      const groups = src === 'merge_id'
+        ? await reviews.resolve_merge_groups({ q: b.q, bucket: b.bucket, foundation_state: b.foundation_state, size: b.size, which_list: b.which_list, keys: b.keys })
+        // nest the list filters under `filters` so build_clauses applies them — this makes
+        // "select all matching" honour the same merge-id/member/foundation/size/match-type filters
+        // the list is showing.
+        : await reviews.resolve_duplicate_groups({ q: b.q, keys: b.keys, filters: { merge_id_state: b.merge_id_state, member_number_state: b.member_number_state, foundation_state: b.foundation_state, size_eq: b.size, match_type: b.match_type, best_min: b.best_min, tier: b.tier } });
+      const keyOf = (g) => (src === 'merge_id' ? g.merge_id : g.source_key);
       const CAP = 1000;
       const resolvable = groups.filter((g) => g.resolvable);
       const unresolved = groups.length - resolvable.length;
       const capped = resolvable.length > CAP;
-      const entries = resolvable.slice(0, CAP).map((g) => ({ created_by: current_user(req), source_type: 'merge_id', source_key: g.merge_id, survivor_account: g.survivor, survivor_name: g.name, loser_accounts: g.losers, master_rule: g.rule || 'cascade', environment: dsb ? dsb.environment : null, org_id }));
+      const entries = resolvable.slice(0, CAP).map((g) => ({ created_by: current_user(req), source_type: src, source_key: keyOf(g), survivor_account: g.survivor, survivor_name: g.name, loser_accounts: g.losers, master_rule: g.rule || 'cascade', environment: dsb ? dsb.environment : null, org_id }));
       const r = await mqueue.add_many(entries);
-      analytics.log({ event_name: 'queue_bulk_add', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), source_type: 'merge_id', set_count: r.queued, outcome: 'ok' });
-      res.json({ ok: true, queued: r.queued, skipped: r.skipped, unresolved, total: groups.length, capped });
+      analytics.log({ event_name: 'queue_bulk_add', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), source_type: src, set_count: r.queued, outcome: 'ok' });
+      res.json({ ok: true, queued: r.queued, skipped: r.skipped, merged: r.merged, unresolved, total: groups.length, capped });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge/status', gate, async function (req, res) {
@@ -372,8 +379,11 @@ function mount(app) {
     try {
       const ds = await dashboard.dataset_info().catch(() => null);
       const is_test = !ds || ds.environment !== 'Production';
-      const r = await sfread.list_recycle_bin({ is_test, limit: req.query.limit });
-      res.json({ ok: true, environment: ds ? ds.environment : null, rows: r.rows, error: r.error });
+      // Query the Recycle Bin as the WRITE user — the identity that actually deletes records during a
+      // merge — so the panel shows the tool's own deletions even when the read user differs and isn't an
+      // admin. (queryAll is still scoped to that user's visibility, i.e. their recycle bin + View All.)
+      const r = await sfread.list_recycle_bin({ is_test, limit: req.query.limit, connect: sfwrite.default_write_connect });
+      res.json({ ok: true, environment: ds ? ds.environment : null, connected_as: 'write_user', rows: r.rows, error: r.error });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Whether the optional "stamp survivor as merged" custom fields exist (admin creates them manually).

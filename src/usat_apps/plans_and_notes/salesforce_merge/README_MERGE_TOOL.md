@@ -597,7 +597,8 @@ matching "To revisit" items above. Decisions here are confirmed.
 >
 > **Optional "stamp survivor as merged" (Process Merges checkbox).** When enabled, after a successful
 > merge the survivor is best-effort updated with custom fields `was_merged__c` (Checkbox) +
-> `was_merged_date__c` (DateTime). These are **NOT auto-created** — an admin adds them in Salesforce
+> `was_merged_date__c` (DateTime) + `was_merged_by__c` (Text — the actor who initiated the run).
+> These are **NOT auto-created** — an admin adds them in Salesforce
 > (Setup → Object Manager → Account → Fields) and grants field-level security. If they're missing the
 > merge still succeeds and the run logs "stamp skipped"; the UI checks field presence
 > (`GET /api/merge/stamp-fields`) and shows a warning. Note: this is the *survivor*-side marker;
@@ -712,12 +713,31 @@ partial recorded, status→failed, no revert), retry resumes, simulate writes sn
 Salesforce write and no status change, alignment/drift skips.
 
 ### Phase 4 — best-effort restore (undo a merge)
-Reverses a merge in three matching steps, reusing 3b's chokepoint, Simulate/Execute switch, gate
-stack, write user, and progress/timer:
-1. **Undelete the losers** from the Recycle Bin (restores **original ids**).
-2. **Re-point the reparented children** back to their original parents from the snapshot.
-3. **Reset the master's overwritten fields** to pre-merge values from the snapshot.
+Salesforce has **no native un-merge** — `undelete` only brings back one soft-deleted record. Restore
+composes an un-merge from standard ops (update + undelete + update) using the pre-merge snapshot, so
+the **order is ours to get right**. Reuses 3b's chokepoint, Simulate/Execute switch, gate stack,
+write user, and progress/timer. Steps, in this deliberate order:
+1. **Reset the master's overwritten fields** to pre-merge values from the snapshot — FIRST. This frees
+   any **unique** value that survivorship moved onto the survivor during the merge (e.g. a member
+   number, `cfg_Member_Number__c`); otherwise step 2's undelete is blocked by Salesforce with
+   "duplicate value found …" (the loser still carries that value). Resetting first restores the
+   documented pre-merge state and releases the value — no out-of-band field-editing.
+2. **Undelete the losers** from the Recycle Bin (restores **original ids**). The undelete result is
+   CHECKED — a loser that won't come back is a real failure, reported with Salesforce's own message.
+3. **Re-point the reparented children** back to their original parents from the snapshot.
 Then log a restore record and flip `done → restored`.
+
+**Resilience (BUILT).** Best-effort per record: a child that is itself deleted is undeleted-then-
+re-pointed; anything still unfixable is skipped with a note; an already-live loser (from a prior
+partial restore) still counts as recoverable (retry-safe); a purged loser routes to recreate. One bad
+record never aborts the whole restore, and failures surface the exact Salesforce reason in the UI +
+run history. Tests cover: reset-before-undelete order, undelete-failure reporting, deleted-child
+recovery, retry-safety, and purge→recreate routing.
+
+**Managed-package byproducts (QI).** A merge can make a managed package (namespace `em4sf`) create +
+delete its own **"Queue Item" (`QI-…`) job records**, which then show in the Recycle Bin. These are
+**not account data**, have no Account relationship, aren't in the snapshot, and are neither restored
+nor touched by the tool — same category as the SFMC caveat (reconcile in that package).
 
 **Two tiers (already in the Restore section above):** ≤ ~15 days = high-fidelity undelete; beyond
 15 days = approximate recreate (new ids). **Best-effort limits:** 15-day window + Recycle-Bin

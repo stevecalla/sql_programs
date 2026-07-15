@@ -26,6 +26,22 @@ async function deleted_set(conn, ids) {
   } catch (e) { return new Set(); }
 }
 
+// Classify each account id: 'deleted' (in the Recycle Bin), 'live' (exists, e.g. already restored by a
+// prior partial run), or 'missing' (purged / gone). Lets restore treat an already-live loser as
+// recoverable instead of mis-routing it to the recreate queue on a retry.
+async function account_states(conn, ids) {
+  const list = (ids || []).filter(Boolean);
+  const map = {};
+  for (const id of list) map[id] = 'missing';
+  if (!list.length || !conn || typeof conn.query !== 'function') return map;
+  const inList = list.map((id) => "'" + String(id).replace(/'/g, '') + "'").join(', ');
+  try {
+    const res = await conn.query('SELECT Id, IsDeleted FROM Account WHERE Id IN (' + inList + ')', { scanAll: true });
+    for (const r of (res.records || [])) map[r.Id] = r.IsDeleted ? 'deleted' : 'live';
+  } catch (e) { /* leave as missing */ }
+  return map;
+}
+
 function from_snapshot(rows, survivorId) {
   const master = {}; const loserIds = []; const children = [];
   for (const r of (rows || [])) {
@@ -177,53 +193,90 @@ async function restore(ids, opts = {}, deps = {}) {
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
       await RUN.finish(runId, { status: 'error' }); return out;
     }
-    const del = await deleted_set(conn, losers);
-    const recoverable = losers.filter((id) => del.has(id));
-    const eligible = recoverable.length === losers.length && losers.length > 0;
+    const states = await account_states(conn, losers);
+    const toUndelete = losers.filter((id) => states[id] === 'deleted');
+    const present = losers.filter((id) => states[id] === 'deleted' || states[id] === 'live'); // recoverable (in bin or already live)
+    const missing = losers.filter((id) => states[id] === 'missing');
+    const eligible = missing.length === 0 && losers.length > 0;
+    const repointable = children.filter((c) => !c.child_type || c.child_type === 'child');
 
     if (!armed) {
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
         survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
-        result: 'simulated', reason: 'restore preview — ' + (eligible ? 'eligible' : 'not eligible') + ' (' + recoverable.length + '/' + losers.length + ' recoverable), ' + children.filter((c) => !c.child_type || c.child_type === 'child').length + ' children to re-point' });
-      out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', eligible, recoverable: recoverable.length, children: children.length });
-      log((e.survivor_name || e.id) + ' — preview ' + (eligible ? 'eligible' : 'not eligible') + ' (' + recoverable.length + '/' + losers.length + ' recoverable)');
+        result: 'simulated', reason: 'restore preview — ' + (eligible ? 'eligible' : 'not eligible') + ' (' + present.length + '/' + losers.length + ' recoverable), ' + repointable.length + ' children to re-point' });
+      out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', eligible, recoverable: present.length, children: children.length });
+      log((e.survivor_name || e.id) + ' — preview ' + (eligible ? 'eligible' : 'not eligible') + ' (' + present.length + '/' + losers.length + ' recoverable)');
       completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
     }
 
     if (!eligible) {
-      // Per-set routing: the whole set can't be undeleted from the Recycle Bin (window expired or a
-      // loser was purged), so move it out of the restore list and into the SECONDARY recreate queue
-      // for the user-initiated recreate-from-backup process. Reason captured for transparency.
-      const reason = 'not in Recycle Bin (only ' + recoverable.length + '/' + losers.length + ' recoverable) — routed to recreate-from-backup queue';
+      // Per-set routing: a loser is purged (gone from the Recycle Bin), so move the set into the
+      // SECONDARY recreate queue for the user-initiated recreate-from-backup process. (An already-live
+      // loser is NOT purged — it counts as recoverable, so a retry after a partial restore still runs.)
+      const reason = 'not in Recycle Bin (only ' + present.length + '/' + losers.length + ' recoverable) — routed to recreate-from-backup queue';
       await Q.transition([e.id], 'recreate_pending', ['done']);
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
         survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
         result: 'skipped', reason });
       out.skipped += 1; out.routed = (out.routed || 0) + 1; out.results.push({ id: e.id, result: 'routed', reason });
-      log((e.survivor_name || e.id) + ' — routed to recreate queue (' + recoverable.length + '/' + losers.length + ' recoverable)');
+      log((e.survivor_name || e.id) + ' — routed to recreate queue (' + present.length + '/' + losers.length + ' recoverable)');
       completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
     }
 
-    try {
-      await W.undelete(conn, losers);
-      for (const ch of children) {
-        if (ch && ch.child_type && ch.child_type !== 'child') continue; // self halves return with undelete
-        if (ch && ch.object && ch.id && ch.parent_field) {
-          await W.update_record(conn, ch.object, { Id: ch.id, [ch.parent_field]: ch.parent_id });
-        }
-      }
-      const reset = master_reset_fields(master, e.survivor_account);
-      if (Object.keys(reset).length > 1) await W.update_record(conn, 'Account', reset);
-      await Q.transition([e.id], 'restored', ['done']);
+    // STEP 1 — reset the SURVIVOR's fields FIRST (pre-merge values from the snapshot). Salesforce has
+    // no native "un-merge"; we compose it from update + undelete + update, so the ORDER is ours to get
+    // right. Resetting the survivor before the undelete frees any UNIQUE value that survivorship moved
+    // onto the survivor during the merge (e.g. a member number) — otherwise Salesforce blocks the
+    // undelete below with "duplicate value found ...". Best-effort (isolated so it can't abort the set).
+    let masterOk = true; const notes = [];
+    try { const reset = master_reset_fields(master, e.survivor_account); if (Object.keys(reset).length > 1) await W.update_record(conn, 'Account', reset); }
+    catch (err) { masterOk = false; notes.push('master reset: ' + (err && err.message)); }
+
+    // STEP 2 — bring the loser(s) back. Only undelete the ones still in the bin, and CHECK the result:
+    // if a loser won't come back, that's a real failure (report Salesforce's own message) — don't push
+    // on and fail later on a child that still points at a deleted parent.
+    let undelErr = null;
+    if (toUndelete.length) {
+      try {
+        const res = await W.undelete(conn, toUndelete);
+        const bad = (res || []).filter((r) => r && r.success === false);
+        if (bad.length) undelErr = (bad[0].errors && bad[0].errors[0] && (bad[0].errors[0].message || bad[0].errors[0].statusCode)) || 'undelete rejected';
+      } catch (err) { undelErr = (err && err.message) || 'undelete threw'; }
+    }
+    if (undelErr) {
+      log((e.survivor_name || e.id) + ' — RESTORE FAILED at undelete: ' + undelErr);
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
         survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
-        result: 'restored', reason: 'undeleted ' + losers.length + ', re-pointed ' + children.length + ' children' });
-      out.restored += 1; out.results.push({ id: e.id, result: 'restored', undeleted: losers.length, children: children.length });
-      log((e.survivor_name || e.id) + ' — RESTORED: undeleted ' + losers.length + ', re-pointed children');
-    } catch (err) {
-      await H.write({ run_id: runId, queue_id: e.id, environment: e.environment, mode, result: 'failed', reason: 'restore halted: ' + err.message });
-      out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
+        result: 'failed', reason: 'restore halted at undelete: ' + undelErr + (masterOk ? '' : ' (survivor reset also failed)') });
+      out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: 'undelete: ' + undelErr });
+      completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
     }
+
+    // STEP 3 — re-point the reparented children back to the loser, BEST-EFFORT: isolate each record so
+    // one problem (e.g. a child the merge deleted → "entity is deleted") can't abort the whole restore.
+    // If a target is itself deleted, undelete it first then re-point; otherwise skip it with a note.
+    let repointed = 0; let skippedCh = 0;
+    for (const ch of repointable) {
+      if (!(ch && ch.object && ch.id && ch.parent_field)) continue;
+      const patch = { Id: ch.id, [ch.parent_field]: ch.parent_id };
+      try { await W.update_record(conn, ch.object, patch); repointed += 1; }
+      catch (err) {
+        if (/deleted/i.test((err && err.message) || '')) {
+          try { await W.undelete(conn, [ch.id]); await W.update_record(conn, ch.object, patch); repointed += 1; }
+          catch (e2) { skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': ' + ((e2 && e2.message) || 'deleted, unrecoverable')); }
+        } else { skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': ' + (err && err.message)); }
+      }
+    }
+
+    await Q.transition([e.id], 'restored', ['done']);
+    const reason = 'undeleted ' + toUndelete.length + ', re-pointed ' + repointed
+      + (skippedCh ? ', skipped ' + skippedCh : '') + (masterOk ? '' : ', master-reset partial')
+      + (notes.length ? ' — ' + notes.slice(0, 5).join('; ') : '');
+    await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
+      survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
+      result: 'restored', reason });
+    out.restored += 1; out.results.push({ id: e.id, result: 'restored', undeleted: toUndelete.length, repointed, skipped: skippedCh, notes });
+    log((e.survivor_name || e.id) + ' — RESTORED: ' + reason);
     completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed });
   }
 
@@ -317,6 +370,7 @@ async function recreate(ids, opts = {}, deps = {}) {
       out.recreated += 1; out.results.push({ id: e.id, result: 'recreated', accounts: losers.length, children: childOk, new_ids: idMap });
       log((e.survivor_name || e.id) + ' — RECREATED ' + losers.length + ' accounts (new ids)');
     } catch (err) {
+      log((e.survivor_name || e.id) + ' — RECREATE FAILED: ' + (err && err.message));
       await H.write({ run_id: runId, queue_id: e.id, environment: e.environment, mode, result: 'failed', reason: 'recreate halted: ' + err.message });
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
     }

@@ -116,7 +116,7 @@ const SECTIONS = [
   },
   {
     title: "Running and undoing merges (how Process Merges will work)",
-    text: "running and undoing merges (how process merges will work) approved sets are run from the process merges page. the whole flow is built to be rehearsed safely first, then run for real once — and undone if needed. simulate vs execute a safety switch (default simulate ) runs everything — re-check, backup, and the merge plan — but makes no salesforce changes. a real merge happens only in execute mode with every gate satisfied (execution enabled, typed “merge” confirmation, environment match, sandbox first). backup every run before each run a snapshot captures the records and their child records, so there’s always a current restore point. only the latest snapshot per set is kept — no stale pile-up. how a merge runs salesforce merges a master plus two records at a time, so a big set runs in several steps (a 26-account set takes 13). a live progress bar, elapsed timer, and estimated finish show as it goes. if a step fails the set stops at the failed step and is marked failed — it is not auto-reverted, because the steps that already worked are correct. re-running it safely continues with whatever is left. true rollback uses restore. runs once a successful set is marked done and drops out, so it can’t be merged twice. you can simulate as often as you like beforehand. merge markers salesforce stamps each deleted loser with masterrecordid = the surviving record (that’s how a merge differs from a plain delete, and it’s what the recycle bin panel’s “merged into” column shows). optionally, the tool can also stamp the survivor with was_merged__c + was_merged_date__c — an admin must create those two account fields first; if they’re missing the merge still runs and the stamp is skipped with a notice. restore (later phase) a completed merge can be undone for about 15 days: the removed records are brought back from the recycle bin (with their original ids), their children re-linked, and the master’s overwritten fields reset — from the snapshot. beyond that window restore is approximate. status: this is the planned behavior for execution (phase 3b) and restore (phase 4). today the page runs in simulate only — no salesforce writes happen yet.",
+    text: "running and undoing merges (how process merges will work) approved sets are run from the process merges page. the whole flow is built to be rehearsed safely first, then run for real once — and undone if needed. simulate vs execute a safety switch (default simulate ) runs everything — re-check, backup, and the merge plan — but makes no salesforce changes. a real merge happens only in execute mode with every gate satisfied (execution enabled, typed “merge” confirmation, environment match, sandbox first). backup every run before each run a snapshot captures the records and their child records, so there’s always a current restore point. only the latest snapshot per set is kept — no stale pile-up. how a merge runs salesforce merges a master plus two records at a time, so a big set runs in several steps (a 26-account set takes 13). a live progress bar, elapsed timer, and estimated finish show as it goes. if a step fails the set stops at the failed step and is marked failed — it is not auto-reverted, because the steps that already worked are correct. re-running it safely continues with whatever is left. true rollback uses restore. runs once a successful set is marked done and drops out, so it can’t be merged twice. you can simulate as often as you like beforehand. merge markers salesforce stamps each deleted loser with masterrecordid = the surviving record (that’s how a merge differs from a plain delete, and it’s what the recycle bin panel’s “merged into” column shows). optionally, the tool can also stamp the survivor with three account fields was_merged__c (checkbox) was_merged_date__c (date) and was_merged_by__c (who ran the merge) — an admin must create these fields first; if any is missing the merge still runs and that field's stamp is skipped with a notice. restore best-effort ~15 days salesforce has no native un-merge. the tool composes one from standard operations in this order: (1) reset the survivor's fields to pre-merge values from the snapshot, (2) undelete the losers from the recycle bin (original ids), (3) re-point the reparented children back to the loser. beyond the ~15-day window, or if a loser was purged, the set is routed to the recreate-from-backup queue. why reset comes first unique fields: if survivorship moved a unique value (e.g. a member number cfg_member_number__c) onto the survivor during the merge, undeleting the loser would create a duplicate and salesforce blocks it (duplicate value found). resetting the survivor to its pre-merge value first frees that value so the undelete succeeds — no manual field editing. best-effort per record: one problem record can't abort the whole restore; a deleted child is undeleted-then-repointed and anything else is skipped with a note; if the loser can't come back the run is failed with the exact salesforce reason shown in the ui and history. queue item qi records in the recycle bin: during a merge you may see queue item qi- records appear in the recycle bin. these are not account data — transient job records created and deleted by a managed package (namespace em4sf) reacting to the account change. they have no relationship to account, aren't captured in the snapshot, and are neither restored nor touched by this tool. like the marketing cloud caveat, they are a downstream/integration side-effect reconciled in that package. prove it yourself: object manager queue item api name em4sf__queue_item__c namespace managed package installed packages; fields & relationships has no lookup or master-detail to account; not in the pre-merge snapshot salesforce_merge_premerge_snapshot; query all rows shows createddate near the merge time (created and deleted during the merge, a transient job record); the tool only writes merge() field updates and undelete/re-point (salesforce_write.js) and never inserts a queue item. execution phase 3b and restore/recreate phase 4 are built and run in an isolated worker; real writes require the execution flag on the worker plus a typed confirmation, sandbox first.",
     body: (
       <>
         <p>
@@ -129,9 +129,12 @@ const SECTIONS = [
           <div className="defs-row"><span className="defs-term lg">How a merge runs</span><span className="defs-body">Salesforce merges a master plus two records at a time, so a big set runs in several steps (a 26-account set takes 13). A live progress bar, elapsed timer, and estimated finish show as it goes.</span></div>
           <div className="defs-row"><span className="defs-term lg">If a step fails</span><span className="defs-body">the set <strong>stops</strong> at the failed step and is marked <em>failed</em> — it is <strong>not</strong> auto-reverted, because the steps that already worked are correct. Re-running it safely continues with whatever is left. True rollback uses Restore.</span></div>
           <div className="defs-row"><span className="defs-term lg">Runs once</span><span className="defs-body">a successful set is marked <em>done</em> and drops out, so it can’t be merged twice. You can simulate as often as you like beforehand.</span></div>
-          <div className="defs-row"><span className="defs-term lg">Merge markers</span><span className="defs-body">Salesforce stamps each deleted loser with <code>MasterRecordId</code> = the surviving record (that’s how a merge differs from a plain delete, and it’s what the Recycle Bin panel’s “merged into” column shows). Optionally, the tool can also stamp the <em>survivor</em> with <code>was_merged__c</code> + <code>was_merged_date__c</code> — an admin must create those two Account fields first; if they’re missing the merge still runs and the stamp is skipped with a notice.</span></div>
-          <div className="defs-row"><span className="defs-term lg">Restore (later phase)</span><span className="defs-body">a completed merge can be undone for about 15 days: the removed records are brought back from the Recycle Bin (with their original IDs), their children re-linked, and the master’s overwritten fields reset — from the snapshot. Beyond that window restore is approximate.</span></div>
-          <div className="defs-gate">Status: this is the planned behavior for execution (Phase 3b) and restore (Phase 4). Today the page runs in <strong>Simulate only</strong> — no Salesforce writes happen yet.</div>
+          <div className="defs-row"><span className="defs-term lg">Merge markers</span><span className="defs-body">Salesforce stamps each deleted loser with <code>MasterRecordId</code> = the surviving record (that’s how a merge differs from a plain delete, and it’s what the Recycle Bin panel’s “merged into” column shows). Optionally, the tool can also stamp the <em>survivor</em> with three Account fields — <code>was_merged__c</code> (checkbox), <code>was_merged_date__c</code> (date), and <code>was_merged_by__c</code> (Text — the app operator who ran it, plus the Salesforce write user, e.g. <em>usat-admin via merge.user@usat</em>) — an admin must create these fields first (Checkbox, Date, Text); if any is missing the merge still runs and that field's stamp is skipped with a notice.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Restore (best-effort, ~15 days)</span><span className="defs-body">Salesforce has <strong>no native “un-merge.”</strong> The tool composes one from standard operations, in this deliberate order: <strong>(1) reset the survivor’s fields</strong> to their pre-merge values from the snapshot, <strong>(2) undelete the loser(s)</strong> from the Recycle Bin (original IDs), <strong>(3) re-point the reparented children</strong> back to the loser. Beyond the ~15-day window, or if a loser was purged, the set is routed to the recreate-from-backup queue instead.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Why reset comes first (unique fields)</span><span className="defs-body">if survivorship moved a <strong>unique</strong> value (e.g. a member number, <code>cfg_Member_Number__c</code>) onto the survivor during the merge, undeleting the loser would try to create a duplicate and Salesforce blocks it (“duplicate value found…”). Resetting the survivor to its pre-merge value <em>first</em> frees that value, so the undelete then succeeds — no manual field-editing needed.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Best-effort, per record</span><span className="defs-body">one problem record can’t abort the whole restore: a child that was itself deleted is undeleted-then-re-pointed, and anything that still can’t be fixed is <em>skipped with a note</em>. If the loser genuinely can’t come back, the run is marked <em>failed</em> and the exact Salesforce reason is shown in the UI and the run history.</span></div>
+          <div className="defs-row"><span className="defs-term lg">Queue Item (QI) records in the Recycle Bin</span><span className="defs-body">during a merge you may see <strong>“Queue Item” (<code>QI-…</code>) records appear in the Recycle Bin</strong>. These are <strong>not account data</strong> — they’re transient job records created and deleted by a managed package (namespace <code>em4sf</code>) reacting to the account change. They have no relationship to Account, aren’t captured in the pre-merge snapshot, and are <strong>neither restored nor touched</strong> by this tool. Treat them like the Marketing Cloud caveat: a downstream/integration side-effect, reconciled in that package, not by undeleting records. <strong>Prove it to yourself:</strong> (1) Setup → Object Manager → Queue Item → <em>Details</em> shows the API name <code>em4sf__Queue_Item__c</code> — the <code>em4sf__</code> namespace means it ships with a managed package (Setup → Installed Packages), not your schema; (2) its <em>Fields &amp; Relationships</em> has <strong>no Lookup/Master-Detail to Account</strong>, so it can’t be a child of the merged records; (3) it doesn’t appear in the pre-merge snapshot (<code>salesforce_merge_premerge_snapshot</code> for that run only lists Contact, ContactPointAddress/Email, subscription members, and the Account self-halves); (4) query one with ALL ROWS — <code>SELECT Id, CreatedDate, IsDeleted FROM em4sf__Queue_Item__c WHERE Name = 'QI-…' </code> — its CreatedDate ≈ the merge time, i.e. created <em>and</em> deleted during the merge (a transient job record); (5) the tool’s only writes are <code>merge()</code> + field updates + undelete/re-point (<code>salesforce_write.js</code>) — it never inserts a Queue Item.</span></div>
+          <div className="defs-gate">Execution (Phase 3b) and restore/recreate (Phase 4) are BUILT and run in an isolated worker; real writes require the execution flag on the worker + a typed confirmation, sandbox first.</div>
         </div>
       </>
     ),
@@ -261,28 +264,43 @@ const SECTIONS = [
 
 export default function Reference() {
   const [q, setQ] = useState('');
+  const [collapsed, setCollapsed] = useState(() => new Set()); // by title; empty = all open
   const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
   const match = (sec) => !terms.length || terms.every((t) => (sec.title + ' ' + sec.text).toLowerCase().includes(t));
   const shown = SECTIONS.filter(match);
+  const toggle = (title) => setCollapsed((p) => { const n = new Set(p); if (n.has(title)) n.delete(title); else n.add(title); return n; });
+  const collapseAll = () => setCollapsed(new Set(SECTIONS.map((s) => s.title)));
+  const expandAll = () => setCollapsed(new Set());
   return (
     <div className="reference">
       <h2>Reference — how this works</h2>
       <p className="muted small">A plain-language guide to finding duplicates and merging accounts. No jargon.</p>
-      <input
-        type="search"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search the reference…"
-        aria-label="Search the reference"
-        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', margin: '4px 0 12px', border: '1px solid var(--line, #e4e7ec)', borderRadius: 8, fontSize: 14, background: 'transparent', color: 'inherit' }}
-      />
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0 12px' }}>
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search the reference…"
+          aria-label="Search the reference"
+          style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '8px 12px', border: '1px solid var(--line, #e4e7ec)', borderRadius: 8, fontSize: 14, background: 'transparent', color: 'inherit' }}
+        />
+        <button type="button" className="btn" style={{ width: 'auto', padding: '6px 10px', fontSize: 12 }} onClick={collapseAll}>Collapse all</button>
+        <button type="button" className="btn" style={{ width: 'auto', padding: '6px 10px', fontSize: 12 }} onClick={expandAll}>Expand all</button>
+      </div>
       <div className="ref-scroll" style={{ maxHeight: 'calc(100vh - 260px)', overflowY: 'auto', paddingRight: 6 }}>
-        {shown.map((sec, i) => (
-          <div className="card ref-card" key={i}>
-            <h3>{sec.title}</h3>
-            {sec.body}
-          </div>
-        ))}
+        {shown.map((sec, i) => {
+          const isOpen = !collapsed.has(sec.title);
+          return (
+            <div className="card ref-card" key={i}>
+              <h3 onClick={() => toggle(sec.title)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}
+                title={isOpen ? 'Collapse' : 'Expand'}>
+                <span style={{ color: 'var(--dim)', fontSize: 13, width: 12, display: 'inline-block' }}>{isOpen ? '▾' : '▸'}</span>
+                {sec.title}
+              </h3>
+              {isOpen ? sec.body : null}
+            </div>
+          );
+        })}
         {shown.length === 0 && <p className="muted small" style={{ padding: '12px 4px' }}>No sections match “{q}”.</p>}
       </div>
     </div>

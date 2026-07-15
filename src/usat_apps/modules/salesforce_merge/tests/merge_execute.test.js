@@ -37,11 +37,12 @@ function deps(opts = {}) {
   };
 }
 
-test('build_master_fields: override > master non-blank > loser backfill', () => {
+test('build_master_fields: an override is an ACCOUNT ID resolved to that record value (not a literal)', () => {
   const accts = [{ account: 'M', PersonEmail: '', Phone: '111' }, { account: 'L', PersonEmail: 'l@x.com', Phone: '999' }];
-  const f = mexec.build_master_fields(accts, 'M', { Phone: '555' });
+  const f = mexec.build_master_fields(accts, 'M', { Phone: 'L' }); // "use account L's Phone"
   assert.equal(f.PersonEmail, 'l@x.com'); // master blank -> backfill from loser
-  assert.equal(f.Phone, '555');           // override wins over master's non-blank
+  assert.equal(f.Phone, '999');           // override -> account L's value
+  assert.notEqual(f.Phone, 'L');          // regression: never write the account id into the field
 });
 
 test('verify_alignment flags environment and org mismatches', () => {

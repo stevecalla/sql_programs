@@ -98,12 +98,23 @@ the `org_id`-capture hardening note live in `../README_MERGE_TOOL.md`.
 
 ## Restore — two tiers, both from Node
 
-1. **Within ~15 days (high fidelity):** `undelete` each loser from the Recycle Bin (keeps its
-   **original id**), then re-parent the snapshotted children back to it and reapply overwritten
-   master fields. All Node calls.
+Salesforce has **no native un-merge** (`undelete` restores one record only). Restore composes an
+un-merge from update + undelete + update using the pre-merge snapshot — so the **order matters**.
+
+1. **Within ~15 days (high fidelity):** in this order — **(a) reapply the master's overwritten fields
+   FIRST** (frees any unique value survivorship moved onto the survivor, e.g. `cfg_Member_Number__c`,
+   so Salesforce won't reject the undelete with "duplicate value found"), **(b) `undelete` each loser**
+   from the Recycle Bin (keeps its **original id**; the undelete result is checked), **(c) re-parent
+   the snapshotted children** back to it. All Node calls, best-effort per record (a deleted child is
+   undeleted-then-re-pointed; unfixable ones are skipped with a note; failures report SF's own reason).
 2. **Beyond 15 days, from backup (approximate):** the loser is permanently gone, so recreate it
    from the MySQL deep snapshot (our backup). Recreated records get **new ids**, so external
    references won't reconnect and children are recreated/re-pointed from the snapshot.
+
+**Not restored — managed-package byproducts.** A merge can trigger a managed package (namespace
+`em4sf`) to create + delete its own **"Queue Item" (`QI-…`) job records**, which appear in the Recycle
+Bin. They have no Account relationship, aren't in the snapshot, and are neither restored nor touched —
+same category as the SFMC caveat.
 
 The **deep pre-merge snapshot** powers both: before merging, Node `describe`s the Account child
 relationships, queries each child's id + parent for the losers, and stores it (plus full loser

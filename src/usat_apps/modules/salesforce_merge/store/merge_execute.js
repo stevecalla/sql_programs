@@ -23,25 +23,13 @@ const ceil2 = (n) => Math.ceil((Number(n) || 0) / 2);
 // Server-side progress logs (stdout). Silence with MERGE_LOG=off (tests set this).
 function log(...a) { if (process.env.MERGE_LOG !== 'off') console.log('[merge]', ...a); }
 
-// Survivorship: which field values to WRITE onto the master. Precedence override > master non-blank >
-// first loser non-blank (backfill). Only fields whose chosen value differs from master are returned.
+// Survivorship: which field values to WRITE onto the master. Delegates to the shared resolver so the
+// execute matches the Select Merges preview EXACTLY. An override is an ACCOUNT ID (take that record's
+// value), NOT a literal value — see survivorship.js. (Kept for existing callers/tests; logic lives in
+// one place now. This fixes the sandbox bug where an overridden member number / email got the account id.)
+const { resolve_master_fields } = require('./survivorship');
 function build_master_fields(accounts, survivorId, overrides) {
-  const SKIP = new Set(['account', 'contact', 'Id', 'Name', 'CreatedDate', 'LastModifiedDate']);
-  const master = accounts.find((a) => a.account === survivorId) || {};
-  const losers = accounts.filter((a) => a.account !== survivorId);
-  const blank = (v) => v === undefined || v === null || v === '';
-  const fields = new Set();
-  for (const a of accounts) for (const k of Object.keys(a)) if (!SKIP.has(k)) fields.add(k);
-  const out = {};
-  for (const f of fields) {
-    const ov = overrides ? overrides[f] : undefined;
-    if (!blank(ov)) { if (ov !== master[f]) out[f] = ov; continue; }
-    if (blank(master[f])) {
-      const donor = losers.find((l) => !blank(l[f]));
-      if (donor) out[f] = donor[f];
-    }
-  }
-  return out;
+  return resolve_master_fields(accounts, survivorId, overrides);
 }
 
 // Alignment guard: a queued set must match the org we'd write to (environment label + org id).
@@ -117,6 +105,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
   let completedOps = 0; let completedSets = 0;
   let conn = null;
   let apiStartLogged = false;
+  let stampPresent = null; // which of the 3 stamp fields exist on Account (describe once, reuse per run)
 
   for (let si = 0; si < entries.length; si += 1) {
     // Cooperative cancel: a Stop request flags this run id; we honor it at the SET boundary so every
@@ -218,13 +207,22 @@ async function runQueue(ids, opts = {}, deps = {}) {
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: failure, merged: merged.length, remaining: remaining.length });
       log(label('FAILED — ' + failure));
     } else {
-      // Optional: stamp the survivor as merged. Done AFTER the merge as a best-effort update so a
-      // missing custom field (was_merged__c / was_merged_date__c) never fails the merge itself.
+      // Optional: stamp the survivor as merged. Best-effort AND PER-FIELD — each of the 3 custom fields
+      // is independent, so we describe Account once and write only the fields that actually exist. That
+      // way a partial set (e.g. flag+date but no *_by__c) still records what it can, and a missing field
+      // never fails the merge.
       let stampNote = '';
       if (opts.stamp_merged) {
         try {
-          await W.update_record(conn, 'Account', { Id: e.survivor_account, was_merged__c: true, was_merged_date__c: new Date().toISOString() });
-          stampNote = '; stamped was_merged__c';
+          if (!stampPresent) stampPresent = await W.stamp_fields_status(conn);
+          const sfUser = (W.write_creds && W.write_creds(is_test) && W.write_creds(is_test).user) || 'sf';
+          const payload = { Id: e.survivor_account };
+          if (stampPresent.was_merged__c) payload.was_merged__c = true;
+          if (stampPresent.was_merged_date__c) payload.was_merged_date__c = new Date().toISOString();
+          if (stampPresent.was_merged_by__c) payload.was_merged_by__c = ((createdBy || 'salesforce_merge_tool') + ' via ' + sfUser).slice(0, 255);
+          const nStamp = Object.keys(payload).length - 1; // minus Id
+          if (nStamp > 0) { await W.update_record(conn, 'Account', payload); stampNote = '; stamped ' + nStamp + ' field(s)'; }
+          else stampNote = '; stamp skipped (no stamp fields on Account)';
         } catch (err) { stampNote = '; stamp skipped (' + err.message + ')'; }
       }
       await Q.transition([e.id], 'done', ['approved']);

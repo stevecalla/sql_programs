@@ -8,7 +8,7 @@ const jsforce = require('jsforce');
 // Custom fields the optional "stamp survivor as merged" feature writes onto the master.
 // These are NOT auto-created — an admin must add them in Salesforce. The stamp is best-effort:
 // if they are missing the merge still succeeds and the run notes that the stamp was skipped.
-const STAMP_FIELDS = { flag: 'was_merged__c', date: 'was_merged_date__c' };
+const STAMP_FIELDS = { flag: 'was_merged__c', date: 'was_merged_date__c', by: 'was_merged_by__c' };
 
 function write_creds(is_test) {
   if (is_test) {
@@ -85,8 +85,8 @@ async function stamp_fields_status(conn) {
   try {
     const d = await conn.sobject('Account').describe();
     const names = new Set((d.fields || []).map((f) => f.name));
-    return { was_merged__c: names.has(STAMP_FIELDS.flag), was_merged_date__c: names.has(STAMP_FIELDS.date) };
-  } catch (e) { return { was_merged__c: false, was_merged_date__c: false, error: e.message }; }
+    return { was_merged__c: names.has(STAMP_FIELDS.flag), was_merged_date__c: names.has(STAMP_FIELDS.date), was_merged_by__c: names.has(STAMP_FIELDS.by) };
+  } catch (e) { return { was_merged__c: false, was_merged_date__c: false, was_merged_by__c: false, error: e.message }; }
 }
 
 module.exports = {

@@ -3,6 +3,7 @@ import DatasetStamp from '../components/DatasetStamp.jsx';
 import WorkerBanner from '../components/WorkerBanner.jsx';
 import DataTable from '../components/DataTable.jsx';
 import CollapsibleCard from '../components/CollapsibleCard.jsx';
+import QueueRowDetail from '../components/QueueRowDetail.jsx';
 import { api, exportUrl } from '../lib/api.js';
 import { awaitRun, summarize } from '../lib/run_poll.js';
 
@@ -99,6 +100,8 @@ export default function MergeProcess() {
   const apiWouldExceed = apiRemaining != null && estApiCalls > apiRemaining;
   const safe = !status || status.safe_mode;
   const apSort = useSort();    // Approved merges
+  const [apExpanded, setApExpanded] = useState(() => new Set());
+  const toggleApExpand = (id) => setApExpanded((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const histSort = useSort();  // Merge history
   const paSort = useSort();    // per-account progress
 
@@ -218,15 +221,15 @@ export default function MergeProcess() {
           )}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={stampMerged} onChange={(e) => setStampMerged(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>Stamp survivor as merged <code>(was_merged__c, was_merged_date__c)</code></span>
+            <span>Stamp survivor as merged <code>(was_merged__c, was_merged_date__c, was_merged_by__c)</code></span>
           </label>
-          {stampMerged && stampFields && (!stampFields.was_merged__c || !stampFields.was_merged_date__c) && (
+          {stampMerged && stampFields && (!stampFields.was_merged__c || !stampFields.was_merged_date__c || !stampFields.was_merged_by__c) && (
             <p className="small" style={{ margin: '0 0 8px', color: 'var(--amber)' }}>
-              ⚠ {[!stampFields.was_merged__c && 'was_merged__c', !stampFields.was_merged_date__c && 'was_merged_date__c'].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The merge still runs; the stamp is skipped until the field exists.
+              ⚠ {[!stampFields.was_merged__c && 'was_merged__c', !stampFields.was_merged_date__c && 'was_merged_date__c', !stampFields.was_merged_by__c && 'was_merged_by__c'].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The merge still runs; the stamp is skipped for any missing field. <code>was_merged_by__c</code> records who ran the merge.
             </p>
           )}
-          {stampMerged && stampFields && stampFields.was_merged__c && stampFields.was_merged_date__c && (
-            <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present</p>
+          {stampMerged && stampFields && stampFields.was_merged__c && stampFields.was_merged_date__c && stampFields.was_merged_by__c && (
+            <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present (flag, date, by)</p>
           )}
           {mode === 'execute' && selCount > 0 && (
             <div className="muted small" style={{ margin: '0 0 8px', padding: '6px 8px', borderRadius: 6, border: '1px solid ' + (apiWouldExceed ? 'var(--red)' : 'var(--line, #e4e7ec)'), color: apiWouldExceed ? 'var(--red)' : undefined }}>
@@ -273,18 +276,19 @@ export default function MergeProcess() {
               <th title="Environment the set was built from — click to sort" style={{ cursor: 'pointer' }} onClick={() => apSort.onSort('environment')}>Env<span className="th-info"> ⓘ</span>{apSort.arrow('environment')}</th>
             </tr></thead>
             <tbody>
-              {apSort.apply(rows).map((r, i) => (
+              {apSort.apply(rows).map((r, i) => [
                 <tr key={r.id}>
                   <td><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} aria-label={'Select ' + r.id} /></td>
-                  <td>{i + 1}</td>
+                  <td><button type="button" onClick={() => toggleApExpand(r.id)} title="Show overrides & details" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, marginRight: 3, font: 'inherit' }}>{apExpanded.has(r.id) ? '▾' : '▸'}</button>{i + 1}</td>
                   <td>{r.survivor_name || '—'}</td>
                   <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title={r.survivor_account}>{r.survivor_account || '—'}</td>
-                  <td>{r.loser_count} account{Number(r.loser_count) === 1 ? '' : 's'}</td>
+                  <td>{r.loser_count} account{Number(r.loser_count) === 1 ? '' : 's'}{r.field_overrides && typeof r.field_overrides === 'object' && Object.keys(r.field_overrides).length ? <span title="This set has field overrides" style={{ marginLeft: 4, color: 'var(--amber)' }}>✎</span> : null}</td>
                   <td title={r.source_key}>{r.source_type === 'merge_id' ? 'merge id ' : 'group '}{shortId(r.source_key)}</td>
                   <td>{r.master_rule || 'cascade'}</td>
                   <td>{r.environment || '—'}</td>
-                </tr>
-              ))}
+                </tr>,
+                apExpanded.has(r.id) ? <tr key={r.id + '_d'}><td colSpan={8} style={{ padding: 0 }}><QueueRowDetail row={r} /></td></tr> : null,
+              ])}
               {rows.length === 0 && <tr><td colSpan={8} className="muted small">No approved merges. Approve sets in Select Merges first.</td></tr>}
             </tbody>
           </table>
@@ -383,6 +387,11 @@ export default function MergeProcess() {
           {result.cancelled ? '■ Stopped — ' : ''}Run {result.run_id} ({result.mode}): {result.done || 0} done, {result.simulated || 0} simulated, {result.skipped} skipped, {result.failed} failed{result.cancelled ? ', ' + (result.remaining || 0) + ' left approved (run again to finish)' : ''}.
         </p>
       )}
+      {result && (result.failed > 0 || result.skipped > 0) && (history || [])
+        .filter((h) => String(h.run_id) === String(result.run_id) && (h.result === 'failed' || h.result === 'skipped'))
+        .map((h, i) => (
+          <p key={i} className="small" style={{ margin: '2px 0 0', color: 'var(--red)' }}>⚠ {h.survivor_name ? h.survivor_name + ': ' : ''}{h.reason}</p>
+        ))}
 
       <CollapsibleCard
         title={<>Merge history <span className="muted small" style={{ fontWeight: 400 }}>({history.length})</span></>}

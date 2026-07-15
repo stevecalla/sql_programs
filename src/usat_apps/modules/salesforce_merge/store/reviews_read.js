@@ -138,6 +138,17 @@ const DUP_SPEC = {
     // does any member of the cluster carry a Foundation constituent flag? (values are ';'-joined true/false)
     foundation_state: { build: (v) => (String(v) === 'has' ? { sql: "Foundation_Constituents__c LIKE '%true%'" }
       : String(v) === 'none' ? { sql: "(Foundation_Constituents__c IS NULL OR Foundation_Constituents__c NOT LIKE '%true%')" } : null) },
+    // exact cluster size (e.g. only pairs = 2). Numeric equality on the record count.
+    size_eq: { build: (v) => (/^\d+$/.test(String(v).trim()) ? { sql: 'CAST(Group_Record_Count__c AS UNSIGNED) = ?', params: [Number(String(v).trim())] } : null) },
+    // match type: keep clusters whose composition INVOLVES the chosen signal ("exact"/"fuzzy"/
+    // "nickname"). Match_Composition__c is a label like "exact only" / "exact + nickname", so a
+    // contains match catches every cluster that used that signal at all.
+    match_type: { build: (v) => { const t = String(v).trim().toLowerCase(); return (t === 'exact' || t === 'fuzzy' || t === 'nickname') ? { sql: 'Match_Composition__c LIKE ?', params: ['%' + t + '%'] } : null; } },
+    // minimum best name-similarity score (0–100) among the cluster's pairs — the "Best" column.
+    best_min: { build: (v) => (/^\d+$/.test(String(v).trim()) ? { sql: 'CAST(Best_Pair_Score__c AS UNSIGNED) >= ?', params: [Number(String(v).trim())] } : null) },
+    // confidence tier — the cluster's single strongest signal (exact > fuzzy > nickname). Mirrors the
+    // Duplicates tab's "Tier" column (exact equality, unlike Signal which is a contains/involves match).
+    tier: { build: (v) => { const t = String(v).trim().toLowerCase(); return (t === 'exact' || t === 'fuzzy' || t === 'nickname') ? { sql: 'LOWER(Confidence_Tier__c) = ?', params: [t] } : null; } },
   },
   facet_cols: { signal: 'Match_Composition__c', tier: 'Confidence_Tier__c', size: 'Group_Record_Count__c' },
   default_sort: 'size',
@@ -338,11 +349,23 @@ async function list_merge_groups(opts = {}, query = real_query) {
   if (bk === "in_both" || bk === "sf_only") { wheres.push("Bucket__c = ?"); params.push(bk); }
   else if (bk === "only_dupes") { wheres.push("Bucket__c NOT IN ('in_both', 'sf_only')"); }
   const where_sql = "WHERE " + wheres.join(" AND ");
-  // foundation filter is group-level: keep merge groups where ANY (has) / NO (none) account is a
-  // Foundation constituent — so it's a HAVING over the GROUP BY, not a row WHERE.
+  // group-level filters run as HAVING over the GROUP BY, not a row WHERE:
+  //  · foundation: keep groups where ANY (has) / NO (none) account is a Foundation constituent.
+  //  · size: the group's member count (COUNT(*)) equals the chosen cluster size.
+  const havings = [];
   const fnd = String(opts.foundation_state || '');
-  const fnd_having = fnd === 'has' ? " HAVING SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) > 0"
-    : fnd === 'none' ? " HAVING SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) = 0" : '';
+  if (fnd === 'has') havings.push("SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) > 0");
+  else if (fnd === 'none') havings.push("SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) = 0");
+  const sz = String(opts.size == null ? '' : opts.size).trim();
+  if (/^\d+$/.test(sz)) havings.push("COUNT(*) = " + Number(sz));
+  //  · which list (detection signal): keep groups where ANY member was flagged by the chosen signal.
+  //    Mirrors the Merge-ID tab's "Which list" column filter (contains match). `wl` is validated to a
+  //    fixed set, so the inlined LIKE is injection-safe.
+  const wl = String(opts.which_list || '').trim().toLowerCase();
+  if (wl === 'exact' || wl === 'fuzzy' || wl === 'nickname') {
+    havings.push("SUM(CASE WHEN Which_List__c LIKE '%" + wl + "%' THEN 1 ELSE 0 END) > 0");
+  }
+  const fnd_having = havings.length ? (" HAVING " + havings.join(" AND ")) : '';
   const totalRows = await query(
     fnd_having
       ? "SELECT COUNT(*) AS n FROM (SELECT Salesforce_Merge_Id__c FROM `" + T + "` " + where_sql + " GROUP BY Salesforce_Merge_Id__c" + fnd_having + ") x"
@@ -373,6 +396,25 @@ async function merge_group_account_ids(merge_id, query = real_query) {
 // list of merge ids. Survivor cascade (DB-only steps): 1) account whose Salesforce Id equals the
 // merge id; 2) lowest membership number among the group. Steps 3 (most children) and 4 (oldest)
 // need Salesforce, so bulk leaves those unresolvable for single review. Pure DB.
+// Shared survivor cascade for BULK queueing (both merge-id and duplicate groups). Resolves the two
+// steps that need no Salesforce call: (1) the account whose id equals the group's merge id; else
+// (2) the lowest membership number. Returns { survivor:null } when neither applies — those groups need
+// the child-count/oldest tie-break and are left for single review. `mergeIdOf`/`memberOf` are accessors
+// so each caller supplies values from its own data source (review table vs consolidated + snapshot).
+function pick_bulk_survivor(accts, mergeIdOf, memberOf) {
+  const gm = accts.map((a) => String(mergeIdOf(a) || '').trim()).find(Boolean) || '';
+  if (gm && accts.includes(gm)) return { survivor: gm, rule: 'merge_id' };
+  const withMem = accts.filter((a) => { const v = memberOf(a); return v != null && String(v).trim() !== ''; });
+  if (withMem.length) {
+    const survivor = withMem.reduce((best, a) => {
+      const va = Number(memberOf(a)); const vb = Number(memberOf(best));
+      return (Number.isFinite(va) && (!Number.isFinite(vb) || va < vb)) ? a : best;
+    }, withMem[0]);
+    return { survivor, rule: 'member_number' };
+  }
+  return { survivor: null, rule: null };
+}
+
 async function resolve_merge_groups(opts = {}, query = real_query) {
   const T = cfg.RESULT_MERGE_ID_REVIEW_TABLE;
   const wheres = ["Salesforce_Merge_Id__c IS NOT NULL", "Salesforce_Merge_Id__c <> ''"];
@@ -390,14 +432,16 @@ async function resolve_merge_groups(opts = {}, query = real_query) {
   const keys = Array.isArray(opts.keys) ? opts.keys.map(String).filter(Boolean) : null;
   if (keys && keys.length) { wheres.push("Salesforce_Merge_Id__c IN (" + keys.map(() => "?").join(", ") + ")"); for (const k of keys) params.push(k); }
   const where_sql = "WHERE " + wheres.join(" AND ");
-  const rows = await query("SELECT Salesforce_Merge_Id__c AS merge_id, Account__c AS account, First_Name__c AS first_name, Last_Name__c AS last_name, Foundation_Constituent__c AS foundation FROM `" + T + "` " + where_sql, params);
-  const byId = new Map(); const allIds = new Set(); const nameMap = new Map(); const fnd_groups = new Set();
+  const rows = await query("SELECT Salesforce_Merge_Id__c AS merge_id, Account__c AS account, First_Name__c AS first_name, Last_Name__c AS last_name, Foundation_Constituent__c AS foundation, Which_List__c AS which_list FROM `" + T + "` " + where_sql, params);
+  const byId = new Map(); const allIds = new Set(); const nameMap = new Map(); const fnd_groups = new Set(); const wl_groups = new Set();
+  const wlWant = String(opts.which_list || '').trim().toLowerCase();
   for (const row of (rows || [])) {
     if (!row.merge_id || !row.account) continue;
     if (!byId.has(row.merge_id)) byId.set(row.merge_id, []);
     byId.get(row.merge_id).push(row.account); allIds.add(row.account);
     nameMap.set(row.account, ((row.first_name || '') + ' ' + (row.last_name || '')).trim());
     if (String(row.foundation || '').toLowerCase().startsWith('true')) fnd_groups.add(row.merge_id);
+    if (wlWant && String(row.which_list || '').toLowerCase().includes(wlWant)) wl_groups.add(row.merge_id);
   }
   // group-level foundation filter: keep groups with ANY (has) / NO (none) Foundation constituent.
   const fnd = String(opts.foundation_state || '');
@@ -407,6 +451,16 @@ async function resolve_merge_groups(opts = {}, query = real_query) {
       if ((fnd === 'has' && !hit) || (fnd === 'none' && hit)) byId.delete(mid);
     }
   }
+  // group-level which-list filter: keep groups where ANY member was flagged by the chosen signal.
+  if (wlWant === 'exact' || wlWant === 'fuzzy' || wlWant === 'nickname') {
+    for (const mid of [...byId.keys()]) { if (!wl_groups.has(mid)) byId.delete(mid); }
+  }
+  // group-level size filter: keep groups whose member count equals the chosen size.
+  const bulkSz = String(opts.size == null ? '' : opts.size).trim();
+  if (/^\d+$/.test(bulkSz)) {
+    const want = Number(bulkSz);
+    for (const [mid, accts] of [...byId]) { if (accts.length !== want) byId.delete(mid); }
+  }
   const memMap = new Map(); const ids = [...allIds];
   for (let k = 0; k < ids.length; k += 1000) {
     const chunk = ids.slice(k, k + 1000);
@@ -414,23 +468,46 @@ async function resolve_merge_groups(opts = {}, query = real_query) {
     const mrows = await query("SELECT salesforce_account_id AS account, member_number FROM `" + cfg.SNAPSHOT_TABLE_NAME + "` WHERE salesforce_account_id IN (" + ph + ")", chunk);
     for (const m of (mrows || [])) memMap.set(m.account, m.member_number);
   }
-  const hasMem = (a) => { const v = memMap.get(a); return v != null && String(v).trim() !== ''; };
   const out = [];
   for (const [mid, accts] of byId) {
-    let survivor = accts.includes(mid) ? mid : null;
-    let rule = survivor ? 'merge_id' : null;
-    if (!survivor) {
-      const withMem = accts.filter(hasMem);
-      if (withMem.length) {
-        survivor = withMem.reduce((best, a) => {
-          const va = Number(memMap.get(a)); const vb = Number(memMap.get(best));
-          return (Number.isFinite(va) && (!Number.isFinite(vb) || va < vb)) ? a : best;
-        }, withMem[0]);
-        rule = 'member_number';
-      }
-    }
+    const { survivor, rule } = pick_bulk_survivor(accts, () => mid, (a) => memMap.get(a));
     const losers = survivor ? accts.filter((a) => a !== survivor) : [];
     out.push({ merge_id: mid, survivor, name: survivor ? (nameMap.get(survivor) || '') : '', losers, rule, resolvable: !!survivor && losers.length > 0 });
+  }
+  return out;
+}
+
+// Bulk survivor resolution for DUPLICATE groups (consolidated clusters), mirroring resolve_merge_groups.
+// Resolves the survivor from the DB via the cascade steps that don't need Salesforce: (1) the account
+// whose id equals the group's merge id, else (2) the lowest membership number. Clusters that would need
+// the child-count or oldest tie-break are left NOT resolvable (skipped for single review) — same policy
+// as the merge-id bulk. `keys` = specific cluster keys, else all clusters matching the list filter.
+async function resolve_duplicate_groups(opts = {}, query = real_query) {
+  const T = cfg.RESULT_CONSOLIDATED_TABLE;
+  let rows;
+  if (Array.isArray(opts.keys) && opts.keys.length) {
+    const ph = opts.keys.map(() => '?').join(', ');
+    rows = await query('SELECT Consolidated_Group_Key__c AS `key`, Record_Ids__c AS ids FROM `' + T + '` WHERE Consolidated_Group_Key__c IN (' + ph + ')', opts.keys.map(String));
+  } else {
+    const { where_sql, params } = build_clauses(opts, DUP_SPEC);
+    rows = await query('SELECT Consolidated_Group_Key__c AS `key`, Record_Ids__c AS ids FROM `' + T + '` ' + where_sql + ' LIMIT 5000', params);
+  }
+  const clusters = (rows || []).map((r) => ({ key: r.key, ids: String(r.ids || '').split(';').map((s) => s.trim()).filter(Boolean) })).filter((c) => c.ids.length > 1);
+  const allIds = [...new Set(clusters.flatMap((c) => c.ids))];
+  const info = new Map();
+  for (let k = 0; k < allIds.length; k += 1000) {
+    const chunk = allIds.slice(k, k + 1000);
+    const ph = chunk.map(() => '?').join(', ');
+    const irows = await query('SELECT salesforce_account_id AS account, salesforce_merge_id AS merge_id, member_number, first_name, last_name FROM `' + cfg.SNAPSHOT_TABLE_NAME + '` WHERE salesforce_account_id IN (' + ph + ')', chunk);
+    for (const r of (irows || [])) info.set(r.account, r);
+  }
+  const out = [];
+  for (const c of clusters) {
+    const accts = c.ids.filter((a) => info.has(a));
+    const { survivor, rule } = pick_bulk_survivor(accts, (a) => info.get(a).merge_id, (a) => info.get(a).member_number);
+    const losers = survivor ? accts.filter((a) => a !== survivor) : [];
+    const nm = survivor ? ((info.get(survivor).first_name || '') + ' ' + (info.get(survivor).last_name || '')).trim() : '';
+    out.push({ source_key: c.key, survivor, name: nm, losers, rule, resolvable: !!survivor && losers.length > 0 });
   }
   return out;
 }
@@ -462,6 +539,6 @@ async function export_rows(view, opts = {}, query = real_query) {
 
 module.exports = {
   list_duplicates, list_merge_id, merge_id_summary, list_accounts, cluster_accounts, facets, export_rows,
-  list_merge_groups, merge_group_account_ids, accounts_by_ids, resolve_merge_groups,
+  list_merge_groups, merge_group_account_ids, accounts_by_ids, resolve_merge_groups, resolve_duplicate_groups, pick_bulk_survivor,
   build_clauses, MAX_PAGE_SIZE, EXPORT_MAX, // exported for tests
 };

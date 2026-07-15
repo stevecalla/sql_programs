@@ -60,12 +60,24 @@ async function ensure_table(query = real_query) {
 async function add(entry, query = real_query) {
   await ensure_table(query);
   const losers = as_losers(entry.loser_accounts);
-  const dup = await query(
-    'SELECT id FROM `' + TABLE + "` WHERE source_key = ? AND survivor_account = ? AND status IN ('queued', 'approved') LIMIT 1",
+  // Guard against re-adding a set on the basis of its LATEST lifecycle state for this
+  // source_key + survivor:
+  //   · queued / approved  -> already staged (can't double-stage)
+  //   · done / recreated   -> already merged and NOT since restored (the losers are deleted;
+  //                            re-merging is meaningless until a restore brings them back)
+  //   · restored / failed  -> re-addable (restore is the supported re-merge path; failed can retry)
+  const last = await query(
+    'SELECT status FROM `' + TABLE + '` WHERE source_key = ? AND survivor_account = ? ORDER BY id DESC LIMIT 1',
     [String(entry.source_key || ''), String(entry.survivor_account || '')]);
-  if (dup && dup.length) {
+  const st = (last && last.length) ? String(last[0].status) : null;
+  if (st === 'queued' || st === 'approved') {
     const e = new Error('This set is already in the merge queue — remove it first to re-add.');
     e.code = 'DUPLICATE';
+    throw e;
+  }
+  if (st === 'done' || st === 'recreated') {
+    const e = new Error('This set has already been merged — restore it first to re-merge.');
+    e.code = 'MERGED';
     throw e;
   }
   const ts = now_mtn_utc();
@@ -140,12 +152,16 @@ async function remove(id, query = real_query) {
 
 async function add_many(entries, query = real_query) {
   await ensure_table(query);
-  let queued = 0, skipped = 0;
+  let queued = 0, skipped = 0, merged = 0;
   for (const e of (entries || [])) {
     try { await add(e, query); queued += 1; }
-    catch (err) { if (err && err.code === 'DUPLICATE') skipped += 1; else throw err; }
+    catch (err) {
+      if (err && err.code === 'DUPLICATE') skipped += 1;
+      else if (err && err.code === 'MERGED') merged += 1;
+      else throw err;
+    }
   }
-  return { queued, skipped };
+  return { queued, skipped, merged };
 }
 
 module.exports = { add, add_many, list, set_status, transition, get, remove, ensure_table, as_losers, as_json, from_json, TABLE, DDL };

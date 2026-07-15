@@ -42,6 +42,11 @@ export default function Restore() {
   const selCount = sel.size;
   const safe = !status || status.safe_mode;
   const canExecute = !safe && mode === 'execute' && confirmText === 'RESTORE' && selCount > 0;
+  // The run summary carries only counts; per-set failure/skip REASONS live in history (reloaded after a
+  // run). Surface them inline so a failed run shows WHY (e.g. "restore halted: entity is deleted").
+  const runReasons = (runId) => (history || [])
+    .filter((h) => String(h.run_id) === String(runId) && (h.result === 'failed' || h.result === 'skipped'))
+    .map((h) => h.reason).filter(Boolean);
 
   const run = async (execute) => {
     if (!ids.length) return;
@@ -99,6 +104,9 @@ export default function Restore() {
           {result && (
             <p className="muted small" style={{ marginTop: 8, color: 'var(--accent)' }}>Run {result.run_id} ({result.mode}): {result.restored || 0} restored, {result.simulated || 0} simulated, {result.skipped} skipped, {result.failed} failed.</p>
           )}
+          {result && (result.failed > 0 || result.skipped > 0) && runReasons(result.run_id).map((r, i) => (
+            <p key={i} className="small" style={{ margin: '2px 0 0', color: 'var(--red)' }}>⚠ {r}</p>
+          ))}
         </div>
 
         <div className="card" style={{ flex: '1 1 320px', minWidth: 0, margin: 0, background: 'var(--card)' }}>
@@ -176,12 +184,15 @@ export default function Restore() {
           {recResult && (
             <span className="muted small" style={{ color: 'var(--accent)' }}>Run {recResult.run_id} ({recResult.mode}): {recResult.recreated || 0} recreated, {recResult.simulated || 0} simulated, {recResult.skipped} skipped, {recResult.failed} failed.</span>
           )}
+          {recResult && (recResult.failed > 0 || recResult.skipped > 0) && runReasons(recResult.run_id).map((r, i) => (
+            <p key={i} className="small" style={{ margin: '2px 0 0', color: 'var(--red)' }}>⚠ {r}</p>
+          ))}
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Recycle Bin <span className="muted small" style={{ fontWeight: 400 }}>(recently deleted Accounts{bin ? ' · ' + bin.rows.length : ''})</span></p>
-        <p className="muted small" style={{ margin: '0 0 8px' }}>Read-only view of soft-deleted Accounts in this org (~15-day window). “Merged into” is the surviving record a deleted account was merged into.</p>
+        <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Recycle Bin <span className="muted small" style={{ fontWeight: 400 }}>(write user's deleted Accounts{bin ? ' · ' + bin.rows.length : ''})</span></p>
+        <p className="muted small" style={{ margin: '0 0 8px' }}>Read-only view of soft-deleted Accounts (~15-day window), queried as the tool's <strong>Salesforce write user</strong> — so it shows the records this tool deleted. It reflects that user's visibility (their recycle bin; org-wide only if the user has <em>View All Data</em>), and is Account-only (other objects like Queue Items aren't shown). “Merged into” is the surviving record a deleted account was merged into.</p>
         <div className="dt-scroll" style={{ maxHeight: 300 }}>
           <table className="modal-table">
             <thead><tr><th>#</th><th>Name</th><th>Member #</th><th>Account</th><th>Merged into</th><th>Deleted / modified</th></tr></thead>

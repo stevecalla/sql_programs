@@ -88,7 +88,9 @@ git commit -m "Retire /merge (8020): folded into usat_apps salesforce_merge modu
 
 ## Step 6 — `.env` cleanup (production)
 
-Remove the monolith's auth/server vars (names per your `.env`): `MERGE_ADMIN_USER`, `MERGE_ADMIN_PASS`, `MERGE_SESSION_SECRET`, `MERGE_PORT`, `MERGE_NGROK`. **Keep** `SF_*`, `MERGE_ENABLE_EXECUTION`, `LOCAL_MYSQL_*`.
+**Optional tidy-up — not required** (these are harmless if left; nothing reads them once 8020 is gone). Remove the monolith's auth/server vars: `MERGE_ADMIN_USER`, `MERGE_ADMIN_PASS`, `MERGE_SESSION_SECRET`, `MERGE_PORT`, `MERGE_NGROK`. **Keep** `SF_*`, `MERGE_ENABLE_EXECUTION`, `LOCAL_MYSQL_*`.
+
+> These are **not replaced by new vars.** Only the standalone 8020 read them. usat_apps auth uses `USATAPPS_ADMIN_USER/PASS` (already set) and an **auto-generated** `session_secret` persisted in the gitignored `auth.json` *outside* the repo (`<OS data path>/usat_apps/auth.json`) — it signs the single `usat_apps_session` cookie that now gates the merge module. Removing `MERGE_SESSION_SECRET` does **not** log anyone out of usat_apps. Do this only **after** step 3 (while 8020 still runs it needs the var).
 
 ## Step 7 — Deploy
 ```
