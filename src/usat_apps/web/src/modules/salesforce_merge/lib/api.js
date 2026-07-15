@@ -64,6 +64,7 @@ export const api = {
   mergeProgress: (kind, runId) => req('/api/salesforce-merge/merge/progress' + (runId ? ('?run_id=' + encodeURIComponent(runId)) : (kind ? ('?kind=' + encodeURIComponent(kind)) : ''))),
   mergeCancel: (kind = 'merge') => req('/api/salesforce-merge/merge/cancel', { method: 'POST', body: JSON.stringify({ kind }) }),
   mergeRestoreList: () => req('/api/salesforce-merge/merge/restore'),
+  mergeRestoreDiff: (id) => req('/api/salesforce-merge/merge/restore/diff' + qs({ id })),
   mergeRestore: (ids, opts = {}) => req('/api/salesforce-merge/merge/restore', { method: 'POST', body: JSON.stringify({ ids, ...opts }) }),
   mergeRecreateList: () => req('/api/salesforce-merge/merge/recreate'),
   mergeRecreate: (ids, opts = {}) => req('/api/salesforce-merge/merge/recreate', { method: 'POST', body: JSON.stringify({ ids, ...opts }) }),

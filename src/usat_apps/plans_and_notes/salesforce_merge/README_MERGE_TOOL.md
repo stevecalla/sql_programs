@@ -40,7 +40,19 @@ It builds on the existing read-only duplicates pipeline and reuses `usat_sales_d
 - **Master selection is deterministic:** winner = account where `Id == merge_id`; losers = same
   `merge_id`, `Id != merge_id`.
 - **Merge execution:** prototype Node-SOAP `merge()` and the Apex wrapper in the sandbox, then pick.
-- **Restore:** two tiers (≤15-day undelete + backup recreate) from a deep pre-merge snapshot.
+- **Merge drift check:** queueing captures a stage-time field baseline
+  (`store/merge_stage_baseline.js`) for single **and** bulk adds; at process time the run diffs live vs
+  that baseline on a canonical identity field set (shape-robust; scope = email, member #, name, DOB,
+  gender, ZIP, address, merge id — not every field) and surfaces any field that changed
+  since staging in the progress bar, per-set badge, run summary, and history. Execute **skips drifted
+  sets by default** (left approved); an operator acknowledges via a checkbox (`ack_drift`) to merge
+  them anyway. Mirror of the restore diff, opposite direction.
+- **Restore:** two tiers (≤15-day undelete + backup recreate) from a deep pre-merge snapshot. A
+  read-only **restore diff / drift check** (`store/restore_diff.js`, `GET …/merge/restore/diff`,
+  `RestoreDiffDetail.jsx`) lets an operator expand any completed merge to compare the survivor's
+  current live values against the pre-merge snapshot field by field — "in sync" (a restore changes
+  nothing) vs the fields a restore would reset (and any edited after the merge that a blind restore
+  would overwrite). See `README_RESTORE_DIFF.md`.
 - **Contact-point preservation** gated by a configurable `high_value_flags` list (donor, …).
 - **Salesforce auth:** start simple (username/password) in sandbox; add a **Connected App
   (OAuth JWT, least-privilege write user) before production**. (Independent of the React choice.)

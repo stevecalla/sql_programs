@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import DatasetStamp from '../components/DatasetStamp.jsx';
 import WorkerBanner from '../components/WorkerBanner.jsx';
+import RestoreDiffDetail from '../components/RestoreDiffDetail.jsx';
 import { api } from '../lib/api.js';
 import { awaitRun, summarize } from '../lib/run_poll.js';
 
@@ -27,6 +28,10 @@ export default function Restore() {
   const [recConfirm, setRecConfirm] = useState('');
   const [recResult, setRecResult] = useState(null);
   const [recBusy, setRecBusy] = useState(false);
+  const [diffOpen, setDiffOpen] = useState(() => new Set());
+  const toggleDiff = (id) => setDiffOpen((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const [keepBySet, setKeepBySet] = useState({});   // { [queueId]: [fieldsToKeepCurrent] } — selective restore
+  const onKeepChange = useCallback((id, fields) => setKeepBySet((p) => ({ ...p, [id]: fields })), []);
 
   const load = useCallback(() => {
     api.mergeStatus().then(setStatus).catch((e) => setErr(e.message));
@@ -52,7 +57,12 @@ export default function Restore() {
     if (!ids.length) return;
     setBusy(true); setErr(''); setResult(null);
     try {
-      const q = await api.mergeRestore(ids, execute ? { mode: 'execute', confirm: confirmText } : { mode: 'simulate' });
+      // Selective restore: send the per-set "keep current" field choices for the sets being restored.
+      const keep_fields = {};
+      for (const id of ids) if (keepBySet[id] && keepBySet[id].length) keep_fields[id] = keepBySet[id];
+      const q = await api.mergeRestore(ids, execute
+        ? { mode: 'execute', confirm: confirmText, keep_fields }
+        : { mode: 'simulate', keep_fields });
       setConfirmText('');
       const finalRun = await awaitRun(api, 'restore', q.run_id);
       setResult(summarize(finalRun)); load();
@@ -67,7 +77,9 @@ export default function Restore() {
     if (!recIds.length) return;
     setRecBusy(true); setErr(''); setRecResult(null);
     try {
-      const q = await api.mergeRecreate(recIds, execute ? { mode: 'execute', confirm: recConfirm } : { mode: 'simulate' });
+      const keep_fields = {};
+      for (const id of recIds) if (keepBySet[id] && keepBySet[id].length) keep_fields[id] = keepBySet[id];
+      const q = await api.mergeRecreate(recIds, execute ? { mode: 'execute', confirm: recConfirm, keep_fields } : { mode: 'simulate', keep_fields });
       setRecConfirm('');
       const finalRun = await awaitRun(api, 'recreate', q.run_id);
       setRecResult(summarize(finalRun)); load();
@@ -120,13 +132,15 @@ export default function Restore() {
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Completed merges <span className="muted small" style={{ fontWeight: 400 }}>({rows.length})</span></p>
+        <p style={{ margin: '0 0 4px', fontWeight: 700 }}>Completed merges <span className="muted small" style={{ fontWeight: 400 }}>({rows.length})</span></p>
+        <p className="muted small" style={{ margin: '0 0 8px' }}>Expand a row to diff the survivor's current Salesforce values against the pre-merge snapshot — “in sync” means a restore would change nothing; differences show what a restore would reset (and what may have been edited since the merge).</p>
         <div className="dt-scroll" style={{ maxHeight: 320 }}>
           <table className="modal-table">
-            <thead><tr><th>Sel</th><th>#</th><th>Survivor</th><th>Account</th><th>Merged</th><th>Source</th><th>Env</th><th>Restorable</th></tr></thead>
+            <thead><tr><th>Diff</th><th>Sel</th><th>#</th><th>Survivor</th><th>Account</th><th>Merged</th><th>Source</th><th>Env</th><th>Restorable</th></tr></thead>
             <tbody>
-              {rows.map((r, i) => (
+              {rows.map((r, i) => [
                 <tr key={r.id}>
+                  <td><button type="button" onClick={() => toggleDiff(r.id)} title="Diff current vs pre-merge snapshot" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, font: 'inherit' }}>{diffOpen.has(r.id) ? '▾' : '▸'}</button></td>
                   <td><input type="checkbox" checked={sel.has(r.id)} disabled={r.restorable === false} onChange={() => toggle(r.id)} aria-label={'Select ' + r.id} /></td>
                   <td>{i + 1}</td>
                   <td>{r.survivor_name || '—'}</td>
@@ -139,9 +153,10 @@ export default function Restore() {
                       {r.restorable === true ? '✓ restorable' : r.restorable === false ? '✕ expired' : '— unknown'}
                     </span>
                   </td>
-                </tr>
-              ))}
-              {rows.length === 0 && <tr><td colSpan={8} className="muted small">No completed merges to restore.</td></tr>}
+                </tr>,
+                diffOpen.has(r.id) ? <tr key={r.id + '_diff'}><td colSpan={9} style={{ padding: 0 }}><RestoreDiffDetail id={r.id} onKeepChange={onKeepChange} /></td></tr> : null,
+              ])}
+              {rows.length === 0 && <tr><td colSpan={9} className="muted small">No completed merges to restore.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -154,10 +169,11 @@ export default function Restore() {
         </p>
         <div className="dt-scroll" style={{ maxHeight: 280 }}>
           <table className="modal-table">
-            <thead><tr><th>Sel</th><th>#</th><th>Survivor</th><th>Account</th><th>Merged</th><th>Backup</th><th>Reason / considerations</th></tr></thead>
+            <thead><tr><th>Diff</th><th>Sel</th><th>#</th><th>Survivor</th><th>Account</th><th>Merged</th><th>Backup</th><th>Reason / considerations</th></tr></thead>
             <tbody>
-              {recRows.map((r, i) => (
+              {recRows.flatMap((r, i) => [
                 <tr key={r.id}>
+                  <td><button type="button" onClick={() => toggleDiff(r.id)} title="Diff survivor vs pre-merge snapshot (+ pick fields to keep)" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, font: 'inherit' }}>{diffOpen.has(r.id) ? '▾' : '▸'}</button></td>
                   <td><input type="checkbox" checked={recSel.has(r.id)} disabled={!r.has_snapshot} onChange={() => recToggle(r.id)} aria-label={'Select ' + r.id} /></td>
                   <td>{i + 1}</td>
                   <td>{r.survivor_name || '—'}</td>
@@ -165,9 +181,10 @@ export default function Restore() {
                   <td>{r.loser_count}</td>
                   <td><span className="pill" style={{ color: r.has_snapshot ? 'var(--green)' : 'var(--red)' }}>{r.has_snapshot ? '✓ ' + r.snapshot_losers + ' acct / ' + r.snapshot_children + ' child' : '✕ none'}</span></td>
                   <td title={r.reason} className="small">{r.reason}</td>
-                </tr>
-              ))}
-              {recRows.length === 0 && <tr><td colSpan={7} className="muted small">Nothing here — a set lands in this queue only when a restore can’t use the Recycle Bin.</td></tr>}
+                </tr>,
+                diffOpen.has(r.id) ? <tr key={r.id + '_diff'}><td colSpan={8} style={{ padding: 0 }}><RestoreDiffDetail id={r.id} onKeepChange={onKeepChange} /></td></tr> : null,
+              ])}
+              {recRows.length === 0 && <tr><td colSpan={8} className="muted small">Nothing here — a set lands in this queue only when a restore can’t use the Recycle Bin.</td></tr>}
             </tbody>
           </table>
         </div>

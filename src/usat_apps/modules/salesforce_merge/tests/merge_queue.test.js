@@ -102,6 +102,7 @@ test('add_many queues each entry, counts active as skipped and merged separately
   assert.equal(r.queued, 2);
   assert.equal(r.skipped, 1);
   assert.equal(r.merged, 1);
+  assert.equal(r.added.length, 2, 'returns the ids/entries of the newly-added sets (for baseline capture)');
 });
 
 test('add persists field_overrides + child_counts as JSON; list parses them back', async () => {

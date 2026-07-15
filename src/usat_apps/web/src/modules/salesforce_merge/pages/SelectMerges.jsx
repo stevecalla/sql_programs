@@ -314,9 +314,13 @@ export default function SelectMerges() {
       selLosers.forEach((id) => { const c = children && children[id]; if (c) { ctot += c.total || 0; for (const [k, v] of Object.entries(c.by || {})) childAgg[k] = (childAgg[k] || 0) + v; } });
       const child_counts = isSf ? { total: ctot, by: childAgg } : null;
       const field_overrides = Object.keys(overrides).length ? overrides : null;
+      // Stage-time baseline: the field values as reviewed, keyed by account, so process-time can flag drift.
+      const setIds = new Set([master, ...selLosers]);
+      const staged_fields = {};
+      for (const a of accounts) if (setIds.has(a.account)) staged_fields[a.account] = a;
       const r = await api.mergeQueueAdd({ source_type: source, source_key: selKey, survivor_account: master,
         survivor_contact: masterAcct ? acctContact(masterAcct) : '', survivor_name: masterAcct ? acctName(masterAcct) : '',
-        loser_accounts: selLosers, master_rule: 'cascade', field_overrides, child_counts });
+        loser_accounts: selLosers, master_rule: 'cascade', field_overrides, child_counts, staged_fields });
       setNote(`Queued: master ${shortId(master)} + ${r.loser_count} account${r.loser_count === 1 ? '' : 's'}.`);
       loadQueue();
     } catch (e) { setAddErr(e.message); }

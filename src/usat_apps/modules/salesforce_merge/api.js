@@ -17,6 +17,8 @@ const mexec = require('./store/merge_execute');
 const mhist = require('./store/merge_history');
 const mrun = require('./store/merge_run');
 const mrestore = require('./store/merge_restore');
+const rdiff = require('./store/restore_diff');
+const stagebase = require('./store/merge_stage_baseline');
 const msnap = require('./store/merge_snapshot');
 const sfread = require('./store/salesforce_read');
 const sfwrite = require('./store/salesforce_write');
@@ -278,6 +280,11 @@ function mount(app) {
       const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key, environment: ds0 ? ds0.environment : null, org_id,
         survivor_account: b.survivor_account, survivor_contact: b.survivor_contact, survivor_name: b.survivor_name, field_overrides: b.field_overrides, child_counts: b.child_counts,
         loser_accounts: b.loser_accounts, master_rule: b.master_rule, notes: b.notes });
+      // Stage-time baseline: capture the field values the user just reviewed so the merge can flag
+      // drift at process time. Best-effort — a failure here must never block queueing.
+      if (r && r.id && b.staged_fields && typeof b.staged_fields === 'object') {
+        try { await stagebase.save(r.id, b.staged_fields); } catch (e) { /* non-fatal */ }
+      }
       analytics.log({ event_name: 'queue_add', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), source_type: b.source_type, source_key: b.source_key, set_count: 1, outcome: 'ok' });
       res.status(201).json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -302,6 +309,22 @@ function mount(app) {
       const capped = resolvable.length > CAP;
       const entries = resolvable.slice(0, CAP).map((g) => ({ created_by: current_user(req), source_type: src, source_key: keyOf(g), survivor_account: g.survivor, survivor_name: g.name, loser_accounts: g.losers, master_rule: g.rule || 'cascade', environment: dsb ? dsb.environment : null, org_id }));
       const r = await mqueue.add_many(entries);
+      // Stage baseline for each newly-added set — from the local snapshot (canonical drift handles the
+      // snapshot-vs-live shape difference). Best-effort; never blocks bulk queueing.
+      try {
+        const addedRows = (r.added || []).filter((x) => x && x.id);
+        if (addedRows.length) {
+          const allIds = [...new Set(addedRows.flatMap((x) => [x.entry.survivor_account].concat(x.entry.loser_accounts || [])).filter(Boolean).map(String))];
+          const accts = await reviews.accounts_by_ids(allIds);
+          const byId = new Map((accts || []).map((a) => [a.account, a]));
+          for (const x of addedRows) {
+            const setIds = [x.entry.survivor_account].concat(x.entry.loser_accounts || []).filter(Boolean);
+            const map = {};
+            for (const id of setIds) if (byId.has(id)) map[id] = byId.get(id);
+            if (Object.keys(map).length) await stagebase.save(x.id, map);
+          }
+        }
+      } catch (e) { /* non-fatal */ }
       analytics.log({ event_name: 'queue_bulk_add', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), source_type: src, set_count: r.queued, outcome: 'ok' });
       res.json({ ok: true, queued: r.queued, skipped: r.skipped, merged: r.merged, unresolved, total: groups.length, capped });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -315,7 +338,7 @@ function mount(app) {
       const b = req.body || {};
       // Phase 3: don't run inline — enqueue a queued salesforce_merge_run; the merge worker claims + runs it.
       const r = await mrun.enqueue({ kind: 'merge', mode: b.mode, created_by: current_user(req),
-        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, created_by: current_user(req) } } });
+        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, ack_drift: !!b.ack_drift, created_by: current_user(req) } } });
       analytics.log({ event_name: 'merge_run', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req),
         mode: (b.dry_run || b.mode !== 'execute') ? 'simulate' : 'execute', outcome: 'queued' });
       res.json({ ok: true, queued: true, ...r });
@@ -350,11 +373,16 @@ function mount(app) {
     try { res.json({ ok: true, rows: await mrestore.list_restorable() }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
+  // Restore diff / drift check — live compare of a merged set's survivor vs its pre-merge snapshot.
+  app.get('/api/salesforce-merge/merge/restore/diff', gate, async function (req, res) {
+    try { res.json({ ok: true, ...(await rdiff.diff_for_entry(req.query.id)) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   app.post('/api/salesforce-merge/merge/restore', gate, async function (req, res) {
     try {
       const b = req.body || {};
       const r = await mrun.enqueue({ kind: 'restore', mode: b.mode, created_by: current_user(req),
-        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, created_by: current_user(req) } } });
+        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, keep_fields: b.keep_fields || null, created_by: current_user(req) } } });
       analytics.log({ event_name: 'restore_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req), mode: b.mode, outcome: 'queued' });
       res.json({ ok: true, queued: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -369,7 +397,7 @@ function mount(app) {
     try {
       const b = req.body || {};
       const r = await mrun.enqueue({ kind: 'recreate', mode: b.mode, created_by: current_user(req),
-        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, created_by: current_user(req) } } });
+        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, keep_fields: b.keep_fields || null, created_by: current_user(req) } } });
       analytics.log({ event_name: 'recreate_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req), mode: b.mode, outcome: 'queued' });
       res.json({ ok: true, queued: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }

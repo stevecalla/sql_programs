@@ -65,6 +65,33 @@ test('restore simulate: no writes, status unchanged, simulated history', async (
   assert.equal(d.calls.history[0].result, 'simulated');
 });
 
+test('master_reset_fields excludes fields in the keep set (selective restore)', () => {
+  const all = mr.master_reset_fields({ PersonEmail: 'a@b.com', Phone: '555' }, 'M');
+  assert.equal(all.PersonEmail, 'a@b.com');
+  assert.equal(all.Phone, '555');
+  const kept = mr.master_reset_fields({ PersonEmail: 'a@b.com', Phone: '555' }, 'M', new Set(['PersonEmail']));
+  assert.equal(kept.PersonEmail, undefined);   // kept at current value -> not reset
+  assert.equal(kept.Phone, '555');
+});
+
+test('restore selective: keep_fields leaves that field out of the survivor reset', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const d = deps({ snapRows: [
+    { role: 'survivor', account: 'M', fields: { account: 'M', PersonEmail: 'm@x.com', Phone: '111' } },
+    { role: 'loser', account: 'L1', fields: { account: 'L1', Id: 'L1' } },
+    { role: 'loser', account: 'L2', fields: { account: 'L2', Id: 'L2' } },
+  ] });
+  const out = await mr.restore([7], { mode: 'execute', confirm: 'RESTORE', keep_fields: { 7: ['PersonEmail'] } }, d);
+  assert.equal(out.restored, 1);
+  const acctUpd = d.calls.updates.find((u) => u.type === 'Account' && u.fields.Id === 'M');
+  assert.ok(acctUpd, 'survivor reset happened');
+  assert.equal(acctUpd.fields.PersonEmail, undefined, 'kept field not reset');
+  assert.equal(acctUpd.fields.Phone, '111', 'non-kept field reset');
+  assert.equal(out.results[0].kept_fields, 1);
+  assert.equal(out.results[0].reset_fields, 1);
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
 test('restore execute eligible: undelete + re-point children + reset master + status->restored', async () => {
   process.env.MERGE_ENABLE_EXECUTION = 'true';
   const d = deps();
@@ -177,5 +204,23 @@ test('recreate execute: creates losers (new ids), re-points children, status->re
   assert.equal(childUpd.fields.AccountId, 'NEW_1');        // re-pointed to the NEW loser id
   assert.equal(d.calls.transitions[0].to, 'recreated');
   assert.equal(d.calls.history[0].result, 'recreated');
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
+test('recreate selective: keep_fields excluded from the survivor reset', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const d = deps({ snapRows: [
+    { role: 'survivor', account: 'M', fields: { account: 'M', PersonEmail: 'm@x.com', Phone: '111' } },
+    { role: 'loser', account: 'L1', fields: { account: 'L1', Id: 'L1' } },
+  ] });
+  const out = await mr.recreate([7], { mode: 'execute', confirm: 'RECREATE', keep_fields: { 7: ['PersonEmail'] } }, d);
+  assert.equal(out.recreated, 1);
+  const acctUpd = d.calls.updates.find((u) => u.type === 'Account' && u.fields.Id === 'M');
+  assert.ok(acctUpd, 'survivor reset happened');
+  assert.equal(acctUpd.fields.PersonEmail, undefined, 'kept field not reset');
+  assert.equal(acctUpd.fields.Phone, '111', 'non-kept field reset');
+  assert.equal(out.results[0].kept_fields, 1);
+  const audit = d.calls.history.find((h) => h.result === 'recreated');
+  assert.ok(audit.diff && audit.diff.kind === 'recreate', 'recreate writes a diff audit');
   delete process.env.MERGE_ENABLE_EXECUTION;
 });

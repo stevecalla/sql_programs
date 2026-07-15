@@ -52,11 +52,16 @@ function from_snapshot(rows, survivorId) {
   return { master, loserIds, children };
 }
 
-function master_reset_fields(masterFields, survivorId) {
+// Build the survivor field patch to reset to pre-merge values. `keep` is an optional set/array of
+// field API names the operator chose to LEAVE at their current (live) value — those are excluded from
+// the reset (selective restore). Everything else non-blank + non-system is reset to the snapshot.
+function master_reset_fields(masterFields, survivorId, keep) {
   const SKIP = new Set(['account', 'contact', 'Id', 'Name', 'CreatedDate', 'LastModifiedDate']);
+  const keepSet = keep instanceof Set ? keep : new Set(keep || []);
   const out = { Id: survivorId };
   for (const [k, v] of Object.entries(masterFields || {})) {
     if (SKIP.has(k)) continue;
+    if (keepSet.has(k)) continue;   // operator kept the current value for this field
     if (v === undefined || v === null || v === '') continue;
     out[k] = v;
   }
@@ -200,11 +205,17 @@ async function restore(ids, opts = {}, deps = {}) {
     const eligible = missing.length === 0 && losers.length > 0;
     const repointable = children.filter((c) => !c.child_type || c.child_type === 'child');
 
+    // Selective restore: per-set list of survivor fields to KEEP at their current value (from the diff
+    // review). Fields not kept are reset to the pre-merge snapshot.
+    const keepList = (opts.keep_fields && (opts.keep_fields[e.id] || opts.keep_fields[String(e.id)])) || [];
+    const keepSet = new Set(keepList);
+    const resetPreview = Object.keys(master_reset_fields(master, e.survivor_account, keepSet)).length - 1;
+
     if (!armed) {
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
         survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
-        result: 'simulated', reason: 'restore preview — ' + (eligible ? 'eligible' : 'not eligible') + ' (' + present.length + '/' + losers.length + ' recoverable), ' + repointable.length + ' children to re-point' });
-      out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', eligible, recoverable: present.length, children: children.length });
+        result: 'simulated', reason: 'restore preview — ' + (eligible ? 'eligible' : 'not eligible') + ' (' + present.length + '/' + losers.length + ' recoverable), ' + repointable.length + ' children to re-point, would reset ' + resetPreview + ' field(s)' + (keepSet.size ? ', keep ' + keepSet.size : '') });
+      out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', eligible, recoverable: present.length, children: children.length, reset_fields: resetPreview, kept_fields: keepSet.size });
       log((e.survivor_name || e.id) + ' — preview ' + (eligible ? 'eligible' : 'not eligible') + ' (' + present.length + '/' + losers.length + ' recoverable)');
       completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
     }
@@ -228,9 +239,13 @@ async function restore(ids, opts = {}, deps = {}) {
     // right. Resetting the survivor before the undelete frees any UNIQUE value that survivorship moved
     // onto the survivor during the merge (e.g. a member number) — otherwise Salesforce blocks the
     // undelete below with "duplicate value found ...". Best-effort (isolated so it can't abort the set).
-    let masterOk = true; const notes = [];
-    try { const reset = master_reset_fields(master, e.survivor_account); if (Object.keys(reset).length > 1) await W.update_record(conn, 'Account', reset); }
-    catch (err) { masterOk = false; notes.push('master reset: ' + (err && err.message)); }
+    let masterOk = true; let resetCount = 0; let resetPlan = []; const notes = [];
+    try {
+      const reset = master_reset_fields(master, e.survivor_account, keepSet);
+      resetPlan = Object.entries(reset).filter(([k]) => k !== 'Id').map(([field, value]) => ({ field, value }));
+      resetCount = resetPlan.length;
+      if (resetCount > 0) await W.update_record(conn, 'Account', reset);
+    } catch (err) { masterOk = false; notes.push('master reset: ' + (err && err.message)); }
 
     // STEP 2 — bring the loser(s) back. Only undelete the ones still in the bin, and CHECK the result:
     // if a loser won't come back, that's a real failure (report Salesforce's own message) — don't push
@@ -269,13 +284,15 @@ async function restore(ids, opts = {}, deps = {}) {
     }
 
     await Q.transition([e.id], 'restored', ['done']);
+    const keptNote = keepSet.size ? ', kept ' + keepSet.size + ' current' : '';
     const reason = 'undeleted ' + toUndelete.length + ', re-pointed ' + repointed
+      + ', reset ' + resetCount + ' field(s)' + keptNote
       + (skippedCh ? ', skipped ' + skippedCh : '') + (masterOk ? '' : ', master-reset partial')
       + (notes.length ? ' — ' + notes.slice(0, 5).join('; ') : '');
     await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
       survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
-      result: 'restored', reason });
-    out.restored += 1; out.results.push({ id: e.id, result: 'restored', undeleted: toUndelete.length, repointed, skipped: skippedCh, notes });
+      result: 'restored', reason, diff: { kind: 'restore', reset: resetPlan, kept: [...keepSet] } });
+    out.restored += 1; out.results.push({ id: e.id, result: 'restored', undeleted: toUndelete.length, repointed, skipped: skippedCh, reset_fields: resetCount, kept_fields: keepSet.size, notes });
     log((e.survivor_name || e.id) + ' — RESTORED: ' + reason);
     completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed });
   }
@@ -361,13 +378,17 @@ async function recreate(ids, opts = {}, deps = {}) {
           childOk += 1;
         }
       }
-      const reset = master_reset_fields(master, e.survivor_account);
-      if (Object.keys(reset).length > 1) await W.update_record(conn, 'Account', reset);
+      // Selective survivor reset (same keep-current choices as restore).
+      const keepSet = new Set((opts.keep_fields && (opts.keep_fields[e.id] || opts.keep_fields[String(e.id)])) || []);
+      const reset = master_reset_fields(master, e.survivor_account, keepSet);
+      const resetPlan = Object.entries(reset).filter(([k]) => k !== 'Id').map(([field, value]) => ({ field, value }));
+      if (resetPlan.length > 0) await W.update_record(conn, 'Account', reset);
       await Q.transition([e.id], 'recreated', ['recreate_pending']);
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
         survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
-        result: 'recreated', reason: 'recreated ' + losers.length + ' account(s) (NEW ids), re-pointed ' + childOk + ' child link(s)' });
-      out.recreated += 1; out.results.push({ id: e.id, result: 'recreated', accounts: losers.length, children: childOk, new_ids: idMap });
+        result: 'recreated', reason: 'recreated ' + losers.length + ' account(s) (NEW ids), re-pointed ' + childOk + ' child link(s), reset ' + resetPlan.length + ' field(s)' + (keepSet.size ? ', kept ' + keepSet.size + ' current' : ''),
+        diff: { kind: 'recreate', reset: resetPlan, kept: [...keepSet] } });
+      out.recreated += 1; out.results.push({ id: e.id, result: 'recreated', accounts: losers.length, children: childOk, new_ids: idMap, reset_fields: resetPlan.length, kept_fields: keepSet.size });
       log((e.survivor_name || e.id) + ' — RECREATED ' + losers.length + ' accounts (new ids)');
     } catch (err) {
       log((e.survivor_name || e.id) + ' — RECREATE FAILED: ' + (err && err.message));
@@ -382,4 +403,4 @@ async function recreate(ids, opts = {}, deps = {}) {
   return out;
 }
 
-module.exports = { restore, list_restorable, list_recreatable, recreate, status, deleted_set, from_snapshot, recreate_plan_from_snapshot, account_create_fields, master_reset_fields, execution_enabled, make_run_id };
+module.exports = { restore, list_restorable, list_recreatable, recreate, status, deleted_set, account_states, from_snapshot, recreate_plan_from_snapshot, account_create_fields, master_reset_fields, execution_enabled, make_run_id };

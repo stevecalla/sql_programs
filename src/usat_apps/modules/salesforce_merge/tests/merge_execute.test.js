@@ -26,6 +26,7 @@ function deps(opts = {}) {
     history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; }, clear_simulated: async () => { calls.clearedSim = (calls.clearedSim || 0) + 1; } },
     run: { start: async () => {}, update: async () => { calls.run.updates += 1; }, finish: async (id, p) => { calls.run.finished = p; } },
     queue: { list: async () => [entry], transition: async (ids, to, from) => { calls.transitions.push({ ids, to, from }); return { updated: 1 }; } },
+    baseline: { get: async () => opts.baseline || null },   // stage-time drift baseline (null = not captured)
     write: {
       default_write_connect: async () => ({}),
       merge_one: async (conn, master, batch, fields) => {
@@ -33,6 +34,9 @@ function deps(opts = {}) {
         const b = opts.mergeBehavior ? opts.mergeBehavior(batch) : { success: true };
         return Object.assign({ success: true, mergedRecordIds: batch }, b);
       },
+      // stamp path defaults (individual tests can override update_record to script failures)
+      stamp_fields_status: async () => (opts.stampPresent || { was_merged__c: true, was_merged_date__c: true, was_merged_by__c: true }),
+      write_creds: () => ({ user: 'svc@sf' }),
     },
   };
 }
@@ -43,6 +47,62 @@ test('build_master_fields: an override is an ACCOUNT ID resolved to that record 
   assert.equal(f.PersonEmail, 'l@x.com'); // master blank -> backfill from loser
   assert.equal(f.Phone, '999');           // override -> account L's value
   assert.notEqual(f.Phone, 'L');          // regression: never write the account id into the field
+});
+
+test('drift check: a field changed since staging is counted + surfaced on the result', async () => {
+  delete process.env.MERGE_ENABLE_EXECUTION;   // simulate is enough to compute drift
+  // Baseline says M's email was blank at staging; live account M now has an email -> 1 drifted field.
+  const d = deps({ baseline: { M: { PersonEmail: 'was-blank@old.com', cfg_Member_Number__pc: '1001' } } });
+  const out = await mexec.process([1], {}, d);
+  assert.equal(out.drift, 1, 'one set had drift');
+  assert.ok(out.drift_fields >= 1, 'at least one field drifted');
+  const r = out.results.find((x) => x.id === 1);
+  assert.equal(r.drift_checked, true);
+  assert.ok(r.drift_fields >= 1);
+  assert.ok(r.drift_detail.some((x) => x.field === 'email'));   // canonical identity field
+});
+
+test('no baseline captured -> drift not checked, no drift count', async () => {
+  delete process.env.MERGE_ENABLE_EXECUTION;
+  const d = deps();   // baseline get -> null
+  const out = await mexec.process([1], {}, d);
+  assert.ok(!out.drift, 'no drift counted');
+  const r = out.results.find((x) => x.id === 1);
+  assert.equal(r.drift_checked, false);
+});
+
+test('canonical drift: snapshot-shaped baseline vs SF-shaped live compares correctly (no false drift)', async () => {
+  delete process.env.MERGE_ENABLE_EXECUTION;
+  // baseline uses snapshot names (email/member_number); live account M uses SF names (PersonEmail/cfg_…).
+  // Equal email -> no drift; different member number -> 1 drift, mapped to the canonical field.
+  const accounts = [{ account: 'M', contact: 'cM', PersonEmail: 'same@x.com', cfg_Member_Number__pc: '2002' }, { account: 'L1' }];
+  const d = deps({ entry: { loser_accounts: 'L1', loser_count: 1 }, accounts, baseline: { M: { email: 'same@x.com', member_number: '1001' } } });
+  const out = await mexec.process([1], {}, d);
+  const r = out.results.find((x) => x.id === 1);
+  assert.equal(r.drift_fields, 1);
+  assert.ok(r.drift_detail.some((x) => x.field === 'member_number'));
+  assert.ok(!r.drift_detail.some((x) => x.field === 'email'), 'equal email across shapes is not drift');
+});
+
+test('drift gate: execute WITHOUT ack skips a drifted set (stays approved, no merge)', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const d = deps({ baseline: { M: { email: 'was@old.com' } } });   // live M PersonEmail '' -> drift
+  const out = await mexec.process([1], { mode: 'execute', confirm: 'MERGE' }, d);
+  assert.equal(out.done, 0, 'not merged');
+  assert.equal(out.skipped, 1);
+  assert.equal(out.drift_blocked, 1);
+  assert.equal(d.calls.merges.length, 0, 'no Salesforce merge call');
+  assert.ok(!d.calls.transitions.some((t) => t.to === 'done'), 'set left approved');
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
+test('drift gate: execute WITH ack_drift merges the drifted set', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const d = deps({ baseline: { M: { email: 'was@old.com' } } });
+  const out = await mexec.process([1], { mode: 'execute', confirm: 'MERGE', ack_drift: true }, d);
+  assert.equal(out.done, 1, 'merged despite drift');
+  assert.ok(d.calls.merges.length >= 1);
+  delete process.env.MERGE_ENABLE_EXECUTION;
 });
 
 test('verify_alignment flags environment and org mismatches', () => {

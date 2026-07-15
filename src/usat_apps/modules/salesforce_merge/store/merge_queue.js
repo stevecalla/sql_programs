@@ -153,15 +153,16 @@ async function remove(id, query = real_query) {
 async function add_many(entries, query = real_query) {
   await ensure_table(query);
   let queued = 0, skipped = 0, merged = 0;
+  const added = [];   // { id, entry } for each newly-inserted set (used to capture stage baselines)
   for (const e of (entries || [])) {
-    try { await add(e, query); queued += 1; }
+    try { const r = await add(e, query); queued += 1; added.push({ id: r && r.id, entry: e }); }
     catch (err) {
       if (err && err.code === 'DUPLICATE') skipped += 1;
       else if (err && err.code === 'MERGED') merged += 1;
       else throw err;
     }
   }
-  return { queued, skipped, merged };
+  return { queued, skipped, merged, added };
 }
 
 module.exports = { add, add_many, list, set_status, transition, get, remove, ensure_table, as_losers, as_json, from_json, TABLE, DDL };
