@@ -233,14 +233,14 @@ export default function MergeProcess() {
           )}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={stampMerged} onChange={(e) => setStampMerged(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>Stamp survivor as merged <code>(was_merged__c, was_merged_date__c, was_merged_by__c)</code></span>
+            <span>Stamp survivor as merged <code>(usat_was_merged__c, usat_was_merged_date__c, usat_was_merged_by__c)</code></span>
           </label>
-          {stampMerged && stampFields && (!stampFields.was_merged__c || !stampFields.was_merged_date__c || !stampFields.was_merged_by__c) && (
+          {stampMerged && stampFields && (!stampFields.usat_was_merged__c || !stampFields.usat_was_merged_date__c || !stampFields.usat_was_merged_by__c) && (
             <p className="small" style={{ margin: '0 0 8px', color: 'var(--amber)' }}>
-              ⚠ {[!stampFields.was_merged__c && 'was_merged__c', !stampFields.was_merged_date__c && 'was_merged_date__c', !stampFields.was_merged_by__c && 'was_merged_by__c'].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The merge still runs; the stamp is skipped for any missing field. <code>was_merged_by__c</code> records who ran the merge.
+              ⚠ {[!stampFields.usat_was_merged__c && 'usat_was_merged__c', !stampFields.usat_was_merged_date__c && 'usat_was_merged_date__c', !stampFields.usat_was_merged_by__c && 'usat_was_merged_by__c'].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The merge still runs; the stamp is skipped for any missing field. <code>usat_was_merged_by__c</code> records who ran the merge.
             </p>
           )}
-          {stampMerged && stampFields && stampFields.was_merged__c && stampFields.was_merged_date__c && stampFields.was_merged_by__c && (
+          {stampMerged && stampFields && stampFields.usat_was_merged__c && stampFields.usat_was_merged_date__c && stampFields.usat_was_merged_by__c && (
             <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present (flag, date, by)</p>
           )}
           {mode === 'execute' && selCount > 0 && (

@@ -67,19 +67,16 @@ const SECTIONS = [
     { id: 6, label: 'Run worker (foreground)', desc: 'node server_salesforce_merge_worker_8021.js — Ctrl-C to stop', bin: 'npm', args: ['run', 'salesforce_merge_worker'], cli: 'npm run salesforce_merge_worker' },
     { id: 7, label: 'Dev worker (nodemon)', desc: 'Auto-restarts on changes to the worker + merge store', bin: 'npm', args: ['run', 'salesforce_merge_worker_dev'], cli: 'npm run salesforce_merge_worker_dev' },
   ] },
-  { label: 'TESTING', color: CYAN, items: [
-    { id: 8, label: 'Smoke test (Phase 3)', desc: 'enqueue -> claim -> run -> done -> result parity. No UI / Salesforce / writes (~5s). Needs the DB.', bin: 'npm', args: ['run', 'salesforce_merge_worker_smoke'], cli: 'npm run salesforce_merge_worker_smoke' },
-    { id: 9, label: 'Worker-down test', desc: 'Proves a merge stays QUEUED when 8021 is down and DRAINS when it returns. Stop the pm2 worker first.', bin: 'npm', args: ['run', 'salesforce_merge_worker_down_test'], cli: 'npm run salesforce_merge_worker_down_test' },
-  ] },
+  // Merge test runners now live on the main platform menu (node src/usat_apps/menu.js -> TESTS).
   { label: 'DATABASE (idempotent migrations)', color: GREEN, items: [
-    { id: 10, label: 'Migrate: created_at_mtn / created_at_utc', desc: 'Add the MTN/UTC timestamp columns to the four merge tables (also auto-applied on boot).', bin: 'node', args: ['src/queries/create_drop_db_table/alter_salesforce_merge_timestamps.js'], cli: 'node src/queries/create_drop_db_table/alter_salesforce_merge_timestamps.js' },
-    { id: 11, label: 'Migrate: Phase-3 worker columns', desc: 'Ensure claimed_by / claimed_at / cancel_requested / params / result on salesforce_merge_run.', bin: 'node', args: ['src/queries/create_drop_db_table/alter_salesforce_merge_run_phase3.js'], cli: 'node src/queries/create_drop_db_table/alter_salesforce_merge_run_phase3.js' },
+    { id: 8, label: 'Migrate: created_at_mtn / created_at_utc', desc: 'Add the MTN/UTC timestamp columns to the four merge tables (also auto-applied on boot).', bin: 'node', args: ['src/queries/create_drop_db_table/alter_salesforce_merge_timestamps.js'], cli: 'node src/queries/create_drop_db_table/alter_salesforce_merge_timestamps.js' },
+    { id: 9, label: 'Migrate: Phase-3 worker columns', desc: 'Ensure claimed_by / claimed_at / cancel_requested / params / result on salesforce_merge_run.', bin: 'node', args: ['src/queries/create_drop_db_table/alter_salesforce_merge_run_phase3.js'], cli: 'node src/queries/create_drop_db_table/alter_salesforce_merge_run_phase3.js' },
   ] },
   { label: 'STATUS & OPEN', color: GREEN, items: [
-    { id: 12, label: 'Worker status (:8021)', desc: 'GET :8021/api/status — is the worker online? (the "no worker online" banner uses this)', status: WORKER_PORT, statusLabel: 'worker', cli: 'curl http://localhost:8021/api/status' },
-    { id: 13, label: 'Platform status (:8022)', desc: 'GET :8022/api/status — usat_apps health (public)', status: PLATFORM_PORT, statusLabel: 'platform', cli: 'curl http://localhost:8022/api/status' },
-    { id: 14, label: 'Open merge in the platform', desc: 'usat_apps at :8022 — the Salesforce merge page', open: `http://localhost:${PLATFORM_PORT}/salesforce/merge`, cli: `open http://localhost:${PLATFORM_PORT}/salesforce/merge` },
-    { id: 15, label: 'Open via proxy (:8000)', desc: 'The merge page through the :8000 proxy', open: 'http://localhost:8000/salesforce/merge', cli: 'open http://localhost:8000/salesforce/merge' },
+    { id: 10, label: 'Worker status (:8021)', desc: 'GET :8021/api/status — is the worker online? (the "no worker online" banner uses this)', status: WORKER_PORT, statusLabel: 'worker', cli: 'curl http://localhost:8021/api/status' },
+    { id: 11, label: 'Platform status (:8022)', desc: 'GET :8022/api/status — usat_apps health (public)', status: PLATFORM_PORT, statusLabel: 'platform', cli: 'curl http://localhost:8022/api/status' },
+    { id: 12, label: 'Open merge in the platform', desc: 'usat_apps at :8022 — the Salesforce merge page', open: `http://localhost:${PLATFORM_PORT}/salesforce/merge`, cli: `open http://localhost:${PLATFORM_PORT}/salesforce/merge` },
+    { id: 13, label: 'Open via proxy (:8000)', desc: 'The merge page through the :8000 proxy', open: 'http://localhost:8000/salesforce/merge', cli: 'open http://localhost:8000/salesforce/merge' },
   ] },
 ];
 const ALL = SECTIONS.flatMap((s) => s.items);
