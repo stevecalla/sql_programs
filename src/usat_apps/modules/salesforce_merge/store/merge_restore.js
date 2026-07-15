@@ -164,14 +164,15 @@ async function restore(ids, opts = {}, deps = {}) {
   const ds = await dash.dataset_info().catch(() => null);
   const env = ds ? ds.environment : null;
   const is_test = env !== 'Production';
+  const orgId = (entries[0] && entries[0].org_id) || null;   // stamp the run/history with the set's org (lineage)
 
   const armed = execution_enabled() && opts.mode === 'execute' && opts.confirm === 'RESTORE';
   const mode = armed ? 'execute' : 'simulate';
   const runId = opts.run_id || make_run_id();
   if (opts.run_id) {
-    await RUN.update(runId, { mode, environment: env, total_sets: entries.length, total_ops: entries.length });
+    await RUN.update(runId, { mode, environment: env, org_id: orgId, total_sets: entries.length, total_ops: entries.length });
   } else {
-    await RUN.start({ run_id: runId, kind: 'restore', mode, environment: env,
+    await RUN.start({ run_id: runId, kind: 'restore', mode, environment: env, org_id: orgId,
       total_sets: entries.length, total_ops: entries.length, created_by: createdBy });
   }
   log('run ' + runId + ' mode=' + mode + ' sets=' + entries.length + ' env=' + env);
@@ -187,7 +188,7 @@ async function restore(ids, opts = {}, deps = {}) {
 
     if (!rows || !rows.length) {
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
-        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
+        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
         result: 'skipped', reason: 'no snapshot to restore from' });
       out.skipped += 1; out.results.push({ id: e.id, result: 'skipped', reason: 'no snapshot' });
       completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
@@ -213,7 +214,7 @@ async function restore(ids, opts = {}, deps = {}) {
 
     if (!armed) {
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
-        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
+        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
         result: 'simulated', reason: 'restore preview — ' + (eligible ? 'eligible' : 'not eligible') + ' (' + present.length + '/' + losers.length + ' recoverable), ' + repointable.length + ' children to re-point, would reset ' + resetPreview + ' field(s)' + (keepSet.size ? ', keep ' + keepSet.size : '') });
       out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', eligible, recoverable: present.length, children: children.length, reset_fields: resetPreview, kept_fields: keepSet.size });
       log((e.survivor_name || e.id) + ' — preview ' + (eligible ? 'eligible' : 'not eligible') + ' (' + present.length + '/' + losers.length + ' recoverable)');
@@ -227,7 +228,7 @@ async function restore(ids, opts = {}, deps = {}) {
       const reason = 'not in Recycle Bin (only ' + present.length + '/' + losers.length + ' recoverable) — routed to recreate-from-backup queue';
       await Q.transition([e.id], 'recreate_pending', ['done']);
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
-        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
+        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
         result: 'skipped', reason });
       out.skipped += 1; out.routed = (out.routed || 0) + 1; out.results.push({ id: e.id, result: 'routed', reason });
       log((e.survivor_name || e.id) + ' — routed to recreate queue (' + present.length + '/' + losers.length + ' recoverable)');
@@ -261,7 +262,7 @@ async function restore(ids, opts = {}, deps = {}) {
     if (undelErr) {
       log((e.survivor_name || e.id) + ' — RESTORE FAILED at undelete: ' + undelErr);
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
-        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
+        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
         result: 'failed', reason: 'restore halted at undelete: ' + undelErr + (masterOk ? '' : ' (survivor reset also failed)') });
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: 'undelete: ' + undelErr });
       completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
@@ -290,7 +291,7 @@ async function restore(ids, opts = {}, deps = {}) {
       + (skippedCh ? ', skipped ' + skippedCh : '') + (masterOk ? '' : ', master-reset partial')
       + (notes.length ? ' — ' + notes.slice(0, 5).join('; ') : '');
     await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
-      survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
+      survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
       result: 'restored', reason, diff: { kind: 'restore', reset: resetPlan, kept: [...keepSet] } });
     out.restored += 1; out.results.push({ id: e.id, result: 'restored', undeleted: toUndelete.length, repointed, skipped: skippedCh, reset_fields: resetCount, kept_fields: keepSet.size, notes });
     log((e.survivor_name || e.id) + ' — RESTORED: ' + reason);
@@ -321,14 +322,15 @@ async function recreate(ids, opts = {}, deps = {}) {
   const ds = await dash.dataset_info().catch(() => null);
   const env = ds ? ds.environment : null;
   const is_test = env !== 'Production';
+  const orgId = (entries[0] && entries[0].org_id) || null;   // stamp the run/history with the set's org (lineage)
 
   const armed = execution_enabled() && opts.mode === 'execute' && opts.confirm === 'RECREATE';
   const mode = armed ? 'execute' : 'simulate';
   const runId = opts.run_id || make_recreate_run_id();
   if (opts.run_id) {
-    await RUN.update(runId, { mode, environment: env, total_sets: entries.length, total_ops: entries.length });
+    await RUN.update(runId, { mode, environment: env, org_id: orgId, total_sets: entries.length, total_ops: entries.length });
   } else {
-    await RUN.start({ run_id: runId, kind: 'recreate', mode, environment: env, total_sets: entries.length, total_ops: entries.length, created_by: createdBy });
+    await RUN.start({ run_id: runId, kind: 'recreate', mode, environment: env, org_id: orgId, total_sets: entries.length, total_ops: entries.length, created_by: createdBy });
   }
   log('recreate run ' + runId + ' mode=' + mode + ' sets=' + entries.length + ' env=' + env);
 
@@ -342,7 +344,7 @@ async function recreate(ids, opts = {}, deps = {}) {
 
     if (!losers.length) {
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
-        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
+        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
         result: 'skipped', reason: 'no backup snapshot to recreate from' });
       out.skipped += 1; out.results.push({ id: e.id, result: 'skipped', reason: 'no snapshot' });
       completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
@@ -350,7 +352,7 @@ async function recreate(ids, opts = {}, deps = {}) {
 
     if (!armed) {
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
-        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
+        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
         result: 'simulated', reason: 'recreate preview — ' + losers.length + ' account(s) + ' + children.length + ' child link(s) from backup (NEW ids)' });
       out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', accounts: losers.length, children: children.length });
       log((e.survivor_name || e.id) + ' — recreate preview (' + losers.length + ' accounts)');
@@ -385,7 +387,7 @@ async function recreate(ids, opts = {}, deps = {}) {
       if (resetPlan.length > 0) await W.update_record(conn, 'Account', reset);
       await Q.transition([e.id], 'recreated', ['recreate_pending']);
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
-        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, mode,
+        survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
         result: 'recreated', reason: 'recreated ' + losers.length + ' account(s) (NEW ids), re-pointed ' + childOk + ' child link(s), reset ' + resetPlan.length + ' field(s)' + (keepSet.size ? ', kept ' + keepSet.size + ' current' : ''),
         diff: { kind: 'recreate', reset: resetPlan, kept: [...keepSet] } });
       out.recreated += 1; out.results.push({ id: e.id, result: 'recreated', accounts: losers.length, children: childOk, new_ids: idMap, reset_fields: resetPlan.length, kept_fields: keepSet.size });

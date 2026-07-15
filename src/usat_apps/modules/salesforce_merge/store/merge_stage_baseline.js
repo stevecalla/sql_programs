@@ -48,6 +48,13 @@ async function save(queueId, map, query = real_query) {
   return { saved: 1, accounts: Object.keys(map || {}).length };
 }
 
+// Remove the baseline for a queue entry (called when its queue row is deleted, so no orphan rows).
+async function remove(queueId, query = real_query) {
+  await ensure_table(query);
+  const res = await query('DELETE FROM `' + TABLE + '` WHERE queue_id = ?', [Number(queueId)]);
+  return { removed: (res && (res.affectedRows != null ? res.affectedRows : 0)) || 0 };
+}
+
 // Returns the stored { accountId: fields } map, or null when nothing was captured (e.g. bulk-added).
 async function get(queueId, query = real_query) {
   await ensure_table(query);
@@ -56,4 +63,4 @@ async function get(queueId, query = real_query) {
   try { return JSON.parse(rows[0].fields) || null; } catch (e) { return null; }
 }
 
-module.exports = { save, get, ensure_table, TABLE, DDL, PURPOSE };
+module.exports = { save, get, remove, ensure_table, TABLE, DDL, PURPOSE };

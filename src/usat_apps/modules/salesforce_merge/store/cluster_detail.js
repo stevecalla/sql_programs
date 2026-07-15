@@ -44,6 +44,9 @@ async function cluster_children(key, { sf = sfread, kind = 'group' } = {}) {
   const contactByAccount = {};
   for (const a of d.accounts) if (a.contact) contactByAccount[a.account] = a.contact;
   const ids = d.accounts.map((a) => a.account);
+  // Fast parallel COUNT over the discovered child objects (Account- AND Contact-parented), the same
+  // discovery the snapshot walks. Cheaper than fetching full records. (May include the two person-account
+  // self-halves per account — a small cosmetic over-count vs the snapshot's reparented figure.)
   const children = await sf.count_children(ids, { is_test: await env_is_test(), contactByAccount });
   return { source: d.source, children };
 }
