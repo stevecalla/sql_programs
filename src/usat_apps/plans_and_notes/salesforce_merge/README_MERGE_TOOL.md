@@ -619,8 +619,8 @@ matching "To revisit" items above. Decisions here are confirmed.
 > shape against the org in sandbox before production.**
 >
 > **Optional "stamp survivor as merged" (Process Merges checkbox).** When enabled, after a successful
-> merge the survivor is best-effort updated with custom fields `was_merged__c` (Checkbox) +
-> `was_merged_date__c` (DateTime) + `was_merged_by__c` (Text — the actor who initiated the run).
+> merge the survivor is best-effort updated with custom fields `usat_was_merged__c` (Checkbox) +
+> `usat_was_merged_date__c` (DateTime) + `usat_was_merged_by__c` (Text — the actor who initiated the run).
 > These are **NOT auto-created** — an admin adds them in Salesforce
 > (Setup → Object Manager → Account → Fields) and grants field-level security. If they're missing the
 > merge still succeeds and the run logs "stamp skipped"; the UI checks field presence

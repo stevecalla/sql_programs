@@ -291,9 +291,9 @@ async function runQueue(ids, opts = {}, deps = {}) {
           if (!stampPresent) stampPresent = await W.stamp_fields_status(conn);
           const sfUser = (W.write_creds && W.write_creds(is_test) && W.write_creds(is_test).user) || 'sf';
           const payload = { Id: e.survivor_account };
-          if (stampPresent.was_merged__c) payload.was_merged__c = true;
-          if (stampPresent.was_merged_date__c) payload.was_merged_date__c = new Date().toISOString();
-          if (stampPresent.was_merged_by__c) payload.was_merged_by__c = ((createdBy || 'salesforce_merge_tool') + ' via ' + sfUser).slice(0, 255);
+          if (stampPresent.usat_was_merged__c) payload.usat_was_merged__c = true;
+          if (stampPresent.usat_was_merged_date__c) payload.usat_was_merged_date__c = new Date().toISOString();
+          if (stampPresent.usat_was_merged_by__c) payload.usat_was_merged_by__c = ((createdBy || 'salesforce_merge_tool') + ' via ' + sfUser).slice(0, 255);
           const nStamp = Object.keys(payload).length - 1; // minus Id
           if (nStamp > 0) { await W.update_record(conn, 'Account', payload); stampNote = '; stamped ' + nStamp + ' field(s)'; }
           else stampNote = '; stamp skipped (no stamp fields on Account)';

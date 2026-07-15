@@ -35,7 +35,7 @@ function deps(opts = {}) {
         return Object.assign({ success: true, mergedRecordIds: batch }, b);
       },
       // stamp path defaults (individual tests can override update_record to script failures)
-      stamp_fields_status: async () => (opts.stampPresent || { was_merged__c: true, was_merged_date__c: true, was_merged_by__c: true }),
+      stamp_fields_status: async () => (opts.stampPresent || { usat_was_merged__c: true, usat_was_merged_date__c: true, usat_was_merged_by__c: true }),
       write_creds: () => ({ user: 'svc@sf' }),
     },
   };
@@ -231,22 +231,22 @@ test('gate stack: execute mode without typed confirm falls back to simulate', as
   delete process.env.MERGE_ENABLE_EXECUTION;
 });
 
-test('execute with stamp_merged stamps was_merged__c on the survivor (best-effort)', async () => {
+test('execute with stamp_merged stamps usat_was_merged__c on the survivor (best-effort)', async () => {
   process.env.MERGE_ENABLE_EXECUTION = 'true';
   const d = deps();
   d.calls.updates = [];
   d.write.update_record = async (c, t, f) => { d.calls.updates.push({ t, f }); return { success: true }; };
   const out = await mexec.process([1], { mode: 'execute', confirm: 'MERGE', stamp_merged: true }, d);
   assert.equal(out.done, 1);
-  const u = d.calls.updates.find((x) => x.t === 'Account' && x.f.was_merged__c === true);
-  assert.ok(u && u.f.Id === 'M' && u.f.was_merged_date__c, 'survivor stamped with flag + date');
+  const u = d.calls.updates.find((x) => x.t === 'Account' && x.f.usat_was_merged__c === true);
+  assert.ok(u && u.f.Id === 'M' && u.f.usat_was_merged_date__c, 'survivor stamped with flag + date');
   delete process.env.MERGE_ENABLE_EXECUTION;
 });
 
 test('stamp failure does not fail the merge (still done)', async () => {
   process.env.MERGE_ENABLE_EXECUTION = 'true';
   const d = deps();
-  d.write.update_record = async () => { throw new Error('No such column was_merged__c'); };
+  d.write.update_record = async () => { throw new Error('No such column usat_was_merged__c'); };
   const out = await mexec.process([1], { mode: 'execute', confirm: 'MERGE', stamp_merged: true }, d);
   assert.equal(out.done, 1);
   assert.match(d.calls.history[0].reason, /stamp skipped/);

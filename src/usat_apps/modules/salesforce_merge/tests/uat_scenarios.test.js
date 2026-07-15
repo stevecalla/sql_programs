@@ -37,7 +37,7 @@ function execDeps(opts = {}) {
     write: {
       default_write_connect: async () => ({}),
       merge_one: async (conn, master, batch, fields) => { calls.merges.push({ master, batch, fields }); const b = opts.mergeBehavior ? opts.mergeBehavior(batch) : { success: true }; return Object.assign({ success: true, mergedRecordIds: batch }, b); },
-      stamp_fields_status: async () => ({ was_merged__c: true, was_merged_date__c: true, was_merged_by__c: true }),
+      stamp_fields_status: async () => ({ usat_was_merged__c: true, usat_was_merged_date__c: true, usat_was_merged_by__c: true }),
       write_creds: () => ({ user: 'svc@sf' }),
     },
   };
