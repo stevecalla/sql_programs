@@ -13,6 +13,56 @@ const snapshot = require('./merge_snapshot');
 const history = require('./merge_history');
 const mrun = require('./merge_run');
 const APIUSE = require('./api_usage');
+const stagebase = require('./merge_stage_baseline');
+const rdiff = require('./restore_diff');
+
+// Account records reach us in two shapes: the local snapshot (first_name / email / member_number …)
+// or a live Salesforce fetch (FirstName / PersonEmail / cfg_Member_Number__pc …). To diff a
+// stage-time baseline against live regardless of which side used which shape, map both to a fixed
+// canonical identity field set first. A field absent on one side is '' (empty snapshot values aren't
+// compared), so there are no false positives from the shape difference.
+const CANON = {
+  first_name: ['first_name', 'FirstName'],
+  last_name: ['last_name', 'LastName'],
+  email: ['email', 'PersonEmail'],
+  phone: ['phone', 'Phone'],
+  member_number: ['member_number', 'cfg_Member_Number__pc'],
+  gender: ['gender', 'cfg_Gender_Identity__pc'],
+  birthdate: ['birthdate', 'PersonBirthdate'],
+  zip: ['zip5', 'zip', 'PersonMailingPostalCode'],
+  city: ['city', 'PersonMailingCity'],
+  state: ['state', 'PersonMailingState'],
+  street: ['street', 'PersonMailingStreet'],
+  merge_id: ['merge_id', 'usat_Salesforce_Merge_Id__pc'],
+};
+function canonical(a) {
+  const out = {};
+  for (const [k, keys] of Object.entries(CANON)) {
+    let v = '';
+    for (const src of keys) { if (a && a[src] != null && String(a[src]).trim() !== '') { v = a[src]; break; } }
+    out[k] = v;
+  }
+  return out;
+}
+
+// Drift check: compare each account's LIVE values against the stage-time baseline (what the reviewer
+// saw when queueing), on the canonical identity fields. Reuses the restore-diff builder (before =
+// baseline, after = live). Returns the count of changed fields + a capped detail list. `checked:false`
+// when no baseline was captured — drift is then simply "not checked", never a failure.
+function compute_drift(baseline, accounts, buildDiff) {
+  if (!baseline) return { checked: false, fields: 0, detail: [] };
+  let fields = 0; const detail = [];
+  for (const a of (accounts || [])) {
+    const base = baseline[a.account];
+    if (!base) continue;
+    const d = buildDiff(canonical(base), canonical(a));
+    for (const row of d.rows) if (row.state === 'differ') {
+      fields += 1;
+      if (detail.length < 20) detail.push({ account: a.account, field: row.field, before: row.before, after: row.after });
+    }
+  }
+  return { checked: true, fields, detail };
+}
 
 // Deploy-level gate, default false. Read at call time so it can be toggled (tests / env) without reload.
 function execution_enabled() { return process.env.MERGE_ENABLE_EXECUTION === 'true'; }
@@ -23,25 +73,13 @@ const ceil2 = (n) => Math.ceil((Number(n) || 0) / 2);
 // Server-side progress logs (stdout). Silence with MERGE_LOG=off (tests set this).
 function log(...a) { if (process.env.MERGE_LOG !== 'off') console.log('[merge]', ...a); }
 
-// Survivorship: which field values to WRITE onto the master. Precedence override > master non-blank >
-// first loser non-blank (backfill). Only fields whose chosen value differs from master are returned.
+// Survivorship: which field values to WRITE onto the master. Delegates to the shared resolver so the
+// execute matches the Select Merges preview EXACTLY. An override is an ACCOUNT ID (take that record's
+// value), NOT a literal value — see survivorship.js. (Kept for existing callers/tests; logic lives in
+// one place now. This fixes the sandbox bug where an overridden member number / email got the account id.)
+const { resolve_master_fields } = require('./survivorship');
 function build_master_fields(accounts, survivorId, overrides) {
-  const SKIP = new Set(['account', 'contact', 'Id', 'Name', 'CreatedDate', 'LastModifiedDate']);
-  const master = accounts.find((a) => a.account === survivorId) || {};
-  const losers = accounts.filter((a) => a.account !== survivorId);
-  const blank = (v) => v === undefined || v === null || v === '';
-  const fields = new Set();
-  for (const a of accounts) for (const k of Object.keys(a)) if (!SKIP.has(k)) fields.add(k);
-  const out = {};
-  for (const f of fields) {
-    const ov = overrides ? overrides[f] : undefined;
-    if (!blank(ov)) { if (ov !== master[f]) out[f] = ov; continue; }
-    if (blank(master[f])) {
-      const donor = losers.find((l) => !blank(l[f]));
-      if (donor) out[f] = donor[f];
-    }
-  }
-  return out;
+  return resolve_master_fields(accounts, survivorId, overrides);
 }
 
 // Alignment guard: a queued set must match the org we'd write to (environment label + org id).
@@ -83,6 +121,8 @@ async function runQueue(ids, opts = {}, deps = {}) {
   const CTRL = deps.control || require('./merge_control');
   const SF = deps.sf || require('./salesforce_read');
   const W = deps.write || require('./salesforce_write');
+  const B = deps.baseline || stagebase;
+  const DIFF = deps.diff || rdiff;
   const dash = deps.dashboard || dashboard;
   const createdBy = opts.created_by || null;
 
@@ -117,6 +157,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
   let completedOps = 0; let completedSets = 0;
   let conn = null;
   let apiStartLogged = false;
+  let stampPresent = null; // which of the 3 stamp fields exist on Account (describe once, reuse per run)
 
   for (let si = 0; si < entries.length; si += 1) {
     // Cooperative cancel: a Stop request flags this run id; we honor it at the SET boundary so every
@@ -157,7 +198,14 @@ async function runQueue(ids, opts = {}, deps = {}) {
       continue;
     }
 
-    await RUN.update(runId, { stage: 'validate', current_label: label('re-validated') });
+    // Drift check — did any reviewed field move between staging and now? (best-effort; non-fatal)
+    let drift = { checked: false, fields: 0, detail: [] };
+    try { const baseline = await B.get(e.id); drift = compute_drift(baseline, accounts, DIFF.build_master_diff); } catch (err) { drift = { checked: false, fields: 0, detail: [] }; }
+    if (drift.fields > 0) { out.drift = (out.drift || 0) + 1; out.drift_fields = (out.drift_fields || 0) + drift.fields; }
+    const driftNote = drift.fields > 0 ? '; ' + drift.fields + ' field(s) changed since staged' : '';
+    const driftAudit = (drift.checked && drift.fields > 0) ? { kind: 'merge_drift', fields: drift.detail } : null;
+
+    await RUN.update(runId, { stage: 'validate', current_label: label(drift.fields > 0 ? '⚠ ' + drift.fields + ' field(s) changed since staged' : 're-validated') });
     await RUN.update(runId, { stage: 'snapshot', current_label: label('gathering child records') });
     log(label('gathering child records'));
     let snap_ok = false;
@@ -177,10 +225,11 @@ async function runQueue(ids, opts = {}, deps = {}) {
     if (!armed) {
       if (H.clear_simulated) await H.clear_simulated(e.id).catch(() => {});
       await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
-        result: 'simulated', reason: opts.dry_run ? 'dry-run' : 'safe mode / simulate — no Salesforce write',
-        planned_fields: Object.keys(masterFields).length });
-      out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', planned_field_changes: Object.keys(masterFields).length });
-      log(label('simulated — ' + Object.keys(masterFields).length + ' field change(s) planned'));
+        result: 'simulated', reason: (opts.dry_run ? 'dry-run' : 'safe mode / simulate — no Salesforce write') + driftNote,
+        planned_fields: Object.keys(masterFields).length, diff: driftAudit });
+      out.simulated += 1; out.results.push({ id: e.id, result: 'simulated', planned_field_changes: Object.keys(masterFields).length,
+        drift_checked: drift.checked, drift_fields: drift.fields, drift_detail: drift.detail });
+      log(label('simulated — ' + Object.keys(masterFields).length + ' field change(s) planned' + driftNote));
       completedOps += opCount; completedSets += 1;
       await RUN.update(runId, { stage: 'record', completed_ops: completedOps, completed_sets: completedSets, current_label: label('simulated') });
       continue;
@@ -193,6 +242,20 @@ async function runQueue(ids, opts = {}, deps = {}) {
       CTRL.clear(runId);
       return out;
     } }
+
+    // Drift gate — if reviewed fields changed since staging and the operator hasn't acknowledged the
+    // drift, SKIP this set (leave it approved so it can be re-reviewed and re-run). Clean sets are
+    // unaffected. `ack_drift` is set from the Process page after a simulate reveals the changes.
+    if (drift.fields > 0 && !opts.ack_drift) {
+      await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
+        result: 'skipped', reason: 'drift not acknowledged: ' + drift.fields + ' field(s) changed since staged — re-review, then run again with the drift box checked' });
+      out.skipped += 1; out.drift_blocked = (out.drift_blocked || 0) + 1;
+      out.results.push({ id: e.id, result: 'skipped', reason: 'drift not acknowledged', drift_checked: true, drift_fields: drift.fields, drift_detail: drift.detail });
+      log(label('SKIPPED — drift not acknowledged (' + drift.fields + ' changed since staged)'));
+      completedOps += opCount; completedSets += 1;
+      await RUN.update(runId, { stage: 'record', completed_ops: completedOps, completed_sets: completedSets, current_label: label('skipped — drift not acknowledged') });
+      continue;
+    }
 
     if (!apiStartLogged) { apiStartLogged = true; try { const u0 = APIUSE.usage_from_conn(conn); if (u0) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: u0.used, max: u0.max }); } catch (e) { /* fire-and-forget */ } }
 
@@ -218,20 +281,29 @@ async function runQueue(ids, opts = {}, deps = {}) {
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: failure, merged: merged.length, remaining: remaining.length });
       log(label('FAILED — ' + failure));
     } else {
-      // Optional: stamp the survivor as merged. Done AFTER the merge as a best-effort update so a
-      // missing custom field (was_merged__c / was_merged_date__c) never fails the merge itself.
+      // Optional: stamp the survivor as merged. Best-effort AND PER-FIELD — each of the 3 custom fields
+      // is independent, so we describe Account once and write only the fields that actually exist. That
+      // way a partial set (e.g. flag+date but no *_by__c) still records what it can, and a missing field
+      // never fails the merge.
       let stampNote = '';
       if (opts.stamp_merged) {
         try {
-          await W.update_record(conn, 'Account', { Id: e.survivor_account, was_merged__c: true, was_merged_date__c: new Date().toISOString() });
-          stampNote = '; stamped was_merged__c';
+          if (!stampPresent) stampPresent = await W.stamp_fields_status(conn);
+          const sfUser = (W.write_creds && W.write_creds(is_test) && W.write_creds(is_test).user) || 'sf';
+          const payload = { Id: e.survivor_account };
+          if (stampPresent.was_merged__c) payload.was_merged__c = true;
+          if (stampPresent.was_merged_date__c) payload.was_merged_date__c = new Date().toISOString();
+          if (stampPresent.was_merged_by__c) payload.was_merged_by__c = ((createdBy || 'salesforce_merge_tool') + ' via ' + sfUser).slice(0, 255);
+          const nStamp = Object.keys(payload).length - 1; // minus Id
+          if (nStamp > 0) { await W.update_record(conn, 'Account', payload); stampNote = '; stamped ' + nStamp + ' field(s)'; }
+          else stampNote = '; stamp skipped (no stamp fields on Account)';
         } catch (err) { stampNote = '; stamp skipped (' + err.message + ')'; }
       }
       await Q.transition([e.id], 'done', ['approved']);
       await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
-        result: 'done', reason: 'merged ' + merged.length + ' record(s)' + stampNote, merged_count: merged.length, remaining_count: 0 });
-      out.done += 1; out.results.push({ id: e.id, result: 'done', merged: merged.length });
-      log(label('done — merged ' + merged.length + stampNote));
+        result: 'done', reason: 'merged ' + merged.length + ' record(s)' + stampNote + driftNote, merged_count: merged.length, remaining_count: 0, diff: driftAudit });
+      out.done += 1; out.results.push({ id: e.id, result: 'done', merged: merged.length, drift_checked: drift.checked, drift_fields: drift.fields, drift_detail: drift.detail });
+      log(label('done — merged ' + merged.length + stampNote + driftNote));
     }
     completedSets += 1;
     await RUN.update(runId, { stage: 'record', completed_sets: completedSets });
@@ -239,9 +311,10 @@ async function runQueue(ids, opts = {}, deps = {}) {
 
   const stopped = out.cancelled === true;
   const finalStatus = stopped ? 'cancelled' : 'done';
-  const finalLabel = stopped
+  const driftLabel = out.drift ? ' · ⚠ ' + out.drift + ' set(s) had field drift since staging' : '';
+  const finalLabel = (stopped
     ? 'Stopped — ' + completedSets + ' of ' + entries.length + ' set(s) processed'
-    : 'Complete';
+    : 'Complete') + driftLabel;
   log('run ' + runId + (stopped ? ' STOPPED' : ' complete') + ': done=' + out.done + ' simulated=' + out.simulated + ' skipped=' + out.skipped + ' failed=' + out.failed + (stopped ? ' (remaining ' + (out.remaining || 0) + ')' : ''));
   try { const uEnd = APIUSE.usage_from_conn(conn); if (uEnd) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: uEnd.used, max: uEnd.max }); } catch (e) { /* fire-and-forget */ }
   await RUN.finish(runId, { status: finalStatus, completed_ops: completedOps, completed_sets: completedSets, current_label: finalLabel });

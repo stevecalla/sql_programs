@@ -131,10 +131,10 @@ export default function GetDuplicates() {
             node step_1_find_duplicates.js {flagsLabel(env, scope)}
           </p>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8 }}>
-            <button className="btn primary" style={{ width: 'auto' }} disabled={running} onClick={start}>
+            <button className="btn primary" style={{ width: 'auto', marginTop: 0 }} disabled={running} onClick={start}>
               {finderRunning ? 'Running…' : 'Run duplicate detection'}
             </button>
-            {finderRunning && <button className="btn" onClick={cancel}>Cancel run</button>}
+            {finderRunning && <button className="btn primary" style={{ width: 'auto', marginTop: 0, whiteSpace: 'nowrap', background: 'var(--red, #c0392b)', color: '#fff', borderColor: 'transparent' }} onClick={cancel}>Cancel run</button>}
             <span className="muted small">Admin only · one run at a time · production needs confirmation</span>
           </div>
         </div>
@@ -150,7 +150,7 @@ export default function GetDuplicates() {
             <button className="btn primary" style={{ width: 'auto' }} disabled={running} onClick={startSweep}>
               {sweepRunning ? 'Running…' : 'Run tuning sweep'}
             </button>
-            {sweepRunning && <button className="btn" onClick={cancel}>Cancel run</button>}
+            {sweepRunning && <button className="btn primary" style={{ width: 'auto', marginTop: 0, whiteSpace: 'nowrap', background: 'var(--red, #c0392b)', color: '#fff', borderColor: 'transparent' }} onClick={cancel}>Cancel run</button>}
           </div>
         </div>
       </div>

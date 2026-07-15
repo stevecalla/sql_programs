@@ -98,12 +98,69 @@ the `org_id`-capture hardening note live in `../README_MERGE_TOOL.md`.
 
 ## Restore — two tiers, both from Node
 
-1. **Within ~15 days (high fidelity):** `undelete` each loser from the Recycle Bin (keeps its
-   **original id**), then re-parent the snapshotted children back to it and reapply overwritten
-   master fields. All Node calls.
+Salesforce has **no native un-merge** (`undelete` restores one record only). Restore composes an
+un-merge from update + undelete + update using the pre-merge snapshot — so the **order matters**.
+
+1. **Within ~15 days (high fidelity):** in this order — **(a) reapply the master's overwritten fields
+   FIRST** (frees any unique value survivorship moved onto the survivor, e.g. `cfg_Member_Number__c`,
+   so Salesforce won't reject the undelete with "duplicate value found"), **(b) `undelete` each loser**
+   from the Recycle Bin (keeps its **original id**; the undelete result is checked), **(c) re-parent
+   the snapshotted children** back to it. All Node calls, best-effort per record (a deleted child is
+   undeleted-then-re-pointed; unfixable ones are skipped with a note; failures report SF's own reason).
 2. **Beyond 15 days, from backup (approximate):** the loser is permanently gone, so recreate it
    from the MySQL deep snapshot (our backup). Recreated records get **new ids**, so external
    references won't reconnect and children are recreated/re-pointed from the snapshot.
+
+**Pre-flight diff + selective restore.** Before confirming, an operator can expand any completed merge
+to see a field-by-field diff of the survivor's **current live** values vs the **pre-merge snapshot** —
+`store/restore_diff.js` (`diff_for_entry`) via `GET /api/salesforce-merge/merge/restore/diff?id=`,
+rendered by `RestoreDiffDetail.jsx`. "In sync" means step (a) would change nothing; differences show
+exactly which fields a restore resets, and flag any edited **after** the merge that a blind restore
+would overwrite. Equality is normalized (case/whitespace, ZIP→first 5); one live record read per view.
+**Selective restore:** each differing field has a **Keep current** checkbox — ticked fields are left at
+their live value instead of being reset. The choices flow as `keep_fields` = `{ [queueId]: [fields] }`
+into the run; `master_reset_fields(fields, id, keep)` omits kept fields from the survivor patch, and
+`restore()` reports `reset_fields` / `kept_fields`. This per-field review is the restore analogue of the
+merge drift acknowledgment. Full spec + as-built in `../README_RESTORE_DIFF.md`.
+
+## Merge drift check (staged → live)
+
+Adding a set to the queue captures a **stage-time baseline** — the field values the reviewer saw —
+into `salesforce_merge_stage_baseline` (`store/merge_stage_baseline.js`, keyed by `queue_id`,
+populated by the single-add route from the payload the frontend sends). At process time (both
+simulate and execute) `merge_execute.runQueue` loads that baseline and diffs it against the freshly
+fetched live records (`compute_drift` → reuses `restore_diff.build_master_diff`, normalized equality).
+Any changed field is **drift**: surfaced live in the progress `current_label`
+("⚠ N field(s) changed since staged"), on the run result (`out.drift`, per-set `drift_fields` /
+`drift_detail`), in history reasons, and as an amber per-set badge on Process Merges.
+
+**Canonical comparison.** Records arrive in two shapes — the local snapshot (`first_name`, `email`,
+`member_number` …) or a live SF fetch (`FirstName`, `PersonEmail`, `cfg_Member_Number__pc` …). Drift
+maps both sides to a fixed canonical identity field set before diffing (`compute_drift` → `canonical`),
+so a shape difference never reads as a false change. This is what lets the baseline be captured cheaply
+from the local snapshot. **Scope:** the check covers the core identity fields only — first/last name,
+email, phone, member number, gender, birthdate, ZIP, city/state/street, merge id (the keys in `CANON`).
+It is intentionally NOT every field: the two shapes only share these, the bulk baseline (local snapshot)
+only stores these, and these are the fields that determine whether the merge target is still correct.
+Editing a non-identity field reads as "no drift". Widening it means extending `CANON` (and, for bulk,
+the snapshot columns).
+
+**Baseline capture — single and bulk.** Single-add stores the exact reviewed values (frontend payload).
+Bulk-add captures the baseline server-side from the local snapshot for every newly-queued set
+(`add_many` returns the new ids; the bulk route batches one `accounts_by_ids` read and saves a baseline
+per set). So both paths get a drift check.
+
+**Acknowledgment gate (execute).** By default, Execute **skips** any set whose reviewed fields drifted
+(`result: skipped`, `out.drift_blocked`, left *approved* so it can be re-run) — only clean sets merge.
+After a Simulate reveals drift, the operator ticks a "I've reviewed the changes — merge anyway" box on
+Process Merges, which passes `ack_drift` and lets drifted sets through. Clean sets are unaffected either
+way. Bulk-added sets have a baseline too, so the gate applies to them. (Simulate never gates; it only
+reports.)
+
+**Not restored — managed-package byproducts.** A merge can trigger a managed package (namespace
+`em4sf`) to create + delete its own **"Queue Item" (`QI-…`) job records**, which appear in the Recycle
+Bin. They have no Account relationship, aren't in the snapshot, and are neither restored nor touched —
+same category as the SFMC caveat.
 
 The **deep pre-merge snapshot** powers both: before merging, Node `describe`s the Account child
 relationships, queries each child's id + parent for the losers, and stores it (plus full loser

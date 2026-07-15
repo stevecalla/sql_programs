@@ -3,6 +3,8 @@ import DatasetStamp from '../components/DatasetStamp.jsx';
 import WorkerBanner from '../components/WorkerBanner.jsx';
 import DataTable from '../components/DataTable.jsx';
 import CollapsibleCard from '../components/CollapsibleCard.jsx';
+import QueueRowDetail from '../components/QueueRowDetail.jsx';
+import MergeDriftDetail from '../components/MergeDriftDetail.jsx';
 import { api, exportUrl } from '../lib/api.js';
 import { awaitRun, summarize } from '../lib/run_poll.js';
 
@@ -28,11 +30,11 @@ const RESULT_COLOR = { simulated: '#1a8a4f', done: '#1a8a4f', skipped: '#854f0b'
 // Per-set pipeline stages reported live by the backend (merge_run.stage) — mirrors the static
 // "Processing steps" card 1:1, shown as a live stepper.
 const MERGE_STAGES = [
-  { key: 'fetch', label: 'Re-fetch + dry-run' },
-  { key: 'validate', label: 'Re-validate' },
-  { key: 'snapshot', label: 'Snapshot' },
-  { key: 'merge', label: 'Execute merge' },
-  { key: 'record', label: 'Record' },
+  { key: 'fetch', label: 'Re-fetch + dry-run', desc: 'Pull the records fresh from Salesforce.' },
+  { key: 'validate', label: 'Re-validate & drift check', desc: 'Confirm the records still exist, and compare their current values to what you staged (flags fields changed since queueing).' },
+  { key: 'snapshot', label: 'Snapshot', desc: 'Back up every record to the pre-merge snapshot.' },
+  { key: 'merge', label: 'Execute merge', desc: 'Write survivor fields, then run the Salesforce merge.' },
+  { key: 'record', label: 'Record', desc: 'Log history and update the queue status.' },
 ];
 
 export default function MergeProcess() {
@@ -47,6 +49,9 @@ export default function MergeProcess() {
   const [err, setErr] = useState('');
   const [mode, setMode] = useState('simulate');   // 'simulate' | 'execute'
   const [confirmText, setConfirmText] = useState('');
+  const [ackDrift, setAckDrift] = useState(false);
+  const [driftRowOpen, setDriftRowOpen] = useState(() => new Set());
+  const toggleDriftRow = (id) => setDriftRowOpen((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const [progress, setProgress] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const [stampMerged, setStampMerged] = useState(false);
@@ -99,6 +104,8 @@ export default function MergeProcess() {
   const apiWouldExceed = apiRemaining != null && estApiCalls > apiRemaining;
   const safe = !status || status.safe_mode;
   const apSort = useSort();    // Approved merges
+  const [apExpanded, setApExpanded] = useState(() => new Set());
+  const toggleApExpand = (id) => setApExpanded((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const histSort = useSort();  // Merge history
   const paSort = useSort();    // per-account progress
 
@@ -106,7 +113,9 @@ export default function MergeProcess() {
   // happens (and what is blocked) in the current mode. Step 4 is the only Salesforce write.
   const steps = [
     { n: 1, label: 'Re-fetch fresh data & re-run dry-run (apply saved overrides)', state: 'run' },
-    { n: 2, label: 'Re-validate — flag/skip drifted sets', state: 'run' },
+    { n: 2, label: 'Re-validate & drift check',
+      note: 'confirm records still present; compare identity fields (email, member #, name, DOB, gender, ZIP, address) to what you staged. On Execute, drifted sets are skipped unless acknowledged',
+      state: 'run' },
     { n: 3, label: 'Write pre-merge snapshot (restore baseline)', state: 'run' },
     { n: 4, label: 'Execute Salesforce Database.merge (master + 2 at a time)',
       note: safe ? 'blocked by safe mode' : (mode === 'execute' ? 'armed in Execute mode' : 'Simulate mode — skipped'),
@@ -141,7 +150,7 @@ export default function MergeProcess() {
     setRunRows(ids.map((id) => rows.find((r) => r.id === id)).filter(Boolean));   // snapshot the sets this run processes (in submit order)
     setBusy(true); setErr(''); setResult(null); setProgress(null); setElapsed(0);
     try {
-      const q = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged } : { mode: 'simulate', stamp_merged: stampMerged });
+      const q = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged, ack_drift: ackDrift } : { mode: 'simulate', stamp_merged: stampMerged });
       setConfirmText('');
       // Phase 3: the merge worker runs it out-of-process — poll this run until it reaches a terminal status.
       const finalRun = await awaitRun(api, 'merge', q.run_id, (rr) => setProgress(rr));
@@ -216,17 +225,23 @@ export default function MergeProcess() {
             <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="type MERGE to confirm"
               style={{ width: '100%', marginBottom: 8 }} />
           )}
+          {mode === 'execute' && !safe && result && result.drift > 0 && (
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 8px', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--amber)', background: 'var(--amber-bg)', color: '#854f0b' }}>
+              <input type="checkbox" checked={ackDrift} onChange={(e) => setAckDrift(e.target.checked)} style={{ marginTop: 2 }} />
+              <span>⚠ {result.drift} set(s) changed since staging. I’ve reviewed the changes — merge them anyway. <strong>Unchecked, drifted sets are skipped</strong> (left approved) and only clean sets run.</span>
+            </label>
+          )}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={stampMerged} onChange={(e) => setStampMerged(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>Stamp survivor as merged <code>(was_merged__c, was_merged_date__c)</code></span>
+            <span>Stamp survivor as merged <code>(was_merged__c, was_merged_date__c, was_merged_by__c)</code></span>
           </label>
-          {stampMerged && stampFields && (!stampFields.was_merged__c || !stampFields.was_merged_date__c) && (
+          {stampMerged && stampFields && (!stampFields.was_merged__c || !stampFields.was_merged_date__c || !stampFields.was_merged_by__c) && (
             <p className="small" style={{ margin: '0 0 8px', color: 'var(--amber)' }}>
-              ⚠ {[!stampFields.was_merged__c && 'was_merged__c', !stampFields.was_merged_date__c && 'was_merged_date__c'].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The merge still runs; the stamp is skipped until the field exists.
+              ⚠ {[!stampFields.was_merged__c && 'was_merged__c', !stampFields.was_merged_date__c && 'was_merged_date__c', !stampFields.was_merged_by__c && 'was_merged_by__c'].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The merge still runs; the stamp is skipped for any missing field. <code>was_merged_by__c</code> records who ran the merge.
             </p>
           )}
-          {stampMerged && stampFields && stampFields.was_merged__c && stampFields.was_merged_date__c && (
-            <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present</p>
+          {stampMerged && stampFields && stampFields.was_merged__c && stampFields.was_merged_date__c && stampFields.was_merged_by__c && (
+            <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present (flag, date, by)</p>
           )}
           {mode === 'execute' && selCount > 0 && (
             <div className="muted small" style={{ margin: '0 0 8px', padding: '6px 8px', borderRadius: 6, border: '1px solid ' + (apiWouldExceed ? 'var(--red)' : 'var(--line, #e4e7ec)'), color: apiWouldExceed ? 'var(--red)' : undefined }}>
@@ -273,18 +288,19 @@ export default function MergeProcess() {
               <th title="Environment the set was built from — click to sort" style={{ cursor: 'pointer' }} onClick={() => apSort.onSort('environment')}>Env<span className="th-info"> ⓘ</span>{apSort.arrow('environment')}</th>
             </tr></thead>
             <tbody>
-              {apSort.apply(rows).map((r, i) => (
+              {apSort.apply(rows).map((r, i) => [
                 <tr key={r.id}>
                   <td><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} aria-label={'Select ' + r.id} /></td>
-                  <td>{i + 1}</td>
+                  <td><button type="button" onClick={() => toggleApExpand(r.id)} title="Show overrides & details" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, marginRight: 3, font: 'inherit' }}>{apExpanded.has(r.id) ? '▾' : '▸'}</button>{i + 1}</td>
                   <td>{r.survivor_name || '—'}</td>
                   <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title={r.survivor_account}>{r.survivor_account || '—'}</td>
-                  <td>{r.loser_count} account{Number(r.loser_count) === 1 ? '' : 's'}</td>
+                  <td>{r.loser_count} account{Number(r.loser_count) === 1 ? '' : 's'}{r.field_overrides && typeof r.field_overrides === 'object' && Object.keys(r.field_overrides).length ? <span title="This set has field overrides" style={{ marginLeft: 4, color: 'var(--amber)' }}>✎</span> : null}</td>
                   <td title={r.source_key}>{r.source_type === 'merge_id' ? 'merge id ' : 'group '}{shortId(r.source_key)}</td>
                   <td>{r.master_rule || 'cascade'}</td>
                   <td>{r.environment || '—'}</td>
-                </tr>
-              ))}
+                </tr>,
+                apExpanded.has(r.id) ? <tr key={r.id + '_d'}><td colSpan={8} style={{ padding: 0 }}><QueueRowDetail row={r} /></td></tr> : null,
+              ])}
               {rows.length === 0 && <tr><td colSpan={8} className="muted small">No approved merges. Approve sets in Select Merges first.</td></tr>}
             </tbody>
           </table>
@@ -294,6 +310,8 @@ export default function MergeProcess() {
       {(() => {
         const activeIdx = progress ? MERGE_STAGES.findIndex((s) => s.key === progress.stage) : -1;
         const pct = progress && progress.total_ops ? Math.round(100 * (progress.completed_ops || 0) / progress.total_ops) : 0;
+        // Stage-level drift cue: the validate step turns amber when the check flagged changes since staging.
+        const driftFlag = (result && result.drift > 0) || (progress && /changed since staged/i.test(progress.current_label || ''));
         const selectedRows = rows.filter((r) => sel.has(r.id));
         const pipelineRows = ((busy || progress || result) && runRows && runRows.length) ? runRows : selectedRows;
         const runId = progress && progress.run_id;
@@ -328,15 +346,17 @@ export default function MergeProcess() {
               {MERGE_STAGES.map((s, i) => {
                 const finished = progress && (progress.status === 'done' || progress.status === 'error' || progress.status === 'cancelled');
                 const isSkip = s.key === 'merge' && progress && progress.mode === 'simulate';
+                const isDrift = s.key === 'validate' && driftFlag;
                 const state = isSkip ? 'skip'
                   : (activeIdx < 0 ? ''
                     : (i < activeIdx ? 'done' : (i === activeIdx ? (finished ? 'done' : 'running') : '')));
+                const amber = { background: 'var(--amber-bg)', color: '#854f0b' };
                 return (
-                  <div className="step-wrap" key={s.key}>
+                  <div className="step-wrap" key={s.key} title={s.desc}>
                     <span className={'step-dot' + (state === 'done' || state === 'running' ? ' ' + state : '')}
-                      style={state === 'skip' ? { background: 'var(--red-bg)', color: 'var(--red)' } : undefined}>
-                      {state === 'done' ? '✓' : state === 'skip' ? '✕' : i + 1}</span>
-                    <span className="step-label" style={state === 'skip' ? { color: 'var(--red)' } : undefined}>{s.label}{isSkip ? ' (skipped)' : ''}</span>
+                      style={state === 'skip' ? { background: 'var(--red-bg)', color: 'var(--red)' } : (isDrift ? amber : undefined)}>
+                      {isDrift ? '⚠' : state === 'done' ? '✓' : state === 'skip' ? '✕' : i + 1}</span>
+                    <span className="step-label" style={state === 'skip' ? { color: 'var(--red)' } : (isDrift ? { color: '#854f0b' } : undefined)}>{s.label}{isSkip ? ' (skipped)' : ''}{isDrift ? ' ⚠' : ''}</span>
                   </div>
                 );
               })}
@@ -345,6 +365,11 @@ export default function MergeProcess() {
               {progress ? (progress.completed_ops || 0) + ' / ' + (progress.total_ops || 0) + ' operations (' + pct + '%)' : ''}
               {' · elapsed ' + elapsed + 's'}{eta != null ? ' · ~' + eta + 's left' : ''}
             </p>
+            {driftFlag && (
+              <p className="small" style={{ marginTop: 4, color: '#854f0b' }}>
+                ⚠ Drift found at the validate step. On <strong>Execute</strong>, drifted sets are skipped (left approved) until you tick the “merge anyway” box after reviewing the changes.
+              </p>
+            )}
             <div className="dt-scroll" style={{ maxHeight: 240, marginTop: 8 }}>
               <table className="modal-table">
                 <thead><tr>
@@ -355,9 +380,12 @@ export default function MergeProcess() {
                   <th title="Live status: pending / processing / done / simulated / skipped / failed">Status</th>
                 </tr></thead>
                 <tbody>
-                  {paSort.apply(pipelineRows).map((r, i) => {
+                  {paSort.apply(pipelineRows).flatMap((r, i) => {
                     const st = statusFor(r);
-                    return (
+                    const dr = result && result.results && result.results.find((x) => Number(x.id) === Number(r.id));
+                    const hasDrift = dr && dr.drift_fields > 0;
+                    const open = driftRowOpen.has(r.id);
+                    return [
                       <tr key={r.id}>
                         <td>{i + 1}</td>
                         <td>{r.survivor_name || '—'}</td>
@@ -366,9 +394,16 @@ export default function MergeProcess() {
                         <td>
                           <span className="pill" style={{ color: STATUS_COLOR[st] || 'var(--dim)' }}>{st}</span>
                           {(() => { const h = hByQueue[r.id]; return (h && h.reason && (h.result === 'skipped' || h.result === 'failed')) ? <span className="muted small" style={{ marginLeft: 6 }} title={h.reason}>— {h.reason}</span> : null; })()}
+                          {hasDrift && (
+                            <button type="button" onClick={() => toggleDriftRow(r.id)} title="Show what changed since staging"
+                              className="pill" style={{ marginLeft: 6, color: '#854f0b', background: 'var(--amber-bg)', border: 0, cursor: 'pointer', font: 'inherit' }}>
+                              {open ? '▾' : '▸'} ⚠ {dr.drift_fields} changed since staged
+                            </button>
+                          )}
                         </td>
-                      </tr>
-                    );
+                      </tr>,
+                      hasDrift && open ? <tr key={r.id + '_drift'}><td colSpan={5} style={{ padding: 0 }}><MergeDriftDetail detail={dr.drift_detail || []} account={r.survivor_account} /></td></tr> : null,
+                    ];
                   })}
                   {pipelineRows.length === 0 && <tr><td colSpan={5} className="muted small">No sets selected — check sets above, or run a simulate to see live per-set status.</td></tr>}
                 </tbody>
@@ -380,9 +415,14 @@ export default function MergeProcess() {
 
       {result && (
         <p className="muted small" style={{ marginTop: 8, color: result.cancelled ? 'var(--red)' : 'var(--accent)' }}>
-          {result.cancelled ? '■ Stopped — ' : ''}Run {result.run_id} ({result.mode}): {result.done || 0} done, {result.simulated || 0} simulated, {result.skipped} skipped, {result.failed} failed{result.cancelled ? ', ' + (result.remaining || 0) + ' left approved (run again to finish)' : ''}.
+          {result.cancelled ? '■ Stopped — ' : ''}Run {result.run_id} ({result.mode}): {result.done || 0} done, {result.simulated || 0} simulated, {result.skipped} skipped, {result.failed} failed{result.drift ? ', ⚠ ' + result.drift + ' with field drift since staging' : ''}{result.cancelled ? ', ' + (result.remaining || 0) + ' left approved (run again to finish)' : ''}.
         </p>
       )}
+      {result && (result.failed > 0 || result.skipped > 0) && (history || [])
+        .filter((h) => String(h.run_id) === String(result.run_id) && (h.result === 'failed' || h.result === 'skipped'))
+        .map((h, i) => (
+          <p key={i} className="small" style={{ margin: '2px 0 0', color: 'var(--red)' }}>⚠ {h.survivor_name ? h.survivor_name + ': ' : ''}{h.reason}</p>
+        ))}
 
       <CollapsibleCard
         title={<>Merge history <span className="muted small" style={{ fontWeight: 400 }}>({history.length})</span></>}
@@ -464,7 +504,8 @@ export default function MergeProcess() {
         <p style={{ margin: '0 0 6px', fontWeight: 700 }}>How processing works</p>
         <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>
           <li><strong>Environment alignment.</strong> Each approved set is stamped with the environment it was built from. Processing re-checks that against the currently loaded data and the connected org id, and skips any set whose lineage does not match — so a set built from Sandbox can never run against Production (or vice-versa).</li>
-          <li><strong>Safe by default.</strong> Unless execution is explicitly enabled, no Salesforce write happens: each set is re-validated against fresh data, backed up to a pre-merge snapshot, and recorded as <em>simulated</em>. Drifted sets (a record changed or removed since approval) are skipped.</li>
+          <li><strong>Safe by default.</strong> Unless execution is explicitly enabled, no Salesforce write happens: each set is re-validated against fresh data, backed up to a pre-merge snapshot, and recorded as <em>simulated</em>.</li>
+          <li><strong>Two checks at the validate step.</strong> (1) <em>Records present</em> — if an account was removed or is missing since approval, the set is skipped. (2) <em>Field drift</em> — the reviewed values are compared to what you staged; changes are flagged in the stepper (amber) and per set. This covers the <strong>core identity fields</strong> (email, member #, name, date of birth, gender, ZIP, address, merge id), not every field. On Execute, drifted sets are <strong>skipped and left approved</strong> until you tick “merge anyway” after reviewing them; clean sets run normally. Simulate only reports.</li>
           <li><strong>Phase 3 execution + restore.</strong> When enabled (sandbox first, typed confirm), processing writes the survivor fields, runs Salesforce <code>Database.merge</code>, logs history, and supports best-effort restore from the snapshot.</li>
         </ul>
       </div>

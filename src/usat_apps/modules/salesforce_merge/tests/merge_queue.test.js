@@ -33,12 +33,37 @@ test('add rejects a duplicate set (same source_key + survivor, still queued)', a
   const calls = [];
   const query = async (sql) => {
     calls.push(sql);
-    if (/WHERE source_key = \? AND survivor_account/i.test(sql)) return [{ id: 9 }];   // already queued
+    if (/WHERE source_key = \? AND survivor_account/i.test(sql)) return [{ status: 'queued' }];   // latest = active
     return {};
   };
   await assert.rejects(() => q.add({ source_key: 'M1', survivor_account: 'A', loser_accounts: ['B'] }, query),
     /already in the merge queue/i);
   assert.ok(!calls.some((s) => /^INSERT/i.test(s)), 'no INSERT when duplicate');
+});
+
+test('add rejects an already-merged set (latest status = done) with a MERGED error', async () => {
+  const calls = [];
+  const query = async (sql) => {
+    calls.push(sql);
+    if (/WHERE source_key = \? AND survivor_account/i.test(sql)) return [{ status: 'done' }];   // already merged
+    return {};
+  };
+  await assert.rejects(() => q.add({ source_key: 'M1', survivor_account: 'A', loser_accounts: ['B'] }, query),
+    /already been merged/i);
+  assert.ok(!calls.some((s) => /^INSERT/i.test(s)), 'no INSERT when already merged');
+});
+
+test('add ALLOWS re-adding a set whose latest status is restored', async () => {
+  const calls = [];
+  const query = async (sql) => {
+    calls.push(sql);
+    if (/^INSERT/i.test(sql)) return { insertId: 5 };
+    if (/WHERE source_key = \? AND survivor_account/i.test(sql)) return [{ status: 'restored' }];
+    return {};
+  };
+  const r = await q.add({ source_key: 'M1', survivor_account: 'A', loser_accounts: ['B'] }, query);
+  assert.equal(r.id, 5);
+  assert.ok(calls.some((s) => /^INSERT/i.test(s)), 'INSERT issued for a restored set');
 });
 
 test('as_losers normalizes string and array', () => {
@@ -56,21 +81,28 @@ test('list selects newest first; remove deletes by id', async () => {
   assert.equal(del.params[0], 7);
 });
 
-test('add_many queues each entry and counts duplicates as skipped', async () => {
+test('add_many queues each entry, counts active as skipped and merged separately', async () => {
   const calls = [];
   const query = async (sql, params) => {
     calls.push({ sql, params });
     if (/^INSERT/i.test(sql)) return { insertId: 1 };
-    if (/WHERE source_key = \? AND survivor_account/i.test(sql)) return (params[1] === 'DUP') ? [{ id: 1 }] : [];
+    if (/WHERE source_key = \? AND survivor_account/i.test(sql)) {
+      if (params[1] === 'DUP') return [{ status: 'queued' }];    // already staged -> skipped
+      if (params[1] === 'MRG') return [{ status: 'done' }];      // already merged -> merged
+      return [];
+    }
     return {};
   };
   const r = await q.add_many([
     { source_key: 'M1', survivor_account: 'A', loser_accounts: ['B'] },
     { source_key: 'M2', survivor_account: 'DUP', loser_accounts: ['C'] },
-    { source_key: 'M3', survivor_account: 'E', loser_accounts: ['F'] },
+    { source_key: 'M3', survivor_account: 'MRG', loser_accounts: ['D'] },
+    { source_key: 'M4', survivor_account: 'E', loser_accounts: ['F'] },
   ], query);
   assert.equal(r.queued, 2);
   assert.equal(r.skipped, 1);
+  assert.equal(r.merged, 1);
+  assert.equal(r.added.length, 2, 'returns the ids/entries of the newly-added sets (for baseline capture)');
 });
 
 test('add persists field_overrides + child_counts as JSON; list parses them back', async () => {

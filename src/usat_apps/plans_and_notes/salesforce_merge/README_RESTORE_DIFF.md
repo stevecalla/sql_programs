@@ -1,4 +1,66 @@
-# Restore Diff — Plan (spec, not yet built)
+# Restore Diff — Plan + As-Built
+
+**Status:** Phase 1 + Phase 2 IMPLEMENTED. Phase 1 = read-only diff (current live vs pre-merge
+snapshot). Phase 2 = **field-level selective restore** — keep specific current values instead of
+resetting them to the snapshot. Both shipped.
+
+## Phase 2 as built (selective restore)
+
+- **The diff is now actionable.** `RestoreDiffDetail.jsx` renders a **"Keep current"** checkbox on
+  every *differing* field. Ticking it means "leave this field at its live value; don't reset it to the
+  snapshot." Kept rows show the snapshot value struck through and a green "keep live" state. The
+  selection is lifted to the Restore page (`onKeepChange(id, fields[])` → `keepBySet`).
+- **Wire-through.** The Restore page sends `keep_fields` = `{ [queueId]: [fieldApiNames] }` for the
+  sets being restored (`api.mergeRestore(ids, { …, keep_fields })` → route → enqueued run `opts`).
+- **Backend enforcement.** `master_reset_fields(masterFields, survivorId, keep)` now takes a keep set
+  and omits those fields from the survivor patch; `restore()` reads `opts.keep_fields[e.id]` per set,
+  applies it in STEP 1 (survivor reset), and reports `reset_fields` / `kept_fields` (in the run result
+  + history reason, and a `would reset N, keep M` line in the Simulate preview).
+- **This is the review/acknowledgment mechanism** — stronger than the merge side's binary "merge
+  anyway", because the operator chooses per field. Restore stays user-initiated + typed `RESTORE`, so
+  no separate skip-gate is needed.
+- **Recreate path too.** The same diff expander + Keep-current now appears on the **Recreate queue**
+  (purged losers), and `recreate()` honours `keep_fields` on its survivor reset — parity with restore.
+
+## Audit artifact (diff persisted to history)
+
+Every merge/restore/recreate history row now carries a `diff_json` column (`merge_history` — additive
+`diff` field on `write()`, parsed back by `list()`):
+- **Merge** rows store `{ kind: 'merge_drift', fields: [{ account, field, before, after }] }` — the
+  exact fields that drifted since staging.
+- **Restore / Recreate** rows store `{ kind: 'restore'|'recreate', reset: [{ field, value }], kept: […] }`
+  — which fields were reset (and to what snapshot value) and which the operator kept at their live value.
+So the field-level detail is durable and queryable, not only a live-panel view.
+
+Phase 1 recap below.
+
+## As built (v1)
+
+- **Store:** `store/restore_diff.js`. `build_master_diff(master, current)` is the pure builder —
+  per-field `{ field, before (snapshot), after (live), state }` where state is `match` / `differ` /
+  `missing`, plus a summary `{ matched, differ, missing, total }` and an `in_sync` flag. It compares
+  only the fields a restore would reset (mirrors `master_reset_fields`: non-system, non-empty snapshot
+  values) and uses **normalized equality** (trim + collapse whitespace + lower-case, ZIP→first 5) so
+  formatting noise isn't flagged as drift. `diff_for_entry(queueId, deps)` loads the pre-merge
+  snapshot (`merge_snapshot.list_for_entry`), live-fetches the survivor's current values
+  (`salesforce_read.fetch_accounts_by_ids` with the compared fields), builds the diff, and reports
+  each loser's recoverability state (`merge_restore.account_states`: deleted / live / missing).
+  Injectable deps; fully unit-tested (`tests/restore_diff.test.js`).
+- **Endpoint:** `GET /api/salesforce-merge/merge/restore/diff?id=<queueId>` (gated). One single-record
+  live read per view; wrapped so a bad field/permission returns `fetch_error` instead of a 500.
+- **UI:** a **Diff** expander on each row of *Completed merges* on the Restore page
+  (`components/RestoreDiffDetail.jsx`, lazy-loaded on expand). Shows a headline — green "already
+  matches the pre-merge snapshot — a restore would change no fields" when `in_sync`, else amber "N of
+  M fields differ…"; the loser recoverability chips; and a Field / Pre-merge (snapshot) / Current
+  (live) / State table with a **Differences only** toggle (default on) and colour-coded rows.
+- **Deviations from the original spec:** v1 is all-or-nothing, so there's no separate "Restore writes"
+  column (for a differing field, restore writes = the snapshot value). Field API names are shown (not
+  labels). Losers are listed with a recoverability state rather than a field-by-field diff. Capturing
+  the diff into merge history as an audit artifact is not yet done.
+
+---
+
+## Original design (for reference)
 
 **Status:** Design only. A read-only "diff" view for the Restore workflow so an operator can see
 exactly what a restore will change *before* confirming it. Additive; no change to the merge/restore

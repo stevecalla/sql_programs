@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import DatasetStamp from '../components/DatasetStamp.jsx';
 import WorkerBanner from '../components/WorkerBanner.jsx';
+import QueueRowDetail from '../components/QueueRowDetail.jsx';
 import { api, exportUrl } from '../lib/api.js';
 
 const PAGE = 200;
+
+// Persist the user's filter selections so they stick as the default across visits/reloads.
+const LS_KEY = 'sm_filters_v1';
+const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; } };
+const PREFS = loadPrefs();
+
+// Shared filter-cell layout: uniform min-width columns that wrap evenly; each select fills its cell
+// so the controls line up in a tidy grid regardless of label length.
+const FCELL = { display: 'flex', flexDirection: 'column', minWidth: 148, flex: '0 0 auto' };
+const FSEL = { width: '100%' };
+const FLabel = ({ children, title }) => (<div className="muted small" style={{ marginBottom: 3 }} title={title}>{children}</div>);
 
 const isBlank = (v) => v == null || String(v).trim() === '';
 const val = (v) => (isBlank(v) ? '—' : String(v));
@@ -87,11 +99,17 @@ function pickMaster(accounts, children, groupMergeId) {
 }
 
 export default function SelectMerges() {
-  const [source, setSource] = useState('merge_id');
-  const [midState, setMidState] = useState('');
-  const [memState, setMemState] = useState('');
-  const [bkState, setBkState] = useState('');
-  const [foundationState, setFoundationState] = useState(''); // '' all · 'has' · 'none' (both sources)
+  const [source, setSource] = useState(PREFS.source || 'merge_id');
+  const [midState, setMidState] = useState(PREFS.midState || '');
+  const [memState, setMemState] = useState(PREFS.memState || '');
+  const [bkState, setBkState] = useState(PREFS.bkState || '');
+  const [foundationState, setFoundationState] = useState(PREFS.foundationState || ''); // '' all · 'has' · 'none' (both sources)
+  const [sizeState, setSizeState] = useState(PREFS.sizeState || '');   // exact cluster size (both sources)
+  const [matchState, setMatchState] = useState(PREFS.matchState || ''); // Signal: exact/fuzzy/nickname (Duplicates source)
+  const [whichState, setWhichState] = useState(PREFS.whichState || ''); // Which list: exact/fuzzy/nickname (Merge-ID source)
+  const [tierState, setTierState] = useState(PREFS.tierState || '');    // Tier (confidence): exact/fuzzy/nickname (Duplicates source)
+  const [simState, setSimState] = useState(PREFS.simState || '');       // min best name-similarity score (Duplicates source)
+  const [sizeOpts, setSizeOpts] = useState([]);   // available cluster sizes (facets)
 
   const [clusters, setClusters] = useState([]);
   const [total, setTotal] = useState(0);
@@ -109,6 +127,10 @@ export default function SelectMerges() {
   const [queue, setQueue] = useState([]);
   const [qSel, setQSel] = useState(() => new Set());
   const [qStatus, setQStatus] = useState('queued');
+  const [qExpanded, setQExpanded] = useState(() => new Set());
+  const toggleQExpand = (id) => setQExpanded((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const [queueAll, setQueueAll] = useState([]);  // every queue entry (all statuses) — to tag/filter groups
+  const [qFilter, setQFilter] = useState(PREFS.qFilter || ''); // '' all | 'unstaged' hide queued/merged | 'staged' only queued/merged
   const [err, setErr] = useState('');
   const [addErr, setAddErr] = useState('');
   const [note, setNote] = useState('');
@@ -143,17 +165,47 @@ export default function SelectMerges() {
 
   useEffect(() => {
     const load = source === 'merge_id'
-      ? api.mergeGroups({ page, page_size: PAGE, q: filter, bucket: bkState, foundation_state: foundationState })
-      : api.duplicates({ page, page_size: PAGE, sort: 'size', dir: 'desc', q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState });
+      ? api.mergeGroups({ page, page_size: PAGE, q: filter, bucket: bkState, foundation_state: foundationState, size: sizeState, which_list: whichState })
+      : api.duplicates({ page, page_size: PAGE, sort: 'size', dir: 'desc', q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, size: sizeState, match_type: matchState, best_min: simState, tier: tierState });
     load.then((r) => { setClusters(r.rows || []); setTotal(Number(r.total) || 0); }).catch((e) => setErr(e.message));
-  }, [source, page, filter, midState, memState, bkState, foundationState]);
+  }, [source, page, filter, midState, memState, bkState, foundationState, sizeState, matchState, whichState, simState, tierState]);
 
-  useEffect(() => { setRailSel(new Set()); setSelectAllMatching(false); setBulkMsg(''); }, [source, filter, bkState, foundationState]);
+  // Populate the cluster-size dropdown from the consolidated facets (distinct group sizes).
+  useEffect(() => { api.duplicatesFacets().then((r) => setSizeOpts(((r.facets && r.facets.size) || []).map(String))).catch(() => {}); }, []);
+
+  // Persist filter selections so they become the user's default next time.
+  useEffect(() => {
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ source, qFilter, midState, memState, bkState, foundationState, sizeState, matchState, whichState, simState, tierState })); } catch { /* ignore */ }
+  }, [source, qFilter, midState, memState, bkState, foundationState, sizeState, matchState, whichState, simState, tierState]);
+
+  useEffect(() => { setRailSel(new Set()); setSelectAllMatching(false); setBulkMsg(''); }, [source, filter, midState, memState, bkState, foundationState, sizeState, matchState, whichState, simState, tierState]);
 
   const loadQueue = useCallback(() => {
     api.mergeQueue(qStatus).then((r) => { const rows = r.rows || []; setQueue(rows); setQSel(new Set(rows.map((x) => x.id))); }).catch((e) => setErr(e.message));
+    api.mergeQueue('all').then((r) => setQueueAll(r.rows || [])).catch(() => {});
   }, [qStatus]);
   useEffect(() => { loadQueue(); }, [loadQueue]);
+
+  // Current queue state per group source_key: 'queued' (active), 'merged' (last terminal done/recreated),
+  // 'restored' (undone — re-mergeable), or 'failed'. Drives the group badge + the top-bar Queue filter.
+  const queueStateByKey = useMemo(() => {
+    const m = {};
+    for (const e of (queueAll || [])) {
+      const k = String(e.source_key); const st = String(e.status);
+      if (!m[k]) m[k] = { active: false, latest: null, at: -1 };
+      if (st === 'queued' || st === 'approved') m[k].active = true;
+      const t = new Date(e.created_at || 0).getTime() || 0;
+      if (t >= m[k].at) { m[k].at = t; m[k].latest = st; }
+    }
+    const out = {};
+    for (const [k, s] of Object.entries(m)) {
+      out[k] = s.active ? 'queued'
+        : (s.latest === 'done' || s.latest === 'recreated') ? 'merged'
+          : s.latest === 'restored' ? 'restored'
+            : s.latest === 'failed' ? 'failed' : null;
+    }
+    return out;
+  }, [queueAll]);
 
   const loadCluster = useCallback((key) => {
     setSelKey(key); setDetail(null); setMaster(null); setManualMaster(false);
@@ -241,11 +293,16 @@ export default function SelectMerges() {
   const childTotal = (children && selLosers.reduce((s, id) => s + ((children[id] && children[id].total) || 0), 0)) || 0;
   const apexCalls = Math.ceil(selLosers.length / 2) || 0;
 
-  const isQueued = !!(selKey && master && queue.some((q) => String(q.source_key) === String(selKey) && String(q.survivor_account) === String(master)));
+  // Only an ACTIVE entry (queued/approved) blocks re-adding — matches the backend add() dedup. Terminal
+  // rows (done/failed/restored/recreated) are history: a RESTORED set is two live duplicates again, so it
+  // must be re-mergeable.
+  const isQueued = !!(selKey && master && queue.some((q) => (String(q.status) === 'queued' || String(q.status) === 'approved') && String(q.source_key) === String(selKey) && String(q.survivor_account) === String(master)));
 
   const pages = Math.max(1, Math.ceil(total / PAGE));
   const setSrc = (s) => { setSource(s); setPage(1); setSelKey(null); setDetail(null); };
   const onFilter = (v) => { setFilter(v); setPage(1); };
+  const clearFilters = () => { setMidState(''); setMemState(''); setBkState(''); setFoundationState(''); setSizeState(''); setMatchState(''); setWhichState(''); setSimState(''); setTierState(''); setQFilter(''); setPage(1); };
+  const anyFilter = !!(midState || memState || bkState || foundationState || sizeState || matchState || whichState || simState || tierState || qFilter);
   const toggleMerge = (id) => setMergeSel((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const addToQueue = async () => {
@@ -257,9 +314,13 @@ export default function SelectMerges() {
       selLosers.forEach((id) => { const c = children && children[id]; if (c) { ctot += c.total || 0; for (const [k, v] of Object.entries(c.by || {})) childAgg[k] = (childAgg[k] || 0) + v; } });
       const child_counts = isSf ? { total: ctot, by: childAgg } : null;
       const field_overrides = Object.keys(overrides).length ? overrides : null;
+      // Stage-time baseline: the field values as reviewed, keyed by account, so process-time can flag drift.
+      const setIds = new Set([master, ...selLosers]);
+      const staged_fields = {};
+      for (const a of accounts) if (setIds.has(a.account)) staged_fields[a.account] = a;
       const r = await api.mergeQueueAdd({ source_type: source, source_key: selKey, survivor_account: master,
         survivor_contact: masterAcct ? acctContact(masterAcct) : '', survivor_name: masterAcct ? acctName(masterAcct) : '',
-        loser_accounts: selLosers, master_rule: 'cascade', field_overrides, child_counts });
+        loser_accounts: selLosers, master_rule: 'cascade', field_overrides, child_counts, staged_fields });
       setNote(`Queued: master ${shortId(master)} + ${r.loser_count} account${r.loser_count === 1 ? '' : 's'}.`);
       loadQueue();
     } catch (e) { setAddErr(e.message); }
@@ -267,11 +328,17 @@ export default function SelectMerges() {
   const removeQueue = async (id) => { try { await api.mergeQueueRemove(id); loadQueue(); } catch (e) { setErr(e.message); } };
 
   const listLabel = source === 'merge_id' ? 'Merge-id groups' : 'Duplicate groups';
-  const addDisabled = !detail || isQueued || !selLosers.length;
-  const pageKeys = clusters.map((c) => c.cluster);
+  // A group is "locked" (shown but not selectable) when it's already staged (queued/approved) or
+  // already merged (done/recreated, not since restored). restored/failed/new stay selectable.
+  const isLocked = useCallback((key) => { const s = queueStateByKey[key]; return s === 'queued' || s === 'merged'; }, [queueStateByKey]);
+  const selState = selKey ? queueStateByKey[selKey] : null;
+  const mergedLock = selState === 'merged';
+  const addDisabled = !detail || isQueued || mergedLock || !selLosers.length;
+  const selectableKeys = clusters.map((c) => c.cluster).filter((k) => !isLocked(k));
+  const pageKeys = selectableKeys;   // "Page" selects only the selectable rows
   const allPageSelected = pageKeys.length > 0 && pageKeys.every((k) => railSel.has(k));
   const selCount = selectAllMatching ? total : railSel.size;
-  const toggleRail = (k) => { setSelectAllMatching(false); setRailSel((p) => { const n = new Set(p); if (n.has(k)) n.delete(k); else n.add(k); return n; }); };
+  const toggleRail = (k) => { if (isLocked(k)) return; setSelectAllMatching(false); setRailSel((p) => { const n = new Set(p); if (n.has(k)) n.delete(k); else n.add(k); return n; }); };
   const togglePage = () => { setSelectAllMatching(false); setRailSel((p) => { const n = new Set(p); if (allPageSelected) pageKeys.forEach((k) => n.delete(k)); else pageKeys.forEach((k) => n.add(k)); return n; }); };
   const bulkAdd = async () => {
     const n = selCount;
@@ -279,9 +346,13 @@ export default function SelectMerges() {
     if (!window.confirm(`Add ${n} merge${n === 1 ? '' : 's'} to the queue using the survivor cascade (merge id, then lowest membership number)? Groups that need a child-count or oldest tie-break are skipped for single review.`)) return;
     setErr(''); setBulkMsg('');
     try {
-      const payload = selectAllMatching ? { source: 'merge_id', q: filter, bucket: bkState, foundation_state: foundationState } : { source: 'merge_id', keys: [...railSel] };
+      const payload = selectAllMatching
+        ? (source === 'merge_id'
+          ? { source: 'merge_id', q: filter, bucket: bkState, foundation_state: foundationState, size: sizeState, which_list: whichState }
+          : { source: 'group', q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, size: sizeState, match_type: matchState, best_min: simState, tier: tierState })
+        : { source, keys: [...railSel] };
       const r = await api.mergeQueueBulk(payload);
-      setBulkMsg(`Queued ${r.queued}` + (r.skipped ? `, ${r.skipped} already queued` : '') + (r.unresolved ? `, ${r.unresolved} skipped (no clear survivor)` : '') + (r.capped ? ' — capped at 1000' : '') + '.');
+      setBulkMsg(`Queued ${r.queued}` + (r.skipped ? `, ${r.skipped} already queued` : '') + (r.merged ? `, ${r.merged} already merged` : '') + (r.unresolved ? `, ${r.unresolved} skipped (no clear survivor)` : '') + (r.capped ? ' — capped at 1000' : '') + '.');
       setRailSel(new Set()); setSelectAllMatching(false);
       loadQueue();
     } catch (e) { setErr(e.message); }
@@ -301,31 +372,91 @@ export default function SelectMerges() {
 
       {/* DATA SELECT PANEL */}
       <div className="card" style={{ margin: '0 0 12px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
-          <div>
-            <div className="muted small" style={{ marginBottom: 3 }}>Review</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
+          <div style={{ ...FCELL, minWidth: 220 }}>
+            <FLabel>Review</FLabel>
             <div className="seg">
               <button type="button" className={'seg-btn' + (source === 'group' ? ' on' : '')} onClick={() => setSrc('group')}>Duplicate groups</button>
               <button type="button" className={'seg-btn' + (source === 'merge_id' ? ' on' : '')} onClick={() => setSrc('merge_id')}>Accounts with merge ids</button>
             </div>
           </div>
+          <div style={FCELL}>
+            <FLabel title="Hide or isolate groups already in the merge queue.">Queue</FLabel>
+            <select className="tb-select" style={FSEL} value={qFilter} onChange={(e) => setQFilter(e.target.value)} title="Hide or isolate groups already in the merge queue.">
+              <option value="">All</option>
+              <option value="unstaged">Not staged (hide queued/merged)</option>
+              <option value="staged">In queue / merged only</option>
+            </select>
+          </div>
+          <div style={FCELL}>
+            <FLabel title="How many accounts are in the group (2 = a pair).">Size</FLabel>
+            <select className="tb-select" style={FSEL} value={sizeState} onChange={(e) => { setSizeState(e.target.value); setPage(1); }} title="How many accounts are in the group (2 = a pair).">
+              <option value="">Any size</option>
+              {sizeOpts.map((s) => <option key={s} value={s}>{s} accounts</option>)}
+            </select>
+          </div>
+          {source === 'group' && (
+            <div style={FCELL}>
+              <FLabel title="Why they were grouped: exact match, fuzzy (similar) name, and/or nickname. A cluster can involve more than one — this keeps any that involve the chosen signal.">Signal</FLabel>
+              <select className="tb-select" style={FSEL} value={matchState} onChange={(e) => { setMatchState(e.target.value); setPage(1); }} title="Why they were grouped: exact match, fuzzy (similar) name, and/or nickname. A cluster can involve more than one — this keeps any that involve the chosen signal.">
+                <option value="">Any signal</option>
+                <option value="exact">Exact</option>
+                <option value="fuzzy">Fuzzy</option>
+                <option value="nickname">Nickname</option>
+              </select>
+            </div>
+          )}
+          {source === 'group' && (
+            <div style={FCELL}>
+              <FLabel title="Confidence level — the cluster's single strongest signal (exact > fuzzy > nickname).">Tier</FLabel>
+              <select className="tb-select" style={FSEL} value={tierState} onChange={(e) => { setTierState(e.target.value); setPage(1); }} title="Confidence level — the cluster's single strongest signal (exact > fuzzy > nickname).">
+                <option value="">Any tier</option>
+                <option value="exact">Exact</option>
+                <option value="fuzzy">Fuzzy</option>
+                <option value="nickname">Nickname</option>
+              </select>
+            </div>
+          )}
+          {source === 'group' && (
+            <div style={FCELL}>
+              <FLabel title="Best (highest) name-similarity score among the cluster's pairs, 0–100.">Min similarity</FLabel>
+              <select className="tb-select" style={FSEL} value={simState} onChange={(e) => { setSimState(e.target.value); setPage(1); }} title="Best (highest) name-similarity score among the cluster's pairs, 0–100.">
+                <option value="">Any score</option>
+                <option value="95">≥ 95</option>
+                <option value="90">≥ 90</option>
+                <option value="85">≥ 85</option>
+                <option value="80">≥ 80</option>
+              </select>
+            </div>
+          )}
+          {source === 'merge_id' && (
+            <div style={FCELL}>
+              <FLabel title="Which detection signal flagged the account: exact, fuzzy, or nickname. Keeps groups where any member matches.">Which list</FLabel>
+              <select className="tb-select" style={FSEL} value={whichState} onChange={(e) => { setWhichState(e.target.value); setPage(1); }} title="Which detection signal flagged the account: exact, fuzzy, or nickname. Keeps groups where any member matches.">
+                <option value="">Any list</option>
+                <option value="exact">Exact</option>
+                <option value="fuzzy">Fuzzy</option>
+                <option value="nickname">Nickname</option>
+              </select>
+            </div>
+          )}
           {source === 'group' && (
             <>
-              <div>
-                <div className="muted small" style={{ marginBottom: 3 }}>Merge ID</div>
-                <select className="tb-select" value={midState} onChange={(e) => { setMidState(e.target.value); setPage(1); }}>
+              <div style={FCELL}>
+                <FLabel title="Whether the cluster carries any Membership Platform merge ID.">Merge ID</FLabel>
+                <select className="tb-select" style={FSEL} value={midState} onChange={(e) => { setMidState(e.target.value); setPage(1); }} title="Whether the cluster carries any Membership Platform merge ID.">
                   <option value="">All</option><option value="has">Has merge ID</option><option value="none">No merge ID</option>
                 </select>
               </div>
-              <div>
-                <div className="muted small" style={{ marginBottom: 3 }}>Membership #</div>
-                <select className="tb-select" value={memState} onChange={(e) => { setMemState(e.target.value); setPage(1); }}>
+              <div style={FCELL}>
+                <FLabel title="Whether any account in the cluster has a membership number.">Membership #</FLabel>
+                <select className="tb-select" style={FSEL} value={memState} onChange={(e) => { setMemState(e.target.value); setPage(1); }} title="Whether any account in the cluster has a membership number.">
                   <option value="">All</option><option value="has">Has member #</option><option value="none">No member #</option>
                 </select>
               </div>
-              <div>
-                <div className="muted small" style={{ marginBottom: 3 }}>Foundation</div>
-                <select className="tb-select" value={foundationState} onChange={(e) => { setFoundationState(e.target.value); setPage(1); }}>
+              <div style={FCELL}>
+                <FLabel title="Whether any account in the group is a Foundation constituent.">Foundation</FLabel>
+                <select className="tb-select" style={FSEL} value={foundationState} onChange={(e) => { setFoundationState(e.target.value); setPage(1); }} title="Whether any account in the group is a Foundation constituent.">
                   <option value="">All</option><option value="has">Is foundation</option><option value="none">Not foundation</option>
                 </select>
               </div>
@@ -333,27 +464,28 @@ export default function SelectMerges() {
           )}
           {source === 'merge_id' && (
             <>
-              <div>
-                <div className="muted small" style={{ marginBottom: 3 }}>Bucket</div>
-                <select className="tb-select" value={bkState} onChange={(e) => { setBkState(e.target.value); setPage(1); }}>
+              <div style={FCELL}>
+                <FLabel title="How the account compares to Salesforce duplicates: In both = has a merge ID and was flagged; ID only = has a merge ID but was not flagged as a duplicate.">Bucket</FLabel>
+                <select className="tb-select" style={FSEL} value={bkState} onChange={(e) => { setBkState(e.target.value); setPage(1); }} title="How the account compares to Salesforce duplicates: In both = has a merge ID and was flagged; ID only = has a merge ID but was not flagged as a duplicate.">
                   <option value="">All</option><option value="in_both">In both</option><option value="sf_only">ID only</option>
                 </select>
               </div>
-              <div>
-                <div className="muted small" style={{ marginBottom: 3 }}>Foundation</div>
-                <select className="tb-select" value={foundationState} onChange={(e) => { setFoundationState(e.target.value); setPage(1); }}>
+              <div style={FCELL}>
+                <FLabel title="Whether any account in the group is a Foundation constituent.">Foundation</FLabel>
+                <select className="tb-select" style={FSEL} value={foundationState} onChange={(e) => { setFoundationState(e.target.value); setPage(1); }} title="Whether any account in the group is a Foundation constituent.">
                   <option value="">All</option><option value="has">Is foundation</option><option value="none">Not foundation</option>
                 </select>
               </div>
             </>
           )}
-          <div title={RULE_TOOLTIP} style={{ cursor: 'help' }}>
-            <div className="muted small" style={{ marginBottom: 3 }}>Master survivor rule</div>
-            <div className="tb-select" style={{ width: 250, display: 'flex', alignItems: 'center' }}>{RULE_TEXT}</div>
-          </div>
+          {anyFilter && (
+            <div style={{ alignSelf: 'flex-end' }}>
+              <button type="button" className="linkbtn" onClick={clearFilters} title="Reset all filters to defaults">Clear filters</button>
+            </div>
+          )}
         </div>
-        <p className="muted small" style={{ margin: '8px 0 0', borderTop: '1px solid var(--line)', paddingTop: 7 }}>
-          Survivor rule: {RULE_TEXT}. You can override the master below.
+        <p className="muted small" style={{ margin: '8px 0 0', borderTop: '1px solid var(--line)', paddingTop: 7 }} title={RULE_TOOLTIP}>
+          Survivor rule: {RULE_TEXT}. You can override the master below. <span style={{ color: 'var(--dim)' }}>Filters are saved as your default.</span>
         </p>
       </div>
 
@@ -362,32 +494,47 @@ export default function SelectMerges() {
         <div className="card" style={{ flex: '0 0 280px', minWidth: 0, margin: 0, height: railH || 574, display: 'flex', flexDirection: 'column' }}>
           <p style={{ margin: '0 0 8px', fontWeight: 700 }}>{listLabel} <span className="muted small" style={{ fontWeight: 400 }}>({total.toLocaleString()})</span></p>
           <input className="search" style={{ width: '100%', marginBottom: 8 }} placeholder="Search: name, id…" value={filter} onChange={(e) => onFilter(e.target.value)} />
-          {source === 'merge_id' && (
-            <div className="ma-bulk">
-              <label className="ma-bulk-all"><input type="checkbox" checked={allPageSelected} onChange={togglePage} /> Page</label>
-              <span className="muted small">{selCount} selected</span>
-              <button className="btn" style={{ width: 'auto', marginLeft: 'auto' }} disabled={selCount === 0} onClick={bulkAdd}>Add selected</button>
-            </div>
-          )}
-          {source === 'merge_id' && allPageSelected && !selectAllMatching && total > clusters.length && (
+          <div className="ma-bulk">
+            <label className="ma-bulk-all"><input type="checkbox" checked={allPageSelected} onChange={togglePage} /> Page</label>
+            <span className="muted small">{selCount} selected</span>
+            <button className="btn" style={{ width: 'auto', marginLeft: 'auto' }} disabled={selCount === 0} onClick={bulkAdd}>Add selected</button>
+          </div>
+          {allPageSelected && !selectAllMatching && total > clusters.length && (
             <button type="button" className="linkbtn" style={{ marginBottom: 6 }} onClick={() => setSelectAllMatching(true)}>Select all {total.toLocaleString()} matching</button>
           )}
-          {source === 'merge_id' && selectAllMatching && (
+          {selectAllMatching && (
             <p className="muted small" style={{ margin: '0 0 6px' }}>All {total.toLocaleString()} matching selected. <button type="button" className="linkbtn" onClick={() => { setSelectAllMatching(false); setRailSel(new Set()); }}>Clear</button></p>
           )}
           {bulkMsg && <p className="muted small" style={{ color: 'var(--accent)', margin: '0 0 6px' }}>{bulkMsg}</p>}
           <div className="dt-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-            {clusters.map((c, i) => (
-              <div key={c.cluster} className="ma-cluster-row">
-                {source === 'merge_id' && <input type="checkbox" checked={selectAllMatching || railSel.has(c.cluster)} onChange={() => toggleRail(c.cluster)} aria-label={'Select ' + c.cluster} />}
-                <button type="button" onClick={() => loadCluster(c.cluster)} style={{ flex: 1, minWidth: 0 }}
-                  className={'ma-cluster' + (selKey === c.cluster ? ' on' : '')}>
-                  <div className="ma-cluster-key" title={fmtNames(c.names) || c.cluster}>{(page - 1) * PAGE + i + 1}. {firstName(c.names) || c.cluster}</div>
-                  <div className="muted small">{c.size} records · {c.signal}</div>
-                </button>
-              </div>
-            ))}
+            {clusters.filter((c) => {
+              if (!qFilter) return true;
+              const s = queueStateByKey[c.cluster]; const staged = s === 'queued' || s === 'merged';
+              return qFilter === 'staged' ? staged : !staged;
+            }).map((c, i) => {
+              const cstate = queueStateByKey[c.cluster];
+              const badge = cstate === 'queued' ? { t: 'in queue', bg: 'var(--amber-bg)', c: 'var(--amber)' }
+                : cstate === 'merged' ? { t: 'merged', bg: 'var(--green-bg, #e6f4ea)', c: 'var(--green, #1a8a4f)' }
+                  : cstate === 'restored' ? { t: 'restored', bg: 'transparent', c: 'var(--dim)' }
+                    : cstate === 'failed' ? { t: 'failed', bg: 'var(--red-bg, #fdecea)', c: 'var(--red, #c0392b)' } : null;
+              const locked = cstate === 'queued' || cstate === 'merged';
+              return (
+                <div key={c.cluster} className="ma-cluster-row" style={locked ? { opacity: 0.6 } : undefined}>
+                  <input type="checkbox" checked={!locked && (selectAllMatching || railSel.has(c.cluster))} disabled={locked} onChange={() => toggleRail(c.cluster)} aria-label={'Select ' + c.cluster}
+                    title={cstate === 'merged' ? 'Already merged — restore it first to re-merge' : cstate === 'queued' ? 'Already in the merge queue' : undefined} style={locked ? { cursor: 'not-allowed' } : undefined} />
+                  <button type="button" onClick={() => loadCluster(c.cluster)} style={{ flex: 1, minWidth: 0 }}
+                    className={'ma-cluster' + (selKey === c.cluster ? ' on' : '')}>
+                    <div className="ma-cluster-key" title={fmtNames(c.names) || c.cluster} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {firstName(c.names) || c.cluster}</span>
+                      {badge && <span className="pill" style={{ background: badge.bg, color: badge.c, fontSize: 10, padding: '1px 6px', flex: '0 0 auto' }}>{badge.t}</span>}
+                    </div>
+                    <div className="muted small">{c.size} records · {c.signal}</div>
+                  </button>
+                </div>
+              );
+            })}
             {clusters.length === 0 && <p className="muted small">No records.</p>}
+            {clusters.length > 0 && qFilter && clusters.filter((c) => { const s = queueStateByKey[c.cluster]; const staged = s === 'queued' || s === 'merged'; return qFilter === 'staged' ? staged : !staged; }).length === 0 && <p className="muted small">No groups on this page match the queue filter.</p>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <button className="btn" style={{ width: 'auto' }} disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
@@ -512,6 +659,7 @@ export default function SelectMerges() {
         {openAccts && (<>
         {addErr && <p className="err" style={{ margin: '0 0 8px' }}>{addErr}</p>}
         {isQueued && !addErr && <p className="muted small" style={{ margin: '0 0 8px' }}>This set is already in the queue — remove it below to re-add.</p>}
+        {mergedLock && !addErr && <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green, #1a8a4f)' }}>This set has already been merged — restore it first (Restore page) to re-merge.</p>}
         {note && <p className="muted small" style={{ color: 'var(--accent)', margin: '0 0 8px' }}>{note}</p>}
         {!detail ? (
           <><div style={{ height: 300, overflow: 'hidden' }}><SkelRows n={6} /></div><Skel w="42%" mt={8} /></>
@@ -597,28 +745,29 @@ export default function SelectMerges() {
             {qStatus === 'queued' && <button className="btn primary" style={{ width: 'auto' }} disabled={qSel.size === 0} onClick={approveSelected} title="Approve the selected sets for Phase 3 processing">Approve selected</button>}
           </span>
         </div>
-        {openQueue && (<div style={{ minHeight: 180 }}>
+        {openQueue && (<div style={{ minHeight: 240 }}>
         {queue.length === 0 ? (
           <p className="muted small" style={{ margin: 0 }}>Nothing queued yet. Add a merge set above.</p>
         ) : (
-          <div className="dt-scroll" style={{ height: 180 }}>
+          <div className="dt-scroll" style={{ height: 360, minHeight: 200, maxHeight: '72vh', resize: 'vertical', overflow: 'auto' }} title="Drag the bottom-right corner to resize">
             <table className="modal-table queue-fixed" style={{ tableLayout: 'fixed', width: '100%' }}>
               <colgroup><col style={{ width: 34 }} /><col style={{ width: 34 }} /><col style={{ width: 160 }} /><col style={{ width: 200 }} /><col style={{ width: 90 }} /><col style={{ width: 200 }} /><col style={{ width: 120 }} /><col style={{ width: 90 }} /><col style={{ width: 40 }} /></colgroup>
               <thead><tr><th><input type="checkbox" checked={queue.length > 0 && qSel.size === queue.length} onChange={() => setQSel(qSel.size === queue.length ? new Set() : new Set(queue.map((q) => q.id)))} aria-label="Select all" /></th><th>#</th><th>Name</th><th>Survivor (master)</th><th>Merging</th><th>Source</th><th>Rule</th><th>Status</th><th></th></tr></thead>
               <tbody>
-                {queue.map((q, i) => (
+                {queue.map((q, i) => [
                   <tr key={q.id} onClick={() => loadFromQueue(q)} className={selKey === q.source_key ? 'row-sel' : undefined} style={{ cursor: 'pointer' }}>
                     <td onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={qSel.has(q.id)} onChange={() => toggleQ(q.id)} aria-label={'Select ' + q.id} /></td>
-                    <td>{i + 1}</td>
+                    <td><button type="button" onClick={(e) => { e.stopPropagation(); toggleQExpand(q.id); }} title="Show overrides & details" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, marginRight: 3, font: 'inherit' }}>{qExpanded.has(q.id) ? '▾' : '▸'}</button>{i + 1}</td>
                     <td title={q.survivor_name}>{q.survivor_name || '—'}</td>
                     <td title={q.survivor_account} style={{ whiteSpace: 'nowrap' }}>{q.survivor_account}</td>
-                    <td>{q.loser_count} account{Number(q.loser_count) === 1 ? '' : 's'}</td>
+                    <td>{q.loser_count} account{Number(q.loser_count) === 1 ? '' : 's'}{q.field_overrides && typeof q.field_overrides === 'object' && Object.keys(q.field_overrides).length ? <span title="This set has field overrides" style={{ marginLeft: 4, color: 'var(--amber)' }}>✎</span> : null}</td>
                     <td title={q.source_key}>{q.source_type === 'merge_id' ? 'merge id ' : 'group '}{shortId(q.source_key)}</td>
                     <td title={RULE_TOOLTIP}>{RULE_LABELS[q.master_rule] || q.master_rule || 'cascade'}</td>
                     <td><span className="pill" style={{ background: 'var(--amber-bg)', color: 'var(--amber)' }}>{q.status}</span></td>
                     <td onClick={(e) => e.stopPropagation()}>{(q.status === 'queued' || q.status === 'approved') ? <button className="btn" style={{ width: 'auto', padding: '2px 8px' }} onClick={() => removeQueue(q.id)} aria-label="Remove">✕</button> : null}</td>
-                  </tr>
-                ))}
+                  </tr>,
+                  qExpanded.has(q.id) ? <tr key={q.id + '_d'}><td colSpan={9} style={{ padding: 0 }}><QueueRowDetail row={q} /></td></tr> : null,
+                ])}
               </tbody>
             </table>
           </div>

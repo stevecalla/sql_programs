@@ -45,3 +45,17 @@ test('history.write inserts a row and list selects newest first', async () => {
   assert.equal(rows.length, 1);
   assert.ok(calls.some((c) => /ORDER BY id DESC/i.test(c.sql)));
 });
+
+test('history.write persists diff_json (audit) and list parses it back', async () => {
+  let stored = null;
+  const diff = { kind: 'restore', reset: [{ field: 'PersonEmail', value: 'a@b.com' }], kept: ['Phone'] };
+  const query = async (sql, params) => {
+    if (/^INSERT/i.test(sql)) { stored = params; return { insertId: 3 }; }
+    if (/^SELECT/i.test(sql)) return [{ id: 3, result: 'restored', diff_json: JSON.stringify(diff) }];
+    return {};
+  };
+  await hist.write({ run_id: 'r', result: 'restored', reason: 'x', diff }, query);
+  assert.equal(stored[stored.length - 3], JSON.stringify(diff), 'diff_json stored before the two timestamps');
+  const rows = await hist.list({ limit: 10 }, query);
+  assert.deepEqual(rows[0].diff, diff, 'diff parsed back from diff_json');
+});

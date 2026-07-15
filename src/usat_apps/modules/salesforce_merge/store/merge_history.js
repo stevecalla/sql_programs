@@ -26,19 +26,21 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' mode VARCHAR(16),' +
   ' reason TEXT,' +
   ' master_rule VARCHAR(60),' +
+  ' diff_json LONGTEXT,' +                        // field-level audit: what drifted (merge) / was reset+kept (restore)
   ' created_at_mtn DATETIME NULL,' +              // Denver wall-clock, written by the app (event-table convention)
   ' created_at_utc DATETIME NULL' +               // UTC wall-clock, written by the app
   ')';
 
 const COLS = 'id, created_at, run_id, queue_id, created_by, source_type, source_key, survivor_account, ' +
   'survivor_name, loser_count, child_total, environment, org_id, snapshot_saved, result, mode, reason, master_rule, ' +
-  'created_at_mtn, created_at_utc';
+  'diff_json, created_at_mtn, created_at_utc';
 
 let _ensured = false;
 async function ensure_table(query = real_query) {
   if (_ensured) return;
   await query(DDL, []);
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN mode VARCHAR(16)', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN diff_json LONGTEXT', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_mtn DATETIME NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_utc DATETIME NULL', []); } catch (e) { /* exists */ }
   _ensured = true;
@@ -47,24 +49,27 @@ async function ensure_table(query = real_query) {
 async function write(row, query = real_query) {
   await ensure_table(query);
   const ts = now_mtn_utc();
+  const diffJson = (row.diff != null) ? (() => { try { return JSON.stringify(row.diff); } catch (e) { return null; } })() : null;
   const res = await query(
     'INSERT INTO `' + TABLE + '` (run_id, queue_id, created_by, source_type, source_key, survivor_account, ' +
     'survivor_name, loser_count, child_total, environment, org_id, snapshot_saved, result, mode, reason, master_rule, ' +
-    'created_at_mtn, created_at_utc) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'diff_json, created_at_mtn, created_at_utc) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [String(row.run_id || ''), row.queue_id != null ? Number(row.queue_id) : null, row.created_by || null,
      row.source_type || null, String(row.source_key || ''), row.survivor_account || null, row.survivor_name || null,
      row.loser_count != null ? Number(row.loser_count) : null, row.child_total != null ? Number(row.child_total) : null,
      row.environment || null, row.org_id || null, row.snapshot_saved ? 1 : 0,
-     String(row.result || 'simulated'), row.mode || null, row.reason || null, row.master_rule || null, ts.mtn, ts.utc]);
+     String(row.result || 'simulated'), row.mode || null, row.reason || null, row.master_rule || null, diffJson, ts.mtn, ts.utc]);
   return { id: (res && res.insertId) || null };
 }
+
+const parseRow = (r) => ({ ...r, diff: (() => { try { return r.diff_json ? JSON.parse(r.diff_json) : null; } catch (e) { return null; } })() });
 
 async function list(opts = {}, query = real_query) {
   await ensure_table(query);
   const n = Math.min(Math.max(parseInt(opts.limit, 10) || 100, 1), 1000);
   const rows = await query('SELECT ' + COLS + ' FROM `' + TABLE + '` ORDER BY id DESC LIMIT ' + n, []);
-  return rows || [];
+  return (rows || []).map(parseRow);
 }
 
 // Keep only the latest simulate row per entry: clear prior 'simulated' rows for a queue entry.
