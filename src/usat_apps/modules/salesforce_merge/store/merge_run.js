@@ -24,6 +24,7 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' created_by VARCHAR(128),' +
   ' claimed_by VARCHAR(64) NULL,' +
   ' claimed_at DATETIME NULL,' +
+  ' heartbeat_at DATETIME NULL,' +                // last progress touch — a stale one means the worker died
   ' cancel_requested TINYINT NOT NULL DEFAULT 0,' +
   ' params TEXT NULL,' +
   ' result TEXT NULL,' +
@@ -40,6 +41,7 @@ async function ensure_table(query = real_query) {
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN stage VARCHAR(24)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN claimed_by VARCHAR(64) NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN claimed_at DATETIME NULL', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN heartbeat_at DATETIME NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN cancel_requested TINYINT NOT NULL DEFAULT 0', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN params TEXT NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN result TEXT NULL', []); } catch (e) { /* exists */ }
@@ -64,11 +66,11 @@ async function start(run, query = real_query) {
 // Patch progress fields mid-run. Pass any of completed_ops, completed_sets, current_label.
 async function update(runId, patch = {}, query = real_query) {
   await ensure_table(query);
-  const sets = []; const vals = [];
+  // Always touch the heartbeat so the reaper can tell a live run from a dead worker.
+  const sets = ['`heartbeat_at` = NOW()']; const vals = [];
   for (const k of ['completed_ops', 'completed_sets', 'current_label', 'total_ops', 'total_sets', 'stage', 'mode', 'environment', 'org_id', 'est_seconds']) {
     if (patch[k] !== undefined) { sets.push('`' + k + '` = ?'); vals.push(patch[k]); }
   }
-  if (!sets.length) return;
   vals.push(String(runId));
   await query('UPDATE `' + TABLE + '` SET ' + sets.join(', ') + ' WHERE run_id = ?', vals);
 }
@@ -119,7 +121,7 @@ async function claim_next(kinds, token, query = real_query) {
   const ks = (kinds && kinds.length) ? kinds : ['merge', 'restore', 'recreate'];
   const inClause = ks.map(function () { return '?'; }).join(',');
   const res = await query(
-    'UPDATE `' + TABLE + '` SET status = "running", claimed_by = ?, claimed_at = NOW() ' +
+    'UPDATE `' + TABLE + '` SET status = "running", claimed_by = ?, claimed_at = NOW(), heartbeat_at = NOW() ' +
     'WHERE status = "queued" AND claimed_by IS NULL AND kind IN (' + inClause + ') ' +
     'ORDER BY started_at ASC LIMIT 1',
     [String(token)].concat(ks));
@@ -127,6 +129,26 @@ async function claim_next(kinds, token, query = real_query) {
   if (!affected) return null;
   const rows = await query('SELECT * FROM `' + TABLE + '` WHERE claimed_by = ? AND status = "running" ORDER BY claimed_at DESC LIMIT 1', [String(token)]);
   return (rows && rows[0]) || null;
+}
+
+// Stale-claim reaper: fail runs left in 'running' whose heartbeat is older than maxIdleSeconds — the
+// signature of a worker that died mid-run (crash / OOM / reboot), which the in-loop try/catch can't
+// catch. Multi-worker safe: a live run's heartbeat is refreshed on every progress update, so it's never
+// stale. We only FAIL the run (unsticks the UI); the queued merge sets stay 'approved' and can be
+// re-selected — safe because the add-dedup + drift checks guard against double-processing. `secs` is
+// clamped + inlined as a validated integer (no injection).
+async function reap_stale(maxIdleSeconds, query = real_query) {
+  await ensure_table(query);
+  const secs = Math.max(30, Math.floor(Number(maxIdleSeconds) || 600));
+  const cutoff = 'COALESCE(heartbeat_at, claimed_at, started_at) < (NOW() - INTERVAL ' + secs + ' SECOND)';
+  const stale = await query('SELECT run_id FROM `' + TABLE + '` WHERE status = "running" AND ' + cutoff, []);
+  const ids = (stale || []).map((r) => r.run_id).filter(Boolean);
+  if (!ids.length) return { reaped: 0, run_ids: [] };
+  await query(
+    'UPDATE `' + TABLE + '` SET status = "error", current_label = ?, finished_at = NOW() ' +
+    'WHERE status = "running" AND ' + cutoff,
+    ['stale — worker stopped before finishing (reclaimed; re-select the sets to retry)']);
+  return { reaped: ids.length, run_ids: ids };
 }
 
 // DB-backed cancellation (cross-process: the web sets the flag, the worker reads it between sets).
@@ -148,4 +170,4 @@ async function set_result(runId, obj, query = real_query) {
   await query('UPDATE `' + TABLE + '` SET result = ? WHERE run_id = ?', [JSON.stringify(obj || {}), String(runId)]);
 }
 
-module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, request_cancel, is_cancelled, set_result, TABLE, DDL };
+module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, reap_stale, request_cancel, is_cancelled, set_result, TABLE, DDL };

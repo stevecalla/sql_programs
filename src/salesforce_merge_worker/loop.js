@@ -8,6 +8,9 @@ const mexec = require('../usat_apps/modules/salesforce_merge/store/merge_execute
 const mrestore = require('../usat_apps/modules/salesforce_merge/store/merge_restore');
 
 const POLL_MS = Number(process.env.MERGE_WORKER_POLL_MS) || 3000;
+// Fail runs stuck 'running' with no progress for this long — a worker that died mid-run. Generous by
+// default because a live run refreshes its heartbeat on every op (seconds apart), so it's never stale.
+const STALE_SECONDS = Number(process.env.MERGE_WORKER_STALE_SECONDS) || 600;
 const WORKER_ID = 'w' + process.pid;
 function log() { if (process.env.MERGE_LOG !== 'off') console.log.apply(console, ['[merge_worker]'].concat([].slice.call(arguments))); }
 
@@ -24,6 +27,9 @@ let running = false;
 const stats = { started_at: null, last_claim_at: null, current_run: null, processed: 0, failed: 0 };
 
 async function tick() {
+  // Reclaim any run left 'running' by a dead worker (crash/OOM/reboot) before claiming new work.
+  try { const rr = await run.reap_stale(STALE_SECONDS); if (rr && rr.reaped) log('reaped', rr.reaped, 'stale run(s):', rr.run_ids.join(', ')); }
+  catch (e) { log('reap error:', e && e.message); }
   const token = WORKER_ID + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
   let row;
   try { row = await run.claim_next(['merge', 'restore', 'recreate'], token); }

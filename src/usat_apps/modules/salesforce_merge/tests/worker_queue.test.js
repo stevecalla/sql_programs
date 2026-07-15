@@ -107,3 +107,45 @@ test('set_result stores the executor summary (UI parity with the pre-worker resp
   const row = await RUN.get(e.run_id, q);
   assert.deepEqual(JSON.parse(row.result), { done: 0, simulated: 3, skipped: 1, failed: 0 });
 });
+
+test('update() always touches the heartbeat (so the reaper can tell live from dead)', async () => {
+  let seen = '';
+  const q = async (sql) => { if (/^UPDATE/i.test(sql) && /run_id = \?/.test(sql)) seen = sql; return {}; };
+  await RUN.update('r1', { stage: 'merge' }, q);
+  assert.ok(/heartbeat_at/i.test(seen) && /NOW\(\)/i.test(seen), 'heartbeat stamped on every progress update');
+});
+
+test('reap_stale fails only running runs with a stale heartbeat; spares fresh + queued', async () => {
+  const rows = [
+    { run_id: 'stale1', status: 'running', stale: true },
+    { run_id: 'fresh1', status: 'running', stale: false },
+    { run_id: 'q1', status: 'queued', stale: true },
+  ];
+  const q = async (sql) => {
+    if (/^SELECT run_id FROM/i.test(sql) && /status = "running"/.test(sql)) {
+      return rows.filter((r) => r.status === 'running' && r.stale).map((r) => ({ run_id: r.run_id }));
+    }
+    if (/^UPDATE/i.test(sql) && /SET status = "error"/.test(sql)) {
+      let n = 0; for (const r of rows) if (r.status === 'running' && r.stale) { r.status = 'error'; n += 1; }
+      return { affectedRows: n };
+    }
+    return {};
+  };
+  const res = await RUN.reap_stale(600, q);
+  assert.equal(res.reaped, 1);
+  assert.deepEqual(res.run_ids, ['stale1']);
+  assert.equal(rows.find((r) => r.run_id === 'stale1').status, 'error', 'stale running -> error');
+  assert.equal(rows.find((r) => r.run_id === 'fresh1').status, 'running', 'fresh running spared');
+  assert.equal(rows.find((r) => r.run_id === 'q1').status, 'queued', 'queued untouched');
+});
+
+test('reap_stale clamps the idle threshold to a 30s floor', async () => {
+  let secsSeen = null;
+  const q = async (sql) => {
+    const m = sql.match(/INTERVAL (\d+) SECOND/); if (m) secsSeen = Number(m[1]);
+    if (/^SELECT run_id/i.test(sql)) return [];
+    return {};
+  };
+  await RUN.reap_stale(1, q);   // below floor -> clamped
+  assert.equal(secsSeen, 30);
+});

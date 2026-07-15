@@ -96,6 +96,23 @@ per-record query, so `done` status + refreshing data after merges are the depend
 tool-driven merges; direct-in-Salesforce merges are caught by layer 4 at run time. Full detail +
 the `org_id`-capture hardening note live in `../README_MERGE_TOOL.md`.
 
+## Worker reliability — stale-claim reaper
+
+Merges/restores run in the isolated worker, which claims a `salesforce_merge_run` row (flips it to
+`running`). If that worker process **dies mid-run** (crash / OOM / reboot / deploy), the row would sit
+`running` forever — the in-loop `try/catch` only catches an executor *throw*, not a dead process — and
+the UI's progress poll would hang. Guard: every progress update stamps `heartbeat_at`, and the worker
+loop calls `merge_run.reap_stale(secs)` each tick. Any run stuck `running` with a heartbeat older than
+the threshold is **failed** (label: "stale — worker stopped before finishing; re-select the sets to
+retry").
+
+- **Threshold:** `MERGE_WORKER_STALE_SECONDS`, **default 600 s (10 min)**, clamped to a **30 s floor**.
+  A live run refreshes its heartbeat on every op (seconds apart), so 10 min of silence unambiguously
+  means the worker is gone — wide margin against reaping a slow-but-alive run.
+- **Safety:** reaping only fails the *run row* (unsticks the UI). The queued sets stay `approved` and
+  can be re-selected; the add-dedup + drift checks prevent double-processing — so it never auto-retries
+  a half-written merge. Multi-worker safe (a live run's heartbeat is always fresh).
+
 ## Restore — two tiers, both from Node
 
 Salesforce has **no native un-merge** (`undelete` restores one record only). Restore composes an
