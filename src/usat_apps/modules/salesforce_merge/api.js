@@ -277,8 +277,24 @@ function mount(app) {
       const b = req.body || {};
       const ds0 = await dashboard.dataset_info().catch(() => null);
       const org_id = b.org_id || await resolve_org_id(!ds0 || ds0.environment !== 'Production');
+      // Authoritative child count: compute server-side from the SAME live discovery the snapshot uses,
+      // for the LOSERS being merged (their children are what reparents). This avoids the frontend race
+      // where "Add" is clicked before the async child fetch finishes (which stored child_counts = 0).
+      // Best-effort — falls back to whatever the client sent if the live fetch is unavailable.
+      let child_counts = b.child_counts || null;
+      try {
+        const losers = Array.isArray(b.loser_accounts) ? b.loser_accounts : String(b.loser_accounts || '').split(';').map((s) => s.trim()).filter(Boolean);
+        if (b.source_key && b.source_type && losers.length) {
+          const cc = await cluster.cluster_children(b.source_key, { kind: b.source_type });
+          if (cc && cc.source === 'salesforce' && cc.children) {
+            let total = 0; const by = {};
+            for (const lid of losers) { const c = cc.children[lid]; if (c) { total += Number(c.total) || 0; for (const [k, v] of Object.entries(c.by || {})) by[k] = (by[k] || 0) + v; } }
+            child_counts = { total, by };
+          }
+        }
+      } catch (e) { /* keep client-sent child_counts */ }
       const r = await mqueue.add({ created_by: current_user(req), source_type: b.source_type, source_key: b.source_key, environment: ds0 ? ds0.environment : null, org_id,
-        survivor_account: b.survivor_account, survivor_contact: b.survivor_contact, survivor_name: b.survivor_name, field_overrides: b.field_overrides, child_counts: b.child_counts,
+        survivor_account: b.survivor_account, survivor_contact: b.survivor_contact, survivor_name: b.survivor_name, field_overrides: b.field_overrides, child_counts,
         loser_accounts: b.loser_accounts, master_rule: b.master_rule, notes: b.notes });
       // Stage-time baseline: capture the field values the user just reviewed so the merge can flag
       // drift at process time. Best-effort — a failure here must never block queueing.
@@ -507,6 +523,8 @@ function mount(app) {
   app.delete('/api/salesforce-merge/merge-queue/:id', gate, async function (req, res) {
     try {
       const r = await mqueue.remove(req.params.id);
+      // Clean up the set's stage-time drift baseline too, so removed items leave no orphan rows.
+      try { await stagebase.remove(req.params.id); } catch (e) { /* non-fatal */ }
       analytics.log({ event_name: 'queue_remove', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), set_count: 1, outcome: 'ok' });
       res.json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }

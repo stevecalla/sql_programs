@@ -333,7 +333,9 @@ export default function SelectMerges() {
   const isLocked = useCallback((key) => { const s = queueStateByKey[key]; return s === 'queued' || s === 'merged'; }, [queueStateByKey]);
   const selState = selKey ? queueStateByKey[selKey] : null;
   const mergedLock = selState === 'merged';
-  const addDisabled = !detail || isQueued || mergedLock || !selLosers.length;
+  // Block queueing until the child records finish loading, so the staged set reflects the full impact
+  // (and the child count is complete) rather than a partial/empty in-flight state.
+  const addDisabled = !detail || isQueued || mergedLock || !selLosers.length || childrenLoading;
   const selectableKeys = clusters.map((c) => c.cluster).filter((k) => !isLocked(k));
   const pageKeys = selectableKeys;   // "Page" selects only the selectable rows
   const allPageSelected = pageKeys.length > 0 && pageKeys.every((k) => railSel.has(k));
@@ -653,7 +655,7 @@ export default function SelectMerges() {
           <span className="muted small">Master = survivor · Merge = include in this set</span>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             {detail && (<span className="dl-group"><span className="muted small">Export</span><a className="dl-link" href={exportUrl('/api/salesforce-merge/cluster/detail/export', { key: selKey, source, format: 'csv' })}>CSV</a><a className="dl-link" href={exportUrl('/api/salesforce-merge/cluster/detail/export', { key: selKey, source, format: 'xlsx' })}>Excel</a></span>)}
-            <button className="btn primary" style={{ width: 'auto' }} disabled={addDisabled} onClick={addToQueue}>Add to merge queue</button>
+            <button className="btn primary" style={{ width: 'auto' }} disabled={addDisabled} onClick={addToQueue} title={childrenLoading ? 'Loading child records (enabled once they finish)' : undefined}>{childrenLoading ? 'Loading child records...' : 'Add to merge queue'}</button>
           </span>
         </div>
         {openAccts && (<>

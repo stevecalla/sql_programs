@@ -7,8 +7,14 @@ const { now_mtn_utc } = require('./timestamps');
 
 const TABLE = 'salesforce_merge_history';
 
+// Self-documenting column (visible in SELECT *) so future readers know what this table is for.
+const PURPOSE = 'Immutable audit trail: one row per processed set per run — the outcome '
+  + '(simulated/done/failed/skipped/restored/recreated), the human-readable reason, snapshot flag, '
+  + 'environment/org, and the field-level diff (diff_json: merge drift, or restore/recreate reset+kept).';
+
 const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' id INT AUTO_INCREMENT PRIMARY KEY,' +
+  " purpose VARCHAR(400) NOT NULL DEFAULT '" + PURPOSE.replace(/'/g, "''") + "'," +
   ' created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,' +
   ' run_id VARCHAR(64) NOT NULL,' +
   ' queue_id INT,' +
@@ -39,6 +45,7 @@ let _ensured = false;
 async function ensure_table(query = real_query) {
   if (_ensured) return;
   await query(DDL, []);
+  try { await query("ALTER TABLE `" + TABLE + "` ADD COLUMN purpose VARCHAR(400) NOT NULL DEFAULT '" + PURPOSE.replace(/'/g, "''") + "'", []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN mode VARCHAR(16)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN diff_json LONGTEXT', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_mtn DATETIME NULL', []); } catch (e) { /* exists */ }

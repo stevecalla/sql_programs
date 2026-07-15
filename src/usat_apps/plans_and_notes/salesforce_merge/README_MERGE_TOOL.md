@@ -40,6 +40,17 @@ It builds on the existing read-only duplicates pipeline and reuses `usat_sales_d
 - **Master selection is deterministic:** winner = account where `Id == merge_id`; losers = same
   `merge_id`, `Id != merge_id`.
 - **Merge execution:** prototype Node-SOAP `merge()` and the Apex wrapper in the sandbox, then pick.
+- **Worker reliability (stale-claim reaper):** the run row carries a `heartbeat_at` that every
+  progress update refreshes; the worker loop calls `merge_run.reap_stale(MERGE_WORKER_STALE_SECONDS,
+  default 600)` each tick to **fail** any run stuck `running` with no heartbeat past the threshold — the
+  signature of a worker that died mid-run (crash/OOM/reboot), which the in-loop try/catch can't catch.
+  Reaping only fails the run row (unsticks the UI); the queued sets stay `approved` and can be
+  re-selected — safe because the add-dedup + drift checks prevent double-processing. Multi-worker safe
+  (a live run's heartbeat is always fresh).
+- **Env/org alignment (verified):** every queue entry stores the `environment` **and** the Salesforce
+  `org_id` it was staged from (captured at add — both the single-add and bulk-add routes resolve it via
+  `resolve_org_id`); `verify_alignment` refuses to execute a set unless both match the connected org, so
+  a set built in one sandbox can't run against a different/refreshed sandbox or Production.
 - **Merge drift check:** queueing captures a stage-time field baseline
   (`store/merge_stage_baseline.js`) for single **and** bulk adds; at process time the run diffs live vs
   that baseline on a canonical identity field set (shape-robust; scope = email, member #, name, DOB,
