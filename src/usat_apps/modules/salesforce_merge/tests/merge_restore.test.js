@@ -5,7 +5,7 @@ process.env.MERGE_LOG = 'off';
 const mr = require('../store/merge_restore');
 
 function deps(opts = {}) {
-  const calls = { undeletes: [], updates: [], history: [], transitions: [], creates: [], seq: [] };
+  const calls = { undeletes: [], updates: [], history: [], transitions: [], creates: [], deletes: [], seq: [] };
   const entry = Object.assign({ id: 7, source_type: 'merge_id', source_key: 'M1', survivor_account: 'M',
     loser_accounts: 'L1;L2', loser_count: 2, environment: 'Sandbox' }, opts.entry || {});
   const snapRows = opts.snapRows || [
@@ -25,13 +25,20 @@ function deps(opts = {}) {
     snapshot: { list_for_entry: async () => snapRows },
     // Inject a fake post-merge snapshot store so the post-merge-edit gate never touches the real DB.
     post_snapshot: { get: async () => (opts.post_snapshot === undefined ? null : opts.post_snapshot) },
-    history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; } },
+    history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; },
+      set_dossier: async (hid, did, doc) => { calls.setDossier = { hid, did, doc }; return { updated: 1 }; } },
+    // Fake dossier store so restore/recreate wiring is exercised without building a real workbook or touching the DB.
+    dossier: { attach_enabled: (o) => !o || o.attach_dossier !== false,
+      generate: async (o) => { calls.dossier = calls.dossier || []; calls.dossier.push(o); return { generated: true, dossier_id: 88, content_document_id: '069R', attached: true, links: [] }; } },
     run: { start: async () => {}, update: async () => {}, finish: async () => {} },
     write: {
       default_write_connect: async () => conn,
       undelete: async (c, ids) => { calls.undeletes.push(ids); calls.seq.push('undelete'); return ids.map((id) => ({ id, success: true })); },
       update_record: async (c, type, fields) => { calls.updates.push({ type, fields }); calls.seq.push('update:' + type); return { success: true, id: fields.Id }; },
       create_record: async (c, type, fields) => { calls.creates.push({ type, fields }); return { success: true, id: 'NEW_' + calls.creates.length }; },
+      delete_record: async (c, type, id) => { calls.deletes.push({ type, id }); return { success: true, id }; },
+      stamp_survivor: async (c, id, action) => { calls.stamp = { id, action }; return { stamped: false, count: 0, skipped: 'test' }; },
+      attach_file: async () => ({ attached: true, content_document_id: '069R', links: [] }),
     },
   };
 }
@@ -148,6 +155,57 @@ test('restore execute: a child that is itself deleted is undeleted-then-repointe
   assert.ok(d.calls.undeletes.some((u) => u.includes('006A')), 'the deleted child was undeleted before re-point');
   assert.equal(out.results[0].repointed, 1);                      // recovered + re-pointed
   assert.equal(d.calls.transitions[0].to, 'restored');
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
+test('restore execute: a file share (ContentDocumentLink) is ADDITIVELY re-linked to the loser (create only, survivor kept)', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const cdlChild = { role: 'child', account: 'L1', child_type: 'child', fields: { object: 'ContentDocumentLink', id: '06Ac0001', parent_field: 'LinkedEntityId', parent_id: 'L1', child_type: 'child', content_document_id: '069DOC1', share_type: 'V', visibility: 'AllUsers' } };
+  const d = deps({ snapRows: [
+    { role: 'survivor', account: 'M', fields: { account: 'M', PersonEmail: 'm@x.com' } },
+    { role: 'loser', account: 'L1', fields: { account: 'L1', Id: 'L1' } },
+    cdlChild,
+  ], deletedIds: ['L1'], presentIds: ['L1'] });
+  const out = await mr.restore([7], { mode: 'execute', confirm: 'RESTORE' }, d);
+  assert.equal(out.restored, 1);
+  const created = d.calls.creates.find((c) => c.type === 'ContentDocumentLink');
+  assert.ok(created, 'a new ContentDocumentLink was created on the loser');
+  assert.equal(created.fields.ContentDocumentId, '069DOC1');
+  assert.equal(created.fields.LinkedEntityId, 'L1', 'link created on the loser');
+  assert.equal(d.calls.deletes.filter((x) => x.type === 'ContentDocumentLink').length, 0, 'ADDITIVE — the survivor’s link is never deleted');
+  assert.ok(!d.calls.updates.some((u) => u.type === 'ContentDocumentLink'), 'never attempts the forbidden LinkedEntityId update');
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
+test('restore execute: a pre-capture file share (no ContentDocumentId) is skipped cleanly, not errored', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const oldCdl = { role: 'child', account: 'L1', child_type: 'child', fields: { object: 'ContentDocumentLink', id: '06Ac0009', parent_field: 'LinkedEntityId', parent_id: 'L1', child_type: 'child' } };
+  const d = deps({ snapRows: [
+    { role: 'survivor', account: 'M', fields: { account: 'M' } },
+    { role: 'loser', account: 'L1', fields: { account: 'L1', Id: 'L1' } },
+    oldCdl,
+  ], deletedIds: ['L1'], presentIds: ['L1'] });
+  const out = await mr.restore([7], { mode: 'execute', confirm: 'RESTORE' }, d);
+  assert.equal(out.restored, 1, 'restore still succeeds');
+  assert.equal(d.calls.creates.filter((c) => c.type === 'ContentDocumentLink').length, 0, 'no create attempted without a ContentDocumentId');
+  const h = d.calls.history[d.calls.history.length - 1];
+  assert.match(h.reason, /file share left on the survivor/i, 'clean, explanatory note (not a raw SF error)');
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
+test('restore stamp is gated by stamp_merged: default stamps, stamp_merged:false skips', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const d1 = deps();
+  await mr.restore([7], { mode: 'execute', confirm: 'RESTORE' }, d1);           // default (no flag) -> stamps
+  assert.ok(d1.calls.stamp && d1.calls.stamp.action === 'RESTORE', 'stamps by default');
+  const d2 = deps();
+  await mr.restore([7], { mode: 'execute', confirm: 'RESTORE', stamp_merged: false }, d2);  // unchecked -> skip
+  assert.equal(d2.calls.stamp, undefined, 'no stamp when stamp_merged=false');
+  const d3 = deps();
+  process.env.MERGE_STAMP_SURVIVOR = 'false';                                   // global off-switch
+  await mr.restore([7], { mode: 'execute', confirm: 'RESTORE' }, d3);
+  assert.equal(d3.calls.stamp, undefined, 'no stamp when MERGE_STAMP_SURVIVOR=false, even with the box checked');
+  delete process.env.MERGE_STAMP_SURVIVOR;
   delete process.env.MERGE_ENABLE_EXECUTION;
 });
 

@@ -16,6 +16,7 @@ const APIUSE = require('./api_usage');
 const stagebase = require('./merge_stage_baseline');
 const post_snapshot = require('./merge_post_snapshot');
 const rdiff = require('./restore_diff');
+const dossier = require('./merge_dossier');
 
 // Account records reach us in two shapes: the local snapshot (first_name / email / member_number …)
 // or a live Salesforce fetch (FirstName / PersonEmail / cfg_Member_Number__pc …). To diff a
@@ -126,6 +127,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
   const DIFF = deps.diff || rdiff;
   const dash = deps.dashboard || dashboard;
   const POST = deps.post_snapshot || post_snapshot;
+  const DOS = deps.dossier || dossier;
   const createdBy = opts.created_by || null;
 
   const idset = new Set((ids || []).map((x) => Number(x)));
@@ -288,18 +290,16 @@ async function runQueue(ids, opts = {}, deps = {}) {
       // way a partial set (e.g. flag+date but no *_by__c) still records what it can, and a missing field
       // never fails the merge.
       let stampNote = '';
-      if (opts.stamp_merged) {
-        try {
-          if (!stampPresent) stampPresent = await W.stamp_fields_status(conn);
-          const sfUser = (W.write_creds && W.write_creds(is_test) && W.write_creds(is_test).user) || 'sf';
-          const payload = { Id: e.survivor_account };
-          if (stampPresent.usat_was_merged__c) payload.usat_was_merged__c = true;
-          if (stampPresent.usat_was_merged_date__c) payload.usat_was_merged_date__c = new Date().toISOString();
-          if (stampPresent.usat_was_merged_by__c) payload.usat_was_merged_by__c = ((createdBy || 'salesforce_merge_tool') + ' via ' + sfUser).slice(0, 255);
-          const nStamp = Object.keys(payload).length - 1; // minus Id
-          if (nStamp > 0) { await W.update_record(conn, 'Account', payload); stampNote = '; stamped ' + nStamp + ' field(s)'; }
-          else stampNote = '; stamp skipped (no stamp fields on Account)';
-        } catch (err) { stampNote = '; stamp skipped (' + err.message + ')'; }
+      if (opts.stamp_merged && process.env.MERGE_STAMP_SURVIVOR !== 'false') {   // per-run checkbox + global off-switch
+        if (!stampPresent) { try { stampPresent = await W.stamp_fields_status(conn); } catch (e2) { stampPresent = null; } }
+        const sfUser = (W.write_creds && W.write_creds(is_test) && W.write_creds(is_test).user) || 'sf';
+        const actor = (createdBy || 'salesforce_merge_tool') + ' via ' + sfUser;
+        const st = (typeof W.stamp_survivor === 'function')
+          ? await W.stamp_survivor(conn, e.survivor_account, 'MERGE', actor, stampPresent)
+          : { stamped: false, skipped: 'stamp unavailable' };
+        if (st.stamped) stampNote = '; stamped ' + st.count + ' field(s)';
+        else if (st.error) stampNote = '; stamp skipped (' + st.error + ')';
+        else stampNote = '; stamp skipped (' + (st.skipped || 'no stamp fields on Account') + ')';
       }
       await Q.transition([e.id], 'done', ['approved']);
       // Post-merge baseline: capture the survivor's field values + SF LastModifiedDate NOW (after the
@@ -311,10 +311,24 @@ async function runQueue(ids, opts = {}, deps = {}) {
         if (surv) await POST.save({ run_id: runId, queue_id: e.id, survivor_account: e.survivor_account,
           source_type: e.source_type, source_key: e.source_key, fields: surv, sf_last_modified: surv.LastModifiedDate || null });
       } catch (perr) { log('post-merge snapshot skipped for ' + e.survivor_account + ': ' + (perr && perr.message)); }
-      await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
+      const hres = await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
         result: 'done', reason: 'merged ' + merged.length + ' record(s)' + stampNote + driftNote, merged_count: merged.length, remaining_count: 0, diff: driftAudit });
+      // Merge dossier: build the multi-tab .xlsx, attach it to the SURVIVOR only (MERGE), keep a DB copy,
+      // and link it onto the history row. Best-effort — a dossier problem never undoes the merge.
+      let dossierNote = '';
+      if (DOS.attach_enabled(opts)) {
+        try {
+          const sfUser = (W.write_creds && W.write_creds(is_test) && W.write_creds(is_test).user) || 'sf';
+          const dres = await DOS.generate({ run_id: runId, queue_id: e.id, action: 'MERGE',
+            actor: (createdBy || 'salesforce_merge_tool') + ' via ' + sfUser, environment: e.environment, org_id: e.org_id,
+            result: 'done', reason: 'merged ' + merged.length + ' record(s)', survivor_account: e.survivor_account,
+            survivor_name: e.survivor_name, conn, targets: [e.survivor_account] }, { write: W });
+          if (dres.dossier_id != null && typeof H.set_dossier === 'function') await H.set_dossier(hres && hres.id, dres.dossier_id, dres.content_document_id);
+          dossierNote = dres.attached ? '; dossier attached' : (dres.generated ? '; dossier saved (not attached)' : '');
+        } catch (derr) { log('dossier skipped for ' + e.survivor_account + ': ' + (derr && derr.message)); }
+      }
       out.done += 1; out.results.push({ id: e.id, result: 'done', merged: merged.length, drift_checked: drift.checked, drift_fields: drift.fields, drift_detail: drift.detail });
-      log(label('done — merged ' + merged.length + stampNote + driftNote));
+      log(label('done — merged ' + merged.length + stampNote + driftNote + dossierNote));
     }
     completedSets += 1;
     await RUN.update(runId, { stage: 'record', completed_sets: completedSets });

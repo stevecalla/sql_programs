@@ -143,6 +143,15 @@ async function transition(ids, toStatus, fromStatuses, query = real_query) {
   return { updated: (res && (res.affectedRows != null ? res.affectedRows : res.changedRows)) || 0 };
 }
 
+// Update just the child_counts for a queued row — used to backfill the authoritative live count
+// asynchronously after the row is inserted, so the "Add to queue" click isn't blocked by a SF query.
+async function set_child_counts(id, child_counts, query = real_query) {
+  await ensure_table(query);
+  if (id == null) return { updated: 0 };
+  const res = await query('UPDATE `' + TABLE + '` SET child_counts = ? WHERE id = ?', [as_json(child_counts), Number(id)]);
+  return { updated: (res && (res.affectedRows != null ? res.affectedRows : 0)) || 0 };
+}
+
 async function get(id, query = real_query) {
   await ensure_table(query);
   const rows = await query('SELECT * FROM `' + TABLE + '` WHERE id = ?', [Number(id)]);
@@ -172,4 +181,4 @@ async function add_many(entries, query = real_query) {
   return { queued, skipped, merged, added };
 }
 
-module.exports = { add, add_many, list, set_status, transition, get, remove, ensure_table, as_losers, as_json, from_json, TABLE, DDL };
+module.exports = { add, add_many, list, set_status, transition, set_child_counts, get, remove, ensure_table, as_losers, as_json, from_json, TABLE, DDL };

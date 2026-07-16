@@ -81,7 +81,28 @@ It builds on the existing read-only duplicates pipeline and reuses `usat_sales_d
 - **History page** (`Reference`-style rail item): a filterable/sortable/exportable view over
   `salesforce_merge_history` (`merge_history.list` gained `result`/`mode`/`q` filters;
   `GET …/merge/history` + `…/export`) — every processed set (merge/restore/recreate/simulate/skip/fail),
-  searchable by survivor name / account / source, with the field-level diff per row.
+  searchable by survivor name / account / source, with the field-level diff per row and a **📎 dossier**
+  download link (`dossier_id`/`dossier_doc_id` columns on the history row).
+- **Lifecycle stamp (usat_was_*) — IMPLEMENTED.** All three actions re-stamp the survivor via one
+  best-effort helper `salesforce_write.stamp_survivor(conn, id, action, actor)`: `usat_was_merged__c`
+  = **true** after MERGE / **false** after RESTORE|RECREATE (currently-a-merge-product), `usat_was_merged_date__c`
+  = last-action date, `usat_was_merged_by__c` = `"<ACTION> — <actor>"` (`MERGE — …`, `RESTORE — …`,
+  `RECREATE — …`). Per-field + best-effort (never auto-creates fields, never fails the action). Merge is
+  gated by the Process-page "Stamp survivor" checkbox (default on); restore/recreate stamp automatically.
+- **Merge dossier — IMPLEMENTED (`store/merge_dossier.js`).** Each action builds a multi-tab Excel
+  (`build()` via exceljs — *Summary · Reference · Overrides & survivorship · Stage baseline · Pre-merge
+  snapshot · Post-merge snapshot · Children re-parented · History & drift*, filename
+  `YYYY-MM-DD HHMM — <survivor> — <ACTION>.xlsx`) from the queue + all three snapshots (stage baseline /
+  pre-merge / post-merge) + history. The **Reference** tab explains every tab and embeds the exact
+  MySQL/SOQL to pull each piece — including the SOQL to fetch the attached File itself (by record or by
+  name) — scoped to this dossier's queue_id/run_id/survivor; the same file-fetch SOQL is repeated as a
+  footer on the History & drift tab. It attaches the workbook as a **Salesforce File** (`salesforce_write.attach_file`: one
+  ContentVersion → ContentDocument → a ContentDocumentLink per target — **merge → survivor only;
+  restore/recreate → all affected parents + children**), keeps a **DB copy** in `salesforce_merge_dossier`
+  (LONGBLOB), and links it onto the history row (`merge_history.set_dossier`). `generate()` orchestrates
+  build→attach→save and NEVER throws. Gated by the Process-page **📎 Attach merge dossier** toggle
+  (default on, per-browser) + master switch `MERGE_ATTACH_DOSSIER` (`=false` disables globally).
+  Download via `GET …/merge/dossier/:id/download` (streams the DB copy); list via `GET …/merge/dossier?queue_id=`.
 - **Contact-point preservation** gated by a configurable `high_value_flags` list (donor, …).
 - **Salesforce auth:** start simple (username/password) in sandbox; add a **Connected App
   (OAuth JWT, least-privilege write user) before production**. (Independent of the React choice.)
@@ -410,6 +431,22 @@ surfacing a per-merge restore action later.
   automation can't be cleanly unwound. Restore is best-effort, scoped, logged — and all the
   restore steps run from Node (undelete + re-parent + recreate), no Apex required.
 
+### File shares (ContentDocumentLink) on restore/recreate — IMPLEMENTED
+
+Salesforce **file shares** (`ContentDocumentLink`, the join between a File/`ContentDocument` and a record)
+cannot be re-parented by updating `LinkedEntityId` — the field is not updateable; a share is insert/delete
+only. A merge moves the losers' shares onto the survivor, and the plain "re-point child" update the restore
+used to run against them failed with *"Unable to create/update fields: LinkedEntityId…"* (they were skipped).
+Now the restore/recreate re-point step **detects `ContentDocumentLink` and ADDITIVELY re-links the share**:
+it creates a fresh link on the loser from the captured `ContentDocumentId` (`salesforce_read.fetch_children`
+now selects `ContentDocumentId` + `ShareType` + `Visibility` for that object) and **keeps the survivor's
+link** — the file is never unshared, moved, or lost (`move_content_link` is additive by design; the
+`salesforce_write.delete_record` helper exists but is intentionally not used here). Shares snapshotted
+before this change have no `ContentDocumentId`, so they're left on the survivor with a clean, explanatory
+note instead of a raw error — and the **`repair_file_shares.js`** tool (below) re-links those after the fact. The History page tags such rows
+with an **ⓘ file share** tooltip explaining the Salesforce limitation. `move_content_link` in
+`merge_restore.js` carries the logic; covered by tests in `merge_restore.test.js`.
+
 ## Conventions
 
 - snake_case throughout (files, functions, variables, table/column names).
@@ -636,14 +673,17 @@ matching "To revisit" items above. Decisions here are confirmed.
 > for production), then choose **Execute** + type MERGE. **Verify the `conn.soap.merge` masterRecord
 > shape against the org in sandbox before production.**
 >
-> **Optional "stamp survivor as merged" (Process Merges checkbox).** When enabled, after a successful
-> merge the survivor is best-effort updated with custom fields `usat_was_merged__c` (Checkbox) +
-> `usat_was_merged_date__c` (DateTime) + `usat_was_merged_by__c` (Text — the actor who initiated the run).
-> These are **NOT auto-created** — an admin adds them in Salesforce
-> (Setup → Object Manager → Account → Fields) and grants field-level security. If they're missing the
-> merge still succeeds and the run logs "stamp skipped"; the UI checks field presence
-> (`GET /api/merge/stamp-fields`) and shows a warning. Note: this is the *survivor*-side marker;
-> Salesforce already stamps each deleted loser's `MasterRecordId` with the survivor id.
+> **"Stamp survivor" lifecycle marker (Process Merges checkbox, default on).** Every action best-effort
+> re-stamps the survivor via `salesforce_write.stamp_survivor(conn, id, action, actor)`: `usat_was_merged__c`
+> (Checkbox — **true** after a merge, **false** after a restore/recreate, i.e. "is this currently a merge
+> product?"), `usat_was_merged_date__c` (DateTime — the last-action date), and `usat_was_merged_by__c`
+> (Text — `"<ACTION> — <actor>"`, e.g. `MERGE — skip via svc@sf`, `RESTORE — skip`, `RECREATE — skip`).
+> These are **NOT auto-created** — an admin adds them in Salesforce (Setup → Object Manager → Account →
+> Fields) and grants field-level security. Per-field + best-effort: any missing field or write error just
+> means the action proceeds unstamped (the merge run logs "stamp skipped"); the UI checks presence
+> (`GET /api/merge/stamp-fields`) and warns. The merge stamp is gated by the checkbox; restore/recreate
+> stamp automatically. Note: this is the *survivor*-side marker; Salesforce already stamps each deleted
+> loser's `MasterRecordId` with the survivor id.
 >
 > **Refinements from sandbox simulate testing.** (1) The snapshot has a `child_type` column on child
 > rows: `child` (real child to re-point) vs `self_account` / `self_contact` (the Person Account's own

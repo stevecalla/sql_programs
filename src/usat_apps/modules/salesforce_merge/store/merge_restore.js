@@ -54,6 +54,31 @@ async function survivor_last_modified(conn, id) {
   } catch (e) { return null; }
 }
 
+// Re-link a file share (ContentDocumentLink) to the loser. Salesforce forbids updating LinkedEntityId, so
+// we CREATE a fresh link on the loser (ch.parent_id / targetOverride) from the captured ContentDocumentId.
+// ADDITIVE BY DESIGN: we do NOT delete the survivor's link and never touch the file itself — the loser
+// simply regains access, the survivor keeps it, so nothing can ever be unshared or lost. Snapshots that
+// predate ContentDocumentId capture can't be recreated here — skipped with a clear note (use the
+// repair_file_shares.js tool for those). Returns { ok, note? }.
+async function move_content_link(W, conn, ch, targetOverride) {
+  const cdid = ch.content_document_id || ch.ContentDocumentId;
+  const target = targetOverride || ch.parent_id;
+  if (!cdid || !target) {
+    return { ok: false, note: 'ContentDocumentLink ' + ch.id + ': file share left on the survivor — Salesforce won’t move a share by update, and this record predates ContentDocumentId capture so it can’t be recreated (expected, not an error; run repair_file_shares.js to re-link).' };
+  }
+  try {
+    const res = await W.create_record(conn, 'ContentDocumentLink', { ContentDocumentId: cdid, LinkedEntityId: target, ShareType: ch.share_type || 'V', Visibility: ch.visibility || 'AllUsers' });
+    if (res && res.success === false) {
+      const msg = (res.errors && res.errors[0] && (res.errors[0].message || res.errors[0].statusCode)) || '';
+      if (!/duplicate|already/i.test(msg)) return { ok: false, note: 'ContentDocumentLink ' + ch.id + ': could not re-link share to loser — ' + (msg || 'create failed') };
+    }
+  } catch (err) {
+    const msg = (err && err.message) || '';
+    if (!/duplicate|already/i.test(msg)) return { ok: false, note: 'ContentDocumentLink ' + ch.id + ': ' + msg };
+  }
+  return { ok: true };   // additive — survivor's link is intentionally left in place
+}
+
 function from_snapshot(rows, survivorId) {
   const master = {}; const loserIds = []; const children = [];
   for (const r of (rows || [])) {
@@ -169,6 +194,7 @@ async function restore(ids, opts = {}, deps = {}) {
   const W = deps.write || require('./salesforce_write');
   const dash = deps.dashboard || dashboard;
   const POST = deps.post_snapshot || post_snapshot;
+  const DOS = deps.dossier || require('./merge_dossier');
   const createdBy = opts.created_by || null;
 
   const idset = new Set((ids || []).map((x) => Number(x)));
@@ -310,6 +336,10 @@ async function restore(ids, opts = {}, deps = {}) {
     let repointed = 0; let skippedCh = 0;
     for (const ch of repointable) {
       if (!(ch && ch.object && ch.id && ch.parent_field)) continue;
+      // File shares (ContentDocumentLink) can't be re-parented by UPDATE — Salesforce is insert/delete-only.
+      // Re-link the share to the loser (ADDITIVE: create a link on the loser, keep the survivor's — a file
+      // is never unshared or lost).
+      if (ch.object === 'ContentDocumentLink') { const r = await move_content_link(W, conn, ch); if (r.ok) repointed += 1; else { skippedCh += 1; notes.push(r.note); } continue; }
       const patch = { Id: ch.id, [ch.parent_field]: ch.parent_id };
       try { await W.update_record(conn, ch.object, patch); repointed += 1; }
       catch (err) {
@@ -321,14 +351,32 @@ async function restore(ids, opts = {}, deps = {}) {
     }
 
     await Q.transition([e.id], 'restored', ['done']);
+    // Lifecycle stamp: the merge was undone, so flag=false, date=now, by='RESTORE — <actor>'. Best-effort,
+    // gated by the "Stamp survivor" checkbox (opts.stamp_merged, default on) — same control as merge.
+    let stampNote = '';
+    if (opts.stamp_merged !== false && process.env.MERGE_STAMP_SURVIVOR !== 'false') {   // checkbox + global off-switch
+      try { const st = await W.stamp_survivor(conn, e.survivor_account, 'RESTORE', createdBy || 'salesforce_merge_tool');
+        if (st.stamped) stampNote = ', stamped ' + st.count + ' field(s)'; } catch (se) { /* best-effort */ }
+    }
     const keptNote = keepSet.size ? ', kept ' + keepSet.size + ' current' : '';
     const reason = 'undeleted ' + toUndelete.length + ', re-pointed ' + repointed
-      + ', reset ' + resetCount + ' field(s)' + keptNote
+      + ', reset ' + resetCount + ' field(s)' + keptNote + stampNote
       + (skippedCh ? ', skipped ' + skippedCh : '') + (masterOk ? '' : ', master-reset partial')
       + (notes.length ? ' — ' + notes.slice(0, 5).join('; ') : '');
-    await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
+    const hres = await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
       survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
       result: 'restored', reason, diff: { kind: 'restore', reset: resetPlan, kept: [...keepSet] } });
+    // Dossier: RESTORE attaches to ALL affected records — the survivor + the undeleted losers + the
+    // re-pointed children — with one file, many links. Best-effort; never undoes the restore.
+    if (DOS.attach_enabled(opts)) {
+      try {
+        const targets = [e.survivor_account, ...toUndelete, ...repointable.map((c) => c && c.id)].filter(Boolean);
+        const dres = await DOS.generate({ run_id: runId, queue_id: e.id, action: 'RESTORE', actor: createdBy || 'salesforce_merge_tool',
+          environment: e.environment, org_id: e.org_id, result: 'restored', reason, survivor_account: e.survivor_account,
+          survivor_name: e.survivor_name, conn, targets }, { write: W });
+        if (dres.dossier_id != null && typeof H.set_dossier === 'function') await H.set_dossier(hres && hres.id, dres.dossier_id, dres.content_document_id);
+      } catch (derr) { log('dossier skipped (restore) for ' + e.survivor_account + ': ' + (derr && derr.message)); }
+    }
     out.restored += 1; out.results.push({ id: e.id, result: 'restored', undeleted: toUndelete.length, repointed, skipped: skippedCh, reset_fields: resetCount, kept_fields: keepSet.size, notes });
     log((e.survivor_name || e.id) + ' — RESTORED: ' + reason);
     completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed });
@@ -350,6 +398,7 @@ async function recreate(ids, opts = {}, deps = {}) {
   const RUN = deps.run || mrun;
   const W = deps.write || require('./salesforce_write');
   const dash = deps.dashboard || dashboard;
+  const DOS = deps.dossier || require('./merge_dossier');
   const createdBy = opts.created_by || null;
 
   const idset = new Set((ids || []).map((x) => Number(x)));
@@ -411,10 +460,11 @@ async function recreate(ids, opts = {}, deps = {}) {
       let childOk = 0;
       for (const ch of children) {
         const newParent = idMap[ch.parent_id] || idMap[ch.account];
-        if (ch && ch.object && ch.id && ch.parent_field && newParent) {
-          await W.update_record(conn, ch.object, { Id: ch.id, [ch.parent_field]: newParent });
-          childOk += 1;
-        }
+        if (!(ch && ch.object && ch.id && ch.parent_field && newParent)) continue;
+        // File share: can't be re-parented by update — additively create a link to the rebuilt (new-id) loser.
+        if (ch.object === 'ContentDocumentLink') { const r = await move_content_link(W, conn, ch, newParent); if (r.ok) childOk += 1; continue; }
+        await W.update_record(conn, ch.object, { Id: ch.id, [ch.parent_field]: newParent });
+        childOk += 1;
       }
       // Selective survivor reset (same keep-current choices as restore).
       const keepSet = new Set((opts.keep_fields && (opts.keep_fields[e.id] || opts.keep_fields[String(e.id)])) || []);
@@ -422,10 +472,28 @@ async function recreate(ids, opts = {}, deps = {}) {
       const resetPlan = Object.entries(reset).filter(([k]) => k !== 'Id').map(([field, value]) => ({ field, value }));
       if (resetPlan.length > 0) await W.update_record(conn, 'Account', reset);
       await Q.transition([e.id], 'recreated', ['recreate_pending']);
-      await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
+      // Lifecycle stamp: losers rebuilt from backup, so the survivor is no longer a merge product.
+      // Gated by the "Stamp survivor" checkbox (opts.stamp_merged, default on) — same control as merge.
+      let stampNote = '';
+      if (opts.stamp_merged !== false && process.env.MERGE_STAMP_SURVIVOR !== 'false') {   // checkbox + global off-switch
+        try { const st = await W.stamp_survivor(conn, e.survivor_account, 'RECREATE', createdBy || 'salesforce_merge_tool');
+          if (st.stamped) stampNote = ', stamped ' + st.count + ' field(s)'; } catch (se) { /* best-effort */ }
+      }
+      const recReason = 'recreated ' + losers.length + ' account(s) (NEW ids), re-pointed ' + childOk + ' child link(s), reset ' + resetPlan.length + ' field(s)' + (keepSet.size ? ', kept ' + keepSet.size + ' current' : '');
+      const hres = await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
         survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
-        result: 'recreated', reason: 'recreated ' + losers.length + ' account(s) (NEW ids), re-pointed ' + childOk + ' child link(s), reset ' + resetPlan.length + ' field(s)' + (keepSet.size ? ', kept ' + keepSet.size + ' current' : ''),
+        result: 'recreated', reason: recReason + stampNote,
         diff: { kind: 'recreate', reset: resetPlan, kept: [...keepSet] } });
+      // Dossier: RECREATE attaches to the survivor + the NEW loser accounts + the re-pointed children.
+      if (DOS.attach_enabled(opts)) {
+        try {
+          const targets = [e.survivor_account, ...Object.values(idMap), ...children.map((c) => c && c.id)].filter(Boolean);
+          const dres = await DOS.generate({ run_id: runId, queue_id: e.id, action: 'RECREATE', actor: createdBy || 'salesforce_merge_tool',
+            environment: e.environment, org_id: e.org_id, result: 'recreated', reason: recReason, survivor_account: e.survivor_account,
+            survivor_name: e.survivor_name, new_ids: idMap, conn, targets }, { write: W });
+          if (dres.dossier_id != null && typeof H.set_dossier === 'function') await H.set_dossier(hres && hres.id, dres.dossier_id, dres.content_document_id);
+        } catch (derr) { log('dossier skipped (recreate) for ' + e.survivor_account + ': ' + (derr && derr.message)); }
+      }
       out.recreated += 1; out.results.push({ id: e.id, result: 'recreated', accounts: losers.length, children: childOk, new_ids: idMap, reset_fields: resetPlan.length, kept_fields: keepSet.size });
       log((e.survivor_name || e.id) + ' — RECREATED ' + losers.length + ' accounts (new ids)');
     } catch (err) {

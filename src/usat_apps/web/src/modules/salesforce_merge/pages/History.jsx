@@ -12,6 +12,14 @@ const RESULT_COLOR = {
 const RESULTS = ['', 'done', 'restored', 'recreated', 'simulated', 'skipped', 'failed'];
 const copyCell = { userSelect: 'all', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
 
+// Explains the ContentDocumentLink message some restore rows carry (a Salesforce quirk, not a tool bug).
+const FILE_SHARE_HELP = 'Salesforce file shares (ContentDocumentLink) can’t be re-parented with a field '
+  + 'update — they are insert/delete only. On restore/recreate the tool ADDITIVELY re-links them: it '
+  + 'creates a new share on the loser and KEEPS the survivor’s, so a file is never unshared or lost. '
+  + 'Shares captured before this feature (no ContentDocumentId recorded) can’t be recreated automatically '
+  + 'and are left on the survivor — run repair_file_shares.js to re-link those. This message is expected, not an error.';
+const isFileShareNote = (reason) => /ContentDocumentLink/i.test(String(reason || ''));
+
 // Client-side column sort (same hook the Process/Restore tables use) over the loaded rows.
 function useSort(initialKey = null) {
   const [s, setS] = useState({ key: initialKey, dir: 'asc' });
@@ -119,6 +127,7 @@ export default function History() {
               <th style={{ cursor: 'pointer' }} onClick={() => sort.onSort('mode')}>Mode{sort.arrow('mode')}</th>
               <th>Reason</th>
               <th style={{ cursor: 'pointer' }} onClick={() => sort.onSort('environment')}>Env{sort.arrow('environment')}</th>
+              <th>Dossier</th>
             </tr></thead>
             <tbody>
               {sort.apply(rows).map((r) => [
@@ -129,12 +138,22 @@ export default function History() {
                   <td><span style={copyCell} title="Click to select · triple-click to copy">{r.survivor_account || '—'}</span></td>
                   <td><span className="pill" style={{ color: RESULT_COLOR[r.result] || 'var(--dim)' }}>{r.result}</span></td>
                   <td>{r.mode}</td>
-                  <td className="small" title={r.reason}>{r.reason}</td>
+                  <td className="small" title={r.reason}>
+                    {r.reason}
+                    {isFileShareNote(r.reason) && (
+                      <span title={FILE_SHARE_HELP} style={{ marginLeft: 4, cursor: 'help', color: 'var(--dim)', borderBottom: '1px dotted var(--dim)' }}>ⓘ file share</span>
+                    )}
+                  </td>
                   <td>{r.environment || '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {r.dossier_id
+                      ? <a className="dl-link" href={exportUrl('/api/salesforce-merge/merge/dossier/' + r.dossier_id + '/download', {})} title={'Download the merge dossier (.xlsx)' + (r.dossier_doc_id ? ' · Salesforce File ' + r.dossier_doc_id : '')}>📎 dossier</a>
+                      : <span className="muted small">—</span>}
+                  </td>
                 </tr>,
-                open.has(r.id) ? <tr key={r.id + '_d'}><td colSpan={8} style={{ padding: 0, background: 'var(--card)' }}><DiffDetail diff={r.diff} /></td></tr> : null,
+                open.has(r.id) ? <tr key={r.id + '_d'}><td colSpan={9} style={{ padding: 0, background: 'var(--card)' }}><DiffDetail diff={r.diff} /></td></tr> : null,
               ])}
-              {rows.length === 0 && !busy && <tr><td colSpan={8} className="muted small">No history rows match — adjust the filters.</td></tr>}
+              {rows.length === 0 && !busy && <tr><td colSpan={9} className="muted small">No history rows match — adjust the filters.</td></tr>}
             </tbody>
           </table>
         </div>

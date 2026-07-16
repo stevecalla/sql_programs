@@ -54,7 +54,8 @@ export default function MergeProcess() {
   const toggleDriftRow = (id) => setDriftRowOpen((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const [progress, setProgress] = useState(null);
   const [elapsed, setElapsed] = useState(0);
-  const [stampMerged, setStampMerged] = useState(false);
+  const [stampMerged, setStampMerged] = useState(true);
+  const [attachDossier, setAttachDossier] = useState(() => { try { return localStorage.getItem('mp_attach_dossier') !== '0'; } catch (e) { return true; } });
   const [stampFields, setStampFields] = useState(null);
   const [snapRows, setSnapRows] = useState([]);
   const [runRows, setRunRows] = useState(null);   // sets the current/last run processed — drives the live progress table, independent of the checkbox selection
@@ -158,7 +159,7 @@ export default function MergeProcess() {
     setRunRows(ids.map((id) => rows.find((r) => r.id === id)).filter(Boolean));   // snapshot the sets this run processes (in submit order)
     setBusy(true); setErr(''); setResult(null); setProgress(null); setElapsed(0);
     try {
-      const q = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged, ack_drift: ackDrift, max_batch: maxBatch } : { mode: 'simulate', stamp_merged: stampMerged });
+      const q = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged, ack_drift: ackDrift, max_batch: maxBatch, attach_dossier: attachDossier } : { mode: 'simulate', stamp_merged: stampMerged, attach_dossier: attachDossier });
       setConfirmText('');
       // Phase 3: the merge worker runs it out-of-process — poll this run until it reaches a terminal status.
       const finalRun = await awaitRun(api, 'merge', q.run_id, (rr) => setProgress(rr));
@@ -246,7 +247,7 @@ export default function MergeProcess() {
           )}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={stampMerged} onChange={(e) => setStampMerged(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>Stamp survivor as merged <code>(usat_was_merged__c, usat_was_merged_date__c, usat_was_merged_by__c)</code></span>
+            <span>Stamp survivor with the merge action <code>(usat_was_*)</code> — flag→on, <code>usat_was_merged_by__c</code> = “MERGE — you”.</span>
           </label>
           {stampMerged && stampFields && (!stampFields.usat_was_merged__c || !stampFields.usat_was_merged_date__c || !stampFields.usat_was_merged_by__c) && (
             <p className="small" style={{ margin: '0 0 8px', color: 'var(--amber)' }}>
@@ -256,6 +257,10 @@ export default function MergeProcess() {
           {stampMerged && stampFields && stampFields.usat_was_merged__c && stampFields.usat_was_merged_date__c && stampFields.usat_was_merged_by__c && (
             <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present (flag, date, by)</p>
           )}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
+            <input type="checkbox" checked={attachDossier} onChange={(e) => { setAttachDossier(e.target.checked); try { localStorage.setItem('mp_attach_dossier', e.target.checked ? '1' : '0'); } catch (er) {} }} style={{ marginTop: 2 }} />
+            <span>📎 Attach merge dossier to the survivor. Applies on Execute; best‑effort.</span>
+          </label>
           {mode === 'execute' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px' }}>
               <span className="muted small">Max sets per run</span>

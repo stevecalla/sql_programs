@@ -102,7 +102,7 @@ async function main() {
   if (!fs.existsSync(template)) { console.error('Template not found: ' + template); process.exit(1); }
 
   const suites = await run_suite();
-  const keys = ['Test 1', 'Test 2', 'Test 3', 'Test 4', 'Test 5', 'Test 6', 'Test 7'];
+  const keys = ['Test 1', 'Test 2', 'Test 3', 'Test 4', 'Test 5', 'Test 6', 'Test 7', 'Test 8'];
   const when = pretty();
 
   const wb = new ExcelJS.Workbook();

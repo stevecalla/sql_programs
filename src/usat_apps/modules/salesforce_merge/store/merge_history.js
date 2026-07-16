@@ -33,13 +33,15 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' reason TEXT,' +
   ' master_rule VARCHAR(60),' +
   ' diff_json LONGTEXT,' +                        // field-level audit: what drifted (merge) / was reset+kept (restore)
+  ' dossier_id INT NULL,' +                       // FK-ish: salesforce_merge_dossier.id (the DB copy of the .xlsx)
+  ' dossier_doc_id VARCHAR(32) NULL,' +           // Salesforce ContentDocumentId of the attached dossier file
   ' created_at_mtn DATETIME NULL,' +              // Denver wall-clock, written by the app (event-table convention)
   ' created_at_utc DATETIME NULL' +               // UTC wall-clock, written by the app
   ')';
 
 const COLS = 'id, created_at, run_id, queue_id, created_by, source_type, source_key, survivor_account, ' +
   'survivor_name, loser_count, child_total, environment, org_id, snapshot_saved, result, mode, reason, master_rule, ' +
-  'diff_json, created_at_mtn, created_at_utc';
+  'diff_json, dossier_id, dossier_doc_id, created_at_mtn, created_at_utc';
 
 let _ensured = false;
 async function ensure_table(query = real_query) {
@@ -48,6 +50,8 @@ async function ensure_table(query = real_query) {
   try { await query("ALTER TABLE `" + TABLE + "` ADD COLUMN purpose VARCHAR(400) NOT NULL DEFAULT '" + PURPOSE.replace(/'/g, "''") + "'", []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN mode VARCHAR(16)', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN diff_json LONGTEXT', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN dossier_id INT NULL', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN dossier_doc_id VARCHAR(32) NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_mtn DATETIME NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_utc DATETIME NULL', []); } catch (e) { /* exists */ }
   _ensured = true;
@@ -88,6 +92,24 @@ async function list(opts = {}, query = real_query) {
   return (rows || []).map(parseRow);
 }
 
+// Link a generated dossier (DB copy id + Salesforce ContentDocumentId) onto a history row. Best-effort.
+async function set_dossier(historyId, dossierId, docId, query = real_query) {
+  await ensure_table(query);
+  if (historyId == null) return { updated: 0 };
+  const res = await query('UPDATE `' + TABLE + '` SET dossier_id = ?, dossier_doc_id = ? WHERE id = ?',
+    [dossierId != null ? Number(dossierId) : null, docId || null, Number(historyId)]);
+  return { updated: (res && (res.affectedRows != null ? res.affectedRows : 0)) || 0 };
+}
+
+// Every history row for one queue entry, oldest first (the entry's lifecycle: simulate → done →
+// restored/recreated). Used by the dossier builder to embed the full audit trail of a set.
+async function list_for_entry(queueId, query = real_query) {
+  await ensure_table(query);
+  if (queueId == null) return [];
+  const rows = await query('SELECT ' + COLS + ' FROM `' + TABLE + '` WHERE queue_id = ? ORDER BY id ASC', [Number(queueId)]);
+  return (rows || []).map(parseRow);
+}
+
 // Keep only the latest simulate row per entry: clear prior 'simulated' rows for a queue entry.
 async function clear_simulated(queueId, query = real_query) {
   await ensure_table(query);
@@ -96,4 +118,4 @@ async function clear_simulated(queueId, query = real_query) {
   return { cleared: (res && (res.affectedRows != null ? res.affectedRows : 0)) || 0 };
 }
 
-module.exports = { write, list, clear_simulated, ensure_table, TABLE, DDL };
+module.exports = { write, list, list_for_entry, set_dossier, clear_simulated, ensure_table, TABLE, DDL };

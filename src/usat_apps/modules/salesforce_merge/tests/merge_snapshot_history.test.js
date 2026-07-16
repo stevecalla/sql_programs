@@ -70,6 +70,24 @@ test('history.list applies result/mode/q filters (WHERE + bound params) — the 
   assert.deepEqual(sel.params, ['restored', 'execute', '%Adam%', '%Adam%', '%Adam%']);
 });
 
+test('history.set_dossier updates the dossier link columns on a row', async () => {
+  let upd = null;
+  const query = async (sql, params) => { if (/^UPDATE/i.test(sql)) { upd = { sql, params }; return { affectedRows: 1 }; } return {}; };
+  const r = await hist.set_dossier(42, 7, '069DOC', query);
+  assert.equal(r.updated, 1);
+  assert.ok(/dossier_id = \?/.test(upd.sql) && /dossier_doc_id = \?/.test(upd.sql));
+  assert.deepEqual(upd.params, [7, '069DOC', 42]);
+});
+
+test('history.list_for_entry returns a queue entry’s rows oldest-first', async () => {
+  let sel = null;
+  const query = async (sql, params) => { if (/^SELECT/i.test(sql)) { sel = { sql, params }; return [{ id: 1, result: 'done' }, { id: 2, result: 'restored' }]; } return {}; };
+  const rows = await hist.list_for_entry(5, query);
+  assert.equal(rows.length, 2);
+  assert.ok(/WHERE queue_id = \?/.test(sel.sql) && /ORDER BY id ASC/i.test(sel.sql));
+  assert.deepEqual(sel.params, [5]);
+});
+
 test('history.list with no filters has no WHERE (unbounded recent list)', async () => {
   let sel = null;
   const query = async (sql, params) => { if (/^SELECT/i.test(sql)) { sel = { sql, params }; return []; } return {}; };

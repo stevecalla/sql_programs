@@ -97,7 +97,13 @@ platform. It now serves at **port 8022** (`server_usat_apps_8022.js`, module
 (`server_salesforce_merge_worker_8021.js` → `src/salesforce_merge_worker/loop.js`) that claims queued
 jobs and runs the merge/restore/recreate. Reviews accounts / merge-ID accounts / duplicates / tuning,
 stages + runs merges (Select → Process), keeps a searchable **History**, and does best-effort restore
-(+ post-merge edit gate, un-approve, batch limit). The actual merge is the only **write** path against
+(+ post-merge edit gate, un-approve, batch limit). Every action best-effort **re-stamps** the survivor's
+`usat_was_merged__c/_date__c/_by__c` fields (flag on after MERGE / off after RESTORE|RECREATE; text
+`"<ACTION> — <actor>"`) and builds a multi-tab **merge dossier** (`store/merge_dossier.js`) that it
+attaches as a Salesforce File (merge → survivor; restore/recreate → all affected records), keeps a
+LONGBLOB copy in `salesforce_merge_dossier`, and links on the History row (📎 download). Both are
+best-effort (never auto-create fields, never block the action) and gated (`MERGE_ATTACH_DOSSIER` +
+per-run toggles). The actual merge is the only **write** path against
 Salesforce; the read-only duplicates pipeline here is untouched. It reads our `salesforce_duplicate_*`
 tables + the `salesforce_account_duplicate_snapshot` for its review pages.
 
