@@ -77,10 +77,14 @@ function gateDeps(opts = {}) {
     history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; } },
     run: { start: async () => {}, update: async () => {}, finish: async () => {} },
     post_snapshot: { get: async () => (opts.noBaseline ? null : { sf_last_modified: opts.lmAtMerge || '2026-01-01T00:00:00Z' }) },
+    // These tests exercise the edit-gate only — disable the dossier so restore never touches the real
+    // dossier store (which would open a MySQL pool and keep the test process from exiting).
+    dossier: { attach_enabled: () => false, generate: async () => ({ generated: false }) },
     write: {
       default_write_connect: async () => conn,
       undelete: async (c, ids) => { calls.undeletes.push(ids); return ids.map((id) => ({ id, success: true })); },
       update_record: async (c, type, fields) => { calls.updates.push({ type, fields }); return { success: true, id: fields.Id }; },
+      stamp_survivor: async () => ({ stamped: false, count: 0, skipped: 'test' }),
     },
   };
 }
