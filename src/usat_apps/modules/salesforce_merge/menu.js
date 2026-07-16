@@ -55,6 +55,23 @@ function hit_status(port, label) {
   });
 }
 
+const M = 'src/usat_apps/modules/salesforce_merge';   // script path prefix (cwd = repo root)
+const PULL_HELP = c(CYAN, '  Pull a dossier .xlsx out of MySQL\n') +
+  '    list:  SELECT id, action, survivor_name, filename, byte_size, created_at_mtn\n' +
+  '           FROM salesforce_merge_dossier ORDER BY id DESC;\n' +
+  '    node:  menu item “Extract a dossier → Downloads” (interactive), or\n' +
+  `           node ${M}/extract_dossier.js <id>\n` +
+  '    app:   GET /api/salesforce-merge/merge/dossier/<id>/download   (the History 📎 link)\n' +
+  c(YELLOW, '    Files land in <home>/Downloads. Do NOT use the mysql CLI “>” redirect on Windows —\n') +
+  c(YELLOW, '    it corrupts the .xlsx; the node/app paths are byte-exact.');
+const VIEW_SF_HELP = c(CYAN, '  Find / download the dossier File in Salesforce (Dev Console / Workbench)\n') +
+  "    by record:  SELECT ContentDocument.Title, ContentDocument.LatestPublishedVersionId, LinkedEntityId\n" +
+  "                FROM ContentDocumentLink WHERE LinkedEntityId = '<survivor_or_loser_id>'\n" +
+  "    by name:    SELECT Id, Title, FileExtension, ContentSize, CreatedDate\n" +
+  "                FROM ContentVersion WHERE Title = '<filename>' ORDER BY CreatedDate DESC\n" +
+  "    bytes:      SELECT VersionData FROM ContentVersion WHERE Id = '<ContentVersionId>'\n" +
+  '    In the UI:  the survivor account → Files (after a restore/recreate, every affected record).';
+
 const SECTIONS = [
   { label: 'WORKER · production (pm2)', color: RED, items: [
     { id: 1, label: 'pm2 start worker', desc: 'Start the isolated write worker on :8021 (autorestart on)', bin: 'npm', args: ['run', 'pm2_start_salesforce_merge_worker'], cli: 'npm run pm2_start_salesforce_merge_worker' },
@@ -77,6 +94,18 @@ const SECTIONS = [
     { id: 11, label: 'Platform status (:8022)', desc: 'GET :8022/api/status — usat_apps health (public)', status: PLATFORM_PORT, statusLabel: 'platform', cli: 'curl http://localhost:8022/api/status' },
     { id: 12, label: 'Open merge in the platform', desc: 'usat_apps at :8022 — the Salesforce merge page', open: `http://localhost:${PLATFORM_PORT}/salesforce/merge`, cli: `open http://localhost:${PLATFORM_PORT}/salesforce/merge` },
     { id: 13, label: 'Open via proxy (:8000)', desc: 'The merge page through the :8000 proxy', open: 'http://localhost:8000/salesforce/merge', cli: 'open http://localhost:8000/salesforce/merge' },
+  ] },
+  { label: 'DOSSIER · files & data', color: CYAN, items: [
+    { id: 14, label: 'Check Files permission (sandbox)', desc: 'Does the SF write user identity + can it create Files (ContentVersion / ContentDocumentLink)?', bin: 'node', args: [`${M}/check_dossier_access.js`], cli: `node ${M}/check_dossier_access.js` },
+    { id: 15, label: 'Check Files permission (PROD, live)', desc: 'Production check that actually creates + deletes a throwaway File to prove the write path', bin: 'node', args: [`${M}/check_dossier_access.js`, '--prod', '--live'], cli: `node ${M}/check_dossier_access.js --prod --live` },
+    { id: 16, label: 'Extract a dossier → Downloads', desc: 'List recent dossiers, pick an id, write the .xlsx to <home>/Downloads (byte-exact)', bin: 'node', args: [`${M}/extract_dossier.js`], cli: `node ${M}/extract_dossier.js` },
+    { id: 17, label: 'Pull a dossier from SQL — how', desc: 'Print the SELECT / node / app-endpoint ways to get the .xlsx out of MySQL', info: PULL_HELP },
+    { id: 18, label: 'View a dossier in Salesforce (SOQL)', desc: 'Print the SOQL to find / download the attached File (by record or by name)', info: VIEW_SF_HELP },
+    { id: 19, label: 'Repair loser file shares', desc: 'Re-link a restored loser’s Files that stayed on the survivor. Shows usage; run with --queue <id> (add --apply to write).', bin: 'node', args: [`${M}/repair_file_shares.js`], cli: `node ${M}/repair_file_shares.js --queue <id> [--apply]` },
+  ] },
+  { label: 'RESET · testing (destructive)', color: RED, items: [
+    { id: 20, label: 'Reset merge tables — DRY RUN', desc: 'Show row counts for the 7 merge tool tables; changes nothing', bin: 'node', args: [`${M}/reset_merge_tables.js`], cli: `node ${M}/reset_merge_tables.js` },
+    { id: 21, label: 'Reset merge tables — APPLY', desc: 'CLEARS the 7 merge tool tables (queue/snapshots/history/run/dossier); leaves the finder input', bin: 'node', args: [`${M}/reset_merge_tables.js`, '--apply'], cli: `node ${M}/reset_merge_tables.js --apply` },
   ] },
 ];
 const ALL = SECTIONS.flatMap((s) => s.items);
@@ -107,6 +136,7 @@ async function main() {
     const it = ALL.find((x) => x.id === parseInt(ans, 10));
     console.log('');
     if (!it) console.log(c(YELLOW, '  Invalid choice.'));
+    else if (it.info) console.log(it.info);
     else if (it.bin) await run_cmd(it.bin, it.args, it.label);
     else if (it.open) open_url(it.open);
     else if (it.status) await hit_status(it.status, it.statusLabel || '');
