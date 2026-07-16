@@ -154,6 +154,16 @@ test('set_status approves only queued entries', async () => {
   assert.equal(r.updated, 2);
 });
 
+test('set_child_counts updates only child_counts (background backfill)', async () => {
+  let upd = null;
+  const query = async (sql, params) => { if (/^UPDATE/i.test(sql)) { upd = { sql, params }; return { affectedRows: 1 }; } return {}; };
+  const r = await q.set_child_counts(7, { total: 6, by: { Contacts: 1 } }, query);
+  assert.ok(/SET child_counts = \? WHERE id = \?/.test(upd.sql));
+  assert.equal(JSON.parse(upd.params[0]).total, 6);
+  assert.equal(upd.params[1], 7);
+  assert.equal(r.updated, 1);
+});
+
 test('list applies a status filter when given', async () => {
   const calls = [];
   const query = async (sql, params) => { calls.push({ sql, params }); if (/^SELECT/i.test(sql)) return []; return {}; };

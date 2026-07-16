@@ -247,7 +247,7 @@ export default function MergeProcess() {
           )}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={stampMerged} onChange={(e) => setStampMerged(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>Stamp survivor with the merge action <code>(usat_was_*)</code> — flag→on, <code>usat_was_merged_by__c</code> = “MERGE — you”. Best‑effort; only writes if those fields exist on Account.</span>
+            <span>Stamp survivor with the merge action <code>(usat_was_*)</code> — flag→on, <code>usat_was_merged_by__c</code> = “MERGE — you”.</span>
           </label>
           {stampMerged && stampFields && (!stampFields.usat_was_merged__c || !stampFields.usat_was_merged_date__c || !stampFields.usat_was_merged_by__c) && (
             <p className="small" style={{ margin: '0 0 8px', color: 'var(--amber)' }}>

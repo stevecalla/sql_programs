@@ -139,7 +139,7 @@ export default function Restore() {
           )}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={stampMerged} onChange={(e) => setStamp(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>Stamp survivor with the restore action <code>(usat_was_*)</code> — flag→off, <code>usat_was_merged_by__c</code> = “RESTORE — you”. Best‑effort; only writes if those fields exist on Account.</span>
+            <span>Stamp survivor with the restore action <code>(usat_was_*)</code> — flag→off, <code>usat_was_merged_by__c</code> = “RESTORE — you”.</span>
           </label>
           {stampMerged && stampFields && (!stampFields.usat_was_merged__c || !stampFields.usat_was_merged_date__c || !stampFields.usat_was_merged_by__c) && (
             <p className="small" style={{ margin: '0 0 8px', color: 'var(--amber)' }}>
