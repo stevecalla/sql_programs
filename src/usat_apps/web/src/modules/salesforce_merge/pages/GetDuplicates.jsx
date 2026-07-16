@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import DatasetStamp from '../components/DatasetStamp.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { api } from '../lib/api.js';
+import { buildActivityRows, fmtClock } from '../lib/activity.js';
 
 const fmtNum = (n) => (n == null ? '—' : Number(n).toLocaleString());
 const fmtWhen = (s) => (s ? new Date(s).toLocaleString() : '—');
@@ -13,10 +14,13 @@ const ACTIVITY_COLUMNS = [
   { key: 'environment', label: 'Environment', sort: true, filter: true, help: 'Which Salesforce environment the run pulled from.',
     render: (r) => <span className={'ds-badge ' + (r.environment === 'Production' ? 'ds-prod' : 'ds-sandbox')}>{r.environment || '—'}</span> },
   { key: 'scope', label: 'Scope', sort: true, filter: true, help: 'Full = all records · Sample = capped subset.' },
-  { key: 'total_records', label: 'Records', sort: true, help: 'How many accounts the run scanned.', render: (r) => fmtNum(r.total_records) },
-  { key: 'clusters', label: 'Clusters', sort: true, help: 'Consolidated duplicate clusters the run produced.', render: (r) => fmtNum(r.clusters) },
-  { key: 'duration_seconds', label: 'Duration', sort: true, help: 'How long the run took (wall-clock).', render: (r) => fmtDur(r.duration_seconds) },
-  { key: 'run_at', label: 'When', sort: true, filter: true, help: 'When the run completed.', render: (r) => fmtWhen(r.run_at) },
+  { key: 'total_records', label: 'Records', sort: true, help: 'How many accounts the run scanned.', render: (r) => (r.live ? <span className="spinner" aria-label="running" /> : fmtNum(r.total_records)) },
+  { key: 'clusters', label: 'Clusters', sort: true, help: 'Consolidated duplicate clusters the run produced.', render: (r) => (r.live ? <span className="spinner" aria-label="running" /> : fmtNum(r.clusters)) },
+  { key: 'duration_seconds', label: 'Duration', sort: true, help: 'How long the run took (wall-clock). Counts up live while a run is in progress.',
+    render: (r) => (r.live
+      ? <span className="dt-loading"><span className="spinner" aria-hidden="true" /> {fmtClock(r.duration_seconds)}</span>
+      : fmtDur(r.duration_seconds)) },
+  { key: 'run_at', label: 'When', sort: true, filter: true, help: 'When the run completed.', render: (r) => (r.live ? <em className="muted">in progress…</em> : fmtWhen(r.run_at)) },
 ];
 
 // Env × Scope -> flags + menu item, for the live command preview (mirrors the backend mapping).
@@ -81,6 +85,19 @@ export default function GetDuplicates() {
   const run = status && status.run;
   const finderRunning = running && run && run.job !== 'sweep';   // default/legacy = finder
   const sweepRunning = running && run && run.job === 'sweep';
+
+  // Tick a 1-second clock while a run is in progress so the live Duration counts up smoothly
+  // (the 2.5s poll above is coarse). Elapsed is derived from started_at, so navigating away and
+  // back re-reads server state and shows the correct time — no local counter to lose.
+  useEffect(() => {
+    if (!running) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  // Recent-runs rows, with a live row prepended while a job runs; it flips to the final DB row
+  // (loaded by the 2.5s poll) once the run completes.
+  const activityRows = buildActivityRows(status, runs, now);
 
   const start = async () => {
     setErr('');
@@ -182,7 +199,7 @@ export default function GetDuplicates() {
 
       <div className="card" style={{ margin: '12px 0' }}>
         <p style={{ margin: '0 0 10px', fontWeight: 500 }}>Activity — recent runs</p>
-        <DataTable columns={ACTIVITY_COLUMNS} rows={runs} searchCols="type, environment, scope, when" minWidth={820} maxHeight={360} />
+        <DataTable columns={ACTIVITY_COLUMNS} rows={activityRows} rowClass={(r) => (r.live ? 'row-running' : '')} searchCols="type, environment, scope, when" minWidth={820} maxHeight={360} />
       </div>
     </>
   );

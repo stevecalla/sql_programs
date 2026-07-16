@@ -599,7 +599,7 @@ function mount(app) {
 
   app.get('/api/salesforce-merge/accounts', gate, async function (req, res) {
     try {
-      const opts = { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } };
+      const opts = { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, in_cluster_state: req.query.in_cluster_state } };
       res.json({ ok: true, ...(await reviews.list_accounts(opts)) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
@@ -608,7 +608,7 @@ function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/accounts/export', gate, async function (req, res) {
-    try { await send_export(req, res, 'accounts', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state } }); }
+    try { await send_export(req, res, 'accounts', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, in_cluster_state: req.query.in_cluster_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 }

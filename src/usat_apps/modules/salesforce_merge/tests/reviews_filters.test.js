@@ -37,6 +37,15 @@ describe('duplicates membership filters', () => {
 });
 
 describe('accounts 3-state selectors', () => {
+  test('in_cluster_state has/none -> cluster_size predicate (indexed, no scan)', async () => {
+    const has = recorder([{ account: '1' }]);
+    await reviews.list_accounts({ filters: { in_cluster_state: 'has' } }, has.q);
+    assert.ok(has.calls.some((c) => /cluster_size > 0/.test(c.sql)));
+    const none = recorder([{ account: '1' }]);
+    await reviews.list_accounts({ filters: { in_cluster_state: 'none' } }, none.q);
+    assert.ok(none.calls.some((c) => /cluster_size IS NULL OR cluster_size = 0/.test(c.sql)));
+  });
+
   test("merge_id_state / member_number_state map to presence checks", async () => {
     let r = recorder([{ account: '1' }]);
     await reviews.list_accounts({ filters: { merge_id_state: 'has' } }, r.q);
@@ -157,13 +166,15 @@ describe('merge-id groups size filter', () => {
 });
 
 describe('accounts new columns: email + match_composition', () => {
-  test('global search: names/ID/member use prefix, email + match_composition use contains', async () => {
+  test('global search: identity columns only, all indexed prefix (no email/match_composition scan)', async () => {
     const r = recorder([{ account: '1' }]);
     await reviews.list_accounts({ q: 'smith' }, r.q);
     const c = sel(r.calls, /salesforce_account_id AS/);
-    assert.ok(/`email` LIKE \? OR `match_composition` LIKE \?/.test(c.sql));
-    // one token -> one param per search col, in column order
-    assert.deepEqual(c.params.slice(0, 6), ['smith%', 'smith%', 'smith%', 'smith%', '%smith%', '%smith%']);
+    assert.ok(/`first_name` LIKE \? OR `last_name` LIKE \? OR `salesforce_account_id` LIKE \? OR `member_number` LIKE \?/.test(c.sql));
+    // one token -> one 'term%' param per identity col; email / match_composition are NOT searched globally
+    assert.deepEqual(c.params.slice(0, 4), ['smith%', 'smith%', 'smith%', 'smith%']);
+    assert.ok(!/`email` LIKE/.test(c.sql));
+    assert.ok(!/`match_composition` LIKE/.test(c.sql));
   });
 
   test('column filter: email is contains-anywhere, match_composition selectable', async () => {
@@ -173,5 +184,18 @@ describe('accounts new columns: email + match_composition', () => {
     assert.ok(/`email` LIKE \?/.test(c.sql) && /`match_composition` LIKE \?/.test(c.sql));
     assert.ok(c.params.includes('%gmail%'));
     assert.ok(c.params.includes('%exact only%'));
+  });
+
+  test('column filters: first_name / last_name / match_score map to their snapshot columns', async () => {
+    const r = recorder([{ account: '1' }]);
+    await reviews.list_accounts({ colFilters: { first_name: 'vic', last_name: 'lop', match_score: '95' } }, r.q);
+    const c = sel(r.calls, /salesforce_account_id AS/);
+    assert.ok(/`first_name` LIKE \?/.test(c.sql));
+    assert.ok(/`last_name` LIKE \?/.test(c.sql));
+    assert.ok(/`match_score` = \?/.test(c.sql));
+    // prefix_search -> 'term%' for these indexed / numeric columns
+    assert.ok(c.params.includes('vic%'));
+    assert.ok(c.params.includes('lop%'));
+    assert.ok(c.params.includes('95'));
   });
 });

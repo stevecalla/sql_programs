@@ -69,9 +69,14 @@ const COLUMNS = [
     'composite_zip_five_digit',
     'exact_duplicate_key',
     'rule_block_key',
-    // detection result — filled by a post-detection write-back (blank at load);
-    // copied from the consolidated cluster's Match_Composition__c
+    // detection result — filled by a post-detection write-back (blank/NULL at load);
+    // copied from the consolidated cluster (Match_Composition__c label, best fuzzy name
+    // score 0-100, and confidence tier). match_score is 100 for exact-only clusters.
     'match_composition',
+    'match_score',
+    'confidence_tier',
+    'cluster_key',
+    'cluster_size',
     // source provenance + load metadata (same for every row in a snapshot:
     // one snapshot = one run = one environment + one org)
     'environment',
@@ -130,6 +135,10 @@ function to_snapshot_row(record, loaded_at = new Date(), load_sequence = null, m
         make_exact_duplicate_key(record),
         make_rule_key(record),
         '', // match_composition — blank at load; filled by the post-detection write-back
+        null, // match_score — NULL at load (numeric); filled by the write-back
+        '', // confidence_tier — blank at load; filled by the write-back
+        '', // cluster_key — blank at load; filled by the write-back (its consolidated cluster)
+        null, // cluster_size — NULL at load; filled by the write-back
         // source provenance + load metadata (constant across the snapshot)
         meta.environment || '',
         meta.org_id || '',
@@ -173,6 +182,10 @@ function create_table_sql(table = SNAPSHOT_TABLE_NAME) {
   exact_duplicate_key          VARCHAR(800) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
   rule_block_key               VARCHAR(600) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
   match_composition            VARCHAR(64),
+  match_score                  SMALLINT,
+  confidence_tier              VARCHAR(16),
+  cluster_key                  TEXT,
+  cluster_size                 SMALLINT,
   environment                  VARCHAR(16),
   org_id                       VARCHAR(32),
   org_host                     VARCHAR(255),
@@ -215,6 +228,13 @@ async function add_indexes(executor, table = SNAPSHOT_TABLE_NAME) {
     // scan per GROUP BY — this is what made All Accounts slow once these facets were added.
     await executor(`CREATE INDEX idx_match_composition ON \`${table}\` (match_composition)`, []);
     await executor(`CREATE INDEX idx_foundation_constituent ON \`${table}\` (foundation_constituent)`, []);
+    // match_score (SMALLINT) — serves ORDER BY / range filters on the All Accounts "Match score" column.
+    await executor(`CREATE INDEX idx_match_score ON \`${table}\` (match_score)`, []);
+    // cluster_size (SMALLINT) — serves the All Accounts "in a duplicate cluster" filter + Matches sort.
+    await executor(`CREATE INDEX idx_cluster_size ON \`${table}\` (cluster_size)`, []);
+    // first_name (prefix) so the global name search — first_name LIKE 'term%' — is index-served,
+    // not a full scan (idx_last_first has first_name only as its 2nd column, unusable alone).
+    await executor(`CREATE INDEX idx_first_name ON \`${table}\` (first_name(100))`, []);
 }
 
 // Build one multi-row INSERT for a batch of already-mapped rows. Returns { sql, params }.
@@ -328,22 +348,27 @@ async function count_rows(executor, table = SNAPSHOT_TABLE_NAME) {
 // fraction), grouped by composition so each value is one batched UPDATE. Returns the
 // number of accounts updated.
 async function update_match_composition(executor, clusters, table = SNAPSHOT_TABLE_NAME, batch = 1000) {
-    const ids_by_comp = new Map(); // composition -> [account ids]
-    for (const c of clusters || []) {
-        const comp = c.match_composition || '';
-        for (const id of String(c.record_ids || '').split(';').filter(Boolean)) {
-            if (!ids_by_comp.has(comp)) ids_by_comp.set(comp, []);
-            ids_by_comp.get(comp).push(id);
-        }
-    }
+    // Stamp each account with its consolidated cluster's fields: the Match_Composition label, the best
+    // fuzzy name score 0-100 (exact-only clusters have no fuzzy link, so surface those as 100), the
+    // confidence tier, and the cluster key + size (so All Accounts can badge/open the cluster). One
+    // UPDATE per cluster (its record_ids), chunked only for very large clusters.
     let updated = 0;
-    for (const [comp, ids] of ids_by_comp) {
+    for (const c of clusters || []) {
+        const ids = String(c.record_ids || '').split(';').filter(Boolean);
+        if (!ids.length) continue;
+        const comp = c.match_composition || '';
+        const tier = c.confidence_tier || '';
+        const score = (c.best_pair_score === '' || c.best_pair_score == null)
+            ? (tier === 'exact' ? 100 : null)
+            : Number(c.best_pair_score);
+        const cluster_key = c.consolidated_group_key || '';
+        const cluster_size = c.group_record_count != null ? Number(c.group_record_count) : ids.length;
         for (let i = 0; i < ids.length; i += batch) {
             const chunk = ids.slice(i, i + batch);
             const placeholders = chunk.map(() => '?').join(',');
             await executor(
-                `UPDATE \`${table}\` SET match_composition = ? WHERE salesforce_account_id IN (${placeholders})`,
-                [comp, ...chunk]);
+                `UPDATE \`${table}\` SET match_composition = ?, match_score = ?, confidence_tier = ?, cluster_key = ?, cluster_size = ? WHERE salesforce_account_id IN (${placeholders})`,
+                [comp, score, tier, cluster_key, cluster_size, ...chunk]);
             updated += chunk.length;
         }
     }
@@ -387,6 +412,7 @@ async function open_local_executor() {
 // (ORDER BY load_sequence). Used by the finder so detection runs OFF the database. The
 // returned records carry the same raw fields in the same order as the input, so the
 // finder's output is byte-identical to the in-memory path (proven by tests).
+
 async function materialize_via_db(records, { progress_every = 0, on_progress, meta = {} } = {}) {
     const { conn, executor, close } = await open_local_connection();
     try {
