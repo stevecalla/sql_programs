@@ -38,7 +38,7 @@ test('scalar_fields drops nested objects (attributes) and keeps scalars', () => 
   assert.deepEqual(sc, { Name: 'A', Phone: '1', blank: '' });
 });
 
-test('build assembles a 5-tab workbook from the stores', async () => {
+test('build assembles an 8-tab workbook from the stores', async () => {
   const r = await dossier.build({ run_id: 'run-1', queue_id: 5, action: 'merge', actor: 'skip via svc@sf', result: 'done', reason: 'merged 2 record(s)' }, fakeDeps());
   assert.match(r.filename, / — MERGE\.xlsx$/);
   assert.equal(r.sheets.length, 8);
@@ -116,7 +116,7 @@ test('save_copy stores the blob + metadata; list_for_entry parses attached_to; g
   assert.ok(Buffer.isBuffer(blob.buffer) && blob.buffer.toString() === 'xyz');
 });
 
-test('build tolerates a set with no snapshot/history (placeholder rows, still 5 tabs)', async () => {
+test('build tolerates a set with no snapshot/history (placeholder rows, still 8 tabs)', async () => {
   const deps = { queue: { get: async () => null }, snapshot: { list_for_entry: async () => [] },
     history: { list_for_entry: async () => [] }, post_snapshot: { get: async () => null }, query: async () => [], when: new Date('2026-07-15T15:07:00Z') };
   const r = await dossier.build({ run_id: 'r', queue_id: 9, action: 'RECREATE', survivor_name: 'X', survivor_account: 'S1', new_ids: { L1: 'NEW1' } }, deps);
