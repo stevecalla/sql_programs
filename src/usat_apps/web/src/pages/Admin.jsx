@@ -178,6 +178,9 @@ export default function Admin() {
           <button className="btn primary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }} onClick={saveUser}>Add / update user</button>
           {msg(uMsg)}
         </div>
+        <p className="muted small" style={{ margin: '10px 0 0', borderLeft: '3px solid var(--line)', paddingLeft: 8 }}>
+          📁 <strong>Where this data lives:</strong> stored users in <code>auth.json</code> (scrypt‑hashed) and panel access in <code>panel_access.json</code> — in the platform data folder <em>outside the repo, not in the database</em>. Recovery accounts come from <code>.env</code> (<code>USATAPPS_ADMIN_*</code> / <code>USATAPPS_TEST_*</code>).
+        </p>
       </div>
 
       <div className="card">

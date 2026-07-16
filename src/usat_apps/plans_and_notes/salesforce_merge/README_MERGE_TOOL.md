@@ -71,6 +71,17 @@ It builds on the existing read-only duplicates pipeline and reuses `usat_sales_d
   with both dates + the changed fields). On Execute, flagged sets are **held** (left in the queue) unless
   `ack_post_merge` is set — so a blind restore can't overwrite a legitimate later edit. Sets merged
   before this feature have no baseline and aren't gated.
+- **Un-approve (approved → queued):** a **↩ Move to queued** control on both Select Merges and Process
+  Merges (`POST …/merge-queue/unapprove` → `merge_queue.transition(ids,'queued',['approved'])`) pulls an
+  approved set off the processable list without deleting it or its stage baseline. Guarded to
+  approved→queued only.
+- **Batch limit per run:** Process Merges has an editable **Max sets per run** (1–500, default
+  `MERGE_MAX_BATCH`) enforced **server-side** at the process route (hard ceiling 500); Simulate is
+  unlimited. Complements the per-run Daily-API-Requests pre-flight estimate.
+- **History page** (`Reference`-style rail item): a filterable/sortable/exportable view over
+  `salesforce_merge_history` (`merge_history.list` gained `result`/`mode`/`q` filters;
+  `GET …/merge/history` + `…/export`) — every processed set (merge/restore/recreate/simulate/skip/fail),
+  searchable by survivor name / account / source, with the field-level diff per row.
 - **Contact-point preservation** gated by a configurable `high_value_flags` list (donor, …).
 - **Salesforce auth:** start simple (username/password) in sandbox; add a **Connected App
   (OAuth JWT, least-privilege write user) before production**. (Independent of the React choice.)
