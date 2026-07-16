@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { exportUrl } from '../lib/api.js';
 import { trackExport, trackFilter, trackSearch, panelForPath } from '../../../lib/track.js';
@@ -35,6 +35,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [elapsed, setElapsed] = useState(0);
+  const acRef = useRef(null);   // AbortController for the in-flight server request (Stop button / auto-cancel on re-search)
 
   // Usage analytics: derive panel from the route + view from the export base ('/api/salesforce-merge/duplicates/export'
   // -> 'duplicates'). Emit filter_run / search_run (debounced) and report_export centrally so every
@@ -67,13 +68,16 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
 
   useEffect(() => {
     if (!server) return undefined;   // client mode reads the `rows` prop directly (see `view`)
+    const ac = new AbortController();          // cancel this request if the query changes or Stop is clicked
+    acRef.current = ac;
     let cancelled = false;
+    const live = () => !cancelled && !ac.signal.aborted;
     setLoading(true); setErr('');
-    fetcher({ q, sort: sortKey || undefined, dir: sortDir, page, page_size: pageSize, colFilters })
-      .then((d) => { if (!cancelled) setData({ rows: d.rows || [], total: d.total || 0 }); })
-      .catch((e) => { if (!cancelled) setErr(e.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    fetcher({ q, sort: sortKey || undefined, dir: sortDir, page, page_size: pageSize, colFilters }, { signal: ac.signal })
+      .then((d) => { if (live()) setData({ rows: d.rows || [], total: d.total || 0 }); })
+      .catch((e) => { if (live() && e && e.name !== 'AbortError') setErr(e.message); })
+      .finally(() => { if (live()) setLoading(false); });
+    return () => { cancelled = true; ac.abort(); };   // abort the prior request when query/sort/page changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [server, q, sortKey, sortDir, page, pageSize, colFiltersKey, ...deps]);
 
@@ -107,6 +111,8 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
   };
   const mark = (col) => { const key = sort_key_of(col); return key && sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''; };
   const setFilter = (key, val) => { setPage(1); setColFilters((f) => ({ ...f, [key]: val })); };
+  // Stop the in-flight server request (e.g. a slow search) and keep the last loaded rows on screen.
+  const stopSearch = () => { if (acRef.current) acRef.current.abort(); setLoading(false); };
   const placeholder = 'Search ' + (searchCols ? searchCols : 'all columns') + '…';
 
   return (
@@ -142,7 +148,9 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
         )}
         <span className="dt-count muted small">
           {loading
-            ? <span className="dt-loading"><span className="spinner" aria-hidden="true" /> Searching… {elapsed.toFixed(1)}s</span>
+            ? <span className="dt-loading"><span className="spinner" aria-hidden="true" /> Searching… {elapsed.toFixed(1)}s
+                <button type="button" className="btn dt-stop" style={{ marginLeft: 8, padding: '1px 8px' }} onClick={stopSearch} title="Stop this search and keep the last results">Stop</button>
+              </span>
             : `${Number(total).toLocaleString()} rows`}
           {!loading && server ? ` · page ${page} / ${pages}` : ''}
         </span>

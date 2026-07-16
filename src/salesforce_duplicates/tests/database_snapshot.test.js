@@ -166,7 +166,7 @@ describe('add_indexes', () => {
     test('uses prefix indexes on the key columns (under InnoDB 3072-byte limit)', async () => {
         const { executor, calls } = fake_executor();
         await add_indexes(executor);
-        assert.equal(calls.length, 11);
+        assert.equal(calls.length, 14);
         assert.ok(/CREATE INDEX .*exact_duplicate_key\(255\)/.test(calls[0].sql), calls[0].sql);
         assert.ok(/CREATE INDEX .*rule_block_key\(255\)/.test(calls[1].sql), calls[1].sql);
         assert.ok(/CREATE INDEX .*load_sequence/.test(calls[2].sql), calls[2].sql);
@@ -214,7 +214,7 @@ describe('load_snapshot', () => {
         assert.equal(drops.length, 1);
         assert.equal(creates.length, 1);
         assert.equal(inserts.length, 3); // 2 + 2 + 1
-        assert.equal(indexes.length, 11);
+        assert.equal(indexes.length, 14);
 
         // order: drop -> create -> inserts... -> indexes
         assert.ok(calls[0].sql.startsWith('DROP TABLE'));
@@ -372,16 +372,15 @@ describe('update_match_composition', () => {
         const calls = [];
         const executor = async (sql, params) => { calls.push({ sql, params }); return []; };
         const clusters = [
-            { match_composition: 'exact only', record_ids: 'A;B' },
-            { match_composition: 'fuzzy + nickname', record_ids: 'C;D;E' },
+            { match_composition: 'exact only', confidence_tier: 'exact', best_pair_score: '', consolidated_group_key: 'A|B', group_record_count: 2, record_ids: 'A;B' },
+            { match_composition: 'fuzzy + nickname', confidence_tier: 'fuzzy', best_pair_score: 92, consolidated_group_key: 'C|D|E', group_record_count: 3, record_ids: 'C;D;E' },
         ];
         const updated = await update_match_composition(executor, clusters);
         assert.equal(updated, 5);
-        assert.ok(calls.every((c) => /UPDATE .*SET match_composition = \?/.test(c.sql)));
-        assert.equal(calls[0].params[0], 'exact only');
-        assert.deepEqual(calls[0].params.slice(1), ['A', 'B']);
-        assert.equal(calls[1].params[0], 'fuzzy + nickname');
-        assert.deepEqual(calls[1].params.slice(1), ['C', 'D', 'E']);
+        assert.ok(calls.every((c) => /UPDATE .*SET match_composition = \?, match_score = \?, confidence_tier = \?, cluster_key = \?, cluster_size = \?/.test(c.sql)));
+        // params are [composition, score, tier, cluster_key, cluster_size, ...ids] per cluster
+        assert.deepEqual(calls[0].params, ['exact only', 100, 'exact', 'A|B', 2, 'A', 'B']);   // exact-only -> score 100
+        assert.deepEqual(calls[1].params, ['fuzzy + nickname', 92, 'fuzzy', 'C|D|E', 3, 'C', 'D', 'E']);
     });
 
     test('no clusters -> no updates', async () => {

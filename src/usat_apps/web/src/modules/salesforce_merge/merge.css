@@ -1091,3 +1091,9 @@
 }
 .sfmerge .sfmerge-worker-banner__text { flex: 1 1 auto; }
 
+
+/* Live "running" row in the Activity — recent runs table (Get Duplicates page). */
+.mtbl tr.row-running,
+tr.row-running { background: rgba(46, 109, 164, 0.10); }
+tr.row-running td { border-top: 1px solid rgba(46, 109, 164, 0.35); border-bottom: 1px solid rgba(46, 109, 164, 0.35); }
+tr.row-running td:first-child { box-shadow: inset 3px 0 0 var(--blue, #2e6da4); }

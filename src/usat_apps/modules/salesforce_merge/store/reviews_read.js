@@ -64,11 +64,14 @@ function build_clauses(opts, spec) {
     if (val == null || String(val).trim() === '') continue;
     const fm = spec.filter_map && spec.filter_map[key];
     if (!fm) continue;
+    const term = String(val).trim();
+    // { eq: 'col' } — exact, index-friendly match (e.g. numeric match_score); no LIKE scan.
+    if (typeof fm === 'object' && fm.eq) { wheres.push('`' + fm.eq + '` = ?'); params.push(term); continue; }
     // a filter_map entry is a column name (backticked) or { expr } for a raw SQL expression
     const col_name = (typeof fm === 'object' && fm.expr) ? null : fm;
     const expr = col_name ? ('`' + fm + '`') : fm.expr;
     wheres.push(expr + ' LIKE ?');
-    params.push(like(String(val).trim(), col_name));
+    params.push(like(term, col_name));
   }
 
   const where_sql = wheres.length ? ('WHERE ' + wheres.join(' AND ')) : '';
@@ -271,9 +274,12 @@ const ACC_SPEC = {
   prefix_search: true,   // 'term%' so name/ID search uses the snapshot's B-tree indexes (~700k rows)
   select: 'salesforce_account_id AS `account`, first_name, last_name, gender_identity AS `gender`, ' +
           'person_birthdate AS `birthdate`, composite_zip_five_digit AS `zip5`, member_number, ' +
-          'salesforce_merge_id AS `merge_id`, match_composition, email, foundation_constituent, created_date, created_by_name',
-  // global search hits names/ID/member (prefix, indexed) plus email + match_composition (contains).
-  search_cols: ['first_name', 'last_name', 'salesforce_account_id', 'member_number', 'email', 'match_composition'],
+          'salesforce_merge_id AS `merge_id`, match_composition, match_score, confidence_tier, ' +
+          'cluster_key, cluster_size, email, foundation_constituent, created_date, created_by_name',
+  // Global search = identity columns only, all matched as 'term%' so every branch can use an index
+  // (huge on ~700k rows). email / match_composition are contains-anywhere and would force a full
+  // scan, so they are NOT in the global search — they live on their own column filters instead.
+  search_cols: ['first_name', 'last_name', 'salesforce_account_id', 'member_number'],
   contains_cols: ['email', 'match_composition', 'created_by_name', 'created_date'],
   filter_cols: {
     has_merge_id: { sql: "salesforce_merge_id <> ''" },                 // legacy truthy toggle (kept)
@@ -283,6 +289,9 @@ const ACC_SPEC = {
       : String(v) === 'none' ? { sql: "(salesforce_merge_id IS NULL OR salesforce_merge_id = '')" } : null) },
     member_number_state: { build: (v) => (String(v) === 'has' ? { sql: "member_number <> ''" }
       : String(v) === 'none' ? { sql: "(member_number IS NULL OR member_number = '')" } : null) },
+    // 'has' = account is in a consolidated duplicate cluster (cluster_size stamped >= 2); 'none' = not.
+    in_cluster_state: { build: (v) => (String(v) === 'has' ? { sql: 'cluster_size > 0' }
+      : String(v) === 'none' ? { sql: '(cluster_size IS NULL OR cluster_size = 0)' } : null) },
   },
   sort: {
     account: 'salesforce_account_id',
@@ -294,15 +303,20 @@ const ACC_SPEC = {
     member_number: 'member_number',
     merge_id: 'salesforce_merge_id',
     match_composition: 'match_composition',
+    match_score: 'match_score',
+    confidence_tier: 'confidence_tier',
+    cluster_size: 'cluster_size',
     email: 'email',
     foundation_constituent: 'foundation_constituent',
     created_date: 'created_date',
     created_by_name: 'created_by_name',
   },
   filter_map: {
-    account: 'salesforce_account_id', name: 'last_name', gender: 'gender_identity',
+    account: 'salesforce_account_id', name: 'last_name',
+    first_name: 'first_name', last_name: 'last_name', gender: 'gender_identity',
     birthdate: 'person_birthdate', zip5: 'composite_zip_five_digit', member_number: 'member_number', merge_id: 'salesforce_merge_id',
-    match_composition: 'match_composition', email: 'email', foundation_constituent: 'foundation_constituent',
+    match_composition: 'match_composition', match_score: { eq: 'match_score' }, confidence_tier: 'confidence_tier', cluster_size: { eq: 'cluster_size' },
+    email: 'email', foundation_constituent: 'foundation_constituent',
     created_date: 'created_date', created_by_name: 'created_by_name',
   },
   facet_cols: { gender: 'gender_identity', match_composition: 'match_composition', foundation_constituent: 'foundation_constituent' },
