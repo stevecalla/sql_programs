@@ -9,6 +9,7 @@ const snapshot = require('./merge_snapshot');
 const history = require('./merge_history');
 const mrun = require('./merge_run');
 const dashboard = require('./duplicates_read');
+const post_snapshot = require('./merge_post_snapshot');
 
 function execution_enabled() { return process.env.MERGE_ENABLE_EXECUTION === 'true'; }
 function log(...a) { if (process.env.MERGE_LOG !== 'off') console.log('[restore]', ...a); }
@@ -40,6 +41,17 @@ async function account_states(conn, ids) {
     for (const r of (res.records || [])) map[r.Id] = r.IsDeleted ? 'deleted' : 'live';
   } catch (e) { /* leave as missing */ }
   return map;
+}
+
+// The survivor's CURRENT Salesforce LastModifiedDate (via the write connection). Used by the post-merge
+// edit gate to tell if the survivor was touched in SF after the merge. Best-effort — null on any issue.
+async function survivor_last_modified(conn, id) {
+  if (!conn || typeof conn.query !== 'function' || !id) return null;
+  try {
+    const res = await conn.query("SELECT Id, LastModifiedDate FROM Account WHERE Id = '" + String(id).replace(/'/g, '') + "'");
+    const r = (res.records || [])[0];
+    return (r && r.LastModifiedDate) || null;
+  } catch (e) { return null; }
 }
 
 function from_snapshot(rows, survivorId) {
@@ -156,6 +168,7 @@ async function restore(ids, opts = {}, deps = {}) {
   const RUN = deps.run || mrun;
   const W = deps.write || require('./salesforce_write');
   const dash = deps.dashboard || dashboard;
+  const POST = deps.post_snapshot || post_snapshot;
   const createdBy = opts.created_by || null;
 
   const idset = new Set((ids || []).map((x) => Number(x)));
@@ -233,6 +246,29 @@ async function restore(ids, opts = {}, deps = {}) {
       out.skipped += 1; out.routed = (out.routed || 0) + 1; out.results.push({ id: e.id, result: 'routed', reason });
       log((e.survivor_name || e.id) + ' — routed to recreate queue (' + present.length + '/' + losers.length + ' recoverable)');
       completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
+    }
+
+    // POST-MERGE EDIT GATE — if the survivor was edited IN SALESFORCE after the merge, a blind restore
+    // (which resets the survivor to pre-merge values) would clobber that later change. Hold the set
+    // (leave it 'done', in the queue) for review unless the operator acknowledged the risk. Best-effort:
+    // if we can't read the timestamps we don't block. Only applies when a post-merge baseline exists.
+    if (!opts.ack_post_merge) {
+      try {
+        const psnap = await POST.get(e.id);
+        if (psnap && psnap.sf_last_modified) {
+          const lmNow = await survivor_last_modified(conn, e.survivor_account);
+          if (lmNow && new Date(lmNow) > new Date(psnap.sf_last_modified)) {
+            const reason = 'survivor edited in Salesforce after the merge (' + lmNow + ' > ' + psnap.sf_last_modified + ') — held for review; acknowledge to restore anyway';
+            await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
+              survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
+              result: 'skipped', reason });
+            out.skipped += 1; out.held = (out.held || 0) + 1;
+            out.results.push({ id: e.id, result: 'held', reason: 'edited since merge', sf_last_modified_now: lmNow, sf_last_modified_at_merge: psnap.sf_last_modified });
+            log((e.survivor_name || e.id) + ' — HELD (edited in SF since merge)');
+            completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
+          }
+        }
+      } catch (gerr) { log('post-merge gate check skipped for ' + e.survivor_account + ': ' + (gerr && gerr.message)); }
     }
 
     // STEP 1 — reset the SURVIVOR's fields FIRST (pre-merge values from the snapshot). Salesforce has
@@ -405,4 +441,4 @@ async function recreate(ids, opts = {}, deps = {}) {
   return out;
 }
 
-module.exports = { restore, list_restorable, list_recreatable, recreate, status, deleted_set, account_states, from_snapshot, recreate_plan_from_snapshot, account_create_fields, master_reset_fields, execution_enabled, make_run_id };
+module.exports = { restore, list_restorable, list_recreatable, recreate, status, deleted_set, account_states, survivor_last_modified, from_snapshot, recreate_plan_from_snapshot, account_create_fields, master_reset_fields, execution_enabled, make_run_id };

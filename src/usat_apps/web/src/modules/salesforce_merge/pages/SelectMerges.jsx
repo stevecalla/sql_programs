@@ -239,6 +239,11 @@ export default function SelectMerges() {
     if (!window.confirm(`Approve ${ids.length} merge${ids.length === 1 ? '' : 's'} for processing? Execution still happens in Phase 3; you can move them back by removing while queued.`)) return;
     try { await api.mergeQueueApprove(ids); loadQueue(); } catch (e) { setErr(e.message); }
   };
+  const unapproveSelected = async () => {
+    const ids = [...qSel].filter((id) => { const q = queue.find((x) => x.id === id); return q && q.status === 'approved'; });
+    if (!ids.length) return;
+    try { await api.mergeQueueUnapprove(ids); setQSel(new Set()); loadQueue(); } catch (e) { setErr(e.message); }
+  };
 
   const accounts = (detail && detail.accounts) || [];
   const fields = (detail && detail.fields) || [];
@@ -305,10 +310,12 @@ export default function SelectMerges() {
   const anyFilter = !!(midState || memState || bkState || foundationState || sizeState || matchState || whichState || simState || tierState || qFilter);
   const toggleMerge = (id) => setMergeSel((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
+  const [adding, setAdding] = useState(false);
   const addToQueue = async () => {
     setAddErr(''); setNote('');
     const masterAcct = accounts.find((a) => a.account === master);
     if (!master || !selLosers.length) { setAddErr('Pick a master and at least one account to merge.'); return; }
+    setAdding(true);
     try {
       const childAgg = {}; let ctot = 0;
       selLosers.forEach((id) => { const c = children && children[id]; if (c) { ctot += c.total || 0; for (const [k, v] of Object.entries(c.by || {})) childAgg[k] = (childAgg[k] || 0) + v; } });
@@ -324,6 +331,7 @@ export default function SelectMerges() {
       setNote(`Queued: master ${shortId(master)} + ${r.loser_count} account${r.loser_count === 1 ? '' : 's'}.`);
       loadQueue();
     } catch (e) { setAddErr(e.message); }
+    finally { setAdding(false); }
   };
   const removeQueue = async (id) => { try { await api.mergeQueueRemove(id); loadQueue(); } catch (e) { setErr(e.message); } };
 
@@ -335,7 +343,7 @@ export default function SelectMerges() {
   const mergedLock = selState === 'merged';
   // Block queueing until the child records finish loading, so the staged set reflects the full impact
   // (and the child count is complete) rather than a partial/empty in-flight state.
-  const addDisabled = !detail || isQueued || mergedLock || !selLosers.length || childrenLoading;
+  const addDisabled = !detail || isQueued || mergedLock || !selLosers.length || childrenLoading || adding;
   const selectableKeys = clusters.map((c) => c.cluster).filter((k) => !isLocked(k));
   const pageKeys = selectableKeys;   // "Page" selects only the selectable rows
   const allPageSelected = pageKeys.length > 0 && pageKeys.every((k) => railSel.has(k));
@@ -655,7 +663,7 @@ export default function SelectMerges() {
           <span className="muted small">Master = survivor · Merge = include in this set</span>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             {detail && (<span className="dl-group"><span className="muted small">Export</span><a className="dl-link" href={exportUrl('/api/salesforce-merge/cluster/detail/export', { key: selKey, source, format: 'csv' })}>CSV</a><a className="dl-link" href={exportUrl('/api/salesforce-merge/cluster/detail/export', { key: selKey, source, format: 'xlsx' })}>Excel</a></span>)}
-            <button className="btn primary" style={{ width: 'auto' }} disabled={addDisabled} onClick={addToQueue} title={childrenLoading ? 'Loading child records (enabled once they finish)' : undefined}>{childrenLoading ? 'Loading child records...' : 'Add to merge queue'}</button>
+            <button className="btn primary" style={{ width: 'auto' }} disabled={addDisabled} onClick={addToQueue} title={childrenLoading ? 'Loading child records (enabled once they finish)' : undefined}>{adding ? <><span className="spinner" style={{ marginRight: 6, verticalAlign: 'middle' }} />Adding…</> : childrenLoading ? 'Loading child records...' : 'Add to merge queue'}</button>
           </span>
         </div>
         {openAccts && (<>
@@ -743,8 +751,9 @@ export default function SelectMerges() {
             <option value="queued">Queued</option><option value="approved">Approved</option><option value="done">Done</option><option value="failed">Failed</option><option value="all">All</option>
           </select>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            {queue.length > 0 && (<span className="dl-group"><span className="muted small">Export</span><a className="dl-link" href={exportUrl('/api/salesforce-merge/merge-queue/export', { format: 'csv' })}>CSV</a><a className="dl-link" href={exportUrl('/api/salesforce-merge/merge-queue/export', { format: 'xlsx' })}>Excel</a></span>)}
             {qStatus === 'queued' && <button className="btn primary" style={{ width: 'auto' }} disabled={qSel.size === 0} onClick={approveSelected} title="Approve the selected sets for Phase 3 processing">Approve selected</button>}
+            {queue.some((q) => qSel.has(q.id) && q.status === 'approved') && <button className="btn" style={{ width: 'auto' }} onClick={unapproveSelected} title="Move the selected approved sets back to queued (removes them from Process Merges until re-approved)">↩ Move to queued</button>}
+            {queue.length > 0 && (<span className="dl-group"><span className="muted small">Export</span><a className="dl-link" href={exportUrl('/api/salesforce-merge/merge-queue/export', { format: 'csv' })}>CSV</a><a className="dl-link" href={exportUrl('/api/salesforce-merge/merge-queue/export', { format: 'xlsx' })}>Excel</a></span>)}
           </span>
         </div>
         {openQueue && (<div style={{ minHeight: 240 }}>

@@ -14,6 +14,7 @@ const history = require('./merge_history');
 const mrun = require('./merge_run');
 const APIUSE = require('./api_usage');
 const stagebase = require('./merge_stage_baseline');
+const post_snapshot = require('./merge_post_snapshot');
 const rdiff = require('./restore_diff');
 
 // Account records reach us in two shapes: the local snapshot (first_name / email / member_number …)
@@ -124,6 +125,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
   const B = deps.baseline || stagebase;
   const DIFF = deps.diff || rdiff;
   const dash = deps.dashboard || dashboard;
+  const POST = deps.post_snapshot || post_snapshot;
   const createdBy = opts.created_by || null;
 
   const idset = new Set((ids || []).map((x) => Number(x)));
@@ -300,6 +302,15 @@ async function runQueue(ids, opts = {}, deps = {}) {
         } catch (err) { stampNote = '; stamp skipped (' + err.message + ')'; }
       }
       await Q.transition([e.id], 'done', ['approved']);
+      // Post-merge baseline: capture the survivor's field values + SF LastModifiedDate NOW (after the
+      // merge + stamp), so a later restore can detect edits made to the survivor in Salesforce after the
+      // merge (post-merge → now), separate from what the merge itself changed. Best-effort — never fails.
+      try {
+        const precs = await SF.fetch_accounts_by_ids([e.survivor_account], { is_test });
+        const surv = (precs && precs[0]) || null;
+        if (surv) await POST.save({ run_id: runId, queue_id: e.id, survivor_account: e.survivor_account,
+          source_type: e.source_type, source_key: e.source_key, fields: surv, sf_last_modified: surv.LastModifiedDate || null });
+      } catch (perr) { log('post-merge snapshot skipped for ' + e.survivor_account + ': ' + (perr && perr.message)); }
       await H.write({ ...histbase(runId, e, createdBy, mode), child_total: childTotal, snapshot_saved: snap_ok ? 1 : 0,
         result: 'done', reason: 'merged ' + merged.length + ' record(s)' + stampNote + driftNote, merged_count: merged.length, remaining_count: 0, diff: driftAudit });
       out.done += 1; out.results.push({ id: e.id, result: 'done', merged: merged.length, drift_checked: drift.checked, drift_fields: drift.fields, drift_detail: drift.detail });

@@ -22,7 +22,7 @@ export default function Admin() {
   const [access, setAccess] = useState({ default: [], users: {} });
   const [err, setErr] = useState('');
 
-  const [nu, setNu] = useState(''); const [np, setNp] = useState(''); const [nr, setNr] = useState('user');
+  const [nu, setNu] = useState(''); const [np, setNp] = useState(''); const [nr, setNr] = useState('user'); const [showPw, setShowPw] = useState(false);
   const [uMsg, setUMsg] = useState(null);
 
   const [defMode, setDefMode] = useState('some'); const [defSet, setDefSet] = useState({}); const [defMsg, setDefMsg] = useState(null);
@@ -52,6 +52,20 @@ export default function Admin() {
   }, [selUser, access]);
 
   const knownUsers = users ? users.map((u) => u.user) : [];
+
+  // What a selected user EFFECTIVELY sees: their per-user override if set, else the general default
+  // (admins always see everything, regardless of panel access).
+  const panelLabel = (k) => { const p = panels.find((x) => x.key === k); return p ? (p.label || p.key) : k; };
+  const effectiveAccess = () => {
+    if (!selUser) return null;
+    const u = users && users.find((x) => x.user === selUser);
+    if (u && u.role === 'admin') return { kind: 'admin' };
+    const ov = access.users ? access.users[selUser] : undefined;
+    const src = ov === undefined ? 'from the general default' : 'per-user override';
+    const eff = ov === undefined ? access.default : ov;
+    if (eff === 'all') return { kind: 'all', src };
+    return { kind: 'some', src, keys: Array.isArray(eff) ? eff : [] };
+  };
 
   const saveUser = async () => {
     const user = nu.trim();
@@ -151,13 +165,17 @@ export default function Admin() {
             ))}
           </tbody>
         </table>
-        <div className="rowform" style={{ marginTop: 10 }}>
+        <div className="rowform" style={{ marginTop: 10, flexWrap: 'wrap' }}>
           <input placeholder="username / email" value={nu} onChange={(e) => setNu(e.target.value)} autoComplete="off" />
-          <input placeholder="password" type="password" value={np} onChange={(e) => setNp(e.target.value)} autoComplete="new-password" />
+          <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+            <input placeholder="password" type={showPw ? 'text' : 'password'} value={np} onChange={(e) => setNp(e.target.value)} autoComplete="new-password" style={{ paddingRight: 30 }} />
+            <button type="button" onClick={() => setShowPw((v) => !v)} title={showPw ? 'Hide password' : 'Show password'} aria-label={showPw ? 'Hide password' : 'Show password'}
+              style={{ position: 'absolute', right: 4, border: 0, background: 'transparent', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, color: 'var(--muted)' }}>{showPw ? '🙈' : '👁'}</button>
+          </span>
           <select value={nr} onChange={(e) => setNr(e.target.value)}>
             <option value="user">user</option><option value="admin">admin</option>
           </select>
-          <button className="btn primary" onClick={saveUser}>Add / update user</button>
+          <button className="btn primary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }} onClick={saveUser}>Add / update user</button>
           {msg(uMsg)}
         </div>
       </div>
@@ -170,7 +188,7 @@ export default function Admin() {
           <label style={rlab}><input type="radio" name="defmode" checked={defMode === 'some'} onChange={() => setDefMode('some')} /> Only selected</label>
         </div>
         {defMode === 'some' && qlist(defSet, setDefSet)}
-        <button className="btn primary" onClick={saveDefault}>Save default</button>{msg(defMsg)}
+        <button className="btn primary" style={{ marginTop: 12 }} onClick={saveDefault}>Save default</button>{msg(defMsg)}
       </div>
 
       <div className="card">
@@ -187,8 +205,21 @@ export default function Admin() {
           <label style={rlab}><input type="radio" name="usermode" checked={uMode === 'all'} onChange={() => setUMode('all')} /> All panels</label>
           <label style={rlab}><input type="radio" name="usermode" checked={uMode === 'some'} onChange={() => setUMode('some')} /> Only selected</label>
         </div>
+        {selUser && (() => {
+          const e = effectiveAccess();
+          let body;
+          if (e.kind === 'admin') body = <em>all panels — admin role (panel access doesn’t apply)</em>;
+          else if (e.kind === 'all') body = <span>all panels <span className="muted">({e.src})</span></span>;
+          else if (e.keys.length) body = <span>{e.keys.map(panelLabel).join(', ')} <span className="muted">({e.src})</span></span>;
+          else body = <span><em>no panels</em> <span className="muted">({e.src})</span></span>;
+          return (
+            <div className="small" style={{ margin: '10px 0', padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}>
+              <strong>{selUser}</strong> currently sees: {body}
+            </div>
+          );
+        })()}
         {uMode === 'some' && qlist(uSet, setUSet)}
-        <button className="btn primary" onClick={saveUserAccess} disabled={!selUser}>Save user</button>{msg(accMsg)}
+        <button className="btn primary" style={{ marginTop: 12 }} onClick={saveUserAccess} disabled={!selUser}>Save user</button>{msg(accMsg)}
         <p className="muted small" style={{ marginTop: 12 }}>
           The <b>Admin</b> page itself is governed by the <b>admin</b> role, not by panel access — a non-admin can
           never reach user management even if granted other panels.

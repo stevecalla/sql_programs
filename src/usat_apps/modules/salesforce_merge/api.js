@@ -268,6 +268,15 @@ function mount(app) {
       res.json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
+  // Move approved sets back to queued (un-approve). Guarded: only approved -> queued.
+  app.post('/api/salesforce-merge/merge-queue/unapprove', gate, async function (req, res) {
+    try {
+      const ids = (req.body || {}).ids || [];
+      const r = await mqueue.transition(ids, 'queued', ['approved']);
+      analytics.log({ event_name: 'queue_unapprove', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), set_count: Array.isArray(ids) ? ids.length : undefined, outcome: 'ok' });
+      res.json({ ok: true, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   app.get('/api/salesforce-merge/merge-queue/export', gate, async function (req, res) {
     try { await write_rows(req, res, await mqueue.list(undefined, req.query.status || null), 'merge_queue_' + new Date().toISOString().slice(0, 10), 'merge_queue'); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -346,12 +355,20 @@ function mount(app) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge/status', gate, async function (req, res) {
-    try { res.json({ ok: true, ...(await mexec.status()) }); }
+    try { res.json({ ok: true, max_batch: Math.min(500, Math.max(1, Number(process.env.MERGE_MAX_BATCH) || 100)), max_batch_hard: 500, ...(await mexec.status()) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.post('/api/salesforce-merge/merge/process', gate, async function (req, res) {
     try {
       const b = req.body || {};
+      // Batch safety limit: cap how many sets one Execute can run (configurable via MERGE_MAX_BATCH).
+      // Only gates real writes — simulate/dry-run is unlimited.
+      const HARD_MAX = 500;   // absolute ceiling the user's setting can never exceed
+      const dfltMax = Math.min(HARD_MAX, Math.max(1, Number(process.env.MERGE_MAX_BATCH) || 100));
+      const reqMax = (b.max_batch != null && b.max_batch !== '') ? Math.min(HARD_MAX, Math.max(1, Number(b.max_batch) || dfltMax)) : dfltMax;
+      if (b.mode === 'execute' && !b.dry_run && Array.isArray(b.ids) && b.ids.length > reqMax) {
+        return res.status(400).json({ ok: false, error: 'Batch too large: ' + b.ids.length + ' sets exceeds the limit of ' + reqMax + ' per Execute (hard cap ' + HARD_MAX + ').' });
+      }
       // Phase 3: don't run inline — enqueue a queued salesforce_merge_run; the merge worker claims + runs it.
       const r = await mrun.enqueue({ kind: 'merge', mode: b.mode, created_by: current_user(req),
         params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, ack_drift: !!b.ack_drift, created_by: current_user(req) } } });
@@ -361,11 +378,11 @@ function mount(app) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge/history', gate, async function (req, res) {
-    try { res.json({ ok: true, rows: await mhist.list({ limit: req.query.limit }) }); }
+    try { res.json({ ok: true, rows: await mhist.list({ limit: req.query.limit, result: req.query.result, mode: req.query.mode, q: req.query.q }) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge/history/export', gate, async function (req, res) {
-    try { await write_rows(req, res, await mhist.list({ limit: req.query.limit || 5000 }), 'merge_history_' + new Date().toISOString().slice(0, 10), 'merge_history'); }
+    try { await write_rows(req, res, await mhist.list({ limit: req.query.limit || 5000, result: req.query.result, mode: req.query.mode, q: req.query.q }), 'merge_history_' + new Date().toISOString().slice(0, 10), 'merge_history'); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Live progress for the latest run (UI polls this for the progress bar + timer + ETA).
@@ -394,11 +411,21 @@ function mount(app) {
     try { res.json({ ok: true, ...(await rdiff.diff_for_entry(req.query.id)) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
+  // Post-merge diff — did the survivor change IN SALESFORCE after the merge? Compares live vs the
+  // post-merge snapshot + LastModifiedDate. Bulk (button over selected sets) or single (row expand).
+  app.post('/api/salesforce-merge/merge/restore/post-diff', gate, async function (req, res) {
+    try {
+      const ids = (req.body && req.body.ids) || [];
+      const results = [];
+      for (const id of ids) results.push(await rdiff.post_merge_diff(id));
+      res.json({ ok: true, results });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   app.post('/api/salesforce-merge/merge/restore', gate, async function (req, res) {
     try {
       const b = req.body || {};
       const r = await mrun.enqueue({ kind: 'restore', mode: b.mode, created_by: current_user(req),
-        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, keep_fields: b.keep_fields || null, created_by: current_user(req) } } });
+        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, keep_fields: b.keep_fields || null, ack_post_merge: !!b.ack_post_merge, created_by: current_user(req) } } });
       analytics.log({ event_name: 'restore_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req), mode: b.mode, outcome: 'queued' });
       res.json({ ok: true, queued: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }

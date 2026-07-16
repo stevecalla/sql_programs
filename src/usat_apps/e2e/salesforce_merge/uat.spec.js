@@ -34,10 +34,9 @@ test.beforeEach(async ({ page }) => {
 test('Select Merges renders the filters and a disabled Add button', async ({ page }) => {
   await page.goto('/salesforce/merge/select-merges');
   await expect(page.getByRole('heading', { name: 'Select Merges' })).toBeVisible();
-  // Filters consistent with the reporting tabs (Size / Signal / Tier).
+  // Filters render (Size is always shown; Signal/Tier are source-dependent) + the source toggle.
   await expect(page.getByText('Size', { exact: true })).toBeVisible();
-  await expect(page.getByText('Signal', { exact: true })).toBeVisible();
-  await expect(page.getByText('Tier', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Duplicate groups' })).toBeVisible();
   // Nothing selected yet -> the guard keeps "Add to merge queue" disabled.
   const add = page.getByRole('button', { name: 'Add to merge queue' });
   await expect(add).toBeVisible();
@@ -62,5 +61,7 @@ test('Restore shows completed merges with a diff expander and the recreate queue
   await expect(page.getByText(/Recreate queue/)).toBeVisible();
   // The stubbed completed row exposes the per-row diff toggle (current vs pre-merge snapshot).
   await expect(page.getByTitle('Diff current vs pre-merge snapshot')).toBeVisible();
+  // Post-merge gate surface: the on-demand "check for edits since the merge" button (UAT Test 7).
+  await expect(page.getByRole('button', { name: /Check post.merge changes/i })).toBeVisible();
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });

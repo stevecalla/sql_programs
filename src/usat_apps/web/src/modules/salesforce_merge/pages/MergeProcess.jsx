@@ -137,7 +137,15 @@ export default function MergeProcess() {
     return () => { clearInterval(tick); clearInterval(poll); };
   }, [busy]);
 
-  const canExecute = !safe && mode === 'execute' && confirmText === 'MERGE' && selCount > 0;
+  const [maxBatch, setMaxBatch] = useState(() => { const v = Number(localStorage.getItem('mp_max_batch')); return (v >= 1 && v <= 500) ? v : 100; });
+  const seededMax = useRef(false);
+  useEffect(() => {
+    if (!seededMax.current && status && status.max_batch != null && localStorage.getItem('mp_max_batch') == null) setMaxBatch(Math.min(500, Math.max(1, status.max_batch)));
+    if (status) seededMax.current = true;
+  }, [status]);
+  const setMax = (n) => { const v = Math.min(500, Math.max(1, Number(n) || 1)); setMaxBatch(v); try { localStorage.setItem('mp_max_batch', String(v)); } catch (e) { /* ignore */ } };
+  const overBatch = selCount > maxBatch;
+  const canExecute = !safe && mode === 'execute' && confirmText === 'MERGE' && selCount > 0 && !overBatch;
   const eta = (() => {
     if (!progress || !progress.completed_ops || !progress.total_ops || !elapsed) return null;
     const per = elapsed / progress.completed_ops;
@@ -150,7 +158,7 @@ export default function MergeProcess() {
     setRunRows(ids.map((id) => rows.find((r) => r.id === id)).filter(Boolean));   // snapshot the sets this run processes (in submit order)
     setBusy(true); setErr(''); setResult(null); setProgress(null); setElapsed(0);
     try {
-      const q = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged, ack_drift: ackDrift } : { mode: 'simulate', stamp_merged: stampMerged });
+      const q = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged, ack_drift: ackDrift, max_batch: maxBatch } : { mode: 'simulate', stamp_merged: stampMerged });
       setConfirmText('');
       // Phase 3: the merge worker runs it out-of-process — poll this run until it reaches a terminal status.
       const finalRun = await awaitRun(api, 'merge', q.run_id, (rr) => setProgress(rr));
@@ -164,6 +172,11 @@ export default function MergeProcess() {
   const stop = async () => {
     setStopping(true);
     try { await api.mergeCancel(); } catch (e) { setErr(e.message); setStopping(false); }
+  };
+  // Move the selected approved sets back to queued (un-approve) — drops them off this page until re-approved.
+  const unapprove = async () => {
+    if (!ids.length) return;
+    try { await api.mergeQueueUnapprove(ids); setSel(new Set()); load(); } catch (e) { setErr(e.message); }
   };
 
   return (
@@ -243,12 +256,22 @@ export default function MergeProcess() {
           {stampMerged && stampFields && stampFields.usat_was_merged__c && stampFields.usat_was_merged_date__c && stampFields.usat_was_merged_by__c && (
             <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present (flag, date, by)</p>
           )}
+          {mode === 'execute' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px' }}>
+              <span className="muted small">Max sets per run</span>
+              <input type="number" min={1} max={500} value={maxBatch} onChange={(e) => setMax(e.target.value)} style={{ width: 66 }} title="Cap how many sets one Execute processes (1–500). Enforced server-side." />
+              <span className="muted small">· hard cap 500</span>
+            </div>
+          )}
           {mode === 'execute' && selCount > 0 && (
             <div className="muted small" style={{ margin: '0 0 8px', padding: '6px 8px', borderRadius: 6, border: '1px solid ' + (apiWouldExceed ? 'var(--red)' : 'var(--line, #e4e7ec)'), color: apiWouldExceed ? 'var(--red)' : undefined }}>
               Pre-flight: {selCount} set{selCount === 1 ? '' : 's'} ≈ <strong>{estApiCalls.toLocaleString()}</strong> API call{estApiCalls === 1 ? '' : 's'}
               {apiRemaining != null ? ' · ' + apiRemaining.toLocaleString() + ' remaining today' : ' · no recent reading (see SF API panel)'}
               {apiWouldExceed && ' — ⚠ exceeds remaining budget; split the run or wait for the daily reset'}
             </div>
+          )}
+          {mode === 'execute' && overBatch && (
+            <p className="small" style={{ margin: '0 0 8px', color: 'var(--red)' }}>⚠ {selCount} selected exceeds the max of {maxBatch} per Execute — deselect some (an admin can raise MERGE_MAX_BATCH).</p>
           )}
           <button className="btn primary" style={{ width: '100%', marginTop: 0 }} disabled={busy || !canExecute}
             title={safe ? 'Execution is locked (safe mode)' : 'Type MERGE and select sets to enable'} onClick={() => run(true)}>
@@ -268,10 +291,14 @@ export default function MergeProcess() {
       <CollapsibleCard
         title={<>Approved merges <span className="muted small" style={{ fontWeight: 400 }}>({rows.length})</span></>}
         actions={rows.length > 0 ? (
-          <span className="dl-group">
-            <span className="muted small">Export</span>
-            <a className="dl-link" href={exportUrl('/api/salesforce-merge/merge-queue/export', { status: 'approved', format: 'csv' })}>CSV</a>
-            <a className="dl-link" href={exportUrl('/api/salesforce-merge/merge-queue/export', { status: 'approved', format: 'xlsx' })}>Excel</a>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {selCount > 0 && <button className="btn" style={{ width: 'auto', padding: '2px 8px' }} onClick={unapprove}
+              title="Move the selected approved sets back to queued (returns them to Select Merges; off this page until re-approved)">↩ Move to queued ({selCount})</button>}
+            <span className="dl-group">
+              <span className="muted small">Export</span>
+              <a className="dl-link" href={exportUrl('/api/salesforce-merge/merge-queue/export', { status: 'approved', format: 'csv' })}>CSV</a>
+              <a className="dl-link" href={exportUrl('/api/salesforce-merge/merge-queue/export', { status: 'approved', format: 'xlsx' })}>Excel</a>
+            </span>
           </span>
         ) : null}
       >

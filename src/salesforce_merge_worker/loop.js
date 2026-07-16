@@ -45,8 +45,16 @@ async function tick() {
     if (row.kind === 'restore') out = await mrestore.restore(params.ids, opts, { control: dbControl });
     else if (row.kind === 'recreate') out = await mrestore.recreate(params.ids, opts, { control: dbControl });
     else out = await mexec.process(params.ids, opts, { control: dbControl });
-    // Parity: store the executor's own result object (minus the big per-set array) on the run row.
-    if (out) { const summary = Object.assign({}, out); delete summary.results; try { await run.set_result(row.run_id, summary); } catch (e) { /* ignore */ } }
+    // Parity: store the executor's own result object on the run row. Trim the per-set array to just the
+    // fields the UI needs (per-set status + drift badge) so the payload stays small while the drift
+    // detail still survives for the Process page (the full field-by-field record also lives in each
+    // history row's diff_json).
+    if (out) {
+      const summary = Object.assign({}, out);
+      summary.results = (out.results || []).map((r) => ({ id: r.id, result: r.result,
+        drift_checked: r.drift_checked, drift_fields: r.drift_fields, drift_detail: r.drift_detail }));
+      try { await run.set_result(row.run_id, summary); } catch (e) { /* ignore */ }
+    }
     stats.processed += 1;
     log('finished', row.run_id);
   } catch (e) {

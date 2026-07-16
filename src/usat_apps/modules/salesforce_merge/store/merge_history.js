@@ -75,7 +75,16 @@ const parseRow = (r) => ({ ...r, diff: (() => { try { return r.diff_json ? JSON.
 async function list(opts = {}, query = real_query) {
   await ensure_table(query);
   const n = Math.min(Math.max(parseInt(opts.limit, 10) || 100, 1), 1000);
-  const rows = await query('SELECT ' + COLS + ' FROM `' + TABLE + '` ORDER BY id DESC LIMIT ' + n, []);
+  const where = []; const params = [];
+  if (opts.result) { where.push('result = ?'); params.push(String(opts.result)); }
+  if (opts.mode) { where.push('mode = ?'); params.push(String(opts.mode)); }
+  if (opts.q && String(opts.q).trim()) {
+    const like = '%' + String(opts.q).trim() + '%';
+    where.push('(survivor_name LIKE ? OR survivor_account LIKE ? OR source_key LIKE ?)');
+    params.push(like, like, like);
+  }
+  const sql = 'SELECT ' + COLS + ' FROM `' + TABLE + '`' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY id DESC LIMIT ' + n;
+  const rows = await query(sql, params);
   return (rows || []).map(parseRow);
 }
 

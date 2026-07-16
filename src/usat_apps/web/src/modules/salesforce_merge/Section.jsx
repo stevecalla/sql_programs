@@ -8,6 +8,7 @@ import GetDuplicates from './pages/GetDuplicates.jsx';
 import SelectMerges from './pages/SelectMerges.jsx';
 import MergeProcess from './pages/MergeProcess.jsx';
 import Restore from './pages/Restore.jsx';
+import History from './pages/History.jsx';
 import Tuning from './pages/Tuning.jsx';
 import Reference from './pages/Reference.jsx';
 import SfApi from './pages/SfApi.jsx';
@@ -27,6 +28,7 @@ export default function MergeSection() {
         <Route path="select-merges" element={<SelectMerges />} />
         <Route path="merge-process" element={<MergeProcess />} />
         <Route path="restore" element={<Restore />} />
+        <Route path="history" element={<History />} />
         <Route path="tuning" element={<Tuning />} />
         <Route path="reference" element={<Reference />} />
         <Route path="sf-api" element={<SfApi />} />

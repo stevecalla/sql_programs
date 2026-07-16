@@ -5,7 +5,6 @@ import RestoreDiffDetail from '../components/RestoreDiffDetail.jsx';
 import { api } from '../lib/api.js';
 import { awaitRun, summarize } from '../lib/run_poll.js';
 
-const shortId = (id) => (id && id.length > 8 ? '…' + id.slice(-5) : id || '');
 const RESULT_COLOR = { restored: '#1a8a4f', simulated: '#1a8a4f', skipped: '#854f0b', failed: '#c0392b' };
 
 // Phase 4 — undo a completed merge (best-effort). Same safety model as Process Merges: Simulate by
@@ -32,6 +31,21 @@ export default function Restore() {
   const toggleDiff = (id) => setDiffOpen((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const [keepBySet, setKeepBySet] = useState({});   // { [queueId]: [fieldsToKeepCurrent] } — selective restore
   const onKeepChange = useCallback((id, fields) => setKeepBySet((p) => ({ ...p, [id]: fields })), []);
+  // Post-merge diff: was the survivor edited IN SALESFORCE after the merge? On-demand (button or row).
+  const [postDiff, setPostDiff] = useState({});     // { [queueId]: post-merge diff result }
+  const [postBusy, setPostBusy] = useState(false);
+  const [ackPost, setAckPost] = useState(false);    // acknowledge → restore edited-since-merge sets anyway
+  const fmtTs = (s) => { if (!s) return '—'; const d = new Date(s); return isNaN(d.getTime()) ? String(s) : d.toLocaleString(); };
+  const checkPostMerge = async (checkIds) => {
+    const list = (checkIds && checkIds.length) ? checkIds : rows.map((r) => r.id);
+    if (!list.length) return;
+    setPostBusy(true); setErr('');
+    try {
+      const r = await api.mergeRestorePostDiff(list);
+      setPostDiff((p) => { const n = { ...p }; for (const d of (r.results || [])) if (d && d.queue_id != null) n[d.queue_id] = d; return n; });
+    } catch (e) { setErr(e.message); }
+    finally { setPostBusy(false); }
+  };
 
   const load = useCallback(() => {
     api.mergeStatus().then(setStatus).catch((e) => setErr(e.message));
@@ -61,7 +75,7 @@ export default function Restore() {
       const keep_fields = {};
       for (const id of ids) if (keepBySet[id] && keepBySet[id].length) keep_fields[id] = keepBySet[id];
       const q = await api.mergeRestore(ids, execute
-        ? { mode: 'execute', confirm: confirmText, keep_fields }
+        ? { mode: 'execute', confirm: confirmText, keep_fields, ack_post_merge: ackPost }
         : { mode: 'simulate', keep_fields });
       setConfirmText('');
       const finalRun = await awaitRun(api, 'restore', q.run_id);
@@ -111,6 +125,12 @@ export default function Restore() {
           {mode === 'execute' && !safe && (
             <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="type RESTORE to confirm" style={{ width: '100%', marginBottom: 8 }} />
           )}
+          {mode === 'execute' && !safe && (
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 8px' }}>
+              <input type="checkbox" checked={ackPost} onChange={(e) => setAckPost(e.target.checked)} style={{ marginTop: 2 }} />
+              <span>Restore even if the survivor was edited in Salesforce after the merge. <strong>Unchecked, edited‑since‑merge sets are held</strong> (left in the list) for review.</span>
+            </label>
+          )}
           <button className="btn primary" style={{ width: '100%', marginTop: 0 }} disabled={busy || !canExecute} onClick={() => run(true)}>▷ Restore selected{safe ? ' (off)' : ''}</button>
           <button className="btn" style={{ width: '100%', marginTop: 8 }} disabled={busy || selCount === 0} onClick={() => run(false)}>{busy ? 'Running…' : '👁 Simulate restore (' + selCount + ')'}</button>
           {result && (
@@ -134,9 +154,15 @@ export default function Restore() {
       <div className="card" style={{ marginTop: 12 }}>
         <p style={{ margin: '0 0 4px', fontWeight: 700 }}>Completed merges <span className="muted small" style={{ fontWeight: 400 }}>({rows.length})</span></p>
         <p className="muted small" style={{ margin: '0 0 8px' }}>Expand a row to diff the survivor's current Salesforce values against the pre-merge snapshot — “in sync” means a restore would change nothing; differences show what a restore would reset (and what may have been edited since the merge).</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <button className="btn" disabled={postBusy || rows.length === 0} onClick={() => checkPostMerge()} title="For each set, compare the survivor's current Salesforce values to the post-merge snapshot to flag anything edited after the merge">
+            {postBusy ? 'Checking…' : '🔍 Check post‑merge changes'}
+          </button>
+          <span className="muted small">Flags survivors edited in Salesforce after the merge (a blind restore would overwrite those edits). On Execute, flagged sets are held unless acknowledged.</span>
+        </div>
         <div className="dt-scroll" style={{ maxHeight: 320 }}>
           <table className="modal-table">
-            <thead><tr><th>Diff</th><th>Sel</th><th>#</th><th>Survivor</th><th>Account</th><th>Merged</th><th>Source</th><th>Env</th><th>Restorable</th></tr></thead>
+            <thead><tr><th>Diff</th><th>Sel</th><th>#</th><th>Survivor</th><th>Account</th><th>Merged</th><th>Source</th><th>Env</th><th>Restorable</th><th title="Whether the survivor was edited in Salesforce after the merge — run “Check post‑merge changes”">Post‑merge</th></tr></thead>
             <tbody>
               {rows.map((r, i) => [
                 <tr key={r.id}>
@@ -144,19 +170,60 @@ export default function Restore() {
                   <td><input type="checkbox" checked={sel.has(r.id)} disabled={r.restorable === false} onChange={() => toggle(r.id)} aria-label={'Select ' + r.id} /></td>
                   <td>{i + 1}</td>
                   <td>{r.survivor_name || '—'}</td>
-                  <td title={r.survivor_account}>{shortId(r.survivor_account)}</td>
+                  <td><span style={{ userSelect: 'all', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title="Click to select · triple-click to copy">{r.survivor_account || '—'}</span></td>
                   <td>{r.loser_count}</td>
-                  <td title={r.source_key}>{r.source_type === 'merge_id' ? 'merge id ' : 'group '}{shortId(r.source_key)}</td>
+                  <td><span className="muted small">{r.source_type === 'merge_id' ? 'merge id ' : 'group '}</span><span style={{ userSelect: 'all', whiteSpace: 'nowrap' }} title="Click to select · triple-click to copy">{r.source_key || '—'}</span></td>
                   <td>{r.environment || '—'}</td>
                   <td title={r.reason}>
                     <span className="pill" style={{ color: r.restorable ? 'var(--green)' : (r.restorable === false ? 'var(--amber)' : 'var(--dim)') }}>
                       {r.restorable === true ? '✓ restorable' : r.restorable === false ? '✕ expired' : '— unknown'}
                     </span>
                   </td>
+                  <td>
+                    {(() => {
+                      const d = postDiff[r.id];
+                      if (!d) return <span className="muted small">—</span>;
+                      if (d.has_baseline === false) return <span className="pill" title={d.note} style={{ color: 'var(--dim)' }}>— no baseline</span>;
+                      if (d.edited_since_merge) return <span className="pill" title={'SF last modified ' + fmtTs(d.sf_last_modified_now) + ' is after the post‑merge snapshot ' + fmtTs(d.sf_last_modified_at_merge)} style={{ color: 'var(--amber)' }}>⚠ edited since merge</span>;
+                      return <span className="pill" style={{ color: 'var(--green)' }}>✓ untouched</span>;
+                    })()}
+                  </td>
                 </tr>,
-                diffOpen.has(r.id) ? <tr key={r.id + '_diff'}><td colSpan={9} style={{ padding: 0 }}><RestoreDiffDetail id={r.id} onKeepChange={onKeepChange} /></td></tr> : null,
+                diffOpen.has(r.id) ? <tr key={r.id + '_diff'}><td colSpan={10} style={{ padding: 0 }}>
+                  {postDiff[r.id] && postDiff[r.id].has_baseline && (() => {
+                    const pd = postDiff[r.id];
+                    const changed = (pd.post_merge && pd.post_merge.rows ? pd.post_merge.rows : []).filter((x) => x.state === 'differ');
+                    return (
+                      <div className="small" style={{ padding: '6px 10px', background: 'var(--card)', borderBottom: '1px solid var(--border)' }}>
+                        <div>Post‑merge snapshot: <strong>{fmtTs(pd.post_snapshot_at)}</strong> · SF last modified: <strong>{fmtTs(pd.sf_last_modified_now)}</strong>{' '}
+                          {pd.edited_since_merge
+                            ? <span style={{ color: 'var(--amber)' }}>— ⚠ edited in Salesforce after the merge ({changed.length} field{changed.length === 1 ? '' : 's'} changed)</span>
+                            : <span style={{ color: 'var(--green)' }}>— ✓ untouched since the merge</span>}
+                        </div>
+                        {pd.edited_since_merge && changed.length > 0 && (
+                          <table className="modal-table" style={{ marginTop: 4 }}>
+                            <thead><tr><th>Field changed since merge</th><th>At merge</th><th>Now (Salesforce)</th></tr></thead>
+                            <tbody>
+                              {changed.map((x) => (
+                                <tr key={x.field}>
+                                  <td style={{ whiteSpace: 'nowrap' }}>{x.field}</td>
+                                  <td><span style={{ userSelect: 'all' }}>{String(x.before == null ? '' : x.before) || '—'}</span></td>
+                                  <td><span style={{ userSelect: 'all', color: 'var(--amber)' }}>{String(x.after == null ? '' : x.after) || '—'}</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                        {pd.edited_since_merge && changed.length === 0 && (
+                          <div className="muted" style={{ marginTop: 2 }}>Record modified after the merge, but no reviewed field differs (the change may be in a field the snapshot didn't capture).</div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  <RestoreDiffDetail id={r.id} onKeepChange={onKeepChange} />
+                </td></tr> : null,
               ])}
-              {rows.length === 0 && <tr><td colSpan={9} className="muted small">No completed merges to restore.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={10} className="muted small">No completed merges to restore.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -177,7 +244,7 @@ export default function Restore() {
                   <td><input type="checkbox" checked={recSel.has(r.id)} disabled={!r.has_snapshot} onChange={() => recToggle(r.id)} aria-label={'Select ' + r.id} /></td>
                   <td>{i + 1}</td>
                   <td>{r.survivor_name || '—'}</td>
-                  <td title={r.survivor_account}>{shortId(r.survivor_account)}</td>
+                  <td><span style={{ userSelect: 'all', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title="Click to select · triple-click to copy">{r.survivor_account || '—'}</span></td>
                   <td>{r.loser_count}</td>
                   <td><span className="pill" style={{ color: r.has_snapshot ? 'var(--green)' : 'var(--red)' }}>{r.has_snapshot ? '✓ ' + r.snapshot_losers + ' acct / ' + r.snapshot_children + ' child' : '✕ none'}</span></td>
                   <td title={r.reason} className="small">{r.reason}</td>
@@ -219,8 +286,8 @@ export default function Restore() {
                   <td>{i + 1}</td>
                   <td>{r.name || '—'}</td>
                   <td>{r.member_number || '—'}</td>
-                  <td title={r.account}>{shortId(r.account)}</td>
-                  <td title={r.master_record_id}>{r.master_record_id ? shortId(r.master_record_id) : '—'}</td>
+                  <td><span style={{ userSelect: 'all', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title="Click to select · triple-click to copy">{r.account || '—'}</span></td>
+                  <td><span style={{ userSelect: 'all', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title="Click to select · triple-click to copy">{r.master_record_id || '—'}</span></td>
                   <td>{r.last_modified ? new Date(r.last_modified).toLocaleString() : '—'}</td>
                 </tr>
               ))}

@@ -17,6 +17,7 @@ const GROUPS = [
     { to: BASE + '/select-merges', label: 'Select Merges', icon: '☑' },
     { to: BASE + '/merge-process', label: 'Process Merges', icon: '⚙' },
     { to: BASE + '/restore', label: 'Restore', icon: '↺' },
+    { to: BASE + '/history', label: 'History', icon: '≡' },
   ] },
   { grp: 'Analyze', items: [
     { to: BASE + '/tuning', label: 'Tuning', icon: '☷' },

@@ -27,9 +27,10 @@ function execDeps(opts = {}) {
   return {
     calls,
     dashboard: { dataset_info: async () => ({ environment: 'Sandbox', run_at: '2026-01-01' }) },
-    sf: { get_org_identity: async () => ({ org_id: 'ORG1' }), fetch_children: async () => [{ account: 'L1', object: 'Opportunity', id: '006', parent_field: 'AccountId', parent_id: 'L1' }] },
+    sf: { get_org_identity: async () => ({ org_id: 'ORG1' }), fetch_children: async () => [{ account: 'L1', object: 'Opportunity', id: '006', parent_field: 'AccountId', parent_id: 'L1' }], fetch_accounts_by_ids: async () => [] },
     cluster: { cluster_detail: async () => ({ accounts }) },
     snapshot: { save: async (...a) => { calls.snapshots.push(a); return { saved: accounts.length }; } },
+    post_snapshot: { save: async () => ({ saved: 1 }), get: async () => null },
     history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; }, clear_simulated: async () => {} },
     run: { start: async () => {}, update: async () => {}, finish: async () => {} },
     queue: { list: async () => [entry], transition: async (ids, to, from) => { calls.transitions.push({ ids, to, from }); return { updated: 1 }; } },
@@ -62,6 +63,7 @@ function restoreDeps(opts = {}) {
     dashboard: { dataset_info: async () => ({ environment: 'Sandbox', run_at: 'x' }) },
     queue: { list: async () => [entry], transition: async (ids, to, from) => { calls.transitions.push({ ids, to, from }); return { updated: 1 }; } },
     snapshot: { list_for_entry: async () => snapRows },
+    post_snapshot: { get: async () => null },
     history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; } },
     run: { start: async () => {}, update: async () => {}, finish: async () => {} },
     write: {
@@ -201,5 +203,77 @@ describe('Test 6 - Bulk queue & process', () => {
     assert.equal(r.skipped, 1, 'one already-queued skipped');
     assert.equal(r.merged, 1, 'one already-merged skipped');
     assert.equal(r.added.length, 2, 'ids returned for baseline capture');
+  });
+});
+
+// ============================================================================
+// Fakes for the post-merge restore gate (survivor edited in Salesforce after the merge).
+function postGateDeps(opts = {}) {
+  const calls = { history: [], transitions: [], undeletes: [], updates: [] };
+  const entry = { id: 7, survivor_account: 'M', survivor_name: 'X', loser_accounts: 'L1', loser_count: 1, environment: 'Sandbox', org_id: 'ORG1' };
+  const snapRows = [
+    { role: 'survivor', account: 'M', fields: { account: 'M', PersonEmail: 'm@x.com', Phone: '111' } },
+    { role: 'loser', account: 'L1', fields: { account: 'L1', Id: 'L1' } },
+  ];
+  const conn = { query: async (sql) => {
+    if (/IsDeleted/.test(sql)) return { records: [{ Id: 'L1', IsDeleted: true }] };
+    if (/LastModifiedDate/.test(sql)) return { records: [{ Id: 'M', LastModifiedDate: opts.lmNow || '2026-02-01T00:00:00Z' }] };
+    return { records: [] };
+  } };
+  return {
+    calls,
+    dashboard: { dataset_info: async () => ({ environment: 'Sandbox' }) },
+    queue: { list: async () => [entry], transition: async (ids, to, from) => { calls.transitions.push({ ids, to, from }); return { updated: 1 }; } },
+    snapshot: { list_for_entry: async () => snapRows },
+    history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; } },
+    run: { start: async () => {}, update: async () => {}, finish: async () => {} },
+    post_snapshot: { get: async () => ({ sf_last_modified: opts.lmAtMerge || '2026-01-01T00:00:00Z' }) },
+    write: {
+      default_write_connect: async () => conn,
+      undelete: async (c, ids) => { calls.undeletes.push(ids); return ids.map((id) => ({ id, success: true })); },
+      update_record: async (c, type, fields) => { calls.updates.push({ type, fields }); return { success: true, id: fields.Id }; },
+    },
+  };
+}
+
+describe('Test 7 - Post-merge restore gate (edited-since-merge hold)', () => {
+  test('execute WITHOUT ack HOLDS a set whose survivor was edited in SF after the merge (stays in the queue)', async () => {
+    process.env.MERGE_ENABLE_EXECUTION = 'true';
+    const d = postGateDeps({ lmNow: '2026-02-01T00:00:00Z', lmAtMerge: '2026-01-01T00:00:00Z' });
+    const out = await mrestore.restore([7], { mode: 'execute', confirm: 'RESTORE' }, d);
+    assert.equal(out.held, 1);
+    assert.equal(out.restored, 0);
+    assert.equal(d.calls.undeletes.length, 0, 'no write — held before restoring');
+    assert.ok(!d.calls.transitions.some((t) => t.to === 'restored'), 'left done (queued for review)');
+    delete process.env.MERGE_ENABLE_EXECUTION;
+  });
+
+  test('execute WITH ack_post_merge restores the edited set anyway', async () => {
+    process.env.MERGE_ENABLE_EXECUTION = 'true';
+    const d = postGateDeps({ lmNow: '2026-02-01T00:00:00Z', lmAtMerge: '2026-01-01T00:00:00Z' });
+    const out = await mrestore.restore([7], { mode: 'execute', confirm: 'RESTORE', ack_post_merge: true }, d);
+    assert.equal(out.restored, 1);
+    delete process.env.MERGE_ENABLE_EXECUTION;
+  });
+
+  test('a survivor untouched since the merge restores normally (no hold)', async () => {
+    process.env.MERGE_ENABLE_EXECUTION = 'true';
+    const d = postGateDeps({ lmNow: '2026-01-01T00:00:00Z', lmAtMerge: '2026-01-01T00:00:00Z' });
+    const out = await mrestore.restore([7], { mode: 'execute', confirm: 'RESTORE' }, d);
+    assert.equal(out.restored, 1);
+    assert.equal(out.held || 0, 0);
+    delete process.env.MERGE_ENABLE_EXECUTION;
+  });
+
+  test('acknowledge + Keep current: the edited set restores but the kept field is preserved', async () => {
+    process.env.MERGE_ENABLE_EXECUTION = 'true';
+    const d = postGateDeps({ lmNow: '2026-02-01T00:00:00Z', lmAtMerge: '2026-01-01T00:00:00Z' });
+    const out = await mrestore.restore([7], { mode: 'execute', confirm: 'RESTORE', ack_post_merge: true, keep_fields: { 7: ['PersonEmail'] } }, d);
+    assert.equal(out.restored, 1, 'ack lets the edited set through');
+    const acctUpd = d.calls.updates.find((u) => u.type === 'Account' && u.fields.Id === 'M');
+    assert.equal(acctUpd.fields.PersonEmail, undefined, 'kept email is NOT reset (post-merge edit preserved)');
+    assert.equal(acctUpd.fields.Phone, '111', 'the non-kept field IS reset to the pre-merge snapshot');
+    assert.equal(out.results[0].kept_fields, 1);
+    delete process.env.MERGE_ENABLE_EXECUTION;
   });
 });
