@@ -59,3 +59,21 @@ test('history.write persists diff_json (audit) and list parses it back', async (
   const rows = await hist.list({ limit: 10 }, query);
   assert.deepEqual(rows[0].diff, diff, 'diff parsed back from diff_json');
 });
+
+test('history.list applies result/mode/q filters (WHERE + bound params) — the History page search', async () => {
+  let sel = null;
+  const query = async (sql, params) => { if (/^SELECT/i.test(sql)) { sel = { sql, params }; return []; } return {}; };
+  await hist.list({ result: 'restored', mode: 'execute', q: 'Adam', limit: 50 }, query);
+  assert.ok(/WHERE/i.test(sel.sql), 'builds a WHERE clause when filtered');
+  assert.ok(/result = \?/i.test(sel.sql) && /mode = \?/i.test(sel.sql), 'filters by result + mode');
+  assert.ok(/survivor_name LIKE \? OR survivor_account LIKE \? OR source_key LIKE \?/i.test(sel.sql), 'text search hits name / account / source');
+  assert.deepEqual(sel.params, ['restored', 'execute', '%Adam%', '%Adam%', '%Adam%']);
+});
+
+test('history.list with no filters has no WHERE (unbounded recent list)', async () => {
+  let sel = null;
+  const query = async (sql, params) => { if (/^SELECT/i.test(sql)) { sel = { sql, params }; return []; } return {}; };
+  await hist.list({ limit: 10 }, query);
+  assert.ok(!/WHERE/i.test(sel.sql), 'no WHERE when unfiltered');
+  assert.deepEqual(sel.params, []);
+});

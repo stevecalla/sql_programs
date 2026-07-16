@@ -88,21 +88,23 @@ finder writes it as a 7th view (CSV `account_merge_id_review.csv`, DB table
 `salesforce_duplicate_merge_id_review`, Excel tab, end-of-run summary). Menu item 11
 (`node src/merge_id_review.js report`) prints the latest run's review from the DB.
 
-## Merge management tool — BUILT (own project: `../salesforce_merge/`, see its `README.md` + `plans_and_notes/README_MERGE_TOOL.md`)
+## Merge management tool — LIVE, now a module of the **usat_apps** platform (`../usat_apps/modules/salesforce_merge/`, see `../usat_apps/plans_and_notes/salesforce_merge/README_MERGE_TOOL.md`)
 
-Built and going live. A web admin console (Node/Express + MySQL + jsforce, React UI, port 8020,
-`server_salesforce_merge_8020.js`) that reviews accounts / merge-ID accounts / duplicates / tuning,
-stages + runs merges (Select → Process), keeps merge history, and does best-effort restore. The
-actual merge runs via a Salesforce Apex REST endpoint (`Database.merge`) — the only **write** path
-against Salesforce; the read-only duplicates pipeline here is untouched. It reads our
-`salesforce_duplicate_*` tables + the `salesforce_account_duplicate_snapshot` for its review pages.
+The standalone `../salesforce_merge/` app (old `server_salesforce_merge_8020.js`, port 8020) was
+**retired and deleted** (see `SALESFORCE_MERGE_RETIREMENT_RUNBOOK.md`) — folded into the usat_apps
+platform. It now serves at **port 8022** (`server_usat_apps_8022.js`, module
+`src/usat_apps/modules/salesforce_merge/`) with an **isolated write worker on port 8021**
+(`server_salesforce_merge_worker_8021.js` → `src/salesforce_merge_worker/loop.js`) that claims queued
+jobs and runs the merge/restore/recreate. Reviews accounts / merge-ID accounts / duplicates / tuning,
+stages + runs merges (Select → Process), keeps a searchable **History**, and does best-effort restore
+(+ post-merge edit gate, un-approve, batch limit). The actual merge is the only **write** path against
+Salesforce; the read-only duplicates pipeline here is untouched. It reads our `salesforce_duplicate_*`
+tables + the `salesforce_account_duplicate_snapshot` for its review pages.
 
-**Multi-user + access control (shipped).** Modeled on the email-queue: `.env` recovery admins
-(`MERGE_ADMIN_*`, `MERGE_TEST_*`) plus file-backed scrypt-hashed users (gitignored `auth.json`
-outside the repo), managed from the `/admin` Access page or the `admin.js` CLI / menu. Per-user
-**panel access** (`panel_access.json`, default = every panel except Metrics, plus per-user
-overrides) is enforced both in the nav and server-side (403). Anything touching that tool's auth
-lives in `../salesforce_merge/auth/` — it does NOT affect this read-only finder.
+**Multi-user + access control** is now the **platform's** (usat_apps): `.env` recovery admins
+(`USATAPPS_ADMIN_*` / `USATAPPS_TEST_*`) + file-backed scrypt-hashed users (`auth.json`) and per-user
+`panel_access.json`, in the usat_apps data folder outside the repo (`src/usat_apps/auth/`) — it does
+NOT affect this read-only finder.
 
 ## Entry points
 
