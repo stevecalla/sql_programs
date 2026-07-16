@@ -61,6 +61,25 @@ export default function Restore() {
     api.mergeRecreateList().then((r) => { const rs = r.rows || []; setRecRows(rs); setRecSel(new Set(rs.filter((x) => x.has_snapshot).map((x) => x.id))); }).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Resume IN-FLIGHT restore / recreate runs when this panel (re)mounts (parity with Process Merges).
+  // The run keeps executing in the worker; without this the busy state + result are lost on navigate-away.
+  useEffect(() => {
+    let cancelled = false;
+    const resume = async (kind, setB, setRes) => {
+      try {
+        const p = await api.mergeProgress(kind);
+        const rn = p && p.run;
+        if (cancelled || !rn || (rn.status !== 'running' && rn.status !== 'queued')) return;
+        setB(true);
+        const finalRun = await awaitRun(api, kind, rn.run_id);
+        if (!cancelled) { setRes(summarize(finalRun)); load(); }
+      } catch (e) { /* idle */ }
+      finally { if (!cancelled) setB(false); }
+    };
+    resume('restore', setBusy, setResult);
+    resume('recreate', setRecBusy, setRecResult);
+    return () => { cancelled = true; };
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (id) => setSel((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const ids = [...sel];

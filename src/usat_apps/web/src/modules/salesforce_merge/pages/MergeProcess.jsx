@@ -59,6 +59,7 @@ export default function MergeProcess() {
   const [stampFields, setStampFields] = useState(null);
   const [snapRows, setSnapRows] = useState([]);
   const [runRows, setRunRows] = useState(null);   // sets the current/last run processed — drives the live progress table, independent of the checkbox selection
+  const [resumeIds, setResumeIds] = useState(null);   // ids of a run we resumed on remount (rebuild the per-set rows once the queue loads)
   const [apiBudget, setApiBudget] = useState(null);   // last captured Daily-API-Requests reading for the target org (cached, no live SF call)
 
   const load = useCallback(() => {
@@ -72,6 +73,33 @@ export default function MergeProcess() {
     // neutral numbered (idle) state until a run starts in this session.
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Resume an IN-FLIGHT run when this panel (re)mounts — e.g. you switched to another panel and came
+  // back. The merge keeps executing in the worker (+ salesforce_merge_run), but the progress bar is
+  // component-local state, so without this it goes blank. Only active runs are resumed; a finished run
+  // still shows the neutral idle pipeline (per the note above).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const p = await api.mergeProgress('merge');
+        const rn = p && p.run;
+        if (cancelled || !rn || (rn.status !== 'running' && rn.status !== 'queued')) return;
+        setBusy(true); setResult(null); setProgress(rn);
+        try { const rp = typeof rn.params === 'string' ? JSON.parse(rn.params) : rn.params; if (rp && Array.isArray(rp.ids)) setResumeIds(rp.ids); } catch (e) { /* ignore */ }
+        const finalRun = await awaitRun(api, 'merge', rn.run_id, (rr) => { if (!cancelled) setProgress(rr); });
+        if (!cancelled) { setResult(summarize(finalRun)); load(); }
+      } catch (e) { /* ignore — idle */ }
+      finally { if (!cancelled) setBusy(false); }
+    })();
+    return () => { cancelled = true; };
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  // Once the approved queue loads, rebuild the per-set progress rows for a resumed run.
+  useEffect(() => {
+    if (resumeIds && resumeIds.length && rows && rows.length && (!runRows || !runRows.length)) {
+      const rr = resumeIds.map((id) => rows.find((r) => r.id === id)).filter(Boolean);
+      if (rr.length) setRunRows(rr);
+    }
+  }, [resumeIds, rows]);   // eslint-disable-line react-hooks/exhaustive-deps
   // Pull the last captured API-usage reading for the target org (cached — no live SF call) so the
   // pre-flight estimate below can compare against the remaining daily budget.
   useEffect(() => {
