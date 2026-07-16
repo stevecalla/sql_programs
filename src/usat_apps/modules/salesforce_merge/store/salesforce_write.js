@@ -79,6 +79,15 @@ async function create_record(conn, type, fields) {
   return norm(res); // { success, id (new), errors }
 }
 
+// Delete a record (used to MOVE a file share on restore/recreate: a ContentDocumentLink's LinkedEntityId
+// is not updateable, so a share is moved by creating a new link on the target and deleting the old one).
+async function delete_record(conn, type, id) {
+  if (!id) throw new Error('delete_record: id required');
+  const res = await conn.sobject(type).destroy(id);
+  const r = Array.isArray(res) ? res[0] : res;
+  return { success: !!(r && (r.success == null ? true : r.success)), id: (r && r.id) || id, errors: (r && r.errors) || [] };
+}
+
 // Are the optional stamp fields present on Account for the connected user? (describe-based.) Used to
 // notify the user before/after a run whether the "stamp survivor" option will actually write.
 async function stamp_fields_status(conn) {
@@ -89,7 +98,68 @@ async function stamp_fields_status(conn) {
   } catch (e) { return { usat_was_merged__c: false, usat_was_merged_date__c: false, usat_was_merged_by__c: false, error: e.message }; }
 }
 
+// Best-effort lifecycle stamp on the survivor Account, written on EVERY action (merge/restore/recreate).
+// `action` is 'MERGE' | 'RESTORE' | 'RECREATE'. The flag reflects the current post-action state:
+//   MERGE -> usat_was_merged__c = true (survivor is currently a merge product)
+//   RESTORE / RECREATE -> false (the merge was undone / rebuilt)
+// The date is the action time; the *_by__c text records "<ACTION> — <actor>" so the last action that
+// touched the record is always legible. PER-FIELD + best-effort: describe once (or reuse `statusOpt`),
+// write only the fields that exist, and never throw — a missing field or write error just means the
+// action proceeds unstamped. Returns { stamped, count, skipped?, error?, payload? }.
+async function stamp_survivor(conn, survivorId, action, actor, statusOpt) {
+  if (!survivorId) return { stamped: false, count: 0, skipped: 'no survivor id' };
+  try {
+    const status = statusOpt || await stamp_fields_status(conn);
+    const merged = String(action).toUpperCase() === 'MERGE';
+    const payload = { Id: survivorId };
+    if (status.usat_was_merged__c) payload.usat_was_merged__c = merged;
+    if (status.usat_was_merged_date__c) payload.usat_was_merged_date__c = new Date().toISOString();
+    if (status.usat_was_merged_by__c) payload.usat_was_merged_by__c = (String(action).toUpperCase() + ' — ' + (actor || 'salesforce_merge_tool')).slice(0, 255);
+    const count = Object.keys(payload).length - 1; // minus Id
+    if (count <= 0) return { stamped: false, count: 0, skipped: 'no stamp fields on Account' };
+    await update_record(conn, 'Account', payload);
+    return { stamped: true, count, payload };
+  } catch (e) { return { stamped: false, count: 0, error: (e && e.message) || String(e) }; }
+}
+
+// Attach a file (the merge dossier) to one or more Salesforce records using Salesforce Files:
+// ONE ContentVersion (the file) -> its ContentDocument -> a ContentDocumentLink per target record.
+// So a single stored file is shared to many records (survivor + restored/recreated parents + children)
+// with no duplication. Best-effort by design: returns per-link success and never throws, so a merge/
+// restore is never failed by an attach problem (e.g. the write user lacks Content permissions).
+// buffer: a Node Buffer of the .xlsx; recordIds: array of Salesforce record ids to link the file to.
+async function attach_file(conn, filename, buffer, recordIds, opts = {}) {
+  const out = { attached: false, content_version_id: null, content_document_id: null, links: [], errors: [] };
+  try {
+    const targets = [...new Set((recordIds || []).filter(Boolean))];
+    if (!buffer || !targets.length) { out.errors.push('no buffer or no target records'); return out; }
+    const cv = await conn.sobject('ContentVersion').create({
+      Title: (opts.title || filename || 'Merge dossier').slice(0, 255),
+      PathOnClient: filename || 'merge_dossier.xlsx',
+      VersionData: Buffer.isBuffer(buffer) ? buffer.toString('base64') : Buffer.from(buffer).toString('base64'),
+      FirstPublishLocationId: opts.first_publish_location_id || undefined,
+    });
+    if (!cv || !cv.success || !cv.id) { out.errors.push('ContentVersion create failed'); return out; }
+    out.content_version_id = cv.id;
+    // The ContentDocumentId is derived by Salesforce from the ContentVersion.
+    const q = await conn.query("SELECT ContentDocumentId FROM ContentVersion WHERE Id = '" + String(cv.id).replace(/'/g, '') + "'");
+    const docId = q && q.records && q.records[0] && q.records[0].ContentDocumentId;
+    if (!docId) { out.errors.push('could not resolve ContentDocumentId'); return out; }
+    out.content_document_id = docId;
+    for (const rid of targets) {
+      try {
+        // If the record was set as FirstPublishLocationId it is already linked; skip to avoid a dup-link error.
+        if (opts.first_publish_location_id && rid === opts.first_publish_location_id) { out.links.push({ id: rid, success: true, note: 'primary' }); continue; }
+        const link = await conn.sobject('ContentDocumentLink').create({ ContentDocumentId: docId, LinkedEntityId: rid, ShareType: 'V', Visibility: 'AllUsers' });
+        out.links.push({ id: rid, success: !!(link && link.success) });
+      } catch (le) { out.links.push({ id: rid, success: false, error: (le && le.message) || String(le) }); }
+    }
+    out.attached = out.links.some((l) => l.success);
+    return out;
+  } catch (e) { out.errors.push((e && e.message) || String(e)); return out; }
+}
+
 module.exports = {
   default_write_connect, write_creds, using_dedicated_write_user,
-  merge_one, undelete, update_record, create_record, stamp_fields_status, STAMP_FIELDS,
+  merge_one, undelete, update_record, create_record, delete_record, stamp_fields_status, stamp_survivor, attach_file, STAMP_FIELDS,
 };

@@ -64,6 +64,11 @@ async function count_children_by_ids(ids, { is_test = true, connect = default_co
 }
 
 const SKIP_CHILD = /(History|Share|Feed|ChangeEvent|Tag|EventRelation|RecordAction)$/i;
+// File blobs are NOT re-parentable children: ContentVersion.FirstPublishLocationId and
+// ContentDocument are insert-only / not updateable, so a restore must never try to re-point them
+// (that's what caused the "Unable to create/update fields: FirstPublishLocationId" error). File
+// SHARING is handled via ContentDocumentLink (kept below), which restore moves additively.
+const SKIP_CHILD_EXACT = new Set(['ContentVersion', 'ContentDocument']);
 const _childCache = {};
 
 async function discover_child_objects(conn, sobject) {
@@ -72,7 +77,7 @@ async function discover_child_objects(conn, sobject) {
   const seen = new Set();
   const out = [];
   for (const cr of (meta.childRelationships || [])) {
-    if (!cr.field || !cr.childSObject || SKIP_CHILD.test(cr.childSObject)) continue;
+    if (!cr.field || !cr.childSObject || SKIP_CHILD.test(cr.childSObject) || SKIP_CHILD_EXACT.has(cr.childSObject)) continue;
     const key = cr.childSObject + '.' + cr.field;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -146,14 +151,20 @@ async function fetch_children(ids, { is_test = true, connect = default_connect, 
     if (!inList) return;
     for (const oc of rels) {
       try {
+        // A file share (ContentDocumentLink) can't be re-parented by updating LinkedEntityId — Salesforce
+        // only allows insert/delete. So we also capture ContentDocumentId (+ share settings) here, which
+        // lets restore/recreate MOVE the share (create a new link on the target, delete the old one).
+        const extra = oc.object === 'ContentDocumentLink' ? ', ContentDocumentId, ShareType, Visibility' : '';
         const lim = limitPerObject > 0 ? (' LIMIT ' + limitPerObject) : '';
-        const soql = 'SELECT Id, ' + oc.field + ' FROM ' + oc.object + ' WHERE ' + oc.field + ' IN (' + inList + ')' + lim;
+        const soql = 'SELECT Id, ' + oc.field + extra + ' FROM ' + oc.object + ' WHERE ' + oc.field + ' IN (' + inList + ')' + lim;
         const res = await conn.query(soql);
         for (const r of (res.records || [])) {
           const parentId = r[oc.field];
           const account = mapToAccount(parentId);
           if (!account) continue;
-          out.push({ account, object: oc.object, id: r.Id, parent_field: oc.field, parent_id: parentId, child_type: accountSet.has(r.Id) ? 'self_account' : (contactSet.has(r.Id) ? 'self_contact' : 'child') });
+          const row = { account, object: oc.object, id: r.Id, parent_field: oc.field, parent_id: parentId, child_type: accountSet.has(r.Id) ? 'self_account' : (contactSet.has(r.Id) ? 'self_contact' : 'child') };
+          if (oc.object === 'ContentDocumentLink') { row.content_document_id = r.ContentDocumentId || null; row.share_type = r.ShareType || null; row.visibility = r.Visibility || null; }
+          out.push(row);
         }
       } catch (e) { /* skip */ }
     }

@@ -15,6 +15,8 @@ function fakeConn(overrides = {}) {
     sobject: (type) => ({
       update: async (fields) => { calls.update.push({ type, fields }); return overrides.updateResult || { success: true, id: fields.Id }; },
       create: async (fields) => { calls.create = calls.create || []; calls.create.push({ type, fields }); return overrides.createResult || { success: true, id: 'NEW001' }; },
+      destroy: async (id) => { calls.destroy = calls.destroy || []; calls.destroy.push({ type, id }); return overrides.destroyResult || { success: true, id }; },
+      describe: async () => (overrides.describe || { fields: [{ name: 'usat_was_merged__c' }, { name: 'usat_was_merged_date__c' }, { name: 'usat_was_merged_by__c' }] }),
     }),
   };
   return conn;
@@ -74,6 +76,102 @@ test('create_record requires fields and returns the new id', async () => {
   assert.ok(!conn.calls.create[0].fields.Id, 'no Id on create payload');
   assert.equal(r.success, true);
   assert.equal(r.id, 'NEW001');
+});
+
+test('delete_record requires an id and destroys the record', async () => {
+  const conn = fakeConn();
+  await assert.rejects(() => sw.delete_record(conn, 'ContentDocumentLink', ''));
+  const r = await sw.delete_record(conn, 'ContentDocumentLink', '06Ac0001');
+  assert.equal(conn.calls.destroy[0].type, 'ContentDocumentLink');
+  assert.equal(conn.calls.destroy[0].id, '06Ac0001');
+  assert.equal(r.success, true);
+});
+
+test('stamp_survivor MERGE sets flag=true, date, and "MERGE — <actor>" text', async () => {
+  const conn = fakeConn();
+  const r = await sw.stamp_survivor(conn, '001M', 'MERGE', 'skip via svc@sf');
+  assert.equal(r.stamped, true);
+  assert.equal(r.count, 3);
+  const u = conn.calls.update[0];
+  assert.equal(u.type, 'Account');
+  assert.equal(u.fields.Id, '001M');
+  assert.equal(u.fields.usat_was_merged__c, true);
+  assert.ok(u.fields.usat_was_merged_date__c, 'date written');
+  assert.equal(u.fields.usat_was_merged_by__c, 'MERGE — skip via svc@sf');
+});
+
+test('stamp_survivor RESTORE/RECREATE set flag=false and the action text', async () => {
+  for (const action of ['RESTORE', 'RECREATE']) {
+    const conn = fakeConn();
+    const r = await sw.stamp_survivor(conn, '001M', action, 'skip');
+    assert.equal(r.stamped, true);
+    assert.equal(conn.calls.update[0].fields.usat_was_merged__c, false, action + ' clears the merged flag');
+    assert.equal(conn.calls.update[0].fields.usat_was_merged_by__c, action + ' — skip');
+  }
+});
+
+test('stamp_survivor writes only present fields; none present -> skipped, no update', async () => {
+  const conn = fakeConn({ describe: { fields: [{ name: 'usat_was_merged__c' }] } }); // only the flag exists
+  const r = await sw.stamp_survivor(conn, '001M', 'MERGE', 'skip');
+  assert.equal(r.stamped, true);
+  assert.equal(r.count, 1);
+  assert.ok('usat_was_merged__c' in conn.calls.update[0].fields);
+  assert.ok(!('usat_was_merged_by__c' in conn.calls.update[0].fields));
+
+  const conn2 = fakeConn({ describe: { fields: [] } }); // no stamp fields at all
+  const r2 = await sw.stamp_survivor(conn2, '001M', 'MERGE', 'skip');
+  assert.equal(r2.stamped, false);
+  assert.equal(conn2.calls.update.length, 0, 'no update attempted when nothing to stamp');
+});
+
+test('stamp_survivor never throws — a write error is returned, not raised', async () => {
+  const conn = fakeConn();
+  conn.sobject = () => ({ describe: async () => ({ fields: [{ name: 'usat_was_merged__c' }] }), update: async () => { throw new Error('FIELD_INTEGRITY_EXCEPTION'); } });
+  const r = await sw.stamp_survivor(conn, '001M', 'MERGE', 'skip');
+  assert.equal(r.stamped, false);
+  assert.match(r.error, /FIELD_INTEGRITY/);
+});
+
+test('attach_file creates one ContentVersion + a ContentDocumentLink per target record', async () => {
+  const calls = { create: [], query: [] };
+  const conn = {
+    sobject: (type) => ({ create: async (fields) => { calls.create.push({ type, fields }); return { success: true, id: type === 'ContentVersion' ? '068VER' : '06AL' + calls.create.length }; } }),
+    query: async (soql) => { calls.query.push(soql); return { records: [{ ContentDocumentId: '069DOC' }] }; },
+  };
+  const r = await sw.attach_file(conn, 'dossier.xlsx', Buffer.from('hi'), ['001A', '001B', '001A']);
+  assert.equal(r.attached, true);
+  assert.equal(r.content_document_id, '069DOC');
+  const cv = calls.create.find((c) => c.type === 'ContentVersion');
+  assert.equal(cv.fields.PathOnClient, 'dossier.xlsx');
+  assert.equal(cv.fields.VersionData, Buffer.from('hi').toString('base64'), 'file base64-encoded');
+  const links = calls.create.filter((c) => c.type === 'ContentDocumentLink');
+  assert.equal(links.length, 2, 'deduped targets -> 2 links');
+  assert.equal(links[0].fields.ContentDocumentId, '069DOC');
+});
+
+test('attach_file publishes to the primary record (FirstPublishLocationId) and only viewer-links the rest', async () => {
+  const calls = { create: [], query: [] };
+  const conn = {
+    sobject: (type) => ({ create: async (fields) => { calls.create.push({ type, fields }); return { success: true, id: type === 'ContentVersion' ? '068VER' : '06AL' + calls.create.length }; } }),
+    query: async () => ({ records: [{ ContentDocumentId: '069DOC' }] }),
+  };
+  const r = await sw.attach_file(conn, 'd.xlsx', Buffer.from('hi'), ['001SURV', '001LOSE'], { first_publish_location_id: '001SURV' });
+  assert.equal(r.attached, true);
+  const cv = calls.create.find((c) => c.type === 'ContentVersion');
+  assert.equal(cv.fields.FirstPublishLocationId, '001SURV', 'published to the survivor like a native upload');
+  const links = calls.create.filter((c) => c.type === 'ContentDocumentLink');
+  assert.equal(links.length, 1, 'only the non-primary record gets a viewer link');
+  assert.equal(links[0].fields.LinkedEntityId, '001LOSE');
+  assert.ok(r.links.some((l) => l.id === '001SURV' && l.note === 'primary'), 'survivor recorded as the primary publish');
+});
+
+test('attach_file is best-effort — no records or bad create returns without throwing', async () => {
+  const conn = { sobject: () => ({ create: async () => ({ success: true, id: 'x' }) }), query: async () => ({ records: [] }) };
+  assert.deepEqual((await sw.attach_file(conn, 'f.xlsx', Buffer.from('x'), [])).attached, false);
+  const conn2 = { sobject: () => ({ create: async () => { throw new Error('INSUFFICIENT_ACCESS'); } }), query: async () => ({ records: [] }) };
+  const r2 = await sw.attach_file(conn2, 'f.xlsx', Buffer.from('x'), ['001A']);
+  assert.equal(r2.attached, false);
+  assert.ok(r2.errors.length >= 1);
 });
 
 test('using_dedicated_write_user reflects env', () => {

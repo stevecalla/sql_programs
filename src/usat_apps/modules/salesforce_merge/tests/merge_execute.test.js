@@ -17,14 +17,17 @@ function deps(opts = {}) {
     { account: 'L1', contact: 'cL1', PersonEmail: 'lost@x.com' },
     { account: 'L2' }, { account: 'L3' },
   ];
-  return {
+  const D = {
     calls,
     dashboard: { dataset_info: async () => ({ environment: 'Sandbox', run_at: '2026-01-01' }) },
     sf: { get_org_identity: async () => ({ org_id: 'ORG1' }), fetch_children: async () => [{ account: 'L1', object: 'Opportunity', id: '006', parent_field: 'AccountId', parent_id: 'L1' }], fetch_accounts_by_ids: async () => [] },
     post_snapshot: { save: async () => ({ saved: 1 }), get: async () => null },
     cluster: { cluster_detail: async () => ({ accounts }) },
     snapshot: { save: async (...a) => { calls.snapshots.push(a); return { saved: accounts.length }; } },
-    history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; }, clear_simulated: async () => { calls.clearedSim = (calls.clearedSim || 0) + 1; } },
+    history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; }, clear_simulated: async () => { calls.clearedSim = (calls.clearedSim || 0) + 1; },
+      set_dossier: async (hid, did, doc) => { calls.setDossier = { hid, did, doc }; return { updated: 1 }; } },
+    dossier: { attach_enabled: (o) => !o || o.attach_dossier !== false,
+      generate: async (o) => { calls.dossier = calls.dossier || []; calls.dossier.push(o); return { generated: true, dossier_id: 77, content_document_id: '069DOC', attached: true, links: [] }; } },
     run: { start: async () => {}, update: async () => { calls.run.updates += 1; }, finish: async (id, p) => { calls.run.finished = p; } },
     queue: { list: async () => [entry], transition: async (ids, to, from) => { calls.transitions.push({ ids, to, from }); return { updated: 1 }; } },
     baseline: { get: async () => opts.baseline || null },   // stage-time drift baseline (null = not captured)
@@ -40,6 +43,22 @@ function deps(opts = {}) {
       write_creds: () => ({ user: 'svc@sf' }),
     },
   };
+  // Faithful lifecycle-stamp fake that routes through the (test-overridable) update_record so assertions
+  // on d.calls.updates see the stamp. Mirrors the real salesforce_write.stamp_survivor semantics.
+  D.write.stamp_survivor = async (conn, id, action, actor, status) => {
+    const s = status || await D.write.stamp_fields_status();
+    const merged = String(action).toUpperCase() === 'MERGE';
+    const payload = { Id: id };
+    if (s.usat_was_merged__c) payload.usat_was_merged__c = merged;
+    if (s.usat_was_merged_date__c) payload.usat_was_merged_date__c = new Date().toISOString();
+    if (s.usat_was_merged_by__c) payload.usat_was_merged_by__c = (String(action).toUpperCase() + ' — ' + (actor || 'x')).slice(0, 255);
+    const count = Object.keys(payload).length - 1;
+    if (count <= 0) return { stamped: false, count: 0, skipped: 'no stamp fields' };
+    if (typeof D.write.update_record !== 'function') return { stamped: false, count: 0, skipped: 'no update_record' };
+    try { await D.write.update_record(conn, 'Account', payload); } catch (e) { return { stamped: false, count: 0, error: e.message }; }
+    return { stamped: true, count };
+  };
+  return D;
 }
 
 test('build_master_fields: an override is an ACCOUNT ID resolved to that record value (not a literal)', () => {
@@ -241,6 +260,28 @@ test('execute with stamp_merged stamps usat_was_merged__c on the survivor (best-
   assert.equal(out.done, 1);
   const u = d.calls.updates.find((x) => x.t === 'Account' && x.f.usat_was_merged__c === true);
   assert.ok(u && u.f.Id === 'M' && u.f.usat_was_merged_date__c, 'survivor stamped with flag + date');
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
+test('execute generates a dossier for the survivor and links it onto the history row', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const d = deps();
+  const out = await mexec.process([1], { mode: 'execute', confirm: 'MERGE' }, d);
+  assert.equal(out.done, 1);
+  assert.equal(d.calls.dossier.length, 1, 'one dossier generated');
+  const g = d.calls.dossier[0];
+  assert.equal(g.action, 'MERGE');
+  assert.deepEqual(g.targets, ['M'], 'merge attaches to survivor only');
+  assert.ok(d.calls.setDossier && d.calls.setDossier.did === 77 && d.calls.setDossier.doc === '069DOC', 'history row linked to dossier');
+  delete process.env.MERGE_ENABLE_EXECUTION;
+});
+
+test('attach_dossier=false skips the dossier', async () => {
+  process.env.MERGE_ENABLE_EXECUTION = 'true';
+  const d = deps();
+  const out = await mexec.process([1], { mode: 'execute', confirm: 'MERGE', attach_dossier: false }, d);
+  assert.equal(out.done, 1);
+  assert.ok(!d.calls.dossier, 'no dossier generated when toggle off');
   delete process.env.MERGE_ENABLE_EXECUTION;
 });
 

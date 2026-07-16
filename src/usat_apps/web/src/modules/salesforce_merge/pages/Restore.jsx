@@ -35,6 +35,11 @@ export default function Restore() {
   const [postDiff, setPostDiff] = useState({});     // { [queueId]: post-merge diff result }
   const [postBusy, setPostBusy] = useState(false);
   const [ackPost, setAckPost] = useState(false);    // acknowledge → restore edited-since-merge sets anyway
+  const [attachDossier, setAttachDossier] = useState(() => { try { return localStorage.getItem('sm_attach_dossier') !== '0'; } catch (e) { return true; } });
+  const setAttach = (v) => { setAttachDossier(v); try { localStorage.setItem('sm_attach_dossier', v ? '1' : '0'); } catch (e) {} };
+  const [stampMerged, setStampMerged] = useState(() => { try { return localStorage.getItem('sm_stamp_merged') !== '0'; } catch (e) { return true; } });
+  const setStamp = (v) => { setStampMerged(v); try { localStorage.setItem('sm_stamp_merged', v ? '1' : '0'); } catch (e) {} };
+  const [stampFields, setStampFields] = useState(null);   // {usat_was_merged__c, _date__c, _by__c} presence on Account
   const fmtTs = (s) => { if (!s) return '—'; const d = new Date(s); return isNaN(d.getTime()) ? String(s) : d.toLocaleString(); };
   const checkPostMerge = async (checkIds) => {
     const list = (checkIds && checkIds.length) ? checkIds : rows.map((r) => r.id);
@@ -49,6 +54,7 @@ export default function Restore() {
 
   const load = useCallback(() => {
     api.mergeStatus().then(setStatus).catch((e) => setErr(e.message));
+    api.stampFields().then(setStampFields).catch(() => setStampFields(null));
     api.mergeRestoreList().then((r) => { const rs = r.rows || []; setRows(rs); setSel(new Set(rs.filter((x) => x.restorable).map((x) => x.id))); }).catch((e) => setErr(e.message));
     api.mergeHistory().then((r) => setHistory((r.rows || []).filter((h) => ['restored', 'recreated', 'skipped', 'failed'].includes(h.result) && /(restor|recreat)/i.test(h.reason || '') ))).catch(() => {});
     api.recycleBin().then((r) => setBin({ rows: r.rows || [], error: r.error || null })).catch((e) => setBin({ rows: [], error: e.message }));
@@ -75,8 +81,8 @@ export default function Restore() {
       const keep_fields = {};
       for (const id of ids) if (keepBySet[id] && keepBySet[id].length) keep_fields[id] = keepBySet[id];
       const q = await api.mergeRestore(ids, execute
-        ? { mode: 'execute', confirm: confirmText, keep_fields, ack_post_merge: ackPost }
-        : { mode: 'simulate', keep_fields });
+        ? { mode: 'execute', confirm: confirmText, keep_fields, ack_post_merge: ackPost, attach_dossier: attachDossier, stamp_merged: stampMerged }
+        : { mode: 'simulate', keep_fields, attach_dossier: attachDossier, stamp_merged: stampMerged });
       setConfirmText('');
       const finalRun = await awaitRun(api, 'restore', q.run_id);
       setResult(summarize(finalRun)); load();
@@ -93,7 +99,7 @@ export default function Restore() {
     try {
       const keep_fields = {};
       for (const id of recIds) if (keepBySet[id] && keepBySet[id].length) keep_fields[id] = keepBySet[id];
-      const q = await api.mergeRecreate(recIds, execute ? { mode: 'execute', confirm: recConfirm, keep_fields } : { mode: 'simulate', keep_fields });
+      const q = await api.mergeRecreate(recIds, execute ? { mode: 'execute', confirm: recConfirm, keep_fields, attach_dossier: attachDossier, stamp_merged: stampMerged } : { mode: 'simulate', keep_fields, attach_dossier: attachDossier, stamp_merged: stampMerged });
       setRecConfirm('');
       const finalRun = await awaitRun(api, 'recreate', q.run_id);
       setRecResult(summarize(finalRun)); load();
@@ -131,6 +137,22 @@ export default function Restore() {
               <span>Restore even if the survivor was edited in Salesforce after the merge. <strong>Unchecked, edited‑since‑merge sets are held</strong> (left in the list) for review.</span>
             </label>
           )}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
+            <input type="checkbox" checked={stampMerged} onChange={(e) => setStamp(e.target.checked)} style={{ marginTop: 2 }} />
+            <span>Stamp survivor with the restore action <code>(usat_was_*)</code> — flag→off, <code>usat_was_merged_by__c</code> = “RESTORE — you”. Best‑effort; only writes if those fields exist on Account.</span>
+          </label>
+          {stampMerged && stampFields && (!stampFields.usat_was_merged__c || !stampFields.usat_was_merged_date__c || !stampFields.usat_was_merged_by__c) && (
+            <p className="small" style={{ margin: '0 0 8px', color: 'var(--amber)' }}>
+              ⚠ {[!stampFields.usat_was_merged__c && 'usat_was_merged__c', !stampFields.usat_was_merged_date__c && 'usat_was_merged_date__c', !stampFields.usat_was_merged_by__c && 'usat_was_merged_by__c'].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The restore still runs; the stamp is skipped for any missing field.
+            </p>
+          )}
+          {stampMerged && stampFields && stampFields.usat_was_merged__c && stampFields.usat_was_merged_date__c && stampFields.usat_was_merged_by__c && (
+            <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present (flag, date, by)</p>
+          )}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
+            <input type="checkbox" checked={attachDossier} onChange={(e) => setAttach(e.target.checked)} style={{ marginTop: 2 }} />
+            <span>📎 Attach restore dossier to every affected record (survivor + restored loser + re‑pointed children). Applies on Execute; best‑effort.</span>
+          </label>
           <button className="btn primary" style={{ width: '100%', marginTop: 0 }} disabled={busy || !canExecute} onClick={() => run(true)}>▷ Restore selected{safe ? ' (off)' : ''}</button>
           <button className="btn" style={{ width: '100%', marginTop: 8 }} disabled={busy || selCount === 0} onClick={() => run(false)}>{busy ? 'Running…' : '👁 Simulate restore (' + selCount + ')'}</button>
           {result && (
@@ -263,6 +285,12 @@ export default function Restore() {
           {recMode === 'execute' && !safe && (
             <input value={recConfirm} onChange={(e) => setRecConfirm(e.target.value)} placeholder="type RECREATE to confirm" style={{ width: 200 }} />
           )}
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }} title="Attach a recreate dossier to the survivor + rebuilt accounts + re-pointed children (Execute; best-effort)">
+            <input type="checkbox" checked={attachDossier} onChange={(e) => setAttach(e.target.checked)} /> 📎 dossier
+          </label>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }} title="Stamp the survivor's usat_was_* fields with 'RECREATE — you' (Execute; best-effort, only if those fields exist)">
+            <input type="checkbox" checked={stampMerged} onChange={(e) => setStamp(e.target.checked)} /> stamp
+          </label>
           <button className="btn primary" disabled={recBusy || !recCanExecute} onClick={() => runRecreate(true)}>▷ Recreate selected{safe ? ' (off)' : ''}</button>
           <button className="btn" disabled={recBusy || recIds.length === 0} onClick={() => runRecreate(false)}>{recBusy ? 'Running…' : '👁 Simulate recreate (' + recIds.length + ')'}</button>
           {recResult && (

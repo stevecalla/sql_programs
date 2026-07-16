@@ -20,6 +20,7 @@ const mrestore = require('./store/merge_restore');
 const rdiff = require('./store/restore_diff');
 const stagebase = require('./store/merge_stage_baseline');
 const msnap = require('./store/merge_snapshot');
+const mdossier = require('./store/merge_dossier');
 const sfread = require('./store/salesforce_read');
 const sfwrite = require('./store/salesforce_write');
 const api_usage = require('./store/api_usage');
@@ -371,7 +372,7 @@ function mount(app) {
       }
       // Phase 3: don't run inline — enqueue a queued salesforce_merge_run; the merge worker claims + runs it.
       const r = await mrun.enqueue({ kind: 'merge', mode: b.mode, created_by: current_user(req),
-        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, ack_drift: !!b.ack_drift, created_by: current_user(req) } } });
+        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, ack_drift: !!b.ack_drift, attach_dossier: b.attach_dossier !== false, created_by: current_user(req) } } });
       analytics.log({ event_name: 'merge_run', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req),
         mode: (b.dry_run || b.mode !== 'execute') ? 'simulate' : 'execute', outcome: 'queued' });
       res.json({ ok: true, queued: true, ...r });
@@ -384,6 +385,25 @@ function mount(app) {
   app.get('/api/salesforce-merge/merge/history/export', gate, async function (req, res) {
     try { await write_rows(req, res, await mhist.list({ limit: req.query.limit || 5000, result: req.query.result, mode: req.query.mode, q: req.query.q }), 'merge_history_' + new Date().toISOString().slice(0, 10), 'merge_history'); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Merge dossier: the archived multi-tab .xlsx for a lifecycle action. `list` returns the metadata
+  // rows for a queue entry (History link source); `download` streams the DB copy of the workbook.
+  app.get('/api/salesforce-merge/merge/dossier', gate, async function (req, res) {
+    try { res.json({ ok: true, rows: await mdossier.list_for_entry(req.query.queue_id) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.get('/api/salesforce-merge/merge/dossier/:id/download', gate, async function (req, res) {
+    try {
+      const d = await mdossier.get_blob(req.params.id);
+      if (!d || !d.buffer) return res.status(404).json({ ok: false, error: 'dossier not found' });
+      const name = String(d.filename || 'merge_dossier.xlsx');
+      // HTTP headers are Latin-1 only, but the filename has an em-dash (—). Send an ASCII-safe `filename`
+      // fallback plus an RFC-5987 UTF-8 `filename*` so browsers keep the real name (and Node doesn't throw).
+      const ascii = name.replace(/[^\x20-\x7E]/g, '-').replace(/"/g, '');
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encodeURIComponent(name));
+      res.send(Buffer.isBuffer(d.buffer) ? d.buffer : Buffer.from(d.buffer));
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Live progress for the latest run (UI polls this for the progress bar + timer + ETA).
   app.get('/api/salesforce-merge/merge/progress', gate, async function (req, res) {
@@ -425,7 +445,7 @@ function mount(app) {
     try {
       const b = req.body || {};
       const r = await mrun.enqueue({ kind: 'restore', mode: b.mode, created_by: current_user(req),
-        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, keep_fields: b.keep_fields || null, ack_post_merge: !!b.ack_post_merge, created_by: current_user(req) } } });
+        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, keep_fields: b.keep_fields || null, ack_post_merge: !!b.ack_post_merge, attach_dossier: b.attach_dossier !== false, stamp_merged: b.stamp_merged !== false, created_by: current_user(req) } } });
       analytics.log({ event_name: 'restore_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req), mode: b.mode, outcome: 'queued' });
       res.json({ ok: true, queued: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -440,7 +460,7 @@ function mount(app) {
     try {
       const b = req.body || {};
       const r = await mrun.enqueue({ kind: 'recreate', mode: b.mode, created_by: current_user(req),
-        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, keep_fields: b.keep_fields || null, created_by: current_user(req) } } });
+        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, keep_fields: b.keep_fields || null, attach_dossier: b.attach_dossier !== false, stamp_merged: b.stamp_merged !== false, created_by: current_user(req) } } });
       analytics.log({ event_name: 'recreate_run', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req), mode: b.mode, outcome: 'queued' });
       res.json({ ok: true, queued: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
