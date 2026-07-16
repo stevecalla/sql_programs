@@ -62,5 +62,7 @@ test('Restore shows completed merges with a diff expander and the recreate queue
   await expect(page.getByText(/Recreate queue/)).toBeVisible();
   // The stubbed completed row exposes the per-row diff toggle (current vs pre-merge snapshot).
   await expect(page.getByTitle('Diff current vs pre-merge snapshot')).toBeVisible();
+  // Post-merge gate surface: the on-demand "check for edits since the merge" button (UAT Test 7).
+  await expect(page.getByRole('button', { name: /Check post.merge changes/i })).toBeVisible();
   await expect(page.locator('vite-error-overlay')).toHaveCount(0);
 });

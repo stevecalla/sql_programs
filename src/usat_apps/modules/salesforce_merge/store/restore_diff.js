@@ -16,6 +16,7 @@ const snapshot = require('./merge_snapshot');
 const mrestore = require('./merge_restore');
 const sfread = require('./salesforce_read');
 const dashboard = require('./duplicates_read');
+const post_snapshot = require('./merge_post_snapshot');
 
 // Fields restore never touches (identity / system / person-account halves) — mirrors
 // merge_restore.master_reset_fields so the diff shows only what a restore would actually change.
@@ -107,4 +108,57 @@ async function diff_for_entry(queueId, deps = {}) {
   };
 }
 
-module.exports = { diff_for_entry, build_master_diff, comparable_keys, values_equal, norm, SKIP };
+// POST-MERGE diff — compares the survivor's CURRENT live values against the POST-merge snapshot (what
+// the survivor looked like right after the merge finished), so it isolates changes made IN SALESFORCE
+// after the merge (as opposed to what the merge itself did, which is the pre-merge diff above). The
+// `edited_since_merge` flag is authoritative and cheap: it compares the survivor's SF LastModifiedDate
+// now against the LastModifiedDate we recorded at capture (SF's own clock on both sides). Returns both
+// timestamps so the UI can show them. Read-only.
+async function post_merge_diff(queueId, deps = {}) {
+  const Q = deps.queue || mqueue;
+  const POST = deps.post_snapshot || post_snapshot;
+  const READ = deps.read || sfread;
+  const dash = deps.dashboard || dashboard;
+  const id = Number(queueId);
+  if (!Number.isFinite(id)) return { error: 'invalid id' };
+
+  const all = await Q.list(undefined, 'all');
+  const e = (all || []).find((x) => Number(x.id) === id);
+  if (!e) return { error: 'merge set not found' };
+
+  const snap = await POST.get(id);
+  if (!snap) {
+    // Set was merged before this feature (no post-merge baseline). Can't tell if it was edited since.
+    return { queue_id: id, survivor_account: e.survivor_account, survivor_name: e.survivor_name,
+      environment: e.environment, status: e.status, has_baseline: false, edited_since_merge: null,
+      post_snapshot_at: null, sf_last_modified_at_merge: null, sf_last_modified_now: null,
+      note: 'no post-merge baseline (merged before this feature)',
+      post_merge: { rows: [], summary: { matched: 0, differ: 0, missing: 0, total: 0 }, in_sync: true } };
+  }
+
+  const ds = await dash.dataset_info().catch(() => null);
+  const is_test = !ds || ds.environment !== 'Production';
+  let current = null; let fetch_error = null;
+  try {
+    const recs = await READ.fetch_accounts_by_ids([e.survivor_account], { is_test, connect: deps.connect });
+    current = (recs && recs[0]) || null;
+  } catch (err) { fetch_error = (err && err.message) || 'live fetch failed'; }
+
+  const post_merge = build_master_diff(snap.fields || {}, current);
+  const sf_now = current && current.LastModifiedDate ? current.LastModifiedDate : null;
+  // Authoritative flag: SF's LastModifiedDate now vs at capture. Field-level detail is best-effort
+  // (scoped to fields the post-merge snapshot held), but this flag catches ANY change.
+  const edited_since_merge = !!(snap.sf_last_modified && sf_now && new Date(sf_now) > new Date(snap.sf_last_modified));
+
+  return {
+    queue_id: id, survivor_account: e.survivor_account, survivor_name: e.survivor_name,
+    environment: e.environment, status: e.status, has_baseline: true,
+    post_snapshot_at: snap.created_at_mtn || snap.created_at_utc || snap.created_at || null,
+    sf_last_modified_at_merge: snap.sf_last_modified || null,
+    sf_last_modified_now: sf_now,
+    edited_since_merge, survivor_missing: current == null, fetch_error,
+    post_merge,
+  };
+}
+
+module.exports = { diff_for_entry, post_merge_diff, build_master_diff, comparable_keys, values_equal, norm, SKIP };

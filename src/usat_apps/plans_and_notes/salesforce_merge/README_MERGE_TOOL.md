@@ -64,6 +64,13 @@ It builds on the existing read-only duplicates pipeline and reuses `usat_sales_d
   current live values against the pre-merge snapshot field by field — "in sync" (a restore changes
   nothing) vs the fields a restore would reset (and any edited after the merge that a blind restore
   would overwrite). See `README_RESTORE_DIFF.md`.
+- **Post-merge edit gate:** a merge captures a **post-merge snapshot** of the survivor (fields + SF
+  `LastModifiedDate`) as it finishes (`store/merge_post_snapshot.js`). On Restore, **Check post-merge
+  changes** (`POST …/merge/restore/post-diff`, `store/restore_diff.js#post_merge_diff`) flags any set
+  whose survivor was **edited in Salesforce after the merge** (⚠ edited-since-merge vs ✓ untouched,
+  with both dates + the changed fields). On Execute, flagged sets are **held** (left in the queue) unless
+  `ack_post_merge` is set — so a blind restore can't overwrite a legitimate later edit. Sets merged
+  before this feature have no baseline and aren't gated.
 - **Contact-point preservation** gated by a configurable `high_value_flags` list (donor, …).
 - **Salesforce auth:** start simple (username/password) in sandbox; add a **Connected App
   (OAuth JWT, least-privilege write user) before production**. (Independent of the React choice.)

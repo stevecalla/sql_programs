@@ -23,6 +23,8 @@ function deps(opts = {}) {
     dashboard: { dataset_info: async () => ({ environment: 'Sandbox', run_at: 'x' }) },
     queue: { list: async () => [entry], transition: async (ids, to, from) => { calls.transitions.push({ ids, to, from }); return { updated: 1 }; } },
     snapshot: { list_for_entry: async () => snapRows },
+    // Inject a fake post-merge snapshot store so the post-merge-edit gate never touches the real DB.
+    post_snapshot: { get: async () => (opts.post_snapshot === undefined ? null : opts.post_snapshot) },
     history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; } },
     run: { start: async () => {}, update: async () => {}, finish: async () => {} },
     write: {

@@ -20,7 +20,8 @@ function deps(opts = {}) {
   return {
     calls,
     dashboard: { dataset_info: async () => ({ environment: 'Sandbox', run_at: '2026-01-01' }) },
-    sf: { get_org_identity: async () => ({ org_id: 'ORG1' }), fetch_children: async () => [{ account: 'L1', object: 'Opportunity', id: '006', parent_field: 'AccountId', parent_id: 'L1' }] },
+    sf: { get_org_identity: async () => ({ org_id: 'ORG1' }), fetch_children: async () => [{ account: 'L1', object: 'Opportunity', id: '006', parent_field: 'AccountId', parent_id: 'L1' }], fetch_accounts_by_ids: async () => [] },
+    post_snapshot: { save: async () => ({ saved: 1 }), get: async () => null },
     cluster: { cluster_detail: async () => ({ accounts }) },
     snapshot: { save: async (...a) => { calls.snapshots.push(a); return { saved: accounts.length }; } },
     history: { write: async (row) => { calls.history.push(row); return { id: calls.history.length }; }, clear_simulated: async () => { calls.clearedSim = (calls.clearedSim || 0) + 1; } },
