@@ -10,7 +10,7 @@
 //   node ... check_sf_auth.js --soap       # SOAP ONLY — the retiring method ('--legacy' also accepted)
 //   ...combine --oauth / --soap with --prod for production.
 try { require('dotenv').config(); } catch (e) { /* dotenv optional */ }
-const { connect_salesforce, COLORS } = require('../../../../utilities/salesforce/salesforceConnect');
+const { connect_salesforce, COLORS } = require('../../../../utilities/salesforce/salesforce_connect');
 const paint = (color, text) => `${COLORS[color] || ''}${text}${COLORS.reset}`;
 
 async function main() {

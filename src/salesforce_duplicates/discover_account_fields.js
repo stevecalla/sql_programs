@@ -26,7 +26,7 @@
 const dotenv = require('dotenv');
 dotenv.config({ path: '../../.env' });
 
-const jsforce = require('jsforce');
+const { connect_salesforce } = require('../../utilities/salesforce/salesforce_connect');
 const { resolve_is_test } = require('./config');
 
 // Positional args after the node script path, ignoring --flags.
@@ -42,18 +42,9 @@ const ASSUMED_FIELD = /^account$/i.test(ENTITY)
 async function main() {
     const is_test = resolve_is_test();
 
-    const conn = new jsforce.Connection({
-        loginUrl: is_test ? process.env.SF_DEV_LOGIN_URL : process.env.SF_PROD_LOGIN_URL,
-    });
-
-    console.log(`Logging into Salesforce (${is_test ? 'DEV sandbox' : 'PRODUCTION'})...`);
-    await conn.login(
-        is_test ? process.env.SF_DEV_USERNAME : process.env.SF_PROD_USERNAME,
-        is_test
-            ? process.env.SF_DEV_PASSWORD + process.env.SF_DEV_SECURITY_TOKEN
-            : process.env.SF_PROD_PASSWORD + process.env.SF_PROD_SECURITY_TOKEN
-    );
-    console.log(`Login OK. Entity="${ENTITY}", term="${SEARCH_TERM}".\n`);
+    console.log(`Connecting to Salesforce (${is_test ? 'DEV sandbox' : 'PRODUCTION'})...`);
+    const { conn } = await connect_salesforce({ is_test });
+    console.log(`Connected. Entity="${ENTITY}", term="${SEARCH_TERM}".\n`);
 
     // 1) DESCRIBE entity, filter fields matching the search term.
     console.log(`1) ${ENTITY}.describe() fields matching "${SEARCH_TERM}":`);

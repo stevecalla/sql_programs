@@ -1,7 +1,7 @@
 'use strict';
 // Phase 2 — READ-ONLY Salesforce fetch of full current detail for specific Account (Person Account)
 // IDs, for the cluster deep-fetch. SELECT only; never writes. `connect` is injectable for testing.
-const jsforce = require('jsforce');
+const { connect_salesforce } = require('../../../../../utilities/salesforce/salesforce_connect');
 
 const DETAIL_FIELDS = [
   'Name', 'FirstName', 'LastName', 'PersonEmail', 'Phone',
@@ -12,14 +12,7 @@ const DETAIL_FIELDS = [
 ];
 
 async function default_connect(is_test) {
-  const conn = new jsforce.Connection({
-    loginUrl: is_test ? process.env.SF_DEV_LOGIN_URL : process.env.SF_PROD_LOGIN_URL,
-  });
-  await conn.login(
-    is_test ? process.env.SF_DEV_USERNAME : process.env.SF_PROD_USERNAME,
-    is_test ? process.env.SF_DEV_PASSWORD + process.env.SF_DEV_SECURITY_TOKEN
-      : process.env.SF_PROD_PASSWORD + process.env.SF_PROD_SECURITY_TOKEN,
-  );
+  const { conn } = await connect_salesforce({ is_test });
   return conn;
 }
 

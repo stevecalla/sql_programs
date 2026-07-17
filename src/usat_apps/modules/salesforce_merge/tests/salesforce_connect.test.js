@@ -4,7 +4,7 @@
 //   node --test src/usat_apps/modules/salesforce_merge/tests/salesforce_connect.test.js
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const sf = require('../../../../../utilities/salesforce/salesforceConnect');
+const sf = require('../../../../../utilities/salesforce/salesforce_connect');
 
 const DEV_ENV = {
   SF_DEV_LOGIN_URL: 'https://usatriathlon--01test.sandbox.my.salesforce.com',
@@ -30,6 +30,18 @@ test('resolve_creds: is_test -> SF_DEV_*, derives token URL', () => {
   assert.equal(c.client_id, 'cid');
   assert.equal(c.token_url, 'https://usatriathlon--01test.sandbox.my.salesforce.com/services/oauth2/token');
   assert.equal(c.username, 'steve.calla@usatriathlon.org.01test');
+});
+
+test('resolve_creds role=write: SOAP fallback prefers WRITE_ user, then base user', () => {
+  const env = { ...DEV_ENV, SF_DEV_WRITE_USERNAME: 'writer@x.01test', SF_DEV_WRITE_PASSWORD: 'wpw' };
+  const w = sf.resolve_creds(true, env, 'write');
+  assert.equal(w.username, 'writer@x.01test');            // dedicated write user
+  assert.equal(w.password, 'wpw');
+  assert.equal(w.security_token, 'tok');                  // no WRITE token -> falls back to base
+  const r = sf.resolve_creds(true, env, 'read');
+  assert.equal(r.username, 'steve.calla@usatriathlon.org.01test');  // read = base user
+  const none = sf.resolve_creds(true, DEV_ENV, 'write');
+  assert.equal(none.username, 'steve.calla@usatriathlon.org.01test'); // no WRITE_ set -> base user
 });
 
 test('resolve_creds: !is_test -> SF_PROD_* (empty here)', () => {

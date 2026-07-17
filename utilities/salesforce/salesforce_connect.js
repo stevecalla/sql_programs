@@ -23,9 +23,14 @@ const paint = (color, text) => `${COLORS[color] || ''}${text}${COLORS.reset}`;
 
 // Resolve the env-var set for the chosen environment. is_test -> SF_DEV_*, else SF_PROD_*.
 // The OAuth token URL is derived from the login URL (+ /services/oauth2/token).
-function resolve_creds(is_test, env = process.env) {
+function resolve_creds(is_test, env = process.env, role = 'read') {
   const p = is_test ? 'SF_DEV_' : 'SF_PROD_';
   const login_url = env[p + 'LOGIN_URL'] || '';
+  // For the SOAP fallback only: the write path may run as a dedicated write user
+  // (SF_DEV_WRITE_USERNAME etc.), falling back to the base user. OAuth always uses the
+  // single External Client App (one run-as user), so this never affects the OAuth path.
+  const prefixes = role === 'write' ? [p + 'WRITE_', p] : [p];
+  const pick = (suffix) => { for (const pre of prefixes) if (env[pre + suffix]) return env[pre + suffix]; return ''; };
   return {
     label: is_test ? 'sandbox' : 'production',
     login_url,
@@ -33,10 +38,10 @@ function resolve_creds(is_test, env = process.env) {
     // OAuth (External Client App) credentials
     client_id: env[p + 'CLIENT_ID'] || '',
     client_secret: env[p + 'CLIENT_SECRET'] || '',
-    // legacy SOAP login credentials (fallback)
-    username: env[p + 'USERNAME'] || '',
-    password: env[p + 'PASSWORD'] || '',
-    security_token: env[p + 'SECURITY_TOKEN'] || '',
+    // SOAP login credentials (fallback)
+    username: pick('USERNAME'),
+    password: pick('PASSWORD'),
+    security_token: pick('SECURITY_TOKEN'),
   };
 }
 
@@ -81,7 +86,9 @@ function org_id_from_identity_url(id_url) {
 async function connect_oauth(creds, deps = {}) {
   const jf = deps.jsforce || require('jsforce');
   const token = await request_client_credentials_token(creds, deps.fetch_impl);
-  const conn = new jf.Connection({ accessToken: token.access_token, instanceUrl: token.instance_url });
+  const co = { accessToken: token.access_token, instanceUrl: token.instance_url };
+  if (deps.version) co.version = deps.version;
+  const conn = new jf.Connection(co);
   return { conn, org_id: org_id_from_identity_url(token.id), instance_url: token.instance_url || '', username: '' };
 }
 
@@ -89,7 +96,9 @@ async function connect_oauth(creds, deps = {}) {
 async function connect_soap(creds, deps = {}) {
   const jf = deps.jsforce || require('jsforce');
   if (!creds.username || !creds.password) throw new Error('missing SOAP login config (need USERNAME, PASSWORD)');
-  const conn = new jf.Connection({ loginUrl: creds.login_url });
+  const cc = { loginUrl: creds.login_url };
+  if (deps.version) cc.version = deps.version;
+  const conn = new jf.Connection(cc);
   const info = await conn.login(creds.username, creds.password + (creds.security_token || ''));
   return { conn, org_id: (info && info.organizationId) || '', instance_url: conn.instanceUrl || '', username: creds.username };
 }
@@ -97,10 +106,10 @@ async function connect_soap(creds, deps = {}) {
 // MAIN ENTRY. Return an authenticated jsforce Connection, trying OAuth first (with fallback per
 // SF_AUTH_MODE). Returns { conn, mode, label, org_id, instance_url, username }.
 async function connect_salesforce(opts = {}) {
-  const { is_test = false, env = process.env, jsforce: jf, fetch_impl, log = console.log } = opts;
-  const creds = resolve_creds(is_test, env);
+  const { is_test = false, env = process.env, jsforce: jf, fetch_impl, log = console.log, role = 'read', version } = opts;
+  const creds = resolve_creds(is_test, env, role);
   const mode = resolve_mode(env);
-  const deps = { jsforce: jf, fetch_impl };
+  const deps = { jsforce: jf, fetch_impl, version };
 
   const try_oauth = mode === 'oauth' || mode === 'auto';
   const try_soap = mode === 'soap' || mode === 'auto';
