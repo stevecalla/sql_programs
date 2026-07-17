@@ -3,7 +3,7 @@
 // Uses a dedicated WRITE connection (separate write-user env vars); if those are not set it falls
 // back to the read-pipeline creds so a sandbox user that already has merge rights can be used for
 // testing. merge() and undelete() go through jsforce's SOAP API (conn.soap). `connect` is injectable.
-const jsforce = require('jsforce');
+const { connect_salesforce } = require('../../../../../utilities/salesforce/salesforce_connect');
 
 // Custom fields the optional "stamp survivor as merged" feature writes onto the master.
 // These are NOT auto-created — an admin must add them in Salesforce. The stamp is best-effort:
@@ -32,10 +32,9 @@ function using_dedicated_write_user(is_test) {
 }
 
 async function default_write_connect(is_test) {
-  const c = write_creds(is_test);
-  if (!c.user || !c.pass) throw new Error('write credentials not configured for ' + (is_test ? 'sandbox' : 'production'));
-  const conn = new jsforce.Connection({ loginUrl: c.url });
-  await conn.login(c.user, c.pass + c.token);
+  // OAuth (single External Client App run-as user) first; SOAP fallback honors a dedicated
+  // write user (SF_*_WRITE_*) via role:'write'. write_creds/using_dedicated_write_user stay for the UI.
+  const { conn } = await connect_salesforce({ is_test, role: 'write' });
   return conn;
 }
 

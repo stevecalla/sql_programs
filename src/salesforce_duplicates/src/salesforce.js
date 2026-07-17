@@ -22,7 +22,7 @@
 
 'use strict';
 
-const jsforce = require('jsforce');
+const { connect_salesforce } = require('../../../utilities/salesforce/salesforce_connect');
 
 const { log_info, log_success, log_warn } = require('./log');
 const { format_duration, format_timestamp_utc } = require('./fmt');
@@ -166,27 +166,15 @@ async function fetch_user_name_map(conn, script_start_ms) {
 // Log into Salesforce (dev sandbox when is_test, else production) and run the
 // Account query. Returns the raw result plus query timing for the run summary.
 async function fetch_salesforce_accounts({ is_test, is_full = false, is_partial = false, max_fetch, script_start_ms }) {
-    const conn = new jsforce.Connection({
-        loginUrl: is_test ? process.env.SF_DEV_LOGIN_URL : process.env.SF_PROD_LOGIN_URL,
-    });
-
-    log_info("Logging into Salesforce...", script_start_ms);
-
-    const login_user_info = await conn.login(
-        is_test ? process.env.SF_DEV_USERNAME : process.env.SF_PROD_USERNAME,
-        is_test ?
-            process.env.SF_DEV_PASSWORD + process.env.SF_DEV_SECURITY_TOKEN :
-            process.env.SF_PROD_PASSWORD + process.env.SF_PROD_SECURITY_TOKEN
-    );
-
-    log_success("Login successful.", script_start_ms);
+    log_info("Connecting to Salesforce...", script_start_ms);
+    const { conn, org_id } = await connect_salesforce({ is_test });
+    log_success("Connected.", script_start_ms);
 
     // Source provenance for the snapshot: which environment + which org these records
     // came from. environment is the run mode; org id/host come from the authenticated
     // connection. Stamped on every snapshot row so the table is self-describing (it is
     // dropped and recreated each run, so one snapshot = one environment + one org).
     const environment = is_test ? 'test' : 'prod';
-    const org_id = (login_user_info && login_user_info.organizationId) || '';
     let org_host = '';
     try { org_host = conn.instanceUrl ? new URL(conn.instanceUrl).host : ''; } catch (_) { org_host = ''; }
     log_info(`Connected org: environment=${environment} org_id=${org_id || '(unknown)'} host=${org_host || '(unknown)'}`, script_start_ms);

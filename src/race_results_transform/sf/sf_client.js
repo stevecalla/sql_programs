@@ -3,7 +3,7 @@
 // unit-testable with a mock conn (no network). Mirrors the archive script's logic:
 //   SOSL FIND {Race Results Doc} -> ContentVersion (xls/xlsx/csv)
 //   -> MT date filter -> sort newest-first -> enrich Program (ContentDocumentLink) + Owner (User).
-const jsforce = require('jsforce');
+const { connect_salesforce } = require('../../../utilities/salesforce/salesforce_connect');
 const { make_date_filter, ymd_in_time_zone, datetime_in_time_zone, DEFAULT_TZ } = require('./sf_dates');
 const { build_download_file_name } = require('./sf_naming');
 
@@ -17,8 +17,9 @@ const SANCTION_FIELD = process.env.SF_SANCTION_FIELD || 'cfg_Id__c';
 
 // Build a jsforce connection and log in. cfg from sf_config(). Kept thin so it can be swapped.
 async function make_connection(cfg) {
-  const conn = new jsforce.Connection({ loginUrl: cfg.login_url, version: cfg.api_version });
-  await conn.login(cfg.username, String(cfg.password || '') + String(cfg.security_token || ''));
+  // cfg.is_test selects SF_DEV_* vs SF_PROD_*. Shared helper: OAuth (External Client App) first,
+  // SOAP login fallback. cfg.api_version is passed through when set.
+  const { conn } = await connect_salesforce({ is_test: !!cfg.is_test, version: cfg.api_version });
   return conn;
 }
 
