@@ -95,6 +95,14 @@ const SECTIONS = [
     { id: 12, label: 'Open merge in the platform', desc: 'usat_apps at :8022 — the Salesforce merge page', open: `http://localhost:${PLATFORM_PORT}/salesforce/merge`, cli: `open http://localhost:${PLATFORM_PORT}/salesforce/merge` },
     { id: 13, label: 'Open via proxy (:8000)', desc: 'The merge page through the :8000 proxy', open: 'http://localhost:8000/salesforce/merge', cli: 'open http://localhost:8000/salesforce/merge' },
   ] },
+  { label: 'SALESFORCE AUTH · connection', color: GREEN, items: [
+    { id: 22, label: 'SF auth — Sandbox · Auto', desc: 'Normal path — tries OAuth (External Client App), falls back to SOAP; reports which one connected.', bin: 'node', args: [`${M}/check_sf_auth.js`], cli: `node ${M}/check_sf_auth.js` },
+    { id: 23, label: 'SF auth — Production · Auto', desc: 'Normal path — tries OAuth (External Client App), falls back to SOAP; reports which one connected.', bin: 'node', args: [`${M}/check_sf_auth.js`, '--prod'], cli: `node ${M}/check_sf_auth.js --prod` },
+    { id: 24, label: 'SF auth — Sandbox · OAuth', desc: 'OAuth only (no fallback) — confirms the new auth is working.', bin: 'node', args: [`${M}/check_sf_auth.js`, '--oauth'], cli: `node ${M}/check_sf_auth.js --oauth` },
+    { id: 25, label: 'SF auth — Production · OAuth', desc: 'OAuth only (no fallback) — confirms the new auth is working.', bin: 'node', args: [`${M}/check_sf_auth.js`, '--prod', '--oauth'], cli: `node ${M}/check_sf_auth.js --prod --oauth` },
+    { id: 26, label: 'SF auth — Sandbox · SOAP', desc: 'SOAP only (the method retiring Summer 2027) — confirms it still works / flags when it goes offline.', bin: 'node', args: [`${M}/check_sf_auth.js`, '--soap'], cli: `node ${M}/check_sf_auth.js --soap` },
+    { id: 27, label: 'SF auth — Production · SOAP', desc: 'SOAP only (the method retiring Summer 2027) — confirms it still works / flags when it goes offline.', bin: 'node', args: [`${M}/check_sf_auth.js`, '--prod', '--soap'], cli: `node ${M}/check_sf_auth.js --prod --soap` },
+  ] },
   { label: 'DOSSIER · files & data', color: CYAN, items: [
     { id: 14, label: 'Check Files permission (sandbox)', desc: 'Does the SF write user identity + can it create Files (ContentVersion / ContentDocumentLink)?', bin: 'node', args: [`${M}/check_dossier_access.js`], cli: `node ${M}/check_dossier_access.js` },
     { id: 15, label: 'Check Files permission (PROD, live)', desc: 'Production check that actually creates + deletes a throwaway File to prove the write path', bin: 'node', args: [`${M}/check_dossier_access.js`, '--prod', '--live'], cli: `node ${M}/check_dossier_access.js --prod --live` },
