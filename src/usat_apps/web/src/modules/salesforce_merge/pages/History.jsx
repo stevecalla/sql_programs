@@ -87,6 +87,9 @@ export default function History() {
   useEffect(() => { load(); }, [result, limit]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const when = (r) => r.created_at_mtn || r.created_at || '';
+  const runCounts = {};
+  rows.forEach((r) => { if (r.run_id) runCounts[r.run_id] = (runCounts[r.run_id] || 0) + 1; });
+  const perMerge = (r) => (r.api_cost != null && runCounts[r.run_id]) ? Math.round(Number(r.api_cost) / runCounts[r.run_id]) : null;
   const exportParams = { result: result || undefined, q: q || undefined, limit: 5000 };
 
   return (
@@ -127,6 +130,7 @@ export default function History() {
               <th style={{ cursor: 'pointer' }} onClick={() => sort.onSort('result')}>Result{sort.arrow('result')}</th>
               <th style={{ cursor: 'pointer' }} onClick={() => sort.onSort('mode')}>Mode{sort.arrow('mode')}</th>
               <th style={{ cursor: 'pointer', textAlign: 'right' }} onClick={() => sort.onSort('api_cost')}>API{sort.arrow('api_cost')}</th>
+              <th style={{ textAlign: 'right' }} title="Run total ÷ sets in the run">≈/merge</th>
               <th>Reason</th>
               <th style={{ cursor: 'pointer' }} onClick={() => sort.onSort('environment')}>Env{sort.arrow('environment')}</th>
               <th>Dossier</th>
@@ -142,6 +146,7 @@ export default function History() {
                   <td><span className="pill" style={{ color: RESULT_COLOR[r.result] || 'var(--dim)' }}>{r.result}</span></td>
                   <td>{r.mode}</td>
                   <td style={{ textAlign: 'right' }}>{r.api_cost != null ? Number(r.api_cost).toLocaleString() : '—'}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--dim)' }}>{perMerge(r) != null ? '≈' + perMerge(r).toLocaleString() : '—'}</td>
                   <td className="small" title={r.reason}>
                     {r.reason}
                     {isFileShareNote(r.reason) && (
@@ -155,9 +160,9 @@ export default function History() {
                       : <span className="muted small">—</span>}
                   </td>
                 </tr>,
-                open.has(r.id) ? <tr key={r.id + '_d'}><td colSpan={11} style={{ padding: 0, background: 'var(--card)' }}><DiffDetail diff={r.diff} /></td></tr> : null,
+                open.has(r.id) ? <tr key={r.id + '_d'}><td colSpan={12} style={{ padding: 0, background: 'var(--card)' }}><DiffDetail diff={r.diff} /></td></tr> : null,
               ])}
-              {rows.length === 0 && !busy && <tr><td colSpan={11} className="muted small">No history rows match — adjust the filters.</td></tr>}
+              {rows.length === 0 && !busy && <tr><td colSpan={12} className="muted small">No history rows match — adjust the filters.</td></tr>}
             </tbody>
           </table>
         </div>

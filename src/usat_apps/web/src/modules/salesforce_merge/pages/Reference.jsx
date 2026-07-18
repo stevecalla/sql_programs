@@ -276,49 +276,18 @@ const SECTIONS = [
       </>
     ),
   },
+  {
+    title: "How API cost is measured",
+    text: "how api cost is measured salesforce caps api calls per day. the tool measures a merge run's cost by reading the org's daily api usage at the start and end of each run — a free /limits call that does not count against the quota. the history panel shows api the run's total api calls, shown on every set in that run, and per merge the even split — run total divided by sets in the run. exact per-set cost is not shown because the daily counter is org-wide, so measuring around each merge would slow the run and add noise. use the per-merge figure against your remaining daily calls to size a safe batch.",
+    body: (
+      <>
+        <p>Salesforce caps API calls per day. The tool measures a merge run's cost by reading the org's daily API usage at the <strong>start and end of each run</strong> — a free <code>/limits</code> call that doesn't count against the quota.</p>
+        <div className="defs">
+          <div className="defs-row"><span className="defs-term lg">API</span><span className="defs-body">the run's <strong>total</strong> API calls, shown on every set in that run (all sets in one run share the number).</span></div>
+          <div className="defs-row"><span className="defs-term lg">≈ / merge</span><span className="defs-body">the even split — run total ÷ sets in the run. A one-set run shows the exact cost.</span></div>
+        </div>
+        <div className="defs-gate">Exact per-set cost isn't shown: the daily counter is org-wide, so measuring around each merge would slow the run and add noise. Use the ≈/merge figure against your <strong>remaining daily calls</strong> to size a safe batch.</div>
+      </>
+    ),
+  },
 ];
-
-export default function Reference() {
-  const [q, setQ] = useState('');
-  const [collapsed, setCollapsed] = useState(() => new Set()); // by title; empty = all open
-  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const match = (sec) => !terms.length || terms.every((t) => (sec.title + ' ' + sec.text).toLowerCase().includes(t));
-  const shown = SECTIONS.filter(match);
-  const toggle = (title) => setCollapsed((p) => { const n = new Set(p); if (n.has(title)) n.delete(title); else n.add(title); return n; });
-  const collapseAll = () => setCollapsed(new Set(SECTIONS.map((s) => s.title)));
-  const expandAll = () => setCollapsed(new Set());
-  return (
-    <div className="reference">
-      <h2>Reference — how this works</h2>
-      <p className="muted small">A plain-language guide to finding duplicates and merging accounts. No jargon.</p>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0 12px' }}>
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search the reference…"
-          aria-label="Search the reference"
-          style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '8px 12px', border: '1px solid var(--line, #e4e7ec)', borderRadius: 8, fontSize: 14, background: 'transparent', color: 'inherit' }}
-        />
-        <button type="button" className="btn" style={{ width: 'auto', padding: '6px 10px', fontSize: 12 }} onClick={collapseAll}>Collapse all</button>
-        <button type="button" className="btn" style={{ width: 'auto', padding: '6px 10px', fontSize: 12 }} onClick={expandAll}>Expand all</button>
-      </div>
-      <div className="ref-scroll" style={{ maxHeight: 'calc(100vh - 260px)', overflowY: 'auto', paddingRight: 6 }}>
-        {shown.map((sec, i) => {
-          const isOpen = !collapsed.has(sec.title);
-          return (
-            <div className="card ref-card" key={i}>
-              <h3 onClick={() => toggle(sec.title)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}
-                title={isOpen ? 'Collapse' : 'Expand'}>
-                <span style={{ color: 'var(--dim)', fontSize: 13, width: 12, display: 'inline-block' }}>{isOpen ? '▾' : '▸'}</span>
-                {sec.title}
-              </h3>
-              {isOpen ? sec.body : null}
-            </div>
-          );
-        })}
-        {shown.length === 0 && <p className="muted small" style={{ padding: '12px 4px' }}>No sections match “{q}”.</p>}
-      </div>
-    </div>
-  );
-}
