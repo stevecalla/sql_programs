@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { formatMtn } from '../../../lib/mtnDate.js';
+import DataTable from '../components/DataTable.jsx';
+import { track } from '../../../lib/track.js';
 
 // SF API usage (Phases 1-4). On open it shows the LAST CAPTURED reading (cheap DB read — NO Salesforce
 // call); Refresh is the only live call, and it records a fresh snapshot for the next viewer. Sandbox /
@@ -12,23 +14,67 @@ function band(pct) { return pct == null ? '#6b7686' : pct >= 85 ? '#e4002b' : pc
 const ENVS = [['production', 'Production'], ['sandbox', 'Sandbox']];
 const dim = { fontWeight: 400, fontSize: 13, textTransform: 'none', letterSpacing: 0 };
 
-function Sparkline({ points }) {
-  const vals = points.map((p) => Number(p.api_used)).filter((n) => Number.isFinite(n));
-  if (vals.length < 2) return <p className="muted small">Not enough readings yet for a trend — refresh across the day to build it.</p>;
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
+function UsageChart({ points, mtnToday }) {
+  const parseHour = (t) => { const m = String(t).match(/(\d{1,2}):(\d{2})/); return m ? (Number(m[1]) + Number(m[2]) / 60) : null; };
+  const rows = (points || []).map((p) => ({ v: Number(p.api_used), h: parseHour(p.created_at_mtn) }))
+    .filter((p) => Number.isFinite(p.v) && p.h != null).sort((a, b) => a.h - b.h);
+  if (rows.length < 2) return <p className="muted small">Not enough readings yet for a trend — hit Refresh (live) across the day to build it (only live refreshes add points).</p>;
+  const W = 680, H = 220, padL = 62, padR = 16, padT = 12, padB = 42;
+  const min = Math.min(...rows.map((p) => p.v));
+  const max = Math.max(...rows.map((p) => p.v));
   const span = (max - min) || 1;
-  const W = 600;
-  const H = 60;
-  const pts = vals.map((v, i) => {
-    const x = (i / (vals.length - 1)) * W;
-    const y = H - ((v - min) / span) * (H - 6) - 3;
-    return x.toFixed(1) + ',' + y.toFixed(1);
-  }).join(' ');
+  const X = (h) => padL + (Math.max(0, Math.min(24, h)) / 24) * (W - padL - padR);  // fixed 0..24h axis
+  const Y = (v) => padT + (1 - (v - min) / span) * (H - padT - padB);
+  const line = rows.map((p) => X(p.h).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ');
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const hhmm = (h) => pad2(Math.floor(h)) + ':' + pad2(Math.round((h - Math.floor(h)) * 60));
+  const yticks = [max, min + span / 2, min];
+  const hours = Array.from({ length: 25 }, (_, i) => i);   // 00..24
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 60 }} aria-label="API usage trend">
-      <polyline points={pts} fill="none" stroke="#2e75b6" strokeWidth="2" />
-    </svg>
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 220 }} role="img" aria-label="Daily API usage over the day (MTN)">
+        {yticks.map((v, i) => (
+          <g key={'y' + i}>
+            <line x1={padL} y1={Y(v)} x2={W - padR} y2={Y(v)} stroke="var(--line, #e4e7ec)" strokeDasharray="2 3" opacity="0.6" />
+            <text x={padL - 8} y={Y(v) + 3} textAnchor="end" fontSize="10" fill="var(--dim)">{fmt(Math.round(v))}</text>
+          </g>
+        ))}
+        {hours.map((h) => (
+          <line key={'g' + h} x1={X(h)} y1={padT} x2={X(h)} y2={H - padB} stroke="var(--line, #e4e7ec)" strokeDasharray="2 3" opacity={h % 2 === 0 ? 0.4 : 0.15} />
+        ))}
+        {hours.filter((h) => h % 2 === 0).map((h) => (
+          <text key={'l' + h} x={X(h)} y={H - padB + 16} textAnchor="middle" fontSize="10" fill="var(--dim)">{pad2(h)}</text>
+        ))}
+        <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="var(--line, #e4e7ec)" />
+        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="var(--line, #e4e7ec)" />
+        <text x={(padL + W - padR) / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--dim)">hour of day (MTN, 00–24)</text>
+        <text transform={`translate(14 ${(padT + H - padB) / 2}) rotate(-90)`} textAnchor="middle" fontSize="10" fill="var(--dim)">Daily API used</text>
+        <polyline points={line} fill="none" stroke="#2e75b6" strokeWidth="2" />
+        {rows.map((p, i) => (<circle key={'c' + i} cx={X(p.h)} cy={Y(p.v)} r="2.5" fill="#2e75b6" />))}
+      </svg>
+      <p className="muted small" style={{ marginTop: 4 }}>{rows.length} reading{rows.length === 1 ? '' : 's'} on {mtnToday || 'today'} (Mountain time) · {hhmm(rows[0].h)} → {hhmm(rows[rows.length - 1].h)} MTN · Y = cumulative Daily API Requests used. New points are only added when someone hits Refresh (live).</p>
+    </>
+  );
+}
+
+// Shared budget gauge — 3 cards (used / remaining / consumed) + a bar + a note. Used for BOTH the Daily
+// API Requests and the Async Apex budgets so they render identically.
+function BudgetGauge({ title, subtitle, usedLabel, remainingSub, consumedSub, used, max, remaining, pct, note }) {
+  const color = band(pct);
+  const bar = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+  return (
+    <div className="mx-panel" style={{ marginTop: 12, borderLeft: pct != null && pct >= 85 ? '3px solid #e4002b' : undefined }}>
+      <h2>{title}{subtitle ? <span className="dim" style={dim}> {subtitle}</span> : null}</h2>
+      <div className="mx-cards">
+        <div className="mx-card"><div className="k">{usedLabel}</div><div className="v" style={{ color }}>{fmt(used)}</div><div className="s">of {fmt(max)}</div></div>
+        <div className="mx-card"><div className="k">Remaining</div><div className="v">{fmt(remaining)}</div><div className="s">{remainingSub}</div></div>
+        <div className="mx-card"><div className="k">Consumed</div><div className="v" style={{ color }}>{pct == null ? '\u2014' : pct + '%'}</div><div className="s">{consumedSub}</div></div>
+      </div>
+      <div style={{ background: 'var(--line, #e4e7ec)', borderRadius: 8, height: 22, overflow: 'hidden', marginTop: 8 }}>
+        <div style={{ width: bar + '%', height: '100%', background: color, transition: 'width .3s' }} />
+      </div>
+      {note ? <p className="muted small" style={{ marginTop: 8 }}>{note}</p> : null}
+    </div>
   );
 }
 
@@ -37,6 +83,11 @@ export default function SfApi() {
   const [byEnv, setByEnv] = useState({});          // { [env]: { usage, live, err } }
   const [loading, setLoading] = useState(false);   // cached load (DB, no SF call)
   const [refreshing, setRefreshing] = useState(false); // live SF call
+  const [opsOpen, setOpsOpen] = useState(false);
+  const [runsOpen, setRunsOpen] = useState(false);
+  const [otherOpen, setOtherOpen] = useState(true);
+  const [budgetTab, setBudgetTab] = useState('apex');
+  const pickTab = (t) => { setBudgetTab(t); track('sf_api_view', { panel: 'merge', view: t }); };
 
   const loadCached = (e) => {
     setLoading(true);
@@ -65,9 +116,15 @@ export default function SfApi() {
   const pct = d ? d.pct_used : null;
   const color = band(pct);
   const barPct = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+  const dapex = view && view.daily_apex;
+  const apexPct = dapex ? dapex.pct_used : null;
+  const apexColor = band(apexPct);
+  const apexBar = apexPct == null ? 0 : Math.max(0, Math.min(100, apexPct));
   const points = (usage && usage.points) || [];
+  const mtnToday = (usage && usage.mtn_today) || null;
   const byOp = (usage && usage.by_op) || [];
   const runs = (usage && usage.runs) || [];
+  const byOpRows = byOp.map((r) => ({ ...r, span: (r.max_used != null && r.min_used != null) ? (r.max_used - r.min_used) : null }));
   const preflight = usage && usage.preflight;
   const envLabel = env === 'production' ? 'Production' : 'Sandbox';
 
@@ -85,14 +142,14 @@ export default function SfApi() {
         <span className="mx-scope-label">Environment</span>
         <div className="mx-tabs">
           {ENVS.map(([k, lbl]) => (
-            <button key={k} className={env === k ? 'on' : ''} onClick={() => setEnv(k)}>{lbl}</button>
+            <button key={k} className={env === k ? 'on' : ''} onClick={() => { setEnv(k); track('sf_api_env', { panel: 'merge', view: k }); }}>{lbl}</button>
           ))}
         </div>
         <span className="mx-scope-hint">Shows the last captured reading — no API call. Refresh pulls a live reading (the only call it makes).</span>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '10px 0 16px' }}>
-        <button className="btn" onClick={() => refreshLive(env)} disabled={refreshing}>{refreshing ? '…' : '↻ Refresh (live)'}</button>
+        <button className="btn" onClick={() => { track('sf_api_refresh', { panel: 'merge', view: 'live' }); refreshLive(env); }} disabled={refreshing}>{refreshing ? '…' : '↻ Refresh (live)'}</button>
         {view && <span className={'mx-tag' + (view.environment === 'Production' ? '' : ' new')}>{view.environment || envLabel}</span>}
         {view && view.org_id && <span className="muted small">Org {view.org_id}</span>}
         {view && !isLive && <span className="muted small">cached{view.op ? ' · ' + view.op : ''}</span>}
@@ -104,104 +161,118 @@ export default function SfApi() {
         <p className="muted">No reading captured yet for {envLabel}. Hit <strong>Refresh (live)</strong> to pull the current usage — that uses one API call.</p>
       )}
 
-      {d && (
+      {(d || dapex || points.length > 0 || (preflight && preflight.approved_sets > 0)) && (
         <>
-          <div className="mx-cards">
-            <div className="mx-card"><div className="k">Daily API used</div><div className="v" style={{ color }}>{fmt(d.used)}</div><div className="s">of {fmt(d.max)}</div></div>
-            <div className="mx-card"><div className="k">Remaining</div><div className="v">{fmt(d.remaining)}</div><div className="s">calls left today</div></div>
-            <div className="mx-card"><div className="k">Consumed</div><div className="v" style={{ color }}>{pct == null ? '—' : pct + '%'}</div><div className="s">of daily budget</div></div>
+          <div className="mx-tabbar">
+            <button className={budgetTab === 'apex' ? 'on' : ''} onClick={() => pickTab('apex')}>Async Apex budget</button>
+            <button className={budgetTab === 'api' ? 'on' : ''} onClick={() => pickTab('api')}>Daily API budget</button>
+            <button className={budgetTab === 'preflight' ? 'on' : ''} onClick={() => pickTab('preflight')}>Pre-flight cost</button>
+            <button className={budgetTab === 'usage' ? 'on' : ''} onClick={() => pickTab('usage')}>Usage today</button>
           </div>
 
-          <div className="mx-panel">
-            <h2>Daily API request budget — {envLabel}</h2>
-            <div style={{ background: 'var(--line, #e4e7ec)', borderRadius: 8, height: 22, overflow: 'hidden' }}>
-              <div style={{ width: barPct + '%', height: '100%', background: color, transition: 'width .3s' }} />
+          {budgetTab === 'apex' && (dapex
+            ? <BudgetGauge title={'Async Apex budget — ' + envLabel} subtitle="— the binding limit (merges trigger rollups)" usedLabel="Async Apex used" remainingSub="executions left today" consumedSub="of daily Apex limit" used={dapex.used} max={dapex.max} remaining={dapex.remaining} pct={apexPct} note={fmt(dapex.used) + ' used · ' + fmt(dapex.remaining) + ' remaining · ' + fmt(dapex.max) + ' daily max. A merge spends ~100 of these (measured ~74/merge), so this — not the API budget — is what limits a large bulk run.'} />
+            : <p className="muted" style={{ marginTop: 12 }}>No Apex reading yet — hit Refresh (live).</p>)}
+
+          {budgetTab === 'api' && (d
+            ? <BudgetGauge title={'Daily API request budget — ' + envLabel} usedLabel="Daily API used" remainingSub="calls left today" consumedSub="of daily budget" used={d.used} max={d.max} remaining={d.remaining} pct={pct} note={fmt(d.used) + ' used · ' + fmt(d.remaining) + ' remaining · ' + fmt(d.max) + ' daily max · ' + (isLive ? 'live' : 'cached') + ' reading'} />
+            : <p className="muted" style={{ marginTop: 12 }}>No API reading yet — hit Refresh (live).</p>)}
+
+          {budgetTab === 'preflight' && (preflight && preflight.approved_sets > 0 ? (
+            <div className="mx-panel" style={{ marginTop: 12, ...((preflight.would_exceed || preflight.apex_would_exceed) ? { borderLeft: '3px solid #e4002b' } : {}) }}>
+              <h2 style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>Pre-flight <span className="dim" style={dim}>— cost to run the approved queue</span><button type="button" className="btn" style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 11 }} title="Pull a fresh live reading and recompute the estimate vs remaining budget" onClick={() => { track('sf_api_refresh', { panel: 'merge', view: 'preflight' }); refreshLive(env); }} disabled={refreshing}>{refreshing ? '…' : '↻ Refresh'}</button></h2>
+              <div className="mx-cards">
+                <div className="mx-card"><div className="k">Approved sets</div><div className="v">{fmt(preflight.approved_sets)}</div><div className="s">queued to run</div></div>
+                <div className="mx-card"><div className="k">Est. API calls</div><div className="v" style={{ color: preflight.would_exceed ? '#e4002b' : 'var(--ink)' }}>{fmt(preflight.estimate)}</div><div className="s">{fmt(preflight.merge_calls)} merge + {fmt(preflight.overhead_calls)} overhead</div></div>
+                <div className="mx-card"><div className="k">Est. async Apex</div><div className="v" style={{ color: preflight.apex_would_exceed ? '#e4002b' : 'var(--ink)' }}>{fmt(preflight.apex_estimate)}</div><div className="s">the run's cost</div></div>
+                <div className="mx-card"><div className="k">Apex remaining</div><div className="v" style={{ color: preflight.apex_would_exceed ? '#e4002b' : 'var(--ink)' }}>{fmt(preflight.apex_remaining)}</div><div className="s">{preflight.apex_pct_after != null ? preflight.apex_pct_after + '% after (the ceiling)' : 'of ~250K'}</div></div>
+                <div className="mx-card"><div className="k">API remaining</div><div className="v">{fmt(preflight.remaining)}</div><div className="s">{preflight.pct_after != null ? preflight.pct_after + '% after (not the ceiling)' : 'no reading'}</div></div>
+              </div>
+              {preflight.would_exceed === true && (
+                <p className="err" style={{ marginTop: 8 }}>⚠ Estimated API cost ({fmt(preflight.estimate)}) exceeds the remaining budget ({fmt(preflight.remaining)}). Split the run or wait for the daily reset.</p>
+              )}
+              {preflight.apex_would_exceed === true && (
+                <p className="err" style={{ marginTop: 8 }}>⚠ Est. async Apex ({fmt(preflight.apex_estimate)}) exceeds the remaining Apex budget ({fmt(preflight.apex_remaining)}). Async Apex (≈250K/day) is the binding limit — split the run or wait for the daily reset.</p>
+              )}
+              {preflight.would_exceed === false && preflight.apex_would_exceed !== true && (
+                <p className="muted small" style={{ marginTop: 8 }}>Fits within today's budget. The <strong>binding limit is async Apex</strong>: {fmt(preflight.apex_remaining)} left{preflight.apex_pct_after != null ? ' · ' + preflight.apex_pct_after + '% used after this run' : ''} — the API budget ({fmt(preflight.remaining)} left) is far larger and not the constraint.{preflight.reading_at ? ' Reading as of ' + formatMtn(preflight.reading_at) + ' MTN.' : ''}</p>
+              )}
+              {preflight.remaining == null && (
+                <p className="muted small" style={{ marginTop: 8 }}>No live reading yet — hit Refresh to compare the estimate against the remaining budget.</p>
+              )}
             </div>
-            <p className="muted small" style={{ marginTop: 8 }}>
-              {fmt(d.used)} used · {fmt(d.remaining)} remaining · {fmt(d.max)} daily max · {isLive ? 'live' : 'cached'} reading
-            </p>
-          </div>
+          ) : <p className="muted" style={{ marginTop: 12 }}>No approved sets queued — nothing to pre-flight.</p>)}
+
+          {budgetTab === 'usage' && (points.length > 0
+            ? <div className="mx-panel" style={{ marginTop: 12 }}><h2>Usage today <span className="dim" style={dim}>— Daily API Requests used over today (Mountain time)</span></h2><UsageChart points={points} mtnToday={mtnToday} /></div>
+            : <p className="muted" style={{ marginTop: 12 }}>No readings captured today (MTN) yet — hit Refresh (live) to add points.</p>)}
         </>
       )}
 
-      {preflight && preflight.approved_sets > 0 && (
-        <div className="mx-panel" style={preflight.would_exceed ? { borderLeft: '3px solid #e4002b' } : undefined}>
-          <h2>Pre-flight <span className="dim" style={dim}>— cost to run the approved queue</span></h2>
-          <div className="mx-cards">
-            <div className="mx-card"><div className="k">Approved sets</div><div className="v">{fmt(preflight.approved_sets)}</div><div className="s">queued to run</div></div>
-            <div className="mx-card"><div className="k">Est. API calls</div><div className="v" style={{ color: preflight.would_exceed ? '#e4002b' : 'var(--ink)' }}>{fmt(preflight.estimate)}</div><div className="s">{fmt(preflight.merge_calls)} merge + {fmt(preflight.overhead_calls)} overhead</div></div>
-            <div className="mx-card"><div className="k">Remaining</div><div className="v">{fmt(preflight.remaining)}</div><div className="s">{preflight.pct_after != null ? preflight.pct_after + '% after' : 'no reading'}</div></div>
-          </div>
-          {preflight.would_exceed === true && (
-            <p className="err" style={{ marginTop: 8 }}>⚠ Estimated cost ({fmt(preflight.estimate)}) exceeds the remaining budget ({fmt(preflight.remaining)}). Split the run or wait for the daily reset.</p>
-          )}
-          {preflight.would_exceed === false && (
-            <p className="muted small" style={{ marginTop: 8 }}>Fits within today's remaining budget{preflight.reading_at ? ' (reading as of ' + formatMtn(preflight.reading_at) + ' MTN)' : ''}. Estimate is conservative — it refines as measured run costs accumulate below.</p>
-          )}
-          {preflight.remaining == null && (
-            <p className="muted small" style={{ marginTop: 8 }}>No live reading yet — hit Refresh to compare the estimate against the remaining budget.</p>
-          )}
-        </div>
-      )}
-
-      {d && points.length > 0 && (
-        <div className="mx-panel">
-          <h2>Usage today <span className="dim" style={dim}>· {points.length} reading{points.length === 1 ? '' : 's'}</span></h2>
-          <Sparkline points={points} />
-        </div>
-      )}
 
       {byOp.length > 0 && (
         <div className="mx-panel">
-          <h2>By activity <span className="dim" style={dim}>— what generated the readings</span></h2>
-          <table>
-            <thead><tr><th>Activity</th><th>Readings</th><th>Runs</th><th>Used span</th></tr></thead>
-            <tbody>
-              {byOp.map((r) => (
-                <tr key={r.op}>
-                  <td>{r.op}</td>
-                  <td>{fmt(r.snapshots)}</td>
-                  <td>{fmt(r.runs)}</td>
-                  <td>{(r.max_used != null && r.min_used != null) ? fmt(r.max_used - r.min_used) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h2 onClick={() => setOpsOpen((o) => !o)} style={{ cursor: 'pointer', userSelect: 'none' }}>{opsOpen ? '▾' : '▸'} By activity <span className="dim" style={dim}>— what generated the readings</span></h2>
+          {opsOpen && (
+          <DataTable
+            rows={byOpRows}
+            rowNumbers={true}
+            maxHeight={280}
+            clientExport="sf_api_by_activity"
+            searchCols="activity"
+            columns={[
+              { key: 'op', label: 'Activity', sort: true, align: 'left', help: 'The operation that produced these readings — merge, restore, recreate, probe or build.' },
+              { key: 'snapshots', label: 'Readings', sort: true, help: 'Number of API-usage snapshots recorded for this activity in the window.', render: (r) => fmt(r.snapshots) },
+              { key: 'runs', label: 'Runs', sort: true, help: 'Distinct runs (run_id) that recorded at least one reading for this activity.', render: (r) => fmt(r.runs) },
+              { key: 'span', label: 'Used span', sort: true, help: 'Daily API Requests consumed across this activity\'s readings (max used − min used).', render: (r) => (r.span == null ? '—' : fmt(r.span)) },
+            ]}
+          />
+          )}
         </div>
       )}
 
       {runs.length > 0 && (
         <div className="mx-panel">
-          <h2>Recent runs <span className="dim" style={dim}>— measured API cost</span></h2>
-          <table>
-            <thead><tr><th>Run</th><th>Activity</th><th>Actor</th><th>API cost</th><th>Last seen (MTN)</th></tr></thead>
-            <tbody>
-              {runs.map((r) => (
-                <tr key={r.run_id}>
-                  <td className="mono">{String(r.run_id).slice(0, 18)}</td>
-                  <td>{r.op}</td>
-                  <td>{r.actor || '—'}</td>
-                  <td>{r.cost != null ? fmt(r.cost) : '—'}</td>
-                  <td>{formatMtn(r.last_seen)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="muted small" style={{ marginTop: 8 }}>Cost = Daily API Requests consumed between a run's first and last reading (needs ≥2 snapshots per run).</p>
+          <h2 onClick={() => setRunsOpen((o) => !o)} style={{ cursor: 'pointer', userSelect: 'none' }}>{runsOpen ? '▾' : '▸'} Recent runs <span className="dim" style={dim}>— measured API cost · latest 20</span></h2>
+          {runsOpen && (
+          <DataTable
+            rows={runs}
+            rowNumbers={true}
+            maxHeight={340}
+            clientExport="sf_api_recent_runs"
+            searchCols="run, activity, actor"
+            columns={[
+              { key: 'run_id', label: 'Run', sort: true, copy: true, align: 'left', help: 'The run identifier. Use the copy button to grab the full id.', exportValue: (r) => r.run_id, render: (r) => <span className="mono">{String(r.run_id).slice(0, 18)}</span> },
+              { key: 'op', label: 'Activity', sort: true, help: 'Operation this run performed — merge, restore or recreate.' },
+              { key: 'actor', label: 'Actor', sort: true, help: 'The app user who initiated the run.', render: (r) => r.actor || '—' },
+              { key: 'cost', label: 'API cost', sort: true, help: 'Daily API Requests consumed by this run (last reading − first reading; needs ≥2 snapshots).', exportValue: (r) => r.cost, render: (r) => (Number(r.snapshots) >= 2 ? fmt(r.cost) : '—') },
+              { key: 'apex_cost', label: 'Apex cost', sort: true, help: 'DailyAsyncApexExecutions consumed by this run — merges trigger async Apex (rollups, managed-package logic). This limit is far smaller than the API budget.', exportValue: (r) => r.apex_cost, render: (r) => (Number(r.snapshots) >= 2 && r.apex_cost != null ? fmt(r.apex_cost) : '—') },
+              { key: 'last_seen', label: 'Last seen (MTN)', sort: true, help: 'Timestamp of the run\'s most recent reading, Mountain time.', exportValue: (r) => formatMtn(r.last_seen), render: (r) => formatMtn(r.last_seen) },
+            ]}
+          />
+          )}
+          <p className="muted small" style={{ marginTop: 8 }}>Cost = Daily API Requests consumed between a run's first and last reading (needs ≥2 snapshots per run). Showing the 20 most recent runs.</p>
         </div>
       )}
 
       {view && view.other && Object.keys(view.other).length > 0 && (
         <div className="mx-panel">
-          <h2>Other limits <span className="dim" style={dim}>— live reading only</span></h2>
-          <table>
-            <thead><tr><th>Limit</th><th>Used</th><th>Remaining</th><th>Max</th></tr></thead>
-            <tbody>
-              {Object.entries(view.other).map(([k, v]) => (
-                <tr key={k}><td>{k}</td><td>{fmt(v.used)}</td><td>{fmt(v.remaining)}</td><td>{fmt(v.max)}</td></tr>
-              ))}
-            </tbody>
-          </table>
+          <h2 onClick={() => setOtherOpen((o) => !o)} style={{ cursor: 'pointer', userSelect: 'none' }}>{otherOpen ? '▾' : '▸'} Other limits <span className="dim" style={dim}>— live reading only</span></h2>
+          {otherOpen && (
+          <DataTable
+            rows={Object.entries(view.other).map(([k, v]) => ({ limit: k, used: v.used, remaining: v.remaining, max: v.max }))}
+            rowNumbers={true}
+            maxHeight={340}
+            clientExport="sf_api_other_limits"
+            searchCols="limit"
+            columns={[
+              { key: 'limit', label: 'Limit', sort: true, align: 'left', help: 'Salesforce org limit name, from the live /limits reading.' },
+              { key: 'used', label: 'Used', sort: true, help: 'Amount of this limit consumed.', render: (r) => fmt(r.used) },
+              { key: 'remaining', label: 'Remaining', sort: true, help: 'Amount of this limit still available.', render: (r) => fmt(r.remaining) },
+              { key: 'max', label: 'Max', sort: true, help: 'The limit\'s allocated maximum.', render: (r) => fmt(r.max) },
+            ]}
+          />
+          )}
         </div>
       )}
     </>

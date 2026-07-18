@@ -23,7 +23,7 @@ function CopyButton({ value }) {
 //   filter: true renders a per-column control in the header (a dropdown if `facets[key]` exists, else a text box).
 //   wrap: true lets long cells wrap; every cell gets a title tooltip with its full value.
 // `facets` maps column key -> distinct values (for the dropdowns). `searchCols` labels what search scans.
-export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, minWidth, initialQuery = '', rowNumbers = true, onRowClick, rowClass, maxHeight = 'min(70vh, 600px)' }) {
+export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, clientExport, minWidth, initialQuery = '', rowNumbers = true, onRowClick, rowClass, maxHeight = 'min(70vh, 600px)' }) {
   const server = typeof fetcher === 'function';
   const [q, setQ] = useState(initialQuery || '');
   const [sortKey, setSortKey] = useState(null);
@@ -113,6 +113,38 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
   const setFilter = (key, val) => { setPage(1); setColFilters((f) => ({ ...f, [key]: val })); };
   // Stop the in-flight server request (e.g. a slow search) and keep the last loaded rows on screen.
   const stopSearch = () => { if (acRef.current) acRef.current.abort(); setLoading(false); };
+  // Client-side CSV export for in-memory tables (no server export endpoint). Exports the current
+  // filtered + sorted `view`, honoring each column's optional `exportValue` (else the raw cell value).
+  const clientCsv = () => {
+    const cellOf = (col, row) => (col.exportValue ? col.exportValue(row) : row[col.key]);
+    const esc = (v) => { const t = String(v == null ? '' : v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const lines = [columns.map((c) => esc(c.label)).join(',')];
+    for (const row of view) lines.push(columns.map((c) => esc(cellOf(c, row))).join(','));
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = (clientExport || 'export') + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  // Real Excel export for in-memory tables — SpreadsheetML 2003 (a .xls Excel opens natively, no library).
+  const clientExcel = () => {
+    const cellOf = (col, row) => (col.exportValue ? col.exportValue(row) : row[col.key]);
+    const xesc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const isNum = (v) => (typeof v === 'number') || (v != null && v !== '' && typeof v !== 'boolean' && String(v).trim() !== '' && !Number.isNaN(Number(v)));
+    const cell = (v) => `<Cell><Data ss:Type="${isNum(v) ? 'Number' : 'String'}">${xesc(v)}</Data></Cell>`;
+    const head = '<Row>' + columns.map((c) => `<Cell><Data ss:Type="String">${xesc(c.label)}</Data></Cell>`).join('') + '</Row>';
+    const body = view.map((row) => '<Row>' + columns.map((c) => cell(cellOf(c, row))).join('') + '</Row>').join('');
+    const xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
+      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+      '<Worksheet ss:Name="Export"><Table>' + head + body + '</Table></Worksheet></Workbook>';
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = (clientExport || 'export') + '.xls';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
   const placeholder = 'Search ' + (searchCols ? searchCols : 'all columns') + '…';
 
   return (
@@ -146,6 +178,13 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
               href={exportUrl(exportBase, { q, sort: sortKey || undefined, dir: sortDir, colFilters, ...exportExtra, format: 'xlsx' })}>Excel</a>
           </span>
         )}
+        {!exportBase && clientExport && (
+          <span className="dl-group dt-export">
+            <span className="muted small">Export</span>
+            <a className="dl-link" title="Download these rows as CSV" style={{ cursor: 'pointer' }} onClick={clientCsv}>CSV</a>
+            <a className="dl-link" title="Download these rows as Excel" style={{ cursor: 'pointer' }} onClick={clientExcel}>Excel</a>
+          </span>
+        )}
         <span className="dt-count muted small">
           {loading
             ? <span className="dt-loading"><span className="spinner" aria-hidden="true" /> Searching… {elapsed.toFixed(1)}s
@@ -162,7 +201,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
         <thead>
           <tr>{rowNumbers && <th className="dt-rownum">#</th>}{columns.map((col) => (
             <th key={col.key} onClick={() => toggle(col)} title={col.help || undefined}
-              style={{ cursor: sort_key_of(col) ? 'pointer' : 'default' }}>
+              style={{ cursor: sort_key_of(col) ? 'pointer' : 'default', ...(col.align ? { textAlign: col.align } : {}) }}>
               {col.label}{col.help ? <span className="th-info" aria-hidden="true"> ⓘ</span> : ''}{mark(col)}
             </th>
           ))}</tr>
@@ -199,7 +238,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
           ) : (
             view.map((row, i) => (
               <tr key={i} className={rowClass ? rowClass(row) : undefined} onClick={onRowClick ? () => onRowClick(row) : undefined} style={onRowClick ? { cursor: 'pointer' } : undefined}>{rowNumbers && <td className="dt-rownum">{(server ? (page - 1) * pageSize : 0) + i + 1}</td>}{columns.map((col) => (
-                <td key={col.key} className={col.wrap ? 'dt-wrap' : undefined} title={String(row[col.key] ?? '')}>
+                <td key={col.key} className={col.wrap ? 'dt-wrap' : undefined} style={col.align ? { textAlign: col.align } : undefined} title={String(row[col.key] ?? '')}>
                   {col.render ? col.render(row) : row[col.key]}
                   {col.copy && row[col.key] != null && row[col.key] !== '' ? <CopyButton value={row[col.key]} /> : null}
                 </td>

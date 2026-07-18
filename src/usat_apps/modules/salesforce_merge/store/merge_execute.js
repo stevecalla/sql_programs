@@ -213,17 +213,21 @@ async function runQueue(ids, opts = {}, deps = {}) {
     await RUN.update(runId, { stage: 'snapshot', current_label: label('gathering child records') });
     log(label('gathering child records'));
     let snap_ok = false;
+    let child_captured = null;
     try {
       const contactByAccount = {};
       for (const a of accounts) if (a.contact) contactByAccount[a.account] = a.contact;
       const children = await SF.fetch_children(accounts.map((a) => a.account), { is_test, contactByAccount }).catch(() => []);
+      child_captured = children.length;
       await SN.save(runId, e, accounts, children);
       snap_ok = true;
     } catch (err) { snap_ok = false; }
 
     await RUN.update(runId, { stage: 'snapshot', current_label: label('snapshot saved') });
     const masterFields = build_master_fields(accounts, e.survivor_account, e.field_overrides);
-    const childTotal = (e.child_counts && e.child_counts.total) || 0;
+    // Prefer the ACTUAL children captured in the snapshot (accurate however the set was queued); fall
+    // back to the queue's pre-computed count only if the child fetch failed.
+    const childTotal = child_captured != null ? child_captured : ((e.child_counts && e.child_counts.total) || 0);
     const opCount = Math.max(1, ceil2(losers.length));
 
     if (!armed) {
@@ -261,7 +265,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
       continue;
     }
 
-    if (!apiStartLogged) { apiStartLogged = true; try { const u0 = await APIUSE.usage_via_limits(conn); if (u0) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: u0.used, max: u0.max }); } catch (e) { /* fire-and-forget */ } }
+    if (!apiStartLogged) { apiStartLogged = true; try { const u0 = await APIUSE.usage_all(conn); if (u0 && u0.api) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: u0.api.used, max: u0.api.max, apex_used: u0.apex && u0.apex.used, apex_max: u0.apex && u0.apex.max, bulk_used: u0.bulk && u0.bulk.used, bulk_max: u0.bulk && u0.bulk.max }); } catch (e) { /* fire-and-forget */ } }
 
     const merged = []; let remaining = losers.slice(); let failure = null; let first = true;
     for (let i = 0; i < losers.length; i += 2) {
@@ -341,7 +345,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
     ? 'Stopped — ' + completedSets + ' of ' + entries.length + ' set(s) processed'
     : 'Complete') + driftLabel;
   log('run ' + runId + (stopped ? ' STOPPED' : ' complete') + ': done=' + out.done + ' simulated=' + out.simulated + ' skipped=' + out.skipped + ' failed=' + out.failed + (stopped ? ' (remaining ' + (out.remaining || 0) + ')' : ''));
-  try { const uEnd = await APIUSE.usage_via_limits(conn); if (uEnd) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: uEnd.used, max: uEnd.max }); } catch (e) { /* fire-and-forget */ }
+  try { const uEnd = await APIUSE.usage_all(conn); if (uEnd && uEnd.api) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: uEnd.api.used, max: uEnd.api.max, apex_used: uEnd.apex && uEnd.apex.used, apex_max: uEnd.apex && uEnd.apex.max, bulk_used: uEnd.bulk && uEnd.bulk.used, bulk_max: uEnd.bulk && uEnd.bulk.max }); } catch (e) { /* fire-and-forget */ }
   await RUN.finish(runId, { status: finalStatus, completed_ops: completedOps, completed_sets: completedSets, current_label: finalLabel });
   CTRL.clear(runId);
   return out;

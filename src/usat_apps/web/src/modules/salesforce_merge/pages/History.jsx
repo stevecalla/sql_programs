@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import DatasetStamp from '../components/DatasetStamp.jsx';
 import { api, exportUrl } from '../lib/api.js';
+import { track } from '../../../lib/track.js';
 
 // Merge / restore history lookup — a filterable, read-only view of the immutable audit
 // (salesforce_merge_history). Search by survivor name / account / source key, filter by result, and
@@ -37,8 +38,18 @@ function useSort(initialKey = null) {
   return { onSort, apply, arrow };
 }
 
-function DiffDetail({ diff }) {
-  if (!diff || typeof diff !== 'object') return <p className="muted small" style={{ padding: '6px 10px', margin: 0 }}>No field-level detail for this row.</p>;
+function DiffDetail({ diff, row }) {
+  if (!diff || typeof diff !== 'object') {
+    const res = row && row.result;
+    const why = (res === 'done' || res === 'simulated')
+      ? 'No field-level diff for this merge. This row records drift — fields that changed between when the set was queued and when it processed — and there was none, so nothing changed to show. (The survivorship plan actually written to the survivor is shown live on Process Merges; it isn’t stored here.)'
+      : (res === 'restored' || res === 'recreated')
+        ? 'No field-level changes for this restore — no survivor fields needed resetting (and none were kept), so there is nothing to diff.'
+        : (res === 'skipped' || res === 'failed')
+          ? ('No field-level changes were made (this set was ' + res + ' — see the Reason column for why).')
+          : 'No field-level changes were recorded for this row.';
+    return <p className="muted small" style={{ padding: '6px 10px', margin: 0 }}>{why}</p>;
+  }
   if (diff.kind === 'merge_drift') {
     const fields = diff.fields || [];
     return (
@@ -108,6 +119,7 @@ export default function History() {
           <input className="search" style={{ width: 260 }} placeholder="Search name, account id, or source…" value={q}
             onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') load(); }} />
           <button className="btn" style={{ width: 'auto' }} onClick={load} disabled={busy}>{busy ? 'Searching…' : 'Search'}</button>
+          <button className="btn" style={{ width: 'auto' }} onClick={() => { track('history_refresh', { panel: 'merge', view: 'history' }); load(); }} disabled={busy} title="Reload the latest history">{busy ? '…' : '↻ Refresh'}</button>
           <span className="muted small">Show</span>
           <select className="tb-select" style={{ width: 90 }} value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
             {[100, 200, 500, 1000].map((n) => <option key={n} value={n}>{n}</option>)}
@@ -131,6 +143,7 @@ export default function History() {
               <th style={{ cursor: 'pointer' }} onClick={() => sort.onSort('mode')}>Mode{sort.arrow('mode')}</th>
               <th style={{ cursor: 'pointer', textAlign: 'right' }} onClick={() => sort.onSort('api_cost')}>API{sort.arrow('api_cost')}</th>
               <th style={{ textAlign: 'right' }} title="Run total ÷ sets in the run">≈/merge</th>
+              <th style={{ cursor: 'pointer', textAlign: 'right' }} title="Async Apex recorded for this run (approximate — rollups fire after the merge, so it can read low)" onClick={() => sort.onSort('apex_cost')}>Apex{sort.arrow('apex_cost')}</th>
               <th>Reason</th>
               <th style={{ cursor: 'pointer' }} onClick={() => sort.onSort('environment')}>Env{sort.arrow('environment')}</th>
               <th>Dossier</th>
@@ -147,6 +160,7 @@ export default function History() {
                   <td>{r.mode}</td>
                   <td style={{ textAlign: 'right' }}>{r.api_cost != null ? Number(r.api_cost).toLocaleString() : '—'}</td>
                   <td style={{ textAlign: 'right', color: 'var(--dim)' }}>{perMerge(r) != null ? '≈' + perMerge(r).toLocaleString() : '—'}</td>
+                  <td style={{ textAlign: 'right' }} title="Async Apex recorded for this run (approximate)">{r.apex_cost != null ? Number(r.apex_cost).toLocaleString() : '—'}</td>
                   <td className="small" title={r.reason}>
                     {r.reason}
                     {isFileShareNote(r.reason) && (
@@ -160,9 +174,9 @@ export default function History() {
                       : <span className="muted small">—</span>}
                   </td>
                 </tr>,
-                open.has(r.id) ? <tr key={r.id + '_d'}><td colSpan={12} style={{ padding: 0, background: 'var(--card)' }}><DiffDetail diff={r.diff} /></td></tr> : null,
+                open.has(r.id) ? <tr key={r.id + '_d'}><td colSpan={13} style={{ padding: 0, background: 'var(--card)' }}><DiffDetail diff={r.diff} row={r} /></td></tr> : null,
               ])}
-              {rows.length === 0 && !busy && <tr><td colSpan={12} className="muted small">No history rows match — adjust the filters.</td></tr>}
+              {rows.length === 0 && !busy && <tr><td colSpan={13} className="muted small">No history rows match — adjust the filters.</td></tr>}
             </tbody>
           </table>
         </div>

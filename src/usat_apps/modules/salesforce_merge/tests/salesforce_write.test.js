@@ -182,3 +182,41 @@ test('using_dedicated_write_user reflects env', () => {
   assert.equal(sw.using_dedicated_write_user(true), true);
   if (saved === undefined) delete process.env.SF_DEV_WRITE_USERNAME; else process.env.SF_DEV_WRITE_USERNAME = saved;
 });
+
+
+test('_is_transient flags retryable contention, not real validation errors', () => {
+  assert.ok(sw._is_transient('UNABLE_TO_LOCK_ROW: unable to obtain exclusive access'));
+  assert.ok(sw._is_transient('deadlock detected'));
+  assert.ok(sw._is_transient('ECONNRESET'));
+  assert.ok(!sw._is_transient('INVALID_FIELD: bad field'));
+  assert.ok(!sw._is_transient('REQUIRED_FIELD_MISSING'));
+  assert.ok(!sw._is_transient(''));
+});
+
+test('merge_one retries a transient lock THROW, then succeeds', async () => {
+  process.env.MERGE_LOCK_BACKOFF_MS = '1';
+  let n = 0;
+  const conn = { soap: { merge: async (req) => { n += 1; if (n < 3) throw new Error('UNABLE_TO_LOCK_ROW: try later'); return { success: true, id: req.masterRecord.Id, mergedRecordIds: req.recordToMergeIds }; } } };
+  const r = await sw.merge_one(conn, '001A', ['001B']);
+  assert.strictEqual(n, 3);
+  assert.strictEqual(r.success, true);
+  assert.strictEqual(r.attempts, 3);
+  delete process.env.MERGE_LOCK_BACKOFF_MS;
+});
+
+test('merge_one does NOT retry a non-transient error (fails first try)', async () => {
+  let n = 0;
+  const conn = { soap: { merge: async () => { n += 1; throw new Error('INVALID_FIELD: nope'); } } };
+  await assert.rejects(() => sw.merge_one(conn, '001A', ['001B']), /INVALID_FIELD/);
+  assert.strictEqual(n, 1);
+});
+
+test('merge_one retries a returned success:false lock failure', async () => {
+  process.env.MERGE_LOCK_BACKOFF_MS = '1';
+  let n = 0;
+  const conn = { soap: { merge: async (req) => { n += 1; if (n < 2) return { success: false, errors: [{ statusCode: 'UNABLE_TO_LOCK_ROW', message: 'locked' }] }; return { success: true, id: req.masterRecord.Id }; } } };
+  const r = await sw.merge_one(conn, '001A', ['001B']);
+  assert.strictEqual(n, 2);
+  assert.strictEqual(r.success, true);
+  delete process.env.MERGE_LOCK_BACKOFF_MS;
+});

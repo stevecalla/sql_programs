@@ -519,8 +519,14 @@ function mount(app) {
       const env = is_test ? 'Sandbox' : 'Production';
       const t = require('./store/timestamps').now_mtn_utc();
       // Record this live reading so the panel can show it later WITHOUT another SF call (op=probe).
-      api_usage.record({ env: env, org_id: lim.org_id, op: 'probe', actor: req.user, used: lim.daily_api.used, max: lim.daily_api.max });
-      res.json({ ok: true, environment: env, at: t.utc, at_mtn: t.mtn, ...lim });
+      // Also capture async-Apex + Bulk so those limits build an over-time trend (merges spend Apex; the
+      // Get-Duplicates full pull spends Bulk batches).
+      const _apex = lim.other && lim.other.DailyAsyncApexExecutions;
+      const _bulk = lim.other && lim.other.DailyBulkApiBatches;
+      api_usage.record({ env: env, org_id: lim.org_id, op: 'probe', actor: req.user, used: lim.daily_api.used, max: lim.daily_api.max,
+        apex_used: _apex && _apex.used, apex_max: _apex && _apex.max, bulk_used: _bulk && _bulk.used, bulk_max: _bulk && _bulk.max });
+      const _shapeOther = (o) => (o && o.max != null) ? { used: o.used, max: o.max, remaining: o.remaining, pct_used: o.max > 0 ? Math.round(1000 * o.used / o.max) / 10 : null } : null;
+      res.json({ ok: true, environment: env, at: t.utc, at_mtn: t.mtn, ...lim, daily_apex: _shapeOther(_apex), daily_bulk: _shapeOther(_bulk) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // SF API usage — CACHED (no live SF call): the latest captured snapshot + intraday trend + per-op
@@ -532,9 +538,11 @@ function mount(app) {
       const days = Number(req.query.days) || 1;
       const ep = String((req.query && req.query.env) || '').toLowerCase();
       const env = (ep === 'production' || ep === 'prod') ? 'Production' : (ep === 'sandbox' || ep === 'test') ? 'Sandbox' : null;
+      const _tsnow = require('./store/timestamps').now_mtn_utc();
+      const mtnToday = String(_tsnow.mtn).slice(0, 10);
       const [lat, points, by_op, runs, approved] = await Promise.all([
         api_usage.latest(pool, env),
-        api_usage.list_recent(pool, { days: days, env: env }),
+        api_usage.list_recent(pool, { mtn_date: mtnToday, env: env }),
         api_usage.summary_by_op(pool, { days: days, env: env }),
         api_usage.recent_runs(pool, { days: 7, env: env }),
         mqueue.list(undefined, 'approved'),
@@ -544,12 +552,14 @@ function mount(app) {
         const has = u != null && m != null;
         return { used: u, max: m, remaining: has ? Math.max(0, m - u) : null, pct_used: (has && m > 0) ? Math.round(1000 * u / m) / 10 : null };
       };
-      const latest = lat ? { environment: lat.env, org_id: lat.org_id, at: lat.created_at_utc, at_mtn: lat.created_at_mtn, op: lat.op, daily_api: shape(lat.api_used, lat.api_max) } : null;
+      const latest = lat ? { environment: lat.env, org_id: lat.org_id, at: lat.created_at_utc, at_mtn: lat.created_at_mtn, op: lat.op, daily_api: shape(lat.api_used, lat.api_max), daily_apex: shape(lat.apex_used, lat.apex_max), daily_bulk: shape(lat.bulk_used, lat.bulk_max) } : null;
       // Pre-flight: estimate the DailyApiRequests cost of running the approved queue vs the remaining
       // budget (from the last captured reading). Read-only, no SF call.
       const est = api_estimate.estimate_run_calls(approved, {});
       const da = latest && latest.daily_api ? latest.daily_api : null;
       const remaining = da ? da.remaining : null;
+      const dapex = latest && latest.daily_apex ? latest.daily_apex : null;
+      const apexRemaining = dapex ? dapex.remaining : null;
       const preflight = {
         approved_sets: est.sets,
         estimate: est.total,
@@ -559,9 +569,14 @@ function mount(app) {
         max: da ? da.max : null,
         would_exceed: (remaining != null) ? est.total > remaining : null,
         pct_after: (da && da.max && da.used != null) ? Math.round(1000 * (da.used + est.total) / da.max) / 10 : null,
+        apex_estimate: est.apex_total,
+        apex_remaining: apexRemaining,
+        apex_max: dapex ? dapex.max : null,
+        apex_would_exceed: (apexRemaining != null) ? est.apex_total > apexRemaining : null,
+        apex_pct_after: (dapex && dapex.max && dapex.used != null) ? Math.round(1000 * (dapex.used + est.apex_total) / dapex.max) / 10 : null,
         reading_at: latest ? latest.at_mtn : null,
       };
-      res.json({ ok: true, env: env, days: days, latest: latest, points: points, by_op: by_op, runs: runs, preflight: preflight });
+      res.json({ ok: true, env: env, days: days, mtn_today: mtnToday, latest: latest, points: points, by_op: by_op, runs: runs, preflight: preflight });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge/whoami', gate, async function (req, res) {

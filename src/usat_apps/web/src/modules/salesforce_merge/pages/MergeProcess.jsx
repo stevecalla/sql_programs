@@ -54,6 +54,7 @@ export default function MergeProcess() {
   const toggleDriftRow = (id) => setDriftRowOpen((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const [progress, setProgress] = useState(null);
   const [elapsed, setElapsed] = useState(0);
+  const [progOpen, setProgOpen] = useState(true);
   const [stampMerged, setStampMerged] = useState(true);
   const [attachDossier, setAttachDossier] = useState(() => { try { return localStorage.getItem('mp_attach_dossier') !== '0'; } catch (e) { return true; } });
   const [stampFields, setStampFields] = useState(null);
@@ -392,6 +393,7 @@ export default function MergeProcess() {
         return (
           <div className="card" style={{ marginTop: 12 }}>
             <p style={{ margin: '0 0 8px', fontWeight: 700, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <button type="button" onClick={() => setProgOpen((o) => !o)} aria-expanded={progOpen} title={progOpen ? 'Collapse' : 'Expand'} style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', font: 'inherit', padding: 0, width: 14 }}>{progOpen ? '▾' : '▸'}</button>
               <span>Progress</span>
               <span className="muted small" style={{ fontWeight: 400 }}>{progress ? ' — ' + (progress.current_label || progress.status) : (busy ? ' — starting…' : ' — no run this session')}</span>
               <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
@@ -402,6 +404,7 @@ export default function MergeProcess() {
                 <button type="button" className="btn" style={{ padding: '2px 8px', fontSize: 11 }} disabled={busy} title="Clear the progress display" onClick={() => { setProgress(null); setResult(null); setElapsed(0); }}>Reset</button>
               </span>
             </p>
+            {progOpen && (<>
             <div className="stepper">
               {MERGE_STAGES.map((s, i) => {
                 const finished = progress && (progress.status === 'done' || progress.status === 'error' || progress.status === 'cancelled');
@@ -469,6 +472,7 @@ export default function MergeProcess() {
                 </tbody>
               </table>
             </div>
+            </>)}
           </div>
         );
       })()}

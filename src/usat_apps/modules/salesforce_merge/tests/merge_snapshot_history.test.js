@@ -95,3 +95,14 @@ test('history.list with no filters has no WHERE (unbounded recent list)', async 
   assert.ok(/FROM `salesforce_merge_history` ORDER BY/i.test(sel.sql), 'no WHERE on the outer query when unfiltered');
   assert.deepEqual(sel.params, []);
 });
+
+
+test('history.list SQL includes api_cost + apex_cost run-delta subqueries', async () => {
+  const sqls = [];
+  const query = async (s) => { sqls.push(String(s)); return [[], []]; };
+  await hist.list({}, query);
+  const sel = sqls.find((s) => /api_cost/.test(s)) || '';
+  assert.match(sel, /AS api_cost/);
+  assert.match(sel, /AS apex_cost/);
+  assert.match(sel, /MAX\(u\.apex_used\) - MIN\(u\.apex_used\)/);
+});

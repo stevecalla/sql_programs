@@ -84,3 +84,22 @@ keeps the current + prior calendar year (`KEEP_YEARS=2`).
 `tests/metrics.test.js` — the read-only SQL guard (`ask.assert_safe_select`: injects/clamps `LIMIT`,
 blocks non-SELECT, other tables, hidden keywords, multi-statement), the column whitelist, and
 `build_report`'s shape via a fake pool.
+
+## SF API panel + History — added events (2026-07)
+
+Page-level interactions on the newer SF API and History screens now emit events via the shared
+`track(event, { panel, view })` helper (`web/src/lib/track.js`), matching the participation-maps pattern.
+The API-panel data tables (By activity / Recent runs / Other limits) are `DataTable`s, so their
+search/filter/export already auto-emit `search_run` / `filter_run` / `report_export` — no extra wiring.
+
+New explicit events:
+
+| Event | Fired when | `view` value |
+|---|---|---|
+| `sf_api_view` | Budget tab switched | `apex` / `api` / `preflight` / `usage` |
+| `sf_api_env` | Sandbox/Production tab switched | `sandbox` / `production` |
+| `sf_api_refresh` | Refresh (live) clicked | `live` (page) / `preflight` (pre-flight card) |
+| `history_refresh` | History Refresh clicked | `history` |
+
+All carry `panel: 'merge'`. Not yet tracked (low value / noisy): collapsible-card toggles and per-column
+client sorts on History.

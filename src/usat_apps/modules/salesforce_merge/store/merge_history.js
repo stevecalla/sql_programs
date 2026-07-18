@@ -88,7 +88,8 @@ async function list(opts = {}, query = real_query) {
     params.push(like, like, like);
   }
   const sql = 'SELECT ' + COLS
-    + ', (SELECT MAX(u.api_used) - MIN(u.api_used) FROM `salesforce_merge_api_usage` u WHERE u.run_id = `' + TABLE + '`.run_id) AS api_cost'
+    + ', (SELECT IF(COUNT(*) >= 2, MAX(u.api_used) - MIN(u.api_used), NULL) FROM `salesforce_merge_api_usage` u WHERE u.run_id = `' + TABLE + '`.run_id) AS api_cost'
+    + ', (SELECT IF(COUNT(*) >= 2, MAX(u.apex_used) - MIN(u.apex_used), NULL) FROM `salesforce_merge_api_usage` u WHERE u.run_id = `' + TABLE + '`.run_id) AS apex_cost'
     + ' FROM `' + TABLE + '`' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY id DESC LIMIT ' + n;
   const rows = await query(sql, params);
   return (rows || []).map(parseRow);

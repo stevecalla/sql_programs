@@ -13,7 +13,12 @@ const TABLE = 'salesforce_merge_api_usage';
 let _ready = null;
 async function ensure(pool) {
   if (_ready) return _ready;
-  _ready = (async () => { await ensure_table(pool, await query_create_salesforce_merge_api_usage_table(TABLE)); })();
+  _ready = (async () => {
+    await ensure_table(pool, await query_create_salesforce_merge_api_usage_table(TABLE));
+    for (const col of ['apex_used INT', 'apex_max INT', 'bulk_used INT', 'bulk_max INT']) {
+      try { await pool.query('ALTER TABLE ' + TABLE + ' ADD COLUMN ' + col); } catch (e) { /* column exists */ }
+    }
+  })();
   return _ready;
 }
 
@@ -41,28 +46,45 @@ async function usage_via_limits(conn) {
   return usage_from_conn(conn);
 }
 
+// Read the three limits that a merge/pull actually spends: DailyApiRequests, DailyAsyncApexExecutions
+// (merges trigger async Apex rollups), and DailyBulkApiBatches (the full data pull uses the Bulk API).
+// Returns { api:{used,max}, apex:{used,max}|null, bulk:{used,max}|null }; /limits itself is free + SOAP-safe.
+async function usage_all(conn) {
+  const pick = (lim, k) => { const d = lim && lim[k]; const max = Number(d && d.Max); const rem = Number(d && d.Remaining); return (Number.isFinite(max) && Number.isFinite(rem)) ? { used: max - rem, max } : null; };
+  try {
+    const lim = await conn.limits();
+    return { api: pick(lim, 'DailyApiRequests') || usage_from_conn(conn), apex: pick(lim, 'DailyAsyncApexExecutions'), bulk: pick(lim, 'DailyBulkApiBatches') };
+  } catch (e) { return { api: usage_from_conn(conn), apex: null, bulk: null }; }
+}
+
 // Insert one snapshot. used/max are passed explicitly (caller reads them from the conn or the /limits
 // result) so this stays pure/testable. Fire-and-forget; pool is injectable for tests.
-async function record({ env, org_id, op, run_id, actor, used, max } = {}, pool) {
+async function record({ env, org_id, op, run_id, actor, used, max, apex_used, apex_max, bulk_used, bulk_max } = {}, pool) {
   try {
     if (used == null || max == null) return;
     const p = pool || (await require('../../../store/db').get_pool());
     await ensure(p);
     const t = ts.now_mtn_utc();
+    const numOrNull = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
     await p.query(
-      'INSERT INTO ' + TABLE + ' (created_at_utc, created_at_mtn, env, org_id, op, run_id, actor, api_used, api_max, source) VALUES (?,?,?,?,?,?,?,?,?,?)',
-      [t.utc, t.mtn, env || null, org_id || null, op || 'read', run_id || null, actor || null, Number(used), Number(max), 'web']
+      'INSERT INTO ' + TABLE + ' (created_at_utc, created_at_mtn, env, org_id, op, run_id, actor, api_used, api_max, apex_used, apex_max, bulk_used, bulk_max, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      [t.utc, t.mtn, env || null, org_id || null, op || 'read', run_id || null, actor || null, Number(used), Number(max),
+       numOrNull(apex_used), numOrNull(apex_max), numOrNull(bulk_used), numOrNull(bulk_max), 'web']
     );
   } catch (e) { /* analytics must never break the app */ }
 }
 
 // Trend points over the window (chronological, for charting).
-async function list_recent(pool, { days = 1, env = null, limit = 1000 } = {}) {
-  const where = ['created_at_utc >= UTC_TIMESTAMP() - INTERVAL ' + (Number(days) || 1) + ' DAY'];
+async function list_recent(pool, { days = 1, env = null, limit = 1000, mtn_date = null } = {}) {
+  const where = [];
   const args = [];
+  // mtn_date pins the trend to a Mountain-time CALENDAR day (created_at_mtn is stored in MTN) so
+  // "Usage today" means today in MTN, not a rolling 24h UTC window. Falls back to days-window otherwise.
+  if (mtn_date) { where.push('DATE(created_at_mtn) = ?'); args.push(mtn_date); }
+  else { where.push('created_at_utc >= UTC_TIMESTAMP() - INTERVAL ' + (Number(days) || 1) + ' DAY'); }
   if (env) { where.push('env = ?'); args.push(env); }
   const rows = (await pool.query(
-    'SELECT created_at_mtn, created_at_utc, env, op, run_id, actor, api_used, api_max FROM ' + TABLE +
+    'SELECT created_at_mtn, created_at_utc, env, op, run_id, actor, api_used, api_max, apex_used FROM ' + TABLE +
     ' WHERE ' + where.join(' AND ') + ' ORDER BY created_at_utc ASC LIMIT ' + (Number(limit) || 1000), args))[0];
   return rows;
 }
@@ -82,7 +104,8 @@ async function summary_by_op(pool, { days = 1, env = null } = {}) {
 // Per-run cost: (max used - min used) across the snapshots sharing a run_id = DailyApiRequests consumed.
 async function run_cost(pool, run_id) {
   const rows = (await pool.query(
-    'SELECT run_id, op, env, COUNT(*) n, MIN(api_used) start_used, MAX(api_used) end_used, (MAX(api_used) - MIN(api_used)) cost FROM ' + TABLE +
+    'SELECT run_id, op, env, COUNT(*) n, MIN(api_used) start_used, MAX(api_used) end_used, (MAX(api_used) - MIN(api_used)) cost, ' +
+    '(MAX(apex_used) - MIN(apex_used)) apex_cost, (MAX(bulk_used) - MIN(bulk_used)) bulk_cost FROM ' + TABLE +
     ' WHERE run_id = ? GROUP BY run_id, op, env', [run_id]))[0];
   return rows[0] || null;
 }
@@ -92,7 +115,7 @@ async function run_cost(pool, run_id) {
 async function latest(pool, env) {
   const args = []; let w = '';
   if (env) { w = ' WHERE env = ?'; args.push(env); }
-  const rows = (await pool.query("SELECT DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') created_at_mtn, created_at_utc, env, org_id, op, api_used, api_max FROM " + TABLE + w + ' ORDER BY created_at_utc DESC LIMIT 1', args))[0];
+  const rows = (await pool.query("SELECT DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') created_at_mtn, created_at_utc, env, org_id, op, api_used, api_max, apex_used, apex_max, bulk_used, bulk_max FROM " + TABLE + w + ' ORDER BY created_at_utc DESC LIMIT 1', args))[0];
   return rows[0] || null;
 }
 
@@ -103,9 +126,9 @@ async function recent_runs(pool, { days = 7, env = null, limit = 20 } = {}) {
   if (env) { where.push('env = ?'); args.push(env); }
   const rows = (await pool.query(
     'SELECT run_id, MAX(op) op, MAX(env) env, MAX(actor) actor, COUNT(*) snapshots, MIN(api_used) start_used, ' +
-    "MAX(api_used) end_used, (MAX(api_used) - MIN(api_used)) cost, DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') last_seen FROM " + TABLE +
+    "MAX(api_used) end_used, (MAX(api_used) - MIN(api_used)) cost, (MAX(apex_used) - MIN(apex_used)) apex_cost, (MAX(bulk_used) - MIN(bulk_used)) bulk_cost, DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') last_seen FROM " + TABLE +
     ' WHERE ' + where.join(' AND ') + ' GROUP BY run_id ORDER BY MAX(created_at_utc) DESC LIMIT ' + (Number(limit) || 20), args))[0];
   return rows;
 }
 
-module.exports = { ensure, record, usage_from_conn, usage_via_limits, latest, list_recent, summary_by_op, run_cost, recent_runs, TABLE };
+module.exports = { ensure, record, usage_from_conn, usage_via_limits, usage_all, latest, list_recent, summary_by_op, run_cost, recent_runs, TABLE };

@@ -212,18 +212,25 @@ async function queue_and_approve(entries) {
 }
 
 // Poll a run until it leaves queued/running. onTick(row) for progress narration.
+// Console verbosity: default COMPACT (one line per batch + a periodic global heartbeat) so a 200-merge
+// run stays readable; --verbose restores the per-set/per-phase stream; --heartbeat <sec> tunes the beat.
+const VERBOSE = process.argv.includes('--verbose');
+const HEARTBEAT_MS = (() => { const i = process.argv.indexOf('--heartbeat'); const v = i >= 0 ? Number(process.argv[i + 1]) : NaN; return Number.isFinite(v) && v > 0 ? v * 1000 : 60000; })();
+
 async function poll_run(run_id, opts = {}) {
   const { mrun } = stores();
   const total = opts.total || 0; const started = Date.now();
-  let lastAt = 0; let lastDone = -1;
+  const onTick = typeof opts.onTick === 'function' ? opts.onTick : null;
+  let lastAt = 0; let lastDone = -1; let lastLabel = null;
   for (let i = 0; i < 100000; i += 1) {
     const row = await mrun.get(run_id);
     const done = (row && row.completed_sets) || 0; const now = Date.now();
-    // Print only when a set completes OR every 5s — keeps the log compact + shows a live timer.
-    if (row && (done !== lastDone || now - lastAt >= 5000)) {
-      const label = row.current_label ? ' · ' + String(row.current_label).slice(0, 40) : '';
-      console.log(`        ${fmt_hms((now - started) / 1000)} · ${done}/${total} sets${label}`);
-      lastAt = now; lastDone = done;
+    const label = row && row.current_label ? String(row.current_label).slice(0, 40) : '';
+    if (onTick) onTick({ done, total, label, now });
+    // VERBOSE only: per-phase stream. Compact mode is silent here — the caller drives a global heartbeat.
+    if (VERBOSE && row && (done !== lastDone || label !== lastLabel || now - lastAt >= 20000)) {
+      console.log(`        ${fmt_hms((now - started) / 1000)} · ${done}/${total} sets${label ? ' · ' + label : ''}`);
+      lastAt = now; lastDone = done; lastLabel = label;
     }
     if (!row || (row.status !== 'queued' && row.status !== 'running')) return row;
     await sleep(1000);
@@ -239,15 +246,21 @@ async function api_snapshot(env) {
   try {
     const pool = await get_pool_p(); const { api_usage } = stores();
     const r = await api_usage.latest(pool, env_label(env));
-    return r && r.api_used != null ? { used: Number(r.api_used), max: Number(r.api_max) || null } : null;
+    return r && r.api_used != null ? {
+      used: Number(r.api_used), max: Number(r.api_max) || null,
+      apex_used: r.apex_used != null ? Number(r.apex_used) : null, apex_max: r.apex_max != null ? Number(r.apex_max) : null,
+      bulk_used: r.bulk_used != null ? Number(r.bulk_used) : null, bulk_max: r.bulk_max != null ? Number(r.bulk_max) : null,
+    } : null;
   } catch (e) { return null; }
 }
 
-// Measured API cost of one run (max-min api_used across its snapshots).
+// Measured cost of one run across its snapshots: DailyApiRequests + DailyAsyncApexExecutions + Bulk batches.
 async function run_api_cost(run_id) {
   try { const pool = await get_pool_p(); const { api_usage } = stores();
-    const r = await api_usage.run_cost(pool, run_id); return r && r.cost != null ? Number(r.cost) : null;
-  } catch (e) { return null; }
+    const r = await api_usage.run_cost(pool, run_id);
+    if (!r) return { api: null, apex: null, bulk: null };
+    return { api: r.cost != null ? Number(r.cost) : null, apex: r.apex_cost != null ? Number(r.apex_cost) : null, bulk: r.bulk_cost != null ? Number(r.bulk_cost) : null };
+  } catch (e) { return { api: null, apex: null, bulk: null }; }
 }
 
 // One history row per processed set, for the report's Merges tab.
@@ -277,33 +290,60 @@ async function run_sequence(o, stamp) {
   const ids = await queue_and_approve(sel.entries);
   console.log(`      queued + approved ${ids.length} sets`);
 
-  console.log(`\n[3/5] Processing (${o.mode}) in batches of ${o.batch}…`);
+  console.log(`\n[3/5] Processing (${o.mode}) in batches of ${o.batch}…${VERBOSE ? '' : '  (compact — --verbose for per-set detail)'}`);
   const batches = plan_batches(ids, o.batch);
   const api_before = await api_snapshot(o.env);
   const runs = [];
+  const totalSets = ids.length; const seqStart = Date.now();
+  let globalDone = 0; let lastHb = Date.now();
+  const pauseRl = o.pause_batches ? require('readline').createInterface({ input: process.stdin, output: process.stdout }) : null;
   for (let bi = 0; bi < batches.length; bi += 1) {
     const batch = batches[bi];
-    console.log(`      batch ${bi + 1}/${batches.length} — enqueue ${batch.length} sets…`);
+    if (VERBOSE) console.log(`      batch ${bi + 1}/${batches.length} — enqueue ${batch.length} sets…`);
+    const batchStart = Date.now();
     const { run_id } = await mrun.enqueue({ kind: 'merge', mode: o.mode,
       environment: o.env === 'production' ? 'Production' : 'Sandbox', org_id: stamp.org_id || null, created_by: 'stress-test',
       params: { ids: batch, opts: { mode: o.mode, confirm: 'MERGE', dry_run: !isExec, ack_drift: true, stamp_merged: o.stamp, attach_dossier: o.dossier, created_by: 'stress-test' } } });
-    const run = await poll_run(run_id, { total: batch.length });
-    const cost = await run_api_cost(run_id);
-    console.log(`        run ${run_id} → ${run ? run.status : 'unknown'}${cost != null ? ' · ' + cost + ' API calls' : ''}`);
-    runs.push({ run_id, batch: batch.length, status: run ? run.status : 'unknown', cost });
+    const run = await poll_run(run_id, { total: batch.length, onTick: ({ done, now }) => {
+      if (VERBOSE || now - lastHb < HEARTBEAT_MS) return;             // periodic global heartbeat only
+      lastHb = now;
+      const g = globalDone + done; const elapsed = (now - seqStart) / 1000;
+      const pct = totalSets ? Math.round((g / totalSets) * 100) : 0;
+      const eta = g > 0 ? (totalSets - g) * (elapsed / g) : 0;
+      console.log(`        … ${g}/${totalSets} sets · ${pct}% · elapsed ${fmt_hms(elapsed)}${eta ? ' · ETA ~' + fmt_hms(eta) : ''}`);
+    } });
+    const c = await run_api_cost(run_id);
+    const cost = c ? c.api : null;
+    const snap = await api_snapshot(o.env);   // checkpoint the org's API + Apex + Bulk usage after this batch
+    globalDone += batch.length;
+    const bsec = Math.round((Date.now() - batchStart) / 1000);
+    const apexLeft = (snap && snap.apex_max != null && snap.apex_used != null) ? (snap.apex_max - snap.apex_used) : null;
+    // One compact line per batch + a running budget checkpoint (async Apex is the binding limit).
+    console.log(`      batch ${bi + 1}/${batches.length} · ${batch.length} set(s) · ${run ? run.status : 'unknown'}${cost != null ? ' · ' + cost + ' API' : ''} · ${fmt_hms(bsec)} · [${globalDone}/${totalSets} done]${apexLeft != null ? ' · Apex left ' + apexLeft.toLocaleString() : ''}`);
+    runs.push({ run_id, batch: batch.length, status: run ? run.status : 'unknown', cost, apex: c ? c.apex : null, bulk: c ? c.bulk : null, bsec, snap });
+    lastHb = Date.now();
+    if (pauseRl && bi < batches.length - 1) {
+      const ans = await new Promise((res) => pauseRl.question(`      ↳ batch ${bi + 1}/${batches.length} done` + (apexLeft != null ? ` · Apex left ${apexLeft.toLocaleString()}` : '') + ' · continue to next batch? (Y/n): ', (a2) => res((a2 || '').trim().toLowerCase())));
+      if (['n', 'no', 's', 'stop', 'q', 'quit'].includes(ans)) { console.log(`      Stopping after batch ${bi + 1}/${batches.length} — ${batches.length - bi - 1} batch(es) left approved (re-run option 30 to finish).`); break; }
+    }
     if (o.pace_ms) await sleep(o.pace_ms);
   }
+  if (pauseRl) pauseRl.close();
   const api_after = await api_snapshot(o.env);
+  const merge_seconds = Math.round((Date.now() - seqStart) / 1000);   // total time in the merge batches
 
-  let restore = null;
+  let restore = null; let restore_seconds = 0;
   if (o.restore) {
     console.log('\n[4/5] Restoring…');
+    const rStart = Date.now();
     const { run_id } = await mrun.enqueue({ kind: 'restore', mode: o.mode,
       environment: o.env === 'production' ? 'Production' : 'Sandbox', org_id: stamp.org_id || null, created_by: 'stress-test',
       params: { ids, opts: { mode: o.mode, confirm: 'RESTORE', ack_post_merge: true, created_by: 'stress-test' } } });
-    const r = await poll_run(run_id, (x) => process.stdout.write(`\r        ${(x.current_label || 'restoring').slice(0, 48)}     `));
-    process.stdout.write('\n');
-    restore = { run_id, status: r ? r.status : 'unknown' };
+    const r = await poll_run(run_id, { total: ids.length });
+    restore_seconds = Math.round((Date.now() - rStart) / 1000);
+    console.log(`      restore ${run_id} → ${r ? r.status : 'unknown'} in ${fmt_hms(restore_seconds)}`);
+    const rhist = await history_for_runs([run_id]);   // attach per-set history so write_report emits the Restores tab
+    restore = { run_id, status: r ? r.status : 'unknown', hist: rhist, seconds: restore_seconds };
   } else console.log('\n[4/5] Skipping restore.');
 
   console.log('\n[5/5] Writing report…');
@@ -312,21 +352,39 @@ async function run_sequence(o, stamp) {
   const by = (r) => hist.filter((h) => h.result === r).length;
   const outcomes = { done: by('done'), simulated: by('simulated'), failed: by('failed'), held: by('held'), skipped: by('skipped') };
   const api_cost = runs.reduce((a, r) => a + (Number(r.cost) || 0), 0) || ((api_before && api_after) ? (api_after.used - api_before.used) : null);
+  // Async Apex fires AFTER the merge (rollups queue as async jobs), so per-batch start/end deltas miss
+  // it. The whole-run before/after delta is the reliable measure; fall back to the per-batch sum only if
+  // we have no before/after snapshot.
+  const apex_delta = (api_before && api_after && api_after.apex_used != null && api_before.apex_used != null) ? (api_after.apex_used - api_before.apex_used) : null;
+  const apex_cost = apex_delta != null ? apex_delta : (runs.reduce((a, r) => a + (Number(r.apex) || 0), 0) || null);
+  const bulk_delta = (api_before && api_after && api_after.bulk_used != null && api_before.bulk_used != null) ? (api_after.bulk_used - api_before.bulk_used) : null;
+  const bulk_cost = bulk_delta != null ? bulk_delta : (runs.reduce((a, r) => a + (Number(r.bulk) || 0), 0) || null);
   const per_merge = (api_cost != null && hist.length) ? Math.round((api_cost / hist.length) * 10) / 10 : null;
+  const apex_per_merge = (apex_cost != null && hist.length) ? Math.round((apex_cost / hist.length) * 10) / 10 : null;
   const remaining = (api_after && api_after.max != null) ? (api_after.max - api_after.used) : null;
+  const apex_remaining = (api_after && api_after.apex_max != null && api_after.apex_used != null) ? (api_after.apex_max - api_after.apex_used) : null;
   const per_min = Math.round((hist.length / Math.max(0.001, seconds)) * 60 * 10) / 10;
-  const data = { o, sel, runs, restore, seconds, per_min, hist, outcomes, api_cost, per_merge, remaining, api_before, api_after, stamp };
+  const data = { o, sel, runs, restore, seconds, merge_seconds, restore_seconds, per_min, hist, outcomes, api_cost, per_merge, remaining, apex_cost, apex_per_merge, apex_remaining, bulk_cost, api_before, api_after, stamp };
   print_summary(data);
   try { const f = await write_report(data); console.log('      report: ' + f); }
-  catch (e) { console.log('      (report write skipped: ' + e.message + ')'); }
+  catch (e) {
+    console.log('      (report write skipped: ' + e.message + ')');
+    if (restore && restore.hist && restore.hist.length) {
+      try {
+        const path = require('path'); const { determineOSPathSync } = require('../../../../utilities/determineOSPath');
+        const rf = await write_standalone_restore(path.join(determineOSPathSync(), 'usat_salesforce_merge_stress'), restore, seconds);
+        console.log('      restore report (fallback): ' + rf);
+      } catch (e2) { console.log('      (restore fallback also skipped: ' + e2.message + ')'); }
+    }
+  }
   try {
     const path = require('path'); const { determineOSPathSync } = require('../../../../utilities/determineOSPath');
     const base = path.join(determineOSPathSync(), 'usat_salesforce_merge_stress');
     const band = (o.min_size || '-') + '..' + (o.max_size || '-');
     const sf = await append_sweep_row(base, [now_local(), o.env, o.mode, o.source === 'merge_id' ? 'merge-id' : 'duplicate', band,
-      o.count, o.batch, o.seed, hist.length, outcomes.done, outcomes.failed, per_min, api_cost, per_merge, fmt_hms(seconds), restore ? restore.status : 'skipped']);
+      o.count, o.batch, o.seed, hist.length, outcomes.done, outcomes.failed, per_min, api_cost, per_merge, apex_cost, apex_per_merge, fmt_hms(seconds), restore ? restore.status : 'skipped']);
     console.log('      sweep:  ' + sf);
-  } catch (e) { /* sweep row is best-effort */ }
+  } catch (e) { console.log('      (sweep row skipped: ' + e.message + (/EBUSY|EPERM|EACCES|locked/i.test(e.message) ? ' — is _sweep_comparison.xlsx open in Excel? close it and re-run' : '') + ')'); }
   console.log('\n=== done ===\n');
   process.exit(0);
 }
@@ -336,7 +394,9 @@ function print_summary(d) {
   console.log(`    sets processed     ${d.hist.length} (queued ${d.runs.reduce((s, r) => s + r.batch, 0)}, batches ${d.runs.length})`);
   console.log(`    outcomes           done ${d.outcomes.done} · simulated ${d.outcomes.simulated} · failed ${d.outcomes.failed} · held ${d.outcomes.held} · skipped ${d.outcomes.skipped}`);
   console.log(`    throughput         ${d.per_min}/min over ${fmt_hms(d.seconds)}`);
+  console.log(`    merge time         ${fmt_hms(d.merge_seconds || 0)}${d.restore ? '   ·   restore time  ' + fmt_hms(d.restore_seconds || 0) : '   (restore skipped)'}`);
   console.log(`    API calls          ${d.api_cost != null ? d.api_cost.toLocaleString() : '(n/a)'}${d.per_merge != null ? ' · ~' + d.per_merge + '/merge' : ''}${d.remaining != null ? ' · ' + d.remaining.toLocaleString() + ' left today' : ''}`);
+  console.log(`    Async Apex         ${d.apex_cost != null ? d.apex_cost.toLocaleString() : '(n/a)'}${d.apex_per_merge != null ? ' · ~' + d.apex_per_merge + '/merge' : ''}${d.apex_remaining != null ? ' · ' + d.apex_remaining.toLocaleString() + ' of ' + (d.api_after && d.api_after.apex_max ? d.api_after.apex_max.toLocaleString() : '?') + ' left today' : ''}`);
   console.log(`    restore            ${d.restore ? d.restore.status : 'skipped'}`);
 }
 
@@ -363,19 +423,56 @@ function now_local() {
 async function append_sweep_row(base, row) {
   const path = require('path'); const fs = require('fs'); const ExcelJS = require('exceljs');
   const file = path.join(base, '_sweep_comparison.xlsx');
+  const HEADER = ['When (MT)', 'Env', 'Mode', 'Source', 'Size band', 'Count', 'Batch', 'Seed', 'Sets', 'Done', 'Failed', 'Throughput/min', 'API total', 'API/merge', 'Async Apex', 'Apex/merge', 'Elapsed', 'Restore'];
+  const APEX_AT = 14; // 0-based index where the Async Apex + Apex/merge columns were inserted
   const wb = new ExcelJS.Workbook();
   let ws = null;
   if (fs.existsSync(file)) { await wb.xlsx.readFile(file); ws = wb.getWorksheet('Runs'); }
-  if (!ws) { ws = wb.addWorksheet('Runs'); ws.addRow(['When (MT)', 'Env', 'Mode', 'Source', 'Size band', 'Count', 'Batch', 'Seed', 'Sets', 'Done', 'Failed', 'Throughput/min', 'API total', 'API/merge', 'Elapsed', 'Restore']); }
+  if (!ws) { ws = wb.addWorksheet('Runs'); ws.addRow(HEADER); }
+  else {
+    // Self-heal an older sweep: if the header predates the Async-Apex columns, rewrite it and realign any
+    // short data rows (insert blanks for the new columns) so Elapsed/Restore don't slide. Idempotent.
+    const hdr = (ws.getRow(1).values || []).slice(1);
+    if (hdr.length !== HEADER.length) {
+      const missing = HEADER.length - hdr.length;
+      const dataRows = [];
+      ws.eachRow((r, i) => { if (i > 1) dataRows.push({ i, vals: (r.values || []).slice(1) }); });
+      if (missing > 0) for (const { i, vals } of dataRows) {
+        if (vals.length === HEADER.length - missing) { const nv = vals.slice(); nv.splice(APEX_AT, 0, ...Array(missing).fill(null)); ws.spliceRows(i, 1, nv); }
+      }
+      ws.spliceRows(1, 1, HEADER);
+    }
+  }
   ws.addRow(row);
   style_table(ws, 1);
   await wb.xlsx.writeFile(file);
   return file;
 }
 
+// Write a standalone restore workbook (used as a fallback whenever we can't append the Restores tab to
+// the merge report — so restore info is never lost, whichever menu path ran).
+async function write_standalone_restore(base, restore, seconds) {
+  const path = require('path'); const fs = require('fs'); const ExcelJS = require('exceljs');
+  fs.mkdirSync(base, { recursive: true });
+  const hist = (restore && restore.hist) || [];
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const file = path.join(base, `${ts}_restore_${(restore && restore.run_id) || 'run'}.xlsx`);
+  const wb = new ExcelJS.Workbook();
+  const rs = wb.addWorksheet('Restores');
+  rs.addRow(['Restore run', (restore && restore.run_id) || '']); rs.addRow(['Status', (restore && restore.status) || 'unknown']);
+  rs.addRow(['Sets', hist.length]); rs.addRow(['Elapsed (hh:mm:ss)', fmt_hms(seconds || 0)]); rs.addRow([]);
+  rs.addRow(['#', 'queue_id', 'source_key', 'survivor', 'survivor_name', 'losers', 'result', 'reason']);
+  hist.forEach((h, i) => rs.addRow([i + 1, h.queue_id, h.source_key, h.survivor_account, h.survivor_name, h.loser_count, h.result, h.reason]));
+  try { style_table(rs, 6); } catch (e) { /* styling optional */ }
+  await wb.xlsx.writeFile(file);
+  return file;
+}
+
 function latest_report(base) {
   try { const fs = require('fs'); const path = require('path');
-    const files = fs.readdirSync(base).filter((f) => f.endsWith('.xlsx')).map((f) => ({ f, t: fs.statSync(path.join(base, f)).mtimeMs })).sort((a, b) => b.t - a.t);
+    // Skip the rolling '_sweep_comparison.xlsx' (and any '_'-prefixed rolling file) — it's touched at the
+    // end of every merge run, so it's always newest; we want the per-run merge report to append into.
+    const files = fs.readdirSync(base).filter((f) => f.endsWith('.xlsx') && !f.startsWith('_')).map((f) => ({ f, t: fs.statSync(path.join(base, f)).mtimeMs })).sort((a, b) => b.t - a.t);
     return files.length ? path.join(base, files[0].f) : null;
   } catch (e) { return null; }
 }
@@ -395,7 +492,8 @@ async function write_report(d) {
     ['Size band', (d.o.min_size || '-') + '..' + (d.o.max_size || '-')], ['Pool', d.sel.pool], ['Sampled', d.sel.sampled],
     ['Sets processed', d.hist.length], ['Batches', d.runs.length],
     ['Done', d.outcomes.done], ['Simulated', d.outcomes.simulated], ['Failed', d.outcomes.failed], ['Held', d.outcomes.held], ['Skipped', d.outcomes.skipped],
-    ['Throughput / min', d.per_min], ['Elapsed (hh:mm:ss)', fmt_hms(d.seconds)],
+    ['Throughput / min', d.per_min], ['Elapsed total (hh:mm:ss)', fmt_hms(d.seconds)],
+    ['Merge time', fmt_hms(d.merge_seconds || 0)], ['Restore time', d.restore ? fmt_hms(d.restore_seconds || 0) : 'skipped'],
     ['API calls total', d.api_cost], ['API per merge', d.per_merge], ['API left today', d.remaining],
     ['Restore', d.restore ? d.restore.status : 'skipped'], ['Dataset org', d.stamp.org_id],
   ]);
@@ -403,11 +501,27 @@ async function write_report(d) {
   m.addRow(['#', 'run_id', 'queue_id', 'source_key', 'survivor', 'survivor_name', 'losers', 'children', 'result', 'reason', 'dossier_id']);
   (d.hist || []).forEach((h, i) => m.addRow([i + 1, h.run_id, h.queue_id, h.source_key, h.survivor_account, h.survivor_name, h.loser_count, h.child_total, h.result, h.reason, h.dossier_id]));
   const b = wb.addWorksheet('Batches');
-  b.addRow(['#', 'run_id', 'sets', 'status', 'api_calls']);
-  d.runs.forEach((r, i) => b.addRow([i + 1, r.run_id, r.batch, r.status, r.cost]));
+  b.addRow(['#', 'run_id', 'sets', 'status', 'API cost', 'API used (after)', 'API left', 'Apex used (after)', 'Apex left', 'Bulk used', 'Batch time']);
+  d.runs.forEach((r, i) => {
+    const s2 = r.snap || {};
+    const apiLeft = (s2.max != null && s2.used != null) ? (s2.max - s2.used) : null;
+    const apexLeft = (s2.apex_max != null && s2.apex_used != null) ? (s2.apex_max - s2.apex_used) : null;
+    b.addRow([i + 1, r.run_id, r.batch, r.status, r.cost, s2.used != null ? s2.used : null, apiLeft,
+      s2.apex_used != null ? s2.apex_used : null, apexLeft, s2.bulk_used != null ? s2.bulk_used : null,
+      r.bsec != null ? fmt_hms(r.bsec) : null]);
+  });
   const a = wb.addWorksheet('API');
-  a.addRows([['Metric', 'Value'], ['Used before', d.api_before ? d.api_before.used : null], ['Used after', d.api_after ? d.api_after.used : null],
-    ['Daily max', d.api_after ? d.api_after.max : null], ['Cost (delta)', d.api_cost], ['Per merge', d.per_merge], ['Remaining today', d.remaining]]);
+  a.addRows([['Metric', 'Value'],
+    ['API used before', d.api_before ? d.api_before.used : null], ['API used after', d.api_after ? d.api_after.used : null],
+    ['API daily max', d.api_after ? d.api_after.max : null], ['API cost (delta)', d.api_cost], ['API per merge', d.per_merge], ['API remaining today', d.remaining],
+    ['', ''],
+    ['Async Apex used before', d.api_before ? d.api_before.apex_used : null], ['Async Apex used after', d.api_after ? d.api_after.apex_used : null],
+    ['Async Apex daily max', d.api_after ? d.api_after.apex_max : null], ['Async Apex cost (delta)', d.apex_cost], ['Async Apex per merge', d.apex_per_merge], ['Async Apex remaining today', d.apex_remaining],
+    ['', ''],
+    ['Bulk API batches used', d.api_after ? d.api_after.bulk_used : null], ['Bulk API daily max', d.api_after ? d.api_after.bulk_max : null], ['Bulk API cost (delta)', d.bulk_cost],
+    ['', ''],
+    ['Note 1', 'Async Apex fires after the merge (rollups run async), so it is measured as the whole-run before/after delta — approximate, and best read per-run not per-batch.'],
+    ['Note 2', 'Bulk API batches are spent by the Get-Duplicates data pull, NOT by merges — so a merge run\'s Bulk cost is ~0. "Bulk API batches used" is the org\'s current daily usage for context.']]);
   if (d.restore && d.restore.hist && d.restore.hist.length) {
     const rs = wb.addWorksheet('Restores');
     rs.addRow(['#', 'queue_id', 'source_key', 'survivor', 'survivor_name', 'losers', 'result', 'reason']);
@@ -447,19 +561,42 @@ async function cmd_restore() {
     const fs = require('fs'); const path = require('path'); const ExcelJS = require('exceljs');
     const { determineOSPathSync } = require('../../../../utilities/determineOSPath');
     const base = path.join(determineOSPathSync(), 'usat_salesforce_merge_stress'); fs.mkdirSync(base, { recursive: true });
-    const existing = latest_report(base);           // consolidate into the most recent workbook (the merge run)
-    const wb = new ExcelJS.Workbook();
-    let file;
-    if (existing) { await wb.xlsx.readFile(existing); file = existing; }
-    else { const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19); file = path.join(base, `${ts}_${stamp.env}_restore_n${ids.length}.xlsx`); }
-    const prev = wb.getWorksheet('Restores'); if (prev) wb.removeWorksheet(prev.id);
-    const rs = wb.addWorksheet('Restores');
-    rs.addRow(['Restore run', run_id]); rs.addRow(['Status', r ? r.status : 'unknown']); rs.addRow(['Sets', ids.length]); rs.addRow(['Elapsed (hh:mm:ss)', fmt_hms(seconds)]); rs.addRow([]);
-    rs.addRow(['#', 'queue_id', 'source_key', 'survivor', 'survivor_name', 'losers', 'result', 'reason']);
-    hist.forEach((h, i) => rs.addRow([i + 1, h.queue_id, h.source_key, h.survivor_account, h.survivor_name, h.loser_count, h.result, h.reason]));
-    await wb.xlsx.writeFile(file);
-    console.log('  report: ' + file + (existing ? '  (appended Restores tab)' : ''));
+    // Build/replace the Restores tab on a workbook (reused for the append + the standalone fallback).
+    const fill = (wb) => {
+      const prev = wb.getWorksheet('Restores'); if (prev) wb.removeWorksheet(prev.id);
+      const rs = wb.addWorksheet('Restores');
+      rs.addRow(['Restore run', run_id]); rs.addRow(['Status', r ? r.status : 'unknown']); rs.addRow(['Sets', ids.length]); rs.addRow(['Elapsed (hh:mm:ss)', fmt_hms(seconds)]); rs.addRow([]);
+      rs.addRow(['#', 'queue_id', 'source_key', 'survivor', 'survivor_name', 'losers', 'result', 'reason']);
+      hist.forEach((h, i) => rs.addRow([i + 1, h.queue_id, h.source_key, h.survivor_account, h.survivor_name, h.loser_count, h.result, h.reason]));
+      try { style_table(rs, 6); } catch (e) { /* styling optional */ }
+    };
+    const existing = latest_report(base);           // consolidate into the most recent merge-run workbook
+    let wrote = null;
+    if (existing) {
+      // Append to the merge report — but if it's open in Excel (locked), don't lose the data.
+      try { const wb = new ExcelJS.Workbook(); await wb.xlsx.readFile(existing); fill(wb); await wb.xlsx.writeFile(existing); wrote = { file: existing, appended: true }; }
+      catch (e) { console.log('  (could not append to ' + path.basename(existing) + ': ' + e.message + (/EBUSY|EPERM|EACCES/i.test(e.message) ? ' — is it open in Excel?' : '') + ' — writing a standalone restore file instead)'); }
+    }
+    if (!wrote) {                                    // no report yet, or the append failed — always land a file
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const file = path.join(base, `${ts}_${stamp.env}_restore_n${ids.length}.xlsx`);
+      const wb = new ExcelJS.Workbook(); fill(wb); await wb.xlsx.writeFile(file); wrote = { file, appended: false };
+    }
+    console.log('  report: ' + wrote.file + (wrote.appended ? '  (appended Restores tab to the merge report)' : '  (standalone restore report)'));
   } catch (e) { console.log('  (report skipped: ' + e.message + ')'); }
+  // Log a one-row activity entry in the rolling sweep file (Runs tab) so it shows ALL activity — a
+  // restore row lands alongside the merge rows (Mode = 'restore'; merge-only columns show '-').
+  try {
+    const path = require('path'); const { determineOSPathSync } = require('../../../../utilities/determineOSPath');
+    const base = path.join(determineOSPathSync(), 'usat_salesforce_merge_stress');
+    const restored = hist.filter((h) => h.result === 'restored').length;
+    const failed = hist.filter((h) => h.result === 'failed').length;
+    const c = await run_api_cost(run_id); const cost = c ? c.api : null;
+    const per_min = Math.round((ids.length / Math.max(0.001, seconds)) * 60 * 10) / 10;
+    const sf = await append_sweep_row(base, [now_local(), stamp.env, 'restore', '-', '-', ids.length, '-', '-',
+      ids.length, restored, failed, per_min, cost != null ? cost : '-', '-', '-', '-', fmt_hms(seconds), r ? r.status : 'unknown']);
+    console.log('  sweep:  ' + sf);
+  } catch (e) { console.log('  (sweep row skipped: ' + e.message + (/EBUSY|EPERM|EACCES|locked/i.test(e.message) ? ' — is _sweep_comparison.xlsx open in Excel? close it and re-run' : '') + ')'); }
   console.log('');
   process.exit(0);
 }
@@ -480,6 +617,7 @@ async function cmd_run(full) {
   const max_size = source === 'group' ? await ask(rl, 'Max cluster size', '4') : null;
   const count = Math.max(1, Number(await ask(rl, 'How many merges (count)', '20')) || 20);
   const batch = Math.max(1, Number(await ask(rl, 'Batch size', '10')) || 10);
+  const pause_batches = (batch < count) ? (await ask(rl, 'Pause between batches (choose continue/stop each)? (y/N)', 'N')).toUpperCase().startsWith('Y') : false;
   const seed = Number(await ask(rl, 'Random seed', String(Date.now() % 100000))) || 1;
   const restore = (await ask(rl, 'Restore afterward? (Y/N)', full ? 'Y' : 'N')).toUpperCase().startsWith('Y');
   const dossier = (await ask(rl, 'Attach dossier? (y/N)', 'N')).toUpperCase().startsWith('Y');
@@ -491,7 +629,7 @@ async function cmd_run(full) {
     if (env === 'production' && process.env.MERGE_ENABLE_EXECUTION !== 'true') { console.log('MERGE_ENABLE_EXECUTION is not true — aborting.\n'); rl.close(); process.exit(1); }
   }
   rl.close();
-  await run_sequence({ env, do_clear, source, min_size, max_size, count, batch, seed, restore, dossier, stamp: stampS, mode, pace_ms: 0, full }, stamp);
+  await run_sequence({ env, do_clear, source, min_size, max_size, count, batch, seed, restore, dossier, stamp: stampS, mode, pace_ms: 0, full, pause_batches }, stamp);
 }
 
 async function cmd_clear() {

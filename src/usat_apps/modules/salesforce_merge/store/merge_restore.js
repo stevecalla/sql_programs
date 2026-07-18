@@ -196,6 +196,7 @@ async function restore(ids, opts = {}, deps = {}) {
   const POST = deps.post_snapshot || post_snapshot;
   const DOS = deps.dossier || require('./merge_dossier');
   const createdBy = opts.created_by || null;
+  const APIUSE = deps.api_usage || require('./api_usage');
 
   const idset = new Set((ids || []).map((x) => Number(x)));
   const done = await Q.list(undefined, 'done');
@@ -217,7 +218,7 @@ async function restore(ids, opts = {}, deps = {}) {
   log('run ' + runId + ' mode=' + mode + ' sets=' + entries.length + ' env=' + env);
 
   const out = { run_id: runId, mode, armed, processed: 0, restored: 0, simulated: 0, skipped: 0, failed: 0, results: [] };
-  let conn = null; let completed = 0;
+  let conn = null; let completed = 0; let apiStartLogged = false;
 
   for (const e of entries) {
     out.processed += 1;
@@ -238,6 +239,7 @@ async function restore(ids, opts = {}, deps = {}) {
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
       await RUN.finish(runId, { status: 'error' }); return out;
     }
+    if (conn && !apiStartLogged) { apiStartLogged = true; try { const u0 = await APIUSE.usage_all(conn); if (u0 && u0.api) APIUSE.record({ env: env, org_id: orgId, op: 'restore', run_id: runId, actor: createdBy, used: u0.api.used, max: u0.api.max, apex_used: u0.apex && u0.apex.used, apex_max: u0.apex && u0.apex.max, bulk_used: u0.bulk && u0.bulk.used, bulk_max: u0.bulk && u0.bulk.max }); } catch (e) { /* fire-and-forget */ } }
     const states = await account_states(conn, losers);
     const toUndelete = losers.filter((id) => states[id] === 'deleted');
     const present = losers.filter((id) => states[id] === 'deleted' || states[id] === 'live'); // recoverable (in bin or already live)
@@ -340,6 +342,11 @@ async function restore(ids, opts = {}, deps = {}) {
       // Re-link the share to the loser (ADDITIVE: create a link on the loser, keep the survivor's — a file
       // is never unshared or lost).
       if (ch.object === 'ContentDocumentLink') { const r = await move_content_link(W, conn, ch); if (r.ok) repointed += 1; else { skippedCh += 1; notes.push(r.note); } continue; }
+      // Salesforce manages activity relationships itself: Task.AccountId is read-only and the *Relation
+      // junctions can't be updated. Skip cleanly instead of raising a false error (see Reference panel).
+      if (/^(Task|Event)(Who)?Relation$/i.test(ch.object) || ((ch.object === 'Task' || ch.object === 'Event') && ch.parent_field === 'AccountId')) {
+        skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': skipped — Salesforce manages this activity relationship'); continue;
+      }
       const patch = { Id: ch.id, [ch.parent_field]: ch.parent_id };
       try { await W.update_record(conn, ch.object, patch); repointed += 1; }
       catch (err) {
@@ -383,6 +390,7 @@ async function restore(ids, opts = {}, deps = {}) {
   }
 
   log('run ' + runId + ' complete: restored=' + out.restored + ' simulated=' + out.simulated + ' skipped=' + out.skipped + ' failed=' + out.failed);
+  if (apiStartLogged && conn) { try { const uEnd = await APIUSE.usage_all(conn); if (uEnd && uEnd.api) APIUSE.record({ env: env, org_id: orgId, op: 'restore', run_id: runId, actor: createdBy, used: uEnd.api.used, max: uEnd.api.max, apex_used: uEnd.apex && uEnd.apex.used, apex_max: uEnd.apex && uEnd.apex.max, bulk_used: uEnd.bulk && uEnd.bulk.used, bulk_max: uEnd.bulk && uEnd.bulk.max }); } catch (e) { /* fire-and-forget */ } }
   await RUN.finish(runId, { status: 'done', completed_ops: completed, completed_sets: completed, current_label: 'Complete' });
   return out;
 }

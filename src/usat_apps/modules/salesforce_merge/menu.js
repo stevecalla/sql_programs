@@ -123,6 +123,10 @@ const SECTIONS = [
     { id: 32, label: 'Full sequence (clear → merge → restore)', desc: 'Runs the whole sequence into one workbook — prompts the options once', bin: 'node', args: [`${M}/stress_test.js`, 'sequence'], cli: `node ${M}/stress_test.js sequence` },
     { id: 33, label: 'Open stress report folder', desc: 'Open the /data folder where the stress-test Excel reports are written', bin: 'node', args: [`${M}/stress_test.js`, 'open'], cli: `node ${M}/stress_test.js open` },
   ] },
+  { label: 'DIAGNOSTICS · data safety (read-only)', color: CYAN, items: [
+    { id: 34, label: 'Probe donor/gift attachment (sandbox)', desc: 'Read-only #6 check: is a "Donor Gift Summary" a master-detail child (cascade-deleted by a merge → data-loss risk) or a lookup (SF re-parents, low risk)? Also flags if the integrated user can\'t see the object. Finds a foundation/donor duplicate to test.', bin: 'node', args: [`${M}/probe_donor_gift.js`], cli: `node ${M}/probe_donor_gift.js` },
+    { id: 35, label: 'Probe donor/gift attachment (PRODUCTION)', desc: 'Same read-only probe against production (DESCRIBE + SELECT only, never writes).', bin: 'node', args: [`${M}/probe_donor_gift.js`, '--prod'], cli: `node ${M}/probe_donor_gift.js --prod` },
+  ] },
 ];
 const ALL = SECTIONS.flatMap((s) => s.items);
 

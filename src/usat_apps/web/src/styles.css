@@ -761,6 +761,12 @@ table.grid td {
 .mx-tabs button { border:none; background:none; padding:6px 14px; border-radius:8px; font:inherit; font-size:13px; font-weight:600; color:var(--dim); cursor:pointer; white-space:nowrap; }
 .mx-tabs button.on { background:var(--card); color:var(--accent); box-shadow:var(--shadow); }
 .mx-tabs button.soon { opacity:.5; cursor:not-allowed; font-weight:500; }
+/* Real underline tabs (vs the chip .mx-tabs segmented control) — used for section tabs like the SF-API budgets. */
+/* Folder tabs — matches the participation-maps tab() style: rounded top, top+side border, panel fill when active. */
+.mx-tabbar { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-top:12px; }
+.mx-tabbar button { padding:8px 15px; font:inherit; font-size:13px; font-weight:500; cursor:pointer; margin-bottom:-1px; border-radius:7px 7px 0 0; border:1px solid transparent; border-bottom:none; background:transparent; color:var(--muted); white-space:nowrap; }
+.mx-tabbar button:hover { color:var(--ink); }
+.mx-tabbar button.on { border:1px solid var(--line); border-bottom:none; background:var(--panel); color:var(--ink); }
 .mx-scope-hint { font-size:12px; color:var(--dim); }
 .mx-tag.warn { background: rgba(194,14,47,.12); color: var(--red); }
 .mx-modal-table { max-width: 88vw; max-height: 78vh; overflow: auto; } .mx-modal-table table { width: 100%; border-collapse: collapse; font-size: 13px; } .mx-modal-table td, .mx-modal-table th { border-bottom: 1px solid var(--line); padding: 5px 10px; text-align: left; white-space: nowrap; } .mx-modal-table th { color: var(--dim); }
