@@ -115,6 +115,14 @@ const SECTIONS = [
     { id: 20, label: 'Reset merge tables — DRY RUN', desc: 'Show row counts for the 7 merge tool tables; changes nothing', bin: 'node', args: [`${M}/reset_merge_tables.js`], cli: `node ${M}/reset_merge_tables.js` },
     { id: 21, label: 'Reset merge tables — APPLY', desc: 'CLEARS the 7 merge tool tables (queue/snapshots/history/run/dossier); leaves the finder input', bin: 'node', args: [`${M}/reset_merge_tables.js`, '--apply'], cli: `node ${M}/reset_merge_tables.js --apply` },
   ] },
+  { label: 'STRESS TEST · sandbox', color: CYAN, items: [
+    { id: 28, label: 'Show cluster-size distribution', desc: 'Histogram of duplicate cluster sizes for the loaded dataset (default sandbox; add --env production). Shows the dataset stamp + lets you pick a representative min/max size band', bin: 'node', args: [`${M}/stress_test.js`, 'distribution'], cli: `node ${M}/stress_test.js distribution` },
+    { id: 29, label: 'Clear run tables (stress)', desc: 'Empty the merge queue/history/snapshot/run/dossier tables for a clean run (finder input untouched). Type CLEAR to confirm', bin: 'node', args: [`${M}/stress_test.js`, 'clear'], cli: `node ${M}/stress_test.js clear` },
+    { id: 30, label: 'Run merges (select → queue → approve → process)', desc: 'Interactive: env, source, count, batch, size band, seed; simulate by default (type MERGE + --execute for real writes). Report to /data', bin: 'node', args: [`${M}/stress_test.js`, 'run'], cli: `node ${M}/stress_test.js run` },
+    { id: 31, label: 'Restore last merged sets (stress)', desc: 'Undo the currently-restorable (recently-merged) sets from the CLI + write a restore report. Type RESTORE to confirm', bin: 'node', args: [`${M}/stress_test.js`, 'restore'], cli: `node ${M}/stress_test.js restore` },
+    { id: 32, label: 'Full sequence (clear → merge → restore)', desc: 'Runs the whole sequence into one workbook — prompts the options once', bin: 'node', args: [`${M}/stress_test.js`, 'sequence'], cli: `node ${M}/stress_test.js sequence` },
+    { id: 33, label: 'Open stress report folder', desc: 'Open the /data folder where the stress-test Excel reports are written', bin: 'node', args: [`${M}/stress_test.js`, 'open'], cli: `node ${M}/stress_test.js open` },
+  ] },
 ];
 const ALL = SECTIONS.flatMap((s) => s.items);
 
@@ -135,7 +143,7 @@ function print_menu() {
 
 async function main() {
   load_prefs();
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+  let rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
   while (true) {
     print_menu();
     const ans = (await prompt(rl, c(BOLD, '\n  Select: '))).trim().toLowerCase();
@@ -145,7 +153,11 @@ async function main() {
     console.log('');
     if (!it) console.log(c(YELLOW, '  Invalid choice.'));
     else if (it.info) console.log(it.info);
-    else if (it.bin) await run_cmd(it.bin, it.args, it.label);
+    else if (it.bin) {
+      rl.close();                                   // release stdin so an interactive child can read its own prompts
+      await run_cmd(it.bin, it.args, it.label);
+      rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    }
     else if (it.open) open_url(it.open);
     else if (it.status) await hit_status(it.status, it.statusLabel || '');
     await prompt(rl, c(DIM, '\n  Press Enter to continue…'));

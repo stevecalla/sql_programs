@@ -92,6 +92,6 @@ test('history.list with no filters has no WHERE (unbounded recent list)', async 
   let sel = null;
   const query = async (sql, params) => { if (/^SELECT/i.test(sql)) { sel = { sql, params }; return []; } return {}; };
   await hist.list({ limit: 10 }, query);
-  assert.ok(!/WHERE/i.test(sel.sql), 'no WHERE when unfiltered');
+  assert.ok(/FROM `salesforce_merge_history` ORDER BY/i.test(sel.sql), 'no WHERE on the outer query when unfiltered');
   assert.deepEqual(sel.params, []);
 });

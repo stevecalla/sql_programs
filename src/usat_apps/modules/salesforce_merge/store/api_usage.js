@@ -28,6 +28,19 @@ function usage_from_conn(conn) {
   return { used: used, max: max };
 }
 
+// Accurate current usage via a real REST /limits call (SOAP merge calls don't refresh the header-based
+// limitInfo, so start==end otherwise). /limits itself does NOT count against DailyApiRequests. Falls
+// back to the header value if the call fails.
+async function usage_via_limits(conn) {
+  try {
+    const lim = await conn.limits();
+    const d = lim && lim.DailyApiRequests;
+    const max = Number(d && d.Max); const remaining = Number(d && d.Remaining);
+    if (Number.isFinite(max) && Number.isFinite(remaining)) return { used: max - remaining, max };
+  } catch (e) { /* fall back below */ }
+  return usage_from_conn(conn);
+}
+
 // Insert one snapshot. used/max are passed explicitly (caller reads them from the conn or the /limits
 // result) so this stays pure/testable. Fire-and-forget; pool is injectable for tests.
 async function record({ env, org_id, op, run_id, actor, used, max } = {}, pool) {
@@ -95,4 +108,4 @@ async function recent_runs(pool, { days = 7, env = null, limit = 20 } = {}) {
   return rows;
 }
 
-module.exports = { ensure, record, usage_from_conn, latest, list_recent, summary_by_op, run_cost, recent_runs, TABLE };
+module.exports = { ensure, record, usage_from_conn, usage_via_limits, latest, list_recent, summary_by_op, run_cost, recent_runs, TABLE };
