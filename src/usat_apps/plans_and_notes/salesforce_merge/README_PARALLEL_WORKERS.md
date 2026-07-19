@@ -88,6 +88,19 @@ MVP keys:
 | `chunk_size` | `5` | `MERGE_CHUNK_SIZE` | sets per parallel batch |
 | `max_batch` | `100` | `MERGE_MAX_BATCH` | max sets one job may run (hard cap 500) |
 | `worker_target` | `4` | `MERGE_WORKER_TARGET` | desired cluster size (drives `pm2 scale`, informational otherwise) |
+| `apex_stop_enabled` | `true` | `MERGE_APEX_STOP` | async-Apex circuit breaker on/off |
+| `apex_stop_threshold` | `200000` | `MERGE_APEX_STOP_AT` | pause a job when DailyAsyncApexExecutions used reaches this (clamped 1k..250k) |
+
+### Async-Apex circuit breaker — pause + resume (built in Phase 1)
+
+Rather than a hard stop, a job **pauses and is resumable**. When `DailyAsyncApexExecutions` used reaches
+`apex_stop_threshold` (`merge_settings.apex_should_pause`), the worker calls `merge_run.hold_job`: every
+still-queued chunk is parked as **`held`**, and any running chunk is flagged to stop at its next set
+boundary (the in-flight set finishes cleanly — nothing half-written). `job_progress` then reports status
+**`paused`** with a `runs_held` count. **Resume** (`merge_run.resume_job`, `POST .../job/:id/resume`) puts
+the held chunks back to `queued` so the cluster drains them again — sets already merged are `done` and
+drop out via the executor's drift check, so resume safely continues with only what's left. Nothing is
+discarded; you resume when headroom returns or the daily counter rolls over.
 
 **Admin API:** `GET/PUT /api/salesforce-merge/ops/settings`, gated to the `merge-ops` panel. Values are
 validated + clamped (chunk_size 1..50, max_batch 1..500, worker_target 1..8).

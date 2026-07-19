@@ -758,6 +758,180 @@ async function cmd_run(full, parallel) {
   await run_sequence({ env, do_clear, source, min_size, max_size, count, batch, seed, restore, dossier, stamp: stampS, mode, pace_ms: 0, full, pause_batches, parallel: !!parallel }, stamp);
 }
 
+// Poll a whole JOB (Phase 1) until it leaves 'running'/'paused-with-work', printing an aggregate
+// heartbeat (batches done, sets done, workers active) built from mrun.job_progress — the same view the
+// UI will poll. Returns the final progress object.
+async function poll_job(mrun, jobId) {
+  let hb = 0; const start = Date.now();
+  for (;;) {
+    const p = await mrun.job_progress(jobId);
+    const now = Date.now();
+    if (!p) { await sleep(1500); continue; }
+    if (now - hb >= 5000 || p.status !== 'running') {
+      hb = now;
+      console.log(`        … ${p.runs_done}/${p.runs_total} batches · ${p.completed_sets}/${p.total_sets} sets · ${p.workers_active} worker(s) active · ${p.status}${p.runs_held ? ' · held ' + p.runs_held : ''} · elapsed ${fmt_hms((now - start) / 1000)}`);
+    }
+    if (p.status !== 'running') return p;
+    await sleep(2000);
+  }
+}
+
+// Build the per-batch `runs` rows the report expects from a list of enqueued chunk-runs [{run_id, batch}].
+// Same shape as run_sequence's runs: cost/apex/bulk (per-run delta), work-time, worker pid, end-usage snap.
+async function assemble_runs(mrun, enq, maxes) {
+  const runs = [];
+  for (const e of enq) {
+    const row = await mrun.get(e.run_id);
+    const c = await run_api_cost(e.run_id);
+    const snap = { used: c.end_api, max: maxes ? maxes.max : null, apex_used: c.end_apex, apex_max: maxes ? maxes.apex_max : null, bulk_used: c.end_bulk, bulk_max: maxes ? maxes.bulk_max : null };
+    runs.push({ run_id: e.run_id, batch: e.batch, status: row ? row.status : 'unknown', cost: c ? c.api : null, apex: c ? c.apex : null, bulk: c ? c.bulk : null, bsec: work_seconds(row), snap, worker: worker_of(row) });
+  }
+  return runs;
+}
+
+// Print the SAME Summary block as items 30/31 (via the shared print_summary) and write the SAME outputs:
+// the per-run .xlsx (write_report) + a sweep row (append_sweep_row). Reuses the shared summary + writers;
+// only the derived-field assembly is here (job is always parallel, so API is org-wide/approx).
+async function finalize_job(o, sel, runs, restore, timings, stamp, api_before, api_after) {
+  const hist = await history_for_runs(runs.map((r) => r.run_id));
+  const by = (r) => hist.filter((h) => h.result === r).length;
+  const outcomes = { done: by('done'), simulated: by('simulated'), failed: by('failed'), held: by('held'), skipped: by('skipped') };
+  const whole_run_api = (api_before && api_after && api_after.used != null && api_before.used != null) ? (api_after.used - api_before.used) : null;
+  const api_cost = whole_run_api != null ? whole_run_api : (runs.reduce((a, r) => a + (Number(r.cost) || 0), 0) || null);
+  const api_approx = true;
+  const apex_delta = (api_before && api_after && api_after.apex_used != null && api_before.apex_used != null) ? (api_after.apex_used - api_before.apex_used) : null;
+  const apex_cost = apex_delta != null ? apex_delta : (runs.reduce((a, r) => a + (Number(r.apex) || 0), 0) || null);
+  const bulk_delta = (api_before && api_after && api_after.bulk_used != null && api_before.bulk_used != null) ? (api_after.bulk_used - api_before.bulk_used) : null;
+  const bulk_cost = bulk_delta != null ? bulk_delta : (runs.reduce((a, r) => a + (Number(r.bulk) || 0), 0) || null);
+  const per_merge = (api_cost != null && hist.length) ? Math.round((api_cost / hist.length) * 10) / 10 : null;
+  const apex_per_merge = (apex_cost != null && apex_cost > 0 && hist.length) ? Math.round((apex_cost / hist.length) * 10) / 10 : null;
+  const remaining = (api_after && api_after.max != null) ? (api_after.max - api_after.used) : null;
+  const apex_remaining = (api_after && api_after.apex_max != null && api_after.apex_used != null) ? (api_after.apex_max - api_after.apex_used) : null;
+  const per_min = Math.round((hist.length / Math.max(0.001, timings.seconds)) * 60 * 10) / 10;
+  const sec_per_merge = median_sec_per_merge(runs);
+  const data = { o, sel, runs, restore, seconds: timings.seconds, merge_seconds: timings.merge_seconds, restore_seconds: timings.restore_seconds,
+    per_min, sec_per_merge, hist, outcomes, api_cost, api_approx, per_merge, remaining, apex_cost, apex_per_merge, apex_remaining, bulk_cost, api_before, api_after, stamp };
+  print_summary(data);   // identical Summary block to items 30/31
+  try { const f = await write_report(data); console.log('      report: ' + f); }
+  catch (e) { console.log('      (report skipped: ' + e.message + ')'); }
+  try {
+    const path = require('path'); const { determineOSPathSync } = require('../../../../utilities/determineOSPath');
+    const base = path.join(determineOSPathSync(), 'usat_salesforce_merge_stress');
+    const band = (o.min_size || '-') + '..' + (o.max_size || '-');
+    const sf = await append_sweep_row(base, [now_local(), o.env, o.mode, o.source === 'merge_id' ? 'merge-id' : 'duplicate', band,
+      o.count, o.batch, o.seed, hist.length, outcomes.done, outcomes.failed, per_min, api_cost, per_merge, apex_cost, apex_per_merge, fmt_hms(timings.seconds), restore ? restore.status : 'skipped']);
+    console.log('      sweep:  ' + sf);
+  } catch (e) { console.log('      (sweep row skipped: ' + e.message + (/EBUSY|EPERM|EACCES|locked/i.test(e.message) ? ' — is _sweep_comparison.xlsx open in Excel? close it and re-run' : '') + ')'); }
+}
+
+// JOB test (Phase 1): like `run`/`parallel` but drives the ACTUAL fan-out path — it splits the approved
+// sets with the same chunker + settings the POST /merge/process endpoint uses, enqueues N chunk-runs
+// sharing a job_id, and polls mrun.job_progress. Needs the worker cluster running (menu item 2).
+async function cmd_job() {
+  const { plan_job, make_job_id, should_parallelize } = require('./store/chunk');
+  const msettings = require('./store/merge_settings');
+  const { mrun } = stores();
+  const rl = make_rl();
+  const env = (await ask(rl, 'Environment (sandbox/production)', 'sandbox')).toLowerCase().startsWith('prod') ? 'production' : 'sandbox';
+  const stamp = await get_dataset_stamp();
+  if (stamp.env !== env) { console.log(`\n! Loaded dataset is ${stamp.env}, not ${env}. Re-run the finder against ${env} first.\n`); rl.close(); process.exit(1); }
+  const do_clear = (await ask(rl, 'Clear run tables first? (Y/N)', env === 'sandbox' ? 'Y' : 'N')).toUpperCase().startsWith('Y');
+  const source = (await ask(rl, 'Source (duplicate/merge-id)', 'duplicate')).toLowerCase().startsWith('merge') ? 'merge_id' : 'group';
+  const min_size = source === 'group' ? await ask(rl, 'Min cluster size', '2') : null;
+  const max_size = source === 'group' ? await ask(rl, 'Max cluster size', '4') : null;
+  const count = Math.max(1, Number(await ask(rl, 'How many merges (count)', '12')) || 12);
+  const dfltChunk = await msettings.get('chunk_size');
+  const chunk = Math.max(1, Number(await ask(rl, 'Chunk size (sets per parallel batch)', String(dfltChunk))) || dfltChunk);
+  const seed = Number(await ask(rl, 'Random seed', String(Date.now() % 100000))) || 1;
+  const restore = (await ask(rl, 'Restore afterward? (Y/N)', 'N')).toUpperCase().startsWith('Y');
+  const dossier = (await ask(rl, 'Attach dossier? (y/N)', 'N')).toUpperCase().startsWith('Y');
+  const stampS = (await ask(rl, 'Stamp survivor? (y/N)', 'N')).toUpperCase().startsWith('Y');
+  const mode = (await ask(rl, 'Mode (simulate/execute)', 'simulate')).toLowerCase().startsWith('exec') ? 'execute' : 'simulate';
+  if (mode === 'execute') {
+    const c = await ask(rl, `Type MERGE to run ${count} REAL merges against ${env}`, '');
+    if (c !== 'MERGE') { console.log('Not confirmed — aborting.\n'); rl.close(); process.exit(1); }
+    if (env === 'production' && process.env.MERGE_ENABLE_EXECUTION !== 'true') { console.log('MERGE_ENABLE_EXECUTION is not true — aborting.\n'); rl.close(); process.exit(1); }
+  }
+  rl.close();
+
+  const parallel_enabled = await msettings.get('parallel_enabled');
+  const srcLabel = source === 'merge_id' ? 'merge-id' : 'duplicate';
+  // Header + step labels mirror items 30/31 (run_sequence) so the console reads the same — the only
+  // difference is the PROCESS step drives the real /merge/process fan-out into a job of chunk-runs.
+  console.log(`\n=== STRESS TEST · JOB FAN-OUT · ${env} · ${mode.toUpperCase()} · source=${srcLabel} · count=${count} · chunk=${chunk} · seed=${seed} · parallel=${parallel_enabled} ===`);
+  if (do_clear) { console.log('\n[1/5] Clearing run tables…'); const c = await clear_run_tables(); console.log('      cleared: ' + c.join(', ')); }
+  else console.log('\n[1/5] Skipping clear (keeping existing run tables).');
+
+  console.log('\n[2/5] Selecting targets + queuing…');
+  const sel = await select_targets({ env, source, min_size, max_size, count, seed }, stamp);
+  console.log(`      pool ${sel.pool} in size ${min_size || '-'}..${max_size || '-'} → sampled ${sel.sampled} → resolvable ${sel.entries.length}`);
+  if (!sel.entries.length) { console.log('      nothing resolvable to queue — aborting.\n'); process.exit(1); }
+  console.log('      selected sets (survivor · losers · cluster):');
+  console.log(format_selection(sel.entries));
+  const ids = await queue_and_approve(sel.entries);
+  console.log(`      queued + approved ${ids.length} sets`);
+
+  // [3/5] Processing — MIRRORS POST /api/salesforce-merge/merge/process (same chunker + settings).
+  const envLabel = env === 'production' ? 'Production' : 'Sandbox';
+  const opts = { mode, confirm: 'MERGE', dry_run: mode !== 'execute', stamp_merged: stampS, ack_drift: true, attach_dossier: dossier, created_by: 'stress-test' };
+  const o = { mode, env, source, count, batch: chunk, seed, min_size, max_size };  // report/sweep shape (batch = chunk)
+  const runStart = Date.now();
+  const api_before = await api_snapshot(env);
+  const enq = [];   // { run_id, batch } per merge chunk-run — feeds the report
+  console.log(`\n[3/5] Processing (${mode}) — fan-out into chunk-runs of ${chunk}…`);
+  if (should_parallelize(ids.length, chunk, parallel_enabled)) {
+    const chunks = plan_job(ids, chunk);
+    const jobId = make_job_id();
+    console.log(`      FAN-OUT — ${ids.length} sets → ${chunks.length} chunk-run(s) of <=${chunk} · job_id ${jobId}`);
+    for (let i = 0; i < chunks.length; i += 1) {
+      const q = await mrun.enqueue({ kind: 'merge', mode, environment: envLabel, org_id: stamp.org_id || null, created_by: 'stress-test',
+        job_id: jobId, batch_index: i + 1, batch_total: chunks.length, current_label: `Queued (batch ${i + 1}/${chunks.length})`,
+        params: { ids: chunks[i], opts, job_id: jobId, batch_index: i + 1, batch_total: chunks.length } });
+      enq.push({ run_id: q.run_id, batch: chunks[i].length });
+    }
+    console.log(`      ${chunks.length} chunk-runs queued — draining with whatever workers are online (start the CLUSTER via menu item 2)…`);
+    await poll_job(mrun, jobId);
+  } else {
+    console.log(`      parallel NOT triggered (parallel=${parallel_enabled}, chunk ${chunk} >= count ${ids.length}) — single run. Lower chunk or raise count to see fan-out.`);
+    const r = await mrun.enqueue({ kind: 'merge', mode, environment: envLabel, org_id: stamp.org_id || null, created_by: 'stress-test', params: { ids, opts } });
+    await poll_run(r.run_id, { total: ids.length, onTick: () => {} });
+    enq.push({ run_id: r.run_id, batch: ids.length });
+  }
+  const api_after = await api_snapshot(env);
+  const merge_seconds = Math.round((Date.now() - runStart) / 1000);
+  // Per-batch rows (used for the worker-split line + the report Batches tab) — same as item 31.
+  const runs = await assemble_runs(mrun, enq, api_after);
+  console.log('      ' + format_worker_balance(runs));
+
+  // [4/5] Optional restore — fan out the SAME way (kind:'restore') so the job path is exercised for restores too.
+  let restoreObj = null; let restore_seconds = 0;
+  if (restore) {
+    console.log('\n[4/5] Restoring…');
+    const rStart = Date.now();
+    const chunks = plan_job(ids, chunk);
+    const rJob = make_job_id();
+    console.log(`      RESTORE fan-out — ${chunks.length} chunk-run(s) · job_id ${rJob}`);
+    const renq = [];
+    for (let i = 0; i < chunks.length; i += 1) {
+      const q = await mrun.enqueue({ kind: 'restore', mode, environment: envLabel, org_id: stamp.org_id || null, created_by: 'stress-test',
+        job_id: rJob, batch_index: i + 1, batch_total: chunks.length, current_label: `Queued restore (batch ${i + 1}/${chunks.length})`,
+        params: { ids: chunks[i], opts: { mode, confirm: 'RESTORE', ack_post_merge: true, created_by: 'stress-test' }, job_id: rJob, batch_index: i + 1, batch_total: chunks.length } });
+      renq.push(q.run_id);
+    }
+    const rp = await poll_job(mrun, rJob);
+    restore_seconds = Math.round((Date.now() - rStart) / 1000);
+    restoreObj = { run_id: rJob, status: rp.status, hist: await history_for_runs(renq) };  // hist → write_report's Restores tab
+    console.log(`      restore ${chunks.length} batches → done in ${fmt_hms(restore_seconds)}`);
+  } else { console.log('\n[4/5] Restore skipped.'); }
+
+  // [5/5] Report — same Summary block + Excel workbook + sweep row as items 30/31.
+  console.log('\n[5/5] Writing report…');
+  const seconds = Math.round((Date.now() - runStart) / 1000);
+  await finalize_job(o, sel, runs, restoreObj, { seconds, merge_seconds, restore_seconds }, stamp, api_before, api_after);
+  console.log('\n=== done ===\n');
+  process.exit(0);
+}
+
 async function cmd_clear() {
   const rl = make_rl();
   const c = await ask(rl, 'Type CLEAR to empty the merge run/queue tables (finder data untouched)', '');
@@ -795,8 +969,9 @@ async function main() {
   if (cmd === 'restore') return cmd_restore();
   if (cmd === 'run') return cmd_run(false);
   if (cmd === 'parallel') return cmd_run(false, true);
+  if (cmd === 'job') return cmd_job();
   if (cmd === 'sequence' || cmd === 'all') return cmd_run(true);
-  console.log('usage: node src/usat_apps/modules/salesforce_merge/stress_test.js <distribution|clear|run|restore|sequence|open> [--env production]');
+  console.log('usage: node src/usat_apps/modules/salesforce_merge/stress_test.js <distribution|clear|run|parallel|job|restore|sequence|open> [--env production]');
   process.exit(0);
 }
 

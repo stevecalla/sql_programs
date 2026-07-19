@@ -25,6 +25,8 @@ const sfread = require('./store/salesforce_read');
 const sfwrite = require('./store/salesforce_write');
 const api_usage = require('./store/api_usage');
 const api_estimate = require('./store/api_estimate');
+const msettings = require('./store/merge_settings');
+const { plan_job, make_job_id, should_parallelize } = require('./store/chunk');
 
 // Phase 1: server-side event logging is a no-op (Phase 4 wires merge usage into usat_apps_events via the
 // platform analytics). Kept as a shim so the ported handler bodies stay byte-for-byte.
@@ -366,20 +368,64 @@ function mount(app) {
   app.post('/api/salesforce-merge/merge/process', gate, async function (req, res) {
     try {
       const b = req.body || {};
-      // Batch safety limit: cap how many sets one Execute can run (configurable via MERGE_MAX_BATCH).
-      // Only gates real writes — simulate/dry-run is unlimited.
+      // Batch safety limit: cap how many sets one job can run. Now resolved from the live settings store
+      // (DB -> env MERGE_MAX_BATCH -> default), so an admin can tune it without a redeploy. Only gates
+      // real writes; simulate/dry-run is unlimited.
       const HARD_MAX = 500;   // absolute ceiling the user's setting can never exceed
-      const dfltMax = Math.min(HARD_MAX, Math.max(1, Number(process.env.MERGE_MAX_BATCH) || 100));
+      const dfltMax = await msettings.get('max_batch');
       const reqMax = (b.max_batch != null && b.max_batch !== '') ? Math.min(HARD_MAX, Math.max(1, Number(b.max_batch) || dfltMax)) : dfltMax;
       if (b.mode === 'execute' && !b.dry_run && Array.isArray(b.ids) && b.ids.length > reqMax) {
         return res.status(400).json({ ok: false, error: 'Batch too large: ' + b.ids.length + ' sets exceeds the limit of ' + reqMax + ' per Execute (hard cap ' + HARD_MAX + ').' });
       }
-      // Phase 3: don't run inline — enqueue a queued salesforce_merge_run; the merge worker claims + runs it.
+      const ids = Array.isArray(b.ids) ? b.ids.filter(Boolean) : [];
+      const opts = { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, ack_drift: !!b.ack_drift, attach_dossier: b.attach_dossier !== false, created_by: current_user(req) };
+      // PARALLEL FAN-OUT (Phase 1): when parallel is enabled and the job is bigger than one chunk, split
+      // it into N chunk-runs that share a job_id so the worker CLUSTER drains them side by side. Small jobs
+      // (or parallel disabled) enqueue exactly one run — byte-identical to the pre-parallel path.
+      const parallel_enabled = await msettings.get('parallel_enabled');
+      const chunk_size = await msettings.get('chunk_size');
+      if (should_parallelize(ids.length, chunk_size, parallel_enabled)) {
+        const chunks = plan_job(ids, chunk_size);
+        const job_id = make_job_id();
+        for (let i = 0; i < chunks.length; i += 1) {
+          await mrun.enqueue({ kind: 'merge', mode: b.mode, created_by: current_user(req),
+            job_id, batch_index: i + 1, batch_total: chunks.length,
+            current_label: 'Queued (batch ' + (i + 1) + '/' + chunks.length + ')',
+            params: { ids: chunks[i], opts, job_id, batch_index: i + 1, batch_total: chunks.length } });
+        }
+        analytics.log({ event_name: 'merge_run', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req),
+          mode: (b.dry_run || b.mode !== 'execute') ? 'simulate' : 'execute', outcome: 'queued', set_count: ids.length });
+        return res.json({ ok: true, queued: true, job_id, runs: chunks.length, parallel: true });
+      }
+      // Single-run path (parallel off, or job <= one chunk) — the worker claims + runs it, exactly as before.
       const r = await mrun.enqueue({ kind: 'merge', mode: b.mode, created_by: current_user(req),
-        params: { ids: b.ids, opts: { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, ack_drift: !!b.ack_drift, attach_dossier: b.attach_dossier !== false, created_by: current_user(req) } } });
+        params: { ids, opts } });
       analytics.log({ event_name: 'merge_run', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req),
         mode: (b.dry_run || b.mode !== 'execute') ? 'simulate' : 'execute', outcome: 'queued' });
-      res.json({ ok: true, queued: true, ...r });
+      res.json({ ok: true, queued: true, parallel: false, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Job-aware live progress: aggregate all the parallel chunk-runs of one job (sets done, workers active,
+  // paused/held count, rolled-up status). The UI polls this for the single aggregate progress bar.
+  app.get('/api/salesforce-merge/merge/job/:jobId/progress', gate, async function (req, res) {
+    try { res.json({ ok: true, job: await mrun.job_progress(req.params.jobId) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Cancel the whole job (all its batches): flag running chunks + drop queued ones.
+  app.post('/api/salesforce-merge/merge/job/:jobId/cancel', gate, async function (req, res) {
+    try {
+      const r = await mrun.cancel_job(req.params.jobId);
+      analytics.log({ event_name: 'merge_job_cancel', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req), outcome: 'ok' });
+      res.json({ ok: true, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Resume a paused job (async-Apex cap or manual hold): put held chunks back to queued so the cluster
+  // drains them again. Already-merged sets drop out via the executor's drift check.
+  app.post('/api/salesforce-merge/merge/job/:jobId/resume', gate, async function (req, res) {
+    try {
+      const r = await mrun.resume_job(req.params.jobId);
+      analytics.log({ event_name: 'merge_job_resume', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req), outcome: 'ok' });
+      res.json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge/history', gate, async function (req, res) {

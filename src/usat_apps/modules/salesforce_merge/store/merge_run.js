@@ -19,6 +19,9 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
   ' mode VARCHAR(16) NOT NULL,' +                 // 'simulate' | 'execute'
   ' environment VARCHAR(24),' +
   ' org_id VARCHAR(32),' +
+  ' job_id VARCHAR(40) NULL,' +                   // groups the parallel chunk-runs of one user job; NULL = legacy single run
+  ' batch_index INT NULL,' +                      // 1-based position of this chunk within the job (display)
+  ' batch_total INT NULL,' +                      // how many chunks the job was split into (display)
   ' total_ops INT DEFAULT 0,' +
   ' completed_ops INT DEFAULT 0,' +
   ' total_sets INT DEFAULT 0,' +
@@ -54,6 +57,25 @@ async function ensure_table(query = real_query) {
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN result TEXT NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_mtn DATETIME NULL', []); } catch (e) { /* exists */ }
   try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN created_at_utc DATETIME NULL', []); } catch (e) { /* exists */ }
+  // Add the job columns positioned with the run identity (AFTER org_id) so a fresh add lands correctly.
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN job_id VARCHAR(40) NULL AFTER org_id', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN batch_index INT NULL AFTER job_id', []); } catch (e) { /* exists */ }
+  try { await query('ALTER TABLE `' + TABLE + '` ADD COLUMN batch_total INT NULL AFTER batch_index', []); } catch (e) { /* exists */ }
+  // One-time self-heal: earlier builds appended job_id/batch_index/batch_total at the END (ADD COLUMN
+  // defaults to the tail), pushing them past the created_at_* wall-clocks. Put them back with the run
+  // identity (after org_id) and keep created_at_* LAST. Guarded on ordinal position so the (COPY-algorithm)
+  // reorder runs only when actually out of order — not on every boot — and never blocks startup.
+  try {
+    const pos = await query("SELECT COLUMN_NAME AS c, ORDINAL_POSITION AS p FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN ('job_id','created_at_utc')", [TABLE]);
+    const m = {}; (Array.isArray(pos) ? pos : []).forEach((r) => { if (r && r.c) m[r.c] = Number(r.p); });
+    if (m.job_id && m.created_at_utc && m.job_id > m.created_at_utc) {
+      await query('ALTER TABLE `' + TABLE + '` MODIFY COLUMN job_id VARCHAR(40) NULL AFTER org_id', []);
+      await query('ALTER TABLE `' + TABLE + '` MODIFY COLUMN batch_index INT NULL AFTER job_id', []);
+      await query('ALTER TABLE `' + TABLE + '` MODIFY COLUMN batch_total INT NULL AFTER batch_index', []);
+      await query('ALTER TABLE `' + TABLE + '` MODIFY COLUMN created_at_mtn DATETIME NULL AFTER finished_at', []);
+      await query('ALTER TABLE `' + TABLE + '` MODIFY COLUMN created_at_utc DATETIME NULL AFTER created_at_mtn', []);
+    }
+  } catch (e) { /* best-effort column ordering — never blocks boot */ }
   _ensured = true;
 }
 
@@ -115,11 +137,76 @@ async function enqueue(job, query = real_query) {
   const ts = now_mtn_utc();
   await query(
     'INSERT INTO `' + TABLE + '` (run_id, kind, mode, environment, org_id, total_ops, total_sets, est_seconds, ' +
-    'completed_ops, completed_sets, current_label, status, created_by, params, started_at, finished_at, created_at_mtn, created_at_utc) ' +
-    'VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, ?, "queued", ?, ?, NOW(), NULL, ?, ?)',
+    'completed_ops, completed_sets, current_label, status, created_by, params, job_id, batch_index, batch_total, started_at, finished_at, created_at_mtn, created_at_utc) ' +
+    'VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, ?, "queued", ?, ?, ?, ?, ?, NOW(), NULL, ?, ?)',
     [String(runId), job.kind || 'merge', job.mode || 'simulate', job.environment || null, job.org_id || null,
-     job.current_label || 'Queued', job.created_by || null, JSON.stringify(job.params || {}), ts.mtn, ts.utc]);
+     job.current_label || 'Queued', job.created_by || null, JSON.stringify(job.params || {}),
+     job.job_id || null, job.batch_index != null ? Number(job.batch_index) : null, job.batch_total != null ? Number(job.batch_total) : null,
+     ts.mtn, ts.utc]);
   return { run_id: runId, status: 'queued' };
+}
+
+// ---- Phase 1 (parallel workers): a "job" = N chunk-runs sharing a job_id ----
+// Aggregate live progress for a whole job across its chunk-runs: summed sets, batch/worker counts, and a
+// rolled-up status. `workers` = distinct pm2 workers currently draining the job (claim-token pid prefix).
+async function job_progress(jobId, query = real_query) {
+  await ensure_table(query);
+  const rows = await query('SELECT * FROM `' + TABLE + '` WHERE job_id = ? ORDER BY batch_index ASC, started_at ASC', [String(jobId)]);
+  const runs = rows || [];
+  if (!runs.length) return null;
+  const sum = (f) => runs.reduce((a, r) => a + (Number(r[f]) || 0), 0);
+  const isTerminal = (s) => s === 'done' || s === 'error' || s === 'cancelled'; // 'held' is NOT terminal (resumable)
+  const runs_done = runs.filter((r) => isTerminal(r.status)).length;
+  const workers = new Set(runs.filter((r) => r.status === 'running').map((r) => String(r.claimed_by || '').split('-')[0]).filter(Boolean)).size;
+  const anyRunning = runs.some((r) => r.status === 'running');
+  const anyQueued = runs.some((r) => r.status === 'queued');
+  const anyHeld = runs.some((r) => r.status === 'held');
+  const anyError = runs.some((r) => r.status === 'error');
+  const anyCancelled = runs.some((r) => r.status === 'cancelled');
+  const runs_held = runs.filter((r) => r.status === 'held').length;
+  // Precedence: a paused job (breaker tripped → some batches held, nothing left queued) shows 'paused'
+  // even while a running chunk finishes its in-flight set; otherwise active → running; else terminal.
+  const status = (anyHeld && !anyQueued) ? 'paused'
+    : (anyRunning || anyQueued) ? 'running'
+    : (anyError ? 'error' : (anyCancelled ? 'cancelled' : 'done'));
+  return {
+    job_id: String(jobId), kind: runs[0].kind, mode: runs[0].mode, status,
+    runs_total: runs.length, runs_done, runs_held, workers_active: workers,
+    total_sets: sum('total_sets'), completed_sets: sum('completed_sets'),
+    total_ops: sum('total_ops'), completed_ops: sum('completed_ops'),
+    started_at: runs[0].started_at,
+    runs: runs.map((r) => ({ run_id: r.run_id, batch_index: r.batch_index, batch_total: r.batch_total, status: r.status,
+      completed_sets: r.completed_sets, total_sets: r.total_sets, worker: String(r.claimed_by || '').split('-')[0] || null, current_label: r.current_label })),
+  };
+}
+
+// Cancel a whole job: flag cancel on every still-running chunk-run (worker honors it at the set boundary).
+// Queued-but-unclaimed chunks are removed so they never start. Returns { cancelled, removed }.
+async function cancel_job(jobId, query = real_query) {
+  await ensure_table(query);
+  const c = await query('UPDATE `' + TABLE + '` SET cancel_requested = 1 WHERE job_id = ? AND status = "running"', [String(jobId)]);
+  const r = await query('UPDATE `' + TABLE + '` SET status = "cancelled", current_label = ?, finished_at = NOW() WHERE job_id = ? AND status = "queued"', ['cancelled before start', String(jobId)]);
+  return { job_id: String(jobId), cancelled: (c && c.affectedRows) || 0, removed: (r && r.affectedRows) || 0 };
+}
+
+// PAUSE a job (async-Apex circuit breaker or a manual hold): park every queued-but-unclaimed chunk as
+// 'held' so no worker starts it, and flag any running chunk to stop at its next set boundary (in-flight
+// set finishes cleanly). Resumable — nothing is discarded. `reason` is shown on the held rows.
+async function hold_job(jobId, reason, query = real_query) {
+  await ensure_table(query);
+  const label = reason || 'paused';
+  const h = await query('UPDATE `' + TABLE + '` SET status = "held", current_label = ? WHERE job_id = ? AND status = "queued"', [label, String(jobId)]);
+  const c = await query('UPDATE `' + TABLE + '` SET cancel_requested = 1 WHERE job_id = ? AND status = "running"', [String(jobId)]);
+  return { job_id: String(jobId), held: (h && h.affectedRows) || 0, stopping: (c && c.affectedRows) || 0 };
+}
+
+// RESUME a paused job: put every held chunk back to 'queued' (clearing any cancel flag) so the worker
+// cluster drains them again. Sets already merged are 'done' and drop out via the executor's drift check,
+// so resume safely continues with only what's left. Returns { resumed }.
+async function resume_job(jobId, query = real_query) {
+  await ensure_table(query);
+  const r = await query('UPDATE `' + TABLE + '` SET status = "queued", cancel_requested = 0, current_label = "Queued (resumed)", claimed_by = NULL, claimed_at = NULL WHERE job_id = ? AND status = "held"', [String(jobId)]);
+  return { job_id: String(jobId), resumed: (r && r.affectedRows) || 0 };
 }
 
 // Atomically claim the oldest queued run of one of `kinds` for this worker `token`. Row or null.
@@ -177,4 +264,4 @@ async function set_result(runId, obj, query = real_query) {
   await query('UPDATE `' + TABLE + '` SET result = ? WHERE run_id = ?', [JSON.stringify(obj || {}), String(runId)]);
 }
 
-module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, reap_stale, request_cancel, is_cancelled, set_result, TABLE, DDL };
+module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, reap_stale, request_cancel, is_cancelled, set_result, job_progress, cancel_job, hold_job, resume_job, TABLE, DDL };
