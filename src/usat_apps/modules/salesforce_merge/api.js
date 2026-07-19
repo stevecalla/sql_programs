@@ -26,6 +26,7 @@ const sfwrite = require('./store/salesforce_write');
 const api_usage = require('./store/api_usage');
 const api_estimate = require('./store/api_estimate');
 const msettings = require('./store/merge_settings');
+const msettings_store = require('./store/merge_settings_store');
 const { plan_job, make_job_id, should_parallelize } = require('./store/chunk');
 
 // Phase 1: server-side event logging is a no-op (Phase 4 wires merge usage into usat_apps_events via the
@@ -59,6 +60,35 @@ function mtest(req) {
 
 function mount(app) {
   const gate = require_panel('merge');
+  const opsGate = require_panel('merge-ops');   // admin-only Merge Ops panel (grantable in Users & Access)
+
+  // Boot-time ensure (fire-and-forget): create/normalize the merge tables on server start so a plain
+  // restart is enough — no manual migration needed. mrun.ensure_table() also self-heals the job-column
+  // order; msettings_store.ensure() creates the live-settings table. Best-effort — never blocks boot.
+  (async () => {
+    try { await mrun.ensure_table(); } catch (e) { /* best-effort */ }
+    try { await msettings_store.ensure(); } catch (e) { /* best-effort */ }
+  })();
+
+
+  // ---- Merge Ops (Phase 2): live operational settings (parallel/chunk/max_batch/apex cap), DB-backed so
+  // an admin tunes them without env edits or a redeploy. Read + write gated by the merge-ops panel. ----
+  app.get('/api/salesforce-merge/ops/settings', opsGate, async function (req, res) {
+    try { res.json({ ok: true, settings: await msettings_store.get_all(), last_saved: await msettings_store.last_saved() }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  app.put('/api/salesforce-merge/ops/settings', opsGate, async function (req, res) {
+    try {
+      const stored = await msettings_store.set_many(req.body || {}, current_user(req));
+      analytics.log({ event_name: 'merge_ops_settings', actor: req.user, role: req.role, panel: 'merge-ops', is_test: mtest(req), outcome: 'ok' });
+      res.json({ ok: true, stored, settings: await msettings_store.get_all(), last_saved: await msettings_store.last_saved() });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Live worker/queue snapshot for the Merge Ops panel (queue depth, workers actively draining, held, jobs).
+  app.get('/api/salesforce-merge/ops/workers', opsGate, async function (req, res) {
+    try { res.json({ ok: true, workers: await mrun.ops_status() }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
 
   // Skeleton health check retained for smoke tests.
   app.get('/api/salesforce-merge/ping', gate, function (req, res) { res.json({ ok: true, module: 'merge' }); });
@@ -372,7 +402,7 @@ function mount(app) {
       // (DB -> env MERGE_MAX_BATCH -> default), so an admin can tune it without a redeploy. Only gates
       // real writes; simulate/dry-run is unlimited.
       const HARD_MAX = 500;   // absolute ceiling the user's setting can never exceed
-      const dfltMax = await msettings.get('max_batch');
+      const dfltMax = await msettings_store.get('max_batch');   // DB -> env -> default (admin-tunable, live)
       const reqMax = (b.max_batch != null && b.max_batch !== '') ? Math.min(HARD_MAX, Math.max(1, Number(b.max_batch) || dfltMax)) : dfltMax;
       if (b.mode === 'execute' && !b.dry_run && Array.isArray(b.ids) && b.ids.length > reqMax) {
         return res.status(400).json({ ok: false, error: 'Batch too large: ' + b.ids.length + ' sets exceeds the limit of ' + reqMax + ' per Execute (hard cap ' + HARD_MAX + ').' });
@@ -382,8 +412,8 @@ function mount(app) {
       // PARALLEL FAN-OUT (Phase 1): when parallel is enabled and the job is bigger than one chunk, split
       // it into N chunk-runs that share a job_id so the worker CLUSTER drains them side by side. Small jobs
       // (or parallel disabled) enqueue exactly one run — byte-identical to the pre-parallel path.
-      const parallel_enabled = await msettings.get('parallel_enabled');
-      const chunk_size = await msettings.get('chunk_size');
+      const parallel_enabled = await msettings_store.get('parallel_enabled');
+      const chunk_size = await msettings_store.get('chunk_size');
       if (should_parallelize(ids.length, chunk_size, parallel_enabled)) {
         const chunks = plan_job(ids, chunk_size);
         const job_id = make_job_id();

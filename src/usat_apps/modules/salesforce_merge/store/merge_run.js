@@ -180,6 +180,27 @@ async function job_progress(jobId, query = real_query) {
   };
 }
 
+// Live ops snapshot for the Merge Ops panel: current queue depth + how many pm2 workers are actively
+// draining (distinct claim-token pid prefixes among running runs) + held (paused) + active job count.
+// Note: only BUSY workers show here (a run they're draining); an idle-but-online cluster instance has no
+// running row to count — the panel labels this "workers active", and pm2 scale reports the true online N.
+async function ops_status(query = real_query) {
+  await ensure_table(query);
+  const rows = await query('SELECT status, claimed_by, job_id FROM `' + TABLE + '` WHERE status IN ("queued", "running", "held")', []);
+  const list = rows || [];
+  const running = list.filter((r) => r.status === 'running');
+  const workers = new Set(running.map((r) => String(r.claimed_by || '').split('-')[0]).filter(Boolean));
+  const jobs = new Set(list.map((r) => r.job_id).filter(Boolean));
+  return {
+    queued: list.filter((r) => r.status === 'queued').length,
+    running: running.length,
+    held: list.filter((r) => r.status === 'held').length,
+    workers_active: workers.size,
+    workers: [...workers].sort(),
+    active_jobs: jobs.size,
+  };
+}
+
 // Cancel a whole job: flag cancel on every still-running chunk-run (worker honors it at the set boundary).
 // Queued-but-unclaimed chunks are removed so they never start. Returns { cancelled, removed }.
 async function cancel_job(jobId, query = real_query) {
@@ -264,4 +285,4 @@ async function set_result(runId, obj, query = real_query) {
   await query('UPDATE `' + TABLE + '` SET result = ? WHERE run_id = ?', [JSON.stringify(obj || {}), String(runId)]);
 }
 
-module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, reap_stale, request_cancel, is_cancelled, set_result, job_progress, cancel_job, hold_job, resume_job, TABLE, DDL };
+module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, reap_stale, request_cancel, is_cancelled, set_result, job_progress, cancel_job, hold_job, resume_job, ops_status, TABLE, DDL };

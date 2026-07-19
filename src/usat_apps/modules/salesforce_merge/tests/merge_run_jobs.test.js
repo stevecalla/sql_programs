@@ -16,6 +16,9 @@ function fakeDb(seed) {
         .sort((a, b) => (a.batch_index || 0) - (b.batch_index || 0));
       return list;
     }
+    if (/^SELECT status, claimed_by, job_id/i.test(sql)) {  // ops_status
+      return Object.values(rows).filter((r) => ['queued', 'running', 'held'].includes(r.status));
+    }
     if (/^UPDATE/i.test(sql) && /cancel_requested = 1/.test(sql) && /status = "running"/.test(sql)) {
       const jid = params[0]; let n = 0;
       Object.values(rows).forEach((r) => { if (r.job_id === jid && r.status === 'running') { r.cancel_requested = 1; n += 1; } });
@@ -85,6 +88,16 @@ test('cancel_job flags running chunks + removes queued chunks', async () => {
   assert.equal(db.rows.b.cancel_requested, 1);
   assert.equal(db.rows.c.status, 'cancelled');
   assert.equal(db.rows.a.status, 'done'); // terminal untouched
+});
+
+test('ops_status counts queue depth, active workers (distinct pids), held, jobs', async () => {
+  const db = fakeDb(seedJob());   // a=done, b=running(w200), c=queued  (done excluded)
+  const s = await run.ops_status(db.query);
+  assert.equal(s.queued, 1);          // c
+  assert.equal(s.running, 1);         // b
+  assert.equal(s.workers_active, 1);  // w200
+  assert.deepStrictEqual(s.workers, ['w200']);
+  assert.equal(s.active_jobs, 1);     // job-1
 });
 
 test('hold_job pauses (queued→held, running flagged) and resume_job puts held→queued', async () => {

@@ -10,6 +10,7 @@ const ParticipationMaps = lazy(() => import('./modules/participation_maps/Sectio
 const ComingSoon = lazy(() => import('./pages/ComingSoon.jsx'));
 const MergeSection = lazy(() => import('./modules/salesforce_merge/Section.jsx'));
 const MergeMetrics = lazy(() => import('./modules/salesforce_merge/pages/MergeMetrics.jsx'));
+const MergeOps = lazy(() => import('./modules/salesforce_merge/pages/MergeOps.jsx'));
 const OpsOverview = lazy(() => import('./modules/ops/Overview.jsx'));
 const OpsBackends = lazy(() => import('./modules/ops/Backends.jsx'));
 const OpsServerCards = lazy(() => import('./modules/ops/ServerCards.jsx'));
@@ -30,6 +31,7 @@ export const NAV = [
   {
     type: 'group', label: 'Salesforce', items: [
       { label: 'Merge', path: '/salesforce/merge', panel: 'merge', icon: '⇄', Component: MergeSection, nested: true },
+      { label: 'Merge Ops', path: '/salesforce/merge-ops', panel: 'merge-ops', icon: '🛠', Component: MergeOps },
     ]
   },
   {

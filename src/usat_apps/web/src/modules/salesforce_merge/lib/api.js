@@ -78,6 +78,13 @@ export const api = {
   sfApiLimits: (env) => req('/api/salesforce-merge/sf-api/limits' + qs({ env })),
   sfApiUsage: (env, days) => req('/api/salesforce-merge/sf-api/usage' + qs({ env, days })),
   mergeQueueBulk: (payload) => req('/api/salesforce-merge/merge-queue/bulk', { method: 'POST', body: JSON.stringify(payload) }),
+  // Merge Ops panel (admin) — live settings + worker/queue snapshot.
+  opsSettings: () => req('/api/salesforce-merge/ops/settings'),
+  opsSettingsSave: (payload) => req('/api/salesforce-merge/ops/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  opsWorkers: () => req('/api/salesforce-merge/ops/workers'),
+  mergeJobProgress: (jobId) => req('/api/salesforce-merge/merge/job/' + encodeURIComponent(jobId) + '/progress'),
+  mergeJobCancel: (jobId) => req('/api/salesforce-merge/merge/job/' + encodeURIComponent(jobId) + '/cancel', { method: 'POST' }),
+  mergeJobResume: (jobId) => req('/api/salesforce-merge/merge/job/' + encodeURIComponent(jobId) + '/resume', { method: 'POST' }),
   refreshStart: (env, scope, job) => req('/api/salesforce-merge/refresh/start', { method: 'POST', body: JSON.stringify({ env, scope, job }) }),
   refreshStatus: () => req('/api/salesforce-merge/refresh/status'),
   refreshCancel: () => req('/api/salesforce-merge/refresh/cancel', { method: 'POST' }),
