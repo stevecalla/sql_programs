@@ -864,6 +864,30 @@ a real failure. The tool now **excludes these from the pre-merge snapshot** (`SK
 child relationship on Task/Event) and **skips them cleanly on restore** (guard in `store/merge_restore.js`).
 Salesforce keeps the activities on the survivor; they are not reattached to the loser on restore.
 
+## Restore — managed-package fields blocked by field-level security (issue #7)
+
+Some child records point back to a Contact/Account through a **managed-package lookup field** — e.g.
+iWave's `iWave_PROscores__Contact__c` on **iWave PRO Score** (`iWave_PROscores__iWave_PRO_Score__c`). If
+the write/integrated user lacks **field-level Edit** on that field, restore can't re-point the child back
+and the SOAP update is rejected with *"Unable to create/update fields: … Please check the security
+settings of this field"*. This is a **permissions** gap, not a code bug.
+
+- **Merge is unaffected.** Salesforce's native merge re-parents these records onto the survivor (the
+  intended result), and the record is never deleted — it just stays on the survivor.
+- **Restore only** can't fully reverse it. The tool now **classifies** this as an FLS skip
+  (`_is_fls_error` in `store/merge_restore.js`) and records a clear note — *"field not writable for this
+  user, needs field-level edit (FLS)"* — instead of a raw error, so History/reports say what to grant.
+- **`AccountContactRelation`** is a related case: its `ContactId` is read-only and the direct
+  Account–Contact relation is system-managed (it follows `Contact.AccountId`). The tool now **skips it
+  cleanly** on restore because Salesforce recreates that relation automatically when the Contact's
+  `AccountId` is restored — no write needed, so the old "check the security settings of ContactId" error
+  is gone.
+
+**Fix:** grant the write user **field-level Edit** on the managed lookup field(s) (e.g.
+`iWave_PROscores__Contact__c`) via a permission set. Field-level access only — no schema/field changes.
+Then restore re-points them fully. If a field is package-locked read-only for everyone, accept it as a
+documented restore-only limitation.
+
 ## Restore — data-loss check for master-detail children (issue #6) + diagnostics
 
 Salesforce **re-parents lookup children** to the survivor during a merge, but **master-detail children

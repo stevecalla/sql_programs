@@ -94,3 +94,59 @@ test('fmt_hms formats seconds as hh:mm:ss', () => {
   assert.equal(s.fmt_hms(329), '00:05:29');
   assert.equal(s.fmt_hms(3661), '01:01:01');
 });
+
+test('active_worker_count = distinct pm2 pids among RUNNING rows (not claim tokens)', () => {
+  // Two pm2 workers (w28136, w1140); each claim mints a fresh token, but the pid prefix identifies the worker.
+  const rows = [
+    { status: 'running', claimed_by: 'w28136-mrqxw7ko-3ngie' },
+    { status: 'running', claimed_by: 'w1140-mrqxw85j-9po5g' },
+    { status: 'done', claimed_by: 'w28136-mrqss4nb-gaxya' },   // finished → not counted
+    { status: 'queued', claimed_by: null },                    // not claimed → not counted
+  ];
+  assert.equal(s.active_worker_count(rows), 2);
+  // Same worker holding two running batches counts once.
+  assert.equal(s.active_worker_count([
+    { status: 'running', claimed_by: 'w1140-aaa-1' },
+    { status: 'running', claimed_by: 'w1140-bbb-2' },
+  ]), 1);
+  assert.equal(s.active_worker_count([]), 0);
+  assert.equal(s.active_worker_count(null), 0);
+});
+
+test('worker_of extracts the pm2 pid prefix from a claim token', () => {
+  assert.equal(s.worker_of({ claimed_by: 'w28136-mrqxw7ko-3ngie' }), 'w28136');
+  assert.equal(s.worker_of({ claimed_by: null }), null);
+  assert.equal(s.worker_of(null), null);
+});
+
+test('work_seconds = claimed_at → finished_at (excludes queue wait), null when incomplete', () => {
+  assert.equal(s.work_seconds({ claimed_at: '2026-07-18 22:30:00', finished_at: '2026-07-18 22:31:42' }), 102);
+  assert.equal(s.work_seconds({ claimed_at: '2026-07-18 22:30:00' }), null);   // no finish
+  assert.equal(s.work_seconds({ finished_at: '2026-07-18 22:31:42' }), null);  // no claim
+  assert.equal(s.work_seconds({ claimed_at: '2026-07-18 22:31:42', finished_at: '2026-07-18 22:30:00' }), null); // negative → null
+});
+
+test('format_worker_balance rolls batches/sets/time up per worker', () => {
+  const runs = [
+    { worker: 'w28136', batch: 2, bsec: 60 },
+    { worker: 'w28136', batch: 2, bsec: 42 },
+    { worker: 'w1140', batch: 2, bsec: 68 },
+  ];
+  const line = s.format_worker_balance(runs);
+  assert.match(line, /w28136 2 batch\(es\)\/4 set\(s\)\/00:01:42/);
+  assert.match(line, /w1140 1 batch\(es\)\/2 set\(s\)\/00:01:08/);
+  assert.equal(s.format_worker_balance([]), 'worker split: (none)');
+});
+
+test('median_sec_per_merge = median of (batch time ÷ set count), concurrency-proof', () => {
+  // batches of 2 sets each taking 70/72/68s → per-merge 35/36/34 → median 35
+  assert.equal(s.median_sec_per_merge([
+    { bsec: 70, batch: 2 }, { bsec: 72, batch: 2 }, { bsec: 68, batch: 2 },
+  ]), 35);
+  // even count → average of the two middles: rates 30,34,36,40 → (34+36)/2 = 35
+  assert.equal(s.median_sec_per_merge([
+    { bsec: 60, batch: 2 }, { bsec: 68, batch: 2 }, { bsec: 72, batch: 2 }, { bsec: 80, batch: 2 },
+  ]), 35);
+  assert.equal(s.median_sec_per_merge([{ batch: 2 }]), null); // no timing
+  assert.equal(s.median_sec_per_merge([]), null);
+});

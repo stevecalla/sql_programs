@@ -157,8 +157,8 @@
     "salesforce_merge_worker": "node server_salesforce_merge_worker_8021.js",
     "salesforce_merge_worker_dev": "nodemon --watch server_salesforce_merge_worker_8021.js --watch src/salesforce_merge_worker --watch src/usat_apps/modules/salesforce_merge/store --ext js server_salesforce_merge_worker_8021.js",
 
-    "pm2_start_salesforce_merge_worker": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_salesforce_merge_worker_8021.js --name salesforce_merge_worker --max-memory-restart 4G --node-args=\"--expose-gc\"",
-    "pm2_start_salesforce_merge_worker_cluster": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_salesforce_merge_worker_8021.js --name salesforce_merge_worker -i 2 --max-memory-restart 4G --node-args=\"--expose-gc\"",
+    "pm2_start_salesforce_merge_worker": "npx pm2 start server_salesforce_merge_worker_8021.js --name salesforce_merge_worker --max-memory-restart 4G --node-args=\"--expose-gc\"",
+    "pm2_start_salesforce_merge_worker_cluster": "npx pm2 start server_salesforce_merge_worker_8021.js --name salesforce_merge_worker -i 4 --max-memory-restart 4G --node-args=\"--expose-gc\"",
 
     "pm2_logs_salesforce_merge_worker": "npx pm2 logs salesforce_merge_worker",
     "salesforce_merge_worker_smoke": "node src/salesforce_merge_worker/smoke.js",

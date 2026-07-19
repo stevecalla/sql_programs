@@ -43,6 +43,15 @@ function deps(opts = {}) {
   };
 }
 
+test('_is_fls_error classifies field-level-security write refusals (not real failures)', () => {
+  assert.ok(mr._is_fls_error('Unable to create/update fields: iWave_PROscores__Contact__c. Please check the security settings of this field'));
+  assert.ok(mr._is_fls_error('INSUFFICIENT_ACCESS: ...'));
+  assert.ok(mr._is_fls_error('field is not writeable'));
+  assert.equal(mr._is_fls_error('entity is deleted'), false);
+  assert.equal(mr._is_fls_error('some other error'), false);
+  assert.equal(mr._is_fls_error(null), false);
+});
+
 test('from_snapshot splits master/losers/children', () => {
   const { master, loserIds, children } = mr.from_snapshot([
     { role: 'survivor', account: 'M', fields: { PersonEmail: 'm@x.com' } },

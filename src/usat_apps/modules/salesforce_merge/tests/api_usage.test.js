@@ -15,7 +15,7 @@ function stub() {
       if (/^\s*INSERT INTO/i.test(s)) { inserts.push(args); return [{ insertId: 1 }, []]; }
       if (/GROUP BY op/.test(s)) return [[{ op: 'probe', snapshots: 3, runs: 0, min_used: 100, max_used: 180, api_max: 100000 }], []];
       if (/run_id = \?/.test(s)) return [[{ run_id: 'r1', op: 'merge', env: 'Sandbox', n: 2, start_used: 200, end_used: 260, cost: 60 }], []];
-      if (/SELECT created_at_mtn/.test(s)) return [[{ created_at_mtn: '2026-07-13 10:00:00', api_used: 120, api_max: 100000, op: 'probe', env: 'Production' }], []];
+      if (/ORDER BY created_at_utc ASC/.test(s)) return [[{ created_at_mtn: '2026-07-13 10:00:00', api_used: 120, api_max: 100000, op: 'probe', env: 'Production' }], []];
       return [[], []];
     },
   };

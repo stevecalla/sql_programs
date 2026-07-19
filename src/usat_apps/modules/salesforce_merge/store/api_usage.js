@@ -84,7 +84,7 @@ async function list_recent(pool, { days = 1, env = null, limit = 1000, mtn_date 
   else { where.push('created_at_utc >= UTC_TIMESTAMP() - INTERVAL ' + (Number(days) || 1) + ' DAY'); }
   if (env) { where.push('env = ?'); args.push(env); }
   const rows = (await pool.query(
-    'SELECT created_at_mtn, created_at_utc, env, op, run_id, actor, api_used, api_max, apex_used FROM ' + TABLE +
+    "SELECT DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') AS created_at_mtn, created_at_utc, env, op, run_id, actor, api_used, api_max, apex_used FROM " + TABLE +
     ' WHERE ' + where.join(' AND ') + ' ORDER BY created_at_utc ASC LIMIT ' + (Number(limit) || 1000), args))[0];
   return rows;
 }
@@ -105,7 +105,7 @@ async function summary_by_op(pool, { days = 1, env = null } = {}) {
 async function run_cost(pool, run_id) {
   const rows = (await pool.query(
     'SELECT run_id, op, env, COUNT(*) n, MIN(api_used) start_used, MAX(api_used) end_used, (MAX(api_used) - MIN(api_used)) cost, ' +
-    '(MAX(apex_used) - MIN(apex_used)) apex_cost, (MAX(bulk_used) - MIN(bulk_used)) bulk_cost FROM ' + TABLE +
+    '(MAX(apex_used) - MIN(apex_used)) apex_cost, MAX(apex_used) end_apex, (MAX(bulk_used) - MIN(bulk_used)) bulk_cost, MAX(bulk_used) end_bulk FROM ' + TABLE +
     ' WHERE run_id = ? GROUP BY run_id, op, env', [run_id]))[0];
   return rows[0] || null;
 }

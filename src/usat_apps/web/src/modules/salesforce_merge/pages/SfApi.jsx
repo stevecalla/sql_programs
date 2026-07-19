@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { formatMtn } from '../../../lib/mtnDate.js';
 import DataTable from '../components/DataTable.jsx';
+import ChartCard from '../components/ChartCard.jsx';
 import { track } from '../../../lib/track.js';
 
 // SF API usage (Phases 1-4). On open it shows the LAST CAPTURED reading (cheap DB read — NO Salesforce
@@ -13,49 +14,6 @@ const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString());
 function band(pct) { return pct == null ? '#6b7686' : pct >= 85 ? '#e4002b' : pct >= 60 ? '#e0a200' : '#16a34a'; }
 const ENVS = [['production', 'Production'], ['sandbox', 'Sandbox']];
 const dim = { fontWeight: 400, fontSize: 13, textTransform: 'none', letterSpacing: 0 };
-
-function UsageChart({ points, mtnToday }) {
-  const parseHour = (t) => { const m = String(t).match(/(\d{1,2}):(\d{2})/); return m ? (Number(m[1]) + Number(m[2]) / 60) : null; };
-  const rows = (points || []).map((p) => ({ v: Number(p.api_used), h: parseHour(p.created_at_mtn) }))
-    .filter((p) => Number.isFinite(p.v) && p.h != null).sort((a, b) => a.h - b.h);
-  if (rows.length < 2) return <p className="muted small">Not enough readings yet for a trend — hit Refresh (live) across the day to build it (only live refreshes add points).</p>;
-  const W = 680, H = 220, padL = 62, padR = 16, padT = 12, padB = 42;
-  const min = Math.min(...rows.map((p) => p.v));
-  const max = Math.max(...rows.map((p) => p.v));
-  const span = (max - min) || 1;
-  const X = (h) => padL + (Math.max(0, Math.min(24, h)) / 24) * (W - padL - padR);  // fixed 0..24h axis
-  const Y = (v) => padT + (1 - (v - min) / span) * (H - padT - padB);
-  const line = rows.map((p) => X(p.h).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ');
-  const pad2 = (n) => String(n).padStart(2, '0');
-  const hhmm = (h) => pad2(Math.floor(h)) + ':' + pad2(Math.round((h - Math.floor(h)) * 60));
-  const yticks = [max, min + span / 2, min];
-  const hours = Array.from({ length: 25 }, (_, i) => i);   // 00..24
-  return (
-    <>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 220 }} role="img" aria-label="Daily API usage over the day (MTN)">
-        {yticks.map((v, i) => (
-          <g key={'y' + i}>
-            <line x1={padL} y1={Y(v)} x2={W - padR} y2={Y(v)} stroke="var(--line, #e4e7ec)" strokeDasharray="2 3" opacity="0.6" />
-            <text x={padL - 8} y={Y(v) + 3} textAnchor="end" fontSize="10" fill="var(--dim)">{fmt(Math.round(v))}</text>
-          </g>
-        ))}
-        {hours.map((h) => (
-          <line key={'g' + h} x1={X(h)} y1={padT} x2={X(h)} y2={H - padB} stroke="var(--line, #e4e7ec)" strokeDasharray="2 3" opacity={h % 2 === 0 ? 0.4 : 0.15} />
-        ))}
-        {hours.filter((h) => h % 2 === 0).map((h) => (
-          <text key={'l' + h} x={X(h)} y={H - padB + 16} textAnchor="middle" fontSize="10" fill="var(--dim)">{pad2(h)}</text>
-        ))}
-        <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="var(--line, #e4e7ec)" />
-        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="var(--line, #e4e7ec)" />
-        <text x={(padL + W - padR) / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--dim)">hour of day (MTN, 00–24)</text>
-        <text transform={`translate(14 ${(padT + H - padB) / 2}) rotate(-90)`} textAnchor="middle" fontSize="10" fill="var(--dim)">Daily API used</text>
-        <polyline points={line} fill="none" stroke="#2e75b6" strokeWidth="2" />
-        {rows.map((p, i) => (<circle key={'c' + i} cx={X(p.h)} cy={Y(p.v)} r="2.5" fill="#2e75b6" />))}
-      </svg>
-      <p className="muted small" style={{ marginTop: 4 }}>{rows.length} reading{rows.length === 1 ? '' : 's'} on {mtnToday || 'today'} (Mountain time) · {hhmm(rows[0].h)} → {hhmm(rows[rows.length - 1].h)} MTN · Y = cumulative Daily API Requests used. New points are only added when someone hits Refresh (live).</p>
-    </>
-  );
-}
 
 // Shared budget gauge — 3 cards (used / remaining / consumed) + a bar + a note. Used for BOTH the Daily
 // API Requests and the Async Apex budgets so they render identically.
@@ -122,6 +80,13 @@ export default function SfApi() {
   const apexBar = apexPct == null ? 0 : Math.max(0, Math.min(100, apexPct));
   const points = (usage && usage.points) || [];
   const mtnToday = (usage && usage.mtn_today) || null;
+  const usagePts = points.map((p) => ({ v: Number(p.api_used), a: (p.apex_used != null ? Number(p.apex_used) : null), t: String(p.created_at_mtn || '') })).filter((p) => Number.isFinite(p.v)).sort((a, b) => a.t.localeCompare(b.t));
+  const usageLabels = usagePts.map((p) => (String(p.t).match(/(\d{2}:\d{2})/) || [null, ''])[1] || String(p.t).slice(11, 16));
+  const usageSeries = [
+    { label: 'Daily API used', data: usagePts.map((p) => p.v), color: '#2e75b6' },
+    { label: 'Async Apex used', data: usagePts.map((p) => (p.a != null && Number.isFinite(p.a) ? p.a : null)), color: '#e0a200' },
+  ];
+  const usageRows = usagePts.map((p, i) => [usageLabels[i], p.v, (p.a != null ? p.a : '')]);
   const byOp = (usage && usage.by_op) || [];
   const runs = (usage && usage.runs) || [];
   const byOpRows = byOp.map((r) => ({ ...r, span: (r.max_used != null && r.min_used != null) ? (r.max_used - r.min_used) : null }));
@@ -203,8 +168,8 @@ export default function SfApi() {
             </div>
           ) : <p className="muted" style={{ marginTop: 12 }}>No approved sets queued — nothing to pre-flight.</p>)}
 
-          {budgetTab === 'usage' && (points.length > 0
-            ? <div className="mx-panel" style={{ marginTop: 12 }}><h2>Usage today <span className="dim" style={dim}>— Daily API Requests used over today (Mountain time)</span></h2><UsageChart points={points} mtnToday={mtnToday} /></div>
+          {budgetTab === 'usage' && (usagePts.length > 1
+            ? <div style={{ marginTop: 12 }}><ChartCard id="sf-api-usage-today" title={'Usage today — API + async Apex used (' + (mtnToday || 'today') + ', MTN)'} type="line" labels={usageLabels} series={usageSeries} headers={['Time (MTN)', 'Daily API used', 'Async Apex used']} rows={usageRows} height={250} /></div>
             : <p className="muted" style={{ marginTop: 12 }}>No readings captured today (MTN) yet — hit Refresh (live) to add points.</p>)}
         </>
       )}

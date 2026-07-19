@@ -147,6 +147,47 @@ const RUN_TABLES = [
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// A worker's claim token is `w<pid>-<time>-<rand>`; the `w<pid>` prefix identifies the actual pm2
+// process. Count DISTINCT prefixes among rows still running so "N workers active" = concurrent workers,
+// not the number of batches claimed over the run.
+function active_worker_count(rows) {
+  const ids = (rows || []).filter((r) => r && r.status === 'running').map((r) => String(r.claimed_by || '').split('-')[0]).filter(Boolean);
+  return new Set(ids).size;
+}
+// The pm2 worker that ran a run (the `w<pid>` prefix of its claim token), for the parallel Batches sheet.
+function worker_of(row) { return row && row.claimed_by ? String(row.claimed_by).split('-')[0] : null; }
+// A batch's actual WORK time in seconds: claimed_at → finished_at (excludes queue-wait, so it reflects
+// what one worker spent on the batch). Both are DATETIME (same field type) so the delta is tz-agnostic.
+function work_seconds(row) {
+  if (!row || !row.claimed_at || !row.finished_at) return null;
+  const ms = new Date(row.finished_at).getTime() - new Date(row.claimed_at).getTime();
+  return ms >= 0 ? Math.round(ms / 1000) : null;
+}
+// The reliable per-merge SERVICE time: median of (batch work-time ÷ its set count) across batches.
+// Concurrency-proof — a batch's own claimed→finished duration doesn't move with other workers, so this
+// is the per-merge number to trust regardless of worker count. null if no batch has a timing.
+function median_sec_per_merge(runs) {
+  const rates = (runs || []).map((r) => (r.bsec != null && r.batch) ? r.bsec / r.batch : null).filter((x) => x != null).sort((a, b) => a - b);
+  if (!rates.length) return null;
+  const mid = Math.floor(rates.length / 2);
+  const m = rates.length % 2 ? rates[mid] : (rates[mid - 1] + rates[mid]) / 2;
+  return Math.round(m * 10) / 10;
+}
+// One-line load split across the pm2 workers that ran the batches, e.g.
+// "worker split: w28136 3 batch(es)/6 set(s)/01:42 · w1140 2 batch(es)/4 set(s)/01:08".
+function format_worker_balance(runs) {
+  const by = new Map();
+  (runs || []).forEach((r) => {
+    const w = r.worker || '(unclaimed)';
+    const a = by.get(w) || { batches: 0, sets: 0, secs: 0 };
+    a.batches += 1; a.sets += Number(r.batch) || 0; a.secs += Number(r.bsec) || 0;
+    by.set(w, a);
+  });
+  if (!by.size) return 'worker split: (none)';
+  const parts = [...by.entries()].sort((x, y) => x[0] < y[0] ? -1 : 1)
+    .map(([w, a]) => `${w} ${a.batches} batch(es)/${a.sets} set(s)/${fmt_hms(a.secs)}`);
+  return 'worker split: ' + parts.join(' · ');
+}
 function db() { return require('../../store/db').query; }
 function stores() {
   return {
@@ -259,7 +300,8 @@ async function run_api_cost(run_id) {
   try { const pool = await get_pool_p(); const { api_usage } = stores();
     const r = await api_usage.run_cost(pool, run_id);
     if (!r) return { api: null, apex: null, bulk: null };
-    return { api: r.cost != null ? Number(r.cost) : null, apex: r.apex_cost != null ? Number(r.apex_cost) : null, bulk: r.bulk_cost != null ? Number(r.bulk_cost) : null };
+    return { api: r.cost != null ? Number(r.cost) : null, apex: r.apex_cost != null ? Number(r.apex_cost) : null, bulk: r.bulk_cost != null ? Number(r.bulk_cost) : null,
+      end_api: r.end_used != null ? Number(r.end_used) : null, end_apex: r.end_apex != null ? Number(r.end_apex) : null, end_bulk: r.end_bulk != null ? Number(r.end_bulk) : null };
   } catch (e) { return { api: null, apex: null, bulk: null }; }
 }
 
@@ -295,6 +337,41 @@ async function run_sequence(o, stamp) {
   const api_before = await api_snapshot(o.env);
   const runs = [];
   const totalSets = ids.length; const seqStart = Date.now();
+  if (o.parallel) {
+    // PARALLEL: enqueue EVERY batch run up front so a pm2 worker CLUSTER (menu item 2) drains them side
+    // by side. Poll them all together; the per-batch checkpoint doesn't apply (batches overlap in time).
+    console.log(`      PARALLEL — enqueuing all ${batches.length} batch runs at once (make sure 2 workers are running: menu item 2)…`);
+    const enq = [];
+    for (let bi = 0; bi < batches.length; bi += 1) {
+      const batch = batches[bi];
+      const q = await mrun.enqueue({ kind: 'merge', mode: o.mode,
+        environment: o.env === 'production' ? 'Production' : 'Sandbox', org_id: stamp.org_id || null, created_by: 'stress-test',
+        params: { ids: batch, opts: { mode: o.mode, confirm: 'MERGE', dry_run: !isExec, ack_drift: true, stamp_merged: o.stamp, attach_dossier: o.dossier, created_by: 'stress-test' } } });
+      enq.push({ run_id: q.run_id, batch: batch.length });
+    }
+    console.log(`      ${enq.length} batches queued — draining with whatever workers are online…`);
+    let hb = 0;
+    for (let i = 0; i < 1000000; i += 1) {
+      const rows = await Promise.all(enq.map((e) => mrun.get(e.run_id)));
+      const finished = rows.filter((r) => r && r.status !== 'queued' && r.status !== 'running').length;
+      const setsDone = rows.reduce((a, r) => a + ((r && r.completed_sets) || 0), 0);
+      const workers = active_worker_count(rows);
+      const now = Date.now();
+      if (now - hb >= 5000 || finished >= enq.length) { hb = now; console.log(`        … ${finished}/${enq.length} batches · ${setsDone}/${totalSets} sets · ${workers} worker(s) active · elapsed ${fmt_hms((now - seqStart) / 1000)}`); }
+      if (finished >= enq.length) break;
+      await sleep(2000);
+    }
+    const maxes = await api_snapshot(o.env);   // daily API/Apex/Bulk limits (stable) — combined with per-run end usage below
+    for (const e of enq) {
+      const row = await mrun.get(e.run_id);
+      const c = await run_api_cost(e.run_id);
+      // In parallel mode batches overlap, so an org-wide "latest" snapshot can't be attributed to one
+      // batch. Use the per-RUN end usage instead, and the batch's own claimed→finished work time.
+      const snap = { used: c.end_api, max: maxes ? maxes.max : null, apex_used: c.end_apex, apex_max: maxes ? maxes.apex_max : null, bulk_used: c.end_bulk, bulk_max: maxes ? maxes.bulk_max : null };
+      runs.push({ run_id: e.run_id, batch: e.batch, status: row ? row.status : 'unknown', cost: c ? c.api : null, apex: c ? c.apex : null, bulk: c ? c.bulk : null, bsec: work_seconds(row), snap, worker: worker_of(row) });
+    }
+    console.log('      ' + format_worker_balance(runs));
+  } else {
   let globalDone = 0; let lastHb = Date.now();
   const pauseRl = o.pause_batches ? require('readline').createInterface({ input: process.stdin, output: process.stdout }) : null;
   for (let bi = 0; bi < batches.length; bi += 1) {
@@ -320,7 +397,7 @@ async function run_sequence(o, stamp) {
     const apexLeft = (snap && snap.apex_max != null && snap.apex_used != null) ? (snap.apex_max - snap.apex_used) : null;
     // One compact line per batch + a running budget checkpoint (async Apex is the binding limit).
     console.log(`      batch ${bi + 1}/${batches.length} · ${batch.length} set(s) · ${run ? run.status : 'unknown'}${cost != null ? ' · ' + cost + ' API' : ''} · ${fmt_hms(bsec)} · [${globalDone}/${totalSets} done]${apexLeft != null ? ' · Apex left ' + apexLeft.toLocaleString() : ''}`);
-    runs.push({ run_id, batch: batch.length, status: run ? run.status : 'unknown', cost, apex: c ? c.apex : null, bulk: c ? c.bulk : null, bsec, snap });
+    runs.push({ run_id, batch: batch.length, status: run ? run.status : 'unknown', cost, apex: c ? c.apex : null, bulk: c ? c.bulk : null, bsec, snap, worker: worker_of(run) });
     lastHb = Date.now();
     if (pauseRl && bi < batches.length - 1) {
       const ans = await new Promise((res) => pauseRl.question(`      ↳ batch ${bi + 1}/${batches.length} done` + (apexLeft != null ? ` · Apex left ${apexLeft.toLocaleString()}` : '') + ' · continue to next batch? (Y/n): ', (a2) => res((a2 || '').trim().toLowerCase())));
@@ -329,6 +406,7 @@ async function run_sequence(o, stamp) {
     if (o.pace_ms) await sleep(o.pace_ms);
   }
   if (pauseRl) pauseRl.close();
+  }
   const api_after = await api_snapshot(o.env);
   const merge_seconds = Math.round((Date.now() - seqStart) / 1000);   // total time in the merge batches
 
@@ -336,14 +414,45 @@ async function run_sequence(o, stamp) {
   if (o.restore) {
     console.log('\n[4/5] Restoring…');
     const rStart = Date.now();
-    const { run_id } = await mrun.enqueue({ kind: 'restore', mode: o.mode,
-      environment: o.env === 'production' ? 'Production' : 'Sandbox', org_id: stamp.org_id || null, created_by: 'stress-test',
-      params: { ids, opts: { mode: o.mode, confirm: 'RESTORE', ack_post_merge: true, created_by: 'stress-test' } } });
-    const r = await poll_run(run_id, { total: ids.length });
-    restore_seconds = Math.round((Date.now() - rStart) / 1000);
-    console.log(`      restore ${run_id} → ${r ? r.status : 'unknown'} in ${fmt_hms(restore_seconds)}`);
-    const rhist = await history_for_runs([run_id]);   // attach per-set history so write_report emits the Restores tab
-    restore = { run_id, status: r ? r.status : 'unknown', hist: rhist, seconds: restore_seconds };
+    if (o.parallel) {
+      // PARALLEL restore too: split into batches and enqueue them all so both workers contend on the
+      // undelete/re-point path (not just merges).
+      const rbatches = plan_batches(ids, o.batch);
+      console.log(`      PARALLEL restore — enqueuing all ${rbatches.length} restore batches at once…`);
+      const renq = [];
+      for (const rb of rbatches) {
+        const q = await mrun.enqueue({ kind: 'restore', mode: o.mode,
+          environment: o.env === 'production' ? 'Production' : 'Sandbox', org_id: stamp.org_id || null, created_by: 'stress-test',
+          params: { ids: rb, opts: { mode: o.mode, confirm: 'RESTORE', ack_post_merge: true, created_by: 'stress-test' } } });
+        renq.push(q.run_id);
+      }
+      let rhb = 0;
+      for (let i = 0; i < 1000000; i += 1) {
+        const rows = await Promise.all(renq.map((rid) => mrun.get(rid)));
+        const fin = rows.filter((r) => r && r.status !== 'queued' && r.status !== 'running').length;
+        const doneSets = rows.reduce((a, r) => a + ((r && r.completed_sets) || 0), 0);
+        const workers = active_worker_count(rows);
+        const now = Date.now();
+        if (now - rhb >= 5000 || fin >= renq.length) { rhb = now; console.log(`        … ${fin}/${renq.length} restore batches · ${doneSets}/${ids.length} sets · ${workers} worker(s) active · elapsed ${fmt_hms((now - rStart) / 1000)}`); }
+        if (fin >= renq.length) break;
+        await sleep(2000);
+      }
+      restore_seconds = Math.round((Date.now() - rStart) / 1000);
+      const statuses = await Promise.all(renq.map((rid) => mrun.get(rid)));
+      const allDone = statuses.every((r) => r && r.status === 'done');
+      const rhist = await history_for_runs(renq);
+      console.log(`      restore ${renq.length} batches → ${allDone ? 'done' : 'mixed'} in ${fmt_hms(restore_seconds)}`);
+      restore = { run_id: renq[0], status: allDone ? 'done' : 'mixed', hist: rhist, seconds: restore_seconds };
+    } else {
+      const { run_id } = await mrun.enqueue({ kind: 'restore', mode: o.mode,
+        environment: o.env === 'production' ? 'Production' : 'Sandbox', org_id: stamp.org_id || null, created_by: 'stress-test',
+        params: { ids, opts: { mode: o.mode, confirm: 'RESTORE', ack_post_merge: true, created_by: 'stress-test' } } });
+      const r = await poll_run(run_id, { total: ids.length });
+      restore_seconds = Math.round((Date.now() - rStart) / 1000);
+      console.log(`      restore ${run_id} → ${r ? r.status : 'unknown'} in ${fmt_hms(restore_seconds)}`);
+      const rhist = await history_for_runs([run_id]);   // attach per-set history so write_report emits the Restores tab
+      restore = { run_id, status: r ? r.status : 'unknown', hist: rhist, seconds: restore_seconds };
+    }
   } else console.log('\n[4/5] Skipping restore.');
 
   console.log('\n[5/5] Writing report…');
@@ -351,7 +460,16 @@ async function run_sequence(o, stamp) {
   const hist = await history_for_runs(runs.map((r) => r.run_id));
   const by = (r) => hist.filter((h) => h.result === r).length;
   const outcomes = { done: by('done'), simulated: by('simulated'), failed: by('failed'), held: by('held'), skipped: by('skipped') };
-  const api_cost = runs.reduce((a, r) => a + (Number(r.cost) || 0), 0) || ((api_before && api_after) ? (api_after.used - api_before.used) : null);
+  // API total: PREFER the whole-run before/after delta (the true org-wide total). In PARALLEL mode the
+  // per-run deltas DOUBLE-COUNT — DailyApiRequests is one org-wide counter, so each concurrent run's
+  // max-min also captures the other workers' calls; summing them overstates badly (e.g. 12k vs the real
+  // ~7k). In serial mode the two agree. Fall back to the per-run sum only if we have no before/after snap.
+  const whole_run_api = (api_before && api_after && api_after.used != null && api_before.used != null) ? (api_after.used - api_before.used) : null;
+  const summed_api = runs.reduce((a, r) => a + (Number(r.cost) || 0), 0) || null;
+  const api_cost = whole_run_api != null ? whole_run_api : summed_api;
+  // Any org-wide daily counter is APPROXIMATE per-merge: it also moves with other workers + background
+  // org activity during the window. True per-merge API is best read from a SERIAL run (batch=count, 1 worker).
+  const api_approx = !!o.parallel;
   // Async Apex fires AFTER the merge (rollups queue as async jobs), so per-batch start/end deltas miss
   // it. The whole-run before/after delta is the reliable measure; fall back to the per-batch sum only if
   // we have no before/after snapshot.
@@ -360,11 +478,15 @@ async function run_sequence(o, stamp) {
   const bulk_delta = (api_before && api_after && api_after.bulk_used != null && api_before.bulk_used != null) ? (api_after.bulk_used - api_before.bulk_used) : null;
   const bulk_cost = bulk_delta != null ? bulk_delta : (runs.reduce((a, r) => a + (Number(r.bulk) || 0), 0) || null);
   const per_merge = (api_cost != null && hist.length) ? Math.round((api_cost / hist.length) * 10) / 10 : null;
-  const apex_per_merge = (apex_cost != null && hist.length) ? Math.round((apex_cost / hist.length) * 10) / 10 : null;
+  const apex_per_merge = (apex_cost != null && apex_cost > 0 && hist.length) ? Math.round((apex_cost / hist.length) * 10) / 10 : null;   // rolling 24h counter -> negatives aren't a per-merge cost
   const remaining = (api_after && api_after.max != null) ? (api_after.max - api_after.used) : null;
   const apex_remaining = (api_after && api_after.apex_max != null && api_after.apex_used != null) ? (api_after.apex_max - api_after.apex_used) : null;
   const per_min = Math.round((hist.length / Math.max(0.001, seconds)) * 60 * 10) / 10;
-  const data = { o, sel, runs, restore, seconds, merge_seconds, restore_seconds, per_min, hist, outcomes, api_cost, per_merge, remaining, apex_cost, apex_per_merge, apex_remaining, bulk_cost, api_before, api_after, stamp };
+  // RELIABLE per-merge cost (concurrency-proof): the median batch's own claimed→finished work time
+  // divided by its set count. Unlike the API counter, batch time isn't polluted by other workers, so
+  // this is the number to trust + report across serial and parallel alike.
+  const sec_per_merge = median_sec_per_merge(runs);
+  const data = { o, sel, runs, restore, seconds, merge_seconds, restore_seconds, per_min, sec_per_merge, hist, outcomes, api_cost, api_approx, per_merge, remaining, apex_cost, apex_per_merge, apex_remaining, bulk_cost, api_before, api_after, stamp };
   print_summary(data);
   try { const f = await write_report(data); console.log('      report: ' + f); }
   catch (e) {
@@ -393,10 +515,11 @@ function print_summary(d) {
   console.log('\n  Summary:');
   console.log(`    sets processed     ${d.hist.length} (queued ${d.runs.reduce((s, r) => s + r.batch, 0)}, batches ${d.runs.length})`);
   console.log(`    outcomes           done ${d.outcomes.done} · simulated ${d.outcomes.simulated} · failed ${d.outcomes.failed} · held ${d.outcomes.held} · skipped ${d.outcomes.skipped}`);
-  console.log(`    throughput         ${d.per_min}/min over ${fmt_hms(d.seconds)}`);
+  console.log(`    throughput         ${d.per_min}/min over ${fmt_hms(d.seconds)}${d.sec_per_merge != null ? '   ·   ~' + d.sec_per_merge + 's/merge (median batch)' : ''}`);
   console.log(`    merge time         ${fmt_hms(d.merge_seconds || 0)}${d.restore ? '   ·   restore time  ' + fmt_hms(d.restore_seconds || 0) : '   (restore skipped)'}`);
-  console.log(`    API calls          ${d.api_cost != null ? d.api_cost.toLocaleString() : '(n/a)'}${d.per_merge != null ? ' · ~' + d.per_merge + '/merge' : ''}${d.remaining != null ? ' · ' + d.remaining.toLocaleString() + ' left today' : ''}`);
-  console.log(`    Async Apex         ${d.apex_cost != null ? d.apex_cost.toLocaleString() : '(n/a)'}${d.apex_per_merge != null ? ' · ~' + d.apex_per_merge + '/merge' : ''}${d.apex_remaining != null ? ' · ' + d.apex_remaining.toLocaleString() + ' of ' + (d.api_after && d.api_after.apex_max ? d.api_after.apex_max.toLocaleString() : '?') + ' left today' : ''}`);
+  const apxTag = d.api_approx ? ' approx' : '';
+  console.log(`    API calls          ${d.api_cost != null ? d.api_cost.toLocaleString() : '(n/a)'}${d.per_merge != null ? ' · ~' + d.per_merge + '/merge' + apxTag : ''}${d.remaining != null ? ' · ' + d.remaining.toLocaleString() + ' left today' : ''}${d.api_approx ? '  (org-wide daily counter — calibrate serially)' : ''}`);
+  console.log(`    Async Apex         ${d.apex_cost == null ? '(n/a)' : (d.apex_cost <= 0 ? 'n/a — fires after commit (deferred); use a 50-100 run' : d.apex_cost.toLocaleString() + (d.apex_per_merge != null ? ' · ~' + d.apex_per_merge + '/merge' : ''))}${d.apex_remaining != null ? ' · ' + d.apex_remaining.toLocaleString() + ' of ' + (d.api_after && d.api_after.apex_max ? d.api_after.apex_max.toLocaleString() : '?') + ' left today' : ''}`);
   console.log(`    restore            ${d.restore ? d.restore.status : 'skipped'}`);
 }
 
@@ -492,36 +615,39 @@ async function write_report(d) {
     ['Size band', (d.o.min_size || '-') + '..' + (d.o.max_size || '-')], ['Pool', d.sel.pool], ['Sampled', d.sel.sampled],
     ['Sets processed', d.hist.length], ['Batches', d.runs.length],
     ['Done', d.outcomes.done], ['Simulated', d.outcomes.simulated], ['Failed', d.outcomes.failed], ['Held', d.outcomes.held], ['Skipped', d.outcomes.skipped],
-    ['Throughput / min', d.per_min], ['Elapsed total (hh:mm:ss)', fmt_hms(d.seconds)],
+    ['Throughput / min', d.per_min], ['Sec per merge (median batch — reliable)', d.sec_per_merge != null ? d.sec_per_merge : 'n/a'], ['Elapsed total (hh:mm:ss)', fmt_hms(d.seconds)],
     ['Merge time', fmt_hms(d.merge_seconds || 0)], ['Restore time', d.restore ? fmt_hms(d.restore_seconds || 0) : 'skipped'],
-    ['API calls total', d.api_cost], ['API per merge', d.per_merge], ['API left today', d.remaining],
+    ['API calls total', d.api_cost], ['API per merge' + (d.api_approx ? ' (approx — org-wide counter)' : ''), d.per_merge], ['API left today', d.remaining],
     ['Restore', d.restore ? d.restore.status : 'skipped'], ['Dataset org', d.stamp.org_id],
   ]);
   const m = wb.addWorksheet('Merges');
   m.addRow(['#', 'run_id', 'queue_id', 'source_key', 'survivor', 'survivor_name', 'losers', 'children', 'result', 'reason', 'dossier_id']);
   (d.hist || []).forEach((h, i) => m.addRow([i + 1, h.run_id, h.queue_id, h.source_key, h.survivor_account, h.survivor_name, h.loser_count, h.child_total, h.result, h.reason, h.dossier_id]));
   const b = wb.addWorksheet('Batches');
-  b.addRow(['#', 'run_id', 'sets', 'status', 'API cost', 'API used (after)', 'API left', 'Apex used (after)', 'Apex left', 'Bulk used', 'Batch time']);
+  b.addRow(['#', 'run_id', 'worker', 'sets', 'status', d.api_approx ? 'API cost (org-wide, overlaps)' : 'API cost', 'API used (after)', 'API left', 'Apex used (after)', 'Apex left', 'Bulk used', 'Batch time']);
   d.runs.forEach((r, i) => {
     const s2 = r.snap || {};
     const apiLeft = (s2.max != null && s2.used != null) ? (s2.max - s2.used) : null;
     const apexLeft = (s2.apex_max != null && s2.apex_used != null) ? (s2.apex_max - s2.apex_used) : null;
-    b.addRow([i + 1, r.run_id, r.batch, r.status, r.cost, s2.used != null ? s2.used : null, apiLeft,
+    b.addRow([i + 1, r.run_id, r.worker || null, r.batch, r.status, r.cost, s2.used != null ? s2.used : null, apiLeft,
       s2.apex_used != null ? s2.apex_used : null, apexLeft, s2.bulk_used != null ? s2.bulk_used : null,
       r.bsec != null ? fmt_hms(r.bsec) : null]);
   });
   const a = wb.addWorksheet('API');
   a.addRows([['Metric', 'Value'],
     ['API used before', d.api_before ? d.api_before.used : null], ['API used after', d.api_after ? d.api_after.used : null],
-    ['API daily max', d.api_after ? d.api_after.max : null], ['API cost (delta)', d.api_cost], ['API per merge', d.per_merge], ['API remaining today', d.remaining],
+    ['API daily max', d.api_after ? d.api_after.max : null], ['API cost (whole-run delta)', d.api_cost], ['API per merge' + (d.api_approx ? ' (approx)' : ''), d.per_merge], ['API remaining today', d.remaining],
+    ['Sec per merge (median batch — RELIABLE)', d.sec_per_merge != null ? d.sec_per_merge : 'n/a'],
     ['', ''],
     ['Async Apex used before', d.api_before ? d.api_before.apex_used : null], ['Async Apex used after', d.api_after ? d.api_after.apex_used : null],
     ['Async Apex daily max', d.api_after ? d.api_after.apex_max : null], ['Async Apex cost (delta)', d.apex_cost], ['Async Apex per merge', d.apex_per_merge], ['Async Apex remaining today', d.apex_remaining],
     ['', ''],
     ['Bulk API batches used', d.api_after ? d.api_after.bulk_used : null], ['Bulk API daily max', d.api_after ? d.api_after.bulk_max : null], ['Bulk API cost (delta)', d.bulk_cost],
     ['', ''],
-    ['Note 1', 'Async Apex fires after the merge (rollups run async), so it is measured as the whole-run before/after delta — approximate, and best read per-run not per-batch.'],
-    ['Note 2', 'Bulk API batches are spent by the Get-Duplicates data pull, NOT by merges — so a merge run\'s Bulk cost is ~0. "Bulk API batches used" is the org\'s current daily usage for context.']]);
+    ['Note 1 (API)', 'API cost = the whole-run before/after delta of DailyApiRequests — a single ORG-WIDE daily counter. In PARALLEL runs it also moves with the other workers + any background org activity, so per-merge API is APPROXIMATE. For a clean per-merge API figure, run SERIALLY (batch = count, one worker). The per-batch "API cost" column is org-wide during overlapping windows in parallel mode — not a true single-batch cost.'],
+    ['Note 2 (best metric)', 'The RELIABLE per-merge cost is "Sec per merge (median batch)" — a batch\'s own claimed→finished time isn\'t polluted by other workers, so it holds across serial and parallel. Use it (and Throughput/min) as the headline; treat the API/Apex counters as daily-headroom context.'],
+    ['Note 3 (Async Apex)', 'Async Apex fires AFTER the merge commits (rollups queue as async jobs) and DailyAsyncApexExecutions is a ROLLING 24h counter, so an immediate post-run snapshot usually reads ~0 (the jobs have not run yet) and a short run\'s net delta can even go negative as old executions age out. It only becomes meaningful on a longer run (50-100) where the deferred jobs have time to fire within the window.'],
+    ['Note 4 (Bulk)', 'Bulk API batches are spent by the Get-Duplicates data pull, NOT by merges — so a merge run\'s Bulk cost is ~0. "Bulk API batches used" is the org\'s current daily usage for context.']]);
   if (d.restore && d.restore.hist && d.restore.hist.length) {
     const rs = wb.addWorksheet('Restores');
     rs.addRow(['#', 'queue_id', 'source_key', 'survivor', 'survivor_name', 'losers', 'result', 'reason']);
@@ -605,7 +731,7 @@ async function cmd_restore() {
 function make_rl() { return require('readline').createInterface({ input: process.stdin, output: process.stdout }); }
 function ask(rl, q, def) { return new Promise((res) => rl.question(`${q}${def != null ? ' [' + def + ']' : ''}: `, (a) => res(((a || '').trim()) || (def != null ? String(def) : '')))); }
 
-async function cmd_run(full) {
+async function cmd_run(full, parallel) {
   const rl = make_rl();
   const env = (await ask(rl, 'Environment (sandbox/production)', 'sandbox')).toLowerCase().startsWith('prod') ? 'production' : 'sandbox';
   const stamp = await get_dataset_stamp();
@@ -617,7 +743,7 @@ async function cmd_run(full) {
   const max_size = source === 'group' ? await ask(rl, 'Max cluster size', '4') : null;
   const count = Math.max(1, Number(await ask(rl, 'How many merges (count)', '20')) || 20);
   const batch = Math.max(1, Number(await ask(rl, 'Batch size', '10')) || 10);
-  const pause_batches = (batch < count) ? (await ask(rl, 'Pause between batches (choose continue/stop each)? (y/N)', 'N')).toUpperCase().startsWith('Y') : false;
+  const pause_batches = (!parallel && batch < count) ? (await ask(rl, 'Pause between batches (choose continue/stop each)? (y/N)', 'N')).toUpperCase().startsWith('Y') : false;
   const seed = Number(await ask(rl, 'Random seed', String(Date.now() % 100000))) || 1;
   const restore = (await ask(rl, 'Restore afterward? (Y/N)', full ? 'Y' : 'N')).toUpperCase().startsWith('Y');
   const dossier = (await ask(rl, 'Attach dossier? (y/N)', 'N')).toUpperCase().startsWith('Y');
@@ -629,7 +755,7 @@ async function cmd_run(full) {
     if (env === 'production' && process.env.MERGE_ENABLE_EXECUTION !== 'true') { console.log('MERGE_ENABLE_EXECUTION is not true — aborting.\n'); rl.close(); process.exit(1); }
   }
   rl.close();
-  await run_sequence({ env, do_clear, source, min_size, max_size, count, batch, seed, restore, dossier, stamp: stampS, mode, pace_ms: 0, full, pause_batches }, stamp);
+  await run_sequence({ env, do_clear, source, min_size, max_size, count, batch, seed, restore, dossier, stamp: stampS, mode, pace_ms: 0, full, pause_batches, parallel: !!parallel }, stamp);
 }
 
 async function cmd_clear() {
@@ -668,11 +794,12 @@ async function main() {
   if (cmd === 'clear') return cmd_clear();
   if (cmd === 'restore') return cmd_restore();
   if (cmd === 'run') return cmd_run(false);
+  if (cmd === 'parallel') return cmd_run(false, true);
   if (cmd === 'sequence' || cmd === 'all') return cmd_run(true);
   console.log('usage: node src/usat_apps/modules/salesforce_merge/stress_test.js <distribution|clear|run|restore|sequence|open> [--env production]');
   process.exit(0);
 }
 
-module.exports = { build_distribution, format_distribution, in_size_range, mulberry32, sample, get_distribution, resolve_env, normalize_env, get_dataset_stamp, plan_batches, summarize, format_selection, fmt_hms };
+module.exports = { build_distribution, format_distribution, in_size_range, mulberry32, sample, get_distribution, resolve_env, normalize_env, get_dataset_stamp, plan_batches, summarize, format_selection, fmt_hms, active_worker_count, worker_of, work_seconds, format_worker_balance, median_sec_per_merge };
 
 if (require.main === module) main().catch((e) => { console.error('FAILED: ' + e.message); process.exit(1); });
