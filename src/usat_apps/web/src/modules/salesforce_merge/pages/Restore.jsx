@@ -17,6 +17,7 @@ export default function Restore() {
   const [mode, setMode] = useState('simulate');
   const [confirmText, setConfirmText] = useState('');
   const [result, setResult] = useState(null);
+  const [restoreReport, setRestoreReport] = useState(null);   // Excel report path written after a restore
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [bin, setBin] = useState(null);
@@ -26,6 +27,7 @@ export default function Restore() {
   const [recMode, setRecMode] = useState('simulate');
   const [recConfirm, setRecConfirm] = useState('');
   const [recResult, setRecResult] = useState(null);
+  const [recReport, setRecReport] = useState(null);   // Excel report path written after a recreate
   const [recBusy, setRecBusy] = useState(false);
   const [diffOpen, setDiffOpen] = useState(() => new Set());
   const toggleDiff = (id) => setDiffOpen((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -94,7 +96,7 @@ export default function Restore() {
 
   const run = async (execute) => {
     if (!ids.length) return;
-    setBusy(true); setErr(''); setResult(null);
+    setBusy(true); setErr(''); setResult(null); setRestoreReport(null);
     try {
       // Selective restore: send the per-set "keep current" field choices for the sets being restored.
       const keep_fields = {};
@@ -105,6 +107,12 @@ export default function Restore() {
       setConfirmText('');
       const finalRun = await awaitRun(api, 'restore', q.run_id);
       setResult(summarize(finalRun)); load();
+      // Write the SAME Excel workbook + sweep row as a merge run does (report_run/report_job detect the
+      // restore kind and label it Mode=restore). Best-effort — a report failure never fails the restore.
+      try {
+        const rep = q.job_id ? await api.mergeJobReport(q.job_id) : await api.mergeRunReport(q.run_id);
+        if (rep && rep.report) setRestoreReport(rep.report);
+      } catch (e) { /* report is best-effort */ }
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
@@ -114,7 +122,7 @@ export default function Restore() {
   const recCanExecute = !safe && recMode === 'execute' && recConfirm === 'RECREATE' && recIds.length > 0;
   const runRecreate = async (execute) => {
     if (!recIds.length) return;
-    setRecBusy(true); setErr(''); setRecResult(null);
+    setRecBusy(true); setErr(''); setRecResult(null); setRecReport(null);
     try {
       const keep_fields = {};
       for (const id of recIds) if (keepBySet[id] && keepBySet[id].length) keep_fields[id] = keepBySet[id];
@@ -122,6 +130,11 @@ export default function Restore() {
       setRecConfirm('');
       const finalRun = await awaitRun(api, 'recreate', q.run_id);
       setRecResult(summarize(finalRun)); load();
+      // Same workbook + sweep row as merges/restores (report_run detects the recreate kind). Best-effort.
+      try {
+        const rep = q.job_id ? await api.mergeJobReport(q.job_id) : await api.mergeRunReport(q.run_id);
+        if (rep && rep.report) setRecReport(rep.report);
+      } catch (e) { /* report is best-effort */ }
     } catch (e) { setErr(e.message); }
     finally { setRecBusy(false); }
   };
@@ -176,6 +189,9 @@ export default function Restore() {
           <button className="btn" style={{ width: '100%', marginTop: 8 }} disabled={busy || selCount === 0} onClick={() => run(false)}>{busy ? 'Running…' : '👁 Simulate restore (' + selCount + ')'}</button>
           {result && (
             <p className="muted small" style={{ marginTop: 8, color: 'var(--accent)' }}>Run {result.run_id} ({result.mode}): {result.restored || 0} restored, {result.simulated || 0} simulated, {result.skipped} skipped, {result.failed} failed.</p>
+          )}
+          {restoreReport && (
+            <p className="muted small" style={{ marginTop: 4 }}>Report written: <span className="mono">{restoreReport}</span> (+ sweep row)</p>
           )}
           {result && (result.failed > 0 || result.skipped > 0) && runReasons(result.run_id).map((r, i) => (
             <p key={i} className="small" style={{ margin: '2px 0 0', color: 'var(--red)' }}>⚠ {r}</p>
@@ -314,6 +330,9 @@ export default function Restore() {
           <button className="btn" disabled={recBusy || recIds.length === 0} onClick={() => runRecreate(false)}>{recBusy ? 'Running…' : '👁 Simulate recreate (' + recIds.length + ')'}</button>
           {recResult && (
             <span className="muted small" style={{ color: 'var(--accent)' }}>Run {recResult.run_id} ({recResult.mode}): {recResult.recreated || 0} recreated, {recResult.simulated || 0} simulated, {recResult.skipped} skipped, {recResult.failed} failed.</span>
+          )}
+          {recReport && (
+            <span className="muted small">Report written: <span className="mono">{recReport}</span> (+ sweep row)</span>
           )}
           {recResult && (recResult.failed > 0 || recResult.skipped > 0) && runReasons(recResult.run_id).map((r, i) => (
             <p key={i} className="small" style={{ margin: '2px 0 0', color: 'var(--red)' }}>⚠ {r}</p>

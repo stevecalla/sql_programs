@@ -880,10 +880,11 @@ async function report_job(jobId, opts = {}) {
   const api_before = win ? win.before : null;
   const api_after = win ? win.after : await api_snapshot(stamp.env);
   const runs = await assemble_runs(mrun, enq, api_after);
-  const isRestore = jp.kind === 'restore';
-  // Restore phase: either this job IS a restore, or a paired restore job to FOLD INTO this one workbook.
+  const kind = jp.kind || 'merge';
+  const isUndo = kind === 'restore' || kind === 'recreate';   // both undo runs reported the same way
+  // Undo phase: either this job IS a restore/recreate, or a paired restore job to FOLD INTO this one workbook.
   let restore = null; let restore_seconds = 0;
-  if (isRestore) { restore = { run_id: jobId, status: jp.status, hist: await history_for_runs(enq.map((e) => e.run_id)) }; restore_seconds = merge_seconds; }
+  if (isUndo) { restore = { run_id: jobId, status: jp.status, hist: await history_for_runs(enq.map((e) => e.run_id)) }; restore_seconds = merge_seconds; }
   else if (restoreJobId) {
     const rjp = await mrun.job_progress(restoreJobId);
     if (rjp && rjp.runs && rjp.runs.length) {
@@ -892,7 +893,7 @@ async function report_job(jobId, opts = {}) {
       restore_seconds = _wall_seconds(rrows);
     }
   }
-  const o = { mode: jp.mode, env: stamp.env, source: isRestore ? 'restore' : 'duplicate',
+  const o = { mode: jp.mode, env: stamp.env, source: isUndo ? kind : 'duplicate',
     count: jp.total_sets, batch: enq[0] ? enq[0].batch : 0, seed: (opts.seed != null && opts.seed !== '') ? opts.seed : '-', min_size: null, max_size: null, job_id: jobId };
   const sel = { pool: null, sampled: jp.total_sets, entries: [] };
   return finalize_job(o, sel, runs, restore, { seconds: merge_seconds + restore_seconds, merge_seconds, restore_seconds }, stamp, api_before, api_after);
@@ -911,12 +912,13 @@ async function report_run(runId, opts = {}) {
   const api_before = win ? win.before : null;
   const api_after = win ? win.after : await api_snapshot(stamp.env);
   const runs = await assemble_runs(mrun, enq, api_after);
-  const isRestore = row.kind === 'restore';
-  const o = { mode: row.mode, env: stamp.env, source: isRestore ? 'restore' : 'duplicate',
+  const kind = row.kind || 'merge';
+  const isUndo = kind === 'restore' || kind === 'recreate';   // both are "undo" runs reported the same way
+  const o = { mode: row.mode, env: stamp.env, source: isUndo ? kind : 'duplicate',
     count: row.total_sets, batch: Number(row.total_sets) || 0, seed: (opts.seed != null && opts.seed !== '') ? opts.seed : '-', min_size: null, max_size: null, job_id: runId };
   const sel = { pool: null, sampled: row.total_sets, entries: [] };
-  const restore = isRestore ? { run_id: runId, status: row.status, hist: await history_for_runs([runId]) } : null;
-  return finalize_job(o, sel, runs, restore, { seconds, merge_seconds: isRestore ? 0 : seconds, restore_seconds: isRestore ? seconds : 0 }, stamp, api_before, api_after);
+  const restore = isUndo ? { run_id: runId, status: row.status, hist: await history_for_runs([runId]) } : null;
+  return finalize_job(o, sel, runs, restore, { seconds, merge_seconds: isUndo ? 0 : seconds, restore_seconds: isUndo ? seconds : 0 }, stamp, api_before, api_after);
 }
 
 // JOB test (Phase 1): like `run`/`parallel` but drives the ACTUAL fan-out path — it splits the approved
