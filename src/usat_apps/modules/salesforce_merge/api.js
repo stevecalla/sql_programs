@@ -479,9 +479,13 @@ function mount(app) {
     try {
       // Effective parallel state (DB -> env -> default), so the main Process Merges UI can show whether a run
       // will fan out — read-only, no admin gate needed. chunk_size drives the "≈ N batches" prediction.
-      let parallel_enabled = false; let chunk_size = 5;
-      try { parallel_enabled = !!(await msettings_store.get('parallel_enabled')); chunk_size = Number(await msettings_store.get('chunk_size')) || 5; } catch (e) { /* settings table not ready */ }
-      res.json({ ok: true, max_batch: Math.min(500, Math.max(1, Number(process.env.MERGE_MAX_BATCH) || 100)), max_batch_hard: 500, parallel_enabled, chunk_size, ...(await mexec.status()) });
+      let parallel_enabled = false; let chunk_size = 5; let hard = 500; let soft = 100;
+      try {
+        parallel_enabled = !!(await msettings_store.get('parallel_enabled')); chunk_size = Number(await msettings_store.get('chunk_size')) || 5;
+        hard = Math.max(1, Number(await msettings_store.get('max_batch_hard')) || 500);              // hard cap (panel→env→500)
+        soft = Math.min(hard, Math.max(1, Number(await msettings_store.get('max_batch')) || 100));   // soft default (panel→env→100), capped at hard
+      } catch (e) { /* settings table not ready */ }
+      res.json({ ok: true, max_batch: soft, max_batch_hard: hard, parallel_enabled, chunk_size, ...(await mexec.status()) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.post('/api/salesforce-merge/merge/process', gate, async function (req, res) {
@@ -490,8 +494,8 @@ function mount(app) {
       // Batch safety limit: cap how many sets one job can run. Now resolved from the live settings store
       // (DB -> env MERGE_MAX_BATCH -> default), so an admin can tune it without a redeploy. Only gates
       // real writes; simulate/dry-run is unlimited.
-      const HARD_MAX = 500;   // absolute ceiling the user's setting can never exceed
-      const dfltMax = await msettings_store.get('max_batch');   // DB -> env -> default (admin-tunable, live)
+      const HARD_MAX = Math.max(1, Number(await msettings_store.get('max_batch_hard')) || 500);   // hard cap (DB→env→500) — one source of truth
+      const dfltMax = Math.min(HARD_MAX, await msettings_store.get('max_batch'));   // soft default (DB→env→100), never above the hard cap
       const reqMax = (b.max_batch != null && b.max_batch !== '') ? Math.min(HARD_MAX, Math.max(1, Number(b.max_batch) || dfltMax)) : dfltMax;
       if (b.mode === 'execute' && !b.dry_run && Array.isArray(b.ids) && b.ids.length > reqMax) {
         return res.status(400).json({ ok: false, error: 'Batch too large: ' + b.ids.length + ' sets exceeds the limit of ' + reqMax + ' per Execute (hard cap ' + HARD_MAX + ').' });
