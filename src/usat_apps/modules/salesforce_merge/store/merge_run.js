@@ -293,4 +293,48 @@ async function set_result(runId, obj, query = real_query) {
   await query('UPDATE `' + TABLE + '` SET result = ? WHERE run_id = ?', [JSON.stringify(obj || {}), String(runId)]);
 }
 
-module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, reap_stale, request_cancel, is_cancelled, set_result, job_progress, cancel_job, hold_job, resume_job, ops_status, TABLE, DDL };
+// Run-level "Job history": aggregate the run table into ONE row per JOB (grouped by job_id) — or per
+// run for a single, non-fanned run (job_key = run_id). Powers the collapsible Job history table. Pulls a
+// generous window of recent runs and groups client-side (each job can hold many chunk-runs), capping to
+// `limit` jobs. Per-job API/Apex totals are joined on top by the endpoint via api_usage.job_window(run_ids).
+async function list_jobs({ limit = 50, env = null, kind = null } = {}, query = real_query) {
+  await ensure_table(query);
+  const n = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
+  const where = []; const params = [];
+  if (env) { where.push('environment = ?'); params.push(String(env)); }
+  if (kind) { where.push('kind = ?'); params.push(String(kind)); }
+  const rows = await query('SELECT run_id, job_id, kind, mode, environment, org_id, total_sets, completed_sets, status, '
+    + 'claimed_by, claimed_at, started_at, finished_at, '
+    + "DATE_FORMAT(COALESCE(created_at_mtn, started_at), '%Y-%m-%d %H:%i:%s') AS when_mtn "
+    + 'FROM `' + TABLE + '`' + (where.length ? ' WHERE ' + where.join(' AND ') : '')
+    + ' ORDER BY started_at DESC LIMIT 4000', params);
+  const list = rows || [];
+  const ms = (v) => (v ? new Date(v).getTime() : 0);
+  const groups = new Map();   // job_key -> runs[] (first-seen order = newest first)
+  for (const r of list) { const key = r.job_id || r.run_id; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(r); }
+  const out = [];
+  for (const [key, runs] of groups) {
+    if (out.length >= n) break;
+    const sum = (f) => runs.reduce((a, x) => a + (Number(x[f]) || 0), 0);
+    const workers = new Set(runs.filter((x) => x.claimed_by).map((x) => String(x.claimed_by).split('-')[0])).size;
+    const starts = runs.map((x) => ms(x.claimed_at || x.started_at)).filter(Boolean);
+    const ends = runs.map((x) => ms(x.finished_at)).filter(Boolean);
+    const seconds = (starts.length && ends.length) ? Math.max(0, Math.round((Math.max(...ends) - Math.min(...starts)) / 1000)) : null;
+    const per = runs.map((x) => { const bs = (x.claimed_at && x.finished_at) ? (ms(x.finished_at) - ms(x.claimed_at)) / 1000 : null; const s = Number(x.total_sets) || 0; return (bs != null && s > 0) ? bs / s : null; }).filter((v) => v != null).sort((a, b) => a - b);
+    const sec_per_merge = per.length ? Math.round(per.length % 2 ? per[(per.length - 1) / 2] : (per[per.length / 2 - 1] + per[per.length / 2]) / 2) : null;
+    const anyQueued = runs.some((x) => x.status === 'queued');
+    const anyRunning = runs.some((x) => x.status === 'running' || x.status === 'queued');
+    const anyHeld = runs.some((x) => x.status === 'held');
+    const status = (anyHeld && !anyQueued) ? 'paused' : anyRunning ? 'running'
+      : runs.some((x) => x.status === 'error') ? 'error' : runs.some((x) => x.status === 'cancelled') ? 'cancelled' : 'done';
+    const r0 = runs[0];
+    const total_sets = sum('total_sets'); const done = sum('completed_sets');
+    out.push({ job_key: key, job_id: r0.job_id || null, is_job: !!r0.job_id, kind: r0.kind, mode: r0.mode,
+      environment: r0.environment, org_id: r0.org_id, when_mtn: r0.when_mtn, batches: runs.length, workers,
+      total_sets, done, failed: Math.max(0, total_sets - done), status, seconds, sec_per_merge,
+      run_ids: runs.map((x) => x.run_id) });
+  }
+  return out;
+}
+
+module.exports = { start, update, finish, get, latest, ensure_table, enqueue, claim_next, reap_stale, request_cancel, is_cancelled, set_result, job_progress, cancel_job, hold_job, resume_job, ops_status, list_jobs, TABLE, DDL };

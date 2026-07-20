@@ -575,6 +575,24 @@ function mount(app) {
     try { await write_rows(req, res, await mhist.list({ limit: req.query.limit || 5000, result: req.query.result, mode: req.query.mode, q: req.query.q }), 'merge_history_' + new Date().toISOString().slice(0, 10), 'merge_history'); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
+  // Run-level Job history: one row per job/run with sets, batches, workers, times, sec/merge, and the
+  // HONEST per-job API/Apex — the whole-run before→after delta across the job's run_ids (NOT the sum of the
+  // per-batch org-wide windows, which overcounts in parallel). api_per_merge = api_total ÷ sets (approx).
+  app.get('/api/salesforce-merge/merge/job-history', gate, async function (req, res) {
+    try {
+      const jobs = await mrun.list_jobs({ limit: req.query.limit, env: req.query.env, kind: req.query.kind });
+      let pool = null; try { pool = await require('../../store/db').get_pool(); } catch (e) { pool = null; }
+      for (const j of jobs) {
+        let win = null;
+        if (pool) { try { win = await api_usage.job_window(pool, j.run_ids); } catch (e) { win = null; } }
+        j.api_total = (win && win.after.used != null && win.before.used != null) ? Math.max(0, win.after.used - win.before.used) : null;
+        j.apex_total = (win && win.after.apex_used != null && win.before.apex_used != null) ? Math.max(0, win.after.apex_used - win.before.apex_used) : null;
+        j.api_per_merge = (j.api_total != null && j.total_sets) ? Math.round(j.api_total / j.total_sets) : null;
+        delete j.run_ids;   // internal — not shipped to the client
+      }
+      res.json({ ok: true, jobs });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   // Merge dossier: the archived multi-tab .xlsx for a lifecycle action. `list` returns the metadata
   // rows for a queue entry (History link source); `download` streams the DB copy of the workbook.
   app.get('/api/salesforce-merge/merge/dossier', gate, async function (req, res) {
