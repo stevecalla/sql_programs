@@ -99,8 +99,9 @@ function poll() {
 function ensureStarted() {
   if (started) return; started = true;
   discover();
-  setInterval(discover, DISCOVER_MS);
-  setInterval(poll, POLL_MS);
+  // unref'd so these background pollers never, on their own, keep a process (or a test) from exiting.
+  const t1 = setInterval(discover, DISCOVER_MS); if (t1.unref) t1.unref();
+  const t2 = setInterval(poll, POLL_MS); if (t2.unref) t2.unref();
 }
 
 function subscribe(res, name, backfill) {

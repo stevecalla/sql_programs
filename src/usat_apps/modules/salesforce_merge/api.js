@@ -65,14 +65,11 @@ function mount(app) {
   const gate = require_panel('merge');
   const opsGate = require_panel('merge-ops');   // admin-only Merge Ops panel (grantable in Users & Access)
 
-  // Boot-time ensure (fire-and-forget): create/normalize the merge tables on server start so a plain
-  // restart is enough — no manual migration needed. mrun.ensure_table() also self-heals the job-column
-  // order; msettings_store.ensure() creates the live-settings table. Best-effort — never blocks boot.
-  (async () => {
-    try { await mrun.ensure_table(); } catch (e) { /* best-effort */ }
-    try { await msettings_store.ensure(); } catch (e) { /* best-effort */ }
-  })();
-
+  // Table create/normalize is LAZY, not at boot: mrun.* and msettings_store.* each call their own
+  // ensure_table()/ensure() (idempotent, _ensured-guarded) on first real use — so the merge tables + the
+  // job-column self-heal + the live-settings table are still created on demand ("restart is enough, no
+  // manual migration"), WITHOUT opening a DB pool at create_app() time. That keeps the no-DB smoke tests
+  // (which build the app but never touch these endpoints) able to exit cleanly.
 
   // ---- Merge Ops (Phase 2): live operational settings (parallel/chunk/max_batch/apex cap), DB-backed so
   // an admin tunes them without env edits or a redeploy. Read + write gated by the merge-ops panel. ----

@@ -444,9 +444,40 @@ export default function MergeProcess() {
                     <table className="modal-table" style={{ width: '100%', fontSize: 12 }}>
                       <thead><tr>{['Batch', 'Worker', 'Sets', 'Time', 'Status'].map((h) => <th key={h} style={{ textAlign: 'left', position: 'sticky', top: 0, background: 'var(--card)', zIndex: 1 }}>{h}</th>)}</tr></thead>
                       <tbody>
-                        {(jobProg.runs || []).map((r) => (
-                          <tr key={r.run_id}><td>{r.batch_index || '—'}/{r.batch_total || (jobProg.runs || []).length}</td><td>{r.worker || '—'}</td><td>{r.completed_sets}/{r.total_sets}</td><td>{fmtS(r.seconds)}</td><td>{r.status}</td></tr>
-                        ))}
+                        {(jobProg.runs || []).flatMap((r) => {
+                          const open = batchOpen.has(r.run_id);
+                          const brun = batchRun[r.run_id];
+                          const doneB = r.status === 'done' || (brun && (brun.status === 'done' || brun.status === 'error' || brun.status === 'cancelled'));
+                          const activeIdx = brun && brun.stage ? MERGE_STAGES.findIndex((s) => s.key === brun.stage) : (doneB ? MERGE_STAGES.length : -1);
+                          const simulate = brun && brun.mode === 'simulate';
+                          return [
+                            <tr key={r.run_id} onClick={() => toggleBatch(r.run_id)} style={{ cursor: 'pointer' }} title="Show this batch's processing steps">
+                              <td>{open ? '▾' : '▸'} {r.batch_index || '—'}/{r.batch_total || (jobProg.runs || []).length}</td><td>{r.worker || '—'}</td><td>{r.completed_sets}/{r.total_sets}</td><td>{fmtS(r.seconds)}</td><td>{r.status}</td>
+                            </tr>,
+                            open ? (
+                              <tr key={r.run_id + '_steps'}>
+                                <td colSpan={5} style={{ padding: '8px 12px', background: 'rgba(127,127,127,.06)' }}>
+                                  <div className="stepper">
+                                    {MERGE_STAGES.map((s, i) => {
+                                      const isSkip = s.key === 'merge' && simulate;
+                                      const state = isSkip ? 'skip' : (doneB ? 'done' : (activeIdx < 0 ? '' : (i < activeIdx ? 'done' : (i === activeIdx ? 'running' : ''))));
+                                      return (
+                                        <div className="step-wrap" key={s.key} title={s.desc}>
+                                          <span className={'step-dot' + (state === 'done' || state === 'running' ? ' ' + state : '')} style={state === 'skip' ? { background: 'var(--red-bg)', color: 'var(--red)' } : undefined}>{state === 'done' ? '✓' : state === 'skip' ? '✕' : i + 1}</span>
+                                          <span className="step-label" style={state === 'skip' ? { color: 'var(--red)' } : undefined}>{s.label}{isSkip ? ' (skipped)' : ''}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <p className="muted small" style={{ marginTop: 6 }}>
+                                    {brun ? ((brun.completed_ops || 0) + ' / ' + (brun.total_ops || 0) + ' operations' + (brun.current_label ? ' · ' + brun.current_label : '')) : 'loading steps…'}
+                                    {' · batch ' + r.completed_sets + '/' + r.total_sets + ' sets' + (r.seconds != null ? ' · ' + fmtS(r.seconds) : '')}
+                                  </p>
+                                </td>
+                              </tr>
+                            ) : null,
+                          ];
+                        })}
                       </tbody>
                     </table>
                   </div>

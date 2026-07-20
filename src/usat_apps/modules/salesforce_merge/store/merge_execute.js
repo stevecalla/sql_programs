@@ -377,24 +377,27 @@ async function runQueue(ids, opts = {}, deps = {}) {
   // ~0. Schedule one delayed re-read (own connection) so the recorded apex_used reflects the fired jobs and
   // run_cost's apex delta becomes real. Best-effort: never throws, unref'd so it can't hold the process.
   if (out.done > 0) {
-    try {
-      const settle = await msettings_store.get('apex_settle_sec');
-      if (settle > 0) {
-        const timer = setTimeout(() => { (async () => {
-          try {
-            const c2 = await W.default_write_connect(is_test);
-            const u = await APIUSE.usage_all(c2);
-            if (u && u.apex && u.apex.used != null) {
-              APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy,
-                used: u.api && u.api.used, max: u.api && u.api.max, apex_used: u.apex.used, apex_max: u.apex.max,
-                bulk_used: u.bulk && u.bulk.used, bulk_max: u.bulk && u.bulk.max });
-              log('run ' + runId + ' apex settle re-read: DailyAsyncApexExecutions ' + u.apex.used);
-            }
-          } catch (e2) { /* best-effort */ }
-        })(); }, settle * 1000);
-        if (timer.unref) timer.unref();
-      }
-    } catch (e) { /* best-effort */ }
+    // Schedule the re-read with a DB-FREE delay (env/default) and read the configured setting INSIDE the
+    // timer. The timer is unref'd and only fires in a real, long-lived run, so a unit test (which finishes
+    // in ms and never waits this long) never touches the settings store — no lingering DB pool, the test
+    // process exits cleanly. (Reading the setting synchronously here previously opened a pool that hung the
+    // suite on exit.)
+    const settleDelaySec = Number(process.env.MERGE_APEX_SETTLE_SEC) || 90;
+    const timer = setTimeout(() => { (async () => {
+      try {
+        const settle = await msettings_store.get('apex_settle_sec');   // DB read only when the timer fires (real runs)
+        if (!(settle > 0)) return;   // admin-disabled
+        const c2 = await W.default_write_connect(is_test);
+        const u = await APIUSE.usage_all(c2);
+        if (u && u.apex && u.apex.used != null) {
+          APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy,
+            used: u.api && u.api.used, max: u.api && u.api.max, apex_used: u.apex.used, apex_max: u.apex.max,
+            bulk_used: u.bulk && u.bulk.used, bulk_max: u.bulk && u.bulk.max });
+          log('run ' + runId + ' apex settle re-read: DailyAsyncApexExecutions ' + u.apex.used);
+        }
+      } catch (e2) { /* best-effort */ }
+    })(); }, settleDelaySec * 1000);
+    if (timer.unref) timer.unref();
   }
   await RUN.finish(runId, { status: finalStatus, completed_ops: completedOps, completed_sets: completedSets, current_label: finalLabel });
   CTRL.clear(runId);
