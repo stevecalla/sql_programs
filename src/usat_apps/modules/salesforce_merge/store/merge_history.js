@@ -90,6 +90,9 @@ async function list(opts = {}, query = real_query) {
   const sql = 'SELECT ' + COLS
     + ', (SELECT IF(COUNT(*) >= 2, MAX(u.api_used) - MIN(u.api_used), NULL) FROM `salesforce_merge_api_usage` u WHERE u.run_id = `' + TABLE + '`.run_id) AS api_cost'
     + ', (SELECT IF(COUNT(*) >= 2, MAX(u.apex_used) - MIN(u.apex_used), NULL) FROM `salesforce_merge_api_usage` u WHERE u.run_id = `' + TABLE + '`.run_id) AS apex_cost'
+    // job_id links each per-account row to its run-level Job history row (the run table carries it; this
+    // table doesn't). Null for single, non-fanned runs (those group under their run_id in Job history).
+    + ', (SELECT r.job_id FROM `salesforce_merge_run` r WHERE r.run_id = `' + TABLE + '`.run_id LIMIT 1) AS job_id'
     + ' FROM `' + TABLE + '`' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY id DESC LIMIT ' + n;
   const rows = await query(sql, params);
   return (rows || []).map(parseRow);
