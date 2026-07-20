@@ -6,7 +6,7 @@ import CollapsibleCard from '../components/CollapsibleCard.jsx';
 import QueueRowDetail from '../components/QueueRowDetail.jsx';
 import MergeDriftDetail from '../components/MergeDriftDetail.jsx';
 import { api, exportUrl } from '../lib/api.js';
-import { awaitRun, summarize } from '../lib/run_poll.js';
+import { awaitRun, awaitJob, summarize } from '../lib/run_poll.js';
 
 const shortId = (id) => (id && id.length > 8 ? '…' + id.slice(-5) : id || '');
 
@@ -53,7 +53,30 @@ export default function MergeProcess() {
   const [driftRowOpen, setDriftRowOpen] = useState(() => new Set());
   const toggleDriftRow = (id) => setDriftRowOpen((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const [progress, setProgress] = useState(null);
+  const [jobProg, setJobProg] = useState(null);   // Phase 4: aggregate progress when a run fans out into a parallel job
+  const [jobId, setJobId] = useState(null);
+  const [jobReport, setJobReport] = useState(null);   // Excel report path written when the job completes
+  const [batchOpen, setBatchOpen] = useState(() => new Set());   // run_ids whose per-batch step pipeline is expanded
+  const [batchRun, setBatchRun] = useState({});   // run_id -> run row (carries stage/ops for the step display)
+  const toggleBatch = (runId) => setBatchOpen((p) => { const n = new Set(p); if (n.has(runId)) n.delete(runId); else n.add(runId); return n; });
+  // For any expanded batch, fetch its run row (stage/ops) so we can show that batch's step pipeline; poll
+  // while it is still running so the steps advance live.
+  useEffect(() => {
+    if (!batchOpen.size) return undefined;
+    let alive = true;
+    const runsMap = new Map(((jobProg && jobProg.runs) || []).map((r) => [r.run_id, r]));
+    const fetchAll = () => {
+      Array.from(batchOpen).forEach((runId) => {
+        api.mergeProgress(null, runId).then((p) => { if (alive && p && p.run) setBatchRun((m) => ({ ...m, [runId]: p.run })); }).catch(() => {});
+      });
+    };
+    fetchAll();
+    const anyRunning = Array.from(batchOpen).some((id) => { const r = runsMap.get(id); return r && r.status === 'running'; });
+    const t = anyRunning ? setInterval(fetchAll, 2500) : null;
+    return () => { alive = false; if (t) clearInterval(t); };
+  }, [batchOpen, jobProg]);
   const [elapsed, setElapsed] = useState(0);
+  const [progOpen, setProgOpen] = useState(true);
   const [stampMerged, setStampMerged] = useState(true);
   const [attachDossier, setAttachDossier] = useState(() => { try { return localStorage.getItem('mp_attach_dossier') !== '0'; } catch (e) { return true; } });
   const [stampFields, setStampFields] = useState(null);
@@ -185,13 +208,25 @@ export default function MergeProcess() {
   const run = async (execute) => {
     if (!ids.length) return;
     setRunRows(ids.map((id) => rows.find((r) => r.id === id)).filter(Boolean));   // snapshot the sets this run processes (in submit order)
-    setBusy(true); setErr(''); setResult(null); setProgress(null); setElapsed(0);
+    setBusy(true); setErr(''); setResult(null); setProgress(null); setElapsed(0); setJobProg(null); setJobId(null); setJobReport(null);
     try {
       const q = await api.mergeProcess(ids, execute ? { mode: 'execute', confirm: confirmText, stamp_merged: stampMerged, ack_drift: ackDrift, max_batch: maxBatch, attach_dossier: attachDossier } : { mode: 'simulate', stamp_merged: stampMerged, attach_dossier: attachDossier });
       setConfirmText('');
-      // Phase 3: the merge worker runs it out-of-process — poll this run until it reaches a terminal status.
-      const finalRun = await awaitRun(api, 'merge', q.run_id, (rr) => setProgress(rr));
-      setResult(summarize(finalRun)); load();
+      if (q.job_id) {
+        // Phase 4: the run fanned out into parallel batches — poll the aggregate job progress instead.
+        setJobId(q.job_id);
+        const job = await awaitJob(api, q.job_id, (jp) => setJobProg(jp));
+        setResult({ mode: execute ? 'execute' : 'simulate', done: job ? job.completed_sets : 0, processed: job ? job.completed_sets : 0, job_id: q.job_id, parallel: true, status: job ? job.status : 'unknown' });
+        // Finalize the job into the Excel workbook + sweep row (skip while merely paused — resume finishes it).
+        if (job && job.status && job.status !== 'paused') { api.mergeJobReport(q.job_id).then((r) => setJobReport(r.report || null)).catch(() => {}); }
+        load();
+      } else {
+        // Phase 3: single run — poll this run until it reaches a terminal status.
+        const finalRun = await awaitRun(api, 'merge', q.run_id, (rr) => setProgress(rr));
+        setResult(summarize(finalRun)); load();
+        // Report a single run too (same workbook + sweep row).
+        if (finalRun && finalRun.run_id) { api.mergeRunReport(finalRun.run_id).then((r) => setJobReport(r.report || null)).catch(() => {}); }
+      }
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); setStopping(false); }
   };
@@ -200,8 +235,10 @@ export default function MergeProcess() {
   // and the in-flight POST resolves normally, so the UI stays "Running…" until then.
   const stop = async () => {
     setStopping(true);
-    try { await api.mergeCancel(); } catch (e) { setErr(e.message); setStopping(false); }
+    try { if (jobId) await api.mergeJobCancel(jobId); else await api.mergeCancel(); } catch (e) { setErr(e.message); setStopping(false); }
   };
+  // Resume a job paused by the async-Apex breaker (re-queues held batches).
+  const resumeJob = async () => { if (jobId) { try { await api.mergeJobResume(jobId); } catch (e) { setErr(e.message); } } };
   // Move the selected approved sets back to queued (un-approve) — drops them off this page until re-approved.
   const unapprove = async () => {
     if (!ids.length) return;
@@ -296,6 +333,21 @@ export default function MergeProcess() {
               <span className="muted small">· hard cap 500</span>
             </div>
           )}
+          {/* Parallel state + fan-out prediction — so it's clear whether THIS run will split into batches
+              before you launch it. A run only fans out when parallel is on AND the selection exceeds one chunk. */}
+          {selCount > 0 && status && (
+            <p className="small" style={{ margin: '0 0 8px' }}>
+              {status.parallel_enabled ? (
+                selCount > (status.chunk_size || 5) ? (
+                  <span><strong style={{ color: 'var(--green)' }}>⇉ Parallel</strong> · this run will fan out into ≈ <strong>{Math.ceil(selCount / (status.chunk_size || 5))}</strong> batches (chunk size {status.chunk_size})</span>
+                ) : (
+                  <span><strong>→ Single run</strong> · parallel is on, but {selCount} set{selCount === 1 ? '' : 's'} fit{selCount === 1 ? 's' : ''} in one chunk (≤ {status.chunk_size}) — no fan-out</span>
+                )
+              ) : (
+                <span><strong style={{ color: 'var(--dim)' }}>→ Single run</strong> · parallel is off (an admin can enable it in Merge Ops → Settings)</span>
+              )}
+            </p>
+          )}
           {mode === 'execute' && selCount > 0 && (
             <div className="muted small" style={{ margin: '0 0 8px', padding: '6px 8px', borderRadius: 6, border: '1px solid ' + (apiWouldExceed ? 'var(--red)' : 'var(--line, #e4e7ec)'), color: apiWouldExceed ? 'var(--red)' : undefined }}>
               Pre-flight: {selCount} set{selCount === 1 ? '' : 's'} ≈ <strong>{estApiCalls.toLocaleString()}</strong> API call{estApiCalls === 1 ? '' : 's'}
@@ -367,7 +419,85 @@ export default function MergeProcess() {
         </div>
       </CollapsibleCard>
 
+      {/* Phase 4: when a run fans out into parallel batches, show ONE aggregate progress panel instead of
+          the single-run pipeline (which tracks only one chunk-run). */}
+      {jobProg ? (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <strong>Parallel job {jobProg.job_id}</strong>
+            <span className="small" style={{ color: jobProg.status === 'done' ? 'var(--green)' : jobProg.status === 'error' ? 'var(--red)' : jobProg.status === 'paused' ? 'var(--amber)' : 'var(--accent)' }}>{jobProg.status}</span>
+          </div>
+          {(() => {
+            const pct = jobProg.total_sets ? Math.round(100 * (jobProg.completed_sets || 0) / jobProg.total_sets) : 0;
+            const rs = (jobProg.runs || []).filter((r) => r.seconds != null);
+            const pm = rs.map((r) => (r.total_sets ? r.seconds / r.total_sets : null)).filter((x) => x != null).sort((a, b) => a - b);
+            const secPerMerge = pm.length ? Math.round((pm.length % 2 ? pm[(pm.length - 1) / 2] : (pm[pm.length / 2 - 1] + pm[pm.length / 2]) / 2) * 10) / 10 : null;
+            const fmtS = (s) => (s == null ? '—' : (s >= 60 ? Math.floor(s / 60) + 'm ' + (s % 60) + 's' : s + 's'));
+            return (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ height: 10, background: 'var(--line)', borderRadius: 6, overflow: 'hidden' }}><div style={{ width: pct + '%', height: '100%', background: 'var(--accent)' }} /></div>
+                <div className="small muted" style={{ marginTop: 6 }}>
+                  {jobProg.completed_sets}/{jobProg.total_sets} sets · {jobProg.runs_done}/{jobProg.runs_total} batches · {jobProg.workers_active} worker(s) active · total {fmtS(jobProg.total_seconds)}{secPerMerge != null ? ' · ~' + secPerMerge + 's/merge' : ''}{jobProg.runs_held ? ' · ' + jobProg.runs_held + ' held' : ''}
+                </div>
+                {(jobProg.runs || []).length ? (
+                  <div style={{ maxHeight: 260, overflow: 'auto', marginTop: 8, border: '1px solid var(--line)', borderRadius: 'var(--radius)' }}>
+                    <table className="modal-table" style={{ width: '100%', fontSize: 12 }}>
+                      <thead><tr>{['Batch', 'Worker', 'Sets', 'Time', 'Status'].map((h) => <th key={h} style={{ textAlign: 'left', position: 'sticky', top: 0, background: 'var(--card)', zIndex: 1 }}>{h}</th>)}</tr></thead>
+                      <tbody>
+                        {(jobProg.runs || []).flatMap((r) => {
+                          const open = batchOpen.has(r.run_id);
+                          const brun = batchRun[r.run_id];
+                          const doneB = r.status === 'done' || (brun && (brun.status === 'done' || brun.status === 'error' || brun.status === 'cancelled'));
+                          const activeIdx = brun && brun.stage ? MERGE_STAGES.findIndex((s) => s.key === brun.stage) : (doneB ? MERGE_STAGES.length : -1);
+                          const simulate = brun && brun.mode === 'simulate';
+                          return [
+                            <tr key={r.run_id} onClick={() => toggleBatch(r.run_id)} style={{ cursor: 'pointer' }} title="Show this batch's processing steps">
+                              <td>{open ? '▾' : '▸'} {r.batch_index || '—'}/{r.batch_total || (jobProg.runs || []).length}</td><td>{r.worker || '—'}</td><td>{r.completed_sets}/{r.total_sets}</td><td>{fmtS(r.seconds)}</td><td>{r.status}</td>
+                            </tr>,
+                            open ? (
+                              <tr key={r.run_id + '_steps'}>
+                                <td colSpan={5} style={{ padding: '8px 12px', background: 'rgba(127,127,127,.06)' }}>
+                                  <div className="stepper">
+                                    {MERGE_STAGES.map((s, i) => {
+                                      const isSkip = s.key === 'merge' && simulate;
+                                      const state = isSkip ? 'skip' : (doneB ? 'done' : (activeIdx < 0 ? '' : (i < activeIdx ? 'done' : (i === activeIdx ? 'running' : ''))));
+                                      return (
+                                        <div className="step-wrap" key={s.key} title={s.desc}>
+                                          <span className={'step-dot' + (state === 'done' || state === 'running' ? ' ' + state : '')} style={state === 'skip' ? { background: 'var(--red-bg)', color: 'var(--red)' } : undefined}>{state === 'done' ? '✓' : state === 'skip' ? '✕' : i + 1}</span>
+                                          <span className="step-label" style={state === 'skip' ? { color: 'var(--red)' } : undefined}>{s.label}{isSkip ? ' (skipped)' : ''}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <p className="muted small" style={{ marginTop: 6 }}>
+                                    {brun ? ((brun.completed_ops || 0) + ' / ' + (brun.total_ops || 0) + ' operations' + (brun.current_label ? ' · ' + brun.current_label : '')) : 'loading steps…'}
+                                    {' · batch ' + r.completed_sets + '/' + r.total_sets + ' sets' + (r.seconds != null ? ' · ' + fmtS(r.seconds) : '')}
+                                  </p>
+                                </td>
+                              </tr>
+                            ) : null,
+                          ];
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()}
+          <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
+            <button className="btn" style={{ width: 'auto' }} disabled={jobProg.status !== 'running' || stopping} onClick={stop}>Stop job</button>
+            <button className="btn" style={{ width: 'auto' }} disabled={jobProg.status !== 'paused'} onClick={resumeJob}>Resume job</button>
+          </div>
+          {jobProg.status === 'paused' ? <p className="small" style={{ color: 'var(--amber)', marginTop: 6 }}>Paused by the async-Apex cap — resume when headroom returns (or the daily counter rolls over).</p> : null}
+          {jobReport ? <p className="small muted" style={{ marginTop: 6 }}>Report written: <span className="mono">{jobReport}</span> (+ sweep row)</p> : null}
+        </div>
+      ) : null}
+
+      {jobReport && !jobProg ? <div className="small muted" style={{ marginTop: 10 }}>Report written: <span className="mono">{jobReport}</span> (+ sweep row)</div> : null}
+
       {(() => {
+        if (jobProg) return null;   // parallel job → aggregate panel above replaces the single-run pipeline
         const activeIdx = progress ? MERGE_STAGES.findIndex((s) => s.key === progress.stage) : -1;
         const pct = progress && progress.total_ops ? Math.round(100 * (progress.completed_ops || 0) / progress.total_ops) : 0;
         // Stage-level drift cue: the validate step turns amber when the check flagged changes since staging.
@@ -392,7 +522,9 @@ export default function MergeProcess() {
         return (
           <div className="card" style={{ marginTop: 12 }}>
             <p style={{ margin: '0 0 8px', fontWeight: 700, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <button type="button" onClick={() => setProgOpen((o) => !o)} aria-expanded={progOpen} title={progOpen ? 'Collapse' : 'Expand'} style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', font: 'inherit', padding: 0, width: 14 }}>{progOpen ? '▾' : '▸'}</button>
               <span>Progress</span>
+              {result && !result.parallel ? <span style={{ padding: '0 7px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: 'rgba(120,120,120,.18)', color: 'var(--dim)' }} title="This run did not fan out — it executed as one run in the app server.">SINGLE RUN</span> : null}
               <span className="muted small" style={{ fontWeight: 400 }}>{progress ? ' — ' + (progress.current_label || progress.status) : (busy ? ' — starting…' : ' — no run this session')}</span>
               <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                 <button type="button" className="btn" style={{ padding: '2px 8px', fontSize: 11, color: 'var(--red)', borderColor: 'var(--red)' }}
@@ -402,6 +534,7 @@ export default function MergeProcess() {
                 <button type="button" className="btn" style={{ padding: '2px 8px', fontSize: 11 }} disabled={busy} title="Clear the progress display" onClick={() => { setProgress(null); setResult(null); setElapsed(0); }}>Reset</button>
               </span>
             </p>
+            {progOpen && (<>
             <div className="stepper">
               {MERGE_STAGES.map((s, i) => {
                 const finished = progress && (progress.status === 'done' || progress.status === 'error' || progress.status === 'cancelled');
@@ -469,6 +602,7 @@ export default function MergeProcess() {
                 </tbody>
               </table>
             </div>
+            </>)}
           </div>
         );
       })()}

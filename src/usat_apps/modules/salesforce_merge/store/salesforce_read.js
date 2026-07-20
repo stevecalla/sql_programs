@@ -56,7 +56,7 @@ async function count_children_by_ids(ids, { is_test = true, connect = default_co
   return out;
 }
 
-const SKIP_CHILD = /(History|Share|Feed|ChangeEvent|Tag|EventRelation|RecordAction)$/i;
+const SKIP_CHILD = /(History|Share|Feed|ChangeEvent|Tag|RecordAction|(?:Task|Event)(?:Who)?Relation)$/i;
 // File blobs are NOT re-parentable children: ContentVersion.FirstPublishLocationId and
 // ContentDocument are insert-only / not updateable, so a restore must never try to re-point them
 // (that's what caused the "Unable to create/update fields: FirstPublishLocationId" error). File
@@ -71,6 +71,8 @@ async function discover_child_objects(conn, sobject) {
   const out = [];
   for (const cr of (meta.childRelationships || [])) {
     if (!cr.field || !cr.childSObject || SKIP_CHILD.test(cr.childSObject) || SKIP_CHILD_EXACT.has(cr.childSObject)) continue;
+    // Task.AccountId / Event.AccountId are read-only, Salesforce-derived fields — not re-pointable.
+    if ((cr.childSObject === 'Task' || cr.childSObject === 'Event') && cr.field === 'AccountId') continue;
     const key = cr.childSObject + '.' + cr.field;
     if (seen.has(key)) continue;
     seen.add(key);

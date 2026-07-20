@@ -51,3 +51,27 @@ describe('count_children (auto-discovery)', () => {
     assert.equal(out.A.by.Cases, 2);
   });
 });
+
+
+describe('discover_child_objects excludes non-re-pointable activity relations (issue #5)', () => {
+  test('drops Task.AccountId + *Relation junctions; keeps real lookups and Task.WhatId', async () => {
+    const conn = { sobject: () => ({ describe: async () => ({ childRelationships: [
+      { childSObject: 'Task', field: 'AccountId', relationshipName: 'Tasks' },
+      { childSObject: 'Task', field: 'WhatId', relationshipName: 'ActivityWhat' },
+      { childSObject: 'TaskRelation', field: 'RelationId', relationshipName: 'TaskRelations' },
+      { childSObject: 'TaskWhoRelation', field: 'RelationId', relationshipName: 'TaskWhoRelations' },
+      { childSObject: 'EventRelation', field: 'RelationId', relationshipName: 'EventRelations' },
+      { childSObject: 'AccountHistory', field: 'AccountId', relationshipName: 'Histories' },
+      { childSObject: 'Opportunity', field: 'AccountId', relationshipName: 'Opportunities' },
+    ] }) }) };
+    const out = await discover_child_objects(conn, 'Acct_ActivityRelTest');   // unique name avoids the module cache
+    const keys = out.map((o) => o.object + '.' + o.field);
+    assert.ok(!keys.includes('Task.AccountId'), 'Task.AccountId (read-only derived) excluded');
+    assert.ok(!keys.includes('TaskRelation.RelationId'), 'TaskRelation excluded');
+    assert.ok(!keys.includes('TaskWhoRelation.RelationId'), 'TaskWhoRelation excluded');
+    assert.ok(!keys.includes('EventRelation.RelationId'), 'EventRelation excluded');
+    assert.ok(!keys.includes('AccountHistory.AccountId'), 'History excluded');
+    assert.ok(keys.includes('Opportunity.AccountId'), 'real Account lookup kept');
+    assert.ok(keys.includes('Task.WhatId'), 'Task via WhatId kept (only the derived AccountId is dropped)');
+  });
+});

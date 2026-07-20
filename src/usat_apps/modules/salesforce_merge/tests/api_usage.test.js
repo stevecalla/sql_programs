@@ -15,7 +15,7 @@ function stub() {
       if (/^\s*INSERT INTO/i.test(s)) { inserts.push(args); return [{ insertId: 1 }, []]; }
       if (/GROUP BY op/.test(s)) return [[{ op: 'probe', snapshots: 3, runs: 0, min_used: 100, max_used: 180, api_max: 100000 }], []];
       if (/run_id = \?/.test(s)) return [[{ run_id: 'r1', op: 'merge', env: 'Sandbox', n: 2, start_used: 200, end_used: 260, cost: 60 }], []];
-      if (/SELECT created_at_mtn/.test(s)) return [[{ created_at_mtn: '2026-07-13 10:00:00', api_used: 120, api_max: 100000, op: 'probe', env: 'Production' }], []];
+      if (/ORDER BY created_at_utc ASC/.test(s)) return [[{ created_at_mtn: '2026-07-13 10:00:00', api_used: 120, api_max: 100000, op: 'probe', env: 'Production' }], []];
       return [[], []];
     },
   };
@@ -33,12 +33,23 @@ test('record inserts a snapshot with the right columns', async () => {
   const { pool, inserts } = stub();
   await api_usage.record({ env: 'Production', org_id: '00D', op: 'probe', run_id: null, actor: 'skip', used: 120, max: 100000 }, pool);
   assert.strictEqual(inserts.length, 1);
-  const a = inserts[0]; // [utc, mtn, env, org_id, op, run_id, actor, api_used, api_max, source]
+  const a = inserts[0]; // [utc, mtn, env, org_id, op, run_id, actor, api_used, api_max, apex_used, apex_max, bulk_used, bulk_max, source]
   assert.strictEqual(a[2], 'Production');
   assert.strictEqual(a[4], 'probe');
   assert.strictEqual(a[7], 120);
   assert.strictEqual(a[8], 100000);
-  assert.strictEqual(a[9], 'web');
+  assert.strictEqual(a[9], null);    // apex_used — not provided → null
+  assert.strictEqual(a[13], 'web');  // source (shifted by the 4 apex/bulk columns)
+});
+
+test('record stores async-Apex + Bulk usage when provided', async () => {
+  const { pool, inserts } = stub();
+  await api_usage.record({ env: 'Sandbox', op: 'merge', used: 1, max: 2, apex_used: 500, apex_max: 250000, bulk_used: 3, bulk_max: 15000 }, pool);
+  const a = inserts[0];
+  assert.strictEqual(a[9], 500);     // apex_used
+  assert.strictEqual(a[10], 250000); // apex_max
+  assert.strictEqual(a[11], 3);      // bulk_used
+  assert.strictEqual(a[12], 15000);  // bulk_max
 });
 
 test('record is a no-op when used/max are missing', async () => {

@@ -42,19 +42,46 @@ const norm = (r) => ({ success: !!(r && r.success), id: r && r.id, errors: (r &&
 
 // Merge a master with up to 2 losers in ONE SOAP merge call. `masterFields` (optional) sets
 // survivorship values onto the master AS PART of the merge. Verify masterRecord shape in sandbox.
+const _sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+// Exponential backoff with jitter: ~0.8s, 1.6s, 3.2s, … (base overridable via env so tests run fast).
+function _backoff(attempt) { const base = Number(process.env.MERGE_LOCK_BACKOFF_MS) || 800; return Math.round((2 ** (attempt - 1)) * base + Math.random() * (base / 2)); }
+// Transient contention that's safe to retry — row locks, lock timeouts, deadlocks, dropped sockets.
+// These get MORE likely when multiple workers merge in parallel and managed-package rollups (dlrs,
+// Cirrus) touch shared parent records. Everything else (real validation errors) must fail immediately.
+function _is_transient(msg) {
+  return /UNABLE_TO_LOCK_ROW|unable to obtain exclusive access|lock timeout|deadlock|ECONNRESET|ETIMEDOUT|socket hang up|server unavailable/i.test(String(msg || ''));
+}
+
 async function merge_one(conn, masterId, loserIds, masterFields = {}) {
   if (!masterId) throw new Error('merge_one: masterId required');
   const losers = (loserIds || []).filter(Boolean).slice(0, 2);
   if (!losers.length) throw new Error('merge_one: at least one loser required');
   const masterRecord = { type: 'Account', Id: masterId, ...(masterFields || {}) };
-  const res = await conn.soap.merge({ masterRecord, recordToMergeIds: losers });
-  const r = Array.isArray(res) ? res[0] : res;
-  return {
-    success: !!(r && r.success),
-    id: (r && r.id) || masterId,
-    mergedRecordIds: (r && r.mergedRecordIds) || [],
-    errors: (r && r.errors) || [],
-  };
+  // Retry transient lock/connection contention with bounded backoff so parallel workers don't just fail
+  // sets on UNABLE_TO_LOCK_ROW; non-transient (real validation) errors fail on the first try.
+  const MAX_TRIES = Math.max(1, Number(process.env.MERGE_LOCK_RETRIES) || 4);
+  let lastErr = null;
+  for (let attempt = 1; attempt <= MAX_TRIES; attempt += 1) {
+    let r = null;
+    try {
+      const res = await conn.soap.merge({ masterRecord, recordToMergeIds: losers });
+      r = Array.isArray(res) ? res[0] : res;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_TRIES && _is_transient(err && err.message)) { await _sleep(_backoff(attempt)); continue; }
+      throw err;
+    }
+    const errText = ((r && r.errors) || []).map((e) => (e && (e.statusCode || e.message)) || '').join('; ');
+    if (r && r.success === false && attempt < MAX_TRIES && _is_transient(errText)) { lastErr = errText; await _sleep(_backoff(attempt)); continue; }
+    return {
+      success: !!(r && r.success),
+      id: (r && r.id) || masterId,
+      mergedRecordIds: (r && r.mergedRecordIds) || [],
+      errors: (r && r.errors) || [],
+      attempts: attempt,
+    };
+  }
+  throw new Error('merge failed after ' + MAX_TRIES + ' attempts (transient contention): ' + String((lastErr && lastErr.message) || lastErr));
 }
 
 async function undelete(conn, ids) {
@@ -161,4 +188,5 @@ async function attach_file(conn, filename, buffer, recordIds, opts = {}) {
 module.exports = {
   default_write_connect, write_creds, using_dedicated_write_user,
   merge_one, undelete, update_record, create_record, delete_record, stamp_fields_status, stamp_survivor, attach_file, STAMP_FIELDS,
+  _is_transient,
 };

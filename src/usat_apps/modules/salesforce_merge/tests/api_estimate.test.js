@@ -30,3 +30,11 @@ test('empty queue estimates zero', () => {
   assert.strictEqual(r.total, 0);
   assert.strictEqual(r.sets, 0);
 });
+
+
+test('estimate_run_calls includes async-Apex estimate (sets * APEX_PER_SET) + calibrated default', () => {
+  const r = est.estimate_run_calls([{ loser_count: 1 }, { loser_count: 3 }], {});
+  assert.strictEqual(r.sets, 2);
+  assert.strictEqual(r.apex_total, 2 * est.APEX_PER_SET);
+  assert.strictEqual(est.APEX_PER_SET, 100);   // recalibrated from the 100-merge run (~74/merge + margin)
+});

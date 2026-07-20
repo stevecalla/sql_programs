@@ -163,6 +163,17 @@ async function runQueue(ids, opts = {}, deps = {}) {
   let apiStartLogged = false;
   let stampPresent = null; // which of the 3 stamp fields exist on Account (describe once, reuse per run)
 
+  // Async-Apex circuit breaker (parallel workers): if this run belongs to a fanned-out JOB and the org's
+  // async-Apex usage has reached the configurable cap, PAUSE the whole job (hold queued siblings, stop
+  // this run at the next set boundary) so a big parallel burn can't blow the daily limit. Best-effort +
+  // resumable — never throws, never fails a merge; only ever ADDS a pause.
+  const msettings_store = require('./merge_settings_store');
+  const msettings = require('./merge_settings');
+  let jobId = opts.job_id || null;
+  try { if (!jobId && opts.run_id) { const jr = await RUN.get(runId); jobId = jr && jr.job_id ? jr.job_id : null; } } catch (e) { /* best-effort */ }
+  let apexCap = null;
+  try { if (jobId) { const en = await msettings_store.get('apex_stop_enabled'); apexCap = en ? await msettings_store.get('apex_stop_threshold') : null; } } catch (e) { apexCap = null; }
+
   for (let si = 0; si < entries.length; si += 1) {
     // Cooperative cancel: a Stop request flags this run id; we honor it at the SET boundary so every
     // set is left whole (finished sets stay done/skipped/failed; remaining sets stay approved).
@@ -171,6 +182,18 @@ async function runQueue(ids, opts = {}, deps = {}) {
       out.remaining = entries.length - si;
       log('run ' + runId + ' STOP requested — halting before set ' + (si + 1) + ' of ' + entries.length);
       break;
+    }
+    // Async-Apex breaker: once a connection exists (execute), pause the whole job if usage hit the cap.
+    if (apexCap && conn && jobId) {
+      try {
+        const u = await APIUSE.usage_all(conn);
+        if (u && u.apex && msettings.apex_should_pause(u.apex.used, { enabled: true, threshold: apexCap })) {
+          log('run ' + runId + ' PAUSING job ' + jobId + ' — async Apex ' + u.apex.used + ' >= cap ' + apexCap);
+          await RUN.hold_job(jobId, 'async Apex cap reached (' + u.apex.used + ' >= ' + apexCap + ')').catch(() => {});
+          out.paused = true; out.remaining = entries.length - si;
+          break;
+        }
+      } catch (e2) { /* best-effort — never block the merge */ }
     }
     const e = entries[si];
     out.processed += 1;
@@ -213,17 +236,21 @@ async function runQueue(ids, opts = {}, deps = {}) {
     await RUN.update(runId, { stage: 'snapshot', current_label: label('gathering child records') });
     log(label('gathering child records'));
     let snap_ok = false;
+    let child_captured = null;
     try {
       const contactByAccount = {};
       for (const a of accounts) if (a.contact) contactByAccount[a.account] = a.contact;
       const children = await SF.fetch_children(accounts.map((a) => a.account), { is_test, contactByAccount }).catch(() => []);
+      child_captured = children.length;
       await SN.save(runId, e, accounts, children);
       snap_ok = true;
     } catch (err) { snap_ok = false; }
 
     await RUN.update(runId, { stage: 'snapshot', current_label: label('snapshot saved') });
     const masterFields = build_master_fields(accounts, e.survivor_account, e.field_overrides);
-    const childTotal = (e.child_counts && e.child_counts.total) || 0;
+    // Prefer the ACTUAL children captured in the snapshot (accurate however the set was queued); fall
+    // back to the queue's pre-computed count only if the child fetch failed.
+    const childTotal = child_captured != null ? child_captured : ((e.child_counts && e.child_counts.total) || 0);
     const opCount = Math.max(1, ceil2(losers.length));
 
     if (!armed) {
@@ -261,7 +288,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
       continue;
     }
 
-    if (!apiStartLogged) { apiStartLogged = true; try { const u0 = APIUSE.usage_from_conn(conn); if (u0) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: u0.used, max: u0.max }); } catch (e) { /* fire-and-forget */ } }
+    if (!apiStartLogged) { apiStartLogged = true; try { const u0 = await APIUSE.usage_all(conn); if (u0 && u0.api) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: u0.api.used, max: u0.api.max, apex_used: u0.apex && u0.apex.used, apex_max: u0.apex && u0.apex.max, bulk_used: u0.bulk && u0.bulk.used, bulk_max: u0.bulk && u0.bulk.max }); } catch (e) { /* fire-and-forget */ } }
 
     const merged = []; let remaining = losers.slice(); let failure = null; let first = true;
     for (let i = 0; i < losers.length; i += 2) {
@@ -335,13 +362,43 @@ async function runQueue(ids, opts = {}, deps = {}) {
   }
 
   const stopped = out.cancelled === true;
-  const finalStatus = stopped ? 'cancelled' : 'done';
+  // A run paused by the async-Apex breaker finishes as 'held' so the job shows 'paused' and Resume can
+  // re-queue it (already-merged sets drop out via the drift check).
+  const finalStatus = out.paused ? 'held' : (stopped ? 'cancelled' : 'done');
   const driftLabel = out.drift ? ' · ⚠ ' + out.drift + ' set(s) had field drift since staging' : '';
-  const finalLabel = (stopped
-    ? 'Stopped — ' + completedSets + ' of ' + entries.length + ' set(s) processed'
-    : 'Complete') + driftLabel;
+  const finalLabel = (out.paused
+    ? 'Paused (async Apex cap) — ' + completedSets + ' of ' + entries.length + ' set(s) done, ' + (out.remaining || 0) + ' left'
+    : stopped
+      ? 'Stopped — ' + completedSets + ' of ' + entries.length + ' set(s) processed'
+      : 'Complete') + driftLabel;
   log('run ' + runId + (stopped ? ' STOPPED' : ' complete') + ': done=' + out.done + ' simulated=' + out.simulated + ' skipped=' + out.skipped + ' failed=' + out.failed + (stopped ? ' (remaining ' + (out.remaining || 0) + ')' : ''));
-  try { const uEnd = APIUSE.usage_from_conn(conn); if (uEnd) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: uEnd.used, max: uEnd.max }); } catch (e) { /* fire-and-forget */ }
+  try { const uEnd = await APIUSE.usage_all(conn); if (uEnd && uEnd.api) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: uEnd.api.used, max: uEnd.api.max, apex_used: uEnd.apex && uEnd.apex.used, apex_max: uEnd.apex && uEnd.apex.max, bulk_used: uEnd.bulk && uEnd.bulk.used, bulk_max: uEnd.bulk && uEnd.bulk.max }); } catch (e) { /* fire-and-forget */ }
+  // Async-Apex SETTLE re-read: async rollups fire AFTER the merge commits, so the end snapshot above reads
+  // ~0. Schedule one delayed re-read (own connection) so the recorded apex_used reflects the fired jobs and
+  // run_cost's apex delta becomes real. Best-effort: never throws, unref'd so it can't hold the process.
+  if (out.done > 0) {
+    // Schedule the re-read with a DB-FREE delay (env/default) and read the configured setting INSIDE the
+    // timer. The timer is unref'd and only fires in a real, long-lived run, so a unit test (which finishes
+    // in ms and never waits this long) never touches the settings store — no lingering DB pool, the test
+    // process exits cleanly. (Reading the setting synchronously here previously opened a pool that hung the
+    // suite on exit.)
+    const settleDelaySec = Number(process.env.MERGE_APEX_SETTLE_SEC) || 90;
+    const timer = setTimeout(() => { (async () => {
+      try {
+        const settle = await msettings_store.get('apex_settle_sec');   // DB read only when the timer fires (real runs)
+        if (!(settle > 0)) return;   // admin-disabled
+        const c2 = await W.default_write_connect(is_test);
+        const u = await APIUSE.usage_all(c2);
+        if (u && u.apex && u.apex.used != null) {
+          APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy,
+            used: u.api && u.api.used, max: u.api && u.api.max, apex_used: u.apex.used, apex_max: u.apex.max,
+            bulk_used: u.bulk && u.bulk.used, bulk_max: u.bulk && u.bulk.max });
+          log('run ' + runId + ' apex settle re-read: DailyAsyncApexExecutions ' + u.apex.used);
+        }
+      } catch (e2) { /* best-effort */ }
+    })(); }, settleDelaySec * 1000);
+    if (timer.unref) timer.unref();
+  }
   await RUN.finish(runId, { status: finalStatus, completed_ops: completedOps, completed_sets: completedSets, current_label: finalLabel });
   CTRL.clear(runId);
   return out;

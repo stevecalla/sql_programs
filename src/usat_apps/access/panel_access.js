@@ -18,6 +18,7 @@ const CATALOG = [
   { key: 'participation-maps', label: 'Participation maps', group: 'Reporting' },
   { key: 'event-analysis',     label: 'Event analysis',     group: 'Reporting' },
   { key: 'merge',              label: 'Merge',              group: 'Salesforce' },
+  { key: 'merge-ops',          label: 'Merge Ops (admin)',  group: 'Salesforce' },
   { key: 'metrics',            label: 'Usage metrics',      group: null },
   { key: 'merge-metrics',      label: 'SF Merge metrics',    group: null },
   { key: 'admin',              label: 'Users & access',     group: 'Admin' },
@@ -25,7 +26,7 @@ const CATALOG = [
 ];
 // Sensitive panels excluded from the default 'all' grant — they need an explicit per-user grant
 // (admins always see everything regardless). 'admin' is additionally hard-gated in is_allowed().
-const DEFAULT_ALL_EXCLUDE = ['admin', 'ops'];
+const DEFAULT_ALL_EXCLUDE = ['admin', 'ops', 'merge-ops'];
 
 function catalog() { return CATALOG.map(function (p) { return { key: p.key, label: p.label, group: p.group }; }); }
 function keys() { return CATALOG.map(function (p) { return p.key; }); }

@@ -852,3 +852,123 @@ deliberate, separate **recreate-from-backup** process on that queue:
 With "snapshot on every run + keep latest," simulate writes a snapshot (rehearsal) but no
 Salesforce write and no status change. To avoid history pile-up from repeated simulates, keep the
 **latest simulate history row per entry** (real `done`/`failed` rows are always kept).
+
+## Restore — activity relationships (Tasks/Events) are not re-pointed (by design)
+
+Salesforce manages activity links itself: `Task.AccountId`/`Event.AccountId` are read-only derived
+fields, and the `TaskRelation`/`TaskWhoRelation` junction objects don't support UPDATE at all. Trying
+to re-point them during restore is therefore **always** rejected ("Unable to create/update fields:
+AccountId", "entity type cannot be updated", "requested resource does not exist") — a false error, not
+a real failure. The tool now **excludes these from the pre-merge snapshot** (`SKIP_CHILD` in
+`store/salesforce_read.js` skips `Task/EventRelation` + `*WhoRelation` and drops the derived `AccountId`
+child relationship on Task/Event) and **skips them cleanly on restore** (guard in `store/merge_restore.js`).
+Salesforce keeps the activities on the survivor; they are not reattached to the loser on restore.
+
+## Restore — managed-package fields blocked by field-level security (issue #7)
+
+Some child records point back to a Contact/Account through a **managed-package lookup field** — e.g.
+iWave's `iWave_PROscores__Contact__c` on **iWave PRO Score** (`iWave_PROscores__iWave_PRO_Score__c`). If
+the write/integrated user lacks **field-level Edit** on that field, restore can't re-point the child back
+and the SOAP update is rejected with *"Unable to create/update fields: … Please check the security
+settings of this field"*. This is a **permissions** gap, not a code bug.
+
+- **Merge is unaffected.** Salesforce's native merge re-parents these records onto the survivor (the
+  intended result), and the record is never deleted — it just stays on the survivor.
+- **Restore only** can't fully reverse it. The tool now **classifies** this as an FLS skip
+  (`_is_fls_error` in `store/merge_restore.js`) and records a clear note — *"field not writable for this
+  user, needs field-level edit (FLS)"* — instead of a raw error, so History/reports say what to grant.
+- **`AccountContactRelation`** is a related case: its `ContactId` is read-only and the direct
+  Account–Contact relation is system-managed (it follows `Contact.AccountId`). The tool now **skips it
+  cleanly** on restore because Salesforce recreates that relation automatically when the Contact's
+  `AccountId` is restored — no write needed, so the old "check the security settings of ContactId" error
+  is gone.
+
+**Fix:** grant the write user **field-level Edit** on the managed lookup field(s) (e.g.
+`iWave_PROscores__Contact__c`) via a permission set. Field-level access only — no schema/field changes.
+Then restore re-points them fully. If a field is package-locked read-only for everyone, accept it as a
+documented restore-only limitation.
+
+## Restore — data-loss check for master-detail children (issue #6) + diagnostics
+
+Salesforce **re-parents lookup children** to the survivor during a merge, but **master-detail children
+cascade-delete** with the loser. If a master-detail child isn't captured in the pre-merge snapshot,
+restore can't bring it back and it purges from the Recycle Bin at ~15 days — the one genuine data-loss
+path. (Queue Items `QI-…` from the `em4sf` package are transient job records — expected, not data.)
+
+**Diagnostics (read-only, DESCRIBE + SELECT only):**
+
+- `probe_donor_gift.js` — merge **menu items 34 (sandbox) / 35 (production)**, or
+  `node src/usat_apps/modules/salesforce_merge/probe_donor_gift.js [--prod]`. For a donor/gift/summary
+  object it reports: (1) the API name, (2) whether it links to Account/Contact by **master-detail
+  (cascade-delete → risk)** or **lookup (SF re-parents → low risk)**, and (3) a foundation/donor
+  duplicate that actually has one attached (a live test case). **If the object never appears**, the
+  integrated (run-as) user can't see it — restore could never undelete it, so that's a *permissions*
+  gap to fix, not a code gap.
+
+- Find a donor duplicate to test with, straight from the finder snapshot (the finder captures
+  `usat_Foundation_Constituent__c` as the indexed column `foundation_constituent`, plus `cluster_key`):
+
+  ```sql
+  SELECT cluster_key, COUNT(*) AS records,
+         SUM(foundation_constituent IS NOT NULL AND foundation_constituent <> '') AS foundation_records
+  FROM salesforce_account_duplicate_snapshot
+  WHERE cluster_key IS NOT NULL AND cluster_key <> ''
+  GROUP BY cluster_key HAVING foundation_records > 0
+  ORDER BY foundation_records DESC, records DESC LIMIT 20;
+  ```
+  Or in the app: the Duplicates panel has a **Foundation = has** filter (3-state) — every matching row
+  is a duplicate cluster containing a donor.
+
+**Confirmed (sandbox 2026-07):** "Donor Gift Summary" is the standard Nonprofit-Cloud object
+`DonorGiftSummary`; its `Donor` field (`DonorId`) is **Master-Detail(Account) (Unique)** — so it
+**cascade-deletes** on merge. BUT it's a *derived per-account giving rollup* (Average Gift Amount, Gift
+Count, Best Gift Year, …); the real donor records live in **Gift Transaction**. The integrated (run-as)
+user currently **can't see the object at all** (Object Access lists 17 perm sets / 4 profiles; the run-as
+user has none granting Read/Delete). Since Salesforce normally **cascade-restores master-detail children
+when the parent is undeleted**, the fix is primarily a **permissions grant** (Read + Delete on
+`DonorGiftSummary` for the integrated user), then re-test restore; only if the child still doesn't return
+do we add explicit undelete code.
+
+**Confirmed (2026-07): Gift Transaction → `Donor` (`DonorId`) is `Lookup(Account)`** — Salesforce
+re-parents the gifts to the survivor on merge, so the **real donor data is NOT lost**. The only
+cascade-deleted object is the derived `DonorGiftSummary` rollup (regenerable, cascade-restorable). **Net
+#6 conclusion: no primary data loss — the single fix is a permissions grant.** The integrated (run-as)
+user currently can't see ANY gift object (`DonorGiftSummary`, `GiftTransaction`, `GiftCommitment`, …);
+grant it **Read (+ Delete for undelete)** on those objects (at minimum `DonorGiftSummary`, ideally
+`GiftTransaction`) via a permission set (the Data Loader set grants Delete), then re-test a sandbox
+merge + restore to confirm the summary cascade-restores.
+
+**#6 action checklist (Salesforce side — no code change):**
+
+- [ ] Grant the integrated (run-as) user **Read + Delete** on `DonorGiftSummary` — add it to a
+      permission set that includes Delete (the Data Loader set does; the "Foundation User Edit" set is
+      Read/Edit only). Ideally also grant Read on `GiftTransaction` so merge/restore/dossier see the gifts.
+- [ ] Re-run the probe (merge menu 34) — the gift objects should flip from **NOT VISIBLE** to a
+      relationship verdict, and it should surface real donor test accounts.
+- [ ] Run a sandbox **merge + restore** on a donor account; confirm the `DonorGiftSummary` cascade-restores
+      and no longer lingers in the Recycle Bin.
+- [ ] (No code change required — Gift Transactions are Lookup(Account) and re-parented by Salesforce;
+      only the derived summary was affected.)
+
+## API-limit tracking — async Apex + Bulk (not just Daily API Requests)
+
+A merge spends more than REST calls. It **triggers async Apex** (Account triggers, managed packages, and
+rollup engines like `dlrs`/Cirrus recomputing gift/donor rollups on merge), which draws on
+**`DailyAsyncApexExecutions`** (~250K/day) — a limit *far* smaller than Daily API Requests (millions). On a
+large bulk merge, async Apex — not the API budget — is the constraint that runs out first. Separately, the
+**Get-Duplicates full pull** spends **`DailyBulkApiBatches`** (Bulk API 2.0).
+
+The tool now captures all three limits (`api_usage.usage_all()` reads `DailyApiRequests` +
+`DailyAsyncApexExecutions` + `DailyBulkApiBatches` from the free `/limits` call) and stores them on every
+snapshot (`salesforce_merge_api_usage` gained `apex_used/apex_max/bulk_used/bulk_max`; auto-migrated on
+boot). Recorded at merge start/end, restore start/end, and on every SF-API-panel **live refresh** (`probe`)
+so async-Apex and Bulk build an over-time trend.
+
+Where it shows:
+- **Stress report** (`option 30/31/32`): the console Summary has an **Async Apex** line (total · ~/merge ·
+  left), each batch line shows `… · N Apex`, and the report's **API tab** has three blocks — API, Async
+  Apex, Bulk API (used before/after · cost delta · per-merge · remaining).
+- **SF API panel**: **Recent runs** has an **Apex cost** column; **Other limits** shows the live values.
+
+Open item: once a real async-Apex-per-merge figure is measured, add an Apex line to the **pre-flight**
+estimate so a production bulk run is sized against the tighter (250K) limit, not the millions-wide API one.

@@ -41,7 +41,7 @@ const DDL = 'CREATE TABLE IF NOT EXISTS `' + TABLE + '` (' +
 
 const COLS = 'id, created_at, run_id, queue_id, created_by, source_type, source_key, survivor_account, ' +
   'survivor_name, loser_count, child_total, environment, org_id, snapshot_saved, result, mode, reason, master_rule, ' +
-  'diff_json, dossier_id, dossier_doc_id, created_at_mtn, created_at_utc';
+  "diff_json, dossier_id, dossier_doc_id, DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') AS created_at_mtn, created_at_utc";
 
 let _ensured = false;
 async function ensure_table(query = real_query) {
@@ -87,7 +87,10 @@ async function list(opts = {}, query = real_query) {
     where.push('(survivor_name LIKE ? OR survivor_account LIKE ? OR source_key LIKE ?)');
     params.push(like, like, like);
   }
-  const sql = 'SELECT ' + COLS + ' FROM `' + TABLE + '`' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY id DESC LIMIT ' + n;
+  const sql = 'SELECT ' + COLS
+    + ', (SELECT IF(COUNT(*) >= 2, MAX(u.api_used) - MIN(u.api_used), NULL) FROM `salesforce_merge_api_usage` u WHERE u.run_id = `' + TABLE + '`.run_id) AS api_cost'
+    + ', (SELECT IF(COUNT(*) >= 2, MAX(u.apex_used) - MIN(u.apex_used), NULL) FROM `salesforce_merge_api_usage` u WHERE u.run_id = `' + TABLE + '`.run_id) AS apex_cost'
+    + ' FROM `' + TABLE + '`' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY id DESC LIMIT ' + n;
   const rows = await query(sql, params);
   return (rows || []).map(parseRow);
 }

@@ -140,7 +140,7 @@ export default function Restore() {
         <span style={{ marginLeft: 'auto' }} className="muted small">Target environment: <strong>{status ? (status.environment || '—') : '…'}</strong></span>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12, alignItems: 'stretch' }}>
         <div className="card" style={{ flex: '0 0 300px', minWidth: 0, margin: 0 }}>
           <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Run restore</p>
           <div className="seg" style={{ width: '100%', marginBottom: 8 }}>

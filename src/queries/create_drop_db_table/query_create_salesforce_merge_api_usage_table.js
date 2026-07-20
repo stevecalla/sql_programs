@@ -20,6 +20,10 @@ const fields = `
 
   api_used INT,                  -- DailyApiRequests used at snapshot time
   api_max INT,                   -- DailyApiRequests daily maximum
+  apex_used INT,                 -- DailyAsyncApexExecutions used (merges trigger async Apex rollups)
+  apex_max INT,                  -- DailyAsyncApexExecutions daily maximum
+  bulk_used INT,                 -- DailyBulkApiBatches used (the Get-Duplicates full pull uses Bulk API)
+  bulk_max INT,                  -- DailyBulkApiBatches daily maximum
   source VARCHAR(12),            -- web
 
   INDEX idx_created_at_mtn (created_at_mtn),

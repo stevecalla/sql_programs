@@ -5,6 +5,11 @@
 // snapshot + validate) and, optionally, one survivor "stamp" update. OVERHEAD_PER_SET is a conservative
 // starting default — calibrate it from captured run_cost (Phase 2/3 data) once real runs exist.
 const OVERHEAD_PER_SET = 3;
+// Async Apex per set: merges trigger managed-package rollups (dlrs, Cirrus) that run as async Apex.
+// DailyAsyncApexExecutions (~250K/day) is far tighter than Daily API Requests, so this is the binding
+// limit. Calibrated to ~100/merge (measured ~74/merge over a 100-merge sandbox run + margin for the
+// deferred async that a run-total under-counts); override with MERGE_APEX_PER_SET as data refines.
+const APEX_PER_SET = Number(process.env.MERGE_APEX_PER_SET) || 100;
 
 function merge_calls_for(loser_count) { return Math.max(1, Math.ceil((Number(loser_count) || 0) / 2)); }
 
@@ -22,7 +27,8 @@ function estimate_run_calls(entries, opts) {
     overhead_calls: sets * overhead,
     stamp_calls: sets * stampPer,
     total: merge_calls + sets * (overhead + stampPer),
+    apex_total: sets * APEX_PER_SET,
   };
 }
 
-module.exports = { merge_calls_for, estimate_run_calls, OVERHEAD_PER_SET };
+module.exports = { merge_calls_for, estimate_run_calls, OVERHEAD_PER_SET, APEX_PER_SET };

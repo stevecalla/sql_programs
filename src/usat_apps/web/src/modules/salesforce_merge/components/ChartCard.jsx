@@ -27,6 +27,30 @@ function chartPng(chart, title) {
   ctx.drawImage(src, 0, pad);
   return off.toDataURL('image/png');
 }
+// Rasterize the flip-to-table data to a titled PNG so Expand/PNG work in TABLE view too (not just chart).
+function tablePng(headers, rows, title) {
+  const pad = 10, cellH = 24, fs = 12;
+  const cols = ['#'].concat(headers.map((h) => String(h)));
+  const body = (rows || []).map((r, i) => [String(i + 1)].concat(r.map((x) => String(x == null ? '' : x))));
+  const grid = [cols].concat(body);
+  const meas = document.createElement('canvas').getContext('2d'); meas.font = fs + 'px system-ui,Arial,sans-serif';
+  const widths = cols.map((_, j) => Math.ceil(Math.max(...grid.map((row) => meas.measureText(String(row[j] == null ? '' : row[j])).width))) + pad * 2);
+  const totalW = widths.reduce((a, b) => a + b, 0);
+  const titleH = title ? 32 : 0;
+  const canvas = document.createElement('canvas'); canvas.width = totalW; canvas.height = titleH + cellH * grid.length + pad;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = cssvar('--card'); ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.textBaseline = 'middle';
+  if (title) { ctx.fillStyle = cssvar('--ink'); ctx.font = '700 ' + (fs + 2) + 'px system-ui,Arial,sans-serif'; ctx.fillText(title, pad, titleH / 2); }
+  grid.forEach((row, i) => {
+    const y = titleH + i * cellH + cellH / 2;
+    if (i === 0) { ctx.fillStyle = cssvar('--line'); ctx.fillRect(0, titleH, totalW, cellH); }
+    ctx.fillStyle = cssvar('--ink'); ctx.font = (i === 0 ? '700 ' : '') + fs + 'px system-ui,Arial,sans-serif';
+    let x = 0;
+    for (let j = 0; j < cols.length; j += 1) { ctx.fillText(String(row[j] == null ? '' : row[j]), x + pad, y); x += widths[j]; }
+  });
+  return canvas.toDataURL('image/png');
+}
 function download(name, href) { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 
 export default function ChartCard({ id, title, type = 'bar', labels = [], values = [], series = [], color, headers = [], rows = [], height = 230, theme }) {
@@ -50,6 +74,17 @@ export default function ChartCard({ id, title, type = 'bar', labels = [], values
           plugins: { legend: { display: true, labels: { color: ink, boxWidth: 12 } }, datalabels: { display: false } },
           scales: { x: { ticks: { color: ink }, grid: { color: grid } }, y: { beginAtZero: true, ticks: { color: ink, precision: 0 }, grid: { color: grid } } } },
       };
+    } else if (type === 'line') {
+      const lds = (series && series.length)
+        ? series.map((sr) => ({ label: sr.label, data: sr.data, borderColor: sr.color, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.15, spanGaps: true }))
+        : [{ data: values, borderColor: acc, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.15 }];
+      cfg = {
+        type: 'line',
+        data: { labels, datasets: lds },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: !!(series && series.length), labels: { color: ink, boxWidth: 12 } }, datalabels: { display: false }, tooltip: { intersect: false, mode: 'index' } },
+          scales: { x: { ticks: { color: ink, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }, grid: { color: grid } }, y: { beginAtZero: false, ticks: { color: ink, precision: 0 }, grid: { color: grid } } } },
+      };
     } else {
       cfg = {
         type: 'bar',
@@ -63,8 +98,8 @@ export default function ChartCard({ id, title, type = 'bar', labels = [], values
     return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
   }, [JSON.stringify(labels), JSON.stringify(values), JSON.stringify(series), color, type, theme]);
 
-  const doPng = () => download((id || 'chart') + '.png', chartPng(chartRef.current, title));
-  const doExpand = () => setModal(chartPng(chartRef.current, title));
+  const doPng = () => download((id || 'chart') + (flip ? '-table' : '') + '.png', flip ? tablePng(headers, rows, title) : chartPng(chartRef.current, title));
+  const doExpand = () => setModal(flip ? tablePng(headers, rows, title) : chartPng(chartRef.current, title));
   const doCsv = () => {
     const esc = (v) => { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     const csv = [headers.map(esc).join(',')].concat(rows.map((r) => r.map(esc).join(','))).join('\n');

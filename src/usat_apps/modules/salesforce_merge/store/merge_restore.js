@@ -14,6 +14,12 @@ const post_snapshot = require('./merge_post_snapshot');
 function execution_enabled() { return process.env.MERGE_ENABLE_EXECUTION === 'true'; }
 function log(...a) { if (process.env.MERGE_LOG !== 'off') console.log('[restore]', ...a); }
 
+// A field-level-security / read-only write refusal — the field exists but the write user lacks EDIT on it
+// (typical of managed-package lookups). Distinct from a real failure: an admin grants field-level edit.
+function _is_fls_error(msg) {
+  return /Unable to create\/update fields|check the security settings|INSUFFICIENT_ACCESS_ON_CROSS_REFERENCE_ENTITY|INSUFFICIENT_ACCESS|field is not writeable|not writable|read[- ]only/i.test(String(msg || ''));
+}
+
 // Which ids are currently in the Recycle Bin (soft-deleted)? scanAll:true => jsforce queryAll endpoint.
 async function deleted_set(conn, ids) {
   const list = (ids || []).filter(Boolean);
@@ -196,6 +202,7 @@ async function restore(ids, opts = {}, deps = {}) {
   const POST = deps.post_snapshot || post_snapshot;
   const DOS = deps.dossier || require('./merge_dossier');
   const createdBy = opts.created_by || null;
+  const APIUSE = deps.api_usage || require('./api_usage');
 
   const idset = new Set((ids || []).map((x) => Number(x)));
   const done = await Q.list(undefined, 'done');
@@ -217,7 +224,7 @@ async function restore(ids, opts = {}, deps = {}) {
   log('run ' + runId + ' mode=' + mode + ' sets=' + entries.length + ' env=' + env);
 
   const out = { run_id: runId, mode, armed, processed: 0, restored: 0, simulated: 0, skipped: 0, failed: 0, results: [] };
-  let conn = null; let completed = 0;
+  let conn = null; let completed = 0; let apiStartLogged = false;
 
   for (const e of entries) {
     out.processed += 1;
@@ -238,6 +245,7 @@ async function restore(ids, opts = {}, deps = {}) {
       out.failed += 1; out.results.push({ id: e.id, result: 'failed', reason: err.message });
       await RUN.finish(runId, { status: 'error' }); return out;
     }
+    if (conn && !apiStartLogged) { apiStartLogged = true; try { const u0 = await APIUSE.usage_all(conn); if (u0 && u0.api) APIUSE.record({ env: env, org_id: orgId, op: 'restore', run_id: runId, actor: createdBy, used: u0.api.used, max: u0.api.max, apex_used: u0.apex && u0.apex.used, apex_max: u0.apex && u0.apex.max, bulk_used: u0.bulk && u0.bulk.used, bulk_max: u0.bulk && u0.bulk.max }); } catch (e) { /* fire-and-forget */ } }
     const states = await account_states(conn, losers);
     const toUndelete = losers.filter((id) => states[id] === 'deleted');
     const present = losers.filter((id) => states[id] === 'deleted' || states[id] === 'live'); // recoverable (in bin or already live)
@@ -340,13 +348,30 @@ async function restore(ids, opts = {}, deps = {}) {
       // Re-link the share to the loser (ADDITIVE: create a link on the loser, keep the survivor's — a file
       // is never unshared or lost).
       if (ch.object === 'ContentDocumentLink') { const r = await move_content_link(W, conn, ch); if (r.ok) repointed += 1; else { skippedCh += 1; notes.push(r.note); } continue; }
+      // Salesforce manages activity relationships itself: Task.AccountId is read-only and the *Relation
+      // junctions can't be updated. Skip cleanly instead of raising a false error (see Reference panel).
+      if (/^(Task|Event)(Who)?Relation$/i.test(ch.object) || ((ch.object === 'Task' || ch.object === 'Event') && ch.parent_field === 'AccountId')) {
+        skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': skipped — Salesforce manages this activity relationship'); continue;
+      }
+      // Account–Contact relation is also system-managed: the DIRECT relation follows Contact.AccountId and
+      // its ContactId is read-only, so re-pointing it always fails. Restoring the Contact's AccountId makes
+      // Salesforce recreate it automatically — so skipping here is correct, not a data gap (Reference panel).
+      if (ch.object === 'AccountContactRelation') {
+        skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': skipped — Salesforce manages the direct Account–Contact relation (follows Contact.AccountId; ContactId is read-only)'); continue;
+      }
       const patch = { Id: ch.id, [ch.parent_field]: ch.parent_id };
       try { await W.update_record(conn, ch.object, patch); repointed += 1; }
       catch (err) {
-        if (/deleted/i.test((err && err.message) || '')) {
+        const msg = (err && err.message) || '';
+        if (/deleted/i.test(msg)) {
           try { await W.undelete(conn, [ch.id]); await W.update_record(conn, ch.object, patch); repointed += 1; }
           catch (e2) { skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': ' + ((e2 && e2.message) || 'deleted, unrecoverable')); }
-        } else { skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': ' + (err && err.message)); }
+        } else if (_is_fls_error(msg)) {
+          // Field-level security: the field exists but the write user lacks EDIT on it (common for managed-
+          // package lookups like iWave). Not a code bug — an admin must grant field-level edit. Merges are
+          // unaffected (SF's native merge re-parents these to the survivor); only a restore can't reverse it.
+          skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': skipped — field not writable for this user, needs field-level edit (FLS): ' + msg);
+        } else { skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': ' + msg); }
       }
     }
 
@@ -383,6 +408,7 @@ async function restore(ids, opts = {}, deps = {}) {
   }
 
   log('run ' + runId + ' complete: restored=' + out.restored + ' simulated=' + out.simulated + ' skipped=' + out.skipped + ' failed=' + out.failed);
+  if (apiStartLogged && conn) { try { const uEnd = await APIUSE.usage_all(conn); if (uEnd && uEnd.api) APIUSE.record({ env: env, org_id: orgId, op: 'restore', run_id: runId, actor: createdBy, used: uEnd.api.used, max: uEnd.api.max, apex_used: uEnd.apex && uEnd.apex.used, apex_max: uEnd.apex && uEnd.apex.max, bulk_used: uEnd.bulk && uEnd.bulk.used, bulk_max: uEnd.bulk && uEnd.bulk.max }); } catch (e) { /* fire-and-forget */ } }
   await RUN.finish(runId, { status: 'done', completed_ops: completed, completed_sets: completed, current_label: 'Complete' });
   return out;
 }
@@ -509,4 +535,4 @@ async function recreate(ids, opts = {}, deps = {}) {
   return out;
 }
 
-module.exports = { restore, list_restorable, list_recreatable, recreate, status, deleted_set, account_states, survivor_last_modified, from_snapshot, recreate_plan_from_snapshot, account_create_fields, master_reset_fields, execution_enabled, make_run_id };
+module.exports = { restore, list_restorable, list_recreatable, recreate, status, deleted_set, account_states, survivor_last_modified, from_snapshot, recreate_plan_from_snapshot, account_create_fields, master_reset_fields, execution_enabled, make_run_id, _is_fls_error };
