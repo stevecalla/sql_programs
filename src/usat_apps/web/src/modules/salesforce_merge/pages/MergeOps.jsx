@@ -13,12 +13,15 @@ import '../merge.css';
 const META = {
   parallel_enabled: { label: 'Parallel enabled', help: 'Master on/off. On = big jobs fan out into parallel batches; off = one run per job (kill switch).' },
   chunk_size: { label: 'Chunk size', help: 'Sets per parallel batch. Lower = more, smaller batches = more fan-out (1–50).' },
-  max_batch: { label: 'Max sets per job', help: 'Cap on how many sets one Execute may run (hard-capped at 500).' },
+  max_batch: { label: 'Max sets per run (default)', help: 'Default cap on how many sets one Execute runs. Seeds the Process Merges box; a run can dial up to the hard cap below.' },
+  max_batch_hard: { label: 'Max sets per run (hard cap)', help: 'Absolute ceiling no run can exceed — the default above is clamped to this. Env MERGE_MAX_BATCH_HARD; raise deliberately.' },
   worker_target: { label: 'Worker target', help: 'Desired cluster size (1–8). Set live from the Workers tab (pm2 scale).' },
-  apex_stop_enabled: { label: 'Async-Apex cap enabled', help: 'When on, a job pauses if async-Apex usage reaches the threshold (resumable).' },
+  apex_stop_enabled: { label: 'Async-Apex cap enabled', help: 'When on, a job pauses if async-Apex usage reaches the threshold (resumable). Note: async-Apex is deferred, so this often reads ~0 during a run — the daily-API cap below is the live governor.' },
   apex_stop_threshold: { label: 'Async-Apex cap (used)', help: 'Pause when DailyAsyncApexExecutions used reaches this. 200k leaves 50k headroom under the 250k cap.' },
+  api_stop_enabled: { label: 'Daily-API cap enabled', help: 'When on, a job pauses if DailyApiRequests usage reaches the threshold (resumable). This counter moves live, so unlike the apex cap it can actually fire mid-run. Independent of the apex cap.' },
+  api_stop_threshold: { label: 'Daily-API cap (used)', help: (v) => { const n = Number(v) || 0; return 'Pause when DailyApiRequests used reaches this. Prod cap is ~410,000 (' + n.toLocaleString() + ' ≈ ' + Math.round((n / 410000) * 100) + '%); sandbox is ~5,000,000.'; } },
 };
-const ORDER = ['parallel_enabled', 'chunk_size', 'max_batch', 'worker_target', 'apex_stop_enabled', 'apex_stop_threshold'];
+const ORDER = ['parallel_enabled', 'chunk_size', 'max_batch', 'max_batch_hard', 'worker_target', 'apex_stop_enabled', 'apex_stop_threshold', 'api_stop_enabled', 'api_stop_threshold'];
 
 function friendlyMtn(mtn) {
   if (!mtn) return 'never';
@@ -345,7 +348,7 @@ export default function MergeOps() {
                   const changed = Object.prototype.hasOwnProperty.call(draft, k);
                   return (
                     <tr key={k} style={{ borderTop: '1px solid var(--line)' }}>
-                      <td style={{ padding: '8px 10px 8px 0' }}><strong>{meta.label}</strong><div className="muted small">{meta.help}</div></td>
+                      <td style={{ padding: '8px 10px 8px 0' }}><strong>{meta.label}</strong><div className="muted small">{typeof meta.help === 'function' ? meta.help(curVal(k)) : meta.help}</div></td>
                       <td style={{ padding: '8px 10px 8px 0' }}>
                         {s.kind === 'bool'
                           ? <label className="small"><input type="checkbox" checked={!!curVal(k)} onChange={(e) => setField(k, e.target.checked)} /> {curVal(k) ? 'on' : 'off'}</label>
@@ -353,7 +356,11 @@ export default function MergeOps() {
                         {changed ? <span className="pill" style={{ marginLeft: 8, borderColor: 'var(--accent)', color: 'var(--accent)' }}>edited</span> : null}
                       </td>
                       <td style={{ padding: '8px 10px 8px 0' }}>{sourceTag(s.source)}</td>
-                      <td className="muted small" style={{ padding: '8px 0' }}>{String(s.def)}</td>
+                      <td className="muted small" style={{ padding: '8px 0' }}
+                        title={s.default_source === 'env' ? ('From the env var (code default is ' + String(s.def) + '). This is what the value reverts to with no saved override.') : 'Hardcoded code default (no env var set).'}>
+                        {(() => { const v = s.effective_default != null ? s.effective_default : s.def; return typeof v === 'number' ? v.toLocaleString() : String(v); })()}
+                        {s.default_source === 'env' ? <span className="pill" style={{ marginLeft: 6 }}>env</span> : null}
+                      </td>
                     </tr>
                   );
                 })}

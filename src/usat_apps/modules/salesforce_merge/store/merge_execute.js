@@ -171,8 +171,11 @@ async function runQueue(ids, opts = {}, deps = {}) {
   const msettings = require('./merge_settings');
   let jobId = opts.job_id || null;
   try { if (!jobId && opts.run_id) { const jr = await RUN.get(runId); jobId = jr && jr.job_id ? jr.job_id : null; } } catch (e) { /* best-effort */ }
-  let apexCap = null;
+  let apexCap = null; let apiCap = null;
   try { if (jobId) { const en = await msettings_store.get('apex_stop_enabled'); apexCap = en ? await msettings_store.get('apex_stop_threshold') : null; } } catch (e) { apexCap = null; }
+  // Daily-API breaker (the real-time governor): DailyApiRequests moves live during a run, so unlike the
+  // deferred apex counter this one can actually fire mid-run. Independent + opt-in.
+  try { if (jobId) { const en = await msettings_store.get('api_stop_enabled'); apiCap = en ? await msettings_store.get('api_stop_threshold') : null; } } catch (e) { apiCap = null; }
 
   for (let si = 0; si < entries.length; si += 1) {
     // Cooperative cancel: a Stop request flags this run id; we honor it at the SET boundary so every
@@ -183,13 +186,20 @@ async function runQueue(ids, opts = {}, deps = {}) {
       log('run ' + runId + ' STOP requested — halting before set ' + (si + 1) + ' of ' + entries.length);
       break;
     }
-    // Async-Apex breaker: once a connection exists (execute), pause the whole job if usage hit the cap.
-    if (apexCap && conn && jobId) {
+    // Circuit breakers: once a connection exists (execute), pause the whole job if EITHER enabled cap is
+    // reached. One usage read serves both; the API cap is checked first (it's the live governor).
+    if ((apexCap || apiCap) && conn && jobId) {
       try {
         const u = await APIUSE.usage_all(conn);
-        if (u && u.apex && msettings.apex_should_pause(u.apex.used, { enabled: true, threshold: apexCap })) {
-          log('run ' + runId + ' PAUSING job ' + jobId + ' — async Apex ' + u.apex.used + ' >= cap ' + apexCap);
-          await RUN.hold_job(jobId, 'async Apex cap reached (' + u.apex.used + ' >= ' + apexCap + ')').catch(() => {});
+        let hit = null;
+        if (apiCap && u && u.api && msettings.apex_should_pause(u.api.used, { enabled: true, threshold: apiCap })) {
+          hit = 'daily API cap reached (' + u.api.used + ' >= ' + apiCap + ')';
+        } else if (apexCap && u && u.apex && msettings.apex_should_pause(u.apex.used, { enabled: true, threshold: apexCap })) {
+          hit = 'async Apex cap reached (' + u.apex.used + ' >= ' + apexCap + ')';
+        }
+        if (hit) {
+          log('run ' + runId + ' PAUSING job ' + jobId + ' — ' + hit);
+          await RUN.hold_job(jobId, hit).catch(() => {});
           out.paused = true; out.remaining = entries.length - si;
           break;
         }

@@ -189,13 +189,16 @@ export default function MergeProcess() {
     return () => { clearInterval(tick); clearInterval(poll); };
   }, [busy]);
 
-  const [maxBatch, setMaxBatch] = useState(() => { const v = Number(localStorage.getItem('mp_max_batch')); return (v >= 1 && v <= 500) ? v : 100; });
+  // Both numbers come from the server (/merge/status): soft default seeds the box, hard cap bounds it.
+  const hardCap = (status && status.max_batch_hard) || 500;
+  const [maxBatch, setMaxBatch] = useState(() => { const v = Number(localStorage.getItem('mp_max_batch')); return (v >= 1 && v <= 5000) ? v : 100; });
   const seededMax = useRef(false);
   useEffect(() => {
-    if (!seededMax.current && status && status.max_batch != null && localStorage.getItem('mp_max_batch') == null) setMaxBatch(Math.min(500, Math.max(1, status.max_batch)));
+    if (!seededMax.current && status && status.max_batch != null && localStorage.getItem('mp_max_batch') == null) setMaxBatch(Math.min(hardCap, Math.max(1, status.max_batch)));
+    if (status && status.max_batch_hard != null) setMaxBatch((v) => Math.min(hardCap, v));   // never let a stored value exceed the live hard cap
     if (status) seededMax.current = true;
-  }, [status]);
-  const setMax = (n) => { const v = Math.min(500, Math.max(1, Number(n) || 1)); setMaxBatch(v); try { localStorage.setItem('mp_max_batch', String(v)); } catch (e) { /* ignore */ } };
+  }, [status]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const setMax = (n) => { const v = Math.min(hardCap, Math.max(1, Number(n) || 1)); setMaxBatch(v); try { localStorage.setItem('mp_max_batch', String(v)); } catch (e) { /* ignore */ } };
   const overBatch = selCount > maxBatch;
   const canExecute = !safe && mode === 'execute' && confirmText === 'MERGE' && selCount > 0 && !overBatch;
   const eta = (() => {
@@ -329,8 +332,8 @@ export default function MergeProcess() {
           {mode === 'execute' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px' }}>
               <span className="muted small">Max sets per run</span>
-              <input type="number" min={1} max={500} value={maxBatch} onChange={(e) => setMax(e.target.value)} style={{ width: 66 }} title="Cap how many sets one Execute processes (1–500). Enforced server-side." />
-              <span className="muted small">· hard cap 500</span>
+              <input type="number" min={1} max={hardCap} value={maxBatch} onChange={(e) => setMax(e.target.value)} style={{ width: 66 }} title={'Cap how many sets one Execute processes (1–' + hardCap + '). Enforced server-side.'} />
+              <span className="muted small">· hard cap {hardCap.toLocaleString()}</span>
             </div>
           )}
           {/* Parallel state + fan-out prediction — so it's clear whether THIS run will split into batches
@@ -356,7 +359,7 @@ export default function MergeProcess() {
             </div>
           )}
           {mode === 'execute' && overBatch && (
-            <p className="small" style={{ margin: '0 0 8px', color: 'var(--red)' }}>⚠ {selCount} selected exceeds the max of {maxBatch} per Execute — deselect some (an admin can raise MERGE_MAX_BATCH).</p>
+            <p className="small" style={{ margin: '0 0 8px', color: 'var(--red)' }}>⚠ {selCount} selected exceeds the max of {maxBatch} per Execute (hard cap {hardCap.toLocaleString()}) — raise the box up to the hard cap, or an admin can change the defaults in Merge Ops → Settings.</p>
           )}
           <button className="btn primary" style={{ width: '100%', marginTop: 0 }} disabled={busy || !canExecute}
             title={safe ? 'Execution is locked (safe mode)' : 'Type MERGE and select sets to enable'} onClick={() => run(true)}>
