@@ -27,7 +27,10 @@ const api_usage = require('./store/api_usage');
 const api_estimate = require('./store/api_estimate');
 const msettings = require('./store/merge_settings');
 const msettings_store = require('./store/merge_settings_store');
+const pm2ctl = require('./store/pm2_control');
 const { plan_job, make_job_id, should_parallelize } = require('./store/chunk');
+const harness = require('./stress_test');   // reuse the tested random selection helpers (no CLI side-effects on require)
+const log_tail = require('../ops/log_tail');   // shared pm2 log SSE multiplexer (same one Ops → Server cards use)
 
 // Phase 1: server-side event logging is a no-op (Phase 4 wires merge usage into usat_apps_events via the
 // platform analytics). Kept as a shim so the ported handler bodies stay byte-for-byte.
@@ -88,6 +91,90 @@ function mount(app) {
   app.get('/api/salesforce-merge/ops/workers', opsGate, async function (req, res) {
     try { res.json({ ok: true, workers: await mrun.ops_status() }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // pm2 cluster online count (on-demand, not polled — it shells to `pm2 jlist`).
+  app.get('/api/salesforce-merge/ops/pm2', opsGate, async function (req, res) {
+    try { res.json({ ok: true, ...(await pm2ctl.online_count()) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Live worker log tail (pm2 logs --nostream). Polled only while the panel is open.
+  app.get('/api/salesforce-merge/ops/logs', opsGate, async function (req, res) {
+    try { res.json({ ok: true, ...(await pm2ctl.tail_logs(req.query.lines || 80)) }); }
+    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Live worker log STREAM (SSE) — same multiplexer + line format as Ops → Server cards, but gated by the
+  // merge-ops PANEL (user-based grant) instead of admin, so a granted user sees the worker logs.
+  app.get('/api/salesforce-merge/ops/logs/stream', opsGate, function (req, res) {
+    res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+    if (res.flushHeaders) res.flushHeaders();
+    // name=<process> filters to one pm2 process; empty or name=all streams EVERY process (so single-run
+    // merges, which execute in the main app server rather than the worker cluster, are visible too).
+    const q = String((req.query || {}).name || '').trim();
+    const name = (q && q.toLowerCase() !== 'all') ? q : null;
+    log_tail.subscribe(res, name, (req.query || {}).lines);   // lines = how much history to backfill (clamped server-side)
+  });
+  // On-the-fly worker scaling: clamp 1–8, persist worker_target, then `pm2 scale`. Best-effort — a pm2
+  // failure returns ok:false with the message (never a 500), and never touches the merge write path.
+  app.post('/api/salesforce-merge/ops/scale', opsGate, async function (req, res) {
+    try {
+      const n = msettings.coerce('worker_target', (req.body || {}).n);
+      await msettings_store.set('worker_target', n, current_user(req));
+      const r = await pm2ctl.scale(n);
+      analytics.log({ event_name: 'merge_ops_scale', actor: req.user, role: req.role, panel: 'merge-ops', is_test: mtest(req), outcome: r.ok ? 'ok' : 'error' });
+      res.json({ ok: r.ok, n: r.n, output: r.output, error: r.error || null });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Batch run — RANDOM sample (stress): pick a seeded random sample of duplicate/merge-id sets by size
+  // band + count (same options as menu item 32), queue + approve them, and return the ids to run. Selection
+  // is read-only against the loaded dataset; the actual merge still needs execute + the server-side gates.
+  app.post('/api/salesforce-merge/ops/batch/stage', opsGate, async function (req, res) {
+    try {
+      const b = req.body || {};
+      const stamp = await harness.get_dataset_stamp();
+      const source = String(b.source || 'duplicate').toLowerCase().startsWith('merge') ? 'merge_id' : 'group';
+      // Full Select-Merges filter set, passed straight through to matching_keys (filter_cols + filter_map).
+      const o = { env: stamp.env, source, filters: b.filters || {}, colFilters: b.colFilters || {},
+        count: Math.max(1, Math.min(500, Number(b.count) || 10)), seed: Number(b.seed) || (Date.now() % 100000) };
+      const sel = await harness.select_targets(o, stamp);
+      const ids = await harness.queue_and_approve(sel.entries);
+      analytics.log({ event_name: 'merge_ops_stage', actor: req.user, role: req.role, panel: 'merge-ops', is_test: mtest(req), outcome: 'ok', set_count: ids.length });
+      res.json({ ok: true, ids, staged: ids.length, pool: sel.pool, sampled: sel.sampled, seed: o.seed, env: stamp.env });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Live "N sets match these filters" count for the batch-run UI (same filter machinery as staging).
+  app.post('/api/salesforce-merge/ops/batch/count', opsGate, async function (req, res) {
+    try {
+      const b = req.body || {};
+      const view = String(b.source || 'duplicate').toLowerCase().startsWith('merge') ? 'merge-id' : 'duplicates';
+      const count = await reviews.count_matching(view, { filters: b.filters || {}, colFilters: b.colFilters || {} });
+      res.json({ ok: true, count });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Batch run — RESTORE job: fan out a restore over the given ids (same job model as merge), so the panel
+  // can run an explicit "restore afterward" phase. Mirrors /merge/process for kind='restore'.
+  app.post('/api/salesforce-merge/ops/batch/restore', opsGate, async function (req, res) {
+    try {
+      const b = req.body || {};
+      const ids = Array.isArray(b.ids) ? b.ids.filter(Boolean) : [];
+      if (!ids.length) return res.status(400).json({ ok: false, error: 'no ids to restore' });
+      const opts = { mode: b.mode, confirm: 'RESTORE', ack_post_merge: true, created_by: current_user(req) };
+      const parallel_enabled = await msettings_store.get('parallel_enabled');
+      const chunk_size = await msettings_store.get('chunk_size');
+      if (should_parallelize(ids.length, chunk_size, parallel_enabled)) {
+        const chunks = plan_job(ids, chunk_size);
+        const job_id = make_job_id();
+        for (let i = 0; i < chunks.length; i += 1) {
+          await mrun.enqueue({ kind: 'restore', mode: b.mode, created_by: current_user(req),
+            job_id, batch_index: i + 1, batch_total: chunks.length, current_label: 'Queued restore (batch ' + (i + 1) + '/' + chunks.length + ')',
+            params: { ids: chunks[i], opts, job_id, batch_index: i + 1, batch_total: chunks.length } });
+        }
+        analytics.log({ event_name: 'merge_ops_restore', actor: req.user, role: req.role, panel: 'merge-ops', is_test: mtest(req), outcome: 'queued', set_count: ids.length });
+        return res.json({ ok: true, job_id, runs: chunks.length, parallel: true, kind: 'restore' });
+      }
+      const r = await mrun.enqueue({ kind: 'restore', mode: b.mode, created_by: current_user(req), params: { ids, opts } });
+      analytics.log({ event_name: 'merge_ops_restore', actor: req.user, role: req.role, panel: 'merge-ops', is_test: mtest(req), outcome: 'queued' });
+      res.json({ ok: true, parallel: false, kind: 'restore', ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
   // Skeleton health check retained for smoke tests.
@@ -392,8 +479,13 @@ function mount(app) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge/status', gate, async function (req, res) {
-    try { res.json({ ok: true, max_batch: Math.min(500, Math.max(1, Number(process.env.MERGE_MAX_BATCH) || 100)), max_batch_hard: 500, ...(await mexec.status()) }); }
-    catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    try {
+      // Effective parallel state (DB -> env -> default), so the main Process Merges UI can show whether a run
+      // will fan out — read-only, no admin gate needed. chunk_size drives the "≈ N batches" prediction.
+      let parallel_enabled = false; let chunk_size = 5;
+      try { parallel_enabled = !!(await msettings_store.get('parallel_enabled')); chunk_size = Number(await msettings_store.get('chunk_size')) || 5; } catch (e) { /* settings table not ready */ }
+      res.json({ ok: true, max_batch: Math.min(500, Math.max(1, Number(process.env.MERGE_MAX_BATCH) || 100)), max_batch_hard: 500, parallel_enabled, chunk_size, ...(await mexec.status()) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.post('/api/salesforce-merge/merge/process', gate, async function (req, res) {
     try {
@@ -456,6 +548,26 @@ function mount(app) {
       const r = await mrun.resume_job(req.params.jobId);
       analytics.log({ event_name: 'merge_job_resume', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req), outcome: 'ok' });
       res.json({ ok: true, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Finalize a completed job into the SAME Excel workbook + sweep row the CLI harness writes — so runs
+  // started from the UI or the Merge Ops panel get a report too. Best-effort; returns the file path.
+  app.post('/api/salesforce-merge/merge/job/:jobId/report', gate, async function (req, res) {
+    try {
+      // Optional restore_job_id folds a paired restore job into the SAME workbook (Restores tab); seed
+      // records the random-sample seed used (blank for approved runs).
+      const b = req.body || {};
+      const report = await harness.report_job(req.params.jobId, { restore_job_id: b.restore_job_id || null, seed: b.seed });
+      analytics.log({ event_name: 'merge_job_report', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req), outcome: report ? 'ok' : 'empty' });
+      res.json({ ok: true, report: report || null });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+  // Same workbook + sweep row for a SINGLE run (parallel off / no fan-out).
+  app.post('/api/salesforce-merge/merge/run/:runId/report', gate, async function (req, res) {
+    try {
+      const report = await harness.report_run(req.params.runId, { seed: (req.body || {}).seed });
+      analytics.log({ event_name: 'merge_run_report', actor: req.user, role: req.role, panel: 'merge-process', is_test: mtest(req), outcome: report ? 'ok' : 'empty' });
+      res.json({ ok: true, report: report || null });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge/history', gate, async function (req, res) {

@@ -90,9 +90,11 @@ export default function QueueRowDetail({ row }) {
         <Line k="Source">{row.source_type === 'merge_id' ? 'merge id' : 'group'} · <code title={row.source_key}>{shortId(row.source_key)}</code></Line>
         <Line k="Survivor rule">{row.master_rule || 'cascade'}</Line>
         <Line k="Environment">{row.environment || '—'}{row.org_id ? ' · org ' + shortId(row.org_id) : ''}</Line>
-        {cc && cc.total != null ? (
-          <Line k="Child records">{cc.total}{cc.by && typeof cc.by === 'object' ? ' — ' + Object.entries(cc.by).map(([k, v]) => k + ': ' + v).join(', ') : ''}</Line>
-        ) : null}
+        <Line k="Child records">
+          {cc && cc.total != null
+            ? <>{cc.total}{cc.by && typeof cc.by === 'object' ? ' — ' + Object.entries(cc.by).map(([k, v]) => k + ': ' + v).join(', ') : ''}</>
+            : <span className="muted">not retrieved on bulk select — re-fetched live at merge time and captured in the pre-merge snapshot (so children are re-pointed on merge and restorable)</span>}
+        </Line>
         {row.status ? <Line k="Status">{row.status}</Line> : null}
         {row.created_by ? <Line k="Added by">{row.created_by}{row.created_at ? ' · ' + new Date(row.created_at).toLocaleString() : ''}</Line> : null}
         {row.notes ? <Line k="Notes">{row.notes}</Line> : null}

@@ -160,7 +160,7 @@ export default function History() {
                   <td>{r.mode}</td>
                   <td style={{ textAlign: 'right' }}>{r.api_cost != null ? Number(r.api_cost).toLocaleString() : '—'}</td>
                   <td style={{ textAlign: 'right', color: 'var(--dim)' }}>{perMerge(r) != null ? '≈' + perMerge(r).toLocaleString() : '—'}</td>
-                  <td style={{ textAlign: 'right' }} title="Async Apex recorded for this run (approximate)">{r.apex_cost != null ? Number(r.apex_cost).toLocaleString() : '—'}</td>
+                  <td style={{ textAlign: 'right' }} title="Async Apex recorded for this run. Rollups fire AFTER the merge commits (deferred), so this reads 0 until the settle re-read lands (~90s) — a dash means 'not yet / deferred', not zero cost.">{r.apex_cost != null && Number(r.apex_cost) > 0 ? Number(r.apex_cost).toLocaleString() : '—'}</td>
                   <td className="small" title={r.reason}>
                     {r.reason}
                     {isFileShareNote(r.reason) && (

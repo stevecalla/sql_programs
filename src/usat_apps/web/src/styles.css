@@ -756,6 +756,8 @@ table.grid td {
 
 /* Metrics scope tabs (platform roll-up vs per-panel) */
 .mx-scope { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:8px 0 4px; }
+/* Any control carrying a hover tooltip (title) shows the help cursor so users know to hover for detail. */
+.sfmerge label[title], .mx-scope label[title], .sfmerge [title].tb-select { cursor: help; }
 .mx-scope-label { font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--dim); text-transform:uppercase; }
 .mx-tabs { display:flex; gap:4px; background:var(--hover); border:1px solid var(--line); border-radius:10px; padding:3px; }
 .mx-tabs button { border:none; background:none; padding:6px 14px; border-radius:8px; font:inherit; font-size:13px; font-weight:600; color:var(--dim); cursor:pointer; white-space:nowrap; }

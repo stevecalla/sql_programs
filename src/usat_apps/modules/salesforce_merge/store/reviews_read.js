@@ -113,6 +113,26 @@ async function facets(view, query = real_query) {
   return out;
 }
 
+// All distinct KEY values matching the SAME filters the Select Merges list uses (no pagination) — so the
+// batch-run sampler can pick a random subset from the exact filtered pool. view: 'duplicates' | 'merge-id'.
+const KEY_COL = { duplicates: 'Consolidated_Group_Key__c', 'merge-id': 'Salesforce_Merge_Id__c' };
+async function matching_keys(view, opts = {}, query = real_query) {
+  const spec = SPECS[view]; const col = KEY_COL[view];
+  if (!spec || !spec.table || !col) return [];
+  const { where_sql, params } = build_clauses({ ...opts, page: 1, page_size: 1 }, spec);   // page/size unused here
+  const rows = await query('SELECT DISTINCT `' + col + '` AS k FROM `' + spec.table + '` ' + where_sql, params);
+  return (rows || []).map((r) => r.k).filter(Boolean);
+}
+
+// COUNT of distinct keys matching the SAME filters (for a live "N sets match" readout in the batch UI).
+async function count_matching(view, opts = {}, query = real_query) {
+  const spec = SPECS[view]; const col = KEY_COL[view];
+  if (!spec || !spec.table || !col) return 0;
+  const { where_sql, params } = build_clauses({ ...opts, page: 1, page_size: 1 }, spec);
+  const rows = await query('SELECT COUNT(DISTINCT `' + col + '`) AS n FROM `' + spec.table + '` ' + where_sql, params);
+  return (rows && rows[0]) ? Number(rows[0].n) : 0;
+}
+
 // ---- Duplicates (consolidated clusters) ----
 const DUP_SPEC = {
   table: cfg.RESULT_CONSOLIDATED_TABLE,
@@ -143,6 +163,9 @@ const DUP_SPEC = {
       : String(v) === 'none' ? { sql: "(Foundation_Constituents__c IS NULL OR Foundation_Constituents__c NOT LIKE '%true%')" } : null) },
     // exact cluster size (e.g. only pairs = 2). Numeric equality on the record count.
     size_eq: { build: (v) => (/^\d+$/.test(String(v).trim()) ? { sql: 'CAST(Group_Record_Count__c AS UNSIGNED) = ?', params: [Number(String(v).trim())] } : null) },
+    // cluster-size band (used by the batch-run sampler's Min/Max size).
+    size_min: { build: (v) => (/^\d+$/.test(String(v).trim()) ? { sql: 'CAST(Group_Record_Count__c AS UNSIGNED) >= ?', params: [Number(String(v).trim())] } : null) },
+    size_max: { build: (v) => (/^\d+$/.test(String(v).trim()) ? { sql: 'CAST(Group_Record_Count__c AS UNSIGNED) <= ?', params: [Number(String(v).trim())] } : null) },
     // match type: keep clusters whose composition INVOLVES the chosen signal ("exact"/"fuzzy"/
     // "nickname"). Match_Composition__c is a label like "exact only" / "exact + nickname", so a
     // contains match catches every cluster that used that signal at all.
@@ -554,5 +577,6 @@ async function export_rows(view, opts = {}, query = real_query) {
 module.exports = {
   list_duplicates, list_merge_id, merge_id_summary, list_accounts, cluster_accounts, facets, export_rows,
   list_merge_groups, merge_group_account_ids, accounts_by_ids, resolve_merge_groups, resolve_duplicate_groups, pick_bulk_survivor,
+  matching_keys, count_matching,
   build_clauses, MAX_PAGE_SIZE, EXPORT_MAX, // exported for tests
 };

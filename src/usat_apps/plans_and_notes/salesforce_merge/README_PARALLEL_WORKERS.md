@@ -6,6 +6,15 @@ worker cluster drains side by side. Transparent to end users (no knob they can c
 by an admin (no env-var round-trips); with an admin-only **Merge Ops** panel that adds settings, a
 live worker view, and direct parallel-batch control.
 
+## Status — Phases 1–4 SHIPPED (parallel gated OFF in prod until enabled)
+
+- **Phase 1 (engine):** `job_id` fan-out (`chunk.js` + `/merge/process`), `job_progress` aggregation, `cancel_job`, `hold_job`/`resume_job`. Behavior-preserving when `parallel_enabled=false`.
+- **Phase 2 (settings):** `salesforce_merge_settings` (DB→env→default resolver, live-tunable), admin `GET/PUT /ops/settings`, `merge-ops` panel key (grantable in Users & Access), boot-ensure of the merge tables on :8022 start.
+- **Phase 3 (Merge Ops panel):** folder-tab page (Settings · Batch run) with an always-visible Workers section; live settings editor + "Last saved"; batch-run in two modes (Approved queue / Random sample with the same facet filters as Select Merges — size/tier/signal/foundation for duplicates, which_list/bucket/foundation for merge-id) + optional Restore phase; on-the-fly `pm2 scale`; live `pm2 logs` tail; explainer + tooltips.
+- **Phase 4 (job-aware end-user UI):** Process Merges shows ONE aggregate progress panel (sets/batches/workers/held/status) with Stop-job + Resume when a run fans out; single-run path unchanged.
+- **Async-Apex breaker:** the worker pauses a job (`hold_job`) when `DailyAsyncApexExecutions` reaches `apex_stop_threshold`; resumable from either UI. Best-effort, never fails a merge.
+- **Remaining:** flip `parallel_enabled` on in prod (ops decision) + default cluster to `pm2 -i 4`.
+
 ## Decisions (locked)
 
 - **Admin panel scope:** BOTH — live settings editor + read-only worker view + admin batch-run control.
@@ -176,3 +185,20 @@ per-merge API figure comes from a serial calibration run. (See the stress-harnes
 - Unit: chunker; settings resolver (DB→env→default); job progress aggregation; cancel-all; parallel-off
   parity (one run).
 - Integration (sandbox): UI Execute fan-out; worker scaling via panel; access grant/deny for `merge-ops`.
+
+## Re-running & restoring a batch job (Merge Ops → Batch run)
+
+No dedicated "restart" is needed — a cancelled or partial job can simply be run again, because
+staging is deterministic and merges are idempotent (an already-merged set skips safely):
+
+- **Approved mode:** launch again. Sets that already merged fall out of the approved queue, so the
+  re-run only picks up what's left.
+- **Random mode:** reuse the **seed** to re-stage the identical sample. The seed is surfaced three ways:
+  (1) the `Seed:` chip under the run controls, with `↺ reuse` (drops it back into the Seed box) and
+  `copy`; (2) the "Staged N set(s) (seed …)" note line; (3) the run's Excel report (Summary row +
+  the tuning sweep row's `Seed` column). Leaving Seed blank picks a fresh random seed each run.
+
+**Restore (undo):** the `↩ Restore this run` button appears once a merge job reaches `done`
+**or** `cancelled` — you do not have to check "Restore afterward" beforehand. It restores only the
+sets that actually merged (undelete losers + re-point children) and skips the rest. `runIds` is
+captured at stage time, so it survives a cancel. Restore writes its own report/sweep row.

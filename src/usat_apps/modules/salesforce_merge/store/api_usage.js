@@ -110,6 +110,22 @@ async function run_cost(pool, run_id) {
   return rows[0] || null;
 }
 
+// The API/Apex/Bulk window (before/after) recorded across a set of run_ids — used to build a web job's
+// report after the fact so its Summary API + Apex columns populate from the real recorded snapshots.
+async function job_window(pool, run_ids) {
+  if (!run_ids || !run_ids.length) return null;
+  const ph = run_ids.map(() => '?').join(',');
+  const rows = (await pool.query(
+    'SELECT MIN(api_used) u0, MAX(api_used) u1, MAX(api_max) umax, MIN(apex_used) a0, MAX(apex_used) a1, MAX(apex_max) amax, '
+    + 'MIN(bulk_used) b0, MAX(bulk_used) b1, MAX(bulk_max) bmax FROM ' + TABLE + ' WHERE run_id IN (' + ph + ')', run_ids))[0];
+  const r = rows && rows[0]; if (!r || r.u1 == null) return null;
+  const n = (v) => (v == null ? null : Number(v));
+  return {
+    before: { used: n(r.u0), max: n(r.umax), apex_used: n(r.a0), apex_max: n(r.amax), bulk_used: n(r.b0), bulk_max: n(r.bmax) },
+    after: { used: n(r.u1), max: n(r.umax), apex_used: n(r.a1), apex_max: n(r.amax), bulk_used: n(r.b1), bulk_max: n(r.bmax) },
+  };
+}
+
 // The single most recent snapshot for an env (any op) — what the panel shows on open, WITHOUT a live
 // SF call. null if nothing captured yet.
 async function latest(pool, env) {
@@ -131,4 +147,4 @@ async function recent_runs(pool, { days = 7, env = null, limit = 20 } = {}) {
   return rows;
 }
 
-module.exports = { ensure, record, usage_from_conn, usage_via_limits, usage_all, latest, list_recent, summary_by_op, run_cost, recent_runs, TABLE };
+module.exports = { ensure, record, usage_from_conn, usage_via_limits, usage_all, latest, list_recent, summary_by_op, run_cost, recent_runs, job_window, TABLE };

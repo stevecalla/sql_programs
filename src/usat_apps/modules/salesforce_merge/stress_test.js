@@ -213,25 +213,23 @@ async function clear_run_tables() {
 // Pick candidate cluster keys within the size band, random-sample `count`, resolve to queue entries.
 async function select_targets(o, stamp) {
   const q = db();
-  const { reviews, cfg } = stores();
-  let picked = [];
-  let pool = 0;
-  if (o.source === 'merge_id') {
-    const groups = await reviews.resolve_merge_groups({}, q);
-    pool = groups.length;
-    picked = sample(groups.map((g) => g.merge_id).filter(Boolean), o.count, o.seed);
-    const resolved = await reviews.resolve_merge_groups({ keys: picked }, q);
-    return build_entries(resolved, 'merge_id', o, stamp, pool, picked.length);
-  }
-  const where = ['1=1']; const params = [];
-  if (o.min_size) { where.push('CAST(Group_Record_Count__c AS UNSIGNED) >= ?'); params.push(Number(o.min_size)); }
-  if (o.max_size) { where.push('CAST(Group_Record_Count__c AS UNSIGNED) <= ?'); params.push(Number(o.max_size)); }
-  const rows = await q('SELECT Consolidated_Group_Key__c AS k FROM `' + cfg.RESULT_CONSOLIDATED_TABLE + '` WHERE ' + where.join(' AND '), params);
-  const keys = (rows || []).map((r) => r.k).filter(Boolean);
-  pool = keys.length;
-  picked = sample(keys, o.count, o.seed);
-  const groups = await reviews.resolve_duplicate_groups({ keys: picked }, q);
-  return build_entries(groups, 'group', o, stamp, pool, picked.length);
+  const { reviews } = stores();
+  const isMergeId = o.source === 'merge_id';
+  const view = isMergeId ? 'merge-id' : 'duplicates';
+  // Reuse the EXACT Select-Merges filter machinery: pick from the full pool of keys that match the same
+  // filters (o.filters -> filter_cols, o.colFilters -> filter_map). Legacy CLI fields (min/max_size,
+  // foundation) fold into filters for back-compat. No parallel filter code here.
+  const filters = { ...(o.filters || {}) };
+  if (o.min_size && filters.size_min == null) filters.size_min = o.min_size;
+  if (o.max_size && filters.size_max == null) filters.size_max = o.max_size;
+  if (o.foundation && !filters.foundation_state) filters.foundation_state = o.foundation;
+  const allKeys = await reviews.matching_keys(view, { filters, colFilters: o.colFilters || {} }, q);
+  const pool = allKeys.length;
+  const picked = sample(allKeys, o.count, o.seed);
+  const resolved = isMergeId
+    ? await reviews.resolve_merge_groups({ keys: picked }, q)
+    : await reviews.resolve_duplicate_groups({ keys: picked }, q);
+  return build_entries(resolved, isMergeId ? 'merge_id' : 'group', o, stamp, pool, picked.length);
 }
 
 function build_entries(groups, source_type, o, stamp, pool, sampled) {
@@ -459,7 +457,8 @@ async function run_sequence(o, stamp) {
   const seconds = Math.round((Date.now() - started) / 1000);
   const hist = await history_for_runs(runs.map((r) => r.run_id));
   const by = (r) => hist.filter((h) => h.result === r).length;
-  const outcomes = { done: by('done'), simulated: by('simulated'), failed: by('failed'), held: by('held'), skipped: by('skipped') };
+  // Count 'restored' as done so a restore report shows real counts (not "Done 0").
+  const outcomes = { done: by('done') + by('restored'), simulated: by('simulated'), failed: by('failed'), held: by('held'), skipped: by('skipped') };
   // API total: PREFER the whole-run before/after delta (the true org-wide total). In PARALLEL mode the
   // per-run deltas DOUBLE-COUNT — DailyApiRequests is one org-wide counter, so each concurrent run's
   // max-min also captures the other workers' calls; summing them overstates badly (e.g. 12k vs the real
@@ -504,7 +503,7 @@ async function run_sequence(o, stamp) {
     const base = path.join(determineOSPathSync(), 'usat_salesforce_merge_stress');
     const band = (o.min_size || '-') + '..' + (o.max_size || '-');
     const sf = await append_sweep_row(base, [now_local(), o.env, o.mode, o.source === 'merge_id' ? 'merge-id' : 'duplicate', band,
-      o.count, o.batch, o.seed, hist.length, outcomes.done, outcomes.failed, per_min, api_cost, per_merge, apex_cost, apex_per_merge, fmt_hms(seconds), restore ? restore.status : 'skipped']);
+      o.count, o.batch, o.seed, hist.length, outcomes.done, outcomes.failed, per_min, api_cost, per_merge, apex_cost, apex_per_merge, fmt_hms(seconds), restore ? restore.status : 'skipped', o.job_id || '-']);
     console.log('      sweep:  ' + sf);
   } catch (e) { console.log('      (sweep row skipped: ' + e.message + (/EBUSY|EPERM|EACCES|locked/i.test(e.message) ? ' — is _sweep_comparison.xlsx open in Excel? close it and re-run' : '') + ')'); }
   console.log('\n=== done ===\n');
@@ -546,22 +545,27 @@ function now_local() {
 async function append_sweep_row(base, row) {
   const path = require('path'); const fs = require('fs'); const ExcelJS = require('exceljs');
   const file = path.join(base, '_sweep_comparison.xlsx');
-  const HEADER = ['When (MT)', 'Env', 'Mode', 'Source', 'Size band', 'Count', 'Batch', 'Seed', 'Sets', 'Done', 'Failed', 'Throughput/min', 'API total', 'API/merge', 'Async Apex', 'Apex/merge', 'Elapsed', 'Restore'];
+  const HEADER = ['When (MT)', 'Env', 'Mode', 'Source', 'Size band', 'Count', 'Batch', 'Seed', 'Sets', 'Done', 'Failed', 'Throughput/min', 'API total', 'API/merge', 'Async Apex', 'Apex/merge', 'Elapsed', 'Restore', 'Job'];
   const APEX_AT = 14; // 0-based index where the Async Apex + Apex/merge columns were inserted
   const wb = new ExcelJS.Workbook();
   let ws = null;
   if (fs.existsSync(file)) { await wb.xlsx.readFile(file); ws = wb.getWorksheet('Runs'); }
   if (!ws) { ws = wb.addWorksheet('Runs'); ws.addRow(HEADER); }
   else {
-    // Self-heal an older sweep: if the header predates the Async-Apex columns, rewrite it and realign any
-    // short data rows (insert blanks for the new columns) so Elapsed/Restore don't slide. Idempotent.
+    // Self-heal an older sweep to the current columns. Handles two additive migrations, in order:
+    //   (1) the Async-Apex pair inserted mid-row at APEX_AT (for headers predating it), then
+    //   (2) the trailing Job column (right-pad). Idempotent; keeps Elapsed/Restore aligned.
     const hdr = (ws.getRow(1).values || []).slice(1);
-    if (hdr.length !== HEADER.length) {
-      const missing = HEADER.length - hdr.length;
-      const dataRows = [];
-      ws.eachRow((r, i) => { if (i > 1) dataRows.push({ i, vals: (r.values || []).slice(1) }); });
-      if (missing > 0) for (const { i, vals } of dataRows) {
-        if (vals.length === HEADER.length - missing) { const nv = vals.slice(); nv.splice(APEX_AT, 0, ...Array(missing).fill(null)); ws.spliceRows(i, 1, nv); }
+    if (hdr.join('') !== HEADER.join('')) {
+      const hadApex = hdr.indexOf('Async Apex') >= 0;
+      const rows = [];
+      ws.eachRow((r, i) => { if (i > 1) rows.push({ i, vals: (r.values || []).slice(1) }); });
+      for (const { i, vals } of rows) {
+        let nv = vals.slice();
+        if (!hadApex) nv.splice(APEX_AT, 0, null, null);      // insert the 2 apex columns mid-row
+        while (nv.length < HEADER.length) nv.push(null);       // right-pad new trailing columns (e.g. Job)
+        nv.length = HEADER.length;
+        ws.spliceRows(i, 1, nv);
       }
       ws.spliceRows(1, 1, HEADER);
     }
@@ -600,20 +604,43 @@ function latest_report(base) {
   } catch (e) { return null; }
 }
 
+// Housekeeping: delete per-run report workbooks older than 24h. The cumulative sweep (and anything else
+// prefixed '_') is preserved. Best-effort — never throws.
+function prune_old_reports(base, maxAgeMs) {
+  try {
+    const fs = require('fs'); const path = require('path');
+    const cutoff = Date.now() - (maxAgeMs || 24 * 60 * 60 * 1000);
+    for (const f of fs.readdirSync(base)) {
+      if (!f.endsWith('.xlsx') || f.startsWith('_')) continue;   // keep _sweep_comparison.xlsx et al.
+      const fp = path.join(base, f);
+      try { if (fs.statSync(fp).mtimeMs < cutoff) fs.unlinkSync(fp); } catch (e) { /* skip */ }
+    }
+  } catch (e) { /* best-effort */ }
+}
+
 async function write_report(d) {
   const fs = require('fs'); const path = require('path'); const ExcelJS = require('exceljs');
   const { determineOSPathSync } = require('../../../../utilities/determineOSPath');
   const base = path.join(determineOSPathSync(), 'usat_salesforce_merge_stress');
   fs.mkdirSync(base, { recursive: true });
+  prune_old_reports(base);   // keep the folder tidy — drop per-run workbooks older than 24h (sweep is kept)
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const src = d.o.source === 'merge_id' ? 'mergeid' : 'dup';
   const file = path.join(base, `${ts}_${d.o.env}_${d.o.mode}_${src}_c${d.o.count}_b${d.o.batch}.xlsx`);
   const wb = new ExcelJS.Workbook();
   const sum = wb.addWorksheet('Summary');
+  // Parallelism, spelled out — a run only fans out when it splits into >1 batch. One batch = no fan-out
+  // (parallel off, or the set count fit in a single chunk). "Workers used" = distinct pm2 instances that ran a batch.
+  const n_batches = d.runs.length;
+  const workers_used = Array.from(new Set((d.runs || []).map((r) => r.worker).filter(Boolean)));
+  const ran_as = n_batches > 1
+    ? ('parallel — ' + n_batches + ' batches across ' + (workers_used.length || 1) + ' worker(s)')
+    : 'single run — 1 batch (no fan-out)';
   sum.addRows([
-    ['Run', d.o.mode + ' · ' + d.o.env], ['Source', src], ['Count', d.o.count], ['Batch', d.o.batch], ['Seed', d.o.seed],
+    ['Run', d.o.mode + ' · ' + d.o.env], ['Job id', d.o.job_id || '-'], ['Source', src], ['Count', d.o.count], ['Batch (requested)', d.o.batch], ['Seed', d.o.seed],
     ['Size band', (d.o.min_size || '-') + '..' + (d.o.max_size || '-')], ['Pool', d.sel.pool], ['Sampled', d.sel.sampled],
-    ['Sets processed', d.hist.length], ['Batches', d.runs.length],
+    ['Ran as', ran_as], ['Workers used', workers_used.length ? workers_used.join(', ') : '1 (or n/a)'],
+    ['Sets processed', d.hist.length], ['Batches (actual)', d.runs.length],
     ['Done', d.outcomes.done], ['Simulated', d.outcomes.simulated], ['Failed', d.outcomes.failed], ['Held', d.outcomes.held], ['Skipped', d.outcomes.skipped],
     ['Throughput / min', d.per_min], ['Sec per merge (median batch — reliable)', d.sec_per_merge != null ? d.sec_per_merge : 'n/a'], ['Elapsed total (hh:mm:ss)', fmt_hms(d.seconds)],
     ['Merge time', fmt_hms(d.merge_seconds || 0)], ['Restore time', d.restore ? fmt_hms(d.restore_seconds || 0) : 'skipped'],
@@ -720,7 +747,7 @@ async function cmd_restore() {
     const c = await run_api_cost(run_id); const cost = c ? c.api : null;
     const per_min = Math.round((ids.length / Math.max(0.001, seconds)) * 60 * 10) / 10;
     const sf = await append_sweep_row(base, [now_local(), stamp.env, 'restore', '-', '-', ids.length, '-', '-',
-      ids.length, restored, failed, per_min, cost != null ? cost : '-', '-', '-', '-', fmt_hms(seconds), r ? r.status : 'unknown']);
+      ids.length, restored, failed, per_min, cost != null ? cost : '-', '-', '-', '-', fmt_hms(seconds), r ? r.status : 'unknown', '-']);
     console.log('  sweep:  ' + sf);
   } catch (e) { console.log('  (sweep row skipped: ' + e.message + (/EBUSY|EPERM|EACCES|locked/i.test(e.message) ? ' — is _sweep_comparison.xlsx open in Excel? close it and re-run' : '') + ')'); }
   console.log('');
@@ -795,7 +822,8 @@ async function assemble_runs(mrun, enq, maxes) {
 async function finalize_job(o, sel, runs, restore, timings, stamp, api_before, api_after) {
   const hist = await history_for_runs(runs.map((r) => r.run_id));
   const by = (r) => hist.filter((h) => h.result === r).length;
-  const outcomes = { done: by('done'), simulated: by('simulated'), failed: by('failed'), held: by('held'), skipped: by('skipped') };
+  // Count 'restored' as done so a restore report shows real counts (not "Done 0").
+  const outcomes = { done: by('done') + by('restored'), simulated: by('simulated'), failed: by('failed'), held: by('held'), skipped: by('skipped') };
   const whole_run_api = (api_before && api_after && api_after.used != null && api_before.used != null) ? (api_after.used - api_before.used) : null;
   const api_cost = whole_run_api != null ? whole_run_api : (runs.reduce((a, r) => a + (Number(r.cost) || 0), 0) || null);
   const api_approx = true;
@@ -812,16 +840,83 @@ async function finalize_job(o, sel, runs, restore, timings, stamp, api_before, a
   const data = { o, sel, runs, restore, seconds: timings.seconds, merge_seconds: timings.merge_seconds, restore_seconds: timings.restore_seconds,
     per_min, sec_per_merge, hist, outcomes, api_cost, api_approx, per_merge, remaining, apex_cost, apex_per_merge, apex_remaining, bulk_cost, api_before, api_after, stamp };
   print_summary(data);   // identical Summary block to items 30/31
-  try { const f = await write_report(data); console.log('      report: ' + f); }
+  let reportPath = null;
+  try { reportPath = await write_report(data); console.log('      report: ' + reportPath); }
   catch (e) { console.log('      (report skipped: ' + e.message + ')'); }
   try {
     const path = require('path'); const { determineOSPathSync } = require('../../../../utilities/determineOSPath');
     const base = path.join(determineOSPathSync(), 'usat_salesforce_merge_stress');
     const band = (o.min_size || '-') + '..' + (o.max_size || '-');
     const sf = await append_sweep_row(base, [now_local(), o.env, o.mode, o.source === 'merge_id' ? 'merge-id' : 'duplicate', band,
-      o.count, o.batch, o.seed, hist.length, outcomes.done, outcomes.failed, per_min, api_cost, per_merge, apex_cost, apex_per_merge, fmt_hms(timings.seconds), restore ? restore.status : 'skipped']);
+      o.count, o.batch, o.seed, hist.length, outcomes.done, outcomes.failed, per_min, api_cost, per_merge, apex_cost, apex_per_merge, fmt_hms(timings.seconds), restore ? restore.status : 'skipped', o.job_id || '-']);
     console.log('      sweep:  ' + sf);
   } catch (e) { console.log('      (sweep row skipped: ' + e.message + (/EBUSY|EPERM|EACCES|locked/i.test(e.message) ? ' — is _sweep_comparison.xlsx open in Excel? close it and re-run' : '') + ')'); }
+  return reportPath;
+}
+
+// Build the SAME Excel workbook + sweep row for a job that was started from the WEB (Process Merges or the
+// Merge Ops batch-run), assembling everything from the DB after the fact: per-batch runs (cost/time/worker),
+// history, wall time from the chunk-runs' timestamps, and a best-effort API snapshot. Returns the file path.
+// Wall time (seconds) across a set of run rows: earliest claim/start → latest finish.
+function _wall_seconds(rows) {
+  const ms = (v) => (v ? new Date(v).getTime() : 0);
+  const s = rows.map((r) => ms(r.claimed_at || r.started_at)).filter(Boolean);
+  const e = rows.map((r) => ms(r.finished_at)).filter(Boolean);
+  return (s.length && e.length) ? Math.max(0, Math.round((Math.max(...e) - Math.min(...s)) / 1000)) : 0;
+}
+
+async function report_job(jobId, opts = {}) {
+  const restoreJobId = opts.restore_job_id || null;
+  const { mrun, api_usage } = stores();
+  const jp = await mrun.job_progress(jobId);
+  if (!jp || !jp.runs || !jp.runs.length) return null;
+  const stamp = await get_dataset_stamp();
+  const rows = (await Promise.all(jp.runs.map((r) => mrun.get(r.run_id)))).filter(Boolean);
+  const enq = rows.map((r) => ({ run_id: r.run_id, batch: Number(r.total_sets) || 0 }));
+  const merge_seconds = _wall_seconds(rows);
+  // Reconstruct the real API/Apex before→after window from the job's recorded usage so those columns fill.
+  let pool = null; try { pool = await get_pool_p(); } catch (e) { pool = null; }
+  const win = pool ? await api_usage.job_window(pool, enq.map((e) => e.run_id)).catch(() => null) : null;
+  const api_before = win ? win.before : null;
+  const api_after = win ? win.after : await api_snapshot(stamp.env);
+  const runs = await assemble_runs(mrun, enq, api_after);
+  const isRestore = jp.kind === 'restore';
+  // Restore phase: either this job IS a restore, or a paired restore job to FOLD INTO this one workbook.
+  let restore = null; let restore_seconds = 0;
+  if (isRestore) { restore = { run_id: jobId, status: jp.status, hist: await history_for_runs(enq.map((e) => e.run_id)) }; restore_seconds = merge_seconds; }
+  else if (restoreJobId) {
+    const rjp = await mrun.job_progress(restoreJobId);
+    if (rjp && rjp.runs && rjp.runs.length) {
+      const rrows = (await Promise.all(rjp.runs.map((r) => mrun.get(r.run_id)))).filter(Boolean);
+      restore = { run_id: restoreJobId, status: rjp.status, hist: await history_for_runs(rjp.runs.map((r) => r.run_id)) };
+      restore_seconds = _wall_seconds(rrows);
+    }
+  }
+  const o = { mode: jp.mode, env: stamp.env, source: isRestore ? 'restore' : 'duplicate',
+    count: jp.total_sets, batch: enq[0] ? enq[0].batch : 0, seed: (opts.seed != null && opts.seed !== '') ? opts.seed : '-', min_size: null, max_size: null, job_id: jobId };
+  const sel = { pool: null, sampled: jp.total_sets, entries: [] };
+  return finalize_job(o, sel, runs, restore, { seconds: merge_seconds + restore_seconds, merge_seconds, restore_seconds }, stamp, api_before, api_after);
+}
+
+// Same workbook + sweep row for a SINGLE run (parallel off, or a job that didn't fan out). One run_id.
+async function report_run(runId, opts = {}) {
+  const { mrun, api_usage } = stores();
+  const row = await mrun.get(runId);
+  if (!row) return null;
+  const stamp = await get_dataset_stamp();
+  const enq = [{ run_id: runId, batch: Number(row.total_sets) || 0 }];
+  const seconds = _wall_seconds([row]);
+  let pool = null; try { pool = await get_pool_p(); } catch (e) { pool = null; }
+  const win = pool ? await api_usage.job_window(pool, [runId]).catch(() => null) : null;
+  const api_before = win ? win.before : null;
+  const api_after = win ? win.after : await api_snapshot(stamp.env);
+  const runs = await assemble_runs(mrun, enq, api_after);
+  const isRestore = row.kind === 'restore';
+  const o = { mode: row.mode, env: stamp.env, source: isRestore ? 'restore' : 'duplicate',
+    count: row.total_sets, batch: Number(row.total_sets) || 0, seed: (opts.seed != null && opts.seed !== '') ? opts.seed : '-', min_size: null, max_size: null, job_id: runId };
+  const sel = { pool: null, sampled: row.total_sets, entries: [] };
+  const restore = isRestore ? { run_id: runId, status: row.status, hist: await history_for_runs([runId]) } : null;
+  return finalize_job(o, sel, runs, restore, { seconds, merge_seconds: isRestore ? 0 : seconds, restore_seconds: isRestore ? seconds : 0 }, stamp, api_before, api_after);
 }
 
 // JOB test (Phase 1): like `run`/`parallel` but drives the ACTUAL fan-out path — it splits the approved
@@ -882,6 +977,7 @@ async function cmd_job() {
   if (should_parallelize(ids.length, chunk, parallel_enabled)) {
     const chunks = plan_job(ids, chunk);
     const jobId = make_job_id();
+    o.job_id = jobId;   // record on the report/sweep (Job column)
     console.log(`      FAN-OUT — ${ids.length} sets → ${chunks.length} chunk-run(s) of <=${chunk} · job_id ${jobId}`);
     for (let i = 0; i < chunks.length; i += 1) {
       const q = await mrun.enqueue({ kind: 'merge', mode, environment: envLabel, org_id: stamp.org_id || null, created_by: 'stress-test',
@@ -975,6 +1071,6 @@ async function main() {
   process.exit(0);
 }
 
-module.exports = { build_distribution, format_distribution, in_size_range, mulberry32, sample, get_distribution, resolve_env, normalize_env, get_dataset_stamp, plan_batches, summarize, format_selection, fmt_hms, active_worker_count, worker_of, work_seconds, format_worker_balance, median_sec_per_merge };
+module.exports = { build_distribution, format_distribution, in_size_range, mulberry32, sample, get_distribution, resolve_env, normalize_env, get_dataset_stamp, plan_batches, summarize, format_selection, fmt_hms, active_worker_count, worker_of, work_seconds, format_worker_balance, median_sec_per_merge, select_targets, queue_and_approve, report_job, report_run };
 
 if (require.main === module) main().catch((e) => { console.error('FAILED: ' + e.message); process.exit(1); });

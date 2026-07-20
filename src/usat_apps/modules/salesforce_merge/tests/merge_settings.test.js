@@ -47,7 +47,7 @@ test('coerce validates + clamps admin input', () => {
 
 test('get_all returns value+source+def for every key (incl. apex cap)', async () => {
   const all = await S.get_all(async () => null);
-  assert.deepStrictEqual(Object.keys(all).sort(), ['apex_stop_enabled', 'apex_stop_threshold', 'chunk_size', 'max_batch', 'parallel_enabled', 'worker_target']);
+  assert.deepStrictEqual(Object.keys(all).sort(), ['apex_settle_sec', 'apex_stop_enabled', 'apex_stop_threshold', 'chunk_size', 'max_batch', 'parallel_enabled', 'worker_target']);
   assert.ok('value' in all.chunk_size && 'source' in all.chunk_size && 'def' in all.chunk_size);
 });
 

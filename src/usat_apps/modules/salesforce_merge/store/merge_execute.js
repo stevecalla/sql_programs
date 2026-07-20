@@ -163,6 +163,17 @@ async function runQueue(ids, opts = {}, deps = {}) {
   let apiStartLogged = false;
   let stampPresent = null; // which of the 3 stamp fields exist on Account (describe once, reuse per run)
 
+  // Async-Apex circuit breaker (parallel workers): if this run belongs to a fanned-out JOB and the org's
+  // async-Apex usage has reached the configurable cap, PAUSE the whole job (hold queued siblings, stop
+  // this run at the next set boundary) so a big parallel burn can't blow the daily limit. Best-effort +
+  // resumable — never throws, never fails a merge; only ever ADDS a pause.
+  const msettings_store = require('./merge_settings_store');
+  const msettings = require('./merge_settings');
+  let jobId = opts.job_id || null;
+  try { if (!jobId && opts.run_id) { const jr = await RUN.get(runId); jobId = jr && jr.job_id ? jr.job_id : null; } } catch (e) { /* best-effort */ }
+  let apexCap = null;
+  try { if (jobId) { const en = await msettings_store.get('apex_stop_enabled'); apexCap = en ? await msettings_store.get('apex_stop_threshold') : null; } } catch (e) { apexCap = null; }
+
   for (let si = 0; si < entries.length; si += 1) {
     // Cooperative cancel: a Stop request flags this run id; we honor it at the SET boundary so every
     // set is left whole (finished sets stay done/skipped/failed; remaining sets stay approved).
@@ -171,6 +182,18 @@ async function runQueue(ids, opts = {}, deps = {}) {
       out.remaining = entries.length - si;
       log('run ' + runId + ' STOP requested — halting before set ' + (si + 1) + ' of ' + entries.length);
       break;
+    }
+    // Async-Apex breaker: once a connection exists (execute), pause the whole job if usage hit the cap.
+    if (apexCap && conn && jobId) {
+      try {
+        const u = await APIUSE.usage_all(conn);
+        if (u && u.apex && msettings.apex_should_pause(u.apex.used, { enabled: true, threshold: apexCap })) {
+          log('run ' + runId + ' PAUSING job ' + jobId + ' — async Apex ' + u.apex.used + ' >= cap ' + apexCap);
+          await RUN.hold_job(jobId, 'async Apex cap reached (' + u.apex.used + ' >= ' + apexCap + ')').catch(() => {});
+          out.paused = true; out.remaining = entries.length - si;
+          break;
+        }
+      } catch (e2) { /* best-effort — never block the merge */ }
     }
     const e = entries[si];
     out.processed += 1;
@@ -339,13 +362,40 @@ async function runQueue(ids, opts = {}, deps = {}) {
   }
 
   const stopped = out.cancelled === true;
-  const finalStatus = stopped ? 'cancelled' : 'done';
+  // A run paused by the async-Apex breaker finishes as 'held' so the job shows 'paused' and Resume can
+  // re-queue it (already-merged sets drop out via the drift check).
+  const finalStatus = out.paused ? 'held' : (stopped ? 'cancelled' : 'done');
   const driftLabel = out.drift ? ' · ⚠ ' + out.drift + ' set(s) had field drift since staging' : '';
-  const finalLabel = (stopped
-    ? 'Stopped — ' + completedSets + ' of ' + entries.length + ' set(s) processed'
-    : 'Complete') + driftLabel;
+  const finalLabel = (out.paused
+    ? 'Paused (async Apex cap) — ' + completedSets + ' of ' + entries.length + ' set(s) done, ' + (out.remaining || 0) + ' left'
+    : stopped
+      ? 'Stopped — ' + completedSets + ' of ' + entries.length + ' set(s) processed'
+      : 'Complete') + driftLabel;
   log('run ' + runId + (stopped ? ' STOPPED' : ' complete') + ': done=' + out.done + ' simulated=' + out.simulated + ' skipped=' + out.skipped + ' failed=' + out.failed + (stopped ? ' (remaining ' + (out.remaining || 0) + ')' : ''));
   try { const uEnd = await APIUSE.usage_all(conn); if (uEnd && uEnd.api) APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy, used: uEnd.api.used, max: uEnd.api.max, apex_used: uEnd.apex && uEnd.apex.used, apex_max: uEnd.apex && uEnd.apex.max, bulk_used: uEnd.bulk && uEnd.bulk.used, bulk_max: uEnd.bulk && uEnd.bulk.max }); } catch (e) { /* fire-and-forget */ }
+  // Async-Apex SETTLE re-read: async rollups fire AFTER the merge commits, so the end snapshot above reads
+  // ~0. Schedule one delayed re-read (own connection) so the recorded apex_used reflects the fired jobs and
+  // run_cost's apex delta becomes real. Best-effort: never throws, unref'd so it can't hold the process.
+  if (out.done > 0) {
+    try {
+      const settle = await msettings_store.get('apex_settle_sec');
+      if (settle > 0) {
+        const timer = setTimeout(() => { (async () => {
+          try {
+            const c2 = await W.default_write_connect(is_test);
+            const u = await APIUSE.usage_all(c2);
+            if (u && u.apex && u.apex.used != null) {
+              APIUSE.record({ env: env, org_id: ctxOrg, op: 'merge', run_id: runId, actor: createdBy,
+                used: u.api && u.api.used, max: u.api && u.api.max, apex_used: u.apex.used, apex_max: u.apex.max,
+                bulk_used: u.bulk && u.bulk.used, bulk_max: u.bulk && u.bulk.max });
+              log('run ' + runId + ' apex settle re-read: DailyAsyncApexExecutions ' + u.apex.used);
+            }
+          } catch (e2) { /* best-effort */ }
+        })(); }, settle * 1000);
+        if (timer.unref) timer.unref();
+      }
+    } catch (e) { /* best-effort */ }
+  }
   await RUN.finish(runId, { status: finalStatus, completed_ops: completedOps, completed_sets: completedSets, current_label: finalLabel });
   CTRL.clear(runId);
   return out;

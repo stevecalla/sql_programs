@@ -19,6 +19,20 @@ export async function awaitRun(api, kind, runId, onTick) {
   return null;
 }
 
+// Phase 4: a JOB is N parallel chunk-runs sharing a job_id. Poll the aggregate job progress until it's
+// no longer 'running' (done/error/cancelled — or 'paused' by the async-Apex breaker, which is a stop
+// point where the user resumes). onTick gets the aggregate each poll.
+export async function awaitJob(api, jobId, onTick) {
+  for (let i = 0; i < 5400; i += 1) {                 // ~1.5h safety cap
+    await new Promise((r) => setTimeout(r, 1000));
+    let job = null;
+    try { job = (await api.mergeJobProgress(jobId)).job; } catch (e) { /* transient */ }
+    if (job && onTick) onTick(job);
+    if (job && job.status && job.status !== 'running') return job;   // done/error/cancelled/paused
+  }
+  return null;
+}
+
 export function summarize(run) {
   if (!run) return { run_id: null, mode: null };
   if (run.result) { try { return JSON.parse(run.result); } catch (e) { /* fall through */ } }

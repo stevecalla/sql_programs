@@ -169,14 +169,22 @@ async function job_progress(jobId, query = real_query) {
   const status = (anyHeld && !anyQueued) ? 'paused'
     : (anyRunning || anyQueued) ? 'running'
     : (anyError ? 'error' : (anyCancelled ? 'cancelled' : 'done'));
+  // Total wall time across the whole job (accounts for parallelism): earliest start → latest finish among
+  // the chunk-runs. Both are DB DATETIMEs so the delta is tz-consistent. Grows as batches finish; final
+  // when the job is terminal.
+  const ms = (v) => (v ? new Date(v).getTime() : 0);
+  const starts = runs.map((r) => ms(r.claimed_at || r.started_at)).filter(Boolean);
+  const ends = runs.map((r) => ms(r.finished_at)).filter(Boolean);
+  const total_seconds = (starts.length && ends.length) ? Math.max(0, Math.round((Math.max(...ends) - Math.min(...starts)) / 1000)) : null;
   return {
     job_id: String(jobId), kind: runs[0].kind, mode: runs[0].mode, status,
     runs_total: runs.length, runs_done, runs_held, workers_active: workers,
     total_sets: sum('total_sets'), completed_sets: sum('completed_sets'),
     total_ops: sum('total_ops'), completed_ops: sum('completed_ops'),
-    started_at: runs[0].started_at,
+    started_at: runs[0].started_at, total_seconds,
     runs: runs.map((r) => ({ run_id: r.run_id, batch_index: r.batch_index, batch_total: r.batch_total, status: r.status,
-      completed_sets: r.completed_sets, total_sets: r.total_sets, worker: String(r.claimed_by || '').split('-')[0] || null, current_label: r.current_label })),
+      completed_sets: r.completed_sets, total_sets: r.total_sets, worker: String(r.claimed_by || '').split('-')[0] || null, current_label: r.current_label,
+      seconds: (r.claimed_at && r.finished_at) ? Math.max(0, Math.round((new Date(r.finished_at).getTime() - new Date(r.claimed_at).getTime()) / 1000)) : null })),
   };
 }
 

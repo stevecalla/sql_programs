@@ -27,6 +27,10 @@ const SPEC = {
   // headroom under the 250k daily cap. Editable live in the Merge Ops panel.
   apex_stop_enabled: { env: 'MERGE_APEX_STOP', def: true, kind: 'bool', coerce: (v, d) => bool(v, d) },
   apex_stop_threshold: { env: 'MERGE_APEX_STOP_AT', def: 200000, kind: 'int', lo: 1000, hi: 250000, coerce: (v, d) => clampInt(v, 1000, 250000, d) },
+  // Async Apex fires AFTER a merge commits (rollups queue as async jobs), so a snapshot taken right at run
+  // end reads ~0 delta. This is how long (seconds) to wait after a run before re-reading usage, so the
+  // recorded Apex reflects the fired rollups. 0 disables the settle re-read. Best-effort.
+  apex_settle_sec: { env: 'MERGE_APEX_SETTLE_SEC', def: 90, kind: 'int', lo: 0, hi: 600, coerce: (v, d) => clampInt(v, 0, 600, d) },
 };
 
 // Circuit-breaker decision (pure): should a job PAUSE now given the current DailyAsyncApexExecutions

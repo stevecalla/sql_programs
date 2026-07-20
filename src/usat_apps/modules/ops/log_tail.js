@@ -15,7 +15,9 @@ const POLL_MS = 1200;
 const DISCOVER_MS = 5000;
 const BACKFILL_ONE = 60;
 const BACKFILL_ALL = 8;
-const TAIL_BYTES = 64 * 1024;
+const BACKFILL_MAX = 5000;         // hard cap on requested backfill
+const TAIL_BYTES = 64 * 1024;      // live-poll read window
+const BACKFILL_BYTES = 2 * 1024 * 1024;   // bigger window for the initial backfill (enough for thousands of lines)
 
 const subs = new Set();
 const files = {};
@@ -40,23 +42,25 @@ function jlist(cb) {
 function send(res, event, data) { try { res.write('event: ' + event + '\n'); res.write('data: ' + JSON.stringify(data) + '\n\n'); } catch (e) { /* client gone */ } }
 function stripAnsi(s) { return String(s).replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\][^\x07]*\x07/g, ''); }
 
-function emit(name, level, text) {
+function emit(name, level, text, id) {
   stripAnsi(text).split(/\r?\n/).forEach(function (line) {
     if (line === '') return;
-    const evt = { at: new Date().toISOString(), level: level, name: name, line: line };
+    const evt = { at: new Date().toISOString(), level: level, name: name, line: line, id: id };  // id = pm2 instance (cluster worker number)
     subs.forEach(function (s) { if (!s.name || s.name === name) send(s.res, 'line', evt); });
   });
 }
 
-function readTailBytes(fp) {
+function readTailBytes(fp, window) {
   try {
-    const st = fs.statSync(fp); const start = Math.max(0, st.size - TAIL_BYTES); const len = st.size - start;
+    const win = window || TAIL_BYTES;
+    const st = fs.statSync(fp); const start = Math.max(0, st.size - win); const len = st.size - start;
     if (len <= 0) return '';
     const fd = fs.openSync(fp, 'r'); const b = Buffer.alloc(len); fs.readSync(fd, b, 0, len, start); fs.closeSync(fd);
     return b.toString('utf8');
   } catch (e) { return ''; }
 }
-function tailLines(fp, n) { const lines = stripAnsi(readTailBytes(fp)).split(/\r?\n/).filter(Boolean); return lines.slice(-n); }
+// Read enough of the tail to yield ~n lines (bigger window for larger n).
+function tailLines(fp, n) { const lines = stripAnsi(readTailBytes(fp, BACKFILL_BYTES)).split(/\r?\n/).filter(Boolean); return lines.slice(-n); }
 
 function discover() {
   jlist(function (err, list) {
@@ -66,8 +70,8 @@ function discover() {
       const env = p.pm2_env || {};
       [['info', env.pm_out_log_path], ['error', env.pm_err_log_path]].forEach(function (pair) {
         const level = pair[0], fp = pair[1]; if (!fp) return; seen[fp] = 1;
-        if (!files[fp]) { let size = 0; try { size = fs.statSync(fp).size; } catch (e) { /* noop */ } files[fp] = { name: p.name, level: level, size: size }; }
-        else files[fp].name = p.name;
+        if (!files[fp]) { let size = 0; try { size = fs.statSync(fp).size; } catch (e) { /* noop */ } files[fp] = { name: p.name, level: level, size: size, id: p.pm_id }; }
+        else { files[fp].name = p.name; files[fp].id = p.pm_id; }
       });
     });
     Object.keys(files).forEach(function (fp) { if (!seen[fp]) delete files[fp]; });
@@ -85,7 +89,7 @@ function poll() {
         const from = Math.max(start, end - TAIL_BYTES);
         let buf = ''; const stream = fs.createReadStream(fp, { start: from, end: end - 1, encoding: 'utf8' });
         stream.on('data', function (d) { buf += d; });
-        stream.on('end', function () { if (buf) emit(f.name, f.level, buf); });
+        stream.on('end', function () { if (buf) emit(f.name, f.level, buf, f.id); });
         stream.on('error', function () { /* noop */ });
       }
     });
@@ -99,15 +103,19 @@ function ensureStarted() {
   setInterval(poll, POLL_MS);
 }
 
-function subscribe(res, name) {
+function subscribe(res, name, backfill) {
   ensureStarted();
+  // How many history lines to send up front: explicit request (clamped) or the per-mode default.
+  let want = parseInt(backfill, 10);
+  if (!Number.isFinite(want) || want <= 0) want = name ? BACKFILL_ONE : BACKFILL_ALL;
+  want = Math.min(want, BACKFILL_MAX);
   jlist(function (err, list) {
     (list || []).forEach(function (p) {
       if (name && p.name !== name) return;
       const env = p.pm2_env || {};
       const fp = env.pm_out_log_path; if (!fp) return;
-      tailLines(fp, name ? BACKFILL_ONE : BACKFILL_ALL).forEach(function (line) {
-        send(res, 'line', { at: new Date().toISOString(), level: 'info', name: p.name, line: line });
+      tailLines(fp, want).forEach(function (line) {
+        send(res, 'line', { at: new Date().toISOString(), level: 'info', name: p.name, line: line, id: p.pm_id });
       });
     });
   });
