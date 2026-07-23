@@ -5,6 +5,9 @@
 
 function s(v) { return String(v == null ? '' : v).trim(); }
 
+// Upper bound on holders per submission — a huge/erroneous list would hold a browser slot for hours.
+const MAX_HOLDERS = Math.max(1, Number(process.env.EVENT_COI_MAX_HOLDERS) || 1000);
+
 function validateRequest(req) {
   req = req || {};
   const event = req.event || {};
@@ -20,6 +23,7 @@ function validateRequest(req) {
   if (!s(requestor.email)) problems.push('Your Email Address');
   else if (!/.+@.+\..+/.test(s(requestor.email))) problems.push('a valid requestor email');
   if (!holders.length) problems.push('at least one holder');
+  else if (holders.length > MAX_HOLDERS) problems.push('too many holders (' + holders.length + ') — the maximum per submission is ' + MAX_HOLDERS);
 
   const mn = holders.filter((h) => !s(h.name)).length;
   const me = holders.filter((h) => !s(h.email)).length;

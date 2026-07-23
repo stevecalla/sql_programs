@@ -19,6 +19,11 @@ const waiting = [];          // runIds queued for a free slot (FIFO)
 let _seq = 0;
 
 const MAX_CONCURRENT = Math.max(1, Number(process.env.EVENT_COI_MAX_CONCURRENT) || 5);
+// A run paused at the human approval gate keeps its browser slot. Auto-expire it after this long with no
+// decision so an abandoned review-mode run can't deadlock the queue. 0 disables. Default 20 minutes.
+const APPROVAL_TIMEOUT_MS = Math.max(0, Number(process.env.EVENT_COI_APPROVAL_TIMEOUT_MS) || 20 * 60 * 1000);
+// Window in which an identical batch from the same user is treated as an accidental duplicate submit.
+const DUP_WINDOW_MS = Math.max(0, Number(process.env.EVENT_COI_DUP_WINDOW_MS) || 60 * 1000);
 
 // Statuses that occupy a browser slot (i.e. count against MAX_CONCURRENT).
 const ACTIVE = ['launching', 'login', 'running', 'awaiting_approval', 'submitting'];
@@ -72,17 +77,31 @@ function decide(id, decision) {
     run.stopRequested = true;
     // A queued run never launched — just mark it stopped and pull it from the line.
     if (run.status === 'queued') { dropFromQueue(id); run.status = 'stopped'; emit(run, 'done', { status: 'stopped', results: run.results }); emitQueuePositions(); return { ok: true }; }
-    if (run.gate) { const g = run.gate; run.gate = null; g('stop'); }
+    if (run.gate) { const g = run.gate; run.gate = null; clearGateTimer(run); g('stop'); }
     // Force the browser closed so the server-side job halts immediately, even if wedged mid Playwright op.
     try { if (run.session && run.driver) run.driver.close(run.session); } catch (_) { /* already gone */ }
     return { ok: true };
   }
-  if (run.gate) { const g = run.gate; run.gate = null; g(decision); return { ok: true }; }
+  if (run.gate) { const g = run.gate; run.gate = null; clearGateTimer(run); g(decision); return { ok: true }; }
   // Not currently paused (e.g. during auto/submit) — flag it so the loop exits at the next check.
   return { ok: true, note: 'no active gate' };
 }
 
-function waitForGate(run) { return new Promise((resolve) => { run.gate = resolve; }); }
+function clearGateTimer(run) { if (run && run.gateTimer) { try { clearTimeout(run.gateTimer); } catch (_) { /* ignore */ } run.gateTimer = null; } }
+
+// Wait for the human approval decision. If APPROVAL_TIMEOUT_MS passes with no decision, resolve with
+// 'expired' so the loop stops the run and frees its slot instead of holding the browser open forever.
+function waitForGate(run) {
+  return new Promise((resolve) => {
+    run.gate = resolve;
+    if (APPROVAL_TIMEOUT_MS > 0) {
+      run.gateTimer = setTimeout(function () {
+        if (run.gate === resolve) { run.gate = null; run.gateTimer = null; run.expired = true; resolve('expired'); }
+      }, APPROVAL_TIMEOUT_MS);
+      if (run.gateTimer && run.gateTimer.unref) run.gateTimer.unref();
+    }
+  });
+}
 
 async function loop(run, driver) {
   let session;
@@ -113,6 +132,7 @@ async function loop(run, driver) {
         emit(run, 'awaiting', { index: run.index, total: run.total, name: holder.name });
         decision = await waitForGate(run);
       }
+      if (decision === 'expired') { run.expired = true; run.stopRequested = true; emit(run, 'status', { status: 'expired', reason: 'approval timeout' }); break; }
       if (decision === 'stop' || run.stopRequested) { run.stopRequested = true; break; }
       if (decision === 'skip') {
         const rec = { index: run.index, name: holder.name, status: 'skipped', error: null, at: Date.now() };
@@ -127,8 +147,8 @@ async function loop(run, driver) {
       emit(run, 'result', Object.assign({}, rec, { confirmShot: r.confirmShot || null }));
     }
 
-    run.status = run.stopRequested ? 'stopped' : 'done';
-    emit(run, 'done', { status: run.status, results: run.results });
+    run.status = run.expired ? 'expired' : (run.stopRequested ? 'stopped' : 'done');
+    emit(run, 'done', Object.assign({ status: run.status, results: run.results }, run.expired ? { reason: 'approval timeout' } : {}));
   } catch (e) {
     run.status = 'error';
     let shot = null; try { if (session) shot = await driver.screenshot(session); } catch (_) { /* ignore */ }
@@ -156,7 +176,8 @@ function start(batch, opts) {
     autoAll: opts.mode === 'auto',
     headless: opts.headless !== false,
     driver, session: null,
-    results: [], subscribers: new Set(), gate: null, stopRequested: false, current: null, last: null,
+    results: [], subscribers: new Set(), gate: null, gateTimer: null, stopRequested: false, expired: false, current: null, last: null,
+    owner: opts.owner || null, fingerprint: opts.fingerprint || null,
     startedAt: Date.now(),
   };
   runs.set(run.id, run);
@@ -175,7 +196,7 @@ async function abort(id) {
   if (!run) return { ok: true, note: 'no active run' };
   run.stopRequested = true;
   dropFromQueue(run.id);
-  if (run.gate) { const g = run.gate; run.gate = null; g('stop'); }
+  if (run.gate) { const g = run.gate; run.gate = null; clearGateTimer(run); g('stop'); }
   try { if (run.session && run.driver) await run.driver.close(run.session); } catch (_) { /* already gone */ }
   if (['starting', 'queued'].concat(ACTIVE).includes(run.status)) run.status = 'stopped';
   runs.delete(run.id);
@@ -196,7 +217,33 @@ function subscribe(id, res) {
 }
 function unsubscribe(id, res) { const run = runs.get(id); if (run) run.subscribers.delete(res); }
 
+// Duplicate-submission guards, used by the API layer only (the stress test calls start() directly and
+// so is never blocked). ownerActiveRun: does this user already have a run in flight or queued?
+function ownerActiveRun(owner) {
+  if (!owner) return null;
+  for (const r of runs.values()) if (r.owner === owner && ['queued'].concat(ACTIVE).includes(r.status)) return r;
+  return null;
+}
+function fingerprint(owner, batch) {
+  const e = (batch && batch.event) || {};
+  const hs = (batch && batch.holders) || [];
+  const first = hs[0] || {}, last = hs[hs.length - 1] || {};
+  return [owner || '', String(e.sanctionId || ''), String(e.eventName || ''), hs.length, String(first.email || first.name || ''), String(last.email || last.name || '')].join('|');
+}
+// Blocked if the user has a run in flight/queued, or an identical batch was started within DUP_WINDOW_MS
+// and didn't already stop/fail/expire (a failed run should be freely retryable).
+function duplicateGuard(owner, fp) {
+  const active = ownerActiveRun(owner);
+  if (active) return { blocked: true, reason: 'You already have a submission run in progress or queued. Wait for it to finish, or reset it, before starting another.', runId: active.id };
+  for (const r of runs.values()) {
+    if (r.fingerprint && r.fingerprint === fp && (Date.now() - r.startedAt) < DUP_WINDOW_MS && !['stopped', 'error', 'expired'].includes(r.status)) {
+      return { blocked: true, reason: 'This looks like a duplicate of a run you just started. If it was intentional, wait a moment and try again.', runId: r.id };
+    }
+  }
+  return { blocked: false };
+}
+
 // Introspection for the API/tests.
 function stats() { return { max: MAX_CONCURRENT, running: runningCount(), queued: waiting.length }; }
 
-module.exports = { start, decide, subscribe, unsubscribe, get, activeRun, abort, stats, MAX_CONCURRENT };
+module.exports = { start, decide, subscribe, unsubscribe, get, activeRun, abort, stats, fingerprint, duplicateGuard, ownerActiveRun, MAX_CONCURRENT, APPROVAL_TIMEOUT_MS };
