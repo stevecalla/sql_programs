@@ -88,6 +88,15 @@
 /* Complete-reset button: pushed to the far right of the defaults row, styled as a destructive action. */
 .coi-reset { margin-left: auto; border-color: #e4002b; color: #e4002b; }
 .coi-reset:hover { background: #e4002b; color: #fff; }
+
+/* Prominent upload dropzone above the step cards (mirrors the merge/race-results drop area). */
+.coi-drop { margin-top: 14px; border: 2px dashed var(--line); border-radius: 12px; padding: 30px 20px; text-align: center; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.coi-drop:hover, .coi-drop-over { border-color: #e4002b; background: rgba(228, 0, 43, 0.06); }
+.coi-drop-icon { width: 46px; height: 46px; border-radius: 50%; background: #e4002b; color: #fff; font-size: 22px; line-height: 46px; margin: 0 auto 14px; }
+.coi-drop-title { font-weight: 700; margin-bottom: 4px; }
+.coi-drop-sub { color: var(--dim); font-size: 13px; margin-bottom: 16px; }
+.coi-drop-actions { display: inline-flex; gap: 8px; justify-content: center; }
+.coi-drop-note { margin-top: 12px; }
 /* collapsible-card title row: badge + title + subtext, evenly spaced (the card wraps these in one span) */
 .coi-cardhead { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .coi-cardtitle { font-size: 16px; }
