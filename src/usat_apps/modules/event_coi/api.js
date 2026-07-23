@@ -38,9 +38,16 @@ function mount(app) {
     const batch = { event: b.event || {}, requestor: b.requestor || {}, options: b.options || {}, holders: Array.isArray(b.holders) ? b.holders : [] };
     const v = validateRequest(batch);
     if (!v.ok) return res.status(400).json({ ok: false, error: 'incomplete request', problems: v.problems });
-    if (run_control.activeRun()) return res.status(409).json({ ok: false, error: 'a submission run is already in progress' });
+    // Runs are no longer one-at-a-time: up to EVENT_COI_MAX_CONCURRENT execute together, each isolated
+    // in its own browser. Past the cap a run is queued and launches automatically when a slot frees.
     const run = run_control.start(batch, { mode: b.mode === 'auto' ? 'auto' : 'review', headless: !b.headed });
-    res.json({ ok: true, runId: run.id, total: run.total });
+    const queued = run.status === 'queued';
+    res.json({ ok: true, runId: run.id, total: run.total, queued: queued, stats: run_control.stats() });
+  });
+
+  // Server capacity snapshot (max concurrent, currently running, queued) — for the UI's status line.
+  app.get('/api/event-coi/run/stats', gate, function (req, res) {
+    res.json({ ok: true, stats: run_control.stats() });
   });
 
   // SSE progress stream. ?runId=...

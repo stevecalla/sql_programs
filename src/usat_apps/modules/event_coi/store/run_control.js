@@ -1,13 +1,27 @@
 'use strict';
-// run_control.js — in-memory submission run for the event_coi module (one active run at a time, like
-// reporting's refresh_runner). Keeps ONE logged-in Chromium session and loops the holders: open form →
-// fill → screenshot → (pause for approval unless auto) → submit → record → next. Progress + screenshots
-// stream to SSE subscribers. The browser work is delegated to a `driver` (store/portal_driver by
-// default) so the loop is unit-testable with a fake driver — no browser needed.
-const defaultDriver = require('./portal_driver');
+// run_control.js — in-memory submission runs for the event_coi module. Each run keeps its OWN logged-in
+// Chromium session and loops its holders: open form → fill → screenshot → (pause for approval unless
+// auto) → submit → record → next. Progress + screenshots stream to that run's SSE subscribers. Browser
+// work is delegated to a `driver` (store/portal_driver by default) so the loop is unit-testable with a
+// fake driver — no browser needed.
+//
+// CONCURRENCY: up to EVENT_COI_MAX_CONCURRENT runs execute at once (default 5); each is fully isolated
+// in its own browser session, so multiple users can submit simultaneously. Runs started past the cap
+// are QUEUED (status 'queued' with a position) and launched automatically as slots free. A run that is
+// paused awaiting the human approval gate still holds its slot (its browser is open).
+// Lazily load the real Playwright driver only when a run actually needs it (no driver was injected).
+// Keeps run_control requireable — and unit-testable with a fake driver — without pulling in Chromium.
+let _defaultDriver = null;
+function defaultDriver() { if (!_defaultDriver) _defaultDriver = require('./portal_driver'); return _defaultDriver; }
 
 const runs = new Map();      // runId -> run
+const waiting = [];          // runIds queued for a free slot (FIFO)
 let _seq = 0;
+
+const MAX_CONCURRENT = Math.max(1, Number(process.env.EVENT_COI_MAX_CONCURRENT) || 5);
+
+// Statuses that occupy a browser slot (i.e. count against MAX_CONCURRENT).
+const ACTIVE = ['launching', 'login', 'running', 'awaiting_approval', 'submitting'];
 
 function newId() { _seq += 1; return 'run-' + Date.now() + '-' + _seq; }
 
@@ -18,12 +32,37 @@ function emit(run, type, data) {
   for (const res of run.subscribers) { try { res.write(line); } catch (e) { /* dropped */ } }
 }
 
+function runningCount() { let n = 0; for (const r of runs.values()) if (ACTIVE.includes(r.status)) n += 1; return n; }
+function queuePosition(run) { const i = waiting.indexOf(run.id); return i < 0 ? 0 : i + 1; }
+
+// Tell each still-queued run its (possibly changed) position, so the UI can show "3rd in line" live.
+function emitQueuePositions() {
+  waiting.forEach(function (id) {
+    const r = runs.get(id);
+    if (r && r.status === 'queued') emit(r, 'queued', { status: 'queued', position: queuePosition(r), max: MAX_CONCURRENT });
+  });
+}
+
+// Launch as many queued runs as free slots allow.
+function pump() {
+  while (runningCount() < MAX_CONCURRENT && waiting.length) {
+    const id = waiting.shift();
+    const run = runs.get(id);
+    if (!run || run.status !== 'queued') continue;   // dropped/stopped while waiting
+    loop(run, run.driver);   // fire-and-forget; progress goes out via SSE
+  }
+  emitQueuePositions();
+}
+
 function activeRun() {
-  for (const r of runs.values()) if (['starting', 'launching', 'login', 'running', 'awaiting_approval'].includes(r.status)) return r;
+  for (const r of runs.values()) if (['starting', 'queued'].concat(ACTIVE).includes(r.status)) return r;
   return null;
 }
 
 function get(id) { return runs.get(id); }
+
+// Remove a run id from the waiting queue (used when a queued run is stopped before it launches).
+function dropFromQueue(id) { const i = waiting.indexOf(id); if (i >= 0) waiting.splice(i, 1); }
 
 // Resolve the approval gate. decision: 'approve' | 'skip' | 'approve-all' | 'stop'.
 function decide(id, decision) {
@@ -31,6 +70,8 @@ function decide(id, decision) {
   if (!run) return { ok: false, error: 'no such run' };
   if (decision === 'stop') {
     run.stopRequested = true;
+    // A queued run never launched — just mark it stopped and pull it from the line.
+    if (run.status === 'queued') { dropFromQueue(id); run.status = 'stopped'; emit(run, 'done', { status: 'stopped', results: run.results }); emitQueuePositions(); return { ok: true }; }
     if (run.gate) { const g = run.gate; run.gate = null; g('stop'); }
     // Force the browser closed so the server-side job halts immediately, even if wedged mid Playwright op.
     try { if (run.session && run.driver) run.driver.close(run.session); } catch (_) { /* already gone */ }
@@ -94,6 +135,8 @@ async function loop(run, driver) {
     emit(run, 'error', { error: (e && e.message) || String(e), screenshot: shot, results: run.results });
   } finally {
     try { if (session) await driver.close(session); } catch (_) { /* ignore */ }
+    // A slot just freed — launch the next queued run.
+    pump();
     // Keep the run around briefly so the UI can fetch final results, then drop it. unref() so this
     // timer never keeps the process (or the test runner) alive.
     const cleanup = setTimeout(() => runs.delete(run.id), 5 * 60 * 1000);
@@ -102,11 +145,13 @@ async function loop(run, driver) {
 }
 
 // batch = { event, requestor, options, holders }. opts = { headless, driver, mode }.
+// Always accepted: if the concurrency cap is reached the run is queued and launches automatically when
+// a slot frees. Returns the run; run.status is 'queued' when it didn't start immediately.
 function start(batch, opts) {
   opts = opts || {};
-  const driver = opts.driver || defaultDriver;
+  const driver = opts.driver || defaultDriver();
   const run = {
-    id: newId(), status: 'starting', batch,
+    id: newId(), status: 'queued', batch,
     total: (batch.holders || []).length, index: -1,
     autoAll: opts.mode === 'auto',
     headless: opts.headless !== false,
@@ -115,21 +160,26 @@ function start(batch, opts) {
     startedAt: Date.now(),
   };
   runs.set(run.id, run);
-  loop(run, driver);   // fire-and-forget; progress goes out via SSE
+  waiting.push(run.id);
+  run.queuedAtStart = queuePosition(run) > MAX_CONCURRENT || runningCount() >= MAX_CONCURRENT;
+  pump();   // launches immediately if a slot is free; otherwise it stays queued
   return run;
 }
 
-// Force a run to end and drop it from the registry so the "one active run" guard clears immediately.
-// Used by the Reset button. With no id, aborts whatever run is currently active. Resolving the gate
-// unsticks a run paused for approval; closing the browser unsticks one wedged on a Playwright call.
+// Force a run to end and drop it from the registry so its slot frees immediately. Used by the Reset
+// button. With no id, aborts whatever run is currently active. Resolving the gate unsticks a run paused
+// for approval; closing the browser unsticks one wedged on a Playwright call; a queued run is just
+// pulled from the line.
 async function abort(id) {
   const run = id ? runs.get(id) : activeRun();
   if (!run) return { ok: true, note: 'no active run' };
   run.stopRequested = true;
+  dropFromQueue(run.id);
   if (run.gate) { const g = run.gate; run.gate = null; g('stop'); }
   try { if (run.session && run.driver) await run.driver.close(run.session); } catch (_) { /* already gone */ }
-  if (['starting', 'launching', 'login', 'running', 'awaiting_approval', 'submitting'].includes(run.status)) run.status = 'stopped';
+  if (['starting', 'queued'].concat(ACTIVE).includes(run.status)) run.status = 'stopped';
   runs.delete(run.id);
+  pump();   // a slot may have freed
   return { ok: true };
 }
 
@@ -138,11 +188,15 @@ function subscribe(id, res) {
   const run = runs.get(id);
   if (!run) return false;
   run.subscribers.add(res);
-  const snap = { type: 'snapshot', status: run.status, index: run.index, total: run.total, autoAll: run.autoAll, results: run.results };
+  const snap = { type: 'snapshot', status: run.status, index: run.index, total: run.total, autoAll: run.autoAll, results: run.results, max: MAX_CONCURRENT };
+  if (run.status === 'queued') snap.position = queuePosition(run);
   if (run.current) snap.current = run.current;
   try { res.write('data: ' + JSON.stringify(snap) + '\n\n'); } catch (e) { /* ignore */ }
   return true;
 }
 function unsubscribe(id, res) { const run = runs.get(id); if (run) run.subscribers.delete(res); }
 
-module.exports = { start, decide, subscribe, unsubscribe, get, activeRun, abort };
+// Introspection for the API/tests.
+function stats() { return { max: MAX_CONCURRENT, running: runningCount(), queued: waiting.length }; }
+
+module.exports = { start, decide, subscribe, unsubscribe, get, activeRun, abort, stats, MAX_CONCURRENT };

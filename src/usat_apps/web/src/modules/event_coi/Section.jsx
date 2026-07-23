@@ -7,7 +7,7 @@
 // client CSV/Excel export approach; only the COI form, holder table, and test-fill tool are unique.
 // Portal field-name mapping lives in plans_and_notes/insurance_coi/RECON_portal_form_map.md.
 // Only Holder Name + Holder Email are required by the portal; the coverage/delivery fields are optional.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import CollapsibleCard from '../salesforce_merge/components/CollapsibleCard.jsx'; // shared UI primitive (could move to web/src/components later)
 import HolderTable from './components/HolderTable.jsx';
 import RunPanel, { openFull } from './components/RunPanel.jsx';
@@ -17,8 +17,6 @@ import { makeZip, b64ToBytes } from './lib/zip.js';
 import { TEST_EVENT, TEST_REQUESTOR, TEST_OPTIONS, TEST_HOLDERS } from './lib/testData.js';
 import './event_coi.css';
 
-// Flip to false (or delete the testData import + this block) to hide the test-fill tools for production.
-const SHOW_TEST_TOOLS = true;
 
 const DEFAULTS_KEY = 'usatapps_event_coi_defaults';   // localStorage; Phase 2 can move to a server settings store like merge.
 
@@ -98,6 +96,9 @@ export default function EventCoiSection({ title }) {
   const [fileNote, setFileNote] = useState('');
   const [defaultsNote, setDefaultsNote] = useState('');
   const [runLog, setRunLog] = useState([]);
+  const dropInputRef = useRef(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [cardForce, setCardForce] = useState({ open: false, n: 0 });   // collapse/expand-all signal for the step cards
   const [runPanelKey, setRunPanelKey] = useState(0);   // bump to remount RunPanel (clears its screenshot/results) on a full reset
 
   const setEventField = (k, v) => setEvent((s) => ({ ...s, [k]: v }));
@@ -158,9 +159,6 @@ export default function EventCoiSection({ title }) {
     setEvent(TEST_EVENT); setRequestor(TEST_REQUESTOR); setOpts(TEST_OPTIONS);
     setHolders(TEST_HOLDERS.map((h) => ({ ...h }))); setDefaultEmail(TEST_REQUESTOR.email);
     setFileNote('Filled with test values.');
-  }
-  function clearAll() {
-    setEvent({}); setRequestor({}); setOpts(EMPTY_OPTS); setHolders([]); setDefaultEmail(''); setFileNote('Cleared.');
   }
   // Complete reset: wipe every field the user entered — event, requestor, coverage/delivery, holders,
   // notes, and the submission log — and best-effort clear any lingering server-side run so the next
@@ -252,20 +250,33 @@ export default function EventCoiSection({ title }) {
         <button className="btn" onClick={loadDefaults}>Load defaults</button>
         <button className="btn" onClick={clearDefaults}>Clear defaults</button>
         <span className="muted small">{defaultsNote || 'Saves requestor + coverage/delivery + default email for next time.'}</span>
-        <button className="btn coi-reset" onClick={resetAll} title="Clear everything on the page — event, requestor, coverage/delivery, all holders, and the submission log. Saved defaults are kept.">Complete reset</button>
+        <button className="btn coi-collapse" style={{ marginLeft: 'auto' }} onClick={() => setCardForce((c) => ({ open: !c.open, n: c.n + 1 }))} title="Collapse or expand all step cards">{cardForce.open ? 'Collapse all' : 'Expand all'}</button>
+        <button className="btn coi-reset" style={{ marginLeft: 0 }} onClick={resetAll} title="Clear everything on the page — event, requestor, coverage/delivery, all holders, and the submission log. Saved defaults are kept.">Form reset</button>
       </div>
 
-      {SHOW_TEST_TOOLS && (
-        <div className="coi-testbar">
-          <span className="coi-testbar-label">🧪 Test tools</span>
-          <button className="btn" onClick={fillTestValues}>Fill test values</button>
-          <button className="btn" onClick={clearAll}>Clear values</button>
-          <span className="muted small">Fill populates the form + sample holders; Clear resets everything.</span>
+
+      {/* Prominent dropzone — upload the certificate-holder list up front (parsed on the server, nothing stored). */}
+      <div
+        className={'coi-drop' + (dragOver ? ' coi-drop-over' : '')}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) onFile(f); }}
+        onClick={() => dropInputRef.current && dropInputRef.current.click()}
+        role="button" tabIndex={0}
+      >
+        <input ref={dropInputRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; onFile(f); }} />
+        <div className="coi-drop-icon" aria-hidden="true">&uarr;</div>
+        <div className="coi-drop-title">Drop a certificate-holder .xlsx or .csv file here</div>
+        <div className="coi-drop-sub">or tap to choose &mdash; parsed on the server, nothing is stored</div>
+        <div className="coi-drop-actions">
+          <button type="button" className="btn" onClick={(e) => { e.stopPropagation(); fillTestValues(); }}>&#9654; Try me (fake data)</button>
+          <a className="btn" href={TEMPLATE_URL} download onClick={(e) => e.stopPropagation()}>&darr; Template</a>
         </div>
-      )}
+        {fileNote && <div className="muted small coi-drop-note">{fileNote}</div>}
+      </div>
 
       {/* STEP 1 — Event + Requestor (entered once) */}
-      <CollapsibleCard title={stepTitle('1', 'Event & requestor', 'Entered once — applied to every certificate.')}>
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('1', 'Event & requestor', 'Entered once — applied to every certificate.')}>
         <div className="coi-cols">
           <div>
             <div className="coi-subhead">Event details</div>
@@ -318,7 +329,7 @@ export default function EventCoiSection({ title }) {
       </CollapsibleCard>
 
       {/* STEP 2 — Coverage & delivery (entered once) */}
-      <CollapsibleCard title={stepTitle('2', 'Coverage & delivery', 'Entered once — optional on the portal.')}>
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('2', 'Coverage & delivery', 'Entered once — optional on the portal.')}>
         <div className="coi-optrow">
           <div className="coi-optlabel">Does the Holder require any of the following to be included on the certificate of insurance? <span className="muted small">(Check All That Apply)</span></div>
           <div className="coi-optbody">
@@ -363,9 +374,9 @@ export default function EventCoiSection({ title }) {
       </CollapsibleCard>
 
       {/* STEP 3 — Holders */}
-      <CollapsibleCard title={stepTitle('3', 'Certificate holders', `${holders.length} holder${holders.length === 1 ? '' : 's'} — one certificate each.`)} actions={holderExport}>
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('3', 'Certificate holders', `${holders.length} holder${holders.length === 1 ? '' : 's'} — one certificate each.`)} actions={holderExport}>
         <div className="coi-toolrow">
-          <label className="btn coi-filebtn">Upload CSV<input type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; onFile(f); }} /></label>
+          <label className="btn coi-filebtn">Upload CSV / Excel<input type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; onFile(f); }} /></label>
           <a className="btn" href={TEMPLATE_URL} download>↓ Template</a>
           <button className="btn" onClick={addHolder}>+ Add row</button>
           <span className="coi-defemail">Default holder email
@@ -378,7 +389,7 @@ export default function EventCoiSection({ title }) {
       </CollapsibleCard>
 
       {/* STEP 4 — Review & run (mocked in Phase 1) */}
-      <CollapsibleCard title={stepTitle('4', 'Review & submit')}>
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('4', 'Review & submit')}>
         <dl className="coi-summary">
           <div><dt>Event</dt><dd>{event.eventName || <span className="coi-req">— missing —</span>}{sanctionOk ? ` · Sanction ${event.sanctionId}` : <span className="coi-req"> · Sanction ID must be 6 digits</span>}</dd></div>
           <div><dt>Dates</dt><dd>{event.eventStartDate || '—'} → {event.eventEndDate || '—'}</dd></div>
@@ -389,7 +400,7 @@ export default function EventCoiSection({ title }) {
       </CollapsibleCard>
 
       {/* STEP 5 — Submission log */}
-      <CollapsibleCard
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n}
         title={stepTitle('5', 'Submission log', runLog.length ? `${runLog.length} processed` : 'Each certificate as it is submitted')}
         actions={runLog.length ? (
           <span className="coi-export">
@@ -423,6 +434,7 @@ export default function EventCoiSection({ title }) {
           </div>
         )}
       </CollapsibleCard>
+
     </div>
   );
 }

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 // A .card whose body collapses/expands when the header is clicked. `title` and optional `actions`
 // (e.g. export links) render in the header row; `actions` clicks don't toggle the card.
-export default function CollapsibleCard({ title, actions, defaultOpen = true, children, style }) {
+export default function CollapsibleCard({ title, actions, defaultOpen = true, forceOpen, forceKey, children, style }) {
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => { if (typeof forceOpen === 'boolean') setOpen(forceOpen); }, [forceKey]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="card" style={{ marginTop: 12, ...(style || {}) }}>
       <p style={{ margin: open ? '0 0 8px' : 0, fontWeight: 700, display: 'flex', alignItems: 'baseline', gap: 8 }}>

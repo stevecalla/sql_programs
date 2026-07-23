@@ -70,6 +70,10 @@ const SECTIONS = [
     { id: 9, label: 'Portal dry run (login + fill, NO submit)', desc: 'Headless. Logs in, opens the form, fills one test holder, screenshots each stage to dry_run_screens/ — nothing is submitted.', bin: 'node', args: ['src/usat_apps/modules/event_coi/run_dry.js'], cli: 'node src/usat_apps/modules/event_coi/run_dry.js' },
     { id: 10, label: 'Portal dry run — WATCH (visible browser)', desc: 'Same as 9 but HEADED: opens a visible Chromium so you can watch login → open form → fill happen live. Still NO submit. Leaves the browser open at the end for you to inspect.', bin: 'node', args: ['src/usat_apps/modules/event_coi/run_dry.js'], env: { HEADLESS: '0' }, cli: 'HEADLESS=0 node src/usat_apps/modules/event_coi/run_dry.js' },
   ]},
+  { label: 'STRESS — concurrency (NO submit)', color: RED, items: [
+    { id: 11, label: 'Concurrency stress test (headless)', desc: 'Spins up N real Playwright runs at once (login → open form → fill → screenshot), skipping the Submit click. Prompts for count + holders. Reports per-run timing, peak concurrent browsers, and total wall time. Cap = EVENT_COI_MAX_CONCURRENT.', bin: 'node', args: ['src/usat_apps/modules/event_coi/stress_test.js'], cli: 'node src/usat_apps/modules/event_coi/stress_test.js' },
+    { id: 12, label: 'Concurrency stress test — WATCH', desc: 'Same as 11 but HEADED: opens N visible Chromium windows so you can watch them run in parallel. Still NO submit. Use a small count.', bin: 'node', args: ['src/usat_apps/modules/event_coi/stress_test.js'], env: { HEADLESS: '0' }, cli: 'HEADLESS=0 node src/usat_apps/modules/event_coi/stress_test.js' },
+  ]},
 ];
 
 function render() {
