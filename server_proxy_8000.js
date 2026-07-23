@@ -64,7 +64,12 @@ function host_gate(which) {
   return function (req, res, next) {
     const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0].toLowerCase();
     if (host === wanted || host === 'localhost' || host === '127.0.0.1') return next();
-    return not_found(req, res);
+    // Wrong host for this prefix: don't handle it here — fall through so a later route can. This lets
+    // an api-tagged prefix (e.g. /events) that ALSO exists as an app page (usat_apps SPA route
+    // /events/insurance-coi) reach the '/' catch-all on the app host instead of hard-404ing. The
+    // api backend stays unreachable from the app host because THIS route's proxy mw is skipped; if
+    // nothing else matches, the final not_found() still returns 404.
+    return next();
   };
 }
 
