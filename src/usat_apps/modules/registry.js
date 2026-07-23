@@ -19,11 +19,13 @@
 const participation_maps = require('./participation_maps/module');
 const ops = require('./ops/module');
 const salesforce_merge = require('./salesforce_merge/module');
+const event_coi = require('./event_coi/module');
 
 const MODULES = [
   participation_maps,
   ops,
   salesforce_merge,   // Salesforce merge (walking skeleton; domain code ports in Phase 1-2)
+  event_coi,          // Event / Race Certificate Request builder (Insurance)
   // event_analysis,   // (Phase 5)
 ];
 

@@ -1,0 +1,124 @@
+/* event_coi — only the styles unique to this app. Everything else reuses the platform shell
+   (.page, .card, .btn, table.grid) and the shared design tokens so light/dark just work. */
+
+.coi-card { margin-top: 16px; }
+
+.coi-step { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.coi-step h3 { margin: 0; }
+.coi-step-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 13px; font-weight: 700; flex: 0 0 auto;
+}
+
+.coi-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 760px) { .coi-cols { grid-template-columns: 1fr; } }
+
+.coi-subhead { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; }
+.coi-form { display: flex; flex-direction: column; gap: 8px; }
+.coi-row { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 10px; font-size: 14px; }
+.coi-row > span { color: var(--ink); }
+
+.coi-input {
+  width: 100%; box-sizing: border-box;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 14px;
+}
+.coi-input:focus { outline: none; border-color: var(--accent); }
+.coi-input-warn { border-color: var(--red); background: color-mix(in srgb, var(--red) 6%, var(--card)); }
+
+.coi-req { color: var(--red); }
+
+/* test tools bar — visually distinct so it's obviously removable before production */
+.coi-testbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 14px; padding: 8px 12px; border-radius: 8px;
+  background: var(--accent-soft); border: 1px dashed var(--accent);
+}
+.coi-testbar-label { font-weight: 600; color: var(--accent); }
+
+.coi-toolrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.coi-filebtn { cursor: pointer; }
+.coi-defemail { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-left: auto; }
+.coi-note { margin: 4px 0 10px; }
+
+.coi-tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.coi-table { width: 100%; }
+.coi-table th { white-space: nowrap; }
+.coi-table td { padding: 4px 6px; }
+.coi-rownum { color: var(--muted); text-align: center; }
+.coi-table .coi-input { padding: 5px 7px; font-size: 13px; }
+
+.coi-x { border: none; background: transparent; color: var(--red); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.coi-x:hover { opacity: .7; }
+
+/* search + per-column sort/filter */
+.coi-search { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.coi-search .coi-input { max-width: 300px; }
+.coi-th-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: transparent; border: none; padding: 0; cursor: pointer;
+  color: var(--muted); font: inherit; font-size: 12px; font-weight: 600;
+}
+.coi-th-btn:hover { color: var(--accent); }
+.coi-sortarrow { font-size: 10px; opacity: .8; }
+.coi-filter {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 4px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12px; font-weight: 400;
+}
+.coi-filter:focus { outline: none; border-color: var(--accent); }
+.coi-empty { padding: 16px; text-align: center; color: var(--muted); }
+
+/* coverage & delivery options (entered once) */
+.coi-optrow { display: grid; grid-template-columns: 300px 1fr; gap: 12px 18px; align-items: start; padding: 12px 0; border-top: 1px solid var(--line); }
+.coi-optrow:first-of-type { border-top: none; }
+.coi-optlabel { font-size: 13.5px; color: var(--ink); font-weight: 600; }
+.coi-optbody { display: flex; flex-direction: column; gap: 6px; }
+.coi-checks, .coi-radios { display: flex; flex-direction: column; gap: 6px; }
+.coi-radios { }
+.coi-check { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; color: var(--ink); font-weight: 400; cursor: pointer; }
+.coi-check input { margin-top: 2px; accent-color: var(--accent); flex: 0 0 auto; }
+.coi-optbody .coi-input { max-width: 460px; }
+@media (max-width: 700px) { .coi-optrow { grid-template-columns: 1fr; } }
+
+/* saved-defaults bar, collapsible-card titles, and export links (matching the merge app) */
+.coi-defaults { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+/* collapsible-card title row: badge + title + subtext, evenly spaced (the card wraps these in one span) */
+.coi-cardhead { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.coi-cardtitle { font-size: 16px; }
+.coi-cardsub { font-weight: 400; }
+.coi-date { max-width: 200px; }
+.coi-export { display: inline-flex; align-items: center; gap: 8px; }
+.coi-dl { font-size: 12px; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.coi-dl:hover { color: var(--ink); }
+
+/* submission run panel */
+.coi-run { display: flex; flex-direction: column; gap: 12px; }
+.coi-run-status { font-size: 14px; }
+.coi-run-current { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; background: var(--card); }
+.coi-run-current-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.coi-run-shotwrap { max-height: 520px; overflow-y: auto; overflow-x: hidden; border: 1px solid var(--line); border-radius: 6px; margin-top: 8px; background: var(--card); }
+.coi-run-shot { display: block; width: 100%; }
+.coi-run-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.coi-run-stop { color: var(--red); border-color: var(--red); }
+.coi-run-results { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.coi-run-results table { width: 100%; }
+.coi-run-results td, .coi-run-results th { padding: 6px 10px; white-space: nowrap; }
+
+/* submission-log card (#5) */
+.coi-log-wrap { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.coi-log { width: 100%; }
+.coi-log td, .coi-log th { padding: 6px 10px; white-space: nowrap; }
+
+/* inline "Other → specify" text box next to an Other checkbox/radio (matches the portal form) */
+.coi-otherinput { margin-left: 6px; max-width: 260px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px; padding: 4px 7px; font: inherit; font-size: 13px; }
+.coi-otherinput:focus { outline: none; border-color: var(--accent); }
+
+.coi-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; margin: 4px 0 16px; }
+.coi-summary div { display: flex; flex-direction: column; gap: 2px; }
+.coi-summary dt { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.coi-summary dd { margin: 0; font-size: 14px; color: var(--ink); }
+
+.coi-runrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

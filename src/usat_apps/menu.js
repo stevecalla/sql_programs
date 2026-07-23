@@ -80,8 +80,8 @@ const SECTIONS = [
     { id: 8, label: 'Run all tests', desc: 'Platform (auth, metrics, status) + all module suites — no DB', bin: 'npm', args: ['run', 'usat_apps_test'], cli: 'npm run usat_apps_test' },
     { id: 9, label: 'Participation maps tests', desc: 'Just the participation_maps module (agg, unique) — no DB', bin: 'node', args: ['src/usat_apps/run_tests.js', 'modules/participation_maps'], cli: 'node src/usat_apps/run_tests.js modules/participation_maps' },
     { id: 10, label: 'Salesforce merge — all unit tests', desc: 'Every salesforce_merge suite (api, queue/worker, execute, restore, drift, UAT scenarios) — no DB. Superset of 11.', bin: 'node', args: ['src/usat_apps/run_tests.js', 'modules/salesforce_merge'], cli: 'node src/usat_apps/run_tests.js modules/salesforce_merge' },
-    { id: 11, label: 'Salesforce merge — UAT scenarios (Tier 1)', desc: 'Just the 6 UAT workbook tabs as backend scenario tests (survivorship, drift gate, selective restore, bulk)', bin: 'npm', args: ['run', 'salesforce_merge_uat'], cli: 'npm run salesforce_merge_uat' },
-    { id: 12, label: 'Salesforce merge — UAT + fill workbook', desc: 'Runs the Tier-1 scenarios AND stamps results into a copy of the UAT workbook in the data folder (usat_salesforce_merge_uat/)', bin: 'npm', args: ['run', 'salesforce_merge_uat_fill'], cli: 'npm run salesforce_merge_uat_fill' },
+    { id: 11, label: 'Salesforce merge — UAT scenarios (Tier 1)', desc: 'The UAT workbook tabs as backend scenario tests — survivorship, drift gate, selective restore, bulk, plus parallel fan-out, job-history aggregation, and the API/Apex caps + batch limits', bin: 'npm', args: ['run', 'salesforce_merge_uat'], cli: 'npm run salesforce_merge_uat' },
+    { id: 12, label: 'Salesforce merge — UAT + fill workbook', desc: 'Runs the Tier-1 scenarios AND stamps PASS/FAIL into a copy of the UAT workbook (all mapped tabs) in the data folder (usat_salesforce_merge_uat/)', bin: 'npm', args: ['run', 'salesforce_merge_uat_fill'], cli: 'npm run salesforce_merge_uat_fill' },
   ]},
   { label: 'TESTS — integration & browser (needs DB / worker / chromium)', color: CYAN, items: [
     { id: 13, label: 'Salesforce merge — worker smoke test', desc: 'enqueue → claim → run → done → result parity. No UI / Salesforce / writes (~5s). Needs the DB.', bin: 'npm', args: ['run', 'salesforce_merge_worker_smoke'], cli: 'npm run salesforce_merge_worker_smoke' },
@@ -114,6 +114,7 @@ const SECTIONS = [
   { label: 'MODULES', color: CYAN, items: [
     { id: 33, label: 'Participation maps — data pipeline & ops →', desc: 'Rebuild region/zip/census/summary data, BigQuery load, build scope (opens the module menu)', bin: 'node', args: ['src/usat_apps/modules/participation_maps/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/participation_maps/menu.js' },
     { id: 34, label: 'Salesforce merge — worker & ops →', desc: 'Start/stop the :8021 write worker, DB migrations, status/opens (the merge tests all live on the main menu above)', bin: 'node', args: ['src/usat_apps/modules/salesforce_merge/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/salesforce_merge/menu.js' },
+    { id: 35, label: 'Event COI — Race Certificate Request builder →', desc: 'Dev/build/open the Event COI page, run the module tests, and the Playwright dry run (login → fill, no submit). event_coi tests also run in “Run all tests” above (option 8).', bin: 'node', args: ['src/usat_apps/modules/event_coi/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/event_coi/menu.js' },
   ]},
 ];
 const ALL = SECTIONS.flatMap((s) => s.items);

@@ -20,6 +20,7 @@ const SCOPES = [
   { key: 'all', label: 'All panels' },
   { key: 'participation-maps', label: 'Participation maps' },
   { key: 'merge', label: 'Salesforce merge' },
+  { key: 'event-coi', label: 'Insurance COI' },
 ];
 
 function Card({ k, v, s }) {

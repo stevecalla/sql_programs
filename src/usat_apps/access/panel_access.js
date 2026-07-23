@@ -19,6 +19,7 @@ const CATALOG = [
   { key: 'event-analysis',     label: 'Event analysis',     group: 'Reporting' },
   { key: 'merge',              label: 'Merge',              group: 'Salesforce' },
   { key: 'merge-ops',          label: 'Merge Ops (admin)',  group: 'Salesforce' },
+  { key: 'event-coi',          label: 'Insurance COI',      group: 'Events' },
   { key: 'metrics',            label: 'Usage metrics',      group: null },
   { key: 'merge-metrics',      label: 'SF Merge metrics',    group: null },
   { key: 'admin',              label: 'Users & access',     group: 'Admin' },
