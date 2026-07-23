@@ -85,6 +85,9 @@
 
 /* saved-defaults bar, collapsible-card titles, and export links (matching the merge app) */
 .coi-defaults { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+/* Complete-reset button: pushed to the far right of the defaults row, styled as a destructive action. */
+.coi-reset { margin-left: auto; border-color: #e4002b; color: #e4002b; }
+.coi-reset:hover { background: #e4002b; color: #fff; }
 /* collapsible-card title row: badge + title + subtext, evenly spaced (the card wraps these in one span) */
 .coi-cardhead { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .coi-cardtitle { font-size: 16px; }
