@@ -98,7 +98,7 @@ export default function EventCoiSection({ title }) {
   const [fileNote, setFileNote] = useState('');
   const [defaultsNote, setDefaultsNote] = useState('');
   const [runLog, setRunLog] = useState([]);
-  const [cardForce, setCardForce] = useState({ open: true, n: 0 });   // collapse/expand-all signal for the step cards
+  const [cardForce, setCardForce] = useState({ open: false, n: 0 });   // collapse/expand-all signal for the step cards
   const [runPanelKey, setRunPanelKey] = useState(0);   // bump to remount RunPanel (clears its screenshot/results) on a full reset
 
   const setEventField = (k, v) => setEvent((s) => ({ ...s, [k]: v }));
@@ -253,13 +253,13 @@ export default function EventCoiSection({ title }) {
         <button className="btn" onClick={loadDefaults}>Load defaults</button>
         <button className="btn" onClick={clearDefaults}>Clear defaults</button>
         <span className="muted small">{defaultsNote || 'Saves requestor + coverage/delivery + default email for next time.'}</span>
-        <button className="btn coi-reset" onClick={resetAll} title="Clear everything on the page — event, requestor, coverage/delivery, all holders, and the submission log. Saved defaults are kept.">Form reset</button>
-        <button className="btn coi-collapse" onClick={() => setCardForce((c) => ({ open: !c.open, n: c.n + 1 }))} title="Collapse or expand all step cards">{cardForce.open ? 'Collapse all' : 'Expand all'}</button>
+        <button className="btn coi-collapse" style={{ marginLeft: 'auto' }} onClick={() => setCardForce((c) => ({ open: !c.open, n: c.n + 1 }))} title="Collapse or expand all step cards">{cardForce.open ? 'Collapse all' : 'Expand all'}</button>
+        <button className="btn coi-reset" style={{ marginLeft: 0 }} onClick={resetAll} title="Clear everything on the page — event, requestor, coverage/delivery, all holders, and the submission log. Saved defaults are kept.">Form reset</button>
       </div>
 
 
       {/* STEP 1 — Event + Requestor (entered once) */}
-      <CollapsibleCard forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('1', 'Event & requestor', 'Entered once — applied to every certificate.')}>
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('1', 'Event & requestor', 'Entered once — applied to every certificate.')}>
         <div className="coi-cols">
           <div>
             <div className="coi-subhead">Event details</div>
@@ -312,7 +312,7 @@ export default function EventCoiSection({ title }) {
       </CollapsibleCard>
 
       {/* STEP 2 — Coverage & delivery (entered once) */}
-      <CollapsibleCard forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('2', 'Coverage & delivery', 'Entered once — optional on the portal.')}>
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('2', 'Coverage & delivery', 'Entered once — optional on the portal.')}>
         <div className="coi-optrow">
           <div className="coi-optlabel">Does the Holder require any of the following to be included on the certificate of insurance? <span className="muted small">(Check All That Apply)</span></div>
           <div className="coi-optbody">
@@ -357,7 +357,7 @@ export default function EventCoiSection({ title }) {
       </CollapsibleCard>
 
       {/* STEP 3 — Holders */}
-      <CollapsibleCard forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('3', 'Certificate holders', `${holders.length} holder${holders.length === 1 ? '' : 's'} — one certificate each.`)} actions={holderExport}>
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('3', 'Certificate holders', `${holders.length} holder${holders.length === 1 ? '' : 's'} — one certificate each.`)} actions={holderExport}>
         <div className="coi-toolrow">
           <label className="btn coi-filebtn">Upload CSV<input type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; onFile(f); }} /></label>
           <a className="btn" href={TEMPLATE_URL} download>↓ Template</a>
@@ -372,7 +372,7 @@ export default function EventCoiSection({ title }) {
       </CollapsibleCard>
 
       {/* STEP 4 — Review & run (mocked in Phase 1) */}
-      <CollapsibleCard forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('4', 'Review & submit')}>
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('4', 'Review & submit')}>
         <dl className="coi-summary">
           <div><dt>Event</dt><dd>{event.eventName || <span className="coi-req">— missing —</span>}{sanctionOk ? ` · Sanction ${event.sanctionId}` : <span className="coi-req"> · Sanction ID must be 6 digits</span>}</dd></div>
           <div><dt>Dates</dt><dd>{event.eventStartDate || '—'} → {event.eventEndDate || '—'}</dd></div>
@@ -383,7 +383,7 @@ export default function EventCoiSection({ title }) {
       </CollapsibleCard>
 
       {/* STEP 5 — Submission log */}
-      <CollapsibleCard forceOpen={cardForce.open} forceKey={cardForce.n}
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n}
         title={stepTitle('5', 'Submission log', runLog.length ? `${runLog.length} processed` : 'Each certificate as it is submitted')}
         actions={runLog.length ? (
           <span className="coi-export">
