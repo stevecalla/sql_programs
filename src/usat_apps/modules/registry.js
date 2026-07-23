@@ -42,7 +42,9 @@ function panels() {
 
 // Mount every module's API routes onto the Express app.
 function mount_all(app) {
-  MODULES.forEach(function (m) { if (typeof m.mount === 'function') m.mount(app); });
+  // Skip modules whose API lives in a dedicated server (externalApi:true) — they still contribute
+  // panels above for access control/nav, but their routes are mounted by that server, not here.
+  MODULES.forEach(function (m) { if (!m.externalApi && typeof m.mount === 'function') m.mount(app); });
 }
 
 // Prebuild each module's data caches at server startup (best-effort, non-blocking) so the first request

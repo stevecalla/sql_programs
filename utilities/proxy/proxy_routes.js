@@ -36,6 +36,12 @@ module.exports = {
   // (`npm run reporting_build_proxy`, Vite base '/reporting/'). See src/reporting/plans_and_notes/DEPLOY_AND_PROXY.md.
   // '/reporting':             { target: 'http://127.0.0.1:8021', health: '/api/status', host: 'app' }, legacy version when /reporting existed
 
+  // Event COI (Insurance) — DEDICATED backend (port 8023) that runs the Playwright submission loop,
+  // isolated from usat_apps so a wedged browser can't take the front door down and front-end deploys
+  // don't kill runs. Its server defines full /api/event-coi/* paths, but app.use(prefix) strips the
+  // prefix — so pathRewrite re-adds it. MUST be listed before the '/' catch-all so it matches first.
+  '/api/event-coi':         { target: 'http://127.0.0.1:8023', health: '/api/event-coi/health', host: 'app', pathRewrite: { '^/': '/api/event-coi/' } },
+
   // usat_apps platform (React SPA, port 8022) — the app front door + Ops console. Built at root base '/'.
   // catch all => handles /reporting & /ops; see src\usat_apps\web\src\nav.js
   '/':                      { target: 'http://127.0.0.1:8022', health: '/api/status', host: 'app' },

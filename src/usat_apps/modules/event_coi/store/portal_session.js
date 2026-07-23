@@ -4,10 +4,15 @@
 // (see plans_and_notes/insurance_coi/RECON_portal_form_map.md). Reads process.env (the platform server
 // and the dry-run CLI both load the repo-root .env before requiring this).
 
-const LOGIN_URL = process.env.INSURANCE_PORTAL_URL || 'https://portalv03.csr24.com/mvc/1239375044';
-const FORM_URL = 'https://portalv03.csr24.com/mvc/Portal/Link/461492185'; // 302 -> FormGenerator/Display?FormKey=3
-const USER = () => process.env.INSURANCE_PORTAL_USER || '';
-const PW = () => process.env.INSURANCE_PORTAL_PW || '';
+// Portal config from .env. EVENT_COI_PORTAL_* are the current names; the older INSURANCE_PORTAL_* are
+// kept as a fallback so an un-migrated .env still works. Set the values in the repo-root .env:
+//   EVENT_COI_PORTAL_URL=https://portalv03.csr24.com/mvc/1239375044
+//   EVENT_COI_PORTAL_USER=USATRIATHLON
+//   EVENT_COI_PORTAL_PW=********
+const LOGIN_URL = process.env.EVENT_COI_PORTAL_URL || process.env.INSURANCE_PORTAL_URL || 'https://portalv03.csr24.com/mvc/1239375044';
+const FORM_URL = process.env.EVENT_COI_PORTAL_FORM_URL || 'https://portalv03.csr24.com/mvc/Portal/Link/461492185'; // 302 -> FormGenerator/Display?FormKey=3
+const USER = () => process.env.EVENT_COI_PORTAL_USER || process.env.INSURANCE_PORTAL_USER || '';
+const PW = () => process.env.EVENT_COI_PORTAL_PW || process.env.INSURANCE_PORTAL_PW || '';
 
 // The Chromium launcher — from `playwright` if present, else `@playwright/test` (a devDependency that
 // re-exports it). Chromium itself is installed via `npx playwright install chromium`.
@@ -26,7 +31,7 @@ async function launch({ headless = true } = {}) {
 }
 
 async function login(page) {
-  if (!USER() || !PW()) throw new Error('Missing INSURANCE_PORTAL_USER / INSURANCE_PORTAL_PW in .env');
+  if (!USER() || !PW()) throw new Error('Missing EVENT_COI_PORTAL_USER / EVENT_COI_PORTAL_PW in .env');
   await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded' });
   // Fill by input type (robust regardless of how the labels are associated).
   const pass = page.locator('input[type="password"]').first();
@@ -41,7 +46,7 @@ async function login(page) {
   try {
     await page.waitForURL(/\/mvc\/Portal\/Index/, { timeout: 30000 });
   } catch (e) {
-    throw new Error('Login did not reach the portal home — check INSURANCE_PORTAL_USER / _PW in .env, or the login form changed.');
+    throw new Error('Login did not reach the portal home — check EVENT_COI_PORTAL_USER / _PW in .env, or the login form changed.');
   }
 }
 
@@ -76,16 +81,8 @@ async function fullPageShot(page) {
           el.style.maxHeight = 'none';
         }
       }
-      // Dismiss the portal's field-help tooltips (the "(ie: Name of Park…)" hint bubbles from the "?"
-      // icons). They pop on focus/hover and get caught in the capture at random. Blur the active field
-      // and force-hide anything tooltip-like so it never bleeds into the screenshot.
-      try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (_) { /* ignore */ }
-      const style = document.createElement('style');
-      style.textContent = '[role="tooltip"],.tooltip,.ui-tooltip,.qtip,.popover,.bubble,.tipsy,[class*="tooltip"],[class*="Tooltip"],[id*="tooltip"]{display:none !important;visibility:hidden !important;opacity:0 !important;}';
-      document.documentElement.appendChild(style);
     });
-    await page.mouse.move(0, 0);     // pull the cursor off any "?" so no hover-tooltip re-appears
-    await page.waitForTimeout(250); // let layout settle + tooltips fade
+    await page.waitForTimeout(250); // let layout settle
     const form = page.locator('form').first();
     if (await form.count()) return await form.screenshot();
     return await page.screenshot({ fullPage: true });

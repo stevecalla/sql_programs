@@ -4,14 +4,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api.js';
 
-const RUNNING = ['launching', 'login', 'running', 'awaiting', 'submitting'];
+const RUNNING = ['queued', 'launching', 'login', 'running', 'awaiting', 'submitting'];
 const STATUS_LABEL = {
-  launching: 'Launching browser…', login: 'Signing in to the portal…', running: 'Filling the form…',
-  awaiting: 'Waiting for your review', submitting: 'Submitting…', done: 'Run complete',
-  stopped: 'Run stopped', error: 'Run error',
+  queued: 'Waiting for a free slot…', launching: 'Launching browser…', login: 'Signing in to the portal…',
+  running: 'Filling the form…', awaiting: 'Waiting for your review', submitting: 'Submitting…',
+  done: 'Run complete', stopped: 'Run stopped', error: 'Run error',
 };
 
-const PORTAL_FORM_URL = 'https://portalv03.csr24.com/mvc/Portal/Link/461492185'; // the live Race Certificate form (opens blank)
+// Portal LOGIN page. (The deep Race-Certificate form link 404s when opened without an authenticated
+// CSR24 session, and we can't sign in on the user's behalf — so this lands them on the login page.)
+const PORTAL_FORM_URL = 'https://portalv03.csr24.com/mvc/1239375044';
 
 // Open a base64 screenshot at full size. Chrome blocks navigating a new tab to a data: URL, so convert
 // to a Blob URL (allowed) and open that.
@@ -35,6 +37,7 @@ export default function RunPanel({ request, holders, ready, problems, onLog }) {
   const [results, setResults] = useState([]);
   const [total, setTotal] = useState(0);
   const [autoAll, setAutoAll] = useState(false);
+  const [queuePos, setQueuePos] = useState(0);   // position in the server's run queue while status==='queued'
   const [err, setErr] = useState('');
   const esRef = useRef(null);
   const shotsRef = useRef({});   // index -> filled-form screenshot, so the log can link each job's form
@@ -49,8 +52,9 @@ export default function RunPanel({ request, holders, ready, problems, onLog }) {
     es.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
       switch (m.type) {
-        case 'snapshot': setStatus(m.status); setTotal(m.total); setAutoAll(m.autoAll); setResults((prev) => (prev.length ? prev : (m.results || []))); if (m.current) setCurrent(m.current); break;
-        case 'status': setStatus(m.status); break;
+        case 'snapshot': setStatus(m.status); setTotal(m.total); setAutoAll(m.autoAll); if (m.position) setQueuePos(m.position); setResults((prev) => (prev.length ? prev : (m.results || []))); if (m.current) setCurrent(m.current); break;
+        case 'queued': setStatus('queued'); setQueuePos(m.position || 0); break;
+        case 'status': setStatus(m.status); if (m.status !== 'queued') setQueuePos(0); break;
         case 'stage': setCurrent({ index: null, name: m.label, screenshot: m.screenshot || null }); break;
         case 'holder-start': setStatus('running'); setCurrent({ index: m.index, name: m.name, screenshot: null }); break;
         case 'filled': shotsRef.current[m.index] = m.screenshot; setStatus('running'); setCurrent({ index: m.index, name: m.name, screenshot: m.screenshot }); break;
@@ -69,7 +73,7 @@ export default function RunPanel({ request, holders, ready, problems, onLog }) {
     setErr(''); setResults([]); setCurrent(null); setAutoAll(false);
     const body = { event: request.event, requestor: request.requestor, options: request.options, holders, mode: 'review' };
     const r = await api.coiRunStart(body);
-    if (r.status === 200 && r.body.ok) { setRunId(r.body.runId); setTotal(r.body.total); setStatus('launching'); openStream(r.body.runId); }
+    if (r.status === 200 && r.body.ok) { setRunId(r.body.runId); setTotal(r.body.total); setStatus(r.body.queued ? 'queued' : 'launching'); openStream(r.body.runId); }
     else if (r.status === 400 && r.body.problems) setErr('Complete before submitting: ' + r.body.problems.join(', ') + '.');
     else if (r.status === 409) setErr('A previous run is still active on the server — click “Reset run”, then Start again.');
     else setErr((r.body && r.body.error) || 'could not start the run');
@@ -78,7 +82,7 @@ export default function RunPanel({ request, holders, ready, problems, onLog }) {
     if (esRef.current) esRef.current.close();
     try { await api.coiRunReset(runId || undefined); } catch (e) { /* best-effort */ }
     shotsRef.current = {};
-    setRunId(null); setStatus('idle'); setCurrent(null); setResults([]); setErr(''); setAutoAll(false);
+    setRunId(null); setStatus('idle'); setCurrent(null); setResults([]); setErr(''); setAutoAll(false); setQueuePos(0);
   }
 
   const approve = () => runId && api.coiRunApprove(runId);
@@ -94,7 +98,7 @@ export default function RunPanel({ request, holders, ready, problems, onLog }) {
       <div className="coi-runrow">
         <button className="btn primary" disabled={!ready} onClick={start}>Start submission loop →</button>
         <button className="btn" onClick={reset} title="Clear any submission run in progress on the server">Reset run</button>
-        <a className="coi-dl" href={PORTAL_FORM_URL} target="_blank" rel="noreferrer" title="Open the live portal form in a new tab (opens blank — filling happens on the server)">Open blank portal form ↗</a>
+        <a className="coi-dl" href={PORTAL_FORM_URL} target="_blank" rel="noreferrer" title="Open the CSR24 portal login in a new tab (sign in there to reach the form manually)">Open portal login ↗</a>
         {err
           ? <span className="coi-req small">{err}</span>
           : ready
@@ -108,13 +112,15 @@ export default function RunPanel({ request, holders, ready, problems, onLog }) {
     <div className="coi-run">
       <div className="coi-run-status">
         <strong>{STATUS_LABEL[status] || status}</strong>
-        <span className="muted small"> · {results.length}/{total} processed
-          {counts.submitted ? ` · ${counts.submitted} submitted` : ''}
-          {counts.failed ? ` · ${counts.failed} failed` : ''}
-          {counts.skipped ? ` · ${counts.skipped} skipped` : ''}
-          {autoAll && running ? ' · auto' : ''}
-        </span>
-        <a className="coi-dl" href={PORTAL_FORM_URL} target="_blank" rel="noreferrer" style={{ marginLeft: 8 }} title="Open the live portal form in a new tab (opens blank)">Open blank portal form ↗</a>
+        {status === 'queued'
+          ? <span className="muted small"> · the server is at capacity{queuePos ? ` · #${queuePos} in line` : ''} — your run starts automatically when a slot frees. Keep this open.</span>
+          : <span className="muted small"> · {results.length}/{total} processed
+              {counts.submitted ? ` · ${counts.submitted} submitted` : ''}
+              {counts.failed ? ` · ${counts.failed} failed` : ''}
+              {counts.skipped ? ` · ${counts.skipped} skipped` : ''}
+              {autoAll && running ? ' · auto' : ''}
+            </span>}
+        <a className="coi-dl" href={PORTAL_FORM_URL} target="_blank" rel="noreferrer" style={{ marginLeft: 8 }} title="Open the CSR24 portal login in a new tab">Open portal login ↗</a>
       </div>
       {err && <p className="err">{err}</p>}
 

@@ -154,8 +154,12 @@ function create_app() {
   // so they match first; '/' forwards everything else to usat_apps (:8022).
   for (const [prefix, cfg] of Object.entries(ROUTES)) {
     const target = typeof cfg === 'string' ? cfg : cfg.target;
+    // Optional per-route pathRewrite: `app.use(prefix,…)` strips the prefix before proxying, which is
+    // right for apps built at that base (/merge, …). A route that carries pathRewrite re-adds it so the
+    // backend still sees the full path — used by /api/event-coi, whose server defines /api/event-coi/*.
     const mw = createProxyMiddleware({
       target, changeOrigin: true, ws: true, proxyTimeout: 30000, timeout: 30000,
+      pathRewrite: (cfg && cfg.pathRewrite) || undefined,
       on: {
         proxyReq: (pr, req) => { console.log('[' + log_ts() + '] -> routed ' + prefix + '  ' + req.method + ' ' + req.url + '  to ' + target); },
         proxyRes: (pr, req) => { console.log('[' + log_ts() + '] <- ' + prefix + ' backend responded ' + pr.statusCode); },

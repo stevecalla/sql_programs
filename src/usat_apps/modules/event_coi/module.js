@@ -11,5 +11,10 @@ module.exports = {
   group: 'Events',                 // nav-group label
   panels: [{ key: 'event-coi', label: 'Event COI' }],
   metricsTable: null,              // shares the platform events table (panel_view tracking is automatic)
+  // The COI API + Playwright run in a DEDICATED server (server_event_coi_8023.js), isolated from the
+  // web front door so a wedged browser can't take usat_apps down and front-end deploys don't kill runs.
+  // externalApi:true tells registry.mount_all NOT to mount these routes inside usat_apps; the dedicated
+  // server calls api.mount() itself. The panel above still registers here so access control + nav work.
+  externalApi: true,
   mount: function (app) { api.mount(app); },
 };
