@@ -3,6 +3,7 @@
 // The run itself is headless on the server; the user reviews each certificate as a screenshot here.
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api.js';
+import { holderOptions } from '../lib/coverage.js';
 
 const RUNNING = ['queued', 'launching', 'login', 'running', 'awaiting', 'submitting'];
 const STATUS_LABEL = {
@@ -30,7 +31,7 @@ export function openFull(dataUrl) {
   } catch (e) { window.open(dataUrl, '_blank'); }
 }
 
-export default function RunPanel({ request, holders, ready, problems, onLog }) {
+export default function RunPanel({ request, holders, ready, problems, onLog, coverageMode }) {
   const [runId, setRunId] = useState(null);
   const [status, setStatus] = useState('idle');
   const [current, setCurrent] = useState(null);   // { index, name, screenshot }
@@ -71,7 +72,9 @@ export default function RunPanel({ request, holders, ready, problems, onLog }) {
 
   async function start() {
     setErr(''); setResults([]); setCurrent(null); setAutoAll(false);
-    const body = { event: request.event, requestor: request.requestor, options: request.options, holders, mode: 'review' };
+    // Attach each holder's effective coverage: per-holder columns when in per-holder mode, else the shared Step 2 options.
+    const runHolders = holders.map((h) => ({ ...h, options: coverageMode === 'perHolder' ? holderOptions(h) : request.options }));
+    const body = { event: request.event, requestor: request.requestor, options: request.options, holders: runHolders, mode: 'review' };
     const r = await api.coiRunStart(body);
     if (r.status === 200 && r.body.ok) { setRunId(r.body.runId); setTotal(r.body.total); setStatus(r.body.queued ? 'queued' : 'launching'); openStream(r.body.runId); }
     else if (r.status === 400 && r.body.problems) setErr('Complete before submitting: ' + r.body.problems.join(', ') + '.');

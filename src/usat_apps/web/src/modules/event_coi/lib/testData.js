@@ -39,9 +39,13 @@ export const TEST_OPTIONS = {
 // Invented holders mirroring the MASTER tab shape so the review table renders during Phase-1 UI review.
 // Emails are pre-set to the test address so a test run is submit-ready in one click.
 export const TEST_HOLDERS = [
-  { name: 'Jane Testerson', address: '100 Sample Street', city: 'Testville', state: 'CO', zip: '80000', email: TEST_EMAIL },
-  { name: 'Acme Test Rentals LLC', address: '200 Placeholder Road', city: 'Faketown', state: 'CO', zip: '80001', email: TEST_EMAIL },
+  { name: 'Jane Testerson', address: '100 Sample Street', city: 'Testville', state: 'CO', zip: '80000', email: TEST_EMAIL,
+    additionalInsured: true, waiverOfSubrogation: true, contract: 'yes', relationship: 'landlord', delivery: 'requestor' },
+  { name: 'Acme Test Rentals LLC', address: '200 Placeholder Road', city: 'Faketown', state: 'CO', zip: '80001', email: TEST_EMAIL,
+    additionalInsured: true, waiverOfSubrogation: true, contract: 'yes', relationship: 'landlord', additionalInfo: '30-day facility rental', delivery: 'requestor' },
   { name: 'John Q. Public', address: 'P.O. Box 123', city: 'Exampleburg', state: 'CO', zip: '80002', email: TEST_EMAIL },
-  { name: 'Mountain View Test HOA', address: '300 Demo Drive', city: 'Testville', state: 'CO', zip: '80000', email: TEST_EMAIL },
-  { name: 'Sample Family Trust', address: '400 Mock Lane', city: 'Faketown', state: 'CO', zip: '80001', email: TEST_EMAIL },
+  { name: 'Mountain View Test HOA', address: '300 Demo Drive', city: 'Testville', state: 'CO', zip: '80000', email: TEST_EMAIL,
+    additionalInsured: true, aiPrimaryNonContrib: true, noticeOfCancellation: true, contract: 'yes', relationship: 'stateGov', delivery: 'requestorAndHolder' },
+  { name: 'Sample Family Trust', address: '400 Mock Lane', city: 'Faketown', state: 'CO', zip: '80001', email: TEST_EMAIL,
+    additionalInsured: true, coverageOtherText: 'Name as additional insured on policy', relationship: 'other', relationshipOtherText: 'Event sponsor', delivery: 'requestor' },
 ];

@@ -74,6 +74,11 @@ const SECTIONS = [
     { id: 11, label: 'Concurrency stress test (headless)', desc: 'Spins up N real Playwright runs at once (login → open form → fill → screenshot), skipping the Submit click. Prompts for count + holders. Reports per-run timing, peak concurrent browsers, and total wall time. Cap = EVENT_COI_MAX_CONCURRENT.', bin: 'node', args: ['src/usat_apps/modules/event_coi/stress_test.js'], cli: 'node src/usat_apps/modules/event_coi/stress_test.js' },
     { id: 12, label: 'Concurrency stress test — WATCH', desc: 'Same as 11 but HEADED: opens N visible Chromium windows so you can watch them run in parallel. Still NO submit. Use a small count.', bin: 'node', args: ['src/usat_apps/modules/event_coi/stress_test.js'], env: { HEADLESS: '0' }, cli: 'HEADLESS=0 node src/usat_apps/modules/event_coi/stress_test.js' },
   ]},
+  { label: 'SUBMIT CHECK - verify the submit button (NO submit)', color: RED, items: [
+    { id: 13, label: 'Submit-button check - WATCH', desc: 'Headed: logs in, fills the form, and INSPECTS the Submit button + form + anti-forgery token WITHOUT clicking Submit. Confirms the runner targets the real button and the form is POST-ready. Nothing is submitted.', bin: 'node', args: ['src/usat_apps/modules/event_coi/submit_check.js'], env: { HEADLESS: '0' }, cli: 'HEADLESS=0 node src/usat_apps/modules/event_coi/submit_check.js' },
+    { id: 14, label: 'Submit-button check - headless', desc: 'Same as 13 but headless; prints the report to the console. Nothing is submitted.', bin: 'node', args: ['src/usat_apps/modules/event_coi/submit_check.js'], cli: 'node src/usat_apps/modules/event_coi/submit_check.js' },
+    { id: 15, label: 'Pending Requests check - WATCH', desc: 'Headed, read-only: logs in and opens the portal Pending Requests queue, screenshots it, and lists the rows. Never opens the certificate form or submits.', bin: 'node', args: ['src/usat_apps/modules/event_coi/pending_check.js'], env: { HEADLESS: '0' }, cli: 'HEADLESS=0 node src/usat_apps/modules/event_coi/pending_check.js' },
+  ]},
 ];
 
 function render() {

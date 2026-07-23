@@ -42,7 +42,9 @@ async function checkRadioNth(page, name, idx) {
 async function fillCertificate(page, request, holder) {
   const e = (request && request.event) || {};
   const r = (request && request.requestor) || {};
-  const o = (request && request.options) || {};
+  // Per-holder coverage: use this holder's own options when present (per-holder mode); otherwise the
+  // once-entered request.options (same-for-all mode).
+  const o = (holder && holder.options) || (request && request.options) || {};
 
   // Event
   await setText(page, TEXT.sanctionId, e.sanctionId);
