@@ -98,6 +98,7 @@ export default function EventCoiSection({ title }) {
   const [fileNote, setFileNote] = useState('');
   const [defaultsNote, setDefaultsNote] = useState('');
   const [runLog, setRunLog] = useState([]);
+  const [runPanelKey, setRunPanelKey] = useState(0);   // bump to remount RunPanel (clears its screenshot/results) on a full reset
 
   const setEventField = (k, v) => setEvent((s) => ({ ...s, [k]: v }));
   const setReqField = (k, v) => setRequestor((s) => ({ ...s, [k]: v }));
@@ -169,6 +170,7 @@ export default function EventCoiSection({ title }) {
         !window.confirm('Reset the whole page? This clears the event, requestor, coverage/delivery options, all holders, and the submission log. Your saved defaults are kept.')) return;
     setEvent({}); setRequestor({}); setOpts(EMPTY_OPTS); setHolders([]); setDefaultEmail('');
     setFileNote(''); setRunLog([]); setDefaultsNote('Page reset — saved defaults kept.');
+    setRunPanelKey((k) => k + 1);   // remount RunPanel so its displayed screenshot + results clear too
     try { await api.coiRunReset(); } catch (e) { /* best-effort: clear any stuck run on the server */ }
   }
 
@@ -383,7 +385,7 @@ export default function EventCoiSection({ title }) {
           <div><dt>Requestor</dt><dd>{requestor.name || <span className="coi-req">— missing —</span>}{requestor.email ? ` · ${requestor.email}` : ''}</dd></div>
           <div><dt>Certificates</dt><dd>{holders.length}{missingNames || missingEmails ? <span className="coi-req"> · {missingNames} missing name, {missingEmails} missing email</span> : ''}</dd></div>
         </dl>
-        <RunPanel request={{ event, requestor, options: opts }} holders={holders} ready={ready} problems={problems} onLog={setRunLog} />
+        <RunPanel key={runPanelKey} request={{ event, requestor, options: opts }} holders={holders} ready={ready} problems={problems} onLog={setRunLog} />
       </CollapsibleCard>
 
       {/* STEP 5 — Submission log */}
