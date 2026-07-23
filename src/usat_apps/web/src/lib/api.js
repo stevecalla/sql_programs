@@ -81,4 +81,7 @@ export const api = {
   opsConsoleRun: (payload) => jpost('/api/ops/console/run', payload),
   opsConsoleUsat: () => jget('/api/ops/console-usat'),
   opsConsoleUsatRun: (payload) => jpost('/api/ops/console-usat/run', payload),
+  // event_coi (Event / Race Certificate Request): /api/event-coi/*
+  coiPing: () => jget('/api/event-coi/ping'),
+  coiParse: (filename, dataB64) => jpost('/api/event-coi/parse', { filename, dataB64 }),
 };

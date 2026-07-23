@@ -63,9 +63,11 @@ const SECTIONS = [
     { id: 6, label: 'Backend status', desc: 'GET /api/status on :8022', act: () => hit('/api/status') },
     { id: 7, label: 'Module ping (needs sign-in)', desc: 'GET /api/event-coi/ping — Phase 2', act: () => hit('/api/event-coi/ping') },
   ]},
-  { label: 'RUNNER — Playwright (Phase 3-4)', color: RED, items: [
-    { id: 8, label: 'Portal login check (dry run)', desc: 'Logs into CSR24 + opens the form, no submit — added in Phase 3', act: () => console.log(c(DIM, '  Not built yet — arrives in Phase 3.')) },
-    { id: 9, label: 'Run tests', desc: 'node src/usat_apps/run_tests.js modules/event_coi — added in Phase 4', act: () => console.log(c(DIM, '  Not built yet — arrives in Phase 4.')) },
+  { label: 'TESTS', color: CYAN, items: [
+    { id: 8, label: 'Run module tests', desc: 'node src/usat_apps/run_tests.js modules/event_coi (holder_parse + validate_request)', bin: 'node', args: ['src/usat_apps/run_tests.js', 'modules/event_coi'], cli: 'node src/usat_apps/run_tests.js modules/event_coi' },
+  ]},
+  { label: 'RUNNER — Playwright (Phase 3)', color: RED, items: [
+    { id: 9, label: 'Portal dry run (login + fill, NO submit)', desc: 'Logs in, opens the form, fills one test holder, screenshots each stage to dry_run_screens/ — nothing is submitted. Prefix HEADLESS=0 to watch the browser.', bin: 'node', args: ['src/usat_apps/modules/event_coi/run_dry.js'], cli: 'node src/usat_apps/modules/event_coi/run_dry.js' },
   ]},
 ];
 

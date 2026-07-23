@@ -4,13 +4,14 @@
 // index in the underlying holders array, so nothing is lost when the list is reordered or filtered.
 import { useMemo, useState } from 'react';
 
+// maxLen matches the portal form's field maxlength attributes (see RECON_portal_form_map.md).
 const COLS = [
-  { key: 'name', label: 'Holder Name', req: true, w: 170 },
-  { key: 'address', label: 'Address', w: 160 },
-  { key: 'city', label: 'City', w: 110 },
-  { key: 'state', label: 'State', w: 60 },
-  { key: 'zip', label: 'Zip', w: 74 },
-  { key: 'email', label: 'Holder Email', req: true, w: 180 },
+  { key: 'name', label: 'Holder Name', req: true, w: 170, maxLen: 100 },
+  { key: 'address', label: 'Address', w: 160, maxLen: 100 },
+  { key: 'city', label: 'City', w: 110, maxLen: 50 },
+  { key: 'state', label: 'State', w: 60, maxLen: 2 },
+  { key: 'zip', label: 'Zip', w: 74, maxLen: 7 },
+  { key: 'email', label: 'Holder Email', req: true, w: 180, maxLen: 100 },
 ];
 
 const val = (h, k) => String(h[k] == null ? '' : h[k]);
@@ -84,8 +85,9 @@ export default function HolderTable({ holders, onChange, onRemove }) {
                   <td key={c.key}>
                     <input
                       className={'coi-input' + (c.req && !val(h, c.key).trim() ? ' coi-input-warn' : '')}
+                      maxLength={c.maxLen || undefined}
                       value={val(h, c.key)}
-                      onChange={(e) => onChange(realIdx, c.key, e.target.value)}
+                      onChange={(e) => onChange(realIdx, c.key, c.maxLen ? e.target.value.slice(0, c.maxLen) : e.target.value)}
                     />
                   </td>
                 ))}

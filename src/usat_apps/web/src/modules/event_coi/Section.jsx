@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import CollapsibleCard from '../salesforce_merge/components/CollapsibleCard.jsx'; // shared UI primitive (could move to web/src/components later)
 import HolderTable from './components/HolderTable.jsx';
+import { api } from '../../lib/api.js';
 import { exportCsv, exportExcel } from './lib/exportRows.js';
 import { TEST_EVENT, TEST_REQUESTOR, TEST_OPTIONS, TEST_HOLDERS } from './lib/testData.js';
 import './event_coi.css';
@@ -21,16 +22,16 @@ const DEFAULTS_KEY = 'usatapps_event_coi_defaults';   // localStorage; Phase 2 c
 
 const EVENT_FIELDS = [
   { key: 'sanctionId', label: 'USA Triathlon Sanction ID #', digits: 6, ph: '6-digit number', req: true },
-  { key: 'eventName', label: 'Event Name', req: true },
-  { key: 'eventLocationName', label: 'Event Location Name' },
-  { key: 'eventAddress', label: 'Event Address' },
-  { key: 'eventStartDate', label: 'Event Start Date', ph: 'MM/DD/YYYY', req: true },
-  { key: 'eventEndDate', label: 'Event End Date', ph: 'MM/DD/YYYY', req: true },
+  { key: 'eventName', label: 'Event Name', req: true, maxLen: 150 },
+  { key: 'eventLocationName', label: 'Event Location Name', maxLen: 150 },
+  { key: 'eventAddress', label: 'Event Address', maxLen: 150 },
+  { key: 'eventStartDate', label: 'Event Start Date', ph: 'MM/DD/YYYY', req: true, maxLen: 10 },
+  { key: 'eventEndDate', label: 'Event End Date', ph: 'MM/DD/YYYY', req: true, maxLen: 10 },
 ];
 const REQUESTOR_FIELDS = [
-  { key: 'name', label: 'Your Name', req: true },
-  { key: 'email', label: 'Your Email Address', type: 'email', req: true },
-  { key: 'phone', label: 'Your Phone Number' },
+  { key: 'name', label: 'Your Name', req: true, maxLen: 100 },
+  { key: 'email', label: 'Your Email Address', type: 'email', req: true, maxLen: 100 },
+  { key: 'phone', label: 'Your Phone Number', maxLen: 12, ph: 'e.g. 555-010-2026' }, // portal caps this at 12 chars
 ];
 // Exact wording from the portal form (see RECON_portal_form_map.md / the original screenshot).
 const COVERAGE = [
@@ -62,42 +63,15 @@ const EMPTY_OPTS = {
 const TEMPLATE_URL = (((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) || '/').replace(/\/+$/, '')) + '/event_coi_template.xlsx';
 const BLANK_HOLDER = () => ({ name: '', address: '', city: '', state: '', zip: '', email: '' });
 
-// Fuzzy header matching so uploads work even when columns are named loosely ("st" for State,
-// "Postal Code" for Zip, "Holder Name" for Name, etc.). Headers are normalized (lowercased, all
-// non-alphanumerics stripped) then matched against these alias sets. Phase 2 mirrors this server-side.
-const HEADER_ALIASES = {
-  name: ['name', 'holdername', 'holder', 'certificateholder', 'certholder', 'company', 'companyname', 'organization', 'organizationname', 'entity', 'businessname', 'insured'],
-  address: ['addressline1', 'address1', 'address', 'addr', 'street', 'streetaddress', 'mailingaddress', 'addressline', 'line1'],
-  address2: ['addressline2', 'address2', 'addr2', 'line2', 'suite', 'unit', 'apt'],
-  city: ['city', 'town'],
-  state: ['state', 'st', 'province', 'stateprovince', 'region'],
-  zip: ['zip', 'zipcode', 'postalcode', 'postal', 'postcode', 'zippostalcode'],
-  email: ['email', 'emailaddress', 'holderemail', 'holderemailaddress', 'mail', 'contactemail', 'emailaddr'],
-};
-const normHeader = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
-
-// Minimal CSV reader for the Phase-1 UI (full xlsx parsing moves server-side in Phase 2, reusing the
-// same HEADER_ALIASES).
-function parseCsv(text) {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length);
-  if (!lines.length) return [];
-  const split = (l) => l.match(/("([^"]|"")*"|[^,]*)(,|$)/g).slice(0, -1).map((c) => c.replace(/,$/, '').replace(/^"|"$/g, '').replace(/""/g, '"').trim());
-  const H = split(lines[0]).map(normHeader);
-  const find = (key) => H.findIndex((h) => HEADER_ALIASES[key].includes(h));
-  const iName = find('name'), iA1 = find('address'), iA2 = find('address2');
-  const iCity = find('city'), iState = find('state'), iZip = find('zip'), iEmail = find('email');
-  const out = [];
-  for (let r = 1; r < lines.length; r++) {
-    const c = split(lines[r]);
-    const address = [iA1 >= 0 ? c[iA1] : '', iA2 >= 0 ? c[iA2] : ''].filter(Boolean).join(' ');
-    const row = {
-      name: iName >= 0 ? c[iName] || '' : '', address,
-      city: iCity >= 0 ? c[iCity] || '' : '', state: iState >= 0 ? c[iState] || '' : '',
-      zip: iZip >= 0 ? c[iZip] || '' : '', email: iEmail >= 0 ? c[iEmail] || '' : '',
-    };
-    if (row.name || row.address) out.push(row);
-  }
-  return out;
+// Uploads are parsed server-side (modules/event_coi/store/holder_parse) so CSV and .xlsx share one
+// tested parser with the fuzzy header matching. Encode the file to base64 in chunks (avoids call-stack
+// limits) and POST it to /api/event-coi/parse.
+function bufToB64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
 }
 
 export default function EventCoiSection({ title }) {
@@ -141,19 +115,22 @@ export default function EventCoiSection({ title }) {
     setDefaultsNote('Saved defaults cleared.');
   }
 
-  function onFile(file) {
+  async function onFile(file) {
     if (!file) return;
-    if (!/\.csv$/i.test(file.name)) {
-      setFileNote('Excel (.xlsx) parsing arrives in Phase 2 (server-side). For now upload a CSV, or use “Fill test values”.');
-      return;
+    setFileNote(`Parsing “${file.name}”…`);
+    try {
+      const buf = await file.arrayBuffer();
+      const r = await api.coiParse(file.name, bufToB64(buf));
+      if (r.status === 200 && r.body && r.body.ok) {
+        setHolders(r.body.holders || []);
+        const sheetNote = r.body.sheet && r.body.sheet !== '(csv)' ? ` (sheet: ${r.body.sheet})` : '';
+        setFileNote(`Loaded ${r.body.count} holders from “${file.name}”${sheetNote}.`);
+      } else {
+        setFileNote((r.body && r.body.error) || 'Could not parse that file.');
+      }
+    } catch (e) {
+      setFileNote('Upload failed: ' + (e && e.message ? e.message : String(e)));
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const rows = parseCsv(String(e.target.result));
-      setHolders(rows);
-      setFileNote(`Loaded ${rows.length} holders from “${file.name}”.`);
-    };
-    reader.readAsText(file);
   }
 
   function applyDefaultEmail() {
@@ -242,10 +219,10 @@ export default function EventCoiSection({ title }) {
                       className={'coi-input' + (invalid ? ' coi-input-warn' : '')}
                       placeholder={f.ph || ''}
                       inputMode={f.digits ? 'numeric' : undefined}
-                      maxLength={f.digits || undefined}
+                      maxLength={f.digits || f.maxLen || undefined}
                       title={f.digits ? `Must be a ${f.digits}-digit number` : undefined}
                       value={event[f.key] || ''}
-                      onChange={(e) => setEventField(f.key, f.digits ? e.target.value.replace(/\D/g, '').slice(0, f.digits) : e.target.value)}
+                      onChange={(e) => { let v = e.target.value; if (f.digits) v = v.replace(/\D/g, '').slice(0, f.digits); else if (f.maxLen) v = v.slice(0, f.maxLen); setEventField(f.key, v); }}
                     />
                   </label>
                 );
@@ -257,7 +234,14 @@ export default function EventCoiSection({ title }) {
             <div className="coi-form">
               {REQUESTOR_FIELDS.map((f) => (
                 <label key={f.key} className="coi-row"><span>{f.label}{f.req ? <span className="coi-req"> *</span> : null}</span>
-                  <input className="coi-input" type={f.type || 'text'} value={requestor[f.key] || ''} onChange={(e) => setReqField(f.key, e.target.value)} />
+                  <input
+                    className="coi-input"
+                    type={f.type || 'text'}
+                    placeholder={f.ph || ''}
+                    maxLength={f.maxLen || undefined}
+                    value={requestor[f.key] || ''}
+                    onChange={(e) => setReqField(f.key, f.maxLen ? e.target.value.slice(0, f.maxLen) : e.target.value)}
+                  />
                 </label>
               ))}
             </div>
@@ -274,7 +258,7 @@ export default function EventCoiSection({ title }) {
               <label key={k} className="coi-check"><input type="checkbox" checked={!!opts[k]} onChange={(e) => setOpt(k, e.target.checked)} /> {label}</label>
             ))}
             <label className="coi-check"><input type="checkbox" checked={!!opts.coverageOther} onChange={(e) => setOpt('coverageOther', e.target.checked)} /> <span>Other</span>
-              <input className="coi-otherinput" placeholder="specify" value={opts.coverageOtherText} onChange={(e) => setOpt('coverageOtherText', e.target.value)} /></label>
+              <input className="coi-otherinput" placeholder="specify" maxLength={100} value={opts.coverageOtherText} onChange={(e) => setOpt('coverageOtherText', e.target.value.slice(0, 100))} /></label>
           </div>
         </div>
         <div className="coi-optrow">
@@ -291,12 +275,12 @@ export default function EventCoiSection({ title }) {
               <label key={k} className="coi-check"><input type="radio" name="coi-rel" checked={opts.relationship === k} onChange={() => setOpt('relationship', k)} /> {label}</label>
             ))}
             <label className="coi-check"><input type="radio" name="coi-rel" checked={opts.relationship === 'other'} onChange={() => setOpt('relationship', 'other')} /> <span>Other</span>
-              <input className="coi-otherinput" placeholder="specify" value={opts.relationshipOtherText} onChange={(e) => setOpt('relationshipOtherText', e.target.value)} /></label>
+              <input className="coi-otherinput" placeholder="specify" maxLength={150} value={opts.relationshipOtherText} onChange={(e) => setOpt('relationshipOtherText', e.target.value.slice(0, 150))} /></label>
           </div>
         </div>
         <div className="coi-optrow">
           <div className="coi-optlabel">Additional Information</div>
-          <div className="coi-optbody"><input className="coi-input" value={opts.additionalInfo} onChange={(e) => setOpt('additionalInfo', e.target.value)} /></div>
+          <div className="coi-optbody"><input className="coi-input" maxLength={500} value={opts.additionalInfo} onChange={(e) => setOpt('additionalInfo', e.target.value.slice(0, 500))} /></div>
         </div>
         <div className="coi-optrow">
           <div className="coi-optlabel">Delivery Method</div>
@@ -305,7 +289,7 @@ export default function EventCoiSection({ title }) {
               <label key={k} className="coi-check"><input type="radio" name="coi-delivery" checked={opts.delivery === k} onChange={() => setOpt('delivery', k)} /> {label}</label>
             ))}
             <label className="coi-check"><input type="radio" name="coi-delivery" checked={opts.delivery === 'other'} onChange={() => setOpt('delivery', 'other')} /> <span>Other</span>
-              <input className="coi-otherinput" placeholder="specify" value={opts.deliveryOtherText} onChange={(e) => setOpt('deliveryOtherText', e.target.value)} /></label>
+              <input className="coi-otherinput" placeholder="specify" maxLength={100} value={opts.deliveryOtherText} onChange={(e) => setOpt('deliveryOtherText', e.target.value.slice(0, 100))} /></label>
           </div>
         </div>
       </CollapsibleCard>
@@ -313,7 +297,7 @@ export default function EventCoiSection({ title }) {
       {/* STEP 3 — Holders */}
       <CollapsibleCard title={stepTitle('3', 'Certificate holders', `${holders.length} holder${holders.length === 1 ? '' : 's'} — one certificate each.`)} actions={holderExport}>
         <div className="coi-toolrow">
-          <label className="btn coi-filebtn">Upload CSV<input type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => onFile(e.target.files[0])} /></label>
+          <label className="btn coi-filebtn">Upload CSV<input type="file" accept=".csv,.xlsx,.xls" hidden onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; onFile(f); }} /></label>
           <a className="btn" href={TEMPLATE_URL} download>↓ Template</a>
           <button className="btn" onClick={addHolder}>+ Add row</button>
           <span className="coi-defemail">Default holder email

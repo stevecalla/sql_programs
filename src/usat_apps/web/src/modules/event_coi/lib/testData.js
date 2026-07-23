@@ -17,7 +17,7 @@ export const TEST_EVENT = {
 export const TEST_REQUESTOR = {
   name: 'Test Requestor',
   email: TEST_EMAIL,
-  phone: '(555) 010-2026',
+  phone: '555-010-2026',
 };
 
 // The once-entered "Coverage & delivery" options (applied to every certificate). Sensible test defaults.
