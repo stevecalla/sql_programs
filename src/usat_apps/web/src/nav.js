@@ -88,6 +88,29 @@ export function panelForPathname(pathname) {
   return best ? best.panel : (p.replace(/^\//, '').split('/')[0] || 'home');
 }
 
+// Legacy/again-friendly path aliases → a canonical route. Old bookmarks (e.g. the retired standalone
+// /merge app) should land on the real page instead of the in-app 404.
+const LEGACY_ALIASES = [
+  { from: '/merge', to: '/salesforce/merge' },
+];
+
+// Redirect map for the router: each group's BASE path (e.g. /events, /salesforce) -> its first child,
+// plus the legacy aliases above. Without this, hitting a bare group path (or an old link) falls to the
+// NotFound route even though the group has real pages. Derived from NAV so new groups work automatically.
+export function redirects() {
+  const out = [];
+  const seen = {};
+  NAV.forEach(function (n) {
+    if (n.type !== 'group' || !n.items || !n.items.length) return;
+    const first = n.items.find(function (it) { return it.path; });
+    if (!first) return;
+    const base = '/' + String(first.path).split('/')[1];
+    if (base && base !== '/' && !seen[base]) { seen[base] = 1; out.push({ from: base, to: first.path }); }
+  });
+  LEGACY_ALIASES.forEach(function (a) { if (!seen[a.from]) { seen[a.from] = 1; out.push(a); } });
+  return out;
+}
+
 // Every leaf panel flattened — used to build the routes.
 export function allPanels() {
   const out = [];

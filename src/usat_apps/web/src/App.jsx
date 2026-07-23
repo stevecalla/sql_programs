@@ -1,8 +1,8 @@
 import { Suspense, useEffect, useState } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { api } from './lib/api.js';
 import { trackPanelView, trackSession } from './lib/track.js';
-import { allPanels, canSee, panelForPathname } from './nav.js';
+import { allPanels, canSee, panelForPathname, redirects } from './nav.js';
 import SideRail from './components/SideRail.jsx';
 import MergeRail from './modules/salesforce_merge/MergeRail.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
@@ -56,6 +56,10 @@ export default function App() {
           <Suspense fallback={<div className="loading">Loading…</div>}>
             <Routes>
               <Route path="/" element={<Home user={user} />} />
+              {/* Bare group paths (/events, /reporting, …) + legacy aliases (/merge) -> first child page. */}
+              {redirects().map((r) => (
+                <Route key={r.from} path={r.from} element={<Navigate to={r.to} replace />} />
+              ))}
               {allPanels().map((p) => (
                 <Route key={p.path} path={p.nested ? p.path + '/*' : p.path} element={guard(p.panel, <p.Component title={p.label} user={user} />)} />
               ))}
