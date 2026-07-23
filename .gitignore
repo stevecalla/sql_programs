@@ -250,3 +250,6 @@ src/salesforce_email_queue_proof_of_concept/.menu_prefs.json
 .proxy_auth.json
 src/usat_apps/.menu_prefs.json
 src/usat_apps/modules/participation_maps/.menu_prefs.json
+
+# Track the COI holder template even though *.xlsx is ignored above.
+!src/usat_apps/web/public/event_coi_template.xlsx
