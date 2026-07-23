@@ -84,4 +84,26 @@ test('member trims surrounding text and keeps the number', () => {
   assert.equal(N.n_member('Member 12345').value, '12345');
   assert.equal(N.n_member('Valid').value, '1-day');               // no usable number
 });
+
+test('member ignores a one-day marker in favour of the real number (no 1 prepended)', () => {
+  // Regression: "1-day - 2095126403" used to yield "12095126403" (the marker's 1 glued on).
+  assert.equal(N.n_member('1-day - 2095126403').value, '2095126403');
+  assert.equal(N.n_member('1-day - 2095126403').flag, 'member-trimmed');
+  assert.equal(N.n_member('1 day 2100012345').value, '2100012345');
+  assert.equal(N.n_member('1day 2100012345').value, '2100012345');
+  assert.equal(N.n_member('one-day 624989814').value, '624989814');
+  assert.equal(N.n_member('One Day 624989814').value, '624989814');
+  // a stray leading "1" (no "day") before a real number is dropped too
+  assert.equal(N.n_member('1 - 2095126403').value, '2095126403');
+  assert.equal(N.n_member('1-2095126403').value, '2095126403');
+  // marker with no usable number -> stays a one-day placeholder
+  assert.equal(N.n_member('1-day').value, '1-day');
+  assert.equal(N.n_member('1 day').value, '1-day');
+  assert.equal(N.n_member('1-day - 209').value, '1-day');          // remainder too short
+  // an internally-dashed id is NOT a stray-1 case — keep every digit
+  assert.equal(N.n_member('2100-074-825').value, '2100074825');
+  assert.equal(N.n_member('2100-074-825').flag, null);
+  assert.equal(N.n_member('1234567890').value, '1234567890');      // legit number starting with 1
+  assert.equal(N.n_member('1234567890').flag, null);
+});
 });

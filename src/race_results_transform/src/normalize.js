@@ -113,11 +113,23 @@
 
   function n_member(value) {
     if (is_blank(value)) return { value: '1-day', flag: 'member-default' };
-    var s = as_text(value).trim();
+    var raw = as_text(value).trim();
+    // A "one-day" (non-member) marker sometimes rides along with a real member number, e.g.
+    // "1-day - 2095126403". Drop the marker — INCLUDING its leading digit "1" — so it isn't glued
+    // onto the front of the real number (which used to yield "12095126403"). Covers 1-day / 1 day /
+    // 1day / 1 - day / one-day / one day (any case). Then drop a *stray* leading "1" that precedes a
+    // real number (a 4+ digit run) even without the word "day" — but only when it's a lone "1"
+    // followed by a separator, so an internally-dashed id like "2100-074-825" is left intact.
+    var s = raw
+      .replace(/\b(?:1|one)\s*-?\s*day\b/gi, ' ')
+      .replace(/^\s*1\s*[-\s]\s*(?=\d{4,})/, ' ')
+      .trim();
+    if (s === '') return { value: '1-day', flag: 'member-nonnumeric' };   // marker with no real number
+    var was_trimmed = s !== raw;
     // Clean numeric id (digits, spaces, dashes only) — strip separators, keep digits.
     if (/^[\d\s-]+$/.test(s)) {
       var digits = s.replace(/\D/g, '');
-      return digits.length >= 4 ? { value: digits, flag: null }
+      return digits.length >= 4 ? { value: digits, flag: was_trimmed ? 'member-trimmed' : null }
                                 : { value: '1-day', flag: 'member-nonnumeric' };
     }
     // Mixed number + text (e.g. "USAT-2100013891", "2100013891 (expired 2024)"):

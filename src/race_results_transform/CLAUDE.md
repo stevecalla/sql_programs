@@ -158,6 +158,12 @@ To support a new quirky file: add an alias in `src/schema.js` or tweak a normali
 - Output ALWAYS has all 12 columns in order; only **Address** is optional.
 - Member #: clean numeric kept (separators stripped); number embedded in text is trimmed out
   (`USAT-12345` → `12345`, flagged `member-trimmed`); blank / "Valid" / no usable number → `1-day`.
+  A **one-day marker riding along with a real number** is dropped INCLUDING its leading digit `1`,
+  so it isn't glued onto the front of the real id: `1-day - 2095126403` → `2095126403` (not
+  `12095126403`). Covers `1-day` / `1 day` / `1day` / `1 - day` / `one-day` / `one day` (any case);
+  a **stray lone leading `1`** before a 4+ digit run is also dropped even without the word "day"
+  (`1 - 2095126403` → `2095126403`), while an internally-dashed id (`2100-074-825` → `2100074825`)
+  is left intact. A bare marker with no real number stays `1-day`.
 - Gender M/F/NB/Open · DOB `mm/dd/yyyy` · State 2-letter (foreign flagged) ·
   Category Age Group/Elite/Para/Relay/Open · Recorded Time `hh:mm:ss.000`.
 - Race statuses (DNS/DNF/DQ/DSQ/DNC/NT) preserved verbatim, flagged `time-status`.
