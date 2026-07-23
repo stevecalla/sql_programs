@@ -50,6 +50,21 @@ test('grid_to_csv round-trips back through csv_to_ir', () => {
   assert.deepEqual(ir.rows[2], rows[1]);   // the comma-containing city survived the quote/parse round-trip
 });
 
+test('csv_to_ir handles CR-only (old Mac) and CRLF line endings', () => {
+  // Regression: a file whose only line break is a lone \r used to collapse into ONE giant row
+  // (blank table). CR, LF, and CRLF must all split rows.
+  const cr = io.csv_to_ir('a,b,c\r1,2,3\r4,5,6\r');       // CR only
+  assert.equal(cr.rows.length, 3);
+  assert.deepEqual(cr.rows[1], ['1', '2', '3']);
+  const crlf = io.csv_to_ir('a,b,c\r\n1,2,3\r\n');         // CRLF still fine
+  assert.equal(crlf.rows.length, 2);
+  assert.deepEqual(crlf.rows[1], ['1', '2', '3']);
+  // a \n embedded inside a quoted field is preserved (not treated as a row break)
+  const q = io.csv_to_ir('h1,h2\r\n"line1\nline2",x\r\n');
+  assert.equal(q.rows.length, 2);
+  assert.equal(q.rows[1][0], 'line1\nline2');
+});
+
 test('flatten_cell unwraps hyperlink + rich-text cells (no "[object Object]")', () => {
   const f = io.flatten_cell;
   // a styled email link reads from exceljs as { text: { richText: [...] }, hyperlink: 'mailto:...' }
