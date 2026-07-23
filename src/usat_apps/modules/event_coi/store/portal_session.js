@@ -81,8 +81,16 @@ async function fullPageShot(page) {
           el.style.maxHeight = 'none';
         }
       }
+      // Dismiss the portal's field-help tooltips (the "(ie: Name of Park...)" hint bubbles from the
+      // "?" icons). They pop on focus/hover and get caught in the capture at random. Blur the active
+      // field and force-hide anything tooltip-like so it never bleeds into the screenshot.
+      try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (_) { /* ignore */ }
+      var _ts = document.createElement('style');
+      _ts.textContent = '[role="tooltip"],.tooltip,.ui-tooltip,.qtip,.popover,.bubble,.tipsy,.help-block,.tooltip-inner,[class*="tooltip"],[class*="Tooltip"],[id*="tooltip"]{display:none !important;visibility:hidden !important;opacity:0 !important;}';
+      document.documentElement.appendChild(_ts);
     });
-    await page.waitForTimeout(250); // let layout settle
+    await page.mouse.move(0, 0);     // pull the cursor off any "?" so no hover-tooltip re-appears
+    await page.waitForTimeout(250); // let layout settle + tooltips fade
     const form = page.locator('form').first();
     if (await form.count()) return await form.screenshot();
     return await page.screenshot({ fullPage: true });
