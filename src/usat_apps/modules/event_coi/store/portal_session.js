@@ -64,6 +64,8 @@ async function fullPageShot(page) {
   try {
     // Tall viewport so a viewport-height scroll container reveals the whole form.
     await page.setViewportSize({ width: (original && original.width) || 1440, height: 3200 });
+    // Close any open date-picker before measuring/capturing (Escape dismisses jQuery-UI/bootstrap pickers).
+    try { await page.keyboard.press('Escape'); } catch (_) { /* ignore */ }
     await page.evaluate(() => {
       const de = document.documentElement, bd = document.body;
       [de, bd].forEach((el) => { if (el) { el.style.height = 'auto'; el.style.maxHeight = 'none'; el.style.overflow = 'visible'; } });
@@ -86,7 +88,10 @@ async function fullPageShot(page) {
       // field and force-hide anything tooltip-like so it never bleeds into the screenshot.
       try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (_) { /* ignore */ }
       var _ts = document.createElement('style');
-      _ts.textContent = '[role="tooltip"],.tooltip,.ui-tooltip,.qtip,.popover,.bubble,.tipsy,.help-block,.tooltip-inner,[class*="tooltip"],[class*="Tooltip"],[id*="tooltip"]{display:none !important;visibility:hidden !important;opacity:0 !important;}';
+      _ts.textContent = '[role="tooltip"],.tooltip,.ui-tooltip,.qtip,.popover,.bubble,.tipsy,.help-block,.tooltip-inner,[class*="tooltip"],[class*="Tooltip"],[id*="tooltip"],'
+        // Also hide any open date-picker / calendar popup — headless prod captures it before it closes.
+        + '#ui-datepicker-div,.ui-datepicker,.datepicker,.datepicker-dropdown,.datepicker-days,.bootstrap-datetimepicker-widget,.flatpickr-calendar,.daterangepicker,.xdsoft_datetimepicker,.air-datepicker,.pika-single,.picker__holder,.calendar-popup,[class*="datepicker"],[class*="Datepicker"],[class*="DatePicker"],[class*="datePicker"],[id*="datepicker"],[id*="Datepicker"]'
+        + '{display:none !important;visibility:hidden !important;opacity:0 !important;}';
       document.documentElement.appendChild(_ts);
     });
     await page.mouse.move(0, 0);     // pull the cursor off any "?" so no hover-tooltip re-appears
