@@ -20,6 +20,7 @@ const OpsOperations = lazy(() => import('./modules/ops/Operations.jsx'));
 const OpsOperationsUsat = lazy(() => import('./modules/ops/OperationsUsat.jsx'));
 const OpsSystemHealth = lazy(() => import('./modules/ops/SystemHealth.jsx'));
 const OpsReference = lazy(() => import('./modules/ops/Reference.jsx'));
+const EventCoi = lazy(() => import('./modules/event_coi/Section.jsx'));
 
 export const NAV = [
   {
@@ -32,6 +33,11 @@ export const NAV = [
     type: 'group', label: 'Salesforce', items: [
       { label: 'Merge', path: '/salesforce/merge', panel: 'merge', icon: '⇄', Component: MergeSection, nested: true },
       { label: 'Merge Ops', path: '/salesforce/merge-ops', panel: 'merge-ops', icon: '🛠', Component: MergeOps },
+    ]
+  },
+  {
+    type: 'group', label: 'Insurance', items: [
+      { label: 'Event COI', path: '/insurance/event-coi', panel: 'event-coi', icon: '🛡', Component: EventCoi },
     ]
   },
   {
