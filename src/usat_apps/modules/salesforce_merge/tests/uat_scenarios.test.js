@@ -339,3 +339,57 @@ describe('Test 8 - Merge dossier & lifecycle stamp (usat_was_*)', () => {
     delete process.env.MERGE_ENABLE_EXECUTION;
   });
 });
+
+// ---- Newer tabs (parallel workers, history, caps/limits) — code-controlled outcomes only ----
+describe('Test 12 - Parallel workers (fan-out planning)', () => {
+  const { plan_job, should_parallelize } = require('../store/chunk');
+  test('a job fans out only when parallel is ON and there is more than one chunk', () => {
+    assert.equal(should_parallelize(10, 5, true), true);    // 10 sets / chunk 5 = 2 chunks -> parallel
+    assert.equal(should_parallelize(3, 5, true), false);    // fits one chunk -> single run
+    assert.equal(should_parallelize(10, 5, false), false);  // parallel disabled -> single run
+  });
+  test('plan_job splits into contiguous chunks of <= size, order preserved', () => {
+    const chunks = plan_job([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 5);
+    assert.equal(chunks.length, 2);
+    assert.ok(chunks.every((c) => c.length <= 5));
+    assert.deepEqual([].concat(...chunks), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+});
+
+describe('Test 16 - History (Job history aggregation)', () => {
+  const mrun = require('../store/merge_run');
+  const runRows = [
+    { run_id: 'mrun-a1', job_id: 'job-A', kind: 'merge', mode: 'execute', environment: 'Sandbox', org_id: 'ORG1', total_sets: 2, completed_sets: 2, status: 'done', claimed_by: 'w100-a', claimed_at: '2026-01-01 00:00:00', started_at: '2026-01-01 00:00:00', finished_at: '2026-01-01 00:01:00', when_mtn: '2026-01-01 00:00:00' },
+    { run_id: 'mrun-a2', job_id: 'job-A', kind: 'merge', mode: 'execute', environment: 'Sandbox', org_id: 'ORG1', total_sets: 2, completed_sets: 2, status: 'done', claimed_by: 'w200-b', claimed_at: '2026-01-01 00:00:05', started_at: '2026-01-01 00:00:05', finished_at: '2026-01-01 00:01:02', when_mtn: '2026-01-01 00:00:05' },
+    { run_id: 'mrun-s', job_id: null, kind: 'merge', mode: 'execute', environment: 'Sandbox', org_id: 'ORG1', total_sets: 1, completed_sets: 1, status: 'done', claimed_by: 'w100-c', claimed_at: '2026-01-01 00:02:00', started_at: '2026-01-01 00:02:00', finished_at: '2026-01-01 00:02:30', when_mtn: '2026-01-01 00:02:00' },
+  ];
+  const fakeQ = async (sql) => (/ORDER BY started_at DESC/i.test(sql) ? runRows : []);
+  test('list_jobs groups chunk-runs by job_id (single runs group under their run_id)', async () => {
+    const jobs = await mrun.list_jobs({ limit: 50 }, fakeQ);
+    const A = jobs.find((j) => j.job_id === 'job-A');
+    assert.ok(A, 'the fanned-out job appears as one row');
+    assert.equal(A.is_job, true);
+    assert.equal(A.total_sets, 4);   // 2 + 2 chunk-runs summed
+    assert.equal(A.batches, 2);
+    assert.equal(A.workers, 2);      // distinct pm2 workers w100, w200
+    const S = jobs.find((j) => !j.is_job);
+    assert.equal(S.job_key, 'mrun-s');
+    assert.equal(S.total_sets, 1);
+    assert.equal(S.batches, 1);
+  });
+});
+
+describe('Test 17 - Circuit breakers & batch limits', () => {
+  const S = require('../store/merge_settings');
+  test('a cap pauses only when enabled and used has reached the threshold', () => {
+    assert.equal(S.apex_should_pause(300000, { enabled: true, threshold: 300000 }), true);   // at cap
+    assert.equal(S.apex_should_pause(290000, { enabled: true, threshold: 300000 }), false);  // under
+    assert.equal(S.apex_should_pause(999999, { enabled: false, threshold: 300000 }), false); // disabled
+  });
+  test('both caps are ON by default; batch limits clamp to a sane bound', async () => {
+    assert.equal(await S.get('apex_stop_enabled', async () => null), true);
+    assert.equal(await S.get('api_stop_enabled', async () => null), true);
+    assert.equal(S.coerce('max_batch', '99999'), 5000);
+    assert.equal(S.coerce('max_batch_hard', '99999'), 5000);
+  });
+});
