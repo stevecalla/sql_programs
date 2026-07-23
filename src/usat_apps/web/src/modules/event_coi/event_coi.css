@@ -43,7 +43,7 @@
 .coi-defemail { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-left: auto; }
 .coi-note { margin: 4px 0 10px; }
 
-.coi-tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.coi-tablewrap { overflow: auto; height: 60vh; min-height: 220px; max-height: 92vh; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius); }
 .coi-table { width: 100%; }
 .coi-table th { white-space: nowrap; }
 .coi-table td { padding: 4px 6px; }
@@ -111,7 +111,7 @@
 .coi-run-status { font-size: 14px; }
 .coi-run-current { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; background: var(--card); }
 .coi-run-current-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.coi-run-shotwrap { max-height: 520px; overflow-y: auto; overflow-x: hidden; border: 1px solid var(--line); border-radius: 6px; margin-top: 8px; background: var(--card); }
+.coi-run-shotwrap { height: 520px; min-height: 220px; max-height: 92vh; overflow-y: auto; overflow-x: hidden; resize: vertical; border: 1px solid var(--line); border-radius: 6px; margin-top: 8px; background: var(--card); }
 .coi-run-shot { display: block; width: 100%; }
 .coi-run-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .coi-run-stop { color: var(--red); border-color: var(--red); }
@@ -120,7 +120,7 @@
 .coi-run-results td, .coi-run-results th { padding: 6px 10px; white-space: nowrap; }
 
 /* submission-log card (#5) */
-.coi-log-wrap { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.coi-log-wrap { height: 340px; min-height: 160px; max-height: 85vh; overflow: auto; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius); }
 .coi-log { width: 100%; }
 .coi-log td, .coi-log th { padding: 6px 10px; white-space: nowrap; }
 .coi-log thead th { position: sticky; top: 0; z-index: 1; background: var(--card); box-shadow: inset 0 -1px 0 var(--line); }
@@ -165,3 +165,10 @@
 .coi-cell-ro { display: inline-block; color: var(--dim); font-size: 13px; padding: 5px 4px; }
 .coi-cell-roc { opacity: .7; }
 .coi-th-ro .coi-th-btn, .coi-th-ro .coi-filter { opacity: .55; }
+
+/* sticky header row for the holder grid (pairs with the frozen Name column) */
+.coi-table thead th { position: sticky; top: 0; z-index: 3; background: var(--card); }
+.coi-table thead .coi-frz-num, .coi-table thead .coi-frz-name { z-index: 4; }
+
+/* per-column 'fill all' control in the grid header */
+.coi-fillall { display: block; width: 100%; margin-top: 3px; font-size: 11px; padding: 2px 4px; border: 1px solid var(--line); background: var(--card); color: var(--dim); border-radius: 5px; }

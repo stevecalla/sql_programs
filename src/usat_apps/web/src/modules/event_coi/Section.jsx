@@ -107,6 +107,7 @@ export default function EventCoiSection({ title }) {
   const setReqField = (k, v) => setRequestor((s) => ({ ...s, [k]: v }));
   const setOpt = (k, v) => setOpts((s) => ({ ...s, [k]: v }));
   const updateHolder = (i, k, v) => setHolders((l) => l.map((h, j) => (j === i ? { ...h, [k]: v } : h)));
+  const fillColumn = (k, v) => setHolders((l) => l.map((h) => ({ ...h, [k]: v })));   // populate one column for every holder
   const removeHolder = (i) => setHolders((l) => l.filter((_, j) => j !== i));
   const addHolder = () => setHolders((l) => [...l, BLANK_HOLDER()]);
 
@@ -174,6 +175,13 @@ export default function EventCoiSection({ title }) {
     setFileNote(''); setRunLog([]); setDefaultsNote('Page reset — saved defaults kept.');
     setRunPanelKey((k) => k + 1); setCoverageMode('all');   // remount RunPanel so its displayed screenshot + results clear too
     try { await api.coiRunReset(); } catch (e) { /* best-effort: clear any stuck run on the server */ }
+  }
+  // Clear ONLY the run / generated form below (remount RunPanel + drop the log + stop any server run).
+  // Keeps the event, requestor, holders, and Step 2 — use after editing the grid so no stale form lingers.
+  function resetRunPanel() {
+    setRunPanelKey((k) => k + 1);
+    setRunLog([]);
+    try { api.coiRunReset(); } catch (e) { /* best-effort */ }
   }
 
   const missingNames = useMemo(() => holders.filter((h) => !String(h.name || '').trim()).length, [holders]);
@@ -402,11 +410,11 @@ export default function EventCoiSection({ title }) {
           </span>
         </div>
         {fileNote && <p className="muted small coi-note">{fileNote}</p>}
-        <HolderTable holders={holders} onChange={updateHolder} onRemove={removeHolder} showCoverage={coverageMode === 'perHolder'} sharedOptions={opts} />
+        <HolderTable holders={holders} onChange={updateHolder} onRemove={removeHolder} showCoverage={coverageMode === 'perHolder'} sharedOptions={opts} onFillColumn={fillColumn} />
       </CollapsibleCard>
 
       {/* STEP 4 — Review & run (mocked in Phase 1) */}
-      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('4', 'Review & submit')}>
+      <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('4', 'Review & submit')} actions={<a className="coi-dl" title="Clear the generated form / run below and start fresh (keeps your event, requestor, and holders)" onClick={resetRunPanel}>Reset</a>}>
         <dl className="coi-summary">
           <div><dt>Event</dt><dd>{event.eventName || <span className="coi-req">— missing —</span>}{sanctionOk ? ` · Sanction ${event.sanctionId}` : <span className="coi-req"> · Sanction ID must be 6 digits</span>}</dd></div>
           <div><dt>Dates</dt><dd>{event.eventStartDate || '—'} → {event.eventEndDate || '—'}</dd></div>

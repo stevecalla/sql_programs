@@ -14,7 +14,7 @@ import { HOLDER_COLUMNS, COVERAGE_KEYS, cellDisplay } from '../lib/coverage.js';
 const COLS = HOLDER_COLUMNS;
 const COVSET = new Set(COVERAGE_KEYS);
 
-export default function HolderTable({ holders, onChange, onRemove, showCoverage, sharedOptions }) {
+export default function HolderTable({ holders, onChange, onRemove, showCoverage, sharedOptions, onFillColumn }) {
   const [q, setQ] = useState('');
   const [filters, setFilters] = useState({});
   const [sort, setSort] = useState({ key: null, dir: 1 });
@@ -100,6 +100,14 @@ export default function HolderTable({ holders, onChange, onRemove, showCoverage,
                     value={filters[c.key] || ''}
                     onChange={(e) => setFilter(c.key, e.target.value)}
                   />
+                  {onFillColumn && !roCov(c) && (c.type === 'check' || c.type === 'select') && (
+                    <select className="coi-fillall" value="" title={'Set ' + c.label + ' for all holders'} onChange={(e) => { const v = e.target.value; e.target.value = ''; if (!v) return; if (c.type === 'check') onFillColumn(c.key, v === '__y'); else onFillColumn(c.key, v === '__blank' ? '' : v); }}>
+                      <option value="">fill all…</option>
+                      {c.type === 'check'
+                        ? [<option key="y" value="__y">Yes</option>, <option key="n" value="__n">No</option>]
+                        : [<option key="__blank" value="__blank">— clear —</option>].concat(c.options.filter((o) => o[0] !== '').map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>))}
+                    </select>
+                  )}
                 </th>
               ))}
               <th style={{ width: 34 }} aria-label="remove" />
