@@ -15,6 +15,7 @@ import { api } from '../../lib/api.js';
 import { exportCsv, exportExcel } from './lib/exportRows.js';
 import { makeZip, b64ToBytes } from './lib/zip.js';
 import { TEST_EVENT, TEST_REQUESTOR, TEST_OPTIONS, TEST_HOLDERS } from './lib/testData.js';
+import { anyHolderHasCoverage } from './lib/coverage.js';
 import './event_coi.css';
 
 
@@ -98,6 +99,7 @@ export default function EventCoiSection({ title }) {
   const [runLog, setRunLog] = useState([]);
   const dropInputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
+  const [coverageMode, setCoverageMode] = useState('all');   // 'all' = Step 2 for everyone; 'perHolder' = each holder's own columns
   const [cardForce, setCardForce] = useState({ open: false, n: 0 });   // collapse/expand-all signal for the step cards
   const [runPanelKey, setRunPanelKey] = useState(0);   // bump to remount RunPanel (clears its screenshot/results) on a full reset
 
@@ -140,7 +142,9 @@ export default function EventCoiSection({ title }) {
       const buf = await file.arrayBuffer();
       const r = await api.coiParse(file.name, bufToB64(buf));
       if (r.status === 200 && r.body && r.body.ok) {
-        setHolders(r.body.holders || []);
+        const hs = r.body.holders || [];
+        setHolders(hs);
+        if (anyHolderHasCoverage(hs)) setCoverageMode('perHolder');
         const sheetNote = r.body.sheet && r.body.sheet !== '(csv)' ? ` (sheet: ${r.body.sheet})` : '';
         setFileNote(`Loaded ${r.body.count} holders from “${file.name}”${sheetNote}.`);
       } else {
@@ -158,7 +162,7 @@ export default function EventCoiSection({ title }) {
   function fillTestValues() {
     setEvent(TEST_EVENT); setRequestor(TEST_REQUESTOR); setOpts(TEST_OPTIONS);
     setHolders(TEST_HOLDERS.map((h) => ({ ...h }))); setDefaultEmail(TEST_REQUESTOR.email);
-    setFileNote('Filled with test values.');
+    setCoverageMode('perHolder'); setFileNote('Filled with test values (per-holder coverage).');
   }
   // Complete reset: wipe every field the user entered — event, requestor, coverage/delivery, holders,
   // notes, and the submission log — and best-effort clear any lingering server-side run so the next
@@ -168,7 +172,7 @@ export default function EventCoiSection({ title }) {
         !window.confirm('Reset the whole page? This clears the event, requestor, coverage/delivery options, all holders, and the submission log. Your saved defaults are kept.')) return;
     setEvent({}); setRequestor({}); setOpts(EMPTY_OPTS); setHolders([]); setDefaultEmail('');
     setFileNote(''); setRunLog([]); setDefaultsNote('Page reset — saved defaults kept.');
-    setRunPanelKey((k) => k + 1);   // remount RunPanel so its displayed screenshot + results clear too
+    setRunPanelKey((k) => k + 1); setCoverageMode('all');   // remount RunPanel so its displayed screenshot + results clear too
     try { await api.coiRunReset(); } catch (e) { /* best-effort: clear any stuck run on the server */ }
   }
 
@@ -330,6 +334,18 @@ export default function EventCoiSection({ title }) {
 
       {/* STEP 2 — Coverage & delivery (entered once) */}
       <CollapsibleCard defaultOpen={cardForce.open} forceOpen={cardForce.open} forceKey={cardForce.n} title={stepTitle('2', 'Coverage & delivery', 'Entered once — optional on the portal.')}>
+        <div className="coi-covtoggle">
+          <label className={'coi-covopt' + (coverageMode === 'perHolder' ? ' sel' : '')}>
+            <input type="radio" name="coi-covmode" checked={coverageMode === 'perHolder'} onChange={() => setCoverageMode('perHolder')} />
+            <span><b>Use per-holder info from the sheet</b> <span className="muted small">- each certificate uses that holder's own coverage columns in the grid below.</span></span>
+          </label>
+          <label className={'coi-covopt' + (coverageMode === 'all' ? ' sel' : '')}>
+            <input type="radio" name="coi-covmode" checked={coverageMode === 'all'} onChange={() => setCoverageMode('all')} />
+            <span><b>Apply the same options to all</b> <span className="muted small">- one coverage set stamped on every certificate (below).</span></span>
+          </label>
+        </div>
+        <div className={'coi-cov-body' + (coverageMode === 'perHolder' ? ' coi-cov-off' : '')}>
+          {coverageMode === 'perHolder' ? <div className="coi-cov-note">Managed per holder in the grid below &darr;</div> : null}
         <div className="coi-optrow">
           <div className="coi-optlabel">Does the Holder require any of the following to be included on the certificate of insurance? <span className="muted small">(Check All That Apply)</span></div>
           <div className="coi-optbody">
@@ -371,6 +387,7 @@ export default function EventCoiSection({ title }) {
               <input className="coi-otherinput" placeholder="specify" maxLength={100} value={opts.deliveryOtherText} onChange={(e) => setOpt('deliveryOtherText', e.target.value.slice(0, 100))} /></label>
           </div>
         </div>
+        </div>
       </CollapsibleCard>
 
       {/* STEP 3 — Holders */}
@@ -385,7 +402,7 @@ export default function EventCoiSection({ title }) {
           </span>
         </div>
         {fileNote && <p className="muted small coi-note">{fileNote}</p>}
-        <HolderTable holders={holders} onChange={updateHolder} onRemove={removeHolder} />
+        <HolderTable holders={holders} onChange={updateHolder} onRemove={removeHolder} showCoverage={coverageMode === 'perHolder'} sharedOptions={opts} />
       </CollapsibleCard>
 
       {/* STEP 4 — Review & run (mocked in Phase 1) */}
@@ -396,7 +413,7 @@ export default function EventCoiSection({ title }) {
           <div><dt>Requestor</dt><dd>{requestor.name || <span className="coi-req">— missing —</span>}{requestor.email ? ` · ${requestor.email}` : ''}</dd></div>
           <div><dt>Certificates</dt><dd>{holders.length}{missingNames || missingEmails ? <span className="coi-req"> · {missingNames} missing name, {missingEmails} missing email</span> : ''}</dd></div>
         </dl>
-        <RunPanel key={runPanelKey} request={{ event, requestor, options: opts }} holders={holders} ready={ready} problems={problems} onLog={setRunLog} />
+        <RunPanel key={runPanelKey} request={{ event, requestor, options: opts }} holders={holders} ready={ready} problems={problems} onLog={setRunLog} coverageMode={coverageMode} />
       </CollapsibleCard>
 
       {/* STEP 5 — Submission log */}

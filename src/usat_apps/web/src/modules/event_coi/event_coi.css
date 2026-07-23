@@ -136,3 +136,32 @@
 .coi-summary dd { margin: 0; font-size: 14px; color: var(--ink); }
 
 .coi-runrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+
+/* --- per-holder coverage (grid freeze + Step 2 toggle) --- */
+/* Frozen # + Holder Name columns: stay put while the coverage columns scroll right. */
+.coi-table { border-collapse: separate; border-spacing: 0; }
+.coi-table thead th, .coi-table tbody td { border-bottom: 1px solid var(--line); }
+.coi-frz-num, .coi-frz-name { position: sticky; z-index: 2; background: var(--card); box-sizing: border-box; }
+.coi-frz-num { left: 0; width: 40px; min-width: 40px; max-width: 40px; }
+.coi-frz-name { left: 40px; box-shadow: 2px 0 0 0 var(--red); }
+.coi-table thead .coi-frz-num, .coi-table thead .coi-frz-name { z-index: 3; background: var(--card); }
+.coi-scrollnote { margin-left: auto; }
+.coi-cell-check { text-align: center; }
+.coi-cellcheck { accent-color: var(--red); width: 16px; height: 16px; cursor: pointer; }
+.coi-cellselect { padding: 4px 6px; font-size: 13px; min-width: 120px; }
+
+/* Step 2 per-holder vs same-for-all toggle */
+.coi-covtoggle { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.coi-covopt { flex: 1; min-width: 240px; display: flex; gap: 9px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; background: var(--card); }
+.coi-covopt.sel { border-color: var(--red); box-shadow: inset 0 0 0 1px var(--red); }
+.coi-covopt input { margin-top: 3px; accent-color: var(--red); flex: 0 0 auto; }
+.coi-covopt b { font-size: 13.5px; color: var(--ink); }
+.coi-cov-body { position: relative; }
+.coi-cov-off .coi-optrow { opacity: .4; filter: grayscale(.4); pointer-events: none; }
+.coi-cov-note { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); background: #20345c; color: #cfe0ff; border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; font-size: 13px; font-weight: 600; z-index: 3; }
+
+/* read-only coverage cells (apply-to-all mode: reflect Step 2) */
+.coi-cell-ro { display: inline-block; color: var(--dim); font-size: 13px; padding: 5px 4px; }
+.coi-cell-roc { opacity: .7; }
+.coi-th-ro .coi-th-btn, .coi-th-ro .coi-filter { opacity: .55; }
