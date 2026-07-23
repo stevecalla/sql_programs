@@ -59,16 +59,18 @@ function not_found(req, res) {
   return res.json({ ok: false, error: 'not found', path: shown });
 }
 
-function host_gate(which) {
+// Wrap a proxy middleware so it only runs on its tagged host. On the right host we run `mw` (proxy to
+// the backend); on the wrong host we call next() to fall THROUGH to the next route — importantly the
+// '/' catch-all — instead of 404ing or forwarding. This must WRAP the proxy (not sit beside it as
+// `app.use(prefix, gate, mw)`), because in that form next() would just advance to `mw` at the same
+// mount and still forward. Wrapping means a host mismatch skips the proxy entirely, so an api-tagged
+// prefix like /events can coexist with an app page at /events/insurance-coi on the app host while the
+// api backend stays unreachable there. If nothing else matches, the final not_found() still 404s.
+function host_gate(which, mw) {
   const wanted = which === 'app' ? APP_HOST : API_HOST;
   return function (req, res, next) {
     const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0].toLowerCase();
-    if (host === wanted || host === 'localhost' || host === '127.0.0.1') return next();
-    // Wrong host for this prefix: don't handle it here — fall through so a later route can. This lets
-    // an api-tagged prefix (e.g. /events) that ALSO exists as an app page (usat_apps SPA route
-    // /events/insurance-coi) reach the '/' catch-all on the app host instead of hard-404ing. The
-    // api backend stays unreachable from the app host because THIS route's proxy mw is skipped; if
-    // nothing else matches, the final not_found() still returns 404.
+    if (host === wanted || host === 'localhost' || host === '127.0.0.1') return mw(req, res, next);
     return next();
   };
 }
@@ -165,8 +167,9 @@ function create_app() {
       },
     });
     // Gate each route to its tagged host (host:'api' | 'app'); untagged routes stay on both hosts.
-    const gate = cfg.host === 'app' ? host_gate('app') : (cfg.host === 'api' ? host_gate('api') : null);
-    if (gate) app.use(prefix, gate, mw);
+    // host_gate WRAPS mw so a wrong-host request falls through to later routes instead of 404ing.
+    const gate = cfg.host === 'app' ? host_gate('app', mw) : (cfg.host === 'api' ? host_gate('api', mw) : null);
+    if (gate) app.use(prefix, gate);
     else app.use(prefix, mw);
   }
 
