@@ -51,7 +51,13 @@ export default function App() {
       </header>
 
       <div className="admin-shell">
-        {location.pathname.startsWith('/salesforce/merge') ? <MergeRail user={user} /> : <SideRail user={user} />}
+        {/* Show the Merge module's own rail ONLY to users who can see that panel; otherwise the normal
+            rail (which lists just what they're permitted to see). Prevents the merge nav leaking to an
+            unauthorized user who lands on a /salesforce/merge… URL — they get the 403 content + their
+            own rail, not the full merge sidebar. */}
+        {location.pathname.startsWith('/salesforce/merge') && canSee(user, panelForPathname(location.pathname))
+          ? <MergeRail user={user} />
+          : <SideRail user={user} />}
         <main className="admin-main">
           <Suspense fallback={<div className="loading">Loading…</div>}>
             <Routes>
