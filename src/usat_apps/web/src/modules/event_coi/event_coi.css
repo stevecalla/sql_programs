@@ -43,7 +43,7 @@
 .coi-defemail { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-left: auto; }
 .coi-note { margin: 4px 0 10px; }
 
-.coi-tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.coi-tablewrap { overflow: auto; max-height: 62vh; border: 1px solid var(--line); border-radius: var(--radius); }
 .coi-table { width: 100%; }
 .coi-table th { white-space: nowrap; }
 .coi-table td { padding: 4px 6px; }
@@ -165,3 +165,7 @@
 .coi-cell-ro { display: inline-block; color: var(--dim); font-size: 13px; padding: 5px 4px; }
 .coi-cell-roc { opacity: .7; }
 .coi-th-ro .coi-th-btn, .coi-th-ro .coi-filter { opacity: .55; }
+
+/* sticky header row for the holder grid (pairs with the frozen Name column) */
+.coi-table thead th { position: sticky; top: 0; z-index: 3; background: var(--card); }
+.coi-table thead .coi-frz-num, .coi-table thead .coi-frz-name { z-index: 4; }
