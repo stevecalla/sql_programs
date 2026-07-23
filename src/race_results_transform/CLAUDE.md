@@ -77,6 +77,9 @@ src/race_results_transform/
                        auto-unwraps into real columns. When it reshapes a file it sets `ir.csv_note` (a short
                        message), which `app.js` surfaces as a small **"ℹ CSV reshaped"** chip in the summary
                        bar (hover for detail); ordinary comma CSVs parse unchanged with no note.
+                       `parse_csv` treats **CR, LF, and CRLF** all as row terminators (outside quotes), so
+                       old-Mac **CR-only** files parse correctly instead of collapsing into one giant row
+                       (which showed as a blank table); a `\n`/`\r` inside a quoted field is still literal.
                        Legacy .xls via SheetJS (xls_to_irs/sheetjs_available). The browser build is
                        **bundled** at public/vendor/xlsx.full.min.js (committed, like exceljs.min.js) so
                        .xls works on any deploy WITHOUT npm install (incl. prod with a locked registry);

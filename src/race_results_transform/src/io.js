@@ -162,8 +162,13 @@
       }
       if (ch === '"') { in_q = true; i++; continue; }
       if (ch === delim) { row.push(field); field = ''; i++; continue; }
-      if (ch === '\r') { i++; continue; }
-      if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+      // A CR, LF, or CRLF (all outside quotes) ends the row — so old-Mac CR-only files parse too,
+      // instead of collapsing every "line" into one giant row.
+      if (ch === '\r' || ch === '\n') {
+        row.push(field); rows.push(row); row = []; field = '';
+        if (ch === '\r' && text[i + 1] === '\n') i++;   // consume the LF of a CRLF pair
+        i++; continue;
+      }
       field += ch; i++;
     }
     if (field !== '' || row.length) { row.push(field); rows.push(row); }
