@@ -16,6 +16,7 @@ import { exportCsv, exportExcel } from './lib/exportRows.js';
 import { makeZip, b64ToBytes } from './lib/zip.js';
 import { TEST_EVENT, TEST_REQUESTOR, TEST_OPTIONS, TEST_HOLDERS } from './lib/testData.js';
 import { anyHolderHasCoverage } from './lib/coverage.js';
+import { usePersistentHeight } from './lib/persistResize.js';
 import './event_coi.css';
 
 
@@ -89,6 +90,7 @@ function bufToB64(buf) {
 }
 
 export default function EventCoiSection({ title }) {
+  const logRef = usePersistentHeight('log');
   const [event, setEvent] = useState({});
   const [requestor, setRequestor] = useState({});
   const [opts, setOpts] = useState(EMPTY_OPTS);
@@ -439,7 +441,7 @@ export default function EventCoiSection({ title }) {
         {runLog.length === 0 ? (
           <p className="muted">Jobs appear here as the run processes each holder — time, status, confirmation number, and a link to view the form.</p>
         ) : (
-          <div className="coi-log-wrap">
+          <div className="coi-log-wrap" ref={logRef}>
             <table className="grid coi-log">
               <thead><tr><th>#</th><th>Time</th><th>Holder</th><th>Status</th><th>Confirmation</th><th>Detail</th><th>Form</th></tr></thead>
               <tbody>

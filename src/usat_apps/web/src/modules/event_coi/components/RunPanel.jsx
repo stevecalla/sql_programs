@@ -4,12 +4,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api.js';
 import { holderOptions } from '../lib/coverage.js';
+import { usePersistentHeight } from '../lib/persistResize.js';
 
 const RUNNING = ['queued', 'launching', 'login', 'running', 'awaiting', 'submitting'];
 const STATUS_LABEL = {
   queued: 'Waiting for a free slot…', launching: 'Launching browser…', login: 'Signing in to the portal…',
   running: 'Filling the form…', awaiting: 'Waiting for your review', submitting: 'Submitting…',
-  done: 'Run complete', stopped: 'Run stopped', error: 'Run error',
+  done: 'Run complete', stopped: 'Run stopped', error: 'Run error', expired: 'Timed out waiting for review — run stopped',
 };
 
 // Portal LOGIN page. (The deep Race-Certificate form link 404s when opened without an authenticated
@@ -32,6 +33,7 @@ export function openFull(dataUrl) {
 }
 
 export default function RunPanel({ request, holders, ready, problems, onLog, coverageMode }) {
+  const shotRef = usePersistentHeight('runShot');
   const [runId, setRunId] = useState(null);
   const [status, setStatus] = useState('idle');
   const [current, setCurrent] = useState(null);   // { index, name, screenshot }
@@ -78,7 +80,7 @@ export default function RunPanel({ request, holders, ready, problems, onLog, cov
     const r = await api.coiRunStart(body);
     if (r.status === 200 && r.body.ok) { setRunId(r.body.runId); setTotal(r.body.total); setStatus(r.body.queued ? 'queued' : 'launching'); openStream(r.body.runId); }
     else if (r.status === 400 && r.body.problems) setErr('Complete before submitting: ' + r.body.problems.join(', ') + '.');
-    else if (r.status === 409) setErr('A previous run is still active on the server — click “Reset run”, then Start again.');
+    else if (r.status === 409) setErr((r.body && r.body.error) || 'A previous run is still active on the server — click “Reset run”, then Start again.');
     else setErr((r.body && r.body.error) || 'could not start the run');
   }
   async function reset() {
@@ -134,7 +136,7 @@ export default function RunPanel({ request, holders, ready, problems, onLog, cov
             {current.screenshot && <a className="coi-dl" href={current.screenshot} onClick={(e) => { e.preventDefault(); openFull(current.screenshot); }}>Open full ↗</a>}
           </div>
           {current.screenshot && (
-            <div className="coi-run-shotwrap">
+            <div className="coi-run-shotwrap" ref={shotRef}>
               <img className="coi-run-shot" src={current.screenshot} alt={'Filled form for ' + current.name} />
             </div>
           )}
@@ -156,7 +158,7 @@ export default function RunPanel({ request, holders, ready, problems, onLog, cov
         <div className="coi-run-actions"><button className="btn coi-run-stop" onClick={stop}>Stop</button></div>
       )}
 
-      {(status === 'done' || status === 'stopped' || status === 'error') && (
+      {(status === 'done' || status === 'stopped' || status === 'error' || status === 'expired') && (
         <div className="coi-run-actions"><button className="btn" onClick={reset}>Start a new run</button><span className="muted small">See the full log in the Submission log below.</span></div>
       )}
     </div>

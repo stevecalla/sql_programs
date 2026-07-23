@@ -10,11 +10,13 @@
 // every certificate will get. showCoverage=true (per-holder): those columns are editable per row.
 import { useMemo, useState } from 'react';
 import { HOLDER_COLUMNS, COVERAGE_KEYS, cellDisplay } from '../lib/coverage.js';
+import { usePersistentHeight } from '../lib/persistResize.js';
 
 const COLS = HOLDER_COLUMNS;
 const COVSET = new Set(COVERAGE_KEYS);
 
 export default function HolderTable({ holders, onChange, onRemove, showCoverage, sharedOptions, onFillColumn }) {
+  const tableRef = usePersistentHeight('holderTable');
   const [q, setQ] = useState('');
   const [filters, setFilters] = useState({});
   const [sort, setSort] = useState({ key: null, dir: 1 });
@@ -83,7 +85,7 @@ export default function HolderTable({ holders, onChange, onRemove, showCoverage,
         </span>
       </div>
 
-      <div className="coi-tablewrap">
+      <div className="coi-tablewrap" ref={tableRef}>
         <table className="grid coi-table">
           <thead>
             <tr>
