@@ -161,6 +161,16 @@ export default function EventCoiSection({ title }) {
   function clearAll() {
     setEvent({}); setRequestor({}); setOpts(EMPTY_OPTS); setHolders([]); setDefaultEmail(''); setFileNote('Cleared.');
   }
+  // Complete reset: wipe every field the user entered — event, requestor, coverage/delivery, holders,
+  // notes, and the submission log — and best-effort clear any lingering server-side run so the next
+  // Start is clean. Saved defaults (localStorage) are intentionally kept; use "Clear defaults" for those.
+  async function resetAll() {
+    if (typeof window !== 'undefined' && window.confirm &&
+        !window.confirm('Reset the whole page? This clears the event, requestor, coverage/delivery options, all holders, and the submission log. Your saved defaults are kept.')) return;
+    setEvent({}); setRequestor({}); setOpts(EMPTY_OPTS); setHolders([]); setDefaultEmail('');
+    setFileNote(''); setRunLog([]); setDefaultsNote('Page reset — saved defaults kept.');
+    try { await api.coiRunReset(); } catch (e) { /* best-effort: clear any stuck run on the server */ }
+  }
 
   const missingNames = useMemo(() => holders.filter((h) => !String(h.name || '').trim()).length, [holders]);
   const missingEmails = useMemo(() => holders.filter((h) => !String(h.email || '').trim()).length, [holders]);
@@ -240,6 +250,7 @@ export default function EventCoiSection({ title }) {
         <button className="btn" onClick={loadDefaults}>Load defaults</button>
         <button className="btn" onClick={clearDefaults}>Clear defaults</button>
         <span className="muted small">{defaultsNote || 'Saves requestor + coverage/delivery + default email for next time.'}</span>
+        <button className="btn coi-reset" onClick={resetAll} title="Clear everything on the page — event, requestor, coverage/delivery, all holders, and the submission log. Saved defaults are kept.">Complete reset</button>
       </div>
 
       {SHOW_TEST_TOOLS && (
