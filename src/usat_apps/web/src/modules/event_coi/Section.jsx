@@ -17,8 +17,6 @@ import { makeZip, b64ToBytes } from './lib/zip.js';
 import { TEST_EVENT, TEST_REQUESTOR, TEST_OPTIONS, TEST_HOLDERS } from './lib/testData.js';
 import './event_coi.css';
 
-// Flip to false (or delete the testData import + this block) to hide the test-fill tools for production.
-const SHOW_TEST_TOOLS = true;
 
 const DEFAULTS_KEY = 'usatapps_event_coi_defaults';   // localStorage; Phase 2 can move to a server settings store like merge.
 
@@ -161,9 +159,6 @@ export default function EventCoiSection({ title }) {
     setEvent(TEST_EVENT); setRequestor(TEST_REQUESTOR); setOpts(TEST_OPTIONS);
     setHolders(TEST_HOLDERS.map((h) => ({ ...h }))); setDefaultEmail(TEST_REQUESTOR.email);
     setFileNote('Filled with test values.');
-  }
-  function clearAll() {
-    setEvent({}); setRequestor({}); setOpts(EMPTY_OPTS); setHolders([]); setDefaultEmail(''); setFileNote('Cleared.');
   }
   // Complete reset: wipe every field the user entered — event, requestor, coverage/delivery, holders,
   // notes, and the submission log — and best-effort clear any lingering server-side run so the next
@@ -440,15 +435,6 @@ export default function EventCoiSection({ title }) {
         )}
       </CollapsibleCard>
 
-      {/* Test tools — moved to the bottom of the page */}
-      {SHOW_TEST_TOOLS && (
-        <div className="coi-testbar">
-          <span className="coi-testbar-label">🧪 Test tools</span>
-          <button className="btn" onClick={fillTestValues}>Fill test values</button>
-          <button className="btn" onClick={clearAll}>Clear values</button>
-          <span className="muted small">Fill populates the form + sample holders; Clear resets everything.</span>
-        </div>
-      )}
     </div>
   );
 }
