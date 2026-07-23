@@ -84,4 +84,14 @@ export const api = {
   // event_coi (Event / Race Certificate Request): /api/event-coi/*
   coiPing: () => jget('/api/event-coi/ping'),
   coiParse: (filename, dataB64) => jpost('/api/event-coi/parse', { filename, dataB64 }),
+  coiRunStart: (body) => jpost('/api/event-coi/run/start', body),
+  coiRunApprove: (runId) => jpost('/api/event-coi/run/approve', { runId }),
+  coiRunApproveAll: (runId) => jpost('/api/event-coi/run/approve-all', { runId }),
+  coiRunSkip: (runId) => jpost('/api/event-coi/run/skip', { runId }),
+  coiRunStop: (runId) => jpost('/api/event-coi/run/stop', { runId }),
+  coiRunReset: (runId) => jpost('/api/event-coi/run/reset', runId ? { runId } : {}),
+  coiRunActive: () => jget('/api/event-coi/run/active'),
+  coiRunResults: (runId) => jget('/api/event-coi/run/results?runId=' + encodeURIComponent(runId)),
+  // SSE stream URL (open with EventSource; cookies ride along same-origin).
+  coiRunStreamUrl: (runId) => ((import.meta.env.BASE_URL || '/').replace(/\/+$/, '')) + '/api/event-coi/run/stream?runId=' + encodeURIComponent(runId),
 };

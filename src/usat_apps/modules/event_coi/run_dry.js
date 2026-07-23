@@ -25,7 +25,7 @@ const TEST_HOLDER = { name: 'Jane Testerson', address: '100 Sample Street', city
   const outDir = path.join(__dirname, 'dry_run_screens');
   fs.mkdirSync(outDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const shot = async (page, name) => { const p = path.join(outDir, `${stamp}_${name}.png`); await page.screenshot({ path: p, fullPage: true }); console.log('  screenshot ->', p); };
+  const shot = async (page, name) => { const p = path.join(outDir, `${stamp}_${name}.png`); const buf = await session.fullPageShot(page); fs.writeFileSync(p, buf); console.log('  screenshot ->', p); };
 
   console.log('event_coi DRY RUN — login -> open form -> fill one holder -> STOP (no submit)\n');
   const { browser, page } = await session.launch({ headless });

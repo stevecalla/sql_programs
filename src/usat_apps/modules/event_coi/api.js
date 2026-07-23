@@ -71,6 +71,18 @@ function mount(app) {
     if (!run) return res.status(404).json({ ok: false, error: 'no such run' });
     res.json({ ok: true, status: run.status, total: run.total, results: run.results });
   });
+
+  // Is a run currently active? (used by the UI to detect a stuck run after a refresh)
+  app.get('/api/event-coi/run/active', gate, function (req, res) {
+    const run = run_control.activeRun();
+    res.json({ ok: true, active: !!run, runId: run ? run.id : null, status: run ? run.status : null });
+  });
+
+  // Force-clear the active (or a specific) run so a new one can start. Aborts + closes its browser.
+  app.post('/api/event-coi/run/reset', gate, async function (req, res) {
+    const r = await run_control.abort((req.body && req.body.runId) || null);
+    res.json(r);
+  });
 }
 
 module.exports = { mount };

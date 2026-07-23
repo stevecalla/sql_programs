@@ -19,7 +19,7 @@ const { spawn, execSync } = require('child_process');
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const PREFS_FILE = path.join(__dirname, '.menu_prefs.json');
 const PORT = 8022;                          // platform (served UI + API)
-const PAGE = '/insurance/event-coi';        // this module's route
+const PAGE = '/events/insurance-coi';        // this module's route
 
 const RESET = '\x1b[0m', BOLD = '\x1b[1m', DIM = '\x1b[2m';
 const RED = '\x1b[31m', GREEN = '\x1b[32m', YELLOW = '\x1b[33m', CYAN = '\x1b[36m';
@@ -30,10 +30,10 @@ function load_prefs() { try { const j = JSON.parse(fs.readFileSync(PREFS_FILE, '
 function save_prefs() { try { fs.writeFileSync(PREFS_FILE, JSON.stringify({ show_cli: _show_cli }, null, 2) + '\n'); } catch (e) { /* ignore */ } }
 function prompt(rl, q) { return new Promise((res) => rl.question(q, res)); }
 
-function run_cmd(bin, args, label) {
+function run_cmd(bin, args, label, env) {
   console.log(c(DIM, `  Running: ${bin} ${args.join(' ')}  (cwd: repo root)  (Ctrl-C to stop)\n`));
   return new Promise((resolve) => {
-    const proc = spawn(bin, args, { cwd: REPO_ROOT, stdio: 'inherit', shell: process.platform === 'win32' });
+    const proc = spawn(bin, args, { cwd: REPO_ROOT, stdio: 'inherit', shell: process.platform === 'win32', env: env ? Object.assign({}, process.env, env) : process.env });
     proc.on('close', (code) => { console.log(code === 0 ? c(GREEN, `\n  ✓ ${label} done.`) : c(RED, `\n  ✗ ${label} exited (${code}).`)); resolve(code); });
   });
 }
@@ -67,7 +67,8 @@ const SECTIONS = [
     { id: 8, label: 'Run module tests', desc: 'node src/usat_apps/run_tests.js modules/event_coi (holder_parse + validate_request)', bin: 'node', args: ['src/usat_apps/run_tests.js', 'modules/event_coi'], cli: 'node src/usat_apps/run_tests.js modules/event_coi' },
   ]},
   { label: 'RUNNER — Playwright (Phase 3)', color: RED, items: [
-    { id: 9, label: 'Portal dry run (login + fill, NO submit)', desc: 'Logs in, opens the form, fills one test holder, screenshots each stage to dry_run_screens/ — nothing is submitted. Prefix HEADLESS=0 to watch the browser.', bin: 'node', args: ['src/usat_apps/modules/event_coi/run_dry.js'], cli: 'node src/usat_apps/modules/event_coi/run_dry.js' },
+    { id: 9, label: 'Portal dry run (login + fill, NO submit)', desc: 'Headless. Logs in, opens the form, fills one test holder, screenshots each stage to dry_run_screens/ — nothing is submitted.', bin: 'node', args: ['src/usat_apps/modules/event_coi/run_dry.js'], cli: 'node src/usat_apps/modules/event_coi/run_dry.js' },
+    { id: 10, label: 'Portal dry run — WATCH (visible browser)', desc: 'Same as 9 but HEADED: opens a visible Chromium so you can watch login → open form → fill happen live. Still NO submit. Leaves the browser open at the end for you to inspect.', bin: 'node', args: ['src/usat_apps/modules/event_coi/run_dry.js'], env: { HEADLESS: '0' }, cli: 'HEADLESS=0 node src/usat_apps/modules/event_coi/run_dry.js' },
   ]},
 ];
 
@@ -98,7 +99,7 @@ async function main() {
     if (!it) { continue; }
     console.log('');
     if (it.act) { await it.act(); }
-    else { await run_cmd(it.bin, it.args, it.label); }
+    else { await run_cmd(it.bin, it.args, it.label, it.env); }
     await prompt(rl, c(DIM, '\n  (enter to return) '));
   }
   rl.close();

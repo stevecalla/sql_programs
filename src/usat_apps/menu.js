@@ -114,6 +114,7 @@ const SECTIONS = [
   { label: 'MODULES', color: CYAN, items: [
     { id: 33, label: 'Participation maps — data pipeline & ops →', desc: 'Rebuild region/zip/census/summary data, BigQuery load, build scope (opens the module menu)', bin: 'node', args: ['src/usat_apps/modules/participation_maps/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/participation_maps/menu.js' },
     { id: 34, label: 'Salesforce merge — worker & ops →', desc: 'Start/stop the :8021 write worker, DB migrations, status/opens (the merge tests all live on the main menu above)', bin: 'node', args: ['src/usat_apps/modules/salesforce_merge/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/salesforce_merge/menu.js' },
+    { id: 35, label: 'Event COI — Race Certificate Request builder →', desc: 'Dev/build/open the Event COI page, run the module tests, and the Playwright dry run (login → fill, no submit). event_coi tests also run in “Run all tests” above (option 8).', bin: 'node', args: ['src/usat_apps/modules/event_coi/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/event_coi/menu.js' },
   ]},
 ];
 const ALL = SECTIONS.flatMap((s) => s.items);

@@ -85,11 +85,32 @@
 
 /* saved-defaults bar, collapsible-card titles, and export links (matching the merge app) */
 .coi-defaults { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+/* collapsible-card title row: badge + title + subtext, evenly spaced (the card wraps these in one span) */
+.coi-cardhead { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .coi-cardtitle { font-size: 16px; }
 .coi-cardsub { font-weight: 400; }
+.coi-date { max-width: 200px; }
 .coi-export { display: inline-flex; align-items: center; gap: 8px; }
 .coi-dl { font-size: 12px; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .coi-dl:hover { color: var(--ink); }
+
+/* submission run panel */
+.coi-run { display: flex; flex-direction: column; gap: 12px; }
+.coi-run-status { font-size: 14px; }
+.coi-run-current { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; background: var(--card); }
+.coi-run-current-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.coi-run-shotwrap { max-height: 520px; overflow-y: auto; overflow-x: hidden; border: 1px solid var(--line); border-radius: 6px; margin-top: 8px; background: var(--card); }
+.coi-run-shot { display: block; width: 100%; }
+.coi-run-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.coi-run-stop { color: var(--red); border-color: var(--red); }
+.coi-run-results { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.coi-run-results table { width: 100%; }
+.coi-run-results td, .coi-run-results th { padding: 6px 10px; white-space: nowrap; }
+
+/* submission-log card (#5) */
+.coi-log-wrap { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.coi-log { width: 100%; }
+.coi-log td, .coi-log th { padding: 6px 10px; white-space: nowrap; }
 
 /* inline "Other → specify" text box next to an Other checkbox/radio (matches the portal form) */
 .coi-otherinput { margin-left: 6px; max-width: 260px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px; padding: 4px 7px; font: inherit; font-size: 13px; }

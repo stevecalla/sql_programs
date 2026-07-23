@@ -36,8 +36,8 @@ export const NAV = [
     ]
   },
   {
-    type: 'group', label: 'Insurance', items: [
-      { label: 'Event COI', path: '/insurance/event-coi', panel: 'event-coi', icon: '🛡', Component: EventCoi },
+    type: 'group', label: 'Events', items: [
+      { label: 'Insurance COI', path: '/events/insurance-coi', panel: 'event-coi', icon: '🛡', Component: EventCoi },
     ]
   },
   {

@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import CollapsibleCard from '../salesforce_merge/components/CollapsibleCard.jsx'; // shared UI primitive (could move to web/src/components later)
 import HolderTable from './components/HolderTable.jsx';
+import RunPanel, { openFull } from './components/RunPanel.jsx';
 import { api } from '../../lib/api.js';
 import { exportCsv, exportExcel } from './lib/exportRows.js';
 import { TEST_EVENT, TEST_REQUESTOR, TEST_OPTIONS, TEST_HOLDERS } from './lib/testData.js';
@@ -25,8 +26,8 @@ const EVENT_FIELDS = [
   { key: 'eventName', label: 'Event Name', req: true, maxLen: 150 },
   { key: 'eventLocationName', label: 'Event Location Name', maxLen: 150 },
   { key: 'eventAddress', label: 'Event Address', maxLen: 150 },
-  { key: 'eventStartDate', label: 'Event Start Date', ph: 'MM/DD/YYYY', req: true, maxLen: 10 },
-  { key: 'eventEndDate', label: 'Event End Date', ph: 'MM/DD/YYYY', req: true, maxLen: 10 },
+  { key: 'eventStartDate', label: 'Event Start Date', req: true, date: true },
+  { key: 'eventEndDate', label: 'Event End Date', req: true, date: true },
 ];
 const REQUESTOR_FIELDS = [
   { key: 'name', label: 'Your Name', req: true, maxLen: 100 },
@@ -52,6 +53,7 @@ const HOLDER_COLS = [
   { key: 'name', label: 'Holder Name' }, { key: 'address', label: 'Address' }, { key: 'city', label: 'City' },
   { key: 'state', label: 'State' }, { key: 'zip', label: 'Zip' }, { key: 'email', label: 'Holder Email' },
 ];
+const LOG_COLS = [{ key: 'num', label: '#' }, { key: 'time', label: 'Time' }, { key: 'holder', label: 'Holder' }, { key: 'status', label: 'Status' }, { key: 'confirmation', label: 'Confirmation' }, { key: 'detail', label: 'Detail' }];
 
 const EMPTY_OPTS = {
   additionalInsured: false, aiPrimaryNonContrib: false, waiverOfSubrogation: false, noticeOfCancellation: false,
@@ -62,6 +64,10 @@ const EMPTY_OPTS = {
 
 const TEMPLATE_URL = (((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) || '/').replace(/\/+$/, '')) + '/event_coi_template.xlsx';
 const BLANK_HOLDER = () => ({ name: '', address: '', city: '', state: '', zip: '', email: '' });
+
+// The portal stores dates as MM/DD/YYYY (maxlength 10); the native date picker speaks YYYY-MM-DD.
+const mdyToIso = (mdy) => { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(mdy || ''); return m ? `${m[3]}-${m[1]}-${m[2]}` : ''; };
+const isoToMdy = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? `${m[2]}/${m[3]}/${m[1]}` : ''; };
 
 // Uploads are parsed server-side (modules/event_coi/store/holder_parse) so CSV and .xlsx share one
 // tested parser with the fuzzy header matching. Encode the file to base64 in chunks (avoids call-stack
@@ -82,6 +88,7 @@ export default function EventCoiSection({ title }) {
   const [defaultEmail, setDefaultEmail] = useState('');
   const [fileNote, setFileNote] = useState('');
   const [defaultsNote, setDefaultsNote] = useState('');
+  const [runLog, setRunLog] = useState([]);
 
   const setEventField = (k, v) => setEvent((s) => ({ ...s, [k]: v }));
   const setReqField = (k, v) => setRequestor((s) => ({ ...s, [k]: v }));
@@ -166,11 +173,11 @@ export default function EventCoiSection({ title }) {
   const ready = problems.length === 0;
 
   const stepTitle = (n, label, sub) => (
-    <>
+    <span className="coi-cardhead">
       <span className="coi-step-n">{n}</span>
       <span className="coi-cardtitle">{label}</span>
       {sub ? <span className="muted small coi-cardsub">{sub}</span> : null}
-    </>
+    </span>
   );
   const holderExport = holders.length ? (
     <span className="coi-export">
@@ -180,9 +187,11 @@ export default function EventCoiSection({ title }) {
     </span>
   ) : null;
 
+  const logRows = runLog.map((j, i) => ({ num: (j.index != null ? j.index : i) + 1, time: j.at ? new Date(j.at).toLocaleString() : '', holder: j.name, status: j.status, confirmation: j.confirmation || '', detail: j.error || '' }));
+
   return (
     <div className="page">
-      <h2>{title || 'Event COI'}</h2>
+      <h2>{title || 'Insurance COI'}</h2>
       <p className="muted">
         Request a Certificate of Insurance for each holder on a sanctioned event. Enter the event,
         requestor, and coverage options once, upload the holder list, review, then submit — one
@@ -215,15 +224,24 @@ export default function EventCoiSection({ title }) {
                 const invalid = f.digits && (event[f.key] || '').length > 0 && !new RegExp(`^\\d{${f.digits}}$`).test(event[f.key] || '');
                 return (
                   <label key={f.key} className="coi-row"><span>{f.label}{f.req ? <span className="coi-req"> *</span> : null}</span>
-                    <input
-                      className={'coi-input' + (invalid ? ' coi-input-warn' : '')}
-                      placeholder={f.ph || ''}
-                      inputMode={f.digits ? 'numeric' : undefined}
-                      maxLength={f.digits || f.maxLen || undefined}
-                      title={f.digits ? `Must be a ${f.digits}-digit number` : undefined}
-                      value={event[f.key] || ''}
-                      onChange={(e) => { let v = e.target.value; if (f.digits) v = v.replace(/\D/g, '').slice(0, f.digits); else if (f.maxLen) v = v.slice(0, f.maxLen); setEventField(f.key, v); }}
-                    />
+                    {f.date ? (
+                      <input
+                        type="date"
+                        className="coi-input coi-date"
+                        value={mdyToIso(event[f.key] || '')}
+                        onChange={(e) => setEventField(f.key, isoToMdy(e.target.value))}
+                      />
+                    ) : (
+                      <input
+                        className={'coi-input' + (invalid ? ' coi-input-warn' : '')}
+                        placeholder={f.ph || ''}
+                        inputMode={f.digits ? 'numeric' : undefined}
+                        maxLength={f.digits || f.maxLen || undefined}
+                        title={f.digits ? `Must be a ${f.digits}-digit number` : undefined}
+                        value={event[f.key] || ''}
+                        onChange={(e) => { let v = e.target.value; if (f.digits) v = v.replace(/\D/g, '').slice(0, f.digits); else if (f.maxLen) v = v.slice(0, f.maxLen); setEventField(f.key, v); }}
+                      />
+                    )}
                   </label>
                 );
               })}
@@ -317,12 +335,42 @@ export default function EventCoiSection({ title }) {
           <div><dt>Requestor</dt><dd>{requestor.name || <span className="coi-req">— missing —</span>}{requestor.email ? ` · ${requestor.email}` : ''}</dd></div>
           <div><dt>Certificates</dt><dd>{holders.length}{missingNames || missingEmails ? <span className="coi-req"> · {missingNames} missing name, {missingEmails} missing email</span> : ''}</dd></div>
         </dl>
-        <div className="coi-runrow">
-          <button className="btn primary" disabled={!ready} onClick={() => alert('Phase 1 preview — the Playwright login + per-holder submit loop is wired in Phase 3-4.')}>Start submission loop →</button>
-          {ready
-            ? <span className="muted small">Login + per-certificate review/submit runs in a later phase.</span>
-            : <span className="coi-req small">Complete before submitting: {problems.join(', ')}.</span>}
-        </div>
+        <RunPanel request={{ event, requestor, options: opts }} holders={holders} ready={ready} problems={problems} onLog={setRunLog} />
+      </CollapsibleCard>
+
+      {/* STEP 5 — Submission log */}
+      <CollapsibleCard
+        title={stepTitle('5', 'Submission log', runLog.length ? `${runLog.length} processed` : 'Each certificate as it is submitted')}
+        actions={runLog.length ? (
+          <span className="coi-export">
+            <span className="muted small">Export</span>
+            <a className="coi-dl" onClick={() => exportCsv(LOG_COLS, logRows, 'event_coi_results')}>CSV</a>
+            <a className="coi-dl" onClick={() => exportExcel(LOG_COLS, logRows, 'event_coi_results')}>Excel</a>
+          </span>
+        ) : null}
+      >
+        {runLog.length === 0 ? (
+          <p className="muted">Jobs appear here as the run processes each holder — time, status, confirmation number, and a link to view the form.</p>
+        ) : (
+          <div className="coi-log-wrap">
+            <table className="grid coi-log">
+              <thead><tr><th>#</th><th>Time</th><th>Holder</th><th>Status</th><th>Confirmation</th><th>Detail</th><th>Form</th></tr></thead>
+              <tbody>
+                {runLog.map((j, i) => (
+                  <tr key={i}>
+                    <td className="coi-rownum">{(j.index != null ? j.index : i) + 1}</td>
+                    <td className="muted small">{j.at ? new Date(j.at).toLocaleTimeString() : ''}</td>
+                    <td>{j.name}</td>
+                    <td className={j.status === 'failed' ? 'coi-req' : ''}>{j.status}</td>
+                    <td>{j.confirmation || ''}{j.confirmScreenshot ? <>{' '}<a className="coi-dl" href="#" onClick={(e) => { e.preventDefault(); openFull(j.confirmScreenshot); }}>page ↗</a></> : null}</td>
+                    <td className="muted small">{j.error || ''}</td>
+                    <td>{j.formScreenshot ? <a className="coi-dl" href="#" onClick={(e) => { e.preventDefault(); openFull(j.formScreenshot); }}>View ↗</a> : <span className="muted small">—</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </CollapsibleCard>
     </div>
   );

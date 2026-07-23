@@ -28,13 +28,21 @@ async function launch({ headless = true } = {}) {
 async function login(page) {
   if (!USER() || !PW()) throw new Error('Missing INSURANCE_PORTAL_USER / INSURANCE_PORTAL_PW in .env');
   await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded' });
-  await page.getByLabel('Username').fill(USER());
-  await page.getByLabel('Password').fill(PW());
-  await page.getByRole('button', { name: 'Login' }).click();
+  // Fill by input type (robust regardless of how the labels are associated).
+  const pass = page.locator('input[type="password"]').first();
+  await page.locator('input[type="text"]').first().fill(USER());
+  await pass.fill(PW());
+  // IMPORTANT: the control that actually submits is an <input type="submit">. The element that carries
+  // the "Login" button role is a wrapper and clicking it does NOT submit — so target the input (or Enter).
+  const submit = page.locator('input[type="submit"], button[type="submit"]').first();
+  if (await submit.count()) await submit.click();
+  else await pass.press('Enter');
   // Success lands on the portal home; wait for that, else surface a clear error.
-  await page.waitForURL(/\/mvc\/Portal\/Index/, { timeout: 30000 }).catch(() => {
-    throw new Error('Login did not reach the portal home — check the credentials in .env.');
-  });
+  try {
+    await page.waitForURL(/\/mvc\/Portal\/Index/, { timeout: 30000 });
+  } catch (e) {
+    throw new Error('Login did not reach the portal home — check INSURANCE_PORTAL_USER / _PW in .env, or the login form changed.');
+  }
 }
 
 async function openCertificateForm(page) {
@@ -43,4 +51,41 @@ async function openCertificateForm(page) {
   await page.waitForSelector('[name="0-0-45"]', { timeout: 30000 });
 }
 
-module.exports = { launch, login, openCertificateForm, LOGIN_URL, FORM_URL };
+// The CSR24 form sits inside an inner scrolling container, so page.screenshot({fullPage}) only grabs
+// one viewport of it. Expand every real scroll container to its full height first, then capture — so
+// the whole form (banner to Submit) lands in one image. Returns a PNG Buffer.
+async function fullPageShot(page) {
+  const original = page.viewportSize();
+  try {
+    // Tall viewport so a viewport-height scroll container reveals the whole form.
+    await page.setViewportSize({ width: (original && original.width) || 1440, height: 3200 });
+    await page.evaluate(() => {
+      const de = document.documentElement, bd = document.body;
+      [de, bd].forEach((el) => { if (el) { el.style.height = 'auto'; el.style.maxHeight = 'none'; el.style.overflow = 'visible'; } });
+      // Un-clip the scroll WRAPPERS only. Skip table elements so the form's table-based layout (which
+      // holds the coverage/contract/delivery sections) is left intact.
+      const SKIP = { TABLE: 1, TBODY: 1, THEAD: 1, TFOOT: 1, TR: 1, TD: 1, TH: 1 };
+      for (const el of document.querySelectorAll('body *')) {
+        if (SKIP[el.tagName]) continue;
+        const st = getComputedStyle(el);
+        const clips = /(auto|scroll|hidden)/.test(st.overflow) || /(auto|scroll|hidden)/.test(st.overflowY);
+        if (clips && el.scrollHeight > el.clientHeight + 4) {
+          el.style.overflow = 'visible';
+          el.style.overflowY = 'visible';
+          el.style.height = 'auto';
+          el.style.maxHeight = 'none';
+        }
+      }
+    });
+    await page.waitForTimeout(250); // let layout settle
+    const form = page.locator('form').first();
+    if (await form.count()) return await form.screenshot();
+    return await page.screenshot({ fullPage: true });
+  } catch (e) {
+    return page.screenshot({ fullPage: true });
+  } finally {
+    try { if (original) await page.setViewportSize(original); } catch (_) { /* ignore */ }
+  }
+}
+
+module.exports = { launch, login, openCertificateForm, fullPageShot, LOGIN_URL, FORM_URL };

@@ -15,7 +15,7 @@ module.exports = {
   async openForm(s) { await session.openCertificateForm(s.page); },
   async fill(s, request, holder) { await fillCertificate(s.page, request, holder); },
   async screenshot(s) {
-    const buf = await s.page.screenshot({ fullPage: true });
+    const buf = await session.fullPageShot(s.page);   // expands inner scroll containers so the WHOLE form is captured
     return 'data:image/png;base64,' + buf.toString('base64');
   },
   // Click Submit and confirm success by the confirmation URL (/mvc/FormGenerator/FormSubmitted). On
@@ -24,7 +24,12 @@ module.exports = {
     try {
       await submitCertificate(s.page);
       await s.page.waitForURL(/FormSubmitted/i, { timeout: 20000 });
-      return { ok: true };
+      // The portal issues no confirmation number — reaching FormSubmitted IS the acknowledgment.
+      const confirmation = 'Request Submitted';
+      // Screenshot of the confirmation page (proof of submission) for the log's confirmation link.
+      let confirmShot = null;
+      try { confirmShot = 'data:image/png;base64,' + (await session.fullPageShot(s.page)).toString('base64'); } catch (_) { /* ignore */ }
+      return { ok: true, confirmation, confirmShot };
     } catch (e) {
       let error = 'submission did not reach the confirmation page';
       try {

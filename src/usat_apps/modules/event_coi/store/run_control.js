@@ -29,9 +29,15 @@ function get(id) { return runs.get(id); }
 function decide(id, decision) {
   const run = runs.get(id);
   if (!run) return { ok: false, error: 'no such run' };
-  if (decision === 'stop') run.stopRequested = true;
+  if (decision === 'stop') {
+    run.stopRequested = true;
+    if (run.gate) { const g = run.gate; run.gate = null; g('stop'); }
+    // Force the browser closed so the server-side job halts immediately, even if wedged mid Playwright op.
+    try { if (run.session && run.driver) run.driver.close(run.session); } catch (_) { /* already gone */ }
+    return { ok: true };
+  }
   if (run.gate) { const g = run.gate; run.gate = null; g(decision); return { ok: true }; }
-  // Not currently paused (e.g. stop during auto/submit) — flag it so the loop exits at the next check.
+  // Not currently paused (e.g. during auto/submit) — flag it so the loop exits at the next check.
   return { ok: true, note: 'no active gate' };
 }
 
@@ -42,8 +48,11 @@ async function loop(run, driver) {
   try {
     run.status = 'launching'; emit(run, 'status', { status: 'launching' });
     session = await driver.open({ headless: run.headless });
+    run.session = session;   // stored so abort() can force the browser closed to unstick a wedged run
     run.status = 'login'; emit(run, 'status', { status: 'login' });
     await driver.login(session);
+    // Show the portal home so the user can see the browser actually signed in.
+    { let s = null; try { s = await driver.screenshot(session); } catch (_) { /* ignore */ } emit(run, 'stage', { label: 'Signed in to the portal', screenshot: s }); }
 
     for (run.index = 0; run.index < run.total; run.index++) {
       if (run.stopRequested) break;
@@ -65,22 +74,24 @@ async function loop(run, driver) {
       }
       if (decision === 'stop' || run.stopRequested) { run.stopRequested = true; break; }
       if (decision === 'skip') {
-        const rec = { index: run.index, name: holder.name, status: 'skipped', error: null };
+        const rec = { index: run.index, name: holder.name, status: 'skipped', error: null, at: Date.now() };
         run.results.push(rec); emit(run, 'result', rec); continue;
       }
       if (decision === 'approve-all') run.autoAll = true;
 
       run.status = 'submitting'; emit(run, 'submitting', { index: run.index, name: holder.name });
       const r = await driver.submit(session);
-      const rec = { index: run.index, name: holder.name, status: r.ok ? 'submitted' : 'failed', error: r.ok ? null : (r.error || 'failed') };
-      run.results.push(rec); emit(run, 'result', rec);
+      const rec = { index: run.index, name: holder.name, status: r.ok ? 'submitted' : 'failed', error: r.ok ? null : (r.error || 'failed'), confirmation: r.confirmation || null, at: Date.now() };
+      run.results.push(rec);   // stored rec omits the big screenshot to save memory
+      emit(run, 'result', Object.assign({}, rec, { confirmShot: r.confirmShot || null }));
     }
 
     run.status = run.stopRequested ? 'stopped' : 'done';
     emit(run, 'done', { status: run.status, results: run.results });
   } catch (e) {
     run.status = 'error';
-    emit(run, 'error', { error: (e && e.message) || String(e), results: run.results });
+    let shot = null; try { if (session) shot = await driver.screenshot(session); } catch (_) { /* ignore */ }
+    emit(run, 'error', { error: (e && e.message) || String(e), screenshot: shot, results: run.results });
   } finally {
     try { if (session) await driver.close(session); } catch (_) { /* ignore */ }
     // Keep the run around briefly so the UI can fetch final results, then drop it. unref() so this
@@ -93,17 +104,33 @@ async function loop(run, driver) {
 // batch = { event, requestor, options, holders }. opts = { headless, driver, mode }.
 function start(batch, opts) {
   opts = opts || {};
+  const driver = opts.driver || defaultDriver;
   const run = {
     id: newId(), status: 'starting', batch,
     total: (batch.holders || []).length, index: -1,
     autoAll: opts.mode === 'auto',
     headless: opts.headless !== false,
+    driver, session: null,
     results: [], subscribers: new Set(), gate: null, stopRequested: false, current: null, last: null,
     startedAt: Date.now(),
   };
   runs.set(run.id, run);
-  loop(run, opts.driver || defaultDriver);   // fire-and-forget; progress goes out via SSE
+  loop(run, driver);   // fire-and-forget; progress goes out via SSE
   return run;
+}
+
+// Force a run to end and drop it from the registry so the "one active run" guard clears immediately.
+// Used by the Reset button. With no id, aborts whatever run is currently active. Resolving the gate
+// unsticks a run paused for approval; closing the browser unsticks one wedged on a Playwright call.
+async function abort(id) {
+  const run = id ? runs.get(id) : activeRun();
+  if (!run) return { ok: true, note: 'no active run' };
+  run.stopRequested = true;
+  if (run.gate) { const g = run.gate; run.gate = null; g('stop'); }
+  try { if (run.session && run.driver) await run.driver.close(run.session); } catch (_) { /* already gone */ }
+  if (['starting', 'launching', 'login', 'running', 'awaiting_approval', 'submitting'].includes(run.status)) run.status = 'stopped';
+  runs.delete(run.id);
+  return { ok: true };
 }
 
 // Attach an SSE response; immediately catch it up with the last known state.
@@ -118,4 +145,4 @@ function subscribe(id, res) {
 }
 function unsubscribe(id, res) { const run = runs.get(id); if (run) run.subscribers.delete(res); }
 
-module.exports = { start, decide, subscribe, unsubscribe, get, activeRun };
+module.exports = { start, decide, subscribe, unsubscribe, get, activeRun, abort };

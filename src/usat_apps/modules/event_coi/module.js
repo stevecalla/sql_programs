@@ -7,8 +7,8 @@ const api = require('./api');
 
 module.exports = {
   id: 'event_coi',                 // stable slug -> panel namespace; API base is /api/event-coi/*
-  label: 'Event COI',
-  group: 'Insurance',              // nav-group label
+  label: 'Insurance COI',
+  group: 'Events',                 // nav-group label
   panels: [{ key: 'event-coi', label: 'Event COI' }],
   metricsTable: null,              // shares the platform events table (panel_view tracking is automatic)
   mount: function (app) { api.mount(app); },
