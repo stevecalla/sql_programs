@@ -5,8 +5,8 @@
  *
  *   node src/usat_apps/modules/event_coi/menu.js
  *
- * The UI + API are served by the platform (:8022). Phase 3-4 adds a Playwright runner that logs into
- * the CSR24 portal and submits one certificate per holder. Self-contained (Node readline, no extra
+ * The React UI is served by usat_apps (:8022). THIS module's backend — the event_coi API
+ * runs on the dedicated server_event_coi_8023.js. Self-contained (Node readline, no extra
  * packages); mirrors src/usat_apps/modules/salesforce_merge/menu.js. Launch directly, or from the
  * platform menu (src/usat_apps/menu.js).
  */
@@ -18,8 +18,9 @@ const { spawn, execSync } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const PREFS_FILE = path.join(__dirname, '.menu_prefs.json');
-const PORT = 8022;                          // platform (served UI + API)
-const PAGE = '/events/insurance-coi';        // this module's route
+const API_PORT = 8023;                       // THIS module's dedicated backend (event_coi API)
+const WEB_PORT = 8022;                       // usat_apps serves the React UI + proxies /api/event-coi -> :8023
+const PAGE = '/events/insurance-coi';        // this module's route on the web tier
 
 const RESET = '\x1b[0m', BOLD = '\x1b[1m', DIM = '\x1b[2m';
 const RED = '\x1b[31m', GREEN = '\x1b[32m', YELLOW = '\x1b[33m', CYAN = '\x1b[36m';
@@ -44,24 +45,24 @@ function open_url(url) {
 }
 function hit(pathname) {
   return new Promise((resolve) => {
-    http.get(`http://127.0.0.1:${PORT}${pathname}`, (res) => {
+    http.get(`http://127.0.0.1:${API_PORT}${pathname}`, (res) => {
       let b = ''; res.on('data', (d) => { b += d; });
       res.on('end', () => { console.log(c(res.statusCode < 400 ? GREEN : YELLOW, `  GET ${pathname} -> HTTP ${res.statusCode}`)); console.log('  ' + b.slice(0, 400)); resolve(); });
-    }).on('error', (e) => { console.log(c(YELLOW, `  Backend not reachable on :${PORT} — is it running? (${e.code || e.message})`)); resolve(); });
+    }).on('error', (e) => { console.log(c(YELLOW, `  COI backend not reachable on :${API_PORT} — is it running? (${e.code || e.message})`)); resolve(); });
   });
 }
 
 const SECTIONS = [
-  { label: 'RUN', color: YELLOW, items: [
-    { id: 1, label: 'Dev — API + web (hot reload)', desc: 'Backend + Vite together; edits show live', bin: 'npm', args: ['run', 'usat_apps_dev_all'], cli: 'npm run usat_apps_dev_all' },
-    { id: 2, label: 'Dev — web only (Vite)', desc: 'React UI dev server, proxies /api to :8022', bin: 'npm', args: ['run', 'usat_apps_web'], cli: 'npm run usat_apps_web' },
-    { id: 3, label: 'Build the web app', desc: 'Compile React to web/dist (served at :8022)', bin: 'npm', args: ['run', 'usat_apps_build'], cli: 'npm run usat_apps_build' },
-    { id: 4, label: 'Start built server (:8022)', desc: 'Express serves the built UI + API on one port', bin: 'npm', args: ['run', 'usat_apps_server'], cli: 'npm run usat_apps_server' },
+  { label: 'RUN — COI backend (:8023)', color: YELLOW, items: [
+    { id: 1, label: 'COI backend — dev (hot reload, :8023)', desc: 'nodemon server_event_coi_8023.js — the event_coi API. Restarts on edits. This is what this module owns; the UI (:8022) is started from the usat_apps menu.', bin: 'npm', args: ['run', 'event_coi_dev'], cli: 'npm run event_coi_dev' },
+    { id: 2, label: 'COI backend — start (:8023)', desc: 'node server_event_coi_8023.js — run the COI backend once (no auto-restart).', bin: 'npm', args: ['run', 'event_coi_server'], cli: 'npm run event_coi_server' },
+    { id: 3, label: 'Deploy COI backend (pm2 :8023)', desc: 'npm run event_coi_deploy — (re)start the pm2 usat_event_coi process + reload the proxy. Use after pulling on the server.', bin: 'npm', args: ['run', 'event_coi_deploy'], cli: 'npm run event_coi_deploy' },
+    { id: 4, label: 'Web UI — Vite dev (:5175, serves the page)', desc: 'npm run usat_apps_web — the React page lives on the web tier and proxies /api/event-coi -> :8023. Run this AND item 1 to use the page locally. (Full web build/serve lives in the usat_apps menu.)', bin: 'npm', args: ['run', 'usat_apps_web'], cli: 'npm run usat_apps_web' },
   ]},
   { label: 'OPEN / STATUS', color: CYAN, items: [
-    { id: 5, label: 'Open the Event COI page', desc: `Opens http://127.0.0.1:${PORT}${PAGE}`, act: () => open_url(`http://127.0.0.1:${PORT}${PAGE}`) },
-    { id: 6, label: 'Backend status', desc: 'GET /api/status on :8022', act: () => hit('/api/status') },
-    { id: 7, label: 'Module ping (needs sign-in)', desc: 'GET /api/event-coi/ping — Phase 2', act: () => hit('/api/event-coi/ping') },
+    { id: 5, label: 'Open the Event COI page', desc: `Opens http://127.0.0.1:${WEB_PORT}${PAGE} (web tier; needs the :8023 backend up too)`, act: () => open_url(`http://127.0.0.1:${WEB_PORT}${PAGE}`) },
+    { id: 6, label: 'COI backend health (:8023)', desc: 'GET /api/event-coi/health on :8023 — public; reports the concurrency snapshot. Confirms the dedicated backend is up.', act: () => hit('/api/event-coi/health') },
+    { id: 7, label: 'Module ping (:8023, needs sign-in)', desc: 'GET /api/event-coi/ping on :8023 — confirms the module is mounted + your panel access.', act: () => hit('/api/event-coi/ping') },
   ]},
   { label: 'TESTS', color: CYAN, items: [
     { id: 8, label: 'Run module tests', desc: 'node src/usat_apps/run_tests.js modules/event_coi (holder_parse + validate_request)', bin: 'node', args: ['src/usat_apps/run_tests.js', 'modules/event_coi'], cli: 'node src/usat_apps/run_tests.js modules/event_coi' },
