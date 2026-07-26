@@ -18,6 +18,23 @@ const runs = new Map();      // runId -> run
 const waiting = [];          // runIds queued for a free slot (FIFO)
 let _seq = 0;
 
+// Optional non-PII submission-history recorder. Set by api.js mount() in production; left null in unit
+// tests so run_control never touches the DB. { record_start(job)->{id}, record_finish(id, outcome) }.
+let _history = null;
+function setHistory(h) { _history = h; }
+// Map a finished run to its non-PII history outcome (counts + rolled-up status).
+function historyOutcome(run) {
+  const by = (st) => run.results.filter((r) => r.status === st).length;
+  const submitted = by('submitted'), failed = by('failed'), skipped = by('skipped');
+  let status;
+  if (run.status === 'stopped' || run.status === 'expired') status = 'cancelled';
+  else if (run.status === 'error') status = 'failed';
+  else if (submitted === 0 && failed > 0) status = 'failed';
+  else if (submitted < run.total) status = 'partial';
+  else status = 'completed';
+  return { status: status, submitted: submitted, failed: failed, skipped: skipped };
+}
+
 const MAX_CONCURRENT = Math.max(1, Number(process.env.EVENT_COI_MAX_CONCURRENT) || 5);
 // A run paused at the human approval gate keeps its browser slot. Auto-expire it after this long with no
 // decision so an abandoned review-mode run can't deadlock the queue. 0 disables. Default 20 minutes.
@@ -107,6 +124,10 @@ async function loop(run, driver) {
   let session;
   try {
     run.status = 'launching'; emit(run, 'status', { status: 'launching' });
+    if (_history) run.historyPromise = Promise.resolve().then(function () {
+      const e = run.batch.event || {};
+      return _history.record_start({ ran_by: run.owner, event_name: e.eventName, event_sanction_id: e.sanctionId, certificates_requested: run.total });
+    }).catch(function () { return null; });
     session = await driver.open({ headless: run.headless });
     run.session = session;   // stored so abort() can force the browser closed to unstick a wedged run
     run.status = 'login'; emit(run, 'status', { status: 'login' });
@@ -155,6 +176,9 @@ async function loop(run, driver) {
     emit(run, 'error', { error: (e && e.message) || String(e), screenshot: shot, results: run.results });
   } finally {
     try { if (session) await driver.close(session); } catch (_) { /* ignore */ }
+    if (_history && run.historyPromise) {
+      try { const h = await run.historyPromise; if (h && h.id) await _history.record_finish(h.id, historyOutcome(run)); } catch (_) { /* history is best-effort */ }
+    }
     // A slot just freed — launch the next queued run.
     pump();
     // Keep the run around briefly so the UI can fetch final results, then drop it. unref() so this
@@ -246,4 +270,4 @@ function duplicateGuard(owner, fp) {
 // Introspection for the API/tests.
 function stats() { return { max: MAX_CONCURRENT, running: runningCount(), queued: waiting.length }; }
 
-module.exports = { start, decide, subscribe, unsubscribe, get, activeRun, abort, stats, fingerprint, duplicateGuard, ownerActiveRun, MAX_CONCURRENT, APPROVAL_TIMEOUT_MS };
+module.exports = { start, decide, subscribe, unsubscribe, get, activeRun, abort, stats, fingerprint, duplicateGuard, ownerActiveRun, setHistory, MAX_CONCURRENT, APPROVAL_TIMEOUT_MS };

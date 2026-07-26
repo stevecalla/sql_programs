@@ -80,6 +80,11 @@ const SECTIONS = [
     { id: 14, label: 'Submit-button check - headless', desc: 'Same as 13 but headless; prints the report to the console. Nothing is submitted.', bin: 'node', args: ['src/usat_apps/modules/event_coi/submit_check.js'], cli: 'node src/usat_apps/modules/event_coi/submit_check.js' },
     { id: 15, label: 'Pending Requests check - WATCH', desc: 'Headed, read-only: logs in and opens the portal Pending Requests queue, screenshots it, and lists the rows. Never opens the certificate form or submits.', bin: 'node', args: ['src/usat_apps/modules/event_coi/pending_check.js'], env: { HEADLESS: '0' }, cli: 'HEADLESS=0 node src/usat_apps/modules/event_coi/pending_check.js' },
   ]},
+  { label: 'HISTORY', color: CYAN, items: [
+    { id: 16, label: 'Recent jobs (last 10 + counts by status)', desc: 'Reads event_coi_submission_history: the 10 most recent submission runs (running ones flagged), a counts-by-status breakdown with grand total, and the SQL for both (copy into MySQL Workbench). Uses the local DB; no server needed. Non-PII — no holder data.', bin: 'node', args: ['src/usat_apps/modules/event_coi/history_recent.js'], cli: 'node src/usat_apps/modules/event_coi/history_recent.js' },
+    { id: 17, label: 'Seed 2 sample test runs (shows the SQL)', desc: "Inserts 2 sample rows (ran_by='test') into event_coi_submission_history so you can try the history view without the portal, and prints the equivalent INSERT for MySQL Workbench. Local DB; no server needed.", bin: 'node', args: ['src/usat_apps/modules/event_coi/history_test_rows.js', 'seed'], cli: 'node src/usat_apps/modules/event_coi/history_test_rows.js seed' },
+    { id: 18, label: 'Clear sample test runs (shows the SQL)', desc: "Deletes the sample rows (ran_by='test') and prints the equivalent DELETE for MySQL Workbench. Local DB; no server needed.", bin: 'node', args: ['src/usat_apps/modules/event_coi/history_test_rows.js', 'clear'], cli: 'node src/usat_apps/modules/event_coi/history_test_rows.js clear' },
+  ]},
 ];
 
 function render() {
