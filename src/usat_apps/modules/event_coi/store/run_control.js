@@ -18,6 +18,32 @@ const runs = new Map();      // runId -> run
 const waiting = [];          // runIds queued for a free slot (FIFO)
 let _seq = 0;
 
+// Optional non-PII submission-history recorder. Set by api.js mount() in production; left null in unit
+// tests so run_control never touches the DB. { record_queued, mark_in_progress, update_counts, record_finish }.
+let _history = null;
+function setHistory(h) { _history = h; }
+// History is best-effort and must never break a run — but SILENT failure hides real problems (e.g. the
+// table can't be created). Log a one-line warning so the cause is visible in the server console.
+function histWarn(where, e) { try { console.warn('[event_coi history] ' + where + ' failed: ' + ((e && e.message) || e)); } catch (_) { /* ignore */ } }
+// Non-PII history helpers. tally = current per-status counts; mapStatus = the run's terminal disposition
+// (skips/failures live in the counts, not the status); finalizeHistory writes the final row exactly once.
+function tally(run) {
+  const by = (st) => run.results.filter((r) => r.status === st).length;
+  return { submitted: by('submitted'), failed: by('failed'), skipped: by('skipped') };
+}
+function mapStatus(run) {
+  if (run.status === 'expired') return 'timed_out';
+  if (run.status === 'stopped') return 'stopped';
+  if (run.status === 'error') return 'crashed';
+  return 'complete';
+}
+function finalizeHistory(run, status) {
+  if (!_history || !run.historyPromise || run.historyFinalized) return;
+  run.historyFinalized = true;
+  const t = tally(run);
+  run.historyPromise.then(function (h) { if (h && h.id) return _history.record_finish(h.id, { status: status, submitted: t.submitted, failed: t.failed, skipped: t.skipped }); }).catch(function (e) { histWarn('record_finish', e); });
+}
+
 const MAX_CONCURRENT = Math.max(1, Number(process.env.EVENT_COI_MAX_CONCURRENT) || 5);
 // A run paused at the human approval gate keeps its browser slot. Auto-expire it after this long with no
 // decision so an abandoned review-mode run can't deadlock the queue. 0 disables. Default 20 minutes.
@@ -76,7 +102,7 @@ function decide(id, decision) {
   if (decision === 'stop') {
     run.stopRequested = true;
     // A queued run never launched — just mark it stopped and pull it from the line.
-    if (run.status === 'queued') { dropFromQueue(id); run.status = 'stopped'; emit(run, 'done', { status: 'stopped', results: run.results }); emitQueuePositions(); return { ok: true }; }
+    if (run.status === 'queued') { dropFromQueue(id); run.status = 'stopped'; finalizeHistory(run, 'stopped'); emit(run, 'done', { status: 'stopped', results: run.results }); emitQueuePositions(); return { ok: true }; }
     if (run.gate) { const g = run.gate; run.gate = null; clearGateTimer(run); g('stop'); }
     // Force the browser closed so the server-side job halts immediately, even if wedged mid Playwright op.
     try { if (run.session && run.driver) run.driver.close(run.session); } catch (_) { /* already gone */ }
@@ -105,8 +131,10 @@ function waitForGate(run) {
 
 async function loop(run, driver) {
   let session;
+  let hid = null;
   try {
     run.status = 'launching'; emit(run, 'status', { status: 'launching' });
+    if (_history && run.historyPromise) { try { const h = await run.historyPromise; hid = h && h.id; if (hid) await _history.mark_in_progress(hid); } catch (e) { histWarn('mark_in_progress', e); } }
     session = await driver.open({ headless: run.headless });
     run.session = session;   // stored so abort() can force the browser closed to unstick a wedged run
     run.status = 'login'; emit(run, 'status', { status: 'login' });
@@ -136,7 +164,9 @@ async function loop(run, driver) {
       if (decision === 'stop' || run.stopRequested) { run.stopRequested = true; break; }
       if (decision === 'skip') {
         const rec = { index: run.index, name: holder.name, status: 'skipped', error: null, at: Date.now() };
-        run.results.push(rec); emit(run, 'result', rec); continue;
+        run.results.push(rec); emit(run, 'result', rec);
+        if (_history && hid) _history.update_counts(hid, tally(run)).catch(function () {});
+        continue;
       }
       if (decision === 'approve-all') run.autoAll = true;
 
@@ -145,6 +175,7 @@ async function loop(run, driver) {
       const rec = { index: run.index, name: holder.name, status: r.ok ? 'submitted' : 'failed', error: r.ok ? null : (r.error || 'failed'), confirmation: r.confirmation || null, at: Date.now() };
       run.results.push(rec);   // stored rec omits the big screenshot to save memory
       emit(run, 'result', Object.assign({}, rec, { confirmShot: r.confirmShot || null }));
+      if (_history && hid) _history.update_counts(hid, tally(run)).catch(function () {});
     }
 
     run.status = run.expired ? 'expired' : (run.stopRequested ? 'stopped' : 'done');
@@ -155,6 +186,7 @@ async function loop(run, driver) {
     emit(run, 'error', { error: (e && e.message) || String(e), screenshot: shot, results: run.results });
   } finally {
     try { if (session) await driver.close(session); } catch (_) { /* ignore */ }
+    finalizeHistory(run, mapStatus(run));
     // A slot just freed — launch the next queued run.
     pump();
     // Keep the run around briefly so the UI can fetch final results, then drop it. unref() so this
@@ -181,6 +213,7 @@ function start(batch, opts) {
     startedAt: Date.now(),
   };
   runs.set(run.id, run);
+  if (_history) { const e = run.batch.event || {}; run.historyPromise = Promise.resolve().then(function () { return _history.record_queued({ ran_by: run.owner, event_name: e.eventName, event_sanction_id: e.sanctionId, certificates_requested: run.total }); }).catch(function (err) { histWarn('record_queued/ensure_table', err); return null; }); }
   waiting.push(run.id);
   run.queuedAtStart = queuePosition(run) > MAX_CONCURRENT || runningCount() >= MAX_CONCURRENT;
   pump();   // launches immediately if a slot is free; otherwise it stays queued
@@ -199,6 +232,7 @@ async function abort(id) {
   if (run.gate) { const g = run.gate; run.gate = null; clearGateTimer(run); g('stop'); }
   try { if (run.session && run.driver) await run.driver.close(run.session); } catch (_) { /* already gone */ }
   if (['starting', 'queued'].concat(ACTIVE).includes(run.status)) run.status = 'stopped';
+  finalizeHistory(run, 'stopped');
   runs.delete(run.id);
   pump();   // a slot may have freed
   return { ok: true };
@@ -246,4 +280,4 @@ function duplicateGuard(owner, fp) {
 // Introspection for the API/tests.
 function stats() { return { max: MAX_CONCURRENT, running: runningCount(), queued: waiting.length }; }
 
-module.exports = { start, decide, subscribe, unsubscribe, get, activeRun, abort, stats, fingerprint, duplicateGuard, ownerActiveRun, MAX_CONCURRENT, APPROVAL_TIMEOUT_MS };
+module.exports = { start, decide, subscribe, unsubscribe, get, activeRun, abort, stats, fingerprint, duplicateGuard, ownerActiveRun, setHistory, MAX_CONCURRENT, APPROVAL_TIMEOUT_MS };

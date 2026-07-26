@@ -64,6 +64,9 @@ const EMPTY_OPTS = {
 };
 
 const TEMPLATE_URL = (((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) || '/').replace(/\/+$/, '')) + '/event_coi_template.xlsx';
+// The "Try me (fake data)" fill tool is a dev/testing convenience only. Hidden in the production build
+// (import.meta.env.DEV is false there) so real users can't load fake holders and accidentally submit them.
+const SHOW_TEST_FILL = typeof import.meta !== 'undefined' && !!import.meta.env && !!import.meta.env.DEV;
 const BLANK_HOLDER = () => ({ name: '', address: '', city: '', state: '', zip: '', email: '' });
 
 // The portal stores dates as MM/DD/YYYY (maxlength 10); the native date picker speaks YYYY-MM-DD.
@@ -283,7 +286,7 @@ export default function EventCoiSection({ title }) {
         <div className="coi-drop-title">Drop a certificate-holder .xlsx or .csv file here</div>
         <div className="coi-drop-sub">or tap to choose &mdash; parsed on the server, nothing is stored</div>
         <div className="coi-drop-actions">
-          <button type="button" className="btn" onClick={(e) => { e.stopPropagation(); fillTestValues(); }}>&#9654; Try me (fake data)</button>
+          {SHOW_TEST_FILL && <button type="button" className="btn" onClick={(e) => { e.stopPropagation(); fillTestValues(); }}>&#9654; Try me (fake data)</button>}
           <a className="btn" href={TEMPLATE_URL} download onClick={(e) => e.stopPropagation()}>&darr; Template</a>
         </div>
         {fileNote && <div className="muted small coi-drop-note">{fileNote}</div>}

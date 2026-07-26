@@ -80,5 +80,16 @@ function start_server(port) {
   return server;
 }
 
+// Graceful shutdown (fleet-standard) so Ctrl-C and `pm2 stop` exit cleanly even with an open DB pool.
+async function cleanup() {
+  console.log('\
+Gracefully shutting down...');
+  process.exit();
+}
+
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+
 if (require.main === module) start_server();
+
 module.exports = { create_app, start_server };

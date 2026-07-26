@@ -42,6 +42,7 @@ export default function RunPanel({ request, holders, ready, problems, onLog, cov
   const [autoAll, setAutoAll] = useState(false);
   const [queuePos, setQueuePos] = useState(0);   // position in the server's run queue while status==='queued'
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(null);   // transition label shown with a spinner between certificates (no abrupt jump)
   const esRef = useRef(null);
   const shotsRef = useRef({});   // index -> filled-form screenshot, so the log can link each job's form
 
@@ -60,12 +61,12 @@ export default function RunPanel({ request, holders, ready, problems, onLog, cov
         case 'status': setStatus(m.status); if (m.status !== 'queued') setQueuePos(0); break;
         case 'stage': setCurrent({ index: null, name: m.label, screenshot: m.screenshot || null }); break;
         case 'holder-start': setStatus('running'); setCurrent({ index: m.index, name: m.name, screenshot: null }); break;
-        case 'filled': shotsRef.current[m.index] = m.screenshot; setStatus('running'); setCurrent({ index: m.index, name: m.name, screenshot: m.screenshot }); break;
-        case 'awaiting': setStatus('awaiting'); setCurrent((c) => ({ ...(c || {}), index: m.index, name: m.name })); break;
-        case 'submitting': setStatus('submitting'); break;
+        case 'filled': shotsRef.current[m.index] = m.screenshot; setStatus('running'); setCurrent({ index: m.index, name: m.name, screenshot: m.screenshot }); setBusy(null); break;
+        case 'awaiting': setStatus('awaiting'); setCurrent((c) => ({ ...(c || {}), index: m.index, name: m.name })); setBusy(null); break;
+        case 'submitting': setStatus('submitting'); setBusy('Submitting this certificate…'); break;
         case 'result': setResults((r) => [...r, { index: m.index, name: m.name, status: m.status, error: m.error, confirmation: m.confirmation || null, at: m.at || Date.now(), formScreenshot: shotsRef.current[m.index] || null, confirmScreenshot: m.confirmShot || null }]); break;
-        case 'done': setStatus(m.status); setResults((prev) => (prev.length ? prev : (m.results || []))); es.close(); break;
-        case 'error': setStatus('error'); setErr(m.error || 'run failed'); setResults((prev) => (prev.length ? prev : (m.results || []))); if (m.screenshot) setCurrent({ index: null, name: 'What the browser saw', screenshot: m.screenshot }); es.close(); break;
+        case 'done': setStatus(m.status); setBusy(null); setResults((prev) => (prev.length ? prev : (m.results || []))); es.close(); break;
+        case 'error': setStatus('error'); setBusy(null); setErr(m.error || 'run failed'); setResults((prev) => (prev.length ? prev : (m.results || []))); if (m.screenshot) setCurrent({ index: null, name: 'What the browser saw', screenshot: m.screenshot }); es.close(); break;
         default: break;
       }
     };
@@ -73,7 +74,7 @@ export default function RunPanel({ request, holders, ready, problems, onLog, cov
   }
 
   async function start() {
-    setErr(''); setResults([]); setCurrent(null); setAutoAll(false);
+    setErr(''); setResults([]); setCurrent(null); setAutoAll(false); setBusy(null);
     // Attach each holder's effective coverage: per-holder columns when in per-holder mode, else the shared Step 2 options.
     const runHolders = holders.map((h) => ({ ...h, options: coverageMode === 'perHolder' ? holderOptions(h) : request.options }));
     const body = { event: request.event, requestor: request.requestor, options: request.options, holders: runHolders, mode: 'review' };
@@ -87,13 +88,13 @@ export default function RunPanel({ request, holders, ready, problems, onLog, cov
     if (esRef.current) esRef.current.close();
     try { await api.coiRunReset(runId || undefined); } catch (e) { /* best-effort */ }
     shotsRef.current = {};
-    setRunId(null); setStatus('idle'); setCurrent(null); setResults([]); setErr(''); setAutoAll(false); setQueuePos(0);
+    setRunId(null); setStatus('idle'); setCurrent(null); setResults([]); setErr(''); setAutoAll(false); setQueuePos(0); setBusy(null);
   }
 
-  const approve = () => runId && api.coiRunApprove(runId);
-  const skip = () => runId && api.coiRunSkip(runId);
+  const approve = () => { if (runId) { setBusy('Submitting this certificate…'); api.coiRunApprove(runId); } };
+  const skip = () => { if (runId) { setBusy('Skipping — loading the next certificate…'); api.coiRunSkip(runId); } };
   const stop = () => runId && api.coiRunStop(runId);
-  const approveAll = () => { if (runId) { setAutoAll(true); api.coiRunApproveAll(runId); } };
+  const approveAll = () => { if (runId) { setAutoAll(true); setBusy('Submitting the remaining certificates…'); api.coiRunApproveAll(runId); } };
 
   const running = RUNNING.includes(status);
   const counts = results.reduce((a, r) => { a[r.status] = (a[r.status] || 0) + 1; return a; }, {});
@@ -132,18 +133,20 @@ export default function RunPanel({ request, holders, ready, problems, onLog, cov
       {current && current.name && (
         <div className="coi-run-current">
           <div className="coi-run-current-head">
-            <span className="muted small">{current.index != null ? `Certificate ${current.index + 1} of ${total}: ` : ''}<strong>{current.name}</strong></span>
-            {current.screenshot && <a className="coi-dl" href={current.screenshot} onClick={(e) => { e.preventDefault(); openFull(current.screenshot); }}>Open full ↗</a>}
+            <span className="coi-run-current-title">{current.index != null ? `Certificate ${current.index + 1} of ${total}: ` : ''}<strong className="coi-run-current-name">{current.name}</strong></span>
+            {!busy && current.screenshot && <a className="coi-dl" href={current.screenshot} onClick={(e) => { e.preventDefault(); openFull(current.screenshot); }}>Open full ↗</a>}
           </div>
-          {current.screenshot && (
+          {(busy || current.screenshot) && (
             <div className="coi-run-shotwrap" ref={shotRef}>
-              <img className="coi-run-shot" src={current.screenshot} alt={'Filled form for ' + current.name} />
+              {busy
+                ? <div className="coi-run-transition"><span className="coi-spinner" aria-hidden="true" /><span className="muted small">{busy}</span></div>
+                : <img className="coi-run-shot coi-fade-in" key={current.index} src={current.screenshot} alt={'Filled form for ' + current.name} />}
             </div>
           )}
         </div>
       )}
 
-      {status === 'awaiting' && (
+      {status === 'awaiting' && !busy && (
         <>
           <div className="coi-run-actions">
             <button className="btn primary" onClick={approve} title="Submit a certificate for this holder, then move on">Approve &amp; submit</button>

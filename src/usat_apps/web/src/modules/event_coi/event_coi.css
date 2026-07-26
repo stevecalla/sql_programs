@@ -111,7 +111,16 @@
 .coi-run-status { font-size: 14px; }
 .coi-run-current { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; background: var(--card); }
 .coi-run-current-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+/* Prominent current-certificate header: normal-size ink line with a large, bold holder name. */
+.coi-run-current-title { font-size: 1.05rem; color: var(--ink); }
+.coi-run-current-name { font-size: 1.3rem; font-weight: 700; color: var(--ink); }
 .coi-run-shotwrap { height: 520px; min-height: 220px; max-height: 92vh; overflow-y: auto; overflow-x: hidden; resize: vertical; border: 1px solid var(--line); border-radius: 6px; margin-top: 8px; background: var(--card); }
+/* Inter-certificate transition: spinner fills the screenshot box so approve/skip doesn't jump. */
+.coi-run-transition { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 100%; min-height: 180px; color: var(--dim); }
+.coi-spinner { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: coi-spin .7s linear infinite; }
+@keyframes coi-spin { to { transform: rotate(360deg); } }
+.coi-fade-in { animation: coi-fade-in .25s ease-out; }
+@keyframes coi-fade-in { from { opacity: 0; } to { opacity: 1; } }
 .coi-run-shot { display: block; width: 100%; }
 .coi-run-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .coi-run-stop { color: var(--red); border-color: var(--red); }
