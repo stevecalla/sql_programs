@@ -103,7 +103,7 @@ function render() {
 
 async function main() {
   load_prefs();
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  let rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   const items = SECTIONS.flatMap((s) => s.items);
   for (;;) {
     render();
@@ -114,7 +114,13 @@ async function main() {
     if (!it) { continue; }
     console.log('');
     if (it.act) { await it.act(); }
-    else { await run_cmd(it.bin, it.args, it.label, it.env); }
+    else {
+      // Release our readline so the spawned server owns stdin — otherwise this menu's readline
+      // intercepts Ctrl-C and the child never receives it (same fix as the usat_apps menu).
+      rl.close();
+      await run_cmd(it.bin, it.args, it.label, it.env);
+      rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    }
     await prompt(rl, c(DIM, '\n  (enter to return) '));
   }
   rl.close();

@@ -15,7 +15,7 @@ function mount(app) {
   // Non-PII submission history: wire the recorder into the in-memory runner (records each run at launch +
   // on finish) and, once at startup, flip any 'running' rows stranded by a prior restart to 'interrupted'.
   // Best-effort — history must never block the module from mounting.
-  try { run_control.setHistory(submission_history); submission_history.mark_interrupted().catch(function () {}); } catch (e) { /* history optional */ }
+  try { run_control.setHistory(submission_history); submission_history.mark_server_restart().catch(function () {}); } catch (e) { /* history optional */ }
 
   // Wiring check (matches the _template ping) — confirms the module is mounted + the panel is granted.
   app.get('/api/event-coi/ping', gate, function (req, res) {
