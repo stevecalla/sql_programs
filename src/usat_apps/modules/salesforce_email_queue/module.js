@@ -1,29 +1,16 @@
 'use strict';
-// modules/salesforce_email_queue/module.js
-//
-// SCAFFOLD ONLY. This module is intentionally NOT yet listed in modules/registry.js, so it changes
-// nothing about the running platform (same idea as modules/_template). Registering it is the LAST
-// step of the fold-in, once the API + shared services exist. See:
-//   plans_and_notes/salesforce_email_queue/EMAIL_QUEUE_FOLDIN_PLAN.md
-//   plans_and_notes/salesforce_email_queue/PORT_INVENTORY.md
-//
-// Contract (see plans_and_notes/README_USAT_APPS.md):
-//   id / label / panels / metricsTable / mount(app)
-//
-// Fold-in target:
-//   - AI + knowledge + corrections are extracted to src/usat_apps/services/ (shared with the chatbot).
-//   - This module ports web/routes.js -> ./api.js and sf/ -> ./sf/ (read-only; no SF writes).
-const { require_panel } = require('../../auth/require_auth');
+// salesforce_email_queue module manifest — folds the standalone email-queue app
+// (server_salesforce_email_queue_8019.js) into the usat_apps platform as the `salesforce_email_queue`
+// module. The API + SF read layer are served by the platform (:8022); auth, session, the metrics
+// framework, ops, and the React shell come from the platform. Read-only (no SF writes). UI is the
+// scaffold Section until Phase 3; EQ admin/metrics land in Phase 4.
+const api = require('./api');
 
 module.exports = {
   id: 'salesforce_email_queue',
   label: 'Email Queue',
+  group: 'Salesforce',
   panels: [{ key: 'email-queue', label: 'Email Queue' }],
   metricsTable: 'salesforce_email_queue_events',
-  mount: function (app) {
-    // Placeholder route only. Real routes port from web/routes.js into ./api.js (Phase 2).
-    app.get('/api/salesforce-email-queue/ping', require_panel('email-queue'), function (req, res) {
-      res.json({ ok: true, module: 'salesforce_email_queue', scaffold: true });
-    });
-  },
+  mount: function (app) { api.mount(app); },
 };

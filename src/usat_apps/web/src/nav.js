@@ -9,6 +9,7 @@ import Admin from './pages/Admin.jsx';
 const ParticipationMaps = lazy(() => import('./modules/participation_maps/Section.jsx'));
 const ComingSoon = lazy(() => import('./pages/ComingSoon.jsx'));
 const MergeSection = lazy(() => import('./modules/salesforce_merge/Section.jsx'));
+const EmailQueueSection = lazy(() => import('./modules/salesforce_email_queue/Section.jsx'));
 const MergeMetrics = lazy(() => import('./modules/salesforce_merge/pages/MergeMetrics.jsx'));
 const MergeOps = lazy(() => import('./modules/salesforce_merge/pages/MergeOps.jsx'));
 const OpsOverview = lazy(() => import('./modules/ops/Overview.jsx'));
@@ -33,6 +34,7 @@ export const NAV = [
     type: 'group', label: 'Salesforce', items: [
       { label: 'Merge', path: '/salesforce/merge', panel: 'merge', icon: '⇄', Component: MergeSection, nested: true },
       { label: 'Merge Ops', path: '/salesforce/merge-ops', panel: 'merge-ops', icon: '🛠', Component: MergeOps },
+      { label: 'Email Queue', path: '/salesforce/email-queue', panel: 'email-queue', icon: '✉', Component: EmailQueueSection, nested: true },
     ]
   },
   {
