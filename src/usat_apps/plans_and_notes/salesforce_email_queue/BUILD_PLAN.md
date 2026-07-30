@@ -115,12 +115,17 @@ new. (Consolidate the shared **SF API-usage** tracking here or just after — ge
 panel into `services/salesforce/api_usage` so merge + email-queue report one org footprint.)
 **Gate:** admin + metrics tests green.
 
-## Phase 5 — Cutover + retire 8019
+## Phase 5 — Cutover + retire 8019  *(data-safe)*
 
 **Do:** full test pass + your hands-on UAT; run the module and 8019 in parallel briefly; then retire 8019
 like we did 8020 — a retirement runbook (copy the merge one), pm2 stop/delete, remove
 scripts/proxy/tasks entries. **Keep** all `SF_*` creds and the `salesforce_email_queue_events` +
 ask-log/ask-corrections tables. No worker to preserve.
+**No data loss (gating requirement — the operator keeps adding context + corrections in 8019 during the
+build):** context files are *shared* (new module reads the same folder → nothing to migrate); operator
+corrections are *imported* from `corrections.json` into the DB table **after** 8019 is stopped (idempotent
+importer, dry-run first, JSON kept as backup); the events table is *continuous*. Full map + the data-safe
+step order are in `EMAIL_QUEUE_FOLDIN_PLAN.md` §9.
 **Parity:** full suite green + your acceptance = the definition of done.
 **Efficiency:** reuse the merge retirement runbook; nothing net-new to design.
 **Gate:** 8019 retired; the module is the single source of truth.

@@ -339,17 +339,58 @@ single chunk of new work.
 banner, landing), queue access (default + per-user), the Reference page, and the metrics dashboards on
 the module's events table. Reuse platform users/panel-access/ops/Ask. **Gate:** admin + metrics tests green.
 
-**Phase 5 — Chatbot can begin (Pattern B).** With `services/ai` + `services/knowledge` live and
+**Phase 5 — Cutover + retire 8019 (data-safe).** Parity confirmed → migrate live data and retire the
+standalone server like 8020. **Preventing data loss is the gating requirement** (see §9): context files
+are already shared (same folder), operator corrections are imported from `corrections.json` into the DB
+table *after* 8019 is stopped, and the events table is continuous. Runbook (copy the merge one), pm2
+stop/delete, remove scripts/proxy/tasks entries; keep all `SF_*` creds, the
+`salesforce_email_queue_events` data, and `corrections.json` as a backup. No worker to preserve.
+
+**Phase 6 — Chatbot can begin (Pattern B).** With `services/ai` + `services/knowledge` live and
 scope-aware, the chatbot is a second consumer + a dedicated public server (`externalApi:true`) + the GTM
 widget. Its own plan; not part of this fold-in.
 
-**Phase 6 — Retire 8019.** Parity confirmed → retire the standalone server like 8020: runbook (copy the
-merge one), pm2 stop/delete, remove scripts/proxy/tasks entries; keep all `SF_*` creds and the
-`salesforce_email_queue_events` data. No worker to preserve this time.
+---
+
+## 9. Overlap & cutover data map (no data loss)
+
+During the build and the parallel-run window, the operator keeps using the **live 8019 app** on the Team
+USA queue and will be **actively adding context files and corrections**. Preserving that data through
+cutover is a hard requirement, not a nicety. Here is exactly what is shared, what is isolated, and how
+each writable store is guaranteed to survive.
+
+| Store | Old 8019 | New module | During overlap | Cutover guarantee |
+|---|---|---|---|---|
+| **Context / knowledge files** | files in the context folder (outside repo) | file-backed, pointed at the **same folder** | shared live — a file added in 8019 is instantly visible to the new module | **nothing to migrate** — already one shared store → zero loss |
+| **Operator corrections** | `corrections.json` (file) | DB table `salesforce_email_queue_corrections` | 8019 writes the file; the table fills at cutover | **idempotent import** `corrections.json` → table, run **after** 8019 is stopped; dry-run first to verify counts; keep the JSON as backup |
+| **Analytics events** | `salesforce_email_queue_events` (DB) | same table | both apps log (blended); `is_test` separates test runs | **continuous** — same table, no migration, history intact |
+| **Salesforce prod org** | `SF_PROD_*` (read) | `SF_PROD_*` (read) | shared org + API budget (read-only, low volume) | n/a — reads only, nothing to preserve |
+
+**Guarantees, stated plainly:**
+- **Context data — zero-loss *by design*.** The new module's knowledge loader points at the *same*
+  context folder the operator already uses, so every file they add during the build is automatically
+  present in the new module. No copy, no migration window, nothing to forget. (Isolating them would be a
+  deliberate config change; the default is shared.)
+- **Corrections — zero-loss *by sequencing*.** While 8019 runs, `corrections.json` is the complete
+  record. The cutover imports it into the table **only after 8019 is stopped**, so no correction can be
+  added after the import runs. The importer is idempotent (safe to dry-run and re-run), and the JSON is
+  retained as a backup afterward.
+- **Events — continuous.** Same table throughout, so metrics history carries over untouched.
+
+**Data-safe cutover sequence (Phase 5):**
+1. Operator finishes any in-flight corrections in 8019; announce the freeze.
+2. Stop 8019 (pm2) → no more writes to `corrections.json`.
+3. Dry-run the corrections importer; verify `count(file)` matches what will be imported.
+4. Run the importer for real (idempotent); confirm the corrections appear in the new module.
+5. Spot-check that the new module reads the shared context folder (open a known file).
+6. Flip the proxy/nav to the module; keep the 8019 code + `corrections.json` as backup until sign-off.
+
+This makes "don't lose corrections or context" a **structural property** of the cutover, not something we
+have to remember to do carefully.
 
 ---
 
-## 9. Effort & risk
+## 10. Effort & risk
 
 - **Risk: low–moderate.** Read-only + AI, no SF writes, no execution path, no worker. The scary parts of
   the merge port simply don't exist here.
@@ -361,13 +402,13 @@ merge one), pm2 stop/delete, remove scripts/proxy/tasks entries; keep all `SF_*`
 
 ---
 
-## 10. Open decisions (what I need from you)
+## 11. Open decisions (status)
 
-1. **`services/` seam:** OK to introduce a top-level `src/usat_apps/services/` for the shared brain
-   (vs. tucking it under the module and having the chatbot reach across)? Recommended: yes — it's the
-   whole point of doing this now.
-2. **Corrections/knowledge storage:** move both to DB tables during Phase 1 (recommended, and already on
-   the email-queue's own roadmap), or keep the file-backed stores initially and migrate later?
+1. **`services/` seam:** ✅ **DECIDED — top-level `src/usat_apps/services/`.** Building here now.
+2. **Corrections / knowledge storage:** ✅ **DECIDED.** Operator **corrections → DB** table
+   (`salesforce_email_queue_corrections`, injectable connection so tests use a fake DB). **Knowledge /
+   context files stay file-based** (they're uploaded documents, not records) — and the new module points
+   at the *same* context folder for zero-loss overlap (see §9).
 3. **Default AI provider:** email queue defaults to OpenAI today. Keep that default in the shared service,
    or standardize on Anthropic? (Either; the abstraction supports both per call.)
 4. **UI parity bar for Phase 3:** full parity with the vanilla page, or MVP-first (queues → thread →
