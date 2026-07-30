@@ -83,6 +83,69 @@ async function create_usat_membership_connection() {
     throw lastErr;
 }
 
+// Run a simple MySQL test only when this file is executed directly.
+if (require.main === module) {
+    (async () => {
+        let connection;
+        let sshClient;
+
+        try {
+            ({ connection, sshClient } =
+                await create_usat_membership_connection());
+
+            connection.query(
+                `
+                SELECT
+                    1 AS connection_test,
+                    NOW() AS database_time,
+                    DATABASE() AS database_name
+                `,
+                (err, results) => {
+                    if (err) {
+                        console.error(
+                            '❌ MySQL connection test failed:',
+                            err.code,
+                            err.message
+                        );
+
+                        connection.destroy();
+                        sshClient.end();
+                        process.exitCode = 1;
+                        return;
+                    }
+
+                    console.log('\n✅ MySQL connection successful.\n');
+                    console.table(results);
+
+                    connection.end((endErr) => {
+                        if (endErr) {
+                            console.error(
+                                '❌ Error closing MySQL connection:',
+                                endErr.message
+                            );
+                        } else {
+                            console.log('✅ MySQL connection closed.');
+                        }
+
+                        sshClient.end();
+                    });
+                }
+            );
+        } catch (err) {
+            console.error(
+                '❌ Connection test failed:',
+                err.code || '',
+                err.message
+            );
+
+            if (connection) connection.destroy();
+            if (sshClient) sshClient.end();
+
+            process.exitCode = 1;
+        }
+    })();
+}
+
 module.exports = {
   create_usat_membership_connection
 };
