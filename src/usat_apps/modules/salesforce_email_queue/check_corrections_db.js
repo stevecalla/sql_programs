@@ -1,4 +1,5 @@
 'use strict';
+try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '..', '.env') }); } catch (e) { /* dotenv optional */ }
 // Live MySQL smoke for operator corrections: ensures the table, inserts a test row, reads it back.
 //   node src/usat_apps/modules/salesforce_email_queue/check_corrections_db.js
 const corrections = require('../../services/corrections');

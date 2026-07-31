@@ -1,4 +1,5 @@
 'use strict';
+try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '..', '.env') }); } catch (e) { /* dotenv optional */ }
 // Live Salesforce READ smoke for the email-queue module. Connects (read role) and lists queues.
 //   node src/usat_apps/modules/salesforce_email_queue/check_sf_read.js [--sandbox]
 const sf = require('./sf');
