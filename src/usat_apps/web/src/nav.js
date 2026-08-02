@@ -11,6 +11,7 @@ const ComingSoon = lazy(() => import('./pages/ComingSoon.jsx'));
 const MergeSection = lazy(() => import('./modules/salesforce_merge/Section.jsx'));
 const EmailQueueSection = lazy(() => import('./modules/salesforce_email_queue/Section.jsx'));
 const MergeMetrics = lazy(() => import('./modules/salesforce_merge/pages/MergeMetrics.jsx'));
+const EmailQueueMetrics = lazy(() => import('./modules/salesforce_email_queue/pages/EmailQueueMetrics.jsx'));
 const MergeOps = lazy(() => import('./modules/salesforce_merge/pages/MergeOps.jsx'));
 const OpsOverview = lazy(() => import('./modules/ops/Overview.jsx'));
 const OpsBackends = lazy(() => import('./modules/ops/Backends.jsx'));
@@ -46,6 +47,7 @@ export const NAV = [
     type: 'group', label: 'Metrics', items: [
       { label: 'Usat apps', path: '/metrics/usat-apps', panel: 'metrics', icon: '👤', Component: Metrics },
       { label: 'SF Merge', path: '/metrics/sf-merge', panel: 'merge-metrics', icon: '▤', Component: MergeMetrics },
+      { label: 'SF Email Queue', path: '/metrics/sf-email-queue', panel: 'email-queue-metrics', icon: '✉', Component: EmailQueueMetrics },
       // { label: 'Participation maps', path: '/metrics/participation-maps', panel: 'metrics', icon: '👤', Component: Metrics },
     ]
   },

@@ -5,6 +5,7 @@ import { trackPanelView, trackSession } from './lib/track.js';
 import { allPanels, canSee, panelForPathname, redirects } from './nav.js';
 import SideRail from './components/SideRail.jsx';
 import MergeRail from './modules/salesforce_merge/MergeRail.jsx';
+import EmailQueueRail from './modules/salesforce_email_queue/EmailQueueRail.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import UserMenu from './components/UserMenu.jsx';
 import FooterClock from './components/FooterClock.jsx';
@@ -57,6 +58,8 @@ export default function App() {
             own rail, not the full merge sidebar. */}
         {location.pathname.startsWith('/salesforce/merge') && canSee(user, panelForPathname(location.pathname))
           ? <MergeRail user={user} />
+          : location.pathname.startsWith('/salesforce/email-queue') && canSee(user, panelForPathname(location.pathname))
+          ? <EmailQueueRail user={user} />
           : <SideRail user={user} />}
         <main className="admin-main">
           <Suspense fallback={<div className="loading">Loading…</div>}>
