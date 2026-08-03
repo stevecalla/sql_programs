@@ -5,6 +5,7 @@ import DataTable from '../components/DataTable.jsx';
 import CollapsibleCard from '../components/CollapsibleCard.jsx';
 import QueueRowDetail from '../components/QueueRowDetail.jsx';
 import MergeDriftDetail from '../components/MergeDriftDetail.jsx';
+import RiskPills from '../components/RiskPills.jsx';
 import { api, exportUrl } from '../lib/api.js';
 import { awaitRun, awaitJob, summarize } from '../lib/run_poll.js';
 
@@ -407,7 +408,7 @@ export default function MergeProcess() {
                 <tr key={r.id}>
                   <td><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} aria-label={'Select ' + r.id} /></td>
                   <td><button type="button" onClick={() => toggleApExpand(r.id)} title="Show overrides & details" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, marginRight: 3, font: 'inherit' }}>{apExpanded.has(r.id) ? '▾' : '▸'}</button>{i + 1}</td>
-                  <td>{r.survivor_name || '—'}</td>
+                  <td>{r.survivor_name || '—'}<RiskPills row={r} /></td>
                   <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title={r.survivor_account}>{r.survivor_account || '—'}</td>
                   <td>{r.loser_count} account{Number(r.loser_count) === 1 ? '' : 's'}{r.field_overrides && typeof r.field_overrides === 'object' && Object.keys(r.field_overrides).length ? <span title="This set has field overrides" style={{ marginLeft: 4, color: 'var(--amber)' }}>✎</span> : null}</td>
                   <td title={r.source_key}>{r.source_type === 'merge_id' ? 'merge id ' : 'group '}{shortId(r.source_key)}</td>
