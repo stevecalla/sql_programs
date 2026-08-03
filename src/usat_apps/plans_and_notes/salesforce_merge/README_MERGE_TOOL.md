@@ -281,8 +281,28 @@ OFF (dry-run)" card, duplicate-pairs-by-signal, and recent activity.
 
 ![Duplicates mockup](mockups/mockup_duplicates.png)
 
-The consolidated clusters as a filterable table (signal, tier, size, has-merge-ID), with
-size, signal composition, tier, and best score. Click a cluster to open it in Admin.
+The consolidated clusters as a filterable table (signal, tier, size, has-merge-ID,
+foundation, **customer portal**), with size, signal composition, tier, and best score.
+Click a cluster to open it in Admin.
+
+### Customer-Portal (IsCustomerPortal) filter + survivor warning — IMPLEMENTED
+
+The finder now carries the Account `IsCustomerPortal` flag through to the review tables
+(snapshot `is_customer_portal`; per-cluster `Has_Portal_Account__c` / `Portal_Account_Count__c`;
+per-account `Is_Customer_Portal__c` on the merge-ID review — see the finder's
+`README.md` → "Customer-Portal flag"). In this tool:
+
+- **Filter (`portal_state`, all/has/none):** on the Duplicates, Merge-ID, All-accounts, and
+  Select-Merges group lists, plus the Merge-Ops random-batch filters. Backend spec/HAVING in
+  `store/reviews_read.js` (DUP_SPEC / MR_SPEC / ACC_SPEC + `list_merge_groups` /
+  `resolve_merge_groups`); passed through every list/export/batch endpoint in `api.js`. The
+  live-Salesforce detail path (`store/salesforce_read.js`) also queries `IsCustomerPortal` and
+  normalizes it to `portal` = `'1'`/`'0'` so the flag is present whether detail comes from the
+  snapshot or a live SF fetch.
+- **Survivor warning (Select Merges):** each account row shows a `portal` pill, and if the
+  chosen **master is NOT a portal account but a selected loser IS**, a red warning fires —
+  Salesforce blocks merging a portal account into a non-portal master, so the portal account
+  must be the master. Best-effort off the `portal` flag; it never blocks staging, it warns.
 
 ### `/merge-id` — Review merge-ID accounts
 
@@ -290,15 +310,15 @@ size, signal composition, tier, and best score. Click a cluster to open it in Ad
 
 The merge-ID review buckets as summary cards (`in_both` / `sf_only` / `exact_only` /
 `fuzzy_only` / `nickname_only` / `multi_signal`) plus a per-account table with bucket, merge ID,
-and which-list. `sf_only` is highlighted as the recall-gap list.
+which-list, and a customer-portal column + filter. `sf_only` is highlighted as the recall-gap list.
 
 ### `/accounts` — All accounts
 
 ![All accounts mockup](mockups/mockup_all_accounts.png)
 
 Browse the full snapshot (server-side paging over ~700k), with search and "in a cluster" /
-"has merge ID" filters. Lean snapshot columns; click a row to fetch full Salesforce detail +
-child records on demand (Tier 2).
+"has merge ID" / "customer portal" filters. Lean snapshot columns (incl. a Portal column);
+click a row to fetch full Salesforce detail + child records on demand (Tier 2).
 
 ### `/admin` — Merge console
 

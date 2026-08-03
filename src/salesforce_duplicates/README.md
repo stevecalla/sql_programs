@@ -229,6 +229,7 @@ cfg_Gender_Identity__pc,
 PersonBirthdate,
 usat_Foundation_Constituent__c,
 usat_Salesforce_Merge_Id__pc,
+IsCustomerPortal,
 CreatedDate, CreatedById, LastModifiedDate, LastModifiedById
 ```
 
@@ -238,9 +239,13 @@ in Node — best-effort, so the run still succeeds (names blank) if the user can
 read User. Everything else is a **flat Account field** (no relationship traversal),
 so it comes back the same shape from both the REST (`--test`) and Bulk (`--prod`) fetch paths.
 If any field does not exist, or your Salesforce user lacks access to it, the query
-fails — **except** `usat_Salesforce_Merge_Id__pc`, which is **optional**: the run
-DESCRIBEs Account and includes it only if the org has it (so an org without the field
-still runs, merge columns just come out blank). The contact + audit fields
+fails — **except** two **optional, auto-detected** fields: `usat_Salesforce_Merge_Id__pc`
+and `IsCustomerPortal`. The run DESCRIBEs Account and includes each only if the org has it
+(so an org without the field still runs — merge columns come out blank, the portal flag
+defaults to false). `IsCustomerPortal` is a standard Account boolean that exists only when
+Customer Portal / Communities is enabled; it is stored on the snapshot as
+`is_customer_portal` (1/0) and rolled up per consolidated cluster (see "Customer-Portal
+flag" below). The contact + audit fields
 (email/phone/address, created/modified dates) are reference data only — they are
 stored in the snapshot but never used by the matching logic.
 
@@ -259,6 +264,7 @@ SELECT Id, Name,
     PersonBirthdate,
     usat_Foundation_Constituent__c,
     usat_Salesforce_Merge_Id__pc,
+    IsCustomerPortal,
     CreatedDate, CreatedById, LastModifiedDate, LastModifiedById
 FROM Account
 WHERE FirstName != null
@@ -302,6 +308,56 @@ result chunk on a large extract. `bulk_query` filters these out at the source
 (`is_bulk_header_row`), so they never reach detection. (REST autoFetch does not have
 this issue.) Without the filter, the identical header rows would otherwise form a
 bogus "LastName/FirstName" exact-duplicate group in the output.
+
+### ⚠ Bulk CSV sends every value as a STRING — normalize booleans when adding fields
+
+This is the single biggest gotcha when adding a **new Account field**, especially a
+**checkbox / boolean**. The two fetch paths disagree on types:
+
+- **REST (`--test`)** returns typed JSON — a checkbox comes back as a real JS boolean
+  `true` / `false`.
+- **Bulk API (`--full` / `--prod`)** returns **CSV**, so **every value is a string** — a
+  false checkbox arrives as the string `"false"`, and an empty field as `""`.
+
+The trap: `"false"` is a **non-empty string, which is truthy in JavaScript**, so a naive
+`record.SomeCheckbox__c ? 1 : 0` marks **every Bulk-fetched row as 1**. (This actually
+happened with `IsCustomerPortal` — the `--test` sample looked fine, but the first full run
+flagged all ~700k records as portal accounts.)
+
+**Rule for future fields:** never test a Bulk-sourced value for truthiness directly.
+Normalize it explicitly. Booleans are normalized in two places on purpose (belt-and-suspenders):
+
+1. At the fetch source in `salesforce.js` — right after the User-name join, each record's
+   boolean is coerced to a real JS boolean (`=== true || string === 'true'`), so **every**
+   downstream consumer (in-memory detection, consolidate rollups, merge-ID review) sees a
+   proper boolean regardless of fetch path.
+2. In `database_snapshot.js` — the `sf_bool_to_int()` helper (treats only real `true` /
+   `"true"` / `"1"` as set) is used by `to_snapshot_row` when writing the 1/0 column.
+
+The same applies to any **numeric** field pulled via Bulk: it arrives as a string, so cast
+before doing math. Fields stored as their raw string and compared as strings (e.g.
+`usat_Foundation_Constituent__c`, matched with SQL `LIKE 'true%'`) are safe as-is — the bug
+only bites when code coerces the raw value to a boolean or a number.
+
+## Customer-Portal flag (IsCustomerPortal)
+
+`IsCustomerPortal` is a standard Account boolean, true when the account is a Customer
+Portal / Community login account. It is **review context**, not a matching signal — it
+never changes which records are grouped. It flows through the pipeline as:
+
+- **Snapshot**: stored as `is_customer_portal` (TINYINT 1/0) with its own index.
+- **Consolidated cluster** (output `d`): rolled up per cluster as
+  `Has_Portal_Account__c` (1 if any member is a portal account) and
+  `Portal_Account_Count__c` (how many members are). Mapped in
+  `sf_rows.js:to_sf_consolidated_row`.
+- **Merge-ID review** (output): per-account `Is_Customer_Portal__c`
+  (`to_sf_merge_id_review_row`).
+
+Why it matters for review: **Salesforce won't merge a portal-enabled account as a loser
+into a master that isn't portal-enabled** — the surviving master must be the portal
+account. The merge tool (usat_apps) surfaces a warning at survivor-selection time and a
+`portal` pill on the account, and exposes a Customer-portal filter on the Duplicates,
+Merge-ID, All-accounts, and Select-Merges views. (Detection itself is unaffected.)
 
 ## Composite ZIP Logic
 

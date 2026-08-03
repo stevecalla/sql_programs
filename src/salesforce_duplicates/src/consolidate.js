@@ -387,6 +387,9 @@ function build_consolidated_clusters(edges, record_lookup) {
             member_numbers: rows.map((r) => r.cfg_Member_Number__pc || '').join(';'),
             merge_ids: rows.map((r) => r.usat_Salesforce_Merge_Id__pc || '').join(';'),
             foundation_constituents: rows.map((r) => r.usat_Foundation_Constituent__c || '').join(';'),
+            // Portal rollup: how many members are Customer-Portal accounts, and a has/none flag for filtering.
+            portal_account_count: rows.filter((r) => !!r.IsCustomerPortal).length,
+            has_portal_account: rows.some((r) => !!r.IsCustomerPortal) ? 1 : 0,
             best_pair_score: has_pair_score ? s.best : '',
             lowest_pair_score: has_pair_score ? s.lowest : '',
             representative_pair,

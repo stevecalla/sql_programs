@@ -63,12 +63,13 @@ const ACCOUNT_BASE_FIELDS = [
 // No ORDER BY otherwise: detection never needs sorted input (exact uses a hash Map,
 // fuzzy uses rule-block buckets, outputs are sorted in code), so dropping the sort
 // lets Salesforce stream the full ~700k extract without sorting it first.
-function build_account_soql({ include_merge_id = true, ordered = false } = {}) {
+function build_account_soql({ include_merge_id = true, include_portal = true, ordered = false } = {}) {
     const fields = [...ACCOUNT_BASE_FIELDS];
     if (include_merge_id) {
         const after = fields.indexOf('usat_Foundation_Constituent__c');
         fields.splice(after + 1, 0, MERGE_ID_FIELD); // group it next to the foundation field
     }
+    if (include_portal) fields.push('IsCustomerPortal'); // standard Account boolean; only present when Customer Portal is enabled
     const select = `SELECT ${fields.join(', ')} FROM Account WHERE FirstName != null AND LastName != null`;
     return ordered ? `${select} ORDER BY LastName, FirstName, Id` : select;
 }
@@ -185,6 +186,12 @@ async function fetch_salesforce_accounts({ is_test, is_full = false, is_partial 
         `Optional field ${MERGE_ID_FIELD}: ${include_merge_id ? 'present — included in query' : 'NOT present in this org — skipped (merge columns will be blank)'}`,
         script_start_ms
     );
+    // IsCustomerPortal exists only when Customer Portal / Communities is enabled — auto-detect it.
+    const include_portal = await account_field_exists(conn, 'IsCustomerPortal');
+    log_info(
+        `Optional field IsCustomerPortal: ${include_portal ? 'present — included in query' : 'NOT present in this org — skipped (portal flag will be false)'}`,
+        script_start_ms
+    );
 
     const query_start_date = new Date();
     const query_start_ms = Date.now();
@@ -194,7 +201,7 @@ async function fetch_salesforce_accounts({ is_test, is_full = false, is_partial 
     //   plain --test   -> capped REST ordered sample (deterministic 5k)
     //   prod / --full  -> Bulk API (full)
     const { use_rest, ordered } = resolve_fetch_plan(is_test, is_full, is_partial);
-    const soql = build_account_soql({ include_merge_id, ordered });
+    const soql = build_account_soql({ include_merge_id, include_portal, ordered });
     const method = use_rest
         ? `REST autoFetch (${is_partial ? 'partial sample' : 'capped'})`
         : (is_test ? 'Bulk API (dev sandbox, FULL)' : 'Bulk API');
@@ -222,6 +229,12 @@ async function fetch_salesforce_accounts({ is_test, is_full = false, is_partial 
     for (const rec of records) {
         rec.CreatedByName = user_names.get(rec.CreatedById) || '';
         rec.LastModifiedByName = user_names.get(rec.LastModifiedById) || '';
+        // Normalize the portal checkbox to a real boolean at the source. The Bulk API (--full/--prod)
+        // streams CSV where every value is a STRING, so a false checkbox arrives as "false" — truthy in
+        // JS. Fix it once here so every downstream consumer (in-memory consolidate, merge-id review, and
+        // the snapshot store) sees a proper boolean, not the string "false".
+        rec.IsCustomerPortal = rec.IsCustomerPortal === true
+            || (typeof rec.IsCustomerPortal === 'string' && rec.IsCustomerPortal.trim().toLowerCase() === 'true');
     }
 
     // Same shape the rest of the pipeline already expects, plus the source

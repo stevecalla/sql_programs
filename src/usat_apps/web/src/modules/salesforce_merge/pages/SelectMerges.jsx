@@ -104,6 +104,7 @@ export default function SelectMerges() {
   const [memState, setMemState] = useState(PREFS.memState || '');
   const [bkState, setBkState] = useState(PREFS.bkState || '');
   const [foundationState, setFoundationState] = useState(PREFS.foundationState || ''); // '' all · 'has' · 'none' (both sources)
+  const [portalState, setPortalState] = useState(PREFS.portalState || ''); // '' all · 'has' · 'none' (both sources)
   const [sizeState, setSizeState] = useState(PREFS.sizeState || '');   // exact cluster size (both sources)
   const [matchState, setMatchState] = useState(PREFS.matchState || ''); // Signal: exact/fuzzy/nickname (Duplicates source)
   const [whichState, setWhichState] = useState(PREFS.whichState || ''); // Which list: exact/fuzzy/nickname (Merge-ID source)
@@ -165,20 +166,20 @@ export default function SelectMerges() {
 
   useEffect(() => {
     const load = source === 'merge_id'
-      ? api.mergeGroups({ page, page_size: PAGE, q: filter, bucket: bkState, foundation_state: foundationState, size: sizeState, which_list: whichState })
-      : api.duplicates({ page, page_size: PAGE, sort: 'size', dir: 'desc', q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, size: sizeState, match_type: matchState, best_min: simState, tier: tierState });
+      ? api.mergeGroups({ page, page_size: PAGE, q: filter, bucket: bkState, foundation_state: foundationState, portal_state: portalState, size: sizeState, which_list: whichState })
+      : api.duplicates({ page, page_size: PAGE, sort: 'size', dir: 'desc', q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, portal_state: portalState, size: sizeState, match_type: matchState, best_min: simState, tier: tierState });
     load.then((r) => { setClusters(r.rows || []); setTotal(Number(r.total) || 0); }).catch((e) => setErr(e.message));
-  }, [source, page, filter, midState, memState, bkState, foundationState, sizeState, matchState, whichState, simState, tierState]);
+  }, [source, page, filter, midState, memState, bkState, foundationState, portalState, sizeState, matchState, whichState, simState, tierState]);
 
   // Populate the cluster-size dropdown from the consolidated facets (distinct group sizes).
   useEffect(() => { api.duplicatesFacets().then((r) => setSizeOpts(((r.facets && r.facets.size) || []).map(String))).catch(() => {}); }, []);
 
   // Persist filter selections so they become the user's default next time.
   useEffect(() => {
-    try { localStorage.setItem(LS_KEY, JSON.stringify({ source, qFilter, midState, memState, bkState, foundationState, sizeState, matchState, whichState, simState, tierState })); } catch { /* ignore */ }
-  }, [source, qFilter, midState, memState, bkState, foundationState, sizeState, matchState, whichState, simState, tierState]);
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ source, qFilter, midState, memState, bkState, foundationState, portalState, sizeState, matchState, whichState, simState, tierState })); } catch { /* ignore */ }
+  }, [source, qFilter, midState, memState, bkState, foundationState, portalState, sizeState, matchState, whichState, simState, tierState]);
 
-  useEffect(() => { setRailSel(new Set()); setSelectAllMatching(false); setBulkMsg(''); }, [source, filter, midState, memState, bkState, foundationState, sizeState, matchState, whichState, simState, tierState]);
+  useEffect(() => { setRailSel(new Set()); setSelectAllMatching(false); setBulkMsg(''); }, [source, filter, midState, memState, bkState, foundationState, portalState, sizeState, matchState, whichState, simState, tierState]);
 
   const loadQueue = useCallback(() => {
     api.mergeQueue(qStatus).then((r) => { const rows = r.rows || []; setQueue(rows); setQSel(new Set(rows.map((x) => x.id))); }).catch((e) => setErr(e.message));
@@ -298,6 +299,26 @@ export default function SelectMerges() {
   const childTotal = (children && selLosers.reduce((s, id) => s + ((children[id] && children[id].total) || 0), 0)) || 0;
   const apexCalls = Math.ceil(selLosers.length / 2) || 0;
 
+  // Customer-Portal safety check: Salesforce won't merge a portal-enabled account as a loser into a
+  // master that isn't portal-enabled (the master must be the portal account). Warn if the chosen master
+  // is NOT a portal account but one or more of the selected losers ARE. Best-effort off the snapshot's
+  // is_customer_portal flag (surfaced as `portal` = '1'/'0' by cluster_accounts).
+  const isPortalAcct = (a) => !!a && String(a.portal) === '1';
+  // Foundation/donor flag isn't unified into one field like `portal` is: the snapshot path gives
+  // `foundation_constituent`, the live-SF path gives `usat_Foundation_Constituent__c`. Check both.
+  const isDonorAcct = (a) => {
+    if (!a) return false;
+    const v = (a.foundation_constituent != null && a.foundation_constituent !== '') ? a.foundation_constituent : a.usat_Foundation_Constituent__c;
+    return v === true || String(v).trim().toLowerCase() === 'true';
+  };
+  const masterAcctSel = accounts.find((a) => a.account === master);
+  const masterIsPortal = isPortalAcct(masterAcctSel);
+  const masterIsDonor = isDonorAcct(masterAcctSel);
+  const portalLosers = selLosers.filter((id) => isPortalAcct(accounts.find((a) => a.account === id)));
+  const donorLosers = selLosers.filter((id) => isDonorAcct(accounts.find((a) => a.account === id)));
+  const portalWarn = !!master && !masterIsPortal && portalLosers.length > 0;
+  const donorWarn = !!master && !masterIsDonor && donorLosers.length > 0;
+
   // Only an ACTIVE entry (queued/approved) blocks re-adding — matches the backend add() dedup. Terminal
   // rows (done/failed/restored/recreated) are history: a RESTORED set is two live duplicates again, so it
   // must be re-mergeable.
@@ -306,8 +327,8 @@ export default function SelectMerges() {
   const pages = Math.max(1, Math.ceil(total / PAGE));
   const setSrc = (s) => { setSource(s); setPage(1); setSelKey(null); setDetail(null); };
   const onFilter = (v) => { setFilter(v); setPage(1); };
-  const clearFilters = () => { setMidState(''); setMemState(''); setBkState(''); setFoundationState(''); setSizeState(''); setMatchState(''); setWhichState(''); setSimState(''); setTierState(''); setQFilter(''); setPage(1); };
-  const anyFilter = !!(midState || memState || bkState || foundationState || sizeState || matchState || whichState || simState || tierState || qFilter);
+  const clearFilters = () => { setMidState(''); setMemState(''); setBkState(''); setFoundationState(''); setPortalState(''); setSizeState(''); setMatchState(''); setWhichState(''); setSimState(''); setTierState(''); setQFilter(''); setPage(1); };
+  const anyFilter = !!(midState || memState || bkState || foundationState || portalState || sizeState || matchState || whichState || simState || tierState || qFilter);
   const toggleMerge = (id) => setMergeSel((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const [adding, setAdding] = useState(false);
@@ -358,8 +379,8 @@ export default function SelectMerges() {
     try {
       const payload = selectAllMatching
         ? (source === 'merge_id'
-          ? { source: 'merge_id', q: filter, bucket: bkState, foundation_state: foundationState, size: sizeState, which_list: whichState }
-          : { source: 'group', q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, size: sizeState, match_type: matchState, best_min: simState, tier: tierState })
+          ? { source: 'merge_id', q: filter, bucket: bkState, foundation_state: foundationState, portal_state: portalState, size: sizeState, which_list: whichState }
+          : { source: 'group', q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, portal_state: portalState, size: sizeState, match_type: matchState, best_min: simState, tier: tierState })
         : { source, keys: [...railSel] };
       const r = await api.mergeQueueBulk(payload);
       setBulkMsg(`Queued ${r.queued}` + (r.skipped ? `, ${r.skipped} already queued` : '') + (r.merged ? `, ${r.merged} already merged` : '') + (r.unresolved ? `, ${r.unresolved} skipped (no clear survivor)` : '') + (r.capped ? ' — capped at 1000' : '') + '.');
@@ -470,6 +491,12 @@ export default function SelectMerges() {
                   <option value="">All</option><option value="has">Is foundation</option><option value="none">Not foundation</option>
                 </select>
               </div>
+              <div style={FCELL}>
+                <FLabel title="Whether any account in the group is a Customer-Portal account (IsCustomerPortal). Salesforce requires the portal account to be the master when merging.">Customer portal</FLabel>
+                <select className="tb-select" style={FSEL} value={portalState} onChange={(e) => { setPortalState(e.target.value); setPage(1); }} title="Whether any account in the group is a Customer-Portal account (IsCustomerPortal).">
+                  <option value="">All</option><option value="has">Has portal</option><option value="none">No portal</option>
+                </select>
+              </div>
             </>
           )}
           {source === 'merge_id' && (
@@ -484,6 +511,12 @@ export default function SelectMerges() {
                 <FLabel title="Whether any account in the group is a Foundation constituent.">Foundation</FLabel>
                 <select className="tb-select" style={FSEL} value={foundationState} onChange={(e) => { setFoundationState(e.target.value); setPage(1); }} title="Whether any account in the group is a Foundation constituent.">
                   <option value="">All</option><option value="has">Is foundation</option><option value="none">Not foundation</option>
+                </select>
+              </div>
+              <div style={FCELL}>
+                <FLabel title="Whether any account in the group is a Customer-Portal account (IsCustomerPortal). Salesforce requires the portal account to be the master when merging.">Customer portal</FLabel>
+                <select className="tb-select" style={FSEL} value={portalState} onChange={(e) => { setPortalState(e.target.value); setPage(1); }} title="Whether any account in the group is a Customer-Portal account (IsCustomerPortal).">
+                  <option value="">All</option><option value="has">Has portal</option><option value="none">No portal</option>
                 </select>
               </div>
             </>
@@ -536,6 +569,8 @@ export default function SelectMerges() {
                     className={'ma-cluster' + (selKey === c.cluster ? ' on' : '')}>
                     <div className="ma-cluster-key" title={fmtNames(c.names) || c.cluster} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {firstName(c.names) || c.cluster}</span>
+                      {Number(c.portal) > 0 && <span className="pill" style={{ background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 10, padding: '1px 6px', flex: '0 0 auto' }} title="This group contains a Customer-Portal account — open it to make sure the portal account is the master.">portal</span>}
+                      {Number(c.foundation) > 0 && <span className="pill" style={{ background: 'var(--amber-bg)', color: 'var(--amber, #854f0b)', fontSize: 10, padding: '1px 6px', flex: '0 0 auto' }} title="This group contains a Foundation constituent (donor record) — open it to confirm the donor is preserved.">donor</span>}
                       {badge && <span className="pill" style={{ background: badge.bg, color: badge.c, fontSize: 10, padding: '1px 6px', flex: '0 0 auto' }}>{badge.t}</span>}
                     </div>
                     <div className="muted small">{c.size} records · {c.signal}</div>
@@ -670,6 +705,18 @@ export default function SelectMerges() {
         {addErr && <p className="err" style={{ margin: '0 0 8px' }}>{addErr}</p>}
         {isQueued && !addErr && <p className="muted small" style={{ margin: '0 0 8px' }}>This set is already in the queue — remove it below to re-add.</p>}
         {mergedLock && !addErr && <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green, #1a8a4f)' }}>This set has already been merged — restore it first (Restore page) to re-merge.</p>}
+        {portalWarn && (
+          <p className="err" style={{ margin: '0 0 8px', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <span aria-hidden="true">⚠</span>
+            <span>The chosen master is <strong>not</strong> a Customer-Portal account, but {portalLosers.length} of the accounts you're merging {portalLosers.length === 1 ? 'is' : 'are'} ({portalLosers.map(shortId).join(', ')}). Salesforce blocks merging a portal account into a non-portal master — pick the Customer-Portal account as the master, or that merge will fail.</span>
+          </p>
+        )}
+        {donorWarn && (
+          <p style={{ margin: '0 0 8px', display: 'flex', alignItems: 'flex-start', gap: 6, color: 'var(--amber, #854f0b)' }}>
+            <span aria-hidden="true">⚠</span>
+            <span>The chosen master is <strong>not</strong> a Foundation constituent, but {donorLosers.length} of the accounts you're merging {donorLosers.length === 1 ? 'is' : 'are'} ({donorLosers.map(shortId).join(', ')}). Confirm the donor record is preserved before merging (internal requirement).</span>
+          </p>
+        )}
         {note && <p className="muted small" style={{ color: 'var(--accent)', margin: '0 0 8px' }}>{note}</p>}
         {!detail ? (
           <><div style={{ height: 300, overflow: 'hidden' }}><SkelRows n={6} /></div><Skel w="42%" mt={8} /></>
@@ -688,7 +735,10 @@ export default function SelectMerges() {
                         <td>{i + 1}</td>
                         <td><input type="radio" name="master" checked={isMaster} onChange={() => { setMaster(a.account); setManualMaster(true); }} aria-label={'Master ' + a.account} /></td>
                         <td>{isMaster ? <span className="muted small">master</span> : <input type="checkbox" checked={mergeSel.has(a.account)} onChange={() => toggleMerge(a.account)} aria-label={'Merge ' + a.account} />}</td>
-                        <td>{acctName(a)}</td>
+                        <td>{acctName(a)}
+                          {isPortalAcct(a) ? <span className="pill" style={{ marginLeft: 4, background: masterIsPortal ? 'var(--accent-soft)' : 'var(--red-bg, #fdecea)', color: masterIsPortal ? 'var(--accent)' : 'var(--red, #c0392b)' }} title={masterIsPortal ? 'Customer-Portal account and the master — OK to merge.' : 'Portal account is not the master — Salesforce will likely reject this merge (the portal account must be the master).'}>portal{masterIsPortal ? '' : '*'}</span> : null}
+                          {isDonorAcct(a) ? <span className="pill" style={{ marginLeft: 4, background: masterIsDonor ? 'var(--accent-soft)' : 'var(--amber-bg)', color: masterIsDonor ? 'var(--accent)' : 'var(--amber, #854f0b)' }} title={masterIsDonor ? 'Foundation constituent (donor record) and the master.' : 'Donor record is not the master — confirm it is preserved before merging (internal requirement).'}>donor{masterIsDonor ? '' : '*'}</span> : null}
+                        </td>
                         <td title={a.account}>{a.account} {idMatch ? <span className="pill" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>= merge id</span> : null}</td>
                         <td title={acctMergeId(a)}>{acctMergeId(a) || '—'}</td>
                         <td>{val(a.member_number || a.cfg_Member_Number__pc)}</td>

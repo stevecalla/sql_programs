@@ -365,6 +365,7 @@ records joined up by all their links.
 | `Shared_Gender__c` / `Shared_Birthdate__c` / `Shared_Composite_Zip__c` | — | Shared rule fields for the cluster. |
 | `Names_In_Group__c` / `Clean_Names_In_Group__c` | Long Text Area | Semicolon-delimited names (positional). |
 | `Record_Ids__c` / `Member_Numbers__c` / `Merge_Ids__c` / `Foundation_Constituents__c` | Long Text Area | Semicolon-delimited member data (positional, one per record). |
+| `Has_Portal_Account__c` / `Portal_Account_Count__c` | Checkbox/Number | Customer-Portal (`IsCustomerPortal`) rollup: 1 if ANY member is a portal account, and how many are. Review context (Salesforce requires the surviving master to be the portal account); does not affect clustering. |
 | `Best_Pair_Score__c` / `Lowest_Pair_Score__c` | Number | Score range across fuzzy/nickname links (blank for a pure-exact cluster). |
 | `Representative_Pair__c` | Long Text Area | The single strongest pair, side-by-side: `Name A <-> Name B: <signal> (first/last/combined scores)`. |
 | `Match_Link_Reasons__c` | Long Text Area | One line per link explaining why each pair is connected, with scores. (Was `Edge_Reasons__c`.) |

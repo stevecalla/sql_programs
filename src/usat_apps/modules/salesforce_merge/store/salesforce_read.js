@@ -8,6 +8,7 @@ const DETAIL_FIELDS = [
   'PersonMailingStreet', 'PersonMailingCity', 'PersonMailingState', 'PersonMailingPostalCode',
   'cfg_Member_Number__pc', 'cfg_Gender_Identity__pc', 'PersonBirthdate',
   'usat_Salesforce_Merge_Id__pc', 'usat_Foundation_Constituent__c',
+  'IsCustomerPortal',
   'CreatedDate', 'LastModifiedDate',
 ];
 
@@ -26,6 +27,9 @@ async function fetch_accounts_by_ids(ids, { is_test = true, fields = DETAIL_FIEL
   return (res.records || []).map((r) => {
     const o = { account: r.Id, contact: r.PersonContactId || '' };
     for (const f of fields) o[f] = r[f] == null ? '' : r[f];
+    // Normalize the portal flag to '1'/'0' so the UI's portal check works the same on the live-SF path
+    // as on the snapshot path (where cluster_accounts already surfaces `portal`).
+    o.portal = r.IsCustomerPortal ? '1' : '0';
     return o;
   });
 }

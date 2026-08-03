@@ -53,6 +53,7 @@ const COLUMNS = [
     'person_birthdate',
     // flags / merge
     'foundation_constituent',
+    'is_customer_portal',
     'salesforce_merge_id',
     // audit — who/when created and last modified
     'created_date',
@@ -86,6 +87,17 @@ const COLUMNS = [
     'load_sequence',
 ];
 
+// Normalize a Salesforce boolean field to 1/0. The REST path (--test) returns a real
+// JS boolean, but the Bulk API path (--full / --prod) streams CSV where EVERY value is a
+// STRING — so a false checkbox comes back as the string "false", which is truthy in JS.
+// A naive `record.Field ? 1 : 0` would therefore mark every Bulk-fetched row as 1. Treat
+// only real true / "true" / "1" as set; everything else (false, "false", "0", "", null) is 0.
+function sf_bool_to_int(v) {
+    if (v === true || v === 1) return 1;
+    const s = String(v == null ? '' : v).trim().toLowerCase();
+    return (s === 'true' || s === '1') ? 1 : 0;
+}
+
 // Salesforce returns ISO timestamps like "2025-05-22T01:59:50.000+0000". Convert to
 // the MySQL DATETIME literal "2025-05-22 01:59:50" (the +0000 means it's already UTC).
 // Returns null for a blank/missing value so the column stores NULL, not "".
@@ -118,6 +130,7 @@ function to_snapshot_row(record, loaded_at = new Date(), load_sequence = null, m
         record.PersonBirthdate || '',
         // flags / merge
         record.usat_Foundation_Constituent__c || '',
+        sf_bool_to_int(record.IsCustomerPortal),   // standard Account boolean -> 1/0 (Bulk CSV sends "true"/"false" strings)
         record.usat_Salesforce_Merge_Id__pc || '',
         // audit — who/when created and last modified
         to_mysql_datetime(record.CreatedDate),
@@ -167,6 +180,7 @@ function create_table_sql(table = SNAPSHOT_TABLE_NAME) {
   gender_identity              VARCHAR(255),
   person_birthdate             VARCHAR(32),
   foundation_constituent       VARCHAR(32),
+  is_customer_portal           TINYINT NOT NULL DEFAULT 0,
   salesforce_merge_id          VARCHAR(255),
   created_date                 DATETIME,
   created_by_id                VARCHAR(20),
@@ -228,6 +242,7 @@ async function add_indexes(executor, table = SNAPSHOT_TABLE_NAME) {
     // scan per GROUP BY — this is what made All Accounts slow once these facets were added.
     await executor(`CREATE INDEX idx_match_composition ON \`${table}\` (match_composition)`, []);
     await executor(`CREATE INDEX idx_foundation_constituent ON \`${table}\` (foundation_constituent)`, []);
+    await executor(`CREATE INDEX idx_is_customer_portal ON \`${table}\` (is_customer_portal)`, []);
     // match_score (SMALLINT) — serves ORDER BY / range filters on the All Accounts "Match score" column.
     await executor(`CREATE INDEX idx_match_score ON \`${table}\` (match_score)`, []);
     // cluster_size (SMALLINT) — serves the All Accounts "in a duplicate cluster" filter + Matches sort.
@@ -321,6 +336,7 @@ function record_from_row(row) {
         cfg_Member_Number__pc: row.member_number || '',
         cfg_Gender_Identity__pc: row.gender_identity || '',
         usat_Foundation_Constituent__c: row.foundation_constituent || '',
+        IsCustomerPortal: !!Number(row.is_customer_portal),
         usat_Salesforce_Merge_Id__pc: row.salesforce_merge_id || '',
         PersonBirthdate: row.person_birthdate || '',
         BillingPostalCode: row.billing_postal_code || '',
@@ -331,7 +347,7 @@ function record_from_row(row) {
 async function read_records(executor, table = SNAPSHOT_TABLE_NAME) {
     const rows = await executor(
         `SELECT salesforce_account_id, last_name, first_name, member_number, gender_identity,
-                foundation_constituent, salesforce_merge_id, person_birthdate,
+                foundation_constituent, is_customer_portal, salesforce_merge_id, person_birthdate,
                 billing_postal_code, person_mailing_postal_code
          FROM \`${table}\` ORDER BY load_sequence`, []);
     return rows.map(record_from_row);

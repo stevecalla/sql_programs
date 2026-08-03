@@ -81,6 +81,24 @@ size is a tunable constant. The load runs inside a transaction (or builds into a
 staging table that is swapped in) so a failed/partial stream never leaves a
 half-populated table.
 
+### ⚠ Bulk CSV type gotcha (read before adding a new snapshot column)
+
+The Bulk API 2.0 stream that feeds this loader is **CSV**, so **every field arrives as a
+string** — unlike the REST path (`--test`), which returns typed JSON. A boolean checkbox
+that is false comes across as the string `"false"`, and `"false"` is **truthy in
+JavaScript**. So a naive `record.SomeCheckbox__c ? 1 : 0` when building the snapshot row
+sets **every full-run row to 1**. This exact bug shipped briefly with `is_customer_portal`:
+the `--test` sample (REST, real booleans) looked correct, but the first `--prod`/`--full`
+run (Bulk, CSV strings) flagged all ~700k accounts as portal accounts.
+
+When adding a **boolean or numeric** column to the snapshot: normalize it, don't coerce the
+raw value. Booleans go through `sf_bool_to_int()` in `database_snapshot.js` (only real
+`true` / `"true"` / `"1"` → 1) AND are coerced to a real boolean at the fetch source in
+`salesforce.js` so the in-memory detection path is correct too; numerics must be cast before
+any arithmetic. String columns compared as strings downstream (e.g. `foundation_constituent`
+via SQL `LIKE 'true%'`) are fine as-is. Full write-up in `README.md` → "Bulk CSV sends every
+value as a STRING".
+
 ## Architecture / data flow
 
 ```
@@ -122,6 +140,10 @@ billing_postal_code
 gender_identity
 person_birthdate
 foundation_constituent
+is_customer_portal                 (IsCustomerPortal, TINYINT 1/0 — indexed; normalized via
+                                    sf_bool_to_int at load AND to a real bool in salesforce.js
+                                    at fetch, because the Bulk CSV path sends "false" as a
+                                    truthy string — see "Bulk CSV type gotcha" below)
 salesforce_merge_id
 created_date                       (CreatedDate, DATETIME)
 created_by_id                      (CreatedById — the user/integration that created it)

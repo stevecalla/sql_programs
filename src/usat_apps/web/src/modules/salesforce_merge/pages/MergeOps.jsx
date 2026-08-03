@@ -118,6 +118,7 @@ export default function MergeOps() {
   const [rCount, setRCount] = useState('10');
   const [rSeed, setRSeed] = useState('');
   const [rFoundation, setRFoundation] = useState('');   // '' any | 'has' | 'none'
+  const [rPortal, setRPortal] = useState('');           // '' any | 'has' | 'none' (Customer-Portal account in the set)
   const [rTier, setRTier] = useState('');
   const [rSignal, setRSignal] = useState('');
   const [rWhichList, setRWhichList] = useState('');
@@ -233,8 +234,10 @@ export default function MergeOps() {
       if (rMergeId) filters.merge_id_state = rMergeId;         // has|none
       if (rMember) filters.member_number_state = rMember;      // has|none
       if (rFoundation) filters.foundation_state = rFoundation; // has|none
+      if (rPortal) filters.portal_state = rPortal;            // has|none
     } else {
       if (rFoundation) filters.foundation_state = rFoundation;
+      if (rPortal) filters.portal_state = rPortal;
       if (rBucket) filters.bucket = rBucket;
       if (rWhichList) colFilters.which_list = rWhichList;
     }
@@ -252,7 +255,7 @@ export default function MergeOps() {
     }, 300);
     return () => { stop = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchMode, rSource, rMin, rMax, rTier, rSignal, rMinSim, rMergeId, rMember, rWhichList, rBucket, rFoundation]);
+  }, [batchMode, rSource, rMin, rMax, rTier, rSignal, rMinSim, rMergeId, rMember, rWhichList, rBucket, rFoundation, rPortal]);
 
   const setField = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
   const dirty = Object.keys(draft).length > 0;
@@ -482,6 +485,7 @@ export default function MergeOps() {
                   </>
                 )}
                 <label className="small" title="Foundation constituents (donor records). 'has' targets donor clusters; 'none' avoids them.">Foundation<br /><span className="tb-select"><select value={rFoundation} onChange={(e) => setRFoundation(e.target.value)}><option value="">all</option><option value="has">has (donors)</option><option value="none">none</option></select></span></label>
+                <label className="small" title="Customer-Portal accounts (IsCustomerPortal). 'has' targets sets that include a portal account; 'none' avoids them.">Customer portal<br /><span className="tb-select"><select value={rPortal} onChange={(e) => setRPortal(e.target.value)}><option value="">all</option><option value="has">has portal</option><option value="none">none</option></select></span></label>
               </div>
             </div>
           )}

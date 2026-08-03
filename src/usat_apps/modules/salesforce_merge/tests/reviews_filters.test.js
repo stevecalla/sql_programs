@@ -83,6 +83,34 @@ describe('foundation filters', () => {
   });
 });
 
+describe('customer-portal filters', () => {
+  test('duplicates portal_state -> cluster Has_Portal_Account__c rollup', async () => {
+    let r = recorder([{ cluster: 'C' }]);
+    await reviews.list_duplicates({ filters: { portal_state: 'has' } }, r.q);
+    assert.ok(/Has_Portal_Account__c = '1'/.test(sel(r.calls, /Names_In_Group__c AS/).sql));
+
+    r = recorder([{ cluster: 'C' }]);
+    await reviews.list_duplicates({ filters: { portal_state: 'none' } }, r.q);
+    assert.ok(/Has_Portal_Account__c IS NULL OR Has_Portal_Account__c <> '1'/.test(sel(r.calls, /Names_In_Group__c AS/).sql));
+  });
+
+  test('accounts portal_state -> snapshot is_customer_portal', async () => {
+    let r = recorder([{ account: '1' }]);
+    await reviews.list_accounts({ filters: { portal_state: 'has' } }, r.q);
+    assert.ok(/is_customer_portal = 1/.test(sel(r.calls, /salesforce_account_id AS/).sql));
+
+    r = recorder([{ account: '1' }]);
+    await reviews.list_accounts({ filters: { portal_state: 'none' } }, r.q);
+    assert.ok(/is_customer_portal IS NULL OR is_customer_portal = 0/.test(sel(r.calls, /salesforce_account_id AS/).sql));
+  });
+
+  test('merge-id portal_state -> per-row Is_Customer_Portal__c', async () => {
+    const r = recorder([{ account: '1' }]);
+    await reviews.list_merge_id({ filters: { portal_state: 'has' } }, r.q);
+    assert.ok(r.calls.some((c) => /Is_Customer_Portal__c = '1'/.test(c.sql)));
+  });
+});
+
 describe('duplicates size + match-type filters', () => {
   test('size_eq -> exact numeric equality on Group_Record_Count__c', async () => {
     const r = recorder([{ cluster: 'C' }]);

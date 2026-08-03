@@ -323,7 +323,7 @@ function mount(app) {
   };
 
   app.get('/api/salesforce-merge/duplicates', gate, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state, size_eq: req.query.size, match_type: req.query.match_type, best_min: req.query.best_min, tier: req.query.tier } })) }); }
+    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state, portal_state: req.query.portal_state, size_eq: req.query.size, match_type: req.query.match_type, best_min: req.query.best_min, tier: req.query.tier } })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/duplicates/facets', gate, async function (req, res) {
@@ -331,7 +331,7 @@ function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/duplicates/export', gate, async function (req, res) {
-    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state, size_eq: req.query.size, match_type: req.query.match_type, best_min: req.query.best_min, tier: req.query.tier } }); }
+    try { await send_export(req, res, 'duplicates', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state, portal_state: req.query.portal_state, size_eq: req.query.size, match_type: req.query.match_type, best_min: req.query.best_min, tier: req.query.tier } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Members of one consolidated cluster (account-level detail for the Duplicates "view group" popup).
@@ -370,7 +370,7 @@ function mount(app) {
 
   // ---- Merge Admin sources + queue ----
   app.get('/api/salesforce-merge/merge-groups', gate, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_merge_groups({ ...page_opts(req), bucket: req.query.bucket, foundation_state: req.query.foundation_state, size: req.query.size, which_list: req.query.which_list })) }); }
+    try { res.json({ ok: true, ...(await reviews.list_merge_groups({ ...page_opts(req), bucket: req.query.bucket, foundation_state: req.query.foundation_state, portal_state: req.query.portal_state, size: req.query.size, which_list: req.query.which_list })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge-queue', gate, async function (req, res) {
@@ -443,11 +443,11 @@ function mount(app) {
       const dsb = await dashboard.dataset_info().catch(() => null);
       const org_id = await resolve_org_id(!dsb || dsb.environment !== 'Production'); // resolved once, reused for the whole batch
       const groups = src === 'merge_id'
-        ? await reviews.resolve_merge_groups({ q: b.q, bucket: b.bucket, foundation_state: b.foundation_state, size: b.size, which_list: b.which_list, keys: b.keys })
+        ? await reviews.resolve_merge_groups({ q: b.q, bucket: b.bucket, foundation_state: b.foundation_state, portal_state: b.portal_state, size: b.size, which_list: b.which_list, keys: b.keys })
         // nest the list filters under `filters` so build_clauses applies them — this makes
         // "select all matching" honour the same merge-id/member/foundation/size/match-type filters
         // the list is showing.
-        : await reviews.resolve_duplicate_groups({ q: b.q, keys: b.keys, filters: { merge_id_state: b.merge_id_state, member_number_state: b.member_number_state, foundation_state: b.foundation_state, size_eq: b.size, match_type: b.match_type, best_min: b.best_min, tier: b.tier } });
+        : await reviews.resolve_duplicate_groups({ q: b.q, keys: b.keys, filters: { merge_id_state: b.merge_id_state, member_number_state: b.member_number_state, foundation_state: b.foundation_state, portal_state: b.portal_state, size_eq: b.size, match_type: b.match_type, best_min: b.best_min, tier: b.tier } });
       const keyOf = (g) => (src === 'merge_id' ? g.merge_id : g.source_key);
       const CAP = 1000;
       const resolvable = groups.filter((g) => g.resolvable);
@@ -805,7 +805,7 @@ function mount(app) {
 
   app.get('/api/salesforce-merge/merge-id', gate, async function (req, res) {
     try {
-      const opts = { ...page_opts(req), filters: { bucket: req.query.bucket, foundation_state: req.query.foundation_state } };
+      const opts = { ...page_opts(req), filters: { bucket: req.query.bucket, foundation_state: req.query.foundation_state, portal_state: req.query.portal_state } };
       const [list, summary] = await Promise.all([reviews.list_merge_id(opts), reviews.merge_id_summary()]);
       res.json({ ok: true, ...list, summary });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -815,13 +815,13 @@ function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge-id/export', gate, async function (req, res) {
-    try { await send_export(req, res, 'merge-id', { ...page_opts(req), filters: { bucket: req.query.bucket, foundation_state: req.query.foundation_state } }); }
+    try { await send_export(req, res, 'merge-id', { ...page_opts(req), filters: { bucket: req.query.bucket, foundation_state: req.query.foundation_state, portal_state: req.query.portal_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
   app.get('/api/salesforce-merge/accounts', gate, async function (req, res) {
     try {
-      const opts = { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, in_cluster_state: req.query.in_cluster_state } };
+      const opts = { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, in_cluster_state: req.query.in_cluster_state, portal_state: req.query.portal_state } };
       res.json({ ok: true, ...(await reviews.list_accounts(opts)) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
@@ -830,7 +830,7 @@ function mount(app) {
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/accounts/export', gate, async function (req, res) {
-    try { await send_export(req, res, 'accounts', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, in_cluster_state: req.query.in_cluster_state } }); }
+    try { await send_export(req, res, 'accounts', { ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, in_cluster_state: req.query.in_cluster_state, portal_state: req.query.portal_state } }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 }

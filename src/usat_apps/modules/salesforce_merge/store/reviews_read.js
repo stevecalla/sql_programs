@@ -137,7 +137,9 @@ async function count_matching(view, opts = {}, query = real_query) {
 const DUP_SPEC = {
   table: cfg.RESULT_CONSOLIDATED_TABLE,
   select: 'Consolidated_Group_Key__c AS `cluster`, Names_In_Group__c AS `names`, Group_Record_Count__c AS `size`, ' +
-          'Match_Composition__c AS `signal`, Confidence_Tier__c AS `tier`, Merge_Ids__c AS `merge_ids`, Best_Pair_Score__c AS `best`',
+          'Match_Composition__c AS `signal`, Confidence_Tier__c AS `tier`, Merge_Ids__c AS `merge_ids`, Best_Pair_Score__c AS `best`, ' +
+          'Has_Portal_Account__c AS `portal`, Portal_Account_Count__c AS `portal_count`, ' +
+          "(Foundation_Constituents__c LIKE '%true%') AS `foundation`",
   search_cols: ['Names_In_Group__c', 'Consolidated_Group_Key__c', 'Record_Ids__c', 'Group_Record_Count__c', 'Confidence_Tier__c'],
   sort: {
     cluster: 'Consolidated_Group_Key__c',
@@ -161,6 +163,9 @@ const DUP_SPEC = {
     // does any member of the cluster carry a Foundation constituent flag? (values are ';'-joined true/false)
     foundation_state: { build: (v) => (String(v) === 'has' ? { sql: "Foundation_Constituents__c LIKE '%true%'" }
       : String(v) === 'none' ? { sql: "(Foundation_Constituents__c IS NULL OR Foundation_Constituents__c NOT LIKE '%true%')" } : null) },
+    // does any member of the cluster carry the IsCustomerPortal flag? (cluster rollup, stored '1'/'0')
+    portal_state: { build: (v) => (String(v) === 'has' ? { sql: "Has_Portal_Account__c = '1'" }
+      : String(v) === 'none' ? { sql: "(Has_Portal_Account__c IS NULL OR Has_Portal_Account__c <> '1')" } : null) },
     // exact cluster size (e.g. only pairs = 2). Numeric equality on the record count.
     size_eq: { build: (v) => (/^\d+$/.test(String(v).trim()) ? { sql: 'CAST(Group_Record_Count__c AS UNSIGNED) = ?', params: [Number(String(v).trim())] } : null) },
     // cluster-size band (used by the batch-run sampler's Min/Max size).
@@ -209,7 +214,7 @@ const MR_SPEC = {
   // to the page rows with one small lookup instead (so size is display-only, not SQL-sortable).
   select: 'Account__c AS `account`, First_Name__c AS `first_name`, Last_Name__c AS `last_name`, ' +
           'Salesforce_Merge_Id__c AS `merge_id`, Which_List__c AS `which_list`, Bucket__c AS `bucket`, ' +
-          'Foundation_Constituent__c AS `foundation`, Consolidated_Group_Key__c AS `cluster`',
+          'Foundation_Constituent__c AS `foundation`, Is_Customer_Portal__c AS `portal`, Consolidated_Group_Key__c AS `cluster`',
   search_cols: ['Account__c', 'First_Name__c', 'Last_Name__c', 'Salesforce_Merge_Id__c', 'Which_List__c'],
   // bucket filter mirrors the funnel: 'only_dupes' = flagged by us with no merge ID (every
   // non in_both / sf_only bucket); any other value is an exact bucket match.
@@ -230,6 +235,9 @@ const MR_SPEC = {
     // 'has' / 'none' on the account's Foundation constituent flag (per-row true/false)
     foundation_state: { build: (v) => (String(v) === 'has' ? { sql: "Foundation_Constituent__c LIKE 'true%'" }
       : String(v) === 'none' ? { sql: "(Foundation_Constituent__c IS NULL OR Foundation_Constituent__c NOT LIKE 'true%')" } : null) },
+    // 'has' / 'none' on the account's IsCustomerPortal flag (per-row '1'/'0')
+    portal_state: { build: (v) => (String(v) === 'has' ? { sql: "Is_Customer_Portal__c = '1'" }
+      : String(v) === 'none' ? { sql: "(Is_Customer_Portal__c IS NULL OR Is_Customer_Portal__c <> '1')" } : null) },
   },
   sort: {
     account: 'Account__c',
@@ -298,7 +306,7 @@ const ACC_SPEC = {
   select: 'salesforce_account_id AS `account`, first_name, last_name, gender_identity AS `gender`, ' +
           'person_birthdate AS `birthdate`, composite_zip_five_digit AS `zip5`, member_number, ' +
           'salesforce_merge_id AS `merge_id`, match_composition, match_score, confidence_tier, ' +
-          'cluster_key, cluster_size, email, foundation_constituent, created_date, created_by_name',
+          'cluster_key, cluster_size, email, foundation_constituent, is_customer_portal AS `portal`, created_date, created_by_name',
   // Global search = identity columns only, all matched as 'term%' so every branch can use an index
   // (huge on ~700k rows). email / match_composition are contains-anywhere and would force a full
   // scan, so they are NOT in the global search — they live on their own column filters instead.
@@ -315,6 +323,9 @@ const ACC_SPEC = {
     // 'has' = account is in a consolidated duplicate cluster (cluster_size stamped >= 2); 'none' = not.
     in_cluster_state: { build: (v) => (String(v) === 'has' ? { sql: 'cluster_size > 0' }
       : String(v) === 'none' ? { sql: '(cluster_size IS NULL OR cluster_size = 0)' } : null) },
+    // 'has' = account is a Customer-Portal account; 'none' = not (snapshot TINYINT 0/1)
+    portal_state: { build: (v) => (String(v) === 'has' ? { sql: 'is_customer_portal = 1' }
+      : String(v) === 'none' ? { sql: '(is_customer_portal IS NULL OR is_customer_portal = 0)' } : null) },
   },
   sort: {
     account: 'salesforce_account_id',
@@ -393,6 +404,10 @@ async function list_merge_groups(opts = {}, query = real_query) {
   const fnd = String(opts.foundation_state || '');
   if (fnd === 'has') havings.push("SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) > 0");
   else if (fnd === 'none') havings.push("SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) = 0");
+  //  · portal: keep groups where ANY (has) / NO (none) account is a Customer-Portal account.
+  const prt = String(opts.portal_state || '');
+  if (prt === 'has') havings.push("SUM(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END) > 0");
+  else if (prt === 'none') havings.push("SUM(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END) = 0");
   const sz = String(opts.size == null ? '' : opts.size).trim();
   if (/^\d+$/.test(sz)) havings.push("COUNT(*) = " + Number(sz));
   //  · which list (detection signal): keep groups where ANY member was flagged by the chosen signal.
@@ -411,13 +426,16 @@ async function list_merge_groups(opts = {}, query = real_query) {
   const rows = await query(
     "SELECT Salesforce_Merge_Id__c AS `merge_id`, " +
     "GROUP_CONCAT(DISTINCT NULLIF(TRIM(CONCAT(COALESCE(First_Name__c, ''), ' ', COALESCE(Last_Name__c, ''))), '') SEPARATOR ';') AS `names`, " +
-    "COUNT(*) AS `size`, MIN(Consolidated_Group_Key__c) AS `cluster_key` " +
+    "COUNT(*) AS `size`, MIN(Consolidated_Group_Key__c) AS `cluster_key`, " +
+    "MAX(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END) AS `portal`, " +
+    "MAX(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) AS `foundation` " +
     "FROM `" + T + "` " + where_sql +
     " GROUP BY Salesforce_Merge_Id__c" + fnd_having + " ORDER BY COUNT(*) DESC, Salesforce_Merge_Id__c ASC LIMIT ? OFFSET ?",
     params.concat([page_size, offset]));
   const out = (rows || []).map((r) => ({
     cluster: r.merge_id, merge_id: r.merge_id, names: r.names || '',
     size: Number(r.size) || 0, signal: "merge id", cluster_key: r.cluster_key || '',
+    portal: Number(r.portal) || 0, foundation: Number(r.foundation) || 0,
   }));
   return { rows: out, total, page, page_size };
 }
@@ -469,8 +487,8 @@ async function resolve_merge_groups(opts = {}, query = real_query) {
   const keys = Array.isArray(opts.keys) ? opts.keys.map(String).filter(Boolean) : null;
   if (keys && keys.length) { wheres.push("Salesforce_Merge_Id__c IN (" + keys.map(() => "?").join(", ") + ")"); for (const k of keys) params.push(k); }
   const where_sql = "WHERE " + wheres.join(" AND ");
-  const rows = await query("SELECT Salesforce_Merge_Id__c AS merge_id, Account__c AS account, First_Name__c AS first_name, Last_Name__c AS last_name, Foundation_Constituent__c AS foundation, Which_List__c AS which_list FROM `" + T + "` " + where_sql, params);
-  const byId = new Map(); const allIds = new Set(); const nameMap = new Map(); const fnd_groups = new Set(); const wl_groups = new Set();
+  const rows = await query("SELECT Salesforce_Merge_Id__c AS merge_id, Account__c AS account, First_Name__c AS first_name, Last_Name__c AS last_name, Foundation_Constituent__c AS foundation, Is_Customer_Portal__c AS portal, Which_List__c AS which_list FROM `" + T + "` " + where_sql, params);
+  const byId = new Map(); const allIds = new Set(); const nameMap = new Map(); const fnd_groups = new Set(); const portal_groups = new Set(); const wl_groups = new Set();
   const wlWant = String(opts.which_list || '').trim().toLowerCase();
   for (const row of (rows || [])) {
     if (!row.merge_id || !row.account) continue;
@@ -478,6 +496,7 @@ async function resolve_merge_groups(opts = {}, query = real_query) {
     byId.get(row.merge_id).push(row.account); allIds.add(row.account);
     nameMap.set(row.account, ((row.first_name || '') + ' ' + (row.last_name || '')).trim());
     if (String(row.foundation || '').toLowerCase().startsWith('true')) fnd_groups.add(row.merge_id);
+    if (String(row.portal || '') === '1') portal_groups.add(row.merge_id);
     if (wlWant && String(row.which_list || '').toLowerCase().includes(wlWant)) wl_groups.add(row.merge_id);
   }
   // group-level foundation filter: keep groups with ANY (has) / NO (none) Foundation constituent.
@@ -486,6 +505,14 @@ async function resolve_merge_groups(opts = {}, query = real_query) {
     for (const mid of [...byId.keys()]) {
       const hit = fnd_groups.has(mid);
       if ((fnd === 'has' && !hit) || (fnd === 'none' && hit)) byId.delete(mid);
+    }
+  }
+  // group-level portal filter: keep groups with ANY (has) / NO (none) Customer-Portal account.
+  const prt = String(opts.portal_state || '');
+  if (prt === 'has' || prt === 'none') {
+    for (const mid of [...byId.keys()]) {
+      const hit = portal_groups.has(mid);
+      if ((prt === 'has' && !hit) || (prt === 'none' && hit)) byId.delete(mid);
     }
   }
   // group-level which-list filter: keep groups where ANY member was flagged by the chosen signal.

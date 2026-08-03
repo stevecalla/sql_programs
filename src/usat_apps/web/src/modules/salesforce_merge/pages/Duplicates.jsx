@@ -31,11 +31,12 @@ export default function Duplicates() {
   const [mergeState, setMergeState] = useState('');     // '' all · 'has' · 'none' (any merge ID in cluster?)
   const [memberState, setMemberState] = useState('');   // '' all · 'has' · 'none' (any member # in cluster?)
   const [foundationState, setFoundationState] = useState(''); // '' all · 'has' · 'none' (any Foundation constituent?)
+  const [portalState, setPortalState] = useState(''); // '' all · 'has' · 'none' (any Customer-Portal account?)
   const [openKey, setOpenKey] = useState(null);         // cluster key whose popup is open
   useEffect(() => { api.duplicatesFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
   const fetcher = useCallback((p) =>
-    api.duplicates({ ...p, merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState }).then((r) => ({ rows: r.rows, total: r.total })),
-  [mergeState, memberState, foundationState]);
+    api.duplicates({ ...p, merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState, portal_state: portalState }).then((r) => ({ rows: r.rows, total: r.total })),
+  [mergeState, memberState, foundationState, portalState]);
 
   const columns = useMemo(() => [
     { key: 'names', label: 'Names', sort: true, filter: true, wrap: true, help: 'The names of every account in this cluster. Click a name to see its account-level records.', render: (r) => namesLinks(r.names) },
@@ -45,6 +46,7 @@ export default function Duplicates() {
     { key: 'tier', label: 'Tier', sort: true, filter: true, help: 'Confidence level — how strongly the match indicates a true duplicate.' },
     { key: 'merge_ids', label: 'Merge IDs', sort: true, filter: true, wrap: true, copy: true, help: 'The Membership Platform merge IDs tagged on the accounts in this cluster (comma-separated), or — if none.', render: (r) => fmt_merge_ids(r.merge_ids) },
     { key: 'best', label: 'Best', sort: true, help: 'Best (highest) name-similarity score among the pairs in the cluster, 0–100.' },
+    { key: 'portal', label: 'Portal', wrap: true, help: 'Does any account in the cluster have IsCustomerPortal set? Shows the count of portal accounts. Use the "Customer portal" filter above.', render: (r) => (String(r.portal) === '1' ? ('Yes' + (Number(r.portal_count) > 0 ? ' (' + r.portal_count + ')' : '')) : 'No') },
   ], []);
 
   const seg = (label, state, set) => (
@@ -67,16 +69,17 @@ export default function Duplicates() {
         fetcher={fetcher}
         facets={facets}
         initialColFilters={initialColFilters}
-        deps={[mergeState, memberState, foundationState]}
+        deps={[mergeState, memberState, foundationState, portalState]}
         pageSize={25}
         searchCols="names, cluster, record IDs, size, tier"
         exportBase="/api/salesforce-merge/duplicates/export"
-        exportExtra={{ merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState }}
+        exportExtra={{ merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState, portal_state: portalState }}
         toolbar={
           <>
             {seg('Merge ID', mergeState, setMergeState)}
             {seg('Member #', memberState, setMemberState)}
             {seg('Foundation', foundationState, setFoundationState)}
+            {seg('Customer portal', portalState, setPortalState)}
           </>
         }
       />
