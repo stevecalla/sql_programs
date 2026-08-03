@@ -33,13 +33,13 @@ const {
     RESULT_MERGE_ID_REVIEW_TABLE,
 } = require("./config");
 
-const { colorize, log_info, log_success, log_warn, log_error } = require("./src/log");
+const { colorize, highlight, log_info, log_success, log_warn, log_error } = require("./src/log");
 const { format_timestamp_utc, format_timestamp_mtn } = require("./src/fmt");
 const { build_fuzzy_groups } = require("./src/grouping");
 const { make_run_id } = require("./src/ids");
 const { create_step_timer } = require("./src/step_timer");
 const { add_timestamp_to_filename, write_csv, archive_previous_output_files, write_run_summary, write_zip_trim_mapping, write_nickname_fire_mapping } = require("./src/output_files");
-const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row, to_sf_nickname_row, to_sf_nickname_group_row, to_sf_consolidated_row, to_sf_merge_id_review_row } = require("./src/sf_rows");
+const { to_sf_exact_row, to_sf_fuzzy_pair_row, to_sf_fuzzy_group_row, to_sf_nickname_row, to_sf_nickname_group_row, to_sf_consolidated_row, to_sf_merge_id_review_row, is_reasons_trimmed, MAX_REASONS_CHARS } = require("./src/sf_rows");
 const { fetch_salesforce_accounts } = require("./src/salesforce");
 const { materialize_via_db, open_local_executor, update_match_composition } = require("./src/database_snapshot");
 const { write_run, write_all_result_tables, write_result_table } = require("./src/database_results");
@@ -339,6 +339,13 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
         );
         consolidated_output_path = await write_csv(output_dir, consolidated_output_file, consolidated_sf_import);
         log_success(`Consolidated file written (${consolidated_cluster_count.toLocaleString()} clusters): ${consolidated_output_path}`, script_start_ms);
+        // Always report the trim status of Match_Link_Reasons__c — either way, so a clean run confirms it too.
+        const reasons_trimmed_count = consolidated_sf_import.filter((r) => is_reasons_trimmed(r.Match_Link_Reasons__c)).length;
+        if (reasons_trimmed_count > 0) {
+            log_warn(highlight(`Match_Link_Reasons__c TRIMMED on ${reasons_trimmed_count.toLocaleString()} of ${consolidated_sf_import.length.toLocaleString()} cluster(s) to fit the ${MAX_REASONS_CHARS.toLocaleString()}-char cell — safe (review-only column; ids/numbers untouched).`));
+        } else {
+            log_success(highlight(`Match_Link_Reasons__c: 0 of ${consolidated_sf_import.length.toLocaleString()} clusters trimmed — all within the ${MAX_REASONS_CHARS.toLocaleString()}-char cap.`), script_start_ms);
+        }
         timer.stage_done("consolidation");
     }
 
@@ -405,50 +412,72 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
     // six result tables + the ZIP-trim / nickname-fire maps (refresh each run) when the
     // SQL backbone is on. A DB failure must not fail the run (the files are written).
     if (use_sql_backbone) {
+        // Each table write is INDEPENDENT and its own try/catch, so one failure (e.g. a too-large
+        // consolidated row) can no longer strand the tables written after it — the bug that left
+        // consolidated empty AND merge_id_review holding a stale run. Failures are collected and, at the
+        // end, surfaced LOUDLY (log_error + non-zero exit) so a partial persist never passes as a silent
+        // green run — because a partial persist leaves the DB tables (and the Dashboard) empty/stale.
+        const persist_errors = [];
         try {
             const { pool, executor } = await open_local_executor();
             try {
-                await write_run(executor, {
-                    run_id,
-                    run_type: "finder",
-                    mode: is_test ? "test" : "prod",
-                    is_full,
-                    is_partial,
-                    run_at: created_at_utc,
-                    run_seconds: Math.round((Date.now() - script_start_ms) / 1000),
-                    total_records_scanned: result.records.length,
-                    salesforce_total_size: result.totalSize,
-                    exact_duplicate_groups: exact_duplicates_sf_import.length,
-                    fuzzy_pair_matches: fuzzy_pair_sf_import.length,
-                    fuzzy_groups: fuzzy_group_sf_import.length,
-                    nickname_pair_matches: nickname_pair_count,
-                    nickname_groups: nickname_group_count,
-                    consolidated_clusters: consolidated_cluster_count,
-                });
-                const result_counts = await write_all_result_tables(executor, {
-                    exact_group: exact_duplicates_sf_import,
-                    fuzzy_pair: fuzzy_pair_sf_import,
-                    fuzzy_group: fuzzy_group_sf_import,
-                    nickname_pair: nickname_sf_import,
-                    nickname_group: nickname_group_sf_import,
-                    consolidated: consolidated_sf_import,
-                });
-                // Write-back: stamp each account's consolidated Match_Composition__c onto
-                // the snapshot row (blank for accounts in no cluster).
-                const stamped = await update_match_composition(executor, clusters);
-                if (stamped > 0) log_info(`Stamped match_composition on ${stamped.toLocaleString()} snapshot accounts.`, script_start_ms);
-                // Maximize SQL: persist the ZIP-trim + nickname-fire maps too (refresh each run).
-                await write_result_table(executor, RESULT_ZIP_TRIM_TABLE, zip_trim.mapping);
-                await write_result_table(executor, RESULT_NICKNAME_FIRE_TABLE, fire_summary);
-                // Merge ID review (QA) result table (refresh each run).
-                await write_result_table(executor, RESULT_MERGE_ID_REVIEW_TABLE, merge_id_review_sf_import);
+                try {
+                    await write_run(executor, {
+                        run_id,
+                        run_type: "finder",
+                        mode: is_test ? "test" : "prod",
+                        is_full,
+                        is_partial,
+                        run_at: created_at_utc,
+                        run_seconds: Math.round((Date.now() - script_start_ms) / 1000),
+                        total_records_scanned: result.records.length,
+                        salesforce_total_size: result.totalSize,
+                        exact_duplicate_groups: exact_duplicates_sf_import.length,
+                        fuzzy_pair_matches: fuzzy_pair_sf_import.length,
+                        fuzzy_groups: fuzzy_group_sf_import.length,
+                        nickname_pair_matches: nickname_pair_count,
+                        nickname_groups: nickname_group_count,
+                        consolidated_clusters: consolidated_cluster_count,
+                    });
+                } catch (e) { persist_errors.push(["run logbook", e]); }
+
+                let result_counts = {};
+                try {
+                    result_counts = await write_all_result_tables(executor, {
+                        exact_group: exact_duplicates_sf_import,
+                        fuzzy_pair: fuzzy_pair_sf_import,
+                        fuzzy_group: fuzzy_group_sf_import,
+                        nickname_pair: nickname_sf_import,
+                        nickname_group: nickname_group_sf_import,
+                        consolidated: consolidated_sf_import,
+                    });
+                } catch (e) { persist_errors.push(["result view tables (exact/fuzzy/nickname/consolidated)", e]); }
+
+                // Write-back: stamp each account's consolidated Match_Composition__c onto the snapshot row.
+                try {
+                    const stamped = await update_match_composition(executor, clusters);
+                    if (stamped > 0) log_info(`Stamped match_composition on ${stamped.toLocaleString()} snapshot accounts.`, script_start_ms);
+                } catch (e) { persist_errors.push(["match_composition write-back", e]); }
+
+                // ZIP-trim + nickname-fire maps + merge-id-review — refreshed each run, independently.
+                try { await write_result_table(executor, RESULT_ZIP_TRIM_TABLE, zip_trim.mapping); } catch (e) { persist_errors.push(["zip_trim map", e]); }
+                try { await write_result_table(executor, RESULT_NICKNAME_FIRE_TABLE, fire_summary); } catch (e) { persist_errors.push(["nickname_fire map", e]); }
+                try { await write_result_table(executor, RESULT_MERGE_ID_REVIEW_TABLE, merge_id_review_sf_import); } catch (e) { persist_errors.push(["merge_id_review", e]); }
+
                 const total_result_rows = Object.values(result_counts).reduce((a, b) => a + b, 0);
-                log_success(`Run logged to ${RUN_TABLE_NAME}; ${total_result_rows.toLocaleString()} rows across 6 result tables + ZIP-trim + nickname-fire + merge-id-review tables.`, script_start_ms);
+                log_success(`Run logged to ${RUN_TABLE_NAME}; ${total_result_rows.toLocaleString()} rows across the result tables + ZIP-trim + nickname-fire + merge-id-review.`, script_start_ms);
             } finally {
                 try { pool.end(); } catch (_) { /* ignore */ }
             }
         } catch (e) {
-            log_warn(`Could not write run/result tables to the database: ${e.message}`);
+            persist_errors.push(["database connection", e]);
+        }
+        if (persist_errors.length > 0) {
+            log_error(highlight(`PERSIST FAILED — ${persist_errors.length} table write(s) did not complete. The DB result tables (and the Dashboard) may be EMPTY or STALE for this run:`));
+            for (const [what, e] of persist_errors) log_error(`   • ${what}: ${e.message}`);
+            process.exitCode = 1;
+        } else {
+            log_success(highlight("PERSIST OK — run logbook + all result tables written, no errors."), script_start_ms);
         }
     }
 

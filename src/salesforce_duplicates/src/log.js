@@ -14,12 +14,19 @@ const COLORS = {
     red: "\x1b[31m",
     green: "\x1b[32m",
     yellow: "\x1b[33m",
+    magenta: "\x1b[35m",
     cyan: "\x1b[36m",
     gray: "\x1b[90m",
 };
 
 function colorize(color, value) {
     return `${COLORS[color] || ""}${value}${COLORS.reset}`;
+}
+
+// Bold + magenta — a distinct highlight (used by no standard log level) so key summary lines (the
+// Match_Link_Reasons__c trim notice, the persist OK/FAIL banner) jump out of the run log at a glance.
+function highlight(value) {
+    return `${COLORS.bright}${COLORS.magenta}${value}${COLORS.reset}`;
 }
 
 function log_info(message, start_ms = null) {
@@ -57,6 +64,7 @@ function log_error(message) {
 module.exports = {
     COLORS,
     colorize,
+    highlight,
     log_info,
     log_success,
     log_warn,

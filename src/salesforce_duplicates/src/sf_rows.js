@@ -11,6 +11,24 @@ const { format_timestamp_utc, format_duration } = require('./fmt');
 const { unique_join } = require('./normalize');
 const { make_external_id } = require('./ids');
 
+// Match_Link_Reasons__c lists a reason for EVERY matched pair in a cluster, so it grows ~O(n^2) with
+// cluster size — a large cluster can exceed the TEXT column's 64KB limit, which silently aborts the whole
+// consolidated insert. Cap it well under that limit and PREFIX an obvious marker so a reviewer can see the
+// reasons were truncated. Only this descriptive column is trimmed — id/number columns stay complete.
+const MAX_REASONS_CHARS = 20000;
+const MATCH_LINK_REASONS_TRIM_PREFIX = '⚠ TRIMMED';
+function trim_match_link_reasons(value) {
+    const str = value == null ? '' : String(value);
+    if (str.length <= MAX_REASONS_CHARS) return str;
+    const omitted = str.length - MAX_REASONS_CHARS;
+    return `${MATCH_LINK_REASONS_TRIM_PREFIX} — showing first ${MAX_REASONS_CHARS.toLocaleString()} of ${str.length.toLocaleString()} chars (${omitted.toLocaleString()} omitted to fit the cell) | ${str.slice(0, MAX_REASONS_CHARS)}`;
+}
+// True if a stored Match_Link_Reasons__c value was trimmed (starts with the marker). Lets the finder
+// report a run-level trimmed count.
+function is_reasons_trimmed(value) {
+    return String(value == null ? '' : value).startsWith(MATCH_LINK_REASONS_TRIM_PREFIX);
+}
+
 function to_sf_exact_row({
     row,
     row_number,
@@ -329,7 +347,7 @@ function to_sf_consolidated_row({
         Best_Pair_Score__c: row.best_pair_score,
         Lowest_Pair_Score__c: row.lowest_pair_score,
         Representative_Pair__c: row.representative_pair,
-        Match_Link_Reasons__c: row.match_link_reasons,
+        Match_Link_Reasons__c: trim_match_link_reasons(row.match_link_reasons),
         Consolidated_Logic__c: row.consolidated_logic,
 
         Created_At_Mtn__c: created_at_mtn,
@@ -429,4 +447,6 @@ module.exports = {
     to_sf_consolidated_row,
     to_sf_nickname_group_row,
     to_sf_merge_id_review_row,
+    is_reasons_trimmed,
+    MAX_REASONS_CHARS,
 };
