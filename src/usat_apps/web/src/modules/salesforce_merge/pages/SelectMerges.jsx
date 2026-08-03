@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import DatasetStamp from '../components/DatasetStamp.jsx';
 import WorkerBanner from '../components/WorkerBanner.jsx';
 import QueueRowDetail from '../components/QueueRowDetail.jsx';
+import RiskPills from '../components/RiskPills.jsx';
 import { api, exportUrl } from '../lib/api.js';
 
 const PAGE = 200;
@@ -205,6 +206,19 @@ export default function SelectMerges() {
           : s.latest === 'restored' ? 'restored'
             : s.latest === 'failed' ? 'failed' : null;
     }
+    return out;
+  }, [queueAll]);
+
+  // Reason text of the latest FAILED queue entry per group — surfaced in the failed badge's hover.
+  const failedReasonByKey = useMemo(() => {
+    const latest = {};
+    for (const e of (queueAll || [])) {
+      const k = String(e.source_key);
+      const t = new Date(e.created_at || 0).getTime() || 0;
+      if (!latest[k] || t >= latest[k].at) latest[k] = { at: t, status: String(e.status), notes: e.notes || '' };
+    }
+    const out = {};
+    for (const [k, v] of Object.entries(latest)) if (v.status === 'failed') out[k] = v.notes || '';
     return out;
   }, [queueAll]);
 
@@ -556,10 +570,12 @@ export default function SelectMerges() {
               return qFilter === 'staged' ? staged : !staged;
             }).map((c, i) => {
               const cstate = queueStateByKey[c.cluster];
-              const badge = cstate === 'queued' ? { t: 'in queue', bg: 'var(--amber-bg)', c: 'var(--amber)' }
-                : cstate === 'merged' ? { t: 'merged', bg: 'var(--green-bg, #e6f4ea)', c: 'var(--green, #1a8a4f)' }
-                  : cstate === 'restored' ? { t: 'restored', bg: 'transparent', c: 'var(--dim)' }
-                    : cstate === 'failed' ? { t: 'failed', bg: 'var(--red-bg, #fdecea)', c: 'var(--red, #c0392b)' } : null;
+              const failedReason = failedReasonByKey[c.cluster];
+              const badge = cstate === 'queued' ? { t: 'in queue', bg: 'var(--amber-bg)', c: 'var(--amber)', title: 'This set is already in the merge queue.' }
+                : cstate === 'merged' ? { t: 'merged', bg: 'var(--green-bg, #e6f4ea)', c: 'var(--green, #1a8a4f)', title: 'This set has already been merged — restore it first to re-merge.' }
+                  : cstate === 'restored' ? { t: 'restored', bg: 'transparent', c: 'var(--dim)', title: 'This set was merged then restored — it is re-mergeable.' }
+                    : cstate === 'failed' ? { t: 'failed', bg: 'var(--red-bg, #fdecea)', c: 'var(--red, #c0392b)',
+                        title: 'A previous merge attempt on this set FAILED' + (failedReason ? ' — ' + failedReason : '') + '. This is queue history (not from the finder); re-stage and merge, or restore, to clear it. If a portal*/donor* flag is shown, that is the likely cause.' } : null;
               const locked = cstate === 'queued' || cstate === 'merged';
               return (
                 <div key={c.cluster} className="ma-cluster-row" style={locked ? { opacity: 0.6 } : undefined}>
@@ -569,9 +585,9 @@ export default function SelectMerges() {
                     className={'ma-cluster' + (selKey === c.cluster ? ' on' : '')}>
                     <div className="ma-cluster-key" title={fmtNames(c.names) || c.cluster} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {firstName(c.names) || c.cluster}</span>
-                      {Number(c.portal) > 0 && <span className="pill" style={{ background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 10, padding: '1px 6px', flex: '0 0 auto' }} title="This group contains a Customer-Portal account — open it to make sure the portal account is the master.">portal</span>}
-                      {Number(c.foundation) > 0 && <span className="pill" style={{ background: 'var(--amber-bg)', color: 'var(--amber, #854f0b)', fontSize: 10, padding: '1px 6px', flex: '0 0 auto' }} title="This group contains a Foundation constituent (donor record) — open it to confirm the donor is preserved.">donor</span>}
-                      {badge && <span className="pill" style={{ background: badge.bg, color: badge.c, fontSize: 10, padding: '1px 6px', flex: '0 0 auto' }}>{badge.t}</span>}
+                      {Number(c.portal) > 0 && (() => { const risk = c.cluster === selKey && portalWarn; return <span className="pill" style={{ background: risk ? 'var(--red-bg, #fdecea)' : 'var(--accent-soft)', color: risk ? 'var(--red, #c0392b)' : 'var(--accent)', fontSize: 10, padding: '1px 6px', flex: '0 0 auto' }} title={risk ? 'Portal account is not the master — Salesforce will likely reject this merge (make the portal account the master).' : 'This group contains a Customer-Portal account — open it to make sure the portal account is the master.'}>portal{risk ? '*' : ''}</span>; })()}
+                      {Number(c.foundation) > 0 && (() => { const risk = c.cluster === selKey && donorWarn; return <span className="pill" style={{ background: 'var(--amber-bg)', color: 'var(--amber, #854f0b)', fontSize: 10, padding: '1px 6px', flex: '0 0 auto' }} title={risk ? 'Donor record is not the master — confirm it is preserved before merging (internal requirement).' : 'This group contains a Foundation constituent (donor record) — open it to confirm the donor is preserved.'}>donor{risk ? '*' : ''}</span>; })()}
+                      {badge && <span className="pill" title={badge.title} style={{ background: badge.bg, color: badge.c, fontSize: 10, padding: '1px 6px', flex: '0 0 auto', cursor: 'help' }}>{badge.t}</span>}
                     </div>
                     <div className="muted small">{c.size} records · {c.signal}</div>
                   </button>
@@ -819,7 +835,7 @@ export default function SelectMerges() {
                   <tr key={q.id} onClick={() => loadFromQueue(q)} className={selKey === q.source_key ? 'row-sel' : undefined} style={{ cursor: 'pointer' }}>
                     <td onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={qSel.has(q.id)} onChange={() => toggleQ(q.id)} aria-label={'Select ' + q.id} /></td>
                     <td><button type="button" onClick={(e) => { e.stopPropagation(); toggleQExpand(q.id); }} title="Show overrides & details" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, marginRight: 3, font: 'inherit' }}>{qExpanded.has(q.id) ? '▾' : '▸'}</button>{i + 1}</td>
-                    <td title={q.survivor_name}>{q.survivor_name || '—'}</td>
+                    <td title={q.survivor_name}>{q.survivor_name || '—'}<RiskPills row={q} /></td>
                     <td title={q.survivor_account} style={{ whiteSpace: 'nowrap' }}>{q.survivor_account}</td>
                     <td>{q.loser_count} account{Number(q.loser_count) === 1 ? '' : 's'}{q.field_overrides && typeof q.field_overrides === 'object' && Object.keys(q.field_overrides).length ? <span title="This set has field overrides" style={{ marginLeft: 4, color: 'var(--amber)' }}>✎</span> : null}</td>
                     <td title={q.source_key}>{q.source_type === 'merge_id' ? 'merge id ' : 'group '}{shortId(q.source_key)}</td>

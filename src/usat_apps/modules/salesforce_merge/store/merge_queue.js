@@ -107,15 +107,44 @@ async function list(query = real_query, status = null) {
   const params = filtered ? [String(status)] : [];
   const rows = await query(
     'SELECT q.*, ' +
-    "TRIM(CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, ''))) AS snapshot_name " +
+    "TRIM(CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, ''))) AS snapshot_name, " +
+    's.is_customer_portal AS survivor_portal, s.foundation_constituent AS survivor_foundation ' +
     'FROM `' + TABLE + '` q LEFT JOIN `' + cfg.SNAPSHOT_TABLE_NAME + '` s ON s.salesforce_account_id = q.survivor_account ' +
     where + 'ORDER BY q.id DESC', params);
-  return (rows || []).map((r) => ({
+  const mapped = (rows || []).map((r) => ({
     ...r,
     survivor_name: r.survivor_name || r.snapshot_name || '',
     field_overrides: from_json(r.field_overrides),
     child_counts: from_json(r.child_counts),
   }));
+  // Portal / donor conflict flags, computed from the CURRENTLY-STAGED survivor + losers so the queue
+  // stays in sync: a *conflict* means a LOSER carries the flag while the SURVIVOR (master) does not.
+  // Salesforce blocks merging a portal account into a non-portal master (hard); donor is an internal
+  // confirm (advisory). One snapshot lookup over all loser ids, then computed per row.
+  const isDonorStr = (v) => String(v == null ? '' : v).trim().toLowerCase().startsWith('true');
+  const loserIds = new Set();
+  for (const r of mapped) for (const id of as_losers(r.loser_accounts)) loserIds.add(String(id));
+  let flagBy = new Map();
+  if (loserIds.size) {
+    const ids = [...loserIds];
+    const ph = ids.map(() => '?').join(', ');
+    const frs = await query('SELECT salesforce_account_id AS id, is_customer_portal AS portal, ' +
+      'foundation_constituent AS foundation FROM `' + cfg.SNAPSHOT_TABLE_NAME + '` WHERE salesforce_account_id IN (' + ph + ')', ids);
+    flagBy = new Map((frs || []).map((x) => [String(x.id), { portal: Number(x.portal) === 1, donor: isDonorStr(x.foundation) }]));
+  }
+  for (const r of mapped) {
+    const survPortal = Number(r.survivor_portal) === 1;
+    const survDonor = isDonorStr(r.survivor_foundation);
+    const losers = as_losers(r.loser_accounts).map(String);
+    const loserPortal = losers.some((id) => flagBy.get(id) && flagBy.get(id).portal);
+    const loserDonor = losers.some((id) => flagBy.get(id) && flagBy.get(id).donor);
+    r.portal_in_set = (survPortal || loserPortal) ? 1 : 0;
+    r.donor_in_set = (survDonor || loserDonor) ? 1 : 0;
+    r.portal_conflict = (!survPortal && loserPortal) ? 1 : 0;   // wrong master -> Salesforce will likely reject
+    r.donor_conflict = (!survDonor && loserDonor) ? 1 : 0;      // donor not the master -> confirm (internal)
+    delete r.survivor_portal; delete r.survivor_foundation;
+  }
+  return mapped;
 }
 
 async function set_status(ids, status, query = real_query) {
