@@ -74,6 +74,19 @@ cluster-centric file, gated by `ENABLE_NICKNAME_MATCHING` (default on). How it w
   only if the org has it (`build_account_soql` / `account_field_exists` in
   `salesforce.js`), so an org without it still runs — merge columns just come out
   blank. See `plans_and_notes/README_MERGE_ID_FIELD.md`.
+- **Customer-Portal flag (IsCustomerPortal).** Standard Account boolean, **auto-detected**
+  the same way as the merge id (`build_account_soql({ include_portal })` +
+  `account_field_exists`; present only when Customer Portal / Communities is enabled).
+  Review context only — it NEVER changes clustering. Stored on the snapshot as
+  `is_customer_portal` (TINYINT 1/0, own index), rolled up per consolidated cluster as
+  `Has_Portal_Account__c` / `Portal_Account_Count__c` (`consolidate.js` →
+  `sf_rows.js:to_sf_consolidated_row`), and per-account on the merge-ID review as
+  `Is_Customer_Portal__c`. Consumed by the usat_apps merge tool (portal filter on
+  Duplicates/Merge-ID/All-accounts/Select-Merges + a survivor-not-portal warning), because
+  Salesforce blocks merging a portal account into a non-portal master. **⚠ Bulk CSV bool
+  gotcha** — see Conventions: the flag is normalized to a real boolean in `salesforce.js`
+  (at fetch) AND via `sf_bool_to_int` in `database_snapshot.js` (on store), because the Bulk
+  path sends `"false"` as a truthy string.
 
 ## Merge ID review (QA) — IMPLEMENTED (see `plans_and_notes/README_MERGE_ID_REVIEW.md`)
 
@@ -191,7 +204,10 @@ salesforce_duplicates/
     salesforce.js           jsforce connect + Account query (only networked module);
                             --test uses REST autoFetch (ORDERED SOQL, for a stable
                             capped subset), --prod uses the Bulk API (UNORDERED SOQL
-                            so SF doesn't sort ~700k rows before streaming)
+                            so SF doesn't sort ~700k rows before streaming). Auto-detects
+                            optional fields (merge id, IsCustomerPortal) via DESCRIBE.
+                            NORMALIZES IsCustomerPortal to a real boolean at fetch (Bulk
+                            CSV sends "false" as a truthy string — see Conventions)
     summaries.js            log_run_summary (final run summary block)
     sweep.js                criteria tuning engine (expand_grid/run_profile/diff; pure)
     sweep_duplicates.js     duplicate criteria tuning CLI (snapshot/run/detail/diff);
@@ -204,7 +220,10 @@ salesforce_duplicates/
                             then read, used by the finder). The load is wrapped in a single
                             transaction (open_local_connection — a dedicated connection;
                             DDL outside, inserts inside) for speed + atomicity. Injectable
-                            executor so it's testable without MySQL.
+                            executor so it's testable without MySQL. sf_bool_to_int()
+                            normalizes Salesforce boolean fields (e.g. is_customer_portal)
+                            to 1/0 — Bulk CSV sends "false" as a truthy string, so a naive
+                            `? 1 : 0` would set every row (see Conventions).
     exact_sql.js            Phase 2b: SQL-based exact grouping (WHERE exact_duplicate_key<>''
                             GROUP BY exact_duplicate_key HAVING COUNT>1 ORDER BY MIN(load_sequence));
                             Node rebuilds + sorts for byte-identical output to exact.js. The
@@ -354,3 +373,15 @@ unit-tested; tests never touch Salesforce or production output folders.
   the test menu after each step.
 - Output filenames are timestamped; source filenames should be stable (don't
   date-stamp source files).
+- **⚠ Bulk CSV sends every value as a STRING — normalize booleans/numbers when adding a
+  new Account field.** The two fetch paths disagree on types: REST (`--test`) returns typed
+  JSON (a checkbox is a real boolean `true`/`false`), but the Bulk API (`--full`/`--prod`)
+  returns CSV where **every value is a string**, so a false checkbox arrives as the string
+  `"false"`. That string is **truthy in JS**, so a naive `record.SomeCheckbox__c ? 1 : 0`
+  marks EVERY Bulk-fetched row as 1 (this bit `IsCustomerPortal` — `--test` looked fine, the
+  first full run flagged all ~700k as portal). Rule: never test a Bulk value for truthiness
+  directly. Coerce booleans to real booleans at the fetch source in `salesforce.js`, and use
+  `sf_bool_to_int()` in `database_snapshot.js` when writing a 1/0 column; cast numerics
+  before math. Fields kept as their raw string and compared as strings (e.g.
+  `usat_Foundation_Constituent__c` via SQL `LIKE 'true%'`) are safe — the bug only bites when
+  code coerces the raw value. Full write-up: README.md → "Bulk CSV sends every value as a STRING".

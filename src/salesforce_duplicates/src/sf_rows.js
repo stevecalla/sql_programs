@@ -343,6 +343,8 @@ function to_sf_consolidated_row({
         Member_Numbers__c: row.member_numbers,
         Merge_Ids__c: row.merge_ids,
         Foundation_Constituents__c: row.foundation_constituents,
+        Has_Portal_Account__c: row.has_portal_account,
+        Portal_Account_Count__c: row.portal_account_count,
 
         Best_Pair_Score__c: row.best_pair_score,
         Lowest_Pair_Score__c: row.lowest_pair_score,
@@ -430,6 +432,7 @@ function to_sf_merge_id_review_row({
         First_Name__c: row.first_name,
         Last_Name__c: row.last_name,
         Foundation_Constituent__c: row.foundation_constituent,
+        Is_Customer_Portal__c: row.is_customer_portal,
         Consolidated_Group_Key__c: row.cluster_key,
         Merge_Id_Review_Logic__c:
             "account compared to its Salesforce merge ID: in_both / sf_only, or named by which signal flagged it (exact/fuzzy/nickname/multi)",

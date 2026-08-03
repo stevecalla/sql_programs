@@ -112,6 +112,7 @@ function build_merge_id_review_rows(clusters, records) {
             first_name: rec.FirstName || '',
             last_name: rec.LastName || '',
             foundation_constituent: rec.usat_Foundation_Constituent__c || '',
+            is_customer_portal: rec.IsCustomerPortal ? 1 : 0,
             cluster_key: sig.cluster_key,
         });
     }
@@ -128,6 +129,7 @@ function build_merge_id_review_rows(clusters, records) {
             first_name: rec.FirstName || '',
             last_name: rec.LastName || '',
             foundation_constituent: rec.usat_Foundation_Constituent__c || '',
+            is_customer_portal: rec.IsCustomerPortal ? 1 : 0,
             cluster_key: '',
         });
     }

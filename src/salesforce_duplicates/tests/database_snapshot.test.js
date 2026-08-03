@@ -166,7 +166,7 @@ describe('add_indexes', () => {
     test('uses prefix indexes on the key columns (under InnoDB 3072-byte limit)', async () => {
         const { executor, calls } = fake_executor();
         await add_indexes(executor);
-        assert.equal(calls.length, 14);
+        assert.equal(calls.length, 15);
         assert.ok(/CREATE INDEX .*exact_duplicate_key\(255\)/.test(calls[0].sql), calls[0].sql);
         assert.ok(/CREATE INDEX .*rule_block_key\(255\)/.test(calls[1].sql), calls[1].sql);
         assert.ok(/CREATE INDEX .*load_sequence/.test(calls[2].sql), calls[2].sql);
@@ -214,7 +214,7 @@ describe('load_snapshot', () => {
         assert.equal(drops.length, 1);
         assert.equal(creates.length, 1);
         assert.equal(inserts.length, 3); // 2 + 2 + 1
-        assert.equal(indexes.length, 14);
+        assert.equal(indexes.length, 15);
 
         // order: drop -> create -> inserts... -> indexes
         assert.ok(calls[0].sql.startsWith('DROP TABLE'));

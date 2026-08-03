@@ -123,6 +123,12 @@ How it works: the snapshot has one row per account (`salesforce_account_id` +
 packed into `Record_Ids__c` (semicolon-delimited). We **explode** `Record_Ids__c` into
 one row per account, then compare to the accounts that have a merge ID.
 
+Each review row also carries per-account review context: `Foundation_Constituent__c` and
+`Is_Customer_Portal__c` (the account's `IsCustomerPortal` flag, `1`/`0`; see
+`README.md` → "Customer-Portal flag" and the Bulk-CSV-boolean note — the flag is normalized
+at fetch/load, not read raw). The usat_apps merge tool exposes both as has/none filters on
+the Merge-ID view.
+
 ### Phase 3 — the per-account review
 
 ```sql

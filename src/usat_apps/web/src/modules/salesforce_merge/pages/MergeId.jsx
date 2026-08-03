@@ -16,15 +16,18 @@ const PILLS = [
   { value: 'only_dupes', label: 'dup only' },
 ];
 
+const PORTAL_STATES = [['', 'Customer portal: all'], ['has', 'Customer portal: yes'], ['none', 'Customer portal: no']];
+
 export default function MergeId() {
   const [bucket, setBucket] = useState('');
+  const [portalState, setPortalState] = useState(''); // '' all · 'has' · 'none'
   const [facets, setFacets] = useState({});
   const [openKey, setOpenKey] = useState(null);   // cluster key whose popup is open
   useEffect(() => { api.mergeIdFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
 
   const fetcher = useCallback((p) =>
-    api.mergeId({ ...p, bucket }).then((r) => ({ rows: r.rows, total: r.total })),
-  [bucket]);
+    api.mergeId({ ...p, bucket, portal_state: portalState }).then((r) => ({ rows: r.rows, total: r.total })),
+  [bucket, portalState]);
 
   const columns = useMemo(() => [
     { key: 'name', label: 'Name', sort: 'last_name', filter: true, help: 'The account holder\'s name. Sorts by last name.', render: full_name },
@@ -35,6 +38,7 @@ export default function MergeId() {
     { key: 'which_list', label: 'Which list', sort: true, filter: true, help: 'Which detection signal flagged it: exact, fuzzy, nickname, or multiple.' },
     { key: 'bucket', label: 'Bucket', sort: true, filter: true, help: 'Where the account falls when comparing Membership Platform merge IDs to the duplicates detected in Salesforce: in_both = has a merge ID & it was flagged; sf_only = has a merge ID, it was not flagged (only a merge ID); the *_only buckets = flagged with no merge ID (only in duplicates).' },
     { key: 'foundation', label: 'Foundation', sort: true, filter: true, help: 'Whether the account is a Foundation constituent.', render: (r) => r.foundation || '—' },
+    { key: 'portal', label: 'Portal', help: 'Whether the account is a Customer-Portal account (IsCustomerPortal). Use the "Customer portal" filter above.', render: (r) => (String(r.portal) === '1' ? 'Yes' : 'No') },
   ], []);
 
   return (
@@ -49,19 +53,26 @@ export default function MergeId() {
         columns={columns}
         fetcher={fetcher}
         facets={facets}
-        deps={[bucket]}
+        deps={[bucket, portalState]}
         pageSize={25}
         searchCols="account, name, merge ID, list"
         exportBase="/api/salesforce-merge/merge-id/export"
-        exportExtra={{ bucket }}
+        exportExtra={{ bucket, portal_state: portalState }}
         toolbar={
-          <span className="pills">
-            {PILLS.map((p) => (
-              <button key={p.value || 'all'} className={'pill' + (bucket === p.value ? ' active' : '')} onClick={() => setBucket(p.value)}>
-                {p.label}
-              </button>
-            ))}
-          </span>
+          <>
+            <span className="pills">
+              {PILLS.map((p) => (
+                <button key={p.value || 'all'} className={'pill' + (bucket === p.value ? ' active' : '')} onClick={() => setBucket(p.value)}>
+                  {p.label}
+                </button>
+              ))}
+            </span>
+            <label className="tb-select">
+              <select value={portalState} onChange={(e) => setPortalState(e.target.value)}>
+                {PORTAL_STATES.map(([v, t]) => (<option key={v || 'all'} value={v}>{t}</option>))}
+              </select>
+            </label>
+          </>
         }
       />
       <ClusterModal clusterKey={openKey} onClose={() => setOpenKey(null)} />

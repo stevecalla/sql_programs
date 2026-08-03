@@ -19,6 +19,7 @@ const BASE_COLUMNS = [
   { key: 'match_composition', label: 'Match', sort: true, filter: true, help: 'How this account matched in the consolidated view (exact / fuzzy / nickname mix). Filter by value.', render: (r) => r.match_composition || '—' },
   { key: 'email', label: 'Email', sort: true, filter: true, copy: true, help: 'The account email (PersonEmail). Search matches anywhere in the address.', render: (r) => r.email || '—' },
   { key: 'foundation_constituent', label: 'Foundation', sort: true, filter: true, help: 'Whether the account is a Foundation constituent. Filter by value.', render: (r) => r.foundation_constituent || '—' },
+  { key: 'portal', label: 'Portal', help: 'Whether the account is a Customer-Portal account (IsCustomerPortal). Use the "Customer portal" filter above.', render: (r) => (String(r.portal) === '1' ? 'Yes' : 'No') },
   { key: 'first_name', label: 'First name', sort: true, filter: true, help: 'The account holder\'s first name. Search matches the start of the name.', render: (r) => r.first_name || '—' },
   { key: 'last_name', label: 'Last name', sort: true, filter: true, help: 'The account holder\'s last name. Search matches the start of the name.', render: (r) => r.last_name || '—' },
   { key: 'match_score', label: 'Match score', sort: true, filter: true, help: 'Best fuzzy name-match score (0–100) for this account\'s duplicate cluster; exact matches show 100. Blank if not in a cluster.', render: (r) => (r.match_score == null || r.match_score === '' ? '—' : r.match_score) },
@@ -32,12 +33,13 @@ export default function AllAccounts() {
   const [mergeState, setMergeState] = useState('');     // '' all · 'has' · 'none'
   const [memberState, setMemberState] = useState('');
   const [clusterState, setClusterState] = useState('');   // '' all · 'has' (in a cluster) · 'none'
+  const [portalState, setPortalState] = useState('');     // '' all · 'has' (customer portal) · 'none'
   const [openKey, setOpenKey] = useState(null);           // cluster key whose popup is open
   const [facets, setFacets] = useState({});
   useEffect(() => { api.accountsFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
   const fetcher = useCallback((p, opts) =>
-    api.accounts({ ...p, merge_id_state: mergeState, member_number_state: memberState, in_cluster_state: clusterState }, opts).then((r) => ({ rows: r.rows, total: r.total })),
-  [mergeState, memberState, clusterState]);
+    api.accounts({ ...p, merge_id_state: mergeState, member_number_state: memberState, in_cluster_state: clusterState, portal_state: portalState }, opts).then((r) => ({ rows: r.rows, total: r.total })),
+  [mergeState, memberState, clusterState, portalState]);
 
   // Insert the clickable "Matches" column right after Match score; it opens the shared cluster popup.
   const columns = useMemo(() => {
@@ -72,16 +74,17 @@ export default function AllAccounts() {
         columns={columns}
         fetcher={fetcher}
         facets={facets}
-        deps={[mergeState, memberState, clusterState]}
+        deps={[mergeState, memberState, clusterState, portalState]}
         pageSize={25}
         minWidth={1750}
         exportBase="/api/salesforce-merge/accounts/export"
-        exportExtra={{ merge_id_state: mergeState, member_number_state: memberState, in_cluster_state: clusterState }}
+        exportExtra={{ merge_id_state: mergeState, member_number_state: memberState, in_cluster_state: clusterState, portal_state: portalState }}
         toolbar={
           <>
             {seg('Merge ID', mergeState, setMergeState)}
             {seg('Member #', memberState, setMemberState)}
             {seg('In a cluster', clusterState, setClusterState)}
+            {seg('Customer portal', portalState, setPortalState)}
           </>
         }
       />
