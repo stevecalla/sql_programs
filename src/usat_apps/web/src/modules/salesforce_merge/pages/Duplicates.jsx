@@ -23,6 +23,10 @@ const namesLinks = (names) => {
 };
 
 export default function Duplicates() {
+  // Seed the signal filter from ?f_signal=… (the Dashboard's "by signal" rows link here filtered).
+  const initialColFilters = useMemo(() => {
+    try { const s = new URLSearchParams(window.location.search).get('f_signal'); return s ? { signal: s } : {}; } catch (e) { return {}; }
+  }, []);
   const [facets, setFacets] = useState({});
   const [mergeState, setMergeState] = useState('');     // '' all · 'has' · 'none' (any merge ID in cluster?)
   const [memberState, setMemberState] = useState('');   // '' all · 'has' · 'none' (any member # in cluster?)
@@ -62,6 +66,7 @@ export default function Duplicates() {
         columns={columns}
         fetcher={fetcher}
         facets={facets}
+        initialColFilters={initialColFilters}
         deps={[mergeState, memberState, foundationState]}
         pageSize={25}
         searchCols="names, cluster, record IDs, size, tier"

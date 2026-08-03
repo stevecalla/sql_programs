@@ -11,6 +11,7 @@
   --accent: #082240;
   --accent-soft: rgba(8, 34, 64, .10);
   --red: #c20e2f;
+  --green: #1a8a4f;
   --card: var(--panel);   /* aliases for the ported Metrics dashboard */
   --dim: var(--muted);
   --radius: 10px;
@@ -758,6 +759,17 @@ table.grid td {
 .mx-scope { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:8px 0 4px; }
 /* Any control carrying a hover tooltip (title) shows the help cursor so users know to hover for detail. */
 .sfmerge label[title], .mx-scope label[title], .sfmerge [title].tb-select { cursor: help; }
+/* Fast custom tooltip — instant on hover (vs the browser's slow native title). Put the text in data-tip. */
+.hdr-tip { position: relative; cursor: help; }
+.hdr-tip:hover::after {
+  content: attr(data-tip);
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+  width: max-content; max-width: 260px; white-space: normal; text-align: left;
+  background: var(--card); color: var(--ink); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 9px; font-size: 12px; font-weight: 400; line-height: 1.45;
+  text-transform: none; letter-spacing: normal; box-shadow: 0 6px 20px rgba(8,34,64,.25);
+}
+.th-info { color: var(--dim); font-weight: 400; }
 .mx-scope-label { font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--dim); text-transform:uppercase; }
 .mx-tabs { display:flex; gap:4px; background:var(--hover); border:1px solid var(--line); border-radius:10px; padding:3px; }
 .mx-tabs button { border:none; background:none; padding:6px 14px; border-radius:8px; font:inherit; font-size:13px; font-weight:600; color:var(--dim); cursor:pointer; white-space:nowrap; }

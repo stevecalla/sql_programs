@@ -340,9 +340,11 @@ async function main(is_test = resolve_is_test(), is_full = resolve_is_full(), is
         consolidated_output_path = await write_csv(output_dir, consolidated_output_file, consolidated_sf_import);
         log_success(`Consolidated file written (${consolidated_cluster_count.toLocaleString()} clusters): ${consolidated_output_path}`, script_start_ms);
         // Always report the trim status of Match_Link_Reasons__c — either way, so a clean run confirms it too.
-        const reasons_trimmed_count = consolidated_sf_import.filter((r) => is_reasons_trimmed(r.Match_Link_Reasons__c)).length;
-        if (reasons_trimmed_count > 0) {
-            log_warn(highlight(`Match_Link_Reasons__c TRIMMED on ${reasons_trimmed_count.toLocaleString()} of ${consolidated_sf_import.length.toLocaleString()} cluster(s) to fit the ${MAX_REASONS_CHARS.toLocaleString()}-char cell — safe (review-only column; ids/numbers untouched).`));
+        const trimmed_clusters = consolidated_sf_import.filter((r) => is_reasons_trimmed(r.Match_Link_Reasons__c));
+        if (trimmed_clusters.length > 0) {
+            const keys = trimmed_clusters.map((r) => r.Consolidated_Group_Key__c).filter(Boolean);
+            const key_list = keys.slice(0, 10).join(", ") + (keys.length > 10 ? `, …+${(keys.length - 10).toLocaleString()} more` : "");
+            log_warn(highlight(`Match_Link_Reasons__c TRIMMED on ${trimmed_clusters.length.toLocaleString()} of ${consolidated_sf_import.length.toLocaleString()} cluster(s) to fit the ${MAX_REASONS_CHARS.toLocaleString()}-char cell — safe (review-only column; ids/numbers untouched). Cluster key(s): ${key_list}`));
         } else {
             log_success(highlight(`Match_Link_Reasons__c: 0 of ${consolidated_sf_import.length.toLocaleString()} clusters trimmed — all within the ${MAX_REASONS_CHARS.toLocaleString()}-char cap.`), script_start_ms);
         }

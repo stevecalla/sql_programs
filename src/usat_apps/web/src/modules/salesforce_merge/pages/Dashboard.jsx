@@ -29,7 +29,7 @@ export default function Dashboard() {
     </>
   );
 
-  const sb = d.signal_breakdown || { accounts: {}, pairs: {}, clusters: {} };
+  const sb = d.signal_breakdown || { accounts: {}, pairs: {}, clusters: {}, has_merge_id: {}, no_merge_id: {} };
   const sigRows = [
     { key: 'exact', label: 'Exact' },
     { key: 'fuzzy', label: 'Fuzzy' },
@@ -38,9 +38,14 @@ export default function Dashboard() {
   ].map((row) => ({
     ...row,
     accounts: sb.accounts[row.key] ?? null,
+    has_merge_id: (sb.has_merge_id || {})[row.key] ?? null,
+    no_merge_id: (sb.no_merge_id || {})[row.key] ?? null,
     pairs: row.key === 'multi' ? null : (sb.pairs[row.key] ?? null),
     clusters: sb.clusters[row.key] ?? null,
   }));
+  const totHasMerge = sigRows.reduce((a, r) => a + (r.has_merge_id || 0), 0);
+  const totNoMerge = sigRows.reduce((a, r) => a + (r.no_merge_id || 0), 0);
+  const bucketCount = (k) => { const b = (d.buckets || []).find((x) => x.bucket === k); return b ? b.count : null; };
 
   return (
     <>
@@ -56,16 +61,24 @@ export default function Dashboard() {
       <table className="sigtable">
         <thead>
           <tr>
-            <th>Signal</th><th>Duplicate accounts</th><th>Duplicate pairs</th><th>Duplicate clusters</th><th aria-hidden="true"></th>
+            <th className="hdr-tip" data-tip="How the duplicate was detected: exact (all key fields identical), fuzzy (similar name), nickname, or multi (a mix). Click a row to open the Duplicates list filtered to that signal.">Signal<span className="th-info" aria-hidden="true"> ⓘ</span></th>
+            <th className="hdr-tip" data-tip="Individual accounts that are members of a cluster of this signal — the records that would be merged. Sums to the total duplicate accounts.">Duplicate accounts<span className="th-info" aria-hidden="true"> ⓘ</span></th>
+            <th className="hdr-tip" data-tip="Matched PAIRS within this signal's clusters. A pair is a single signal, so multi-signal shows '—'; the three sum to the total pairs.">Duplicate pairs<span className="th-info" aria-hidden="true"> ⓘ</span></th>
+            <th className="hdr-tip" data-tip="Unique duplicate CLUSTERS (groups of accounts) attributed to this signal by their composition.">Duplicate clusters<span className="th-info" aria-hidden="true"> ⓘ</span></th>
+            <th className="hdr-tip" data-tip="Of this signal's duplicate accounts, how many carry their OWN Membership-Platform merge ID — per account, NOT whether the whole cluster has one. Sums to the Merge-ID review's 'In both'.">Has merge ID<span className="th-info" aria-hidden="true"> ⓘ</span></th>
+            <th className="hdr-tip" data-tip="Duplicate accounts in this signal whose account has NO merge ID of its own. Sums to the review's 'Only in duplicates'.">No merge ID<span className="th-info" aria-hidden="true"> ⓘ</span></th>
+            <th aria-hidden="true"></th>
           </tr>
         </thead>
         <tbody>
           {sigRows.map((r) => (
-            <tr key={r.key} className="row-link" onClick={() => nav('/duplicates')}>
+            <tr key={r.key} className="row-link" onClick={() => nav('/salesforce/merge/duplicates' + (r.key === 'multi' ? '' : '?f_signal=' + r.key))}>
               <td><span className="statlink">{r.label}</span></td>
               <td>{fmt(r.accounts)}</td>
               <td>{r.pairs == null ? '—' : fmt(r.pairs)}</td>
               <td>{fmt(r.clusters)}</td>
+              <td>{fmt(r.has_merge_id)}</td>
+              <td>{fmt(r.no_merge_id)}</td>
               <td className="chev">›</td>
             </tr>
           ))}
@@ -74,19 +87,42 @@ export default function Dashboard() {
             <td>{fmt(d.accounts_in_clusters)}</td>
             <td>{fmt(d.duplicate_pairs)}</td>
             <td>{fmt(d.clusters)}</td>
+            <td>{fmt(totHasMerge)}</td>
+            <td>{fmt(totNoMerge)}</td>
             <td></td>
           </tr>
         </tbody>
       </table>
-      <p className="funnel-note" style={{ maxWidth: 720 }}>
+      <p className="funnel-note" style={{ maxWidth: 'none' }}>
         Pairs are single-signal, so they show "—" for multi and sum exactly to the total. Accounts and
-        clusters split by composition, so multi-signal is its own row. Click a row to open the Duplicates
-        list filtered to that signal.
+        clusters split by composition, so multi-signal is its own row. <strong>Has / No merge ID</strong> split
+        each signal's duplicate accounts by whether that <em>account itself</em> carries a Membership-Platform
+        merge ID (per account — not whether the whole cluster does); the two columns sum to the Merge-ID
+        review's "In both" and "Only in duplicates". Click a row to open the Duplicates list filtered to that signal.
       </p>
 
       {/* MERGE-ID FUNNEL (shared with the Merge-ID page) */}
       <h3>Merge-ID review</h3>
       <MergeIdFunnel d={d} />
+      {(() => {
+        const inBoth = bucketCount('in_both') || 0;
+        const sfOnly = bucketCount('sf_only') || 0;
+        const sum = inBoth + sfOnly;
+        const target = d.merge_id_accounts || 0;
+        const ok = sum === target;
+        const gap = Math.abs(target - sum);
+        return (
+          <p className="funnel-note" style={{ maxWidth: 'none' }}>
+            Merge-ID groups: <strong>{fmt(d.merge_id_groups)}</strong> groups · <strong>{fmt(target)}</strong> accounts
+            with a merge ID = {fmt(inBoth)} in both + {fmt(sfOnly)} only in merge IDs{' '}
+            <span className="hdr-tip" style={{ color: ok ? 'var(--green)' : 'var(--red)', fontWeight: 500 }}
+              data-tip={'Live self-check: accounts with a merge ID should equal In both + Only-in-merge-IDs. '
+                + (ok ? 'They match, so the merge-ID panel reconciles.' : 'They differ by ' + fmt(gap) + ' — the counts don’t reconcile; re-run the finder or investigate the data.')}>
+              {ok ? '✓ reconciles' : '⚠ off by ' + fmt(gap)}</span>. Those accounts group by their merge-ID value into
+            the "Merge-id groups" shown on Select Merges → "Accounts with merge ids".
+          </p>
+        );
+      })()}
 
       {/* DEFINITIONS */}
       <h3>How matches are defined</h3>

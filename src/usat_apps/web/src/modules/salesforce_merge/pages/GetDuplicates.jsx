@@ -67,8 +67,10 @@ export default function GetDuplicates() {
   const [runs, setRuns] = useState([]);
   const [err, setErr] = useState('');
   const [now, setNow] = useState(Date.now());
+  const [copied, setCopied] = useState(false);   // transient copy-button feedback
   const timer = useRef(null);
   const logRef = useRef(null);
+  const pinnedRef = useRef(true);   // follow the tail only while the user is at the bottom
 
   const poll = () => api.refreshStatus().then(setStatus).catch((e) => setErr(e.message));
   const loadRuns = () => api.runs().then((r) => setRuns(r.runs || [])).catch(() => {});
@@ -78,11 +80,25 @@ export default function GetDuplicates() {
     return () => clearInterval(timer.current);
   }, []);
 
-  // Keep the live log pinned to the newest line as output streams in.
-  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [status]);
+  // Follow the newest line ONLY when the user is already at the bottom — don't yank them back if they've
+  // scrolled up to read earlier output.
+  useEffect(() => { const el = logRef.current; if (el && pinnedRef.current) el.scrollTop = el.scrollHeight; }, [status]);
 
   const running = status && status.running;
   const run = status && status.run;
+
+  // Copy the console log with a clipboard-API attempt + a textarea fallback (the API needs a secure
+  // context, so it can silently fail behind an http proxy), then show transient feedback on the button.
+  const copyLog = async () => {
+    const text = (run && run.log_tail) ? run.log_tail.join('\n') : '';
+    let ok = false;
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; } } catch (e) { ok = false; }
+    if (!ok) {
+      try { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.focus(); ta.select(); ok = document.execCommand('copy'); ta.remove(); } catch (e) { ok = false; }
+    }
+    setCopied(ok ? 'copied ✓' : 'copy failed');
+    setTimeout(() => setCopied(false), 1600);
+  };
   const finderRunning = running && run && run.job !== 'sweep';   // default/legacy = finder
   const sweepRunning = running && run && run.job === 'sweep';
 
@@ -193,13 +209,24 @@ export default function GetDuplicates() {
         </div>
 
         {run && run.log_tail && run.log_tail.length > 0
-          ? <pre className="proc-log" ref={logRef}>{run.log_tail.join('\n')}</pre>
+          ? (
+            <>
+              <pre className="proc-log" ref={logRef}
+                onScroll={(e) => { const el = e.currentTarget; pinnedRef.current = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40; }}>{run.log_tail.join('\n')}</pre>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', gap: 6, marginTop: 6 }}>
+                <button className="btn" style={{ width: 'auto', padding: '1px 10px', color: copied === 'copied ✓' ? 'var(--green)' : (copied === 'copy failed' ? 'var(--red)' : undefined) }} title="Copy the console log to the clipboard"
+                  onClick={copyLog}>{copied || 'copy'}</button>
+                <button className="btn" style={{ width: 'auto', padding: '1px 10px' }} title="Download the console log as a .txt file"
+                  onClick={() => { const t = run.log_tail.join('\n'); const b = new Blob([t], { type: 'text/plain' }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = 'finder_console_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u); }}>export</button>
+              </div>
+            </>
+          )
           : <p className="muted small">No run in this session yet — start one above, or see the recent runs below.</p>}
       </div>
 
       <div className="card" style={{ margin: '12px 0' }}>
         <p style={{ margin: '0 0 10px', fontWeight: 500 }}>Activity — recent runs</p>
-        <DataTable columns={ACTIVITY_COLUMNS} rows={activityRows} rowClass={(r) => (r.live ? 'row-running' : '')} searchCols="type, environment, scope, when" minWidth={820} maxHeight={360} />
+        <DataTable columns={ACTIVITY_COLUMNS} rows={activityRows} rowClass={(r) => (r.live ? 'row-running' : '')} searchCols="type, environment, scope, when" clientExport="finder_activity_runs" minWidth={820} maxHeight={360} />
       </div>
     </>
   );
