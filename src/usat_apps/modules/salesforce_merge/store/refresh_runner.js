@@ -32,7 +32,7 @@ function public_status() {
       env: r.env, scope: r.scope, flags: r.flags, mode: r.flags.join(' '), job: r.job,
       started_at: r.started_at, finished_at: r.finished_at,
       exit_code: r.exit_code, error: r.error,
-      steps: r.steps, log_tail: r.log.slice(-20), pid: r.pid,
+      steps: r.steps, log_tail: r.log.slice(-LOG_CAP), pid: r.pid,   // send the full retained buffer (500) so late lines (e.g. a persist error) stay visible/scrollable
     },
   };
 }

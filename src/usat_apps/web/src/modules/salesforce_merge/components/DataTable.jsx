@@ -23,13 +23,13 @@ function CopyButton({ value }) {
 //   filter: true renders a per-column control in the header (a dropdown if `facets[key]` exists, else a text box).
 //   wrap: true lets long cells wrap; every cell gets a title tooltip with its full value.
 // `facets` maps column key -> distinct values (for the dropdowns). `searchCols` labels what search scans.
-export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, clientExport, minWidth, initialQuery = '', rowNumbers = true, onRowClick, rowClass, maxHeight = 'min(70vh, 600px)' }) {
+export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolbar, deps = [], searchCols, facets = {}, exportBase, exportExtra = {}, clientExport, minWidth, initialQuery = '', initialColFilters = {}, rowNumbers = true, onRowClick, rowClass, maxHeight = 'min(70vh, 600px)' }) {
   const server = typeof fetcher === 'function';
   const [q, setQ] = useState(initialQuery || '');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
-  const [colFilters, setColFilters] = useState({});
+  const [colFilters, setColFilters] = useState(initialColFilters || {});
   const [showFilters, setShowFilters] = useState(true);
   const [data, setData] = useState({ rows: rows || [], total: (rows || []).length });
   const [loading, setLoading] = useState(false);

@@ -19,20 +19,24 @@ async function dashboard_counts(query = real_query) {
   const out = {
     total_accounts: null,
     merge_id_accounts: null,
+    merge_id_groups: null,   // distinct merge IDs = the "Merge-id groups" count on Select Merges
     clusters: null,
     accounts_in_clusters: null,
     duplicate_pairs: null,
     buckets: [],
     // Per-signal breakdown for the dashboard "By match signal" table. Each is keyed
     // exact/fuzzy/nickname/multi. Pairs have no multi (a pair is a single signal).
-    signal_breakdown: { accounts: {}, pairs: {}, clusters: {} },
+    // has_merge_id / no_merge_id split each signal's duplicate ACCOUNTS by whether that ACCOUNT
+    // individually carries a merge ID (per-account, matching the Merge-ID review's in_both bucket).
+    signal_breakdown: { accounts: {}, pairs: {}, clusters: {}, has_merge_id: {}, no_merge_id: {} },
   };
 
   // All eight figures are independent reads, so fire them concurrently (the DB layer is a pool) and
   // assemble once — this turns the dashboard load from the SUM of the query latencies into the MAX.
-  const [rTotal, rMerge, rClusters, rPairs, rAccts, rBuckets, rSig, rComp] = await Promise.all([
+  const [rTotal, rMerge, rMergeGroups, rClusters, rPairs, rAccts, rBuckets, rSig, rComp, rMergeSig] = await Promise.all([
     safe('SELECT COUNT(*) AS n FROM `' + T_SNAP + '`'),
     safe("SELECT COUNT(*) AS n FROM `" + T_SNAP + "` WHERE salesforce_merge_id <> ''"),
+    safe("SELECT COUNT(DISTINCT salesforce_merge_id) AS n FROM `" + T_SNAP + "` WHERE salesforce_merge_id <> ''"),
     safe('SELECT COUNT(*) AS n FROM `' + T_CL + '`'),
     safe('SELECT SUM(CAST(Match_Link_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`'),
     // Duplicate ACCOUNTS = sum of cluster sizes (the individual records in clusters) — the figure
@@ -48,10 +52,20 @@ async function dashboard_counts(query = real_query) {
     // single-signal clusters, else a "a + b" mix. Fold mixes into "multi".
     safe('SELECT Match_Composition__c AS comp, COUNT(*) AS clusters, ' +
       'SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS accounts FROM `' + T_CL + '` GROUP BY Match_Composition__c'),
+    // Cross-tab: each signal's duplicate ACCOUNTS split by whether the ACCOUNT itself has a merge ID.
+    // Join the per-account review (Bucket__c: in_both = has merge ID) to its cluster's composition
+    // (the signal). Excludes sf_only (has a merge ID but is NOT a duplicate). has+no per signal reconcile
+    // to the review's In-both (6,621) + Only-in-duplicates (3,358).
+    safe('SELECT cl.Match_Composition__c AS comp, ' +
+      "SUM(CASE WHEN mr.Bucket__c = 'in_both' THEN 1 ELSE 0 END) AS has_merge, " +
+      "SUM(CASE WHEN mr.Bucket__c <> 'in_both' THEN 1 ELSE 0 END) AS no_merge " +
+      'FROM `' + T_MR + '` mr JOIN `' + T_CL + '` cl ON cl.Consolidated_Group_Key__c = mr.Consolidated_Group_Key__c ' +
+      "WHERE mr.Bucket__c <> 'sf_only' GROUP BY cl.Match_Composition__c"),
   ]);
 
   if (rTotal) out.total_accounts = Number(rTotal[0].n);
   if (rMerge) out.merge_id_accounts = Number(rMerge[0].n);
+  if (rMergeGroups) out.merge_id_groups = Number(rMergeGroups[0].n || 0);
   if (rClusters) out.clusters = Number(rClusters[0].n);
   if (rPairs) out.duplicate_pairs = Number(rPairs[0].n || 0);
   if (rAccts) out.accounts_in_clusters = Number(rAccts[0].n || 0);
@@ -72,6 +86,18 @@ async function dashboard_counts(query = real_query) {
     }
     out.signal_breakdown.accounts = acc;
     out.signal_breakdown.clusters = cls;
+  }
+  if (rMergeSig) {
+    const foldKey = (comp) => (comp === 'exact only' ? 'exact' : comp === 'fuzzy only' ? 'fuzzy' : comp === 'nickname only' ? 'nickname' : 'multi');
+    const has = { exact: 0, fuzzy: 0, nickname: 0, multi: 0 };
+    const no = { exact: 0, fuzzy: 0, nickname: 0, multi: 0 };
+    for (const x of rMergeSig) {
+      const key = foldKey(String(x.comp || ''));
+      has[key] += Number(x.has_merge || 0);
+      no[key] += Number(x.no_merge || 0);
+    }
+    out.signal_breakdown.has_merge_id = has;
+    out.signal_breakdown.no_merge_id = no;
   }
 
   return out;

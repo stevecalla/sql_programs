@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Email Queue — layout mockup (current vs ported)</title>
+<style>
+  :root{
+    /* dark theme, matched to the real app */
+    --bg:#0f1420; --panel:#0b111c; --card:#171d2b; --card2:#1b2333; --ink:#e7ecf5; --dim:#9aa6ba;
+    --line:#283142; --line2:#212a3a; --accent:#e4002b; --accent-soft:rgba(228,0,43,.16);
+    --navy:#15284e; --navy2:#0d1a33;
+    --blue:#6fb3ff; --green:#5fd38a; --gold:#e0b455; --coral:#ff8a7a;
+    --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+    --note:#8bc0ff; --note-bg:rgba(90,150,230,.12); --note-line:rgba(120,170,240,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0a0e17;color:var(--ink);
+    font:13.5px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .page{max-width:1320px;margin:0 auto;padding:24px 20px 60px}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
+  .lead{color:var(--dim);margin:0 0 16px;max-width:860px}
+  .switch{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px;box-shadow:var(--shadow);margin-bottom:20px}
+  .switch button{appearance:none;border:0;background:transparent;color:var(--dim);font:inherit;font-weight:600;padding:8px 16px;border-radius:999px;cursor:pointer}
+  .switch button.on{background:var(--accent);color:#fff}
+  .view{display:none} .view.on{display:block}
+  .frame{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin:0 0 14px}
+  .cap{display:flex;align-items:baseline;gap:10px;margin:24px 0 8px;flex-wrap:wrap}
+  .cap h2{font-size:14px;margin:0;text-transform:uppercase;letter-spacing:.05em}
+  .cap .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+  .tag.now{background:rgba(228,0,43,.16);color:#ff8497} .tag.port{background:rgba(95,211,138,.15);color:var(--green)}
+  .cap .sub{color:var(--dim);font-size:12px}
+
+  /* atoms */
+  .b{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;line-height:1.4}
+  .b-new{color:var(--blue);background:rgba(111,179,255,.14)}
+  .b-gold{color:var(--gold);border:1px solid rgba(224,180,85,.45)}
+  .b-wait{color:var(--gold);background:rgba(224,180,85,.13)}
+  .b-msg{color:var(--dim);background:rgba(255,255,255,.055)}
+  .b-att{color:var(--coral);border:1px solid rgba(255,138,122,.45)}
+  .b-green{color:var(--green);background:rgba(95,211,138,.13)}
+  .sf{color:var(--blue);font-size:10.5px;font-weight:600;text-decoration:none;border-bottom:1px dotted var(--blue)}
+  .btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--card2);color:var(--ink);padding:6px 11px;border-radius:8px;cursor:default}
+  .btn.pri{background:var(--accent);color:#fff;border-color:transparent}
+  .btn.link{background:transparent;border-color:transparent;color:var(--accent);padding:6px 4px}
+  .btn.sm{padding:4px 9px;font-size:11px}
+  .fld{border:1px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--dim);background:#0e1524;font-size:12px}
+  .h3{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:0 0 8px}
+  .cbx{width:14px;height:14px;border:1px solid var(--line);border-radius:3px;display:inline-block;background:#0e1524;flex:0 0 auto}
+  .cbx.on{background:var(--accent);border-color:transparent}
+  .subtle{color:var(--dim);font-size:11.5px}
+  .chev{color:var(--dim);font-size:12px}
+
+  /* case card (shared by both views) */
+  .case{position:relative;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:10px 11px 11px 30px;margin:0 0 9px}
+  .case.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-soft)}
+  .case .idx{position:absolute;left:11px;top:10px;color:var(--dim);font-size:11px;font-weight:700}
+  .case .cb{position:absolute;left:9px;top:26px}
+  .case .subj{font-weight:600;font-size:12.5px;margin:0 0 3px;color:#dbe3f2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .case .date{font-size:11px;color:var(--dim);margin:0 0 7px}
+  .case .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .case .row+.row{margin-top:6px}
+
+  /* message */
+  .msg{border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin:0 0 10px;background:var(--card)}
+  .msg.auto{background:#131a28}
+  .msg .mh{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11.5px}
+  .msg .who{font-weight:700;letter-spacing:.02em}
+  .msg .who.cust{color:var(--blue)} .msg .who.auto{color:var(--green)}
+  .msg .when{color:var(--dim);font-size:11px;display:flex;gap:8px;align-items:center}
+  .msg p{margin:8px 0 0;font-size:12.5px;color:#d3dbea;white-space:pre-line}
+
+  /* AI accordion (right pane) */
+  .draftbox{border:1px solid var(--line);border-radius:9px;background:#0e1524;min-height:120px;padding:11px;color:var(--dim);font-size:12.5px;font-style:italic}
+  .acc{border:1px solid var(--line);border-radius:9px;background:var(--card2);padding:11px 12px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center}
+  .acc .t{font-size:11px;font-weight:700;letter-spacing:.05em;color:#c3cde0}
+  .tabbar{display:flex;gap:4px;margin:0 0 12px;border-bottom:1px solid var(--line)}
+  .tabbar span{font-size:12px;font-weight:600;color:var(--dim);padding:7px 12px;cursor:default;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tabbar span.on{color:#fff;border-bottom-color:var(--accent)}
+
+  /* full Queue & filters form (shared) */
+  .filter{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px;margin:0 0 10px}
+  .flabel{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);margin:11px 0 5px}
+  .finput{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:#0e1524;color:#dbe3f2;font-size:12.5px}
+  .finput.dim{color:var(--dim)}
+  .fhelp{font-size:10px;color:var(--dim);margin:5px 0 4px;line-height:1.4}
+  .frow{display:flex;align-items:center;gap:7px;margin:8px 0}
+  .dhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .dhead .rng{font-size:10px;color:var(--dim);white-space:nowrap}
+  .view-btn{width:100%;justify-content:center;background:var(--accent);color:#fff;border:0;padding:10px;border-radius:9px;font-weight:700;font-size:13px;margin-top:10px;display:flex}
+  .mini{width:50px;flex:0 0 auto;justify-content:center;padding:7px}
+  .cal{color:var(--dim)}
+
+  /* ============ CURRENT (standalone) ============ */
+  .eq-head{display:flex;align-items:center;gap:12px;padding:12px 18px;background:#0b1120;border-bottom:1px solid var(--line)}
+  .eq-mark{width:34px;height:34px;border-radius:9px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:16px}
+  .eq-title h3{font-size:16px;margin:0;color:#fff;text-transform:none;letter-spacing:0}
+  .eq-title .s{font-size:11.5px;color:var(--dim)}
+  .eq-head .right{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .grid3{display:grid;grid-template-columns:300px 1px minmax(0,1fr) 1px 384px;min-height:600px}
+  .vline{background:var(--line)}
+  .pane{padding:14px;overflow:hidden} .pane.side{background:var(--panel)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px;margin:0 0 11px}
+  .spread{display:flex;justify-content:space-between;align-items:center}
+  .thead{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin:0 0 8px}
+  .thead2{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:flex-end;color:var(--dim);font-size:12px;margin:0 0 14px}
+
+  /* ============ PORTED (usat_apps) ============ */
+  .ua-head{display:flex;align-items:center;gap:12px;padding:11px 16px;background:var(--navy);border-bottom:1px solid #0a1730}
+  .ua-mark{width:30px;height:30px;border-radius:8px;background:#fff;color:var(--navy);display:grid;place-items:center;font-weight:800}
+  .ua-head h3{font-size:15px;margin:0;color:#fff;text-transform:none;letter-spacing:0}
+  .ua-head .right{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:12px;color:#aebbd6}
+  .ua-shell{display:grid;grid-template-columns:152px 280px minmax(0,1fr);min-height:600px}
+  .ua-rail{background:var(--navy2);padding:12px 9px;border-right:1px solid #0a1730}
+  .ua-rail .grp{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:#6f84ad;margin:12px 6px 6px}
+  .ua-nav{display:flex;flex-direction:column;gap:2px}
+  .ua-nav a{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;color:#b8c4dc;font-size:12.5px;text-decoration:none}
+  .ua-nav a .ic{width:16px;text-align:center;opacity:.85}
+  .ua-nav a.on{background:rgba(255,255,255,.09);color:#fff;font-weight:600}
+  .ua-nav a.on.red{box-shadow:inset 3px 0 0 var(--accent)}
+  .ua-sub{background:var(--panel);border-right:1px solid var(--line);padding:13px 12px;overflow:hidden}
+  .q{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-radius:8px;border:1px solid transparent;font-size:12.5px;color:#c3cde0}
+  .q .n{font-size:11px;color:var(--dim)}
+  .q.on{background:var(--accent-soft);border-color:rgba(228,0,43,.5);color:#ff8497;font-weight:600}
+  .q.on .n{color:#ff8497}
+  .ua-main{display:flex;flex-direction:column;background:var(--bg)}
+  .thread-head{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:11px 15px;background:var(--card);border-bottom:1px solid var(--line)}
+  .body-split{display:grid;grid-template-columns:minmax(0,1fr) 392px;flex:1}
+  .col-thread{padding:15px;overflow:hidden}
+  .col-ai{background:var(--panel);border-left:1px solid var(--line);padding:14px;overflow:hidden}
+  .ua-foot{padding:7px 16px;background:var(--card);border-top:1px solid var(--line);color:var(--dim);font-size:11.5px;text-align:center}
+
+  /* AI accordion panel (real content) */
+  .ai-head{display:flex;justify-content:space-between;align-items:center;margin:0 0 2px}
+  .ai-sec{border:1px solid var(--line);border-radius:10px;background:var(--card);margin:0 0 9px;overflow:hidden}
+  .ai-sec>.hd{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 12px;cursor:pointer;user-select:none}
+  .ai-sec>.hd .t{font-size:10.5px;font-weight:700;letter-spacing:.05em;color:#c7d1e4}
+  .ai-sec>.hd .rt{display:flex;gap:10px;align-items:center;color:var(--dim);font-size:11px}
+  .ai-sec>.bd{padding:0 12px 12px;display:none}
+  .ai-sec.open>.bd{display:block}
+  .ai-sec .chvr{transition:transform .15s;color:var(--dim)}
+  .ai-sec.open .chvr{transform:rotate(90deg)}
+  .ta{border:1px solid var(--line);border-radius:8px;background:#0e1524;min-height:96px;padding:9px 10px;color:var(--dim);font-size:12px;font-style:italic}
+  .ta.sm{min-height:56px}
+  .chip2{display:inline-block;font-size:11px;color:#cdd7ea;background:#0e1524;border:1px solid var(--line);border-radius:999px;padding:5px 10px;margin:0 6px 6px 0;cursor:default}
+  .code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;line-height:1.55;color:#bcd0ec;background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:9px 10px;white-space:pre;overflow:auto;margin:5px 0}
+  .mlabel{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:11px 0 6px}
+  .filerow{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#0e1524;font-size:12px;margin:6px 0}
+  .filerow .meta{color:var(--dim);font-size:10.5px;display:flex;gap:9px;align-items:center}
+  .correction{border:1px solid var(--line);border-radius:8px;background:#0e1524;padding:9px 10px;font-size:12px;color:#d3dbea;display:flex;justify-content:space-between;gap:8px;margin:6px 0}
+  .correction .sc{color:var(--dim);font-size:10px;white-space:nowrap}
+  .btnrow{display:flex;flex-wrap:wrap;gap:7px;margin:9px 0 2px}
+  .fhelp2{font-size:11px;color:var(--dim);margin:2px 0 8px;line-height:1.4}
+
+  /* Admin & Metrics view */
+  .ua-shell.two{grid-template-columns:152px minmax(0,1fr)}
+  .setbody{padding:16px 18px;overflow:hidden}
+  .setsec{border-bottom:1px solid var(--line2);padding:0 0 14px;margin:0 0 14px}
+  .setsec:last-child{border-bottom:0}
+  .setsec .st{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#c7d1e4;margin:0 0 4px}
+  .setsec .sd{font-size:11px;color:var(--dim);margin:0 0 9px;line-height:1.45}
+  .mtable{width:100%;border-collapse:collapse;font-size:11.5px}
+  .mtable th{text-align:left;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:0 8px 6px 0;font-weight:700}
+  .mtable td{padding:4px 8px 4px 0;color:#d3dbea}
+  .mtable .cell{border:1px solid var(--line);border-radius:6px;background:#0e1524;padding:5px 8px;color:#d3dbea}
+  .tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:0 0 12px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .tile .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+  .tile .v{font-size:16px;font-weight:700;margin-top:3px}
+  .tile .s{font-size:9.5px;color:var(--dim)}
+  .charts{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px}
+  .cbox{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px}
+  .cbox .ct{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:0 0 8px}
+  .bars{display:flex;align-items:flex-end;gap:8px;height:96px}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;justify-content:flex-end;height:100%}
+  .bar .col{width:74%;border-radius:5px 5px 0 0;background:linear-gradient(180deg,#3a5a9c,#22345b)}
+  .bar .col.red{background:linear-gradient(180deg,#e4002b,#8f0a20)}
+  .bar .lb{font-size:9px;color:var(--dim);text-align:center;line-height:1.2}
+  .map3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:14px 0 4px}
+  .mapcol{border:1px solid var(--line);border-radius:11px;padding:13px;background:var(--card)}
+  .mapcol.reuse{border-color:rgba(95,211,138,.4)}
+  .mapcol.port{border-color:rgba(228,0,43,.32)}
+  .mapcol h4{margin:2px 0 3px;font-size:12.5px}
+  .mapcol .tagline{font-size:10.5px;color:var(--dim);margin:0 0 9px}
+  .mapcol ul{margin:0;padding-left:16px}
+  .mapcol li{font-size:11.5px;margin:0 0 6px;color:#d3dbea;line-height:1.35}
+  .pill{display:inline-block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:6px;margin-bottom:6px}
+  .pill.reuse{background:rgba(95,211,138,.15);color:var(--green)}
+  .pill.port{background:rgba(228,0,43,.16);color:#ff8497}
+
+  /* callouts */
+  .callouts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:12px 0 4px}
+  .callout{display:flex;gap:9px;align-items:flex-start;background:var(--note-bg);border:1px solid var(--note-line);border-radius:10px;padding:10px 12px;color:#cfe0f7;font-size:12px}
+  .num{flex:0 0 auto;width:20px;height:20px;border-radius:999px;background:var(--note);color:#08213b;font-size:12px;font-weight:800;display:grid;place-items:center}
+  .pin{position:absolute;width:22px;height:22px;border-radius:999px;background:var(--note);color:#08213b;font-size:12px;font-weight:800;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.5);z-index:5}
+  .legend{color:var(--dim);font-size:12px;margin:4px 0 18px}
+  .legend b{color:var(--ink)}
+  code{background:rgba(255,255,255,.07);padding:1px 5px;border-radius:5px;font-size:11.5px}
+  @media (max-width:960px){ .callouts{grid-template-columns:1fr} .grid3{grid-template-columns:1fr} .vline{display:none} .ua-shell{grid-template-columns:1fr} .body-split{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Email Queue — layout mockup</h1>
+  <p class="lead">Corrected to your dark-mode screenshot. Shows the operator UI <b>today</b> (standalone app) and <b>ported</b> into the usat_apps shell — queues in the module rail, thread + AI in the main body. Sample content is anonymized; no real member data.</p>
+
+  <div class="switch">
+    <button id="b-port" class="on" onclick="show('port')">App — Ported</button>
+    <button id="b-now" onclick="show('now')">App — Current</button>
+    <button id="b-admin" onclick="show('admin')">Admin &amp; Metrics</button>
+  </div>
+
+  <!-- ===================== PORTED ===================== -->
+  <section id="v-port" class="view on">
+    <div class="cap"><h2>Ported into usat_apps</h2><span class="tag port">TARGET</span>
+      <span class="sub">navy platform shell · Email Queue is a module · queues + cases in the rail · thread + AI in the body</span></div>
+
+    <div class="frame" style="position:relative">
+      <span class="pin" style="left:242px;top:150px">1</span>
+      <span class="pin" style="left:540px;top:118px">2</span>
+      <span class="pin" style="right:150px;top:118px">3</span>
+
+      <div class="ua-head">
+        <span class="ua-mark">U</span><h3>USAT Apps</h3>
+        <span class="b b-wait">🧪 Sandbox</span>
+        <span class="right">✳ Light &nbsp;·&nbsp; skip ▾</span>
+      </div>
+
+      <div class="ua-shell">
+        <nav class="ua-rail">
+          <div class="grp">Apps</div>
+          <div class="ua-nav">
+            <a><span class="ic">▦</span> Home</a>
+            <a><span class="ic">📊</span> Reporting</a>
+            <a><span class="ic">🔀</span> Merge</a>
+            <a class="on red"><span class="ic">✉️</span> Email Queue</a>
+            <a><span class="ic">🛠️</span> Ops</a>
+          </div>
+          <div class="grp">Email Queue</div>
+          <div class="ua-nav">
+            <a class="on"><span class="ic">📥</span> Cases</a>
+            <a><span class="ic">📚</span> Context files</a>
+            <a><span class="ic">✏️</span> Corrections</a>
+            <a><span class="ic">📈</span> Metrics</a>
+          </div>
+        </nav>
+
+        <aside class="ua-sub">
+          <div class="filter">
+            <div class="dhead" style="margin-bottom:2px"><div class="h3" style="margin:0">Queue &amp; filters</div><span class="subtle">Team USA ⌄</span></div>
+            <div class="flabel" style="margin-top:8px">Queue</div>
+            <div class="finput">Team USA (10 open)<span class="chev">▾</span></div>
+            <div class="flabel">Status</div>
+            <div class="finput">Open only<span class="chev">▾</span></div>
+            <div class="dhead"><div class="flabel">Dates</div><span class="rng">2026-07-28 → 2026-07-29 ⌄</span></div>
+            <div class="fhelp">Default: yesterday to today (max 14 days, back to 2025-01-01).</div>
+            <div class="flabel" style="margin-top:2px">From</div>
+            <div class="finput">07/28/2026<span class="cal">📅</span></div>
+            <div class="flabel">To</div>
+            <div class="finput">07/29/2026<span class="cal">📅</span></div>
+            <div class="frow"><span class="cbx"></span> Any date <span class="subtle">by</span> <span class="finput" style="flex:1;padding:6px 9px">Last activity<span class="chev">▾</span></span></div>
+            <div class="flabel">Search</div>
+            <div class="frow"><span class="finput dim" style="flex:1">Search (subject, status, #, sende…</span><span class="btn sm">✕</span></div>
+            <div class="frow"><span class="cbx"></span> Only with attachments <span class="subtle" style="margin-left:auto">Show</span> <span class="finput mini">25</span></div>
+            <div class="view-btn">View</div>
+          </div>
+          <div style="display:flex;gap:9px;align-items:center;margin:2px 2px 11px;flex-wrap:wrap">
+            <span class="btn sm">AI triage visible</span><span class="btn sm">↻ Refresh</span><span class="subtle">Triage complete.</span>
+          </div>
+
+          <div class="case sel">
+            <span class="idx">1</span><span class="cb"><span class="cbx on"></span></span>
+            <div class="subj">[EXTERNAL] — Event registration change</div>
+            <div class="date">07/29/2026, 4:01 PM MDT</div>
+            <div class="row"><span class="b b-new">New</span><span class="b b-gold">Needs info</span><span class="b b-msg">2 msg</span><a class="sf">SF ↗</a></div>
+          </div>
+          <div class="case">
+            <span class="idx">2</span><span class="cb"><span class="cbx"></span></span>
+            <div class="subj">[EXTERNAL] — Fwd: Pressio customer…</div>
+            <div class="date">07/29/2026, 2:13 PM MDT</div>
+            <div class="row"><span class="b b-wait">Waiting For USAT</span><span class="b b-gold">Needs info</span></div>
+            <div class="row"><span class="b b-msg">8 msg</span><span class="b b-att">attachment</span><a class="sf">SF ↗</a></div>
+          </div>
+          <div class="case">
+            <span class="idx">3</span><span class="cb"><span class="cbx"></span></span>
+            <div class="subj">[EXTERNAL] — Pontevedra: 2026…</div>
+            <div class="date">07/29/2026, 1:42 PM MDT</div>
+            <div class="row"><span class="b b-new">New</span><span class="b b-gold">Needs info</span><span class="b b-msg">2 msg</span><a class="sf">SF ↗</a></div>
+          </div>
+        </aside>
+
+        <div class="ua-main">
+          <div class="thread-head">
+            <a class="sf" style="font-size:13px">Case 00047212 ↗</a>
+            <span class="subtle">· 2 msg · newest first</span>
+            <span class="b b-gold">Needs info</span>
+            <span class="btn sm">re-run</span>
+            <span class="subtle">Status:</span><span class="fld">New</span>
+            <span style="margin-left:auto" class="subtle">Team USA</span>
+          </div>
+          <div class="body-split">
+            <div class="col-thread">
+              <div class="thead2" style="justify-content:flex-start">
+                <span><span class="cbx on"></span> HTML</span>
+                <span><span class="cbx on"></span> Hide quoted/repeated text</span>
+                <span class="btn sm">Collapse all</span><span class="btn sm">Expand all</span>
+              </div>
+              <div class="msg auto">
+                <div class="mh"><span class="who auto">AUTO-REPLY · noreply@usatriathlon.org</span><span class="when">07/29 4:01 PM MDT ›</span></div>
+                <p>Dear member, thank you for reaching out to us! Your request has been received and a customer service t…</p>
+              </div>
+              <div class="msg">
+                <div class="mh"><span class="who cust">CUSTOMER · member@example.com</span><span class="when">07/29 4:00 PM MDT ⌄</span></div>
+                <p>-- External Sender --
+
+Hello,
+I registered for two events in Spain and would only like to compete in the sprint. Will you please change it for me?
+Sent from my iPhone</p>
+              </div>
+            </div>
+
+            <div class="col-ai"><div class="ai-panel" id="ai-port"></div></div>
+          </div>
+          <div class="ua-foot">Saturday, July 11, 2026 · 4:52 PM MTN — signed in as skip</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callouts">
+      <div class="callout"><span class="num">1</span><div><b>Queues + cases → module rail.</b> The "Queue &amp; filters" header, the queue picker with counts, the triage/refresh controls, and the numbered case cards (badges, msg count, SF↗, attachment) all move into the module drill-in rail.</div></div>
+      <div class="callout"><span class="num">2</span><div><b>Thread → main body.</b> Case header (case link, msg count, status, re-run) + the HTML / hide-quoted / collapse-expand controls + the message thread fill the main column.</div></div>
+      <div class="callout"><span class="num">3</span><div><b>AI → right of body.</b> Draft (editable) + Send/Copy, then accordions: <b>Ask</b> (quick-prompt chips), <b>Corrections</b>, <b>Context files</b> (grounding + add file/folder), <b>SOQL</b> (thread + case queries). Click a header to expand. Corrections + context files become the shared <code>services/</code> the chatbot reuses; SOQL stays operator-only.</div></div>
+    </div>
+    <div class="legend">Reused from the platform for free: <b>navy shell</b>, <b>header</b>, <b>auth/session</b>, <b>theme</b>, <b>footer clock</b>, and the <b>Ops</b> + <b>Metrics</b> panels — so the standalone app's model picker / Reset / bespoke chrome go away. &nbsp;<b>Note:</b> the AI panel is content-rich (SOQL editor, context-file manager), so it wants ~390px+; on narrow screens the body stacks thread-over-AI.</div>
+  </section>
+
+  <!-- ===================== CURRENT ===================== -->
+  <section id="v-now" class="view">
+    <div class="cap"><h2>Current — standalone app</h2><span class="tag now">TODAY</span>
+      <span class="sub">vanilla page · 3 resizable panes: queue+cases / thread / AI · dark mode</span></div>
+
+    <div class="frame">
+      <div class="eq-head">
+        <span class="eq-mark">✉</span>
+        <div class="eq-title"><h3>Email Queue Assistant</h3><div class="s">read-only proof of concept — nothing is sent to Salesforce</div></div>
+        <span class="right">
+          <span class="subtle">Model:</span><span class="fld">ChatGPT (OpenAI) · gpt-5.1 ▾</span>
+          <span class="btn sm">✳ Light</span><span class="btn sm">↻ Reset</span><span class="btn sm">Sign out</span>
+        </span>
+      </div>
+
+      <div class="grid3">
+        <!-- LEFT -->
+        <div class="pane side">
+          <div class="filter">
+            <div class="dhead" style="margin-bottom:2px"><div class="h3" style="margin:0">Queue &amp; filters</div><span class="subtle">Team USA ⌄</span></div>
+            <div class="flabel" style="margin-top:8px">Queue</div>
+            <div class="finput">Team USA (10 open)<span class="chev">▾</span></div>
+            <div class="flabel">Status</div>
+            <div class="finput">Open only<span class="chev">▾</span></div>
+            <div class="dhead"><div class="flabel">Dates</div><span class="rng">2026-07-28 → 2026-07-29 ⌄</span></div>
+            <div class="fhelp">Default: yesterday to today (max 14 days, back to 2025-01-01).</div>
+            <div class="flabel" style="margin-top:2px">From</div>
+            <div class="finput">07/28/2026<span class="cal">📅</span></div>
+            <div class="flabel">To</div>
+            <div class="finput">07/29/2026<span class="cal">📅</span></div>
+            <div class="frow"><span class="cbx"></span> Any date <span class="subtle">by</span> <span class="finput" style="flex:1;padding:6px 9px">Last activity<span class="chev">▾</span></span></div>
+            <div class="flabel">Search</div>
+            <div class="frow"><span class="finput dim" style="flex:1">Search (subject, status, #, sende…</span><span class="btn sm">✕</span></div>
+            <div class="frow"><span class="cbx"></span> Only with attachments <span class="subtle" style="margin-left:auto">Show</span> <span class="finput mini">25</span></div>
+            <div class="view-btn">View</div>
+          </div>
+          <div style="display:flex;gap:9px;align-items:center;margin:2px 2px 6px;flex-wrap:wrap">
+            <span class="btn sm">AI triage visible</span><span class="btn sm">↻ Refresh</span><span class="subtle">Triage complete.</span>
+          </div>
+          <div class="subtle" style="font-size:10.5px;margin:0 2px 11px">* = local rule (no AI) · cheaper models miss more spam. Hover a badge for the reason.</div>
+
+          <div class="case sel">
+            <span class="idx">1</span><span class="cb"><span class="cbx on"></span></span>
+            <div class="subj">[EXTERNAL] — I registered for …</div>
+            <div class="date">07/29/2026, 4:01:02 PM MDT</div>
+            <div class="row"><span class="b b-new">New</span><span class="b b-gold">Needs info</span><span class="b b-msg">2 msg</span></div>
+            <div class="row"><a class="sf">SF ↗</a></div>
+          </div>
+          <div class="case">
+            <span class="idx">2</span><span class="cb"><span class="cbx"></span></span>
+            <div class="subj">[EXTERNAL] — Fwd: Pressio Cus…</div>
+            <div class="date">07/29/2026, 2:13:51 PM MDT</div>
+            <div class="row"><span class="b b-wait">Waiting For USAT</span><span class="b b-gold">Needs info</span></div>
+            <div class="row"><span class="b b-msg">8 msg</span><span class="b b-att">attachment</span><a class="sf">SF ↗</a></div>
+          </div>
+          <div class="case">
+            <span class="idx">3</span><span class="cb"><span class="cbx"></span></span>
+            <div class="subj">[EXTERNAL] — Pontevedra: 202…</div>
+            <div class="date">07/29/2026, 1:42:00 PM MDT</div>
+            <div class="row"><span class="b b-new">New</span><span class="b b-gold">Needs info</span><span class="b b-msg">2 msg</span></div>
+            <div class="row"><a class="sf">SF ↗</a></div>
+          </div>
+          <div class="case">
+            <span class="idx">4</span><span class="cb"><span class="cbx"></span></span>
+            <div class="subj">[EXTERNAL] — Competing in D…</div>
+            <div class="date">07/29/2026, 1:38:02 PM MDT</div>
+            <div class="row"><span class="b b-new">New</span><span class="b b-gold">Needs info</span><span class="b b-msg">2 msg</span><a class="sf">SF ↗</a></div>
+          </div>
+        </div>
+
+        <div class="vline"></div>
+
+        <!-- MIDDLE -->
+        <div class="pane">
+          <div class="thead">
+            <a class="sf" style="font-size:14px">Case 00047212 ↗</a>
+            <span class="subtle">· 2 msg · newest first</span>
+            <span class="b b-gold">Needs info</span>
+            <span class="btn sm">re-run</span>
+            <span class="subtle">Status:</span><span class="fld">New</span>
+          </div>
+          <div class="thead2">
+            <span><span class="cbx on"></span> HTML</span>
+            <span><span class="cbx on"></span> Hide quoted/repeated text</span>
+            <span class="btn sm">Collapse all</span><span class="btn sm">Expand all</span>
+          </div>
+          <div class="msg auto">
+            <div class="mh"><span class="who auto">AUTO-REPLY · noreply@usatriathlon.org</span><span class="when">07/29/2026, 4:01:02 PM MDT ›</span></div>
+            <p>Dear member, thank you for reaching out to us! Your request has been received and a customer service t…</p>
+          </div>
+          <div class="msg">
+            <div class="mh"><span class="who cust">CUSTOMER · member@example.com</span><span class="when">07/29/2026, 4:00:39 PM MDT ⌄</span></div>
+            <p>-- External Sender --
+
+Hello,
+I registered for two events in Spain and would only like to compete in the sprint. Will you please change it for me?
+Sent from my iPhone</p>
+          </div>
+        </div>
+
+        <div class="vline"></div>
+
+        <!-- RIGHT (AI) -->
+        <div class="pane side"><div class="ai-panel" id="ai-now"></div></div>
+      </div>
+      <div class="ua-foot" style="border-top:1px solid var(--line)">Email Queue Assistant · MTN Jul 29, 2026, 8:12 PM</div>
+    </div>
+    <div class="legend">Every piece here — <b>auth</b>, <b>header</b>, model picker, <b>theme</b>, <b>metrics</b>, admin console — is bespoke to this one app. The port keeps the brain (thread, AI draft, ask, corrections, context files, SOQL) and drops the duplicated chrome. <b>Tip:</b> click an accordion header to expand it.</div>
+  </section>
+
+  <!-- ===================== ADMIN & METRICS ===================== -->
+  <section id="v-admin" class="view">
+    <div class="cap"><h2>Admin &amp; Metrics — how the robust tooling ports</h2><span class="tag port">PLAN</span>
+      <span class="sub">the app's admin + analytics don't get dropped — some is reused from the platform, some ports as Email-Queue-specific</span></div>
+
+    <!-- ported Settings -->
+    <div class="frame">
+      <div class="ua-head"><span class="ua-mark">U</span><h3>USAT Apps</h3><span class="subtle" style="color:#aebbd6">Email Queue · Settings</span><span class="right">✳ Light &nbsp;·&nbsp; skip ▾</span></div>
+      <div class="ua-shell two">
+        <nav class="ua-rail">
+          <div class="grp">Apps</div>
+          <div class="ua-nav"><a><span class="ic">📊</span> Reporting</a><a><span class="ic">🔀</span> Merge</a><a class="on red"><span class="ic">✉️</span> Email Queue</a><a><span class="ic">🛠️</span> Ops</a></div>
+          <div class="grp">Email Queue</div>
+          <div class="ua-nav"><a><span class="ic">📥</span> Cases</a><a><span class="ic">📚</span> Context files</a><a><span class="ic">✏️</span> Corrections</a><a class="on"><span class="ic">⚙️</span> Settings</a><a><span class="ic">📈</span> Metrics</a><a><span class="ic">👤</span> Access</a></div>
+        </nav>
+        <div class="setbody">
+          <div class="setsec">
+            <div class="st">Salesforce environment</div>
+            <div class="sd">Which org the module reads from. Production = live (SF_PROD_*). Sandbox = practice (SF_DEV_*). Sandbox shows a banner; every analytics row is tagged with the env.</div>
+            <div style="display:flex;gap:8px;align-items:center"><span class="finput" style="width:220px">🟢 Production (live)<span class="chev">▾</span></span><span class="btn pri">Save</span></div>
+          </div>
+          <div class="setsec">
+            <div class="st">AI models &amp; pricing</div>
+            <div class="sd">The models offered in the app picker <i>and</i> the metrics Ask box (one shared list). Prices USD / 1M tokens drive cost tracking. Pick one Default.</div>
+            <table class="mtable">
+              <tr><th>Default</th><th>Provider</th><th>Model</th><th>Label</th><th>In $/1M</th><th>Out $/1M</th></tr>
+              <tr><td>◉</td><td class="cell">openai</td><td class="cell">gpt-5.1</td><td class="cell">ChatGPT (OpenAI)</td><td class="cell">1.25</td><td class="cell">10</td></tr>
+              <tr><td>○</td><td class="cell">anthropic</td><td class="cell">claude-sonnet-4-6</td><td class="cell">Claude Sonnet (rich)</td><td class="cell">3</td><td class="cell">15</td></tr>
+              <tr><td>○</td><td class="cell">anthropic</td><td class="cell">claude-haiku-4-5</td><td class="cell">Claude Haiku (fast)</td><td class="cell">1</td><td class="cell">5</td></tr>
+            </table>
+            <div class="btnrow"><span class="btn sm">+ Add model</span><span class="btn pri sm">Save models</span></div>
+          </div>
+          <div class="setsec">
+            <div class="st">Banners &amp; landing</div>
+            <div class="sd">SANDBOX banner always shows in sandbox (safety). TEST-MODE banner is toggleable. Admin default landing sets where admins land after sign-in.</div>
+            <div class="btnrow"><span><span class="cbx on"></span> Show the TEST MODE banner</span> <span class="finput" style="width:180px;margin-left:12px">Landing: Metrics ▾</span><span class="btn pri sm">Save</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ported Metrics -->
+    <div class="frame">
+      <div class="ua-head"><span class="ua-mark">U</span><h3>USAT Apps</h3><span class="subtle" style="color:#aebbd6">Email Queue · Metrics</span><span class="right">7 days ▾ &nbsp;·&nbsp; ↻ Refresh</span></div>
+      <div class="setbody">
+        <div class="tiles">
+          <div class="tile"><div class="k">Visits</div><div class="v">1</div><div class="s">1 user</div></div>
+          <div class="tile"><div class="k">AI calls</div><div class="v">7</div><div class="s">100% ok</div></div>
+          <div class="tile"><div class="k">Avg latency</div><div class="v">1380<span style="font-size:10px"> ms</span></div><div class="s">max 2280</div></div>
+          <div class="tile"><div class="k">Drafts ok</div><div class="v">7</div><div class="s">0 failed</div></div>
+          <div class="tile"><div class="k">Grounded</div><div class="v">0%</div><div class="s">0 w/ images</div></div>
+          <div class="tile"><div class="k">Est. cost</div><div class="v">$0.006</div><div class="s">3351 in / 178 out</div></div>
+        </div>
+        <div class="charts">
+          <div class="cbox"><div class="ct">Funnel — visits → threads → AI → drafts → acks</div>
+            <div class="bars">
+              <div class="bar"><div class="col" style="height:14%"></div><div class="lb">Visits</div></div>
+              <div class="bar"><div class="col" style="height:14%"></div><div class="lb">Threads</div></div>
+              <div class="bar"><div class="col" style="height:100%"></div><div class="lb">AI calls</div></div>
+              <div class="bar"><div class="col" style="height:100%"></div><div class="lb">Drafts</div></div>
+              <div class="bar"><div class="col" style="height:6%"></div><div class="lb">Acks</div></div>
+            </div>
+          </div>
+          <div class="cbox"><div class="ct">Verdicts (respond)</div>
+            <div class="bars"><div class="bar"><div class="col red" style="height:100%"></div><div class="lb">needs_info</div></div></div>
+          </div>
+          <div class="cbox"><div class="ct">AI calls by queue</div>
+            <div class="bars"><div class="bar"><div class="col" style="height:100%"></div><div class="lb">Team USA</div></div></div>
+          </div>
+        </div>
+        <div class="legend" style="margin:12px 0 0">Also on the real dashboard: <b>cases worked</b> (per email), <b>AI calls by provider / action</b>, <b>corrections + context-file changes</b>, <b>AI spend</b> (real vs test) &amp; <b>cost by model</b>, top actors, and the <b>Ask-your-data</b> read-only AI box. All computed from PII-free rows — counts / enums + staff username + queue name.</div>
+      </div>
+    </div>
+
+    <!-- mapping -->
+    <div class="map3">
+      <div class="mapcol reuse">
+        <span class="pill reuse">Reuse from platform</span>
+        <h4>Already in usat_apps</h4>
+        <div class="tagline">No re-port — inherit the platform's version.</div>
+        <ul>
+          <li><b>Users, roles &amp; login</b> — signed-cookie auth, .env recovery accounts</li>
+          <li><b>Panel access</b> control (per-panel grants)</li>
+          <li><b>Ops console</b> — health, routes, pm2, logs, cron, system commands</li>
+          <li><b>Metrics framework</b> — events table + report + <b>Ask-your-data</b></li>
+          <li><b>Config-status Overview</b>, theme, footer clock, header</li>
+        </ul>
+      </div>
+      <div class="mapcol port">
+        <span class="pill port">Port — EQ settings</span>
+        <h4>Email-Queue domain config</h4>
+        <div class="tagline">Module-specific admin the platform doesn't have.</div>
+        <ul>
+          <li><b>Salesforce env switch</b> (Production / Sandbox)</li>
+          <li><b>AI models &amp; pricing</b> table (shared by app + Ask)</li>
+          <li><b>TEST-MODE banner</b> toggle + admin landing</li>
+          <li><b>Queue access</b> — general default + per-user overrides</li>
+          <li>Operations menu items specific to EQ (verify SF, list queues, view corrections/context)</li>
+        </ul>
+      </div>
+      <div class="mapcol port">
+        <span class="pill port">Port — EQ dashboards</span>
+        <h4>Email-Queue analytics</h4>
+        <div class="tagline">Charts on the module's own events table.</div>
+        <ul>
+          <li><b>Funnel</b> visits → threads → AI → drafts → acks</li>
+          <li><b>Verdicts</b>, AI calls by <b>queue / provider / action</b></li>
+          <li><b>Cases worked</b> (per email), top actors</li>
+          <li><b>Corrections + context-file changes</b></li>
+          <li><b>AI spend</b> (real vs test) &amp; <b>cost by model</b></li>
+        </ul>
+      </div>
+    </div>
+    <div class="legend"><b>Net:</b> the framework (auth, access, ops, metrics-events, Ask) is platform plumbing we reuse; what ports is the Email-Queue <i>domain</i> layer — a Settings page and a set of dashboards that read the module's <code>salesforce_email_queue_events</code> table. Because those rows are already PII-free (counts/enums + staff user + queue name), the same analytics safely coexist with the chatbot's no-PII boundary.</div>
+  </section>
+</div>
+
+<script>
+  // ---- faithful AI panel (identical in both views) ----
+  function aiPanel(){
+    return ''
+    + '<div class="ai-head"><div class="h3" style="margin:0">AI panel</div><span class="subtle">click a section to expand</span></div>'
+    // 1. AI SUGGESTED RESPONSE
+    + '<div class="ai-sec open"><div class="hd"><span class="t">AI SUGGESTED RESPONSE</span><span class="rt"><span class="chvr">›</span></span></div><div class="bd">'
+      + '<div class="tabbar"><span class="on">Draft reply</span><span>Acknowledge receipt</span></div>'
+      + '<div class="mlabel">Reply (editable)</div>'
+      + '<div class="ta">The AI draft appears here and is fully editable. You can also compose a reply yourself, even if the AI said it needs more info.</div>'
+      + '<div class="btnrow"><span class="btn link">Send reply</span><span class="btn sm">⧉ Copy reply</span></div>'
+    + '</div></div>'
+    // 2. ASK A QUESTION
+    + '<div class="ai-sec open"><div class="hd"><span class="t">ASK A QUESTION</span><span class="rt"><span class="chvr">›</span></span></div><div class="bd">'
+      + '<div style="margin:2px 0 8px">'
+        + '<span class="chip2">Summarize the case</span><span class="chip2">What is the customer asking?</span>'
+        + '<span class="chip2">What information is missing to answer?</span><span class="chip2">Is this within our scope or should it be escalated?</span>'
+        + '<span class="chip2">Draft a brief, friendly holding reply</span><span class="chip2">What are the suggested next steps?</span>'
+      + '</div>'
+      + '<div class="ta sm">Ask a question about this case…</div>'
+      + '<div class="btnrow"><span class="btn sm">Ask</span></div>'
+    + '</div></div>'
+    // 3. CORRECTIONS
+    + '<div class="ai-sec"><div class="hd"><span class="t">CORRECTIONS (TEACH THE AI)</span><span class="rt"><span class="chvr">›</span></span></div><div class="bd">'
+      + '<div class="fhelp2">Corrections are injected into the AI grounding so future drafts and answers honor them.</div>'
+      + '<div class="correction"><span>When I ask about email address, look at the source of the email to determine it.</span><span class="sc">queue · Team USA</span></div>'
+      + '<div class="ta sm" style="margin-top:6px">e.g. Coaching cert processing takes 2–3 weeks, not 4–6. Send renewals to…</div>'
+      + '<div class="btnrow"><span class="btn sm">This queue only ▾</span><span class="btn sm">Add correction</span></div>'
+    + '</div></div>'
+    // 4. CONTEXT FILES
+    + '<div class="ai-sec"><div class="hd"><span class="t">CONTEXT FILES (KNOWLEDGE THE AI READS)</span><span class="rt">↻ Refresh <span class="chvr">›</span></span></div><div class="bd">'
+      + '<div class="fhelp2">AI is grounding on 1 context file(s) (554 chars) · 1 correction(s).</div>'
+      + '<div class="filerow"><span>knowledge_SAMPLE.md</span><span class="meta">global · 479b <a class="sf">view</a> <a class="sf">exclude</a></span></div>'
+      + '<div class="mlabel">Add a file</div>'
+      + '<div class="btnrow"><span class="btn sm">Choose a file</span><span class="subtle">No file chosen</span><span class="btn sm">This queue only</span><span class="btn sm">Upload</span></div>'
+      + '<div class="mlabel">Add a folder (browser reads it)</div>'
+      + '<div class="btnrow"><span class="btn sm">Choose a folder</span><span class="btn sm">This queue only</span></div>'
+    + '</div></div>'
+    // 5. SOQL
+    + '<div class="ai-sec"><div class="hd"><span class="t">SOQL (EDITABLE, RUNS READ-ONLY)</span><span class="rt"><span class="chvr">›</span></span></div><div class="bd">'
+      + '<div class="fhelp2">Case Id: 500aZ0000…TQAQ · Case #00047212 — edit, then Run (results below) or Copy for Workbench.</div>'
+      + '<div class="mlabel">Thread query (EmailMessage)</div>'
+      + '<div class="code">SELECT Id, ParentId, Incoming, MessageDate, Status,\n  Subject, FromAddress, FromName, ToAddress, CcAddress,\n  CreatedBy.Name, HasAttachment, TextBody, HtmlBody\nFROM EmailMessage\nWHERE ParentId = \'500aZ0000010bvwTQAQ\'\nORDER BY MessageDate ASC</div>'
+      + '<div class="btnrow"><span class="btn sm">Run query</span><span class="btn sm">⧉ Copy SOQL</span><span class="btn sm">Open Workbench ↗</span></div>'
+      + '<div class="mlabel">Case query</div>'
+      + '<div class="code">SELECT Id, CaseNumber, Subject, Status, SuppliedEmail\nFROM Case WHERE Id = \'500aZ0000010bvwTQAQ\'</div>'
+      + '<div class="btnrow"><span class="btn sm">Run case query</span><span class="btn sm">⧉ Copy case SOQL</span></div>'
+      + '<div class="mlabel">Results</div>'
+    + '</div></div>';
+  }
+  function mountAi(){
+    ['ai-now','ai-port'].forEach(function(id){ var n=document.getElementById(id); if(n) n.innerHTML=aiPanel(); });
+    document.querySelectorAll('.ai-sec > .hd').forEach(function(h){
+      h.addEventListener('click', function(){ h.parentNode.classList.toggle('open'); });
+    });
+  }
+  mountAi();
+
+  function show(which){
+    var map={port:'v-port',now:'v-now',admin:'v-admin'};
+    document.querySelectorAll('.view').forEach(function(v){v.classList.remove('on');});
+    ['port','now','admin'].forEach(function(k){ document.getElementById('b-'+k).classList.toggle('on', k===which); });
+    document.getElementById(map[which]).classList.add('on');
+  }
+</script>
+</body>
+</html>

@@ -56,6 +56,7 @@ const SECTIONS = [
           <div className="defs-row"><span className="defs-term lg">Only in merge IDs</span><span className="defs-body">it has a merge ID, but the tool did <em>not</em> flag it (the platform marked it; the tool did not).</span></div>
           <div className="defs-row"><span className="defs-term lg">Only in duplicates</span><span className="defs-body">the tool flagged it, but it has <em>no</em> merge ID yet.</span></div>
           <div className="defs-gate">Those three add up to every account reviewed, so you can see exactly where the two views agree and where they don’t — before anything is merged.</div>
+          <div className="defs-row"><span className="defs-term lg">"Has merge ID" is per account</span><span className="defs-body">Everywhere the review (and the Dashboard's "By match signal → Has / No merge ID" columns) says an account <em>has a merge ID</em>, it means <strong>that individual account</strong> carries its own Membership-Platform merge ID — <em>not</em> that every account in its cluster does. So "Has merge ID" totals to <em>In both</em> and "No merge ID" to <em>Only in duplicates</em>. This is different from the <strong>Duplicates</strong> page's cluster-level "Merge ID" filter, which asks whether <em>any</em> account in the cluster has one.</span></div>
         </div>
       </>
     ),

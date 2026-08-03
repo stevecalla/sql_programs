@@ -20,12 +20,14 @@ const participation_maps = require('./participation_maps/module');
 const ops = require('./ops/module');
 const salesforce_merge = require('./salesforce_merge/module');
 const event_coi = require('./event_coi/module');
+const salesforce_email_queue = require('./salesforce_email_queue/module');
 
 const MODULES = [
   participation_maps,
   ops,
   salesforce_merge,   // Salesforce merge (walking skeleton; domain code ports in Phase 1-2)
   event_coi,          // Event / Race Certificate Request builder (Insurance)
+  salesforce_email_queue,   // Email Queue Assistant (Phase 2: API + SF read; UI Phase 3)
   // event_analysis,   // (Phase 5)
 ];
 
