@@ -1,0 +1,38 @@
+/* Chatbot POC — docked bubble + panel, scoped to the Chatbot section. Uses the platform theme tokens.
+   For this internal instance the bubble lives INSIDE the assistant card (.cb-card is position:relative and
+   the FAB/panel are position:absolute), so it sits in the card's lower-right corner rather than floating
+   over the whole app. The public GTM widget (later) is the one that floats over a host page. */
+.cb-page .cb-pill { font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 10px; padding: 2px 8px; vertical-align: middle; margin-left: 8px; }
+
+/* The assistant card — a bounded, relatively-positioned box the bubble anchors to. */
+.cb-card {
+  position: relative; border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+  padding: 18px 20px; min-height: 560px; overflow: hidden; max-width: 900px;
+}
+
+.cb-fab {
+  position: absolute; right: 18px; bottom: 18px; width: 56px; height: 56px; border-radius: 50%;
+  border: 0; background: var(--accent); color: #fff; font-size: 24px; line-height: 1; cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0,0,0,.32); z-index: 20; display: grid; place-items: center;
+}
+.cb-fab.on { background: #334155; }
+
+.cb-panel {
+  position: absolute; right: 18px; bottom: 84px; width: 340px; max-width: calc(100% - 36px);
+  height: 460px; max-height: calc(100% - 104px); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 16px 48px rgba(0,0,0,.4); display: flex; flex-direction: column;
+  overflow: hidden; z-index: 20;
+}
+.cb-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--accent); color: #fff; font-weight: 700; }
+.cb-head-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cb-sub { font-size: 11px; font-weight: 500; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-x { background: transparent; border: 0; color: #fff; font-size: 20px; line-height: 1; cursor: pointer; }
+.cb-body { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.cb-msg { max-width: 85%; padding: 8px 11px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+.cb-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.cb-msg.bot { align-self: flex-start; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.cb-typing { color: var(--muted); letter-spacing: 2px; }
+.cb-input { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); background: var(--panel); }
+.cb-input textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font: inherit; font-size: 13.5px; background: var(--card); color: var(--ink); max-height: 120px; }
+.cb-send { border: 0; background: var(--accent); color: #fff; border-radius: 9px; padding: 0 14px; font-weight: 600; cursor: pointer; }
+.cb-send:disabled { opacity: .5; cursor: default; }

@@ -21,6 +21,7 @@ const CATALOG = [
   { key: 'merge-ops',          label: 'Merge Ops (admin)',  group: 'Salesforce' },
   { key: 'email-queue',        label: 'Email Queue',        group: 'Salesforce' },
   { key: 'event-coi',          label: 'Insurance COI',      group: 'Events' },
+  { key: 'chatbot',            label: 'Chatbot',            group: 'Chatbot' },
   { key: 'metrics',            label: 'Usage metrics',      group: null },
   { key: 'merge-metrics',      label: 'SF Merge metrics',    group: null },
   { key: 'email-queue-metrics',label: 'SF Email Queue metrics', group: null },

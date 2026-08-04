@@ -21,6 +21,7 @@ const ops = require('./ops/module');
 const salesforce_merge = require('./salesforce_merge/module');
 const event_coi = require('./event_coi/module');
 const salesforce_email_queue = require('./salesforce_email_queue/module');
+const chatbot = require('./chatbot/module');
 
 const MODULES = [
   participation_maps,
@@ -28,6 +29,7 @@ const MODULES = [
   salesforce_merge,   // Salesforce merge (walking skeleton; domain code ports in Phase 1-2)
   event_coi,          // Event / Race Certificate Request builder (Insurance)
   salesforce_email_queue,   // Email Queue Assistant (Phase 2: API + SF read; UI Phase 3)
+  chatbot,                  // Team USA chatbot (internal POC; dedicated public server later)
   // event_analysis,   // (Phase 5)
 ];
 

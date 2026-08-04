@@ -24,6 +24,7 @@ const OpsOperationsUsat = lazy(() => import('./modules/ops/OperationsUsat.jsx'))
 const OpsSystemHealth = lazy(() => import('./modules/ops/SystemHealth.jsx'));
 const OpsReference = lazy(() => import('./modules/ops/Reference.jsx'));
 const EventCoi = lazy(() => import('./modules/event_coi/Section.jsx'));
+const ChatbotSection = lazy(() => import('./modules/chatbot/ChatbotSection.jsx'));
 
 export const NAV = [
   {
@@ -42,6 +43,11 @@ export const NAV = [
   {
     type: 'group', label: 'Events', items: [
       { label: 'Insurance COI', path: '/events/insurance-coi', panel: 'event-coi', icon: '🛡', Component: EventCoi },
+    ]
+  },
+  {
+    type: 'group', label: 'Chatbot', items: [
+      { label: 'Team USA Assistant', path: '/chatbot/team-usa', panel: 'chatbot', icon: '💬', Component: ChatbotSection },
     ]
   },
   {
