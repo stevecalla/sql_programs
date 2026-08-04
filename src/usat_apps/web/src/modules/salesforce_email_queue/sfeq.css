@@ -82,6 +82,8 @@
 
 /* Phase 3.1 — module rail (replaces the platform SideRail) + 2-col main */
 .siderail.sfeq-rail { width:320px; padding:14px 12px; overflow:auto; }
+/* Rail sections keep their height; the rail (overflow:auto) scrolls. Without this, .eq-card overflow:hidden lets flexbox shrink the collapsed Queue & filters bar to 0 height (it disappears) once the shell is viewport-bounded. */
+.sfeq.sfeq-rail > * { flex-shrink: 0; }
 .sfeq-rail .eq-railbody { display:flex; flex-direction:column; }
 .sfeq .eq-lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--eq-dim); margin:9px 0 5px; }
 .sfeq .eq-mini { font-size:10px; color:var(--eq-dim); margin:0 0 3px; }
