@@ -13,9 +13,15 @@ const corrections = require('../../services/corrections');
 const corr_store = require('../../services/corrections/mysql_store');
 const queue_access = require('./store/queue_access');
 const kb_data_dir = require('../../services/knowledge/data_dir');
+const auth_store = require('../../auth/auth_store');
 const analytics = require('./metrics/events');
 const metrics_report = require('./metrics/metrics_report');
 const metrics_ask = require('./metrics/ask');
+const console_registry = require('./admin/console_registry');
+const console_runner = require('./admin/console_runner');
+const log_ring = require('./admin/log_ring');
+const PM2_PROCESS_NAME = process.env.EQ_PM2_PROCESS || process.env.PM2_PROCESS_NAME || 'usat_apps';
+function open_sse(res) { res.setHeader('Content-Type', 'text/event-stream'); res.setHeader('Cache-Control', 'no-cache'); res.setHeader('Connection', 'keep-alive'); res.setHeader('X-Accel-Buffering', 'no'); if (res.flushHeaders) try { res.flushHeaders(); } catch (e) {} }
 
 // Salesforce env: 'prod' (SF_PROD_*) or 'sandbox' (SF_DEV_*). Read from the module config.json; the
 // admin toggle lands in Phase 4. Defaults to production.
@@ -25,6 +31,13 @@ function sf_env() {
 function show_test_banner() {
   try { return (kb_data_dir.read_config() || {}).show_test_banner !== false; } catch (e) { return true; }
 }
+const ADMIN_LANDINGS = ['/metrics', '/admin', '/'];
+const SF_ENVS = ['prod', 'sandbox'];
+function admin_landing() {
+  try { const v = (kb_data_dir.read_config() || {}).admin_landing; return ADMIN_LANDINGS.indexOf(v) >= 0 ? v : '/metrics'; } catch (e) { return '/metrics'; }
+}
+// Wire the shared model registry to read the module config.json (so /admin Settings model edits take effect).
+try { ai.set_config_reader(function () { try { return kb_data_dir.read_config() || {}; } catch (e) { return {}; } }); } catch (e) { /* ignore */ }
 
 let _conn = null, _conn_env = null;
 async function get_conn() {
@@ -110,6 +123,7 @@ const P = '/api/salesforce-email-queue';
 
 function mount(app) {
   const gate = require_panel('email-queue');
+  try { log_ring.install(console); } catch (e) { /* never block mount on logging */ }
 
   app.get(P + '/ping', gate, function (req, res) { res.json({ ok: true, module: 'salesforce_email_queue' }); });
   app.get(P + '/config', gate, function (req, res) { res.json({ ok: true, sf_env: sf_env(), show_test_banner: show_test_banner() }); });
@@ -331,6 +345,98 @@ function mount(app) {
       if (!note) return res.status(400).json({ ok: false, error: 'no correction text' });
       res.json({ ok: true, count: metrics_ask.add_correction(note, b.question, b.answer, req.user) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
+
+  // ---- EQ Admin (Settings / Access) — admin-only, ported 1:1 from the standalone app's /admin ----
+  app.get(P + '/admin/config', require_admin, function (req, res) {
+    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS, ai_models: ai.list_models(), sf_env: sf_env(), sf_envs: SF_ENVS, show_test_banner: show_test_banner() });
+  });
+  app.post(P + '/admin/config', require_admin, function (req, res) {
+    try {
+      const b = req.body || {};
+      const cfg = kb_data_dir.read_config() || {};
+      // Salesforce env — special-cased: persist, drop the cached SF connection (next read rebuilds against
+      // the other org), and return early (mirrors the POC reset_conn behavior).
+      if (b.sf_env !== undefined) {
+        if (SF_ENVS.indexOf(b.sf_env) < 0) return res.status(400).json({ ok: false, error: 'invalid sf_env' });
+        cfg.sf_env = b.sf_env; kb_data_dir.write_config(cfg); _conn = null; _conn_env = null;
+        return res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env() });
+      }
+      if (b.admin_landing !== undefined) {
+        if (ADMIN_LANDINGS.indexOf(b.admin_landing) < 0) return res.status(400).json({ ok: false, error: 'invalid landing page' });
+        cfg.admin_landing = b.admin_landing;
+      }
+      if (b.show_test_banner !== undefined) cfg.show_test_banner = !!b.show_test_banner;
+      if (b.ai_models !== undefined) {
+        if (!Array.isArray(b.ai_models)) return res.status(400).json({ ok: false, error: 'ai_models must be an array' });
+        const num = function (v, d) { const n = Number(v); return isFinite(n) && n >= 0 ? n : d; };
+        const rows = b.ai_models.map(function (e) {
+          if (!e || typeof e !== 'object') return null;
+          const model = String(e.model || '').trim(); if (!model) return null;
+          return { provider: e.provider === 'anthropic' ? 'anthropic' : 'openai', model: model.slice(0, 60), label: String(e.label || model).slice(0, 60), is_default: !!e.is_default, price_in: num(e.price_in, 0), price_out: num(e.price_out, 0) };
+        }).filter(Boolean);
+        if (!rows.length) return res.status(400).json({ ok: false, error: 'at least one model is required' });
+        if (!rows.some(function (r) { return r.is_default; })) rows[0].is_default = true;
+        else { let seen = false; rows.forEach(function (r) { if (r.is_default && seen) r.is_default = false; else if (r.is_default) seen = true; }); }
+        cfg.ai_models = rows;
+      }
+      kb_data_dir.write_config(cfg);
+      res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env(), show_test_banner: show_test_banner() });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  app.get(P + '/admin/queue-access', require_admin, async function (req, res) {
+    try {
+      const c = await get_conn();
+      const queues = await sf.list_queues(c, { with_open_counts: false });
+      const users = auth_store.env_accounts().map(function (u) { return u.user; }).concat(auth_store.list_users().map(function (u) { return u.user; }));
+      queue_access.prune_users(users);   // self-heal: drop queue overrides for accounts removed in Users & access
+      res.json({ ok: true, queues: queues, access: queue_access.get(), users: users });
+    } catch (e) { err(res, e); }
+  });
+  app.post(P + '/admin/queue-access', require_admin, function (req, res) {
+    try {
+      const b = req.body || {};
+      if (b.default !== undefined) queue_access.set_default(b.default);
+      if (b.user && b.clear) queue_access.clear_user(b.user);
+      else if (b.user && b.queues !== undefined) queue_access.set_user(b.user, b.queues);
+      res.json({ ok: true, access: queue_access.get() });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // ---- EQ Admin — Overview (config status), Operations (console), Logs. Admin-only. ----
+  app.get(P + '/admin/status', require_admin, async function (req, res) {
+    let analytics_db = false;
+    try { const pool = await require('../../store/db').get_pool(); await pool.query('SELECT 1'); analytics_db = true; } catch (e) { analytics_db = false; }
+    const sf_cfg = Object.keys(process.env).some(function (k) { return /^SF_.*USER/i.test(k); });
+    res.json({
+      ok: true, user: req.user,
+      salesforce_configured: sf_cfg,
+      openai_key: !!process.env.OPENAI_API_KEY,
+      anthropic_key: !!process.env.ANTHROPIC_API_KEY,
+      analytics_db: analytics_db,
+      admin_login_configured: !!(process.env.USATAPPS_ADMIN_USER || process.env.USATAPPS_TEST_USER),
+      user_login_configured: (function () { try { return auth_store.list_users().length > 0; } catch (e) { return false; } })(),
+      ngrok_enabled: false
+    });
+  });
+
+  app.get(P + '/admin-console/commands', require_admin, function (req, res) {
+    res.json({ ok: true, sections: console_runner.commands(), runs: console_runner.list_runs(), audit: console_runner.recent_audit() });
+  });
+  app.post(P + '/admin-console/run', require_admin, function (req, res) {
+    const b = req.body || {};
+    const item = console_registry.ALL.filter(function (i) { return String(i.id) === String(b.id); })[0];
+    const r = console_runner.start_run(item, b.params, b.confirm);
+    res.json(r);
+  });
+  app.get(P + '/admin-console/stream/:run_id', require_admin, function (req, res) { open_sse(res); console_runner.subscribe(req.params.run_id, res); });
+  app.post(P + '/admin-console/kill/:run_id', require_admin, function (req, res) { res.json(console_runner.kill_run(req.params.run_id)); });
+
+  app.get(P + '/admin-logs', require_admin, function (req, res) { res.json({ ok: true, lines: log_ring.tail(req.query.n) }); });
+  app.get(P + '/admin-logs/stream', require_admin, function (req, res) { open_sse(res); log_ring.subscribe(res); });
+  app.get(P + '/admin-pm2', require_admin, async function (req, res) {
+    try { res.json(Object.assign({ ok: true }, await log_ring.read_pm2(PM2_PROCESS_NAME))); }
+    catch (e) { res.json({ ok: true, under_pm2: false, reason: (e && e.message) || 'error' }); }
   });
 
   // Read-only build: Send reply / status change are mocked (no SF writes). Kept so the UI buttons work.

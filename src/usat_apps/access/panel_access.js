@@ -24,12 +24,13 @@ const CATALOG = [
   { key: 'metrics',            label: 'Usage metrics',      group: null },
   { key: 'merge-metrics',      label: 'SF Merge metrics',    group: null },
   { key: 'email-queue-metrics',label: 'SF Email Queue metrics', group: null },
+  { key: 'email-queue-admin',  label: 'Email Queue admin',  group: 'Admin' },
   { key: 'admin',              label: 'Users & access',     group: 'Admin' },
   { key: 'ops',                label: 'Ops',                group: 'Ops' },
 ];
 // Sensitive panels excluded from the default 'all' grant — they need an explicit per-user grant
 // (admins always see everything regardless). 'admin' is additionally hard-gated in is_allowed().
-const DEFAULT_ALL_EXCLUDE = ['admin', 'ops', 'merge-ops'];
+const DEFAULT_ALL_EXCLUDE = ['admin', 'ops', 'merge-ops', 'email-queue-admin'];
 
 function catalog() { return CATALOG.map(function (p) { return { key: p.key, label: p.label, group: p.group }; }); }
 function keys() { return CATALOG.map(function (p) { return p.key; }); }

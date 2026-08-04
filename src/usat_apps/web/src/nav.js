@@ -12,6 +12,7 @@ const MergeSection = lazy(() => import('./modules/salesforce_merge/Section.jsx')
 const EmailQueueSection = lazy(() => import('./modules/salesforce_email_queue/Section.jsx'));
 const MergeMetrics = lazy(() => import('./modules/salesforce_merge/pages/MergeMetrics.jsx'));
 const EmailQueueMetrics = lazy(() => import('./modules/salesforce_email_queue/pages/EmailQueueMetrics.jsx'));
+const EmailQueueAdminSection = lazy(() => import('./modules/salesforce_email_queue/AdminSection.jsx'));
 const MergeOps = lazy(() => import('./modules/salesforce_merge/pages/MergeOps.jsx'));
 const OpsOverview = lazy(() => import('./modules/ops/Overview.jsx'));
 const OpsBackends = lazy(() => import('./modules/ops/Backends.jsx'));
@@ -67,6 +68,7 @@ export const NAV = [
   {
     type: 'group', label: 'Admin', items: [
       { label: 'Users & access', path: '/admin/users', panel: 'admin', icon: '👤', Component: Admin },
+      { label: 'Email Queue', path: '/admin/email-queue', panel: 'email-queue-admin', icon: '✉', Component: EmailQueueAdminSection, nested: true },
     ]
   },
 ];

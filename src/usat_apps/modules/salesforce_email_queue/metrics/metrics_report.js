@@ -45,17 +45,17 @@ async function build_report(pool, opts) {
     'SUM(ai_prompt_tokens) ptok, SUM(ai_completion_tokens) ctok, SUM(ai_cost_usd) cost ' +
     'FROM ' + AIW, A))[0] || {};
   const by_action = await q(pool, 'SELECT ai_action a, COUNT(*) n FROM ' + AIW + ' GROUP BY ai_action ORDER BY n DESC', A);
-  const by_provider = await q(pool, 'SELECT ai_provider p, COUNT(*) n, AVG(ai_latency_ms) avg_ms FROM ' + AIW + ' GROUP BY ai_provider ORDER BY n DESC', A);
+  const by_provider = await q(pool, 'SELECT ai_provider p, COUNT(*) n, AVG(ai_latency_ms) avg_ms, SUM(ai_cost_usd) cost FROM ' + AIW + ' GROUP BY ai_provider ORDER BY n DESC', A);
   const by_verdict = await q(pool, "SELECT ai_verdict v, COUNT(*) n FROM " + AIW + " AND ai_verdict IS NOT NULL AND ai_verdict<>'' GROUP BY ai_verdict ORDER BY n DESC", A);
   const by_model = await q(pool, "SELECT ai_model m, COUNT(*) n, SUM(ai_prompt_tokens) ptok, SUM(ai_completion_tokens) ctok, SUM(ai_cost_usd) cost FROM " + AIW + " AND ai_model IS NOT NULL AND ai_model<>'' GROUP BY ai_model ORDER BY cost DESC, n DESC LIMIT 8", A);
   const ai_errors = await q(pool, "SELECT ai_error e, COUNT(*) n FROM " + AIW + " AND ai_ok=0 AND ai_error IS NOT NULL AND ai_error<>'' GROUP BY ai_error ORDER BY n DESC", A);
 
   // ---- by queue / operator / time ----
   const by_queue = await q(pool,
-    "SELECT queue qn, COUNT(*) events, SUM(event_name='ai_call') ai_calls, SUM(event_name='thread_opened') threads " +
+    "SELECT queue qn, COUNT(*) events, SUM(event_name='ai_call') ai_calls, SUM(event_name='thread_opened') threads, SUM(ai_cost_usd) cost " +
     'FROM ' + W + " AND queue IS NOT NULL AND queue<>'' GROUP BY queue ORDER BY ai_calls DESC, events DESC LIMIT 12", A);
   const top_ops = await q(pool,
-    "SELECT actor a, SUM(event_name='ai_call') ai_calls, SUM(event_name='thread_opened') threads, COUNT(*) events, " +
+    "SELECT actor a, SUM(event_name='ai_call') ai_calls, SUM(event_name='thread_opened') threads, COUNT(*) events, SUM(ai_cost_usd) cost, " +
     "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %l:%i %p') last_seen " +
     'FROM ' + W + " AND actor IS NOT NULL AND actor<>'' GROUP BY actor ORDER BY ai_calls DESC, events DESC LIMIT 8", A);
   const recent_ops = await q(pool,
@@ -73,10 +73,11 @@ async function build_report(pool, opts) {
   const by_day = await q(pool,
     "SELECT DATE(COALESCE(created_at_mtn, created_at_utc)) d, " +
     "SUM(event_name='page_view') visits, SUM(event_name='thread_opened') threads, " +
-    "SUM(event_name='ai_call') ai_calls, SUM(event_name='ai_call' AND ai_action='acknowledge') acks " +
+    "SUM(event_name='ai_call') ai_calls, SUM(event_name='ai_call' AND ai_action='acknowledge') acks, SUM(ai_cost_usd) cost " +
     'FROM ' + W + ' GROUP BY d ORDER BY d', A);
   const by_hour = await q(pool, "SELECT HOUR(COALESCE(created_at_mtn, created_at_utc)) h, COUNT(*) n FROM " + AIW + ' GROUP BY h ORDER BY h', A);
-  const by_dow = await q(pool, "SELECT local_dow d, COUNT(*) n FROM " + W + " AND event_name='ai_call' GROUP BY local_dow ORDER BY n DESC", A);
+  // Day-of-week from the MTN timestamp (not the client's local_dow) so it matches the rest of the dashboard.
+  const by_dow = await q(pool, "SELECT (DAYOFWEEK(COALESCE(created_at_mtn, created_at_utc)) - 1) d, COUNT(*) n FROM " + W + " AND event_name='ai_call' GROUP BY d ORDER BY n DESC", A);
 
   // ---- other interactions ----
   const attach = await q(pool, "SELECT attachment_type t, COUNT(*) n FROM " + W + " AND event_name='attachment_viewed' AND attachment_type IS NOT NULL GROUP BY attachment_type ORDER BY n DESC", A);
@@ -161,17 +162,17 @@ async function build_report(pool, opts) {
       prompt_tokens: n0(ai.ptok), completion_tokens: n0(ai.ctok), cost_usd: usd6(ai.cost)
     },
     by_action: by_action.map(function (r) { return { action: r.a || '?', n: n0(r.n) }; }),
-    by_provider: by_provider.map(function (r) { return { provider: r.p || '?', n: n0(r.n), avg_ms: Math.round(n0(r.avg_ms)) }; }),
+    by_provider: by_provider.map(function (r) { return { provider: r.p || '?', n: n0(r.n), avg_ms: Math.round(n0(r.avg_ms)), cost_usd: usd6(r.cost) }; }),
     by_verdict: by_verdict.map(function (r) { return { verdict: r.v, n: n0(r.n) }; }),
     by_model: by_model.map(function (r) { return { model: r.m, n: n0(r.n), prompt_tokens: n0(r.ptok), completion_tokens: n0(r.ctok), cost_usd: usd6(r.cost) }; }),
     ai_errors: ai_errors.map(function (r) { return { error: r.e, n: n0(r.n) }; }),
-    by_queue: by_queue.map(function (r) { return { queue: r.qn, events: n0(r.events), ai_calls: n0(r.ai_calls), threads: n0(r.threads) }; }),
-    top_operators: top_ops.map(function (r) { return { actor: String(r.a || ''), ai_calls: n0(r.ai_calls), threads: n0(r.threads), events: n0(r.events), last_seen: r.last_seen || null }; }),
+    by_queue: by_queue.map(function (r) { return { queue: r.qn, events: n0(r.events), ai_calls: n0(r.ai_calls), threads: n0(r.threads), cost_usd: usd6(r.cost) }; }),
+    top_operators: top_ops.map(function (r) { return { actor: String(r.a || ''), ai_calls: n0(r.ai_calls), threads: n0(r.threads), events: n0(r.events), cost_usd: usd6(r.cost), last_seen: r.last_seen || null }; }),
     recent_operators: recent_ops.map(function (r) { return { actor: String(r.a || ''), events: n0(r.events), ai_calls: n0(r.ai_calls), last_seen: r.last_seen || null }; }),
     visitors: visitors.map(function (r) { return { id: String(r.v || ''), returning: n0(r.ret), actor: String(r.actor || ''), actors: n0(r.actor_n), tz: r.tz || null, viewport: r.viewport || null, visits: n0(r.visits), threads: n0(r.threads), queues: n0(r.queues), events: n0(r.events), last_seen: r.last_seen || null }; }),
     by_day: by_day.map(function (r) {
       var d = r.d, day = (d && d.toISOString) ? d.toISOString().slice(0, 10) : String(d).slice(0, 10);
-      return { day: day, visits: n0(r.visits), threads: n0(r.threads), ai_calls: n0(r.ai_calls), acks: n0(r.acks) };
+      return { day: day, visits: n0(r.visits), threads: n0(r.threads), ai_calls: n0(r.ai_calls), acks: n0(r.acks), cost_usd: usd6(r.cost) };
     }),
     by_hour: by_hour.map(function (r) { return { hour: n0(r.h), n: n0(r.n) }; }),
     by_dow: by_dow.map(function (r) { return { dow: n0(r.d), n: n0(r.n) }; }),
