@@ -41,6 +41,28 @@ test('stored users: add / validate / remove', () => {
   assert.strictEqual(store.valid_user('jane@usat.org', 'pw12345'), null);
 });
 
+test('env_accounts() lists every seeded .env recovery account with role admin + source env', () => {
+  // Seed the optional second recovery admin (USATAPPS_ADMIN_* is already set at file top). recovery_accounts()
+  // is evaluated fresh on each call, so setting the vars here is enough — no module reload needed.
+  process.env.USATAPPS_TEST_USER = 'recovery_admin_2';
+  process.env.USATAPPS_TEST_PASS = require('node:crypto').randomBytes(12).toString('hex');
+  try {
+    const accts = store.env_accounts();
+    // Both configured recovery accounts appear; a pair only counts when BOTH user AND pass are set.
+    assert.strictEqual(accts.length, 2);
+    for (const a of accts) {
+      assert.strictEqual(a.role, 'admin');
+      assert.strictEqual(a.source, 'env');
+    }
+    const users = accts.map((a) => a.user);
+    assert.ok(users.includes('recovery_admin'), 'primary recovery admin listed');
+    assert.ok(users.includes('recovery_admin_2'), 'secondary recovery admin listed');
+  } finally {
+    delete process.env.USATAPPS_TEST_USER;
+    delete process.env.USATAPPS_TEST_PASS;
+  }
+});
+
 test('session sign/verify round-trips; tamper is rejected', () => {
   const secret = store.session_secret();
   const tok = session.sign({ user: 'x', role: 'admin', ts: Date.now() }, secret);

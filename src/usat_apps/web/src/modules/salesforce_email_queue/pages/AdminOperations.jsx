@@ -17,6 +17,35 @@ function klassBadge(klass) {
   return <span className="small" style={{ marginLeft: 8, color, fontWeight: 700 }}>{klass}</span>;
 }
 
+// Inline param form for web:'form' items (e.g. the Ask-your-data command). Renders each param as a text
+// input or enum select (seeded from its default), then hands the collected values to onRun.
+function OpsForm({ item, running, onRun }) {
+  const [vals, setVals] = useState(() => {
+    const o = {};
+    (item.params || []).forEach((p) => { o[p.name] = p.default != null ? String(p.default) : ''; });
+    return o;
+  });
+  const set = (name, v) => setVals((s) => ({ ...s, [name]: v }));
+  return (
+    <div className="small" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
+      {(item.params || []).map((p) => (
+        <label key={p.name} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span className="muted">{p.label || p.name}{p.required ? ' *' : ''}</span>
+          {p.type === 'enum'
+            ? (
+              <select value={vals[p.name]} onChange={(e) => set(p.name, e.target.value)}>
+                {(p.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            ) : (
+              <input type="text" value={vals[p.name]} onChange={(e) => set(p.name, e.target.value)} style={{ minWidth: 240 }} />
+            )}
+        </label>
+      ))}
+      <button className="btn" disabled={running} onClick={() => onRun(vals)}>Run</button>
+    </div>
+  );
+}
+
 export default function AdminOperations() {
   const [sections, setSections] = useState(null);
   const [err, setErr] = useState('');
@@ -42,7 +71,7 @@ export default function AdminOperations() {
   // cleanup on unmount
   useEffect(() => () => { if (esRef.current) { try { esRef.current.close(); } catch (e) { /* noop */ } } }, []);
 
-  const opsRun = async (item) => {
+  const opsRun = async (item, params = {}) => {
     let confirm;
     if (item.klass === 'destruct') {
       if (!window.confirm('This is destructive: ' + item.label + '\nRun it now?')) return;
@@ -56,7 +85,7 @@ export default function AdminOperations() {
 
     let r;
     try {
-      r = await api.adminConsoleRun({ id: item.id, params: {}, confirm });
+      r = await api.adminConsoleRun({ id: item.id, params, confirm });
     } catch (e) {
       setLines([{ stream: 'err', line: e.message }]);
       setRunStatus('No command running.');
@@ -133,9 +162,11 @@ export default function AdminOperations() {
                   <div style={{ marginTop: 6 }}>
                     {item.web === 'terminal'
                       ? <span className="muted small">{item.note}</span>
-                      : item.web === 'run'
-                        ? <button className="btn" onClick={() => opsRun(item)} disabled={running}>Run</button>
-                        : null}
+                      : item.web === 'form'
+                        ? <OpsForm item={item} running={running} onRun={(p) => opsRun(item, p)} />
+                        : item.web === 'run'
+                          ? <button className="btn" onClick={() => opsRun(item)} disabled={running}>Run</button>
+                          : null}
                   </div>
                 </div>
               ))}
