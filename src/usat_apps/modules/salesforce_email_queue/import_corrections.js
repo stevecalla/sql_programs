@@ -7,6 +7,12 @@
 // (id, created_at, active, scope, author, queue, case_id, question, note), and each has a stable string
 // `id`, so this upserts by id: a dry-run then a real run, or two real runs, are safe and produce no dups.
 //
+// TABLE: salesforce_email_queue_corrections — do NOT create it by hand. This script calls the corrections
+// store's create_store(), which runs CREATE TABLE IF NOT EXISTS (DDL in services/corrections/mysql_store.js)
+// before importing. To check the result, connect to the SAME DB the platform uses and run:
+//   SELECT COUNT(*) FROM salesforce_email_queue_corrections;
+//   SELECT id, created_at, scope, author, queue, LEFT(note,80) note FROM salesforce_email_queue_corrections ORDER BY created_at DESC LIMIT 20;
+//
 //   node src/usat_apps/modules/salesforce_email_queue/import_corrections.js            # DRY RUN (default; no writes)
 //   node src/usat_apps/modules/salesforce_email_queue/import_corrections.js --commit   # actually import
 //   node .../import_corrections.js /path/to/corrections.json [--commit]                # explicit source file
@@ -21,6 +27,13 @@ const data_dir = require('../../services/knowledge/data_dir');
 
 function to_sql_dt(iso) { const s = String(iso || '').slice(0, 19).replace('T', ' '); return s || null; }
 async function safe_end() { try { if (db.end) await db.end(); } catch (e) { /* ignore */ } }
+
+// Direction for the operator: the exact SQL to confirm the table + inspect what was imported.
+function print_verify() {
+  console.log('\nVerify in MySQL (the same DB the platform uses):');
+  console.log('  SELECT COUNT(*) FROM ' + store.TABLE + ';');
+  console.log('  SELECT id, created_at, scope, author, queue, LEFT(note,80) note FROM ' + store.TABLE + ' ORDER BY created_at DESC LIMIT 20;');
+}
 
 async function main() {
   const argv = process.argv.slice(2);
@@ -71,13 +84,16 @@ async function main() {
   if (!commit) {
     // Try the DB to show new-vs-existing, but a DRY RUN still succeeds (and validates the file) with no DB.
     try {
-      await store.create_store();
+      await store.create_store();  // CREATE TABLE IF NOT EXISTS
       const existing = new Set((await db.query('SELECT id FROM ' + store.TABLE)).map(function (r) { return String(r.id); }));
       const already = unique.filter(function (r) { return existing.has(r.id); }).length;
+      console.log('  table (ensured)  : ' + store.TABLE + '  — exists, ' + existing.size + ' row(s) now');
       console.log('  already in table : ' + already);
       console.log('  NEW to insert    : ' + (unique.length - already));
+      print_verify();
     } catch (e) {
       console.log('  (could not reach the DB to compare: ' + e.message + ')');
+      console.log('  table            : ' + store.TABLE + '  — auto-created (CREATE TABLE IF NOT EXISTS) on --commit');
       console.log('  NEW to insert    : up to ' + unique.length + ' (assuming an empty / new table)');
     }
     console.log('\nDRY RUN — nothing written. Re-run with --commit to import (idempotent upsert by id).');
@@ -100,8 +116,9 @@ async function main() {
   const total = (await db.query('SELECT COUNT(*) c FROM ' + store.TABLE))[0].c;
   console.log('  already in table : ' + upd);
   console.log('  NEW inserted     : ' + ins);
-  console.log('\nImported. inserted=' + ins + '  updated=' + upd + '  — table now holds ' + total + ' row(s).');
+  console.log('\nImported into ' + store.TABLE + '. inserted=' + ins + '  updated=' + upd + '  — table now holds ' + total + ' row(s).');
   console.log('Keep corrections.json as a backup — this import is idempotent and safe to re-run.');
+  print_verify();
   await safe_end();
 }
 
