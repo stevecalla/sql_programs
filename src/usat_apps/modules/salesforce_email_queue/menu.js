@@ -66,12 +66,18 @@ function hit_status(port, label) {
 // platform-only STATUS & OPEN section. Registry ids are 1..N; the status/open items continue after them.
 const CMD_SECTIONS = registry.SECTIONS.map((s) => ({ label: s.label, color: color_for(s.color), items: s.items }));
 let _next = registry.ALL.reduce((m, it) => Math.max(m, it.id), 0);
+// Cutover (data migration) — CLI-only (not a web Operations button, since COMMIT writes the DB).
+const IMP = 'src/usat_apps/modules/salesforce_email_queue/import_corrections.js';
+const CUTOVER_SECTION = { label: 'Cutover (data migration)', color: YELLOW, items: [
+  { id: ++_next, label: 'Import corrections — DRY RUN', desc: 'Read the 8019 corrections.json, show counts; writes nothing.', bin: 'node', argv: [IMP], cli: 'node ' + IMP },
+  { id: ++_next, label: 'Import corrections — COMMIT', desc: 'Idempotent upsert of corrections.json into the DB (run AFTER stopping 8019).', bin: 'node', argv: [IMP, '--commit'], cli: 'node ' + IMP + ' --commit' },
+] };
 const STATUS_SECTION = { label: 'Status & open (platform)', color: GREEN, items: [
   { id: ++_next, label: 'Platform status (:8022)', desc: 'GET :8022/api/status — usat_apps health (the module mounts here)', status: PLATFORM_PORT, statusLabel: 'platform', cli: 'curl http://localhost:8022/api/status' },
   { id: ++_next, label: 'Open Email Queue (:8022)', desc: 'The operator page on the platform', open: `http://localhost:${PLATFORM_PORT}/salesforce/email-queue`, cli: `open http://localhost:${PLATFORM_PORT}/salesforce/email-queue` },
   { id: ++_next, label: 'Open via proxy (:8000)', desc: 'The operator page through the :8000 proxy', open: `http://localhost:${PROXY_PORT}/salesforce/email-queue`, cli: `open http://localhost:${PROXY_PORT}/salesforce/email-queue` },
 ] };
-const SECTIONS = CMD_SECTIONS.concat([STATUS_SECTION]);
+const SECTIONS = CMD_SECTIONS.concat([CUTOVER_SECTION, STATUS_SECTION]);
 const ALL = SECTIONS.flatMap((s) => s.items);
 
 function print_menu() {
@@ -79,7 +85,7 @@ function print_menu() {
   const rule = '='.repeat(64);
   console.log(c(CYAN, rule));
   console.log(c(CYAN, c(BOLD, '  USAT Apps · Email Queue')));
-  console.log(c(GRAY, '  Aligned with admin → Operations · ' + registry.ALL.length + ' commands + status/open. Read-only.'));
+  console.log(c(GRAY, '  Aligned with admin → Operations · ' + registry.ALL.length + ' commands + cutover + status/open.'));
   console.log(c(CYAN, rule));
   for (const s of SECTIONS) {
     console.log('');

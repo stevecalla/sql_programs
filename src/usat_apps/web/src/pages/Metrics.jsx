@@ -21,6 +21,8 @@ const SCOPES = [
   { key: 'participation-maps', label: 'Participation maps' },
   { key: 'merge', label: 'Salesforce merge' },
   { key: 'event-coi', label: 'Insurance COI' },
+  { key: 'email-queue', label: 'Email Queue' },
+  { key: 'email-queue-metrics', label: 'Email Queue metrics' },
 ];
 
 function Card({ k, v, s }) {
