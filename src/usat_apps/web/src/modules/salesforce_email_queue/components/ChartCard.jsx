@@ -53,10 +53,10 @@ function tablePng(headers, rows, title) {
 }
 function download(name, href) { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 
-export default function ChartCard({ id, title, type = 'bar', labels = [], values = [], series = [], color, headers = [], rows = [], height = 230, theme }) {
+export default function ChartCard({ id, title, type = 'bar', labels = [], values = [], series = [], color, headers = [], rows = [], height = 230, theme, defaultTable = false }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
-  const [flip, setFlip] = useState(false);
+  const [flip, setFlip] = useState(!!defaultTable);
   const [modal, setModal] = useState(null);
 
   useEffect(() => {

@@ -50,6 +50,18 @@ function set_user(user, queues) {
 }
 function clear_user(user) { const c = load(); delete c.users[String(user)]; save(); return c; }
 
+// Drop per-user overrides for accounts that no longer exist, so this file stays in sync with the
+// platform user store (Users & access). `valid` is the current list of usernames. Returns the count
+// removed and persists only if something changed. Called when the admin Access page is read.
+function prune_users(valid) {
+  const c = load();
+  const keep = {}; (valid || []).forEach(function (u) { keep[String(u)] = true; });
+  let removed = 0;
+  Object.keys(c.users).forEach(function (u) { if (!keep[u]) { delete c.users[u]; removed++; } });
+  if (removed) save();
+  return removed;
+}
+
 // The effective allow-list for a user: 'all' or an array of allowed queue ids.
 // role 'admin' is always unrestricted.
 function allowed_for(user, role) {
@@ -73,4 +85,4 @@ function filter_queues(list, user, role) {
 }
 function _reset() { _cfg = null; }
 
-module.exports = { get, set_default, set_user, clear_user, allowed_for, is_allowed, filter_queues, _reset, FILE: FILE };
+module.exports = { get, set_default, set_user, clear_user, prune_users, allowed_for, is_allowed, filter_queues, _reset, FILE: FILE };

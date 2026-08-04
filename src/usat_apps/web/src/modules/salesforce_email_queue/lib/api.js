@@ -48,4 +48,18 @@ export const api = {
   metricsAskModels: () => req(P + '/metrics-ask-models'),
   metricsAsk: (payload) => req(P + '/metrics-ask', { method: 'POST', body: JSON.stringify(payload) }),
   metricsAskCorrect: (payload) => req(P + '/metrics-ask-correct', { method: 'POST', body: JSON.stringify(payload) }),
+  // admin (Settings / Access) — admin-only
+  adminConfig: () => req(P + '/admin/config'),
+  adminConfigSave: (payload) => req(P + '/admin/config', { method: 'POST', body: JSON.stringify(payload) }),
+  adminQueueAccess: () => req(P + '/admin/queue-access'),
+  adminQueueAccessSave: (payload) => req(P + '/admin/queue-access', { method: 'POST', body: JSON.stringify(payload) }),
+  // admin Overview / Operations (console, SSE) / Logs
+  adminStatus: () => req(P + '/admin/status'),
+  adminConsoleCommands: () => req(P + '/admin-console/commands'),
+  adminConsoleRun: (payload) => req(P + '/admin-console/run', { method: 'POST', body: JSON.stringify(payload) }),
+  adminConsoleKill: (runId) => req(P + '/admin-console/kill/' + encodeURIComponent(runId), { method: 'POST' }),
+  adminConsoleStreamUrl: (runId) => BASE + P + '/admin-console/stream/' + encodeURIComponent(runId),
+  adminLogs: (n) => req(P + '/admin-logs' + qs({ n })),
+  adminLogsStreamUrl: () => BASE + P + '/admin-logs/stream',
+  adminPm2: () => req(P + '/admin-pm2'),
 };

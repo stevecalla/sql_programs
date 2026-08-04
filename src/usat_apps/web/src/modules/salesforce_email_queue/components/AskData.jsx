@@ -43,7 +43,7 @@ function Bubble({ turn, onCorrect }) {
     <div className={'mx-ask-bubble' + (turn.error ? ' err' : '')}>
       <div className="mx-ask-bubble-top">
         <span className="q">Q: {turn.question}</span>
-        <span className="meta">{turn.provider || ''}{turn.model ? ' · ' + turn.model : ''}</span>
+        <span className="meta">{turn.provider || ''}{turn.model ? ' · ' + turn.model : ''}{turn.at ? ' · ' + turn.at : ''}</span>
       </div>
       {turn.error
         ? <div className="a" style={{ color: '#d32f2f' }}>{turn.error}</div>
@@ -92,15 +92,16 @@ export default function AskData() {
     const text = (question != null ? question : q).trim();
     if (!text || busy) return;
     setBusy(true);
+    const at = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Denver', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date()) + ' MTN';
     const payload = sqlMode
       ? { mode: 'sql', sql: text, model }
       : { question: text, model, history: convo.filter((t) => !t.error).map((t) => ({ question: t.question, sql: t.sql })) };
     try {
       const r = await api.metricsAsk(payload);
-      setConvo((c) => c.concat([{ question: sqlMode ? '(SQL) ' + text : text, answer: r.answer, sql: r.sql, rows: r.rows, row_count: r.row_count, model: r.model, provider: r.provider }]));
+      setConvo((c) => c.concat([{ question: sqlMode ? '(SQL) ' + text : text, answer: r.answer, sql: r.sql, rows: r.rows, row_count: r.row_count, model: r.model, provider: r.provider, at }]));
     } catch (e) {
       if (/AI key/i.test(e.message)) setNoKey(true);
-      setConvo((c) => c.concat([{ question: text, error: e.message }]));
+      setConvo((c) => c.concat([{ question: text, error: e.message, at }]));
     } finally {
       setBusy(false); setQ(''); if (taRef.current) taRef.current.style.height = 'auto';
     }

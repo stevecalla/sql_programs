@@ -6,8 +6,13 @@
  *   node src/usat_apps/modules/salesforce_email_queue/menu.js
  *
  * The Email Queue UI + API are served by the platform (:8022) — read-only (no Salesforce writes), no
- * worker. This menu drives the module/services tests, the live SF-read + corrections-DB smokes, and
- * quick status / opens. No admin / users here — the platform owns auth.
+ * worker. This CLI menu is rendered FROM the same allow-list the admin → Operations web panel uses
+ * (admin/console_registry.js), so the two surfaces stay ALIGNED by construction and both mirror the POC's
+ * menu at parity. The menu adds a platform-only STATUS & OPEN section (status ping + open URLs).
+ *
+ * Interactive/terminal-only items the web panel can only note (browser E2E, SF read, corrections/context
+ * views) run right here in the CLI; note-only pointers (server, users, list queues/statuses) print their
+ * guidance. Metrics "AI ask" prompts for its params, then runs via the shared arg-assembler.
  *
  * Launched from the platform menu (src/usat_apps/menu.js -> MODULES -> Email Queue), or run directly.
  * Self-contained (Node readline, no extra packages); mirrors src/usat_apps/modules/salesforce_merge/menu.js.
@@ -17,6 +22,8 @@ const path = require('path');
 const http = require('http');
 const readline = require('readline');
 const { spawn, execSync } = require('child_process');
+const registry = require('./admin/console_registry');   // the shared Operations allow-list (source of truth)
+const runner = require('./admin/console_runner');        // reuse the exact arg-assembler the web panel uses
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const PREFS_FILE = path.join(__dirname, '.menu_prefs.json');
@@ -24,8 +31,10 @@ const PLATFORM_PORT = 8022;
 const PROXY_PORT = 8000;
 
 const RESET = '\x1b[0m', BOLD = '\x1b[1m', DIM = '\x1b[2m';
-const RED = '\x1b[31m', GREEN = '\x1b[32m', YELLOW = '\x1b[33m', CYAN = '\x1b[36m';
+const RED = '\x1b[31m', GREEN = '\x1b[32m', YELLOW = '\x1b[33m', BLUE = '\x1b[34m', MAGENTA = '\x1b[35m', CYAN = '\x1b[36m', GRAY = '\x1b[90m';
 const c = (color, t) => `${color}${t}${RESET}`;
+const COLORS = { RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN };
+const color_for = (name) => COLORS[String(name || '').toUpperCase()] || CYAN;
 
 let _show_cli = false;
 function load_prefs() { try { const j = JSON.parse(fs.readFileSync(PREFS_FILE, 'utf8')); if (typeof j.show_cli === 'boolean') _show_cli = j.show_cli; } catch (e) { /* defaults */ } }
@@ -53,41 +62,50 @@ function hit_status(port, label) {
   });
 }
 
-const M = 'src/usat_apps/modules/salesforce_email_queue';   // script path prefix (cwd = repo root)
-
-const SECTIONS = [
-  { label: 'TESTS (no DB / no Salesforce)', color: GREEN, items: [
-    { id: 1, label: 'Module tests (sf + api gate)', desc: 'The salesforce_email_queue module suite — sf_threads + panel-gate contract', bin: 'node', args: ['src/usat_apps/run_tests.js', 'modules/salesforce_email_queue'], cli: 'node src/usat_apps/run_tests.js modules/salesforce_email_queue' },
-    { id: 2, label: 'Shared services tests', desc: 'services/{ai,text_clean,knowledge,corrections,salesforce} — the shared brain', bin: 'node', args: ['src/usat_apps/run_tests.js', 'services'], cli: 'node src/usat_apps/run_tests.js services' },
-  ] },
-  { label: 'SALESFORCE · read (live)', color: CYAN, items: [
-    { id: 3, label: 'Verify SF read — Production', desc: 'Connect (read role) + list queues via services/salesforce. Needs SF_PROD_* + network.', bin: 'node', args: [`${M}/check_sf_read.js`], cli: `node ${M}/check_sf_read.js` },
-    { id: 4, label: 'Verify SF read — Sandbox', desc: 'Same, against the dev org (SF_DEV_* + test.salesforce.com).', bin: 'node', args: [`${M}/check_sf_read.js`, '--sandbox'], cli: `node ${M}/check_sf_read.js --sandbox` },
-  ] },
-  { label: 'DATABASE (live)', color: YELLOW, items: [
-    { id: 5, label: 'Corrections DB smoke', desc: 'Ensure salesforce_email_queue_corrections, insert a test row, read it back. Needs LOCAL_MYSQL_*.', bin: 'node', args: [`${M}/check_corrections_db.js`], cli: `node ${M}/check_corrections_db.js` },
-  ] },
-  { label: 'STATUS & OPEN', color: GREEN, items: [
-    { id: 6, label: 'Platform status (:8022)', desc: 'GET :8022/api/status — usat_apps health (the module mounts here)', status: PLATFORM_PORT, statusLabel: 'platform', cli: 'curl http://localhost:8022/api/status' },
-    { id: 7, label: 'Open Email Queue in the platform', desc: 'usat_apps at :8022 — the Email Queue page (scaffold UI until Phase 3)', open: `http://localhost:${PLATFORM_PORT}/salesforce/email-queue`, cli: `open http://localhost:${PLATFORM_PORT}/salesforce/email-queue` },
-    { id: 8, label: 'Open via proxy (:8000)', desc: 'The Email Queue page through the :8000 proxy', open: `http://localhost:${PROXY_PORT}/salesforce/email-queue`, cli: `open http://localhost:${PROXY_PORT}/salesforce/email-queue` },
-  ] },
-];
+// Command sections come straight from the Operations allow-list (aligned with /admin → Operations), then a
+// platform-only STATUS & OPEN section. Registry ids are 1..N; the status/open items continue after them.
+const CMD_SECTIONS = registry.SECTIONS.map((s) => ({ label: s.label, color: color_for(s.color), items: s.items }));
+let _next = registry.ALL.reduce((m, it) => Math.max(m, it.id), 0);
+const STATUS_SECTION = { label: 'Status & open (platform)', color: GREEN, items: [
+  { id: ++_next, label: 'Platform status (:8022)', desc: 'GET :8022/api/status — usat_apps health (the module mounts here)', status: PLATFORM_PORT, statusLabel: 'platform', cli: 'curl http://localhost:8022/api/status' },
+  { id: ++_next, label: 'Open Email Queue (:8022)', desc: 'The operator page on the platform', open: `http://localhost:${PLATFORM_PORT}/salesforce/email-queue`, cli: `open http://localhost:${PLATFORM_PORT}/salesforce/email-queue` },
+  { id: ++_next, label: 'Open via proxy (:8000)', desc: 'The operator page through the :8000 proxy', open: `http://localhost:${PROXY_PORT}/salesforce/email-queue`, cli: `open http://localhost:${PROXY_PORT}/salesforce/email-queue` },
+] };
+const SECTIONS = CMD_SECTIONS.concat([STATUS_SECTION]);
 const ALL = SECTIONS.flatMap((s) => s.items);
 
 function print_menu() {
   console.clear();
-  console.log(c(BOLD + CYAN, '\n  USAT Apps · Email Queue'));
-  console.log(c(DIM, '  ─────────────────────────────────\n'));
+  const rule = '='.repeat(64);
+  console.log(c(CYAN, rule));
+  console.log(c(CYAN, c(BOLD, '  USAT Apps · Email Queue')));
+  console.log(c(GRAY, '  Aligned with admin → Operations · ' + registry.ALL.length + ' commands + status/open. Read-only.'));
+  console.log(c(CYAN, rule));
   for (const s of SECTIONS) {
-    console.log(c(s.color + BOLD, `  ${s.label}`));
-    for (const it of s.items) {
-      console.log(`  ${c(BOLD, String(it.id).padStart(3) + '.')} ${it.label.padEnd(32)} ${c(DIM, it.desc)}`);
-      if (_show_cli && it.cli) console.log('       ' + c(DIM, '$ ' + it.cli));
-    }
     console.log('');
+    console.log(c(s.color, c(BOLD, '  ' + s.label)));
+    console.log(c(s.color, '  ' + '-'.repeat(s.label.length)));
+    for (const it of s.items) {
+      console.log('   ' + c(s.color, c(BOLD, '[' + it.id + ']')) + ' ' + c(BOLD, it.label));
+      if (it.desc) console.log('       ' + c(GRAY, it.desc));
+      if (_show_cli && it.cli) console.log('       ' + c(GRAY, '$ ' + it.cli));
+    }
   }
-  console.log('  ' + c(BOLD + YELLOW, '[t]') + c(DIM, ` toggle CLI (${_show_cli ? 'on' : 'off'})    `) + c(BOLD + YELLOW, '[q]') + c(DIM, ' back / quit') + c(DIM, '    (or 0)'));
+  console.log('');
+  console.log('  ' + c(BOLD, c(YELLOW, '[t]')) + c(GRAY, ' toggle CLI commands (' + (_show_cli ? 'on' : 'off') + ')    ') + c(BOLD, c(YELLOW, '[q]')) + c(GRAY, ' quit') + c(GRAY, '    (or 0)'));
+}
+
+async function run_form(rl, it) {
+  const params = {};
+  for (const p of (it.params || [])) {
+    const def = p.default != null ? String(p.default) : '';
+    const ans = (await prompt(rl, c(BOLD, `  ${p.label || p.name}${def ? ` [${def}]` : ''}${p.required ? ' *' : ''}: `))).trim();
+    params[p.name] = ans || def;
+  }
+  const built = runner.assemble_argv(it, params);
+  console.log('');
+  if (!built.ok) { console.log(c(RED, '  ' + (built.error || 'bad params'))); return null; }
+  return built.argv;
 }
 
 async function main() {
@@ -100,15 +118,20 @@ async function main() {
     if (ans === 't') { _show_cli = !_show_cli; save_prefs(); continue; }
     const it = ALL.find((x) => x.id === parseInt(ans, 10));
     console.log('');
-    if (!it) console.log(c(YELLOW, '  Invalid choice.'));
-    else if (it.info) console.log(it.info);
-    else if (it.bin) {
-      rl.close();                                   // release stdin so an interactive child can read its own prompts
-      await run_cmd(it.bin, it.args, it.label);
+    if (!it) { console.log(c(YELLOW, '  Invalid choice.')); }
+    else if (it.status) { await hit_status(it.status, it.statusLabel || ''); }
+    else if (it.open) { open_url(it.open); }
+    else if (it.params) {                             // web:'form' (Ask-your-data) — prompt, assemble, run
+      const argv = await run_form(rl, it);
+      if (argv) { rl.close(); await run_cmd(it.bin, argv, it.label); rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true }); }
+    }
+    else if (it.bin) {                                // run/terminal items with a real command (tests, SF, metrics, e2e)
+      rl.close();                                     // release stdin so an interactive child can read its own prompts
+      await run_cmd(it.bin, it.argv, it.label);
       rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
     }
-    else if (it.open) open_url(it.open);
-    else if (it.status) await hit_status(it.status, it.statusLabel || '');
+    else if (it.note) { console.log(c(DIM, '  ' + it.note)); }   // note-only pointers (list queues, assist, server, users)
+    else { console.log(c(DIM, '  (nothing to run — see the operator app / platform)')); }
     await prompt(rl, c(DIM, '\n  Press Enter to continue…'));
   }
 }

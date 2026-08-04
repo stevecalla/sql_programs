@@ -6,6 +6,7 @@ import { allPanels, canSee, panelForPathname, redirects } from './nav.js';
 import SideRail from './components/SideRail.jsx';
 import MergeRail from './modules/salesforce_merge/MergeRail.jsx';
 import EmailQueueRail from './modules/salesforce_email_queue/EmailQueueRail.jsx';
+import EmailQueueAdminRail from './modules/salesforce_email_queue/EmailQueueAdminRail.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import UserMenu from './components/UserMenu.jsx';
 import FooterClock from './components/FooterClock.jsx';
@@ -52,14 +53,15 @@ export default function App() {
       </header>
 
       <div className="admin-shell">
-        {/* Show the Merge module's own rail ONLY to users who can see that panel; otherwise the normal
-            rail (which lists just what they're permitted to see). Prevents the merge nav leaking to an
-            unauthorized user who lands on a /salesforce/merge… URL — they get the 403 content + their
-            own rail, not the full merge sidebar. */}
+        {/* Show a module's own rail ONLY to users who can see that panel; otherwise the normal rail
+            (which lists just what they're permitted to see). Prevents a module's nav leaking to an
+            unauthorized user who lands on a deep URL — they get the 403 content + their own rail. */}
         {location.pathname.startsWith('/salesforce/merge') && canSee(user, panelForPathname(location.pathname))
           ? <MergeRail user={user} />
           : location.pathname.startsWith('/salesforce/email-queue') && canSee(user, panelForPathname(location.pathname))
           ? <EmailQueueRail user={user} />
+          : location.pathname.startsWith('/admin/email-queue') && canSee(user, panelForPathname(location.pathname))
+          ? <EmailQueueAdminRail user={user} />
           : <SideRail user={user} />}
         <main className="admin-main">
           <Suspense fallback={<div className="loading">Loading…</div>}>

@@ -10,8 +10,9 @@
 // Per-file invocation (not `node --test <dir>` or a glob) because directory discovery and glob
 // expansion are unreliable across Node versions and on Windows.
 //
-//   node src/usat_apps/run_tests.js                              # whole platform (auth + every module)
-//   node src/usat_apps/run_tests.js modules/participation_maps   # just one module/subtree
+//   node src/usat_apps/run_tests.js                                    # whole platform (auth + every module)
+//   node src/usat_apps/run_tests.js modules/participation_maps         # just one module/subtree
+//   node src/usat_apps/run_tests.js services tests/auth.test.js        # any mix of dirs + individual files
 //   (or: npm run usat_apps_test)
 const fs = require("fs");
 const os = require("os");
@@ -19,9 +20,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const ROOT = __dirname; // src/usat_apps
-const sub = process.argv[2]; // optional subtree filter, relative to ROOT
-const SEARCH = sub ? path.resolve(ROOT, sub) : ROOT;
-if (!fs.existsSync(SEARCH)) { console.error("Path not found: " + SEARCH); process.exit(1); }
+const args = process.argv.slice(2); // optional subtree/file filters (dirs or *.test.js), relative to ROOT
 
 function findTests(dir, out) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -32,14 +31,29 @@ function findTests(dir, out) {
   }
   return out;
 }
+function collect(target, out) {
+  const st = fs.statSync(target);
+  if (st.isDirectory()) return findTests(target, out);
+  if (st.isFile() && /\.test\.js$/.test(target)) out.push(target);
+  return out;
+}
 function countOf(out, field) {
   const m = out.match(new RegExp("^# " + field + " (\\d+)", "m"));
   return m ? Number(m[1]) : 0;
 }
 
 const BAR = "=".repeat(64);
-const files = findTests(SEARCH, []).sort();
-if (files.length === 0) { console.error("No *.test.js files found under " + SEARCH); process.exit(1); }
+let files = [];
+if (args.length === 0) { findTests(ROOT, files); }
+else {
+  for (const a of args) {
+    const p = path.resolve(ROOT, a);
+    if (!fs.existsSync(p)) { console.error("Path not found: " + p); process.exit(1); }
+    collect(p, files);
+  }
+}
+files = Array.from(new Set(files)).sort();
+if (files.length === 0) { console.error("No *.test.js files found for: " + (args.join(" ") || ROOT)); process.exit(1); }
 
 const results = [];
 const tot = { tests: 0, pass: 0, fail: 0, skipped: 0, todo: 0 };
@@ -50,11 +64,11 @@ for (let i = 0; i < files.length; i++) {
   console.log("  " + rel);
   console.log(BAR);
   const tapFile = path.join(os.tmpdir(), "usat_apps_tap_" + process.pid + "_" + i + ".tap");
-  const args = ["--test",
+  const spawnArgs = ["--test",
     "--test-reporter", "spec", "--test-reporter-destination", "stdout",
     "--test-reporter", "tap", "--test-reporter-destination", tapFile,
     f];
-  const r = spawnSync(process.execPath, args, { stdio: "inherit" });
+  const r = spawnSync(process.execPath, spawnArgs, { stdio: "inherit" });
   let tap = "";
   try { tap = fs.readFileSync(tapFile, "utf8"); } catch (e) { /* reporter flags unsupported? counts stay 0 */ }
   try { fs.unlinkSync(tapFile); } catch (e) { /* ignore */ }
@@ -65,7 +79,7 @@ for (let i = 0; i < files.length; i++) {
 
 const suitesFailed = results.filter(function (r) { return !r.ok; }).length;
 console.log("\n" + BAR);
-console.log("  SUMMARY" + (sub ? "  (" + sub + ")" : ""));
+console.log("  SUMMARY" + (args.length ? "  (" + args.join(" ") + ")" : ""));
 console.log(BAR);
 results.forEach(function (r) {
   console.log("  " + (r.ok ? "PASS" : "FAIL") + "  " + r.rel + "  (" + r.tests + " test" + (r.tests === 1 ? "" : "s") + (r.fail ? ", " + r.fail + " failed" : "") + ")");
