@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { Card, Modal, fmtBytes } from './ui.jsx';
 import { track } from '../../../lib/track.js';
-import { ContextAddFiles } from '../../../lib/ui.jsx';
+import { ContextAddFiles, AskPanel } from '../../../lib/ui.jsx';
 
 function fileLocation(dir, scope, name, queueSlug) {
   const root = (dir || '').replace(/[\\/]+$/, '');
@@ -11,50 +11,41 @@ function fileLocation(dir, scope, name, queueSlug) {
   return [root, sub, name].filter(Boolean).join(sep);
 }
 
-// ---- Test the assistant (the PII-safe analog of the email-queue "Ask the AI" card) ----
-function TestCard({ queue, onLogged }) {
-  const [msgs, setMsgs] = useState([]);
-  const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const convoRef = useRef(null);
-  const turnRef = useRef(0);
-  const bodyRef = useRef(null);
-  useEffect(() => { convoRef.current = null; turnRef.current = 0; setMsgs([]); }, [queue]);
-  useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight; }, [msgs, sending]);
-
-  const send = async () => {
-    const m = input.trim(); if (!m || sending) return;
-    setInput('');
-    const next = msgs.concat([{ role: 'user', text: m }]);
-    setMsgs(next); setSending(true);
+// ---- Ask a question (INSPECTION) — shared AskPanel; answers about the selected conversation and/or the
+// queue's knowledge. Does NOT create a turn (separate from the chat bubble). Same panel as the email queue. ----
+const ASK_PRESETS = ['Summarize this conversation', 'Did the last answer match the knowledge?', 'What is missing from the knowledge to answer this?'];
+function AskCard({ queue, selectedId }) {
+  const [question, setQuestion] = useState('');
+  const [hist, setHist] = useState([]);         // { q, a, ts }
+  const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => { setHist([]); setErr(''); setExpanded(false); }, [queue]);
+  const ask = async (q) => {
+    const q0 = String(q == null ? question : q).trim(); if (!q0 || busy) return;
+    setBusy(true); setErr('');
+    const ts = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     try {
-      const r = await api.chat({ queue, message: m, history: next.slice(-6), conversation_id: convoRef.current, turn: turnRef.current, is_test: 1 });
-      if (r && r.conversation_id) convoRef.current = r.conversation_id;
-      turnRef.current += 1;
-      setMsgs(next.concat([{ role: 'bot', text: r.answer || '(no answer)', model: r.model, grounded: r.grounded }]));
-      if (onLogged) onLogged(convoRef.current);
-      try { track('chat_send', { panel: 'chatbot', view: 'test' }); } catch (e2) { /* noop */ }
-    } catch (e) {
-      setMsgs(next.concat([{ role: 'bot', text: 'Error: ' + (e.message || 'failed') }]));
-    } finally { setSending(false); }
+      const r = await api.ask({ queue, question: q0, conversation_id: selectedId || undefined });
+      setHist((h) => h.concat([{ q: q0, a: r.answer || '(no answer)', ts: ts }]));
+      setQuestion('');
+      try { track('ask_question', { panel: 'chatbot', view: 'ask' }); } catch (e) { /* noop */ }
+    } catch (e) { setHist((h) => h.concat([{ q: q0, a: '(error) ' + (e.message || 'failed'), ts: ts }])); }
+    finally { setBusy(false); }
   };
-  const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
-  const reset = () => { convoRef.current = null; turnRef.current = 0; setMsgs([]); };
-
   return (
-    <Card title="Test the assistant" open summary={msgs.length ? (turnRef.current + ' turns') : ''}>
-      <div className="cbx-hint">Runs the exact grounding the live bot uses for <b>{queue}</b> (knowledge + corrections). Logged as a test conversation.</div>
-      <div className="cbx-test-body" ref={bodyRef}>
-        {msgs.map((m, i) => <div key={i} className={'cbx-msg ' + m.role}>{m.text}</div>)}
-        {sending ? <div className="cbx-msg bot cbx-dim">…</div> : null}
-      </div>
-      <div className="cbx-test-input">
-        <textarea rows={2} value={input} placeholder={'Ask the ' + queue + ' assistant…'} onChange={(e) => setInput(e.target.value)} onKeyDown={onKey} />
-        <div className="cbx-test-actions">
-          <button className="cbx-btn sm" onClick={reset} disabled={!msgs.length}>New</button>
-          <button className="cbx-btn primary" onClick={send} disabled={sending || !input.trim()}>Send</button>
-        </div>
-      </div>
+    <Card title="Ask a question" open summary={selectedId ? 'about selected' : 'about knowledge'}>
+      <div className="cbx-hint">Answers about the {selectedId ? <b>selected conversation</b> : <span>queue <b>knowledge</b></span>} for <b>{queue}</b>. Does <b>not</b> create a turn — a review tool, separate from the chat bubble.</div>
+      <AskPanel
+        question={question} onQuestion={setQuestion} onAsk={ask}
+        hist={hist} busy={busy} busyLabel="Thinking…"
+        placeholder="Ask about the selected conversation or the knowledge…"
+        presets={ASK_PRESETS}
+        expanded={expanded} onToggleExpanded={() => setExpanded((x) => !x)}
+        renderCopy={(t) => <button className="cbx-btn xs" onClick={() => { try { navigator.clipboard.writeText(t); } catch (e) { /* ignore */ } }}>📋 Copy</button>}
+        classes={{ chips: 'cbx-chips', chip: 'cbx-chip', hist: 'cbx-ask-hist', dim: 'cbx-dim', qa: 'cbx-qa', q: 'cbx-q', ts: 'cbx-ts', a: 'cbx-a', ta: 'cbx-input cbx-ask-ta', askBtn: 'cbx-btn primary sm', seeMore: 'cbx-btn xs' }}
+      />
+      {err ? <div className="cbx-err">{err}</div> : null}
     </Card>
   );
 }
@@ -261,14 +252,42 @@ function GtmSpecCard({ queue }) {
   );
 }
 
+// ---- AI model selector — at the TOP of the panel, like the email queue (saves on change) ----
+function ModelSelect() {
+  const [models, setModels] = useState([]);
+  const [sel, setSel] = useState('');   // "provider|model"
+  useEffect(() => {
+    api.settings().then((r) => {
+      const ms = r.models || []; setModels(ms);
+      const st = r.settings || {};
+      const cur = st.model ? (st.provider + '|' + st.model) : (function () { const d = ms.find((m) => m.is_default) || ms[0]; return d ? (d.provider + '|' + d.model) : ''; })();
+      setSel(cur);
+    }).catch(() => {});
+  }, []);
+  const change = (v) => {
+    setSel(v);
+    const parts = v.split('|');
+    api.saveSettings({ provider: parts[0], model: parts[1] }).catch(() => {});
+    try { track('model_change', { panel: 'chatbot', view: 'model' }); } catch (e) { /* noop */ }
+  };
+  if (!models.length) return null;
+  return (
+    <div className="cbx-modelbar" title="AI model — used to answer. Same shared registry the email queue edits.">
+      <select className="cbx-select" value={sel} onChange={(e) => change(e.target.value)}>
+        {models.map((m) => <option key={m.provider + '|' + m.model} value={m.provider + '|' + m.model}>{(m.provider === 'anthropic' ? 'Claude' : 'ChatGPT') + ' · ' + (m.label || m.model)}</option>)}
+      </select>
+    </div>
+  );
+}
+
 // The right rail: the shared-brain cards, all scoped to the selected queue.
-export default function ChatbotAiPanel({ queue, onLogged }) {
+export default function ChatbotAiPanel({ queue, selectedId }) {
   return (
     <>
-      <TestCard queue={queue} onLogged={onLogged} />
+      <ModelSelect />
+      <AskCard queue={queue} selectedId={selectedId} />
       <CorrectionsCard queue={queue} />
       <ContextCard queue={queue} />
-      <SettingsCard />
       <ReferenceCard queue={queue} />
       <GtmSpecCard queue={queue} />
     </>

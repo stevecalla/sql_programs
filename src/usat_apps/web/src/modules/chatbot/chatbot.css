@@ -44,7 +44,7 @@ textarea.cbx-input { resize: vertical; }
 .cbx-turn { max-width: 78%; padding: 10px 13px; border-radius: 12px; }
 .cbx-turn.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
 .cbx-turn.bot { align-self: flex-start; background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
-.cbx-turn-role { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; opacity: .7; margin-bottom: 3px; }
+.cbx-turn-role { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
 .cbx-turn-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; }
 .cbx-turn-meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 .cbx-tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 7px; color: #fff; }
@@ -111,7 +111,7 @@ textarea.cbx-input { resize: vertical; }
 
 /* Active-queue chip in the title + per-turn Mountain-time timestamp. */
 .cbx-queue { font-size: 12px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 9px; padding: 1px 8px; margin-left: 8px; vertical-align: middle; }
-.cbx-turn-time { font-weight: 400; font-size: 10px; letter-spacing: 0; text-transform: none; opacity: .6; margin-left: 8px; }
+.cbx-turn-time { font-weight: 500; font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--muted); margin-left: auto; white-space: nowrap; }
 
 /* Rail filter block (date range etc.) */
 .cbx-filters { display: flex; flex-direction: column; gap: 8px; }
@@ -184,7 +184,38 @@ textarea.cbx-input { resize: vertical; }
 .cbx-main2 > .cbx-center { min-height: 0; }
 
 /* AI panel is a PLAIN scrolling block (like eq-ai) — no flex column, so cards never "scrunch". */
-.cbx-ai { overflow: auto; min-height: 0; padding: 14px; border-left: 1px solid var(--line); background: var(--panel); }
+.cbx-ai { overflow: auto; min-height: 0; padding: 0 12px 12px; border-left: 1px solid var(--line); background: var(--panel); }
 .cbx-ai .cbx-card { margin-bottom: 10px; }
 .cbx-ai .cbx-card:last-child { margin-bottom: 0; }
 
+
+/* Readable timestamps on the accent (user) bubble + collapsible turns + center actions */
+.cbx-turn.user .cbx-turn-time { color: rgba(255,255,255,.85); }
+.cbx-turn.user .cbx-turn-prev { color: rgba(255,255,255,.8); }
+.cbx-turn-role { cursor: pointer; user-select: none; display: flex; align-items: center; }
+.cbx-caret { display: inline-block; transition: transform .12s; margin-right: 6px; opacity: .7; font-weight: 700; }
+.cbx-caret.open { transform: rotate(90deg); }
+.cbx-turn-prev { font-size: 13px; line-height: 1.4; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.cbx-turn.collapsed { padding-bottom: 8px; }
+.cbx-center-head { gap: 10px; }
+.cbx-center-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+
+.cbx-turn.bot .cbx-turn-role { color: var(--muted); }
+.cbx-turn.bot .cbx-turn-time { color: var(--ink); opacity: .8; }
+
+/* AI model selector at the top of the panel (email-queue convention) + roomier Ask input */
+.cbx-modelbar { margin: 2px 0 10px; }
+.cbx-ask-ta { min-height: 84px; }
+
+/* Ask a question (inspection) — Q/A history */
+.cbx-ask-hist { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow: auto; margin: 6px 0 8px; }
+.cbx-qa { border: 1px solid var(--line); border-radius: 9px; background: var(--card); padding: 8px 10px; }
+.cbx-q { font-size: 13px; color: var(--ink); margin-bottom: 4px; }
+.cbx-a { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; color: var(--ink); }
+
+/* Ask-a-question preset chips + Q/A timestamp (shared AskPanel) */
+.cbx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.cbx-chip { font: inherit; font-size: 11px; font-weight: 600; padding: 4px 9px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--ink); cursor: pointer; }
+.cbx-chip:hover { border-color: var(--accent); }
+.cbx-chip:disabled { opacity: .5; cursor: default; }
+.cbx-ts { color: var(--muted); font-size: 10px; font-weight: 400; margin-left: 6px; }

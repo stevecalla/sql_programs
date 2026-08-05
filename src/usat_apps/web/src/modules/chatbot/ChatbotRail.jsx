@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import * as store from './lib/store.js';
 import ResizeHandle from '../../lib/ResizeHandle.jsx';
-import { fmtMtnShort } from './components/ui.jsx';
+import { formatMtnDateTime } from '../../lib/mtnDate.js';   // email-queue timestamp style (MDT)
 import './chatbot.css';
 
 // Platform left siderail for the AI Chat Bot (mirrors EmailQueueRail): Queue & filters + the conversation
@@ -74,7 +74,7 @@ export default function ChatbotRail() {
             <button key={t.conversation_id} className={'cbx-thread' + (s.selectedId === t.conversation_id ? ' on' : '')} onClick={() => store.selectConversation(t.conversation_id)}>
               <div className="cbx-thread-top">
                 <span className={'cbx-badge ' + (t.is_test ? 'test' : 'live')}>{t.is_test ? 'test' : 'live'}</span>
-                <span className="cbx-thread-time" title={t.last_mtn}>{fmtMtnShort(t.last_mtn)}</span>
+                <span className="cbx-thread-time" title={t.last_utc}>{formatMtnDateTime(t.last_utc)}</span>
               </div>
               <div className="cbx-thread-prev">{t.preview || '(no preview)'}</div>
               <div className="cbx-thread-meta">{t.turns} turn{t.turns === 1 ? '' : 's'} · {t.answers} answer{t.answers === 1 ? '' : 's'}</div>

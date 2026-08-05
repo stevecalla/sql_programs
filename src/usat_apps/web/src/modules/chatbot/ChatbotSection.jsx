@@ -25,7 +25,7 @@ export default function ChatbotSection() {
           current={() => store.getState().aiW} onCommit={store.setAiW}
           title="Drag to resize the AI panel · double-click to reset" />
         <aside className="cbx-ai">
-          <ChatbotAiPanel queue={s.queue} onLogged={store.onLogged} />
+          <ChatbotAiPanel queue={s.queue} selectedId={s.selectedId} />
         </aside>
       </div>
       <ChatBubble queue={s.queue} onLogged={store.onLogged} />

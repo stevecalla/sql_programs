@@ -16,11 +16,28 @@ const pill = (bg, fg) => ({ display: 'inline-block', padding: '1px 9px', borderR
 const rolePill = (r) => (r === 'admin' ? pill('rgba(194,14,47,.15)', '#c20e2f') : pill('rgba(59,130,246,.16)', '#2563eb'));
 const srcPill = (s) => (s === 'env' ? pill('rgba(212,146,10,.20)', '#b45309') : pill('rgba(100,116,139,.20)', 'var(--muted, #64748b)'));
 
+// Collapsible card wrapper for this page — same plain `.card` look, with a clickable header + chevron.
+// Defaults open so nothing on the admin page is hidden until the admin chooses to collapse it.
+function Section({ title, open, onToggle, children }) {
+  return (
+    <div className="card">
+      <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+        <h3 style={{ margin: 0 }}>{title}</h3>
+        <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: 18, lineHeight: 1, transition: 'transform .15s', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
+      </div>
+      {open ? <div style={{ marginTop: 12 }}>{children}</div> : null}
+    </div>
+  );
+}
+
 export default function Admin() {
   const [users, setUsers] = useState(null);
   const [panels, setPanels] = useState([]);
   const [access, setAccess] = useState({ default: [], users: {} });
   const [err, setErr] = useState('');
+
+  const [secOpen, setSecOpen] = useState({ users: true, def: true, user: true });
+  const toggleSec = (k) => setSecOpen((o) => ({ ...o, [k]: !o[k] }));
 
   const [nu, setNu] = useState(''); const [np, setNp] = useState(''); const [nr, setNr] = useState('user'); const [showPw, setShowPw] = useState(false);
   const [uMsg, setUMsg] = useState(null);
@@ -142,8 +159,7 @@ export default function Admin() {
     <div className="page">
       <h2>Users &amp; access</h2>
 
-      <div className="card">
-        <h3>Users</h3>
+      <Section title="Users" open={secOpen.users} onToggle={() => toggleSec('users')}>
         <p className="muted small" style={{ marginTop: 0 }}>
           App logins. <code>.env</code> recovery accounts (<code>USATAPPS_ADMIN_*</code>, <code>USATAPPS_TEST_*</code>) are
           always valid and can’t be removed; add app-specific users below. Role <b>admin</b> can reach this page.
@@ -181,10 +197,9 @@ export default function Admin() {
         <p className="muted small" style={{ margin: '10px 0 0', borderLeft: '3px solid var(--line)', paddingLeft: 8 }}>
           📁 <strong>Where this data lives:</strong> stored users in <code>auth.json</code> (scrypt‑hashed) and panel access in <code>panel_access.json</code> — in the platform data folder <em>outside the repo, not in the database</em>. Recovery accounts come from <code>.env</code> (<code>USATAPPS_ADMIN_*</code> / <code>USATAPPS_TEST_*</code>).
         </p>
-      </div>
+      </Section>
 
-      <div className="card">
-        <h3>Panel access — general default</h3>
+      <Section title="Panel access — general default" open={secOpen.def} onToggle={() => toggleSec('def')}>
         <p className="muted small" style={{ marginTop: 0 }}>Which panels non-admin users see by default. Admins always see every panel.</p>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
           <label style={rlab}><input type="radio" name="defmode" checked={defMode === 'all'} onChange={() => setDefMode('all')} /> All panels</label>
@@ -192,10 +207,9 @@ export default function Admin() {
         </div>
         {defMode === 'some' && qlist(defSet, setDefSet)}
         <button className="btn primary" style={{ marginTop: 12 }} onClick={saveDefault}>Save default</button>{msg(defMsg)}
-      </div>
+      </Section>
 
-      <div className="card">
-        <h3>Panel access — per user</h3>
+      <Section title="Panel access — per user" open={secOpen.user} onToggle={() => toggleSec('user')}>
         <p className="muted small" style={{ marginTop: 0 }}>Override the default for one user. “Use default” removes the override.</p>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <label className="small">User&nbsp;
@@ -227,7 +241,7 @@ export default function Admin() {
           The <b>Admin</b> page itself is governed by the <b>admin</b> role, not by panel access — a non-admin can
           never reach user management even if granted other panels.
         </p>
-      </div>
+      </Section>
     </div>
   );
 }

@@ -214,6 +214,49 @@ function mount(app) {
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'load failed' }); }
   });
 
+  // POST /api/chatbot/ask — operator INSPECTION: ask a question ABOUT the selected conversation and/or this
+  // queue's knowledge. Does NOT create a bot turn / log anything — it's a review tool (like the email queue's
+  // "Ask a question", but about our own logged conversation + curated knowledge, never a member case).
+  app.post(P + '/ask', gate, async function (req, res) {
+    const b = req.body || {};
+    const question = String(b.question || '').trim();
+    if (!question) return res.status(400).json({ ok: false, error: 'Empty question.' });
+    if (question.length > MAX_MSG) return res.status(400).json({ ok: false, error: 'Question too long.' });
+    const queue = pick_queue(req);
+    try {
+      const knowledge = await kb.load_knowledge(queue);
+      let corr = [];
+      try { corr = await corrections.grounding_lines(await get_store(), 12, { queue: queue }); } catch (e) { corr = []; }
+      let convoText = '';
+      if (b.conversation_id) {
+        try {
+          const turns = await convo_store.by_conversation(String(b.conversation_id).slice(0, 40));
+          convoText = (turns || []).map(function (t) { return (t.role === 'bot' ? 'Assistant: ' : 'User: ') + String(t.text || ''); }).join('\n');
+        } catch (e) { convoText = ''; }
+      }
+      const st = settings.get();
+      const provider = st.provider || 'openai';
+      const model = ai.resolve_model(provider, st.model || null, process.env);
+      if (!model) return res.status(502).json({ ok: false, error: 'No AI model configured.' });
+      const kblock = (knowledge && String(knowledge).trim()) ? String(knowledge).trim() : '(no knowledge provided)';
+      const cblock = (corr && corr.length) ? corr.map(function (c) { return '- ' + c; }).join('\n') : '';
+      const system = [
+        'You are helping a USA Triathlon operator review the "' + queue + '" assistant. Answer the OPERATOR',
+        'QUESTION about the CONVERSATION (if provided) and/or the assistant KNOWLEDGE below. Be concise and',
+        'factual — you may summarize, critique, or check the assistant answers against the knowledge. This is an',
+        'internal review tool; do NOT role-play as the member-facing bot.',
+        '',
+        'KNOWLEDGE:', kblock,
+        cblock ? ('\nCORRECTIONS:\n' + cblock) : '',
+      ].join('\n');
+      const prompt = (convoText ? ('CONVERSATION (selected):\n' + convoText + '\n\n') : '') + 'OPERATOR QUESTION: ' + question;
+      const raw = await ai.complete({ provider: provider, model: model, system: system, prompt: prompt });
+      const out = ai.norm_completion(raw, model);
+      res.json({ ok: true, answer: (out && out.text ? String(out.text).trim() : ''), model: out.model || model });
+      // Intentionally NOT logged to chatbot_conversations — inspection, not a bot turn.
+    } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'ask failed' }); }
+  });
+
   // Chat / test-the-assistant. { message, history?, conversation_id?, turn?, queue?, is_test? }
   app.post(P + '/chat', gate, async function (req, res) {
     const b = req.body || {};
