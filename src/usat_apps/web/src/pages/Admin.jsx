@@ -30,13 +30,52 @@ function Section({ title, open, onToggle, children }) {
   );
 }
 
+// Web-context allowlist — hostnames the AI Chat Bot may fetch as URL context. Admin-gated endpoint.
+function AllowlistCard({ open, onToggle }) {
+  const [text, setText] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const BASE = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
+  const load = async () => {
+    try {
+      const r = await fetch(BASE + '/api/chatbot/context-allowlist', { credentials: 'same-origin' });
+      const j = await r.json();
+      if (j.ok) setText((j.allowlist || []).join('\n')); else setMsg({ text: j.error || 'error', kind: 'err' });
+    } catch (e) { setMsg({ text: 'load failed', kind: 'err' }); }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  const save = async () => {
+    setBusy(true); setMsg(null);
+    const hosts = text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+    try {
+      const r = await fetch(BASE + '/api/chatbot/context-allowlist', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ allowlist: hosts }) });
+      const j = await r.json();
+      if (j.ok) { setText((j.allowlist || []).join('\n')); setMsg({ text: 'Saved.', kind: 'ok' }); } else setMsg({ text: j.error || 'error', kind: 'err' });
+    } catch (e) { setMsg({ text: 'save failed', kind: 'err' }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Section title="Web context allowlist (AI Chat Bot)" open={open} onToggle={onToggle}>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Hostnames the AI Chat Bot may fetch as URL context (apex + subdomains). One host per line, e.g. <code>usatriathlon.org</code>.
+        A page from any other host is rejected. Fetches are also SSRF-guarded (no internal addresses).
+      </p>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} style={{ width: '100%', fontFamily: 'monospace', fontSize: 13 }} placeholder="usatriathlon.org" />
+      <div style={{ marginTop: 8 }}>
+        <button className="btn primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save allowlist'}</button>
+        {msg && msg.text ? <span className="small" style={{ marginLeft: 8, color: msg.kind === 'err' ? 'var(--red)' : '#16794a' }}>{msg.text}</span> : null}
+      </div>
+    </Section>
+  );
+}
+
 export default function Admin() {
   const [users, setUsers] = useState(null);
   const [panels, setPanels] = useState([]);
   const [access, setAccess] = useState({ default: [], users: {} });
   const [err, setErr] = useState('');
 
-  const [secOpen, setSecOpen] = useState({ users: true, def: true, user: true });
+  const [secOpen, setSecOpen] = useState({ users: true, def: true, user: true, allow: false });
   const toggleSec = (k) => setSecOpen((o) => ({ ...o, [k]: !o[k] }));
 
   const [nu, setNu] = useState(''); const [np, setNp] = useState(''); const [nr, setNr] = useState('user'); const [showPw, setShowPw] = useState(false);
@@ -242,6 +281,8 @@ export default function Admin() {
           never reach user management even if granted other panels.
         </p>
       </Section>
+
+      <AllowlistCard open={secOpen.allow} onToggle={() => toggleSec('allow')} />
     </div>
   );
 }

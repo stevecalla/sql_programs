@@ -22,6 +22,16 @@ export const api = {
   contextRawUrl: (queue, name) => BASE + P + '/context/raw' + qs({ queue, name }),
   uploadContext: (payload) => req(P + '/context', { method: 'POST', body: JSON.stringify(payload) }),
   contextExclude: (key, excluded) => req(P + '/context-exclude', { method: 'POST', body: JSON.stringify({ key, excluded }) }),
+  // URL context sources + chunks + retrieval preview
+  contextUrls: (queue) => req(P + '/context-urls' + qs({ queue })),
+  urlChunks: (queue, source_ref, scope) => req(P + '/context-url/chunks' + qs({ queue, source_ref, scope })),
+  addUrl: (payload) => req(P + '/context-url', { method: 'POST', body: JSON.stringify(payload) }),
+  refreshUrl: (payload) => req(P + '/context-url/refresh', { method: 'POST', body: JSON.stringify(payload) }),
+  removeUrl: (payload) => req(P + '/context-url/remove', { method: 'POST', body: JSON.stringify(payload) }),
+  chunkExclude: (id, excluded) => req(P + '/context-chunk-exclude', { method: 'POST', body: JSON.stringify({ id, excluded }) }),
+  retrievePreview: (payload) => req(P + '/retrieve-preview', { method: 'POST', body: JSON.stringify(payload) }),
+  allowlist: () => req(P + '/context-allowlist'),
+  saveAllowlist: (allowlist) => req(P + '/context-allowlist', { method: 'POST', body: JSON.stringify({ allowlist }) }),
   // corrections
   corrections: (queue) => req(P + '/corrections' + qs({ queue })),
   addCorrection: (payload) => req(P + '/corrections', { method: 'POST', body: JSON.stringify(payload) }),

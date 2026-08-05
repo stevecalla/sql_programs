@@ -3,6 +3,7 @@ import { api } from '../lib/api.js';
 import { Card, Modal, fmtBytes } from './ui.jsx';
 import { track } from '../../../lib/track.js';
 import { ContextAddFiles, AskPanel } from '../../../lib/ui.jsx';
+import { UrlContextCard, RetrievePreviewCard } from './UrlContext.jsx';
 
 function fileLocation(dir, scope, name, queueSlug) {
   const root = (dir || '').replace(/[\\/]+$/, '');
@@ -288,6 +289,8 @@ export default function ChatbotAiPanel({ queue, selectedId }) {
       <AskCard queue={queue} selectedId={selectedId} />
       <CorrectionsCard queue={queue} />
       <ContextCard queue={queue} />
+      <UrlContextCard queue={queue} />
+      <RetrievePreviewCard queue={queue} />
       <ReferenceCard queue={queue} />
       <GtmSpecCard queue={queue} />
     </>

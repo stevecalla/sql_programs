@@ -15,20 +15,14 @@
  *     config.json     non-secret app config (context_dir override, exclusions)
  *
  * Created automatically (mkdir recursive) on first use. Async, because determineOSPath() is async.
- * Overrides: KNOWLEDGE_DATA_DIR (project root) and KNOWLEDGE_CONTEXT_DIR (just the context folder).
- *   The older EQ_DATA_DIR / EQ_CONTEXT_DIR names remain valid as fallbacks (shared-brain plan, item 2).
+ * Overrides: EQ_DATA_DIR (project root) and EQ_CONTEXT_DIR (just the context folder).
  */
 const path = require('path');
 const fs = require('fs');
 const { determineOSPath, determineOSPathSync } = require('../../../../utilities/determineOSPath');
 
-// Env overrides — KNOWLEDGE_* are the current names; EQ_* remain valid as aliases so nothing breaks.
-function env_data_dir() { return process.env.KNOWLEDGE_DATA_DIR || process.env.EQ_DATA_DIR || ''; }
-function env_context_dir() { return process.env.KNOWLEDGE_CONTEXT_DIR || process.env.EQ_CONTEXT_DIR || ''; }
-
 async function base() {
-  const ed = env_data_dir();
-  if (ed) return ed;
+  if (process.env.EQ_DATA_DIR) return process.env.EQ_DATA_DIR;
   const root = await determineOSPath();            // e.g. .../usat/data/
   return path.join(root, 'usat_email_queue');
 }
@@ -40,10 +34,9 @@ async function ensure(sub) {
 function config_path() { return path.join(base_sync(), 'config.json'); }
 function read_config() { try { return JSON.parse(fs.readFileSync(config_path(), 'utf8')) || {}; } catch (e) { return {}; } }
 function write_config(obj) { const p = base_sync(); fs.mkdirSync(p, { recursive: true }); fs.writeFileSync(config_path(), JSON.stringify(obj || {}, null, 2) + '\n'); return obj || {}; }
-// Context root resolution order: KNOWLEDGE_CONTEXT_DIR/EQ_CONTEXT_DIR env > saved config.context_dir (UI) > default.
+// Context root resolution order: EQ_CONTEXT_DIR env > saved config.context_dir (set in the UI) > default.
 async function context() {
-  const ec = env_context_dir();
-  if (ec) { try { fs.mkdirSync(ec, { recursive: true }); return ec; } catch (e) { /* fall back */ } }
+  if (process.env.EQ_CONTEXT_DIR) { try { fs.mkdirSync(process.env.EQ_CONTEXT_DIR, { recursive: true }); return process.env.EQ_CONTEXT_DIR; } catch (e) { /* fall back */ } }
   const cfg = read_config();
   if (cfg && cfg.context_dir) { try { fs.mkdirSync(cfg.context_dir, { recursive: true }); return cfg.context_dir; } catch (e) { /* bad override -> fall back to default */ } }
   return ensure('context');
@@ -52,8 +45,7 @@ async function context() {
 // Sync resolver (no mkdir) for modules that compute a file path at load time (auth/corrections).
 // The writers mkdir the dirname before writing, so we don't touch the filesystem here.
 function base_sync() {
-  const ed = env_data_dir();
-  if (ed) return ed;
+  if (process.env.EQ_DATA_DIR) return process.env.EQ_DATA_DIR;
   return path.join(determineOSPathSync(), 'usat_email_queue');
 }
 function file_sync(name) { return path.join(base_sync(), name); }

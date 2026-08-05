@@ -7,9 +7,11 @@
 // STRICT grounding: answer only from curated knowledge (+ corrections); if it isn't there, say so and point
 // to USA Triathlon. NEVER touches raw email-queue cases / member PII. Every turn is logged to
 // chatbot_conversations (transcript + counts), keyed by (channel, queue) — fire-and-forget, never blocks.
-const { require_panel } = require('../../auth/require_auth');
+const { require_panel, require_admin } = require('../../auth/require_auth');
 const ai = require('../../services/ai');
 const kb = require('../../services/knowledge');
+const url_fetch = require('../../services/knowledge/url_fetch');
+const chunk_store = require('../../services/knowledge/chunk_store');
 const corrections = require('../../services/corrections');
 const corr_store = require('../../services/corrections/mysql_store');
 const convo_store = require('./conversations');
@@ -25,6 +27,33 @@ const DEFAULT_QUEUE = process.env.CHATBOT_QUEUE || 'Team USA';   // the EXACT Sa
 // the two surfaces are linked the dropdown names line up 1:1 (same spelling). key === name === SF queue name.
 const QUEUES = (process.env.CHATBOT_QUEUES || DEFAULT_QUEUE).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 const CHANNEL = process.env.CHATBOT_CHANNEL || 'internal-poc';
+const RETRIEVE_N = Number(process.env.CHATBOT_RETRIEVE_N || 8);
+
+// Retrieval: rank this queue's knowledge CHUNKS (URL context + any file-derived chunks) against a question
+// and return a grounding block + provenance. Never throws — grounding must not break a chat/ask.
+async function retrieve(queue, question) {
+  try {
+    const used = await chunk_store.select_chunks(queue, question, RETRIEVE_N);
+    return { block: chunk_store.knowledge_from_chunks(used), used: used || [] };
+  } catch (e) { return { block: '', used: [] }; }
+}
+// File knowledge (existing pipeline) + retrieved chunk block, most-relevant chunks first.
+function combine_knowledge(fileK, chunkBlock) {
+  const parts = [];
+  if (chunkBlock && String(chunkBlock).trim()) parts.push(String(chunkBlock).trim());
+  if (fileK && String(fileK).trim()) parts.push(String(fileK).trim());
+  return parts.join('\n\n');
+}
+function provenance(used) {
+  return (used || []).map(function (u) { return { source_ref: u.source_ref, source_title: u.source_title, category: u.category, score: u.score }; });
+}
+
+// Loopback-only gate for the nightly cron endpoint (utilities/cron_get_url_context hits it on localhost:8022).
+function local_only(req, res, next) {
+  const ip = String((req.ip || (req.socket && req.socket.remoteAddress) || '')).replace('::ffff:', '');
+  if (ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return next();
+  return res.status(403).json({ ok: false, error: 'local only' });
+}
 
 // Only allow-listed queues (prevents an arbitrary scope; all knowledge is curated non-PII regardless).
 function pick_queue(req) {
@@ -180,6 +209,76 @@ function mount(app) {
     catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
+  // ---- URL context sources (curated web pages -> chunks the bot retrieves over) ----
+  // List URL sources for this queue (+ globals) with status + last-fetched.
+  app.get(P + '/context-urls', gate, async function (req, res) {
+    const queue = pick_queue(req);
+    try { res.json({ ok: true, queue: queue, sources: await chunk_store.list_sources(queue) }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'list failed' }); }
+  });
+  // Chunks for one source (the expandable chunks view).
+  app.get(P + '/context-url/chunks', gate, async function (req, res) {
+    try { res.json({ ok: true, chunks: await chunk_store.list_chunks(req.query.source_ref, req.query.scope, pick_queue(req)) }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'chunks failed' }); }
+  });
+  // Add a URL: fetch now, chunk, store. { url, scope:'global'|'queue', needs_js? }
+  app.post(P + '/context-url', gate, async function (req, res) {
+    const b = req.body || {}; const queue = pick_queue(req);
+    const url = String(b.url || '').trim();
+    if (!url) return res.status(400).json({ ok: false, error: 'A URL is required.' });
+    const added_by = (req.user && (req.user.username || req.user.email)) || '';
+    try {
+      const r = await url_fetch.add_or_refresh(url, { scope: b.scope === 'global' ? 'global' : 'queue', queue: queue, added_by: added_by, needs_js: !!b.needs_js });
+      if (!r.ok) return res.status(400).json({ ok: false, error: r.reason || 'fetch failed', source_ref: r.source_ref });
+      res.json(Object.assign({ ok: true }, r));
+    } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'add failed' }); }
+  });
+  // Refresh one source (re-fetch + re-chunk). { source_ref, scope, needs_js? }
+  app.post(P + '/context-url/refresh', gate, async function (req, res) {
+    const b = req.body || {}; const queue = pick_queue(req);
+    try {
+      const r = await url_fetch.add_or_refresh(String(b.source_ref || ''), { scope: b.scope === 'global' ? 'global' : 'queue', queue: queue, added_by: (req.user && (req.user.username || req.user.email)) || '', needs_js: !!b.needs_js });
+      res.json(Object.assign({ ok: r.ok }, r));
+    } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'refresh failed' }); }
+  });
+  // Remove a source and its chunks. { source_ref, scope }
+  app.post(P + '/context-url/remove', gate, async function (req, res) {
+    const b = req.body || {}; const queue = pick_queue(req);
+    try { await chunk_store.remove_source(String(b.source_ref || ''), b.scope === 'global' ? 'global' : 'queue', queue); res.json({ ok: true }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'remove failed' }); }
+  });
+  // Include/exclude ONE chunk from grounding. { id, excluded }
+  app.post(P + '/context-chunk-exclude', gate, async function (req, res) {
+    const b = req.body || {};
+    try { await chunk_store.set_excluded(b.id, !!b.excluded); res.json({ ok: true }); }
+    catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  // Retrieval PREVIEW — the top-N chunks a question WOULD pull (score + source + section). No turn, no log.
+  app.post(P + '/retrieve-preview', gate, async function (req, res) {
+    const b = req.body || {}; const queue = pick_queue(req);
+    const question = String(b.question || '').trim();
+    if (!question) return res.status(400).json({ ok: false, error: 'Empty question.' });
+    try { res.json({ ok: true, queue: queue, results: await chunk_store.select_chunks(queue, question, Number(b.n) || RETRIEVE_N) }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'preview failed' }); }
+  });
+  // Admin: the web-context allowlist (hostnames). GET returns it; POST replaces it. Admin role only.
+  app.get(P + '/context-allowlist', require_admin, function (req, res) {
+    try { res.json({ ok: true, allowlist: url_fetch.get_allowlist() }); }
+    catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
+  });
+  app.post(P + '/context-allowlist', require_admin, function (req, res) {
+    const b = req.body || {};
+    try { res.json({ ok: true, allowlist: url_fetch.set_allowlist(Array.isArray(b.allowlist) ? b.allowlist : []) }); }
+    catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // Nightly refresh entry point — re-fetch + re-chunk every URL source. Loopback only (called by
+  // utilities/cron_get_url_context on the server); not a user route.
+  app.get(P + '/scheduled-refresh-urls', local_only, async function (req, res) {
+    try { const results = await url_fetch.refresh_all(); res.json({ ok: true, refreshed: results.length, results: results }); }
+    catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'refresh failed' }); }
+  });
+
   // Corrections (teach the AI) — shared store, filtered to the queue's relevant scope.
   app.get(P + '/corrections', gate, async function (req, res) {
     const queue = pick_queue(req);
@@ -224,7 +323,9 @@ function mount(app) {
     if (question.length > MAX_MSG) return res.status(400).json({ ok: false, error: 'Question too long.' });
     const queue = pick_queue(req);
     try {
-      const knowledge = await kb.load_knowledge(queue);
+      const fileK = await kb.load_knowledge(queue);
+      const ret = await retrieve(queue, question);
+      const knowledge = combine_knowledge(fileK, ret.block);
       let corr = [];
       try { corr = await corrections.grounding_lines(await get_store(), 12, { queue: queue }); } catch (e) { corr = []; }
       let convoText = '';
@@ -252,7 +353,7 @@ function mount(app) {
       const prompt = (convoText ? ('CONVERSATION (selected):\n' + convoText + '\n\n') : '') + 'OPERATOR QUESTION: ' + question;
       const raw = await ai.complete({ provider: provider, model: model, system: system, prompt: prompt });
       const out = ai.norm_completion(raw, model);
-      res.json({ ok: true, answer: (out && out.text ? String(out.text).trim() : ''), model: out.model || model });
+      res.json({ ok: true, answer: (out && out.text ? String(out.text).trim() : ''), model: out.model || model, sources: provenance(ret.used) });
       // Intentionally NOT logged to chatbot_conversations — inspection, not a bot turn.
     } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'ask failed' }); }
   });
@@ -269,7 +370,9 @@ function mount(app) {
     const is_test = (b.is_test === 0 || b.is_test === false) ? 0 : 1;   // internal surface defaults to test
     const actor = (req.user && (req.user.username || req.user.email)) || null;
     try {
-      const knowledge = await kb.load_knowledge(queue);
+      const fileK = await kb.load_knowledge(queue);
+      const ret = await retrieve(queue, message);
+      const knowledge = combine_knowledge(fileK, ret.block);
       let corr = [];
       try { corr = await corrections.grounding_lines(await get_store(), 12, { queue: queue }); } catch (e) { corr = []; }
       let ctx_files = 0;
@@ -290,7 +393,7 @@ function mount(app) {
       const answer = (out && out.text ? String(out.text).trim() : '');
       const grounded = !!(knowledge && knowledge.length);
 
-      res.json({ ok: true, answer: answer, grounded: grounded, model: out.model || model, conversation_id: conversation_id, queue: queue });
+      res.json({ ok: true, answer: answer, grounded: grounded, model: out.model || model, conversation_id: conversation_id, queue: queue, sources: provenance(ret.used) });
 
       const base = { conversation_id: conversation_id, channel: CHANNEL, queue: queue, actor: actor, is_test: is_test };
       convo_store.log_turn(Object.assign({}, base, { turn: turn, role: 'user', text: message }));
