@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { PortalModal } from '../../../lib/ui.jsx';   // shared modal/collapsible logic (D: dedup)
 
 export function fmtBytes(n) { n = Number(n) || 0; if (n < 1024) return n + ' b'; if (n < 1048576) return (n / 1024).toFixed(1) + ' kb'; return (n / 1048576).toFixed(1) + ' mb'; }
 
@@ -32,20 +33,14 @@ export function CopyButton({ text, label, className, title, onCopied }) {
   );
 }
 
-// Portal modal: closes on backdrop click and on Escape.
+// Portal modal (now backed by the shared PortalModal — SAME markup/classes as before).
 export function Modal({ title, onClose, actions, children, wide }) {
-  useEffect(() => {
-    function onKey(e) { if (e.key === 'Escape') onClose(); }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return createPortal(
-    <div className="eq-modalbg" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={'eq-modal' + (wide ? ' wide' : '')}>
-        <div className="eq-modalh"><h3>{title}</h3><span className="eq-inline">{actions}<button className="eq-btn sm" title="Close (Esc)" onClick={onClose}>✕ Close</button></span></div>
-        <div className="eq-modalb">{children}</div>
-      </div>
-    </div>, document.body);
+  return (
+    <PortalModal title={title} onClose={onClose} actions={actions} wide={wide} closeLabel="✕ Close"
+      classes={{ bg: 'eq-modalbg', modal: 'eq-modal', head: 'eq-modalh', actions: 'eq-inline', closeBtn: 'eq-btn sm', body: 'eq-modalb' }}>
+      {children}
+    </PortalModal>
+  );
 }
 
 export function RowsTable({ rows, note }) {

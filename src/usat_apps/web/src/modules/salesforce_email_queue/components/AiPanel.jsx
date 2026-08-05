@@ -3,6 +3,7 @@ import { api } from '../lib/api.js';
 import * as store from '../lib/store.js';
 import { track, meta as trackMeta } from '../lib/track.js';
 import { Modal, RowsTable, fmtBytes, copyText, CopyButton, downloadText } from './ui.jsx';
+import { Collapsible, ContextAddFiles } from '../../../lib/ui.jsx';   // shared collapsible + add-files (D: dedup)
 
 const ASK_PRESETS = [
   'Summarize the case',
@@ -25,17 +26,8 @@ function rowsToCsv(rows) {
   return (rows || []).map((r) => (r || []).map((c) => { const s = String(c == null ? '' : c); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\n');
 }
 
-function Card({ title, open, onToggle, summary, children }) {
-  return (
-    <div className="eq-card">
-      <div className="eq-cardhead" onClick={onToggle}>
-        <h3 className="eq-h" style={{ margin: 0 }}>{title}</h3>
-        {summary ? <span className="eq-summary">{summary}</span> : null}
-        <span className={'eq-chev' + (open ? ' open' : '')}>›</span>
-      </div>
-      {open ? <div className="eq-cardbody">{children}</div> : null}
-    </div>
-  );
+function Card(props) {
+  return <Collapsible {...props} classes={{ card: 'eq-card', head: 'eq-cardhead', h: 'eq-h', summary: 'eq-summary', chev: 'eq-chev', body: 'eq-cardbody' }} />;
 }
 
 export default function AiPanel({ s }) {
@@ -260,18 +252,9 @@ export default function AiPanel({ s }) {
             </div>
           )) : (ctx ? <div className="dim">(no context files yet)</div> : null)}
         </div>
-        <h3 className="eq-h" style={{ marginTop: 10 }}>Add files</h3>
-        <div className="eq-inline" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <select className="eq-fld" style={{ margin: 0, width: 'auto' }} value={upScope} onChange={(e) => setUpScope(e.target.value)}>
-            <option value="queue">This queue only</option>
-            <option value="global">Global (all queues)</option>
-          </select>
-          <button className="eq-btn sm" onClick={() => fileRef.current && fileRef.current.click()}>Choose file(s)</button>
-          <button className="eq-btn sm" onClick={() => folderRef.current && folderRef.current.click()} title="Reads every file in the folder">Choose folder</button>
-          <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={(e) => { uploadFiles(e.target.files, ''); e.target.value = ''; }} />
-          <input ref={folderRef} type="file" webkitdirectory="" directory="" multiple style={{ display: 'none' }} onChange={(e) => { const files = e.target.files; const folder = files && files[0] && files[0].webkitRelativePath ? files[0].webkitRelativePath.split('/')[0] : ''; uploadFiles(files, folder); e.target.value = ''; }} />
-        </div>
-        {upMsg ? <div className="dim" style={{ marginTop: 6, fontSize: 12 }}>{upMsg}</div> : null}
+        <ContextAddFiles scope={upScope} onScope={setUpScope} onUpload={uploadFiles} busyMsg={upMsg}
+          classes={{ h: 'eq-h', row: 'eq-inline', select: 'eq-fld', btn: 'eq-btn sm', msg: 'dim' }}
+          styles={{ h: { marginTop: 10 }, row: { gap: 8, flexWrap: 'wrap' }, select: { margin: 0, width: 'auto' }, msg: { marginTop: 6, fontSize: 12 } }} />
       </Card>
 
       {/* Card 5 — SOQL */}

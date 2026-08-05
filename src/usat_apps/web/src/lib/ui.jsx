@@ -1,0 +1,69 @@
+import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+
+// Shared, STYLE-AGNOSTIC UI primitives. The behavior (collapsible toggle, portal, Esc/backdrop close) lives
+// here ONCE; each caller passes its own class names via `classes` so a module keeps its exact look
+// (email queue: eq-*, chatbot: cbx-*). This lets both modules share the logic without changing any styling.
+
+// Collapsible card: header (title + optional summary + chevron) that toggles a body. Controlled via
+// open/onToggle. Markup mirrors the email-queue + chatbot cards exactly when given their class maps.
+export function Collapsible({ title, open, onToggle, summary, children, classes }) {
+  const c = classes || {};
+  return (
+    <div className={c.card}>
+      <div className={c.head} onClick={onToggle}>
+        <h3 className={c.h} style={{ margin: 0 }}>{title}</h3>
+        {summary ? <span className={c.summary}>{summary}</span> : null}
+        <span className={(c.chev || '') + (open ? ' open' : '')}>›</span>
+      </div>
+      {open ? <div className={c.body}>{children}</div> : null}
+    </div>
+  );
+}
+
+// Portal modal: closes on backdrop click and Escape. `classes` maps each slot; `titleClass` optional (email
+// queue renders a bare <h3>, chatbot styles it). `closeLabel` lets each keep its own button text.
+export function PortalModal({ title, onClose, actions, children, wide, classes, titleClass, closeLabel }) {
+  const c = classes || {};
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return createPortal(
+    <div className={c.bg} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className={(c.modal || '') + (wide ? ' wide' : '')}>
+        <div className={c.head}>
+          <h3 className={titleClass}>{title}</h3>
+          <span className={c.actions}>{actions}<button className={c.closeBtn} title="Close (Esc)" onClick={onClose}>{closeLabel || '✕ Close'}</button></span>
+        </div>
+        <div className={c.body}>{children}</div>
+      </div>
+    </div>, document.body);
+}
+
+// Shared "Add files" control (scope select + Choose file(s) + Choose folder) — the same feature the email
+// queue uses, style-agnostic via `classes`/`styles` so each module keeps its look. `onUpload(fileList, folder)`
+// is module-specific (each posts to its own API). Folder upload uses webkitdirectory and passes the top folder.
+export function ContextAddFiles({ scope, onScope, onUpload, busyMsg, heading, classes, styles }) {
+  const fileRef = useRef(null);
+  const folderRef = useRef(null);
+  const c = classes || {};
+  const st = styles || {};
+  return (
+    <>
+      <h3 className={c.h} style={st.h}>{heading || 'Add files'}</h3>
+      <div className={c.row} style={st.row}>
+        <select className={c.select} style={st.select} value={scope} onChange={(e) => onScope(e.target.value)}>
+          <option value="queue">This queue only</option>
+          <option value="global">Global (all queues)</option>
+        </select>
+        <button className={c.btn} onClick={() => fileRef.current && fileRef.current.click()}>Choose file(s)</button>
+        <button className={c.btn} onClick={() => folderRef.current && folderRef.current.click()} title="Reads every file in the folder">Choose folder</button>
+        <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={(e) => { onUpload(e.target.files, ''); e.target.value = ''; }} />
+        <input ref={folderRef} type="file" webkitdirectory="" directory="" multiple style={{ display: 'none' }} onChange={(e) => { const files = e.target.files; const folder = files && files[0] && files[0].webkitRelativePath ? files[0].webkitRelativePath.split('/')[0] : ''; onUpload(files, folder); e.target.value = ''; }} />
+      </div>
+      {busyMsg ? <div className={c.msg} style={st.msg}>{busyMsg}</div> : null}
+    </>
+  );
+}

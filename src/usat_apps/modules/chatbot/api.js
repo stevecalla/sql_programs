@@ -1,35 +1,84 @@
 'use strict';
-// chatbot module API — the internal POC endpoint. POST /api/chatbot/chat grounds an answer on the Team USA
-// email-queue knowledge (+ operator corrections) and calls services/ai (OpenAI) with STRICT grounding:
-// answer only from the curated knowledge; if it isn't there, say so and point to USA Triathlon. Panel-gated
-// ('chatbot'); reuses the shared brain, so a correction that improves the email queue improves the bot too.
+// chatbot module API — the internal operator surface (email-queue-style). All endpoints are keyed by QUEUE
+// (the SF email-queue queue whose CURATED knowledge + operator corrections ground the bot). Pick a queue in
+// the left rail and the whole surface — grounding, corrections, context, conversation log — switches to that
+// queue's context space. Starts allow-listed to TeamUSA; add queues via CHATBOT_QUEUES with no schema change.
+//
+// STRICT grounding: answer only from curated knowledge (+ corrections); if it isn't there, say so and point
+// to USA Triathlon. NEVER touches raw email-queue cases / member PII. Every turn is logged to
+// chatbot_conversations (transcript + counts), keyed by (channel, queue) — fire-and-forget, never blocks.
 const { require_panel } = require('../../auth/require_auth');
 const ai = require('../../services/ai');
 const kb = require('../../services/knowledge');
 const corrections = require('../../services/corrections');
 const corr_store = require('../../services/corrections/mysql_store');
+const convo_store = require('./conversations');
+const settings = require('./settings');
+const sf = require('../salesforce_email_queue/sf');          // SAME SF service the email queue uses (names only — no cases/PII)
+const kb_data_dir = require('../../services/knowledge/data_dir');
 
 const P = '/api/chatbot';
 const gate = require_panel('chatbot');
-const QUEUE = process.env.CHATBOT_QUEUE || 'TeamUSA';   // which email-queue knowledge scope grounds the bot
 const MAX_MSG = 2000;
+const DEFAULT_QUEUE = process.env.CHATBOT_QUEUE || 'Team USA';   // the EXACT Salesforce queue name (slug -> team_usa)
+// CHATBOT_QUEUES values are the EXACT Salesforce queue names the email queue uses (e.g. 'Team USA'), so when
+// the two surfaces are linked the dropdown names line up 1:1 (same spelling). key === name === SF queue name.
+const QUEUES = (process.env.CHATBOT_QUEUES || DEFAULT_QUEUE).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+const CHANNEL = process.env.CHATBOT_CHANNEL || 'internal-poc';
+
+// Only allow-listed queues (prevents an arbitrary scope; all knowledge is curated non-PII regardless).
+function pick_queue(req) {
+  const q = String((req.query && req.query.queue) || (req.body && req.body.queue) || '').trim();
+  if (!q) return DEFAULT_QUEUE;
+  // Accept anything that NORMALIZES to an allow-listed queue (so the SF-canonical "Team USA" is accepted for
+  // the allowlist entry "TeamUSA"), and return it VERBATIM — its slug then matches the email queue's folder
+  // (slug("Team USA") === "team_usa"), so the chatbot reads the SAME knowledge the email queue created.
+  const nq = norm_name(q);
+  return QUEUES.some(function (a) { return norm_name(a) === nq; }) ? q : DEFAULT_QUEUE;
+}
+
+// Align queue NAMES with the email queue's live Salesforce list. Read-only, names only — never cases/PII.
+// The allowlist (QUEUES) decides which queues are bot-enabled; the display name is pulled from SF so the
+// spelling can't drift. Falls back to the allowlist name if SF is unreachable (e.g. dev without creds).
+function sf_env() { try { const c = kb_data_dir.read_config() || {}; return c.sf_env === 'sandbox' ? 'sandbox' : 'prod'; } catch (e) { return 'prod'; } }
+let _conn = null, _conn_env = null;
+async function get_conn() {
+  const env = sf_env();
+  if (_conn && _conn_env === env) return _conn;
+  const r = await sf.connect({ is_test: env === 'sandbox', role: 'read' });
+  _conn = (r && r.conn) || r; _conn_env = env;
+  return _conn;
+}
+function norm_name(x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+async function sf_queue_names() {
+  try { const c = await get_conn(); const all = await sf.list_queues(c, { with_open_counts: false }); const m = {}; (all || []).forEach(function (q) { m[norm_name(q.name)] = q; }); return m; }
+  catch (e) { return null; }   // null = SF unavailable -> caller falls back to allowlist names
+}
 
 let _store = null;
 async function get_store() { if (!_store) _store = await corr_store.create_store(); return _store; }
 
-function build_system(knowledge, corr) {
+async function used_context(queue) {
+  let meta = [];
+  try { meta = await kb.list_context_meta(queue); } catch (e) { meta = []; }
+  return (meta || []).filter(function (f) { return !f.excluded; });
+}
+
+function build_system(queue, knowledge, corr) {
   const kblock = (knowledge && String(knowledge).trim()) ? String(knowledge).trim() : '(no knowledge provided)';
   const cblock = (corr && corr.length) ? corr.map(function (c) { return '- ' + c; }).join('\n') : '';
+  const name = String(queue || 'this program');
   return [
-    'You are the USA Triathlon "Team USA" assistant. You help members and visitors with questions about',
-    'USA Triathlon and the Age Group Team USA program ONLY.',
+    'You are a USA Triathlon assistant for the "' + name + '" program. You help members and visitors with',
+    'questions about USA Triathlon and the ' + name + ' program ONLY.',
     '',
     'Rules:',
     '- Answer ONLY using the KNOWLEDGE below (and CORRECTIONS). Do not use outside information.',
     "- If the answer is not in the KNOWLEDGE, say you don't have that information and suggest contacting",
     '  USA Triathlon. Do NOT guess or invent policy.',
-    "- If the question is unrelated to USA Triathlon / Team USA, politely say that's outside what you can help with.",
+    '- If the question is unrelated to USA Triathlon / ' + name + ", politely say that's outside what you can help with.",
     '- Never ask for or reveal personal or member data. Keep answers concise and friendly.',
+    '- Write the program name exactly as: "' + name + '".',
     '',
     'KNOWLEDGE:',
     kblock,
@@ -38,38 +87,176 @@ function build_system(knowledge, corr) {
 }
 
 function mount(app) {
-  // GET /api/chatbot/config — the scope + model this POC uses (for the widget header).
-  app.get(P + '/config', gate, async function (req, res) {
-    let chars = 0;
-    try { const k = await kb.load_knowledge(QUEUE); chars = (k && k.length) || 0; } catch (e) { chars = 0; }
-    res.json({ ok: true, scope: QUEUE, model: ai.resolve_model('openai', null, process.env), knowledge_chars: chars });
+  // The available queues (left-rail picker). Starts at TeamUSA; scales via CHATBOT_QUEUES.
+  app.get(P + '/queues', gate, async function (req, res) {
+    const byNorm = await sf_queue_names();   // null if SF unreachable
+    const queues = QUEUES.map(function (name) {
+      const match = byNorm ? byNorm[norm_name(name)] : null;
+      // KEY = the SF-canonical name (when matched) so it IS the grounding scope — slug(key) then equals the
+      // email queue's knowledge folder (e.g. "Team USA" -> "team_usa"). Falls back to the allowlist name if
+      // SF is unreachable (dev without creds), in which case set CHATBOT_QUEUES to the exact SF name.
+      const canon = match ? match.name : name;
+      return { key: canon, name: canon, label: canon, aligned: !!match };
+    });
+    const dq = queues.find(function (q) { return norm_name(q.key) === norm_name(DEFAULT_QUEUE); });
+    const def = (dq && dq.key) || (queues[0] && queues[0].key) || DEFAULT_QUEUE;
+    res.json({ ok: true, default: def, queues: queues, sf_aligned: byNorm != null });
   });
 
-  // POST /api/chatbot/chat  { message, history? } -> { ok, answer, grounded, model }
+  // Available AI models (shared registry, same list the email queue edits in /admin Settings).
+  app.get(P + '/ai/models', gate, function (req, res) {
+    try { res.json(ai.list_models()); } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
+  });
+
+  // Settings — the bot's AI choice (provider + model). GET returns current + the model list; POST saves.
+  app.get(P + '/settings', gate, function (req, res) {
+    try { res.json({ ok: true, settings: settings.get(), models: ai.list_models() }); }
+    catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
+  });
+  app.post(P + '/settings', gate, function (req, res) {
+    const b = req.body || {};
+    try { res.json({ ok: true, settings: settings.set({ provider: b.provider, model: b.model }) }); }
+    catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
+  });
+
+  // Scope + model + knowledge size for a queue (widget header).
+  app.get(P + '/config', gate, async function (req, res) {
+    const queue = pick_queue(req);
+    let chars = 0;
+    try { const k = await kb.load_knowledge(queue); chars = (k && k.length) || 0; } catch (e) { chars = 0; }
+    const st = settings.get();
+    res.json({ ok: true, scope: queue, queue: queue, provider: st.provider, model: ai.resolve_model(st.provider, st.model || null, process.env), knowledge_chars: chars });
+  });
+
+  // The exact context the bot grounds on (files + corrections count + dir). Names/sizes only.
+  app.get(P + '/context', gate, async function (req, res) {
+    const queue = pick_queue(req);
+    try {
+      const files = (await used_context(queue)).map(function (f) {
+        return { name: f.name, base: f.base, scope: f.scope, folder: f.folder || '', ext: f.ext, size: f.size, key: f.key, excluded: !!f.excluded };
+      });
+      let knowledge_chars = 0;
+      try { const k = await kb.load_knowledge(queue); knowledge_chars = (k && k.length) || 0; } catch (e) { knowledge_chars = 0; }
+      let corr = [];
+      try { corr = await corrections.grounding_lines(await get_store(), 12, { queue: queue }); } catch (e) { corr = []; }
+      let dir = '';
+      try { dir = await kb.context_dir(); } catch (e) { dir = ''; }
+      res.json({ ok: true, scope: queue, queue: queue, knowledge_chars: knowledge_chars, corrections_used: corr.length, dir: dir, files: files });
+    } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'context failed' }); }
+  });
+
+  // Preview ONE context file (text/table/image/pdf).
+  app.get(P + '/context/file', gate, async function (req, res) {
+    try { res.json(Object.assign({ ok: true }, await kb.read_context_file(req.query.scope, pick_queue(req), req.query.name))); }
+    catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // Raw bytes for inline PDF/image + download.
+  app.get(P + '/context/raw', gate, async function (req, res) {
+    try {
+      const fp = await kb.find_context_path(pick_queue(req), req.query.name || '');
+      if (!fp) return res.status(404).json({ ok: false, error: 'context file not found' });
+      const ext = String(req.query.name || '').split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '');
+      const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml', pdf: 'application/pdf', txt: 'text/plain', csv: 'text/csv' };
+      res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
+      res.setHeader('Content-Disposition', 'inline'); res.setHeader('Cache-Control', 'private, max-age=300');
+      res.send(require('fs').readFileSync(fp));
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // Upload a curated knowledge file to the queue (or global) scope.
+  app.post(P + '/context', gate, async function (req, res) {
+    const b = req.body || {}; const queue = pick_queue(req);
+    try {
+      const buf = Buffer.from(String(b.data_base64 || ''), 'base64');
+      if (!buf.length) return res.status(400).json({ ok: false, error: 'empty upload' });
+      res.json({ ok: true, saved: await kb.save_context_file(b.scope, queue, b.name, buf, b.folder) });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // Include/exclude a context file from grounding (affects this shared knowledge store).
+  app.post(P + '/context-exclude', gate, function (req, res) {
+    try { const b = req.body || {}; kb.set_context_excluded(b.key, !!b.excluded); res.json({ ok: true }); }
+    catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // Corrections (teach the AI) — shared store, filtered to the queue's relevant scope.
+  app.get(P + '/corrections', gate, async function (req, res) {
+    const queue = pick_queue(req);
+    try {
+      const all = await corrections.list(await get_store(), false);
+      res.json({ ok: true, queue: queue, corrections: corrections.filter_scope(all, { queue: queue }) });
+    } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'corrections failed' }); }
+  });
+  app.post(P + '/corrections', gate, async function (req, res) {
+    const b = req.body || {}; const queue = pick_queue(req);
+    const note = String(b.note || '').trim();
+    if (!note) return res.status(400).json({ ok: false, error: 'A correction note is required.' });
+    try {
+      const author = (req.user && (req.user.username || req.user.email)) || '';
+      const rec = await corrections.add({ note: note, question: b.question || '', queue: queue, scope: b.scope || 'queue', author: author }, await get_store());
+      res.json({ ok: true, correction: rec });
+    } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'add failed' }); }
+  });
+
+  // Conversation THREADS for the middle/left list (grouped by conversation_id).
+  app.get(P + '/conversations', gate, async function (req, res) {
+    const queue = pick_queue(req);
+    const is_test = (req.query.is_test === '0') ? 0 : (req.query.is_test === '1' ? 1 : null);
+    try {
+      const threads = await convo_store.list_threads(queue, { is_test: is_test, limit: Number(req.query.limit) || 60, q: req.query.q || '', from: req.query.from || '', to: req.query.to || '' });
+      res.json({ ok: true, queue: queue, threads: threads });
+    } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'list failed' }); }
+  });
+  // One conversation's full transcript (center pane).
+  app.get(P + '/conversation', gate, async function (req, res) {
+    try { res.json({ ok: true, id: req.query.id, turns: await convo_store.by_conversation(req.query.id) }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'load failed' }); }
+  });
+
+  // Chat / test-the-assistant. { message, history?, conversation_id?, turn?, queue?, is_test? }
   app.post(P + '/chat', gate, async function (req, res) {
     const b = req.body || {};
     const message = String(b.message || '').trim();
     if (!message) return res.status(400).json({ ok: false, error: 'Empty message.' });
     if (message.length > MAX_MSG) return res.status(400).json({ ok: false, error: 'Message too long.' });
+    const queue = pick_queue(req);
+    const conversation_id = (b.conversation_id && String(b.conversation_id).slice(0, 40)) || convo_store.new_conversation_id();
+    const turn = Number(b.turn || 0);
+    const is_test = (b.is_test === 0 || b.is_test === false) ? 0 : 1;   // internal surface defaults to test
+    const actor = (req.user && (req.user.username || req.user.email)) || null;
     try {
-      const knowledge = await kb.load_knowledge(QUEUE);
+      const knowledge = await kb.load_knowledge(queue);
       let corr = [];
-      try { corr = await corrections.grounding_lines(await get_store(), 12, { queue: QUEUE }); } catch (e) { corr = []; }
-      const provider = 'openai';
-      const model = ai.resolve_model(provider, null, process.env);
-      if (!model) return res.status(502).json({ ok: false, error: 'No OpenAI model configured (set OPENAI_API_KEY / OPENAI_MODEL).' });
+      try { corr = await corrections.grounding_lines(await get_store(), 12, { queue: queue }); } catch (e) { corr = []; }
+      let ctx_files = 0;
+      try { ctx_files = (await used_context(queue)).length; } catch (e) { ctx_files = 0; }
+      const st = settings.get();
+      const provider = st.provider || 'openai';
+      const model = ai.resolve_model(provider, st.model || null, process.env);
+      if (!model) return res.status(502).json({ ok: false, error: 'No AI model configured — set the model in Settings (and the provider API key).' });
 
-      // Light conversation memory: recent turns for continuity; the GROUNDING stays the knowledge, not history.
       const hist = Array.isArray(b.history) ? b.history.slice(-6) : [];
       const convo = hist.map(function (h) { return (h.role === 'bot' ? 'Assistant: ' : 'User: ') + String(h.text || ''); }).join('\n');
       const prompt = (convo ? (convo + '\n') : '') + 'User: ' + message + '\nAssistant:';
 
-      const raw = await ai.complete({ provider: provider, model: model, system: build_system(knowledge, corr), prompt: prompt });
+      const t0 = Date.now();
+      const raw = await ai.complete({ provider: provider, model: model, system: build_system(queue, knowledge, corr), prompt: prompt });
+      const latency_ms = Date.now() - t0;
       const out = ai.norm_completion(raw, model);
-      res.json({ ok: true, answer: (out && out.text ? String(out.text).trim() : ''), grounded: !!(knowledge && knowledge.length), model: out.model || model });
-    } catch (e) {
-      res.status(502).json({ ok: false, error: (e && e.message) || 'chat failed' });
-    }
+      const answer = (out && out.text ? String(out.text).trim() : '');
+      const grounded = !!(knowledge && knowledge.length);
+
+      res.json({ ok: true, answer: answer, grounded: grounded, model: out.model || model, conversation_id: conversation_id, queue: queue });
+
+      const base = { conversation_id: conversation_id, channel: CHANNEL, queue: queue, actor: actor, is_test: is_test };
+      convo_store.log_turn(Object.assign({}, base, { turn: turn, role: 'user', text: message }));
+      convo_store.log_turn(Object.assign({}, base, {
+        turn: turn, role: 'bot', text: answer, provider: provider, model: out.model || model,
+        grounded: grounded, knowledge_chars: (knowledge && knowledge.length) || 0,
+        context_files: ctx_files, corrections_used: corr.length, latency_ms: latency_ms,
+      }));
+    } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'chat failed' }); }
   });
 }
 

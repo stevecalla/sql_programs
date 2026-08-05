@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import './sfeq.css';
 import { api } from './lib/api.js';
 import * as store from './lib/store.js';
-import ResizeHandle from './components/ResizeHandle.jsx';
+import ResizeHandle from '../../lib/ResizeHandle.jsx';   // shared grabber (common with the chatbot)
 import AiPanel from './components/AiPanel.jsx';
 import { Modal, RowsTable, fmtBytes, CopyButton } from './components/ui.jsx';
 import { track, meta as trackMeta } from './lib/track.js';
