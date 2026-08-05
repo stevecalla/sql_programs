@@ -7,6 +7,7 @@ import SideRail from './components/SideRail.jsx';
 import MergeRail from './modules/salesforce_merge/MergeRail.jsx';
 import EmailQueueRail from './modules/salesforce_email_queue/EmailQueueRail.jsx';
 import EmailQueueAdminRail from './modules/salesforce_email_queue/EmailQueueAdminRail.jsx';
+import ChatbotRail from './modules/chatbot/ChatbotRail.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import UserMenu from './components/UserMenu.jsx';
 import FooterClock from './components/FooterClock.jsx';
@@ -62,6 +63,8 @@ export default function App() {
           ? <EmailQueueRail user={user} />
           : location.pathname.startsWith('/admin/email-queue') && canSee(user, panelForPathname(location.pathname))
           ? <EmailQueueAdminRail user={user} />
+          : location.pathname.startsWith('/chatbot') && canSee(user, panelForPathname(location.pathname))
+          ? <ChatbotRail user={user} />
           : <SideRail user={user} />}
         <main className="admin-main">
           <Suspense fallback={<div className="loading">Loading…</div>}>

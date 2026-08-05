@@ -1,28 +1,133 @@
-/* Chatbot POC — docked bubble + panel, scoped to the Chatbot section. Uses the platform theme tokens.
-   For this internal instance the bubble lives INSIDE the assistant card (.cb-card is position:relative and
-   the FAB/panel are position:absolute), so it sits in the card's lower-right corner rather than floating
-   over the whole app. The public GTM widget (later) is the one that floats over a host page. */
-.cb-page .cb-pill { font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 10px; padding: 2px 8px; vertical-align: middle; margin-left: 8px; }
+/* TeamUSA Assistant — email-queue-style 3-column operator surface. Uses the platform theme tokens.
+   LEFT rail (queue + filters + thread list) | CENTER transcript | RIGHT AI cards. */
+.cbx-wrap { display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
+.cbx-topbar { display: flex; align-items: baseline; gap: 14px; padding: 6px 4px 12px; flex-wrap: wrap; }
+.cbx-title { margin: 0; font-size: 20px; }
+.cbx-pill { font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 10px; padding: 2px 8px; vertical-align: middle; margin-left: 6px; }
+.cbx-dim { color: var(--muted); font-size: 12px; }
+.cbx-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.cbx-pad { padding: 12px; }
 
-/* The assistant card — a bounded, relatively-positioned box the bubble anchors to. */
-.cb-card {
-  position: relative; border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
-  padding: 18px 20px; min-height: 560px; overflow: hidden; max-width: 900px;
-}
+.cbx-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 260px minmax(0, 1fr) 340px; grid-template-rows: 100%; gap: 12px; }
 
-.cb-fab {
-  position: absolute; right: 18px; bottom: 18px; width: 56px; height: 56px; border-radius: 50%;
-  border: 0; background: var(--accent); color: #fff; font-size: 24px; line-height: 1; cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0,0,0,.32); z-index: 20; display: grid; place-items: center;
-}
+/* ---- LEFT RAIL ---- */
+.cbx-rail { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.cbx-rail-sec { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.cbx-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.cbx-hint { font-size: 11px; color: var(--muted); }
+.cbx-select, .cbx-input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--card); color: var(--ink); font: inherit; font-size: 13px; box-sizing: border-box; }
+textarea.cbx-input { resize: vertical; }
+.cbx-seg { display: flex; gap: 4px; }
+.cbx-segbtn { flex: 1; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 7px; padding: 5px 0; font-size: 12px; cursor: pointer; }
+.cbx-segbtn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.cbx-rail-listhead { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.cbx-thread-list { flex: 1; overflow: auto; min-height: 0; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 6px; }
+.cbx-thread { text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: 9px; padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
+.cbx-thread:hover { border-color: var(--accent); }
+.cbx-thread.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.cbx-thread-top { display: flex; align-items: center; justify-content: space-between; }
+.cbx-thread-time { font-size: 10.5px; color: var(--muted); }
+.cbx-thread-prev { font-size: 12.5px; color: var(--ink); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cbx-thread-meta { font-size: 10.5px; color: var(--muted); }
+.cbx-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; color: #fff; }
+.cbx-badge.test { background: #7c3aed; }
+.cbx-badge.live { background: #0891b2; }
+
+/* ---- CENTER (transcript) ---- */
+.cbx-center { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.cbx-center-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--card); }
+.cbx-thread-body { flex: 1; overflow: auto; min-height: 0; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.cbx-center-empty { align-items: center; justify-content: center; }
+.cbx-empty-card { text-align: center; max-width: 380px; margin: auto; color: var(--ink); }
+.cbx-empty-emoji { font-size: 40px; }
+.cbx-empty-card h3 { margin: 8px 0 6px; }
+.cbx-turn { max-width: 78%; padding: 10px 13px; border-radius: 12px; }
+.cbx-turn.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.cbx-turn.bot { align-self: flex-start; background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.cbx-turn-role { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; opacity: .7; margin-bottom: 3px; }
+.cbx-turn-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; }
+.cbx-turn-meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.cbx-tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 7px; color: #fff; }
+.cbx-tag.ok { background: #16a34a; } .cbx-tag.warn { background: #d97706; }
+
+/* ---- RIGHT RAIL (AI cards) ---- */
+.cbx-rightcol { position: relative; min-height: 0; display: flex; }
+.cbx-aipanel { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; padding-right: 2px; }
+.cbx-aipanel > * { flex-shrink: 0; }   /* keep card heights; rail scrolls instead of squishing them */
+.cbx-card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.cbx-cardhead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; user-select: none; }
+.cbx-h { margin: 0; font-size: 13.5px; flex: 1; }
+.cbx-summary { font-size: 11px; color: var(--muted); }
+.cbx-chev { transition: transform .15s; color: var(--muted); }
+.cbx-chev.open { transform: rotate(90deg); }
+.cbx-cardbody { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+
+.cbx-test-body { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 8px; min-height: 60px; }
+.cbx-msg { max-width: 90%; padding: 7px 10px; border-radius: 11px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; word-wrap: break-word; }
+.cbx-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+.cbx-msg.bot { align-self: flex-start; background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 3px; }
+.cbx-test-input { display: flex; flex-direction: column; gap: 6px; }
+.cbx-test-input textarea { width: 100%; box-sizing: border-box; resize: none; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 13px; background: var(--card); color: var(--ink); }
+.cbx-test-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+.cbx-row-end { display: flex; justify-content: flex-end; }
+.cbx-row-between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cbx-corr-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; }
+.cbx-corr { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--card); }
+.cbx-corr-note { font-size: 13px; line-height: 1.4; }
+.cbx-dir { font-size: 10.5px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cbx-ctx-list { display: flex; flex-direction: column; gap: 4px; max-height: 340px; overflow: auto; }
+.cbx-ctx-row { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 6px; border-radius: 7px; }
+.cbx-ctx-row:nth-child(odd) { background: var(--card); }
+.cbx-ctx-row.ex { opacity: .5; }
+.cbx-ctx-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.cbx-ctx-sc { color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+.cbx-err { color: #b91c1c; font-size: 12px; }
+
+/* ---- buttons ---- */
+.cbx-btn { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 6px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+.cbx-btn:hover { border-color: var(--accent); }
+.cbx-btn.sm { padding: 4px 9px; font-size: 12px; }
+.cbx-btn.xs { padding: 3px 7px; font-size: 11px; }
+.cbx-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.cbx-btn:disabled { opacity: .5; cursor: default; }
+
+/* ---- modal (context viewer) ---- */
+.cbx-modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 90; }
+.cbx-modal { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; width: 560px; max-width: calc(100vw - 40px); max-height: calc(100vh - 80px); display: flex; flex-direction: column; overflow: hidden; }
+.cbx-modal.wide { width: 820px; }
+.cbx-modal-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--card); }
+.cbx-modal-title { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cbx-modal-body { padding: 14px; overflow: auto; }
+.cbx-modal-loc { margin-top: 10px; font-size: 11px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+.cbx-att-img { max-width: 100%; border-radius: 8px; }
+.cbx-att-pdf { width: 100%; height: 60vh; border: 0; }
+.cbx-att-text { white-space: pre-wrap; word-wrap: break-word; font-size: 13px; line-height: 1.5; }
+.cbx-att-tablewrap { overflow: auto; }
+.cbx-att-table { border-collapse: collapse; font-size: 12.5px; }
+.cbx-att-table td { border: 1px solid var(--line); padding: 4px 8px; }
+
+@media (max-width: 1100px) { .cbx-grid { grid-template-columns: 220px minmax(0,1fr) 300px; } }
+
+/* Active-queue chip in the title + per-turn Mountain-time timestamp. */
+.cbx-queue { font-size: 12px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 9px; padding: 1px 8px; margin-left: 8px; vertical-align: middle; }
+.cbx-turn-time { font-weight: 400; font-size: 10px; letter-spacing: 0; text-transform: none; opacity: .6; margin-left: 8px; }
+
+/* Rail filter block (date range etc.) */
+.cbx-filters { display: flex; flex-direction: column; gap: 8px; }
+.cbx-daterow { display: flex; gap: 6px; }
+.cbx-dcol { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.cbx-dcol span { font-size: 10px; color: var(--muted); }
+.cbx-dcol input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px; background: var(--card); color: var(--ink); font: inherit; font-size: 12px; }
+.cbx-presets { display: flex; gap: 4px; flex-wrap: wrap; }
+.cbx-preset { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 12px; padding: 2px 9px; font-size: 11px; cursor: pointer; }
+.cbx-preset:hover { border-color: var(--accent); }
+.cbx-clear { background: transparent; border: 0; color: var(--accent); font-size: 11px; cursor: pointer; padding: 0; align-self: flex-start; }
+
+/* Floating quick-test bubble — docked bottom-right of the AI Chat Bot panel only. */
+.cb-fab { position: absolute; right: 14px; bottom: 14px; width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--accent); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.32); z-index: 85; display: grid; place-items: center; }
 .cb-fab.on { background: #334155; }
-
-.cb-panel {
-  position: absolute; right: 18px; bottom: 84px; width: 340px; max-width: calc(100% - 36px);
-  height: 460px; max-height: calc(100% - 104px); background: var(--panel); border: 1px solid var(--line);
-  border-radius: 14px; box-shadow: 0 16px 48px rgba(0,0,0,.4); display: flex; flex-direction: column;
-  overflow: hidden; z-index: 20;
-}
+.cb-panel { position: absolute; right: 14px; bottom: 80px; width: 340px; max-width: calc(100% - 20px); height: 460px; max-height: calc(100% - 96px); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 48px rgba(0,0,0,.4); display: flex; flex-direction: column; overflow: hidden; z-index: 85; }
 .cb-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--accent); color: #fff; font-weight: 700; }
 .cb-head-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cb-sub { font-size: 11px; font-weight: 500; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -36,3 +141,50 @@
 .cb-input textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font: inherit; font-size: 13.5px; background: var(--card); color: var(--ink); max-height: 120px; }
 .cb-send { border: 0; background: var(--accent); color: #fff; border-radius: 9px; padding: 0 14px; font-weight: 600; cursor: pointer; }
 .cb-send:disabled { opacity: .5; cursor: default; }
+
+/* Reference card list */
+.cbx-ref { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
+.cbx-ref li { font-size: 12.5px; line-height: 1.45; color: var(--ink); }
+
+/* Native controls (date-picker icon + popup, selects, scrollbars) follow the platform theme — same approach
+   as sfeq.css: default light, flip to dark under [data-theme="dark"] so the calendar icon stays visible. */
+.cbx-wrap { color-scheme: light; }
+[data-theme="dark"] .cbx-wrap { color-scheme: dark; }
+[data-theme="dark"] .cbx-dcol input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
+
+/* GTM spec snippet block */
+.cbx-snippet { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 11px; line-height: 1.5; overflow: auto; white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 180px; }
+.cbx-ref code, .cbx-snippet code { background: var(--card); padding: 0 4px; border-radius: 4px; }
+
+/* Queue & filters card in the rail */
+.cbx-railcard { margin-bottom: 8px; flex-shrink: 0; }
+.cbx-rail-listhead { flex-shrink: 0; }
+.cbx-railcard .cbx-cardbody { gap: 6px; }
+.cbx-viewbtn { width: 100%; margin-top: 6px; }
+
+/* Modal head now uses a shared structure (h3 title + actions span) — keep the chatbot look. */
+.cbx-modal-head h3.cbx-modal-title { margin: 0; font-weight: 700; flex: 1; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cbx-modal-actions { display: flex; align-items: center; gap: 8px; }
+
+/* Add-files section (shared ContextAddFiles) inside the Context card */
+.cbx-addh { margin: 12px 0 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.cbx-addrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.cbx-addrow .cbx-select { width: auto; }
+
+/* ===== Email-queue-style layout: siderail (rail) + 2-column resizable main (transcript + AI) ===== */
+
+/* Left platform siderail — width driven by the store (inline), internal scroll for the thread list. */
+.cbx-siderail { overflow: auto; gap: 10px; }
+.cbx-siderail > * { flex-shrink: 0; }
+.cbx-siderail .cbx-thread-list { flex: 0 0 auto; overflow: visible; min-height: 0; }
+.cbx-siderail .cbx-railcard { margin-bottom: 0; }
+
+/* Main area: two columns (transcript | 6px handle | AI), row bounded so each column scrolls internally. */
+.cbx-main2 { flex: 1; min-height: 0; display: grid; grid-template-rows: 100%; }
+.cbx-main2 > .cbx-center { min-height: 0; }
+
+/* AI panel is a PLAIN scrolling block (like eq-ai) — no flex column, so cards never "scrunch". */
+.cbx-ai { overflow: auto; min-height: 0; padding: 14px; border-left: 1px solid var(--line); background: var(--panel); }
+.cbx-ai .cbx-card { margin-bottom: 10px; }
+.cbx-ai .cbx-card:last-child { margin-bottom: 0; }
+

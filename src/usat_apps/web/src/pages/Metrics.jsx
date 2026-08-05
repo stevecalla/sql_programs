@@ -23,6 +23,7 @@ const SCOPES = [
   { key: 'event-coi', label: 'Insurance COI' },
   { key: 'email-queue', label: 'Email Queue' },
   { key: 'email-queue-metrics', label: 'Email Queue metrics' },
+  { key: 'chatbot', label: 'AI Chat Bot' },
 ];
 
 function Card({ k, v, s }) {

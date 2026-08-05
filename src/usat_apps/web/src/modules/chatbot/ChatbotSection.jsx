@@ -1,24 +1,34 @@
+import { useEffect } from 'react';
+import * as store from './lib/store.js';
+import ResizeHandle from '../../lib/ResizeHandle.jsx';
+import Transcript from './components/Transcript.jsx';
+import ChatbotAiPanel from './components/ChatbotAiPanel.jsx';
 import ChatBubble from './ChatBubble.jsx';
 import './chatbot.css';
 
-// The Chatbot section (POC). The bubble is docked in the lower-right corner of the assistant CARD below
-// (position:absolute within .cb-card), so for this internal instance it stays inside the card rather than
-// floating over the whole app. Grounded on the TeamUSA email-queue knowledge; internal-only for now.
+// The AI Chat Bot main area (mirrors the email queue Section): two columns — transcript + AI panel — with a
+// resizable divider. Queue & filters + the conversation list live in the platform siderail (ChatbotRail).
+// Both read the shared store.
 export default function ChatbotSection() {
+  const s = store.useStore();
+  useEffect(() => { store.init(); }, []);
+  const cur = store.curQueueObj();
   return (
-    <div className="page cb-page">
-      <h2>Team USA Assistant <span className="cb-pill">POC</span></h2>
-      <div className="cb-card">
-        <p className="muted" style={{ maxWidth: 620, marginTop: 0 }}>
-          An internal preview of the Team USA chatbot. It answers from the <b>same curated Team USA knowledge</b> the
-          email queue uses — and only that. If something isn’t in the knowledge, it will say so rather than guess.
-        </p>
-        <p className="muted" style={{ maxWidth: 620 }}>
-          Click the chat bubble in the corner of this card to try it. This is the internal test surface; the public
-          website widget comes later.
-        </p>
-        <ChatBubble />
+    <div className="cbx-wrap">
+      <div className="cbx-topbar">
+        <h2 className="cbx-title">AI Chat Bot{s.queue ? <span className="cbx-queue">{(cur && cur.name) || s.queue}</span> : null} <span className="cbx-pill">POC</span></h2>
+        <span className="cbx-dim">Operator surface · grounded on curated knowledge only · never touches member PII</span>
       </div>
+      <div className="cbx-main2" style={{ gridTemplateColumns: 'minmax(0,1fr) 6px ' + s.aiW + 'px' }}>
+        <Transcript id={s.selectedId} turns={s.turns} loading={s.loadingTurns} />
+        <ResizeHandle target="gridNext" dir={-1} min={store.AI_MIN} max={store.AI_MAX} def={store.AI_DEF}
+          current={() => store.getState().aiW} onCommit={store.setAiW}
+          title="Drag to resize the AI panel · double-click to reset" />
+        <aside className="cbx-ai">
+          <ChatbotAiPanel queue={s.queue} onLogged={store.onLogged} />
+        </aside>
+      </div>
+      <ChatBubble queue={s.queue} onLogged={store.onLogged} />
     </div>
   );
 }

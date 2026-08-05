@@ -47,7 +47,7 @@ export const NAV = [
   },
   {
     type: 'group', label: 'Chatbot', items: [
-      { label: 'Team USA Assistant', path: '/chatbot/team-usa', panel: 'chatbot', icon: '💬', Component: ChatbotSection },
+      { label: 'AI Chat Bot', path: '/chatbot/bot', panel: 'chatbot', icon: '💬', Component: ChatbotSection },
     ]
   },
   {

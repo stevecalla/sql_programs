@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import './sfeq.css';
 import * as store from './lib/store.js';
-import ResizeHandle from './components/ResizeHandle.jsx';
+import ResizeHandle from '../../lib/ResizeHandle.jsx';   // shared grabber (common with the chatbot)
 
 function statusColor(s) { s = String(s || '').toLowerCase(); if (s.includes('clos')) return 'var(--eq-dim)'; if (s.includes('wait')) return 'var(--eq-gold)'; if (s.includes('new')) return 'var(--eq-blue)'; return 'var(--eq-ink)'; }
 export function TriageBadge({ t }) {
