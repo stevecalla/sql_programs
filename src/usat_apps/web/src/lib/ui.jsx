@@ -67,3 +67,37 @@ export function ContextAddFiles({ scope, onScope, onUpload, busyMsg, heading, cl
     </>
   );
 }
+
+// Shared "Ask a question" panel (extracted from the email queue): preset chips + Q/A history (newest first,
+// with See-more) + textarea + Ask button. Style-agnostic via `classes`; each caller wires its own async
+// `onAsk(q)` (q omitted → use the current textarea value) and its own copy renderer. Keeps the email queue
+// and the chatbot in sync — one layout, two backends.
+export function AskPanel({ question, onQuestion, onAsk, hist, busy, busyLabel, placeholder, presets, expanded, onToggleExpanded, renderCopy, classes }) {
+  const c = classes || {};
+  const rows = hist || [];
+  const shown = expanded ? rows.slice().reverse() : rows.slice(-2).reverse();
+  return (
+    <>
+      {presets && presets.length ? (
+        <div className={c.chips}>
+          {presets.map((p) => <button key={p} className={c.chip} onClick={() => onAsk(p)} disabled={busy}>{p}</button>)}
+        </div>
+      ) : null}
+      {rows.length ? (
+        <div className={c.hist}>
+          {busy ? <div className={c.dim}>{busyLabel || 'Thinking…'}</div> : null}
+          {shown.map((h, i) => (
+            <div className={c.qa} key={i}>
+              <div className={c.q}><b>Q:</b> {h.q} {h.ts ? <span className={c.ts}>{h.ts}</span> : null}</div>
+              <div className={c.a}>{h.a}</div>
+              {renderCopy ? renderCopy(h.a) : null}
+            </div>
+          ))}
+          {rows.length > 2 ? <button className={c.seeMore} onClick={onToggleExpanded}>{expanded ? 'See less' : 'See ' + (rows.length - 2) + ' earlier'}</button> : null}
+        </div>
+      ) : null}
+      <textarea className={c.ta} value={question} onChange={(e) => onQuestion(e.target.value)} placeholder={placeholder} />
+      <button className={c.askBtn} onClick={() => onAsk()} disabled={busy || !question.trim()}>{busy ? 'Asking…' : 'Ask'}</button>
+    </>
+  );
+}

@@ -35,3 +35,16 @@ export function formatMtn(raw) {
   }
   return s;
 }
+
+// Full MTN date-time in the EMAIL QUEUE style — e.g. "08/04/2026, 4:54:02 PM MDT". Same Intl options as the
+// backend services/salesforce.datetime_in_time_zone, so every surface reads identically. Input: a real
+// instant (ISO-Z string, ms, or Date) — NOT a wall-clock string.
+export function formatMtnDateTime(value) {
+  if (value == null || value === '') return '—';
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Denver', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZoneName: 'short'
+    }).format(new Date(value));
+  } catch (e) { return String(value); }
+}

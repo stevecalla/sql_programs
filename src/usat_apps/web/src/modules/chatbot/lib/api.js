@@ -34,4 +34,5 @@ export const api = {
   saveSettings: (payload) => req(P + '/settings', { method: 'POST', body: JSON.stringify(payload) }),
   // chat / test
   chat: (payload) => req(P + '/chat', { method: 'POST', body: JSON.stringify(payload) }),
+  ask: (payload) => req(P + '/ask', { method: 'POST', body: JSON.stringify(payload) }),
 };

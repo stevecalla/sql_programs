@@ -67,12 +67,12 @@ function hit_status(port, label) {
 const CMD_SECTIONS = registry.SECTIONS.map((s) => ({ label: s.label, color: color_for(s.color), items: s.items }));
 let _next = registry.ALL.reduce((m, it) => Math.max(m, it.id), 0);
 // Cutover (data migration) — CLI-only (not a web Operations button, since COMMIT writes the DB).
-const IMP = 'src/usat_apps/modules/salesforce_email_queue/import_corrections.js';
-const EXP = 'src/usat_apps/modules/salesforce_email_queue/export_corrections.js';
-const CUTOVER_SECTION = { label: 'Cutover (data migration)', color: YELLOW, items: [
-  { id: ++_next, label: 'Export corrections → JSON', desc: 'Dump this DB\'s corrections to <data_dir>/corrections_export.json (copy it to another env, then Import).', bin: 'node', argv: [EXP], cli: 'node ' + EXP },
-  { id: ++_next, label: 'Import corrections — DRY RUN', desc: 'Read the 8019 corrections.json, show counts; writes nothing.', bin: 'node', argv: [IMP], cli: 'node ' + IMP },
-  { id: ++_next, label: 'Import corrections — COMMIT', desc: 'Idempotent upsert of corrections.json into the DB (run AFTER stopping 8019).', bin: 'node', argv: [IMP, '--commit'], cli: 'node ' + IMP + ' --commit' },
+const PULL = 'src/usat_apps/modules/salesforce_email_queue/pull_corrections.js';
+const PULLC = 'src/usat_apps/modules/salesforce_email_queue/pull_content.js';
+// All-from-dev pulls: SSH to prod, generate/copy, apply here. Need PROD_SSH in .env (+ SSH access).
+const CUTOVER_SECTION = { label: 'Pull from prod → dev (corrections + content)', color: YELLOW, items: [
+  { id: ++_next, label: 'Pull corrections from prod', desc: 'From DEV: SSH to prod, export corrections, copy back, import here (idempotent). Needs PROD_SSH in .env.', bin: 'node', argv: [PULL], cli: 'node ' + PULL },
+  { id: ++_next, label: 'Pull content files from prod', desc: 'From DEV: copy prod\'s context/knowledge tree into this machine\'s data dir (additive/overwrite). Needs PROD_SSH in .env.', bin: 'node', argv: [PULLC], cli: 'node ' + PULLC },
 ] };
 const STATUS_SECTION = { label: 'Status & open (platform)', color: GREEN, items: [
   { id: ++_next, label: 'Platform status (:8022)', desc: 'GET :8022/api/status — usat_apps health (the module mounts here)', status: PLATFORM_PORT, statusLabel: 'platform', cli: 'curl http://localhost:8022/api/status' },

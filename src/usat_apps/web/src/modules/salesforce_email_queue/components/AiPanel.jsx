@@ -3,7 +3,7 @@ import { api } from '../lib/api.js';
 import * as store from '../lib/store.js';
 import { track, meta as trackMeta } from '../lib/track.js';
 import { Modal, RowsTable, fmtBytes, copyText, CopyButton, downloadText } from './ui.jsx';
-import { Collapsible, ContextAddFiles } from '../../../lib/ui.jsx';   // shared collapsible + add-files (D: dedup)
+import { Collapsible, ContextAddFiles, AskPanel } from '../../../lib/ui.jsx';   // shared collapsible + add-files + ask (dedup)
 
 const ASK_PRESETS = [
   'Summarize the case',
@@ -199,24 +199,16 @@ export default function AiPanel({ s }) {
 
       {/* Card 2 — Ask */}
       <Card title="Ask a question" open={open.ask} onToggle={() => toggle('ask')}>
-        <div className="eq-chips">
-          {ASK_PRESETS.map((p) => <button key={p} className="qchip" onClick={() => ask(p)} disabled={busy === 'ask'}>{p}</button>)}
-        </div>
-        {hist.length ? (
-          <div className="eq-askhist">
-            {busy === 'ask' ? <div className="dim">Thinking ({model ? (model.provider === 'anthropic' ? 'Claude' : 'ChatGPT') : 'AI'})…</div> : null}
-            {shownHist.map((h, i) => (
-              <div className="eq-qa" key={i}>
-                <div className="eq-q"><b>Q:</b> {h.q} <span className="sc">{h.ts}</span></div>
-                <div className="eq-a">{h.a}</div>
-                <CopyButton text={h.a} label="📋 Copy" />
-              </div>
-            ))}
-            {hist.length > 2 ? <button className="eq-btn sm ghost" onClick={() => setAskExpanded((x) => !x)}>{askExpanded ? 'See less' : 'See ' + (hist.length - 2) + ' earlier'}</button> : null}
-          </div>
-        ) : null}
-        <textarea className="eq-fld" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask a question about this case…" />
-        <button className="eq-btn" onClick={() => ask()} disabled={busy === 'ask' || !question.trim()}>{busy === 'ask' ? 'Asking…' : 'Ask'}</button>
+        <AskPanel
+          question={question} onQuestion={setQuestion} onAsk={ask}
+          hist={hist} busy={busy === 'ask'}
+          busyLabel={'Thinking (' + (model ? (model.provider === 'anthropic' ? 'Claude' : 'ChatGPT') : 'AI') + ')…'}
+          placeholder="Ask a question about this case…"
+          presets={ASK_PRESETS}
+          expanded={askExpanded} onToggleExpanded={() => setAskExpanded((x) => !x)}
+          renderCopy={(t) => <CopyButton text={t} label="📋 Copy" />}
+          classes={{ chips: 'eq-chips', chip: 'qchip', hist: 'eq-askhist', dim: 'dim', qa: 'eq-qa', q: 'eq-q', ts: 'sc', a: 'eq-a', ta: 'eq-fld', askBtn: 'eq-btn', seeMore: 'eq-btn sm ghost' }}
+        />
       </Card>
 
       {/* Card 3 — Corrections */}

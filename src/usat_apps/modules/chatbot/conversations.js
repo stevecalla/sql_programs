@@ -103,8 +103,9 @@ async function list_threads(queue, opts) {
   const havingSql = having.length ? (' HAVING ' + having.join(' AND ')) : '';
   const groups = await db.query(
     'SELECT conversation_id, MIN(id) first_id, COUNT(*) turns, SUM(role = \'bot\') answers, ' +
-    'MIN(created_at_utc) started_utc, MAX(created_at_utc) last_utc, MAX(created_at_mtn) last_mtn, ' +
-    'MIN(created_at_mtn) started_mtn, MAX(is_test) is_test ' +
+    "MIN(created_at_utc) started_utc, DATE_FORMAT(MAX(created_at_utc), '%Y-%m-%dT%H:%i:%sZ') last_utc, " +
+    "DATE_FORMAT(MAX(created_at_mtn), '%Y-%m-%d %H:%i:%s') last_mtn, DATE_FORMAT(MIN(created_at_mtn), '%Y-%m-%d %H:%i:%s') started_mtn, " +
+    'MAX(is_test) is_test ' +
     'FROM ' + TABLE + ' WHERE ' + where.join(' AND ') + ' GROUP BY conversation_id' + havingSql +
     ' ORDER BY last_utc DESC LIMIT ' + lim,
     params.concat(hParams));
@@ -125,7 +126,7 @@ async function list_threads(queue, opts) {
 
 async function by_conversation(conversation_id) {
   return await db.query(
-    'SELECT id, turn, role, text, model, grounded, latency_ms, created_at_mtn, created_at_utc FROM ' + TABLE +
+    "SELECT id, turn, role, text, model, grounded, latency_ms, DATE_FORMAT(created_at_mtn, '%Y-%m-%d %H:%i:%s') created_at_mtn, DATE_FORMAT(created_at_utc, '%Y-%m-%dT%H:%i:%sZ') created_at_utc FROM " + TABLE +
     ' WHERE conversation_id = ? ORDER BY id ASC', [String(conversation_id || '')]);
 }
 async function recent_conversations(limit) {
