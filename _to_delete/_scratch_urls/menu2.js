@@ -69,12 +69,10 @@ let _next = registry.ALL.reduce((m, it) => Math.max(m, it.id), 0);
 // Cutover (data migration) — CLI-only (not a web Operations button, since COMMIT writes the DB).
 const PULL = 'src/usat_apps/knowledge_sync/pull_corrections.js';
 const PULLC = 'src/usat_apps/knowledge_sync/pull_content.js';
-const PULLU = 'src/usat_apps/knowledge_sync/pull_urls.js';
 // All-from-dev pulls: SSH to prod, generate/copy, apply here. Need PROD_SSH in .env (+ SSH access).
-const CUTOVER_SECTION = { label: 'Pull from prod → dev (corrections + content + URLs)', color: YELLOW, items: [
+const CUTOVER_SECTION = { label: 'Pull from prod → dev (corrections + content)', color: YELLOW, items: [
   { id: ++_next, label: 'Pull corrections from prod', desc: 'From DEV: SSH to prod, export corrections, copy back, import here (idempotent). Needs PROD_SSH in .env.', bin: 'node', argv: [PULL], cli: 'node ' + PULL },
   { id: ++_next, label: 'Pull content files from prod', desc: 'From DEV: copy prod\'s context/knowledge tree into this machine\'s data dir (additive/overwrite). Needs PROD_SSH in .env.', bin: 'node', argv: [PULLC], cli: 'node ' + PULLC },
-  { id: ++_next, label: 'Pull knowledge URLs from prod', desc: 'From DEV: SSH to prod, export knowledge_sources + knowledge_chunks, copy back, import here (exact parity - upserts sources, replaces chunks). Needs PROD_SSH in .env.', bin: 'node', argv: [PULLU], cli: 'node ' + PULLU },
 ] };
 const STATUS_SECTION = { label: 'Status & open (platform)', color: GREEN, items: [
   { id: ++_next, label: 'Platform status (:8022)', desc: 'GET :8022/api/status — usat_apps health (the module mounts here)', status: PLATFORM_PORT, statusLabel: 'platform', cli: 'curl http://localhost:8022/api/status' },
