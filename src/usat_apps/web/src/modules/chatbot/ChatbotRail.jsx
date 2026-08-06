@@ -69,20 +69,30 @@ export default function ChatbotRail() {
 
         <div className="cbx-rail-listhead">
           <span>Conversations{threads ? ' · ' + threads.length : ''}</span>
-          <button className="cbx-btn xs" onClick={store.loadThreads} title="Refresh">↻</button>
+          <span className="cbx-listhead-actions">
+            <button className="cbx-btn xs" title={'Delete ALL test conversations for ' + (s.queue || 'this queue')}
+              onClick={() => { if (window.confirm('Delete ALL test conversations for ' + (s.queue || 'this queue') + '? This cannot be undone.')) store.clearTest(); }}>Clear test</button>
+            <button className="cbx-btn xs" onClick={store.loadThreads} title="Refresh">↻</button>
+          </span>
         </div>
         <div className="cbx-thread-list">
           {s.loadingThreads ? <div className="cbx-dim cbx-pad">Loading…</div> : null}
           {!s.loadingThreads && threads && threads.length === 0 ? <div className="cbx-dim cbx-pad">No conversations match. Use “Test the assistant” or the bubble to create one.</div> : null}
           {(threads || []).map((t) => (
-            <button key={t.conversation_id} className={'cbx-thread' + (s.selectedId === t.conversation_id ? ' on' : '')} onClick={() => store.selectConversation(t.conversation_id)}>
-              <div className="cbx-thread-top">
-                <span className={'cbx-badge ' + (t.is_test ? 'test' : 'live')}>{t.is_test ? 'test' : 'live'}</span>
-                <span className="cbx-thread-time" title={t.last_utc}>{formatMtnDateTime(t.last_utc)}</span>
-              </div>
-              <div className="cbx-thread-prev">{t.preview || '(no preview)'}</div>
-              <div className="cbx-thread-meta">{t.turns} turn{t.turns === 1 ? '' : 's'} · {t.answers} answer{t.answers === 1 ? '' : 's'}</div>
-            </button>
+            <div key={t.conversation_id} className="cbx-thread-row">
+              <button className={'cbx-thread' + (s.selectedId === t.conversation_id ? ' on' : '')} onClick={() => store.selectConversation(t.conversation_id)}>
+                <div className="cbx-thread-top">
+                  <span className={'cbx-badge ' + (t.is_test ? 'test' : 'live')}>{t.is_test ? 'test' : 'live'}</span>
+                  <span className="cbx-thread-time" title={t.last_utc}>{formatMtnDateTime(t.last_utc)}</span>
+                </div>
+                <div className="cbx-thread-prev">{t.preview || '(no preview)'}</div>
+                <div className="cbx-thread-meta">{t.turns} turn{t.turns === 1 ? '' : 's'} · {t.answers} answer{t.answers === 1 ? '' : 's'}</div>
+              </button>
+              {t.is_test ? (
+                <button className="cbx-thread-del" title="Delete this test conversation"
+                  onClick={() => { if (window.confirm('Delete this test conversation? This cannot be undone.')) store.deleteConversation(t.conversation_id); }}>🗑</button>
+              ) : null}
+            </div>
           ))}
         </div>
       </nav>

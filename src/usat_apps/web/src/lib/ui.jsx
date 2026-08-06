@@ -72,12 +72,18 @@ export function ContextAddFiles({ scope, onScope, onUpload, busyMsg, heading, cl
 // with See-more) + textarea + Ask button. Style-agnostic via `classes`; each caller wires its own async
 // `onAsk(q)` (q omitted → use the current textarea value) and its own copy renderer. Keeps the email queue
 // and the chatbot in sync — one layout, two backends.
-export function AskPanel({ question, onQuestion, onAsk, hist, busy, busyLabel, placeholder, presets, expanded, onToggleExpanded, renderCopy, classes }) {
+export function AskPanel({ question, onQuestion, onAsk, hist, busy, busyLabel, placeholder, presets, expanded, onToggleExpanded, renderCopy, onReset, classes }) {
   const c = classes || {};
   const rows = hist || [];
   const shown = expanded ? rows.slice().reverse() : rows.slice(-2).reverse();
+  const canReset = !!onReset && (rows.length > 0 || (question && question.trim()));
   return (
     <>
+      {onReset ? (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+          <button className={c.resetBtn || c.seeMore} onClick={() => onReset()} disabled={busy || !canReset} title="Clear the question box and this Q&A history">Reset</button>
+        </div>
+      ) : null}
       {presets && presets.length ? (
         <div className={c.chips}>
           {presets.map((p) => <button key={p} className={c.chip} onClick={() => onAsk(p)} disabled={busy}>{p}</button>)}
@@ -99,5 +105,24 @@ export function AskPanel({ question, onQuestion, onAsk, hist, busy, busyLabel, p
       <textarea className={c.ta} value={question} onChange={(e) => onQuestion(e.target.value)} placeholder={placeholder} />
       <button className={c.askBtn} onClick={() => onAsk()} disabled={busy || !question.trim()}>{busy ? 'Asking…' : 'Ask'}</button>
     </>
+  );
+}
+
+// Shared corrections LIST — one layout for the chatbot and the email queue (scrollable list of bordered
+// note cards, each with an optional "re: <question>" line). Style-agnostic via `classes`: pass the same
+// class map on both surfaces for identical look. `rows` is null while loading, [] when empty.
+export function CorrectionsList({ rows, classes }) {
+  const c = classes || {};
+  return (
+    <div className={c.list}>
+      {rows == null ? <div className={c.dim}>Loading…</div> : null}
+      {rows && rows.length === 0 ? <div className={c.dim}>No corrections yet.</div> : null}
+      {(rows || []).map((r) => (
+        <div className={c.item} key={r.id}>
+          <div className={c.note}>{r.note}</div>
+          {r.question ? <div className={c.dim}>re: {r.question}</div> : null}
+        </div>
+      ))}
+    </div>
   );
 }

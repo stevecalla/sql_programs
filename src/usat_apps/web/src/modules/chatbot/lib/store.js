@@ -79,7 +79,26 @@ export async function selectConversation(id) {
   catch (e) { state.turns = []; }
   finally { state.loadingTurns = false; emit(); }
 }
+// After a test exchange is logged: refresh the thread list AND auto-open the conversation being tested in
+// the center turn card (so the active test thread pops up + updates live as you chat). The turns are logged
+// fire-and-forget on the server, so we refetch immediately and again shortly after to catch the new rows.
 export function onLogged(cid) {
   loadThreads();
-  if (cid && cid === state.selectedId) { api.conversation(cid).then((r) => { state.turns = r.turns || []; emit(); }).catch(() => {}); }
+  if (!cid) return;
+  state.selectedId = cid; emit();
+  const refetch = () => api.conversation(cid).then((r) => { if (state.selectedId === cid) { state.turns = r.turns || []; emit(); } }).catch(() => {});
+  refetch();
+  setTimeout(refetch, 400);
+}
+// Delete ONE test conversation (backend guards is_test=1), then refresh the list.
+export async function deleteConversation(id) {
+  try { await api.deleteConversation(id); } catch (e) { /* ignore */ }
+  if (state.selectedId === id) { state.selectedId = null; state.turns = []; }
+  loadThreads();
+}
+// Delete ALL test conversations for the current queue, then refresh.
+export async function clearTest() {
+  try { await api.clearTestConversations(state.queue); } catch (e) { /* ignore */ }
+  state.selectedId = null; state.turns = [];
+  loadThreads();
 }

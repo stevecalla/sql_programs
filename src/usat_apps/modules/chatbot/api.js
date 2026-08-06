@@ -12,6 +12,7 @@ const ai = require('../../services/ai');
 const kb = require('../../services/knowledge');
 const url_fetch = require('../../services/knowledge/url_fetch');
 const chunk_store = require('../../services/knowledge/chunk_store');
+const grounding = require('../../services/knowledge/grounding');   // shared curated-knowledge gatherer (same one the email queue uses)
 const corrections = require('../../services/corrections');
 const corr_store = require('../../services/corrections/mysql_store');
 const convo_store = require('./conversations');
@@ -30,24 +31,11 @@ const DEFAULT_QUEUE = process.env.CHATBOT_QUEUE || 'Team USA';   // exact SF que
 const CHANNEL = process.env.CHATBOT_CHANNEL || 'internal-poc';
 const RETRIEVE_N = Number(process.env.CHATBOT_RETRIEVE_N || 8);
 
-// Retrieval: rank this queue's knowledge CHUNKS (URL context + any file-derived chunks) against a question
-// and return a grounding block + provenance. Never throws — grounding must not break a chat/ask.
-async function retrieve(queue, question) {
-  try {
-    const used = await chunk_store.select_chunks(queue, question, RETRIEVE_N);
-    return { block: chunk_store.knowledge_from_chunks(used), used: used || [] };
-  } catch (e) { return { block: '', used: [] }; }
-}
-// File knowledge (existing pipeline) + retrieved chunk block, most-relevant chunks first.
-function combine_knowledge(fileK, chunkBlock) {
-  const parts = [];
-  if (chunkBlock && String(chunkBlock).trim()) parts.push(String(chunkBlock).trim());
-  if (fileK && String(fileK).trim()) parts.push(String(fileK).trim());
-  return parts.join('\n\n');
-}
-function provenance(used) {
-  return (used || []).map(function (u) { return { source_ref: u.source_ref, source_title: u.source_title, category: u.category, score: u.score }; });
-}
+// Retrieval + combine + provenance all delegate to the SHARED grounding gatherer so the chatbot and the
+// email queue rank and assemble curated knowledge identically (one code path — they can't drift).
+async function retrieve(queue, question) { return grounding.retrieve(queue, question, RETRIEVE_N); }
+function combine_knowledge(fileK, chunkBlock) { return grounding.combine(fileK, chunkBlock); }
+function provenance(used) { return grounding.provenance(used); }
 
 // Loopback-only gate for the nightly cron endpoint (utilities/cron_get_url_context hits it on localhost:8022).
 function local_only(req, res, next) {
@@ -84,26 +72,45 @@ async function used_context(queue) {
   return (meta || []).filter(function (f) { return !f.excluded; });
 }
 
-function build_system(queue, knowledge, corr) {
+// Member-facing system prompt. `mode` selects how tightly the bot is confined to curated knowledge:
+//   'strict' (default) — answer ONLY from KNOWLEDGE + CORRECTIONS; if absent, say so and point to USAT.
+//   'broad'            — may also draw on general USA Triathlon / triathlon knowledge when the curated
+//                        content doesn't cover it, but never invents specific policy/prices/dates/contacts
+//                        and still refuses genuinely off-topic questions.
+function build_system(queue, knowledge, corr, mode) {
   const kblock = (knowledge && String(knowledge).trim()) ? String(knowledge).trim() : '(no knowledge provided)';
   const cblock = (corr && corr.length) ? corr.map(function (c) { return '- ' + c; }).join('\n') : '';
   const name = String(queue || 'this program');
-  return [
-    'You are a USA Triathlon assistant for the "' + name + '" program. You help members and visitors with',
-    'questions about USA Triathlon and the ' + name + ' program ONLY.',
-    '',
-    'Rules:',
+  const broad = mode === 'broad';
+  const rules = broad ? [
+    '- Prefer the KNOWLEDGE below (and CORRECTIONS) — treat them as authoritative for this program.',
+    '- If the KNOWLEDGE does not cover the question, you MAY use general knowledge about USA Triathlon and',
+    '  the sport of triathlon to be helpful, staying within that domain.',
+    '- Do NOT invent specific policies, prices, fees, dates, deadlines, membership rules, phone numbers,',
+    '  emails, or URLs that are not in the KNOWLEDGE. For those specifics, say you are not certain and',
+    '  suggest contacting USA Triathlon.',
+    '- If the question is unrelated to USA Triathlon / triathlon / ' + name + ", politely say that's outside what you can help with.",
+    '- Never ask for or reveal personal or member data. Keep answers concise and friendly.',
+    '- Write the program name exactly as: "' + name + '".',
+  ] : [
     '- Answer ONLY using the KNOWLEDGE below (and CORRECTIONS). Do not use outside information.',
     "- If the answer is not in the KNOWLEDGE, say you don't have that information and suggest contacting",
     '  USA Triathlon. Do NOT guess or invent policy.',
     '- If the question is unrelated to USA Triathlon / ' + name + ", politely say that's outside what you can help with.",
     '- Never ask for or reveal personal or member data. Keep answers concise and friendly.',
     '- Write the program name exactly as: "' + name + '".',
+  ];
+  return [
+    'You are a USA Triathlon assistant for the "' + name + '" program. You help members and visitors with',
+    'questions about USA Triathlon and the ' + name + ' program' + (broad ? '.' : ' ONLY.'),
+    '',
+    'Rules (' + (broad ? 'BROAD grounding' : 'STRICT grounding — curated content only') + '):',
+  ].concat(rules).concat([
     '',
     'KNOWLEDGE:',
     kblock,
     cblock ? ('\nCORRECTIONS (authoritative — follow these):\n' + cblock) : '',
-  ].join('\n');
+  ]).join('\n');
 }
 
 function mount(app) {
@@ -147,7 +154,7 @@ function mount(app) {
     let chars = 0;
     try { const k = await kb.load_knowledge(queue); chars = (k && k.length) || 0; } catch (e) { chars = 0; }
     const st = settings.get();
-    res.json({ ok: true, scope: queue, queue: queue, provider: st.provider, model: ai.resolve_model(st.provider, st.model || null, process.env), knowledge_chars: chars });
+    res.json({ ok: true, scope: queue, queue: queue, provider: st.provider, model: ai.resolve_model(st.provider, st.model || null, process.env), knowledge_chars: chars, grounding: st.grounding });
   });
 
   // The exact context the bot grounds on (files + corrections count + dir). Names/sizes only.
@@ -251,7 +258,7 @@ function mount(app) {
     const b = req.body || {}; const queue = pick_queue(req);
     const question = String(b.question || '').trim();
     if (!question) return res.status(400).json({ ok: false, error: 'Empty question.' });
-    try { res.json({ ok: true, queue: queue, results: await chunk_store.select_chunks(queue, question, Number(b.n) || RETRIEVE_N) }); }
+    try { const g = await grounding.retrieve(queue, question, Number(b.n) || RETRIEVE_N); res.json({ ok: true, queue: queue, mode: g.mode, results: g.used }); }
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'preview failed' }); }
   });
   // Admin: the web-context allowlist (hostnames). GET returns it; POST replaces it. Admin role only.
@@ -304,6 +311,19 @@ function mount(app) {
   app.get(P + '/conversation', gate, async function (req, res) {
     try { res.json({ ok: true, id: req.query.id, turns: await convo_store.by_conversation(req.query.id) }); }
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'load failed' }); }
+  });
+  // Delete ONE test conversation. TEST ONLY — the store guards is_test=1, so live conversations can't be deleted.
+  app.post(P + '/conversation/delete', gate, async function (req, res) {
+    const id = String((req.body && req.body.conversation_id) || '').slice(0, 40);
+    if (!id) return res.status(400).json({ ok: false, error: 'conversation_id required' });
+    try { res.json({ ok: true, deleted: await convo_store.delete_conversation(id) }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'delete failed' }); }
+  });
+  // Delete ALL test conversations for the current queue. TEST ONLY.
+  app.post(P + '/conversations/delete-test', gate, async function (req, res) {
+    const queue = pick_queue(req);
+    try { res.json({ ok: true, deleted: await convo_store.delete_test(queue) }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'delete failed' }); }
   });
 
   // POST /api/chatbot/ask — operator INSPECTION: ask a question ABOUT the selected conversation and/or this
@@ -379,22 +399,30 @@ function mount(app) {
       const convo = hist.map(function (h) { return (h.role === 'bot' ? 'Assistant: ' : 'User: ') + String(h.text || ''); }).join('\n');
       const prompt = (convo ? (convo + '\n') : '') + 'User: ' + message + '\nAssistant:';
 
+      const mode = st.grounding || 'strict';   // 'strict' (curated content only) | 'broad' (general knowledge allowed)
       const t0 = Date.now();
-      const raw = await ai.complete({ provider: provider, model: model, system: build_system(queue, knowledge, corr), prompt: prompt });
+      const raw = await ai.complete({ provider: provider, model: model, system: build_system(queue, knowledge, corr, mode), prompt: prompt });
       const latency_ms = Date.now() - t0;
       const out = ai.norm_completion(raw, model);
       const answer = (out && out.text ? String(out.text).trim() : '');
       const grounded = !!(knowledge && knowledge.length);
 
-      res.json({ ok: true, answer: answer, grounded: grounded, model: out.model || model, conversation_id: conversation_id, queue: queue, sources: provenance(ret.used) });
+      res.json({ ok: true, answer: answer, grounded: grounded, grounding: mode, model: out.model || model, conversation_id: conversation_id, queue: queue, sources: provenance(ret.used) });
 
       const base = { conversation_id: conversation_id, channel: CHANNEL, queue: queue, actor: actor, is_test: is_test };
-      convo_store.log_turn(Object.assign({}, base, { turn: turn, role: 'user', text: message }));
-      convo_store.log_turn(Object.assign({}, base, {
-        turn: turn, role: 'bot', text: answer, provider: provider, model: out.model || model,
-        grounded: grounded, knowledge_chars: (knowledge && knowledge.length) || 0,
-        context_files: ctx_files, corrections_used: corr.length, latency_ms: latency_ms,
-      }));
+      // Log fire-and-forget but IN ORDER (intro → user → bot) so the review transcript reads correctly.
+      // `intro` is the bubble's opening greeting, sent only on the first message of a conversation.
+      (async function () {
+        try {
+          if (b.intro) await convo_store.log_turn(Object.assign({}, base, { turn: 0, role: 'bot', text: String(b.intro).slice(0, MAX_MSG) }));
+          await convo_store.log_turn(Object.assign({}, base, { turn: turn, role: 'user', text: message }));
+          await convo_store.log_turn(Object.assign({}, base, {
+            turn: turn, role: 'bot', text: answer, provider: provider, model: out.model || model,
+            grounded: grounded, knowledge_chars: (knowledge && knowledge.length) || 0,
+            context_files: ctx_files, corrections_used: corr.length, latency_ms: latency_ms,
+          }));
+        } catch (e) { /* logging must never break the response */ }
+      })();
     } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'chat failed' }); }
   });
 }

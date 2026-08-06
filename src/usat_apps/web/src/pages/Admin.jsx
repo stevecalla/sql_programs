@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import { ReorderableCards } from '../lib/ReorderableList.jsx';   // shared collapsible + drag-reorder cards
 
 // Admin · Access — user management + panel access, over the admin-gated /api/admin/* endpoints.
 //   • Users: .env recovery accounts (always valid, not removable) + stored scrypt-hashed users.
 //   • Panel access — general default: which panels non-admins see by default (admins always see all).
 //   • Panel access — per user: override the default for one user ("Use default" removes the override).
-// The panel catalog is built server-side from the module registry, so new modules' panels appear here.
-//
-// NOTE (deferred): once Microsoft SSO lands, "add user" becomes "add USAT email" and the password field
-// goes away — the identity comes from Microsoft; this page still governs role + panel access.
+// Cards are collapsible + drag-reorderable via the shared component (kept open by default so nothing is
+// hidden until an admin chooses to collapse it). The panel catalog is built server-side from the module
+// registry, so new modules' panels appear here.
 
 const sbtn = { padding: '3px 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)', color: 'var(--ink)', cursor: 'pointer', fontSize: 12 };
 const rlab = { display: 'inline-flex', gap: 6, alignItems: 'center' };
@@ -16,67 +16,11 @@ const pill = (bg, fg) => ({ display: 'inline-block', padding: '1px 9px', borderR
 const rolePill = (r) => (r === 'admin' ? pill('rgba(194,14,47,.15)', '#c20e2f') : pill('rgba(59,130,246,.16)', '#2563eb'));
 const srcPill = (s) => (s === 'env' ? pill('rgba(212,146,10,.20)', '#b45309') : pill('rgba(100,116,139,.20)', 'var(--muted, #64748b)'));
 
-// Collapsible card wrapper for this page — same plain `.card` look, with a clickable header + chevron.
-// Defaults open so nothing on the admin page is hidden until the admin chooses to collapse it.
-function Section({ title, open, onToggle, children }) {
-  return (
-    <div className="card">
-      <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-        <h3 style={{ margin: 0 }}>{title}</h3>
-        <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: 18, lineHeight: 1, transition: 'transform .15s', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
-      </div>
-      {open ? <div style={{ marginTop: 12 }}>{children}</div> : null}
-    </div>
-  );
-}
-
-// Web-context allowlist — hostnames the AI Chat Bot may fetch as URL context. Admin-gated endpoint.
-function AllowlistCard({ open, onToggle }) {
-  const [text, setText] = useState('');
-  const [msg, setMsg] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const BASE = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
-  const load = async () => {
-    try {
-      const r = await fetch(BASE + '/api/chatbot/context-allowlist', { credentials: 'same-origin' });
-      const j = await r.json();
-      if (j.ok) setText((j.allowlist || []).join('\n')); else setMsg({ text: j.error || 'error', kind: 'err' });
-    } catch (e) { setMsg({ text: 'load failed', kind: 'err' }); }
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
-  const save = async () => {
-    setBusy(true); setMsg(null);
-    const hosts = text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
-    try {
-      const r = await fetch(BASE + '/api/chatbot/context-allowlist', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ allowlist: hosts }) });
-      const j = await r.json();
-      if (j.ok) { setText((j.allowlist || []).join('\n')); setMsg({ text: 'Saved.', kind: 'ok' }); } else setMsg({ text: j.error || 'error', kind: 'err' });
-    } catch (e) { setMsg({ text: 'save failed', kind: 'err' }); }
-    finally { setBusy(false); }
-  };
-  return (
-    <Section title="Web context allowlist (AI Chat Bot)" open={open} onToggle={onToggle}>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Hostnames the AI Chat Bot may fetch as URL context (apex + subdomains). One host per line, e.g. <code>usatriathlon.org</code>.
-        A page from any other host is rejected. Fetches are also SSRF-guarded (no internal addresses).
-      </p>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} style={{ width: '100%', fontFamily: 'monospace', fontSize: 13 }} placeholder="usatriathlon.org" />
-      <div style={{ marginTop: 8 }}>
-        <button className="btn primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save allowlist'}</button>
-        {msg && msg.text ? <span className="small" style={{ marginLeft: 8, color: msg.kind === 'err' ? 'var(--red)' : '#16794a' }}>{msg.text}</span> : null}
-      </div>
-    </Section>
-  );
-}
-
 export default function Admin() {
   const [users, setUsers] = useState(null);
   const [panels, setPanels] = useState([]);
   const [access, setAccess] = useState({ default: [], users: {} });
   const [err, setErr] = useState('');
-
-  const [secOpen, setSecOpen] = useState({ users: true, def: true, user: true, allow: false });
-  const toggleSec = (k) => setSecOpen((o) => ({ ...o, [k]: !o[k] }));
 
   const [nu, setNu] = useState(''); const [np, setNp] = useState(''); const [nr, setNr] = useState('user'); const [showPw, setShowPw] = useState(false);
   const [uMsg, setUMsg] = useState(null);
@@ -109,8 +53,6 @@ export default function Admin() {
 
   const knownUsers = users ? users.map((u) => u.user) : [];
 
-  // What a selected user EFFECTIVELY sees: their per-user override if set, else the general default
-  // (admins always see everything, regardless of panel access).
   const panelLabel = (k) => { const p = panels.find((x) => x.key === k); return p ? (p.label || p.key) : k; };
   const effectiveAccess = () => {
     if (!selUser) return null;
@@ -162,7 +104,6 @@ export default function Admin() {
     ? <span className="small" style={{ marginLeft: 8, color: m.kind === 'err' ? 'var(--red)' : (m.kind === 'ok' ? '#16794a' : 'var(--muted)') }}>{m.text}</span>
     : null);
 
-  // Bucket the catalog by group (group:null -> "General"), preserving catalog order.
   const grouped = () => {
     const g = {}; const order = [];
     panels.forEach((p) => { const k = p.group || 'General'; if (!g[k]) { g[k] = []; order.push(k); } g[k].push(p); });
@@ -194,95 +135,107 @@ export default function Admin() {
 
   if (err) return (<div className="page"><h2>Users &amp; access</h2><p className="err">{err}</p></div>);
 
+  const items = [
+    {
+      key: 'users', title: 'Users', defaultOpen: true, children: (
+        <>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            App logins. <code>.env</code> recovery accounts (<code>USATAPPS_ADMIN_*</code>, <code>USATAPPS_TEST_*</code>) are
+            always valid and can’t be removed; add app-specific users below. Role <b>admin</b> can reach this page.
+          </p>
+          <table className="grid">
+            <thead><tr><th>User</th><th>Role</th><th>Source</th><th /></tr></thead>
+            <tbody>
+              {!users && <tr><td className="muted">Loading…</td></tr>}
+              {users && users.map((u) => (
+                <tr key={u.user + u.source}>
+                  <td>{u.user}</td>
+                  <td><span style={rolePill(u.role)}>{u.role}</span></td>
+                  <td><span style={srcPill(u.source)}>{u.source === 'env' ? 'recovery' : 'stored'}</span></td>
+                  <td>{u.removable
+                    ? (<><button style={sbtn} onClick={() => resetPw(u.user)}>reset pw</button>{' '}
+                       <button style={{ ...sbtn, color: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => removeUser(u.user)}>remove</button></>)
+                    : <span className="muted small">recovery</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="rowform" style={{ marginTop: 10, flexWrap: 'wrap' }}>
+            <input placeholder="username / email" value={nu} onChange={(e) => setNu(e.target.value)} autoComplete="off" />
+            <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+              <input placeholder="password" type={showPw ? 'text' : 'password'} value={np} onChange={(e) => setNp(e.target.value)} autoComplete="new-password" style={{ paddingRight: 30 }} />
+              <button type="button" onClick={() => setShowPw((v) => !v)} title={showPw ? 'Hide password' : 'Show password'} aria-label={showPw ? 'Hide password' : 'Show password'}
+                style={{ position: 'absolute', right: 4, border: 0, background: 'transparent', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, color: 'var(--muted)' }}>{showPw ? '🙈' : '👁'}</button>
+            </span>
+            <select value={nr} onChange={(e) => setNr(e.target.value)}>
+              <option value="user">user</option><option value="admin">admin</option>
+            </select>
+            <button className="btn primary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }} onClick={saveUser}>Add / update user</button>
+            {msg(uMsg)}
+          </div>
+          <p className="muted small" style={{ margin: '10px 0 0', borderLeft: '3px solid var(--line)', paddingLeft: 8 }}>
+            📁 <strong>Where this data lives:</strong> stored users in <code>auth.json</code> (scrypt‑hashed) and panel access in <code>panel_access.json</code> — in the platform data folder <em>outside the repo, not in the database</em>. Recovery accounts come from <code>.env</code> (<code>USATAPPS_ADMIN_*</code> / <code>USATAPPS_TEST_*</code>).
+          </p>
+        </>
+      )
+    },
+    {
+      key: 'def', title: 'Panel access — general default', defaultOpen: true, children: (
+        <>
+          <p className="muted small" style={{ marginTop: 0 }}>Which panels non-admin users see by default. Admins always see every panel.</p>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <label style={rlab}><input type="radio" name="defmode" checked={defMode === 'all'} onChange={() => setDefMode('all')} /> All panels</label>
+            <label style={rlab}><input type="radio" name="defmode" checked={defMode === 'some'} onChange={() => setDefMode('some')} /> Only selected</label>
+          </div>
+          {defMode === 'some' && qlist(defSet, setDefSet)}
+          <button className="btn primary" style={{ marginTop: 12 }} onClick={saveDefault}>Save default</button>{msg(defMsg)}
+        </>
+      )
+    },
+    {
+      key: 'user', title: 'Panel access — per user', defaultOpen: true, children: (
+        <>
+          <p className="muted small" style={{ marginTop: 0 }}>Override the default for one user. “Use default” removes the override.</p>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="small">User&nbsp;
+              <select value={selUser} onChange={(e) => setSelUser(e.target.value)}>
+                <option value="">—</option>
+                {knownUsers.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </label>
+            <label style={rlab}><input type="radio" name="usermode" checked={uMode === 'default'} onChange={() => setUMode('default')} /> Use default</label>
+            <label style={rlab}><input type="radio" name="usermode" checked={uMode === 'all'} onChange={() => setUMode('all')} /> All panels</label>
+            <label style={rlab}><input type="radio" name="usermode" checked={uMode === 'some'} onChange={() => setUMode('some')} /> Only selected</label>
+          </div>
+          {selUser && (() => {
+            const e = effectiveAccess();
+            let body;
+            if (e.kind === 'admin') body = <em>all panels — admin role (panel access doesn’t apply)</em>;
+            else if (e.kind === 'all') body = <span>all panels <span className="muted">({e.src})</span></span>;
+            else if (e.keys.length) body = <span>{e.keys.map(panelLabel).join(', ')} <span className="muted">({e.src})</span></span>;
+            else body = <span><em>no panels</em> <span className="muted">({e.src})</span></span>;
+            return (
+              <div className="small" style={{ margin: '10px 0', padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}>
+                <strong>{selUser}</strong> currently sees: {body}
+              </div>
+            );
+          })()}
+          {uMode === 'some' && qlist(uSet, setUSet)}
+          <button className="btn primary" style={{ marginTop: 12 }} onClick={saveUserAccess} disabled={!selUser}>Save user</button>{msg(accMsg)}
+          <p className="muted small" style={{ marginTop: 12 }}>
+            The <b>Admin</b> page itself is governed by the <b>admin</b> role, not by panel access — a non-admin can
+            never reach user management even if granted other panels.
+          </p>
+        </>
+      )
+    },
+  ];
+
   return (
     <div className="page">
       <h2>Users &amp; access</h2>
-
-      <Section title="Users" open={secOpen.users} onToggle={() => toggleSec('users')}>
-        <p className="muted small" style={{ marginTop: 0 }}>
-          App logins. <code>.env</code> recovery accounts (<code>USATAPPS_ADMIN_*</code>, <code>USATAPPS_TEST_*</code>) are
-          always valid and can’t be removed; add app-specific users below. Role <b>admin</b> can reach this page.
-        </p>
-        <table className="grid">
-          <thead><tr><th>User</th><th>Role</th><th>Source</th><th /></tr></thead>
-          <tbody>
-            {!users && <tr><td className="muted">Loading…</td></tr>}
-            {users && users.map((u) => (
-              <tr key={u.user + u.source}>
-                <td>{u.user}</td>
-                <td><span style={rolePill(u.role)}>{u.role}</span></td>
-                <td><span style={srcPill(u.source)}>{u.source === 'env' ? 'recovery' : 'stored'}</span></td>
-                <td>{u.removable
-                  ? (<><button style={sbtn} onClick={() => resetPw(u.user)}>reset pw</button>{' '}
-                     <button style={{ ...sbtn, color: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => removeUser(u.user)}>remove</button></>)
-                  : <span className="muted small">recovery</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="rowform" style={{ marginTop: 10, flexWrap: 'wrap' }}>
-          <input placeholder="username / email" value={nu} onChange={(e) => setNu(e.target.value)} autoComplete="off" />
-          <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-            <input placeholder="password" type={showPw ? 'text' : 'password'} value={np} onChange={(e) => setNp(e.target.value)} autoComplete="new-password" style={{ paddingRight: 30 }} />
-            <button type="button" onClick={() => setShowPw((v) => !v)} title={showPw ? 'Hide password' : 'Show password'} aria-label={showPw ? 'Hide password' : 'Show password'}
-              style={{ position: 'absolute', right: 4, border: 0, background: 'transparent', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2, color: 'var(--muted)' }}>{showPw ? '🙈' : '👁'}</button>
-          </span>
-          <select value={nr} onChange={(e) => setNr(e.target.value)}>
-            <option value="user">user</option><option value="admin">admin</option>
-          </select>
-          <button className="btn primary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }} onClick={saveUser}>Add / update user</button>
-          {msg(uMsg)}
-        </div>
-        <p className="muted small" style={{ margin: '10px 0 0', borderLeft: '3px solid var(--line)', paddingLeft: 8 }}>
-          📁 <strong>Where this data lives:</strong> stored users in <code>auth.json</code> (scrypt‑hashed) and panel access in <code>panel_access.json</code> — in the platform data folder <em>outside the repo, not in the database</em>. Recovery accounts come from <code>.env</code> (<code>USATAPPS_ADMIN_*</code> / <code>USATAPPS_TEST_*</code>).
-        </p>
-      </Section>
-
-      <Section title="Panel access — general default" open={secOpen.def} onToggle={() => toggleSec('def')}>
-        <p className="muted small" style={{ marginTop: 0 }}>Which panels non-admin users see by default. Admins always see every panel.</p>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <label style={rlab}><input type="radio" name="defmode" checked={defMode === 'all'} onChange={() => setDefMode('all')} /> All panels</label>
-          <label style={rlab}><input type="radio" name="defmode" checked={defMode === 'some'} onChange={() => setDefMode('some')} /> Only selected</label>
-        </div>
-        {defMode === 'some' && qlist(defSet, setDefSet)}
-        <button className="btn primary" style={{ marginTop: 12 }} onClick={saveDefault}>Save default</button>{msg(defMsg)}
-      </Section>
-
-      <Section title="Panel access — per user" open={secOpen.user} onToggle={() => toggleSec('user')}>
-        <p className="muted small" style={{ marginTop: 0 }}>Override the default for one user. “Use default” removes the override.</p>
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-          <label className="small">User&nbsp;
-            <select value={selUser} onChange={(e) => setSelUser(e.target.value)}>
-              <option value="">—</option>
-              {knownUsers.map((u) => <option key={u} value={u}>{u}</option>)}
-            </select>
-          </label>
-          <label style={rlab}><input type="radio" name="usermode" checked={uMode === 'default'} onChange={() => setUMode('default')} /> Use default</label>
-          <label style={rlab}><input type="radio" name="usermode" checked={uMode === 'all'} onChange={() => setUMode('all')} /> All panels</label>
-          <label style={rlab}><input type="radio" name="usermode" checked={uMode === 'some'} onChange={() => setUMode('some')} /> Only selected</label>
-        </div>
-        {selUser && (() => {
-          const e = effectiveAccess();
-          let body;
-          if (e.kind === 'admin') body = <em>all panels — admin role (panel access doesn’t apply)</em>;
-          else if (e.kind === 'all') body = <span>all panels <span className="muted">({e.src})</span></span>;
-          else if (e.keys.length) body = <span>{e.keys.map(panelLabel).join(', ')} <span className="muted">({e.src})</span></span>;
-          else body = <span><em>no panels</em> <span className="muted">({e.src})</span></span>;
-          return (
-            <div className="small" style={{ margin: '10px 0', padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}>
-              <strong>{selUser}</strong> currently sees: {body}
-            </div>
-          );
-        })()}
-        {uMode === 'some' && qlist(uSet, setUSet)}
-        <button className="btn primary" style={{ marginTop: 12 }} onClick={saveUserAccess} disabled={!selUser}>Save user</button>{msg(accMsg)}
-        <p className="muted small" style={{ marginTop: 12 }}>
-          The <b>Admin</b> page itself is governed by the <b>admin</b> role, not by panel access — a non-admin can
-          never reach user management even if granted other panels.
-        </p>
-      </Section>
-
-      <AllowlistCard open={secOpen.allow} onToggle={() => toggleSec('allow')} />
+      <p className="muted small" style={{ marginTop: -4 }}>Drag the <b>⠿</b> handle to reorder; click a title to collapse.</p>
+      <ReorderableCards storageKey="admin_users_access" items={items} />
     </div>
   );
 }

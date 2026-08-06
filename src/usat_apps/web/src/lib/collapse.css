@@ -1,0 +1,8 @@
+/* Shared collapsible-card header styling for ReorderableCards (lib/ReorderableList.jsx). Reuses the app's
+   global .card box; adds the clickable header + rotating chevron. */
+.rc-head { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.rc-h { margin: 0; flex: 1; }
+.rc-summary { color: var(--dim, #6b7280); font-size: 12px; }
+.rc-chev { color: var(--dim, #6b7280); transition: transform .15s ease; }
+.rc-chev.open { transform: rotate(90deg); }
+.rc-body { margin-top: 10px; }

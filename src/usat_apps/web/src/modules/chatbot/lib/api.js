@@ -38,6 +38,8 @@ export const api = {
   // conversation threads
   conversations: (queue, opts) => req(P + '/conversations' + qs(Object.assign({ queue }, opts || {}))),
   conversation: (id) => req(P + '/conversation' + qs({ id })),
+  deleteConversation: (id) => req(P + '/conversation/delete', { method: 'POST', body: JSON.stringify({ conversation_id: id }) }),
+  clearTestConversations: (queue) => req(P + '/conversations/delete-test', { method: 'POST', body: JSON.stringify({ queue }) }),
   // settings / models
   aiModels: () => req(P + '/ai/models'),
   settings: () => req(P + '/settings'),

@@ -192,7 +192,7 @@ textarea.cbx-input { resize: vertical; }
 /* Readable timestamps on the accent (user) bubble + collapsible turns + center actions */
 .cbx-turn.user .cbx-turn-time { color: rgba(255,255,255,.85); }
 .cbx-turn.user .cbx-turn-prev { color: rgba(255,255,255,.8); }
-.cbx-turn-role { cursor: pointer; user-select: none; display: flex; align-items: center; }
+.cbx-turn-role { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
 .cbx-caret { display: inline-block; transition: transform .12s; margin-right: 6px; opacity: .7; font-weight: 700; }
 .cbx-caret.open { transform: rotate(90deg); }
 .cbx-turn-prev { font-size: 13px; line-height: 1.4; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
@@ -219,3 +219,10 @@ textarea.cbx-input { resize: vertical; }
 .cbx-chip:hover { border-color: var(--accent); }
 .cbx-chip:disabled { opacity: .5; cursor: default; }
 .cbx-ts { color: var(--muted); font-size: 10px; font-weight: 400; margin-left: 6px; }
+
+/* Delete test conversations: per-row trash (hover-reveal) + list-head actions */
+.cbx-listhead-actions { display: inline-flex; gap: 6px; align-items: center; }
+.cbx-thread-row { position: relative; display: flex; }
+.cbx-thread-row > .cbx-thread { flex: 1; width: 100%; padding-right: 32px; }
+.cbx-thread-del { position: absolute; bottom: 6px; right: 6px; border: 0; background: transparent; cursor: pointer; font-size: 18px; line-height: 1; padding: 4px; border-radius: 6px; color: var(--muted); opacity: .8; }
+.cbx-thread-del:hover { opacity: 1; color: var(--red, #c20e2f); background: var(--panel); }

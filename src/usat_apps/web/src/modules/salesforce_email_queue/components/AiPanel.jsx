@@ -3,7 +3,9 @@ import { api } from '../lib/api.js';
 import * as store from '../lib/store.js';
 import { track, meta as trackMeta } from '../lib/track.js';
 import { Modal, RowsTable, fmtBytes, copyText, CopyButton, downloadText } from './ui.jsx';
-import { Collapsible, ContextAddFiles, AskPanel } from '../../../lib/ui.jsx';   // shared collapsible + add-files + ask (dedup)
+import { Collapsible, ContextAddFiles, AskPanel, CorrectionsList } from '../../../lib/ui.jsx';   // shared collapsible + add-files + ask + corrections list (dedup)
+import { UrlContextCard, RetrievePreviewCard } from '../../chatbot/components/UrlContext.jsx';   // shared URL knowledge cards (one knowledge base)
+import '../../chatbot/chatbot.css';   // cbx-* styles for the shared URL cards
 
 const ASK_PRESETS = [
   'Summarize the case',
@@ -207,15 +209,15 @@ export default function AiPanel({ s }) {
           presets={ASK_PRESETS}
           expanded={askExpanded} onToggleExpanded={() => setAskExpanded((x) => !x)}
           renderCopy={(t) => <CopyButton text={t} label="📋 Copy" />}
-          classes={{ chips: 'eq-chips', chip: 'qchip', hist: 'eq-askhist', dim: 'dim', qa: 'eq-qa', q: 'eq-q', ts: 'sc', a: 'eq-a', ta: 'eq-fld', askBtn: 'eq-btn', seeMore: 'eq-btn sm ghost' }}
+          onReset={() => { setHist([]); setQuestion(''); setAskExpanded(false); }}
+          classes={{ chips: 'eq-chips', chip: 'qchip', hist: 'eq-askhist', dim: 'dim', qa: 'eq-qa', q: 'eq-q', ts: 'sc', a: 'eq-a', ta: 'eq-fld', askBtn: 'eq-btn', seeMore: 'eq-btn sm ghost', resetBtn: 'eq-btn sm ghost' }}
         />
       </Card>
 
       {/* Card 3 — Corrections */}
       <Card title="Corrections (teach the AI)" open={open.corr} onToggle={() => toggle('corr')} summary={corrCount ? corrCount + ' active' : ''}>
         <div className="dim" style={{ marginBottom: 8 }}>Corrections are injected into the AI grounding so future drafts and answers honor them.</div>
-        {(s.corr || []).slice(0, 8).map((x) => <div className="eq-corr" key={x.id}><span>{x.note}</span><span className="sc">{x.scope}{x.queue ? ' · ' + x.queue : ''}</span></div>)}
-        {!(s.corr || []).length ? <div className="dim">(no corrections yet)</div> : null}
+        <CorrectionsList rows={s.corr || []} classes={{ list: 'cbx-corr-list', item: 'cbx-corr', note: 'cbx-corr-note', dim: 'cbx-dim' }} />
         <textarea className="eq-fld" style={{ marginTop: 8 }} value={corrNote} onChange={(e) => setCorrNote(e.target.value)} placeholder="e.g. Coaching cert processing takes 2–3 weeks, not 4–6. Send renewals to memberservices@usatriathlon.org." />
         <div className="eq-inline" style={{ gap: 8 }}>
           <select className="eq-fld" style={{ margin: 0, width: 'auto' }} value={corrScope} onChange={(e) => setCorrScope(e.target.value)}>
@@ -248,6 +250,10 @@ export default function AiPanel({ s }) {
           classes={{ h: 'eq-h', row: 'eq-inline', select: 'eq-fld', btn: 'eq-btn sm', msg: 'dim' }}
           styles={{ h: { marginTop: 10 }, row: { gap: 8, flexWrap: 'wrap' }, select: { margin: 0, width: 'auto' }, msg: { marginTop: 6, fontSize: 12 } }} />
       </Card>
+
+      {/* Card 4b — Web pages (URL context) + Retrieval preview — SHARED with the chatbot (one knowledge base) */}
+      <UrlContextCard queue={queueName} api={api} />
+      <RetrievePreviewCard queue={queueName} api={api} />
 
       {/* Card 5 — SOQL */}
       <Card title="SOQL (editable, runs read-only)" open={open.soql} onToggle={() => toggle('soql')}>
@@ -295,6 +301,7 @@ export default function AiPanel({ s }) {
         <h3 className="eq-h" style={{ marginTop: 4 }}>How the AI works & what it can see</h3>
         <p className="eq-refp">When you draft or ask, the server rebuilds the case context from Salesforce and sends the model: the <b>full email thread</b>, this sender's <b>prior case history</b>, extracted <b>attachment text</b>, the queue's <b>knowledge / context files</b>, and any <b>operator corrections</b> scoped to you / this queue / all queues. Triage sees the thread plus the queue knowledge.</p>
         <p className="eq-refp">The <b>model picker</b> at the top applies to triage, draft and ask alike — stronger models classify and write more reliably. A <b>local rule</b> (marked <b>*</b>) may decide obvious cases (e.g. spam) with no AI call. The AI is grounded on <b>curated knowledge and the case itself</b>; it never invents specifics that aren't in that context, and this build makes <b>no changes in Salesforce</b>.</p>
+        <p className="eq-refp"><b>How knowledge is ranked (BM25‑lite).</b> Web pages and files are split into labeled <b>chunks</b>; for each draft or question the server scores those chunks against the customer's message (plus your question) with a keyword relevance formula — like a search engine: rarer, more specific words count more, a match in a section <b>heading</b> counts extra, and common filler words are ignored. It's fast and <b>literal</b> (it matches words, not meaning), so the wording in your knowledge matters. The top‑scoring chunks are what the AI is grounded on — the same shared knowledge base the chatbot uses.</p>
       </Card>
 
       {ctxView ? <Modal title={ctxView.name} onClose={() => setCtxView(null)} wide actions={ctxView.dl ? <a className="eq-btn sm" href={ctxView.dl} target="_blank" rel="noopener">⬇ Download</a> : null}><div className="eq-attpane big">{ctxView.node}</div></Modal> : null}

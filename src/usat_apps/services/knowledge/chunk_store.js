@@ -65,6 +65,17 @@ const DDL_CHUNKS = `CREATE TABLE IF NOT EXISTS ${CHUNKS} (
   INDEX idx_excluded (excluded)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`;
 
+// Add a column to an existing table only if it's missing (fresh installs get it from the DDL above; older
+// prod tables predate the embedding columns). Idempotent via information_schema.
+async function ensure_column(table, column, coldef) {
+  const rows = await db.query(
+    'SELECT COUNT(*) c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+    [table, column]);
+  if (rows && rows[0] && Number(rows[0].c) === 0) {
+    try { await db.query('ALTER TABLE ' + table + ' ADD COLUMN ' + coldef); } catch (e) { /* concurrent add / perms — ignore */ }
+  }
+}
+
 let _ready = null;
 async function ensure() {
   if (_ready) return _ready;
@@ -72,6 +83,9 @@ async function ensure() {
     const pool = await db.get_pool();
     await ensure_table(pool, DDL_SOURCES);
     await ensure_table(pool, DDL_CHUNKS);
+    // Migrate older chunk tables to carry the embedding columns (semantic retrieval).
+    await ensure_column(CHUNKS, 'embedding', 'embedding MEDIUMBLOB NULL');
+    await ensure_column(CHUNKS, 'embed_model', 'embed_model VARCHAR(80) NULL');
   })();
   return _ready;
 }
@@ -200,8 +214,54 @@ async function stats() {
   return (rows && rows[0]) || { chunks: 0, sources: 0, excluded: 0 };
 }
 
+// ---- embeddings (semantic retrieval) ----
+// Candidate chunks for hybrid ranking: same visibility as select_chunks, but ALSO returns the stored vector
+// bytes + which model produced them, so grounding can compute a semantic score. Curated text only.
+async function candidates(queue) {
+  await ensure();
+  return await db.query(
+    'SELECT chunk_id, source_ref, source_title, category, text, char_len, embedding, embed_model FROM ' + CHUNKS +
+    " WHERE excluded = 0 AND (scope = 'global' OR (scope = 'queue' AND REGEXP_REPLACE(LOWER(queue), '[^a-z0-9]', '') = ?)) " +
+    'LIMIT 5000', [nq(queue)]);
+}
+// Store one chunk's vector (Buffer) + the model that produced it. Pass buffer=null to clear.
+async function set_chunk_embedding(id, buffer, model) {
+  await ensure();
+  await db.query('UPDATE ' + CHUNKS + ' SET embedding = ?, embed_model = ? WHERE id = ?', [buffer || null, model || null, Number(id)]);
+  return true;
+}
+// Chunks that still need a vector for `model` (missing OR produced by a different model). For reindex/backfill.
+async function chunks_missing_embedding(model, limit) {
+  await ensure();
+  const lim = Math.max(1, Math.min(1000, Number(limit) || 128));
+  return await db.query(
+    'SELECT id, text FROM ' + CHUNKS +
+    " WHERE excluded = 0 AND text IS NOT NULL AND text <> '' AND (embedding IS NULL OR embed_model IS NULL OR embed_model <> ?) " +
+    'ORDER BY id ASC LIMIT ' + lim, [String(model || '')]);
+}
+// The just-stored chunks for one source (used to embed right after ingest).
+async function chunks_for_source(source_ref, scope, queue) {
+  await ensure();
+  const sc = norm_scope(scope); const q = scope_queue(sc, queue);
+  return await db.query('SELECT id, text FROM ' + CHUNKS + ' WHERE source_ref = ? AND scope = ? AND queue = ? AND text IS NOT NULL',
+    [String(source_ref || ''), sc, q]);
+}
+// Index coverage for the current model: total vs embedded / stale (other model) / missing.
+async function embedding_status(model) {
+  await ensure();
+  const m = String(model || '');
+  const rows = await db.query(
+    'SELECT SUM(excluded = 0) total, ' +
+    'SUM(excluded = 0 AND embedding IS NOT NULL AND embed_model = ?) embedded, ' +
+    'SUM(excluded = 0 AND embedding IS NOT NULL AND (embed_model IS NULL OR embed_model <> ?)) stale, ' +
+    'SUM(excluded = 0 AND embedding IS NULL) missing FROM ' + CHUNKS, [m, m]);
+  const r = (rows && rows[0]) || {};
+  return { model: m, total: Number(r.total || 0), embedded: Number(r.embedded || 0), stale: Number(r.stale || 0), missing: Number(r.missing || 0) };
+}
+
 module.exports = {
   CHUNKS, SOURCES, REPORTING_TZ, ensure,
   upsert_source, replace_source_chunks, list_sources, list_chunks, set_excluded, remove_source,
   select_chunks, knowledge_from_chunks, stats,
+  candidates, set_chunk_embedding, chunks_missing_embedding, chunks_for_source, embedding_status,
 };

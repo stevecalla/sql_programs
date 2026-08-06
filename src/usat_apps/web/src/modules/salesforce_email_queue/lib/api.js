@@ -40,6 +40,15 @@ export const api = {
   contextExclude: (key, excluded) => req(P + '/context-exclude', { method: 'POST', body: JSON.stringify({ key, excluded }) }),
   contextFile: (scope, queue, name) => req(P + '/context/file' + qs({ scope, queue, name })),
   contextRawUrl: (scope, queue, name) => BASE + P + '/context/raw' + qs({ scope, queue, name }),
+  // URL / web-page context (curated web pages -> chunks) — SHARED with the chatbot (one knowledge base).
+  // Method names match the chatbot client so the shared UrlContext cards work with either api object.
+  contextUrls: (queue) => req(P + '/context-urls' + qs({ queue })),
+  urlChunks: (queue, source_ref, scope) => req(P + '/context-url/chunks' + qs({ queue, source_ref, scope })),
+  addUrl: (payload) => req(P + '/context-url', { method: 'POST', body: JSON.stringify(payload) }),
+  refreshUrl: (payload) => req(P + '/context-url/refresh', { method: 'POST', body: JSON.stringify(payload) }),
+  removeUrl: (payload) => req(P + '/context-url/remove', { method: 'POST', body: JSON.stringify(payload) }),
+  chunkExclude: (id, excluded) => req(P + '/context-chunk-exclude', { method: 'POST', body: JSON.stringify({ id, excluded }) }),
+  retrievePreview: (payload) => req(P + '/retrieve-preview', { method: 'POST', body: JSON.stringify(payload) }),
   send: (payload) => req(P + '/send', { method: 'POST', body: JSON.stringify(payload) }),
   setStatus: (payload) => req(P + '/status', { method: 'POST', body: JSON.stringify(payload) }),
   // metrics dashboard (/metrics/sf-email-queue)

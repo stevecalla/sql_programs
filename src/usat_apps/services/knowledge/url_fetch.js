@@ -14,6 +14,7 @@ const data_dir = require('./data_dir');
 const chunker = require('./chunk');
 const store = require('./chunk_store');
 const safety = require('./url_safety');
+const reindex = require('./reindex');   // embed newly-ingested chunks (only when embeddings are enabled)
 
 const MAX_BYTES = 3 * 1024 * 1024;     // per-page download cap
 const MAX_CHARS = 400 * 1000;          // extracted-text cap before chunking
@@ -142,6 +143,8 @@ async function add_or_refresh(rawUrl, opts) {
     needs_js: thin ? 1 : (o.needs_js ? 1 : 0), chunk_count: chunks.length, bytes: got.bytes, added_by: o.added_by,
     snapshot_path: snap, fetched: true,
   });
+  // Keep the vector index warm: embed the new chunks now if embeddings are on (no-op otherwise). Best-effort.
+  try { await reindex.embed_source(source_ref, o.scope, o.queue); } catch (e) { /* embedding must not fail ingest */ }
   return { ok: true, source_ref: source_ref, title: title, chunks: chunks.length, needs_js: thin ? true : !!o.needs_js };
 }
 
