@@ -16,7 +16,7 @@ const corrections = require('../../services/corrections');
 const corr_store = require('../../services/corrections/mysql_store');
 const convo_store = require('./conversations');
 const settings = require('./settings');
-const sf = require('../salesforce_email_queue/sf');          // SAME SF service the email queue uses (names only — no cases/PII)
+const sf = require('../../services/salesforce');             // shared SF client — connect + list_queues only (no email-queue module, no case/PII reads)
 const kb_data_dir = require('../../services/knowledge/data_dir');
 
 const P = '/api/chatbot';

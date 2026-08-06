@@ -15,4 +15,3 @@ fetch('http://localhost:8022/api/chatbot/scheduled-refresh-urls')
     .catch(error => {
         console.error('Error with request /scheduled-refresh-urls:', error.message);
     });
-cd
