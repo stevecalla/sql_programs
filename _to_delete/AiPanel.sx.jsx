@@ -28,9 +28,8 @@ function rowsToCsv(rows) {
   return (rows || []).map((r) => (r || []).map((c) => { const s = String(c == null ? '' : c); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\n');
 }
 
-const EQ_CARD_CLASSES = { card: 'eq-card', head: 'eq-cardhead', h: 'eq-h', summary: 'eq-summary', chev: 'eq-chev', body: 'eq-cardbody' };
 function Card(props) {
-  return <Collapsible {...props} classes={EQ_CARD_CLASSES} />;
+  return <Collapsible {...props} classes={{ card: 'eq-card', head: 'eq-cardhead', h: 'eq-h', summary: 'eq-summary', chev: 'eq-chev', body: 'eq-cardbody' }} />;
 }
 
 export default function AiPanel({ s }) {
@@ -253,8 +252,8 @@ export default function AiPanel({ s }) {
       </Card>
 
       {/* Card 4b — Web pages (URL context) + Retrieval preview — SHARED with the chatbot (one knowledge base) */}
-      <UrlContextCard queue={queueName} api={api} cardClasses={EQ_CARD_CLASSES} />
-      <RetrievePreviewCard queue={queueName} api={api} cardClasses={EQ_CARD_CLASSES} />
+      <UrlContextCard queue={queueName} api={api} />
+      <RetrievePreviewCard queue={queueName} api={api} />
 
       {/* Card 5 — SOQL */}
       <Card title="SOQL (editable, runs read-only)" open={open.soql} onToggle={() => toggle('soql')}>
@@ -302,8 +301,7 @@ export default function AiPanel({ s }) {
         <h3 className="eq-h" style={{ marginTop: 4 }}>How the AI works & what it can see</h3>
         <p className="eq-refp">When you draft or ask, the server rebuilds the case context from Salesforce and sends the model: the <b>full email thread</b>, this sender's <b>prior case history</b>, extracted <b>attachment text</b>, the queue's <b>knowledge / context files</b>, and any <b>operator corrections</b> scoped to you / this queue / all queues. Triage sees the thread plus the queue knowledge.</p>
         <p className="eq-refp">The <b>model picker</b> at the top applies to triage, draft and ask alike — stronger models classify and write more reliably. A <b>local rule</b> (marked <b>*</b>) may decide obvious cases (e.g. spam) with no AI call. The AI is grounded on <b>curated knowledge and the case itself</b>; it never invents specifics that aren't in that context, and this build makes <b>no changes in Salesforce</b>.</p>
-        <p className="eq-refp"><b>How knowledge is ranked (keyword + semantic).</b> Web pages are split into labeled <b>chunks</b>; for each draft or question the server scores those chunks two ways — <b>keyword</b> (BM25‑lite, a search‑engine formula: rarer/more‑specific words and heading matches count more, filler ignored; fast and <b>literal</b>, matches words not meaning) and, when enabled, <b>semantic</b> (<b>embeddings</b> — the server sends each chunk (once, at ingest) and the question to an <b>embedding model</b>, e.g. OpenAI’s <code>text‑embedding‑3‑small</code>, which turns text into number vectors; chunks are ranked by vector closeness = closeness of <b>meaning</b>, so a paraphrase still finds the right chunk. It’s a small, cheap lookup — separate from the ChatGPT/Claude call that writes the draft). A single <b>blend weight</b> sets how much each counts, and the top blended chunks are added to the grounding. Context <b>files</b> are always included in full. This is the <b>same shared knowledge base</b> the chatbot uses.</p>
-        <p className="eq-refp"><b>Where these are set.</b> The blend weight, the embedding model + reindex, the web allowlist, the AI model list, and queue access are all managed in <b>Admin → Knowledge &amp; AI</b> — one shared place that governs both the email queue and the chatbot. Add web pages or a <b>Retrieval preview</b> from the cards above; upload files in <i>Context files</i>.</p>
+        <p className="eq-refp"><b>How knowledge is ranked (BM25‑lite).</b> Web pages and files are split into labeled <b>chunks</b>; for each draft or question the server scores those chunks against the customer's message (plus your question) with a keyword relevance formula — like a search engine: rarer, more specific words count more, a match in a section <b>heading</b> counts extra, and common filler words are ignored. It's fast and <b>literal</b> (it matches words, not meaning), so the wording in your knowledge matters. The top‑scoring chunks are what the AI is grounded on — the same shared knowledge base the chatbot uses.</p>
       </Card>
 
       {ctxView ? <Modal title={ctxView.name} onClose={() => setCtxView(null)} wide actions={ctxView.dl ? <a className="eq-btn sm" href={ctxView.dl} target="_blank" rel="noopener">⬇ Download</a> : null}><div className="eq-attpane big">{ctxView.node}</div></Modal> : null}

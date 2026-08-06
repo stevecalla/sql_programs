@@ -41,14 +41,14 @@ export function timeAgo(iso) {
 
 // Collapsible card — supports controlled (open/onToggle) OR uncontrolled (local state) use. Renders via the
 // shared Collapsible with the chatbot's cbx-* classes so the look is unchanged.
-const CBX_CARD_CLASSES = { card: 'cbx-card', head: 'cbx-cardhead', h: 'cbx-h', summary: 'cbx-summary', chev: 'cbx-chev', body: 'cbx-cardbody' };
-export function Card({ title, summary, open, onToggle, children, classes }) {
+export function Card({ title, summary, open, onToggle, children }) {
   const [localOpen, setLocalOpen] = useState(!!open);
   const controlled = onToggle != null;
   const isOpen = controlled ? open : localOpen;
   const toggle = () => (controlled ? onToggle() : setLocalOpen((o) => !o));
   return (
-    <Collapsible title={title} summary={summary} open={isOpen} onToggle={toggle} classes={classes || CBX_CARD_CLASSES}>
+    <Collapsible title={title} summary={summary} open={isOpen} onToggle={toggle}
+      classes={{ card: 'cbx-card', head: 'cbx-cardhead', h: 'cbx-h', summary: 'cbx-summary', chev: 'cbx-chev', body: 'cbx-cardbody' }}>
       {children}
     </Collapsible>
   );

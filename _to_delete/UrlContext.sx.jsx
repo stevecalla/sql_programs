@@ -10,7 +10,7 @@ import { track } from '../../../lib/track.js';
 // Web pages (URL context): add an allow-listed page -> the server fetches, chunks, and stores it; the bot
 // retrieves the relevant chunks. Sources list with status + last-fetched, expandable to their chunks
 // (per-chunk include toggle), Refresh / Remove. Snapshots also refresh nightly (utilities/cron_get_url_context).
-export function UrlContextCard({ queue, api = defaultApi, cardClasses }) {
+export function UrlContextCard({ queue, api = defaultApi }) {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
   const [url, setUrl] = useState('');
@@ -69,7 +69,7 @@ export function UrlContextCard({ queue, api = defaultApi, cardClasses }) {
   };
 
   return (
-    <Card title="Web pages (URL context)" classes={cardClasses} summary={sources.length ? sources.length + ' source' + (sources.length === 1 ? '' : 's') : ''}>
+    <Card title="Web pages (URL context)" summary={sources.length ? sources.length + ' source' + (sources.length === 1 ? '' : 's') : ''}>
       <div className="cbx-hint">Add an allow-listed page (e.g. usatriathlon.org). The bot fetches it, splits it into labeled chunks, and retrieves the relevant ones. Snapshots refresh nightly and on demand.</div>
       <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         <input className="cbx-input" style={{ flex: '1 1 200px' }} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.usatriathlon.org/…" />
@@ -126,7 +126,7 @@ export function UrlContextCard({ queue, api = defaultApi, cardClasses }) {
 
 // Retrieval preview: type a question, see the top chunks the bot WOULD send (score + source + section).
 // Creates no conversation turn — the "how is it pulling relevant data" window.
-export function RetrievePreviewCard({ queue, api = defaultApi, cardClasses }) {
+export function RetrievePreviewCard({ queue, api = defaultApi }) {
   const [q, setQ] = useState('');
   const [rows, setRows] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -140,7 +140,7 @@ export function RetrievePreviewCard({ queue, api = defaultApi, cardClasses }) {
     finally { setBusy(false); }
   };
   return (
-    <Card title="Retrieval preview" classes={cardClasses} summary="what the bot would pull">
+    <Card title="Retrieval preview" summary="what the bot would pull">
       <div className="cbx-hint">Type a question to see the top chunks the bot would send for <b>{queue}</b> — score, source, and section. Creates no conversation.</div>
       <textarea className="cbx-input" style={{ minHeight: 60, marginTop: 8 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. how long does coaching renewal take?" />
       <button className="cbx-btn primary sm" onClick={run} disabled={busy || !q.trim()}>{busy ? 'Retrieving…' : 'Preview retrieval'}</button>
