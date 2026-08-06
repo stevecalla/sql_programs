@@ -57,7 +57,7 @@ const SECTIONS = [
   ] },
   { label: 'AI assistant (read-only)', color: 'GREEN', items: [
     { id: 24, action: 'assist', label: 'Browse & assist (guided)', desc: 'Interactive: queue → status → email → draft / ask / correct. Nothing is sent.', cli: 'open /salesforce/email-queue', web: 'terminal', klass: 'na', note: 'The operator app IS the guided assistant — open http://localhost:8022/salesforce/email-queue (queue → email → draft / ask / correct).' },
-    { id: 25, action: 'view_corrections', label: 'View corrections', desc: 'Operator corrections currently grounding the AI.', cli: '(operator app · Corrections)', web: 'terminal', klass: 'na', note: 'Corrections show in the operator app (Corrections) + the metrics Ask; stored in the DB table salesforce_email_queue_corrections.' },
+    { id: 25, action: 'view_corrections', label: 'View corrections', desc: 'Operator corrections currently grounding the AI.', cli: '(operator app · Corrections)', web: 'terminal', klass: 'na', note: 'Corrections show in the operator app (Corrections) + the metrics Ask; stored in the DB table knowledge_corrections.' },
     { id: 26, action: 'view_context', label: 'View context files', desc: 'Reference files the AI reads (md, csv, pdf, docx, xlsx).', cli: '(operator app · Context)', web: 'terminal', klass: 'na', note: 'Reference/context files show in the operator app’s Context card (md, csv, pdf, docx, xlsx).' },
   ] },
   { label: 'Metrics & analytics', color: 'CYAN', items: [

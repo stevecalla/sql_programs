@@ -1,29 +1,29 @@
 'use strict';
 // import_corrections.js — one-shot, IDEMPOTENT import of the standalone (8019) app's corrections.json into
-// the platform DB table salesforce_email_queue_corrections. Run at CUTOVER, AFTER 8019 is stopped, so no new
+// the platform DB table knowledge_corrections. Run at CUTOVER, AFTER 8019 is stopped, so no new
 // corrections can be written to the JSON after the import runs (see the cutover runbook).
 //
 // The records are field-identical between the JSON and the table
 // (id, created_at, active, scope, author, queue, case_id, question, note), and each has a stable string
 // `id`, so this upserts by id: a dry-run then a real run, or two real runs, are safe and produce no dups.
 //
-// TABLE: salesforce_email_queue_corrections — do NOT create it by hand. This script calls the corrections
+// TABLE: knowledge_corrections — do NOT create it by hand. This script calls the corrections
 // store's create_store(), which runs CREATE TABLE IF NOT EXISTS (DDL in services/corrections/mysql_store.js)
 // before importing. To check the result, connect to the SAME DB the platform uses and run:
-//   SELECT COUNT(*) FROM salesforce_email_queue_corrections;
-//   SELECT id, created_at, scope, author, queue, LEFT(note,80) note FROM salesforce_email_queue_corrections ORDER BY created_at DESC LIMIT 20;
+//   SELECT COUNT(*) FROM knowledge_corrections;
+//   SELECT id, created_at, scope, author, queue, LEFT(note,80) note FROM knowledge_corrections ORDER BY created_at DESC LIMIT 20;
 //
-//   node src/usat_apps/modules/salesforce_email_queue/import_corrections.js            # DRY RUN (default; no writes)
-//   node src/usat_apps/modules/salesforce_email_queue/import_corrections.js --commit   # actually import
+//   node src/usat_apps/knowledge_sync/import_corrections.js            # DRY RUN (default; no writes)
+//   node src/usat_apps/knowledge_sync/import_corrections.js --commit   # actually import
 //   node .../import_corrections.js /path/to/corrections.json [--commit]                # explicit source file
 //
 // Source resolution when no path arg is given: EQ_CORRECTIONS_FILE > <data_dir>/corrections.json — the SAME
 // path the 8019 app writes (services/knowledge/data_dir.file_sync mirrors the POC's data_dir).
-try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '..', '.env') }); } catch (e) { /* dotenv optional */ }
+try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '.env') }); } catch (e) { /* dotenv optional */ }
 const fs = require('fs');
-const db = require('../../store/db');
-const store = require('../../services/corrections/mysql_store');   // TABLE, DDL, create_store (ensures the table)
-const data_dir = require('../../services/knowledge/data_dir');
+const db = require('../store/db');
+const store = require('../services/corrections/mysql_store');   // TABLE, DDL, create_store (ensures the table)
+const data_dir = require('../services/knowledge/data_dir');
 
 function to_sql_dt(iso) { const s = String(iso || '').slice(0, 19).replace('T', ' '); return s || null; }
 async function safe_end() { try { if (db.end) await db.end(); } catch (e) { /* ignore */ } }

@@ -1,17 +1,17 @@
 'use strict';
-// export_corrections.js — dump salesforce_email_queue_corrections to a JSON file in the SAME shape
+// export_corrections.js — dump knowledge_corrections to a JSON file in the SAME shape
 // import_corrections.js reads (an array of {id, created_at, active, scope, author, queue, case_id,
 // question, note}). Use it to snapshot one environment's corrections, copy the JSON to another env, then run
 // import_corrections.js --commit there (idempotent upsert by id). Symmetric with the importer — safe to
 // re-run; overwrites the export file each time.
 //
-//   node src/usat_apps/modules/salesforce_email_queue/export_corrections.js                 # -> <data_dir>/corrections_export.json
-//   node src/usat_apps/modules/salesforce_email_queue/export_corrections.js /path/out.json  # explicit output file
-try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '..', '.env') }); } catch (e) { /* dotenv optional */ }
+//   node src/usat_apps/knowledge_sync/export_corrections.js                 # -> <data_dir>/corrections_export.json
+//   node src/usat_apps/knowledge_sync/export_corrections.js /path/out.json  # explicit output file
+try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '.env') }); } catch (e) { /* dotenv optional */ }
 const fs = require('fs');
-const db = require('../../store/db');
-const store = require('../../services/corrections/mysql_store');   // TABLE + create_store (ensures the table)
-const data_dir = require('../../services/knowledge/data_dir');
+const db = require('../store/db');
+const store = require('../services/corrections/mysql_store');   // TABLE + create_store (ensures the table)
+const data_dir = require('../services/knowledge/data_dir');
 
 function to_iso(v) { if (v == null) return ''; if (v instanceof Date) return v.toISOString(); const s = String(v); return s.length >= 10 ? s.replace(' ', 'T') : s; }
 
@@ -36,8 +36,8 @@ async function main() {
   console.log('Exported ' + out.length + ' correction(s) from ' + store.TABLE);
   console.log('  file: ' + file);
   console.log('\nNext: copy this file to the target environment and import (idempotent upsert by id):');
-  console.log('  node src/usat_apps/modules/salesforce_email_queue/import_corrections.js "' + file + '"            # DRY RUN');
-  console.log('  node src/usat_apps/modules/salesforce_email_queue/import_corrections.js "' + file + '" --commit   # import');
+  console.log('  node src/usat_apps/knowledge_sync/import_corrections.js "' + file + '"            # DRY RUN');
+  console.log('  node src/usat_apps/knowledge_sync/import_corrections.js "' + file + '" --commit   # import');
   try { if (db.end) await db.end(); } catch (e) { /* ignore */ }
 }
 main().then(function () { process.exit(0); }).catch(function (e) { console.error('ERROR:', (e && e.message) || e); process.exit(1); });

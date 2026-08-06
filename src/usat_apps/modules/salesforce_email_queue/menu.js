@@ -67,8 +67,8 @@ function hit_status(port, label) {
 const CMD_SECTIONS = registry.SECTIONS.map((s) => ({ label: s.label, color: color_for(s.color), items: s.items }));
 let _next = registry.ALL.reduce((m, it) => Math.max(m, it.id), 0);
 // Cutover (data migration) — CLI-only (not a web Operations button, since COMMIT writes the DB).
-const PULL = 'src/usat_apps/modules/salesforce_email_queue/pull_corrections.js';
-const PULLC = 'src/usat_apps/modules/salesforce_email_queue/pull_content.js';
+const PULL = 'src/usat_apps/knowledge_sync/pull_corrections.js';
+const PULLC = 'src/usat_apps/knowledge_sync/pull_content.js';
 // All-from-dev pulls: SSH to prod, generate/copy, apply here. Need PROD_SSH in .env (+ SSH access).
 const CUTOVER_SECTION = { label: 'Pull from prod → dev (corrections + content)', color: YELLOW, items: [
   { id: ++_next, label: 'Pull corrections from prod', desc: 'From DEV: SSH to prod, export corrections, copy back, import here (idempotent). Needs PROD_SSH in .env.', bin: 'node', argv: [PULL], cli: 'node ' + PULL },

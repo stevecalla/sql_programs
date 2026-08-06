@@ -1,13 +1,15 @@
 'use strict';
 /**
- * data_dir.js — cross-platform home for the email-queue assistant's runtime data.
+ * data_dir.js — cross-platform home for the SHARED knowledge/brain runtime data (used by the email queue
+ * AND the AI Chat Bot). Renamed usat_email_queue -> usat_knowledge (shared-brain plan, item 4); a
+ * prefer-existing fallback keeps the old folder working until a one-time `mv` per host.
  *
  * Mirrors src/race_results_transform/src/data_dir.js: resolve the platform/user base with
- * utilities/determineOSPath() and create a project subfolder under it -> <base>/usat_email_queue/...
+ * utilities/determineOSPath() and create a project subfolder under it -> <base>/usat_knowledge/...
  * That base is usat/data/ on linux/mac, so data lives OUTSIDE the sql_programs repo and member
  * data (uploaded context, future corrections/history) is never committed.
  *
- *   <determineOSPath()>/usat_email_queue/
+ *   <determineOSPath()>/usat_knowledge/   (falls back to usat_email_queue if that folder still exists)
  *     context/        user-provided knowledge the AI reads (_global + <queue_slug>)
  *     auth.json       local user store
  *     corrections.json operator corrections
@@ -26,11 +28,23 @@ const { determineOSPath, determineOSPathSync } = require('../../../../utilities/
 function env_data_dir() { return process.env.KNOWLEDGE_DATA_DIR || process.env.EQ_DATA_DIR || ''; }
 function env_context_dir() { return process.env.KNOWLEDGE_CONTEXT_DIR || process.env.EQ_CONTEXT_DIR || ''; }
 
+// The shared data folder was renamed usat_email_queue -> usat_knowledge (item 4). Prefer the new name; if it
+// doesn't exist yet but the old one does, keep using the old one until a one-time `mv` is done on that host
+// (avoids split-brain between new writes and old reads). New installs get the new name.
+const NEW_DIR = 'usat_knowledge';
+const OLD_DIR = 'usat_email_queue';
+function resolve_base(root) {
+  const nw = path.join(root, NEW_DIR);
+  if (fs.existsSync(nw)) return nw;
+  const old = path.join(root, OLD_DIR);
+  if (fs.existsSync(old)) return old;
+  return nw;   // neither exists yet -> create the new one
+}
+
 async function base() {
   const ed = env_data_dir();
   if (ed) return ed;
-  const root = await determineOSPath();            // e.g. .../usat/data/
-  return path.join(root, 'usat_email_queue');
+  return resolve_base(await determineOSPath());
 }
 async function ensure(sub) {
   const d = sub ? path.join(await base(), sub) : await base();
@@ -54,7 +68,7 @@ async function context() {
 function base_sync() {
   const ed = env_data_dir();
   if (ed) return ed;
-  return path.join(determineOSPathSync(), 'usat_email_queue');
+  return resolve_base(determineOSPathSync());
 }
 function file_sync(name) { return path.join(base_sync(), name); }
 

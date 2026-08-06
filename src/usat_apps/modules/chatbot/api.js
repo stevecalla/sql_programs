@@ -2,7 +2,7 @@
 // chatbot module API — the internal operator surface (email-queue-style). All endpoints are keyed by QUEUE
 // (the SF email-queue queue whose CURATED knowledge + operator corrections ground the bot). Pick a queue in
 // the left rail and the whole surface — grounding, corrections, context, conversation log — switches to that
-// queue's context space. Starts allow-listed to TeamUSA; add queues via CHATBOT_QUEUES with no schema change.
+// queue's context space. Queue availability = the live Salesforce list filtered by the shared queue_access.
 //
 // STRICT grounding: answer only from curated knowledge (+ corrections); if it isn't there, say so and point
 // to USA Triathlon. NEVER touches raw email-queue cases / member PII. Every turn is logged to
@@ -17,15 +17,16 @@ const corr_store = require('../../services/corrections/mysql_store');
 const convo_store = require('./conversations');
 const settings = require('./settings');
 const sf = require('../../services/salesforce');             // shared SF client — connect + list_queues only (no email-queue module, no case/PII reads)
+const queue_access = require('../../services/queue_access');  // shared queue allow-list (same model as the email queue)
 const kb_data_dir = require('../../services/knowledge/data_dir');
 
 const P = '/api/chatbot';
 const gate = require_panel('chatbot');
 const MAX_MSG = 2000;
-const DEFAULT_QUEUE = process.env.CHATBOT_QUEUE || 'Team USA';   // the EXACT Salesforce queue name (slug -> team_usa)
-// CHATBOT_QUEUES values are the EXACT Salesforce queue names the email queue uses (e.g. 'Team USA'), so when
-// the two surfaces are linked the dropdown names line up 1:1 (same spelling). key === name === SF queue name.
-const QUEUES = (process.env.CHATBOT_QUEUES || DEFAULT_QUEUE).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+// Soft DEFAULT selection only (which queue is pre-picked) — NOT an allowlist. Queue AVAILABILITY comes from
+// Salesforce (sf.list_queues) filtered by the SHARED queue_access rules (services/queue_access), the same
+// access model as the email queue. There is no chatbot-specific queue allowlist.
+const DEFAULT_QUEUE = process.env.CHATBOT_QUEUE || 'Team USA';   // exact SF queue name; slug -> team_usa
 const CHANNEL = process.env.CHATBOT_CHANNEL || 'internal-poc';
 const RETRIEVE_N = Number(process.env.CHATBOT_RETRIEVE_N || 8);
 
@@ -55,20 +56,14 @@ function local_only(req, res, next) {
   return res.status(403).json({ ok: false, error: 'local only' });
 }
 
-// Only allow-listed queues (prevents an arbitrary scope; all knowledge is curated non-PII regardless).
+// The queue this request targets: the requested SF queue name (verbatim, so slug() matches the email
+// queue's knowledge folder), else the soft default. Access is governed by queue_access at the picker level.
 function pick_queue(req) {
   const q = String((req.query && req.query.queue) || (req.body && req.body.queue) || '').trim();
-  if (!q) return DEFAULT_QUEUE;
-  // Accept anything that NORMALIZES to an allow-listed queue (so the SF-canonical "Team USA" is accepted for
-  // the allowlist entry "TeamUSA"), and return it VERBATIM — its slug then matches the email queue's folder
-  // (slug("Team USA") === "team_usa"), so the chatbot reads the SAME knowledge the email queue created.
-  const nq = norm_name(q);
-  return QUEUES.some(function (a) { return norm_name(a) === nq; }) ? q : DEFAULT_QUEUE;
+  return q || DEFAULT_QUEUE;
 }
 
-// Align queue NAMES with the email queue's live Salesforce list. Read-only, names only — never cases/PII.
-// The allowlist (QUEUES) decides which queues are bot-enabled; the display name is pulled from SF so the
-// spelling can't drift. Falls back to the allowlist name if SF is unreachable (e.g. dev without creds).
+// Salesforce connection (read-only, names only — never cases/PII). Cached per env.
 function sf_env() { try { const c = kb_data_dir.read_config() || {}; return c.sf_env === 'sandbox' ? 'sandbox' : 'prod'; } catch (e) { return 'prod'; } }
 let _conn = null, _conn_env = null;
 async function get_conn() {
@@ -79,10 +74,6 @@ async function get_conn() {
   return _conn;
 }
 function norm_name(x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
-async function sf_queue_names() {
-  try { const c = await get_conn(); const all = await sf.list_queues(c, { with_open_counts: false }); const m = {}; (all || []).forEach(function (q) { m[norm_name(q.name)] = q; }); return m; }
-  catch (e) { return null; }   // null = SF unavailable -> caller falls back to allowlist names
-}
 
 let _store = null;
 async function get_store() { if (!_store) _store = await corr_store.create_store(); return _store; }
@@ -116,20 +107,22 @@ function build_system(queue, knowledge, corr) {
 }
 
 function mount(app) {
-  // The available queues (left-rail picker). Starts at TeamUSA; scales via CHATBOT_QUEUES.
+  // The available queues (left-rail picker): the live Salesforce queue list, filtered by the SHARED
+  // queue_access rules for this user (admins see all) — same access model as the email queue. No
+  // chatbot-specific allowlist. KEY = the SF-canonical name, so slug(key) matches the email queue's folder.
   app.get(P + '/queues', gate, async function (req, res) {
-    const byNorm = await sf_queue_names();   // null if SF unreachable
-    const queues = QUEUES.map(function (name) {
-      const match = byNorm ? byNorm[norm_name(name)] : null;
-      // KEY = the SF-canonical name (when matched) so it IS the grounding scope — slug(key) then equals the
-      // email queue's knowledge folder (e.g. "Team USA" -> "team_usa"). Falls back to the allowlist name if
-      // SF is unreachable (dev without creds), in which case set CHATBOT_QUEUES to the exact SF name.
-      const canon = match ? match.name : name;
-      return { key: canon, name: canon, label: canon, aligned: !!match };
-    });
+    let all = null;
+    try { const c = await get_conn(); all = await sf.list_queues(c, { with_open_counts: false }); }
+    catch (e) { all = null; }   // SF unreachable (e.g. dev without creds)
+    if (!all) {
+      // Fallback so the picker isn't empty: just the soft default queue.
+      return res.json({ ok: true, default: DEFAULT_QUEUE, sf_aligned: false, queues: [{ key: DEFAULT_QUEUE, name: DEFAULT_QUEUE, label: DEFAULT_QUEUE, aligned: false }] });
+    }
+    const visible = queue_access.filter_queues(all, req.user, req.role);
+    const queues = visible.map(function (q) { return { key: q.name, name: q.name, label: q.name, id: q.id, aligned: true }; });
     const dq = queues.find(function (q) { return norm_name(q.key) === norm_name(DEFAULT_QUEUE); });
     const def = (dq && dq.key) || (queues[0] && queues[0].key) || DEFAULT_QUEUE;
-    res.json({ ok: true, default: def, queues: queues, sf_aligned: byNorm != null });
+    res.json({ ok: true, default: def, sf_aligned: true, queues: queues });
   });
 
   // Available AI models (shared registry, same list the email queue edits in /admin Settings).
