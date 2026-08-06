@@ -151,24 +151,23 @@ export function RetrievePreviewCard({ queue, api = defaultApi }) {
         // (BM25 scores are unbounded; the bar and rank make "how strong" obvious at a glance).
         const maxScore = Math.max.apply(null, rows.map(function (x) { return Number(x.score) || 0; }).concat([0.0001]));
         return (
-          // Same scrollable bordered-card list as the Corrections list (cbx-corr-list / cbx-corr), just taller.
-          <div className="cbx-corr-list" style={{ marginTop: 8, maxHeight: 360 }}>
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {rows.map((r, i) => {
               const pct = Math.max(3, Math.round(((Number(r.score) || 0) / maxScore) * 100));
               return (
-                <div key={i} className="cbx-corr">
+                <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '6px 8px' }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
                     <span className="cbx-badge" title="BM25-lite relevance score (higher = better keyword match)">{r.score}</span>
                     <b style={{ fontSize: 12 }}>{r.source_title || r.source_ref}</b>
                     <span className="cbx-dim" style={{ marginLeft: 'auto', fontSize: 11 }}>#{i + 1}</span>
                   </div>
-                  <div style={{ height: 4, background: 'var(--line)', borderRadius: 2, marginTop: 5, overflow: 'hidden' }} title={'relevance ' + pct + '% of the top match'}>
+                  <div style={{ height: 4, background: 'var(--line)', borderRadius: 2, marginTop: 4, overflow: 'hidden' }} title={'relevance ' + pct + '% of the top match'}>
                     <div style={{ height: 4, width: pct + '%', background: '#3b82f6', borderRadius: 2 }} />
                   </div>
-                  <div className="cbx-dim" style={{ fontSize: 11, marginTop: 4 }}>{r.category}</div>
+                  <div className="cbx-dim" style={{ fontSize: 11, marginTop: 3 }}>{r.category}</div>
                   {(r.keyword != null && r.semantic != null) ? <div className="cbx-dim" style={{ fontSize: 11, marginTop: 2 }}>keyword {Number(r.keyword).toFixed(2)} · semantic {Number(r.semantic).toFixed(2)} → blended {Number(r.score).toFixed(2)}</div> : null}
                   {r.hits && r.hits.length ? <div className="cbx-dim" style={{ fontSize: 11, marginTop: 2 }}>matched: {r.hits.join(', ')}</div> : null}
-                  <div className="cbx-corr-note" style={{ marginTop: 4 }}>{String(r.text || '').slice(0, 300)}{(r.text || '').length > 300 ? '…' : ''}</div>
+                  <div style={{ fontSize: 12, marginTop: 2 }}>{String(r.text || '').slice(0, 180)}{(r.text || '').length > 180 ? '…' : ''}</div>
                 </div>
               );
             })}
