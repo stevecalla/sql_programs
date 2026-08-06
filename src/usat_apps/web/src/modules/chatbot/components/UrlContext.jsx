@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
-import { api } from '../lib/api.js';
+import { api as defaultApi } from '../lib/api.js';
 import { Card } from './ui.jsx';
 import { track } from '../../../lib/track.js';
+
+// These two cards are SHARED: the chatbot renders them with its own api client (the default), and the email
+// queue renders them with its api client (same method names, different endpoints) so both manage the one
+// shared URL knowledge base. Pass `api` to override the default chatbot client.
 
 // Web pages (URL context): add an allow-listed page -> the server fetches, chunks, and stores it; the bot
 // retrieves the relevant chunks. Sources list with status + last-fetched, expandable to their chunks
 // (per-chunk include toggle), Refresh / Remove. Snapshots also refresh nightly (utilities/cron_get_url_context).
-export function UrlContextCard({ queue }) {
+export function UrlContextCard({ queue, api = defaultApi }) {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(false);
   const [url, setUrl] = useState('');
@@ -122,7 +126,7 @@ export function UrlContextCard({ queue }) {
 
 // Retrieval preview: type a question, see the top chunks the bot WOULD send (score + source + section).
 // Creates no conversation turn — the "how is it pulling relevant data" window.
-export function RetrievePreviewCard({ queue }) {
+export function RetrievePreviewCard({ queue, api = defaultApi }) {
   const [q, setQ] = useState('');
   const [rows, setRows] = useState(null);
   const [busy, setBusy] = useState(false);

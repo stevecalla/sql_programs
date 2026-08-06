@@ -44,7 +44,8 @@ function AskCard({ queue, selectedId }) {
         presets={ASK_PRESETS}
         expanded={expanded} onToggleExpanded={() => setExpanded((x) => !x)}
         renderCopy={(t) => <button className="cbx-btn xs" onClick={() => { try { navigator.clipboard.writeText(t); } catch (e) { /* ignore */ } }}>📋 Copy</button>}
-        classes={{ chips: 'cbx-chips', chip: 'cbx-chip', hist: 'cbx-ask-hist', dim: 'cbx-dim', qa: 'cbx-qa', q: 'cbx-q', ts: 'cbx-ts', a: 'cbx-a', ta: 'cbx-input cbx-ask-ta', askBtn: 'cbx-btn primary sm', seeMore: 'cbx-btn xs' }}
+        onReset={() => { setHist([]); setQuestion(''); setExpanded(false); setErr(''); }}
+        classes={{ chips: 'cbx-chips', chip: 'cbx-chip', hist: 'cbx-ask-hist', dim: 'cbx-dim', qa: 'cbx-qa', q: 'cbx-q', ts: 'cbx-ts', a: 'cbx-a', ta: 'cbx-input cbx-ask-ta', askBtn: 'cbx-btn primary sm', seeMore: 'cbx-btn xs', resetBtn: 'cbx-btn xs' }}
       />
       {err ? <div className="cbx-err">{err}</div> : null}
     </Card>
@@ -164,12 +165,18 @@ function ReferenceCard({ queue }) {
   return (
     <Card title="How this works (reference)">
       <ul className="cbx-ref">
-        <li><b>Pick a queue.</b> The <b>{queue}</b> queue sets the bot’s context space — its knowledge and corrections. Switching queues switches the whole surface.</li>
-        <li><b>Grounded, not guessing.</b> The bot answers only from the curated <i>Context files</i> + <i>Corrections</i> for this queue. If it isn’t there, it says so and points to USA Triathlon.</li>
-        <li><b>No member PII.</b> It never reads live Salesforce cases or member emails — only curated knowledge. Conversations logged here are the bot’s own turns.</li>
-        <li><b>Test the assistant.</b> Use the card above or the bottom-right bubble to try questions. These log as <i>test</i> conversations (shown in the left list).</li>
-        <li><b>Teach it.</b> Add a <i>Correction</i> to fix or sharpen an answer — it also improves the email queue, since they share the same brain.</li>
-        <li><b>Add knowledge.</b> Upload files in <i>Context files</i>, or exclude ones that shouldn’t ground answers.</li>
+        <li><b>Pick a queue.</b> The <b>{queue}</b> queue sets the bot’s context space — its knowledge, web pages, and corrections. Switching queues switches the whole surface. The picker shows the live Salesforce queues you’re allowed to see (same access rules as the email queue).</li>
+        <li><b>Grounding: Strict vs Broad.</b> The <b>Grounding</b> control at the top of this panel sets how far the bot can range.
+          <ul>
+            <li><i>Strict</i> (default) — answers <b>only</b> from this queue’s curated knowledge + corrections. If the answer isn’t there, it says so and points to USA Triathlon. Best for the public / member-facing bot.</li>
+            <li><i>Broad</i> — still prefers the curated knowledge, but may fall back to general USA Triathlon and triathlon knowledge when the curated content doesn’t cover it. It will <b>not</b> invent specific policy, prices, fees, dates, deadlines, phone numbers, emails, or URLs, and still refuses off-topic questions.</li>
+          </ul>
+          It’s a chatbot-only setting and applies to every queue. The email queue is always strict by design.</li>
+        <li><b>How it grounds.</b> For each question the bot retrieves the most relevant chunks from this queue’s <i>Context files</i> and <i>Web pages</i>, adds any <i>Corrections</i>, and answers from that. Use <i>Retrieval preview</i> to see exactly which chunks a question pulls.</li>
+        <li><b>Add knowledge.</b> Upload files in <i>Context files</i>, or add allow-listed <i>Web pages</i> (URLs) that the bot snapshots and chunks. Exclude any file or chunk you don’t want grounding answers, and refresh a page to re-pull its content.</li>
+        <li><b>Teach it.</b> Add a <i>Correction</i> to fix or sharpen an answer — corrections are authoritative and override the rest. They also improve the email queue, since both share the same brain.</li>
+        <li><b>Ask about it.</b> Use <i>Ask a question</i> above (a review tool — it doesn’t create a turn) to check the bot against its knowledge; the bottom-right bubble runs the live grounding and logs as a <i>test</i> conversation. <i>Reset</i> (top of the Ask card) clears the box and its history.</li>
+        <li><b>No member PII.</b> The bot never reads live Salesforce cases or member emails — only curated knowledge. Conversations logged here are the bot’s own turns.</li>
       </ul>
     </Card>
   );
@@ -281,11 +288,39 @@ function ModelSelect() {
   );
 }
 
+// ---- Grounding mode selector — STRICT (curated content only) vs BROAD (general knowledge allowed) ----
+// Chatbot-only control (the email queue is always strict by design). Saves on change, like ModelSelect.
+function GroundingSelect() {
+  const [mode, setMode] = useState('');   // '' until loaded, then 'strict' | 'broad'
+  useEffect(() => {
+    api.settings().then((r) => { const st = r.settings || {}; setMode(st.grounding === 'broad' ? 'broad' : 'strict'); }).catch(() => setMode('strict'));
+  }, []);
+  const change = (v) => {
+    setMode(v);
+    api.saveSettings({ grounding: v }).catch(() => {});
+    try { track('grounding_change', { panel: 'chatbot', view: 'grounding', mode: v }); } catch (e) { /* noop */ }
+  };
+  if (!mode) return null;
+  const tip = mode === 'broad'
+    ? 'Broad: uses curated knowledge first, but may fall back to general USA Triathlon knowledge. Never invents specific policy/prices/dates; still refuses off-topic.'
+    : 'Strict: answers ONLY from curated knowledge + corrections. If it isn’t there, the bot says so and points to USA Triathlon.';
+  return (
+    <div className="cbx-modelbar" title={tip}>
+      <span className="cbx-dim" style={{ marginRight: 6 }}>Grounding</span>
+      <select className="cbx-select" value={mode} onChange={(e) => change(e.target.value)}>
+        <option value="strict">Strict · curated content only</option>
+        <option value="broad">Broad · allow general knowledge</option>
+      </select>
+    </div>
+  );
+}
+
 // The right rail: the shared-brain cards, all scoped to the selected queue.
 export default function ChatbotAiPanel({ queue, selectedId }) {
   return (
     <>
       <ModelSelect />
+      <GroundingSelect />
       <AskCard queue={queue} selectedId={selectedId} />
       <CorrectionsCard queue={queue} />
       <ContextCard queue={queue} />

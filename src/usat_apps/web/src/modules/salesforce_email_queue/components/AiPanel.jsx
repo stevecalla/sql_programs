@@ -4,6 +4,8 @@ import * as store from '../lib/store.js';
 import { track, meta as trackMeta } from '../lib/track.js';
 import { Modal, RowsTable, fmtBytes, copyText, CopyButton, downloadText } from './ui.jsx';
 import { Collapsible, ContextAddFiles, AskPanel } from '../../../lib/ui.jsx';   // shared collapsible + add-files + ask (dedup)
+import { UrlContextCard, RetrievePreviewCard } from '../../chatbot/components/UrlContext.jsx';   // shared URL knowledge cards (one knowledge base)
+import '../../chatbot/chatbot.css';   // cbx-* styles for the shared URL cards
 
 const ASK_PRESETS = [
   'Summarize the case',
@@ -207,7 +209,8 @@ export default function AiPanel({ s }) {
           presets={ASK_PRESETS}
           expanded={askExpanded} onToggleExpanded={() => setAskExpanded((x) => !x)}
           renderCopy={(t) => <CopyButton text={t} label="📋 Copy" />}
-          classes={{ chips: 'eq-chips', chip: 'qchip', hist: 'eq-askhist', dim: 'dim', qa: 'eq-qa', q: 'eq-q', ts: 'sc', a: 'eq-a', ta: 'eq-fld', askBtn: 'eq-btn', seeMore: 'eq-btn sm ghost' }}
+          onReset={() => { setHist([]); setQuestion(''); setAskExpanded(false); }}
+          classes={{ chips: 'eq-chips', chip: 'qchip', hist: 'eq-askhist', dim: 'dim', qa: 'eq-qa', q: 'eq-q', ts: 'sc', a: 'eq-a', ta: 'eq-fld', askBtn: 'eq-btn', seeMore: 'eq-btn sm ghost', resetBtn: 'eq-btn sm ghost' }}
         />
       </Card>
 
@@ -248,6 +251,10 @@ export default function AiPanel({ s }) {
           classes={{ h: 'eq-h', row: 'eq-inline', select: 'eq-fld', btn: 'eq-btn sm', msg: 'dim' }}
           styles={{ h: { marginTop: 10 }, row: { gap: 8, flexWrap: 'wrap' }, select: { margin: 0, width: 'auto' }, msg: { marginTop: 6, fontSize: 12 } }} />
       </Card>
+
+      {/* Card 4b — Web pages (URL context) + Retrieval preview — SHARED with the chatbot (one knowledge base) */}
+      <UrlContextCard queue={queueName} api={api} />
+      <RetrievePreviewCard queue={queueName} api={api} />
 
       {/* Card 5 — SOQL */}
       <Card title="SOQL (editable, runs read-only)" open={open.soql} onToggle={() => toggle('soql')}>

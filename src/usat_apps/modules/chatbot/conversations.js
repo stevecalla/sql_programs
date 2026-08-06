@@ -142,4 +142,19 @@ async function stats() {
   return (rows && rows[0]) || { conversations: 0, turns: 0, answers: 0, grounded_answers: 0 };
 }
 
-module.exports = { TABLE, DDL, REPORTING_TZ, ensure, log_turn, by_conversation, recent_conversations, list_threads, stats, new_conversation_id };
+// Delete TEST conversations only (is_test = 1). Live/member conversations are NEVER deletable here — the
+// `is_test = 1` guard is enforced in SQL, so a request for a live conversation deletes nothing.
+async function delete_conversation(conversation_id) {
+  await ensure();
+  const r = await db.query('DELETE FROM ' + TABLE + ' WHERE conversation_id = ? AND is_test = 1', [String(conversation_id || '')]);
+  return (r && r.affectedRows) || 0;
+}
+// Delete ALL test conversations for one queue (normalized match, like list_threads).
+async function delete_test(queue) {
+  await ensure();
+  const nq = String(queue || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const r = await db.query("DELETE FROM " + TABLE + " WHERE is_test = 1 AND REGEXP_REPLACE(LOWER(queue), '[^a-z0-9]', '') = ?", [nq]);
+  return (r && r.affectedRows) || 0;
+}
+
+module.exports = { TABLE, DDL, REPORTING_TZ, ensure, log_turn, by_conversation, recent_conversations, list_threads, stats, new_conversation_id, delete_conversation, delete_test };

@@ -9,6 +9,9 @@ const { require_panel, require_admin } = require('../../auth/require_auth');
 const sf = require('./sf');
 const ai = require('../../services/ai');
 const kb = require('../../services/knowledge');
+const grounding = require('../../services/knowledge/grounding');     // shared curated-knowledge gatherer (same one the chatbot uses)
+const chunk_store = require('../../services/knowledge/chunk_store');  // shared URL/web-page chunk store
+const url_fetch = require('../../services/knowledge/url_fetch');      // shared URL fetch + chunk pipeline (allow-list enforced)
 const corrections = require('../../services/corrections');
 const corr_store = require('../../services/corrections/mysql_store');
 const queue_access = require('./store/queue_access');
@@ -50,6 +53,19 @@ async function get_conn() {
 let _cstore = null;
 async function corr_store_get() { if (!_cstore) _cstore = await corr_store.create_store(); return _cstore; }
 function err(res, e) { res.status(502).json({ ok: false, error: (e && e.message) || String(e) }); }
+
+// The retrieval QUERY for a case: the latest inbound (customer) message text, optionally prefixed with an
+// operator question. Curated-knowledge retrieval only — this text is used to RANK shared knowledge chunks,
+// never stored. Bounded so a huge thread can't blow up the query.
+function thread_query(thread, extra) {
+  const inbound = (thread || []).filter(function (m) { return m && m.incoming; });
+  const last = inbound[inbound.length - 1] || (thread || [])[(thread || []).length - 1] || {};
+  // Message shape from sf/sf_threads.js: text_new (quoted history stripped) / text_raw, plus subject.
+  const body = String(last.text_new || last.text_raw || last.subject || '');
+  return [String(extra || ''), body].filter(Boolean).join(' ').slice(0, 2000);
+}
+// The queue a URL request targets (query or body); URL knowledge is queue-keyed, shared with the chatbot.
+function eq_pick_queue(req) { return String((req.query && req.query.queue) || (req.body && req.body.queue) || ''); }
 
 // ---- analytics helpers (fire-and-forget; never throw/block a request) ----
 function provider_label(p) { return p === 'anthropic' ? 'claude' : 'chatgpt'; }
@@ -219,10 +235,13 @@ function mount(app) {
       const sender_email = ai.find_sender_email(thread);
       const sender_history = sender_email ? await sf.get_sender_history(c, { email: sender_email, exclude_case_id: b.case_id }) : [];
       const attachments_text = await collect_attachment_text(c, thread);
-      const knowledge = await kb.load_knowledge(b.queue);
+      // Shared curated knowledge: context files + retrieved URL/web-page chunks (same gatherer the chatbot uses).
+      const g = await grounding.gather(b.queue, thread_query(thread));
+      const knowledge = g.knowledge;
       const images = await kb.load_context_images(b.queue);
       const corr = await corrections.grounding_lines(await corr_store_get(), 12, { queue: b.queue, user: req.user });
       const r = await ai.respond_to_case({ thread: thread, sender_history: sender_history, attachments_text: attachments_text, provider: b.provider, model: b.model, faq: knowledge, images: images, corrections: corr });
+      r.sources = grounding.provenance(g.used);
       log_ai(req, b, Object.assign({
         ai_action: 'respond', ai_verdict: (r.verdict || '').toUpperCase(), ai_latency_ms: Date.now() - t0,
         ai_prompt_chars: r.context_chars || 0, ai_reply_chars: (r.body || '').length,
@@ -240,10 +259,13 @@ function mount(app) {
       const thread = await sf.get_thread(c, b.case_id);
       const sender_email = ai.find_sender_email(thread);
       const sender_history = sender_email ? await sf.get_sender_history(c, { email: sender_email, exclude_case_id: b.case_id }) : [];
-      const knowledge = await kb.load_knowledge(b.queue);
+      // Shared curated knowledge, retrieved against the operator's question + latest customer message.
+      const g = await grounding.gather(b.queue, thread_query(thread, b.question));
+      const knowledge = g.knowledge;
       const images = await kb.load_context_images(b.queue);
       const corr = await corrections.grounding_lines(await corr_store_get(), 12, { queue: b.queue, user: req.user });
       const r = await ai.ask_about_case({ thread: thread, sender_history: sender_history, question: b.question, history: b.history, provider: b.provider, model: b.model, faq: knowledge, images: images, corrections: corr });
+      r.sources = grounding.provenance(g.used);
       log_ai(req, b, Object.assign({
         ai_action: action, ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.context_chars || 0,
         ai_reply_chars: (r.answer || '').length, ai_used_images: images && images.length ? 1 : 0,
@@ -257,7 +279,8 @@ function mount(app) {
     const b = req.body || {}; const t0 = Date.now();
     try {
       const thread = await sf.get_thread(await get_conn(), b.case_id);
-      const r = await ai.triage_case({ thread: thread, provider: b.provider, model: b.model, faq: await kb.load_knowledge(b.queue) });
+      const g = await grounding.gather(b.queue, thread_query(thread));   // shared curated knowledge (files + URL chunks)
+      const r = await ai.triage_case({ thread: thread, provider: b.provider, model: b.model, faq: g.knowledge });
       log_ai(req, b, Object.assign({ ai_action: 'triage', ai_intent: r.status || '', ai_verdict: r.status || '',
         ai_latency_ms: Date.now() - t0, ai_prompt_chars: r.prompt_chars || 0,
         ai_reply_chars: (r.reply_chars != null ? r.reply_chars : (r.reason || '').length), ai_used_images: 0, ai_ok: 1 }, token_cost(r, b)));
@@ -310,6 +333,54 @@ function mount(app) {
       res.setHeader('Content-Disposition', 'inline'); res.setHeader('Cache-Control', 'private, max-age=300');
       res.send(require('fs').readFileSync(fp));
     } catch (e) { err(res, e); }
+  });
+
+  // ---- URL context sources (curated web pages -> chunks) — SHARED with the chatbot (one knowledge base) ----
+  // These wrap the SAME shared services (url_fetch + chunk_store) keyed by queue+scope, so a page added here
+  // grounds the chatbot too, and vice versa. Curated knowledge only — never touches cases/PII/chat turns.
+  app.get(P + '/context-urls', gate, async function (req, res) {
+    const queue = eq_pick_queue(req);
+    try { res.json({ ok: true, queue: queue, sources: await chunk_store.list_sources(queue) }); }
+    catch (e) { err(res, e); }
+  });
+  app.get(P + '/context-url/chunks', gate, async function (req, res) {
+    try { res.json({ ok: true, chunks: await chunk_store.list_chunks(req.query.source_ref, req.query.scope, eq_pick_queue(req)) }); }
+    catch (e) { err(res, e); }
+  });
+  app.post(P + '/context-url', gate, async function (req, res) {
+    const b = req.body || {}; const queue = eq_pick_queue(req);
+    const url = String(b.url || '').trim();
+    if (!url) return res.status(400).json({ ok: false, error: 'A URL is required.' });
+    const added_by = (req.user && (req.user.username || req.user.email)) || '';
+    try {
+      const r = await url_fetch.add_or_refresh(url, { scope: b.scope === 'global' ? 'global' : 'queue', queue: queue, added_by: added_by, needs_js: !!b.needs_js });
+      if (!r.ok) return res.status(400).json({ ok: false, error: r.reason || 'fetch failed', source_ref: r.source_ref });
+      res.json(Object.assign({ ok: true }, r));
+    } catch (e) { err(res, e); }
+  });
+  app.post(P + '/context-url/refresh', gate, async function (req, res) {
+    const b = req.body || {}; const queue = eq_pick_queue(req);
+    try {
+      const r = await url_fetch.add_or_refresh(String(b.source_ref || ''), { scope: b.scope === 'global' ? 'global' : 'queue', queue: queue, added_by: (req.user && (req.user.username || req.user.email)) || '', needs_js: !!b.needs_js });
+      res.json(Object.assign({ ok: r.ok }, r));
+    } catch (e) { err(res, e); }
+  });
+  app.post(P + '/context-url/remove', gate, async function (req, res) {
+    const b = req.body || {}; const queue = eq_pick_queue(req);
+    try { await chunk_store.remove_source(String(b.source_ref || ''), b.scope === 'global' ? 'global' : 'queue', queue); res.json({ ok: true }); }
+    catch (e) { err(res, e); }
+  });
+  app.post(P + '/context-chunk-exclude', gate, async function (req, res) {
+    const b = req.body || {};
+    try { await chunk_store.set_excluded(b.id, !!b.excluded); res.json({ ok: true }); }
+    catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  app.post(P + '/retrieve-preview', gate, async function (req, res) {
+    const b = req.body || {}; const queue = eq_pick_queue(req);
+    const question = String(b.question || '').trim();
+    if (!question) return res.status(400).json({ ok: false, error: 'Empty question.' });
+    try { res.json({ ok: true, queue: queue, results: await chunk_store.select_chunks(queue, question, Number(b.n) || grounding.DEFAULT_N) }); }
+    catch (e) { err(res, e); }
   });
 
   // Browser analytics ingest — the module's own events table (rich queue/case/AI columns). The server

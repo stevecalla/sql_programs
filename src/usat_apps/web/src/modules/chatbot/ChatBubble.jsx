@@ -6,6 +6,9 @@ function newConversationId() {
   try { if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID(); } catch (e) { /* fall through */ }
   return 'c_' + Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2);
 }
+// The opening assistant greeting — shown in the bubble AND logged as the first turn (via /chat `intro`) so
+// the review transcript includes it too.
+function greeting(q) { return 'Hi! Ask me anything about the ' + (q || 'selected') + ' program.'; }
 
 // Floating quick-test bubble, docked in the lower-right of the AI Chat Bot panel (fixed; this section is the
 // only place it mounts). It talks to the SELECTED queue and logs as a test conversation, so anything you try
@@ -20,10 +23,15 @@ export default function ChatBubble({ queue, onLogged }) {
   const convoRef = useRef(newConversationId());
   const turnRef = useRef(0);
 
+  // Start a fresh conversation: new id + turn counter, clear the transcript. The old (logged) test turns
+  // stay in the thread list until deleted. Used on queue change and by the "New conversation" button.
+  const reset = () => {
+    convoRef.current = newConversationId(); turnRef.current = 0;
+    setMsgs([{ role: 'bot', text: greeting(queue) }]);
+  };
   // Reset the mini-conversation and refresh config whenever the queue changes.
   useEffect(() => {
-    convoRef.current = newConversationId(); turnRef.current = 0;
-    setMsgs([{ role: 'bot', text: 'Hi! Ask me anything about the ' + (queue || 'selected') + ' program.' }]);
+    reset();
     if (queue) api.config(queue).then(setCfg).catch(() => setCfg(null));
   }, [queue]);
   useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight; }, [msgs, open, sending]);
@@ -35,7 +43,7 @@ export default function ChatBubble({ queue, onLogged }) {
     const next = msgs.concat([{ role: 'user', text: m }]);
     setMsgs(next); setSending(true);
     try {
-      const r = await api.chat({ queue, message: m, history: next.slice(-6), conversation_id: convoRef.current, turn: turnRef.current, is_test: 1 });
+      const r = await api.chat({ queue, message: m, history: next.slice(-6), conversation_id: convoRef.current, turn: turnRef.current, is_test: 1, intro: turnRef.current === 0 ? greeting(queue) : undefined });
       if (r && r.conversation_id) convoRef.current = r.conversation_id;
       turnRef.current += 1;
       setMsgs(next.concat([{ role: 'bot', text: r.answer || '(no answer)' }]));
@@ -57,6 +65,7 @@ export default function ChatBubble({ queue, onLogged }) {
               <div>AI Chat Bot · {queue}</div>
               <div className="cb-sub">{ground}{cfg && cfg.model ? ' · ' + cfg.model : ''}</div>
             </div>
+            <button className="cb-x" onClick={reset} aria-label="New conversation" title="Start a new conversation">↺</button>
             <button className="cb-x" onClick={() => setOpen(false)} aria-label="Close">×</button>
           </div>
           <div className="cb-body" ref={bodyRef}>
