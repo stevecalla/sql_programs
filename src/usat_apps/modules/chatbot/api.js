@@ -2,44 +2,68 @@
 // chatbot module API — the internal operator surface (email-queue-style). All endpoints are keyed by QUEUE
 // (the SF email-queue queue whose CURATED knowledge + operator corrections ground the bot). Pick a queue in
 // the left rail and the whole surface — grounding, corrections, context, conversation log — switches to that
-// queue's context space. Starts allow-listed to TeamUSA; add queues via CHATBOT_QUEUES with no schema change.
+// queue's context space. Queue availability = the live Salesforce list filtered by the shared queue_access.
 //
 // STRICT grounding: answer only from curated knowledge (+ corrections); if it isn't there, say so and point
 // to USA Triathlon. NEVER touches raw email-queue cases / member PII. Every turn is logged to
 // chatbot_conversations (transcript + counts), keyed by (channel, queue) — fire-and-forget, never blocks.
-const { require_panel } = require('../../auth/require_auth');
+const { require_panel, require_admin } = require('../../auth/require_auth');
 const ai = require('../../services/ai');
 const kb = require('../../services/knowledge');
+const url_fetch = require('../../services/knowledge/url_fetch');
+const chunk_store = require('../../services/knowledge/chunk_store');
 const corrections = require('../../services/corrections');
 const corr_store = require('../../services/corrections/mysql_store');
 const convo_store = require('./conversations');
 const settings = require('./settings');
-const sf = require('../salesforce_email_queue/sf');          // SAME SF service the email queue uses (names only — no cases/PII)
+const sf = require('../../services/salesforce');             // shared SF client — connect + list_queues only (no email-queue module, no case/PII reads)
+const queue_access = require('../../services/queue_access');  // shared queue allow-list (same model as the email queue)
 const kb_data_dir = require('../../services/knowledge/data_dir');
 
 const P = '/api/chatbot';
 const gate = require_panel('chatbot');
 const MAX_MSG = 2000;
-const DEFAULT_QUEUE = process.env.CHATBOT_QUEUE || 'Team USA';   // the EXACT Salesforce queue name (slug -> team_usa)
-// CHATBOT_QUEUES values are the EXACT Salesforce queue names the email queue uses (e.g. 'Team USA'), so when
-// the two surfaces are linked the dropdown names line up 1:1 (same spelling). key === name === SF queue name.
-const QUEUES = (process.env.CHATBOT_QUEUES || DEFAULT_QUEUE).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+// Soft DEFAULT selection only (which queue is pre-picked) — NOT an allowlist. Queue AVAILABILITY comes from
+// Salesforce (sf.list_queues) filtered by the SHARED queue_access rules (services/queue_access), the same
+// access model as the email queue. There is no chatbot-specific queue allowlist.
+const DEFAULT_QUEUE = process.env.CHATBOT_QUEUE || 'Team USA';   // exact SF queue name; slug -> team_usa
 const CHANNEL = process.env.CHATBOT_CHANNEL || 'internal-poc';
+const RETRIEVE_N = Number(process.env.CHATBOT_RETRIEVE_N || 8);
 
-// Only allow-listed queues (prevents an arbitrary scope; all knowledge is curated non-PII regardless).
-function pick_queue(req) {
-  const q = String((req.query && req.query.queue) || (req.body && req.body.queue) || '').trim();
-  if (!q) return DEFAULT_QUEUE;
-  // Accept anything that NORMALIZES to an allow-listed queue (so the SF-canonical "Team USA" is accepted for
-  // the allowlist entry "TeamUSA"), and return it VERBATIM — its slug then matches the email queue's folder
-  // (slug("Team USA") === "team_usa"), so the chatbot reads the SAME knowledge the email queue created.
-  const nq = norm_name(q);
-  return QUEUES.some(function (a) { return norm_name(a) === nq; }) ? q : DEFAULT_QUEUE;
+// Retrieval: rank this queue's knowledge CHUNKS (URL context + any file-derived chunks) against a question
+// and return a grounding block + provenance. Never throws — grounding must not break a chat/ask.
+async function retrieve(queue, question) {
+  try {
+    const used = await chunk_store.select_chunks(queue, question, RETRIEVE_N);
+    return { block: chunk_store.knowledge_from_chunks(used), used: used || [] };
+  } catch (e) { return { block: '', used: [] }; }
+}
+// File knowledge (existing pipeline) + retrieved chunk block, most-relevant chunks first.
+function combine_knowledge(fileK, chunkBlock) {
+  const parts = [];
+  if (chunkBlock && String(chunkBlock).trim()) parts.push(String(chunkBlock).trim());
+  if (fileK && String(fileK).trim()) parts.push(String(fileK).trim());
+  return parts.join('\n\n');
+}
+function provenance(used) {
+  return (used || []).map(function (u) { return { source_ref: u.source_ref, source_title: u.source_title, category: u.category, score: u.score }; });
 }
 
-// Align queue NAMES with the email queue's live Salesforce list. Read-only, names only — never cases/PII.
-// The allowlist (QUEUES) decides which queues are bot-enabled; the display name is pulled from SF so the
-// spelling can't drift. Falls back to the allowlist name if SF is unreachable (e.g. dev without creds).
+// Loopback-only gate for the nightly cron endpoint (utilities/cron_get_url_context hits it on localhost:8022).
+function local_only(req, res, next) {
+  const ip = String((req.ip || (req.socket && req.socket.remoteAddress) || '')).replace('::ffff:', '');
+  if (ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return next();
+  return res.status(403).json({ ok: false, error: 'local only' });
+}
+
+// The queue this request targets: the requested SF queue name (verbatim, so slug() matches the email
+// queue's knowledge folder), else the soft default. Access is governed by queue_access at the picker level.
+function pick_queue(req) {
+  const q = String((req.query && req.query.queue) || (req.body && req.body.queue) || '').trim();
+  return q || DEFAULT_QUEUE;
+}
+
+// Salesforce connection (read-only, names only — never cases/PII). Cached per env.
 function sf_env() { try { const c = kb_data_dir.read_config() || {}; return c.sf_env === 'sandbox' ? 'sandbox' : 'prod'; } catch (e) { return 'prod'; } }
 let _conn = null, _conn_env = null;
 async function get_conn() {
@@ -50,10 +74,6 @@ async function get_conn() {
   return _conn;
 }
 function norm_name(x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
-async function sf_queue_names() {
-  try { const c = await get_conn(); const all = await sf.list_queues(c, { with_open_counts: false }); const m = {}; (all || []).forEach(function (q) { m[norm_name(q.name)] = q; }); return m; }
-  catch (e) { return null; }   // null = SF unavailable -> caller falls back to allowlist names
-}
 
 let _store = null;
 async function get_store() { if (!_store) _store = await corr_store.create_store(); return _store; }
@@ -87,20 +107,22 @@ function build_system(queue, knowledge, corr) {
 }
 
 function mount(app) {
-  // The available queues (left-rail picker). Starts at TeamUSA; scales via CHATBOT_QUEUES.
+  // The available queues (left-rail picker): the live Salesforce queue list, filtered by the SHARED
+  // queue_access rules for this user (admins see all) — same access model as the email queue. No
+  // chatbot-specific allowlist. KEY = the SF-canonical name, so slug(key) matches the email queue's folder.
   app.get(P + '/queues', gate, async function (req, res) {
-    const byNorm = await sf_queue_names();   // null if SF unreachable
-    const queues = QUEUES.map(function (name) {
-      const match = byNorm ? byNorm[norm_name(name)] : null;
-      // KEY = the SF-canonical name (when matched) so it IS the grounding scope — slug(key) then equals the
-      // email queue's knowledge folder (e.g. "Team USA" -> "team_usa"). Falls back to the allowlist name if
-      // SF is unreachable (dev without creds), in which case set CHATBOT_QUEUES to the exact SF name.
-      const canon = match ? match.name : name;
-      return { key: canon, name: canon, label: canon, aligned: !!match };
-    });
+    let all = null;
+    try { const c = await get_conn(); all = await sf.list_queues(c, { with_open_counts: false }); }
+    catch (e) { all = null; }   // SF unreachable (e.g. dev without creds)
+    if (!all) {
+      // Fallback so the picker isn't empty: just the soft default queue.
+      return res.json({ ok: true, default: DEFAULT_QUEUE, sf_aligned: false, queues: [{ key: DEFAULT_QUEUE, name: DEFAULT_QUEUE, label: DEFAULT_QUEUE, aligned: false }] });
+    }
+    const visible = queue_access.filter_queues(all, req.user, req.role);
+    const queues = visible.map(function (q) { return { key: q.name, name: q.name, label: q.name, id: q.id, aligned: true }; });
     const dq = queues.find(function (q) { return norm_name(q.key) === norm_name(DEFAULT_QUEUE); });
     const def = (dq && dq.key) || (queues[0] && queues[0].key) || DEFAULT_QUEUE;
-    res.json({ ok: true, default: def, queues: queues, sf_aligned: byNorm != null });
+    res.json({ ok: true, default: def, sf_aligned: true, queues: queues });
   });
 
   // Available AI models (shared registry, same list the email queue edits in /admin Settings).
@@ -180,6 +202,76 @@ function mount(app) {
     catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
+  // ---- URL context sources (curated web pages -> chunks the bot retrieves over) ----
+  // List URL sources for this queue (+ globals) with status + last-fetched.
+  app.get(P + '/context-urls', gate, async function (req, res) {
+    const queue = pick_queue(req);
+    try { res.json({ ok: true, queue: queue, sources: await chunk_store.list_sources(queue) }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'list failed' }); }
+  });
+  // Chunks for one source (the expandable chunks view).
+  app.get(P + '/context-url/chunks', gate, async function (req, res) {
+    try { res.json({ ok: true, chunks: await chunk_store.list_chunks(req.query.source_ref, req.query.scope, pick_queue(req)) }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'chunks failed' }); }
+  });
+  // Add a URL: fetch now, chunk, store. { url, scope:'global'|'queue', needs_js? }
+  app.post(P + '/context-url', gate, async function (req, res) {
+    const b = req.body || {}; const queue = pick_queue(req);
+    const url = String(b.url || '').trim();
+    if (!url) return res.status(400).json({ ok: false, error: 'A URL is required.' });
+    const added_by = (req.user && (req.user.username || req.user.email)) || '';
+    try {
+      const r = await url_fetch.add_or_refresh(url, { scope: b.scope === 'global' ? 'global' : 'queue', queue: queue, added_by: added_by, needs_js: !!b.needs_js });
+      if (!r.ok) return res.status(400).json({ ok: false, error: r.reason || 'fetch failed', source_ref: r.source_ref });
+      res.json(Object.assign({ ok: true }, r));
+    } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'add failed' }); }
+  });
+  // Refresh one source (re-fetch + re-chunk). { source_ref, scope, needs_js? }
+  app.post(P + '/context-url/refresh', gate, async function (req, res) {
+    const b = req.body || {}; const queue = pick_queue(req);
+    try {
+      const r = await url_fetch.add_or_refresh(String(b.source_ref || ''), { scope: b.scope === 'global' ? 'global' : 'queue', queue: queue, added_by: (req.user && (req.user.username || req.user.email)) || '', needs_js: !!b.needs_js });
+      res.json(Object.assign({ ok: r.ok }, r));
+    } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'refresh failed' }); }
+  });
+  // Remove a source and its chunks. { source_ref, scope }
+  app.post(P + '/context-url/remove', gate, async function (req, res) {
+    const b = req.body || {}; const queue = pick_queue(req);
+    try { await chunk_store.remove_source(String(b.source_ref || ''), b.scope === 'global' ? 'global' : 'queue', queue); res.json({ ok: true }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'remove failed' }); }
+  });
+  // Include/exclude ONE chunk from grounding. { id, excluded }
+  app.post(P + '/context-chunk-exclude', gate, async function (req, res) {
+    const b = req.body || {};
+    try { await chunk_store.set_excluded(b.id, !!b.excluded); res.json({ ok: true }); }
+    catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+  // Retrieval PREVIEW — the top-N chunks a question WOULD pull (score + source + section). No turn, no log.
+  app.post(P + '/retrieve-preview', gate, async function (req, res) {
+    const b = req.body || {}; const queue = pick_queue(req);
+    const question = String(b.question || '').trim();
+    if (!question) return res.status(400).json({ ok: false, error: 'Empty question.' });
+    try { res.json({ ok: true, queue: queue, results: await chunk_store.select_chunks(queue, question, Number(b.n) || RETRIEVE_N) }); }
+    catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'preview failed' }); }
+  });
+  // Admin: the web-context allowlist (hostnames). GET returns it; POST replaces it. Admin role only.
+  app.get(P + '/context-allowlist', require_admin, function (req, res) {
+    try { res.json({ ok: true, allowlist: url_fetch.get_allowlist() }); }
+    catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
+  });
+  app.post(P + '/context-allowlist', require_admin, function (req, res) {
+    const b = req.body || {};
+    try { res.json({ ok: true, allowlist: url_fetch.set_allowlist(Array.isArray(b.allowlist) ? b.allowlist : []) }); }
+    catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // Nightly refresh entry point — re-fetch + re-chunk every URL source. Loopback only (called by
+  // utilities/cron_get_url_context on the server); not a user route.
+  app.get(P + '/scheduled-refresh-urls', local_only, async function (req, res) {
+    try { const results = await url_fetch.refresh_all(); res.json({ ok: true, refreshed: results.length, results: results }); }
+    catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'refresh failed' }); }
+  });
+
   // Corrections (teach the AI) — shared store, filtered to the queue's relevant scope.
   app.get(P + '/corrections', gate, async function (req, res) {
     const queue = pick_queue(req);
@@ -224,7 +316,9 @@ function mount(app) {
     if (question.length > MAX_MSG) return res.status(400).json({ ok: false, error: 'Question too long.' });
     const queue = pick_queue(req);
     try {
-      const knowledge = await kb.load_knowledge(queue);
+      const fileK = await kb.load_knowledge(queue);
+      const ret = await retrieve(queue, question);
+      const knowledge = combine_knowledge(fileK, ret.block);
       let corr = [];
       try { corr = await corrections.grounding_lines(await get_store(), 12, { queue: queue }); } catch (e) { corr = []; }
       let convoText = '';
@@ -252,7 +346,7 @@ function mount(app) {
       const prompt = (convoText ? ('CONVERSATION (selected):\n' + convoText + '\n\n') : '') + 'OPERATOR QUESTION: ' + question;
       const raw = await ai.complete({ provider: provider, model: model, system: system, prompt: prompt });
       const out = ai.norm_completion(raw, model);
-      res.json({ ok: true, answer: (out && out.text ? String(out.text).trim() : ''), model: out.model || model });
+      res.json({ ok: true, answer: (out && out.text ? String(out.text).trim() : ''), model: out.model || model, sources: provenance(ret.used) });
       // Intentionally NOT logged to chatbot_conversations — inspection, not a bot turn.
     } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'ask failed' }); }
   });
@@ -269,7 +363,9 @@ function mount(app) {
     const is_test = (b.is_test === 0 || b.is_test === false) ? 0 : 1;   // internal surface defaults to test
     const actor = (req.user && (req.user.username || req.user.email)) || null;
     try {
-      const knowledge = await kb.load_knowledge(queue);
+      const fileK = await kb.load_knowledge(queue);
+      const ret = await retrieve(queue, message);
+      const knowledge = combine_knowledge(fileK, ret.block);
       let corr = [];
       try { corr = await corrections.grounding_lines(await get_store(), 12, { queue: queue }); } catch (e) { corr = []; }
       let ctx_files = 0;
@@ -290,7 +386,7 @@ function mount(app) {
       const answer = (out && out.text ? String(out.text).trim() : '');
       const grounded = !!(knowledge && knowledge.length);
 
-      res.json({ ok: true, answer: answer, grounded: grounded, model: out.model || model, conversation_id: conversation_id, queue: queue });
+      res.json({ ok: true, answer: answer, grounded: grounded, model: out.model || model, conversation_id: conversation_id, queue: queue, sources: provenance(ret.used) });
 
       const base = { conversation_id: conversation_id, channel: CHANNEL, queue: queue, actor: actor, is_test: is_test };
       convo_store.log_turn(Object.assign({}, base, { turn: turn, role: 'user', text: message }));

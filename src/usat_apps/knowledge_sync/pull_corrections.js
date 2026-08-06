@@ -8,9 +8,9 @@
 //   PROD_SSH=usat-server@100.103.13.100
 //   PROD_REPO=/home/usat-server/development/usat/sql_programs     # optional; default shown (ABSOLUTE — no ~)
 // Then any time:
-//   node src/usat_apps/modules/salesforce_email_queue/pull_corrections.js
+//   node src/usat_apps/knowledge_sync/pull_corrections.js
 //   (or the module menu -> Corrections sync -> Pull corrections from prod)
-try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '..', '.env') }); } catch (e) { /* dotenv optional */ }
+try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '.env') }); } catch (e) { /* dotenv optional */ }
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -18,7 +18,7 @@ const SSH = process.env.PROD_SSH;
 const REPO = process.env.PROD_REPO || '/home/usat-server/development/usat/sql_programs';   // ABSOLUTE, no ~
 const REMOTE_TMP = '/tmp/corrections_export.json';
 const LOCAL = 'corrections_export.json';                        // relative to cwd (repo root)
-const REMOTE_EXPORT = 'src/usat_apps/modules/salesforce_email_queue/export_corrections.js';
+const REMOTE_EXPORT = 'src/usat_apps/knowledge_sync/export_corrections.js';
 const IMPORT = path.resolve(__dirname, 'import_corrections.js');
 
 if (!SSH) { console.error('PROD_SSH is not set. Add it to .env, e.g.:\n  PROD_SSH=usat-server@100.103.13.100'); process.exit(1); }

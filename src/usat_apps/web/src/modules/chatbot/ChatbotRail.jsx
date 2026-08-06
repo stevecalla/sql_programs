@@ -37,8 +37,12 @@ export default function ChatbotRail() {
 
               <label className="cbx-lbl">Show</label>
               <div className="cbx-seg">
-                {[['all', 'All'], ['1', 'Test'], ['0', 'Live']].map(([v, lab]) => (
-                  <button key={v} className={'cbx-segbtn' + (s.filter === v ? ' on' : '')} onClick={() => store.setFilter(v)}>{lab}</button>
+                {[
+                  ['all', 'All', 'Show every conversation — both test runs and live traffic.'],
+                  ['1', 'Test', 'Test conversations: ones you created here via “Test the assistant” or the chat bubble. Safe practice runs, not real member traffic.'],
+                  ['0', 'Live', 'Live conversations: real end-user chats (e.g. the public widget). Excludes your test runs.'],
+                ].map(([v, lab, tip]) => (
+                  <button key={v} className={'cbx-segbtn' + (s.filter === v ? ' on' : '')} onClick={() => store.setFilter(v)} title={tip}>{lab}</button>
                 ))}
               </div>
 

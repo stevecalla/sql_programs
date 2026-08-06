@@ -1,11 +1,11 @@
 'use strict';
 // Knowledge loader (tier-4 grounding). Knowledge = files in the CONTEXT folder(s), read recursively:
-//   <base>/usat_email_queue/context/_global/**      applied to EVERY queue
-//   <base>/usat_email_queue/context/<queue_slug>/** applied to that queue only
+//   <base>/usat_knowledge/context/_global/**      applied to EVERY queue
+//   <base>/usat_knowledge/context/<queue_slug>/** applied to that queue only
 // A "folder" added from the UI is stored as a named subfolder, so it can be excluded as a group.
 // Files can be EXCLUDED from grounding (by file key OR folder key) without deleting them from disk.
 // Text (md/txt/csv/html/json...) is extracted; pdf/docx/xlsx via optional parsers; png/jpeg/gif/webp
-// go to the vision model. Overrides: EQ_CONTEXT_DIR / EQ_DATA_DIR.
+// go to the vision model. Overrides: KNOWLEDGE_CONTEXT_DIR / KNOWLEDGE_DATA_DIR (EQ_* still valid as aliases).
 const fs = require('fs');
 const path = require('path');
 const extract = require('../ai/extract');

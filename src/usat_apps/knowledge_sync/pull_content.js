@@ -6,17 +6,17 @@
 //
 // One-time in .env:
 //   PROD_SSH=usat-server@100.103.13.100
-//   PROD_CONTEXT=/home/usat-server/development/usat/data/usat_email_queue/context   # optional; default shown
+//   PROD_CONTEXT=/home/usat-server/development/usat/data/usat_knowledge/context   # optional; default shown
 // Then any time:
-//   node src/usat_apps/modules/salesforce_email_queue/pull_content.js
-try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '..', '.env') }); } catch (e) { /* dotenv optional */ }
+//   node src/usat_apps/knowledge_sync/pull_content.js
+try { require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '.env') }); } catch (e) { /* dotenv optional */ }
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const data_dir = require('../../services/knowledge/data_dir');
+const data_dir = require('../services/knowledge/data_dir');
 
 const SSH = process.env.PROD_SSH;
-const PROD_CONTEXT = process.env.PROD_CONTEXT || '/home/usat-server/development/usat/data/usat_email_queue/context';
+const PROD_CONTEXT = process.env.PROD_CONTEXT || '/home/usat-server/development/usat/data/usat_knowledge/context';
 if (!SSH) { console.error('PROD_SSH is not set. Add it to .env, e.g.:\n  PROD_SSH=usat-server@100.103.13.100'); process.exit(1); }
 
 const ENV = Object.assign({}, process.env, { MSYS_NO_PATHCONV: '1', MSYS2_ARG_CONV_EXCL: '*' });
