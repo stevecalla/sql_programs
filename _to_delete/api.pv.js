@@ -379,7 +379,7 @@ function mount(app) {
     const b = req.body || {}; const queue = eq_pick_queue(req);
     const question = String(b.question || '').trim();
     if (!question) return res.status(400).json({ ok: false, error: 'Empty question.' });
-    try { const g = await grounding.retrieve(queue, question, Number(b.n) || grounding.DEFAULT_N); res.json({ ok: true, queue: queue, mode: g.mode, results: g.used }); }
+    try { res.json({ ok: true, queue: queue, results: await chunk_store.select_chunks(queue, question, Number(b.n) || grounding.DEFAULT_N) }); }
     catch (e) { err(res, e); }
   });
 

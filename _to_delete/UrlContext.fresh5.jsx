@@ -146,34 +146,20 @@ export function RetrievePreviewCard({ queue, api = defaultApi }) {
       <button className="cbx-btn primary sm" onClick={run} disabled={busy || !q.trim()}>{busy ? 'Retrieving…' : 'Preview retrieval'}</button>
       {err ? <div className="cbx-err" style={{ marginTop: 6 }}>{err}</div> : null}
       {rows && rows.length === 0 && !busy ? <div className="cbx-dim" style={{ marginTop: 8 }}>No matching chunks. Add a URL or upload context first.</div> : null}
-      {rows && rows.length ? (function () {
-        // Relative bar = this chunk's score as a % of the top match, so the raw BM25 number is interpretable
-        // (BM25 scores are unbounded; the bar and rank make "how strong" obvious at a glance).
-        const maxScore = Math.max.apply(null, rows.map(function (x) { return Number(x.score) || 0; }).concat([0.0001]));
-        return (
-          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {rows.map((r, i) => {
-              const pct = Math.max(3, Math.round(((Number(r.score) || 0) / maxScore) * 100));
-              return (
-                <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '6px 8px' }}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                    <span className="cbx-badge" title="BM25-lite relevance score (higher = better keyword match)">{r.score}</span>
-                    <b style={{ fontSize: 12 }}>{r.source_title || r.source_ref}</b>
-                    <span className="cbx-dim" style={{ marginLeft: 'auto', fontSize: 11 }}>#{i + 1}</span>
-                  </div>
-                  <div style={{ height: 4, background: 'var(--line)', borderRadius: 2, marginTop: 4, overflow: 'hidden' }} title={'relevance ' + pct + '% of the top match'}>
-                    <div style={{ height: 4, width: pct + '%', background: '#3b82f6', borderRadius: 2 }} />
-                  </div>
-                  <div className="cbx-dim" style={{ fontSize: 11, marginTop: 3 }}>{r.category}</div>
-                  {(r.keyword != null && r.semantic != null) ? <div className="cbx-dim" style={{ fontSize: 11, marginTop: 2 }}>keyword {Number(r.keyword).toFixed(2)} · semantic {Number(r.semantic).toFixed(2)} → blended {Number(r.score).toFixed(2)}</div> : null}
-                  {r.hits && r.hits.length ? <div className="cbx-dim" style={{ fontSize: 11, marginTop: 2 }}>matched: {r.hits.join(', ')}</div> : null}
-                  <div style={{ fontSize: 12, marginTop: 2 }}>{String(r.text || '').slice(0, 180)}{(r.text || '').length > 180 ? '…' : ''}</div>
-                </div>
-              );
-            })}
-          </div>
-        );
-      })() : null}
+      {rows && rows.length ? (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {rows.map((r, i) => (
+            <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '6px 8px' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span className="cbx-badge">{r.score}</span>
+                <b style={{ fontSize: 12 }}>{r.source_title || r.source_ref}</b>
+              </div>
+              <div className="cbx-dim" style={{ fontSize: 11 }}>{r.category}</div>
+              <div style={{ fontSize: 12, marginTop: 2 }}>{String(r.text || '').slice(0, 180)}{(r.text || '').length > 180 ? '…' : ''}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </Card>
   );
 }

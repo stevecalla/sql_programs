@@ -165,7 +165,6 @@ export function RetrievePreviewCard({ queue, api = defaultApi }) {
                     <div style={{ height: 4, width: pct + '%', background: '#3b82f6', borderRadius: 2 }} />
                   </div>
                   <div className="cbx-dim" style={{ fontSize: 11, marginTop: 3 }}>{r.category}</div>
-                  {(r.keyword != null && r.semantic != null) ? <div className="cbx-dim" style={{ fontSize: 11, marginTop: 2 }}>keyword {Number(r.keyword).toFixed(2)} · semantic {Number(r.semantic).toFixed(2)} → blended {Number(r.score).toFixed(2)}</div> : null}
                   {r.hits && r.hits.length ? <div className="cbx-dim" style={{ fontSize: 11, marginTop: 2 }}>matched: {r.hits.join(', ')}</div> : null}
                   <div style={{ fontSize: 12, marginTop: 2 }}>{String(r.text || '').slice(0, 180)}{(r.text || '').length > 180 ? '…' : ''}</div>
                 </div>

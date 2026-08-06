@@ -107,22 +107,3 @@ export function AskPanel({ question, onQuestion, onAsk, hist, busy, busyLabel, p
     </>
   );
 }
-
-// Shared corrections LIST — one layout for the chatbot and the email queue (scrollable list of bordered
-// note cards, each with an optional "re: <question>" line). Style-agnostic via `classes`: pass the same
-// class map on both surfaces for identical look. `rows` is null while loading, [] when empty.
-export function CorrectionsList({ rows, classes }) {
-  const c = classes || {};
-  return (
-    <div className={c.list}>
-      {rows == null ? <div className={c.dim}>Loading…</div> : null}
-      {rows && rows.length === 0 ? <div className={c.dim}>No corrections yet.</div> : null}
-      {(rows || []).map((r) => (
-        <div className={c.item} key={r.id}>
-          <div className={c.note}>{r.note}</div>
-          {r.question ? <div className={c.dim}>re: {r.question}</div> : null}
-        </div>
-      ))}
-    </div>
-  );
-}

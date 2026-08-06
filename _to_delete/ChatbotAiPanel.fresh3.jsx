@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { Card, Modal, fmtBytes } from './ui.jsx';
 import { track } from '../../../lib/track.js';
-import { ContextAddFiles, AskPanel, CorrectionsList } from '../../../lib/ui.jsx';
+import { ContextAddFiles, AskPanel } from '../../../lib/ui.jsx';
 import { UrlContextCard, RetrievePreviewCard } from './UrlContext.jsx';
 
 function fileLocation(dir, scope, name, queueSlug) {
@@ -74,7 +74,16 @@ function CorrectionsCard({ queue }) {
       <textarea className="cbx-input" rows={2} placeholder="Correction / note the AI should follow *" value={note} onChange={(e) => setNote(e.target.value)} />
       <div className="cbx-row-end"><button className="cbx-btn primary sm" onClick={add} disabled={busy || !note.trim()}>Add correction</button></div>
       {err ? <div className="cbx-err">{err}</div> : null}
-      <CorrectionsList rows={rows} classes={{ list: 'cbx-corr-list', item: 'cbx-corr', note: 'cbx-corr-note', dim: 'cbx-dim' }} />
+      <div className="cbx-corr-list">
+        {rows == null ? <div className="cbx-dim">Loading…</div> : null}
+        {rows && rows.length === 0 ? <div className="cbx-dim">No corrections yet.</div> : null}
+        {(rows || []).map((r) => (
+          <div className="cbx-corr" key={r.id}>
+            <div className="cbx-corr-note">{r.note}</div>
+            {r.question ? <div className="cbx-dim">re: {r.question}</div> : null}
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }
@@ -164,7 +173,6 @@ function ReferenceCard({ queue }) {
           </ul>
           It’s a chatbot-only setting and applies to every queue. The email queue is always strict by design.</li>
         <li><b>How it grounds.</b> For each question the bot retrieves the most relevant chunks from this queue’s <i>Context files</i> and <i>Web pages</i>, adds any <i>Corrections</i>, and answers from that. Use <i>Retrieval preview</i> to see exactly which chunks a question pulls.</li>
-        <li><b>How it ranks (BM25‑lite).</b> Chunks are scored against your question with a keyword relevance formula (like a search engine): rarer, more specific words count more, a match in a section <i>heading</i> counts extra, and common filler words are ignored. It’s fast and <b>literal</b> — it matches words, not meaning — so phrasing matters. The top‑scoring chunks become the grounding.</li>
         <li><b>Add knowledge.</b> Upload files in <i>Context files</i>, or add allow-listed <i>Web pages</i> (URLs) that the bot snapshots and chunks. Exclude any file or chunk you don’t want grounding answers, and refresh a page to re-pull its content.</li>
         <li><b>Teach it.</b> Add a <i>Correction</i> to fix or sharpen an answer — corrections are authoritative and override the rest. They also improve the email queue, since both share the same brain.</li>
         <li><b>Ask about it.</b> Use <i>Ask a question</i> above (a review tool — it doesn’t create a turn) to check the bot against its knowledge; the bottom-right bubble runs the live grounding and logs as a <i>test</i> conversation. <i>Reset</i> (top of the Ask card) clears the box and its history.</li>

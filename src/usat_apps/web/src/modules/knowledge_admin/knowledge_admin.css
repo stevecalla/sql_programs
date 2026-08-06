@@ -1,0 +1,8 @@
+/* Knowledge & AI admin — card styling for the shared Collapsible component (lib/ui.jsx). */
+.ka-card { background: var(--card, #fff); border: 1px solid var(--line, #e4e7ec); border-radius: 12px; padding: 14px 18px; margin-bottom: 12px; }
+.ka-cardhead { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.ka-h { font-size: 15px; margin: 0; flex: 1; }
+.ka-summary { color: var(--dim, #6b7280); font-size: 12px; }
+.ka-chev { color: var(--dim, #6b7280); font-size: 16px; transition: transform .15s ease; }
+.ka-chev.open { transform: rotate(90deg); }
+.ka-body { margin-top: 12px; }

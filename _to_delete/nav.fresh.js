@@ -25,7 +25,6 @@ const OpsSystemHealth = lazy(() => import('./modules/ops/SystemHealth.jsx'));
 const OpsReference = lazy(() => import('./modules/ops/Reference.jsx'));
 const EventCoi = lazy(() => import('./modules/event_coi/Section.jsx'));
 const ChatbotSection = lazy(() => import('./modules/chatbot/ChatbotSection.jsx'));
-const KnowledgeAdminSection = lazy(() => import('./modules/knowledge_admin/Section.jsx'));
 
 export const NAV = [
   {
@@ -75,7 +74,6 @@ export const NAV = [
   {
     type: 'group', label: 'Admin', items: [
       { label: 'Users & access', path: '/admin/users', panel: 'admin', icon: '👤', Component: Admin },
-      { label: 'Knowledge & AI', path: '/admin/knowledge', panel: 'knowledge-admin', icon: '🧠', Component: KnowledgeAdminSection },
       { label: 'Email Queue', path: '/admin/email-queue', panel: 'email-queue-admin', icon: '✉', Component: EmailQueueAdminSection, nested: true },
     ]
   },
