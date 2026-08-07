@@ -40,25 +40,13 @@ function set_allowlist(hosts) {
 }
 
 // ---- HTML -> text with H1/H3 preserved as markdown so the chunker can see structure ----
-// baseUrl (the page's own URL) is used to resolve relative link targets to absolute URLs.
-function html_to_headings(html, baseUrl) {
+function html_to_headings(html) {
   let s = String(html || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ');
   s = s.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, function (m, t) { return '\n# ' + strip(t) + '\n'; })
        .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, function (m, t) { return '\n## ' + strip(t) + '\n'; })
        .replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, function (m, t) { return '\n### ' + strip(t) + '\n'; });
   s = s.replace(/<li[^>]*>/gi, '\n• ').replace(/<\/(p|div|tr|section|article|ul|ol|table|h[4-6])>/gi, '\n').replace(/<br\s*\/?>/gi, '\n');
-  // Preserve link targets: turn <a href="URL">text</a> into "text (ABSOLUTE_URL)" BEFORE stripping tags, so
-  // the chunk keeps the real URL and the assistant can cite a clickable link. Skip #, mailto:, tel:, js:.
-  s = s.replace(/<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, function (m, href, txt) {
-    var label = strip(txt);
-    var h = String(href || '').trim();
-    if (!h || h.charAt(0) === '#' || /^(javascript:|mailto:|tel:)/i.test(h)) return label || ' ';
-    var url; try { url = new URL(h, baseUrl || undefined).toString(); } catch (e) { return label || ' '; }
-    if (!/^https?:\/\//i.test(url)) return label || ' ';
-    if (!label) return url;
-    return label.indexOf(url) >= 0 ? label : (label + ' (' + url + ')');
-  });
   s = s.replace(/<[^>]+>/g, ' ');
   s = s.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
        .replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"');
@@ -101,7 +89,7 @@ async function fetch_text(rawUrl, allowlist) {
     const bytes = Buffer.byteLength(body);
     if (bytes > MAX_BYTES) throw new Error('Page too large (' + bytes + ' bytes).');
     const isHtml = /text\/html|application\/xhtml/.test(ct);
-    let text = isHtml ? html_to_headings(body, current) : body.trim();
+    let text = isHtml ? html_to_headings(body) : body.trim();
     if (text.length > MAX_CHARS) text = text.slice(0, MAX_CHARS);
     return { url: current, host: chk.host, text: text, bytes: bytes, content_type: ct };
   }

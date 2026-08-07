@@ -308,52 +308,56 @@ export function WidgetReferenceCard() {
   );
 }
 
-// ---- Public bots (right rail, first) — the registry of published bots. Each is addressed by an opaque
-// handle (data-widget="teamusa"); queue/channel/styling/pages are saved SERVER-SIDE, so the embed carries
-// only the handle and a web page can never repoint the bot. Presentational; state lives in WidgetSection. ----
-export function WidgetPublicBotsCard(p) {
-  const bots = p.bots || {};
-  const handles = Object.keys(bots);
-  const known = handles.indexOf(p.handle) >= 0;
+// ---- Public bot (right rail, first) — which queue the embeddable widget is pinned to + its channel.
+// Saved SERVER-SIDE (authenticated, not admin-only), so the embed can't be repointed from a web page. ----
+export function WidgetPublicBotCard({ onSaved }) {
+  const [queues, setQueues] = useState([]);
+  const [queue, setQueue] = useState('');
+  const [channel, setChannel] = useState('web-widget');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(function () {
+    let live = true;
+    (async function () {
+      try {
+        const pb = await api.publicBot();
+        const q = await api.queues();
+        if (!live) return;
+        setChannel(pb.channel || 'web-widget');
+        setQueues((q && q.queues) || []);
+        setQueue(pb.queue || (q && q.default) || '');
+      } catch (e) { if (live) setMsg(e.message || 'Could not load'); }
+    })();
+    return function () { live = false; };
+  }, []);
+  const save = async function () {
+    setBusy(true); setMsg('');
+    try {
+      const r = await api.savePublicBot({ queue: queue, channel: channel });
+      setChannel(r.channel); setQueue(r.queue);
+      setMsg('Saved ✓'); setTimeout(function () { setMsg(''); }, 1800);
+      if (onSaved) onSaved();
+    } catch (e) { setMsg(e.message || 'Save failed'); }
+    finally { setBusy(false); }
+  };
   return (
-    <Card title="Public bots" summary={p.handle || 'new'}>
-      <div className="cbx-dim">Each embeddable bot is an expert in one queue’s knowledge, addressed by a <b>handle</b>. Saved on the server — the embed carries only the handle, so a web page can’t repoint it. Queue = that program’s context + global context.</div>
+    <Card title="Public bot" summary={queue || ''}>
+      <div className="cbx-dim">Which knowledge the embeddable widget is an expert in. Saved on the server — the embed <b>can’t</b> be repointed from a web page. Queue = that program’s context + global context.</div>
       <div className="cbx-row-between" style={{ margin: '8px 0' }}>
-        <span className="cbx-dim">Bot</span>
-        <select className="cbx-select" style={{ width: 'auto', maxWidth: 200 }} value={known ? p.handle : ''} onChange={(e) => { if (e.target.value === '__new') p.onNew(); else p.onSelect(e.target.value); }}>
-          {handles.map(function (h) { return <option key={h} value={h}>{h}</option>; })}
-          {!known ? <option value="">{p.handle || '(new)'}</option> : null}
-          <option value="__new">＋ New bot…</option>
-        </select>
-      </div>
-      <div className="cbx-row-between" style={{ marginBottom: 8 }}>
-        <span className="cbx-dim">Handle</span>
-        <input className="cbx-input" style={{ maxWidth: 160 }} value={p.handle} spellCheck={false} disabled={p.handle === 'default'}
-          onChange={(e) => p.setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} placeholder="teamusa" />
-      </div>
-      <div className="cbx-row-between" style={{ marginBottom: 8 }}>
         <span className="cbx-dim">Queue</span>
-        <select className="cbx-select" style={{ width: 'auto', maxWidth: 200 }} value={p.queue} onChange={(e) => p.setQueue(e.target.value)}>
-          {p.queues.length === 0 ? <option value="">(loading…)</option> : null}
-          {p.queues.map(function (q) { return <option key={q.key} value={q.key}>{q.label || q.name || q.key}</option>; })}
+        <select className="cbx-select" style={{ width: 'auto', maxWidth: 240 }} value={queue} onChange={(e) => setQueue(e.target.value)}>
+          {queues.length === 0 ? <option value="">(loading…)</option> : null}
+          {queues.map(function (q) { return <option key={q.key} value={q.key}>{q.label || q.name || q.key}</option>; })}
         </select>
       </div>
       <div className="cbx-row-between" style={{ marginBottom: 8 }}>
         <span className="cbx-dim">Channel</span>
-        <input className="cbx-input" style={{ maxWidth: 160 }} value={p.channel} spellCheck={false} onChange={(e) => p.setChannel(e.target.value)} placeholder="web-widget" />
+        <input className="cbx-input" style={{ maxWidth: 160 }} value={channel} spellCheck={false}
+          onChange={(e) => setChannel(e.target.value)} placeholder="web-widget" />
       </div>
-      <div style={{ marginBottom: 8 }}>
-        <div className="cbx-dim" style={{ marginBottom: 4 }}>Pages (one URL path per line — builds the GTM trigger)</div>
-        <textarea className="cbx-input" rows="3" style={{ width: '100%', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }} value={p.pagesText} spellCheck={false}
-          onChange={(e) => p.setPagesText(e.target.value)} placeholder={'/our-community/age-group-team-usa\n/team-usa/apparel'} />
-      </div>
-      <div className="cbx-hint" style={{ marginBottom: 8 }}>Appearance (theme, bubble, color) is set in the cards below and saved with the bot. The preview + embed follow it.</div>
       <div className="cbx-row-between">
-        <div>
-          {p.handle !== 'default' && known ? <button className="cbx-btn xs" onClick={p.onDelete} disabled={p.busy}>delete</button> : null}
-          <span className="cbx-dim" style={{ fontSize: 11, marginLeft: 8 }}>{p.msg}</span>
-        </div>
-        <button className="cbx-btn sm primary" onClick={p.onSave} disabled={p.busy || !p.queue || !p.handle}>{p.busy ? 'saving…' : 'Save bot'}</button>
+        <span className="cbx-dim" style={{ fontSize: 11 }}>{msg}</span>
+        <button className="cbx-btn sm primary" onClick={save} disabled={busy || !queue}>{busy ? 'saving…' : 'Save'}</button>
       </div>
     </Card>
   );
@@ -420,44 +424,16 @@ export function WidgetGtmCard() {
 }
 
 // ---- Embed code (right rail) — Option A: GTM loader script · Option B: raw iframe ----
-// ---- GTM setup (triggers) — copy-paste tag for this handle + the exact trigger to set from its Pages ----
-export function WidgetGtmSetupCard({ handle, pagesText }) {
-  const [copied, setCopied] = useState('');
-  const origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : 'https://apps.usatriathlon.org';
-  const h = handle || 'default';
-  const tag = '<script async src="' + origin + '/api/public-chatbot/widget.js" data-widget="' + h + '"></' + 'script>';
-  const pages = String(pagesText || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
-  const rx = pages.map(function (p) { return p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|');
-  const trigger = pages.length === 0
-    ? 'All Pages (fires site-wide)'
-    : (pages.length === 1
-      ? ('Page View → Some Page Views → Page Path  contains  ' + pages[0])
-      : ('Page View → Some Page Views → Page Path  matches RegEx  ' + rx));
-  const copy = function (text, tagName) { try { navigator.clipboard.writeText(text); setCopied(tagName); setTimeout(function () { setCopied(''); }, 1500); } catch (e) { /* ignore */ } };
-  return (
-    <Card title="GTM setup (triggers)" summary={h}>
-      <div className="cbx-dim"><b>1. Tag</b> — GTM → <i>Tags → New → Custom HTML</i>, paste this one-liner:</div>
-      <pre className="cbx-snippet">{tag}</pre>
-      <div className="cbx-row-end"><button className="cbx-btn sm" onClick={() => copy(tag, 'tag')}>{copied === 'tag' ? 'copied ✓' : 'copy tag'}</button></div>
-      <div className="cbx-dim" style={{ marginTop: 12 }}><b>2. Trigger</b> — set the tag to fire on:</div>
-      <pre className="cbx-snippet">{trigger}</pre>
-      {pages.length > 0 ? <div className="cbx-row-end"><button className="cbx-btn sm" onClick={() => copy(pages.length > 1 ? rx : pages[0], 'trg')}>{copied === 'trg' ? 'copied ✓' : (pages.length > 1 ? 'copy regex' : 'copy path')}</button></div> : null}
-      <div className="cbx-hint" style={{ marginTop: 10 }}>For click-around navigation on a single-page site, also add a <i>History Change</i> trigger with the same rule. The tag is a <b>stable one-liner</b> — changing this bot’s queue, styling, or knowledge here <b>never</b> requires re-pasting it. Only editing which pages it appears on is a trigger change.</div>
-    </Card>
-  );
-}
-
-// ---- Embed code — the one-line GTM tag (Option A) or a raw iframe (Option B), both by handle ----
-export function WidgetEmbedCard({ handle }) {
+export function WidgetEmbedCard({ theme, bubble, color }) {
   const [copiedA, setCopiedA] = useState(false);
   const [copiedB, setCopiedB] = useState(false);
   const origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : 'https://apps.usatriathlon.org';
-  const h = handle || 'default';
-  // Option A — the GTM loader: ONE stable <script> tag; queue + styling come from the handle's server config.
-  const gtmSnippet = '<script async src="' + origin + '/api/public-chatbot/widget.js" data-widget="' + h + '"></' + 'script>';
+  const cq = encodeURIComponent(color);
+  // Option A — the GTM loader: ONE <script> tag in a Custom HTML tag; it injects the iframe + resizer for you.
+  const gtmSnippet = '<script async src="' + origin + '/api/public-chatbot/widget.js" data-theme="' + theme + '" data-bubble="' + bubble + '" data-color="' + color + '"></' + 'script>';
   // Option B — a raw iframe + a tiny resizer that grows/shrinks it on open/close, if you can place HTML directly.
   const iframeSnippet = [
-    '<iframe id="usat-bot" title="USA Triathlon assistant" src="' + origin + '/api/public-chatbot/widget?w=' + encodeURIComponent(h) + '"',
+    '<iframe id="usat-bot" title="USA Triathlon assistant" src="' + origin + '/api/public-chatbot/widget?theme=' + theme + '&bubble=' + bubble + '&color=' + cq + '"',
     '  style="position:fixed;right:12px;bottom:12px;width:84px;height:84px;border:0;z-index:2147483000;background:transparent;color-scheme:normal;transition:width .15s,height .15s"></iframe>',
     '<script>',
     '  window.addEventListener("message", function (e) {',
@@ -478,9 +454,9 @@ export function WidgetEmbedCard({ handle }) {
     } catch (e) { /* ignore */ }
   };
   return (
-    <Card title="Embed code" summary={h}>
-      <div className="cbx-hint" style={{ marginBottom: 8 }}>Carries only the bot <b>handle</b> (<code>{h}</code>). Queue, theme, bubble, and color come from this bot’s saved config — change them here and the live embed follows, no re-paste.</div>
-      <div className="cbx-dim"><b>Option A — GTM (recommended).</b> Paste into a GTM <i>Custom HTML</i> tag; it injects the widget for you.</div>
+    <Card title="Embed code" summary="GTM / iframe">
+      <div className="cbx-hint" style={{ marginBottom: 8 }}>Reflects the preview — <b>{theme}</b> theme · <b>{bubble}</b> bubble · <b style={{ color: /^#[0-9a-fA-F]{6}$/.test(color) ? color : undefined }}>{color}</b>. Change them in the preview and the <i>Bot color</i> card; these snippets update to match.</div>
+      <div className="cbx-dim"><b>Option A — GTM (recommended).</b> Paste into a GTM <i>Custom HTML</i> tag. It injects the widget for you — no iframe to hand-place.</div>
       <pre className="cbx-snippet">{gtmSnippet}</pre>
       <div className="cbx-row-end"><button className="cbx-btn sm" onClick={() => copy(gtmSnippet, 'a')}>{copiedA ? 'copied ✓' : 'copy GTM tag'}</button></div>
       <div className="cbx-dim" style={{ marginTop: 12 }}><b>Option B — raw iframe.</b> If you can place HTML on the page directly.</div>

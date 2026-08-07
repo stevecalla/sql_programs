@@ -40,10 +40,9 @@ export const api = {
   conversation: (id) => req(P + '/conversation' + qs({ id })),
   deleteConversation: (id) => req(P + '/conversation/delete', { method: 'POST', body: JSON.stringify({ conversation_id: id }) }),
   clearTestConversations: (queue) => req(P + '/conversations/delete-test', { method: 'POST', body: JSON.stringify({ queue }) }),
-  // published-bots registry (each embeddable bot addressed by a handle -> queue/channel/styling/pages)
-  publicBots: () => req(P + '/public-bots'),
-  savePublicBot: (payload) => req(P + '/public-bots', { method: 'POST', body: JSON.stringify(payload) }),
-  deletePublicBot: (handle) => req(P + '/public-bots/delete', { method: 'POST', body: JSON.stringify({ handle }) }),
+  // public bot config (which queue the embeddable widget grounds on + its channel label)
+  publicBot: () => req(P + '/public-bot'),
+  savePublicBot: (payload) => req(P + '/public-bot', { method: 'POST', body: JSON.stringify(payload) }),
   // settings / models
   aiModels: () => req(P + '/ai/models'),
   settings: () => req(P + '/settings'),

@@ -23,14 +23,14 @@ const S = {
   hint: { color: 'var(--dim,#6b7280)', fontSize: 12.5, marginBottom: 12 },
   lbl: { fontSize: 12, fontWeight: 600, color: 'var(--dim,#6b7280)', textTransform: 'uppercase', letterSpacing: '.03em', margin: '16px 0 6px' },
   row: { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
-  btn: { cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '6px 11px', borderRadius: 8, border: '1px solid var(--line,#e4e7ec)', background: '#fff', color: 'inherit' },
+  btn: { cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '6px 11px', borderRadius: 8, border: '1px solid var(--line,#e4e7ec)', background: 'var(--panel, #fff)', color: 'var(--ink, inherit)' },
   btnPri: { cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: '6px 11px', borderRadius: 8, border: '1px solid #3b82f6', background: '#3b82f6', color: '#fff' },
   pill: { fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, border: '1px solid #cfe0ff', background: '#eff5ff', color: '#3b82f6' },
   muted: { color: 'var(--dim,#6b7280)', fontSize: 12 },
   status: { display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center', background: 'var(--bg,#fbfcfe)', border: '1px solid var(--line,#e4e7ec)', borderRadius: 10, padding: '10px 12px' },
   note: { fontSize: 12, color: '#b45309', background: '#fff8ee', border: '1px solid #fde9cf', borderRadius: 8, padding: '8px 10px', marginTop: 12 },
   demo: { border: '1px solid var(--line,#e4e7ec)', borderRadius: 10, padding: 12, marginTop: 8, background: 'var(--bg,#fbfcfe)' },
-  inp: { font: 'inherit', padding: '6px 8px', border: '1px solid var(--line,#e4e7ec)', borderRadius: 7, background: '#fff', color: 'inherit' },
+  inp: { font: 'inherit', padding: '6px 8px', border: '1px solid var(--line,#e4e7ec)', borderRadius: 7, background: 'var(--panel, #fff)', color: 'var(--ink, inherit)' },
   ref: { fontSize: 12, lineHeight: 1.5, color: 'var(--dim,#6b7280)', background: 'var(--bg,#fbfcfe)', border: '1px solid var(--line,#e4e7ec)', borderRadius: 8, padding: '8px 10px', marginBottom: 12 },
   ok: { color: '#16a34a', fontSize: 12 },
   err: { color: '#dc2626', fontSize: 12 },
@@ -80,7 +80,7 @@ function useRetrieval() {
   }, [weight]);
   return { data, err, weight, setWeight, busy, host, setHost, reidxMsg, commitWeight, changeModel, reindex, saveAllow, addHost, ranked };
 }
-const bar = (pct, color) => <div style={{ height: 6, background: '#eef1f5', borderRadius: 3, overflow: 'hidden' }}><i style={{ display: 'block', height: 6, width: Math.max(2, pct) + '%', background: color, borderRadius: 3 }} /></div>;
+const bar = (pct, color) => <div style={{ height: 6, background: 'var(--line, #eef1f5)', borderRadius: 3, overflow: 'hidden' }}><i style={{ display: 'block', height: 6, width: Math.max(2, pct) + '%', background: color, borderRadius: 3 }} /></div>;
 
 function RetrievalBlendCard({ r }) {
   const { data, weight, setWeight, busy, commitWeight, ranked } = r;
@@ -160,7 +160,7 @@ function AllowlistCard({ r }) {
       {!data ? <div style={S.muted}>Loading…</div> : (
         <>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {allow.map((h) => <span key={h} style={{ fontSize: 12, background: '#eef1f5', borderRadius: 6, padding: '3px 8px' }}><b>{h}</b> <button onClick={() => saveAllow(allow.filter((x) => x !== h))} style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--dim,#6b7280)' }} title="Remove">✕</button></span>)}
+            {allow.map((h) => <span key={h} style={{ fontSize: 12, background: 'var(--line, #eef1f5)', borderRadius: 6, padding: '3px 8px' }}><b>{h}</b> <button onClick={() => saveAllow(allow.filter((x) => x !== h))} style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--dim,#6b7280)' }} title="Remove">✕</button></span>)}
             {!allow.length ? <span style={S.muted}>(none — defaults to usatriathlon.org)</span> : null}
           </div>
           <div style={S.lbl}>Add host</div>

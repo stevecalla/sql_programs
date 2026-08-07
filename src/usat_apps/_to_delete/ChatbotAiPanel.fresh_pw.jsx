@@ -220,244 +220,19 @@ function SettingsCard() {
   );
 }
 
-// ==== Public widget panel (Chatbot → Public widget) ==================================================
-// Three cards, laid out by WidgetSection.jsx as main preview + right rail (how-to + embed code), the same
-// shell the operator/email-queue pages use. The server pins the queue (Team USA) + strict grounding.
-
-// Bubble (FAB) styles the visitor sees — shared by the preview + the embed snippet. 'random' picks a new
-// one on each page load. Keep in sync with BUBBLES in modules/chatbot/widget_page.js.
-const BUBBLE_OPTS = [
-  ['plain', 'Plain 💬', 'Plain'],
-  ['triathlon', 'Triathlon — swim/bike/run cycle', 'Triathlon'],
-  ['athlete', 'Runner — in motion', 'Runner'],
-  ['speedlines', 'Cyclist — speed lines', 'Cyclist'],
-  ['emoji', 'Emoji crossfade', 'Emoji'],
-  ['random', 'Random each load', 'Random'],
-];
-
-// Bot accent color — USAT blue by default. Swatches + a hex box drive the preview and the embed.
-// Kept in sync with DEFAULT_ACCENT in modules/chatbot/widget_page.js.
-const DEFAULT_COLOR = '#152C53';
-const COLOR_SWATCHES = [
-  ['#152C53', 'USAT blue'],
-  ['#D12027', 'USAT red'],
-  ['#0E7490', 'Teal'],
-  ['#15803D', 'Green'],
-  ['#6D28D9', 'Purple'],
-  ['#C2410C', 'Orange'],
-  ['#334155', 'Slate'],
-  ['#111827', 'Charcoal'],
-];
-function normHex(s) {
-  let v = String(s == null ? '' : s).trim();
-  if (v && v[0] !== '#') v = '#' + v;
-  if (/^#[0-9a-fA-F]{3}$/.test(v)) v = '#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
-  return /^#[0-9a-fA-F]{6}$/.test(v) ? v.toUpperCase() : null;
-}
-
-// ---- Bot color (right rail) — swatches + hex + native picker; drives the preview and the embed ----
-export function WidgetColorCard({ color, setColor }) {
-  const [hex, setHex] = useState(color);
-  useEffect(() => { setHex(color); }, [color]);
-  const apply = () => { const v = normHex(hex); if (v) setColor(v); else setHex(color); };
-  const picker = /^#[0-9a-fA-F]{6}$/.test(color) ? color : DEFAULT_COLOR;
-  return (
-    <Card title="Bot color" summary={color}>
-      <div className="cbx-dim">Accent for the bubble, header, send button, and the visitor’s messages. Applies to the preview and the embed below.</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '8px 0' }}>
-        {COLOR_SWATCHES.map(function (o) {
-          const on = color.toLowerCase() === o[0].toLowerCase();
-          return (
-            <button key={o[0]} type="button" title={o[1] + ' ' + o[0]} onClick={function () { setColor(o[0]); }}
-              style={{ width: 26, height: 26, borderRadius: '50%', background: o[0], cursor: 'pointer', border: on ? '2px solid var(--ink)' : '1px solid var(--line)' }} />
-          );
-        })}
-      </div>
-      <div className="cbx-row-between" style={{ gap: 6 }}>
-        <input className="cbx-input" style={{ maxWidth: 130 }} value={hex} spellCheck={false} placeholder="#152C53"
-          onChange={function (e) { setHex(e.target.value); }} onKeyDown={function (e) { if (e.key === 'Enter') apply(); }} />
-        <input type="color" value={picker} title="Color picker"
-          onChange={function (e) { setColor(e.target.value.toUpperCase()); }}
-          style={{ width: 34, height: 30, padding: 0, border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', cursor: 'pointer' }} />
-        <button className="cbx-btn xs" onClick={apply}>apply</button>
-      </div>
-    </Card>
-  );
-}
-
-// ---- How this works (reference) — the security model + everything else about the public widget panel ----
-export function WidgetReferenceCard() {
-  return (
-    <Card title="How this works (reference)">
-      <ul className="cbx-ref">
-        <li><b>What this is.</b> The <b>public widget</b> is the member-facing bot you embed on external sites (via GTM or an iframe). It’s the same brain as <i>Bot training</i>, but unauthenticated and locked down. Everything you see in the preview is exactly what ships.</li>
-        <li><b>Curated knowledge only — never PII.</b> It answers <b>only</b> from the pinned queue’s curated knowledge: context files, allow-listed web pages, and operator corrections. It never reads Salesforce cases, member emails, or any personal data, and it can’t see the operator/email-queue conversations.</li>
-        <li><b>Always strict grounding.</b> The public bot is always in <i>strict</i> mode — if the answer isn’t in the knowledge, it says so and points to USA Triathlon rather than guessing. (The Strict/Broad toggle only exists on the internal bot.)</li>
-        <li><b>The pinned queue can’t be changed from a web page.</b> The <i>Public bot</i> card sets which queue (knowledge) the widget grounds on, and it’s stored <b>server-side</b>. The widget reads it on every request — it is <b>never</b> taken from a URL parameter — so an embedding site can’t repoint the bot at other knowledge. On save, the server also verifies <b>you</b> have access to that queue.</li>
-        <li><b>Queue = program + global.</b> A queue gives the bot that program’s context <b>plus</b> the shared global context (same model as the email queue). Point it at Team USA, Coaches, etc.; each is an expert in its own space.</li>
-        <li><b>Who can frame it.</b> Only allow-listed origins may embed the widget (CSP <code>frame-ancestors</code>, env <code>CHATBOT_WIDGET_FRAME_ANCESTORS</code> — preview / www / <code>*.usatriathlon.org</code> by default). Other sites are blocked from framing it.</li>
-        <li><b>Abuse protection.</b> Requests are rate-limited per visitor IP (<code>CHATBOT_PUBLIC_RATE</code>, default 30/min) and messages are length-capped. Errors are generic — no internal details are exposed to the public.</li>
-        <li><b>Everything is logged for review.</b> Each turn is recorded to <code>chatbot_conversations</code> tagged with your <i>Channel</i> (e.g. <code>web-widget</code>) and <code>is_test=1</code> on the test site. It appears in the left rail (and updates live as you test here). This is the data your future reporting / review / escalation process will use. The footer tells visitors the bot is in training and chats are recorded.</li>
-        <li><b>Answers can carry links + formatting.</b> When the knowledge contains a real URL, the bot includes it as a clickable link; it also renders <b>bold</b> and <i>italic</i>. It only ever cites URLs that are actually in the knowledge — it won’t invent one. (Links reach the knowledge only after a page is (re)ingested with the current fetcher.)</li>
-        <li><b>It knows “today”.</b> The bot is given the current date (Mountain Time), so “latest / next / most recent” questions resolve against real dates in the knowledge.</li>
-        <li><b>Styling.</b> <i>Bubble &amp; theme</i> sets the floating bubble (plain / triathlon / runner / cyclist / emoji / random) and light/dark; <i>Bot color</i> sets the accent (USAT blue by default). Both flow into the preview and the copy-paste embed.</li>
-        <li><b>Embedding.</b> Use <i>Embed code → Option A</i> (a GTM Custom HTML tag — recommended, no iframe to hand-place) or <i>Option B</i> (a raw iframe). The chosen theme, bubble, and color are baked into the snippet. See <i>How to embed with GTM</i> for the step-by-step.</li>
-        <li><b>Verify.</b> Endpoints: <code>/api/public-chatbot/widget</code> (HTML), <code>/widget.js</code> (loader), <code>POST /ask</code> (answer). The chatbot module menu probes all three. Note: the widget is server-rendered, so restart <code>:8022</code> after backend changes and reload Vite for UI changes.</li>
-      </ul>
-    </Card>
-  );
-}
-
-// ---- Public bots (right rail, first) — the registry of published bots. Each is addressed by an opaque
-// handle (data-widget="teamusa"); queue/channel/styling/pages are saved SERVER-SIDE, so the embed carries
-// only the handle and a web page can never repoint the bot. Presentational; state lives in WidgetSection. ----
-export function WidgetPublicBotsCard(p) {
-  const bots = p.bots || {};
-  const handles = Object.keys(bots);
-  const known = handles.indexOf(p.handle) >= 0;
-  return (
-    <Card title="Public bots" summary={p.handle || 'new'}>
-      <div className="cbx-dim">Each embeddable bot is an expert in one queue’s knowledge, addressed by a <b>handle</b>. Saved on the server — the embed carries only the handle, so a web page can’t repoint it. Queue = that program’s context + global context.</div>
-      <div className="cbx-row-between" style={{ margin: '8px 0' }}>
-        <span className="cbx-dim">Bot</span>
-        <select className="cbx-select" style={{ width: 'auto', maxWidth: 200 }} value={known ? p.handle : ''} onChange={(e) => { if (e.target.value === '__new') p.onNew(); else p.onSelect(e.target.value); }}>
-          {handles.map(function (h) { return <option key={h} value={h}>{h}</option>; })}
-          {!known ? <option value="">{p.handle || '(new)'}</option> : null}
-          <option value="__new">＋ New bot…</option>
-        </select>
-      </div>
-      <div className="cbx-row-between" style={{ marginBottom: 8 }}>
-        <span className="cbx-dim">Handle</span>
-        <input className="cbx-input" style={{ maxWidth: 160 }} value={p.handle} spellCheck={false} disabled={p.handle === 'default'}
-          onChange={(e) => p.setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} placeholder="teamusa" />
-      </div>
-      <div className="cbx-row-between" style={{ marginBottom: 8 }}>
-        <span className="cbx-dim">Queue</span>
-        <select className="cbx-select" style={{ width: 'auto', maxWidth: 200 }} value={p.queue} onChange={(e) => p.setQueue(e.target.value)}>
-          {p.queues.length === 0 ? <option value="">(loading…)</option> : null}
-          {p.queues.map(function (q) { return <option key={q.key} value={q.key}>{q.label || q.name || q.key}</option>; })}
-        </select>
-      </div>
-      <div className="cbx-row-between" style={{ marginBottom: 8 }}>
-        <span className="cbx-dim">Channel</span>
-        <input className="cbx-input" style={{ maxWidth: 160 }} value={p.channel} spellCheck={false} onChange={(e) => p.setChannel(e.target.value)} placeholder="web-widget" />
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <div className="cbx-dim" style={{ marginBottom: 4 }}>Pages (one URL path per line — builds the GTM trigger)</div>
-        <textarea className="cbx-input" rows="3" style={{ width: '100%', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }} value={p.pagesText} spellCheck={false}
-          onChange={(e) => p.setPagesText(e.target.value)} placeholder={'/our-community/age-group-team-usa\n/team-usa/apparel'} />
-      </div>
-      <div className="cbx-hint" style={{ marginBottom: 8 }}>Appearance (theme, bubble, color) is set in the cards below and saved with the bot. The preview + embed follow it.</div>
-      <div className="cbx-row-between">
-        <div>
-          {p.handle !== 'default' && known ? <button className="cbx-btn xs" onClick={p.onDelete} disabled={p.busy}>delete</button> : null}
-          <span className="cbx-dim" style={{ fontSize: 11, marginLeft: 8 }}>{p.msg}</span>
-        </div>
-        <button className="cbx-btn sm primary" onClick={p.onSave} disabled={p.busy || !p.queue || !p.handle}>{p.busy ? 'saving…' : 'Save bot'}</button>
-      </div>
-    </Card>
-  );
-}
-
-// ---- Bubble & theme (right rail) — the live-preview controls ----
-export function WidgetAppearanceCard({ theme, setTheme, bubble, setBubble }) {
-  return (
-    <Card title="Bubble & theme">
-      <div className="cbx-row-between" style={{ marginBottom: 8 }}>
-        <span className="cbx-dim">Theme</span>
-        <select className="cbx-select" style={{ width: 'auto' }} value={theme} onChange={(e) => setTheme(e.target.value)}>
-          <option value="light">Light</option><option value="dark">Dark</option>
-        </select>
-      </div>
-      {/* Clickable style switcher — flip the preview instantly between bubbles. The active one is highlighted. */}
-      <div className="cbx-row-between" style={{ alignItems: 'flex-start', gap: 8 }}>
-        <span className="cbx-dim" style={{ paddingTop: 5 }}>Bubble style</span>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, justifyContent: 'flex-end' }}>
-          {BUBBLE_OPTS.map(function (o) {
-            return (
-              <button key={o[0]} type="button" title={o[1]}
-                className={'cbx-btn xs' + (bubble === o[0] ? ' primary' : '')}
-                onClick={function () { setBubble(o[0]); }}>{o[2]}</button>
-            );
-          })}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-// ---- Live preview (main area) — what you see here is EXACTLY what embeds. `src` + theme come from the
-// parent (WidgetSection), which also renders the "open full page" link above this card. ----
-export function WidgetPreviewCard({ src, theme }) {
-  return (
-    <Card title="Public widget — live preview" open>
-      <div className="cbx-hint">This is the <b>real</b> embeddable widget (pinned to <b>Team USA</b>, strict grounding, curated knowledge only — no PII). Changes in <i>Bubble &amp; theme</i> and <i>Bot color</i> show up here immediately. Open the bubble to try it.</div>
-      {/* Responsive height so the whole widget — open panel AND the bubble — fits inside the card without
-          clipping or a page scroll. The widget inside reads this container's height as its 100vh. */}
-      <div style={{ position: 'relative', height: 'clamp(400px, calc(100vh - 340px), 520px)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden', background: theme === 'dark' ? '#0f172a' : '#eef1f5' }}>
-        <iframe key={src} title="Widget preview" src={src} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }} />
-      </div>
-    </Card>
-  );
-}
-
-// ---- GTM step-by-step how-to (right rail) ----
-export function WidgetGtmCard() {
-  return (
-    <Card title="How to embed with GTM">
-      <ol className="cbx-ref">
-        <li><b>New tag.</b> In Google Tag Manager, open the site’s container, then <i>Tags → New → Tag Configuration → Custom HTML</i>.</li>
-        <li><b>Paste the loader.</b> Use <i>Option A</i> from the <b>Embed code</b> card below — the one-line <code>&lt;script async src="…/widget.js"&gt;</code>. Leave “Support document.write” unchecked; set <code>data-theme</code> to <code>light</code> or <code>dark</code>.</li>
-        <li><b>Trigger.</b> Add a trigger — <i>All Pages</i> for site-wide, or a page-path trigger for one page (e.g. the test page <code>/iframe-test-page2</code>).</li>
-        <li><b>Allow the origin.</b> The embedding site must be in the server’s <code>frame-ancestors</code> allow-list (env <code>CHATBOT_WIDGET_FRAME_ANCESTORS</code>). The preview / www / <code>*.usatriathlon.org</code> origins are allowed by default.</li>
-        <li><b>Preview.</b> Click <i>Preview</i> in GTM, load the page, and confirm the bubble appears bottom-right and answers a Team USA question.</li>
-        <li><b>Publish.</b> <i>Submit → Publish</i> the container version.</li>
-        <li><b>GA4 events.</b> The widget pushes <code>chatbot_open</code>, <code>chatbot_ask</code>, <code>chatbot_answer</code>, and <code>chatbot_error</code> to the page’s <code>dataLayer</code>. Add GA4 Event tags fired on those as <i>Custom Event</i> triggers, then watch them in GA4 <i>DebugView</i>.</li>
-      </ol>
-      <div className="cbx-hint" style={{ marginTop: 10 }}>Verify the endpoints directly: <code>/api/public-chatbot/widget</code> (HTML), <code>/widget.js</code> (loader JS), <code>POST /ask</code> (answer). The chatbot module menu — <code>node …/modules/chatbot/menu.js</code> — probes all three on :5175 and :8022.</div>
-    </Card>
-  );
-}
-
-// ---- Embed code (right rail) — Option A: GTM loader script · Option B: raw iframe ----
-// ---- GTM setup (triggers) — copy-paste tag for this handle + the exact trigger to set from its Pages ----
-export function WidgetGtmSetupCard({ handle, pagesText }) {
-  const [copied, setCopied] = useState('');
+// ---- GTM / public widget (spec) — a place to start speccing the embeddable public bot ----
+// ---- Public widget — LIVE preview + copy-paste embed. What you see here is exactly what embeds. ----
+function WidgetPreviewCard() {
+  const [theme, setTheme] = useState('light');
+  const [copied, setCopied] = useState(false);
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
   const origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : 'https://apps.usatriathlon.org';
-  const h = handle || 'default';
-  const tag = '<script async src="' + origin + '/api/public-chatbot/widget.js" data-widget="' + h + '"></' + 'script>';
-  const pages = String(pagesText || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
-  const rx = pages.map(function (p) { return p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|');
-  const trigger = pages.length === 0
-    ? 'All Pages (fires site-wide)'
-    : (pages.length === 1
-      ? ('Page View → Some Page Views → Page Path  contains  ' + pages[0])
-      : ('Page View → Some Page Views → Page Path  matches RegEx  ' + rx));
-  const copy = function (text, tagName) { try { navigator.clipboard.writeText(text); setCopied(tagName); setTimeout(function () { setCopied(''); }, 1500); } catch (e) { /* ignore */ } };
-  return (
-    <Card title="GTM setup (triggers)" summary={h}>
-      <div className="cbx-dim"><b>1. Tag</b> — GTM → <i>Tags → New → Custom HTML</i>, paste this one-liner:</div>
-      <pre className="cbx-snippet">{tag}</pre>
-      <div className="cbx-row-end"><button className="cbx-btn sm" onClick={() => copy(tag, 'tag')}>{copied === 'tag' ? 'copied ✓' : 'copy tag'}</button></div>
-      <div className="cbx-dim" style={{ marginTop: 12 }}><b>2. Trigger</b> — set the tag to fire on:</div>
-      <pre className="cbx-snippet">{trigger}</pre>
-      {pages.length > 0 ? <div className="cbx-row-end"><button className="cbx-btn sm" onClick={() => copy(pages.length > 1 ? rx : pages[0], 'trg')}>{copied === 'trg' ? 'copied ✓' : (pages.length > 1 ? 'copy regex' : 'copy path')}</button></div> : null}
-      <div className="cbx-hint" style={{ marginTop: 10 }}>For click-around navigation on a single-page site, also add a <i>History Change</i> trigger with the same rule. The tag is a <b>stable one-liner</b> — changing this bot’s queue, styling, or knowledge here <b>never</b> requires re-pasting it. Only editing which pages it appears on is a trigger change.</div>
-    </Card>
-  );
-}
-
-// ---- Embed code — the one-line GTM tag (Option A) or a raw iframe (Option B), both by handle ----
-export function WidgetEmbedCard({ handle }) {
-  const [copiedA, setCopiedA] = useState(false);
-  const [copiedB, setCopiedB] = useState(false);
-  const origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : 'https://apps.usatriathlon.org';
-  const h = handle || 'default';
-  // Option A — the GTM loader: ONE stable <script> tag; queue + styling come from the handle's server config.
-  const gtmSnippet = '<script async src="' + origin + '/api/public-chatbot/widget.js" data-widget="' + h + '"></' + 'script>';
-  // Option B — a raw iframe + a tiny resizer that grows/shrinks it on open/close, if you can place HTML directly.
-  const iframeSnippet = [
-    '<iframe id="usat-bot" title="USA Triathlon assistant" src="' + origin + '/api/public-chatbot/widget?w=' + encodeURIComponent(h) + '"',
+  const src = base + '/api/public-chatbot/widget?theme=' + theme;
+  // The GTM / page embed: a corner iframe + a tiny resizer that grows/shrinks it on open/close (so a closed
+  // bubble doesn't block the page). The server pins the queue (Team USA) and enforces strict grounding.
+  const snippet = [
+    '<!-- USA Triathlon assistant — iframe embed (paste into a GTM Custom HTML tag) -->',
+    '<iframe id="usat-bot" title="USA Triathlon assistant" src="' + origin + '/api/public-chatbot/widget?theme=' + theme + '"',
     '  style="position:fixed;right:12px;bottom:12px;width:84px;height:84px;border:0;z-index:2147483000;background:transparent;color-scheme:normal;transition:width .15s,height .15s"></iframe>',
     '<script>',
     '  window.addEventListener("message", function (e) {',
@@ -465,28 +240,27 @@ export function WidgetEmbedCard({ handle }) {
     '    var f = document.getElementById("usat-bot"); if (!f) return;',
     '    if (e.data.event === "chatbot_open")  { f.style.width = "min(396px,100vw)"; f.style.height = "min(600px,100vh)"; }',
     '    if (e.data.event === "chatbot_close") { f.style.width = "84px"; f.style.height = "84px"; }',
-    '    // also chatbot_ask / chatbot_answer / chatbot_error — forward to GA4 if desired:',
+    '    // e.data.event is also chatbot_ask / chatbot_answer / chatbot_error — forward to GA4 here if desired:',
     '    // window.dataLayer = window.dataLayer || []; window.dataLayer.push({ event: e.data.event });',
     '  });',
-    '</' + 'script>',
+    '</script>',
   ].join('\n');
-  const copy = (text, which) => {
-    try {
-      navigator.clipboard.writeText(text);
-      const set = which === 'a' ? setCopiedA : setCopiedB;
-      set(true); setTimeout(() => set(false), 1500);
-    } catch (e) { /* ignore */ }
-  };
+  const copy = () => { try { navigator.clipboard.writeText(snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) { /* ignore */ } };
   return (
-    <Card title="Embed code" summary={h}>
-      <div className="cbx-hint" style={{ marginBottom: 8 }}>Carries only the bot <b>handle</b> (<code>{h}</code>). Queue, theme, bubble, and color come from this bot’s saved config — change them here and the live embed follows, no re-paste.</div>
-      <div className="cbx-dim"><b>Option A — GTM (recommended).</b> Paste into a GTM <i>Custom HTML</i> tag; it injects the widget for you.</div>
-      <pre className="cbx-snippet">{gtmSnippet}</pre>
-      <div className="cbx-row-end"><button className="cbx-btn sm" onClick={() => copy(gtmSnippet, 'a')}>{copiedA ? 'copied ✓' : 'copy GTM tag'}</button></div>
-      <div className="cbx-dim" style={{ marginTop: 12 }}><b>Option B — raw iframe.</b> If you can place HTML on the page directly.</div>
-      <pre className="cbx-snippet">{iframeSnippet}</pre>
-      <div className="cbx-row-end"><button className="cbx-btn sm" onClick={() => copy(iframeSnippet, 'b')}>{copiedB ? 'copied ✓' : 'copy iframe'}</button></div>
-      <div className="cbx-hint" style={{ marginTop: 10 }}>The server must allow the embedding site in <code>frame-ancestors</code> (env <code>CHATBOT_WIDGET_FRAME_ANCESTORS</code>) or the frame won’t load.</div>
+    <Card title="Public widget — live preview & embed">
+      <div className="cbx-hint">This is the <b>real</b> embeddable widget (pinned to <b>Team USA</b>, strict grounding, curated knowledge only — no PII). Style changes to the widget show up here immediately. Open the bubble in the preview to try it.</div>
+      <div className="cbx-row-between" style={{ marginBottom: 8 }}>
+        <span className="cbx-dim">Preview theme</span>
+        <select className="cbx-select" style={{ width: 'auto' }} value={theme} onChange={(e) => setTheme(e.target.value)}>
+          <option value="light">Light</option><option value="dark">Dark</option>
+        </select>
+      </div>
+      <div style={{ position: 'relative', height: 560, border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden', background: theme === 'dark' ? '#0f172a' : '#eef1f5' }}>
+        <iframe title="Widget preview" src={src} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }} />
+      </div>
+      <div className="cbx-dim" style={{ marginTop: 10 }}>Embed (GTM Custom HTML tag) — server must allow the embedding site in <code>frame-ancestors</code>:</div>
+      <pre className="cbx-snippet">{snippet}</pre>
+      <div className="cbx-row-end"><button className="cbx-btn sm" onClick={copy}>{copied ? 'copied ✓' : 'copy embed'}</button></div>
     </Card>
   );
 }
@@ -558,6 +332,7 @@ export default function ChatbotAiPanel({ queue, selectedId }) {
       <UrlContextCard queue={queue} />
       <RetrievePreviewCard queue={queue} />
       <ReferenceCard queue={queue} />
+      <WidgetPreviewCard />
     </>
   );
 }

@@ -49,7 +49,7 @@ export const NAV = [
   },
   {
     type: 'group', label: 'Chatbot', items: [
-      { label: 'Bot training', path: '/chatbot/training', panel: 'chatbot', icon: '💬', Component: ChatbotSection },
+      { label: 'AI Chat Bot', path: '/chatbot/bot', panel: 'chatbot', icon: '💬', Component: ChatbotSection },
       { label: 'Public widget', path: '/chatbot/widget', panel: 'chatbot', icon: '🌐', Component: WidgetSection },
     ]
   },
@@ -108,7 +108,6 @@ export function panelForPathname(pathname) {
 // /merge app) should land on the real page instead of the in-app 404.
 const LEGACY_ALIASES = [
   { from: '/merge', to: '/salesforce/merge' },
-  { from: '/chatbot/bot', to: '/chatbot/training' },   // renamed: AI Chat Bot -> Bot training
 ];
 
 // Redirect map for the router: each group's BASE path (e.g. /events, /salesforce) -> its first child,
