@@ -53,32 +53,6 @@ function pick_queue(req) {
 
 // Salesforce connection (read-only, names only — never cases/PII). Cached per env.
 function sf_env() { try { const c = kb_data_dir.read_config() || {}; return c.sf_env === 'sandbox' ? 'sandbox' : 'prod'; } catch (e) { return 'prod'; } }
-
-// Public-bot config (which queue the embeddable widget grounds on + its channel label). Stored server-side
-// in the shared config.json so it can NEVER be set by a URL parameter — the public widget only reads it.
-// Falls back to env vars, then the soft default. Read/written here (authenticated) and read by public.js.
-function DEF_BOT() {
-  return {
-    queue: process.env.CHATBOT_PUBLIC_QUEUE || DEFAULT_QUEUE,
-    channel: process.env.CHATBOT_PUBLIC_CHANNEL || 'web-widget',
-    theme: 'light', bubble: 'triathlon', color: '#152C53', pages: [],
-  };
-}
-// The published-bots registry (config.public_bots), keyed by handle. Migrates the legacy single config
-// (config.public_bot) into the 'default' handle so nothing breaks. Mirrors resolve_bot() in public.js.
-function bots_map() {
-  let c = {}; try { c = kb_data_dir.read_config() || {}; } catch (e) { c = {}; }
-  let m = (c && c.public_bots && typeof c.public_bots === 'object') ? c.public_bots : null;
-  if (!m || !Object.keys(m).length) {
-    const pb = (c && c.public_bot) || {};
-    m = { default: Object.assign(DEF_BOT(), { queue: pb.queue || DEF_BOT().queue, channel: pb.channel || DEF_BOT().channel }) };
-  }
-  // fill any missing fields per bot
-  const out = {};
-  Object.keys(m).forEach(function (k) { out[k] = Object.assign(DEF_BOT(), m[k] || {}); });
-  return out;
-}
-function slug_handle(s) { return String(s || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); }
 let _conn = null, _conn_env = null;
 async function get_conn() {
   const env = sf_env();
@@ -108,15 +82,7 @@ function build_system(queue, knowledge, corr, mode) {
   const cblock = (corr && corr.length) ? corr.map(function (c) { return '- ' + c; }).join('\n') : '';
   const name = String(queue || 'this program');
   const broad = mode === 'broad';
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Denver' });
-  // Shared across strict + broad: date reasoning for "latest/next", and clickable-link handling.
-  const shared = [
-    '- Use today\'s date to resolve "latest", "next", "upcoming", "most recent", or "past": read the dates in',
-    '  the KNOWLEDGE and pick the item on the correct side of today, and state the specific date you chose.',
-    '- When the KNOWLEDGE contains a relevant link (a URL, often shown as "label (https://…)"), include it as',
-    '  a Markdown link [label](https://…). Only use URLs that appear in the KNOWLEDGE — never invent one.',
-  ];
-  const rules = (broad ? [
+  const rules = broad ? [
     '- Prefer the KNOWLEDGE below (and CORRECTIONS) — treat them as authoritative for this program.',
     '- If the KNOWLEDGE does not cover the question, you MAY use general knowledge about USA Triathlon and',
     '  the sport of triathlon to be helpful, staying within that domain.',
@@ -133,11 +99,10 @@ function build_system(queue, knowledge, corr, mode) {
     '- If the question is unrelated to USA Triathlon / ' + name + ", politely say that's outside what you can help with.",
     '- Never ask for or reveal personal or member data. Keep answers concise and friendly.',
     '- Write the program name exactly as: "' + name + '".',
-  ]).concat(shared);
+  ];
   return [
     'You are a USA Triathlon assistant for the "' + name + '" program. You help members and visitors with',
     'questions about USA Triathlon and the ' + name + ' program' + (broad ? '.' : ' ONLY.'),
-    'Today is ' + today + ' (US Mountain Time).',
     '',
     'Rules (' + (broad ? 'BROAD grounding' : 'STRICT grounding — curated content only') + '):',
   ].concat(rules).concat([
@@ -190,49 +155,6 @@ function mount(app) {
     try { const k = await kb.load_knowledge(queue); chars = (k && k.length) || 0; } catch (e) { chars = 0; }
     const st = settings.get();
     res.json({ ok: true, scope: queue, queue: queue, provider: st.provider, model: ai.resolve_model(st.provider, st.model || null, process.env), knowledge_chars: chars, grounding: st.grounding });
-  });
-
-  // Published-bots registry — each embeddable bot addressed by an opaque handle (data-widget="teamusa").
-  // Anyone with the chatbot panel can manage them (not admin-only), but they're saved SERVER-SIDE: the embed
-  // carries only the handle, so a web page can never name a queue or repoint the bot. On save we verify the
-  // chosen queue is one this user is allowed to see (queue_access) — you can't publish a queue you can't access.
-  app.get(P + '/public-bots', gate, async function (req, res) {
-    let queues = [];
-    try { const c = await get_conn(); const all = await sf.list_queues(c, { with_open_counts: false }); if (all) queues = queue_access.filter_queues(all, req.user, req.role).map(function (q) { return { key: q.name, name: q.name, label: q.name }; }); }
-    catch (e) { queues = []; }
-    res.json({ ok: true, bots: bots_map(), queues: queues, defaultHandle: 'default' });
-  });
-  app.post(P + '/public-bots', gate, async function (req, res) {
-    const b = req.body || {};
-    const handle = slug_handle(b.handle) || 'default';
-    const wantQueue = String(b.queue || '').trim();
-    if (!wantQueue) return res.status(400).json({ ok: false, error: 'Queue required.' });
-    let all = null;
-    try { const c = await get_conn(); all = await sf.list_queues(c, { with_open_counts: false }); } catch (e) { all = null; }
-    let allowed;
-    if (all) { const visible = queue_access.filter_queues(all, req.user, req.role); allowed = visible.some(function (q) { return norm_name(q.name) === norm_name(wantQueue); }); }
-    else { allowed = norm_name(wantQueue) === norm_name(DEFAULT_QUEUE); }
-    if (!allowed) return res.status(403).json({ ok: false, error: 'You do not have access to that queue.' });
-    const bot = {
-      queue: wantQueue,
-      channel: (String(b.channel || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 60)) || 'web-widget',
-      theme: b.theme === 'dark' ? 'dark' : 'light',
-      bubble: String(b.bubble || 'triathlon'),
-      color: (/^#[0-9a-fA-F]{6}$/.test(String(b.color || '')) ? String(b.color) : '#152C53'),
-      pages: Array.isArray(b.pages) ? b.pages.map(function (p) { return String(p || '').trim(); }).filter(Boolean).slice(0, 50) : [],
-    };
-    let cfg = {}; try { cfg = kb_data_dir.read_config() || {}; } catch (e) { cfg = {}; }
-    const m = bots_map(); m[handle] = bot; cfg.public_bots = m;
-    try { kb_data_dir.write_config(cfg); } catch (e) { return res.status(500).json({ ok: false, error: 'Could not save.' }); }
-    res.json({ ok: true, handle: handle, bots: m });
-  });
-  app.post(P + '/public-bots/delete', gate, function (req, res) {
-    const handle = slug_handle((req.body || {}).handle);
-    if (!handle || handle === 'default') return res.status(400).json({ ok: false, error: 'The default bot can’t be deleted.' });
-    let cfg = {}; try { cfg = kb_data_dir.read_config() || {}; } catch (e) { cfg = {}; }
-    const m = bots_map(); delete m[handle]; cfg.public_bots = m;
-    try { kb_data_dir.write_config(cfg); } catch (e) { return res.status(500).json({ ok: false, error: 'Could not save.' }); }
-    res.json({ ok: true, bots: m });
   });
 
   // The exact context the bot grounds on (files + corrections count + dir). Names/sizes only.
