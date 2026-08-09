@@ -16,6 +16,7 @@ const path = require('path');
 const readline = require('readline');
 const { spawn, execSync } = require('child_process');
 const data_dir = require('./src/data_dir');
+const { runMenu } = require('../../utilities/menu/menu_kit');   // shared menu shell (render/number/toggle/quit)
 
 const DIR = __dirname;
 const SERVER = path.join(DIR, '..', '..', 'server_race_results_transform_8018.js');
@@ -30,26 +31,21 @@ let _show_cli = false;
 function load_prefs() { try { const j = JSON.parse(fs.readFileSync(PREFS_FILE, 'utf8')); if (typeof j.show_cli === 'boolean') _show_cli = j.show_cli; } catch (e) {} }
 function save_prefs() { try { fs.writeFileSync(PREFS_FILE, JSON.stringify({ show_cli: _show_cli }, null, 2) + '\n'); } catch (e) {} }
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-function ask(q) { return new Promise(function (res) { rl.question(q, res); }); }
-function clean(p) { return p.trim().replace(/^["']|["']$/g, ''); }
+// The kit's context for the item currently running (set in onSelect) — lets the shared ask()/run()/handle()
+// reach the kit's readline + spawn instead of owning their own readline (which would collide with the kit's).
+let _ctx = null;
+function ask(q) { return _ctx ? _ctx.ask(q) : Promise.resolve(''); }
+function clean(p) { return String(p || '').trim().replace(/^["']|["']$/g, ''); }
 
 function run(cmd, args) {
+  // The kit's runCmd closes/reopens its readline around the child (child owns Ctrl-C; menu resumes on close)
+  // and never shell-wraps `node` on Windows — same guarantees this menu relied on. Fallback spawn is only for
+  // the (unused) no-context path.
+  if (_ctx) return _ctx.runCmd(cmd, args, cmd + ' ' + args.join(' '));
   return new Promise(function (resolve) {
-    // Release stdin so the child can read interactive prompts (e.g. cli confirms).
-    // The menu's persistent readline would otherwise swallow the keystrokes.
-    rl.pause();
-    // `node` is directly executable on Windows, so DON'T wrap it in a shell: a cmd.exe
-    // wrapper intercepts Ctrl-C and the child (e.g. the server) never receives SIGINT,
-    // so it can't shut down cleanly. Only npm/open and similar need a shell on Windows.
     const need_shell = process.platform === 'win32' && cmd !== 'node';
-    // While the child owns the terminal let IT handle Ctrl-C (the server's own SIGINT
-    // cleanup exits it); the menu ignores SIGINT meanwhile and just returns when the
-    // child closes -- so Ctrl-C stops the server and drops you back to the menu.
-    const ignore = function () {};
-    process.on('SIGINT', ignore);
     const p = spawn(cmd, args, { cwd: DIR, stdio: 'inherit', shell: need_shell });
-    p.on('close', function (code) { process.removeListener('SIGINT', ignore); rl.resume(); resolve(code); });
+    p.on('close', resolve);
   });
 }
 // Capture the bot's channels as JSON (via the CLI, which loads .env) for a numbered pick-list.
@@ -83,114 +79,21 @@ async function run_test(file, label) {
 // admin/console_registry.js so menu.js and the /admin Operations panel never drift. The real SECTIONS
 // is derived from the registry just below this literal; DEAD_INLINE_SECTIONS is unused (kept only so the
 // diff is reviewable) and can be deleted.
-const DEAD_INLINE_SECTIONS = [
-  { label: 'Convert', color: CYAN, items: [
-    { id: 1, label: 'Convert a file', desc: 'Reformat one .xlsx or .csv to the USAT template; prints a scorecard.', cli: 'node src/cli.js convert <file> [-o out.xlsx]', action: 'convert' },
-    { id: 2, label: 'Batch-convert a folder', desc: 'Reformat every .xlsx/.csv in a folder.', cli: 'node src/cli.js batch <folder> [-o outdir]', action: 'batch' },
-    { id: 3, label: 'Convert everything in data/inputs', desc: 'Reformat every file in your (gitignored) data/inputs folder into data/outputs.', cli: 'node src/cli.js batch data/inputs -o data/outputs', action: 'examples' }
-  ] },
-  { label: 'Inspect', color: BLUE, items: [
-    { id: 4, label: 'Inspect headers + auto-mapping', desc: 'Show detected headers and how each maps to the template; no file written.', cli: 'node src/cli.js inspect <file>', action: 'inspect' }
-  ] },
-  { label: 'Tests — engine & UI (node, no browser)', color: MAGENTA, items: [
-    { id: 5, label: 'Run ALL engine/UI tests', desc: 'Runs every node --test suite (dependency-free, no browser). Browser tests are in the next section.', cli: 'node --test tests/*.test.js', action: 'test_all' },
-    { id: 6, label: 'Config wiring (package + tasks)', desc: 'repo-root package.json scripts + .vscode/tasks.json register this tool (step 16/16) like the other servers.', cli: 'node --test tests/config_wiring.test.js', action: 'test_config' },
-    { id: 7, label: 'Table display format', desc: 'Excel times render as times (not dates) · DOB as mm/dd/yyyy · long member #s intact — on real files.', cli: 'node --test tests/display.test.js', action: 'test_display' },
-    { id: 8, label: 'Golden fixtures (real files)', desc: 'Convert the 2 xlsx + 2 csv examples and compare to the checked-in expected snapshots.', cli: 'node --test tests/fixtures.test.js', action: 'test_fixtures' },
-    { id: 9, label: 'Excel / CSV I/O round-trip', desc: 'Write an .xlsx and read it back; member numbers stay text (no scientific notation).', cli: 'node --test tests/io.test.js', action: 'test_io' },
-    { id: 10, label: 'Lint — snake_case', desc: 'Fail if any of our identifiers are camelCase (DOM/library names + UPPER_SNAKE constants + element ids are allowed).', cli: 'node --test tests/lint_snake_case.test.js', action: 'test_lint' },
-    { id: 11, label: 'Column matching', desc: 'Finish time beats splits · "Age Group" beats "Race / Division" · name-order independence.', cli: 'node --test tests/match.test.js', action: 'test_match' },
-    { id: 12, label: 'Value normalization', desc: 'Gender→M/F/NB · DOB→mm/dd/yyyy · times incl. DNS/DNF · state abbrev · member→1-day · category buckets.', cli: 'node --test tests/normalize.test.js', action: 'test_normalize' },
-    { id: 13, label: 'Integrity & reconciliation', desc: 'Row counts tie out · dividers skipped · column ledger · Name/Email/Zip preserved · always 12-col output.', cli: 'node --test tests/reconcile.test.js', action: 'test_reconcile' },
-    { id: 14, label: 'Smoke — modules load', desc: 'Each engine module parses + exports; schema has all 12 columns in order.', cli: 'node --test tests/smoke.test.js', action: 'test_smoke' }
-  ] },
-  { label: 'Tests — browser (Playwright)', color: MAGENTA, items: [
-    { id: 15, label: 'Install browser E2E (one-time)', desc: 'Dev: npm run e2e:install (axe-core + chromium/firefox/webkit). Linux server: npm run e2e:install:server (adds --with-deps; root).', cli: 'npm run e2e:install', action: 'e2e_install' },
-    { id: 16, label: 'Run ALL browser tests', desc: 'Real-browser convert/download/split/combine + UI/a11y/visual/mobile across chromium/firefox/webkit. Run the Install item once first.', cli: 'npm run e2e', action: 'e2e_run' },
-    { id: 17, label: 'Browser E2E — chromium only (fast)', desc: 'Runs the suite on just chromium, skipping firefox/webkit/mobile projects.', cli: 'npm run e2e:chromium', action: 'e2e_chromium' },
-    { id: 18, label: 'Browser E2E — analytics DB round-trip (chromium)', desc: 'Drives the app, then checks MySQL received the events and the table schema exists. Skips if no DB.', cli: 'npm run e2e:db', action: 'e2e_db' },
-    { id: 19, label: 'Browser E2E — watch in Chrome (headed)', desc: 'Same tests in a visible, slowed Chrome window so you can watch. Desktop only (not the headless server).', cli: 'npm run e2e:headed', action: 'e2e_headed' },
-    { id: 20, label: 'Browser E2E — step through (pause each step)', desc: 'Headed Chrome that PAUSES on every step via the Playwright Inspector; click Resume to advance one step at a time. Desktop only.', cli: 'npm run e2e:step', action: 'e2e_step' },
-    { id: 21, label: 'Refresh visual snapshot baselines', desc: 'Regenerate the committed screenshot baselines (e2e/visual.spec.js-snapshots). Run after intended UI changes.', cli: 'npm run e2e:snap', action: 'e2e_snap' }
-  ] },
-  { label: 'Server & app', color: GREEN, items: [
-    { id: 22, label: 'Start the web app server (port 8018)', desc: 'Serve public/ at http://localhost:8018; also opens a public ngrok URL if NGROK_AUTHTOKEN is set (otherwise it just notes that and keeps running). Ctrl-C to stop.', cli: 'node ../../server_race_results_transform_8018.js', action: 'server' },
-    { id: 23, label: 'Open the web app in a browser', desc: 'Open http://localhost:8018 (start the server first).', cli: 'open http://localhost:8018', action: 'open' }
-  ] },
-  { label: 'Usage analytics', color: CYAN, items: [
-    { id: 24, label: 'Usage stats (last 7 days)', desc: 'Print the usage summary (same as the Slack digest): visits, new/repeat, uploads, conversions, downloads by mode, completion, auto-map accuracy, top files.', cli: 'node src/cli.js stats', action: 'metrics_stats' },
-    { id: 25, label: 'Usage data — size', desc: 'Events table size (MB), row count, date range, and rows per year.', cli: 'node src/cli.js metrics:size', action: 'metrics_size' },
-    { id: 26, label: 'Usage data — cleanup (purge old years)', desc: 'Keep current + prior calendar year; preview, confirm, then purge older rows.', cli: 'node src/cli.js metrics:cleanup', action: 'metrics_cleanup' },
-    { id: 27, label: 'Usage data — purge TEST rows only (is_test=1)', desc: 'Delete only deliberate test-run rows (browser opened with ?metrics_test=1). Real + demo data is untouched.', cli: 'node src/cli.js metrics:purge-test', action: 'metrics_purge_test' },
-    { id: 28, label: 'Usage data — PURGE ALL (danger)', desc: 'Delete every analytics row regardless of date (asks to confirm). For clearing test data.', cli: 'node src/cli.js metrics:purge-all', action: 'metrics_purge_all' }
-  ] },
-  { label: 'AI \u2014 ask your data', color: CYAN, items: [
-    { id: 29, label: 'AI ask \u2014 ask a question (read-only)', desc: 'Ask the usage data in plain English; choose OpenAI or Claude. Read-only; prints the answer + the SQL it ran.', cli: 'node src/cli.js ask "<question>" [--provider openai|claude]', action: 'ask_question' },
-    { id: 30, label: 'AI ask \u2014 guard demo (try a query)', desc: 'See the read-only guard ACCEPT/REJECT example queries or your own SQL, with the enforced LIMIT.', cli: 'node metrics/ask/demo_guard.js ["<sql>"]', action: 'ask_demo' },
-    { id: 31, label: 'AI ask \u2014 guard & catalog tests', desc: 'Read-only SQL guard + ask catalog tests. Also runs inside Run ALL.', cli: 'node --test tests/ask_db.test.js tests/ask_guard.test.js', action: 'test_ask' },
-    { id: 32, label: 'AI ask \u2014 view question log', desc: 'Recent AI questions + answers (audit log; no PII).', cli: 'node src/cli.js ask:log [--n 20]', action: 'ask_log' },
-    { id: 33, label: 'AI ask \u2014 run SQL directly (read-only)', desc: 'Run a read-only SELECT yourself (guarded: SELECT-only, allowlisted table, enforced LIMIT). No AI involved.', cli: 'node src/cli.js ask:sql "<SELECT ...>"', action: 'ask_sql' },
-    { id: 34, label: 'AI ask \u2014 view/manage corrections', desc: 'Operator clarifications the AI uses as grounding (G2). Deactivate with: node src/cli.js ask:uncorrect <id>.', cli: 'node src/cli.js ask:corrections [--n 20] [--all]', action: 'ask_corrections' },
-    { id: 35, label: 'AI ask \u2014 test corrections (guided)', desc: 'Step-by-step process to confirm a saved correction is incorporated into the next answer (G2).', cli: 'node src/cli.js ask:test:corrections', action: 'ask_test_corrections' },
-    { id: 36, label: 'AI ask \u2014 test follow-up thread (guided)', desc: 'Step-by-step process to confirm follow-up questions keep conversational context (B1).', cli: 'node src/cli.js ask:test:threads', action: 'ask_test_threads' },
-    { id: 37, label: 'AI ask \u2014 run eval scenarios (records report)', desc: 'Runs the review scenarios against the live model (needs API key + DB) and writes a recorded report.', cli: 'node src/cli.js ask:eval', action: 'ask_eval' }
-  ] },
-  { label: 'Try Me (sample data)', color: GREEN, items: [
-    { id: 38, label: 'Try Me — UI + is_demo wiring tests', desc: 'node test: the Try-me dropdown markup + the is_demo column wired across DDL, server whitelist, and browser allow-list.', cli: 'node --test tests/try_me.test.js', action: 'test_try_me' },
-    { id: 39, label: 'Try Me — metrics report tests (demo split)', desc: 'node test: the is_demo split query + demo_split shape, plus Last-User-Activity MTN / dashboard_view exclusion.', cli: 'node --test tests/metrics_report.test.js', action: 'test_metrics_report' },
-    { id: 40, label: 'Try Me vs real — counts (read-only SQL)', desc: 'Show demo (Try Me) vs real uploads/conversions/downloads straight from the events table.', cli: 'node src/cli.js ask:sql "SELECT … GROUP BY kind"', action: 'metrics_demo_split' }
-  ] },
-  { label: 'Salesforce (pull race-results files)', color: BLUE, items: [
-    { id: 41, label: 'Salesforce — list files (today, MT)', desc: 'List Race Results Doc files modified today (Mountain Time). Needs SF_* env vars in .env.', cli: 'node src/cli.js sf:list --today', action: 'sf_list' },
-    { id: 42, label: 'Salesforce — list recent files (precise or broad, prod or test)', desc: 'List recent files newest-first. Prompts: environment (prod/sandbox), search (precise term or broadened OR terms), and how many — so you can compare recall.', cli: 'node src/cli.js sf:list [--test] [--search "..."] --limit N', action: 'sf_list_recent' },
-    { id: 43, label: 'Salesforce — pull files to a folder', desc: 'Download Race Results Doc files (snake_case names) into a folder. Prompts for date + folder + strategy.', cli: 'node src/cli.js sf:pull <opts> -o <dir>', action: 'sf_pull' },
-    { id: 44, label: 'Salesforce — list EMAIL-queue files (prod or test)', desc: 'List Rankings email-queue race-results attachments. Prompts for environment, open-only/all status, and count.', cli: 'node src/cli.js sf:list-email [--all] [--test]', action: 'sf_list_email' },
-    { id: 45, label: 'Salesforce — pull EMAIL-queue files to a folder', desc: 'Download Rankings email-queue attachments (snake_case names). Prompts for environment, status, and folder.', cli: 'node src/cli.js sf:pull-email <opts> -o <dir>', action: 'sf_pull_email' }
-  ] },
-  { label: 'Slack (pull race-results files)', color: BLUE, items: [
-    { id: 46, label: 'Slack — check connection (probe)', desc: 'Read-only: confirm SLACK_BOT_TOKEN works, show the bot identity, and list the channels it is in. Optionally probe one channel for files.', cli: 'node src/cli.js slack:probe [--channel <id|name>]', action: 'slack_probe' },
-    { id: 47, label: 'Slack — list the bot’s channels', desc: 'List the channels the bot is a member of (+ ids). Invite the bot to a channel in Slack and it shows up here.', cli: 'node src/cli.js slack:channels', action: 'slack_channels' },
-    { id: 48, label: 'Slack — list files (date range)', desc: 'List spreadsheet attachments in a channel for a date range. Prompts for channel + date.', cli: 'node src/cli.js slack:list --channel <id|name> [date opts]', action: 'slack_list' },
-    { id: 49, label: 'Slack — pull files to a folder', desc: 'Download a channel’s spreadsheet attachments (snake_case names) into a folder. Prompts for channel + date + folder + strategy.', cli: 'node src/cli.js slack:pull <opts> -o <dir>', action: 'slack_pull' },
-    { id: 50, label: 'Slack — run Slack tests', desc: 'Run the Slack engine + UI unit tests (mock client, no network).', cli: 'node --test tests/slack_*.test.js', action: 'slack_tests' },
-    { id: 51, label: 'Slack — setup & how-to (future self)', desc: 'Print the runbook: app scopes, getting the bot token into .env, and the self-service /invite channel flow.', action: 'slack_howto' }
-  ] },
-  { label: 'Usage analytics — maintenance', color: CYAN, items: [
-    { id: 52, label: 'Backfill source: salesforce → sf_upload_queue', desc: 'One-time, idempotent relabel of legacy source=salesforce rows (the SF Email Queue is new, so all prior salesforce activity was the upload queue). Dry-run → confirm.', cli: 'node src/cli.js metrics:backfill-source', action: 'metrics_backfill_source' }
-  ] },
-  { label: 'Settings', color: GRAY, items: [
-    { id: 53, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item. Persists in .menu_prefs.json.', action: 'toggle' },
-    { id: 54, label: 'Quit', desc: 'Exit the menu.', action: 'quit' }
-  ] }
-];
-void DEAD_INLINE_SECTIONS;   // superseded by the registry-derived SECTIONS below
 const console_registry = require('./admin/console_registry');
 const COLOR_BY_NAME = { CYAN: CYAN, BLUE: BLUE, MAGENTA: MAGENTA, GREEN: GREEN, GRAY: GRAY, YELLOW: YELLOW };
+// Derived from the shared Operations registry (single source of truth with the /admin panel). Drop the
+// registry's toggle/quit entries — the kit provides [t]/[q] as footer keys — and DON'T copy ids: the kit
+// numbers by position. Colors stay as the registry's ANSI codes (the kit passes raw codes through).
 const SECTIONS = console_registry.SECTIONS.map(function (s) {
   return {
     label: s.label,
     color: COLOR_BY_NAME[s.color] || CYAN,
-    items: s.items.map(function (it) {
-      return { id: it.id, label: it.label, desc: it.desc, cli: it.cli, action: it.action };
-    })
+    items: s.items
+      .filter(function (it) { return it.action !== 'toggle' && it.action !== 'quit'; })
+      .map(function (it) { return { label: it.label, desc: it.desc, cli: it.cli, action: it.action }; })
   };
-});
+}).filter(function (s) { return s.items.length > 0; });
 const ALL = SECTIONS.flatMap(function (s) { return s.items; });
-
-function banner() {
-  console.log('');
-  console.log(c(BOLD + CYAN, 'race_results_transform') + c(GRAY, '  ·  race results → USAT template'));
-  console.log(c(GRAY, '─'.repeat(62)));
-  SECTIONS.forEach(function (sec) {
-    console.log('');
-    console.log(c(sec.color + BOLD, '  ' + sec.label));
-    sec.items.forEach(function (it) {
-      console.log('  ' + c(BOLD, String(it.id).padStart(2)) + '. ' + it.label + c(GRAY, '  — ' + it.desc));
-      if (_show_cli && it.cli) console.log('      ' + c(DIM, '$ ' + it.cli));
-    });
-  });
-  console.log('');
-}
 
 async function handle(item) {
   switch (item.action) {
@@ -398,23 +301,25 @@ async function handle(item) {
   }
 }
 
-async function main() {
-  load_prefs();
-  for (;;) {
-    banner();
-    if (_show_cli) console.log(c(DIM, '  (CLI commands shown — toggle with 15)\n'));
-    const choice = clean(await ask('Choose a number: ')).toLowerCase();
-    if (choice === 'q' || choice === 'quit' || choice === 'exit') break;
-    const item = ALL.find(function (i) { return String(i.id) === choice; });
-    if (!item) { console.log(c(YELLOW, '  Invalid choice.')); continue; }
-    try {
-      if ((await handle(item)) === 'quit') break;
-    } catch (e) { console.error(c(YELLOW, '  Action failed: ' + e.message)); }
-    // Pause so command output stays on screen until the user is ready (like event_analysis).
-    if (item.action !== 'quit' && item.action !== 'toggle') {
-      await ask(c(DIM, '\n  Press Enter to return to the menu… '));
-    }
-  }
-  rl.close();
+// DATA-ONLY shell via the shared kit: it renders the registry-derived sections, numbers by position, owns
+// the [t] toggle + [q] quit + the pause, and calls onSelect for each item — delegating to the existing
+// handle() switch (unchanged: convert/inspect/tests/slack/server/etc). See plans_and_notes/MENU_CONVENTIONS.md.
+async function onSelect(item, ctx) {
+  _ctx = ctx;
+  return handle(item);
 }
-if (require.main === module) main();
+
+async function main() {
+  await runMenu({
+    title: 'race_results_transform  ·  race results → USAT template',
+    color: CYAN,
+    sections: SECTIONS,
+    cwd: DIR,
+    prefsFile: PREFS_FILE,
+    onSelect: onSelect,
+  });
+}
+
+if (require.main === module) main().catch(function (e) { console.error(e); process.exit(1); });
+
+module.exports = { SECTIONS, ALL };

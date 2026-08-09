@@ -23,6 +23,7 @@ const { execSync, spawn } = require('child_process');
 
 const { determineOSPath } = require('../../utilities/determineOSPath');
 const { OUTPUT_DIR_NAME, ARCHIVE_DIR_NAME, META_DIR_NAME, ZIP_TRIM_MAPPING_FILE, TUNING_DIR_NAME, SNAPSHOT_TABLE_NAME } = require('./config');
+const { runMenu } = require('../../utilities/menu/menu_kit');   // shared menu shell (render/number/toggle/quit)
 
 const DIR = __dirname;
 const MAIN_SCRIPT = 'step_1_find_duplicates.js';
@@ -41,9 +42,6 @@ const YELLOW = '\x1b[33m';
 const MAGENTA = '\x1b[35m';
 const CYAN = '\x1b[36m';
 const c = (color, text) => `${color}${text}${RESET}`;
-
-// ── CLI-command toggle (in-session only; resets when the menu restarts) ─────
-let _show_cli = false;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function prompt(rl, question) {
@@ -110,108 +108,83 @@ const SECTIONS = [
     label: 'TESTING — verify the code is working',
     color: CYAN,
     items: [
-      { id: 1, label: 'Run ALL tests',     desc: 'Every suite under tests/ at once', action: 'run_tests', target: 'tests/',                        test_label: 'all tests',        cli: 'node --test tests/' },
-      { id: 2, label: 'normalize tests',   desc: 'Field cleaning + key builders',     action: 'run_tests', target: 'tests/normalize.test.js',       test_label: 'normalize tests',  cli: 'node --test tests/normalize.test.js' },
-      { id: 3, label: 'matcher tests',     desc: 'Levenshtein, similarity, rule flags', action: 'run_tests', target: 'tests/matcher.test.js',       test_label: 'matcher tests',    cli: 'node --test tests/matcher.test.js' },
-      { id: 4, label: 'grouping tests',    desc: 'UnionFind + fuzzy group builder',   action: 'run_tests', target: 'tests/grouping.test.js',        test_label: 'grouping tests',   cli: 'node --test tests/grouping.test.js' },
-      { id: 5, label: 'file output tests', desc: 'CSV write + archive rotation',       action: 'run_tests', target: 'tests/file_output.test.js',     test_label: 'file output tests', cli: 'node --test tests/file_output.test.js' },
-      { id: 6, label: 'Syntax check',      desc: `Parse-check ${MAIN_SCRIPT} (no run)`, action: 'syntax_check',                                       cli: `node --check ${MAIN_SCRIPT}` },
+      { label: 'Run ALL tests',     desc: 'Every suite under tests/ at once', action: 'run_tests', target: 'tests/',                        test_label: 'all tests',        cli: 'node --test tests/' },
+      { label: 'normalize tests',   desc: 'Field cleaning + key builders',     action: 'run_tests', target: 'tests/normalize.test.js',       test_label: 'normalize tests',  cli: 'node --test tests/normalize.test.js' },
+      { label: 'matcher tests',     desc: 'Levenshtein, similarity, rule flags', action: 'run_tests', target: 'tests/matcher.test.js',       test_label: 'matcher tests',    cli: 'node --test tests/matcher.test.js' },
+      { label: 'grouping tests',    desc: 'UnionFind + fuzzy group builder',   action: 'run_tests', target: 'tests/grouping.test.js',        test_label: 'grouping tests',   cli: 'node --test tests/grouping.test.js' },
+      { label: 'file output tests', desc: 'CSV write + archive rotation',       action: 'run_tests', target: 'tests/file_output.test.js',     test_label: 'file output tests', cli: 'node --test tests/file_output.test.js' },
+      { label: 'Syntax check',      desc: `Parse-check ${MAIN_SCRIPT} (no run)`, action: 'syntax_check',                                       cli: `node --check ${MAIN_SCRIPT}` },
     ],
   },
   {
     label: 'RUN — the real duplicate finder (SQL backbone ON; add --in-memory to bypass)',
     color: YELLOW,
     items: [
-      { id: 7, label: 'Find duplicates — TEST',       desc: '--test: dev sandbox, capped 5,000 -> streams into the snapshot table (SQL backbone)', action: 'run_test', cli: `node ${MAIN_SCRIPT} --test` },
-      { id: 8, label: 'Find duplicates — TEST FULL',  desc: '--test --full: dev sandbox, ALL records (Bulk) -> snapshot table (SQL backbone)', action: 'run_test_full', cli: `node ${MAIN_SCRIPT} --test --full` },
-      { id: 9, label: 'Find duplicates — PROD PARTIAL', desc: '--prod --partial: capped sample -> snapshot table (SQL backbone; try before full)', action: 'run_prod_partial', cli: `node ${MAIN_SCRIPT} --prod --partial` },
-      { id: 10, label: 'Find duplicates — PRODUCTION', desc: '--prod: full fetch -> streams into snapshot table (SQL backbone), writes CSVs to /data', action: 'run_prod', cli: `node ${MAIN_SCRIPT} --prod` },
+      { label: 'Find duplicates — TEST',       desc: '--test: dev sandbox, capped 5,000 -> streams into the snapshot table (SQL backbone)', action: 'run_test', cli: `node ${MAIN_SCRIPT} --test` },
+      { label: 'Find duplicates — TEST FULL',  desc: '--test --full: dev sandbox, ALL records (Bulk) -> snapshot table (SQL backbone)', action: 'run_test_full', cli: `node ${MAIN_SCRIPT} --test --full` },
+      { label: 'Find duplicates — PROD PARTIAL', desc: '--prod --partial: capped sample -> snapshot table (SQL backbone; try before full)', action: 'run_prod_partial', cli: `node ${MAIN_SCRIPT} --prod --partial` },
+      { label: 'Find duplicates — PRODUCTION', desc: '--prod: full fetch -> streams into snapshot table (SQL backbone), writes CSVs to /data', action: 'run_prod', cli: `node ${MAIN_SCRIPT} --prod` },
     ],
   },
   {
     label: 'MERGE ID QA — compare our duplicates to Salesforce merge IDs (read-only)',
     color: GREEN,
     items: [
-      { id: 11, label: 'Review merge ID results', desc: 'Latest run: account buckets + duplicate pairs + a preview, from the DB', action: 'merge_id_review', cli: `node ${MERGE_ID_REVIEW_SCRIPT} report` },
+      { label: 'Review merge ID results', desc: 'Latest run: account buckets + duplicate pairs + a preview, from the DB', action: 'merge_id_review', cli: `node ${MERGE_ID_REVIEW_SCRIPT} report` },
     ],
   },
   {
     label: 'OUTPUT',
     color: GREEN,
     items: [
-      { id: 12,  label: 'Open output folder',  desc: `Most recent files (${OUTPUT_DIR_NAME})`, action: 'open_output' },
-      { id: 13, label: 'Open archive folder', desc: `Previous run (${ARCHIVE_DIR_NAME})`, action: 'open_archive' },
-      { id: 14, label: 'Open review folder',  desc: `ZIP trim mapping + run summary (${META_DIR_NAME})`, action: 'open_meta' },
+      { label: 'Open output folder',  desc: `Most recent files (${OUTPUT_DIR_NAME})`, action: 'open_output' },
+      { label: 'Open archive folder', desc: `Previous run (${ARCHIVE_DIR_NAME})`, action: 'open_archive' },
+      { label: 'Open review folder',  desc: `ZIP trim mapping + run summary (${META_DIR_NAME})`, action: 'open_meta' },
     ],
   },
   {
     label: 'DUPLICATE TUNING — compare duplicate counts across criteria (DB-backed, review-only)',
     color: YELLOW,
     items: [
-      { id: 15, label: 'Sweep snapshot — TEST',       desc: 'Fetch records ONCE (dev sandbox) and STREAM them into the snapshot table', action: 'sweep_snapshot_test', cli: `node ${SWEEP_SCRIPT} snapshot --test` },
-      { id: 16, label: 'Sweep snapshot — PRODUCTION', desc: 'Fetch records ONCE (production) and STREAM them into the snapshot table', action: 'sweep_snapshot_prod', cli: `node ${SWEEP_SCRIPT} snapshot --prod` },
-      { id: 17, label: 'Run sweep (grid over snapshot)', desc: 'Replay config.DEFAULT_SWEEP_GRID over the DB snapshot; prints summary + table, writes sweep_summary.csv', action: 'sweep_run', cli: `node ${SWEEP_SCRIPT} run` },
-      { id: 18, label: 'Sweep snapshot status (DB)', desc: 'Verify the DB snapshot: meta + live row count from the database', action: 'sweep_status', cli: `node ${SWEEP_SCRIPT} status` },
-      { id: 19, label: 'Open tuning folder',  desc: `Sweep CSVs (${TUNING_DIR_NAME})`, action: 'open_tuning' },
+      { label: 'Sweep snapshot — TEST',       desc: 'Fetch records ONCE (dev sandbox) and STREAM them into the snapshot table', action: 'sweep_snapshot_test', cli: `node ${SWEEP_SCRIPT} snapshot --test` },
+      { label: 'Sweep snapshot — PRODUCTION', desc: 'Fetch records ONCE (production) and STREAM them into the snapshot table', action: 'sweep_snapshot_prod', cli: `node ${SWEEP_SCRIPT} snapshot --prod` },
+      { label: 'Run sweep (grid over snapshot)', desc: 'Replay config.DEFAULT_SWEEP_GRID over the DB snapshot; prints summary + table, writes sweep_summary.csv', action: 'sweep_run', cli: `node ${SWEEP_SCRIPT} run` },
+      { label: 'Sweep snapshot status (DB)', desc: 'Verify the DB snapshot: meta + live row count from the database', action: 'sweep_status', cli: `node ${SWEEP_SCRIPT} status` },
+      { label: 'Open tuning folder',  desc: `Sweep CSVs (${TUNING_DIR_NAME})`, action: 'open_tuning' },
     ],
   },
   {
     label: 'SQL BACKBONE — verify the Phase 0 loader against the local DB (step by step)',
     color: GREEN,
     items: [
-      { id: 20, label: 'Loader unit tests (no DB)', desc: 'tests/database_snapshot.test.js — logic only, no MySQL', action: 'run_tests', target: 'tests/database_snapshot.test.js', test_label: 'database_snapshot tests', cli: 'node --test tests/database_snapshot.test.js' },
-      { id: 21, label: 'Step 1 — Load synthetic rows', desc: `Drop+recreate ${SNAPSHOT_TABLE_NAME} in usat_sales_db and load 4 rows`, action: 'db_verify_load', cli: `node ${VERIFY_SCRIPT} load` },
-      { id: 22, label: 'Step 2 — Show rows + dup groups', desc: 'SELECT the rows and run the exact-duplicate GROUP BY (SQL output)', action: 'db_verify_show', cli: `node ${VERIFY_SCRIPT} show` },
-      { id: 23, label: 'Step 3 — Drop the table', desc: 'Remove the verification table (cleanup)', action: 'db_verify_drop', cli: `node ${VERIFY_SCRIPT} drop` },
+      { label: 'Loader unit tests (no DB)', desc: 'tests/database_snapshot.test.js — logic only, no MySQL', action: 'run_tests', target: 'tests/database_snapshot.test.js', test_label: 'database_snapshot tests', cli: 'node --test tests/database_snapshot.test.js' },
+      { label: 'Step 1 — Load synthetic rows', desc: `Drop+recreate ${SNAPSHOT_TABLE_NAME} in usat_sales_db and load 4 rows`, action: 'db_verify_load', cli: `node ${VERIFY_SCRIPT} load` },
+      { label: 'Step 2 — Show rows + dup groups', desc: 'SELECT the rows and run the exact-duplicate GROUP BY (SQL output)', action: 'db_verify_show', cli: `node ${VERIFY_SCRIPT} show` },
+      { label: 'Step 3 — Drop the table', desc: 'Remove the verification table (cleanup)', action: 'db_verify_drop', cli: `node ${VERIFY_SCRIPT} drop` },
     ],
   },
   {
     label: 'SERVER — Slack slash-command server (start, then hit from another terminal)',
     color: CYAN,
     items: [
-      { id: 24, label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
-      { id: 25, label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
-      { id: 26, label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
-      { id: 27, label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
-      { id: 28, label: 'Hit /scheduled — TEST FULL',  desc: 'is_test=true&full=true: dev sandbox, ALL records + Slack post', action: 'hit_scheduled_test_full', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true&full=true"` },
-      { id: 29, label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
+      { label: 'Start Slack server (port 8017)', desc: 'Endpoints: test / stats / scheduled / reporting (Ctrl-C to stop)', action: 'start_server', cli: 'node server_salesforce_duplicates_8017.js' },
+      { label: 'Hit /test',      desc: 'GET health check (server must be running)', action: 'hit_test',      cli: `curl http://localhost:${8017}/salesforce-duplicates-test` },
+      { label: 'Hit /stats',     desc: 'POST latest-run counts (mode=latest file=all)', action: 'hit_stats',     cli: `curl -X POST http://localhost:${8017}/salesforce-duplicates-stats -d "text=mode=latest file=all"` },
+      { label: 'Hit /scheduled — TEST',       desc: 'is_test=true: dev sandbox regenerate + Slack post', action: 'hit_scheduled_test', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true"` },
+      { label: 'Hit /scheduled — TEST FULL',  desc: 'is_test=true&full=true: dev sandbox, ALL records + Slack post', action: 'hit_scheduled_test_full', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=true&full=true"` },
+      { label: 'Hit /scheduled — PRODUCTION', desc: 'is_test=false: production regenerate + Slack post', action: 'hit_scheduled_prod', cli: `curl "http://localhost:${8017}/scheduled-salesforce-duplicates?is_test=false"` },
     ],
   },
   {
     label: 'DISCOVERY — confirm Salesforce field names (read-only)',
     color: MAGENTA,
     items: [
-      { id: 30, label: 'Discover Salesforce fields', desc: 'Describe + Tooling SOQL for a field on an entity (prompts: entity / term / mode)', action: 'discover_fields', cli: 'node discover_account_fields.js --prod Account Merge' },
-    ],
-  },
-  {
-    label: 'PREFERENCES',
-    color: MAGENTA,
-    items: [
-      { id: 31, label: 'Show/hide CLI commands', desc: 'Toggle a dimmed "$ ..." line under each item', action: 'toggle_cli' },
+      { label: 'Discover Salesforce fields', desc: 'Describe + Tooling SOQL for a field on an entity (prompts: entity / term / mode)', action: 'discover_fields', cli: 'node discover_account_fields.js --prod Account Merge' },
     ],
   },
 ];
 
 const ALL_ITEMS = SECTIONS.flatMap((s) => s.items);
-
-function print_menu() {
-  console.clear();
-  console.log(c(BOLD + RED, '\n  USAT Salesforce Duplicates'));
-  console.log(c(DIM, '  ─────────────────────────────────────────────\n'));
-  for (const section of SECTIONS) {
-    console.log(c(section.color + BOLD, `  ${section.label}`));
-    for (const item of section.items) {
-      const num = String(item.id).padStart(3);
-      console.log(`  ${c(BOLD, num + '.')} ${item.label.padEnd(28)} ${c(DIM, item.desc)}`);
-      if (_show_cli && item.cli) {
-        console.log(`        ${c(DIM, '$ ' + item.cli)}`);
-      }
-    }
-    console.log('');
-  }
-  console.log(c(DIM, '    0. Exit\n'));
-}
 
 // ── Actions ─────────────────────────────────────────────────────────────────
 async function handle_action(item, rl) {
@@ -375,39 +348,23 @@ async function handle_action(item, rl) {
       report(code, label, 'completed');
       break;
     }
-    case 'toggle_cli': {
-      _show_cli = !_show_cli;
-      console.log(c(GREEN, `  ✓ CLI commands ${_show_cli ? 'shown' : 'hidden'}.`));
-      break;
-    }
     default:
       console.log(c(YELLOW, `  Unknown action: ${item.action}`));
   }
 }
 
-// ── Main loop ────────────────────────────────────────────────────────────────
-async function main() {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-  rl.on('SIGINT', () => { console.log(c(DIM, '\n  Bye.')); rl.close(); process.exit(0); });
-
-  const max_id = Math.max(...ALL_ITEMS.map((i) => i.id));
-  while (true) {
-    print_menu();
-    const raw = (await prompt(rl, c(BOLD, `  Select (0-${max_id}): `))).trim();
-    if (raw === '0' || raw.toLowerCase() === 'q' || raw.toLowerCase() === 'exit') {
-      console.log(c(DIM, '\n  Bye.'));
-      rl.close();
-      return;
-    }
-    const item = ALL_ITEMS.find((i) => i.id === parseInt(raw, 10));
-    if (!item) { console.log(c(YELLOW, '  Invalid choice.')); }
-    else { await handle_action(item, rl); }
-    await prompt(rl, c(DIM, '\n  Press Enter to continue…'));
-  }
-}
-
+// ── Shell ────────────────────────────────────────────────────────────────────
+// DATA-ONLY shell via the shared kit: it renders, numbers by position, owns the [t] toggle + quit, and
+// pauses. Dispatch stays here — the kit calls onSelect for each item, delegating to the existing switch
+// (which keeps this menu's y/N confirms, DB probes, and server spawn exactly as before). No hand-numbering.
 if (require.main === module) {
-  main().catch((err) => { console.error(err); process.exit(1); });
+  runMenu({
+    title: 'USAT Salesforce Duplicates',
+    color: 'RED',
+    sections: SECTIONS,
+    cwd: DIR,
+    onSelect: (item, ctx) => handle_action(item, ctx.rl),
+  }).catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { SECTIONS, ALL_ITEMS, handle_action, main };
+module.exports = { SECTIONS, ALL_ITEMS, handle_action };

@@ -46,10 +46,20 @@ function create_app() {
   // iframe this server serves), and cross-site framing is governed by the CSP frame-ancestors public.js sets.
   // Keeping this surface same-origin is part of hardening the public process.
 
-  // One concise log line per request — confirms the proxy/CDN reaches this process.
+  // One concise line per request — logged on FINISH so it proves the server RESPONDED (status + timing),
+  // not just that a request arrived. A real chat turn (POST /ask) is tagged so served turns stand out from
+  // static asset fetches / health pings. No message or answer text is logged — this surface handles no PII,
+  // and the bodies stay out of the log. app._served counts everything, for the idle heartbeat below.
+  app._served = 0;
   app.use(function (req, res, next) {
-    const ts = new Date().toISOString();
-    console.log('[' + ts + '] ' + req.method + ' ' + req.originalUrl + '  host=' + (req.headers.host || '?'));
+    const start = Date.now();
+    res.on('finish', function () {
+      app._served += 1;
+      const ms = Date.now() - start;
+      const turn = (req.method === 'POST' && req.path.endsWith('/ask')) ? '  <- turn' : '';
+      console.log('[' + new Date().toISOString() + '] ' + req.method + ' ' + req.originalUrl +
+                  ' -> ' + res.statusCode + ' (' + ms + 'ms)' + turn);
+    });
     next();
   });
 
@@ -79,8 +89,14 @@ function start_server(port) {
     console.log('  -> http://localhost:' + actual + '/api/status                      (health check)');
     console.log('  -> ' + PROD_URL + '   (production host — proxy / Cloudflare)');
     console.log('  Unauthenticated, curated-knowledge only — no admin, no Salesforce, no PII in this process.');
-    console.log('  One log line per request below. Press Ctrl-C to stop.\n');
+    console.log('  One line per request (status + ms; POST /ask tagged "turn"). Press Ctrl-C to stop.\n');
   });
+  // Idle heartbeat: one line every 5 min so the log shows the process is alive even with zero traffic.
+  // .unref() so this timer never keeps the process alive on its own (shutdown stays clean).
+  const HEARTBEAT_MS = Number(process.env.CHATBOT_PUBLIC_HEARTBEAT_MS) || 5 * 60 * 1000;
+  setInterval(function () {
+    console.log('[' + new Date().toISOString() + '] alive — ' + (app._served || 0) + ' requests served');
+  }, HEARTBEAT_MS).unref();
   server.on('error', function (e) {
     if (e && e.code === 'EADDRINUSE') console.error('PORT ' + p + ' is already in use — stop the other process or set CHATBOT_PUBLIC_PORT.');
     else console.error(e);

@@ -42,15 +42,14 @@ describe('menu.js — structure', () => {
     }
   });
 
-  test('every item has id + label + desc + action', () => {
+  test('every item has label + desc + action (ids are assigned by the shared kit, not hand-written)', () => {
     for (const it of ALL_ITEMS) {
-      assert.equal(typeof it.id,     'number', `bad id: ${JSON.stringify(it)}`);
       assert.equal(typeof it.label,  'string', `bad label: ${JSON.stringify(it)}`);
       assert.equal(typeof it.desc,   'string', `bad desc: ${JSON.stringify(it)}`);
       assert.equal(typeof it.action, 'string', `bad action: ${JSON.stringify(it)}`);
-      assert.ok(it.id >= 1,              `id must be >= 1: ${JSON.stringify(it)}`);
       assert.ok(it.label.trim().length,  `label must be non-empty: ${JSON.stringify(it)}`);
       assert.ok(it.action.trim().length, `action must be non-empty: ${JSON.stringify(it)}`);
+      assert.ok(!('id' in it), `items must NOT hand-write an id — the kit numbers by position: ${JSON.stringify(it)}`);
     }
   });
 });
@@ -58,10 +57,12 @@ describe('menu.js — structure', () => {
 // ── Uniqueness: ids and actions ────────────────────────────────────────────
 
 describe('menu.js — uniqueness', () => {
-  test('all ids are unique', () => {
-    const ids = ALL_ITEMS.map(i => i.id);
-    const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
-    assert.deepEqual(dupes, [], `duplicate ids: ${dupes.join(', ')}`);
+  test('the kit assigns sequential, unique ids by position (1..N)', () => {
+    const { assign_ids } = require('../../../utilities/menu/menu_kit');
+    const numbered = assign_ids(SECTIONS.map(s => ({ ...s, items: s.items.map(it => ({ ...it })) })));
+    const ids = numbered.map(i => i.id);
+    assert.deepEqual(ids, ids.map((_, i) => i + 1), 'ids must be 1..N in display order');
+    assert.equal(new Set(ids).size, ids.length, 'ids must be unique');
   });
 
   test('all actions are unique', () => {
@@ -88,7 +89,6 @@ describe('menu.js — known actions', () => {
     'run_tests_menu', 'run_tests_smoke', 'run_tests_glossary',
     'run_tests_downloads', 'run_tests_build', 'run_tests_roster',
     'run_tests_dashboard',
-    'toggle_commands',
   ];
 
   test('every REQUIRED_ACTIONS entry is present in the menu', () => {
@@ -132,12 +132,9 @@ describe('menu.js — known actions', () => {
     assert.match(item.cli, /--analysis-year/);
   });
 
-  test('Show/hide CLI commands toggle is wired and sits in PREFERENCES section', () => {
-    const prefs_section = SECTIONS.find(s => s.label === 'PREFERENCES');
-    assert.ok(prefs_section, 'PREFERENCES section not found');
-    const item = prefs_section.items.find(i => i.action === 'toggle_commands');
-    assert.ok(item, 'toggle_commands action missing from PREFERENCES section');
-    assert.match(item.label, /CLI commands/i);
+  test('CLI-command toggle is the shared kit\'s [t] — no hand-rolled toggle item remains', () => {
+    const actions = new Set(ALL_ITEMS.map(i => i.action));
+    assert.ok(!actions.has('toggle_commands'), 'toggle_commands should be gone — the shared kit provides the [t] toggle');
   });
 
   test('every BUILD item has a cli field (so the toggle has something to show)', () => {
