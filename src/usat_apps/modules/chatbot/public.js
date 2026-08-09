@@ -108,6 +108,37 @@ function rate_ok(ip) {
 }
 function client_ip(req) { return String((req.ip || (req.socket && req.socket.remoteAddress) || '')).replace('::ffff:', ''); }
 
+// --- answer cache (in-memory, per-process) --------------------------------------------------------------
+// Repeat FAQ questions skip grounding + the LLM: instant, free, and it eases OpenAI load (helps the 429
+// path). Keyed by queue + normalized question; ONLY first-turn questions (no conversation history) are
+// cached, since follow-ups depend on context. Entries expire after the TTL — lazy refresh: the next ask
+// after expiry regenerates a fresh answer, so knowledge/corrections edits show up within one TTL window.
+//   CONTROLS (env — no redeploy of code needed, just set + restart the process):
+//     CHATBOT_PUBLIC_CACHE_TTL_MS   answer lifetime in ms (default 600000 = 10 min). Set 0 to DISABLE the cache.
+//     CHATBOT_PUBLIC_CACHE_MAX      max entries kept in memory (default 500).
+const _cache_ttl_env = Number(process.env.CHATBOT_PUBLIC_CACHE_TTL_MS);
+const CACHE_TTL = (!isNaN(_cache_ttl_env) && _cache_ttl_env >= 0) ? _cache_ttl_env : 10 * 60 * 1000;   // 0 = off
+const CACHE_MAX = Number(process.env.CHATBOT_PUBLIC_CACHE_MAX) || 500;
+const _answers = new Map();   // key -> { answer, grounded, exp }
+function cache_norm(s) { return String(s || '').toLowerCase().trim().replace(/\s+/g, ' ').replace(/[?!.]+$/, ''); }
+function cache_key(queue, message) { return queue + '\n' + cache_norm(message); }
+function cache_get(key) {
+  if (!CACHE_TTL) return null;
+  const e = _answers.get(key);
+  if (!e) return null;
+  if (Date.now() > e.exp) { _answers.delete(key); return null; }   // expired -> miss (regenerated on this ask)
+  return e;
+}
+function cache_put(key, answer, grounded) {
+  if (!CACHE_TTL || !answer) return;
+  if (_answers.size >= CACHE_MAX) {                                  // stay bounded: drop expired, then the oldest
+    const now = Date.now();
+    for (const [k, v] of _answers) { if (now > v.exp) _answers.delete(k); }
+    if (_answers.size >= CACHE_MAX) { const oldest = _answers.keys().next().value; if (oldest !== undefined) _answers.delete(oldest); }
+  }
+  _answers.set(key, { answer: answer, grounded: grounded, exp: Date.now() + CACHE_TTL });
+}
+
 let _store = null;
 async function get_store() { if (!_store) _store = await corr_store.create_store(); return _store; }
 
@@ -142,6 +173,29 @@ function mount(app) {
     const queue = pc.queue;   // PINNED server-side (never a queue from the request)
     const conversation_id = (b.conversation_id && String(b.conversation_id).slice(0, 40)) || convo_store.new_conversation_id();
     const turn = Number(b.turn || 0);
+
+    // Cache lookup — only first-turn questions (no history) are cacheable. A hit returns instantly,
+    // skipping grounding + the LLM, and still records the turn so analytics stay complete.
+    const cacheable = CACHE_TTL > 0 && !(Array.isArray(b.history) && b.history.length);
+    const ckey = cacheable ? cache_key(queue, message) : null;
+    if (cacheable) {
+      const hit = cache_get(ckey);
+      if (hit) {
+        res.json({ ok: true, answer: hit.answer, conversation_id: conversation_id });
+        console.log('[' + new Date().toISOString() + '] public-chatbot ask  q="' + queue + '" turn=' + turn +
+                    ' grounded=' + (hit.grounded ? 'yes' : 'no') + ' 0ms ans=' + hit.answer.length + 'ch cached' + (IS_TEST ? ' test' : ''));
+        const base = { conversation_id: conversation_id, channel: pc.channel, queue: queue, actor: null, is_test: IS_TEST };
+        (async function () {
+          try {
+            if (b.intro && turn === 0) await convo_store.log_turn(Object.assign({}, base, { turn: 0, role: 'bot', text: String(b.intro).slice(0, MAX_MSG) }));
+            await convo_store.log_turn(Object.assign({}, base, { turn: turn, role: 'user', text: message }));
+            await convo_store.log_turn(Object.assign({}, base, { turn: turn, role: 'bot', text: hit.answer, grounded: hit.grounded, latency_ms: 0, cached: true }));
+          } catch (e) { /* logging must never break the widget */ }
+        })();
+        return;
+      }
+    }
+
     try {
       const g = await grounding.gather(queue, message);
       const knowledge = g.knowledge;
@@ -162,6 +216,7 @@ function mount(app) {
       const grounded = !!(knowledge && knowledge.length);
 
       res.json({ ok: true, answer: answer, conversation_id: conversation_id });
+      if (cacheable && answer) cache_put(ckey, answer, grounded);   // remember first-turn answers for the TTL window
 
       // One concise line per served turn — printed by WHICHEVER server mounts this router (the platform
       // :8022 today; the dedicated :8024 if the proxy is routed there). Metadata only — no visitor message
