@@ -163,6 +163,13 @@ function mount(app) {
 
       res.json({ ok: true, answer: answer, conversation_id: conversation_id });
 
+      // One concise line per served turn — printed by WHICHEVER server mounts this router (the platform
+      // :8022 today; the dedicated :8024 if the proxy is routed there). Metadata only — no visitor message
+      // or answer TEXT is logged (lengths + timing + grounding), so it's PII-safe and light.
+      console.log('[' + new Date().toISOString() + '] public-chatbot ask  q="' + queue + '" turn=' + turn +
+                  ' grounded=' + (grounded ? 'yes' : 'no') + ' ' + latency_ms + 'ms ans=' + answer.length + 'ch' +
+                  (IS_TEST ? ' test' : ''));
+
       // Fire-and-forget logging (never blocks the response): intro (first turn) -> user -> bot, in order.
       const base = { conversation_id: conversation_id, channel: pc.channel, queue: queue, actor: null, is_test: IS_TEST };
       (async function () {
@@ -175,7 +182,10 @@ function mount(app) {
           }));
         } catch (e) { /* logging must never break the widget */ }
       })();
-    } catch (e) { res.status(502).json({ ok: false, error: 'Sorry — something went wrong.' }); }
+    } catch (e) {
+      console.log('[' + new Date().toISOString() + '] public-chatbot ask  ERROR: ' + (e && e.message ? e.message : e));
+      res.status(502).json({ ok: false, error: 'Sorry — something went wrong.' });
+    }
   });
 }
 
