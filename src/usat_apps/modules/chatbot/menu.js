@@ -79,7 +79,7 @@ async function ask_question(ctx, port) {
 }
 
 // run() handler: pick a bubble style + port, then open the widget URL. Lets you flip styles fast.
-const BUBBLE_STYLES = ['plain', 'triathlon', 'athlete', 'speedlines', 'emoji', 'random'];
+const BUBBLE_STYLES = ['plain', 'triathlon', 'athlete', 'speedlines', 'emoji', 'usat', 'random'];
 async function pick_bubble(ctx) {
   console.log(c(BOLD, '  Bubble styles:'));
   BUBBLE_STYLES.forEach((s, i) => console.log('    ' + c(CYAN, (i + 1) + ')') + ' ' + s));

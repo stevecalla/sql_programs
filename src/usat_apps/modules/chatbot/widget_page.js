@@ -10,7 +10,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function
 // Bubble (FAB) styles the visitor sees. All keep the same 56px size/position so the resizer + open/close
 // still work; the difference is only the glyph + animation. Cycling styles (triathlon/emoji) are driven by
 // JS so hover-to-speed-up and click-to-freeze are exact; ath/speedlines are CSS animations paused on open.
-const BUBBLES = ['plain', 'triathlon', 'athlete', 'speedlines', 'emoji', 'random'];
+const BUBBLES = ['plain', 'triathlon', 'athlete', 'speedlines', 'emoji', 'usat', 'random'];
 function fab_inner(style) {
   var SWIM = '&#127946;', BIKE = '&#128692;', RUN = '&#127939;', CHAT = '&#128172;';   // 🏊 🚴 🏃 💬 (entities avoid encoding issues)
   if (style === 'triathlon') return '<span class="cyc"><span>' + SWIM + '</span><span>' + BIKE + '</span><span>' + RUN + '</span></span>';
@@ -23,6 +23,7 @@ function fab_inner(style) {
 // Accent color. USAT blue by default; a valid #RGB/#RRGGBB `color` param overrides it (bubble + header +
 // send button + user message). We lighten it for dark mode so a dark brand color still reads on a dark bg.
 const DEFAULT_ACCENT = '#152C53';   // USAT blue
+const USAT_RED = '#D12027';         // USA Triathlon red — used by the 'usat' bubble style (red closed -> blue open)
 function norm_hex(s) {
   var v = String(s == null ? '' : s).trim();
   if (v && v.charAt(0) !== '#') v = '#' + v;
@@ -50,9 +51,13 @@ function _wlink(t) {
 
 function render(opts) {
   const o = opts || {};
-  const accent = norm_hex(o.color) || DEFAULT_ACCENT;
+  const bubble = BUBBLES.indexOf(o.bubble) >= 0 ? o.bubble : 'plain';
+  // 'usat' is a branded preset: a red bubble that flips to blue on open AND a blue chat panel. Force the
+  // accent to USAT blue for it (ignoring any color param) so the bubble AND the panel are consistently blue
+  // when open — identical whether launched from the menu or the public panel. Other styles honor `color`.
+  const accent = (bubble === 'usat') ? DEFAULT_ACCENT : (norm_hex(o.color) || DEFAULT_ACCENT);
   const accentDark = lighten(accent, 0.30);   // readable on the dark bg
-  const cfg = { queue: String(o.queue || 'Team USA'), handle: String(o.handle || 'default'), endpoint: '/api/public-chatbot/ask', theme: o.theme === 'dark' ? 'dark' : 'light', bubble: BUBBLES.indexOf(o.bubble) >= 0 ? o.bubble : 'plain' };
+  const cfg = { queue: String(o.queue || 'Team USA'), handle: String(o.handle || 'default'), endpoint: '/api/public-chatbot/ask', theme: o.theme === 'dark' ? 'dark' : 'light', bubble: bubble };
   const CLIENT = [
     "(function(){",
     "  var CFG = window.__USAT_CFG__ || {};",
@@ -135,6 +140,10 @@ function render(opts) {
     'html,body{margin:0;height:100%;background:transparent;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink)}',
     '.usat-fab{position:fixed;right:16px;bottom:16px;width:56px;height:56px;border-radius:50%;border:0;cursor:pointer;background:var(--accent);color:#fff;font-size:24px;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:2;display:flex;align-items:center;justify-content:center;overflow:hidden}',
     '.usat-fab:hover{transform:scale(1.05)}',
+    // 'usat' bubble style: USA Triathlon red while closed, flips to USA Triathlon blue when opened
+    // (driven purely by the aria-expanded state the open/close code already sets — no JS needed).
+    '.usat-fab[data-bubble="usat"]{background:' + USAT_RED + ';transition:background .25s ease}',
+    '.usat-fab[data-bubble="usat"][aria-expanded="true"]{background:' + DEFAULT_ACCENT + '}',
     '.usat-fab .cyc{position:relative;width:28px;height:28px;display:inline-block}',
     '.usat-fab .cyc>span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;opacity:0}',
     '.usat-fab .cyc>span:first-child{opacity:1}',

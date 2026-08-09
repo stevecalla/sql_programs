@@ -232,6 +232,7 @@ const BUBBLE_OPTS = [
   ['athlete', 'Runner — in motion', 'Runner'],
   ['speedlines', 'Cyclist — speed lines', 'Cyclist'],
   ['emoji', 'Emoji crossfade', 'Emoji'],
+  ['usat', 'USA Triathlon — red, turns blue when opened', 'USAT'],
   ['random', 'Random each load', 'Random'],
 ];
 
@@ -300,7 +301,7 @@ export function WidgetReferenceCard() {
         <li><b>Everything is logged for review.</b> Each turn is recorded to <code>chatbot_conversations</code> tagged with your <i>Channel</i> (e.g. <code>web-widget</code>) and <code>is_test=1</code> on the test site. It appears in the left rail (and updates live as you test here). This is the data your future reporting / review / escalation process will use. The footer tells visitors the bot is in training and chats are recorded.</li>
         <li><b>Answers can carry links + formatting.</b> When the knowledge contains a real URL, the bot includes it as a clickable link; it also renders <b>bold</b> and <i>italic</i>. It only ever cites URLs that are actually in the knowledge — it won’t invent one. (Links reach the knowledge only after a page is (re)ingested with the current fetcher.)</li>
         <li><b>It knows “today”.</b> The bot is given the current date (Mountain Time), so “latest / next / most recent” questions resolve against real dates in the knowledge.</li>
-        <li><b>Styling.</b> <i>Bubble &amp; theme</i> sets the floating bubble (plain / triathlon / runner / cyclist / emoji / random) and light/dark; <i>Bot color</i> sets the accent (USAT blue by default). Both flow into the preview and the copy-paste embed.</li>
+        <li><b>Styling.</b> <i>Bubble &amp; theme</i> sets the floating bubble (plain / triathlon / runner / cyclist / emoji / USAT / random) and light/dark; <i>Bot color</i> sets the accent (USAT blue by default). Both flow into the preview and the copy-paste embed.</li>
         <li><b>Embedding.</b> Use <i>Embed code → Option A</i> (a GTM Custom HTML tag — recommended, no iframe to hand-place) or <i>Option B</i> (a raw iframe). The chosen theme, bubble, and color are baked into the snippet. See <i>How to embed with GTM</i> for the step-by-step.</li>
         <li><b>Verify.</b> Endpoints: <code>/api/public-chatbot/widget</code> (HTML), <code>/widget.js</code> (loader), <code>POST /ask</code> (answer). The chatbot module menu probes all three. Note: the widget is server-rendered, so restart <code>:8022</code> after backend changes and reload Vite for UI changes.</li>
       </ul>
