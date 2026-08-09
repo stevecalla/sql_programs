@@ -1,167 +1,83 @@
 #!/usr/bin/env node
+'use strict';
 /**
  * menu.js — interactive launcher for the USAT Apps platform.
  *
  *   node src/usat_apps/menu.js
  *
- * Numbered menu built on Node's readline (no extra packages). Mirrors the reporting/merge menus:
- * a per-item short description, a [t] toggle to show/hide the underlying CLI command (persisted to
- * .menu_prefs.json), and [q] to quit. Self-contained — runs node/npm directly (no root npm scripts),
- * so it works without editing the repo-root package.json.
+ * DATA-ONLY: rendering, numbering (by position), the [t] CLI toggle, spawn (incl. launching the module
+ * sub-menus — the kit closes/reopens readline so a child menu owns stdin), HTTP probes, and quit handling
+ * all come from the shared kit. See utilities/menu/menu_kit.js + plans_and_notes/MENU_CONVENTIONS.md.
  */
-'use strict';
-
-const fs = require('fs');
 const path = require('path');
-const http = require('http');
-const readline = require('readline');
-const { spawn, execSync } = require('child_process');
+const { runMenu } = require('../../utilities/menu/menu_kit');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
-const WEB_DIR = path.join(__dirname, 'web');
-const SERVER = 'server_usat_apps_8022.js';
 const PORT = 8022;
-const PREFS_FILE = path.join(__dirname, '.menu_prefs.json');
-
-const RESET = '\x1b[0m', BOLD = '\x1b[1m', DIM = '\x1b[2m';
-const RED = '\x1b[31m', GREEN = '\x1b[32m', YELLOW = '\x1b[33m', CYAN = '\x1b[36m';
-const c = (color, t) => `${color}${t}${RESET}`;
-
-let _show_cli = false;
-function load_prefs() { try { const j = JSON.parse(fs.readFileSync(PREFS_FILE, 'utf8')); if (typeof j.show_cli === 'boolean') _show_cli = j.show_cli; } catch (e) { /* defaults */ } }
-function save_prefs() { try { fs.writeFileSync(PREFS_FILE, JSON.stringify({ show_cli: _show_cli }, null, 2) + '\n'); } catch (e) { /* ignore */ } }
-
-function prompt(rl, q) { return new Promise((res) => rl.question(q, res)); }
-
-// Run a command (node or npm) with inherited stdio. `cwd` defaults to the repo root.
-function run_cmd(bin, args, label, cwd) {
-  console.log(c(DIM, `  Running: ${bin} ${args.join(' ')}  (cwd: ${path.relative(REPO_ROOT, cwd || REPO_ROOT) || '.'})  (Ctrl-C to stop)\n`));
-  return new Promise((resolve) => {
-    const proc = spawn(bin, args, { cwd: cwd || REPO_ROOT, stdio: 'inherit', shell: process.platform === 'win32' });
-    proc.on('close', (code) => {
-      console.log(code === 0 ? c(GREEN, `\n  ✓ ${label} done.`) : c(RED, `\n  ✗ ${label} exited (${code}).`));
-      resolve(code);
-    });
-  });
-}
-
-function open_url(url) {
-  const cmd = process.platform === 'win32' ? `start "" "${url}"`
-            : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
-  try { execSync(cmd, { stdio: 'ignore' }); console.log(c(DIM, `  Opened ${url}`)); }
-  catch { console.log(`  Open manually: ${url}`); }
-}
-
-function hit_endpoint(pathname) {
-  return new Promise((resolve) => {
-    http.get(`http://127.0.0.1:${PORT}${pathname}`, (res) => {
-      let b = ''; res.on('data', (d) => { b += d; });
-      res.on('end', () => {
-        console.log(c(res.statusCode < 400 ? GREEN : YELLOW, `  GET ${pathname} -> HTTP ${res.statusCode}`));
-        console.log('  ' + b);
-        if (res.statusCode === 401) console.log(c(DIM, '  (401 = not signed in from this tool — /api/me and /api/modules need a browser session cookie; sign in at the UI first.)'));
-        resolve();
-      });
-    }).on('error', (e) => { console.log(c(YELLOW, `  Backend not reachable on :${PORT} — is it running? (${e.code || e.message})`)); resolve(); });
-  });
-}
 
 const SECTIONS = [
-  { label: 'RUN', color: YELLOW, items: [
-    { id: 1, label: 'Dev — API + web (hot reload)', desc: 'Backend + Vite together (concurrently); edits show live', bin: 'npm', args: ['run', 'usat_apps_dev_all'], cli: 'npm run usat_apps_dev_all' },
-    { id: 2, label: 'Dev — backend only (nodemon)', desc: 'Express API on :8022, auto-restarts on change', bin: 'npm', args: ['run', 'usat_apps_dev'], cli: 'npm run usat_apps_dev' },
-    { id: 3, label: 'Dev — web only (Vite)', desc: 'React UI on :5175, proxies /api to :8022', bin: 'npm', args: ['run', 'usat_apps_web'], cli: 'npm run usat_apps_web' },
-    { id: 4, label: 'Build the web app', desc: 'npm install + compile React to web/dist (served at :8022)', bin: 'npm', args: ['run', 'usat_apps_build'], cli: 'npm run usat_apps_build' },
-    { id: 5, label: 'Build for proxy (root base)', desc: 'Build with Vite base / for the :8000 proxy (served at usat-app root)', bin: 'npm', args: ['run', 'usat_apps_build_proxy'], cli: 'npm run usat_apps_build_proxy' },
-    { id: 6, label: 'Start built server (:8022)', desc: 'Express serves the built UI + API on one port', bin: 'npm', args: ['run', 'usat_apps_server'], cli: 'npm run usat_apps_server' },
-    { id: 7, label: 'Start proxy (:8000)', desc: 'Reverse proxy; serves the app at :8000/ (usat-app host)', bin: 'npm', args: ['run', 'proxy_server'], cli: 'npm run proxy_server' },
+  { label: 'RUN', color: 'YELLOW', items: [
+    { label: 'Dev — API + web (hot reload)', desc: 'Backend + Vite together (concurrently); edits show live', bin: 'npm', args: ['run', 'usat_apps_dev_all'], cli: 'npm run usat_apps_dev_all' },
+    { label: 'Dev — backend only (nodemon)', desc: 'Express API on :8022, auto-restarts on change', bin: 'npm', args: ['run', 'usat_apps_dev'], cli: 'npm run usat_apps_dev' },
+    { label: 'Dev — web only (Vite)', desc: 'React UI on :5175, proxies /api to :8022', bin: 'npm', args: ['run', 'usat_apps_web'], cli: 'npm run usat_apps_web' },
+    { label: 'Build the web app', desc: 'npm install + compile React to web/dist (served at :8022)', bin: 'npm', args: ['run', 'usat_apps_build'], cli: 'npm run usat_apps_build' },
+    { label: 'Build for proxy (root base)', desc: 'Build with Vite base / for the :8000 proxy (served at usat-app root)', bin: 'npm', args: ['run', 'usat_apps_build_proxy'], cli: 'npm run usat_apps_build_proxy' },
+    { label: 'Start built server (:8022)', desc: 'Express serves the built UI + API on one port', bin: 'npm', args: ['run', 'usat_apps_server'], cli: 'npm run usat_apps_server' },
+    { label: 'Start proxy (:8000)', desc: 'Reverse proxy; serves the app at :8000/ (usat-app host)', bin: 'npm', args: ['run', 'proxy_server'], cli: 'npm run proxy_server' },
   ]},
-  { label: 'TESTS — unit & scenario (fast, no DB)', color: CYAN, items: [
-    { id: 8, label: 'Run all tests', desc: 'Platform (auth, metrics, status) + all module suites — no DB', bin: 'npm', args: ['run', 'usat_apps_test'], cli: 'npm run usat_apps_test' },
-    { id: 9, label: 'Participation maps tests', desc: 'Just the participation_maps module (agg, unique) — no DB', bin: 'node', args: ['src/usat_apps/run_tests.js', 'modules/participation_maps'], cli: 'node src/usat_apps/run_tests.js modules/participation_maps' },
-    { id: 10, label: 'Salesforce merge — all unit tests', desc: 'Every salesforce_merge suite (api, queue/worker, execute, restore, drift, UAT scenarios) — no DB. Superset of 11.', bin: 'node', args: ['src/usat_apps/run_tests.js', 'modules/salesforce_merge'], cli: 'node src/usat_apps/run_tests.js modules/salesforce_merge' },
-    { id: 11, label: 'Salesforce merge — UAT scenarios (Tier 1)', desc: 'The UAT workbook tabs as backend scenario tests — survivorship, drift gate, selective restore, bulk, plus parallel fan-out, job-history aggregation, and the API/Apex caps + batch limits', bin: 'npm', args: ['run', 'salesforce_merge_uat'], cli: 'npm run salesforce_merge_uat' },
-    { id: 12, label: 'Salesforce merge — UAT + fill workbook', desc: 'Runs the Tier-1 scenarios AND stamps PASS/FAIL into a copy of the UAT workbook (all mapped tabs) in the data folder (usat_salesforce_merge_uat/)', bin: 'npm', args: ['run', 'salesforce_merge_uat_fill'], cli: 'npm run salesforce_merge_uat_fill' },
+  { label: 'TESTS — unit & scenario (fast, no DB)', color: 'CYAN', items: [
+    { label: 'Run all tests', desc: 'Platform (auth, metrics, status) + all module suites — no DB', bin: 'npm', args: ['run', 'usat_apps_test'], cli: 'npm run usat_apps_test' },
+    { label: 'Participation maps tests', desc: 'Just the participation_maps module (agg, unique) — no DB', bin: 'node', args: ['src/usat_apps/run_tests.js', 'modules/participation_maps'], cli: 'node src/usat_apps/run_tests.js modules/participation_maps' },
+    { label: 'Salesforce merge — all unit tests', desc: 'Every salesforce_merge suite (api, queue/worker, execute, restore, drift, UAT scenarios) — no DB. Superset of the Tier-1 run.', bin: 'node', args: ['src/usat_apps/run_tests.js', 'modules/salesforce_merge'], cli: 'node src/usat_apps/run_tests.js modules/salesforce_merge' },
+    { label: 'Salesforce merge — UAT scenarios (Tier 1)', desc: 'The UAT workbook tabs as backend scenario tests — survivorship, drift gate, selective restore, bulk, plus parallel fan-out, job-history aggregation, and the API/Apex caps + batch limits', bin: 'npm', args: ['run', 'salesforce_merge_uat'], cli: 'npm run salesforce_merge_uat' },
+    { label: 'Salesforce merge — UAT + fill workbook', desc: 'Runs the Tier-1 scenarios AND stamps PASS/FAIL into a copy of the UAT workbook (all mapped tabs) in the data folder (usat_salesforce_merge_uat/)', bin: 'npm', args: ['run', 'salesforce_merge_uat_fill'], cli: 'npm run salesforce_merge_uat_fill' },
   ]},
-  { label: 'TESTS — integration & browser (needs DB / worker / chromium)', color: CYAN, items: [
-    { id: 13, label: 'Salesforce merge — worker smoke test', desc: 'enqueue → claim → run → done → result parity. No UI / Salesforce / writes (~5s). Needs the DB.', bin: 'npm', args: ['run', 'salesforce_merge_worker_smoke'], cli: 'npm run salesforce_merge_worker_smoke' },
-    { id: 14, label: 'Salesforce merge — worker-down test', desc: 'Proves a merge stays QUEUED when :8021 is down and DRAINS when it returns. Stop the pm2 worker first (menu 34).', bin: 'npm', args: ['run', 'salesforce_merge_worker_down_test'], cli: 'npm run salesforce_merge_worker_down_test' },
-    { id: 15, label: 'E2E — platform UI (Playwright)', desc: 'Browser suite: platform shell + participation map. Isolated build/port/creds — never touches the real dist. One-time: npx playwright install chromium', bin: 'npm', args: ['run', 'usat_apps_e2e'], cli: 'npm run usat_apps_e2e' },
-    { id: 16, label: 'E2E — merge UAT UI (Playwright)', desc: 'Renders the Select / Process / Restore surfaces with stubbed APIs (needs: npx playwright install chromium)', bin: 'npm', args: ['run', 'salesforce_merge_e2e'], cli: 'npm run salesforce_merge_e2e' },
-    { id: 17, label: 'E2E — interactive runner', desc: 'The platform browser suite in Playwright --ui (watch, step through, time-travel).', bin: 'npm', args: ['run', 'usat_apps_e2e_ui'], cli: 'npm run usat_apps_e2e_ui' },
+  { label: 'TESTS — integration & browser (needs DB / worker / chromium)', color: 'CYAN', items: [
+    { label: 'Salesforce merge — worker smoke test', desc: 'enqueue → claim → run → done → result parity. No UI / Salesforce / writes (~5s). Needs the DB.', bin: 'npm', args: ['run', 'salesforce_merge_worker_smoke'], cli: 'npm run salesforce_merge_worker_smoke' },
+    { label: 'Salesforce merge — worker-down test', desc: 'Proves a merge stays QUEUED when :8021 is down and DRAINS when it returns. Stop the pm2 worker first (Salesforce merge sub-menu).', bin: 'npm', args: ['run', 'salesforce_merge_worker_down_test'], cli: 'npm run salesforce_merge_worker_down_test' },
+    { label: 'E2E — platform UI (Playwright)', desc: 'Browser suite: platform shell + participation map. Isolated build/port/creds — never touches the real dist. One-time: npx playwright install chromium', bin: 'npm', args: ['run', 'usat_apps_e2e'], cli: 'npm run usat_apps_e2e' },
+    { label: 'E2E — merge UAT UI (Playwright)', desc: 'Renders the Select / Process / Restore surfaces with stubbed APIs (needs: npx playwright install chromium)', bin: 'npm', args: ['run', 'salesforce_merge_e2e'], cli: 'npm run salesforce_merge_e2e' },
+    { label: 'E2E — interactive runner', desc: 'The platform browser suite in Playwright --ui (watch, step through, time-travel).', bin: 'npm', args: ['run', 'usat_apps_e2e_ui'], cli: 'npm run usat_apps_e2e_ui' },
   ]},
-  { label: 'USERS & ACCESS', color: CYAN, items: [
-    { id: 18, label: 'Add / update a user', desc: 'Create a web-app login (username/email, password, role)', bin: 'node', args: ['src/usat_apps/admin.js', 'add'], cli: 'node src/usat_apps/admin.js add' },
-    { id: 19, label: 'List users', desc: 'Show .env recovery + stored web-app logins', bin: 'node', args: ['src/usat_apps/admin.js', 'list'], cli: 'node src/usat_apps/admin.js list' },
-    { id: 20, label: 'Reset a user password', desc: 'Set a new password for an existing stored login', bin: 'node', args: ['src/usat_apps/admin.js', 'passwd'], cli: 'node src/usat_apps/admin.js passwd' },
-    { id: 21, label: 'Remove a user', desc: 'Delete a stored login (prompts + confirm)', bin: 'node', args: ['src/usat_apps/admin.js', 'remove'], cli: 'node src/usat_apps/admin.js remove' },
-    { id: 22, label: 'Show panel access', desc: 'Print the default + per-user panel allow-list + catalog', bin: 'node', args: ['src/usat_apps/admin.js', 'access'], cli: 'node src/usat_apps/admin.js access' },
+  { label: 'USERS & ACCESS', color: 'CYAN', items: [
+    { label: 'Add / update a user', desc: 'Create a web-app login (username/email, password, role)', bin: 'node', args: ['src/usat_apps/admin.js', 'add'], cli: 'node src/usat_apps/admin.js add' },
+    { label: 'List users', desc: 'Show .env recovery + stored web-app logins', bin: 'node', args: ['src/usat_apps/admin.js', 'list'], cli: 'node src/usat_apps/admin.js list' },
+    { label: 'Reset a user password', desc: 'Set a new password for an existing stored login', bin: 'node', args: ['src/usat_apps/admin.js', 'passwd'], cli: 'node src/usat_apps/admin.js passwd' },
+    { label: 'Remove a user', desc: 'Delete a stored login (prompts + confirm)', bin: 'node', args: ['src/usat_apps/admin.js', 'remove'], cli: 'node src/usat_apps/admin.js remove' },
+    { label: 'Show panel access', desc: 'Print the default + per-user panel allow-list + catalog', bin: 'node', args: ['src/usat_apps/admin.js', 'access'], cli: 'node src/usat_apps/admin.js access' },
   ]},
-  { label: 'OPEN', color: GREEN, items: [
-    { id: 23, label: 'Open built UI', desc: 'Production-style single-port app at :8022', open: `http://localhost:${PORT}`, cli: `open http://localhost:${PORT}` },
-    { id: 24, label: 'Open dev UI', desc: 'Vite dev server (hot reload) at :5175', open: 'http://localhost:5175', cli: 'open http://localhost:5175' },
-    { id: 25, label: 'Open via proxy (/)', desc: 'The app through the proxy at :8000/', open: 'http://localhost:8000/', cli: 'open http://localhost:8000/' },
-    { id: 26, label: 'Check API status', desc: 'GET /api/status — backend health (public)', endpoint: '/api/status', cli: `curl http://localhost:${PORT}/api/status` },
-    { id: 27, label: 'Check login / whoami', desc: 'GET /api/me — current user + role + panels (needs a signed-in session)', endpoint: '/api/me', cli: `curl http://localhost:${PORT}/api/me` },
-    { id: 28, label: 'Show your modules', desc: 'GET /api/modules — the module catalog the nav is built from (needs a session)', endpoint: '/api/modules', cli: `curl http://localhost:${PORT}/api/modules` },
+  { label: 'OPEN', color: 'GREEN', items: [
+    { label: 'Open built UI', desc: 'Production-style single-port app at :8022', open: `http://localhost:${PORT}`, cli: `open http://localhost:${PORT}` },
+    { label: 'Open dev UI', desc: 'Vite dev server (hot reload) at :5175', open: 'http://localhost:5175', cli: 'open http://localhost:5175' },
+    { label: 'Open via proxy (/)', desc: 'The app through the proxy at :8000/', open: 'http://localhost:8000/', cli: 'open http://localhost:8000/' },
+    { label: 'Check API status', desc: 'GET /api/status — backend health (public)', hit: { port: PORT, pathname: '/api/status' }, cli: `curl http://localhost:${PORT}/api/status` },
+    { label: 'Check login / whoami', desc: 'GET /api/me — current user + role + panels. 401 here is normal — this tool has no browser session cookie; sign in at the UI first.', hit: { port: PORT, pathname: '/api/me' }, cli: `curl http://localhost:${PORT}/api/me` },
+    { label: 'Show your modules', desc: 'GET /api/modules — the module catalog the nav is built from. 401 here is normal — needs a signed-in browser session.', hit: { port: PORT, pathname: '/api/modules' }, cli: `curl http://localhost:${PORT}/api/modules` },
   ]},
-  { label: 'PM2 (production)', color: RED, items: [
-    { id: 29, label: 'pm2 start', desc: 'Run the server under pm2 (production)', bin: 'npm', args: ['run', 'pm2_start_usat_apps'], cli: 'npm run pm2_start_usat_apps' },
-    { id: 30, label: 'pm2 restart', desc: 'Restart the pm2 process', bin: 'npm', args: ['run', 'restart_usat_apps'], cli: 'npm run restart_usat_apps' },
-    { id: 31, label: 'pm2 stop', desc: 'Stop the pm2 process', bin: 'npm', args: ['run', 'stop_usat_apps'], cli: 'npm run stop_usat_apps' },
-    { id: 32, label: 'pm2 logs', desc: 'Tail the pm2 logs', bin: 'npm', args: ['run', 'pm2_logs_usat_apps'], cli: 'npm run pm2_logs_usat_apps' },
+  { label: 'PM2 (production)', color: 'RED', items: [
+    { label: 'pm2 start', desc: 'Run the server under pm2 (production)', bin: 'npm', args: ['run', 'pm2_start_usat_apps'], cli: 'npm run pm2_start_usat_apps' },
+    { label: 'pm2 restart', desc: 'Restart the pm2 process', bin: 'npm', args: ['run', 'restart_usat_apps'], cli: 'npm run restart_usat_apps' },
+    { label: 'pm2 stop', desc: 'Stop the pm2 process', bin: 'npm', args: ['run', 'stop_usat_apps'], cli: 'npm run stop_usat_apps' },
+    { label: 'pm2 logs', desc: 'Tail the pm2 logs', bin: 'npm', args: ['run', 'pm2_logs_usat_apps'], cli: 'npm run pm2_logs_usat_apps' },
   ]},
-  { label: 'MODULES', color: CYAN, items: [
-    { id: 33, label: 'Participation maps — data pipeline & ops →', desc: 'Rebuild region/zip/census/summary data, BigQuery load, build scope (opens the module menu)', bin: 'node', args: ['src/usat_apps/modules/participation_maps/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/participation_maps/menu.js' },
-    { id: 34, label: 'Salesforce merge — worker & ops →', desc: 'Start/stop the :8021 write worker, DB migrations, status/opens (the merge tests all live on the main menu above)', bin: 'node', args: ['src/usat_apps/modules/salesforce_merge/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/salesforce_merge/menu.js' },
-    { id: 35, label: 'Event COI — Race Certificate Request builder →', desc: 'Dev/build/open the Event COI page, run the module tests, and the Playwright dry run (login → fill, no submit). event_coi tests also run in “Run all tests” above (option 8).', bin: 'node', args: ['src/usat_apps/modules/event_coi/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/event_coi/menu.js' },
-    { id: 36, label: 'Email Queue - dev & ops →', desc: 'Module/services tests, verify SF read, corrections DB smoke (folded into :8022)', bin: 'node', args: ['src/usat_apps/modules/salesforce_email_queue/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/salesforce_email_queue/menu.js' },
-    { id: 37, label: 'AI Chat Bot - dev, tests & public widget probes →', desc: 'Shared-brain tests + live probes of the public widget endpoints (widget HTML, widget.js loader, POST /ask) on :5175 and :8022. No dedicated widget server — mounts on :8022.', bin: 'node', args: ['src/usat_apps/modules/chatbot/menu.js'], interactive: true, cli: 'node src/usat_apps/modules/chatbot/menu.js' },
+  { label: 'MODULES', color: 'CYAN', items: [
+    { label: 'Participation maps — data pipeline & ops →', desc: 'Rebuild region/zip/census/summary data, BigQuery load, build scope (opens the module menu)', bin: 'node', args: ['src/usat_apps/modules/participation_maps/menu.js'], cli: 'node src/usat_apps/modules/participation_maps/menu.js' },
+    { label: 'Salesforce merge — worker & ops →', desc: 'Start/stop the :8021 write worker, DB migrations, status/opens (the merge tests all live on the main menu above)', bin: 'node', args: ['src/usat_apps/modules/salesforce_merge/menu.js'], cli: 'node src/usat_apps/modules/salesforce_merge/menu.js' },
+    { label: 'Event COI — Race Certificate Request builder →', desc: 'Dev/build/open the Event COI page, run the module tests, and the Playwright dry run (login → fill, no submit). event_coi tests also run in "Run all tests" above.', bin: 'node', args: ['src/usat_apps/modules/event_coi/menu.js'], cli: 'node src/usat_apps/modules/event_coi/menu.js' },
+    { label: 'Email Queue - dev & ops →', desc: 'Module/services tests, verify SF read, corrections DB smoke (folded into :8022)', bin: 'node', args: ['src/usat_apps/modules/salesforce_email_queue/menu.js'], cli: 'node src/usat_apps/modules/salesforce_email_queue/menu.js' },
+    { label: 'AI Chat Bot - dev, tests & public widget probes →', desc: 'Shared-brain tests + live probes of the public widget endpoints (widget HTML, widget.js loader, POST /ask) on :5175 and :8022, plus the dedicated :8024 server.', bin: 'node', args: ['src/usat_apps/modules/chatbot/menu.js'], cli: 'node src/usat_apps/modules/chatbot/menu.js' },
   ]},
 ];
 const ALL = SECTIONS.flatMap((s) => s.items);
 
-function print_menu() {
-  console.clear();
-  console.log(c(BOLD + CYAN, '\n  USAT Apps'));
-  console.log(c(DIM, '  ─────────────────────────────────────\n'));
-  for (const s of SECTIONS) {
-    console.log(c(s.color + BOLD, `  ${s.label}`));
-    for (const it of s.items) {
-      console.log(`  ${c(BOLD, String(it.id).padStart(3) + '.')} ${it.label.padEnd(32)} ${c(DIM, it.desc)}`);
-      if (_show_cli && it.cli) console.log('       ' + c(DIM, '$ ' + it.cli));
-    }
-    console.log('');
-  }
-  console.log('  ' + c(BOLD + YELLOW, '[t]') + c(DIM, ` toggle CLI commands (${_show_cli ? 'on' : 'off'})    `) + c(BOLD + YELLOW, '[q]') + c(DIM, ' quit') + c(DIM, '    (or 0 to exit)'));
+if (require.main === module) {
+  runMenu({
+    title: 'USAT Apps',
+    color: 'CYAN',
+    sections: SECTIONS,
+    cwd: REPO_ROOT,
+    prefsFile: path.join(__dirname, '.menu_prefs.json'),
+  }).catch((e) => { console.error(e); process.exit(1); });
 }
-
-async function main() {
-  load_prefs();
-  let rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-  while (true) {
-    print_menu();
-    const ans = (await prompt(rl, c(BOLD, '\n  Select: '))).trim().toLowerCase();
-    if (ans === 'q' || ans === 'quit' || ans === '0') { console.log(c(DIM, '\n  Bye.')); rl.close(); return; }
-    if (ans === 't') { _show_cli = !_show_cli; save_prefs(); continue; }
-    const it = ALL.find((x) => x.id === parseInt(ans, 10));
-    console.log('');
-    if (it && it.interactive && it.bin) {
-      // Interactive sub-menu: release our readline so the child's readline owns stdin, then recreate
-      // ours when it returns. Without this the parent readline steals the child's t/q keystrokes.
-      rl.close();
-      await run_cmd(it.bin, it.args, it.label, it.cwd);
-      rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-      continue;
-    }
-    if (!it) console.log(c(YELLOW, '  Invalid choice.'));
-    else if (it.bin) await run_cmd(it.bin, it.args, it.label, it.cwd);
-    else if (it.open) open_url(it.open);
-    else if (it.endpoint) await hit_endpoint(it.endpoint);
-    await prompt(rl, c(DIM, '\n  Press Enter to continue…'));
-  }
-}
-
-if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
 
 module.exports = { SECTIONS, ALL };
