@@ -33,6 +33,9 @@ const DDL = `CREATE TABLE IF NOT EXISTS ${TABLE} (
   context_files INT NULL,
   corrections_used INT NULL,
   latency_ms INT NULL,
+  prompt_tokens INT NULL,
+  completion_tokens INT NULL,
+  cost_usd DECIMAL(12,6) NULL,
   actor VARCHAR(120) NULL,
   is_test TINYINT NOT NULL DEFAULT 1,
   created_at_mtn DATETIME NOT NULL,
@@ -52,7 +55,35 @@ function new_conversation_id() {
 let _ready = null;
 async function ensure() {
   if (_ready) return _ready;
-  _ready = (async () => { const pool = await db.get_pool(); await ensure_table(pool, DDL); })();
+  _ready = (async () => {
+    const pool = await db.get_pool();
+    await ensure_table(pool, DDL);
+    // Idempotent migration: add the token/cost columns to a pre-existing table (MySQL has no
+    // ADD COLUMN IF NOT EXISTS, so check information_schema first). Auto-applies on first use after deploy.
+    // Placement matters: the platform convention keeps created_at_mtn + created_at_utc as the LAST columns,
+    // so new columns are inserted AFTER latency_ms (before actor/is_test/created_at_*), matching the DDL.
+    try {
+      const cols = await db.query(
+        'SELECT COLUMN_NAME, ORDINAL_POSITION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?', [TABLE]);
+      const pos = {}; (cols || []).forEach(function (c) { pos[String(c.COLUMN_NAME)] = Number(c.ORDINAL_POSITION); });
+      const have = new Set(Object.keys(pos));
+      const adds = [];
+      if (!have.has('prompt_tokens')) adds.push('ADD COLUMN prompt_tokens INT NULL AFTER latency_ms');
+      if (!have.has('completion_tokens')) adds.push('ADD COLUMN completion_tokens INT NULL AFTER prompt_tokens');
+      if (!have.has('cost_usd')) adds.push('ADD COLUMN cost_usd DECIMAL(12,6) NULL AFTER completion_tokens');
+      if (adds.length) await db.query('ALTER TABLE ' + TABLE + ' ' + adds.join(', '));
+      // Repair pass: if an earlier migration appended these columns at the END (after created_at_utc),
+      // move them back in front of created_at_* so the two timestamps stay last (convention).
+      const tail = pos['created_at_utc'] || 0;
+      const misplaced = ['prompt_tokens', 'completion_tokens', 'cost_usd'].some(function (c) { return have.has(c) && pos[c] > tail; });
+      if (misplaced) {
+        await db.query('ALTER TABLE ' + TABLE + ' ' +
+          'MODIFY COLUMN prompt_tokens INT NULL AFTER latency_ms, ' +
+          'MODIFY COLUMN completion_tokens INT NULL AFTER prompt_tokens, ' +
+          'MODIFY COLUMN cost_usd DECIMAL(12,6) NULL AFTER completion_tokens');
+      }
+    } catch (e) { /* boot race / perms — non-fatal, metrics cost just stays null until columns exist */ }
+  })();
   return _ready;
 }
 
@@ -64,8 +95,8 @@ async function log_turn(rec) {
     const r = rec || {};
     await db.query(
       'INSERT INTO ' + TABLE + ' (conversation_id, turn, role, text, channel, queue, provider, model, grounded, ' +
-      'knowledge_chars, context_files, corrections_used, latency_ms, actor, is_test, created_at_mtn, created_at_utc) ' +
-      'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      'knowledge_chars, context_files, corrections_used, latency_ms, prompt_tokens, completion_tokens, cost_usd, actor, is_test, created_at_mtn, created_at_utc) ' +
+      'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
       [
         String(r.conversation_id || ''), Number(r.turn || 0), String(r.role || ''),
         (r.text == null ? null : String(r.text)),
@@ -75,6 +106,9 @@ async function log_turn(rec) {
         (r.context_files == null ? null : Number(r.context_files)),
         (r.corrections_used == null ? null : Number(r.corrections_used)),
         (r.latency_ms == null ? null : Number(r.latency_ms)),
+        (r.prompt_tokens == null ? null : Number(r.prompt_tokens)),
+        (r.completion_tokens == null ? null : Number(r.completion_tokens)),
+        (r.cost_usd == null ? null : Number(r.cost_usd)),
         r.actor || null,
         (r.is_test == null ? 1 : (r.is_test ? 1 : 0)),
         fmt_in_tz(now, REPORTING_TZ), fmt_in_tz(now, 'UTC'),

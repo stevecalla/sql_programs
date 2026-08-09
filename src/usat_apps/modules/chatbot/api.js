@@ -16,6 +16,7 @@ const grounding = require('../../services/knowledge/grounding');   // shared cur
 const corrections = require('../../services/corrections');
 const corr_store = require('../../services/corrections/mysql_store');
 const convo_store = require('./conversations');
+const metrics = require('./metrics_report');
 const settings = require('./settings');
 const sf = require('../../services/salesforce');             // shared SF client — connect + list_queues only (no email-queue module, no case/PII reads)
 const queue_access = require('../../services/queue_access');  // shared queue allow-list (same model as the email queue)
@@ -23,6 +24,7 @@ const kb_data_dir = require('../../services/knowledge/data_dir');
 
 const P = '/api/chatbot';
 const gate = require_panel('chatbot');
+const metrics_gate = require_panel('chatbot-metrics');   // Metrics page has its own grantable panel
 const MAX_MSG = 2000;
 // Soft DEFAULT selection only (which queue is pre-picked) — NOT an allowlist. Queue AVAILABILITY comes from
 // Salesforce (sf.list_queues) filtered by the SHARED queue_access rules (services/queue_access), the same
@@ -170,6 +172,18 @@ function mount(app) {
   // Available AI models (shared registry, same list the email queue edits in /admin Settings).
   app.get(P + '/ai/models', gate, function (req, res) {
     try { res.json(ai.list_models()); } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
+  });
+
+  // Usage + cost metrics (read-only). ?days=30 window; ?test=1 (test only) / ?test=0 (real only) / omit = both.
+  // Returns overview counts, cost (tokens x per-model price), daily trend, grounding/sources, frequent
+  // channels, and the most-asked questions — the data the Metrics panel renders.
+  app.get(P + '/metrics', metrics_gate, async function (req, res) {
+    try {
+      const days = Number(req.query.days) || 30;
+      const t = req.query.test;
+      const is_test = (t === '1' || t === 'true') ? 1 : (t === '0' || t === 'false') ? 0 : undefined;
+      res.json({ ok: true, metrics: await metrics.report({ days: days, is_test: is_test }) });
+    } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
   });
 
   // Settings — the bot's AI choice (provider + model). GET returns current + the model list; POST saves.

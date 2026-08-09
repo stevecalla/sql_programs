@@ -56,6 +56,8 @@ const DDL_CHUNKS = `CREATE TABLE IF NOT EXISTS ${CHUNKS} (
   excluded TINYINT NOT NULL DEFAULT 0,
   embedding MEDIUMBLOB NULL,
   embed_model VARCHAR(80) NULL,
+  embed_tokens INT NULL,
+  embed_cost_usd DECIMAL(12,6) NULL,
   fetched_at_mtn DATETIME NULL,
   fetched_at_utc DATETIME NULL,
   created_at_mtn DATETIME NOT NULL,
@@ -86,6 +88,9 @@ async function ensure() {
     // Migrate older chunk tables to carry the embedding columns (semantic retrieval).
     await ensure_column(CHUNKS, 'embedding', 'embedding MEDIUMBLOB NULL');
     await ensure_column(CHUNKS, 'embed_model', 'embed_model VARCHAR(80) NULL');
+    // Embedding-cost tracking: per-chunk tokens + USD (placed AFTER embed_model so created_at_* stay last).
+    await ensure_column(CHUNKS, 'embed_tokens', 'embed_tokens INT NULL AFTER embed_model');
+    await ensure_column(CHUNKS, 'embed_cost_usd', 'embed_cost_usd DECIMAL(12,6) NULL AFTER embed_tokens');
   })();
   return _ready;
 }
@@ -224,10 +229,12 @@ async function candidates(queue) {
     " WHERE excluded = 0 AND (scope = 'global' OR (scope = 'queue' AND REGEXP_REPLACE(LOWER(queue), '[^a-z0-9]', '') = ?)) " +
     'LIMIT 5000', [nq(queue)]);
 }
-// Store one chunk's vector (Buffer) + the model that produced it. Pass buffer=null to clear.
-async function set_chunk_embedding(id, buffer, model) {
+// Store one chunk's vector (Buffer) + the model that produced it, plus its embedding token/cost share.
+// Pass buffer=null to clear. tokens/cost are optional (default 0) so older callers still work.
+async function set_chunk_embedding(id, buffer, model, tokens, cost) {
   await ensure();
-  await db.query('UPDATE ' + CHUNKS + ' SET embedding = ?, embed_model = ? WHERE id = ?', [buffer || null, model || null, Number(id)]);
+  await db.query('UPDATE ' + CHUNKS + ' SET embedding = ?, embed_model = ?, embed_tokens = ?, embed_cost_usd = ? WHERE id = ?',
+    [buffer || null, model || null, (tokens == null ? null : Number(tokens)), (cost == null ? null : Number(cost)), Number(id)]);
   return true;
 }
 // Chunks that still need a vector for `model` (missing OR produced by a different model). For reindex/backfill.
@@ -238,6 +245,16 @@ async function chunks_missing_embedding(model, limit) {
     'SELECT id, text FROM ' + CHUNKS +
     " WHERE excluded = 0 AND text IS NOT NULL AND text <> '' AND (embedding IS NULL OR embed_model IS NULL OR embed_model <> ?) " +
     'ORDER BY id ASC LIMIT ' + lim, [String(model || '')]);
+}
+// ALL embeddable chunks (page by offset), regardless of current embedding state — used by a FORCE reindex to
+// re-embed already-embedded chunks so their token/cost is captured (backfill). Ordered by id for stable paging.
+async function chunks_all_embeddable(limit, offset) {
+  await ensure();
+  const lim = Math.max(1, Math.min(1000, Number(limit) || 128));
+  const off = Math.max(0, Number(offset) || 0);
+  return await db.query(
+    'SELECT id, text FROM ' + CHUNKS +
+    " WHERE excluded = 0 AND text IS NOT NULL AND text <> '' ORDER BY id ASC LIMIT " + lim + ' OFFSET ' + off, []);
 }
 // The just-stored chunks for one source (used to embed right after ingest).
 async function chunks_for_source(source_ref, scope, queue) {
@@ -258,10 +275,30 @@ async function embedding_status(model) {
   const r = (rows && rows[0]) || {};
   return { model: m, total: Number(r.total || 0), embedded: Number(r.embedded || 0), stale: Number(r.stale || 0), missing: Number(r.missing || 0) };
 }
+// Embedding SPEND across the whole (shared) index: total cost + tokens + embedded chunk count, and a
+// per-embed_model breakdown. This is index-build cost — a chunk is embedded once per source, not per chat —
+// so it is NOT windowed like conversation cost. Powers the "Embedding spend" card on the metrics page.
+async function embedding_cost_summary() {
+  await ensure();
+  const tot = (await db.query(
+    'SELECT COALESCE(SUM(embed_cost_usd),0) cost, COALESCE(SUM(embed_tokens),0) tokens, ' +
+    'SUM(embedding IS NOT NULL) embedded, COUNT(*) chunks FROM ' + CHUNKS + ' WHERE excluded = 0'))[0] || {};
+  const by_model = await db.query(
+    'SELECT embed_model model, COUNT(*) chunks, COALESCE(SUM(embed_tokens),0) tokens, COALESCE(SUM(embed_cost_usd),0) cost ' +
+    'FROM ' + CHUNKS + " WHERE excluded = 0 AND embedding IS NOT NULL AND embed_model IS NOT NULL AND embed_model <> '' " +
+    'GROUP BY embed_model ORDER BY cost DESC, chunks DESC');
+  return {
+    cost_usd: Math.round((Number(tot.cost) || 0) * 1e6) / 1e6,
+    tokens: Number(tot.tokens) || 0,
+    embedded: Number(tot.embedded) || 0,
+    chunks: Number(tot.chunks) || 0,
+    by_model: by_model.map(function (r) { return { model: String(r.model || ''), chunks: Number(r.chunks) || 0, tokens: Number(r.tokens) || 0, cost_usd: Math.round((Number(r.cost) || 0) * 1e6) / 1e6 }; }),
+  };
+}
 
 module.exports = {
   CHUNKS, SOURCES, REPORTING_TZ, ensure,
   upsert_source, replace_source_chunks, list_sources, list_chunks, set_excluded, remove_source,
   select_chunks, knowledge_from_chunks, stats,
-  candidates, set_chunk_embedding, chunks_missing_embedding, chunks_for_source, embedding_status,
+  candidates, set_chunk_embedding, chunks_missing_embedding, chunks_all_embeddable, chunks_for_source, embedding_status, embedding_cost_summary,
 };

@@ -119,32 +119,80 @@ function RetrievalBlendCard({ r }) {
   );
 }
 
-function EmbeddingCard({ r }) {
-  const { data, busy, changeModel, reindex, reidxMsg } = r;
-  const st = data && data.settings, status = data && data.status;
+// Embedding model REGISTRY — mirrors the AI model registry (Default / Provider / Model / Label / $ per 1M),
+// with the index status + Reindex folded in. The Default row is the active embedding model; its price drives
+// embedding-cost tracking. Self-contained (own /embed-models fetch/save + /reindex), like ModelRegistry.
+function EmbeddingRegistry() {
+  const [models, setModels] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [err, setErr] = useState(''); const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState('');
+  const load = () => req('/embed-models').then((r) => { setModels((r.embed_models || []).map((m) => ({ ...m }))); setStatus(r.status || null); }).catch((e) => setErr(e.message));
+  useEffect(() => { load(); }, []);
+  const setM = (i, patch) => setModels((ms) => ms.map((m, j) => (j === i ? { ...m, ...patch } : m)));
+  const setDefault = (i) => setModels((ms) => ms.map((m, j) => ({ ...m, is_default: j === i })));
+  const add = () => setModels((ms) => (ms || []).concat([{ provider: 'openai', model: '', label: '', is_default: (ms || []).length === 0, price_in: 0 }]));
+  const del = (i) => setModels((ms) => ms.filter((_, j) => j !== i));
+  const save = async () => {
+    const rows = (models || []).filter((m) => String(m.model || '').trim());
+    if (!rows.length) { setMsg(''); setErr('Add at least one embedding model.'); return; }
+    setErr(''); setMsg('');
+    try {
+      const r = await req('/embed-models', { method: 'POST', body: JSON.stringify({ embed_models: rows.map((m) => ({ provider: 'openai', model: String(m.model).trim(), label: m.label || m.model, is_default: !!m.is_default, price_in: parseFloat(m.price_in) || 0 })) }) });
+      setModels((r.embed_models || []).map((m) => ({ ...m }))); setStatus(r.status || null); setMsg('Saved ' + (r.embed_models || []).length + ' model(s).');
+    } catch (e) { setErr(e.message); }
+  };
+  const reindex = async (force) => {
+    setBusy(force ? 'f' : 'r'); setMsg(force ? 'Re-embedding all…' : 'Embedding…'); setErr('');
+    try { const r = await req('/reindex', { method: 'POST', body: JSON.stringify({ max: 500, force: !!force }) }); setStatus(r.status || null); setMsg(r.remaining > 0 ? ('Embedded ' + r.embedded + ' · ' + r.remaining + ' remaining — click again') : ('Done · embedded ' + r.embedded)); }
+    catch (e) { setMsg(''); setErr(e.message); } finally { setBusy(''); }
+  };
   return (
-    <Collapse title={<>Embedding model<Applies /></>} summary={st ? (st.embeddings_enabled ? st.embedding_model : 'off') : ''}>
-      <Ref>The model that turns each chunk into a <b>vector</b> (used for the semantic score above). Only matters when the blend is above 0%. <b>Changing it invalidates every stored vector</b> — vectors from different models aren’t comparable — so you must <b>Reindex</b> to rebuild them. Requires <code>OPENAI_API_KEY</code> on the server. If a vector is missing or the key fails, that chunk falls back to keyword — grounding never breaks.</Ref>
-      {!data ? <div style={S.muted}>Loading…</div> : (
+    <Collapse title={<>Embedding models<Applies /></>} summary={models ? models.length + ' models' : ''}>
+      <Ref>The <b>list of embedding models</b> that turn each chunk into a <b>vector</b> (semantic retrieval), plus their <b>price</b> (USD per 1M input tokens) for embedding-cost tracking. The <b>Default</b> is the active model — changing it makes stored vectors stale, so <b>Reindex</b> to rebuild them. Embeddings bill input tokens only. Requires <code>OPENAI_API_KEY</code> on the server; if a vector is missing or the key fails, that chunk falls back to keyword — grounding never breaks.</Ref>
+      {models == null ? <div style={S.muted}>{err || 'Loading…'}</div> : (
         <>
-          <div style={{ ...S.row, justifyContent: 'space-between' }}>
-            <select value={st.embedding_model} onChange={(e) => changeModel(e.target.value)} disabled={busy === 'm'} style={{ ...S.inp, minWidth: 300 }}>
-              {(st.models || []).map((m) => <option key={m.id} value={m.id}>{m.label} ({m.dim}d){m.id === 'text-embedding-3-small' ? ' — default' : ''}</option>)}
-            </select>
-            <span style={S.muted}>Scope: Global (all queues)</span>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
+              <thead><tr style={{ textAlign: 'left', color: 'var(--dim,#6b7280)', fontSize: 11 }}>
+                <th style={{ padding: 4 }}>Default</th><th style={{ padding: 4 }}>Provider</th><th style={{ padding: 4 }}>Model</th><th style={{ padding: 4 }}>Label</th><th style={{ padding: 4 }}>$/1M</th><th></th>
+              </tr></thead>
+              <tbody>
+                {models.length === 0 ? <tr><td colSpan={6} style={S.muted}>No models — add one below.</td></tr> : null}
+                {models.map((m, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: 4, textAlign: 'center' }}><input type="radio" name="kaEmbedDefault" checked={!!m.is_default} onChange={() => setDefault(i)} /></td>
+                    <td style={{ padding: 4 }}><select value={m.provider || 'openai'} onChange={(e) => setM(i, { provider: e.target.value })} style={S.inp}><option value="openai">openai</option></select></td>
+                    <td style={{ padding: 4 }}><input value={m.model} onChange={(e) => setM(i, { model: e.target.value })} placeholder="text-embedding-3-small" style={{ ...S.inp, minWidth: 200 }} /></td>
+                    <td style={{ padding: 4 }}><input value={m.label} onChange={(e) => setM(i, { label: e.target.value })} placeholder="OpenAI · text-embedding-3-small" style={S.inp} /></td>
+                    <td style={{ padding: 4 }}><input type="number" step="0.01" min="0" value={m.price_in} onChange={(e) => setM(i, { price_in: e.target.value })} style={{ ...S.inp, width: 80 }} /></td>
+                    <td style={{ padding: 4 }}><button style={S.btn} onClick={() => del(i)}>remove</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div style={S.lbl}>Index status</div>
-          <div style={S.status}>
-            <Stat n={status.total} label="chunks" />
-            <Stat n={status.embedded} label="embedded" color="#16a34a" />
-            <Stat n={status.stale} label="stale / other model" color={status.stale ? '#b45309' : undefined} />
-            <Stat n={status.missing} label="not embedded" color={status.missing ? '#b45309' : undefined} />
-            <div style={{ marginLeft: 'auto', ...S.row }}>
-              {reidxMsg ? <span style={S.muted}>{reidxMsg}</span> : (status.stale + status.missing > 0 ? <span style={{ ...S.muted, color: '#b45309' }}>{status.stale + status.missing} to embed</span> : <span style={S.muted}>Up to date</span>)}
-              <button style={S.btnPri} onClick={reindex} disabled={busy === 'r'}>{busy === 'r' ? 'Reindexing…' : '↻ Reindex'}</button>
-            </div>
+          <div style={{ ...S.row, marginTop: 10 }}>
+            <button style={S.btn} onClick={add}>+ Add model</button>
+            <button style={S.btnPri} onClick={save}>Save models</button>
+            {msg && busy !== 'r' ? <span style={S.ok}>{msg}</span> : null}{err ? <span style={S.err}>{err}</span> : null}
           </div>
-          {!st.embeddings_enabled ? <div style={S.note}>Embeddings are <b>off</b> (weight 0). You can still Reindex now so it’s ready when you raise the blend.</div> : null}
+          {status ? (
+            <>
+              <div style={S.lbl}>Index status</div>
+              <div style={S.status}>
+                <Stat n={status.total} label="chunks" />
+                <Stat n={status.embedded} label="embedded" color="#16a34a" />
+                <Stat n={status.stale} label="stale / other model" color={status.stale ? '#b45309' : undefined} />
+                <Stat n={status.missing} label="not embedded" color={status.missing ? '#b45309' : undefined} />
+                <div style={{ marginLeft: 'auto', ...S.row }}>
+                  {busy ? <span style={S.muted}>{msg}</span> : (status.stale + status.missing > 0 ? <span style={{ ...S.muted, color: '#b45309' }}>{status.stale + status.missing} to embed</span> : <span style={S.muted}>Up to date</span>)}
+                  <button style={S.btn} onClick={() => reindex(true)} disabled={!!busy} title="Re-embed every chunk (even already-embedded ones) to backfill embedding tokens + cost. Embeddings are cheap.">{busy === 'f' ? 'Re-embedding…' : '↻ Re-embed all (cost)'}</button>
+                  <button style={S.btnPri} onClick={() => reindex(false)} disabled={!!busy}>{busy === 'r' ? 'Reindexing…' : '↻ Reindex'}</button>
+                </div>
+              </div>
+            </>
+          ) : null}
         </>
       )}
     </Collapse>
@@ -283,7 +331,7 @@ export default function KnowledgeAdminSection() {
   const items = [
     { key: 'queue', node: <QueueAccess /> },
     { key: 'retrieval', node: <RetrievalBlendCard r={r} /> },
-    { key: 'embedding', node: <EmbeddingCard r={r} /> },
+    { key: 'embedding', node: <EmbeddingRegistry /> },
     { key: 'allowlist', node: <AllowlistCard r={r} /> },
     { key: 'models', node: <ModelRegistry /> },
   ];

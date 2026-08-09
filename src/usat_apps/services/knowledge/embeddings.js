@@ -55,15 +55,17 @@ function blend(keywordScores, semanticScores, weight) {
   return out;
 }
 
-// ---- provider call (impure) — OpenAI embeddings. Returns Float32Array[] aligned to `texts`. ----
-// opts: { model, api_key, base_url?, dim?, fetch? }. Throws on failure so callers can fall back to keyword.
-async function embed_texts(texts, opts) {
+// ---- provider call (impure) — OpenAI embeddings. Returns { vectors: Float32Array[] aligned to `texts`,
+// tokens: total input tokens billed (usage.total_tokens), model }. Throws on failure so callers can fall
+// back to keyword. This token-aware form powers embedding-cost tracking. ----
+// opts: { model, api_key, base_url?, dim?, fetch? }.
+async function embed_batch(texts, opts) {
   const o = opts || {};
   const list = (texts || []).map(function (t) { return String(t == null ? '' : t); });
-  if (!list.length) return [];
+  const model = o.model || 'text-embedding-3-small';
+  if (!list.length) return { vectors: [], tokens: 0, model: model };
   const key = o.api_key || process.env.OPENAI_API_KEY || process.env.OPENAI_KEY;
   if (!key) throw new Error('embed_texts: no OpenAI API key');
-  const model = o.model || 'text-embedding-3-small';
   const url = (o.base_url || 'https://api.openai.com/v1').replace(/\/+$/, '') + '/embeddings';
   const doFetch = o.fetch || (typeof fetch === 'function' ? fetch : null);
   if (!doFetch) throw new Error('embed_texts: fetch unavailable');
@@ -80,7 +82,12 @@ async function embed_texts(texts, opts) {
   // Preserve request order (API returns an index per item).
   const byIndex = [];
   data.forEach(function (d) { byIndex[d.index != null ? d.index : byIndex.length] = Float32Array.from(d.embedding || []); });
-  return list.map(function (_, i) { return byIndex[i] || null; });
+  const usage = (json && json.usage) || {};
+  const tokens = Number(usage.total_tokens != null ? usage.total_tokens : usage.prompt_tokens) || 0;
+  return { vectors: list.map(function (_, i) { return byIndex[i] || null; }), tokens: tokens, model: model };
 }
 
-module.exports = { to_buffer, from_buffer, cosine, minmax, blend, embed_texts };
+// Vectors-only convenience (backward compatible) — Float32Array[] aligned to `texts`.
+async function embed_texts(texts, opts) { return (await embed_batch(texts, opts)).vectors; }
+
+module.exports = { to_buffer, from_buffer, cosine, minmax, blend, embed_texts, embed_batch };

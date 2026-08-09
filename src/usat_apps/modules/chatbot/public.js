@@ -189,7 +189,7 @@ function mount(app) {
           try {
             if (b.intro && turn === 0) await convo_store.log_turn(Object.assign({}, base, { turn: 0, role: 'bot', text: String(b.intro).slice(0, MAX_MSG) }));
             await convo_store.log_turn(Object.assign({}, base, { turn: turn, role: 'user', text: message }));
-            await convo_store.log_turn(Object.assign({}, base, { turn: turn, role: 'bot', text: hit.answer, grounded: hit.grounded, latency_ms: 0, cached: true }));
+            await convo_store.log_turn(Object.assign({}, base, { turn: turn, role: 'bot', text: hit.answer, grounded: hit.grounded, latency_ms: 0, prompt_tokens: 0, completion_tokens: 0, cost_usd: 0, cached: true }));
           } catch (e) { /* logging must never break the widget */ }
         })();
         return;
@@ -214,16 +214,19 @@ function mount(app) {
       const out = ai.norm_completion(raw, model);
       const answer = (out && out.text ? String(out.text).trim() : '');
       const grounded = !!(knowledge && knowledge.length);
+      const usage = out.usage || {};
+      const ptok = Number(usage.prompt_tokens) || 0, ctok = Number(usage.completion_tokens) || 0;
+      const cost_usd = ai.cost_for(out.model || model, ptok, ctok);   // shared per-model pricing → the metrics panel
 
       res.json({ ok: true, answer: answer, conversation_id: conversation_id });
       if (cacheable && answer) cache_put(ckey, answer, grounded);   // remember first-turn answers for the TTL window
 
       // One concise line per served turn — printed by WHICHEVER server mounts this router (the platform
       // :8022 today; the dedicated :8024 if the proxy is routed there). Metadata only — no visitor message
-      // or answer TEXT is logged (lengths + timing + grounding), so it's PII-safe and light.
+      // or answer TEXT is logged (lengths + timing + grounding + tokens + cost), so it's PII-safe and light.
       console.log('[' + new Date().toISOString() + '] public-chatbot ask  q="' + queue + '" turn=' + turn +
-                  ' grounded=' + (grounded ? 'yes' : 'no') + ' ' + latency_ms + 'ms ans=' + answer.length + 'ch' +
-                  (IS_TEST ? ' test' : ''));
+                  ' grounded=' + (grounded ? 'yes' : 'no') + ' ' + latency_ms + 'ms ans=' + answer.length + 'ch ' +
+                  ptok + '/' + ctok + 'tok $' + cost_usd.toFixed(4) + (IS_TEST ? ' test' : ''));
 
       // Fire-and-forget logging (never blocks the response): intro (first turn) -> user -> bot, in order.
       const base = { conversation_id: conversation_id, channel: pc.channel, queue: queue, actor: null, is_test: IS_TEST };
@@ -234,6 +237,7 @@ function mount(app) {
           await convo_store.log_turn(Object.assign({}, base, {
             turn: turn, role: 'bot', text: answer, provider: provider, model: out.model || model,
             grounded: grounded, knowledge_chars: (knowledge && knowledge.length) || 0, corrections_used: corr.length, latency_ms: latency_ms,
+            prompt_tokens: ptok, completion_tokens: ctok, cost_usd: cost_usd,
           }));
         } catch (e) { /* logging must never break the widget */ }
       })();

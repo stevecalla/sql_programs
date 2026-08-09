@@ -44,6 +44,8 @@ export const api = {
   publicBots: () => req(P + '/public-bots'),
   savePublicBot: (payload) => req(P + '/public-bots', { method: 'POST', body: JSON.stringify(payload) }),
   deletePublicBot: (handle) => req(P + '/public-bots/delete', { method: 'POST', body: JSON.stringify({ handle }) }),
+  // usage + cost metrics (opts: { days, test }) — powers the Metrics page
+  metrics: (opts) => req(P + '/metrics' + qs(opts || {})),
   // settings / models
   aiModels: () => req(P + '/ai/models'),
   settings: () => req(P + '/settings'),
