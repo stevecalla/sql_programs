@@ -42,6 +42,17 @@ module.exports = {
   // prefix — so pathRewrite re-adds it. MUST be listed before the '/' catch-all so it matches first.
   '/api/event-coi':         { target: 'http://127.0.0.1:8023', health: '/api/event-coi/health', host: 'app', pathRewrite: { '^/': '/api/event-coi/' } },
 
+  // PUBLIC CHATBOT (embeddable widget) — OPTIONAL dedicated backend (port 8024), same isolation idea as
+  // event-coi above: an unauthenticated, internet-facing process that serves ONLY the public widget routes
+  // (/api/public-chatbot/widget, /widget.js, /ask — from modules/chatbot/public.js).
+  //   INACTIVE by default. While this line stays commented, /api/public-chatbot/* falls through to the '/'
+  //   catch-all below and is served by the platform (:8022) — which is exactly how the widget works today.
+  //   To move public widget traffic onto the dedicated :8024 process: UNCOMMENT this line, then
+  //   `npm run pm2_reload_proxy`. After that, :8024 must stay running (pm2_start_public_chatbot) or both the
+  //   public widget AND the in-app preview panel break. To roll back: re-comment + reload → back to :8022.
+  //   No pathRewrite needed — :8024 serves these full paths directly (unlike event-coi). Must sit ABOVE '/'.
+  '/api/public-chatbot':    { target: 'http://127.0.0.1:8024', health: '/api/status', host: 'app' },
+
   // usat_apps platform (React SPA, port 8022) — the app front door + Ops console. Built at root base '/'.
   // catch all => handles /reporting & /ops; see src\usat_apps\web\src\nav.js
   '/':                      { target: 'http://127.0.0.1:8022', health: '/api/status', host: 'app' },
