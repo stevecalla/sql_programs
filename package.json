@@ -4,9 +4,12 @@
   "description": "",
   "main": "query_AllPayments.js",
   "scripts": {
+    "//=== MENUS (shared kit) ===": "",
+    "lint_menus": "node utilities/menu/lint_menus.js",
+
     "//=== PM2: ADMIN & FLEET ===": "",
     "test": "echo \"Error: no test specified\" && exit 1",
-    
+
     "pm2_monitor": "npx pm2 monit",
     "pm2_list": "npx pm2 list",
     "pm2_restart_all": "npx pm2 restart all",

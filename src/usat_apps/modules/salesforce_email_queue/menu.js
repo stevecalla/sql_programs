@@ -47,6 +47,7 @@ const CMD_SECTIONS = registry.SECTIONS.map((s) => ({
   color: String(s.color || 'CYAN').toUpperCase(),
   items: s.items.map((it) => {
     const clone = Object.assign({}, it);
+    delete clone.id;   // the kit numbers by position — never carry the registry's id
     if (clone.params) clone.run = (ctx) => run_form_exec(ctx, clone);
     return clone;
   }),
