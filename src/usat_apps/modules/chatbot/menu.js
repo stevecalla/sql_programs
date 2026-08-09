@@ -31,6 +31,7 @@ const PREFS_FILE = path.join(__dirname, '.menu_prefs.json');
 const PLATFORM_PORT = 8022;   // built server (single port: API + UI)
 const DEV_PORT = 5175;        // Vite dev server — proxies /api to :8022
 const PROXY_PORT = 8000;      // reverse proxy (usat-app host)
+const PUBLIC_PORT = 8024;     // dedicated public-chatbot server (server_public_chatbot_8024.js)
 const PUBLIC_BASE = '/api/public-chatbot';
 
 const RESET = '\x1b[0m', BOLD = '\x1b[1m', DIM = '\x1b[2m';
@@ -127,6 +128,11 @@ const SECTIONS = [
     { id: 17, label: 'Platform status (:8022)', desc: 'GET :8022/api/status — the server both surfaces mount on.', hit: { method: 'GET', port: PLATFORM_PORT, pathname: '/api/status' }, cli: 'curl http://localhost:8022/api/status' },
     { id: 18, label: 'Dev proxy status (:5175 → :8022)', desc: 'Confirms Vite is up and proxying /api to :8022.', hit: { method: 'GET', port: DEV_PORT, pathname: '/api/status' }, cli: 'curl http://localhost:5175/api/status' },
     { id: 19, label: 'Open via proxy (:8000)', desc: 'The widget through the :8000 reverse proxy (usat-app host).', open: `http://localhost:${PROXY_PORT}${PUBLIC_BASE}/widget`, cli: `open http://localhost:8000${PUBLIC_BASE}/widget` },
+  ]},
+  { label: 'DEDICATED PUBLIC SERVER (:8024)', color: MAGENTA, items: [
+    { id: 25, label: 'Start dedicated public chatbot server (:8024)', desc: 'Runs server_public_chatbot_8024.js — the isolated, unauthenticated public-widget server. Blocks; Ctrl-C to stop. Optional: the platform :8022 already serves these routes for the in-app preview.', bin: 'npm', argv: ['run', 'public_chatbot_server'], cli: 'npm run public_chatbot_server' },
+    { id: 26, label: 'Dedicated server status (:8024)', desc: 'GET :8024/api/status — confirms the dedicated server is up.', hit: { method: 'GET', port: PUBLIC_PORT, pathname: '/api/status' }, cli: 'curl http://localhost:8024/api/status' },
+    { id: 27, label: 'GET widget.js on (:8024)', desc: 'The GTM loader served by the dedicated server (expect application/javascript).', hit: { method: 'GET', port: PUBLIC_PORT, pathname: `${PUBLIC_BASE}/widget.js` }, cli: `curl -i http://localhost:8024${PUBLIC_BASE}/widget.js` },
   ]},
   { label: 'KNOWLEDGE (shared with Email Queue)', color: YELLOW, items: [
     { id: 20, label: 'Pull corrections from prod', desc: 'SSH to prod, export corrections, copy back, import here (idempotent). Needs PROD_SSH in .env. Shared brain.', bin: 'node', argv: ['src/usat_apps/knowledge_sync/pull_corrections.js'], cli: 'node src/usat_apps/knowledge_sync/pull_corrections.js' },

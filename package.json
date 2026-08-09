@@ -194,6 +194,17 @@
     "show_usat_apps": "npx pm2 show usat_apps",
     "restart_usat_apps": "npx pm2 restart usat_apps",
 
+    "//=== PUBLIC CHATBOT — dedicated embeddable widget server (port 8024) ===": "",
+    "public_chatbot_server": "node server_public_chatbot_8024.js",
+    "public_chatbot_dev": "nodemon --watch server_public_chatbot_8024.js --watch src/usat_apps/modules/chatbot --watch src/usat_apps/services/knowledge --watch src/usat_apps/services/corrections --watch src/usat_apps/services/ai --ext js server_public_chatbot_8024.js",
+    "public_chatbot_deploy": "(npm run restart_public_chatbot || npm run pm2_start_public_chatbot) && npx pm2 save",
+    "pm2_start_public_chatbot": "npx pm2 start /home/usat-server/development/usat/sql_programs/server_public_chatbot_8024.js --name usat_public_chatbot --no-autorestart --max-memory-restart 2G --node-args=\"--expose-gc\"",
+    "pm2_logs_public_chatbot": "npx pm2 logs usat_public_chatbot",
+    "stop_public_chatbot": "npx pm2 stop usat_public_chatbot",
+    "delete_public_chatbot": "npx pm2 delete usat_public_chatbot",
+    "show_public_chatbot": "npx pm2 show usat_public_chatbot",
+    "restart_public_chatbot": "npx pm2 restart usat_public_chatbot",
+
     "//=== EVENT COI (Insurance) — dedicated Playwright submission backend (port 8023) ===": "",
     "event_coi_server": "node server_event_coi_8023.js",
     "event_coi_dev": "nodemon --watch server_event_coi_8023.js --watch src/usat_apps/modules/event_coi --ext js server_event_coi_8023.js",
