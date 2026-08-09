@@ -38,7 +38,37 @@ function norm_completion(raw, fallback_model) {
 
 async function safe_text(res) { try { return await res.text(); } catch (e) { return ''; } }
 
-// complete({ provider, model, system, prompt, env, transport })
+// Retry policy for transient upstream failures — provider 429 rate-limits, 5xx, and network blips. A burst
+// of concurrent users hitting OpenAI's per-minute limit no longer fails outright; it retries with backoff.
+// Non-retryable: missing API key, and 4xx other than 429 (a genuine bad request won't get better on retry).
+// Backoff is exponential + jitter and honors a Retry-After header when the provider sends one.
+// Default 2 retries (3 attempts total); AI_MAX_RETRIES overrides. The final error keeps .status for callers.
+function is_retryable(err) {
+  if (!err || err.code === 'NO_API_KEY') return false;
+  const s = err.status;
+  if (s === 429) return true;
+  if (typeof s === 'number' && s >= 500 && s <= 599) return true;
+  if (s === undefined) return true;   // transport/network error (fetch threw) — worth a retry
+  return false;
+}
+async function with_retry(fn, retries) {
+  const max = (retries != null && !isNaN(retries) && Number(retries) >= 0) ? Number(retries) : 2;
+  let attempt = 0;
+  for (;;) {
+    try { return await fn(); }
+    catch (e) {
+      if (attempt >= max || !is_retryable(e)) throw e;
+      let wait = 300 * Math.pow(2, attempt);                 // 300ms, 600ms, 1200ms, …
+      const ra = Number(e && e.retry_after);
+      if (!isNaN(ra) && ra > 0) wait = Math.min(ra * 1000, 8000);   // honor Retry-After (capped at 8s)
+      wait = Math.round(wait + Math.random() * 200);         // jitter to avoid a thundering herd
+      await new Promise(function (r) { setTimeout(r, wait); });
+      attempt += 1;
+    }
+  }
+}
+
+// complete({ provider, model, system, prompt, env, transport, retries })
 async function complete(opts) {
   const o = opts || {};
   const p = resolve(o.provider);
@@ -48,9 +78,9 @@ async function complete(opts) {
   const transport = o.transport || (typeof fetch !== 'undefined' ? fetch : null);
   if (!api_key) { const e = new Error(p.label + ' API key missing (' + p.env_key + ')'); e.code = 'NO_API_KEY'; throw e; }
   if (!transport) throw new Error('No fetch transport available');
-  const out = p.id === 'openai'
-    ? await openai_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport })
-    : await anthropic_complete({ api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport });
+  const args = { api_key: api_key, model: model, system: o.system, prompt: o.prompt, images: o.images, transport: transport };
+  const call = function () { return p.id === 'openai' ? openai_complete(args) : anthropic_complete(args); };
+  const out = await with_retry(call, (o.retries != null ? o.retries : env.AI_MAX_RETRIES));
   // Uniform shape: { text, usage:{prompt_tokens,completion_tokens}|null, model }. Callers may treat
   // the return as a string (legacy) or read .text/.usage/.model (cost tracking) — see ai/respond.js.
   return { text: out.text, usage: out.usage || null, model: model };
@@ -69,7 +99,7 @@ async function openai_complete(a) {
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + a.api_key },
     body: JSON.stringify({ model: a.model, temperature: 0.2, messages: [{ role: 'system', content: a.system || '' }, { role: 'user', content: openai_user_content(a.prompt, a.images) }] })
   });
-  if (!res.ok) throw new Error('OpenAI HTTP ' + res.status + ': ' + (await safe_text(res)));
+  if (!res.ok) { const e = new Error('OpenAI HTTP ' + res.status + ': ' + (await safe_text(res))); e.status = res.status; e.retry_after = (res.headers && res.headers.get) ? res.headers.get('retry-after') : null; throw e; }
   const j = await res.json();
   const text = ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '').trim();
   const u = j.usage || {};
@@ -89,7 +119,7 @@ async function anthropic_complete(a) {
     headers: { 'Content-Type': 'application/json', 'x-api-key': a.api_key, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({ model: a.model, max_tokens: 1024, system: a.system || '', messages: [{ role: 'user', content: anthropic_user_content(a.prompt, a.images) }] })
   });
-  if (!res.ok) throw new Error('Anthropic HTTP ' + res.status + ': ' + (await safe_text(res)));
+  if (!res.ok) { const e = new Error('Anthropic HTTP ' + res.status + ': ' + (await safe_text(res))); e.status = res.status; e.retry_after = (res.headers && res.headers.get) ? res.headers.get('retry-after') : null; throw e; }
   const j = await res.json();
   const text = ((j.content && j.content[0] && j.content[0].text) || '').trim();
   const u = j.usage || {};
