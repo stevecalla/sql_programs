@@ -183,8 +183,14 @@ function mount(app) {
         } catch (e) { /* logging must never break the widget */ }
       })();
     } catch (e) {
-      console.log('[' + new Date().toISOString() + '] public-chatbot ask  ERROR: ' + (e && e.message ? e.message : e));
-      res.status(502).json({ ok: false, error: 'Sorry — something went wrong.' });
+      // After the AI layer's retries are exhausted, a 429/5xx means upstream is overloaded — tell the visitor
+      // it's busy (retryable) rather than a hard error, so they try again in a moment.
+      const s = e && e.status;
+      const busy = s === 429 || (typeof s === 'number' && s >= 500 && s <= 599);
+      console.log('[' + new Date().toISOString() + '] public-chatbot ask  ' + (busy ? 'BUSY' : 'ERROR') + ': ' + (e && e.message ? e.message : e));
+      res.status(busy ? 503 : 502).json({ ok: false, error: busy
+        ? 'The assistant is busy right now — please try again in a moment.'
+        : 'Sorry — something went wrong.' });
     }
   });
 }
