@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './lib/api.js';
 import { track } from '../../lib/track.js';
+import RichText from './lib/richText.jsx';   // shared bot-message formatter (bold, links) — same across all chatbot views
 
 function newConversationId() {
   try { if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID(); } catch (e) { /* fall through */ }
@@ -69,7 +70,7 @@ export default function ChatBubble({ queue, onLogged }) {
             <button className="cb-x" onClick={() => setOpen(false)} aria-label="Close">×</button>
           </div>
           <div className="cb-body" ref={bodyRef}>
-            {msgs.map((m, i) => <div key={i} className={'cb-msg ' + m.role}>{m.text}</div>)}
+            {msgs.map((m, i) => <RichText key={i} className={'cb-msg ' + m.role} text={m.text} plain={m.role !== 'bot'} />)}
             {sending && <div className="cb-msg bot cb-typing">…</div>}
           </div>
           <div className="cb-input">

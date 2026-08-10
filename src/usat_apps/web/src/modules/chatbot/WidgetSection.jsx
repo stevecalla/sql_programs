@@ -8,7 +8,7 @@ import './chatbot.css';
 // it) and a right rail. Each PUBLISHED bot is addressed by an opaque handle; the selected bot's config
 // (queue / channel / theme / bubble / color / pages) lives HERE so the preview, the styling cards, the GTM
 // trigger helper, and the embed all stay in lockstep. The embed carries only the handle (server-resolved).
-const DEFAULT_COLOR = '#152C53';
+const DEFAULT_COLOR = '#002A5C';
 export default function WidgetSection() {
   const [bots, setBots] = useState({});
   const [queues, setQueues] = useState([]);

@@ -56,13 +56,39 @@ function mount(app) {
     } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
   });
   app.get(P + '/runs', gate, async function (req, res) {
-    try { res.json({ ok: true, runs: await store.list_runs(Number(req.query.limit) || 12) }); }
+    try { res.json({ ok: true, runs: await store.list_runs(Number(req.query.limit) || 12, req.query.queue || undefined) }); }
     catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
   });
   app.post(P + '/rerun', gate, async function (req, res) {
     const b = req.body || {};
     try { res.json(Object.assign({ ok: true }, await runner.rerun_failures(String(b.run_id || ''), { answer_model: b.answer_model, judge_model: b.judge_model }))); }
     catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || 'rerun failed' }); }
+  });
+  // AI-draft a correction for a failed question (human approves it → live). Grounded in current knowledge.
+  app.post(P + '/suggest-correction', gate, async function (req, res) {
+    const b = req.body || {};
+    try {
+      let queue = b.queue;
+      if (!queue && b.run_id) { const run = await store.get_run(String(b.run_id)); queue = run && run.queue; }
+      const r = await runner.suggest_correction(queue, String(b.question || ''), b.answer, b.reason);
+      res.json({ ok: true, suggestion: r.suggestion, sources: r.sources });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || 'suggest failed' }); }
+  });
+  // Stop a running stress test — keeps whatever has been graded so far.
+  app.post(P + '/stop', gate, function (req, res) {
+    const b = req.body || {};
+    try { res.json({ ok: true, stopped: runner.cancel(String(b.run_id || '')) }); }
+    catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || 'stop failed' }); }
+  });
+  // Human override of the judge's verdict on one result ('correct' | 'wrong' | null to reset). Recomputes the run.
+  app.post(P + '/result/override', gate, async function (req, res) {
+    const b = req.body || {};
+    try {
+      const r = await store.set_override(b.id, b.verdict, b.score);
+      const run = r.run_id ? await store.get_run(r.run_id) : null;
+      const results = r.run_id ? await store.results_for(r.run_id, {}) : [];
+      res.json({ ok: true, run: run, results: results });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || 'override failed' }); }
   });
 
   // ---- question bank ----

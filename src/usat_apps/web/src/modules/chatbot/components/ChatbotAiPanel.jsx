@@ -238,10 +238,10 @@ const BUBBLE_OPTS = [
 
 // Bot accent color — USAT blue by default. Swatches + a hex box drive the preview and the embed.
 // Kept in sync with DEFAULT_ACCENT in modules/chatbot/widget_page.js.
-const DEFAULT_COLOR = '#152C53';
+const DEFAULT_COLOR = '#002A5C';
 const COLOR_SWATCHES = [
-  ['#152C53', 'USAT blue'],
-  ['#D12027', 'USAT red'],
+  ['#002A5C', 'USAT blue'],
+  ['#A80C34', 'USAT red'],
   ['#0E7490', 'Teal'],
   ['#15803D', 'Green'],
   ['#6D28D9', 'Purple'],
@@ -275,7 +275,7 @@ export function WidgetColorCard({ color, setColor }) {
         })}
       </div>
       <div className="cbx-row-between" style={{ gap: 6 }}>
-        <input className="cbx-input" style={{ maxWidth: 130 }} value={hex} spellCheck={false} placeholder="#152C53"
+        <input className="cbx-input" style={{ maxWidth: 130 }} value={hex} spellCheck={false} placeholder="#002A5C"
           onChange={function (e) { setHex(e.target.value); }} onKeyDown={function (e) { if (e.key === 'Enter') apply(); }} />
         <input type="color" value={picker} title="Color picker"
           onChange={function (e) { setColor(e.target.value.toUpperCase()); }}

@@ -20,7 +20,7 @@ const kb_data_dir = require('../../services/knowledge/data_dir');   // shared co
 
 const PUBLIC_QUEUE = process.env.CHATBOT_PUBLIC_QUEUE || 'Team USA';           // default / fallback only
 const CHANNEL = process.env.CHATBOT_PUBLIC_CHANNEL || 'web-widget';            // default / fallback only
-const DEF_COLOR = '#152C53';
+const DEF_COLOR = '#002A5C';
 
 // Multi-bot registry. Each PUBLISHED bot is addressed by an opaque handle (data-widget="teamusa"); the
 // handle resolves — SERVER-SIDE — to its queue/channel + default styling. The embed carries only the handle,

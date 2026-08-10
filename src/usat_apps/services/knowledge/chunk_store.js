@@ -207,7 +207,10 @@ function knowledge_from_chunks(selected) {
   if (!list.length) return '';
   const parts = ['=== KNOWLEDGE / CONTEXT (retrieved, most relevant first) ==='];
   list.forEach(function (c) {
-    const label = (c.source_title || c.source_ref || 'source') + (c.category ? ' › ' + c.category : '');
+    // Include the source URL in the label ("title (https://…)") when the chunk came from a web page, so the model
+    // can CITE it as a Markdown link instead of omitting or inventing one. File chunks (non-URL refs) show title only.
+    const url = (c.source_ref && /^https?:\/\//i.test(String(c.source_ref))) ? String(c.source_ref) : '';
+    const label = (c.source_title || c.source_ref || 'source') + (url ? ' (' + url + ')' : '') + (c.category ? ' › ' + c.category : '');
     parts.push('-- ' + label + ' --\n' + (c.text || ''));
   });
   return parts.join('\n\n');

@@ -63,7 +63,7 @@ function DEF_BOT() {
   return {
     queue: process.env.CHATBOT_PUBLIC_QUEUE || DEFAULT_QUEUE,
     channel: process.env.CHATBOT_PUBLIC_CHANNEL || 'web-widget',
-    theme: 'light', bubble: 'triathlon', color: '#152C53', pages: [],
+    theme: 'light', bubble: 'triathlon', color: '#002A5C', pages: [],
   };
 }
 // The published-bots registry (config.public_bots), keyed by handle. Migrates the legacy single config
@@ -115,8 +115,12 @@ function build_system(queue, knowledge, corr, mode) {
   const shared = [
     '- Use today\'s date to resolve "latest", "next", "upcoming", "most recent", or "past": read the dates in',
     '  the KNOWLEDGE and pick the item on the correct side of today, and state the specific date you chose.',
-    '- When the KNOWLEDGE contains a relevant link (a URL, often shown as "label (https://…)"), include it as',
-    '  a Markdown link [label](https://…). Only use URLs that appear in the KNOWLEDGE — never invent one.',
+    '- LINKS: if the KNOWLEDGE contains a relevant URL (usually shown as "label (https://…)"), you MUST include it',
+    '  in your answer as a Markdown link [label](https://…). Never point a member to a resource or say "you can',
+    '  register/watch/find it here" without the actual link when its URL is present in the KNOWLEDGE.',
+    '- Only use URLs that appear verbatim in the KNOWLEDGE. NEVER invent, guess, shorten, or modify a URL. If the',
+    '  KNOWLEDGE has no URL for what is asked, do not provide a link and do not imply one exists — say you don\'t',
+    '  have that link and point to USA Triathlon.',
   ];
   const rules = (broad ? [
     '- Prefer the KNOWLEDGE below (and CORRECTIONS) — treat them as authoritative for this program.',
@@ -232,7 +236,7 @@ function mount(app) {
       channel: (String(b.channel || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 60)) || 'web-widget',
       theme: b.theme === 'dark' ? 'dark' : 'light',
       bubble: String(b.bubble || 'triathlon'),
-      color: (/^#[0-9a-fA-F]{6}$/.test(String(b.color || '')) ? String(b.color) : '#152C53'),
+      color: (/^#[0-9a-fA-F]{6}$/.test(String(b.color || '')) ? String(b.color) : '#002A5C'),
       pages: Array.isArray(b.pages) ? b.pages.map(function (p) { return String(p || '').trim(); }).filter(Boolean).slice(0, 50) : [],
     };
     let cfg = {}; try { cfg = kb_data_dir.read_config() || {}; } catch (e) { cfg = {}; }

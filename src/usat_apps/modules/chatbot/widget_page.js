@@ -22,8 +22,8 @@ function fab_inner(style) {
 
 // Accent color. USAT blue by default; a valid #RGB/#RRGGBB `color` param overrides it (bubble + header +
 // send button + user message). We lighten it for dark mode so a dark brand color still reads on a dark bg.
-const DEFAULT_ACCENT = '#152C53';   // USAT blue
-const USAT_RED = '#D12027';         // USA Triathlon red — used by the 'usat' bubble style (red closed -> blue open)
+const DEFAULT_ACCENT = '#002A5C';   // USAT blue
+const USAT_RED = '#A80C34';         // USA Triathlon red — used by the 'usat' bubble style (red closed -> blue open)
 function norm_hex(s) {
   var v = String(s == null ? '' : s).trim();
   if (v && v.charAt(0) !== '#') v = '#' + v;
@@ -134,7 +134,7 @@ function render(opts) {
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     '<title>USA Triathlon assistant</title>',
     '<style>',
-    ':root{--bg:#fff;--ink:#1f2937;--dim:#6b7280;--line:#e4e7ec;--accent:#152C53;--bot:#f3f4f6;--user:#152C53;--userink:#fff;}',
+    ':root{--bg:#fff;--ink:#1f2937;--dim:#6b7280;--line:#e4e7ec;--accent:#002A5C;--bot:#f3f4f6;--user:#002A5C;--userink:#fff;}',
     '[data-theme="dark"]{--bg:#0f172a;--ink:#e5e7eb;--dim:#9aa4b2;--line:#334155;--accent:#3A5A8C;--bot:#1e293b;--user:#3A5A8C;--userink:#fff;}',
     '*{box-sizing:border-box}',
     'html,body{margin:0;height:100%;background:transparent;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink)}',
