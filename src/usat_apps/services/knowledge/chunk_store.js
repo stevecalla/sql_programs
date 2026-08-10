@@ -297,7 +297,7 @@ async function embedding_cost_summary() {
 }
 
 module.exports = {
-  CHUNKS, SOURCES, REPORTING_TZ, ensure,
+  CHUNKS, SOURCES, REPORTING_TZ, DDL_CHUNKS, DDL_SOURCES, ensure,
   upsert_source, replace_source_chunks, list_sources, list_chunks, set_excluded, remove_source,
   select_chunks, knowledge_from_chunks, stats,
   candidates, set_chunk_embedding, chunks_missing_embedding, chunks_all_embeddable, chunks_for_source, embedding_status, embedding_cost_summary,

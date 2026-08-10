@@ -519,4 +519,4 @@ function mount(app) {
   });
 }
 
-module.exports = { mount };
+module.exports = { mount, build_system };   // build_system exported so the eval harness answers identically

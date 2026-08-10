@@ -4,6 +4,7 @@ import { metricsTestOn, setMetricsTest } from '../../../lib/track.js';
 import ChartCard from '../components/ChartCard.jsx';
 import AskData from '../components/AskData.jsx';
 import MetricsControls from '../../../components/MetricsControls.jsx';
+import SqlReference from '../../../components/SqlReference.jsx';
 import { useMetricsTheme } from '../../../lib/useMetricsTheme.js';
 import { formatMtn } from '../../../lib/mtnDate.js';
 
@@ -351,6 +352,9 @@ export default function EmailQueueMetrics({ user }) {
           </tbody>
         </table>
       </div>
+
+      {/* SQL reference — DDL to recreate the table + the exact metric queries, runnable by hand */}
+      <SqlReference schema={rep.schema} queries={rep.queries} title="SQL reference" />
 
       {/* health footer */}
       <p className="muted small" style={{ marginTop: 12 }}>

@@ -46,6 +46,18 @@ export const api = {
   deletePublicBot: (handle) => req(P + '/public-bots/delete', { method: 'POST', body: JSON.stringify({ handle }) }),
   // usage + cost metrics (opts: { days, test }) — powers the Metrics page
   metrics: (opts) => req(P + '/metrics' + qs(opts || {})),
+  // stress-test / training harness
+  evalRun: (payload) => req(P + '/eval/run', { method: 'POST', body: JSON.stringify(payload || {}) }),
+  evalStatus: (run_id) => req(P + '/eval/status' + qs({ run_id })),
+  evalRunDetail: (run_id) => req(P + '/eval/run' + qs({ run_id })),
+  evalLast: () => req(P + '/eval/last'),
+  evalRuns: (limit) => req(P + '/eval/runs' + qs({ limit })),
+  evalRerun: (run_id) => req(P + '/eval/rerun', { method: 'POST', body: JSON.stringify({ run_id }) }),
+  evalQuestions: (bucket) => req(P + '/eval/questions' + qs({ bucket })),
+  evalAddQuestions: (payload) => req(P + '/eval/questions', { method: 'POST', body: JSON.stringify(payload) }),
+  evalUpdateQuestion: (payload) => req(P + '/eval/questions/update', { method: 'POST', body: JSON.stringify(payload) }),
+  evalDeleteQuestion: (id) => req(P + '/eval/questions/delete', { method: 'POST', body: JSON.stringify({ id }) }),
+  evalPromote: (payload) => req(P + '/eval/promote', { method: 'POST', body: JSON.stringify(payload) }),
   // settings / models
   aiModels: () => req(P + '/ai/models'),
   settings: () => req(P + '/settings'),

@@ -86,8 +86,38 @@ async function report(opts) {
   try { embedding = await chunk_store.embedding_cost_summary(); } catch (e) { /* index empty / not migrated — show zeros */ }
 
   const answers = n0(ov.answers), grounded = n0(ov.grounded_answers), conversations = n0(ov.conversations);
+
+  // Reference: the exact metric queries behind this page, as runnable SQL with the CURRENT window/test filter
+  // already substituted (no ? params) so an analyst can copy one and pull the number by hand. Mirrors the
+  // queries executed above; the "Table reference" section on the page renders these.
+  const wlit = 'WHERE created_at_utc >= (UTC_TIMESTAMP() - INTERVAL ' + days + ' DAY)' +
+    (opts.is_test === 0 ? "\n  AND is_test = 0" : opts.is_test === 1 ? "\n  AND is_test = 1" : '');
+  const queries = [
+    { label: 'Overview — conversations / questions / answers / grounded / avg latency',
+      sql: "SELECT COUNT(DISTINCT conversation_id) AS conversations,\n       SUM(role='user') AS questions,\n       SUM(role='bot') AS answers,\n       SUM(role='bot' AND grounded=1) AS grounded_answers,\n       AVG(CASE WHEN role='bot' THEN latency_ms END) AS avg_latency_ms\nFROM " + TABLE + "\n" + wlit + ";" },
+    { label: 'AI spend — total + real/test split + tokens + call counts',
+      sql: "SELECT SUM(cost_usd) AS total_usd,\n       SUM(CASE WHEN is_test=0 THEN cost_usd ELSE 0 END) AS real_usd,\n       SUM(CASE WHEN is_test=1 THEN cost_usd ELSE 0 END) AS test_usd,\n       SUM(prompt_tokens) AS input_tokens, SUM(completion_tokens) AS output_tokens,\n       SUM(role='bot' AND model IS NOT NULL AND model<>'') AS ai_calls\nFROM " + TABLE + "\n" + wlit + ";" },
+    { label: 'AI cost by model',
+      sql: "SELECT model, COUNT(*) AS calls, SUM(prompt_tokens) AS input_tokens,\n       SUM(completion_tokens) AS output_tokens, SUM(cost_usd) AS cost_usd\nFROM " + TABLE + "\n" + wlit + "\n  AND role='bot' AND model IS NOT NULL AND model<>''\nGROUP BY model ORDER BY cost_usd DESC;" },
+    { label: 'Activity by day (MTN)',
+      sql: "SELECT DATE_FORMAT(created_at_mtn,'%Y-%m-%d') AS day,\n       COUNT(DISTINCT conversation_id) AS conversations,\n       SUM(role='user') AS questions, SUM(role='bot') AS answers,\n       SUM(cost_usd) AS cost_usd\nFROM " + TABLE + "\n" + wlit + "\nGROUP BY day ORDER BY day;" },
+    { label: 'Sources / grounding',
+      sql: "SELECT SUM(role='bot' AND grounded=1) AS grounded,\n       SUM(role='bot' AND (grounded=0 OR grounded IS NULL)) AS deflected,\n       AVG(CASE WHEN role='bot' THEN knowledge_chars END) AS avg_knowledge_chars,\n       AVG(CASE WHEN role='bot' THEN corrections_used END) AS avg_corrections\nFROM " + TABLE + "\n" + wlit + ";" },
+    { label: 'Frequent channels (which bot)',
+      sql: "SELECT channel, COUNT(DISTINCT conversation_id) AS conversations,\n       SUM(role='user') AS questions, SUM(role='bot') AS answers, SUM(cost_usd) AS cost_usd\nFROM " + TABLE + "\n" + wlit + "\n  AND channel IS NOT NULL AND channel<>''\nGROUP BY channel ORDER BY questions DESC;" },
+    { label: 'Most-asked questions',
+      sql: "SELECT MAX(text) AS sample_question, COUNT(*) AS times_asked\nFROM " + TABLE + "\n" + wlit + "\n  AND role='user' AND TRIM(text)<>''\nGROUP BY LOWER(TRIM(text)) ORDER BY times_asked DESC LIMIT 15;" },
+    { label: 'Conversations worked (turns per conversation)',
+      sql: "SELECT conversation_id, MAX(channel) AS channel,\n       SUM(role='user') AS questions, SUM(role='bot') AS answers,\n       SUM(role='bot' AND grounded=1) AS grounded, SUM(cost_usd) AS cost_usd,\n       DATE_FORMAT(MAX(created_at_mtn),'%Y-%m-%d %H:%i') AS last_seen\nFROM " + TABLE + "\n" + wlit + "\n  AND conversation_id IS NOT NULL AND conversation_id<>''\nGROUP BY conversation_id ORDER BY MAX(created_at_utc) DESC LIMIT 50;" },
+    { label: 'Embedding spend — shared knowledge index (not windowed)',
+      sql: "SELECT COALESCE(SUM(embed_cost_usd),0) AS index_cost_usd,\n       COALESCE(SUM(embed_tokens),0) AS tokens,\n       SUM(embedding IS NOT NULL) AS embedded, COUNT(*) AS chunks\nFROM knowledge_chunks WHERE excluded = 0;\n\n-- by embedding model:\nSELECT embed_model, COUNT(*) AS chunks, COALESCE(SUM(embed_tokens),0) AS tokens,\n       COALESCE(SUM(embed_cost_usd),0) AS cost_usd\nFROM knowledge_chunks\nWHERE excluded = 0 AND embedding IS NOT NULL AND embed_model IS NOT NULL AND embed_model<>''\nGROUP BY embed_model ORDER BY cost_usd DESC;" },
+  ];
+
   return {
     embedding: embedding,
+    // Reference SQL rendered on the page: DDL to recreate the tables + the metric queries above.
+    schema: { chatbot_conversations: convo.DDL, knowledge_chunks: chunk_store.DDL_CHUNKS || '' },
+    queries: queries,
     window: {
       days: days,
       is_test: (opts.is_test === 0 || opts.is_test === 1) ? opts.is_test : null,

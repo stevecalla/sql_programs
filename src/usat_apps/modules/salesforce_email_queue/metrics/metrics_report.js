@@ -7,6 +7,7 @@
 const retention = require('../../../../../utilities/analytics/retention');
 const render = require('../../../../../utilities/analytics/report_render');
 const cfg = require('./metrics_config');
+const { query_create_salesforce_email_queue_events_table } = require('../../../../queries/create_drop_db_table/query_create_salesforce_email_queue_events_table');
 
 const T = cfg.TABLE;
 async function q(pool, sql, params) { const [rows] = await pool.query(sql, params || []); return rows; }
@@ -231,6 +232,27 @@ async function build_report(pool, opts) {
     ]
   };
   report.data = data;
+  // Reference: the headline metric queries behind this dashboard, as runnable SQL with the CURRENT window +
+  // test filter already substituted (no ? params) so an analyst can copy one and pull the number by hand.
+  try { report.schema = { [cfg.TABLE]: await query_create_salesforce_email_queue_events_table(cfg.TABLE) }; } catch (e) { report.schema = {}; }
+  const Wlit = '`' + T + '` WHERE app = ' + JSON.stringify(cfg.APP) + ' AND ' + since + test_filter;
+  const AIWlit = Wlit + " AND event_name='ai_call'";
+  report.queries = [
+    { label: 'Event counts by type',
+      sql: 'SELECT event_name, COUNT(*) AS n\nFROM ' + Wlit + '\nGROUP BY event_name ORDER BY n DESC;' },
+    { label: 'Users — unique / new / returning / operators',
+      sql: "SELECT COUNT(DISTINCT visitor_id) AS unique_users,\n       COUNT(DISTINCT CASE WHEN (is_returning IS NULL OR is_returning=0) THEN visitor_id END) AS new_users,\n       COUNT(DISTINCT CASE WHEN is_returning=1 THEN visitor_id END) AS returning_users,\n       COUNT(DISTINCT actor) AS operators\nFROM " + Wlit + "\n  AND event_name='page_view';" },
+    { label: 'AI flow — calls / ok / failed / latency / tokens / cost',
+      sql: "SELECT COUNT(*) AS calls, SUM(ai_ok=1) AS ok, SUM(ai_ok=0) AS failed,\n       AVG(ai_latency_ms) AS avg_ms, MAX(ai_latency_ms) AS max_ms,\n       SUM(ai_grounded=1) AS grounded, SUM(ai_used_images=1) AS with_images,\n       SUM(ai_prompt_tokens) AS input_tokens, SUM(ai_completion_tokens) AS output_tokens,\n       SUM(ai_cost_usd) AS cost_usd\nFROM " + AIWlit + ";" },
+    { label: 'AI cost by model',
+      sql: "SELECT ai_model AS model, COUNT(*) AS calls,\n       SUM(ai_prompt_tokens) AS input_tokens, SUM(ai_completion_tokens) AS output_tokens,\n       SUM(ai_cost_usd) AS cost_usd\nFROM " + AIWlit + "\n  AND ai_model IS NOT NULL AND ai_model<>''\nGROUP BY ai_model ORDER BY cost_usd DESC;" },
+    { label: 'By queue — events / AI calls / threads / cost',
+      sql: "SELECT queue, COUNT(*) AS events,\n       SUM(event_name='ai_call') AS ai_calls,\n       SUM(event_name='thread_opened') AS threads,\n       SUM(ai_cost_usd) AS cost_usd\nFROM " + Wlit + "\n  AND queue IS NOT NULL AND queue<>''\nGROUP BY queue ORDER BY ai_calls DESC;" },
+    { label: 'Activity by day (MTN)',
+      sql: "SELECT DATE(COALESCE(created_at_mtn, created_at_utc)) AS day,\n       SUM(event_name='page_view') AS visits,\n       SUM(event_name='thread_opened') AS threads,\n       SUM(event_name='ai_call') AS ai_calls,\n       SUM(ai_cost_usd) AS cost_usd\nFROM " + Wlit + "\nGROUP BY day ORDER BY day;" },
+    { label: 'Salesforce writes — sends / status changes / acks',
+      sql: "SELECT SUM(event_name='send_email') AS sends,\n       SUM(event_name='send_email' AND sf_ok=1) AS sends_ok,\n       SUM(event_name='status_change') AS status_changes,\n       SUM(event_name='status_change' AND sf_ok=1) AS status_ok,\n       SUM(event_name='ai_call' AND ai_action='acknowledge') AS acknowledgements\nFROM " + Wlit + ";" },
+  ];
   return report;
 }
 

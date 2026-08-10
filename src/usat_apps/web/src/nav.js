@@ -26,6 +26,7 @@ const OpsReference = lazy(() => import('./modules/ops/Reference.jsx'));
 const EventCoi = lazy(() => import('./modules/event_coi/Section.jsx'));
 const ChatbotSection = lazy(() => import('./modules/chatbot/ChatbotSection.jsx'));
 const WidgetSection = lazy(() => import('./modules/chatbot/WidgetSection.jsx'));
+const EvalSection = lazy(() => import('./modules/chatbot/EvalSection.jsx'));
 const ChatbotMetrics = lazy(() => import('./modules/chatbot/pages/ChatbotMetrics.jsx'));
 const KnowledgeAdminSection = lazy(() => import('./modules/knowledge_admin/Section.jsx'));
 
@@ -52,6 +53,7 @@ export const NAV = [
     type: 'group', label: 'Chatbot', items: [
       { label: 'Bot training', path: '/chatbot/training', panel: 'chatbot', icon: '💬', Component: ChatbotSection },
       { label: 'Public widget', path: '/chatbot/widget', panel: 'chatbot', icon: '🌐', Component: WidgetSection },
+      { label: 'Stress test', path: '/chatbot/stress-test', panel: 'chatbot', icon: '🧪', Component: EvalSection },
     ]
   },
   {

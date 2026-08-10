@@ -7,6 +7,7 @@
 // only, for embedding on external sites via an iframe. Panel: 'chatbot'.
 const api = require('./api');
 const publicApi = require('./public');
+const evalApi = require('./eval/api');   // stress-test / training harness (/api/chatbot/eval/*)
 
 module.exports = {
   id: 'chatbot',
@@ -14,5 +15,5 @@ module.exports = {
   group: 'Chatbot',                     // new nav group
   panels: [{ key: 'chatbot', label: 'Chatbot' }],
   metricsTable: null,                   // shares the platform events table (panel_view tracking is automatic)
-  mount: function (app) { api.mount(app); publicApi.mount(app); },
+  mount: function (app) { api.mount(app); publicApi.mount(app); evalApi.mount(app); },
 };

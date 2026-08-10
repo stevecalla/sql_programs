@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api.js';
 import ChartCard from '../components/ChartCard.jsx';
 import MetricsControls from '../../../components/MetricsControls.jsx';
+import SqlReference from '../../../components/SqlReference.jsx';
 
 // Chatbot usage + cost dashboard — a direct sibling of the SF Email Queue metrics page. Same chrome
 // (MetricsControls), same stat-card grid (.mx-cards / Card), same Chart.js cards (ChartCard), and the
@@ -223,6 +224,9 @@ export default function ChatbotMetrics() {
         </div>
         <p className="muted small">Top user messages, normalized (case/space-insensitive). A high repeat count is a good candidate for a curated answer or correction.</p>
       </div>
+
+      {/* SQL reference — DDL to recreate the tables + the exact metric queries, runnable by hand */}
+      <SqlReference schema={m.schema} queries={m.queries} title="SQL reference" />
 
       {/* footer */}
       <p className="muted small" style={{ marginTop: 12 }}>
