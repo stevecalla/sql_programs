@@ -61,7 +61,7 @@ function mount(app) {
   // Backfill/refresh vectors for the current model, up to `max` per call (click again to continue).
   app.post(P + '/reindex', require_admin, async function (req, res) {
     const b = req.body || {};
-    try { res.json(Object.assign({ ok: true }, await reindex.reindex({ max: Number(b.max) || 500 }))); }
+    try { res.json(Object.assign({ ok: true }, await reindex.reindex({ max: Number(b.max) || 500, force: !!b.force }))); }
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'reindex failed' }); }
   });
   app.get(P + '/status', require_admin, async function (req, res) {
@@ -99,6 +99,20 @@ function mount(app) {
       else { let seen = false; rows.forEach(function (r) { if (r.is_default && seen) r.is_default = false; else if (r.is_default) seen = true; }); }
       const cfg = kb_data_dir.read_config() || {}; cfg.ai_models = rows; kb_data_dir.write_config(cfg);
       res.json({ ok: true, ai_models: ai.list_models() });
+    } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
+  });
+
+  // ---- Shared EMBEDDING model registry (mirrors the AI model registry) — default/provider/model/label/cost ----
+  app.get(P + '/embed-models', require_admin, async function (req, res) {
+    try { res.json({ ok: true, embed_models: settings.list_models(), status: await chunk_store.embedding_status(settings.get().embedding_model) }); }
+    catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
+  });
+  app.post(P + '/embed-models', require_admin, async function (req, res) {
+    const b = req.body || {};
+    try {
+      if (!Array.isArray(b.embed_models)) return res.status(400).json({ ok: false, error: 'embed_models must be an array' });
+      const saved = settings.save_models(b.embed_models);   // normalizes + guarantees exactly one default
+      res.json({ ok: true, embed_models: saved, status: await chunk_store.embedding_status(settings.get().embedding_model) });
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 

@@ -26,6 +26,8 @@ const OpsReference = lazy(() => import('./modules/ops/Reference.jsx'));
 const EventCoi = lazy(() => import('./modules/event_coi/Section.jsx'));
 const ChatbotSection = lazy(() => import('./modules/chatbot/ChatbotSection.jsx'));
 const WidgetSection = lazy(() => import('./modules/chatbot/WidgetSection.jsx'));
+const EvalSection = lazy(() => import('./modules/chatbot/EvalSection.jsx'));
+const ChatbotMetrics = lazy(() => import('./modules/chatbot/pages/ChatbotMetrics.jsx'));
 const KnowledgeAdminSection = lazy(() => import('./modules/knowledge_admin/Section.jsx'));
 
 export const NAV = [
@@ -51,6 +53,7 @@ export const NAV = [
     type: 'group', label: 'Chatbot', items: [
       { label: 'Bot training', path: '/chatbot/training', panel: 'chatbot', icon: '💬', Component: ChatbotSection },
       { label: 'Public widget', path: '/chatbot/widget', panel: 'chatbot', icon: '🌐', Component: WidgetSection },
+      { label: 'Stress test', path: '/chatbot/stress-test', panel: 'chatbot', icon: '🧪', Component: EvalSection },
     ]
   },
   {
@@ -58,6 +61,7 @@ export const NAV = [
       { label: 'Usat apps', path: '/metrics/usat-apps', panel: 'metrics', icon: '👤', Component: Metrics },
       { label: 'SF Merge', path: '/metrics/sf-merge', panel: 'merge-metrics', icon: '▤', Component: MergeMetrics },
       { label: 'SF Email Queue', path: '/metrics/sf-email-queue', panel: 'email-queue-metrics', icon: '✉', Component: EmailQueueMetrics },
+      { label: 'Chatbot', path: '/metrics/chatbot', panel: 'chatbot-metrics', icon: '🤖', Component: ChatbotMetrics },
       // { label: 'Participation maps', path: '/metrics/participation-maps', panel: 'metrics', icon: '👤', Component: Metrics },
     ]
   },
@@ -109,6 +113,7 @@ export function panelForPathname(pathname) {
 const LEGACY_ALIASES = [
   { from: '/merge', to: '/salesforce/merge' },
   { from: '/chatbot/bot', to: '/chatbot/training' },   // renamed: AI Chat Bot -> Bot training
+  { from: '/chatbot/metrics', to: '/metrics/chatbot' },  // moved into the Metrics section
 ];
 
 // Redirect map for the router: each group's BASE path (e.g. /events, /salesforce) -> its first child,
