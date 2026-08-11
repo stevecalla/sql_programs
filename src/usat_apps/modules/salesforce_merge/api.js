@@ -685,7 +685,7 @@ function mount(app) {
       // merge — so the panel shows the tool's own deletions even when the read user differs and isn't an
       // admin. (queryAll is still scoped to that user's visibility, i.e. their recycle bin + View All.)
       const r = await sfread.list_recycle_bin({ is_test, limit: req.query.limit, connect: sfwrite.default_write_connect });
-      res.json({ ok: true, environment: ds ? ds.environment : null, connected_as: 'write_user', rows: r.rows, error: r.error });
+      res.json({ ok: true, environment: ds ? ds.environment : null, connected_as: 'write_user', connected: r.connected, queried_at: r.queried_at, rows: r.rows, error: r.error });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   // Whether the optional "stamp survivor as merged" custom fields exist (admin creates them manually).

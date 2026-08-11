@@ -501,15 +501,23 @@ async function recreate(ids, opts = {}, deps = {}) {
         if (!res.success || !res.id) throw new Error((res.errors && res.errors[0] && (res.errors[0].message || res.errors[0].statusCode)) || ('create failed for ' + l.old_id));
         idMap[l.old_id] = res.id;
       }
-      let childOk = 0;
+      let childOk = 0; let childSkipped = 0; const childErrs = [];
       for (const ch of children) {
         const newParent = idMap[ch.parent_id] || idMap[ch.account];
         if (!(ch && ch.object && ch.id && ch.parent_field && newParent)) continue;
-        // File share: can't be re-parented by update — additively create a link to the rebuilt (new-id) loser.
-        if (ch.object === 'ContentDocumentLink') { const r = await move_content_link(W, conn, ch, newParent); if (r.ok) childOk += 1; continue; }
-        await W.update_record(conn, ch.object, { Id: ch.id, [ch.parent_field]: newParent });
-        childOk += 1;
+        // Per-child + best-effort: a child that was itself deleted (ENTITY_IS_DELETED) or is otherwise
+        // un-updatable must NOT abort the whole recreate — the account is already rebuilt. Skip + note it.
+        try {
+          // File share: can't be re-parented by update — additively create a link to the rebuilt (new-id) loser.
+          if (ch.object === 'ContentDocumentLink') { const r = await move_content_link(W, conn, ch, newParent); if (r.ok) childOk += 1; else childSkipped += 1; continue; }
+          await W.update_record(conn, ch.object, { Id: ch.id, [ch.parent_field]: newParent });
+          childOk += 1;
+        } catch (cerr) {
+          childSkipped += 1;
+          childErrs.push((ch.object || 'child') + ' ' + ch.id + ': ' + ((cerr && cerr.message) || cerr));
+        }
       }
+      if (childErrs.length) log((e.survivor_name || e.id) + ' — ' + childSkipped + ' child link(s) skipped (deleted/failed): ' + childErrs.slice(0, 5).join(' | '));
       // Selective survivor reset (same keep-current choices as restore).
       const keepSet = new Set((opts.keep_fields && (opts.keep_fields[e.id] || opts.keep_fields[String(e.id)])) || []);
       const reset = master_reset_fields(master, e.survivor_account, keepSet);
@@ -523,7 +531,7 @@ async function recreate(ids, opts = {}, deps = {}) {
         try { const st = await W.stamp_survivor(conn, e.survivor_account, 'RECREATE', createdBy || 'salesforce_merge_tool');
           if (st.stamped) stampNote = ', stamped ' + st.count + ' field(s)'; } catch (se) { /* best-effort */ }
       }
-      const recReason = 'recreated ' + losers.length + ' account(s) (NEW ids), re-pointed ' + childOk + ' child link(s), reset ' + resetPlan.length + ' field(s)' + (keepSet.size ? ', kept ' + keepSet.size + ' current' : '');
+      const recReason = 'recreated ' + losers.length + ' account(s) (NEW ids), re-pointed ' + childOk + ' child link(s)' + (childSkipped ? ', skipped ' + childSkipped + ' deleted/failed child link(s)' : '') + ', reset ' + resetPlan.length + ' field(s)' + (keepSet.size ? ', kept ' + keepSet.size + ' current' : '');
       const hres = await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
         survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
         result: 'recreated', reason: recReason + stampNote,

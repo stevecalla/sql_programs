@@ -7,6 +7,33 @@ import { awaitRun, summarize } from '../lib/run_poll.js';
 
 const RESULT_COLOR = { restored: '#1a8a4f', simulated: '#1a8a4f', skipped: '#854f0b', failed: '#c0392b' };
 
+// A labeled SOQL block with a one-click Copy button. Clipboard API with a textarea fallback for
+// non-secure contexts. `note` is optional helper text under the label.
+function CopyQuery({ label, sql, note }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(sql); }
+    catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = sql; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (_) { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+    setCopied(true); setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
+        <span className="muted small" style={{ fontWeight: 600 }}>{label}</span>
+        <button type="button" onClick={copy} style={{ cursor: 'pointer', fontSize: 11, padding: '2px 10px', borderRadius: 5, border: '1px solid var(--border, rgba(127,127,127,0.4))', background: copied ? '#1a8a4f' : 'transparent', color: copied ? '#fff' : 'inherit', whiteSpace: 'nowrap' }}>{copied ? '✓ Copied' : 'Copy'}</button>
+      </div>
+      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: 'var(--panel, rgba(127,127,127,0.12))', padding: 8, borderRadius: 6, fontSize: 11, margin: 0, userSelect: 'all' }}>{sql}</pre>
+      {note && <p className="muted small" style={{ margin: '3px 0 0' }}>{note}</p>}
+    </div>
+  );
+}
+
 // Phase 4 — undo a completed merge (best-effort). Same safety model as Process Merges: Simulate by
 // default; a real restore needs Execute mode + typed RESTORE + the deploy execution flag.
 export default function Restore() {
@@ -59,7 +86,7 @@ export default function Restore() {
     api.stampFields().then(setStampFields).catch(() => setStampFields(null));
     api.mergeRestoreList().then((r) => { const rs = r.rows || []; setRows(rs); setSel(new Set(rs.filter((x) => x.restorable).map((x) => x.id))); }).catch((e) => setErr(e.message));
     api.mergeHistory().then((r) => setHistory((r.rows || []).filter((h) => ['restored', 'recreated', 'skipped', 'failed'].includes(h.result) && /(restor|recreat)/i.test(h.reason || '') ))).catch(() => {});
-    api.recycleBin().then((r) => setBin({ rows: r.rows || [], error: r.error || null })).catch((e) => setBin({ rows: [], error: e.message }));
+    api.recycleBin().then((r) => setBin({ rows: r.rows || [], error: r.error || null, connected: r.connected || null, queried_at: r.queried_at || null })).catch((e) => setBin({ rows: [], error: e.message }));
     api.mergeRecreateList().then((r) => { const rs = r.rows || []; setRecRows(rs); setRecSel(new Set(rs.filter((x) => x.has_snapshot).map((x) => x.id))); }).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -155,7 +182,7 @@ export default function Restore() {
       <div className="card" style={{ margin: '8px 0 12px', borderColor: safe ? 'var(--green)' : 'var(--red)', background: safe ? 'var(--green-bg)' : 'var(--red-bg)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <strong style={{ color: safe ? 'var(--green)' : 'var(--red)' }}>{safe ? 'Safe mode is ON — no Salesforce writes' : 'Execution ENABLED'}</strong>
         <span className="muted small">{safe ? 'Restore runs as a preview (eligibility + plan) only.' : 'A real restore may run behind the gates.'}</span>
-        <span style={{ marginLeft: 'auto' }} className="muted small">Target environment: <strong>{status ? (status.environment || '—') : '…'}</strong></span>
+        <span style={{ marginLeft: 'auto' }} className="muted small">Target environment: <strong style={status && status.environment ? { color: status.environment === 'Production' ? 'var(--red)' : 'var(--green)' } : undefined}>{status ? (status.environment || '—') : '…'}</strong></span>
       </div>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12, alignItems: 'stretch' }}>
@@ -346,8 +373,42 @@ export default function Restore() {
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Recycle Bin <span className="muted small" style={{ fontWeight: 400 }}>(write user's deleted Accounts{bin ? ' · ' + bin.rows.length : ''})</span></p>
-        <p className="muted small" style={{ margin: '0 0 8px' }}>Read-only view of soft-deleted Accounts (~15-day window), queried as the tool's <strong>Salesforce write user</strong> — so it shows the records this tool deleted. It reflects that user's visibility (their recycle bin; org-wide only if the user has <em>View All Data</em>), and is Account-only (other objects like Queue Items aren't shown). “Merged into” is the surviving record a deleted account was merged into.</p>
+        <p style={{ margin: '0 0 8px', fontWeight: 700 }}>App Recycle Bin <span className="muted small" style={{ fontWeight: 400 }}>(Accounts with <code>IsDeleted=true</code> via queryAll{bin ? ' · ' + bin.rows.length : ''})</span></p>
+        <p className="muted small" style={{ margin: '0 0 8px' }}>This is the <strong>app's</strong> view, not the Salesforce Recycle Bin. It lists every Account the API returns as <code>IsDeleted=true</code> (the <code>queryAll</code>/<em>scanAll</em> endpoint), queried live as the tool's <strong>Salesforce write user</strong>. That set is a <strong>superset</strong> of the actual Salesforce Recycle Bin — Salesforce exposes <em>no</em> field for "is in the Recycle Bin," only <code>IsDeleted</code>, so a record that has already been purged from the SF Recycle Bin (15-day expiry, manual empty, or bin-overflow auto-purge) can still appear here during Salesforce's physical-delete lag. Such rows show up but are <strong>not restorable</strong> — a restore attempt detects it and auto-routes the set to the recreate-from-backup queue. The only definitive test of restorability is attempting the restore. “Merged into” is the surviving record a deleted account was merged into.</p>
+        {bin && bin.connected && (
+          <p className="muted small" style={{ margin: '0 0 8px', fontFamily: 'monospace', fontSize: 11 }}>
+            Queried live as <strong>{bin.connected.username || '(unknown user)'}</strong> · org <strong>{bin.connected.org_id || '?'}</strong>{bin.connected.instance_host ? ' · ' + bin.connected.instance_host : ''}{bin.queried_at ? ' · at ' + new Date(bin.queried_at).toLocaleString() : ''}. Use this user + org when checking against Workbench (below) so you're comparing the same org.
+          </p>
+        )}
+        {bin && bin.rows.length > 0 && (
+          <details className="muted small" style={{ margin: '0 0 10px' }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>App Recycle Bin vs. Salesforce Recycle Bin — how to verify in Workbench</summary>
+            <div style={{ marginTop: 6 }}>
+              <p style={{ margin: '0 0 6px' }}>A record moves through these states. States 2 and 3 look <strong>identical</strong> to any query — both are just <code>IsDeleted=true</code> — which is why this panel can't tell them apart:</p>
+              <ol style={{ margin: '0 0 8px 18px', padding: 0 }}>
+                <li><strong>Live</strong> — <code>IsDeleted=false</code>. Normal queries see it.</li>
+                <li><strong>In Salesforce Recycle Bin</strong> — <code>IsDeleted=true</code>, restorable, shows in the SF bin UI. Lasts ~15 days <em>or until the bin overflows its size cap</em> (Salesforce auto-purges oldest first — so in a busy sandbox, recent records can vanish within hours).</li>
+                <li><strong>Purged, physical-delete pending</strong> — gone from the SF bin (not in the UI, <code>undelete</code> fails "not in recycle bin"), but <code>queryAll</code> still returns it <code>IsDeleted=true</code> for a lag window. <strong>This panel shows these; they are not restorable.</strong></li>
+                <li><strong>Physically gone</strong> — <code>queryAll</code> returns nothing. The row drops off this panel on its own.</li>
+              </ol>
+              <p style={{ margin: '0 0 4px' }}>Run these in <strong>Workbench → queries → SOQL Query</strong> with <strong>“Deleted and archived records: Include”</strong> selected (that's Workbench's <code>queryAll</code> switch — a normal query hides deleted rows; note SOQL has no <code>SELECT *</code>, so fields are named explicitly):</p>
+              <CopyQuery
+                label="All deleted Accounts — latest 100 (with email + member #)"
+                sql={"SELECT Id, Name, PersonEmail, cfg_Member_Number__pc, MasterRecordId, LastModifiedDate\nFROM Account\nWHERE IsDeleted = true\nORDER BY LastModifiedDate DESC\nLIMIT 100"}
+              />
+              <CopyQuery
+                label="Check one member by name"
+                sql={"SELECT Id, Name, IsDeleted, MasterRecordId, LastModifiedDate\nFROM Account\nWHERE Name = 'Kai German'"}
+                note="Change the name to whichever member you're checking."
+              />
+              <CopyQuery
+                label="Check the exact ids shown in this panel"
+                sql={`SELECT Id, Name, IsDeleted, MasterRecordId, LastModifiedDate\nFROM Account\nWHERE Id IN (${bin.rows.map((r) => "'" + r.account + "'").join(', ')})`}
+              />
+              <p style={{ margin: '8px 0 0' }}>If a row comes back <code>IsDeleted=true</code> here but isn't in your <strong>My Recycle Bin</strong> or <strong>Org Recycle Bin</strong> (Setup → Recycle Bin), it's in state 3 — purged but still in Salesforce's lag window. It will drop off this panel once Salesforce finishes physical deletion; until then it's recreate-from-backup, not restore. (Note: <code>IsDeleted=true</code> alone never means "restorable" — only that the record is deleted.)</p>
+            </div>
+          </details>
+        )}
         <div className="dt-scroll" style={{ maxHeight: 300 }}>
           <table className="modal-table">
             <thead><tr><th>#</th><th>Name</th><th>Member #</th><th>Account</th><th>Merged into</th><th>Deleted / modified</th></tr></thead>
@@ -363,7 +424,7 @@ export default function Restore() {
                 </tr>
               ))}
               {bin && bin.error && <tr><td colSpan={6} className="small" style={{ color: 'var(--red)' }}>Could not read Recycle Bin: {bin.error}</td></tr>}
-              {bin && !bin.error && bin.rows.length === 0 && <tr><td colSpan={6} className="muted small">Recycle Bin is empty — no deleted Accounts in the last ~15 days.</td></tr>}
+              {bin && !bin.error && bin.rows.length === 0 && <tr><td colSpan={6} className="muted small">No Accounts returned with <code>IsDeleted=true</code> for this write user — nothing deleted in the queryAll window.</td></tr>}
               {!bin && <tr><td colSpan={6} className="muted small">Loading…</td></tr>}
             </tbody>
           </table>

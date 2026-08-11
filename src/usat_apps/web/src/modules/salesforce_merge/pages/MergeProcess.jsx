@@ -265,7 +265,7 @@ export default function MergeProcess() {
       <div className="card" style={{ margin: '8px 0 12px', borderColor: safe ? 'var(--green)' : 'var(--red)', background: safe ? 'var(--green-bg)' : 'var(--red-bg)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <strong style={{ color: safe ? 'var(--green)' : 'var(--red)' }}>{safe ? 'Safe mode is ON — no Salesforce writes' : 'Execution ENABLED'}</strong>
         <span className="muted small">{safe ? 'Processing runs the full dry-run + snapshot and records a simulated result.' : 'Real merges may run behind the remaining gates.'}</span>
-        <span style={{ marginLeft: 'auto' }} className="muted small">Target environment: <strong>{status ? (status.environment || '—') : '…'}</strong>{status && status.data_as_of ? ' · data as of ' + new Date(status.data_as_of).toLocaleString() : ''}</span>
+        <span style={{ marginLeft: 'auto' }} className="muted small">Target environment: <strong style={status && status.environment ? { color: status.environment === 'Production' ? 'var(--red)' : 'var(--green)' } : undefined}>{status ? (status.environment || '—') : '…'}</strong>{status && status.data_as_of ? ' · data as of ' + new Date(status.data_as_of).toLocaleString() : ''}</span>
       </div>
 
       <div className="card" style={{ margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
