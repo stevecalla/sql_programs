@@ -70,6 +70,7 @@ export const api = {
   mergeRestoreDiff: (id) => req('/api/salesforce-merge/merge/restore/diff' + qs({ id })),
   mergeRestorePostDiff: (ids) => req('/api/salesforce-merge/merge/restore/post-diff', { method: 'POST', body: JSON.stringify({ ids }) }),
   mergeRestore: (ids, opts = {}) => req('/api/salesforce-merge/merge/restore', { method: 'POST', body: JSON.stringify({ ids, ...opts }) }),
+  mergeRouteToRecreate: (ids) => req('/api/salesforce-merge/merge/restore/to-recreate', { method: 'POST', body: JSON.stringify({ ids }) }),
   mergeRecreateList: () => req('/api/salesforce-merge/merge/recreate'),
   mergeRecreate: (ids, opts = {}) => req('/api/salesforce-merge/merge/recreate', { method: 'POST', body: JSON.stringify({ ids, ...opts }) }),
   recycleBin: () => req('/api/salesforce-merge/merge/recycle-bin'),

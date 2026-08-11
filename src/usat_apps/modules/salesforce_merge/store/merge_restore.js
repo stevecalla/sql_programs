@@ -171,6 +171,48 @@ async function list_restorable(deps = {}) {
   return out;
 }
 
+// Move EXPIRED completed-merge sets (a loser is gone from the Recycle Bin, so a restore can never run)
+// straight into the recreate-from-backup queue — WITHOUT first submitting a doomed restore. This closes
+// the catch-22 where an expired set's Restore checkbox is disabled, so it could never reach Recreate.
+// Re-verifies each set is actually expired (at least one loser no longer recoverable) so a still-
+// restorable set can't be diverted to a new-id rebuild by mistake. DB-only status change (no SF writes).
+async function route_to_recreate(ids, deps = {}) {
+  const Q = deps.queue || mqueue;
+  const dash = deps.dashboard || dashboard;
+  const W = deps.write || require('./salesforce_write');
+  const list = (ids || []).map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  const out = { routed: 0, skipped: 0, results: [] };
+  if (!list.length) return out;
+  const ds = await dash.dataset_info().catch(() => null);
+  const is_test = !ds || ds.environment !== 'Production';
+  const done = await Q.list(undefined, 'done');
+  const byId = new Map(done.map((e) => [Number(e.id), e]));
+  let conn = null;
+  for (const id of list) {
+    const e = byId.get(id);
+    if (!e) { out.skipped += 1; out.results.push({ id, result: 'skipped', reason: 'not a completed (done) set' }); continue; }
+    const losers = String(e.loser_accounts || '').split(';').map((s) => s.trim()).filter(Boolean);
+    try {
+      if (!conn) conn = await W.default_write_connect(is_test);
+      const del = await deleted_set(conn, losers);
+      const recoverable = losers.filter((lid) => del.has(lid)).length;
+      if (losers.length > 0 && recoverable === losers.length) {
+        out.skipped += 1;
+        out.results.push({ id, result: 'skipped', reason: 'still restorable — every loser is in the Recycle Bin; use Restore, not Recreate' });
+        continue;
+      }
+    } catch (err) {
+      out.skipped += 1;
+      out.results.push({ id, result: 'skipped', reason: 'could not verify eligibility: ' + err.message });
+      continue;
+    }
+    await Q.transition([id], 'recreate_pending', ['done']);
+    out.routed += 1;
+    out.results.push({ id, result: 'routed', reason: 'moved to recreate-from-backup queue (expired — losers gone from the Recycle Bin)' });
+  }
+  return out;
+}
+
 // The SECONDARY queue: sets whose Recycle-Bin restore failed (window expired / purged) and were
 // routed to recreate-from-backup. Each carries its reason + what the backup snapshot can rebuild.
 async function list_recreatable(deps = {}) {
@@ -561,4 +603,4 @@ async function recreate(ids, opts = {}, deps = {}) {
   return out;
 }
 
-module.exports = { restore, list_restorable, list_recreatable, recreate, status, deleted_set, account_states, survivor_last_modified, from_snapshot, recreate_plan_from_snapshot, account_create_fields, master_reset_fields, execution_enabled, make_run_id, _is_fls_error };
+module.exports = { restore, list_restorable, route_to_recreate, list_recreatable, recreate, status, deleted_set, account_states, survivor_last_modified, from_snapshot, recreate_plan_from_snapshot, account_create_fields, master_reset_fields, execution_enabled, make_run_id, _is_fls_error };
