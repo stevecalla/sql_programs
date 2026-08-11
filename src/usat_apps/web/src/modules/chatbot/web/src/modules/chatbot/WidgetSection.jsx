@@ -115,7 +115,7 @@ export default function WidgetSection() {
           <WidgetGtmSetupCard handle={handle} pagesText={pagesText} />
           <WidgetGtmCard />
           <WidgetEmbedCard handle={handle} />
-          <WidgetDevConsoleCard handle={handle} theme={theme} bubble={bubble} color={color} />
+          <WidgetDevConsoleCard handle={handle} />
           <WidgetReferenceCard />
         </aside>
       </div>

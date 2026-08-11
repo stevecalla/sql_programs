@@ -71,6 +71,9 @@ const DDL_RES = `CREATE TABLE IF NOT EXISTS ${RES} (
   reason VARCHAR(500) NULL,
   latency_ms INT NULL,
   cost_usd DECIMAL(12,6) NULL,
+  human_verdict VARCHAR(16) NULL,
+  human_score INT NULL,
+  sources MEDIUMTEXT NULL,
   created_at_mtn DATETIME NOT NULL,
   created_at_utc DATETIME NOT NULL,
   INDEX idx_run (run_id),
@@ -85,8 +88,22 @@ async function ensure() {
     await ensure_table(pool, DDL_Q);
     await ensure_table(pool, DDL_RUNS);
     await ensure_table(pool, DDL_RES);
+    // Migrate a pre-existing results table to carry the human-override columns (placed before created_at_*).
+    try {
+      const cols = await db.query('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?', [RES]);
+      const have = new Set((cols || []).map(function (c) { return String(c.COLUMN_NAME); }));
+      if (!have.has('human_verdict')) await db.query('ALTER TABLE ' + RES + ' ADD COLUMN human_verdict VARCHAR(16) NULL AFTER cost_usd');
+      if (!have.has('human_score')) await db.query('ALTER TABLE ' + RES + ' ADD COLUMN human_score INT NULL AFTER human_verdict');
+      if (!have.has('sources')) await db.query('ALTER TABLE ' + RES + ' ADD COLUMN sources MEDIUMTEXT NULL AFTER human_score');
+    } catch (e) { /* perms/boot race — non-fatal, override just unavailable until columns exist */ }
   })();
   return _ready;
+}
+// The EFFECTIVE category/score for a result — a human override wins over the judge.
+function effective(r) {
+  if (r.human_verdict === 'correct') return { category: (r.expected === 'deflect' ? 'correct-deflected' : 'correct-grounded'), score: (r.human_score == null ? 100 : Number(r.human_score)) };
+  if (r.human_verdict === 'wrong') return { category: 'wrong', score: (r.human_score == null ? 0 : Number(r.human_score)) };
+  return { category: r.category, score: Number(r.score) || 0 };
 }
 function stamps() { const now = new Date(); return [fmt_in_tz(now, REPORTING_TZ), fmt_in_tz(now, 'UTC')]; }
 
@@ -183,11 +200,11 @@ async function insert_results(run_id, arr) {
   for (const r of (arr || [])) {
     const [mtn, utc] = stamps();
     await db.query(
-      'INSERT INTO ' + RES + ' (run_id, question, bucket, expected, topic, source, answer, grounded, category, score, reason, latency_ms, cost_usd, created_at_mtn, created_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO ' + RES + ' (run_id, question, bucket, expected, topic, source, answer, grounded, category, score, reason, latency_ms, cost_usd, sources, created_at_mtn, created_at_utc) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
       [String(run_id), String(r.question || '').slice(0, 600), r.bucket || null, r.expected || null, r.topic || null, r.source || null,
        r.answer == null ? null : String(r.answer), r.grounded == null ? null : (r.grounded ? 1 : 0),
        r.category || null, r.score == null ? null : Number(r.score), r.reason ? String(r.reason).slice(0, 500) : null,
-       r.latency_ms == null ? null : Number(r.latency_ms), r.cost_usd == null ? null : Number(r.cost_usd), mtn, utc]);
+       r.latency_ms == null ? null : Number(r.latency_ms), r.cost_usd == null ? null : Number(r.cost_usd), (r.sources == null ? null : String(r.sources)), mtn, utc]);
   }
 }
 async function get_run(run_id) {
@@ -198,23 +215,50 @@ async function last_run() {
   await ensure();
   return (await db.query("SELECT * FROM " + RUNS + " WHERE status='done' ORDER BY created_at_utc DESC LIMIT 1"))[0] || null;
 }
-async function list_runs(limit) {
+async function list_runs(limit, queue) {
   await ensure();
   const n = Math.max(1, Math.min(50, Number(limit) || 10));
-  return db.query('SELECT run_id, queue, answer_model, status, total, score_overall, coverage_pct, safety_pct, cost_usd, ' +
-    "DATE_FORMAT(created_at_mtn,'%Y-%m-%d %H:%i') created_at_mtn FROM " + RUNS + ' ORDER BY created_at_utc DESC LIMIT ' + n);
+  const where = queue ? ' WHERE queue = ?' : '';
+  const args = queue ? [String(queue)] : [];
+  return db.query('SELECT run_id, queue, answer_model, judge_model, status, total, score_overall, coverage_pct, safety_pct, cost_usd, ' +
+    "DATE_FORMAT(created_at_mtn,'%Y-%m-%d %H:%i') created_at_mtn FROM " + RUNS + where + ' ORDER BY created_at_utc DESC LIMIT ' + n, args);
 }
 async function results_for(run_id, opts) {
   await ensure();
   opts = opts || {};
   const w = ['run_id = ?']; const a = [String(run_id)];
   if (opts.category) { w.push('category = ?'); a.push(String(opts.category)); }
-  return db.query('SELECT question, bucket, expected, topic, source, answer, grounded, category, score, reason, latency_ms, cost_usd FROM ' + RES +
+  return db.query('SELECT id, question, bucket, expected, topic, source, answer, grounded, category, score, reason, latency_ms, cost_usd, sources, human_verdict, human_score FROM ' + RES +
     ' WHERE ' + w.join(' AND ') + ' ORDER BY score ASC, id ASC', a);
 }
 
+// Human override of the judge on one result. verdict: 'correct' | 'wrong' | null(reset). Optional explicit score.
+async function set_override(result_id, verdict, score) {
+  await ensure();
+  const v = (verdict === 'correct' || verdict === 'wrong') ? verdict : null;
+  const rows = await db.query('SELECT run_id FROM ' + RES + ' WHERE id = ?', [Number(result_id)]);
+  const run_id = rows && rows[0] ? rows[0].run_id : null;
+  await db.query('UPDATE ' + RES + ' SET human_verdict = ?, human_score = ? WHERE id = ?', [v, (score == null || score === '' ? null : Number(score)), Number(result_id)]);
+  if (run_id) await recompute_run(run_id);
+  return { run_id: run_id };
+}
+// Recompute a run's scorecard from its results, honoring human overrides, and persist it (keeps trend accurate).
+async function recompute_run(run_id) {
+  await ensure();
+  const rows = await results_for(run_id, {});
+  const eff = rows.map(function (r) { return Object.assign({}, r, effective(r)); });
+  const on = eff.filter(function (r) { return r.expected !== 'deflect'; });
+  const off = eff.filter(function (r) { return r.expected === 'deflect'; });
+  const grounded_ok = on.filter(function (r) { return r.category === 'correct-grounded'; }).length;
+  const deflect_ok = off.filter(function (r) { return r.category === 'correct-deflected'; }).length;
+  const avg = eff.length ? Math.round(eff.reduce(function (s, r) { return s + (Number(r.score) || 0); }, 0) / eff.length) : 0;
+  const card = { score_overall: avg, coverage_pct: on.length ? Math.round((grounded_ok / on.length) * 100) : 0, safety_pct: off.length ? Math.round((deflect_ok / off.length) * 100) : 0 };
+  await update_run(run_id, card);
+  return card;
+}
+
 module.exports = {
-  Q, RUNS, RES, REPORTING_TZ, DDL_Q, DDL_RUNS, DDL_RES, ensure,
+  Q, RUNS, RES, REPORTING_TZ, DDL_Q, DDL_RUNS, DDL_RES, ensure, effective,
   list_questions, add_question, bulk_add, update_question, delete_question, count_questions,
-  create_run, update_run, insert_results, get_run, last_run, list_runs, results_for,
+  create_run, update_run, insert_results, get_run, last_run, list_runs, results_for, set_override, recompute_run,
 };

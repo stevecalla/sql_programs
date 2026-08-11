@@ -98,10 +98,16 @@ async function gather(queue, query, opts) {
   };
 }
 
-// Per-answer provenance for the chunks used (for the "sources" surface). No PII — chunk metadata + scores only.
+// Per-answer provenance for the chunks used (for the "sources" surface). No PII — chunk metadata + scores + a
+// short text preview so a reviewer can SEE what each retrieved chunk actually contained (and confirm whether a
+// specific link/date in the answer really came from the knowledge).
 function provenance(used) {
   return (used || []).map(function (u) {
-    return { source_ref: u.source_ref, source_title: u.source_title, category: u.category, score: u.score, keyword: u.keyword, semantic: u.semantic };
+    return {
+      source_ref: u.source_ref, source_title: u.source_title, category: u.category,
+      score: u.score, keyword: u.keyword, semantic: u.semantic,
+      snippet: String(u.text || '').replace(/\s+/g, ' ').trim().slice(0, 600),
+    };
   });
 }
 

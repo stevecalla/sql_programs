@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatMtnDateTime } from '../../../lib/mtnDate.js';   // email-queue timestamp style (MDT)
+import RichText from '../lib/richText.jsx';   // shared bot-message formatter (bold, links) — same across all chatbot views
 
 const GROUNDED_TIP = "Grounded: this answer was generated with the queue's curated knowledge loaded (Context files + Corrections), so the bot had real material to base its reply on.";
 const NOKN_TIP = "No knowledge was loaded for this queue when this answer was generated, so the bot had nothing to ground on and would say it doesn't have the info.";
@@ -56,7 +57,7 @@ export default function Transcript({ id, turns, loading }) {
               </div>
               {isCol
                 ? <div className="cbx-turn-prev">{String(t.text || '').replace(/\s+/g, ' ').slice(0, 90)}{(t.text || '').length > 90 ? '…' : ''}</div>
-                : <div className="cbx-turn-text">{t.text}</div>}
+                : <RichText className="cbx-turn-text" text={t.text} plain={t.role !== 'bot'} />}
               {!isCol && t.role === 'bot' && (t.model || t.latency_ms != null) ? (
                 <div className="cbx-turn-meta">
                   {t.grounded
