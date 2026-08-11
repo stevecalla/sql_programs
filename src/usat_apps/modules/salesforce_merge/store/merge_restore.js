@@ -334,6 +334,20 @@ async function restore(ids, opts = {}, deps = {}) {
       } catch (err) { undelErr = (err && err.message) || 'undelete threw'; }
     }
     if (undelErr) {
+      // "Entity is not in the recycle bin" (or ENTITY_IS_DELETED) means the loser was actually PURGED —
+      // Salesforce's IsDeleted query lagged, so account_states thought it was still recoverable and we
+      // tried to undelete it. Don't dead-end: route the set to the recreate-from-backup queue (same as a
+      // detected purge) so the operator can rebuild it from the snapshot instead of being stuck 'failed'.
+      if (/recycle bin|ENTITY_IS_DELETED|not in the recycle/i.test(String(undelErr))) {
+        const reason = 'loser not in Recycle Bin (purged; undelete: ' + undelErr + ') — routed to recreate-from-backup queue';
+        await Q.transition([e.id], 'recreate_pending', ['done']);
+        await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
+          survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
+          result: 'skipped', reason });
+        out.skipped += 1; out.routed = (out.routed || 0) + 1; out.results.push({ id: e.id, result: 'routed', reason });
+        log((e.survivor_name || e.id) + ' — routed to recreate queue (loser purged; undelete rejected)');
+        completed += 1; await RUN.update(runId, { completed_ops: completed, completed_sets: completed }); continue;
+      }
       log((e.survivor_name || e.id) + ' — RESTORE FAILED at undelete: ' + undelErr);
       await H.write({ run_id: runId, queue_id: e.id, created_by: createdBy, source_type: e.source_type, source_key: e.source_key,
         survivor_account: e.survivor_account, survivor_name: e.survivor_name, environment: e.environment, org_id: e.org_id, mode,
