@@ -21,7 +21,11 @@ const post_snapshot = require('./merge_post_snapshot');
 // Fields restore never touches (identity / system / person-account halves) — mirrors
 // merge_restore.master_reset_fields so the diff shows only what a restore would actually change.
 const SKIP = new Set(['account', 'contact', 'Id', 'Name', 'CreatedDate', 'LastModifiedDate',
-  'attributes', 'PersonContactId', 'IsPersonAccount', 'IsDeleted', 'MasterRecordId', 'SystemModstamp']);
+  'attributes', 'PersonContactId', 'IsPersonAccount', 'IsDeleted', 'MasterRecordId', 'SystemModstamp',
+  // Review-only portal context — NOT restorable/comparable Salesforce fields. `portal` is a synthetic
+  // key added by salesforce_read; `IsCustomerPortal` is a real but non-writable system field. Leaving
+  // them in would put an invalid field in the live re-fetch SELECT (→ survivor reads null → all "missing").
+  'portal', 'IsCustomerPortal']);
 
 // Normalize a value for equality: blank-ish -> '', ZIP/postal -> first 5 digits, else trimmed +
 // whitespace-collapsed + lower-cased. So trivial formatting differences don't read as drift.
