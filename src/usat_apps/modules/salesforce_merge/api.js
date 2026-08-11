@@ -154,7 +154,7 @@ function mount(app) {
       const b = req.body || {};
       const ids = Array.isArray(b.ids) ? b.ids.filter(Boolean) : [];
       if (!ids.length) return res.status(400).json({ ok: false, error: 'no ids to restore' });
-      const opts = { mode: b.mode, confirm: 'RESTORE', ack_post_merge: true, created_by: current_user(req) };
+      const opts = { mode: b.mode, confirm: 'RESTORE', ack_post_merge: true, stamp_merged: b.stamp_merged !== false, attach_dossier: b.attach_dossier !== false, created_by: current_user(req) };
       const parallel_enabled = await msettings_store.get('parallel_enabled');
       const chunk_size = await msettings_store.get('chunk_size');
       if (should_parallelize(ids.length, chunk_size, parallel_enabled)) {
@@ -501,7 +501,7 @@ function mount(app) {
         return res.status(400).json({ ok: false, error: 'Batch too large: ' + b.ids.length + ' sets exceeds the limit of ' + reqMax + ' per Execute (hard cap ' + HARD_MAX + ').' });
       }
       const ids = Array.isArray(b.ids) ? b.ids.filter(Boolean) : [];
-      const opts = { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: !!b.stamp_merged, ack_drift: !!b.ack_drift, attach_dossier: b.attach_dossier !== false, created_by: current_user(req) };
+      const opts = { mode: b.mode, confirm: b.confirm, dry_run: !!b.dry_run, stamp_merged: b.stamp_merged !== false, ack_drift: !!b.ack_drift, attach_dossier: b.attach_dossier !== false, created_by: current_user(req) };
       // PARALLEL FAN-OUT (Phase 1): when parallel is enabled and the job is bigger than one chunk, split
       // it into N chunk-runs that share a job_id so the worker CLUSTER drains them side by side. Small jobs
       // (or parallel disabled) enqueue exactly one run — byte-identical to the pre-parallel path.

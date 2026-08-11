@@ -110,6 +110,8 @@ export default function MergeOps() {
   const [batchMode, setBatchMode] = useState('approved');   // 'approved' | 'random'
   const [runMode, setRunMode] = useState('simulate');        // 'simulate' | 'execute'
   const [restoreAfter, setRestoreAfter] = useState(false);
+  const [stampMerged, setStampMerged] = useState(true);   // stamp usat_was_* on the survivor (parity with Process Merges)
+  const [attachDossier, setAttachDossier] = useState(() => { try { return localStorage.getItem('mp_attach_dossier') !== '0'; } catch (e) { return true; } });
   const [approved, setApproved] = useState(null);
   const [approvedRows, setApprovedRows] = useState([]);
   const [rSource, setRSource] = useState('duplicate');
@@ -183,7 +185,7 @@ export default function MergeOps() {
   useEffect(() => {
     if (restoreAfter && mergeProg && mergeProg.status === 'done' && runIds && runIds.length && !restoreJobId && !restoreStartedRef.current) {
       restoreStartedRef.current = true;
-      api.opsBatchRestore(runIds, { mode: runMode })
+      api.opsBatchRestore(runIds, { mode: runMode, stamp_merged: stampMerged, attach_dossier: attachDossier })
         .then((r) => { if (r.job_id) setRestoreJobId(r.job_id); else setRunNote('Restore ran as a single run (parallel off).'); })
         .catch((e) => { setRunErr('restore: ' + e.message); restoreStartedRef.current = false; });
     }
@@ -293,7 +295,9 @@ export default function MergeOps() {
       .then((ids) => {
         if (!ids.length) throw new Error(batchMode === 'random' ? 'nothing resolvable to stage' : 'no approved sets to run');
         setRunIds(ids);
-        const opts = runMode === 'execute' ? { mode: 'execute', confirm: 'MERGE', dry_run: false, ack_drift: true } : { mode: 'simulate', dry_run: true };
+        const opts = runMode === 'execute'
+          ? { mode: 'execute', confirm: 'MERGE', dry_run: false, ack_drift: true, stamp_merged: stampMerged, attach_dossier: attachDossier }
+          : { mode: 'simulate', dry_run: true, stamp_merged: stampMerged, attach_dossier: attachDossier };
         return api.mergeProcess(ids, opts);
       })
       .then((r) => {
@@ -308,7 +312,7 @@ export default function MergeOps() {
     if (!runIds || !runIds.length) return;
     track('merge_ops_restore_manual', { panel: 'merge-ops', view: 'batch-run' });
     setRestoreReport(null); restoreReportedRef.current = false;
-    api.opsBatchRestore(runIds, { mode: runMode })
+    api.opsBatchRestore(runIds, { mode: runMode, stamp_merged: stampMerged, attach_dossier: attachDossier })
       .then((r) => { if (r.job_id) setRestoreJobId(r.job_id); else setRunNote('Restore ran as a single run (parallel off).'); })
       .catch((e) => setRunErr('restore: ' + e.message));
   };
@@ -317,7 +321,7 @@ export default function MergeOps() {
     if (!id) return;
     track('merge_ops_restore_one', { panel: 'merge-ops', view: 'batch-run' });
     setRestoreReport(null); restoreReportedRef.current = false;
-    api.opsBatchRestore([id], { mode: runMode })
+    api.opsBatchRestore([id], { mode: runMode, stamp_merged: stampMerged, attach_dossier: attachDossier })
       .then((r) => { if (r.job_id) setRestoreJobId(r.job_id); else { setRunNote('Restore ran as a single run (parallel off).'); loadRestorable(); } })
       .catch((e) => setRunErr('restore: ' + e.message));
   };
@@ -500,6 +504,8 @@ export default function MergeOps() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
             <span className="tb-select" title="Simulate makes no Salesforce changes; Execute performs real merges (subject to the server-side gates)."><select value={runMode} onChange={(e) => setRunMode(e.target.value)}><option value="simulate">Simulate</option><option value="execute">Execute (real merges)</option></select></span>
             <label className="small" title="After the merge job completes, automatically run a restore job over the same sets."><input type="checkbox" checked={restoreAfter} onChange={(e) => setRestoreAfter(e.target.checked)} /> Restore afterward</label>
+            <label className="small" title="Stamp the survivor's usat_was_* fields (flag on + MERGE — you) on merge, and on restore/recreate. Same control as Process Merges."><input type="checkbox" checked={stampMerged} onChange={(e) => setStampMerged(e.target.checked)} /> Stamp survivor <code>(usat_was_*)</code></label>
+            <label className="small" title="Attach the merge/restore dossier spreadsheet to the affected Salesforce records. Best-effort; same control as Process Merges."><input type="checkbox" checked={attachDossier} onChange={(e) => { setAttachDossier(e.target.checked); try { localStorage.setItem('mp_attach_dossier', e.target.checked ? '1' : '0'); } catch (er) {} }} /> 📎 Attach dossier</label>
             <button className={'btn ' + (runMode === 'execute' ? 'primary' : '')} style={{ width: 'auto' }} disabled={runBusy} onClick={launchRun}>{runBusy ? 'Launching…' : (runMode === 'execute' ? 'Run merges' : 'Simulate run')}</button>
           </div>
           {runNote ? <p className="small" style={{ color: 'var(--dim)' }}>{runNote}</p> : null}
