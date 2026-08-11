@@ -16,7 +16,7 @@ function fakeConn(overrides = {}) {
       update: async (fields) => { calls.update.push({ type, fields }); return overrides.updateResult || { success: true, id: fields.Id }; },
       create: async (fields) => { calls.create = calls.create || []; calls.create.push({ type, fields }); return overrides.createResult || { success: true, id: 'NEW001' }; },
       destroy: async (id) => { calls.destroy = calls.destroy || []; calls.destroy.push({ type, id }); return overrides.destroyResult || { success: true, id }; },
-      describe: async () => (overrides.describe || { fields: [{ name: 'usat_was_merged__c' }, { name: 'usat_was_merged_date__c' }, { name: 'usat_was_merged_by__c' }] }),
+      describe: async () => (overrides.describe || { fields: [{ name: 'usat_Was_Merged__pc' }, { name: 'usat_Was_Merged_Date__pc' }, { name: 'usat_Was_Merged_By__pc' }] }),
     }),
   };
   return conn;
@@ -87,6 +87,41 @@ test('delete_record requires an id and destroys the record', async () => {
   assert.equal(r.success, true);
 });
 
+// Regression (UAT Test 8): the stamp fields live on the ACCOUNT as Person-Account projections ending in
+// __pc (usat_Was_Merged__pc). The code checked the wrong suffix (__c) with a case-sensitive match, so
+// every stamp was "skipped". Detection must find the actual __pc field (case-insensitively).
+test('stamp_fields_status detects the __pc Person-Account fields and keeps the actual name', async () => {
+  const conn = fakeConn({ describe: { fields: [
+    { name: 'usat_Was_Merged__pc' }, { name: 'usat_Was_Merged_Date__pc' }, { name: 'usat_Was_Merged_By__pc' },
+  ] } });
+  const st = await sw.stamp_fields_status(conn);
+  assert.equal(st.usat_was_merged__c, true);
+  assert.equal(st.usat_was_merged_date__c, true);
+  assert.equal(st.usat_was_merged_by__c, true);
+  assert.equal(st.resolved.flag, 'usat_Was_Merged__pc');   // actual Account (__pc) field name preserved
+});
+
+test('stamp_survivor writes the __pc Account field names', async () => {
+  const conn = fakeConn({ describe: { fields: [
+    { name: 'usat_Was_Merged__pc' }, { name: 'usat_Was_Merged_Date__pc' }, { name: 'usat_Was_Merged_By__pc' },
+  ] } });
+  const r = await sw.stamp_survivor(conn, '001MASTER', 'MERGE', 'tester');
+  assert.equal(r.stamped, true);
+  assert.equal(r.count, 3);
+  const payload = conn.calls.update[conn.calls.update.length - 1].fields;
+  assert.equal(payload.usat_Was_Merged__pc, true);         // actual Account field, TRUE for a MERGE
+  assert.ok('usat_Was_Merged_Date__pc' in payload);
+  assert.ok(String(payload.usat_Was_Merged_By__pc).startsWith('MERGE — '));
+  assert.ok(!('usat_Was_Merged__c' in payload), 'must not write the Contact (__c) name onto the Account');
+});
+
+test('stamp_survivor still reports skipped when the fields truly are absent', async () => {
+  const conn = fakeConn({ describe: { fields: [{ name: 'Name' }, { name: 'Id' }] } });
+  const r = await sw.stamp_survivor(conn, '001MASTER', 'MERGE', 'tester');
+  assert.equal(r.stamped, false);
+  assert.equal(r.skipped, 'no stamp fields on Account');
+});
+
 test('stamp_survivor MERGE sets flag=true, date, and "MERGE — <actor>" text', async () => {
   const conn = fakeConn();
   const r = await sw.stamp_survivor(conn, '001M', 'MERGE', 'skip via svc@sf');
@@ -95,9 +130,9 @@ test('stamp_survivor MERGE sets flag=true, date, and "MERGE — <actor>" text', 
   const u = conn.calls.update[0];
   assert.equal(u.type, 'Account');
   assert.equal(u.fields.Id, '001M');
-  assert.equal(u.fields.usat_was_merged__c, true);
-  assert.ok(u.fields.usat_was_merged_date__c, 'date written');
-  assert.equal(u.fields.usat_was_merged_by__c, 'MERGE — skip via svc@sf');
+  assert.equal(u.fields.usat_Was_Merged__pc, true);
+  assert.ok(u.fields.usat_Was_Merged_Date__pc, 'date written');
+  assert.equal(u.fields.usat_Was_Merged_By__pc, 'MERGE — skip via svc@sf');
 });
 
 test('stamp_survivor RESTORE/RECREATE set flag=false and the action text', async () => {
@@ -105,18 +140,18 @@ test('stamp_survivor RESTORE/RECREATE set flag=false and the action text', async
     const conn = fakeConn();
     const r = await sw.stamp_survivor(conn, '001M', action, 'skip');
     assert.equal(r.stamped, true);
-    assert.equal(conn.calls.update[0].fields.usat_was_merged__c, false, action + ' clears the merged flag');
-    assert.equal(conn.calls.update[0].fields.usat_was_merged_by__c, action + ' — skip');
+    assert.equal(conn.calls.update[0].fields.usat_Was_Merged__pc, false, action + ' clears the merged flag');
+    assert.equal(conn.calls.update[0].fields.usat_Was_Merged_By__pc, action + ' — skip');
   }
 });
 
 test('stamp_survivor writes only present fields; none present -> skipped, no update', async () => {
-  const conn = fakeConn({ describe: { fields: [{ name: 'usat_was_merged__c' }] } }); // only the flag exists
+  const conn = fakeConn({ describe: { fields: [{ name: 'usat_Was_Merged__pc' }] } }); // only the flag exists
   const r = await sw.stamp_survivor(conn, '001M', 'MERGE', 'skip');
   assert.equal(r.stamped, true);
   assert.equal(r.count, 1);
-  assert.ok('usat_was_merged__c' in conn.calls.update[0].fields);
-  assert.ok(!('usat_was_merged_by__c' in conn.calls.update[0].fields));
+  assert.ok('usat_Was_Merged__pc' in conn.calls.update[0].fields);
+  assert.ok(!('usat_Was_Merged_By__pc' in conn.calls.update[0].fields));
 
   const conn2 = fakeConn({ describe: { fields: [] } }); // no stamp fields at all
   const r2 = await sw.stamp_survivor(conn2, '001M', 'MERGE', 'skip');
@@ -126,7 +161,7 @@ test('stamp_survivor writes only present fields; none present -> skipped, no upd
 
 test('stamp_survivor never throws — a write error is returned, not raised', async () => {
   const conn = fakeConn();
-  conn.sobject = () => ({ describe: async () => ({ fields: [{ name: 'usat_was_merged__c' }] }), update: async () => { throw new Error('FIELD_INTEGRITY_EXCEPTION'); } });
+  conn.sobject = () => ({ describe: async () => ({ fields: [{ name: 'usat_Was_Merged__pc' }] }), update: async () => { throw new Error('FIELD_INTEGRITY_EXCEPTION'); } });
   const r = await sw.stamp_survivor(conn, '001M', 'MERGE', 'skip');
   assert.equal(r.stamped, false);
   assert.match(r.error, /FIELD_INTEGRITY/);

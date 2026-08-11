@@ -92,6 +92,22 @@ test('master_reset_fields excludes fields in the keep set (selective restore)', 
   assert.equal(kept.Phone, '555');
 });
 
+// Regression (UAT Test 1): the review-only portal keys leaked into the pre-merge snapshot and then into
+// the survivor reset — Salesforce rejected them ("master-reset partial"). They must never be written back.
+test('master_reset_fields never writes portal / IsCustomerPortal (review-only, non-writable)', () => {
+  const out = mr.master_reset_fields({ PersonEmail: 'a@b.com', portal: '1', IsCustomerPortal: true }, 'M');
+  assert.equal(out.PersonEmail, 'a@b.com');
+  assert.ok(!('portal' in out), 'synthetic portal key must be skipped');
+  assert.ok(!('IsCustomerPortal' in out), 'non-writable IsCustomerPortal must be skipped');
+});
+
+test('account_create_fields never writes portal / IsCustomerPortal', () => {
+  const out = mr.account_create_fields({ FirstName: 'A', LastName: 'B', portal: '1', IsCustomerPortal: false });
+  assert.equal(out.LastName, 'B');
+  assert.ok(!('portal' in out));
+  assert.ok(!('IsCustomerPortal' in out));
+});
+
 test('restore selective: keep_fields leaves that field out of the survivor reset', async () => {
   process.env.MERGE_ENABLE_EXECUTION = 'true';
   const d = deps({ snapRows: [

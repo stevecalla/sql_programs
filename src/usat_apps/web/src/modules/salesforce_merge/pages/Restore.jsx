@@ -86,6 +86,11 @@ export default function Restore() {
   const toggle = (id) => setSel((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const ids = [...sel];
   const selCount = sel.size;
+  // Org's ACTUAL stamp-field API names (backend resolves real casing); fall back to the lowercase
+  // constants when a field is absent so the "create it" hint still names it correctly.
+  const _sfR = (stampFields && stampFields.resolved) || {};
+  const _sfF = (stampFields && stampFields.fields) || { flag: 'usat_Was_Merged__pc', date: 'usat_Was_Merged_Date__pc', by: 'usat_Was_Merged_By__pc' };
+  const nmFlag = _sfR.flag || _sfF.flag, nmDate = _sfR.date || _sfF.date, nmBy = _sfR.by || _sfF.by;
   const safe = !status || status.safe_mode;
   const canExecute = !safe && mode === 'execute' && confirmText === 'RESTORE' && selCount > 0;
   // The run summary carries only counts; per-set failure/skip REASONS live in history (reloaded after a
@@ -171,15 +176,15 @@ export default function Restore() {
           )}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={stampMerged} onChange={(e) => setStamp(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>Stamp survivor with the restore action <code>(usat_was_*)</code> — flag→off, <code>usat_was_merged_by__c</code> = “RESTORE — you”.</span>
+            <span>Stamp survivor with the restore action <code>(usat_was_*)</code> — flag→off, <code>{nmBy}</code> = “RESTORE — you”.</span>
           </label>
           {stampMerged && stampFields && (!stampFields.usat_was_merged__c || !stampFields.usat_was_merged_date__c || !stampFields.usat_was_merged_by__c) && (
             <p className="small" style={{ margin: '0 0 8px', color: 'var(--amber)' }}>
-              ⚠ {[!stampFields.usat_was_merged__c && 'usat_was_merged__c', !stampFields.usat_was_merged_date__c && 'usat_was_merged_date__c', !stampFields.usat_was_merged_by__c && 'usat_was_merged_by__c'].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The restore still runs; the stamp is skipped for any missing field.
+              ⚠ {[!stampFields.usat_was_merged__c && nmFlag, !stampFields.usat_was_merged_date__c && nmDate, !stampFields.usat_was_merged_by__c && nmBy].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The restore still runs; the stamp is skipped for any missing field.
             </p>
           )}
           {stampMerged && stampFields && stampFields.usat_was_merged__c && stampFields.usat_was_merged_date__c && stampFields.usat_was_merged_by__c && (
-            <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present (flag, date, by)</p>
+            <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present ({nmFlag}, {nmDate}, {nmBy})</p>
           )}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={attachDossier} onChange={(e) => setAttach(e.target.checked)} style={{ marginTop: 2 }} />

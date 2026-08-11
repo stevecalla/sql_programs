@@ -8,7 +8,11 @@ const { connect_salesforce } = require('../../../../../utilities/salesforce/sale
 // Custom fields the optional "stamp survivor as merged" feature writes onto the master.
 // These are NOT auto-created — an admin must add them in Salesforce. The stamp is best-effort:
 // if they are missing the merge still succeeds and the run notes that the stamp was skipped.
-const STAMP_FIELDS = { flag: 'usat_was_merged__c', date: 'usat_was_merged_date__c', by: 'usat_was_merged_by__c' };
+// Exact org API names. These live on the CONTACT as usat_Was_Merged__c etc., but the merge tool writes
+// to the ACCOUNT (Person Account merges), where they surface as the Person-Account projection ending in
+// __pc — same pattern as usat_Salesforce_Merge_Id__pc. Single source of truth for the backend (detect +
+// write) and the frontend (returned by /merge/stamp-fields). Matching is case-insensitive as a backstop.
+const STAMP_FIELDS = { flag: 'usat_Was_Merged__pc', date: 'usat_Was_Merged_Date__pc', by: 'usat_Was_Merged_By__pc' };
 
 function write_creds(is_test) {
   if (is_test) {
@@ -119,9 +123,16 @@ async function delete_record(conn, type, id) {
 async function stamp_fields_status(conn) {
   try {
     const d = await conn.sobject('Account').describe();
-    const names = new Set((d.fields || []).map((f) => f.name));
-    return { usat_was_merged__c: names.has(STAMP_FIELDS.flag), usat_was_merged_date__c: names.has(STAMP_FIELDS.date), usat_was_merged_by__c: names.has(STAMP_FIELDS.by) };
-  } catch (e) { return { usat_was_merged__c: false, usat_was_merged_date__c: false, usat_was_merged_by__c: false, error: e.message }; }
+    // Salesforce API names are CASE-INSENSITIVE, but describe returns the org's actual casing — which for
+    // USAT custom fields is Title_Case (e.g. `usat_Was_Merged__c`), not the all-lowercase constants below.
+    // Match case-insensitively and remember the ACTUAL name so the write payload uses the org's exact name.
+    // (A case-sensitive `names.has('usat_was_merged__c')` was the bug: it missed the real field → every
+    // stamp came back "no stamp fields on Account" even though the fields exist.)
+    const byLower = new Map((d.fields || []).map((f) => [String(f.name).toLowerCase(), f.name]));
+    const resolve = (name) => byLower.get(String(name).toLowerCase()) || null;
+    const flag = resolve(STAMP_FIELDS.flag), date = resolve(STAMP_FIELDS.date), by = resolve(STAMP_FIELDS.by);
+    return { usat_was_merged__c: !!flag, usat_was_merged_date__c: !!date, usat_was_merged_by__c: !!by, resolved: { flag, date, by } };
+  } catch (e) { return { usat_was_merged__c: false, usat_was_merged_date__c: false, usat_was_merged_by__c: false, resolved: { flag: null, date: null, by: null }, error: e.message }; }
 }
 
 // Best-effort lifecycle stamp on the survivor Account, written on EVERY action (merge/restore/recreate).
@@ -136,11 +147,17 @@ async function stamp_survivor(conn, survivorId, action, actor, statusOpt) {
   if (!survivorId) return { stamped: false, count: 0, skipped: 'no survivor id' };
   try {
     const status = statusOpt || await stamp_fields_status(conn);
+    // Use the org's ACTUAL field names (from describe) so the write matches the real casing; fall back to
+    // the constants when a caller passed an older status object without `resolved`.
+    const R = status.resolved || {};
+    const flagName = R.flag || (status.usat_was_merged__c ? STAMP_FIELDS.flag : null);
+    const dateName = R.date || (status.usat_was_merged_date__c ? STAMP_FIELDS.date : null);
+    const byName = R.by || (status.usat_was_merged_by__c ? STAMP_FIELDS.by : null);
     const merged = String(action).toUpperCase() === 'MERGE';
     const payload = { Id: survivorId };
-    if (status.usat_was_merged__c) payload.usat_was_merged__c = merged;
-    if (status.usat_was_merged_date__c) payload.usat_was_merged_date__c = new Date().toISOString();
-    if (status.usat_was_merged_by__c) payload.usat_was_merged_by__c = (String(action).toUpperCase() + ' — ' + (actor || 'salesforce_merge_tool')).slice(0, 255);
+    if (flagName) payload[flagName] = merged;
+    if (dateName) payload[dateName] = new Date().toISOString();
+    if (byName) payload[byName] = (String(action).toUpperCase() + ' — ' + (actor || 'salesforce_merge_tool')).slice(0, 255);
     const count = Object.keys(payload).length - 1; // minus Id
     if (count <= 0) return { stamped: false, count: 0, skipped: 'no stamp fields on Account' };
     await update_record(conn, 'Account', payload);

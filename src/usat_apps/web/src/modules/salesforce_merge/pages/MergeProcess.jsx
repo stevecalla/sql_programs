@@ -155,6 +155,11 @@ export default function MergeProcess() {
   const estApiCalls = rows.filter((r) => sel.has(r.id)).reduce((acc, r) => acc + Math.max(1, Math.ceil((Number(r.loser_count) || 0) / 2)), 0) + selCount * (3 + (stampMerged ? 1 : 0));
   const apiRemaining = apiBudget ? apiBudget.remaining : null;
   const apiWouldExceed = apiRemaining != null && estApiCalls > apiRemaining;
+  // Show the org's ACTUAL stamp-field API names (backend resolves real casing, e.g. usat_Was_Merged__c);
+  // fall back to the lowercase constants when a field is absent (so the "create it" hint names it right).
+  const _sfR = (stampFields && stampFields.resolved) || {};
+  const _sfF = (stampFields && stampFields.fields) || { flag: 'usat_Was_Merged__pc', date: 'usat_Was_Merged_Date__pc', by: 'usat_Was_Merged_By__pc' };
+  const nmFlag = _sfR.flag || _sfF.flag, nmDate = _sfR.date || _sfF.date, nmBy = _sfR.by || _sfF.by;
   const safe = !status || status.safe_mode;
   const apSort = useSort();    // Approved merges
   const [apExpanded, setApExpanded] = useState(() => new Set());
@@ -316,15 +321,15 @@ export default function MergeProcess() {
           )}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={stampMerged} onChange={(e) => setStampMerged(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>Stamp survivor with the merge action <code>(usat_was_*)</code> — flag→on, <code>usat_was_merged_by__c</code> = “MERGE — you”.</span>
+            <span>Stamp survivor with the merge action <code>(usat_was_*)</code> — flag→on, <code>{nmBy}</code> = “MERGE — you”.</span>
           </label>
           {stampMerged && stampFields && (!stampFields.usat_was_merged__c || !stampFields.usat_was_merged_date__c || !stampFields.usat_was_merged_by__c) && (
             <p className="small" style={{ margin: '0 0 8px', color: 'var(--amber)' }}>
-              ⚠ {[!stampFields.usat_was_merged__c && 'usat_was_merged__c', !stampFields.usat_was_merged_date__c && 'usat_was_merged_date__c', !stampFields.usat_was_merged_by__c && 'usat_was_merged_by__c'].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The merge still runs; the stamp is skipped for any missing field. <code>usat_was_merged_by__c</code> records who ran the merge.
+              ⚠ {[!stampFields.usat_was_merged__c && nmFlag, !stampFields.usat_was_merged_date__c && nmDate, !stampFields.usat_was_merged_by__c && nmBy].filter(Boolean).join(' + ')} not found on Account — create it in Salesforce (Setup → Object Manager → Account → Fields). The merge still runs; the stamp is skipped for any missing field. <code>{nmBy}</code> records who ran the merge.
             </p>
           )}
           {stampMerged && stampFields && stampFields.usat_was_merged__c && stampFields.usat_was_merged_date__c && stampFields.usat_was_merged_by__c && (
-            <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present (flag, date, by)</p>
+            <p className="muted small" style={{ margin: '0 0 8px', color: 'var(--green)' }}>✓ stamp fields present ({nmFlag}, {nmDate}, {nmBy})</p>
           )}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={attachDossier} onChange={(e) => { setAttachDossier(e.target.checked); try { localStorage.setItem('mp_attach_dossier', e.target.checked ? '1' : '0'); } catch (er) {} }} style={{ marginTop: 2 }} />
