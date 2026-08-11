@@ -44,6 +44,19 @@ describe('build_master_diff', () => {
     assert.equal(d.summary.missing, 1);
     assert.equal(d.rows[0].state, 'missing');
   });
+
+  // Regression (UAT Test 1): the review-only portal keys leaked into the snapshot; putting them in the
+  // live re-fetch SELECT made the survivor read back null → every field "missing". They must be skipped.
+  test('portal / IsCustomerPortal are excluded from the comparable field set', () => {
+    const keys = rd.comparable_keys({ PersonEmail: 'a@b.com', portal: '1', IsCustomerPortal: true });
+    assert.ok(keys.includes('PersonEmail'));
+    assert.ok(!keys.includes('portal'));
+    assert.ok(!keys.includes('IsCustomerPortal'));
+    // and the diff itself ignores them (a portal-only change is not a real drift)
+    const d = rd.build_master_diff({ PersonEmail: 'a@b.com', portal: '1' }, { PersonEmail: 'a@b.com', portal: '0' });
+    assert.equal(d.in_sync, true);
+    assert.equal(d.summary.total, 1);
+  });
 });
 
 describe('diff_for_entry', () => {

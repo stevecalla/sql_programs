@@ -36,10 +36,12 @@ async function main() {
     } catch (e) { filesOk = false; console.log('  ' + obj.padEnd(20) + ' describe FAILED: ' + e.message); }
   }
 
-  console.log('\nStamp fields on Account (needed for usat_was_* lifecycle marker):');
+  console.log('\nStamp fields on Account (needed for the usat_Was_Merged__pc lifecycle marker):');
   const sf = await W.stamp_fields_status(conn);
-  for (const k of ['usat_was_merged__c', 'usat_was_merged_date__c', 'usat_was_merged_by__c']) {
-    console.log('  ' + k.padEnd(28) + (sf[k] ? 'present' : 'MISSING'));
+  const present = { flag: sf.usat_was_merged__c, date: sf.usat_was_merged_date__c, by: sf.usat_was_merged_by__c };
+  for (const key of ['flag', 'date', 'by']) {
+    const actual = (sf.resolved && sf.resolved[key]) || W.STAMP_FIELDS[key]; // show the org's real API name
+    console.log('  ' + String(actual).padEnd(30) + (present[key] ? 'present' : 'MISSING'));
   }
 
   if (live) {

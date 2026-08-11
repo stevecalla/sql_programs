@@ -179,6 +179,17 @@ async function list_recycle_bin({ is_test = true, connect = default_connect, lim
   const conn = await connect(is_test);
   const n = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
   if (typeof conn.query !== 'function') return { rows: [], error: 'query not available' };
+  // Capture the LIVE connection identity so the panel can show exactly which org + user (+ instance) this
+  // list was queried as — the recycle bin is per-user, so the connected user is what determines the rows.
+  let connected = { username: '', org_id: '', instance_host: '' };
+  try {
+    const id = (typeof conn.identity === 'function') ? await conn.identity() : null;
+    connected = {
+      username: (id && id.username) || '',
+      org_id: (id && id.organization_id) || '',
+      instance_host: (() => { try { return conn.instanceUrl ? new URL(conn.instanceUrl).host : ''; } catch (_) { return ''; } })(),
+    };
+  } catch (_) { /* identity best-effort */ }
   try {
     const res = await conn.query(
       'SELECT Id, Name, PersonEmail, cfg_Member_Number__pc, MasterRecordId, LastModifiedDate ' +
@@ -188,8 +199,8 @@ async function list_recycle_bin({ is_test = true, connect = default_connect, lim
       member_number: r.cfg_Member_Number__pc || '', master_record_id: r.MasterRecordId || '',
       last_modified: r.LastModifiedDate || '',
     }));
-    return { rows, error: null };
-  } catch (e) { return { rows: [], error: e.message }; }
+    return { rows, error: null, connected, queried_at: new Date().toISOString() };
+  } catch (e) { return { rows: [], error: e.message, connected, queried_at: new Date().toISOString() }; }
 }
 
 async function get_user_capabilities({ is_test, connect = default_connect, objects = ['Account', 'Contact'] } = {}) {
