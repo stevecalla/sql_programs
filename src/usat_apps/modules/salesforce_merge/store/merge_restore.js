@@ -99,7 +99,10 @@ function from_snapshot(rows, survivorId) {
 // field API names the operator chose to LEAVE at their current (live) value — those are excluded from
 // the reset (selective restore). Everything else non-blank + non-system is reset to the snapshot.
 function master_reset_fields(masterFields, survivorId, keep) {
-  const SKIP = new Set(['account', 'contact', 'Id', 'Name', 'CreatedDate', 'LastModifiedDate']);
+  // 'portal' (synthetic key from salesforce_read) and 'IsCustomerPortal' (real but non-writable system
+  // field) are review-only context — writing them back causes Salesforce to reject the update (the
+  // "master-reset partial" note). They must never be part of a survivor reset.
+  const SKIP = new Set(['account', 'contact', 'Id', 'Name', 'CreatedDate', 'LastModifiedDate', 'portal', 'IsCustomerPortal']);
   const keepSet = keep instanceof Set ? keep : new Set(keep || []);
   const out = { Id: survivorId };
   for (const [k, v] of Object.entries(masterFields || {})) {
@@ -121,7 +124,8 @@ async function status(deps = {}) {
 // System / read-only fields that can't be written when CREATING a fresh Account from a snapshot.
 // (Name on a Person Account is derived from First/Last, so it's skipped too.)
 const CREATE_SKIP = new Set(['Id', 'account', 'contact', 'attributes', 'Name', 'CreatedDate', 'LastModifiedDate',
-  'SystemModstamp', 'IsDeleted', 'MasterRecordId', 'LastActivityDate', 'LastViewedDate', 'LastReferencedDate', 'IsPersonAccount']);
+  'SystemModstamp', 'IsDeleted', 'MasterRecordId', 'LastActivityDate', 'LastViewedDate', 'LastReferencedDate', 'IsPersonAccount',
+  'portal', 'IsCustomerPortal']);   // review-only portal context — never write these when recreating an account
 function account_create_fields(fields) {
   const out = {};
   for (const [k, v] of Object.entries(fields || {})) {
