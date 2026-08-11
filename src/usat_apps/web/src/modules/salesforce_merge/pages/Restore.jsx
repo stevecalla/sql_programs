@@ -353,6 +353,17 @@ export default function Restore() {
         <p className="muted small" style={{ margin: '0 0 8px' }}>
           Secondary queue: sets whose losers are gone from the Recycle Bin (window expired or purged), routed here when a restore couldn’t use the bin. Recreate rebuilds the accounts from the pre-merge backup — the new records get <strong>new Salesforce ids</strong>, so external references (Marketing Cloud, data warehouse, etc.) won’t reconnect. User-initiated and gated like restore.
         </p>
+        <div style={{ margin: '0 0 10px', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)' }}>
+          <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: 13 }}>How recreate works</p>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>
+            <li><strong>When it's used.</strong> When a restore can't run because a loser is gone from the Recycle Bin (purged or the ~15-day window lapsed). There's nothing to <code>undelete</code>, so instead of bringing the record back we <em>rebuild</em> it.</li>
+            <li><strong>What it does.</strong> Reads the set's <strong>pre-merge backup snapshot</strong> and recreates each lost loser as a new Account with its saved field values, re-points that loser's children to the new record, and resets the survivor's overwritten fields — the same end state as a restore, except the rebuilt accounts get <strong>new Salesforce ids</strong>.</li>
+            <li><strong>New ids = the catch.</strong> Because the id changes, anything outside Salesforce that referenced the old id (Marketing Cloud, data warehouse, integrations) won't reconnect on its own. Restore keeps the original id; recreate can't.</li>
+            <li><strong>Needs a backup.</strong> Recreate only works if a pre-merge snapshot exists for the set. Rows without one are greyed out here — there's nothing to rebuild from, and the record can't be recovered.</li>
+            <li><strong>How a set gets here.</strong> Automatically when a restore attempt detects a purged loser, or manually via the <strong>“→ Recreate”</strong> button on an <em>✕ expired</em> row up in Completed merges.</li>
+            <li><strong>Safe by default.</strong> Simulate previews the rebuild with no writes; a real recreate needs Execute mode and a typed <strong>RECREATE</strong> — then the set flips to <em>recreated</em>.</li>
+          </ul>
+        </div>
         <details className="muted small" style={{ margin: '0 0 10px' }}>
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>How a loser is identified as “not in the Recycle Bin”</summary>
           <div style={{ marginTop: 6 }}>
