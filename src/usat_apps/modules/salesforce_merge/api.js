@@ -661,6 +661,18 @@ function mount(app) {
       res.json({ ok: true, queued: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
+  // Move an EXPIRED completed-merge set (losers gone from the Recycle Bin — Restore can't run) into the
+  // recreate-from-backup queue. DB-only status change (done -> recreate_pending); re-verifies expiry so a
+  // still-restorable set isn't diverted to a new-id rebuild. Closes the catch-22 where the disabled Restore
+  // checkbox left an expired set with no path to Recreate.
+  app.post('/api/salesforce-merge/merge/restore/to-recreate', gate, async function (req, res) {
+    try {
+      const b = req.body || {};
+      const r = await mrestore.route_to_recreate(b.ids || []);
+      analytics.log({ event_name: 'route_to_recreate', actor: req.user, role: req.role, panel: 'restore', is_test: mtest(req), outcome: (r.routed ? 'routed' : 'skipped') });
+      res.json({ ok: true, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   // Secondary queue — sets routed to recreate-from-backup (their losers are gone from the Recycle
   // Bin). list shows the queue + reasons; recreate is the user-initiated rebuild (typed RECREATE).
   app.get('/api/salesforce-merge/merge/recreate', gate, async function (req, res) {

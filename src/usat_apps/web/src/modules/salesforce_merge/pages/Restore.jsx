@@ -81,6 +81,17 @@ export default function Restore() {
     finally { setPostBusy(false); }
   };
 
+  const [routingId, setRoutingId] = useState(null);   // queue id currently being moved to Recreate
+  const sendToRecreate = async (id) => {
+    setErr(''); setRoutingId(id);
+    try {
+      const r = await api.mergeRouteToRecreate([id]);
+      if (r && r.routed) { load(); }
+      else { const why = (r && r.results && r.results[0] && r.results[0].reason) || 'could not move this set'; setErr('Not moved to Recreate: ' + why); }
+    } catch (e) { setErr(e.message); }
+    finally { setRoutingId(null); }
+  };
+
   const load = useCallback(() => {
     api.mergeStatus().then(setStatus).catch((e) => setErr(e.message));
     api.stampFields().then(setStampFields).catch(() => setStampFields(null));
@@ -279,6 +290,13 @@ export default function Restore() {
                     <span className="pill" title={"Restorable status — a pre-check on the loser records, not a guarantee (the real test is the undelete):\n✓ restorable — every loser still reads IsDeleted=true; the set can be restored from the Recycle Bin.\n✕ expired — at least one loser is gone from the bin (purged, or already restored) — it can't be undeleted here; use the Recreate queue below.\n— unknown — couldn't reach Salesforce to check right now." + (r.reason ? "\n\nThis set: " + r.reason : "")} style={{ color: r.restorable ? 'var(--green)' : (r.restorable === false ? 'var(--amber)' : 'var(--dim)') }}>
                       {r.restorable === true ? '✓ restorable' : r.restorable === false ? '✕ expired' : '— unknown'}
                     </span>
+                    {r.restorable === false && (
+                      <button type="button" onClick={() => sendToRecreate(r.id)} disabled={routingId === r.id}
+                        title="This set can't be restored — its loser(s) are gone from the Recycle Bin. Move it to the Recreate queue below to rebuild from the pre-merge backup (new Salesforce ids)."
+                        style={{ marginLeft: 6, fontSize: 11, padding: '1px 7px', borderRadius: 5, border: '1px solid var(--amber)', background: 'transparent', color: 'var(--amber)', cursor: routingId === r.id ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                        {routingId === r.id ? '…' : '→ Recreate'}
+                      </button>
+                    )}
                   </td>
                   <td>
                     {(() => {
