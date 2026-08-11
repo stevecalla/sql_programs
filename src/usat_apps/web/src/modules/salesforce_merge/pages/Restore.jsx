@@ -195,12 +195,22 @@ export default function Restore() {
           {mode === 'execute' && !safe && (
             <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="type RESTORE to confirm" style={{ width: '100%', marginBottom: 8 }} />
           )}
-          {mode === 'execute' && !safe && (
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 8px' }}>
-              <input type="checkbox" checked={ackPost} onChange={(e) => setAckPost(e.target.checked)} style={{ marginTop: 2 }} />
-              <span>Restore even if the survivor was edited in Salesforce after the merge. <strong>Unchecked, edited‑since‑merge sets are held</strong> (left in the list) for review.</span>
-            </label>
-          )}
+          {mode === 'execute' && !safe && (() => {
+            // Only actionable once something is actually flagged: a post-merge check found an edited
+            // survivor, or a prior restore attempt held a set. Otherwise greyed (visible, not clickable)
+            // so it can't be pre-ticked blind before a conflict exists.
+            const ackNeeded = Object.values(postDiff).some((d) => d && d.edited_since_merge)
+              || !!(result && (result.held > 0 || (result.results || []).some((x) => x.result === 'held')));
+            const disabledTip = "Greyed out because no set currently needs it. This box only matters when a survivor was edited in Salesforce AFTER its merge — greying it until then keeps it from being ticked blind before any such conflict exists.\n\nIt unlocks when EITHER:\n• you click “Check post‑merge changes” and a survivor comes back “⚠ edited since merge”, or\n• a restore attempt holds a set for that reason.\n\nOnce unlocked, ticking it lets you overwrite the later edit on purpose.";
+            return (
+              <label
+                style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 8px', opacity: ackNeeded ? 1 : 0.5, cursor: ackNeeded ? 'pointer' : 'not-allowed' }}
+                title={ackNeeded ? undefined : disabledTip}>
+                <input type="checkbox" checked={ackNeeded ? ackPost : false} disabled={!ackNeeded} onChange={(e) => setAckPost(e.target.checked)} title={ackNeeded ? undefined : disabledTip} style={{ marginTop: 2 }} />
+                <span>Restore even if the survivor was edited in Salesforce after the merge. <strong>Unchecked, edited‑since‑merge sets are held</strong> (left in the list) for review.{!ackNeeded && <em> — enabled only once a set is flagged edited‑since‑merge.</em>}</span>
+              </label>
+            );
+          })()}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, margin: '0 0 6px' }}>
             <input type="checkbox" checked={stampMerged} onChange={(e) => setStamp(e.target.checked)} style={{ marginTop: 2 }} />
             <span>Stamp survivor with the restore action <code>(usat_was_*)</code> — flag→off, <code>{nmBy}</code> = “RESTORE — you”.</span>
@@ -234,7 +244,9 @@ export default function Restore() {
           <p style={{ margin: '0 0 6px', fontWeight: 700 }}>How restore works</p>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>
             <li><strong>Three steps.</strong> Undelete the losers from the Recycle Bin (original ids), re-point their children to their original parents (from the snapshot), and reset the master's overwritten fields (from the snapshot).</li>
-            <li><strong>Best-effort, ~15-day window.</strong> Restore only works while the losers are still in the Recycle Bin — rows flagged <em>expired</em> can't be restored here. Downstream automation and external systems (e.g. Marketing Cloud) are not auto-undone.</li>
+            <li><strong>Two queues.</strong> A merge lands in <em>Completed merges</em>. Restore it there and it flips to <em>restored</em>. But if a loser can't be undeleted — it's gone from the Recycle Bin (purged, or the ~15-day window lapsed) — that set is moved out of Completed merges into the <em>Recreate queue</em> below, which rebuilds the accounts from the pre-merge backup with <strong>new ids</strong> (external references, e.g. Marketing Cloud, won't reconnect).</li>
+            <li><strong>Restorable vs expired.</strong> The <em>Restorable</em> badge pre-checks the losers: <em>✓ restorable</em> means they still read deleted; <em>✕ expired</em> means at least one is gone (that row's checkbox is disabled — it belongs in Recreate). Hover either badge for the full meaning.</li>
+            <li><strong>Post‑merge column.</strong> After you click <em>Check post‑merge changes</em>, it flags whether the survivor was edited in Salesforce <em>after</em> the merge: <em>✓ untouched</em> = safe, a restore cleanly resets it; <em>⚠ edited since merge</em> = a blind restore would overwrite those later edits, so the set is held on Execute unless you acknowledge (or Keep current on the changed fields); <em>— no baseline</em> = merged before this feature, so it can't be checked (not gated); <em>—</em> = not checked yet. Hover any value for detail.</li>
             <li><strong>Safe by default.</strong> Simulate previews eligibility and the plan with no writes; a real restore needs Execute mode, a typed <strong>RESTORE</strong>, and the deploy execution flag — then the set flips to <em>restored</em>.</li>
           </ul>
         </div>
@@ -263,18 +275,18 @@ export default function Restore() {
                   <td>{r.loser_count}</td>
                   <td><span className="muted small">{r.source_type === 'merge_id' ? 'merge id ' : 'group '}</span><span style={{ userSelect: 'all', whiteSpace: 'nowrap' }} title="Click to select · triple-click to copy">{r.source_key || '—'}</span></td>
                   <td>{r.environment || '—'}</td>
-                  <td title={r.reason}>
-                    <span className="pill" style={{ color: r.restorable ? 'var(--green)' : (r.restorable === false ? 'var(--amber)' : 'var(--dim)') }}>
+                  <td>
+                    <span className="pill" title={"Restorable status — a pre-check on the loser records, not a guarantee (the real test is the undelete):\n✓ restorable — every loser still reads IsDeleted=true; the set can be restored from the Recycle Bin.\n✕ expired — at least one loser is gone from the bin (purged, or already restored) — it can't be undeleted here; use the Recreate queue below.\n— unknown — couldn't reach Salesforce to check right now." + (r.reason ? "\n\nThis set: " + r.reason : "")} style={{ color: r.restorable ? 'var(--green)' : (r.restorable === false ? 'var(--amber)' : 'var(--dim)') }}>
                       {r.restorable === true ? '✓ restorable' : r.restorable === false ? '✕ expired' : '— unknown'}
                     </span>
                   </td>
                   <td>
                     {(() => {
                       const d = postDiff[r.id];
-                      if (!d) return <span className="muted small">—</span>;
-                      if (d.has_baseline === false) return <span className="pill" title={d.note} style={{ color: 'var(--dim)' }}>— no baseline</span>;
-                      if (d.edited_since_merge) return <span className="pill" title={'SF last modified ' + fmtTs(d.sf_last_modified_now) + ' is after the post‑merge snapshot ' + fmtTs(d.sf_last_modified_at_merge)} style={{ color: 'var(--amber)' }}>⚠ edited since merge</span>;
-                      return <span className="pill" style={{ color: 'var(--green)' }}>✓ untouched</span>;
+                      if (!d) return <span className="muted small" title="Not checked yet — click “Check post‑merge changes” to compare the survivor's current Salesforce values against the snapshot taken right after the merge.">—</span>;
+                      if (d.has_baseline === false) return <span className="pill" title={"No post‑merge baseline for this set — it was merged before this feature existed, so we can't tell if the survivor was edited afterward. It won't be gated.\n\n" + (d.note || '')} style={{ color: 'var(--dim)' }}>— no baseline</span>;
+                      if (d.edited_since_merge) return <span className="pill" title={"Edited since merge — the survivor was changed in Salesforce AFTER the merge finished, so a blind restore would overwrite those later edits. On Execute this set is HELD unless you acknowledge (or tick Keep current on the changed fields).\n\nSF last modified " + fmtTs(d.sf_last_modified_now) + " is after the post‑merge snapshot " + fmtTs(d.sf_last_modified_at_merge)} style={{ color: 'var(--amber)' }}>⚠ edited since merge</span>;
+                      return <span className="pill" title="Untouched — the survivor has NOT been edited in Salesforce since the merge finished, so restoring it will cleanly reset it to its pre‑merge values with nothing to overwrite. Safe to restore." style={{ color: 'var(--green)' }}>✓ untouched</span>;
                     })()}
                   </td>
                 </tr>,
@@ -323,6 +335,17 @@ export default function Restore() {
         <p className="muted small" style={{ margin: '0 0 8px' }}>
           Secondary queue: sets whose losers are gone from the Recycle Bin (window expired or purged), routed here when a restore couldn’t use the bin. Recreate rebuilds the accounts from the pre-merge backup — the new records get <strong>new Salesforce ids</strong>, so external references (Marketing Cloud, data warehouse, etc.) won’t reconnect. User-initiated and gated like restore.
         </p>
+        <details className="muted small" style={{ margin: '0 0 10px' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>How a loser is identified as “not in the Recycle Bin”</summary>
+          <div style={{ marginTop: 6 }}>
+            <p style={{ margin: '0 0 6px' }}>Salesforce exposes no “is it in the Recycle Bin?” field, so the tool uses two checks — a query pre-check, then the restore attempt itself as the definitive test:</p>
+            <ol style={{ margin: '0 0 6px 18px', padding: 0 }}>
+              <li><strong>Query pre-check (before restoring).</strong> Each loser is read with <code>SELECT Id, IsDeleted … ALL ROWS</code> (queryAll). Three outcomes: <strong>IsDeleted=true</strong> → still in the bin (recoverable); <strong>IsDeleted=false</strong> → already live/restored (also fine); <strong>not returned at all</strong> → physically purged and gone. This drives the <em>✕ expired</em> badge. It's all-or-nothing: if any one loser in the set is gone, the whole set is routed here.</li>
+              <li><strong>Undelete attempt (definitive).</strong> A loser can pass the pre-check as <code>IsDeleted=true</code> yet still be rejected by the actual <code>undelete</code> with “entity is not in the recycle bin.” That's a record purged from the bin but still lingering in <code>queryAll</code> during Salesforce's physical-delete lag. When that rejection happens mid-restore, the set is moved here too.</li>
+            </ol>
+            <p style={{ margin: 0 }}>An already-<strong>restored</strong> (live) loser is <em>not</em> treated as purged, so retrying after a partial restore still runs. Only a <strong>purged</strong> or <strong>missing</strong> loser lands a set in this queue.</p>
+          </div>
+        </details>
         <div className="dt-scroll" style={{ maxHeight: 280 }}>
           <table className="modal-table">
             <thead><tr><th>Diff</th><th>Sel</th><th>#</th><th>Survivor</th><th>Account</th><th>Merged</th><th>Backup</th><th>Reason / considerations</th></tr></thead>
