@@ -495,6 +495,44 @@ export function WidgetEmbedCard({ handle }) {
   );
 }
 
+// ---- Dev-console test — paste-into-the-browser-console loaders that inject THIS bot's widget from prod or a
+// local dev server, so you can smoke-test the widget on any page while iterating on the public bot code. The
+// data-widget handle tracks the selected bot, so switching bots here updates both snippets live. ----
+export function WidgetDevConsoleCard({ handle, theme, bubble, color }) {
+  const [copied, setCopied] = useState('');
+  const h = handle || 'default';
+  const PROD_HOST = 'https://usat-app.kidderwise.org';
+  const LOCAL_HOST = 'http://localhost:5175';
+  // The loader (widget_page.render_loader) reads data-widget + optional data-theme / data-bubble / data-color and
+  // passes the cosmetic ones through to the widget — the SAME override path the live Preview uses. So we emit the
+  // panel's current draft styling here: the console test then matches the Preview exactly, even before you Save.
+  // Queue / pages / knowledge / corrections are always resolved server-side from the handle (can't be overridden),
+  // so those reflect the SAVED bot — Save to test changes to them.
+  const attrs = [['data-widget', h]];
+  if (theme === 'light' || theme === 'dark') attrs.push(['data-theme', theme]);
+  if (bubble) attrs.push(['data-bubble', bubble]);
+  if (color) attrs.push(['data-color', color]);
+  const snippet = (host) => ["var s=document.createElement('script'); s.async=true;", "s.src='" + host + "/api/public-chatbot/widget.js';"]
+    .concat(attrs.map(([k, v]) => "s.setAttribute('" + k + "','" + v + "');"))
+    .concat(['document.body.appendChild(s);'])
+    .join('\n');
+  const prod = snippet(PROD_HOST);
+  const local = snippet(LOCAL_HOST);
+  const copy = (text, which) => { try { navigator.clipboard.writeText(text); setCopied(which); setTimeout(() => setCopied(''), 1500); } catch (e) { /* ignore */ } };
+  return (
+    <Card title="Dev console test" summary={h}>
+      <div className="cbx-hint" style={{ marginBottom: 8 }}>Paste into the browser <b>DevTools console</b> on any page to inject the <code>{h}</code> widget for a quick smoke test. It tracks this panel live: <b>styling</b> (theme/bubble/color) matches the preview — including unsaved tweaks — while <b>queue &amp; knowledge</b> come from the <b>saved</b> bot, so <b>Save</b> before testing those.</div>
+      <div className="cbx-dim"><b>Production</b> — <code>{PROD_HOST}</code></div>
+      <pre className="cbx-snippet">{prod}</pre>
+      <div className="cbx-row-end"><button className="cbx-btn sm" onClick={() => copy(prod, 'prod')}>{copied === 'prod' ? 'copied ✓' : 'copy prod'}</button></div>
+      <div className="cbx-dim" style={{ marginTop: 12 }}><b>Local dev</b> — <code>{LOCAL_HOST}</code></div>
+      <pre className="cbx-snippet">{local}</pre>
+      <div className="cbx-row-end"><button className="cbx-btn sm" onClick={() => copy(local, 'local')}>{copied === 'local' ? 'copied ✓' : 'copy local'}</button></div>
+      <div className="cbx-hint" style={{ marginTop: 10 }}>Loading over <code>http://localhost</code> from an <code>https</code> page is mixed content — test the local snippet on a local/http page, or allow insecure content for the tab. Run <i>either</i> block, not both, to avoid two widgets on the page.</div>
+    </Card>
+  );
+}
+
 // ---- AI model selector — at the TOP of the panel, like the email queue (saves on change) ----
 function ModelSelect() {
   const [models, setModels] = useState([]);
