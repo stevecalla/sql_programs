@@ -61,13 +61,22 @@ const CUTOVER_SECTION = { label: 'Pull from prod → dev (corrections + content 
   { label: 'Pull content files from prod', desc: 'From DEV: copy prod\'s context/knowledge tree into this machine\'s data dir (additive/overwrite). Needs PROD_SSH in .env.', bin: 'node', argv: [PULLC], cli: 'node ' + PULLC },
   { label: 'Pull knowledge URLs from prod', desc: 'From DEV: SSH to prod, export knowledge_sources + knowledge_chunks, copy back, import here (exact parity - upserts sources, replaces chunks). Needs PROD_SSH in .env.', bin: 'node', argv: [PULLU], cli: 'node ' + PULLU },
 ] };
+// Read-only Salesforce probes — no writes, no email sent. Confirm the integration user's identity and whether
+// it can send/log email BEFORE we wire up the real send path. Same connection the app uses.
+const SEND_CHECK = 'src/usat_apps/modules/salesforce_email_queue/check_sf_send_capability.js';
+const READ_CHECK = 'src/usat_apps/modules/salesforce_email_queue/check_sf_read.js';
+const SF_CHECK_SECTION = { label: 'Salesforce checks (read-only — nothing is written or sent)', color: 'MAGENTA', items: [
+  { label: 'Check send capability — PRODUCTION', desc: 'Connects as the integration user and reports PASS/FAIL for: create EmailMessage, edit Case, Send Email permission, and available org-wide from-addresses. Read-only.', bin: 'node', argv: [SEND_CHECK], cli: 'node ' + SEND_CHECK },
+  { label: 'Check send capability — sandbox', desc: 'Same read-only probe against the sandbox org (SF_DEV_* creds).', bin: 'node', argv: [SEND_CHECK, '--sandbox'], cli: 'node ' + SEND_CHECK + ' --sandbox' },
+  { label: 'SF read smoke — PRODUCTION', desc: 'Connect + list queues — confirms the connection and which org/user we authenticate as.', bin: 'node', argv: [READ_CHECK], cli: 'node ' + READ_CHECK },
+] };
 const STATUS_SECTION = { label: 'Status & open (platform)', color: 'GREEN', items: [
   { label: 'Platform status (:8022)', desc: 'GET :8022/api/status — usat_apps health (the module mounts here)', status: PLATFORM_PORT, statusLabel: 'platform', cli: 'curl http://localhost:8022/api/status' },
   { label: 'Open Email Queue (:8022)', desc: 'The operator page on the platform', open: `http://localhost:${PLATFORM_PORT}/salesforce/email-queue`, cli: `open http://localhost:${PLATFORM_PORT}/salesforce/email-queue` },
   { label: 'Open via proxy (:8000)', desc: 'The operator page through the :8000 proxy', open: `http://localhost:${PROXY_PORT}/salesforce/email-queue`, cli: `open http://localhost:${PROXY_PORT}/salesforce/email-queue` },
 ] };
 
-const SECTIONS = CMD_SECTIONS.concat([CUTOVER_SECTION, STATUS_SECTION]);
+const SECTIONS = CMD_SECTIONS.concat([SF_CHECK_SECTION, CUTOVER_SECTION, STATUS_SECTION]);
 const ALL = SECTIONS.flatMap((s) => s.items);
 
 if (require.main === module) {
