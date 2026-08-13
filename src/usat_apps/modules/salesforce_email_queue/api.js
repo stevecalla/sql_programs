@@ -49,6 +49,17 @@ function send_enabled() {
 function send_queue_from() {
   try { const m = (kb_data_dir.read_config() || {}).send_queue_from; return (m && typeof m === 'object' && !Array.isArray(m)) ? m : {}; } catch (e) { return {}; }
 }
+// Master on/off switch for writing Case.Status changes from the app. Default OFF — status changes stay
+// disabled until an admin turns them on in Admin → Settings, so we can't write to Salesforce before it's approved.
+function status_enabled() {
+  try { return (kb_data_dir.read_config() || {}).status_enabled === true; } catch (e) { return false; }
+}
+// Per-status extra fields to collect + write when moving to that status:
+//   { "<StatusValue>": [ { field: 'Reason', required: true }, ... ] }
+// e.g. Closed -> Case Close Reason (required). Only fields listed here can be written by /status.
+function status_requirements() {
+  try { const m = (kb_data_dir.read_config() || {}).status_requirements; return (m && typeof m === 'object' && !Array.isArray(m)) ? m : {}; } catch (e) { return {}; }
+}
 // Wire the shared model registry to read the module config.json (so /admin Settings model edits take effect).
 try { ai.set_config_reader(function () { try { return kb_data_dir.read_config() || {}; } catch (e) { return {}; } }); } catch (e) { /* ignore */ }
 
@@ -167,7 +178,25 @@ function mount(app) {
   app.get(P + '/config', gate, async function (req, res) {
     let sf_user = _conn_user;
     if (!sf_user) { try { await get_conn(); sf_user = _conn_user; } catch (e) { /* connection optional here */ } }
-    res.json({ ok: true, sf_env: sf_env(), show_test_banner: show_test_banner(), sf_user: sf_user || '', send_enabled: send_enabled(), send_queue_from: send_queue_from() });
+    res.json({ ok: true, sf_env: sf_env(), show_test_banner: show_test_banner(), sf_user: sf_user || '', send_enabled: send_enabled(), send_queue_from: send_queue_from(), status_enabled: status_enabled(), status_requirements: status_requirements() });
+  });
+
+  // Updateable Case fields (name/label/type + picklist options) — used by the admin "required fields" editor
+  // and by the operator status-change form to render the right input for each configured field. Dynamic (describe).
+  app.get(P + '/case-fields', gate, async function (req, res) {
+    try {
+      const c = await get_conn();
+      const meta = await c.sobject('Case').describe();
+      const fields = (meta.fields || []).filter(function (f) { return f.updateable; }).map(function (f) {
+        return {
+          name: f.name, label: f.label || f.name, type: f.type,
+          required: (f.nillable === false && f.defaultedOnCreate === false),
+          picklist: (f.type === 'picklist' || f.type === 'multipicklist') ? (f.picklistValues || []).filter(function (v) { return v.active; }).map(function (v) { return { value: v.value, label: v.label || v.value }; }) : [],
+          controller: f.controllerName || null, dependent: !!f.dependentPicklist
+        };
+      });
+      res.json({ ok: true, fields: fields });
+    } catch (e) { err(res, e); }
   });
 
   // Verified Org-Wide Email Addresses (OWEAs) available as a "From" for outbound send. Dynamic — reads the
@@ -457,7 +486,7 @@ function mount(app) {
 
   // ---- EQ Admin (Settings / Access) — admin-only, ported 1:1 from the standalone app's /admin ----
   app.get(P + '/admin/config', require_admin, function (req, res) {
-    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS, ai_models: ai.list_models(), sf_env: sf_env(), sf_envs: SF_ENVS, show_test_banner: show_test_banner(), send_enabled: send_enabled(), send_queue_from: send_queue_from() });
+    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS, ai_models: ai.list_models(), sf_env: sf_env(), sf_envs: SF_ENVS, show_test_banner: show_test_banner(), send_enabled: send_enabled(), send_queue_from: send_queue_from(), status_enabled: status_enabled(), status_requirements: status_requirements() });
   });
   app.post(P + '/admin/config', require_admin, function (req, res) {
     try {
@@ -484,6 +513,19 @@ function mount(app) {
         Object.keys(b.send_queue_from).forEach(function (k) { const v = String(b.send_queue_from[k] || '').trim(); if (v) map[String(k)] = v.slice(0, 254); });
         cfg.send_queue_from = map;
       }
+      // Master switch for Case status writes.
+      if (b.status_enabled !== undefined) cfg.status_enabled = !!b.status_enabled;
+      // Per-status required/optional fields map: { "<Status>": [ { field, required } ] }.
+      if (b.status_requirements !== undefined) {
+        if (b.status_requirements === null || typeof b.status_requirements !== 'object' || Array.isArray(b.status_requirements)) return res.status(400).json({ ok: false, error: 'status_requirements must be an object' });
+        const map = {};
+        Object.keys(b.status_requirements).forEach(function (k) {
+          const arr = Array.isArray(b.status_requirements[k]) ? b.status_requirements[k] : [];
+          const rows = arr.map(function (x) { const f = x && String(x.field || '').trim(); return f ? { field: f.slice(0, 80), required: !!x.required } : null; }).filter(Boolean);
+          if (rows.length) map[String(k)] = rows;
+        });
+        cfg.status_requirements = map;
+      }
       if (b.ai_models !== undefined) {
         if (!Array.isArray(b.ai_models)) return res.status(400).json({ ok: false, error: 'ai_models must be an array' });
         const num = function (v, d) { const n = Number(v); return isFinite(n) && n >= 0 ? n : d; };
@@ -498,7 +540,7 @@ function mount(app) {
         cfg.ai_models = rows;
       }
       kb_data_dir.write_config(cfg);
-      res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env(), show_test_banner: show_test_banner(), send_enabled: send_enabled(), send_queue_from: send_queue_from() });
+      res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env(), show_test_banner: show_test_banner(), send_enabled: send_enabled(), send_queue_from: send_queue_from(), status_enabled: status_enabled(), status_requirements: status_requirements() });
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
   app.get(P + '/admin/queue-access', require_admin, async function (req, res) {
@@ -592,10 +634,38 @@ function mount(app) {
       res.status(502).json({ ok: false, error: (e && e.message) || 'send failed' });
     }
   });
-  app.post(P + '/status', gate, function (req, res) {
+  // Change a case's Status (and any required extra fields) in Salesforce. Gated by the master status switch;
+  // only fields configured in status_requirements[status] may be written; required ones must be present.
+  app.post(P + '/status', gate, async function (req, res) {
     const b = req.body || {};
-    log_sf(req, b, { event_name: 'status_change', sf_action: 'status_change', status_to: b.status || '', sf_ok: 0, sf_error: 'status change not enabled in this build' });
-    res.json({ ok: true, mocked: true, note: 'read-only build — no Salesforce write' });
+    const case_id = String(b.case_id || '');
+    const status = String(b.status || '');
+    const inFields = (b.fields && typeof b.fields === 'object' && !Array.isArray(b.fields)) ? b.fields : {};
+    if (!status_enabled()) return res.status(403).json({ ok: false, error: 'Case status changes are turned off. An admin can enable it in Admin → Settings → Case status changes.' });
+    if (!case_id) return res.status(400).json({ ok: false, error: 'No case selected.' });
+    if (!status) return res.status(400).json({ ok: false, error: 'Pick a status.' });
+    // Whitelist the writable extra fields for this status; enforce the required ones.
+    const reqs = Array.isArray(status_requirements()[status]) ? status_requirements()[status] : [];
+    const allowed = {}; reqs.forEach(function (r) { if (r && r.field) allowed[String(r.field)] = !!r.required; });
+    const missing = Object.keys(allowed).filter(function (f) { return allowed[f] && (inFields[f] == null || String(inFields[f]).trim() === ''); });
+    if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required field(s): ' + missing.join(', ') });
+    try {
+      const conn = await get_conn_write();
+      const rec = { Id: case_id, Status: status };
+      Object.keys(allowed).forEach(function (f) { const v = inFields[f]; if (v != null && String(v).trim() !== '') rec[f] = v; });
+      let r;
+      try { r = await conn.sobject('Case').update(rec); }
+      catch (e) { let m = (e && e.message) || String(e); try { const j = JSON.parse(m); const a = Array.isArray(j) ? j[0] : j; if (a && a.message) m = a.message; } catch (e2) { /* not JSON */ } throw new Error(m); }
+      if (!(r && (r.success || r.id))) {
+        const em = (r && r.errors && (Array.isArray(r.errors) ? r.errors.map(function (x) { return x.message || x.statusCode; }).join('; ') : JSON.stringify(r.errors))) || 'update failed';
+        throw new Error(em);
+      }
+      log_sf(req, b, { event_name: 'status_change', sf_action: 'status_change', status_to: status, sf_ok: 1 });
+      res.json({ ok: true, status: status, id: case_id });
+    } catch (e) {
+      log_sf(req, b, { event_name: 'status_change', sf_action: 'status_change', status_to: status, sf_ok: 0, sf_error: String((e && e.message) || 'status change failed').slice(0, 380) });
+      res.status(502).json({ ok: false, error: (e && e.message) || 'status change failed' });
+    }
   });
 }
 

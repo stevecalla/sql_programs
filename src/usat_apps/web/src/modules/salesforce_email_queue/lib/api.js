@@ -51,6 +51,7 @@ export const api = {
   retrievePreview: (payload) => req(P + '/retrieve-preview', { method: 'POST', body: JSON.stringify(payload) }),
   send: (payload) => req(P + '/send', { method: 'POST', body: JSON.stringify(payload) }),
   orgWideEmails: () => req(P + '/org-wide-emails'),
+  caseFields: () => req(P + '/case-fields'),
   setStatus: (payload) => req(P + '/status', { method: 'POST', body: JSON.stringify(payload) }),
   // metrics dashboard (/metrics/sf-email-queue)
   metricsReport: (days, includeTest) => req(P + '/metrics-report' + qs({ days, test: includeTest ? 1 : undefined })),

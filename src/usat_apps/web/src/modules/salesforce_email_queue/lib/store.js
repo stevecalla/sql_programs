@@ -53,6 +53,7 @@ function saveJson(k, v) { try { window.localStorage.setItem(k, JSON.stringify(v)
 let state = {
   queues: [], statuses: [], counts: {}, instanceUrl: '', sfEnv: 'prod', showTestBanner: false,
   sfUser: '', sendEnabled: false, sendQueueFrom: {}, oweAddresses: [],
+  statusEnabled: false, statusRequirements: {}, caseFields: [],
   models: [], model: null,
   queueId: '', status: loadStr('eq_status') || 'open', dateField: 'LastModifiedDate', anyDate: false,
   from: eqYesterday(), to: eqToday(), search: '', attachOnly: false, limit: 25,
@@ -90,16 +91,24 @@ export async function refreshConfig() {
     if (r.sf_user) state.sfUser = r.sf_user;
     state.sendEnabled = !!r.send_enabled;
     state.sendQueueFrom = r.send_queue_from || {};
+    state.statusEnabled = !!r.status_enabled;
+    state.statusRequirements = r.status_requirements || {};
     emit();
   } catch (e) { /* keep last-known config */ }
   return state.sendEnabled;
+}
+// Reflect a status change locally (no reload): update the selected case + its row in the list.
+export function applyCaseStatus(caseId, status) {
+  if (state.sel && state.sel.case_id === caseId) state.sel = { ...state.sel, status: status };
+  state.cases = (state.cases || []).map(function (c) { return c.case_id === caseId ? { ...c, status: status } : c; });
+  emit();
 }
 
 let _inited = false;
 export async function init() {
   if (_inited) return; _inited = true;
   track('page_view', {});   // funnel "Visits" stage — one per app load (server stamps actor)
-  try { const r = await api.config(); state.sfEnv = r.sf_env || 'prod'; state.showTestBanner = !!r.show_test_banner; state.sfUser = r.sf_user || ''; state.sendEnabled = !!r.send_enabled; state.sendQueueFrom = r.send_queue_from || {}; emit(); } catch (e) { /* optional */ }
+  try { const r = await api.config(); state.sfEnv = r.sf_env || 'prod'; state.showTestBanner = !!r.show_test_banner; state.sfUser = r.sf_user || ''; state.sendEnabled = !!r.send_enabled; state.sendQueueFrom = r.send_queue_from || {}; state.statusEnabled = !!r.status_enabled; state.statusRequirements = r.status_requirements || {}; emit(); } catch (e) { /* optional */ }
   // Keep the master switch / From map live in open tabs: refresh on focus + a modest visible-only poll.
   try {
     if (typeof window !== 'undefined' && !window.__eqCfgWatch) {
@@ -111,6 +120,8 @@ export async function init() {
   } catch (e) { /* non-browser / no window */ }
   // Verified Org-Wide Email Addresses for the "From" dropdown (best-effort; empty if the query fails).
   try { const r = await api.orgWideEmails(); state.oweAddresses = r.addresses || []; emit(); } catch (e) { /* optional */ }
+  // Updateable Case field metadata (for the status-change required fields). Best-effort.
+  try { const r = await api.caseFields(); state.caseFields = r.fields || []; emit(); } catch (e) { /* optional */ }
   try {
     const r = await api.queues(); state.queues = r.queues || []; state.instanceUrl = r.instance_url || '';
     const savedQ = loadStr('eq_queue');
