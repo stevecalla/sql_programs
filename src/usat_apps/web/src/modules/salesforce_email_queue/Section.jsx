@@ -4,6 +4,7 @@ import { api } from './lib/api.js';
 import * as store from './lib/store.js';
 import ResizeHandle from '../../lib/ResizeHandle.jsx';   // shared grabber (common with the chatbot)
 import AiPanel from './components/AiPanel.jsx';
+import { SfEnvBadge } from './EmailQueueRail.jsx';   // prod/sandbox indicator — shown on the case header line
 import { Modal, RowsTable, fmtBytes, CopyButton } from './components/ui.jsx';
 import { track, meta as trackMeta } from './lib/track.js';
 
@@ -132,19 +133,24 @@ export default function Section() {
         {s.sfEnv === 'sandbox' ? <div className="eq-modebanner" title="Pointed at the Salesforce sandbox org">🧪 SANDBOX — practice data, not production</div> : null}
         {sel ? (
           <>
-            <div className="eq-thead">
-              <div className="eq-inline" style={{ flexWrap: 'wrap' }}>
+            <div className="eq-thead" style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}>
+              {/* Row 1 — case number + info + AI status + the prod/sandbox badge */}
+              <div className="eq-inline" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 {s.instanceUrl ? <a className="eq-caselink" href={s.instanceUrl + '/lightning/r/Case/' + sel.case_id + '/view'} target="_blank" rel="noopener">Case {sel.case_number || ''} ↗</a> : <b>Case {sel.case_number || ''}</b>}
                 <span className="dim">· {s.thread.length} msg · newest first</span>
                 <TriageControl s={s} />
-                <span className="eq-inline"><span className="dim" style={{ fontSize: 12 }}>Status:</span>
-                  <select className="eq-fld eq-statussel" value={sel.status || ''} onChange={(e) => doStatusMock(e.target.value)}>
-                    {(s.statuses.length ? s.statuses : ['New', 'Working', 'Escalated', 'Closed']).map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                  {stMock ? <span className="dim" style={{ fontSize: 11 }}>mock — not saved to SF</span> : null}
-                </span>
+                <SfEnvBadge env={s.sfEnv} />
               </div>
-              <div className="eq-inline" style={{ marginLeft: 'auto', flexWrap: 'wrap' }}>
+              {/* Row 2 — status */}
+              <div className="eq-inline" style={{ gap: 8, alignItems: 'center' }}>
+                <span className="dim" style={{ fontSize: 12 }}>Status:</span>
+                <select className="eq-fld eq-statussel" value={sel.status || ''} onChange={(e) => doStatusMock(e.target.value)}>
+                  {(s.statuses.length ? s.statuses : ['New', 'Working', 'Escalated', 'Closed']).map((x) => <option key={x} value={x}>{x}</option>)}
+                </select>
+                {stMock ? <span className="dim" style={{ fontSize: 11 }}>mock — not saved to SF</span> : null}
+              </div>
+              {/* Row 3 — view controls */}
+              <div className="eq-inline" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 <span className="dim" style={{ fontSize: 11 }} title="Each message auto-picks HTML (if it has real formatting) or stripped text. Use the Text/HTML toggle in a message header to override it.">views auto-set per message</span>
                 <label className="eq-check" title="For text-view messages: hide quoted history and repeated text"><input type="checkbox" checked={s.dedupe} onChange={(e) => store.set({ dedupe: e.target.checked })} /> Hide quoted/repeated</label>
                 <button className="eq-btn sm" onClick={() => store.collapseAll(true)}>Collapse all</button>

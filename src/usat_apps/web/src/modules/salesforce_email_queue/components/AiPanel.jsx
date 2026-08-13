@@ -34,7 +34,7 @@ export default function AiPanel({ s }) {
   const sel = s.sel; const model = s.model; const queueName = store.queueName();
   const cid = sel ? sel.case_id : '';
 
-  const [open, setOpen] = useState({ resp: true, ask: false, corr: false, ctx: false, soql: false, ref: false });
+  const [open, setOpen] = useState({ resp: true, send: true, ask: false, corr: false, ctx: false, soql: false, ref: false });
   const toggle = (k) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
   // Card 1 — reply
@@ -43,6 +43,12 @@ export default function AiPanel({ s }) {
   const [reply, setReply] = useState('');
   const [sendMsg, setSendMsg] = useState(null);   // { cls, text }
   const [err, setErr] = useState('');
+
+  // Card 1b — Salesforce send settings (UI only for now; the Send reply button stays in the reply card).
+  const [sendOn, setSendOn] = useState(false);                                   // default OFF — draft-only
+  const [sendTo, setSendTo] = useState('');                                      // prefilled from the case, editable
+  const [sendFrom, setSendFrom] = useState('service@usatriathlon.org');          // verified org-wide address
+  const [sendSubject, setSendSubject] = useState('');
 
   // Card 2 — ask
   const [question, setQuestion] = useState('');
@@ -71,6 +77,7 @@ export default function AiPanel({ s }) {
   // reset per case
   useEffect(() => {
     setBusy(''); setVerdict(''); setReply(''); setSendMsg(null); setErr('');
+    setSendOn(false); setSendTo((sel && sel.supplied_email) || ''); setSendSubject(sel && sel.subject ? ('RE: ' + sel.subject) : '');   // prefill send fields per case (From persists)
     setQuestion(''); setHist([]); setAskExpanded(false);
     setCorrNote(''); setCorrMsg('');
     setCtx(null); setCtxView(null); setUpMsg('');
@@ -190,11 +197,38 @@ export default function AiPanel({ s }) {
         {err ? <div className="eq-err">{err}</div> : null}
         <h3 className="eq-h" style={{ marginTop: 10 }}>Reply (editable)</h3>
         <textarea className="eq-fld eq-grow" style={{ minHeight: 220 }} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="The AI draft appears here and is fully editable. You can also compose a reply yourself, even if the AI said it needs more info." />
-        <div className="eq-inline" style={{ gap: 8 }}>
-          <button className="eq-btn" onClick={doSend}>Send reply</button>
+        <div className="eq-inline" style={{ gap: 8, alignItems: 'center' }}>
+          <button className="eq-btn" onClick={doSend} disabled={!sendOn}
+            title={sendOn ? 'Send this reply to the member' : 'Turn on “Enable sending to Salesforce” in the card below to enable sending'}>Send reply</button>
           <CopyButton text={() => reply} label="📋 Copy reply" onCopied={() => track('reply_copied', { ai_reply_chars: reply.length })} />
         </div>
+        {!sendOn ? <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>Sending is off — enable it in “Send to Salesforce” below.</div> : null}
         {sendMsg ? <div className={'note ' + (sendMsg.cls === 'ok' ? 'ok' : sendMsg.cls === 'warn' ? 'warn' : '')} style={{ marginTop: 8 }}>{sendMsg.text}</div> : null}
+      </Card>
+
+      {/* Card 1b — Send to Salesforce (setup/consent for the reply above; the Send button stays in the reply card for now) */}
+      <Card title="Send to Salesforce" open={open.send} onToggle={() => toggle('send')} summary={sendOn ? 'enabled' : 'off'}>
+        <label className="eq-check" style={{ alignItems: 'flex-start', gap: 8 }}>
+          <input type="checkbox" checked={sendOn} onChange={(e) => setSendOn(e.target.checked)} />
+          <span><b>Enable sending to Salesforce</b>
+            <div className="dim" style={{ fontSize: 12 }}>Off by default — the reply stays draft-only (nothing is written or emailed). Turn on to allow this reply to be sent to the member and logged on this case’s thread.</div>
+          </span>
+        </label>
+        <div style={{ opacity: sendOn ? 1 : 0.5, pointerEvents: sendOn ? 'auto' : 'none', marginTop: 10 }}>
+          <h3 className="eq-h" style={{ marginTop: 4 }}>To</h3>
+          <input className="eq-fld" value={sendTo} onChange={(e) => setSendTo(e.target.value)} placeholder="member@email.com" />
+          <h3 className="eq-h" style={{ marginTop: 10 }}>From</h3>
+          <select className="eq-fld" value={sendFrom} onChange={(e) => setSendFrom(e.target.value)}>
+            <option value="service@usatriathlon.org">Service Team — service@usatriathlon.org</option>
+            <option value="noreply@usatriathlon.org">USA Triathlon (No Reply) — noreply@usatriathlon.org</option>
+          </select>
+          <div className="dim" style={{ fontSize: 11, marginTop: 3 }}>Only Salesforce-verified org-wide addresses can be used. <span title="Not a verified org-wide address in Salesforce yet — would need to be added there first">teamusa@ is not verified yet.</span></div>
+          <h3 className="eq-h" style={{ marginTop: 10 }}>Subject</h3>
+          <input className="eq-fld" value={sendSubject} onChange={(e) => setSendSubject(e.target.value)} placeholder="RE: …" />
+          <div className="dim" style={{ fontSize: 11, marginTop: 8 }}>
+            {s.sfEnv === 'sandbox' ? 'Sending in SANDBOX — safe to test.' : 'Sending in PRODUCTION — reaches a real member.'} Use “Send reply” in the AI suggested response card above to send.
+          </div>
+        </div>
       </Card>
 
       {/* Card 2 — Ask */}
