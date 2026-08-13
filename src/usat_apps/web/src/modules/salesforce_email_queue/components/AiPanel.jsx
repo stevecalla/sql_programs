@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api.js';
 import * as store from '../lib/store.js';
 import { track, meta as trackMeta } from '../lib/track.js';
-import { Modal, RowsTable, fmtBytes, copyText, CopyButton, downloadText } from './ui.jsx';
+import { Modal, RowsTable, fmtBytes, copyText, CopyButton, downloadText, OffBadge } from './ui.jsx';
 import { Collapsible, ContextAddFiles, AskPanel } from '../../../lib/ui.jsx';   // shared collapsible + add-files + ask (dedup)
 
 const ASK_PRESETS = [
@@ -224,10 +224,9 @@ export default function AiPanel({ s }) {
           <button className="eq-btn" onClick={doSend} disabled={!sendOn || !s.sendEnabled}
             title={!s.sendEnabled ? 'Email sending is turned off for the app (Admin → Settings)' : (sendOn ? 'Send this reply to the member' : 'Turn on “Enable sending to Salesforce” in the card below to enable sending')}>Send reply</button>
           <CopyButton text={() => reply} label="📋 Copy reply" onCopied={() => track('reply_copied', { ai_reply_chars: reply.length })} />
+          {!s.sendEnabled ? <OffBadge label="Email sending off" title="An admin can enable this in Admin → Settings → Email sending" /> : null}
         </div>
-        {!s.sendEnabled
-          ? <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>Email sending is turned off for the app — an admin can enable it in Admin → Settings.</div>
-          : (!sendOn ? <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>Sending is off — enable it in “Send to Salesforce” below.</div> : null)}
+        {s.sendEnabled && !sendOn ? <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>Sending is off — enable it in “Send to Salesforce” below.</div> : null}
         {sendMsg ? <div className={'note ' + (sendMsg.cls === 'ok' ? 'ok' : sendMsg.cls === 'warn' ? 'warn' : '')} style={{ marginTop: 8 }}>{sendMsg.text}</div> : null}
       </Card>
 

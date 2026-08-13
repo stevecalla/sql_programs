@@ -13,5 +13,6 @@
     },
     "editor.wordWrap": "on",
     "task.allowAutomaticTasks": "off",
-    "python.terminal.activateEnvironment": false
+    "python.terminal.activateEnvironment": false,
+    "salesforcedx-vscode-slds.file.scopeWithInSFDX": true
 }

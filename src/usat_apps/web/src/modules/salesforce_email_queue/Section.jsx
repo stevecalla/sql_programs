@@ -5,7 +5,7 @@ import * as store from './lib/store.js';
 import ResizeHandle from '../../lib/ResizeHandle.jsx';   // shared grabber (common with the chatbot)
 import AiPanel from './components/AiPanel.jsx';
 import { SfEnvBadge } from './EmailQueueRail.jsx';   // prod/sandbox indicator — shown on the case header line
-import { Modal, RowsTable, fmtBytes, CopyButton } from './components/ui.jsx';
+import { Modal, RowsTable, fmtBytes, CopyButton, OffBadge } from './components/ui.jsx';
 import { track, meta as trackMeta } from './lib/track.js';
 
 // ---- helpers ----
@@ -164,7 +164,7 @@ function StatusControl({ s, queueName }) {
               title={changed ? 'Apply this status change in Salesforce' : 'Pick a different status to apply'}>{busy ? 'Applying…' : 'Apply'}</button>
             {changed ? <button className="eq-btn sm" style={{ flex: '0 0 auto' }} onClick={() => { setTarget(cur); setVals({}); setMsg(null); }} disabled={busy} title="Discard the change">Reset</button> : null}
           </>
-        ) : <span className="dim" style={{ fontSize: 11, flex: '0 0 auto' }}>changes off (admin)</span>}
+        ) : <OffBadge label="Status changes off" title="An admin can enable this in Admin → Settings → Case status changes" />}
       </div>
 
       {/* required / optional fields for the target status (own rows, below) */}
