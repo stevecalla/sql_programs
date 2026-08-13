@@ -52,6 +52,7 @@ function saveJson(k, v) { try { window.localStorage.setItem(k, JSON.stringify(v)
 // ---- store ----
 let state = {
   queues: [], statuses: [], counts: {}, instanceUrl: '', sfEnv: 'prod', showTestBanner: false,
+  sfUser: '', sendEnabled: false, sendQueueFrom: {}, oweAddresses: [],
   models: [], model: null,
   queueId: '', status: loadStr('eq_status') || 'open', dateField: 'LastModifiedDate', anyDate: false,
   from: eqYesterday(), to: eqToday(), search: '', attachOnly: false, limit: 25,
@@ -78,11 +79,38 @@ export function setAiW(w) { state.aiW = w; saveW('eq_aiW', w); emit(); }
 export function queueObj() { return state.queues.find((x) => x.id === state.queueId) || null; }
 export function queueName() { const q = queueObj(); return q ? q.name : ''; }
 
+// Re-pull the operator config (master send switch, per-queue From, env) WITHOUT a full reload, so an admin
+// flipping "Email sending" on/off (or remapping a queue's From) takes effect in open operator tabs on their
+// own. Called on tab focus, on a light background poll, and right before a send. Never throws.
+export async function refreshConfig() {
+  try {
+    const r = await api.config();
+    state.sfEnv = r.sf_env || state.sfEnv;
+    state.showTestBanner = !!r.show_test_banner;
+    if (r.sf_user) state.sfUser = r.sf_user;
+    state.sendEnabled = !!r.send_enabled;
+    state.sendQueueFrom = r.send_queue_from || {};
+    emit();
+  } catch (e) { /* keep last-known config */ }
+  return state.sendEnabled;
+}
+
 let _inited = false;
 export async function init() {
   if (_inited) return; _inited = true;
   track('page_view', {});   // funnel "Visits" stage — one per app load (server stamps actor)
-  try { const r = await api.config(); state.sfEnv = r.sf_env || 'prod'; state.showTestBanner = !!r.show_test_banner; emit(); } catch (e) { /* optional */ }
+  try { const r = await api.config(); state.sfEnv = r.sf_env || 'prod'; state.showTestBanner = !!r.show_test_banner; state.sfUser = r.sf_user || ''; state.sendEnabled = !!r.send_enabled; state.sendQueueFrom = r.send_queue_from || {}; emit(); } catch (e) { /* optional */ }
+  // Keep the master switch / From map live in open tabs: refresh on focus + a modest visible-only poll.
+  try {
+    if (typeof window !== 'undefined' && !window.__eqCfgWatch) {
+      window.__eqCfgWatch = true;
+      window.addEventListener('focus', function () { refreshConfig(); });
+      if (typeof document !== 'undefined') document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshConfig(); });
+      setInterval(function () { if (typeof document === 'undefined' || !document.hidden) refreshConfig(); }, 45000);
+    }
+  } catch (e) { /* non-browser / no window */ }
+  // Verified Org-Wide Email Addresses for the "From" dropdown (best-effort; empty if the query fails).
+  try { const r = await api.orgWideEmails(); state.oweAddresses = r.addresses || []; emit(); } catch (e) { /* optional */ }
   try {
     const r = await api.queues(); state.queues = r.queues || []; state.instanceUrl = r.instance_url || '';
     const savedQ = loadStr('eq_queue');
@@ -132,6 +160,8 @@ export function toggleChecked(id) { if (state.checked[id]) delete state.checked[
 export function setCollapsed(id, v) { state.collapsed = { ...state.collapsed, [id]: v }; emit(); }
 export function collapseAll(v) { const col = {}; state.thread.forEach((m) => { col[m.id] = v; }); state.collapsed = col; emit(); }
 export async function reloadCorrections() { try { const r = await api.corrections(); state.corr = r.corrections || []; emit(); } catch (e) { /* ignore */ } }
+// Re-fetch the open case's thread (e.g. after sending a reply so the new outbound message appears).
+export async function reloadThread() { if (!state.sel) return; try { const r = await api.thread(state.sel.case_id); state.thread = r.thread || []; emit(); } catch (e) { /* ignore */ } }
 
 export async function triageOne(cs) {
   cs = cs || state.sel; if (!cs) return;

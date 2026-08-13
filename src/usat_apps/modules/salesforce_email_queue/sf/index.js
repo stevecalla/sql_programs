@@ -6,6 +6,7 @@ const text_clean = require('../../../services/text_clean');
 const queues = require('./sf_queues');
 const threads = require('./sf_threads');
 const context = require('./sf_context');
+const send = require('./sf_send');
 
 module.exports = {
   // shared plumbing (re-exported for convenience)
@@ -27,6 +28,10 @@ module.exports = {
   message_counts: threads.message_counts,
   is_automated_sender: threads.is_automated_sender,
   get_sender_history: context.get_sender_history,
+  // outbound (write)
+  send_case_email: send.send_case_email,
+  send_case_email_apex: send.send_case_email_apex,
+  resolve_owe_id: send.resolve_owe_id,
   // text helpers
   html_to_text: text_clean.html_to_text,
   strip_quoted_history: text_clean.strip_quoted_history

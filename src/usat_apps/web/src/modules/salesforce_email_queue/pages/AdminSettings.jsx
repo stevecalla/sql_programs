@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import * as store from '../lib/store.js';
 import { ReorderableCards } from '../../../lib/ReorderableList.jsx';   // shared collapsible + drag-reorder cards
 
 // Email Queue admin → Settings. Cards (admin landing, Salesforce environment, banners) each POST their own
@@ -17,20 +18,31 @@ export default function AdminSettings() {
   const [landing, setLanding] = useState('/metrics');
   const [sfEnv, setSfEnv] = useState('prod');
   const [banner, setBanner] = useState(true);
-  const [msg, setMsg] = useState({});   // { landing, sfEnv, banner }
+  const [sendEnabled, setSendEnabled] = useState(false);
+  const [queueFrom, setQueueFrom] = useState({});   // { <queue_id>: '<address>' } (working copy, edited before Save)
+  const [queues, setQueues] = useState([]);
+  const [owe, setOwe] = useState([]);
+  const [msg, setMsg] = useState({});   // { landing, sfEnv, banner, sendToggle, queueFrom }
 
   const applyCfg = (c) => {
     setCfg(c);
     setLanding(c.admin_landing || '/metrics');
     setSfEnv(c.sf_env || 'prod');
     setBanner(c.show_test_banner !== false);
+    setSendEnabled(c.send_enabled === true);
+    setQueueFrom(c.send_queue_from && typeof c.send_queue_from === 'object' ? { ...c.send_queue_from } : {});
   };
   const load = () => api.adminConfig().then(applyCfg).catch((e) => setErr(e.message));
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => {
+    load();
+    api.queues().then((r) => setQueues(r.queues || [])).catch(() => { /* optional */ });
+    api.orgWideEmails().then((r) => setOwe(r.addresses || [])).catch(() => { /* optional */ });
+    /* eslint-disable-next-line */
+  }, []);
 
   const save = async (key, payload, ok) => {
     setMsg((s) => ({ ...s, [key]: null }));
-    try { const r = await api.adminConfigSave(payload); applyCfg(r); setMsg((s) => ({ ...s, [key]: { ok: true, text: ok(r) } })); }
+    try { const r = await api.adminConfigSave(payload); applyCfg(r); setMsg((s) => ({ ...s, [key]: { ok: true, text: ok(r) } })); try { await store.refreshConfig(); } catch (e) { /* ignore */ } }
     catch (e) { setMsg((s) => ({ ...s, [key]: { ok: false, text: e.message } })); }
   };
 
@@ -82,6 +94,48 @@ export default function AdminSettings() {
             <button className="btn primary" onClick={() => save('banner', { show_test_banner: banner }, (r) => 'TEST banner ' + (r.show_test_banner !== false ? 'on' : 'off') + '. Reload pages to apply.')}>Save</button>
           </div>
           <Msg m={msg.banner} />
+        </>
+      )
+    },
+    {
+      key: 'sendmaster', title: 'Email sending (master switch)', children: (
+        <>
+          <p className="muted small">The app-wide <b>on/off switch</b> for sending replies out through Salesforce. When <b>off</b>, operators can still draft, ask, and copy replies, but the <b>Send</b> button is disabled everywhere and the server refuses any send — nothing reaches a member. Leave this <b>off</b> until sending is production-ready; flip it on when you want operators to be able to send.</p>
+          <label className="rowform" style={{ alignItems: 'center' }}>
+            <input type="checkbox" checked={sendEnabled} onChange={(e) => setSendEnabled(e.target.checked)} /> Allow operators to send email through Salesforce
+          </label>
+          <div className="small" style={{ marginTop: 4, color: sendEnabled ? '#16a34a' : '#d32f2f' }}>
+            {sendEnabled ? '● Sending is currently ENABLED — operators can send.' : '● Sending is currently OFF — no email can be sent.'}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <button className="btn primary" onClick={() => save('sendToggle', { send_enabled: sendEnabled }, (r) => 'Email sending ' + (r.send_enabled ? 'ENABLED' : 'turned OFF') + '. Takes effect in open operator tabs on focus (and within ~45s otherwise) — no reload needed.')}>Save</button>
+          </div>
+          <Msg m={msg.sendToggle} />
+        </>
+      )
+    },
+    {
+      key: 'queuefrom', title: 'Per-queue “From” address', children: (
+        <>
+          <p className="muted small">The default <b>From</b> address a reply is sent as, per queue. Choose a Salesforce <b>verified Org-Wide Email Address</b> (loaded live below) for each queue — e.g. the coaching queue sends as the coaching inbox. When an operator sends with <b>From → “Queue default”</b>, the reply uses the address you map here. Queues left as <i>(SF user)</i> send from the operator’s connected Salesforce user. Only addresses Salesforce has verified appear in the dropdowns.</p>
+          {owe.length
+            ? <p className="muted small">Verified org-wide addresses available: {owe.map((a) => a.address).join(', ')}.</p>
+            : <p className="small" style={{ color: '#b45309' }}>No verified Org-Wide Email Addresses found in this org yet. Verify one in Salesforce (Setup → Org-Wide Addresses) — e.g. <code>teamusa@usatriathlon.org</code> — and it’ll show up here.</p>}
+          <div style={{ marginTop: 8 }}>
+            {(queues || []).length ? (queues || []).map((q) => (
+              <div className="rowform" key={q.id} style={{ alignItems: 'center', marginBottom: 6 }}>
+                <label className="muted small" style={{ minWidth: 160, display: 'inline-block' }}>{q.name}</label>
+                <select value={queueFrom[q.id] || ''} onChange={(e) => setQueueFrom((m) => ({ ...m, [q.id]: e.target.value }))}>
+                  <option value="">(SF user — no default)</option>
+                  {owe.map((a) => <option key={a.id} value={a.address}>{(a.display_name ? a.display_name + ' — ' : '') + a.address}</option>)}
+                </select>
+              </div>
+            )) : <p className="muted small">No queues loaded (they load from Salesforce).</p>}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <button className="btn primary" onClick={() => save('queueFrom', { send_queue_from: queueFrom }, (r) => { const n = Object.keys(r.send_queue_from || {}).length; return 'Saved — ' + n + ' queue' + (n === 1 ? '' : 's') + ' mapped to a From address.'; })}>Save mapping</button>
+          </div>
+          <Msg m={msg.queueFrom} />
         </>
       )
     },

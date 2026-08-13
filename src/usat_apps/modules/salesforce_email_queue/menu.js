@@ -65,9 +65,11 @@ const CUTOVER_SECTION = { label: 'Pull from prod → dev (corrections + content 
 // it can send/log email BEFORE we wire up the real send path. Same connection the app uses.
 const SEND_CHECK = 'src/usat_apps/modules/salesforce_email_queue/check_sf_send_capability.js';
 const READ_CHECK = 'src/usat_apps/modules/salesforce_email_queue/check_sf_read.js';
+const ROUTE_CHECK = 'src/usat_apps/modules/salesforce_email_queue/check_sf_routing_addresses.js';
 const SF_CHECK_SECTION = { label: 'Salesforce checks (read-only — nothing is written or sent)', color: 'MAGENTA', items: [
   { label: 'Check send capability — PRODUCTION', desc: 'Connects as the integration user and reports PASS/FAIL for: create EmailMessage, edit Case, Send Email permission, and available org-wide from-addresses. Read-only.', bin: 'node', argv: [SEND_CHECK], cli: 'node ' + SEND_CHECK },
   { label: 'Check send capability — sandbox', desc: 'Same read-only probe against the sandbox org (SF_DEV_* creds).', bin: 'node', argv: [SEND_CHECK, '--sandbox'], cli: 'node ' + SEND_CHECK + ' --sandbox' },
+  { label: 'Routing/from addresses per queue — PRODUCTION', desc: 'Inspects recent case emails to show, per queue, the inbound routing address customers emailed and the outbound "from" replies went out as. Tells us if each queue has its own address. Read-only.', bin: 'node', argv: [ROUTE_CHECK], cli: 'node ' + ROUTE_CHECK },
   { label: 'SF read smoke — PRODUCTION', desc: 'Connect + list queues — confirms the connection and which org/user we authenticate as.', bin: 'node', argv: [READ_CHECK], cli: 'node ' + READ_CHECK },
 ] };
 const STATUS_SECTION = { label: 'Status & open (platform)', color: 'GREEN', items: [
