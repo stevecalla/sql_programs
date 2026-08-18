@@ -107,27 +107,30 @@ export default function MergeOps() {
   const [scaleBusy, setScaleBusy] = useState(false);
   const [scaleMsg, setScaleMsg] = useState('');
   // batch run
-  const [batchMode, setBatchMode] = useState('approved');   // 'approved' | 'random'
-  const [runMode, setRunMode] = useState('simulate');        // 'simulate' | 'execute'
-  const [restoreAfter, setRestoreAfter] = useState(false);
-  const [stampMerged, setStampMerged] = useState(true);   // stamp usat_was_* on the survivor (parity with Process Merges)
+  // Run-option choices persist across navigation (they're component state that would otherwise reset on
+  // remount). Rehydrate from localStorage on mount; a small effect below re-saves them on any change.
+  const readPref = (k, dflt) => { try { const p = JSON.parse(localStorage.getItem('sm_batch_prefs') || '{}'); return (p && Object.prototype.hasOwnProperty.call(p, k)) ? p[k] : dflt; } catch (e) { return dflt; } };
+  const [batchMode, setBatchMode] = useState(() => readPref('batch_mode', 'approved'));   // 'approved' | 'random'
+  const [runMode, setRunMode] = useState(() => readPref('run_mode', 'simulate'));        // 'simulate' | 'execute'
+  const [restoreAfter, setRestoreAfter] = useState(() => !!readPref('restore_after', false));
+  const [stampMerged, setStampMerged] = useState(() => readPref('stamp_merged', true) !== false);   // stamp usat_was_* on the survivor (parity with Process Merges)
   const [attachDossier, setAttachDossier] = useState(() => { try { return localStorage.getItem('mp_attach_dossier') !== '0'; } catch (e) { return true; } });
   const [approved, setApproved] = useState(null);
   const [approvedRows, setApprovedRows] = useState([]);
-  const [rSource, setRSource] = useState('duplicate');
-  const [rMin, setRMin] = useState('2');
-  const [rMax, setRMax] = useState('4');
-  const [rCount, setRCount] = useState('10');
-  const [rSeed, setRSeed] = useState('');
-  const [rFoundation, setRFoundation] = useState('');   // '' any | 'has' | 'none'
-  const [rPortal, setRPortal] = useState('');           // '' any | 'has' | 'none' (Customer-Portal account in the set)
-  const [rTier, setRTier] = useState('');
-  const [rSignal, setRSignal] = useState('');
-  const [rWhichList, setRWhichList] = useState('');
-  const [rBucket, setRBucket] = useState('');
-  const [rMinSim, setRMinSim] = useState('');
-  const [rMergeId, setRMergeId] = useState('');
-  const [rMember, setRMember] = useState('');
+  const [rSource, setRSource] = useState(() => readPref('r_source', 'duplicate'));
+  const [rMin, setRMin] = useState(() => readPref('r_min', '2'));
+  const [rMax, setRMax] = useState(() => readPref('r_max', '4'));
+  const [rCount, setRCount] = useState(() => readPref('r_count', '10'));
+  const [rSeed, setRSeed] = useState(() => readPref('r_seed', ''));   // persisted as typed; blank = new random each run
+  const [rFoundation, setRFoundation] = useState(() => readPref('r_foundation', ''));   // '' any | 'has' | 'none'
+  const [rPortal, setRPortal] = useState(() => readPref('r_portal', ''));           // '' any | 'has' | 'none' (Customer-Portal account in the set)
+  const [rTier, setRTier] = useState(() => readPref('r_tier', ''));
+  const [rSignal, setRSignal] = useState(() => readPref('r_signal', ''));
+  const [rWhichList, setRWhichList] = useState(() => readPref('r_which_list', ''));
+  const [rBucket, setRBucket] = useState(() => readPref('r_bucket', ''));
+  const [rMinSim, setRMinSim] = useState(() => readPref('r_min_sim', ''));
+  const [rMergeId, setRMergeId] = useState(() => readPref('r_merge_id', ''));
+  const [rMember, setRMember] = useState(() => readPref('r_member', ''));
   const [facets, setFacets] = useState({});
   const [matchCount, setMatchCount] = useState(null);   // live "N sets match these filters"
   // activity logs
@@ -164,6 +167,39 @@ export default function MergeOps() {
 
   useEffect(() => { track('merge_ops_view', { panel: 'merge-ops', view: 'ops' }); loadSettings(); loadWorkers(); loadPm2(); loadApproved(); loadRestorable(); }, [loadSettings, loadWorkers, loadPm2, loadApproved, loadRestorable]);
   useEffect(() => { const t = setInterval(loadWorkers, 5000); return () => clearInterval(t); }, [loadWorkers]);
+  // Reattach to an IN-FLIGHT job when you return to this panel. The job keeps running in the worker
+  // cluster after you navigate away; without this the live progress panel comes back blank. Runs once on
+  // mount, and only reattaches to a still-running job (never resurrects an old finished one). Mirrors the
+  // Restore page's resume-on-mount. The existing job-progress poll effect takes over from here.
+  useEffect(() => {
+    // Reattach to the panel's last job — RUNNING or already FINISHED — from the persisted context, so
+    // returning always re-shows it (a running job keeps polling live; a finished one shows its final
+    // summary). It stays until you launch a new run or click "Reset panel". restore_job_id (+ the started
+    // flag) prevents the restore-afterward chain from re-firing on a reattach.
+    try {
+      const saved = JSON.parse(localStorage.getItem('sm_active_batch') || 'null');
+      if (saved && saved.job_id) {
+        setMergeJobId(saved.job_id); setRunKind('parallel');
+        if (saved.run_ids) setRunIds(saved.run_ids);
+        if (saved.seed != null) setStagedSeed(saved.seed);
+        if (saved.restore_job_id) { setRestoreJobId(saved.restore_job_id); restoreStartedRef.current = true; }
+      }
+    } catch (e) { /* ignore */ }
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps  (runs on every mount → re-shows the last job)
+  // Persist the whole batch form so it survives navigating away and back — run-option toggles PLUS the
+  // sample/filter inputs (count, size range, seed-as-typed, and every filter dropdown).
+  useEffect(() => {
+    try {
+      localStorage.setItem('sm_batch_prefs', JSON.stringify({
+        batch_mode: batchMode, run_mode: runMode, restore_after: restoreAfter, stamp_merged: stampMerged, attach_dossier: attachDossier,
+        r_source: rSource, r_min: rMin, r_max: rMax, r_count: rCount, r_seed: rSeed,
+        r_foundation: rFoundation, r_portal: rPortal, r_tier: rTier, r_signal: rSignal,
+        r_which_list: rWhichList, r_bucket: rBucket, r_min_sim: rMinSim, r_merge_id: rMergeId, r_member: rMember,
+      }));
+    } catch (e) { /* ignore */ }
+  }, [batchMode, runMode, restoreAfter, stampMerged, attachDossier, rSource, rMin, rMax, rCount, rSeed, rFoundation, rPortal, rTier, rSignal, rWhichList, rBucket, rMinSim, rMergeId, rMember]);
+  // Record the restore job id onto the persisted run so a reattach re-shows the restore phase (and doesn't re-fire it).
+  const persistRestoreJobId = (id) => { try { const s = JSON.parse(localStorage.getItem('sm_active_batch') || 'null'); if (s) { s.restore_job_id = id; localStorage.setItem('sm_active_batch', JSON.stringify(s)); } } catch (e) { /* ignore */ } };
   const isTerminal = (s) => s === 'done' || s === 'error' || s === 'cancelled';   // 'paused' is NOT terminal (resumable)
   // Poll the merge phase — STOP once terminal so mergeProg stops churning (that churn caused duplicate reports).
   useEffect(() => {
@@ -186,7 +222,7 @@ export default function MergeOps() {
     if (restoreAfter && mergeProg && mergeProg.status === 'done' && runIds && runIds.length && !restoreJobId && !restoreStartedRef.current) {
       restoreStartedRef.current = true;
       api.opsBatchRestore(runIds, { mode: runMode, stamp_merged: stampMerged, attach_dossier: attachDossier })
-        .then((r) => { if (r.job_id) setRestoreJobId(r.job_id); else setRunNote('Restore ran as a single run (parallel off).'); })
+        .then((r) => { if (r.job_id) { setRestoreJobId(r.job_id); persistRestoreJobId(r.job_id); } else setRunNote('Restore ran as a single run (parallel off).'); })
         .catch((e) => { setRunErr('restore: ' + e.message); restoreStartedRef.current = false; });
     }
   }, [mergeProg, restoreAfter, runIds, restoreJobId, runMode]);
@@ -286,14 +322,17 @@ export default function MergeOps() {
     setRunBusy(true); setRunErr(''); setRunNote(''); setMergeProg(null); setMergeJobId(null); setRunKind(null); setRestoreProg(null); setRestoreJobId(null); setRunIds(null); setMergeReport(null); setRestoreReport(null); setStagedSeed(null);
     restoreStartedRef.current = false; mergeReportedRef.current = false; restoreReportedRef.current = false;
     track('merge_ops_run', { panel: 'merge-ops', view: 'batch-run', mode: runMode, source: batchMode });
+    try { localStorage.removeItem('sm_active_batch'); } catch (e) { /* ignore */ }
+    let stagedIds = []; let seedVal = null;   // captured for persistence so a reattach can resume the restore-afterward chain
     const { filters, colFilters } = buildFilters();
     const getIds = batchMode === 'random'
       ? api.opsBatchStage({ source: rSource, count: rCount, seed: rSeed || undefined, filters, colFilters })
-        .then((r) => { setStagedSeed(r.seed); setRunNote('Staged ' + r.staged + ' random set(s) (seed ' + r.seed + ', pool ' + r.pool + ', env ' + r.env + ').'); return r.ids || []; })
+        .then((r) => { seedVal = r.seed; setStagedSeed(r.seed); setRunNote('Staged ' + r.staged + ' random set(s) (seed ' + r.seed + ', pool ' + r.pool + ', env ' + r.env + ').'); return r.ids || []; })
       : api.mergeQueue('approved').then((r) => (r.rows || []).map((x) => x.id).filter(Boolean));
     getIds
       .then((ids) => {
         if (!ids.length) throw new Error(batchMode === 'random' ? 'nothing resolvable to stage' : 'no approved sets to run');
+        stagedIds = ids;
         setRunIds(ids);
         const opts = runMode === 'execute'
           ? { mode: 'execute', confirm: 'MERGE', dry_run: false, ack_drift: true, stamp_merged: stampMerged, attach_dossier: attachDossier }
@@ -301,7 +340,12 @@ export default function MergeOps() {
         return api.mergeProcess(ids, opts);
       })
       .then((r) => {
-        if (r.job_id) { setMergeJobId(r.job_id); setRunKind('parallel'); }
+        if (r.job_id) {
+          setMergeJobId(r.job_id); setRunKind('parallel');
+          // Persist the in-flight run so a reattach (after navigating away) can resume its restore-afterward
+          // chain — the toggle values themselves live in sm_batch_prefs (below).
+          try { localStorage.setItem('sm_active_batch', JSON.stringify({ job_id: r.job_id, run_ids: stagedIds, seed: seedVal, run_mode: runMode })); } catch (e) { /* ignore */ }
+        }
         else { setRunKind('single'); setRunNote((n) => (n ? n + ' ' : '') + 'Merge ran as a SINGLE run (no fan-out) — either parallel is off, or the set count fit in one chunk (≤ chunk size).'); }
       })
       .catch((e) => setRunErr(e.message))
@@ -313,7 +357,7 @@ export default function MergeOps() {
     track('merge_ops_restore_manual', { panel: 'merge-ops', view: 'batch-run' });
     setRestoreReport(null); restoreReportedRef.current = false;
     api.opsBatchRestore(runIds, { mode: runMode, stamp_merged: stampMerged, attach_dossier: attachDossier })
-      .then((r) => { if (r.job_id) setRestoreJobId(r.job_id); else setRunNote('Restore ran as a single run (parallel off).'); })
+      .then((r) => { if (r.job_id) { setRestoreJobId(r.job_id); persistRestoreJobId(r.job_id); } else setRunNote('Restore ran as a single run (parallel off).'); })
       .catch((e) => setRunErr('restore: ' + e.message));
   };
   // Restore a single already-merged set straight from the "Ready to restore" list.
@@ -322,11 +366,20 @@ export default function MergeOps() {
     track('merge_ops_restore_one', { panel: 'merge-ops', view: 'batch-run' });
     setRestoreReport(null); restoreReportedRef.current = false;
     api.opsBatchRestore([id], { mode: runMode, stamp_merged: stampMerged, attach_dossier: attachDossier })
-      .then((r) => { if (r.job_id) setRestoreJobId(r.job_id); else { setRunNote('Restore ran as a single run (parallel off).'); loadRestorable(); } })
+      .then((r) => { if (r.job_id) { setRestoreJobId(r.job_id); persistRestoreJobId(r.job_id); } else { setRunNote('Restore ran as a single run (parallel off).'); loadRestorable(); } })
       .catch((e) => setRunErr('restore: ' + e.message));
   };
   const cancel = (id) => { if (id) { track('merge_ops_job_cancel', { panel: 'merge-ops', view: 'batch-run' }); api.mergeJobCancel(id).catch(() => {}); } };
   const resume = (id) => { if (id) { track('merge_ops_job_resume', { panel: 'merge-ops', view: 'batch-run' }); api.mergeJobResume(id).catch(() => {}); } };
+  // Manually clear the run panel back to the fresh form (job progress, reports, ids, seed). Does NOT touch
+  // Salesforce or the job — just resets what this panel is showing. Keeps your saved run-option choices.
+  const resetPanel = () => {
+    setMergeProg(null); setMergeJobId(null); setRunKind(null); setRestoreProg(null); setRestoreJobId(null);
+    setRunIds(null); setMergeReport(null); setRestoreReport(null); setStagedSeed(null); setRunNote(''); setRunErr('');
+    restoreStartedRef.current = false; mergeReportedRef.current = false; restoreReportedRef.current = false;
+    try { localStorage.removeItem('sm_active_batch'); } catch (e) { /* ignore */ }
+    track('merge_ops_reset_panel', { panel: 'merge-ops', view: 'batch-run' });
+  };
 
   const TABS = [['settings', 'Settings'], ['batch', 'Batch run']];   // Workers is always-visible below the tabs
 
@@ -537,6 +590,11 @@ export default function MergeOps() {
             </div>
           ) : null}
           <JobProgress title="Restore job" prog={restoreProg} report={restoreReport} onCancel={() => cancel(restoreJobId)} onResume={() => resume(restoreJobId)} />
+          {mergeProg && isTerminal(mergeProg.status) && (!restoreProg || isTerminal(restoreProg.status)) ? (
+            <div style={{ marginTop: 10 }}>
+              <button className="btn" style={{ width: 'auto' }} title="Clear this panel back to the fresh run form. Does not touch Salesforce or the completed job — just resets what's shown here. Your run-option choices are kept." onClick={resetPanel}>↺ Reset panel</button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 

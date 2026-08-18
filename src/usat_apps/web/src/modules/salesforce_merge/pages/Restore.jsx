@@ -81,6 +81,7 @@ export default function Restore() {
     finally { setPostBusy(false); }
   };
 
+  const [busyIds, setBusyIds] = useState(() => new Set());   // sets currently being restored/recreated (live in-flight indicator)
   const [routingId, setRoutingId] = useState(null);   // queue id currently being moved to Recreate
   const sendToRecreate = async (id) => {
     setErr(''); setRoutingId(id);
@@ -139,7 +140,7 @@ export default function Restore() {
 
   const run = async (execute) => {
     if (!ids.length) return;
-    setBusy(true); setErr(''); setResult(null); setRestoreReport(null);
+    setBusy(true); setErr(''); setResult(null); setRestoreReport(null); setBusyIds(new Set(ids));
     try {
       // Selective restore: send the per-set "keep current" field choices for the sets being restored.
       const keep_fields = {};
@@ -157,7 +158,7 @@ export default function Restore() {
         if (rep && rep.report) setRestoreReport(rep.report);
       } catch (e) { /* report is best-effort */ }
     } catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setBusyIds(new Set()); }
   };
 
   const recToggle = (id) => setRecSel((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -165,7 +166,7 @@ export default function Restore() {
   const recCanExecute = !safe && recMode === 'execute' && recConfirm === 'RECREATE' && recIds.length > 0;
   const runRecreate = async (execute) => {
     if (!recIds.length) return;
-    setRecBusy(true); setErr(''); setRecResult(null); setRecReport(null);
+    setRecBusy(true); setErr(''); setRecResult(null); setRecReport(null); setBusyIds(new Set(recIds));
     try {
       const keep_fields = {};
       for (const id of recIds) if (keepBySet[id] && keepBySet[id].length) keep_fields[id] = keepBySet[id];
@@ -179,7 +180,7 @@ export default function Restore() {
         if (rep && rep.report) setRecReport(rep.report);
       } catch (e) { /* report is best-effort */ }
     } catch (e) { setErr(e.message); }
-    finally { setRecBusy(false); }
+    finally { setRecBusy(false); setBusyIds(new Set()); }
   };
 
   return (
@@ -281,7 +282,7 @@ export default function Restore() {
                   <td><button type="button" onClick={() => toggleDiff(r.id)} title="Diff current vs pre-merge snapshot" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, font: 'inherit' }}>{diffOpen.has(r.id) ? '▾' : '▸'}</button></td>
                   <td><input type="checkbox" checked={sel.has(r.id)} disabled={r.restorable === false} onChange={() => toggle(r.id)} aria-label={'Select ' + r.id} /></td>
                   <td>{i + 1}</td>
-                  <td>{r.survivor_name || '—'}</td>
+                  <td>{r.survivor_name || '—'}{busyIds.has(r.id) && <span className="pill" title="This set is being restored right now." style={{ marginLeft: 6, color: 'var(--amber)', borderColor: 'var(--amber)' }}>⏳ restoring…</span>}</td>
                   <td><span style={{ userSelect: 'all', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title="Click to select · triple-click to copy">{r.survivor_account || '—'}</span></td>
                   <td>{r.loser_count}</td>
                   <td><span className="muted small">{r.source_type === 'merge_id' ? 'merge id ' : 'group '}</span><span style={{ userSelect: 'all', whiteSpace: 'nowrap' }} title="Click to select · triple-click to copy">{r.source_key || '—'}</span></td>
@@ -348,6 +349,34 @@ export default function Restore() {
         </div>
       </div>
 
+      {(() => {
+        const doneRows = (history || []).filter((h) => h.result === 'restored' || h.result === 'recreated');
+        if (!doneRows.length) return null;
+        return (
+          <div className="card" style={{ marginTop: 12 }}>
+            <p style={{ margin: '0 0 4px', fontWeight: 700 }}>Recently restored / recreated <span className="muted small" style={{ fontWeight: 400 }}>({doneRows.length})</span></p>
+            <p className="muted small" style={{ margin: '0 0 8px' }}>Sets restored or recreated in recent runs — they've dropped off the “Completed merges” list above (their status flipped to <em>restored</em>/<em>recreated</em>), so they're shown here instead of vanishing. The full audit is on the <strong>History</strong> tab.</p>
+            <div className="dt-scroll" style={{ maxHeight: 240 }}>
+              <table className="modal-table">
+                <thead><tr><th>#</th><th>Survivor</th><th>Account</th><th>Result</th><th>When</th><th>Detail</th></tr></thead>
+                <tbody>
+                  {doneRows.slice(0, 25).map((h, i) => (
+                    <tr key={(h.run_id || '') + '_' + (h.survivor_account || i)}>
+                      <td>{i + 1}</td>
+                      <td>{h.survivor_name || '—'}</td>
+                      <td><span style={{ userSelect: 'all', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title="Click to select · triple-click to copy">{h.survivor_account || '—'}</span></td>
+                      <td><span className="pill" style={{ color: 'var(--green)' }}>✓ {h.result}</span></td>
+                      <td className="small">{h.created_at ? new Date(h.created_at).toLocaleString() : (h.created_at_mtn || '—')}</td>
+                      <td className="small">{h.reason || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="card" style={{ marginTop: 12 }}>
         <p style={{ margin: '0 0 4px', fontWeight: 700 }}>Recreate queue <span className="muted small" style={{ fontWeight: 400 }}>(not in Recycle Bin · {recRows.length})</span></p>
         <p className="muted small" style={{ margin: '0 0 8px' }}>
@@ -384,7 +413,7 @@ export default function Restore() {
                   <td><button type="button" onClick={() => toggleDiff(r.id)} title="Diff survivor vs pre-merge snapshot (+ pick fields to keep)" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, font: 'inherit' }}>{diffOpen.has(r.id) ? '▾' : '▸'}</button></td>
                   <td><input type="checkbox" checked={recSel.has(r.id)} disabled={!r.has_snapshot} onChange={() => recToggle(r.id)} aria-label={'Select ' + r.id} /></td>
                   <td>{i + 1}</td>
-                  <td>{r.survivor_name || '—'}</td>
+                  <td>{r.survivor_name || '—'}{busyIds.has(r.id) && <span className="pill" title="This set is being recreated right now." style={{ marginLeft: 6, color: 'var(--amber)', borderColor: 'var(--amber)' }}>⏳ recreating…</span>}</td>
                   <td><span style={{ userSelect: 'all', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title="Click to select · triple-click to copy">{r.survivor_account || '—'}</span></td>
                   <td>{r.loser_count}</td>
                   <td><span className="pill" style={{ color: r.has_snapshot ? 'var(--green)' : 'var(--red)' }}>{r.has_snapshot ? '✓ ' + r.snapshot_losers + ' acct / ' + r.snapshot_children + ' child' : '✕ none'}</span></td>
