@@ -39,17 +39,50 @@ const SF_ENVS = ['prod', 'sandbox'];
 function admin_landing() {
   try { const v = (kb_data_dir.read_config() || {}).admin_landing; return ADMIN_LANDINGS.indexOf(v) >= 0 ? v : '/metrics'; } catch (e) { return '/metrics'; }
 }
+// Master on/off switch for outbound send. Default OFF (false) — send stays disabled until an admin turns it
+// on from Admin → Settings, so we can't accidentally email members before it's production-ready.
+function send_enabled() {
+  try { return (kb_data_dir.read_config() || {}).send_enabled === true; } catch (e) { return false; }
+}
+// Per-queue default "From" (verified Org-Wide Email Address) map: { <queue_id>: 'teamusa@usatriathlon.org', ... }.
+// When an operator sends without picking a specific From, we look up the queue's default here.
+function send_queue_from() {
+  try { const m = (kb_data_dir.read_config() || {}).send_queue_from; return (m && typeof m === 'object' && !Array.isArray(m)) ? m : {}; } catch (e) { return {}; }
+}
+// Master on/off switch for writing Case.Status changes from the app. Default OFF — status changes stay
+// disabled until an admin turns them on in Admin → Settings, so we can't write to Salesforce before it's approved.
+function status_enabled() {
+  try { return (kb_data_dir.read_config() || {}).status_enabled === true; } catch (e) { return false; }
+}
+// Per-status extra fields to collect + write when moving to that status:
+//   { "<StatusValue>": [ { field: 'Reason', required: true }, ... ] }
+// e.g. Closed -> Case Close Reason (required). Only fields listed here can be written by /status.
+function status_requirements() {
+  try { const m = (kb_data_dir.read_config() || {}).status_requirements; return (m && typeof m === 'object' && !Array.isArray(m)) ? m : {}; } catch (e) { return {}; }
+}
 // Wire the shared model registry to read the module config.json (so /admin Settings model edits take effect).
 try { ai.set_config_reader(function () { try { return kb_data_dir.read_config() || {}; } catch (e) { return {}; } }); } catch (e) { /* ignore */ }
 
-let _conn = null, _conn_env = null;
+let _conn = null, _conn_env = null, _conn_user = '';
 async function get_conn() {
   const env = sf_env();
   if (_conn && _conn_env === env) return _conn;
   const r = await sf.connect({ is_test: env === 'sandbox', role: 'read' });
-  _conn = r.conn; _conn_env = env;
+  _conn = r.conn; _conn_env = env; _conn_user = r.username || _conn_user;   // SOAP fallback reports the run-as username
   return _conn;
 }
+// Separate WRITE connection for outbound (send). Under OAuth this is the same run-as user; under the SOAP
+// fallback it can be a dedicated write user. Cached per env.
+let _wconn = null, _wconn_env = null;
+async function get_conn_write() {
+  const env = sf_env();
+  if (_wconn && _wconn_env === env) return _wconn;
+  const r = await sf.connect({ is_test: env === 'sandbox', role: 'write' });
+  _wconn = r.conn; _wconn_env = env;
+  return _wconn;
+}
+// The "From" for a send is now resolved dynamically: either the operator picks a verified Org-Wide Email
+// Address (GET /org-wide-emails) or it falls back to the queue's default (Admin → Settings). No hardcoded list.
 let _cstore = null;
 async function corr_store_get() { if (!_cstore) _cstore = await corr_store.create_store(); return _cstore; }
 function err(res, e) { res.status(502).json({ ok: false, error: (e && e.message) || String(e) }); }
@@ -142,7 +175,40 @@ function mount(app) {
   try { log_ring.install(console); } catch (e) { /* never block mount on logging */ }
 
   app.get(P + '/ping', gate, function (req, res) { res.json({ ok: true, module: 'salesforce_email_queue' }); });
-  app.get(P + '/config', gate, function (req, res) { res.json({ ok: true, sf_env: sf_env(), show_test_banner: show_test_banner() }); });
+  app.get(P + '/config', gate, async function (req, res) {
+    let sf_user = _conn_user;
+    if (!sf_user) { try { await get_conn(); sf_user = _conn_user; } catch (e) { /* connection optional here */ } }
+    res.json({ ok: true, sf_env: sf_env(), show_test_banner: show_test_banner(), sf_user: sf_user || '', send_enabled: send_enabled(), send_queue_from: send_queue_from(), status_enabled: status_enabled(), status_requirements: status_requirements() });
+  });
+
+  // Updateable Case fields (name/label/type + picklist options) — used by the admin "required fields" editor
+  // and by the operator status-change form to render the right input for each configured field. Dynamic (describe).
+  app.get(P + '/case-fields', gate, async function (req, res) {
+    try {
+      const c = await get_conn();
+      const meta = await c.sobject('Case').describe();
+      const fields = (meta.fields || []).filter(function (f) { return f.updateable; }).map(function (f) {
+        return {
+          name: f.name, label: f.label || f.name, type: f.type,
+          required: (f.nillable === false && f.defaultedOnCreate === false),
+          picklist: (f.type === 'picklist' || f.type === 'multipicklist') ? (f.picklistValues || []).filter(function (v) { return v.active; }).map(function (v) { return { value: v.value, label: v.label || v.value }; }) : [],
+          controller: f.controllerName || null, dependent: !!f.dependentPicklist
+        };
+      });
+      res.json({ ok: true, fields: fields });
+    } catch (e) { err(res, e); }
+  });
+
+  // Verified Org-Wide Email Addresses (OWEAs) available as a "From" for outbound send. Dynamic — reads the
+  // live list from Salesforce so the operator/admin dropdowns reflect whatever support inboxes are verified
+  // (e.g. once teamusa@ is verified it shows up here automatically). Panel-gated (operators need it too).
+  app.get(P + '/org-wide-emails', gate, async function (req, res) {
+    try {
+      const c = await get_conn();
+      const r = await c.query('SELECT Id, Address, DisplayName, IsAllowAllProfiles FROM OrgWideEmailAddress ORDER BY DisplayName');
+      res.json({ ok: true, addresses: (r.records || []).map(function (x) { return { id: x.Id, address: x.Address, display_name: x.DisplayName || '', all_profiles: !!x.IsAllowAllProfiles }; }) });
+    } catch (e) { err(res, e); }
+  });
 
   app.get(P + '/queues', gate, async function (req, res) {
     try {
@@ -420,7 +486,7 @@ function mount(app) {
 
   // ---- EQ Admin (Settings / Access) — admin-only, ported 1:1 from the standalone app's /admin ----
   app.get(P + '/admin/config', require_admin, function (req, res) {
-    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS, ai_models: ai.list_models(), sf_env: sf_env(), sf_envs: SF_ENVS, show_test_banner: show_test_banner() });
+    res.json({ ok: true, admin_landing: admin_landing(), choices: ADMIN_LANDINGS, ai_models: ai.list_models(), sf_env: sf_env(), sf_envs: SF_ENVS, show_test_banner: show_test_banner(), send_enabled: send_enabled(), send_queue_from: send_queue_from(), status_enabled: status_enabled(), status_requirements: status_requirements() });
   });
   app.post(P + '/admin/config', require_admin, function (req, res) {
     try {
@@ -438,6 +504,28 @@ function mount(app) {
         cfg.admin_landing = b.admin_landing;
       }
       if (b.show_test_banner !== undefined) cfg.show_test_banner = !!b.show_test_banner;
+      // Master send switch (boolean) — the app-wide kill switch for outbound email.
+      if (b.send_enabled !== undefined) cfg.send_enabled = !!b.send_enabled;
+      // Per-queue default "From" map: { <queue_id>: '<verified address>' }. Empty string clears a queue's entry.
+      if (b.send_queue_from !== undefined) {
+        if (b.send_queue_from === null || typeof b.send_queue_from !== 'object' || Array.isArray(b.send_queue_from)) return res.status(400).json({ ok: false, error: 'send_queue_from must be an object' });
+        const map = {};
+        Object.keys(b.send_queue_from).forEach(function (k) { const v = String(b.send_queue_from[k] || '').trim(); if (v) map[String(k)] = v.slice(0, 254); });
+        cfg.send_queue_from = map;
+      }
+      // Master switch for Case status writes.
+      if (b.status_enabled !== undefined) cfg.status_enabled = !!b.status_enabled;
+      // Per-status required/optional fields map: { "<Status>": [ { field, required } ] }.
+      if (b.status_requirements !== undefined) {
+        if (b.status_requirements === null || typeof b.status_requirements !== 'object' || Array.isArray(b.status_requirements)) return res.status(400).json({ ok: false, error: 'status_requirements must be an object' });
+        const map = {};
+        Object.keys(b.status_requirements).forEach(function (k) {
+          const arr = Array.isArray(b.status_requirements[k]) ? b.status_requirements[k] : [];
+          const rows = arr.map(function (x) { const f = x && String(x.field || '').trim(); return f ? { field: f.slice(0, 80), required: !!x.required } : null; }).filter(Boolean);
+          if (rows.length) map[String(k)] = rows;
+        });
+        cfg.status_requirements = map;
+      }
       if (b.ai_models !== undefined) {
         if (!Array.isArray(b.ai_models)) return res.status(400).json({ ok: false, error: 'ai_models must be an array' });
         const num = function (v, d) { const n = Number(v); return isFinite(n) && n >= 0 ? n : d; };
@@ -452,7 +540,7 @@ function mount(app) {
         cfg.ai_models = rows;
       }
       kb_data_dir.write_config(cfg);
-      res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env(), show_test_banner: show_test_banner() });
+      res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env(), show_test_banner: show_test_banner(), send_enabled: send_enabled(), send_queue_from: send_queue_from(), status_enabled: status_enabled(), status_requirements: status_requirements() });
     } catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
   app.get(P + '/admin/queue-access', require_admin, async function (req, res) {
@@ -510,16 +598,74 @@ function mount(app) {
     catch (e) { res.json({ ok: true, under_pm2: false, reason: (e && e.message) || 'error' }); }
   });
 
-  // Read-only build: Send reply / status change are mocked (no SF writes). Kept so the UI buttons work.
-  app.post(P + '/send', gate, function (req, res) {
+  // Send a case reply THROUGH Salesforce (SF delivers to the member + logs it on the case thread). MVP:
+  // requires a case, recipient, non-empty body, and a permitted verified "from". Sends as the write connection.
+  app.post(P + '/send', gate, async function (req, res) {
     const b = req.body || {};
-    log_sf(req, b, { event_name: 'send_email', sf_action: 'send', sf_ok: 0, sf_error: 'sending not enabled in this build', ai_reply_chars: (b.body || '').length });
-    res.json({ ok: true, mocked: true, note: 'read-only build — no Salesforce write' });
+    const case_id = String(b.case_id || '');
+    const to = String(b.to || '').trim();
+    let from = String(b.from || '').trim();
+    const subject = String(b.subject || '');
+    const body = String(b.body || '');
+    // Master kill switch: send stays off until an admin enables it in Admin → Settings.
+    if (!send_enabled()) return res.status(403).json({ ok: false, error: 'Email send is turned off. An admin can enable it in Admin → Settings → Email sending.' });
+    if (!case_id) return res.status(400).json({ ok: false, error: 'No case selected.' });
+    if (!to) return res.status(400).json({ ok: false, error: 'A recipient (To) is required.' });
+    if (!body.trim()) return res.status(400).json({ ok: false, error: 'The reply is empty.' });
+    // Resolve the "From": a blank or "queue-default" sentinel falls back to this queue's configured default
+    // address (Admin → Settings → Per-queue From). Keyed by queue_id, then queue name. Empty = SF chooses.
+    if (!from || from === 'queue-default') {
+      const map = send_queue_from();
+      from = String(map[String(b.queue_id || '')] || map[String(b.queue || '')] || '').trim();
+    }
+    // Method toggle: default is Apex case-reply (threaded, can send from a verified org-wide address).
+    // Only an explicit direct/emailSimple choice uses the direct path; anything unspecified -> Apex.
+    const method = String(b.method || '').toLowerCase();
+    const useApex = !(method === 'emailsimple' || method === 'direct' || method === 'simple');
+    try {
+      const conn = await get_conn_write();
+      const r = useApex
+        ? await sf.send_case_email_apex(conn, { case_id: case_id, to: to, from: from, subject: subject, body: body, sender_user: _conn_user })
+        : await sf.send_case_email(conn, { case_id: case_id, to: to, from: from, subject: subject, body: body, sender_user: _conn_user });
+      log_sf(req, b, { event_name: 'send_email', sf_action: 'send', sf_ok: 1, ai_reply_chars: body.length });
+      res.json({ ok: true, sent: true, via: r.via || 'direct', id: r.id || null, sent_as: r.sent_as || null, from_used: r.from_used || null, note: r.note || null, logged: !!r.logged, log_error: r.log_error || null });
+    } catch (e) {
+      log_sf(req, b, { event_name: 'send_email', sf_action: 'send', sf_ok: 0, sf_error: String((e && e.message) || 'send failed').slice(0, 380), ai_reply_chars: body.length });
+      res.status(502).json({ ok: false, error: (e && e.message) || 'send failed' });
+    }
   });
-  app.post(P + '/status', gate, function (req, res) {
+  // Change a case's Status (and any required extra fields) in Salesforce. Gated by the master status switch;
+  // only fields configured in status_requirements[status] may be written; required ones must be present.
+  app.post(P + '/status', gate, async function (req, res) {
     const b = req.body || {};
-    log_sf(req, b, { event_name: 'status_change', sf_action: 'status_change', status_to: b.status || '', sf_ok: 0, sf_error: 'status change not enabled in this build' });
-    res.json({ ok: true, mocked: true, note: 'read-only build — no Salesforce write' });
+    const case_id = String(b.case_id || '');
+    const status = String(b.status || '');
+    const inFields = (b.fields && typeof b.fields === 'object' && !Array.isArray(b.fields)) ? b.fields : {};
+    if (!status_enabled()) return res.status(403).json({ ok: false, error: 'Case status changes are turned off. An admin can enable it in Admin → Settings → Case status changes.' });
+    if (!case_id) return res.status(400).json({ ok: false, error: 'No case selected.' });
+    if (!status) return res.status(400).json({ ok: false, error: 'Pick a status.' });
+    // Whitelist the writable extra fields for this status; enforce the required ones.
+    const reqs = Array.isArray(status_requirements()[status]) ? status_requirements()[status] : [];
+    const allowed = {}; reqs.forEach(function (r) { if (r && r.field) allowed[String(r.field)] = !!r.required; });
+    const missing = Object.keys(allowed).filter(function (f) { return allowed[f] && (inFields[f] == null || String(inFields[f]).trim() === ''); });
+    if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required field(s): ' + missing.join(', ') });
+    try {
+      const conn = await get_conn_write();
+      const rec = { Id: case_id, Status: status };
+      Object.keys(allowed).forEach(function (f) { const v = inFields[f]; if (v != null && String(v).trim() !== '') rec[f] = v; });
+      let r;
+      try { r = await conn.sobject('Case').update(rec); }
+      catch (e) { let m = (e && e.message) || String(e); try { const j = JSON.parse(m); const a = Array.isArray(j) ? j[0] : j; if (a && a.message) m = a.message; } catch (e2) { /* not JSON */ } throw new Error(m); }
+      if (!(r && (r.success || r.id))) {
+        const em = (r && r.errors && (Array.isArray(r.errors) ? r.errors.map(function (x) { return x.message || x.statusCode; }).join('; ') : JSON.stringify(r.errors))) || 'update failed';
+        throw new Error(em);
+      }
+      log_sf(req, b, { event_name: 'status_change', sf_action: 'status_change', status_to: status, sf_ok: 1 });
+      res.json({ ok: true, status: status, id: case_id });
+    } catch (e) {
+      log_sf(req, b, { event_name: 'status_change', sf_action: 'status_change', status_to: status, sf_ok: 0, sf_error: String((e && e.message) || 'status change failed').slice(0, 380) });
+      res.status(502).json({ ok: false, error: (e && e.message) || 'status change failed' });
+    }
   });
 }
 

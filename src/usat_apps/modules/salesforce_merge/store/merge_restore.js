@@ -423,15 +423,24 @@ async function restore(ids, opts = {}, deps = {}) {
       try { await W.update_record(conn, ch.object, patch); repointed += 1; }
       catch (err) {
         const msg = (err && err.message) || '';
+        // Some child links can't be re-pointed by the tool for STRUCTURAL Salesforce reasons — the raw SF
+        // error is kept below; we just APPEND why + what (if anything) fixes it, so the log is actionable.
+        // NOTE: Salesforce returns the same "check the security settings" message for both a true FLS block
+        // AND a non-updateable field, so the raw text can be misleading for these — hence the clarifications.
+        const extra = ch.object === 'User'
+          ? ' || COMMUNITY/PORTAL USER — Salesforce ties a portal login to its Contact, and on a Person Account that Contact can\'t be reparented, so User.AccountId isn\'t directly writable (this is a Salesforce limitation, not a data gap). MANUAL FIX (admin): reassign the community user in Setup → Users, or re-enable it on the restored account\'s Contact — needs the "Manage External Users" permission and may require Salesforce Support. If the login only needs to keep working, no action is required — it stays active on the surviving account.'
+          : ch.object === 'CampaignMember'
+          ? ' || CAMPAIGNMEMBER LINK IS CREATE-ONLY — a CampaignMember\'s ContactId/LeadOrContactId is set when the record is created and is NOT updateable (LeadOrContactId is a read-only formula), so it can\'t be re-pointed by an update. This is NOT an FLS/permissions issue — granting field edit will NOT help, despite the "check security settings" wording. The only way to move it is to delete the CampaignMember and re-create it against the restored Contact. Usually acceptable to leave as-is (non-fatal).'
+          : '';
         if (/deleted/i.test(msg)) {
           try { await W.undelete(conn, [ch.id]); await W.update_record(conn, ch.object, patch); repointed += 1; }
-          catch (e2) { skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': ' + ((e2 && e2.message) || 'deleted, unrecoverable')); }
+          catch (e2) { skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': ' + ((e2 && e2.message) || 'deleted, unrecoverable') + extra); }
         } else if (_is_fls_error(msg)) {
           // Field-level security: the field exists but the write user lacks EDIT on it (common for managed-
           // package lookups like iWave). Not a code bug — an admin must grant field-level edit. Merges are
           // unaffected (SF's native merge re-parents these to the survivor); only a restore can't reverse it.
-          skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': skipped — field not writable for this user, needs field-level edit (FLS): ' + msg);
-        } else { skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': ' + msg); }
+          skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': skipped — field not writable for this user, needs field-level edit (FLS): ' + msg + extra);
+        } else { skippedCh += 1; notes.push(ch.object + ' ' + ch.id + ': ' + msg + extra); }
       }
     }
 

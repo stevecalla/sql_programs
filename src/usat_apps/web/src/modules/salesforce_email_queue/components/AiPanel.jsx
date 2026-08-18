@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api.js';
 import * as store from '../lib/store.js';
 import { track, meta as trackMeta } from '../lib/track.js';
-import { Modal, RowsTable, fmtBytes, copyText, CopyButton, downloadText } from './ui.jsx';
+import { Modal, RowsTable, fmtBytes, copyText, CopyButton, downloadText, OffBadge } from './ui.jsx';
 import { Collapsible, ContextAddFiles, AskPanel } from '../../../lib/ui.jsx';   // shared collapsible + add-files + ask (dedup)
 
 const ASK_PRESETS = [
@@ -34,7 +34,7 @@ export default function AiPanel({ s }) {
   const sel = s.sel; const model = s.model; const queueName = store.queueName();
   const cid = sel ? sel.case_id : '';
 
-  const [open, setOpen] = useState({ resp: true, ask: false, corr: false, ctx: false, soql: false, ref: false });
+  const [open, setOpen] = useState({ resp: true, send: true, ask: false, corr: false, ctx: false, soql: false, ref: false });
   const toggle = (k) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
   // Card 1 — reply
@@ -43,6 +43,14 @@ export default function AiPanel({ s }) {
   const [reply, setReply] = useState('');
   const [sendMsg, setSendMsg] = useState(null);   // { cls, text }
   const [err, setErr] = useState('');
+
+  // Card 1b — Salesforce send settings (UI only for now; the Send reply button stays in the reply card).
+  const [sendOn, setSendOn] = useState(false);                                   // default OFF — draft-only
+  const [sendTo, setSendTo] = useState('');                                      // prefilled from the case, editable
+  const [sendFrom, setSendFrom] = useState('queue-default');                     // 'queue-default' = use this queue's configured From; '' = connected SF user; or a verified OWEA address
+  const [sendSubject, setSendSubject] = useState('');
+  const [sendMethod, setSendMethod] = useState(() => { try { return window.localStorage.getItem('eq_send_method') || 'apex'; } catch (e) { return 'apex'; } });   // default 'apex' (CaseReplyService · threaded); 'emailSimple' = direct. Persisted per-browser.
+  const pickMethod = (v) => { setSendMethod(v); try { window.localStorage.setItem('eq_send_method', v); } catch (e) { /* ignore */ } };
 
   // Card 2 — ask
   const [question, setQuestion] = useState('');
@@ -71,6 +79,7 @@ export default function AiPanel({ s }) {
   // reset per case
   useEffect(() => {
     setBusy(''); setVerdict(''); setReply(''); setSendMsg(null); setErr('');
+    setSendOn(false); setSendTo((sel && sel.supplied_email) || ''); setSendSubject(sel && sel.subject ? ('RE: ' + sel.subject) : '');   // prefill send fields per case (From persists)
     setQuestion(''); setHist([]); setAskExpanded(false);
     setCorrNote(''); setCorrMsg('');
     setCtx(null); setCtxView(null); setUpMsg('');
@@ -102,10 +111,31 @@ export default function AiPanel({ s }) {
     catch (e) { setErr(e.message); } finally { setBusy(''); }
   }
   async function doSend() {
+    // Re-check the live master switch (an admin may have just toggled it) so we don't offer a send the
+    // server will refuse — and so re-enabling works without a reload.
+    const liveEnabled = await store.refreshConfig();
+    if (!liveEnabled) { setSendMsg({ cls: 'warn', text: 'Email sending is turned off for the app. An admin can enable it in Admin → Settings → Email sending.' }); return; }
     if (!reply.trim()) { setSendMsg({ cls: '', text: 'Nothing to send yet — draft or write a reply first.' }); return; }
-    setSendMsg(null);
-    try { const r = await api.send(Object.assign(base(), { body: reply })); setSendMsg({ cls: 'ok', text: r.mocked ? 'Read-only build — not sent to Salesforce (mock OK).' : 'Sent.' }); }
-    catch (e) { setSendMsg({ cls: 'warn', text: e.message }); }
+    if (!sendOn) { setSendMsg({ cls: '', text: 'Turn on “Enable sending to Salesforce” first.' }); return; }
+    const to = (sendTo || '').trim();
+    if (!to) { setSendMsg({ cls: 'warn', text: 'Add a recipient (To) in “Send to Salesforce”.' }); return; }
+    const envLabel = s.sfEnv === 'sandbox' ? 'SANDBOX (safe test)' : 'PRODUCTION — reaches a real inbox';
+    const qDefault = (s.sendQueueFrom || {})[(store.queueObj() || {}).id || ''] || '';
+    const fromLabel = sendFrom === 'queue-default'
+      ? (qDefault ? (qDefault + ' (queue default)') : ('your Salesforce user' + (s.sfUser ? ' — ' + s.sfUser : '') + ' — no queue default set'))
+      : sendFrom ? (sendFrom + ' (falls back to your SF user if refused)')
+      : ('your Salesforce user' + (s.sfUser ? ' — ' + s.sfUser : ''));
+    const ok = window.confirm('Send this reply through Salesforce?\n\nTo:   ' + to + '\nFrom: ' + fromLabel + '\nOrg:  ' + envLabel + '\nCase: #' + (sel.case_number || '') + '\n\nSalesforce will email the recipient and log it on this case.');
+    if (!ok) return;
+    setSendMsg({ cls: '', text: 'Sending…' });
+    try {
+      const r = await api.send(Object.assign(base(), { body: reply, to: to, from: sendFrom, subject: sendSubject, method: sendMethod }));
+      if (r.mocked) { setSendMsg({ cls: 'ok', text: 'Read-only build — not sent to Salesforce (mock OK).' }); return; }
+      const logPart = r.logged ? ' Logged on the case.' : (' (Delivered, but could not log it on the case: ' + (r.log_error || 'unknown') + ')');
+      const viaPart = r.via === 'apex' ? ' [via Apex case-reply]' : '';
+      setSendMsg({ cls: r.logged ? 'ok' : 'warn', text: 'Sent ✓ — Salesforce emailed ' + to + '.' + logPart + viaPart + (r.note ? '  ' + r.note : '') });
+      store.reloadThread();   // pull in the new outbound message so it shows in the thread
+    } catch (e) { setSendMsg({ cls: 'warn', text: e.message }); }
   }
 
   async function ask(q) {
@@ -190,11 +220,70 @@ export default function AiPanel({ s }) {
         {err ? <div className="eq-err">{err}</div> : null}
         <h3 className="eq-h" style={{ marginTop: 10 }}>Reply (editable)</h3>
         <textarea className="eq-fld eq-grow" style={{ minHeight: 220 }} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="The AI draft appears here and is fully editable. You can also compose a reply yourself, even if the AI said it needs more info." />
-        <div className="eq-inline" style={{ gap: 8 }}>
-          <button className="eq-btn" onClick={doSend}>Send reply</button>
+        <div className="eq-inline" style={{ gap: 8, alignItems: 'center' }}>
+          <button className="eq-btn" onClick={doSend} disabled={!sendOn || !s.sendEnabled}
+            title={!s.sendEnabled ? 'Email sending is turned off for the app (Admin → Settings)' : (sendOn ? 'Send this reply to the member' : 'Turn on “Enable sending to Salesforce” in the card below to enable sending')}>Send reply</button>
           <CopyButton text={() => reply} label="📋 Copy reply" onCopied={() => track('reply_copied', { ai_reply_chars: reply.length })} />
+          {!s.sendEnabled ? <OffBadge label="Email sending off" title="An admin can enable this in Admin → Settings → Email sending" /> : null}
         </div>
+        {s.sendEnabled && !sendOn ? <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>Sending is off — enable it in “Send to Salesforce” below.</div> : null}
         {sendMsg ? <div className={'note ' + (sendMsg.cls === 'ok' ? 'ok' : sendMsg.cls === 'warn' ? 'warn' : '')} style={{ marginTop: 8 }}>{sendMsg.text}</div> : null}
+      </Card>
+
+      {/* Card 1b — Send to Salesforce (setup/consent for the reply above; the Send button stays in the reply card for now) */}
+      <Card title="Send to Salesforce" open={open.send} onToggle={() => toggle('send')} summary={!s.sendEnabled ? 'disabled by admin' : (sendOn ? 'enabled' : 'off')}>
+        {!s.sendEnabled ? (
+          <div className="note warn" style={{ marginBottom: 10 }}>Email sending is turned <b>off</b> for the whole app. An admin can enable it in <b>Admin → Settings → Email sending</b>. Until then you can draft and copy replies, but not send.</div>
+        ) : null}
+        <label className="eq-check" style={{ alignItems: 'flex-start', gap: 8, opacity: s.sendEnabled ? 1 : 0.5 }}>
+          <input type="checkbox" checked={sendOn && s.sendEnabled} disabled={!s.sendEnabled} onChange={(e) => setSendOn(e.target.checked)} />
+          <span><b>Enable sending to Salesforce</b>
+            <div className="dim" style={{ fontSize: 12 }}>Off by default — the reply stays draft-only (nothing is written or emailed). Turn on to allow this reply to be sent to the member and logged on this case’s thread.</div>
+          </span>
+        </label>
+        <div style={{ opacity: (sendOn && s.sendEnabled) ? 1 : 0.5, pointerEvents: (sendOn && s.sendEnabled) ? 'auto' : 'none', marginTop: 10 }}>
+          <h3 className="eq-h" style={{ marginTop: 4 }}>Send method</h3>
+          <select className="eq-fld" value={sendMethod} onChange={(e) => pickMethod(e.target.value)}>
+            <option value="apex">Apex case-reply (CaseReplyService · threaded) — recommended</option>
+            <option value="emailSimple">Direct send (emailSimple)</option>
+          </select>
+          <div className="dim" style={{ fontSize: 11, marginTop: 3 }}>
+            {sendMethod === 'apex'
+              ? 'Default. Routes through the deployed Apex CaseReplyService — relates the email to the case for proper threading, and can send from a verified org-wide address (e.g. teamusa@).'
+              : 'Delivers and still logs the reply on the case, but can’t send from an org-wide address (falls back to your SF user) and a member’s reply may start a new case instead of threading back.'}
+          </div>
+          <h3 className="eq-h" style={{ marginTop: 10 }}>To</h3>
+          <input className="eq-fld" value={sendTo} onChange={(e) => setSendTo(e.target.value)} placeholder="member@email.com" />
+          <h3 className="eq-h" style={{ marginTop: 10 }}>From</h3>
+          {(() => {
+            const qDefault = (s.sendQueueFrom || {})[(store.queueObj() || {}).id || ''] || '';
+            const owe = s.oweAddresses || [];
+            return (
+              <>
+                <select className="eq-fld" value={sendFrom} onChange={(e) => setSendFrom(e.target.value)}>
+                  <option value="queue-default">Queue default{qDefault ? ' — ' + qDefault : ' (none set for this queue)'}</option>
+                  <option value="">Your Salesforce user{s.sfUser ? ' — ' + s.sfUser : ''}</option>
+                  {owe.map((a) => <option key={a.id} value={a.address}>{(a.display_name ? a.display_name + ' — ' : '') + a.address}{a.all_profiles ? '' : ' (restricted)'}</option>)}
+                </select>
+                <div className="dim" style={{ fontSize: 11, marginTop: 3 }}>
+                  {sendFrom === 'queue-default'
+                    ? (qDefault
+                        ? <>Uses this queue’s configured address <b>{qDefault}</b> (set in Admin → Settings → Per-queue From). Falls back to your Salesforce user if Salesforce refuses it.</>
+                        : <>No default is set for this queue yet, so this sends from your Salesforce user{s.sfUser ? ' (' + s.sfUser + ')' : ''}. An admin can map one in Admin → Settings → Per-queue From.</>)
+                    : sendFrom
+                      ? <>Sends as the verified org-wide address <b>{sendFrom}</b>, falling back to your Salesforce user{s.sfUser ? ' (' + s.sfUser + ')' : ''} if Salesforce refuses it.</>
+                      : <>Sends from your connected Salesforce user{s.sfUser ? ' (' + s.sfUser + ')' : ''}.</>}
+                  {owe.length ? <> · {owe.length} verified org-wide address{owe.length === 1 ? '' : 'es'} available.</> : <> · No verified org-wide addresses found yet.</>}
+                </div>
+              </>
+            );
+          })()}
+          <h3 className="eq-h" style={{ marginTop: 10 }}>Subject</h3>
+          <input className="eq-fld" value={sendSubject} onChange={(e) => setSendSubject(e.target.value)} placeholder="RE: …" />
+          <div className="dim" style={{ fontSize: 11, marginTop: 8 }}>
+            {s.sfEnv === 'sandbox' ? 'Sending in SANDBOX — safe to test.' : 'Sending in PRODUCTION — reaches a real member.'} Use “Send reply” in the AI suggested response card above to send.
+          </div>
+        </div>
       </Card>
 
       {/* Card 2 — Ask */}

@@ -5,6 +5,28 @@ import * as store from './lib/store.js';
 import ResizeHandle from '../../lib/ResizeHandle.jsx';   // shared grabber (common with the chatbot)
 
 function statusColor(s) { s = String(s || '').toLowerCase(); if (s.includes('clos')) return 'var(--eq-dim)'; if (s.includes('wait')) return 'var(--eq-gold)'; if (s.includes('new')) return 'var(--eq-blue)'; return 'var(--eq-ink)'; }
+
+// Always-visible indicator of which Salesforce org this Email Queue is pointed at (from the module /config
+// sf_env). PRODUCTION is red (replies/changes hit real cases); SANDBOX is blue (safe to test). Sits next to
+// the "USAT Apps" link in the rail so no one ever sends from the wrong org by accident.
+export function SfEnvBadge({ env }) {
+  if (!env) return null;
+  const isProd = env !== 'sandbox';
+  const st = isProd
+    ? { color: '#ff6b8a', bg: 'rgba(168,12,52,.18)', bd: '#a80c34', label: 'Production' }
+    : { color: '#8fb4e6', bg: 'rgba(58,90,140,.22)', bd: '#3a5a8c', label: 'Sandbox' };
+  const tip = isProd
+    ? 'Connected to Salesforce PRODUCTION — replies and status changes affect real cases and members.'
+    : 'Connected to a Salesforce SANDBOX — safe to test; nothing reaches real members.';
+  return (
+    <span title={tip} aria-label={'Salesforce ' + st.label}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 800, letterSpacing: '.4px',
+        textTransform: 'uppercase', padding: '2px 8px', borderRadius: 999, color: st.color, background: st.bg, border: '1px solid ' + st.bd,
+        whiteSpace: 'nowrap', flex: '0 0 auto' }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.color }} />SF · {st.label}
+    </span>
+  );
+}
 export function TriageBadge({ t }) {
   if (!t || !t.status) return null;
   const isLocal = t.ai === false;

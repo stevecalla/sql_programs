@@ -4,7 +4,8 @@ import { api } from './lib/api.js';
 import * as store from './lib/store.js';
 import ResizeHandle from '../../lib/ResizeHandle.jsx';   // shared grabber (common with the chatbot)
 import AiPanel from './components/AiPanel.jsx';
-import { Modal, RowsTable, fmtBytes, CopyButton } from './components/ui.jsx';
+import { SfEnvBadge } from './EmailQueueRail.jsx';   // prod/sandbox indicator — shown on the case header line
+import { Modal, RowsTable, fmtBytes, CopyButton, OffBadge } from './components/ui.jsx';
 import { track, meta as trackMeta } from './lib/track.js';
 
 // ---- helpers ----
@@ -115,14 +116,88 @@ function TriageControl({ s }) {
   return <button className="eq-btn sm" onClick={() => store.triageOne(cs)}>AI status</button>;
 }
 
+// Case Status control: STAGE a selection, then Apply. If the target status has configured required/optional
+// fields (Admin → Settings → Case status changes), an inline form collects them before the write. The whole
+// thing is gated by the master status switch (s.statusEnabled) and enforced again server-side.
+function StatusControl({ s, queueName }) {
+  const sel = s.sel;
+  const cur = sel.status || '';
+  const statuses = (s.statuses && s.statuses.length) ? s.statuses : ['New', 'Working', 'Escalated', 'Closed'];
+  const [target, setTarget] = useState(cur);
+  const [vals, setVals] = useState({});          // { <fieldName>: value }
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);          // { ok, text }
+  useEffect(() => { setTarget(sel.status || ''); setVals({}); setMsg(null); }, [sel.case_id, sel.status]);
+
+  const enabled = !!s.statusEnabled;
+  const reqs = (s.statusRequirements && s.statusRequirements[target]) || [];   // [{ field, required }]
+  const changed = target !== cur;
+  const fieldMeta = (name) => (s.caseFields || []).find((f) => f.name === name) || { name, label: name, type: 'string', picklist: [] };
+  const setVal = (name, v) => setVals((o) => ({ ...o, [name]: v }));
+
+  async function apply() {
+    setMsg(null);
+    const missing = reqs.filter((r) => r.required).filter((r) => { const v = vals[r.field]; return v == null || String(v).trim() === ''; });
+    if (missing.length) { setMsg({ ok: false, text: 'Fill required: ' + missing.map((r) => fieldMeta(r.field).label).join(', ') }); return; }
+    setBusy(true);
+    try {
+      const fields = {}; reqs.forEach((r) => { const v = vals[r.field]; if (v != null && String(v).trim() !== '') fields[r.field] = v; });
+      const r = await api.setStatus({ case_id: sel.case_id, case_number: sel.case_number, queue: queueName, queue_id: (store.queueObj() || {}).id || '', status: target, fields, meta: trackMeta() });
+      if (r && r.mocked) { setMsg({ ok: false, text: 'Status writes are off.' }); }
+      else { setMsg({ ok: true, text: 'Status updated to “' + target + '”.' }); track('status_changed', { status_to: target }); store.applyCaseStatus(sel.case_id, target); setVals({}); }
+    } catch (e) { setMsg({ ok: false, text: (e && e.message) || 'Status change failed.' }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* one line: label · dropdown · Apply · Reset (or the off note) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="dim" style={{ fontSize: 12, flex: '0 0 auto' }}>Status:</span>
+        <select className="eq-fld eq-statussel" style={{ margin: 0, width: 'auto', minWidth: 180, flex: '0 1 auto' }}
+          value={target} onChange={(e) => { setTarget(e.target.value); setVals({}); setMsg(null); }} disabled={!enabled}>
+          {statuses.map((x) => <option key={x} value={x}>{x}</option>)}
+        </select>
+        {enabled ? (
+          <>
+            <button className="eq-btn sm pri" style={{ flex: '0 0 auto' }} onClick={apply} disabled={!changed || busy}
+              title={changed ? 'Apply this status change in Salesforce' : 'Pick a different status to apply'}>{busy ? 'Applying…' : 'Apply'}</button>
+            {changed ? <button className="eq-btn sm" style={{ flex: '0 0 auto' }} onClick={() => { setTarget(cur); setVals({}); setMsg(null); }} disabled={busy} title="Discard the change">Reset</button> : null}
+          </>
+        ) : <OffBadge label="Status changes off" title="An admin can enable this in Admin → Settings → Case status changes" />}
+      </div>
+
+      {/* required / optional fields for the target status (own rows, below) */}
+      {enabled && changed && reqs.length ? (
+        <div className="eq-statusreq" style={{ padding: '8px 10px', border: '1px solid var(--eq-border,#2a3550)', borderRadius: 6 }}>
+          <div className="dim" style={{ fontSize: 11, marginBottom: 6 }}>“{target}” needs:</div>
+          {reqs.map((r) => {
+            const fm = fieldMeta(r.field);
+            return (
+              <div key={r.field} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <label className="dim" style={{ fontSize: 12, flex: '0 0 150px' }}>{fm.label}{r.required ? ' *' : ''}</label>
+                {fm.picklist && fm.picklist.length ? (
+                  <select className="eq-fld" style={{ margin: 0, width: 'auto', minWidth: 180, flex: '0 1 auto' }} value={vals[r.field] || ''} onChange={(e) => setVal(r.field, e.target.value)}>
+                    <option value="">— select —</option>
+                    {fm.picklist.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
+                ) : (
+                  <input className="eq-fld" style={{ margin: 0, flex: '1 1 auto' }} value={vals[r.field] || ''} onChange={(e) => setVal(r.field, e.target.value)} placeholder={fm.label} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {msg ? <div className={'note ' + (msg.ok ? 'ok' : 'warn')} style={{ fontSize: 12 }}>{msg.text}</div> : null}
+    </div>
+  );
+}
+
 export default function Section() {
   const s = store.useEq();
   const sel = s.sel; const queueName = store.queueName();
-  const [stMock, setStMock] = useState(false);
-
-  useEffect(() => { setStMock(false); }, [sel && sel.case_id]);
-
-  async function doStatusMock(v) { setStMock(true); try { await api.setStatus({ case_id: sel.case_id, case_number: sel.case_number, queue: queueName, queue_id: (store.queueObj() || {}).id || '', status: v, meta: trackMeta() }); } catch (e) { /* mocked */ } }
 
   const previewUrl = s.linkPreview ? (/^https?:\/\//i.test(s.linkPreview) ? s.linkPreview : 'https://' + s.linkPreview) : '';
 
@@ -132,19 +207,18 @@ export default function Section() {
         {s.sfEnv === 'sandbox' ? <div className="eq-modebanner" title="Pointed at the Salesforce sandbox org">🧪 SANDBOX — practice data, not production</div> : null}
         {sel ? (
           <>
-            <div className="eq-thead">
-              <div className="eq-inline" style={{ flexWrap: 'wrap' }}>
+            <div className="eq-thead" style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}>
+              {/* Row 1 — case number + info + AI status + the prod/sandbox badge */}
+              <div className="eq-inline" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 {s.instanceUrl ? <a className="eq-caselink" href={s.instanceUrl + '/lightning/r/Case/' + sel.case_id + '/view'} target="_blank" rel="noopener">Case {sel.case_number || ''} ↗</a> : <b>Case {sel.case_number || ''}</b>}
                 <span className="dim">· {s.thread.length} msg · newest first</span>
                 <TriageControl s={s} />
-                <span className="eq-inline"><span className="dim" style={{ fontSize: 12 }}>Status:</span>
-                  <select className="eq-fld eq-statussel" value={sel.status || ''} onChange={(e) => doStatusMock(e.target.value)}>
-                    {(s.statuses.length ? s.statuses : ['New', 'Working', 'Escalated', 'Closed']).map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                  {stMock ? <span className="dim" style={{ fontSize: 11 }}>mock — not saved to SF</span> : null}
-                </span>
+                <SfEnvBadge env={s.sfEnv} />
               </div>
-              <div className="eq-inline" style={{ marginLeft: 'auto', flexWrap: 'wrap' }}>
+              {/* Row 2 — status (stage + Apply, with required fields when needed) */}
+              <StatusControl s={s} queueName={queueName} />
+              {/* Row 3 — view controls */}
+              <div className="eq-inline" style={{ flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 <span className="dim" style={{ fontSize: 11 }} title="Each message auto-picks HTML (if it has real formatting) or stripped text. Use the Text/HTML toggle in a message header to override it.">views auto-set per message</span>
                 <label className="eq-check" title="For text-view messages: hide quoted history and repeated text"><input type="checkbox" checked={s.dedupe} onChange={(e) => store.set({ dedupe: e.target.checked })} /> Hide quoted/repeated</label>
                 <button className="eq-btn sm" onClick={() => store.collapseAll(true)}>Collapse all</button>

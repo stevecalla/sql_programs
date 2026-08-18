@@ -43,6 +43,17 @@ export function Modal({ title, onClose, actions, children, wide }) {
   );
 }
 
+// Compact amber "turned off by admin" indicator — shared by the send and status controls so the
+// disabled state looks identical in both. `label` is the short text; `title` is the hover explanation.
+export function OffBadge({ label, title }) {
+  return (
+    <span title={title || 'An admin can enable this in Admin → Settings'}
+      style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#b45309', background: 'rgba(180,83,9,0.12)', border: '1px solid rgba(180,83,9,0.45)', borderRadius: 10, padding: '2px 9px' }}>
+      🔒 {label}
+    </span>
+  );
+}
+
 export function RowsTable({ rows, note }) {
   const head = (rows && rows[0]) || [];
   return (
