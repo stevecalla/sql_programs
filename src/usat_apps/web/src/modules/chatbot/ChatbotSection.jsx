@@ -28,7 +28,7 @@ export default function ChatbotSection() {
           <ChatbotAiPanel queue={s.queue} selectedId={s.selectedId} />
         </aside>
       </div>
-      <ChatBubble queue={s.queue} onLogged={store.onLogged} />
+      <ChatBubble queue={s.queue} onLogged={store.onLogged} load={s.bubbleLoad} />
     </div>
   );
 }

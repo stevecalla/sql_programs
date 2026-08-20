@@ -18,6 +18,7 @@ let state = {
   filter: 'all', from: yesterday(), to: today(), search: '',
   threads: null, loadingThreads: false,
   selectedId: null, turns: [], loadingTurns: false,
+  bubbleLoad: null,   // { id, turns, nonce } — set when a thread is clicked so the chat bubble loads + continues it
   cardOpen: true,
   railW: loadW('cb_railW', RAIL_DEF, RAIL_MIN, RAIL_MAX),
   aiW: loadW('cb_aiW', AI_DEF, AI_MIN, AI_MAX),
@@ -72,10 +73,16 @@ export async function loadThreads() {
     emit();
   }
 }
+let _bubbleNonce = 0;
 export async function selectConversation(id) {
   state.selectedId = id; state.turns = []; state.loadingTurns = true; emit();
   try { track('conversation_open', { panel: 'chatbot', view: 'bot' }); } catch (e) { /* noop */ }
-  try { const r = await api.conversation(id); state.turns = r.turns || []; }
+  try {
+    const r = await api.conversation(id); state.turns = r.turns || [];
+    // Signal the chat bubble to load this conversation so the operator can continue it. Nonce so the bubble
+    // reloads even when the same id is clicked again; NOT set by onLogged, so live chatting doesn't reload it.
+    state.bubbleLoad = { id: id, turns: state.turns, nonce: ++_bubbleNonce };
+  }
   catch (e) { state.turns = []; }
   finally { state.loadingTurns = false; emit(); }
 }

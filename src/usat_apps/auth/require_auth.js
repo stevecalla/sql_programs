@@ -44,4 +44,22 @@ function require_panel(panel) {
   };
 }
 
-module.exports = { require_auth, require_admin, require_panel, payload };
+// Like require_panel, but passes if the user is allowed ANY of the given panel keys (admins always pass).
+// Used for endpoints shared by several sibling pages (e.g. the chatbot operator surface — queues, context,
+// corrections — is reachable whether you were granted Bot training, Public widget, or Stress test).
+function require_any_panel(panels) {
+  const list = Array.isArray(panels) ? panels : [panels];
+  return function (req, res, next) {
+    const p = payload(req);
+    if (!p) return res.status(401).json({ ok: false, error: 'authentication required' });
+    const role = p.role || 'user';
+    const ok = list.some(function (panel) { return panel_access.is_allowed(p.user, role, panel); });
+    if (!ok) return res.status(403).json({ ok: false, error: 'access to this panel is restricted' });
+    req.user = p.user;
+    req.role = role;
+    session.refresh(res, p, store.session_secret());
+    next();
+  };
+}
+
+module.exports = { require_auth, require_admin, require_panel, require_any_panel, payload };

@@ -7,7 +7,7 @@
 // STRICT grounding: answer only from curated knowledge (+ corrections); if it isn't there, say so and point
 // to USA Triathlon. NEVER touches raw email-queue cases / member PII. Every turn is logged to
 // chatbot_conversations (transcript + counts), keyed by (channel, queue) — fire-and-forget, never blocks.
-const { require_panel, require_admin } = require('../../auth/require_auth');
+const { require_panel, require_any_panel, require_admin } = require('../../auth/require_auth');
 const ai = require('../../services/ai');
 const kb = require('../../services/knowledge');
 const url_fetch = require('../../services/knowledge/url_fetch');
@@ -23,7 +23,16 @@ const queue_access = require('../../services/queue_access');  // shared queue al
 const kb_data_dir = require('../../services/knowledge/data_dir');
 
 const P = '/api/chatbot';
+// Chatbot access is now three sibling panel keys (Bot training / Public widget / Stress test):
+//   gate         = 'chatbot'         → Bot-training-only routes (conversation log, chat/ask, settings write)
+//   widget_gate  = 'chatbot-widget'  → Public-widget admin routes (/public-bots*)
+//   any_gate     = any of the three  → the SHARED operator surface (queues, config, context, corrections,
+//                                       ai/models). Stress test (eval/api.js, gated 'chatbot-stress') and the
+//                                       Public widget page both read these, so any granted chatbot page works.
+const CHATBOT_KEYS = ['chatbot', 'chatbot-widget', 'chatbot-stress'];
 const gate = require_panel('chatbot');
+const widget_gate = require_panel('chatbot-widget');
+const any_gate = require_any_panel(CHATBOT_KEYS);
 const metrics_gate = require_panel('chatbot-metrics');   // Metrics page has its own grantable panel
 const MAX_MSG = 2000;
 // Soft DEFAULT selection only (which queue is pre-picked) — NOT an allowlist. Queue AVAILABILITY comes from
@@ -158,7 +167,7 @@ function mount(app) {
   // The available queues (left-rail picker): the live Salesforce queue list, filtered by the SHARED
   // queue_access rules for this user (admins see all) — same access model as the email queue. No
   // chatbot-specific allowlist. KEY = the SF-canonical name, so slug(key) matches the email queue's folder.
-  app.get(P + '/queues', gate, async function (req, res) {
+  app.get(P + '/queues', any_gate, async function (req, res) {
     let all = null;
     try { const c = await get_conn(); all = await sf.list_queues(c, { with_open_counts: false }); }
     catch (e) { all = null; }   // SF unreachable (e.g. dev without creds)
@@ -174,7 +183,7 @@ function mount(app) {
   });
 
   // Available AI models (shared registry, same list the email queue edits in /admin Settings).
-  app.get(P + '/ai/models', gate, function (req, res) {
+  app.get(P + '/ai/models', any_gate, function (req, res) {
     try { res.json(ai.list_models()); } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
   });
 
@@ -191,7 +200,7 @@ function mount(app) {
   });
 
   // Settings — the bot's AI choice (provider + model). GET returns current + the model list; POST saves.
-  app.get(P + '/settings', gate, function (req, res) {
+  app.get(P + '/settings', any_gate, function (req, res) {
     try { res.json({ ok: true, settings: settings.get(), models: ai.list_models() }); }
     catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
   });
@@ -202,7 +211,7 @@ function mount(app) {
   });
 
   // Scope + model + knowledge size for a queue (widget header).
-  app.get(P + '/config', gate, async function (req, res) {
+  app.get(P + '/config', any_gate, async function (req, res) {
     const queue = pick_queue(req);
     let chars = 0;
     try { const k = await kb.load_knowledge(queue); chars = (k && k.length) || 0; } catch (e) { chars = 0; }
@@ -214,13 +223,13 @@ function mount(app) {
   // Anyone with the chatbot panel can manage them (not admin-only), but they're saved SERVER-SIDE: the embed
   // carries only the handle, so a web page can never name a queue or repoint the bot. On save we verify the
   // chosen queue is one this user is allowed to see (queue_access) — you can't publish a queue you can't access.
-  app.get(P + '/public-bots', gate, async function (req, res) {
+  app.get(P + '/public-bots', widget_gate, async function (req, res) {
     let queues = [];
     try { const c = await get_conn(); const all = await sf.list_queues(c, { with_open_counts: false }); if (all) queues = queue_access.filter_queues(all, req.user, req.role).map(function (q) { return { key: q.name, name: q.name, label: q.name }; }); }
     catch (e) { queues = []; }
     res.json({ ok: true, bots: bots_map(), queues: queues, defaultHandle: 'default' });
   });
-  app.post(P + '/public-bots', gate, async function (req, res) {
+  app.post(P + '/public-bots', widget_gate, async function (req, res) {
     const b = req.body || {};
     const handle = slug_handle(b.handle) || 'default';
     const wantQueue = String(b.queue || '').trim();
@@ -244,7 +253,7 @@ function mount(app) {
     try { kb_data_dir.write_config(cfg); } catch (e) { return res.status(500).json({ ok: false, error: 'Could not save.' }); }
     res.json({ ok: true, handle: handle, bots: m });
   });
-  app.post(P + '/public-bots/delete', gate, function (req, res) {
+  app.post(P + '/public-bots/delete', widget_gate, function (req, res) {
     const handle = slug_handle((req.body || {}).handle);
     if (!handle || handle === 'default') return res.status(400).json({ ok: false, error: 'The default bot can’t be deleted.' });
     let cfg = {}; try { cfg = kb_data_dir.read_config() || {}; } catch (e) { cfg = {}; }
@@ -254,7 +263,7 @@ function mount(app) {
   });
 
   // The exact context the bot grounds on (files + corrections count + dir). Names/sizes only.
-  app.get(P + '/context', gate, async function (req, res) {
+  app.get(P + '/context', any_gate, async function (req, res) {
     const queue = pick_queue(req);
     try {
       const files = (await used_context(queue)).map(function (f) {
@@ -271,13 +280,13 @@ function mount(app) {
   });
 
   // Preview ONE context file (text/table/image/pdf).
-  app.get(P + '/context/file', gate, async function (req, res) {
+  app.get(P + '/context/file', any_gate, async function (req, res) {
     try { res.json(Object.assign({ ok: true }, await kb.read_context_file(req.query.scope, pick_queue(req), req.query.name))); }
     catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
   // Raw bytes for inline PDF/image + download.
-  app.get(P + '/context/raw', gate, async function (req, res) {
+  app.get(P + '/context/raw', any_gate, async function (req, res) {
     try {
       const fp = await kb.find_context_path(pick_queue(req), req.query.name || '');
       if (!fp) return res.status(404).json({ ok: false, error: 'context file not found' });
@@ -290,7 +299,7 @@ function mount(app) {
   });
 
   // Upload a curated knowledge file to the queue (or global) scope.
-  app.post(P + '/context', gate, async function (req, res) {
+  app.post(P + '/context', any_gate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     try {
       const buf = Buffer.from(String(b.data_base64 || ''), 'base64');
@@ -300,25 +309,25 @@ function mount(app) {
   });
 
   // Include/exclude a context file from grounding (affects this shared knowledge store).
-  app.post(P + '/context-exclude', gate, function (req, res) {
+  app.post(P + '/context-exclude', any_gate, function (req, res) {
     try { const b = req.body || {}; kb.set_context_excluded(b.key, !!b.excluded); res.json({ ok: true }); }
     catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
   // ---- URL context sources (curated web pages -> chunks the bot retrieves over) ----
   // List URL sources for this queue (+ globals) with status + last-fetched.
-  app.get(P + '/context-urls', gate, async function (req, res) {
+  app.get(P + '/context-urls', any_gate, async function (req, res) {
     const queue = pick_queue(req);
     try { res.json({ ok: true, queue: queue, sources: await chunk_store.list_sources(queue) }); }
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'list failed' }); }
   });
   // Chunks for one source (the expandable chunks view).
-  app.get(P + '/context-url/chunks', gate, async function (req, res) {
+  app.get(P + '/context-url/chunks', any_gate, async function (req, res) {
     try { res.json({ ok: true, chunks: await chunk_store.list_chunks(req.query.source_ref, req.query.scope, pick_queue(req)) }); }
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'chunks failed' }); }
   });
   // Add a URL: fetch now, chunk, store. { url, scope:'global'|'queue', needs_js? }
-  app.post(P + '/context-url', gate, async function (req, res) {
+  app.post(P + '/context-url', any_gate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     const url = String(b.url || '').trim();
     if (!url) return res.status(400).json({ ok: false, error: 'A URL is required.' });
@@ -330,7 +339,7 @@ function mount(app) {
     } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'add failed' }); }
   });
   // Refresh one source (re-fetch + re-chunk). { source_ref, scope, needs_js? }
-  app.post(P + '/context-url/refresh', gate, async function (req, res) {
+  app.post(P + '/context-url/refresh', any_gate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     try {
       const r = await url_fetch.add_or_refresh(String(b.source_ref || ''), { scope: b.scope === 'global' ? 'global' : 'queue', queue: queue, added_by: (req.user && (req.user.username || req.user.email)) || '', needs_js: !!b.needs_js });
@@ -338,19 +347,19 @@ function mount(app) {
     } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'refresh failed' }); }
   });
   // Remove a source and its chunks. { source_ref, scope }
-  app.post(P + '/context-url/remove', gate, async function (req, res) {
+  app.post(P + '/context-url/remove', any_gate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     try { await chunk_store.remove_source(String(b.source_ref || ''), b.scope === 'global' ? 'global' : 'queue', queue); res.json({ ok: true }); }
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'remove failed' }); }
   });
   // Include/exclude ONE chunk from grounding. { id, excluded }
-  app.post(P + '/context-chunk-exclude', gate, async function (req, res) {
+  app.post(P + '/context-chunk-exclude', any_gate, async function (req, res) {
     const b = req.body || {};
     try { await chunk_store.set_excluded(b.id, !!b.excluded); res.json({ ok: true }); }
     catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
   // Retrieval PREVIEW — the top-N chunks a question WOULD pull (score + source + section). No turn, no log.
-  app.post(P + '/retrieve-preview', gate, async function (req, res) {
+  app.post(P + '/retrieve-preview', any_gate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     const question = String(b.question || '').trim();
     if (!question) return res.status(400).json({ ok: false, error: 'Empty question.' });
@@ -376,14 +385,14 @@ function mount(app) {
   });
 
   // Corrections (teach the AI) — shared store, filtered to the queue's relevant scope.
-  app.get(P + '/corrections', gate, async function (req, res) {
+  app.get(P + '/corrections', any_gate, async function (req, res) {
     const queue = pick_queue(req);
     try {
       const all = await corrections.list(await get_store(), false);
       res.json({ ok: true, queue: queue, corrections: corrections.filter_scope(all, { queue: queue }) });
     } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'corrections failed' }); }
   });
-  app.post(P + '/corrections', gate, async function (req, res) {
+  app.post(P + '/corrections', any_gate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     const note = String(b.note || '').trim();
     if (!note) return res.status(400).json({ ok: false, error: 'A correction note is required.' });
