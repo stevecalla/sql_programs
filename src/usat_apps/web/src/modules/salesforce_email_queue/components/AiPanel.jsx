@@ -4,6 +4,7 @@ import * as store from '../lib/store.js';
 import { track, meta as trackMeta } from '../lib/track.js';
 import { Modal, RowsTable, fmtBytes, copyText, CopyButton, downloadText, OffBadge } from './ui.jsx';
 import { Collapsible, ContextAddFiles, AskPanel } from '../../../lib/ui.jsx';   // shared collapsible + add-files + ask (dedup)
+import { UrlContextCard, RetrievePreviewCard } from '../../chatbot/components/UrlContext.jsx';   // shared URL knowledge + retrieval-preview cards (one knowledge base, one code path with the chatbot)
 
 const ASK_PRESETS = [
   'Summarize the case',
@@ -26,8 +27,11 @@ function rowsToCsv(rows) {
   return (rows || []).map((r) => (r || []).map((c) => { const s = String(c == null ? '' : c); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\n');
 }
 
+// The email-queue card look. Shared as EQ_CARD_CLASSES so the imported chatbot cards (UrlContextCard,
+// RetrievePreviewCard) render with the SAME eq- styling as the panel's own cards.
+const EQ_CARD_CLASSES = { card: 'eq-card', head: 'eq-cardhead', h: 'eq-h', summary: 'eq-summary', chev: 'eq-chev', body: 'eq-cardbody' };
 function Card(props) {
-  return <Collapsible {...props} classes={{ card: 'eq-card', head: 'eq-cardhead', h: 'eq-h', summary: 'eq-summary', chev: 'eq-chev', body: 'eq-cardbody' }} />;
+  return <Collapsible {...props} classes={EQ_CARD_CLASSES} />;
 }
 
 export default function AiPanel({ s }) {
@@ -337,6 +341,11 @@ export default function AiPanel({ s }) {
           classes={{ h: 'eq-h', row: 'eq-inline', select: 'eq-fld', btn: 'eq-btn sm', msg: 'dim' }}
           styles={{ h: { marginTop: 10 }, row: { gap: 8, flexWrap: 'wrap' }, select: { margin: 0, width: 'auto' }, msg: { marginTop: 6, fontSize: 12 } }} />
       </Card>
+
+      {/* Card 4b/4c — Web pages (URL context) + Retrieval preview — the SAME shared chatbot components,
+          grounding on the same queue knowledge base; passed the EQ api client + eq- styling. */}
+      <UrlContextCard queue={queueName} api={api} cardClasses={EQ_CARD_CLASSES} />
+      <RetrievePreviewCard queue={queueName} api={api} cardClasses={EQ_CARD_CLASSES} />
 
       {/* Card 5 — SOQL */}
       <Card title="SOQL (editable, runs read-only)" open={open.soql} onToggle={() => toggle('soql')}>

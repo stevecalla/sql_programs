@@ -52,8 +52,8 @@ export const NAV = [
   {
     type: 'group', label: 'Chatbot', items: [
       { label: 'Bot training', path: '/chatbot/training', panel: 'chatbot', icon: '💬', Component: ChatbotSection },
-      { label: 'Public widget', path: '/chatbot/widget', panel: 'chatbot', icon: '🌐', Component: WidgetSection },
-      { label: 'Stress test', path: '/chatbot/stress-test', panel: 'chatbot', icon: '🧪', Component: EvalSection },
+      { label: 'Public widget', path: '/chatbot/widget', panel: 'chatbot-widget', icon: '🌐', Component: WidgetSection },
+      { label: 'Stress test', path: '/chatbot/stress-test', panel: 'chatbot-stress', icon: '🧪', Component: EvalSection },
     ]
   },
   {

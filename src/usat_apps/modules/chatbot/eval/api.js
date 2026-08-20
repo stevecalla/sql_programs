@@ -18,7 +18,10 @@ const store = require('./store');
 const runner = require('./runner');
 
 const P = '/api/chatbot/eval';
-const gate = require_panel('chatbot');
+// Stress test / training harness is its own grantable page: panel 'chatbot-stress'. (The shared operator
+// surface it also reads — queues, context, corrections — lives in ../api.js under any_gate, so a
+// stress-only grant still loads that data.)
+const gate = require_panel('chatbot-stress');
 
 function mount(app) {
   // ---- runs ----
