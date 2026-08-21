@@ -11,6 +11,12 @@ const send = require('./sf_send');
 module.exports = {
   // shared plumbing (re-exported for convenience)
   connect: sfsvc.connect,
+  // managed, self-healing connection layer (cache + TTL refresh + reconnect-on-session-error)
+  conn_for: sfsvc.conn_for,
+  invalidate: sfsvc.invalidate,
+  invalidate_all: sfsvc.invalidate_all,
+  run: sfsvc.run,
+  is_session_error: sfsvc.is_session_error,
   run_soql: sfsvc.run_soql,
   describe_object: sfsvc.describe_object,
   fetch_content_version_bytes: sfsvc.fetch_content_version_bytes,

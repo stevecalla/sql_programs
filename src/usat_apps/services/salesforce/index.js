@@ -14,6 +14,64 @@ async function connect(opts) {
   return connect_salesforce({ is_test: !!o.is_test, role: o.role || 'read', version: o.version });
 }
 
+// --- Managed, self-healing connections -------------------------------------------------------------
+// Cache one connection per (role, env) and reuse it — SF logins are rate-limited, so re-authing on every
+// call (the naive approach) burns the login budget. Two safety nets keep a cached connection from going
+// stale and 502-ing the app until a manual restart:
+//   (1) TTL — conn_for() refreshes a connection once it is older than SF_CONN_TTL_MS, comfortably under
+//       the org's session lifetime, so a token never ages out in place.
+//   (2) reconnect-on-error — run() retries an operation ONCE against a fresh connection if it failed with
+//       a session-expired error.
+// Concurrent callers share a single in-flight (re)connect (dedupe), so a burst of requests hitting an
+// expired connection triggers one login, not many.
+const _mc = {};        // key -> { conn, username, born }
+const _mcPending = {}; // key -> Promise<rec>  (dedupe concurrent connects)
+const CONN_TTL_MS = Math.max(60000, parseInt(process.env.SF_CONN_TTL_MS, 10) || 15 * 60 * 1000);
+
+function _mkey(o) { return (o && o.role === 'write' ? 'write' : 'read') + '|' + (o && o.is_test ? 'sandbox' : 'prod'); }
+
+// True when an error means the Salesforce session/token is no longer valid (vs a real data/logic error) —
+// so we reconnect on these but let genuine errors surface.
+function is_session_error(e) {
+  if (!e) return false;
+  const status = e.statusCode || e.status;
+  const s = String(e.errorCode || e.name || e.code || '') + ' ' + String(e.message || '');
+  return status === 401
+    || /INVALID_SESSION_ID|INVALID_LOGIN|invalid_grant|Session expired or invalid|expired access\/refresh token|missing_oauth_token|Bad_OAuth_Token/i.test(s);
+}
+
+function _fresh(rec) { return !!rec && (Date.now() - rec.born) < CONN_TTL_MS; }
+
+// Get a cached connection for (role, env), (re)connecting if missing or past its TTL. Returns
+// { conn, username, born }. Concurrent callers awaiting the same key share one login.
+async function conn_for(opts) {
+  const o = opts || {};
+  const k = _mkey(o);
+  if (_fresh(_mc[k])) return _mc[k];
+  if (!_mcPending[k]) {
+    _mcPending[k] = connect({ is_test: !!o.is_test, role: o.role || 'read', version: o.version })
+      .then(function (r) { const rec = { conn: r.conn, username: r.username || '', born: Date.now() }; _mc[k] = rec; return rec; })
+      .finally(function () { delete _mcPending[k]; });
+  }
+  return _mcPending[k];
+}
+function invalidate(opts) { delete _mc[_mkey(opts)]; }
+function invalidate_all() { Object.keys(_mc).forEach(function (k) { delete _mc[k]; }); }
+
+// Run an SF operation with self-heal. `fn` receives (conn, rec) — use rec.username for the run-as user.
+// On a session-expired error the cached connection is dropped, re-authed once, and the op retried once.
+// Use ONLY for idempotent reads — a retry must be safe to run twice (never wrap a send/write with this).
+async function run(opts, fn) {
+  const rec = await conn_for(opts);
+  try { return await fn(rec.conn, rec); }
+  catch (e) {
+    if (!is_session_error(e)) throw e;
+    if (_mc[_mkey(opts)] === rec) invalidate(opts);   // don't drop a connection a concurrent call already refreshed
+    const rec2 = await conn_for(opts);
+    return fn(rec2.conn, rec2);
+  }
+}
+
 // Run a SOQL query and return the records array (jsforce query().execute with auto-fetch).
 const MAX_FETCH = 5000;
 async function run_soql(conn, soql, max_fetch) {
@@ -85,4 +143,4 @@ function parse_limits(lim) {
   return { daily: one(lim, 'DailyApiRequests'), other: OTHER_LIMITS.map(function (k) { return one(lim, k); }).filter(Boolean) };
 }
 
-module.exports = { connect, run_soql, list_queues, describe_object, get_limits, parse_limits, OTHER_LIMITS, DEFAULT_TZ, ymd_in_time_zone, datetime_in_time_zone, fetch_content_version_bytes };
+module.exports = { connect, conn_for, invalidate, invalidate_all, run, is_session_error, CONN_TTL_MS, run_soql, list_queues, describe_object, get_limits, parse_limits, OTHER_LIMITS, DEFAULT_TZ, ymd_in_time_zone, datetime_in_time_zone, fetch_content_version_bytes };
