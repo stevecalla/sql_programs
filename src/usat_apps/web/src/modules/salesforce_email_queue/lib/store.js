@@ -104,9 +104,16 @@ export function applyCaseStatus(caseId, status) {
   emit();
 }
 
+// Identity of the signed-in app user, so we can re-fetch the (access-filtered) queue list when a different
+// user signs in without a hard reload. The server always filters /queues by role; this just keeps the
+// client from showing the previous user's list until a refresh.
+let _userKey = null;
+function userKeyOf(u) { return u ? (String(u.user || '') + '|' + String(u.role || '')) : ''; }
+
 let _inited = false;
-export async function init() {
+export async function init(user) {
   if (_inited) return; _inited = true;
+  _userKey = userKeyOf(user);   // seed identity so the first syncUser() call doesn't trigger a needless reload
   track('page_view', {});   // funnel "Visits" stage — one per app load (server stamps actor)
   try { const r = await api.config(); state.sfEnv = r.sf_env || 'prod'; state.showTestBanner = !!r.show_test_banner; state.sfUser = r.sf_user || ''; state.sendEnabled = !!r.send_enabled; state.sendQueueFrom = r.send_queue_from || {}; state.statusEnabled = !!r.status_enabled; state.statusRequirements = r.status_requirements || {}; emit(); } catch (e) { /* optional */ }
   // Keep the master switch / From map live in open tabs: refresh on focus + a modest visible-only poll.
@@ -130,6 +137,25 @@ export async function init() {
   try { const r = await api.statuses(); state.statuses = r.statuses || []; emit(); } catch (e) { /* optional */ }
   try { const list = await api.aiModels(); const arr = Array.isArray(list) ? list : []; state.models = arr; const sm = loadStr('eq_model'); state.model = arr.find((m) => m.model === sm) || arr.find((m) => m.is_default) || arr[0] || null; emit(); } catch (e) { /* optional */ }
   try { const r = await api.corrections(); state.corr = r.corrections || []; emit(); } catch (e) { /* optional */ }
+}
+// Call whenever the signed-in app user might have changed (mount + on the `user` prop changing). If the
+// identity actually changed since init/last sync, re-fetch the access-filtered queue list and drop the
+// prior user's selection — so a restricted user immediately sees only their queues, no hard refresh needed.
+export function syncUser(user) {
+  const k = userKeyOf(user);
+  if (_userKey === null) { _userKey = k; return; }   // first time we see a user — seed, don't reload
+  if (k === _userKey) return;                          // same user — nothing to do
+  _userKey = k;
+  reloadForUser();
+}
+async function reloadForUser() {
+  state.queues = []; state.queueId = ''; state.counts = {}; state.cases = []; state.loaded = false; state.sel = null; state.thread = []; emit();
+  try {
+    const r = await api.queues(); state.queues = r.queues || []; state.instanceUrl = r.instance_url || '';
+    const savedQ = loadStr('eq_queue');
+    if (savedQ && state.queues.some((q) => q.id === savedQ)) { state.queueId = savedQ; emit(); loadCounts(); } else { emit(); }
+  } catch (e) { state.casesErr = e.message; emit(); }
+  try { await refreshConfig(); } catch (e) { /* best-effort: sfUser/banner may differ */ }
 }
 export async function loadCounts() {
   if (!state.queueId) { state.counts = {}; emit(); return; }

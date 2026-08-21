@@ -63,24 +63,16 @@ function status_requirements() {
 // Wire the shared model registry to read the module config.json (so /admin Settings model edits take effect).
 try { ai.set_config_reader(function () { try { return kb_data_dir.read_config() || {}; } catch (e) { return {}; } }); } catch (e) { /* ignore */ }
 
-let _conn = null, _conn_env = null, _conn_user = '';
-async function get_conn() {
-  const env = sf_env();
-  if (_conn && _conn_env === env) return _conn;
-  const r = await sf.connect({ is_test: env === 'sandbox', role: 'read' });
-  _conn = r.conn; _conn_env = env; _conn_user = r.username || _conn_user;   // SOAP fallback reports the run-as username
-  return _conn;
-}
+// Salesforce connection options for the current env. The shared client (services/salesforce) owns the
+// connection cache and self-heals: it refreshes on a TTL and reconnects on a session-expired error, so a
+// token aging out no longer 502s the app until a manual restart (see conn_for/run there).
+function ro() { return { is_test: sf_env() === 'sandbox', role: 'read' }; }
+function rw() { return { is_test: sf_env() === 'sandbox', role: 'write' }; }
+let _conn_user = '';
+async function get_conn() { const rec = await sf.conn_for(ro()); _conn_user = rec.username || _conn_user; return rec.conn; }
 // Separate WRITE connection for outbound (send). Under OAuth this is the same run-as user; under the SOAP
-// fallback it can be a dedicated write user. Cached per env.
-let _wconn = null, _wconn_env = null;
-async function get_conn_write() {
-  const env = sf_env();
-  if (_wconn && _wconn_env === env) return _wconn;
-  const r = await sf.connect({ is_test: env === 'sandbox', role: 'write' });
-  _wconn = r.conn; _wconn_env = env;
-  return _wconn;
-}
+// fallback it can be a dedicated write user.
+async function get_conn_write() { const rec = await sf.conn_for(rw()); return rec.conn; }
 // The "From" for a send is now resolved dynamically: either the operator picks a verified Org-Wide Email
 // Address (GET /org-wide-emails) or it falls back to the queue's default (Admin → Settings). No hardcoded list.
 let _cstore = null;
@@ -185,8 +177,7 @@ function mount(app) {
   // and by the operator status-change form to render the right input for each configured field. Dynamic (describe).
   app.get(P + '/case-fields', gate, async function (req, res) {
     try {
-      const c = await get_conn();
-      const meta = await c.sobject('Case').describe();
+      const meta = await sf.run(ro(), function (c) { return c.sobject('Case').describe(); });
       const fields = (meta.fields || []).filter(function (f) { return f.updateable; }).map(function (f) {
         return {
           name: f.name, label: f.label || f.name, type: f.type,
@@ -204,23 +195,23 @@ function mount(app) {
   // (e.g. once teamusa@ is verified it shows up here automatically). Panel-gated (operators need it too).
   app.get(P + '/org-wide-emails', gate, async function (req, res) {
     try {
-      const c = await get_conn();
-      const r = await c.query('SELECT Id, Address, DisplayName, IsAllowAllProfiles FROM OrgWideEmailAddress ORDER BY DisplayName');
+      const r = await sf.run(ro(), function (c) { return c.query('SELECT Id, Address, DisplayName, IsAllowAllProfiles FROM OrgWideEmailAddress ORDER BY DisplayName'); });
       res.json({ ok: true, addresses: (r.records || []).map(function (x) { return { id: x.Id, address: x.Address, display_name: x.DisplayName || '', all_profiles: !!x.IsAllowAllProfiles }; }) });
     } catch (e) { err(res, e); }
   });
 
   app.get(P + '/queues', gate, async function (req, res) {
     try {
-      const c = await get_conn();
-      const all = await sf.list_queues(c, { with_open_counts: true });
-      const visible = queue_access.filter_queues(all, req.user, req.role);
-      res.json({ ok: true, queues: visible, instance_url: c.instanceUrl || '' });
+      const out = await sf.run(ro(), async function (c) {
+        return { all: await sf.list_queues(c, { with_open_counts: true }), instance_url: c.instanceUrl || '' };
+      });
+      const visible = queue_access.filter_queues(out.all, req.user, req.role);
+      res.json({ ok: true, queues: visible, instance_url: out.instance_url });
     } catch (e) { err(res, e); }
   });
   app.get(P + '/statuses', gate, async function (req, res) {
     try {
-      const c = await get_conn(); const meta = await c.sobject('Case').describe();
+      const meta = await sf.run(ro(), function (c) { return c.sobject('Case').describe(); });
       const f = (meta.fields || []).filter(function (x) { return x.name === 'Status'; })[0];
       res.json({ ok: true, statuses: ((f && f.picklistValues) || []).filter(function (v) { return v.active; }).map(function (v) { return v.value; }) });
     } catch (e) { err(res, e); }
@@ -241,11 +232,11 @@ function mount(app) {
   app.get(P + '/status-counts', gate, async function (req, res) {
     try {
       if (req.query.queue && !queue_access.is_allowed(req.user, req.role, req.query.queue)) return res.status(403).json({ ok: false, error: 'queue not permitted' });
-      res.json(Object.assign({ ok: true }, await sf.status_counts(await get_conn(), req.query.queue)));
+      res.json(Object.assign({ ok: true }, await sf.run(ro(), function (c) { return sf.status_counts(c, req.query.queue); })));
     } catch (e) { err(res, e); }
   });
   app.get(P + '/thread', gate, async function (req, res) {
-    try { res.json({ ok: true, thread: await sf.get_thread(await get_conn(), req.query.case_id) }); } catch (e) { err(res, e); }
+    try { res.json({ ok: true, thread: await sf.run(ro(), function (c) { return sf.get_thread(c, req.query.case_id); }) }); } catch (e) { err(res, e); }
   });
 
   app.get(P + '/attachment/:cvid/text', gate, async function (req, res) {
@@ -496,7 +487,7 @@ function mount(app) {
       // the other org), and return early (mirrors the POC reset_conn behavior).
       if (b.sf_env !== undefined) {
         if (SF_ENVS.indexOf(b.sf_env) < 0) return res.status(400).json({ ok: false, error: 'invalid sf_env' });
-        cfg.sf_env = b.sf_env; kb_data_dir.write_config(cfg); _conn = null; _conn_env = null;
+        cfg.sf_env = b.sf_env; kb_data_dir.write_config(cfg); sf.invalidate_all();   // drop cached read+write conns; next call rebuilds against the other org
         return res.json({ ok: true, admin_landing: admin_landing(), ai_models: ai.list_models(), sf_env: sf_env() });
       }
       if (b.admin_landing !== undefined) {

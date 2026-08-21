@@ -36,9 +36,11 @@ export function TriageBadge({ t }) {
   return <span className={'tstat ' + t.status} title={tip}>{label}</span>;
 }
 
-export default function EmailQueueRail() {
+export default function EmailQueueRail({ user }) {
   const s = store.useEq();
-  useEffect(() => { store.init(); }, []);
+  useEffect(() => { store.init(user); }, []);   // seed identity + first load (guarded to run once)
+  // Re-fetch the access-filtered queue list if a different user signs in without a hard reload.
+  useEffect(() => { store.syncUser(user); }, [user]);
   const visible = store.visibleCases();
   const chev = (open) => <span className={'eq-chev' + (open ? ' open' : '')}>›</span>;
 
