@@ -94,6 +94,11 @@ function slug_handle(s) { return String(s || '').trim().toLowerCase().replace(/[
 // connection lifecycle and self-heals — TTL refresh + reconnect-on-session-error — so an expired token no
 // longer breaks the queue picker. SF reads go through sf.run(ro(), …); no private connection cache here.
 function ro() { return { is_test: sf_env() === 'sandbox', role: 'read' }; }
+// Per-queue access gate (shared with the email queue): a non-admin can only touch a queue they're granted,
+// resolved by NAME against the cached SF queue list. 403 otherwise. Mounted AFTER the panel gate on every
+// queue-scoped route. Uses the EFFECTIVE queue (pick_queue, incl. the soft default) so omitting the param
+// can't bypass it. Public widget is unaffected — it pins the queue server-side.
+const qgate = queue_access.require_queue(function () { return sf.queues_cached(ro()); }, pick_queue);
 function norm_name(x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
 
 let _store = null;
@@ -207,7 +212,7 @@ function mount(app) {
   });
 
   // Scope + model + knowledge size for a queue (widget header).
-  app.get(P + '/config', any_gate, async function (req, res) {
+  app.get(P + '/config', any_gate, qgate, async function (req, res) {
     const queue = pick_queue(req);
     let chars = 0;
     try { const k = await kb.load_knowledge(queue); chars = (k && k.length) || 0; } catch (e) { chars = 0; }
@@ -259,7 +264,7 @@ function mount(app) {
   });
 
   // The exact context the bot grounds on (files + corrections count + dir). Names/sizes only.
-  app.get(P + '/context', any_gate, async function (req, res) {
+  app.get(P + '/context', any_gate, qgate, async function (req, res) {
     const queue = pick_queue(req);
     try {
       const files = (await used_context(queue)).map(function (f) {
@@ -276,13 +281,13 @@ function mount(app) {
   });
 
   // Preview ONE context file (text/table/image/pdf).
-  app.get(P + '/context/file', any_gate, async function (req, res) {
+  app.get(P + '/context/file', any_gate, qgate, async function (req, res) {
     try { res.json(Object.assign({ ok: true }, await kb.read_context_file(req.query.scope, pick_queue(req), req.query.name))); }
     catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
 
   // Raw bytes for inline PDF/image + download.
-  app.get(P + '/context/raw', any_gate, async function (req, res) {
+  app.get(P + '/context/raw', any_gate, qgate, async function (req, res) {
     try {
       const fp = await kb.find_context_path(pick_queue(req), req.query.name || '');
       if (!fp) return res.status(404).json({ ok: false, error: 'context file not found' });
@@ -295,7 +300,7 @@ function mount(app) {
   });
 
   // Upload a curated knowledge file to the queue (or global) scope.
-  app.post(P + '/context', any_gate, async function (req, res) {
+  app.post(P + '/context', any_gate, qgate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     try {
       const buf = Buffer.from(String(b.data_base64 || ''), 'base64');
@@ -312,18 +317,18 @@ function mount(app) {
 
   // ---- URL context sources (curated web pages -> chunks the bot retrieves over) ----
   // List URL sources for this queue (+ globals) with status + last-fetched.
-  app.get(P + '/context-urls', any_gate, async function (req, res) {
+  app.get(P + '/context-urls', any_gate, qgate, async function (req, res) {
     const queue = pick_queue(req);
     try { res.json({ ok: true, queue: queue, sources: await chunk_store.list_sources(queue) }); }
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'list failed' }); }
   });
   // Chunks for one source (the expandable chunks view).
-  app.get(P + '/context-url/chunks', any_gate, async function (req, res) {
+  app.get(P + '/context-url/chunks', any_gate, qgate, async function (req, res) {
     try { res.json({ ok: true, chunks: await chunk_store.list_chunks(req.query.source_ref, req.query.scope, pick_queue(req)) }); }
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'chunks failed' }); }
   });
   // Add a URL: fetch now, chunk, store. { url, scope:'global'|'queue', needs_js? }
-  app.post(P + '/context-url', any_gate, async function (req, res) {
+  app.post(P + '/context-url', any_gate, qgate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     const url = String(b.url || '').trim();
     if (!url) return res.status(400).json({ ok: false, error: 'A URL is required.' });
@@ -335,7 +340,7 @@ function mount(app) {
     } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'add failed' }); }
   });
   // Refresh one source (re-fetch + re-chunk). { source_ref, scope, needs_js? }
-  app.post(P + '/context-url/refresh', any_gate, async function (req, res) {
+  app.post(P + '/context-url/refresh', any_gate, qgate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     try {
       const r = await url_fetch.add_or_refresh(String(b.source_ref || ''), { scope: b.scope === 'global' ? 'global' : 'queue', queue: queue, added_by: (req.user && (req.user.username || req.user.email)) || '', needs_js: !!b.needs_js });
@@ -343,7 +348,7 @@ function mount(app) {
     } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'refresh failed' }); }
   });
   // Remove a source and its chunks. { source_ref, scope }
-  app.post(P + '/context-url/remove', any_gate, async function (req, res) {
+  app.post(P + '/context-url/remove', any_gate, qgate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     try { await chunk_store.remove_source(String(b.source_ref || ''), b.scope === 'global' ? 'global' : 'queue', queue); res.json({ ok: true }); }
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'remove failed' }); }
@@ -355,7 +360,7 @@ function mount(app) {
     catch (e) { res.status(400).json({ ok: false, error: (e && e.message) || String(e) }); }
   });
   // Retrieval PREVIEW — the top-N chunks a question WOULD pull (score + source + section). No turn, no log.
-  app.post(P + '/retrieve-preview', any_gate, async function (req, res) {
+  app.post(P + '/retrieve-preview', any_gate, qgate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     const question = String(b.question || '').trim();
     if (!question) return res.status(400).json({ ok: false, error: 'Empty question.' });
@@ -381,14 +386,14 @@ function mount(app) {
   });
 
   // Corrections (teach the AI) — shared store, filtered to the queue's relevant scope.
-  app.get(P + '/corrections', any_gate, async function (req, res) {
+  app.get(P + '/corrections', any_gate, qgate, async function (req, res) {
     const queue = pick_queue(req);
     try {
       const all = await corrections.list(await get_store(), false);
       res.json({ ok: true, queue: queue, corrections: corrections.filter_scope(all, { queue: queue }) });
     } catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'corrections failed' }); }
   });
-  app.post(P + '/corrections', any_gate, async function (req, res) {
+  app.post(P + '/corrections', any_gate, qgate, async function (req, res) {
     const b = req.body || {}; const queue = pick_queue(req);
     const note = String(b.note || '').trim();
     if (!note) return res.status(400).json({ ok: false, error: 'A correction note is required.' });
@@ -400,7 +405,7 @@ function mount(app) {
   });
 
   // Conversation THREADS for the middle/left list (grouped by conversation_id).
-  app.get(P + '/conversations', gate, async function (req, res) {
+  app.get(P + '/conversations', gate, qgate, async function (req, res) {
     const queue = pick_queue(req);
     const is_test = (req.query.is_test === '0') ? 0 : (req.query.is_test === '1' ? 1 : null);
     try {
@@ -421,7 +426,7 @@ function mount(app) {
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'delete failed' }); }
   });
   // Delete ALL test conversations for the current queue. TEST ONLY.
-  app.post(P + '/conversations/delete-test', gate, async function (req, res) {
+  app.post(P + '/conversations/delete-test', gate, qgate, async function (req, res) {
     const queue = pick_queue(req);
     try { res.json({ ok: true, deleted: await convo_store.delete_test(queue) }); }
     catch (e) { res.status(502).json({ ok: false, error: (e && e.message) || 'delete failed' }); }
@@ -430,7 +435,7 @@ function mount(app) {
   // POST /api/chatbot/ask — operator INSPECTION: ask a question ABOUT the selected conversation and/or this
   // queue's knowledge. Does NOT create a bot turn / log anything — it's a review tool (like the email queue's
   // "Ask a question", but about our own logged conversation + curated knowledge, never a member case).
-  app.post(P + '/ask', gate, async function (req, res) {
+  app.post(P + '/ask', gate, qgate, async function (req, res) {
     const b = req.body || {};
     const question = String(b.question || '').trim();
     if (!question) return res.status(400).json({ ok: false, error: 'Empty question.' });
@@ -473,7 +478,7 @@ function mount(app) {
   });
 
   // Chat / test-the-assistant. { message, history?, conversation_id?, turn?, queue?, is_test? }
-  app.post(P + '/chat', gate, async function (req, res) {
+  app.post(P + '/chat', gate, qgate, async function (req, res) {
     const b = req.body || {};
     const message = String(b.message || '').trim();
     if (!message) return res.status(400).json({ ok: false, error: 'Empty message.' });

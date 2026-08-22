@@ -143,4 +143,17 @@ function parse_limits(lim) {
   return { daily: one(lim, 'DailyApiRequests'), other: OTHER_LIMITS.map(function (k) { return one(lim, k); }).filter(Boolean) };
 }
 
-module.exports = { connect, conn_for, invalidate, invalidate_all, run, is_session_error, CONN_TTL_MS, run_soql, list_queues, describe_object, get_limits, parse_limits, OTHER_LIMITS, DEFAULT_TZ, ymd_in_time_zone, datetime_in_time_zone, fetch_content_version_bytes };
+// Short-TTL cache of the SF queue list (id + name only), per env, via the self-healing run(). Used by the
+// shared queue-access middleware so gating a hot path (e.g. chatbot /chat) doesn't hit Salesforce per call.
+// The cache also rides out brief SF blips. TTL is small (queues rarely change); QUEUE_LIST_TTL_MS overrides.
+const _ql = {};
+const QUEUE_LIST_TTL_MS = Math.max(10000, parseInt(process.env.QUEUE_LIST_TTL_MS, 10) || 60000);
+async function queues_cached(opts) {
+  const k = (opts && opts.is_test) ? 'sandbox' : 'prod';
+  if (_ql[k] && (Date.now() - _ql[k].born) < QUEUE_LIST_TTL_MS) return _ql[k].list;
+  const list = await run(opts || {}, function (c) { return list_queues(c, { with_open_counts: false }); });
+  _ql[k] = { list: list || [], born: Date.now() };
+  return _ql[k].list;
+}
+
+module.exports = { connect, conn_for, invalidate, invalidate_all, run, is_session_error, CONN_TTL_MS, run_soql, list_queues, queues_cached, describe_object, get_limits, parse_limits, OTHER_LIMITS, DEFAULT_TZ, ymd_in_time_zone, datetime_in_time_zone, fetch_content_version_bytes };
