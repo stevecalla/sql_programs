@@ -79,10 +79,32 @@ fresh login. Local: restart `:8022` + reload → 502s gone, queue loads.
 Merge to `main` → on prod `git pull` + build + `pm2 restart usat_apps`. Tuning knob: `SF_CONN_TTL_MS`
 (default 900000). After deploy the token-expiry 502 should not recur; the TTL bounds any residual case.
 
+## Rollout status — migrate all SF consumers onto the shared self-healing client
+
+**Done:**
+- Shared managed layer + **email queue** — deployed; held stable in prod past a full token-expiry window.
+- **Chatbot** (`modules/chatbot/api.js`) — migrated onto `sf.conn_for()` / `sf.run()`; private `_conn` removed.
+- **Knowledge & AI** (`modules/knowledge_admin/api.js`) — migrated.
+
+**Assessed and closed (2026-08 review):**
+1. **Merge (`salesforce_merge`)** — **NOT migrating (deliberate).** It connects fresh on every call
+   (`connect_salesforce` directly in `store/salesforce_read.js` / `salesforce_write.js`), so it has **no
+   stale-connection bug** — the problem self-heal fixes doesn't apply. Migrating would add caching (and
+   expiry risk) to the destructive merge/restore path, which already has its own tuned retry/backoff. High
+   risk, low reward (only saves logins). Revisit only if SF login volume becomes a real constraint, as a
+   focused sandbox-tested effort.
+2. **race_results_transform (`:8018`)** — **Skip here.** Separate app, its own SF client, mostly cron/batch.
+   If it ever needs self-heal, that belongs in its own codebase, not coupled to this shared client.
+3. **Guardrail / convention** — **Done.** A `CONVENTION:` block at the top of the managed section in
+   `services/salesforce/index.js` states: modules never cache their own connection; reads → `sf.run()`,
+   raw conn → `sf.conn_for().conn`, writes/merges → `sf.conn_for()` only (never `run()`), raw `connect()`
+   only for one-off scripts.
+
+**Net:** every long-running `usat_apps` consumer that CACHED a connection (email queue, chatbot, Knowledge &
+AI) is now on the self-healing layer. Merge and race_results don't cache, so they were never at risk.
+
 ## Follow-ups
 
-- **Phase 2:** migrate chatbot, knowledge-admin, and merge onto the same managed layer. Merge currently
-  re-auths on every call (wasteful of the SF login budget); moving it to cache+self-heal improves it.
 - `usat_apps` heap was ~97% during this — separate, worth a look so it isn't a second instability source.
 - Console noise seen while debugging — "Unchecked runtime.lastError … bfcache", "listener indicated an
   asynchronous response … message channel closed", `[TargetingRulesDataService]`, WebPush — are all **browser
