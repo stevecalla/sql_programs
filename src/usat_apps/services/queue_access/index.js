@@ -84,6 +84,35 @@ function filter_queues(list, user, role) {
   const set = {}; a.forEach(function (id) { set[String(id)] = true; });
   return (list || []).filter(function (qq) { return set[String(qq.id)]; });
 }
+function _norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+// Access check that accepts EITHER a queue id or a queue NAME. `queues` is a [{id,name}] list (e.g. the
+// cached SF queue list) used to resolve a name -> id. Admins always pass; an empty or unresolvable value is
+// denied (fail closed). This lets the id-based email queue and the name-based chatbot share one check.
+function is_allowed_queue(user, role, value, queues) {
+  if ((role || 'user') === 'admin') return true;
+  const v = String(value == null ? '' : value).trim();
+  if (!v) return false;
+  const list = queues || [];
+  let q = list.find(function (x) { return String(x.id) === v; });
+  if (!q) { const n = _norm(v); q = list.find(function (x) { return _norm(x.name) === n; }); }
+  if (!q) return false;
+  return is_allowed(user, role, q.id);
+}
+// Express middleware factory shared by both surfaces. `get_queues()` returns the [{id,name}] list (cached);
+// `get_value(req)` returns the queue id/name to check (defaults to ?queue / body.queue). If no value is
+// present it passes through (handler decides); otherwise a non-permitted queue -> 403. Fails closed on any
+// error (e.g. the queue list can't be loaded). Requires req.user/req.role, so mount it AFTER the auth gate.
+function require_queue(get_queues, get_value) {
+  return async function (req, res, next) {
+    try {
+      const value = get_value ? get_value(req) : String((req.query && req.query.queue) || (req.body && req.body.queue) || '').trim();
+      if (!value) return next();
+      const queues = await get_queues();
+      if (!is_allowed_queue(req.user, req.role, value, queues)) return res.status(403).json({ ok: false, error: 'queue not permitted' });
+      return next();
+    } catch (e) { return res.status(403).json({ ok: false, error: 'queue not permitted' }); }
+  };
+}
 function _reset() { _cfg = null; }
 
-module.exports = { get, set_default, set_user, clear_user, prune_users, allowed_for, is_allowed, filter_queues, _reset, FILE: FILE };
+module.exports = { get, set_default, set_user, clear_user, prune_users, allowed_for, is_allowed, is_allowed_queue, filter_queues, require_queue, _reset, FILE: FILE };

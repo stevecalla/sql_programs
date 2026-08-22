@@ -295,7 +295,7 @@ export default function MergeOps() {
     }, 300);
     return () => { stop = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchMode, rSource, rMin, rMax, rTier, rSignal, rMinSim, rMergeId, rMember, rWhichList, rBucket, rFoundation, rPortal]);
+  }, [batchMode, rSource, rMin, rMax, rSize, rTier, rSignal, rMinSim, rMergeId, rMember, rWhichList, rBucket, rFoundation, rPortal]);
 
   const setField = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
   const dirty = Object.keys(draft).length > 0;

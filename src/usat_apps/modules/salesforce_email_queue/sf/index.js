@@ -17,6 +17,7 @@ module.exports = {
   invalidate_all: sfsvc.invalidate_all,
   run: sfsvc.run,
   is_session_error: sfsvc.is_session_error,
+  queues_cached: sfsvc.queues_cached,   // TTL-cached queue list (name↔id) for the shared queue-access gate
   run_soql: sfsvc.run_soql,
   describe_object: sfsvc.describe_object,
   fetch_content_version_bytes: sfsvc.fetch_content_version_bytes,
