@@ -90,14 +90,10 @@ function bots_map() {
   return out;
 }
 function slug_handle(s) { return String(s || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); }
-let _conn = null, _conn_env = null;
-async function get_conn() {
-  const env = sf_env();
-  if (_conn && _conn_env === env) return _conn;
-  const r = await sf.connect({ is_test: env === 'sandbox', role: 'read' });
-  _conn = (r && r.conn) || r; _conn_env = env;
-  return _conn;
-}
+// Read-only Salesforce connection (queue names only). The shared client (services/salesforce) owns the
+// connection lifecycle and self-heals — TTL refresh + reconnect-on-session-error — so an expired token no
+// longer breaks the queue picker. SF reads go through sf.run(ro(), …); no private connection cache here.
+function ro() { return { is_test: sf_env() === 'sandbox', role: 'read' }; }
 function norm_name(x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
 
 let _store = null;
@@ -169,7 +165,7 @@ function mount(app) {
   // chatbot-specific allowlist. KEY = the SF-canonical name, so slug(key) matches the email queue's folder.
   app.get(P + '/queues', any_gate, async function (req, res) {
     let all = null;
-    try { const c = await get_conn(); all = await sf.list_queues(c, { with_open_counts: false }); }
+    try { all = await sf.run(ro(), function (c) { return sf.list_queues(c, { with_open_counts: false }); }); }
     catch (e) { all = null; }   // SF unreachable (e.g. dev without creds)
     if (!all) {
       // Fallback so the picker isn't empty: just the soft default queue.
@@ -225,7 +221,7 @@ function mount(app) {
   // chosen queue is one this user is allowed to see (queue_access) — you can't publish a queue you can't access.
   app.get(P + '/public-bots', widget_gate, async function (req, res) {
     let queues = [];
-    try { const c = await get_conn(); const all = await sf.list_queues(c, { with_open_counts: false }); if (all) queues = queue_access.filter_queues(all, req.user, req.role).map(function (q) { return { key: q.name, name: q.name, label: q.name }; }); }
+    try { const all = await sf.run(ro(), function (c) { return sf.list_queues(c, { with_open_counts: false }); }); if (all) queues = queue_access.filter_queues(all, req.user, req.role).map(function (q) { return { key: q.name, name: q.name, label: q.name }; }); }
     catch (e) { queues = []; }
     res.json({ ok: true, bots: bots_map(), queues: queues, defaultHandle: 'default' });
   });
@@ -235,7 +231,7 @@ function mount(app) {
     const wantQueue = String(b.queue || '').trim();
     if (!wantQueue) return res.status(400).json({ ok: false, error: 'Queue required.' });
     let all = null;
-    try { const c = await get_conn(); all = await sf.list_queues(c, { with_open_counts: false }); } catch (e) { all = null; }
+    try { all = await sf.run(ro(), function (c) { return sf.list_queues(c, { with_open_counts: false }); }); } catch (e) { all = null; }
     let allowed;
     if (all) { const visible = queue_access.filter_queues(all, req.user, req.role); allowed = visible.some(function (q) { return norm_name(q.name) === norm_name(wantQueue); }); }
     else { allowed = norm_name(wantQueue) === norm_name(DEFAULT_QUEUE); }

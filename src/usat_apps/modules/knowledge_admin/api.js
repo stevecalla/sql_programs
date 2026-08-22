@@ -23,16 +23,10 @@ try { ai.set_config_reader(function () { try { return kb_data_dir.read_config() 
 
 const P = '/api/knowledge-admin';
 
-// Read-only Salesforce connection (queue names only). Cached per env, same pattern as the other modules.
+// Read-only Salesforce connection (queue names only). The shared client owns the connection + self-heals
+// (TTL refresh + reconnect-on-session-error); SF reads go through sf.run(ro(), …), no private cache here.
 function sf_env() { try { const c = kb_data_dir.read_config() || {}; return c.sf_env === 'sandbox' ? 'sandbox' : 'prod'; } catch (e) { return 'prod'; } }
-let _conn = null, _conn_env = null;
-async function get_conn() {
-  const env = sf_env();
-  if (_conn && _conn_env === env) return _conn;
-  const r = await sf.connect({ is_test: env === 'sandbox', role: 'read' });
-  _conn = (r && r.conn) || r; _conn_env = env;
-  return _conn;
-}
+function ro() { return { is_test: sf_env() === 'sandbox', role: 'read' }; }
 
 async function snapshot() {
   const st = settings.get();
@@ -119,8 +113,7 @@ function mount(app) {
   // ---- Shared queue access (who sees which queues) — migrated from the email admin. SF names only ----
   app.get(P + '/queue-access', require_admin, async function (req, res) {
     try {
-      const c = await get_conn();
-      const queues = await sf.list_queues(c, { with_open_counts: false });
+      const queues = await sf.run(ro(), function (c) { return sf.list_queues(c, { with_open_counts: false }); });
       const users = auth_store.env_accounts().map(function (u) { return u.user; }).concat(auth_store.list_users().map(function (u) { return u.user; }));
       queue_access.prune_users(users);   // drop overrides for accounts removed in Users & access
       res.json({ ok: true, queues: queues, access: queue_access.get(), users: users });
