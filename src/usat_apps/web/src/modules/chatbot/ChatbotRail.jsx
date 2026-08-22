@@ -154,11 +154,13 @@ function ConversationRail({ s }) {
 // Platform left siderail for the AI Chat Bot (mirrors EmailQueueRail). Route-aware: the QA & Training page
 // (/chatbot/stress-test) gets a run-history rail; every other chatbot page gets the conversation browser.
 // Rendered by App.jsx on /chatbot. Resizable via the trailing ResizeHandle (target='prev' resizes this nav).
-export default function ChatbotRail() {
+export default function ChatbotRail({ user }) {
   const s = store.useStore();
   const location = useLocation();
   const isQA = location.pathname.startsWith('/chatbot/stress-test');
-  useEffect(() => { store.init(); }, []);
+  useEffect(() => { store.init(user); }, []);   // seed identity + first load (guarded to run once)
+  // Re-fetch the access-filtered queue list if a different user signs in without a hard reload.
+  useEffect(() => { store.syncUser(user); }, [user]);
   return (
     <>
       <nav className="siderail cbx-siderail" aria-label="AI Chat Bot" style={{ width: s.railW }}>
