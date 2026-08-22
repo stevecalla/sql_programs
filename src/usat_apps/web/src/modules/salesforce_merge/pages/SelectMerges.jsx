@@ -434,8 +434,8 @@ export default function SelectMerges() {
             </select>
           </div>
           <div style={FCELL}>
-            <FLabel title="How many accounts are in the group (2 = a pair).">Size</FLabel>
-            <select className="tb-select" style={FSEL} value={sizeState} onChange={(e) => { setSizeState(e.target.value); setPage(1); }} title="How many accounts are in the group (2 = a pair).">
+            <FLabel title="How many accounts are in the group (2 = a pair). The size options come from duplicate clusters, which are always 2 or more — so there's no “1” here (a single account isn't a duplicate). Note: the “Accounts with merge ids” view can list 1-record groups (a merge ID carried by just one account); those aren't mergeable, so this Size filter can't select them.">Size</FLabel>
+            <select className="tb-select" style={FSEL} value={sizeState} onChange={(e) => { setSizeState(e.target.value); setPage(1); }} title="How many accounts are in the group (2 = a pair). The size options come from duplicate clusters, which are always 2 or more — so there's no “1” here (a single account isn't a duplicate). Note: the “Accounts with merge ids” view can list 1-record groups (a merge ID carried by just one account); those aren't mergeable, so this Size filter can't select them.">
               <option value="">Any size</option>
               {sizeOpts.map((s) => <option key={s} value={s}>{s} accounts</option>)}
             </select>
