@@ -120,6 +120,7 @@ export default function MergeOps() {
   const [rSource, setRSource] = useState(() => readPref('r_source', 'duplicate'));
   const [rMin, setRMin] = useState(() => readPref('r_min', '2'));
   const [rMax, setRMax] = useState(() => readPref('r_max', '4'));
+  const [rSize, setRSize] = useState(() => readPref('r_size', ''));   // merge-id: exact group size (matches Select Merges' Size)
   const [rCount, setRCount] = useState(() => readPref('r_count', '10'));
   const [rSeed, setRSeed] = useState(() => readPref('r_seed', ''));   // persisted as typed; blank = new random each run
   const [rFoundation, setRFoundation] = useState(() => readPref('r_foundation', ''));   // '' any | 'has' | 'none'
@@ -194,10 +195,10 @@ export default function MergeOps() {
         batch_mode: batchMode, run_mode: runMode, restore_after: restoreAfter, stamp_merged: stampMerged, attach_dossier: attachDossier,
         r_source: rSource, r_min: rMin, r_max: rMax, r_count: rCount, r_seed: rSeed,
         r_foundation: rFoundation, r_portal: rPortal, r_tier: rTier, r_signal: rSignal,
-        r_which_list: rWhichList, r_bucket: rBucket, r_min_sim: rMinSim, r_merge_id: rMergeId, r_member: rMember,
+        r_which_list: rWhichList, r_bucket: rBucket, r_min_sim: rMinSim, r_merge_id: rMergeId, r_member: rMember, r_size: rSize,
       }));
     } catch (e) { /* ignore */ }
-  }, [batchMode, runMode, restoreAfter, stampMerged, attachDossier, rSource, rMin, rMax, rCount, rSeed, rFoundation, rPortal, rTier, rSignal, rWhichList, rBucket, rMinSim, rMergeId, rMember]);
+  }, [batchMode, runMode, restoreAfter, stampMerged, attachDossier, rSource, rMin, rMax, rCount, rSeed, rFoundation, rPortal, rTier, rSignal, rWhichList, rBucket, rMinSim, rMergeId, rMember, rSize]);
   // Record the restore job id onto the persisted run so a reattach re-shows the restore phase (and doesn't re-fire it).
   const persistRestoreJobId = (id) => { try { const s = JSON.parse(localStorage.getItem('sm_active_batch') || 'null'); if (s) { s.restore_job_id = id; localStorage.setItem('sm_active_batch', JSON.stringify(s)); } } catch (e) { /* ignore */ } };
   const isTerminal = (s) => s === 'done' || s === 'error' || s === 'cancelled';   // 'paused' is NOT terminal (resumable)
@@ -278,6 +279,7 @@ export default function MergeOps() {
       if (rPortal) filters.portal_state = rPortal;
       if (rBucket) filters.bucket = rBucket;
       if (rWhichList) colFilters.which_list = rWhichList;
+      if (rSize) colFilters.size = rSize;
     }
     return { filters, colFilters };
   };
@@ -537,12 +539,13 @@ export default function MergeOps() {
                   </>
                 ) : (
                   <>
-                    <label className="small" title="Which source list the merge-id group came from.">Which list<br /><span className="tb-select"><select value={rWhichList} onChange={(e) => setRWhichList(e.target.value)}><option value="">all</option>{(facets.which_list || []).map((v) => <option key={v} value={v}>{v}</option>)}</select></span></label>
-                    <label className="small" title="Merge-id review bucket (in_both / sf_only / etc.).">Bucket<br /><span className="tb-select"><select value={rBucket} onChange={(e) => setRBucket(e.target.value)}><option value="">all</option>{(facets.bucket || []).map((v) => <option key={v} value={v}>{v}</option>)}</select></span></label>
+                    <label className="small" title="How many accounts are in the group (2 = a pair). Options come from duplicate clusters, which are always 2 or more — so there's no “1” (a single account isn't a duplicate). A merge-id group can be 1 record, but those aren't mergeable and this filter can't select them.">Size<br /><span className="tb-select"><select value={rSize} onChange={(e) => setRSize(e.target.value)}><option value="">Any size</option>{(facets.size || []).map((s) => <option key={s} value={String(s)}>{s} accounts</option>)}</select></span></label>
+                    <label className="small" title="Which detection signal flagged the account: exact, fuzzy, or nickname. Keeps groups where any member matches.">Which list<br /><span className="tb-select"><select value={rWhichList} onChange={(e) => setRWhichList(e.target.value)}><option value="">Any list</option><option value="exact">Exact</option><option value="fuzzy">Fuzzy</option><option value="nickname">Nickname</option></select></span></label>
+                    <label className="small" title="How the account compares to Salesforce duplicates: In both = has a merge ID and was flagged; ID only = has a merge ID but was not flagged as a duplicate.">Bucket<br /><span className="tb-select"><select value={rBucket} onChange={(e) => setRBucket(e.target.value)}><option value="">All</option><option value="in_both">In both</option><option value="sf_only">ID only</option></select></span></label>
                   </>
                 )}
-                <label className="small" title="Foundation constituents (donor records). 'has' targets donor clusters; 'none' avoids them.">Foundation<br /><span className="tb-select"><select value={rFoundation} onChange={(e) => setRFoundation(e.target.value)}><option value="">all</option><option value="has">has (donors)</option><option value="none">none</option></select></span></label>
-                <label className="small" title="Customer-Portal accounts (IsCustomerPortal). 'has' targets sets that include a portal account; 'none' avoids them.">Customer portal<br /><span className="tb-select"><select value={rPortal} onChange={(e) => setRPortal(e.target.value)}><option value="">all</option><option value="has">has portal</option><option value="none">none</option></select></span></label>
+                <label className="small" title="Whether any account in the group is a Foundation constituent.">Foundation<br /><span className="tb-select"><select value={rFoundation} onChange={(e) => setRFoundation(e.target.value)}><option value="">All</option><option value="has">Is foundation</option><option value="none">Not foundation</option></select></span></label>
+                <label className="small" title="Whether any account in the group is a Customer-Portal account (IsCustomerPortal). Salesforce requires the portal account to be the master when merging.">Customer portal<br /><span className="tb-select"><select value={rPortal} onChange={(e) => setRPortal(e.target.value)}><option value="">All</option><option value="has">Has portal</option><option value="none">No portal</option></select></span></label>
               </div>
             </div>
           )}

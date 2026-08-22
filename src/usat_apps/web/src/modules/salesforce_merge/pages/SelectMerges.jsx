@@ -3,7 +3,7 @@ import DatasetStamp from '../components/DatasetStamp.jsx';
 import WorkerBanner from '../components/WorkerBanner.jsx';
 import QueueRowDetail from '../components/QueueRowDetail.jsx';
 import RiskPills from '../components/RiskPills.jsx';
-import { api, exportUrl } from '../lib/api.js';
+import { api, exportUrl, sfRecordUrl } from '../lib/api.js';
 
 const PAGE = 200;
 
@@ -112,6 +112,7 @@ export default function SelectMerges() {
   const [tierState, setTierState] = useState(PREFS.tierState || '');    // Tier (confidence): exact/fuzzy/nickname (Duplicates source)
   const [simState, setSimState] = useState(PREFS.simState || '');       // min best name-similarity score (Duplicates source)
   const [sizeOpts, setSizeOpts] = useState([]);   // available cluster sizes (facets)
+  const [instUrl, setInstUrl] = useState('');     // org instance base URL for "open in Salesforce" # links
 
   const [clusters, setClusters] = useState([]);
   const [total, setTotal] = useState(0);
@@ -174,6 +175,7 @@ export default function SelectMerges() {
 
   // Populate the cluster-size dropdown from the consolidated facets (distinct group sizes).
   useEffect(() => { api.duplicatesFacets().then((r) => setSizeOpts(((r.facets && r.facets.size) || []).map(String))).catch(() => {}); }, []);
+  useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
 
   // Persist filter selections so they become the user's default next time.
   useEffect(() => {
@@ -434,8 +436,8 @@ export default function SelectMerges() {
             </select>
           </div>
           <div style={FCELL}>
-            <FLabel title="How many accounts are in the group (2 = a pair).">Size</FLabel>
-            <select className="tb-select" style={FSEL} value={sizeState} onChange={(e) => { setSizeState(e.target.value); setPage(1); }} title="How many accounts are in the group (2 = a pair).">
+            <FLabel title="How many accounts are in the group (2 = a pair). The size options come from duplicate clusters, which are always 2 or more — so there's no “1” here (a single account isn't a duplicate). Note: the “Accounts with merge ids” view can list 1-record groups (a merge ID carried by just one account); those aren't mergeable, so this Size filter can't select them.">Size</FLabel>
+            <select className="tb-select" style={FSEL} value={sizeState} onChange={(e) => { setSizeState(e.target.value); setPage(1); }} title="How many accounts are in the group (2 = a pair). The size options come from duplicate clusters, which are always 2 or more — so there's no “1” here (a single account isn't a duplicate). Note: the “Accounts with merge ids” view can list 1-record groups (a merge ID carried by just one account); those aren't mergeable, so this Size filter can't select them.">
               <option value="">Any size</option>
               {sizeOpts.map((s) => <option key={s} value={s}>{s} accounts</option>)}
             </select>
@@ -748,7 +750,7 @@ export default function SelectMerges() {
                     const idMatch = acctMergeId(a) && a.account === acctMergeId(a);
                     return (
                       <tr key={a.account} className={isMaster ? 'row-sel' : undefined}>
-                        <td>{i + 1}</td>
+                        <td>{(() => { const href = sfRecordUrl(instUrl, a.account); return href ? <a href={href} target="_blank" rel="noopener noreferrer" title="Open this account in Salesforce ↗" onClick={(e) => e.stopPropagation()}>{i + 1} ↗</a> : (i + 1); })()}</td>
                         <td><input type="radio" name="master" checked={isMaster} onChange={() => { setMaster(a.account); setManualMaster(true); }} aria-label={'Master ' + a.account} /></td>
                         <td>{isMaster ? <span className="muted small">master</span> : <input type="checkbox" checked={mergeSel.has(a.account)} onChange={() => toggleMerge(a.account)} aria-label={'Merge ' + a.account} />}</td>
                         <td>{acctName(a)}

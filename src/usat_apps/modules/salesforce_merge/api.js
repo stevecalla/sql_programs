@@ -244,6 +244,17 @@ function mount(app) {
     try { res.json({ ok: true, data: await dashboard.dataset_info() }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
+  // Org instance base URL for the LOADED environment — used to build Lightning "open in Salesforce" record
+  // links from an account id. Cheap: reads the pooled connection's instanceUrl (cached), no SF API call.
+  app.get('/api/salesforce-merge/merge/org', gate, async function (req, res) {
+    try {
+      const ds = await dashboard.dataset_info().catch(() => null);
+      const is_test = !ds || ds.environment !== 'Production';
+      let instance_url = '';
+      try { instance_url = await sfread.get_instance_url({ is_test }); } catch (e) { instance_url = ''; }
+      res.json({ ok: true, environment: ds ? ds.environment : null, instance_url });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
 
   app.get('/api/salesforce-merge/tuning', gate, async function (req, res) {
     try { res.json({ ok: true, ...(await dashboard.sweep_profiles()) }); }
