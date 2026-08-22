@@ -34,9 +34,36 @@ export function setAiW(w) { state.aiW = w; saveW('cb_aiW', w); emit(); }
 export function toggleCard() { state.cardOpen = !state.cardOpen; emit(); }
 export function curQueueObj() { return (state.queues || []).find((q) => q.key === state.queue) || null; }
 
+// Identity of the signed-in app user, so we can re-fetch the access-filtered queue list when a different
+// user signs in without a hard reload (mirrors the email queue). The server always filters /queues by role;
+// this just keeps the client from showing the previous user's queues until a refresh.
+let _userKey = null;
+function userKeyOf(u) { return u ? (String(u.user || '') + '|' + String(u.role || '')) : ''; }
+
 let _inited = false;
-export async function init() {
+export async function init(user) {
   if (_inited) return; _inited = true;
+  _userKey = userKeyOf(user);   // seed identity so the first syncUser() call doesn't trigger a needless reload
+  try {
+    const r = await api.queues();
+    state.queues = r.queues || [];
+    state.queue = r.default || (state.queues[0] && state.queues[0].key) || 'Team USA';
+    state.sfAligned = r.sf_aligned !== false;
+  } catch (e) { state.queues = [{ key: 'Team USA', name: 'Team USA', aligned: false }]; state.queue = 'Team USA'; state.sfAligned = false; }
+  emit();
+  loadThreads();
+}
+// Call when the signed-in user might have changed (mount + on the `user` prop changing). If the identity
+// actually changed, re-fetch the access-filtered queue list and drop the prior user's selection/threads.
+export function syncUser(user) {
+  const k = userKeyOf(user);
+  if (_userKey === null) { _userKey = k; return; }   // first time we see a user — seed, don't reload
+  if (k === _userKey) return;                          // same user — nothing to do
+  _userKey = k;
+  reloadForUser();
+}
+async function reloadForUser() {
+  state.selectedId = null; state.turns = []; state.threads = null; state.bubbleLoad = null; emit();
   try {
     const r = await api.queues();
     state.queues = r.queues || [];
