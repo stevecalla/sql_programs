@@ -14,6 +14,15 @@ async function connect(opts) {
   return connect_salesforce({ is_test: !!o.is_test, role: o.role || 'read', version: o.version });
 }
 
+// === CONVENTION: modules must NOT cache their own Salesforce connection ============================
+// A per-module `let _conn = …` cache that never re-authenticates is how the email queue silently 502'd
+// once its OAuth token aged out (see plans_and_notes/salesforce_email_queue/sf_connection_selfheal.md).
+// Always go through the self-healing layer below instead:
+//   • reads  → sf.run(opts, fn)      (cached + TTL refresh + reconnect-and-retry-once on session expiry)
+//   • need the raw conn → sf.conn_for(opts).conn   (cached + TTL refresh, no retry)
+//   • writes/sends/merges → sf.conn_for(opts) only — NEVER wrap a destructive write in run() (a retry
+//     could double-apply it). connect() (raw, no cache) stays only for one-off scripts / per-call callers.
+// ====================================================================================================
 // --- Managed, self-healing connections -------------------------------------------------------------
 // Cache one connection per (role, env) and reuse it — SF logins are rate-limited, so re-authing on every
 // call (the naive approach) burns the login budget. Two safety nets keep a cached connection from going
