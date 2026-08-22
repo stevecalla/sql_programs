@@ -135,6 +135,19 @@ async function get_org_identity({ is_test, connect = default_connect } = {}) {
   return { org_id, is_sandbox };
 }
 
+// The org's instance base URL (e.g. https://usatriathlon--01test.sandbox.my.salesforce.com) for building
+// Lightning record links. Read straight off the (pooled) connection's instanceUrl — no extra Salesforce
+// API call — and cached per environment so repeated page loads don't reconnect.
+const _instanceUrlCache = new Map();
+async function get_instance_url({ is_test, connect = default_connect } = {}) {
+  const key = !!is_test;
+  if (_instanceUrlCache.has(key)) return _instanceUrlCache.get(key);
+  const conn = await connect(is_test);
+  const url = (conn && conn.instanceUrl) ? String(conn.instanceUrl).replace(/\/+$/, '') : '';
+  if (url) _instanceUrlCache.set(key, url);
+  return url;
+}
+
 async function fetch_children(ids, { is_test = true, connect = default_connect, contactByAccount = {}, limitPerObject = 0 } = {}) {
   const list = (ids || []).map((s) => String(s)).filter(Boolean);
   if (!list.length) return [];
@@ -260,4 +273,4 @@ async function get_api_limits({ is_test, connect = default_connect } = {}) {
   return Object.assign({ org_id: org_id }, parse_limits(lim));
 }
 
-module.exports = { fetch_accounts_by_ids, count_children_by_ids, count_children, fetch_children, discover_child_objects, get_org_identity, get_user_capabilities, list_recycle_bin, parse_limits, get_api_limits, DETAIL_FIELDS, CHILD_OBJECTS };
+module.exports = { fetch_accounts_by_ids, count_children_by_ids, count_children, fetch_children, discover_child_objects, get_org_identity, get_instance_url, get_user_capabilities, list_recycle_bin, parse_limits, get_api_limits, DETAIL_FIELDS, CHILD_OBJECTS };

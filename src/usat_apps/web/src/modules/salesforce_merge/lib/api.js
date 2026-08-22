@@ -39,6 +39,7 @@ export const api = {
   logout: () => req('/api/salesforce-merge/logout', { method: 'POST' }),
   dashboard: () => req('/api/salesforce-merge/dashboard'),
   dataset: () => req('/api/salesforce-merge/dataset'),
+  mergeOrg: () => req('/api/salesforce-merge/merge/org'),
   runs: () => req('/api/salesforce-merge/runs'),
   tuning: () => req('/api/salesforce-merge/tuning'),
   status: () => req('/api/salesforce-merge/status'),
@@ -129,4 +130,11 @@ function qs(o) {
 // Build a download URL (CSV/Excel export) with the same params the table is showing.
 export function exportUrl(base, params) {
   return BASE + base + qs(expand(params));
+}
+
+// Build a Lightning "open in Salesforce" record URL from the org instance base + a record id.
+// Returns null when either is missing, so callers can fall back to plain text (no broken link).
+export function sfRecordUrl(instanceUrl, id, object = 'Account') {
+  if (!instanceUrl || !id) return null;
+  return String(instanceUrl).replace(/\/+$/, '') + '/lightning/r/' + object + '/' + id + '/view';
 }

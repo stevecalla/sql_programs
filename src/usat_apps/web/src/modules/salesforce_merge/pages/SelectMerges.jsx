@@ -3,7 +3,7 @@ import DatasetStamp from '../components/DatasetStamp.jsx';
 import WorkerBanner from '../components/WorkerBanner.jsx';
 import QueueRowDetail from '../components/QueueRowDetail.jsx';
 import RiskPills from '../components/RiskPills.jsx';
-import { api, exportUrl } from '../lib/api.js';
+import { api, exportUrl, sfRecordUrl } from '../lib/api.js';
 
 const PAGE = 200;
 
@@ -112,6 +112,7 @@ export default function SelectMerges() {
   const [tierState, setTierState] = useState(PREFS.tierState || '');    // Tier (confidence): exact/fuzzy/nickname (Duplicates source)
   const [simState, setSimState] = useState(PREFS.simState || '');       // min best name-similarity score (Duplicates source)
   const [sizeOpts, setSizeOpts] = useState([]);   // available cluster sizes (facets)
+  const [instUrl, setInstUrl] = useState('');     // org instance base URL for "open in Salesforce" # links
 
   const [clusters, setClusters] = useState([]);
   const [total, setTotal] = useState(0);

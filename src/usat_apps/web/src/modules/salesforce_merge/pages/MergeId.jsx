@@ -3,7 +3,7 @@ import DataTable from '../components/DataTable.jsx';
 import DatasetStamp from '../components/DatasetStamp.jsx';
 import ClusterModal from '../components/ClusterModal.jsx';
 import { MergeIdFunnel } from '../components/Funnels.jsx';
-import { api } from '../lib/api.js';
+import { api, sfRecordUrl } from '../lib/api.js';
 
 const full_name = (r) => `${r.first_name || ''} ${r.last_name || ''}`.trim();
 const fmt = (n) => (n == null || n === '' ? '—' : Number(n).toLocaleString());
@@ -23,7 +23,9 @@ export default function MergeId() {
   const [portalState, setPortalState] = useState(''); // '' all · 'has' · 'none'
   const [facets, setFacets] = useState({});
   const [openKey, setOpenKey] = useState(null);   // cluster key whose popup is open
+  const [instUrl, setInstUrl] = useState('');     // org instance base URL for "open in Salesforce" # links
   useEffect(() => { api.mergeIdFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
+  useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
 
   const fetcher = useCallback((p) =>
     api.mergeId({ ...p, bucket, portal_state: portalState }).then((r) => ({ rows: r.rows, total: r.total })),
@@ -53,6 +55,7 @@ export default function MergeId() {
         columns={columns}
         fetcher={fetcher}
         facets={facets}
+        rowLink={(r) => sfRecordUrl(instUrl, r.account)}
         deps={[bucket, portalState]}
         pageSize={25}
         searchCols="account, name, merge ID, list"

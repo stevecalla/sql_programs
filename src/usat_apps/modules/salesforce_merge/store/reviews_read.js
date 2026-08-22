@@ -116,7 +116,11 @@ async function facets(view, query = real_query) {
 // All distinct KEY values matching the SAME filters the Select Merges list uses (no pagination) — so the
 // batch-run sampler can pick a random subset from the exact filtered pool. view: 'duplicates' | 'merge-id'.
 const KEY_COL = { duplicates: 'Consolidated_Group_Key__c', 'merge-id': 'Salesforce_Merge_Id__c' };
+// The merge-id view is a GROUP-level query (one row per Salesforce merge id, group-level HAVING filters,
+// blank ids excluded). Both the Select-Merges "Merge-id groups" panel AND the batch sampler go through the
+// SAME builder (merge_group_clauses, below) so their counts and keys always agree — one source of truth.
 async function matching_keys(view, opts = {}, query = real_query) {
+  if (view === 'merge-id') return merge_group_keys(flatten_mergeid_opts(opts), query);
   const spec = SPECS[view]; const col = KEY_COL[view];
   if (!spec || !spec.table || !col) return [];
   const { where_sql, params } = build_clauses({ ...opts, page: 1, page_size: 1 }, spec);   // page/size unused here
@@ -124,8 +128,10 @@ async function matching_keys(view, opts = {}, query = real_query) {
   return (rows || []).map((r) => r.k).filter(Boolean);
 }
 
-// COUNT of distinct keys matching the SAME filters (for a live "N sets match" readout in the batch UI).
+// COUNT of matching sets for the live "N sets match" readout in the batch UI. Merge-id delegates to the
+// same grouped builder as the review panel; duplicates uses the row-level consolidated clauses.
 async function count_matching(view, opts = {}, query = real_query) {
+  if (view === 'merge-id') return merge_group_count(flatten_mergeid_opts(opts), query);
   const spec = SPECS[view]; const col = KEY_COL[view];
   if (!spec || !spec.table || !col) return 0;
   const { where_sql, params } = build_clauses({ ...opts, page: 1, page_size: 1 }, spec);
@@ -376,13 +382,12 @@ async function cluster_accounts(key, query = real_query) {
   return { key, accounts: accounts || [] };
 }
 
-// ---- Merge-ID groups (Merge Admin source): one row per distinct Salesforce merge id ----
-// Only accounts that HAVE a merge id are listed. Bucket filter mirrors the merge-id review panel
-// (the buckets with a merge id: in_both / id only [sf_only]).
-async function list_merge_groups(opts = {}, query = real_query) {
-  const page = clamp_int(opts.page, 1, 1, 1e9);
-  const page_size = clamp_int(opts.page_size, 25, 1, MAX_PAGE_SIZE);
-  const offset = (page - 1) * page_size;
+// ---- Merge-ID groups: ONE shared builder used by BOTH the review panel and the batch sampler ----
+// One row per distinct Salesforce merge id (blank ids excluded). Group-level filters run as HAVING over the
+// GROUP BY (foundation/portal/which-list = ANY/NO member matches; size = the group's member count COUNT(*));
+// bucket + search run as row-level WHERE. Accepts FLAT opts: { q, bucket, foundation_state, portal_state,
+// size, which_list }. This is the single source of truth so the panel and the batch stager never diverge.
+function merge_group_clauses(opts = {}) {
   const T = cfg.RESULT_MERGE_ID_REVIEW_TABLE;
   const wheres = ["Salesforce_Merge_Id__c IS NOT NULL", "Salesforce_Merge_Id__c <> ''"];
   const params = [];
@@ -396,33 +401,43 @@ async function list_merge_groups(opts = {}, query = real_query) {
   const bk = opts.bucket;
   if (bk === "in_both" || bk === "sf_only") { wheres.push("Bucket__c = ?"); params.push(bk); }
   else if (bk === "only_dupes") { wheres.push("Bucket__c NOT IN ('in_both', 'sf_only')"); }
-  const where_sql = "WHERE " + wheres.join(" AND ");
-  // group-level filters run as HAVING over the GROUP BY, not a row WHERE:
-  //  · foundation: keep groups where ANY (has) / NO (none) account is a Foundation constituent.
-  //  · size: the group's member count (COUNT(*)) equals the chosen cluster size.
   const havings = [];
   const fnd = String(opts.foundation_state || '');
   if (fnd === 'has') havings.push("SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) > 0");
   else if (fnd === 'none') havings.push("SUM(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) = 0");
-  //  · portal: keep groups where ANY (has) / NO (none) account is a Customer-Portal account.
   const prt = String(opts.portal_state || '');
   if (prt === 'has') havings.push("SUM(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END) > 0");
   else if (prt === 'none') havings.push("SUM(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END) = 0");
   const sz = String(opts.size == null ? '' : opts.size).trim();
   if (/^\d+$/.test(sz)) havings.push("COUNT(*) = " + Number(sz));
-  //  · which list (detection signal): keep groups where ANY member was flagged by the chosen signal.
-  //    Mirrors the Merge-ID tab's "Which list" column filter (contains match). `wl` is validated to a
-  //    fixed set, so the inlined LIKE is injection-safe.
-  const wl = String(opts.which_list || '').trim().toLowerCase();
-  if (wl === 'exact' || wl === 'fuzzy' || wl === 'nickname') {
-    havings.push("SUM(CASE WHEN Which_List__c LIKE '%" + wl + "%' THEN 1 ELSE 0 END) > 0");
-  }
-  const fnd_having = havings.length ? (" HAVING " + havings.join(" AND ")) : '';
-  const totalRows = await query(
-    fnd_having
-      ? "SELECT COUNT(*) AS n FROM (SELECT Salesforce_Merge_Id__c FROM `" + T + "` " + where_sql + " GROUP BY Salesforce_Merge_Id__c" + fnd_having + ") x"
-      : "SELECT COUNT(DISTINCT Salesforce_Merge_Id__c) AS n FROM `" + T + "` " + where_sql, params);
-  const total = totalRows && totalRows[0] ? Number(totalRows[0].n) : 0;
+  const wl = String(opts.which_list || '').trim().toLowerCase();   // validated to a fixed set -> inlined LIKE is injection-safe
+  if (wl === 'exact' || wl === 'fuzzy' || wl === 'nickname') havings.push("SUM(CASE WHEN Which_List__c LIKE '%" + wl + "%' THEN 1 ELSE 0 END) > 0");
+  return { T, where_sql: "WHERE " + wheres.join(" AND "), having_sql: havings.length ? (" HAVING " + havings.join(" AND ")) : '', params };
+}
+// The batch sampler passes nested { filters, colFilters }; flatten to what merge_group_clauses expects.
+function flatten_mergeid_opts(opts = {}) {
+  const f = opts.filters || {}; const cf = opts.colFilters || {};
+  return { q: opts.q, bucket: f.bucket, foundation_state: f.foundation_state, portal_state: f.portal_state, which_list: cf.which_list, size: cf.size };
+}
+async function merge_group_count(opts = {}, query = real_query) {
+  const { T, where_sql, having_sql, params } = merge_group_clauses(opts);
+  const rows = await query(having_sql
+    ? "SELECT COUNT(*) AS n FROM (SELECT Salesforce_Merge_Id__c FROM `" + T + "` " + where_sql + " GROUP BY Salesforce_Merge_Id__c" + having_sql + ") x"
+    : "SELECT COUNT(DISTINCT Salesforce_Merge_Id__c) AS n FROM `" + T + "` " + where_sql, params);
+  return rows && rows[0] ? Number(rows[0].n) : 0;
+}
+async function merge_group_keys(opts = {}, query = real_query) {
+  const { T, where_sql, having_sql, params } = merge_group_clauses(opts);
+  const rows = await query("SELECT Salesforce_Merge_Id__c AS k FROM `" + T + "` " + where_sql +
+    " GROUP BY Salesforce_Merge_Id__c" + having_sql, params);
+  return (rows || []).map((r) => r.k).filter(Boolean);
+}
+async function list_merge_groups(opts = {}, query = real_query) {
+  const page = clamp_int(opts.page, 1, 1, 1e9);
+  const page_size = clamp_int(opts.page_size, 25, 1, MAX_PAGE_SIZE);
+  const offset = (page - 1) * page_size;
+  const { T, where_sql, having_sql, params } = merge_group_clauses(opts);   // shared with the batch sampler
+  const total = await merge_group_count(opts, query);
   const rows = await query(
     "SELECT Salesforce_Merge_Id__c AS `merge_id`, " +
     "GROUP_CONCAT(DISTINCT NULLIF(TRIM(CONCAT(COALESCE(First_Name__c, ''), ' ', COALESCE(Last_Name__c, ''))), '') SEPARATOR ';') AS `names`, " +
@@ -430,7 +445,7 @@ async function list_merge_groups(opts = {}, query = real_query) {
     "MAX(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END) AS `portal`, " +
     "MAX(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) AS `foundation` " +
     "FROM `" + T + "` " + where_sql +
-    " GROUP BY Salesforce_Merge_Id__c" + fnd_having + " ORDER BY COUNT(*) DESC, Salesforce_Merge_Id__c ASC LIMIT ? OFFSET ?",
+    " GROUP BY Salesforce_Merge_Id__c" + having_sql + " ORDER BY COUNT(*) DESC, Salesforce_Merge_Id__c ASC LIMIT ? OFFSET ?",
     params.concat([page_size, offset]));
   const out = (rows || []).map((r) => ({
     cluster: r.merge_id, merge_id: r.merge_id, names: r.names || '',

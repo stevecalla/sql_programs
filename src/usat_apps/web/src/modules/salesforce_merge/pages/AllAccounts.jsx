@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import DatasetStamp from '../components/DatasetStamp.jsx';
 import ClusterModal from '../components/ClusterModal.jsx';
-import { api } from '../lib/api.js';
+import { api, sfRecordUrl } from '../lib/api.js';
 
 const full_name = (r) => `${r.first_name || ''} ${r.last_name || ''}`.trim();
 const STATES = [['', 'all'], ['has', 'has'], ['none', "doesn't have"]];
@@ -36,7 +36,9 @@ export default function AllAccounts() {
   const [portalState, setPortalState] = useState('');     // '' all · 'has' (customer portal) · 'none'
   const [openKey, setOpenKey] = useState(null);           // cluster key whose popup is open
   const [facets, setFacets] = useState({});
+  const [instUrl, setInstUrl] = useState('');   // org instance base URL for "open in Salesforce" # links
   useEffect(() => { api.accountsFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
+  useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
   const fetcher = useCallback((p, opts) =>
     api.accounts({ ...p, merge_id_state: mergeState, member_number_state: memberState, in_cluster_state: clusterState, portal_state: portalState }, opts).then((r) => ({ rows: r.rows, total: r.total })),
   [mergeState, memberState, clusterState, portalState]);
@@ -74,6 +76,7 @@ export default function AllAccounts() {
         columns={columns}
         fetcher={fetcher}
         facets={facets}
+        rowLink={(r) => sfRecordUrl(instUrl, r.account)}
         deps={[mergeState, memberState, clusterState, portalState]}
         pageSize={25}
         minWidth={1750}
