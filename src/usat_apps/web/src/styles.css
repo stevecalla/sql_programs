@@ -1,6 +1,7 @@
 /* USAT Apps platform shell — light/dark design tokens + the shell/layout/table/form primitives the
    modules build on. Kept intentionally compact; feature modules add their own scoped styles. */
 :root {
+  color-scheme: light;   /* native controls (date-picker icon + popup, selects, scrollbars) render light */
   --bg: #f4f6fb;
   --panel: #ffffff;
   --ink: #0f172a;
@@ -25,6 +26,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;   /* flips native date-picker icon/popup, selects & scrollbars to dark app-wide (incl. rails) */
   --bg: #0b1220;
   --panel: #111a2e;
   --ink: #e5eaf3;
