@@ -68,6 +68,10 @@ try { ai.set_config_reader(function () { try { return kb_data_dir.read_config() 
 // token aging out no longer 502s the app until a manual restart (see conn_for/run there).
 function ro() { return { is_test: sf_env() === 'sandbox', role: 'read' }; }
 function rw() { return { is_test: sf_env() === 'sandbox', role: 'write' }; }
+// Per-queue access gate — the SAME shared middleware the chatbot uses (services/queue_access.require_queue),
+// resolving the queue (id from ?queue on reads, name from body.queue on the AI endpoints) against the cached
+// SF list. Mounted AFTER the panel gate on queue-scoped routes; 403 on a queue the user isn't granted.
+const qgate = queue_access.require_queue(function () { return sf.queues_cached(ro()); });
 let _conn_user = '';
 async function get_conn() { const rec = await sf.conn_for(ro()); _conn_user = rec.username || _conn_user; return rec.conn; }
 // Separate WRITE connection for outbound (send). Under OAuth this is the same run-as user; under the SOAP
@@ -216,9 +220,8 @@ function mount(app) {
       res.json({ ok: true, statuses: ((f && f.picklistValues) || []).filter(function (v) { return v.active; }).map(function (v) { return v.value; }) });
     } catch (e) { err(res, e); }
   });
-  app.get(P + '/cases', gate, async function (req, res) {
+  app.get(P + '/cases', gate, qgate, async function (req, res) {
     try {
-      if (req.query.queue && !queue_access.is_allowed(req.user, req.role, req.query.queue)) return res.status(403).json({ ok: false, error: 'queue not permitted' });
       const c = await get_conn();
       const lim = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 200);
       const cases = await sf.list_queue_cases(c, { queue_id: req.query.queue, status: req.query.status || 'open', limit: lim, date_from: req.query.from || '', date_to: req.query.to || '', date_field: req.query.field || 'LastModifiedDate' });
@@ -229,9 +232,8 @@ function mount(app) {
       res.json({ ok: true, cases: cases, limit: lim });
     } catch (e) { err(res, e); }
   });
-  app.get(P + '/status-counts', gate, async function (req, res) {
+  app.get(P + '/status-counts', gate, qgate, async function (req, res) {
     try {
-      if (req.query.queue && !queue_access.is_allowed(req.user, req.role, req.query.queue)) return res.status(403).json({ ok: false, error: 'queue not permitted' });
       res.json(Object.assign({ ok: true }, await sf.run(ro(), function (c) { return sf.status_counts(c, req.query.queue); })));
     } catch (e) { err(res, e); }
   });
@@ -284,7 +286,7 @@ function mount(app) {
   app.get(P + '/ai/models', gate, function (req, res) {
     try { res.json(ai.list_models()); } catch (e) { res.status(500).json({ ok: false, error: (e && e.message) || 'error' }); }
   });
-  app.post(P + '/ai/respond', gate, async function (req, res) {
+  app.post(P + '/ai/respond', gate, qgate, async function (req, res) {
     const b = req.body || {}; const t0 = Date.now();
     try {
       const c = await get_conn();
@@ -309,7 +311,7 @@ function mount(app) {
       res.json(Object.assign({ ok: true }, r));
     } catch (e) { log_ai(req, b, { ai_action: 'respond', ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) }); err(res, e); }
   });
-  app.post(P + '/ai/ask', gate, async function (req, res) {
+  app.post(P + '/ai/ask', gate, qgate, async function (req, res) {
     const b = req.body || {}; const action = b.action === 'acknowledge' ? 'acknowledge' : 'ask'; const t0 = Date.now();
     try {
       const c = await get_conn();
@@ -332,7 +334,7 @@ function mount(app) {
       res.json(Object.assign({ ok: true }, r));
     } catch (e) { log_ai(req, b, { ai_action: action, ai_latency_ms: Date.now() - t0, ai_ok: 0, ai_error: ((e && e.message) || 'error').slice(0, 60) }); err(res, e); }
   });
-  app.post(P + '/ai/triage', gate, async function (req, res) {
+  app.post(P + '/ai/triage', gate, qgate, async function (req, res) {
     const b = req.body || {}; const t0 = Date.now();
     try {
       const thread = await sf.get_thread(await get_conn(), b.case_id);
