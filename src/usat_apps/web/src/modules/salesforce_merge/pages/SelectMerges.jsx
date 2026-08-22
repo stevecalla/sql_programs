@@ -175,6 +175,7 @@ export default function SelectMerges() {
 
   // Populate the cluster-size dropdown from the consolidated facets (distinct group sizes).
   useEffect(() => { api.duplicatesFacets().then((r) => setSizeOpts(((r.facets && r.facets.size) || []).map(String))).catch(() => {}); }, []);
+  useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
 
   // Persist filter selections so they become the user's default next time.
   useEffect(() => {
@@ -749,7 +750,7 @@ export default function SelectMerges() {
                     const idMatch = acctMergeId(a) && a.account === acctMergeId(a);
                     return (
                       <tr key={a.account} className={isMaster ? 'row-sel' : undefined}>
-                        <td>{i + 1}</td>
+                        <td>{(() => { const href = sfRecordUrl(instUrl, a.account); return href ? <a href={href} target="_blank" rel="noopener noreferrer" title="Open this account in Salesforce ↗" onClick={(e) => e.stopPropagation()}>{i + 1} ↗</a> : (i + 1); })()}</td>
                         <td><input type="radio" name="master" checked={isMaster} onChange={() => { setMaster(a.account); setManualMaster(true); }} aria-label={'Master ' + a.account} /></td>
                         <td>{isMaster ? <span className="muted small">master</span> : <input type="checkbox" checked={mergeSel.has(a.account)} onChange={() => toggleMerge(a.account)} aria-label={'Merge ' + a.account} />}</td>
                         <td>{acctName(a)}
