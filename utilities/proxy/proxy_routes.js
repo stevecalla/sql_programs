@@ -60,6 +60,5 @@ module.exports = {
 
   // '/event-analysis': { target: 'http://127.0.0.1:8016', health: '/api/status', host: 'app' },
   // '/race-results':   { target: 'http://127.0.0.1:8018', health: '/api/status', host: 'app' },
-  // '/email-queue':    { target: 'http://127.0.0.1:8019', health: '/api/status', host: 'app' },
   // '/org-chart':      { target: 'http://127.0.0.1:8011', health: '/healthz', host: 'app' },  // Streamlit — keep standalone
 };
