@@ -29,7 +29,6 @@ const MENUS = [
   'src/usat_apps/modules/salesforce_email_queue/menu.js',
   'src/usat_apps/modules/chatbot/menu.js',
   'src/salesforce_duplicates/menu.js',
-  'src/salesforce_email_queue_proof_of_concept/menu.js',
   'src/event_analysis/menu.js',
   'src/race_results_transform/menu.js',
 ];

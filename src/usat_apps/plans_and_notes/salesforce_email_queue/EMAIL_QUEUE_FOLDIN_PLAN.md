@@ -1,6 +1,8 @@
 # Salesforce Email Queue — fold-in plan (port into usat_apps)
 
-Status: **planning** · Owner: skip · Last updated: 2026-07-30
+Status: **cutover complete; retiring 8019 code (dev done → prod pending)** · Owner: skip · Last updated: 2026-08-22
+
+> **Update 2026-08-22 — 8019 stale-code removal (dev).** Module has run live ~3 weeks; now removing the retired standalone server's code. **Dev complete on `refactor/sf_email_queue_v9`:** deleted `server_salesforce_email_queue_8019.js` and `src/salesforce_email_queue_proof_of_concept/` (76 files); removed the email-queue pm2 launcher step + the 7 EQ npm scripts + 3 `email_queue_metrics_*` scripts from `package.json`; dropped the POC menu from `utilities/menu/lint_menus.js`; removed the commented `:8019` proxy route; removed the unused `SF_EMAIL_QUEUE_*` keys from dev `.env`; cleaned the VS Code EQ tasks. Validated via `node --check`, the menu linter, and confirming no live code reads the removed keys. **Pending (prod):** `pm2 delete usat_salesforce_email_queue` on the prod box, remove `SF_EMAIL_QUEUE_*` from prod `.env`, then deploy. `corrections_export.json` kept — it backs live knowledge_sync tooling, not 8019.
 
 This is the Phase-1 plan referenced by `plans_and_notes/chatbot/CHATBOT_PLAN.md`. It ports
 `src/salesforce_email_queue_proof_of_concept` into `usat_apps` as a first-class module, and —
