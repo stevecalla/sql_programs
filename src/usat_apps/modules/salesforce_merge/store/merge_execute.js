@@ -329,7 +329,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
       let stampNote = '';
       if (opts.stamp_merged && process.env.MERGE_STAMP_SURVIVOR !== 'false') {   // per-run checkbox + global off-switch
         if (!stampPresent) { try { stampPresent = await W.stamp_fields_status(conn); } catch (e2) { stampPresent = null; } }
-        const sfUser = (W.write_creds && W.write_creds(is_test) && W.write_creds(is_test).user) || 'sf';
+        const sfUser = (SF && typeof SF.get_identity_username === 'function' ? await SF.get_identity_username({ is_test }) : '') || (W.write_creds && W.write_creds(is_test) && W.write_creds(is_test).user) || 'sf';
         const actor = (createdBy || 'salesforce_merge_tool') + ' via ' + sfUser;
         const st = (typeof W.stamp_survivor === 'function')
           ? await W.stamp_survivor(conn, e.survivor_account, 'MERGE', actor, stampPresent)
@@ -355,7 +355,7 @@ async function runQueue(ids, opts = {}, deps = {}) {
       let dossierNote = '';
       if (DOS.attach_enabled(opts)) {
         try {
-          const sfUser = (W.write_creds && W.write_creds(is_test) && W.write_creds(is_test).user) || 'sf';
+          const sfUser = (SF && typeof SF.get_identity_username === 'function' ? await SF.get_identity_username({ is_test }) : '') || (W.write_creds && W.write_creds(is_test) && W.write_creds(is_test).user) || 'sf';
           const dres = await DOS.generate({ run_id: runId, queue_id: e.id, action: 'MERGE',
             actor: (createdBy || 'salesforce_merge_tool') + ' via ' + sfUser, environment: e.environment, org_id: e.org_id,
             result: 'done', reason: 'merged ' + merged.length + ' record(s)', survivor_account: e.survivor_account,

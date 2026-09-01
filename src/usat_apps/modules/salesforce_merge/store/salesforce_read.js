@@ -148,6 +148,23 @@ async function get_instance_url({ is_test, connect = default_connect } = {}) {
   return url;
 }
 
+// The LIVE authenticated Salesforce username on the connection (e.g. the Integration User the merge/delete
+// actually runs as) — the same value the Recycle Bin's "Deleted By" reflects. Used to STAMP records with the
+// real actor instead of a static config username. Cached per environment (one identity() call per worker).
+const _identityUserCache = new Map();
+async function get_identity_username({ is_test, connect = default_connect } = {}) {
+  const key = !!is_test;
+  if (_identityUserCache.has(key)) return _identityUserCache.get(key);
+  let username = '';
+  try {
+    const conn = await connect(is_test);
+    const id = (typeof conn.identity === 'function') ? await conn.identity() : null;
+    username = (id && id.username) ? String(id.username) : '';
+  } catch (e) { username = ''; }
+  if (username) _identityUserCache.set(key, username);
+  return username;
+}
+
 async function fetch_children(ids, { is_test = true, connect = default_connect, contactByAccount = {}, limitPerObject = 0 } = {}) {
   const list = (ids || []).map((s) => String(s)).filter(Boolean);
   if (!list.length) return [];
@@ -273,4 +290,4 @@ async function get_api_limits({ is_test, connect = default_connect } = {}) {
   return Object.assign({ org_id: org_id }, parse_limits(lim));
 }
 
-module.exports = { fetch_accounts_by_ids, count_children_by_ids, count_children, fetch_children, discover_child_objects, get_org_identity, get_instance_url, get_user_capabilities, list_recycle_bin, parse_limits, get_api_limits, DETAIL_FIELDS, CHILD_OBJECTS };
+module.exports = { fetch_accounts_by_ids, count_children_by_ids, count_children, fetch_children, discover_child_objects, get_org_identity, get_instance_url, get_identity_username, get_user_capabilities, list_recycle_bin, parse_limits, get_api_limits, DETAIL_FIELDS, CHILD_OBJECTS };

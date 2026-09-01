@@ -195,6 +195,17 @@ async function remove(id, query = real_query) {
   return { ok: true };
 }
 
+// Bulk remove — take the given sets OUT of the queue entirely (queued OR approved), returning them to the
+// review list. Never touches a set that's mid-run (only 'queued'/'approved' are deletable). Mirrors remove().
+async function remove_many(ids, query = real_query) {
+  await ensure_table(query);
+  const list = (ids || []).map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  if (!list.length) return { ok: true, removed: 0 };
+  const ph = list.map(() => '?').join(', ');
+  const res = await query("DELETE FROM `" + TABLE + "` WHERE id IN (" + ph + ") AND status IN ('queued', 'approved')", list);
+  return { ok: true, removed: (res && (res.affectedRows != null ? res.affectedRows : res.affected_rows)) || 0 };
+}
+
 async function add_many(entries, query = real_query) {
   await ensure_table(query);
   let queued = 0, skipped = 0, merged = 0;
@@ -210,4 +221,4 @@ async function add_many(entries, query = real_query) {
   return { queued, skipped, merged, added };
 }
 
-module.exports = { add, add_many, list, set_status, transition, set_child_counts, get, remove, ensure_table, as_losers, as_json, from_json, TABLE, DDL };
+module.exports = { add, add_many, list, set_status, transition, set_child_counts, get, remove, remove_many, ensure_table, as_losers, as_json, from_json, TABLE, DDL };

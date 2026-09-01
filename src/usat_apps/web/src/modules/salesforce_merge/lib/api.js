@@ -59,6 +59,7 @@ export const api = {
   mergeQueueRemove: (id) => req('/api/salesforce-merge/merge-queue/' + encodeURIComponent(id), { method: 'DELETE' }),
   mergeQueueApprove: (ids) => req('/api/salesforce-merge/merge-queue/approve', { method: 'POST', body: JSON.stringify({ ids }) }),
   mergeQueueUnapprove: (ids) => req('/api/salesforce-merge/merge-queue/unapprove', { method: 'POST', body: JSON.stringify({ ids }) }),
+  mergeQueueRemoveMany: (ids) => req('/api/salesforce-merge/merge-queue/remove', { method: 'POST', body: JSON.stringify({ ids }) }),
   mergeStatus: () => req('/api/salesforce-merge/merge/status'),
   mergeProcess: (ids, opts = {}) => req('/api/salesforce-merge/merge/process', { method: 'POST', body: JSON.stringify({ ids, ...opts }) }),
   mergeHistory: () => req('/api/salesforce-merge/merge/history'),
