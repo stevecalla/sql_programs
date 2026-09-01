@@ -405,6 +405,16 @@ function mount(app) {
       res.json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
+  // Bulk remove selected sets from the queue entirely (queued or approved) — returns them to the review
+  // list; nothing is merged. Mirrors the single DELETE, for the "Unqueue selected" button.
+  app.post('/api/salesforce-merge/merge-queue/remove', gate, async function (req, res) {
+    try {
+      const ids = (req.body || {}).ids || [];
+      const r = await mqueue.remove_many(ids);
+      analytics.log({ event_name: 'queue_remove_many', actor: req.user, role: req.role, panel: 'select-merges', is_test: mtest(req), set_count: Array.isArray(ids) ? ids.length : undefined, outcome: 'ok' });
+      res.json({ ok: true, ...r });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  });
   app.get('/api/salesforce-merge/merge-queue/export', gate, async function (req, res) {
     try { await write_rows(req, res, await mqueue.list(undefined, req.query.status || null), 'merge_queue_' + new Date().toISOString().slice(0, 10), 'merge_queue'); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }

@@ -261,6 +261,14 @@ export default function SelectMerges() {
     if (!ids.length) return;
     try { await api.mergeQueueUnapprove(ids); setQSel(new Set()); loadQueue(); } catch (e) { setErr(e.message); }
   };
+  // Remove the selected sets from the queue entirely (queued OR approved) — they return to the review list;
+  // nothing is merged. Bulk version of the per-row remove.
+  const unqueueSelected = async () => {
+    const ids = [...qSel];
+    if (!ids.length) return;
+    if (!window.confirm(`Remove ${ids.length} set${ids.length === 1 ? '' : 's'} from the queue? They'll return to the review list — nothing is merged.`)) return;
+    try { await api.mergeQueueRemoveMany(ids); setQSel(new Set()); loadQueue(); } catch (e) { setErr(e.message); }
+  };
 
   const accounts = (detail && detail.accounts) || [];
   const fields = (detail && detail.fields) || [];
@@ -821,6 +829,7 @@ export default function SelectMerges() {
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             {qStatus === 'queued' && <button className="btn primary" style={{ width: 'auto' }} disabled={qSel.size === 0} onClick={approveSelected} title="Approve the selected sets for Phase 3 processing">Approve selected</button>}
             {queue.some((q) => qSel.has(q.id) && q.status === 'approved') && <button className="btn" style={{ width: 'auto' }} onClick={unapproveSelected} title="Move the selected approved sets back to queued (removes them from Process Merges until re-approved)">↩ Move to queued</button>}
+            {qSel.size > 0 && <button className="btn" style={{ width: 'auto' }} onClick={unqueueSelected} title="Remove the selected sets from the queue entirely (returns them to the review list; nothing is merged)">✕ Unqueue selected ({qSel.size})</button>}
             {queue.length > 0 && (<span className="dl-group"><span className="muted small">Export</span><a className="dl-link" href={exportUrl('/api/salesforce-merge/merge-queue/export', { format: 'csv' })}>CSV</a><a className="dl-link" href={exportUrl('/api/salesforce-merge/merge-queue/export', { format: 'xlsx' })}>Excel</a></span>)}
           </span>
         </div>
