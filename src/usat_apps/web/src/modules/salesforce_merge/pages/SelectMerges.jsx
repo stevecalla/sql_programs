@@ -824,7 +824,7 @@ export default function SelectMerges() {
           <button type="button" className="collapse-btn" onClick={() => setOpenQueue((v) => !v)}>{openQueue ? '▾' : '▸'} Merge queue</button>
           <span className="pill">{queue.length} {qStatus === 'all' ? 'total' : qStatus}</span>
           <select className="tb-select" style={{ width: 120 }} value={qStatus} onChange={(e) => setQStatus(e.target.value)} title="Filter the queue by status">
-            <option value="queued">Queued</option><option value="approved">Approved</option><option value="done">Done</option><option value="failed">Failed</option><option value="all">All</option>
+            <option value="all">All</option><option value="approved">Approved</option><option value="done">Done</option><option value="failed">Failed</option><option value="queued">Queued</option><option value="recreate_pending">Recreate pending</option><option value="recreated">Recreated</option><option value="restored">Restored</option>
           </select>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             {qStatus === 'queued' && <button className="btn primary" style={{ width: 'auto' }} disabled={qSel.size === 0} onClick={approveSelected} title="Approve the selected sets for Phase 3 processing">Approve selected</button>}
@@ -839,17 +839,17 @@ export default function SelectMerges() {
         ) : (
           <div className="dt-scroll" style={{ height: 360, minHeight: 200, maxHeight: '72vh', resize: 'vertical', overflow: 'auto' }} title="Drag the bottom-right corner to resize">
             <table className="modal-table queue-fixed" style={{ tableLayout: 'fixed', width: '100%' }}>
-              <colgroup><col style={{ width: 34 }} /><col style={{ width: 34 }} /><col style={{ width: 160 }} /><col style={{ width: 200 }} /><col style={{ width: 90 }} /><col style={{ width: 200 }} /><col style={{ width: 120 }} /><col style={{ width: 90 }} /><col style={{ width: 40 }} /></colgroup>
+              <colgroup><col style={{ width: 34 }} /><col style={{ width: 82 }} /><col style={{ width: 160 }} /><col style={{ width: 200 }} /><col style={{ width: 90 }} /><col style={{ width: 260 }} /><col style={{ width: 120 }} /><col style={{ width: 90 }} /><col style={{ width: 40 }} /></colgroup>
               <thead><tr><th><input type="checkbox" checked={queue.length > 0 && qSel.size === queue.length} onChange={() => setQSel(qSel.size === queue.length ? new Set() : new Set(queue.map((q) => q.id)))} aria-label="Select all" /></th><th>#</th><th>Name</th><th>Survivor (master)</th><th>Merging</th><th>Source</th><th>Rule</th><th>Status</th><th></th></tr></thead>
               <tbody>
                 {queue.map((q, i) => [
                   <tr key={q.id} onClick={() => loadFromQueue(q)} className={selKey === q.source_key ? 'row-sel' : undefined} style={{ cursor: 'pointer' }}>
                     <td onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={qSel.has(q.id)} onChange={() => toggleQ(q.id)} aria-label={'Select ' + q.id} /></td>
-                    <td><button type="button" onClick={(e) => { e.stopPropagation(); toggleQExpand(q.id); }} title="Show overrides & details" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, marginRight: 3, font: 'inherit' }}>{qExpanded.has(q.id) ? '▾' : '▸'}</button>{i + 1}</td>
+                    <td><button type="button" onClick={(e) => { e.stopPropagation(); toggleQExpand(q.id); }} title="Show overrides & details" style={{ border: 0, background: 'transparent', color: 'var(--dim)', cursor: 'pointer', padding: 0, marginRight: 3, font: 'inherit' }}>{qExpanded.has(q.id) ? '▾' : '▸'}</button>{(() => { const href = sfRecordUrl(instUrl, q.survivor_account); return href ? <a href={href} target="_blank" rel="noopener noreferrer" title="Open the survivor account in Salesforce ↗" onClick={(e) => e.stopPropagation()}>{i + 1} ↗</a> : (i + 1); })()}</td>
                     <td title={q.survivor_name}>{q.survivor_name || '—'}<RiskPills row={q} /></td>
                     <td title={q.survivor_account} style={{ whiteSpace: 'nowrap' }}>{q.survivor_account}</td>
                     <td>{q.loser_count} account{Number(q.loser_count) === 1 ? '' : 's'}{q.field_overrides && typeof q.field_overrides === 'object' && Object.keys(q.field_overrides).length ? <span title="This set has field overrides" style={{ marginLeft: 4, color: 'var(--amber)' }}>✎</span> : null}</td>
-                    <td title={q.source_key}>{q.source_type === 'merge_id' ? 'merge id ' : 'group '}{shortId(q.source_key)}</td>
+                    <td title={q.source_key} style={{ whiteSpace: 'nowrap' }}>{q.source_type === 'merge_id' ? 'merge id ' : 'group '}{q.source_key}</td>
                     <td title={RULE_TOOLTIP}>{RULE_LABELS[q.master_rule] || q.master_rule || 'cascade'}</td>
                     <td><span className="pill" style={{ background: 'var(--amber-bg)', color: 'var(--amber)' }}>{q.status}</span></td>
                     <td onClick={(e) => e.stopPropagation()}>{(q.status === 'queued' || q.status === 'approved') ? <button className="btn" style={{ width: 'auto', padding: '2px 8px' }} onClick={() => removeQueue(q.id)} aria-label="Remove">✕</button> : null}</td>
