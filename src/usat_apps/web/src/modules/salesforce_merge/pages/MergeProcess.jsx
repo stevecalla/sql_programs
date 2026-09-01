@@ -6,7 +6,7 @@ import CollapsibleCard from '../components/CollapsibleCard.jsx';
 import QueueRowDetail from '../components/QueueRowDetail.jsx';
 import MergeDriftDetail from '../components/MergeDriftDetail.jsx';
 import RiskPills from '../components/RiskPills.jsx';
-import { api, exportUrl } from '../lib/api.js';
+import { api, exportUrl, sfRecordUrl } from '../lib/api.js';
 import { awaitRun, awaitJob, summarize } from '../lib/run_poll.js';
 
 const shortId = (id) => (id && id.length > 8 ? '…' + id.slice(-5) : id || '');
@@ -43,6 +43,7 @@ export default function MergeProcess() {
   const [rows, setRows] = useState([]);
   const [sel, setSel] = useState(() => new Set());
   const [history, setHistory] = useState([]);
+  const [instUrl, setInstUrl] = useState('');     // org instance base URL for "open in Salesforce" # links
   const [who, setWho] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -97,6 +98,7 @@ export default function MergeProcess() {
     // neutral numbered (idle) state until a run starts in this session.
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
   // Resume an IN-FLIGHT run when this panel (re)mounts — e.g. you switched to another panel and came
   // back. The merge keeps executing in the worker (+ salesforce_merge_run), but the progress bar is
   // component-local state, so without this it goes blank. Only active runs are resumed; a finished run
@@ -643,6 +645,7 @@ export default function MergeProcess() {
               <th title="Row number">#</th>
               <th title="When the run happened — click to sort" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => histSort.onSort('created_at')}>When<span className="th-info"> ⓘ</span>{histSort.arrow('created_at')}</th>
               <th title="Surviving record — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('survivor_name')}>Survivor<span className="th-info"> ⓘ</span>{histSort.arrow('survivor_name')}</th>
+              <th title="Surviving account id — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('survivor_account')}>Survivor account<span className="th-info"> ⓘ</span>{histSort.arrow('survivor_account')}</th>
               <th title="How many accounts were merged in — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('loser_count')}>Merged<span className="th-info"> ⓘ</span>{histSort.arrow('loser_count')}</th>
               <th title="Child records counted at run time — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('child_total')}>Children<span className="th-info"> ⓘ</span>{histSort.arrow('child_total')}</th>
               <th title="Environment the run targeted — click to sort" style={{ cursor: 'pointer' }} onClick={() => histSort.onSort('environment')}>Env<span className="th-info"> ⓘ</span>{histSort.arrow('environment')}</th>
@@ -653,18 +656,19 @@ export default function MergeProcess() {
             <tbody>
               {histSort.apply(history).map((h, i) => (
                 <tr key={h.id}>
-                  <td>{i + 1}</td>
-                  <td>{h.created_at ? new Date(h.created_at).toLocaleString() : '—'}</td>
+                  <td>{(() => { const href = sfRecordUrl(instUrl, h.survivor_account); return href ? <a href={href} target="_blank" rel="noopener noreferrer" title="Open the survivor account in Salesforce ↗">{i + 1} ↗</a> : (i + 1); })()}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{h.created_at ? new Date(h.created_at).toLocaleString() : '—'}</td>
                   <td title={h.survivor_account}>{h.survivor_name || shortId(h.survivor_account)}</td>
+                  <td title={h.survivor_account} style={{ whiteSpace: 'nowrap' }}>{h.survivor_account || '—'}</td>
                   <td>{h.loser_count == null ? '—' : h.loser_count}</td>
                   <td>{h.child_total == null ? '—' : h.child_total}</td>
                   <td>{h.environment || '—'}</td>
                   <td><span className="pill" style={{ color: RESULT_COLOR[h.result] || 'var(--dim)' }}>{h.result}</span></td>
                   <td>{h.snapshot_saved ? 'saved' : '—'}</td>
-                  <td title={h.reason} style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.reason || ''}</td>
+                  <td title={h.reason} style={{ minWidth: 260, whiteSpace: 'normal', wordBreak: 'break-word' }}>{h.reason || ''}</td>
                 </tr>
               ))}
-              {history.length === 0 && <tr><td colSpan={8} className="muted small">No runs yet.</td></tr>}
+              {history.length === 0 && <tr><td colSpan={9} className="muted small">No runs yet.</td></tr>}
             </tbody>
           </table>
         </div>
