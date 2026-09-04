@@ -616,8 +616,20 @@ async function export_rows(view, opts = {}, query = real_query) {
   return rows || [];
 }
 
+// Build the SELECT for a streamed export — same WHERE/ORDER as the view, but NO LIMIT (the CSV
+// path streams row-by-row, so it isn't bound by the EXPORT_MAX buffer cap that export_rows uses
+// for the in-memory Excel path). Returns { sql, params } or null for an unknown view.
+function export_sql(view, opts = {}) {
+  const spec = SPECS[view];
+  if (!spec) return null;
+  const o = { ...opts };
+  if (view === 'duplicates' && !o.dir) o.dir = 'DESC';
+  const { where_sql, order_sql, params } = build_clauses(o, spec);
+  return { sql: 'SELECT ' + spec.select + ' FROM `' + spec.table + '` ' + where_sql + ' ' + order_sql, params };
+}
+
 module.exports = {
-  list_duplicates, list_merge_id, merge_id_summary, list_accounts, cluster_accounts, facets, export_rows,
+  list_duplicates, list_merge_id, merge_id_summary, list_accounts, cluster_accounts, facets, export_rows, export_sql,
   list_merge_groups, merge_group_account_ids, accounts_by_ids, resolve_merge_groups, resolve_duplicate_groups, pick_bulk_survivor,
   matching_keys, count_matching,
   build_clauses, MAX_PAGE_SIZE, EXPORT_MAX, // exported for tests

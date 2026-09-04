@@ -328,9 +328,73 @@ function mount(app) {
       res.send(to_csv(rows));
     }
   };
+  // Stream a review query straight to the response as CSV — one row at a time, no LIMIT and no
+  // in-memory buffer, so a full-size export (up to the whole ~700k snapshot) never lands in a Node
+  // array and the connection keeps flushing instead of timing out. Headers come from the first row.
+  const { once } = require('events');
+  const db_stream = require('../../store/db');
+  const stream_csv = async (req, res, plan, fname) => {
+    if (!plan) throw new Error('unknown export view');   // pre-stream: bubbles to the 500 handler
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '.csv"');
+    let headers = null;
+    let aborted = false;
+    res.on('close', () => { if (!res.writableEnded) aborted = true; });   // client hung up mid-download
+    const write_line = async (line) => {
+      if (aborted) throw new Error('client aborted');
+      if (!res.write(line)) await once(res, 'drain');   // backpressure: wait for the socket to drain
+    };
+    try {
+      await db_stream.stream_rows(plan.sql, plan.params, async (row) => {
+        if (!headers) { headers = Object.keys(row); await write_line(headers.map(csv_cell).join(',') + '\r\n'); }
+        await write_line(headers.map((h) => csv_cell(row[h])).join(',') + '\r\n');
+      });
+      res.end();
+    } catch (e) {
+      // Once bytes are on the wire we can't switch to a 500 JSON body — just cut the connection so the
+      // client sees a failed/truncated download. Only pre-stream errors reach the endpoint's catch.
+      if (res.headersSent) { try { res.destroy(); } catch (_) { /* already gone */ } }
+      else throw e;
+    }
+  };
+  // Excel's hard ceiling is 1,048,576 rows PER SHEET (incl. the header row) — so at most this many
+  // data rows. Beyond it we stop adding rather than emit a corrupt workbook (CSV has no such limit).
+  const EXCEL_MAX_DATA_ROWS = 1048575;
+  // Stream a review query straight to the response as .xlsx via ExcelJS's WorkbookWriter — rows are
+  // committed one at a time (sharedStrings/styles OFF) so memory stays flat on a big export instead
+  // of building the whole workbook in RAM the way write_rows does. Headers come from the first row.
+  const stream_xlsx = async (req, res, plan, fname, sheet) => {
+    if (!plan) throw new Error('unknown export view');   // pre-stream: bubbles to the 500 handler
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '.xlsx"');
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: false, useSharedStrings: false });
+    const ws = wb.addWorksheet(sheet || 'export');
+    let headers = null;
+    let n = 0;
+    let aborted = false;
+    res.on('close', () => { if (!res.writableEnded) aborted = true; });   // client hung up mid-download
+    try {
+      await db_stream.stream_rows(plan.sql, plan.params, async (row) => {
+        if (aborted) throw new Error('client aborted');
+        if (!headers) { headers = Object.keys(row); ws.addRow(headers).commit(); }
+        if (n >= EXCEL_MAX_DATA_ROWS) return;   // at Excel's sheet ceiling — drop the overflow
+        ws.addRow(headers.map((h) => row[h])).commit();
+        n += 1;
+      });
+      await ws.commit();
+      await wb.commit();   // finalizes the zip + ends the response stream
+    } catch (e) {
+      if (res.headersSent) { try { res.destroy(); } catch (_) { /* already gone */ } }
+      else throw e;
+    }
+  };
   const send_export = async (req, res, view, opts) => {
-    const rows = await reviews.export_rows(view, opts);
-    await write_rows(req, res, rows, view.replace('-', '_') + '_export_' + new Date().toISOString().slice(0, 10), view);
+    const fname = view.replace('-', '_') + '_export_' + new Date().toISOString().slice(0, 10);
+    if (String(req.query.format) === 'xlsx') {
+      return stream_xlsx(req, res, reviews.export_sql(view, opts), fname, view);
+    }
+    await stream_csv(req, res, reviews.export_sql(view, opts), fname);
   };
 
   app.get('/api/salesforce-merge/duplicates', gate, async function (req, res) {
