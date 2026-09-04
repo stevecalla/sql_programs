@@ -22,10 +22,30 @@ async function query(sql, params) {
   return rows;
 }
 
+// Stream rows one at a time instead of buffering the whole result set — used by the large CSV
+// exports so memory stays flat regardless of row count (a full ~700k dump never lands in a Node
+// array). Grabs a dedicated pooled connection, runs the query in streaming mode, and invokes
+// onRow(row) for each row (onRow may return a promise — awaited, so callers can apply HTTP
+// backpressure). On clean completion the connection is released back to the pool; on any error or
+// early abort it is destroyed (a half-drained connection must not go back into rotation).
+async function stream_rows(sql, params, onRow) {
+  const p = await get_pool();
+  const conn = await p.getConnection();
+  let clean = false;
+  try {
+    const q = conn.connection.query(sql, params || []);
+    const s = q.stream();
+    for await (const row of s) { await onRow(row); }
+    clean = true;
+  } finally {
+    if (clean) conn.release(); else conn.destroy();
+  }
+}
+
 async function end() {
   if (!pool) return;
   const p = pool; pool = null;
   try { await p.end(); } catch (e) { /* already closing/closed */ }
 }
 
-module.exports = { get_pool, query, end };
+module.exports = { get_pool, query, stream_rows, end };
