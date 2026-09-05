@@ -9,7 +9,9 @@ import { api } from '../lib/api.js';
 const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString());
 
 // One funnel step. `tone` tints the card (accent / green / amber); `to` makes the label a link.
-export function Step({ k, v, sub, sep = '→', tone, to }) {
+// `alt` is the companion count in the OTHER unit (e.g. "1,928 groups" under an account figure), shown
+// as a small bold line so a card reconciles at a glance with the other panels without a unit toggle.
+export function Step({ k, v, sub, alt, sep = '→', tone, to }) {
   const label = to ? <Link className="statlink" to={to}>{k}</Link> : k;
   return (
     <>
@@ -17,6 +19,7 @@ export function Step({ k, v, sub, sep = '→', tone, to }) {
       <div className={'funnel-card' + (tone ? ' ' + tone : '')}>
         <div className="funnel-k">{label}</div>
         <div className="funnel-v">{v}</div>
+        {alt ? <div className="funnel-sub" style={{ fontWeight: 600, opacity: 0.95 }}>{alt}</div> : null}
         {sub ? <div className="funnel-sub">{sub}</div> : null}
       </div>
     </>
@@ -61,7 +64,7 @@ export function AccountsFunnel({ d: passed }) {
     <>
       <div className="funnel fade-in">
         <Step k="All accounts" v={fmt(d.total_accounts)} sub="every person record" sep="" to="/salesforce/merge/accounts" />
-        <Step k="Duplicate accounts" v={fmt(d.accounts_in_clusters)} sub="records in a cluster" tone="accent" to="/salesforce/merge/duplicates" />
+        <Step k="Duplicate accounts" v={fmt(d.accounts_in_clusters)} alt={d.clusters != null ? fmt(d.clusters) + ' clusters' : null} sub="records in a cluster" tone="accent" to="/salesforce/merge/duplicates" />
         <Step k="Duplicate pairs" v={fmt(d.duplicate_pairs)} sub="matches between two" to="/salesforce/merge/duplicates" />
         <Step k="Duplicate clusters" v={fmt(d.clusters)} sub="one unique duplicate" to="/salesforce/merge/duplicates" />
       </div>
@@ -81,15 +84,19 @@ export function MergeIdFunnel({ d: passed }) {
   const reviewed = (d.buckets || []).reduce((s, b) => s + b.count, 0);
   if (!reviewed) return <p className="muted">No merge-ID review yet — run the duplicates finder first.</p>;
   const bucketCount = (name) => (d.buckets.find((b) => b.bucket === name)?.count || 0);
+  const bucketGroups = (name) => (d.buckets.find((b) => b.bucket === name)?.groups || 0);
   const inBoth = bucketCount('in_both');
   const sfOnly = bucketCount('sf_only');
   const onlyOurs = reviewed - inBoth - sfOnly;
   return (
     <>
       <div className="funnel fade-in">
+        {/* No groups companion here: "Accounts compared" mixes accounts WITH a merge ID and the no-merge-ID
+            "Only in duplicates" bucket, so a single group count would be misleading (groups only span the
+            with-merge-ID subset). The In both / Only-in-merge-IDs cards carry the valid group companions. */}
         <Step k="Accounts compared" v={fmt(reviewed)} sub="Platform merge IDs vs. Salesforce duplicates" sep="" tone="accent" to="/salesforce/merge/merge-id" />
-        <Step k="In both" v={fmt(inBoth)} sub="has a merge ID & flagged as a duplicate" sep="→" tone="green" to="/salesforce/merge/merge-id" />
-        <Step k="Only in merge IDs" v={fmt(sfOnly)} sub="has a merge ID, not flagged as a duplicate" sep="+" tone="amber" to="/salesforce/merge/merge-id" />
+        <Step k="In both" v={fmt(inBoth)} alt={fmt(bucketGroups('in_both')) + ' groups'} sub="has a merge ID & flagged as a duplicate" sep="→" tone="green" to="/salesforce/merge/merge-id" />
+        <Step k="Only in merge IDs" v={fmt(sfOnly)} alt={fmt(bucketGroups('sf_only')) + ' groups'} sub="has a merge ID, not flagged as a duplicate" sep="+" tone="amber" to="/salesforce/merge/merge-id" />
         <Step k="Only in duplicates" v={fmt(onlyOurs)} sub="flagged as a duplicate, no merge ID" sep="+" to="/salesforce/merge/merge-id" />
       </div>
       <p className="funnel-note">

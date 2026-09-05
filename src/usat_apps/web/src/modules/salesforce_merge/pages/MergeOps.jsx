@@ -138,6 +138,7 @@ export default function MergeOps() {
   const [rSearch, setRSearch] = useState(() => readPref('r_search', ''));   // name/id search — same pool narrowing as Select Merges' list search
   const [facets, setFacets] = useState({});
   const [matchCount, setMatchCount] = useState(null);   // live "N sets match these filters"
+  const [matchAccounts, setMatchAccounts] = useState(null);   // account companion (parity with Select Merges)
   // activity logs
   const [logsOpen, setLogsOpen] = useState(false);
   const [logScope, setLogScope] = useState('all');   // 'all' = full pm2 log; or a specific process name
@@ -301,8 +302,8 @@ export default function MergeOps() {
     const { filters, colFilters } = buildFilters();
     const t = setTimeout(() => {
       api.opsBatchCount({ source: rSource, filters, colFilters, queue_filter: rQueueFilter, q: rSearch })
-        .then((r) => { if (!stop) setMatchCount(typeof r.count === 'number' ? r.count : null); })
-        .catch(() => { if (!stop) setMatchCount(null); });
+        .then((r) => { if (!stop) { setMatchCount(typeof r.count === 'number' ? r.count : null); setMatchAccounts(typeof r.accounts === 'number' ? r.accounts : null); } })
+        .catch(() => { if (!stop) { setMatchCount(null); setMatchAccounts(null); } });
     }, 300);
     return () => { stop = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -567,7 +568,7 @@ export default function MergeOps() {
           )}
           {batchMode === 'random' ? (
             <p className="small" style={{ marginTop: 8 }}>
-              <strong>{matchCount == null ? '…' : matchCount.toLocaleString()}</strong> set(s) match these filters
+              <strong>{matchCount == null ? '…' : matchCount.toLocaleString()}</strong> set(s){matchAccounts != null ? <span className="muted"> · {matchAccounts.toLocaleString()} accounts</span> : null} match these filters
               {matchCount != null && rCount ? <span className="muted"> · will run {Math.min(Number(rCount) || 0, matchCount).toLocaleString()} (Count vs pool)</span> : null}
             </p>
           ) : null}

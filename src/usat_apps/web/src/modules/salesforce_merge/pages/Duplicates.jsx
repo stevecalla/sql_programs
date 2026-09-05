@@ -5,6 +5,7 @@ import DatasetStamp from '../components/DatasetStamp.jsx';
 import ClusterModal from '../components/ClusterModal.jsx';
 import { AccountsFunnel } from '../components/Funnels.jsx';
 import { api } from '../lib/api.js';
+import { nfmt } from '../components/CountPair.jsx';
 
 const fmt_merge_ids = (s) => { const ids = String(s || '').split(';').map((x) => x.trim()).filter(Boolean); return ids.length ? ids.join(', ') : '—'; };
 const STATES = [['', 'all'], ['has', 'has'], ['none', "doesn't have"]];
@@ -35,7 +36,7 @@ export default function Duplicates() {
   const [openKey, setOpenKey] = useState(null);         // cluster key whose popup is open
   useEffect(() => { api.duplicatesFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
   const fetcher = useCallback((p) =>
-    api.duplicates({ ...p, merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState, portal_state: portalState }).then((r) => ({ rows: r.rows, total: r.total })),
+    api.duplicates({ ...p, merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState, portal_state: portalState }).then((r) => ({ rows: r.rows, total: r.total, suffix: r.accounts != null ? nfmt(r.accounts) + ' accounts' : '' })),   // "N rows (clusters) · M accounts"
   [mergeState, memberState, foundationState, portalState]);
 
   const columns = useMemo(() => [

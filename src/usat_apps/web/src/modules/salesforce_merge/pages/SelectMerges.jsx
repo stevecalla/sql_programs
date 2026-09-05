@@ -7,6 +7,7 @@ import { api, exportUrl, sfRecordUrl } from '../lib/api.js';
 // Shared filter cell/label + the single source of truth for filter tooltips + options, used by both this
 // page and the Merge Ops random panel (FilterSelect renders each dropdown identically off these).
 import { FilterSelect, FILTER_TIP, FILTER_OPTS, sizeOptions, FCELL, FLabel } from '../components/MergeFilters.jsx';
+import { nfmt } from '../components/CountPair.jsx';
 
 const PAGE = 200;
 
@@ -113,6 +114,7 @@ export default function SelectMerges() {
 
   const [clusters, setClusters] = useState([]);
   const [total, setTotal] = useState(0);
+  const [totalAccounts, setTotalAccounts] = useState(0);   // account companion to the group/cluster total
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState('');
 
@@ -167,7 +169,7 @@ export default function SelectMerges() {
     const load = source === 'merge_id'
       ? api.mergeGroups({ page, page_size: PAGE, q: filter, queue_filter: qFilter, bucket: bkState, foundation_state: foundationState, portal_state: portalState, size: sizeState, which_list: whichState })
       : api.duplicates({ page, page_size: PAGE, sort: 'size', dir: 'desc', q: filter, queue_filter: qFilter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, portal_state: portalState, size: sizeState, match_type: matchState, best_min: simState, tier: tierState });
-    load.then((r) => { setClusters(r.rows || []); setTotal(Number(r.total) || 0); }).catch((e) => setErr(e.message));
+    load.then((r) => { setClusters(r.rows || []); setTotal(Number(r.total) || 0); setTotalAccounts(Number(r.accounts) || 0); }).catch((e) => setErr(e.message));
   }, [source, page, filter, qFilter, midState, memState, bkState, foundationState, portalState, sizeState, matchState, whichState, simState, tierState]);
 
   // Populate the Size dropdown from the facets for the CURRENT source (duplicate clusters vs merge-id groups),
@@ -480,7 +482,7 @@ export default function SelectMerges() {
       {/* CARD GROUP: list rail + analysis */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div className="card" style={{ flex: '0 0 280px', minWidth: 0, margin: 0, height: railH || 574, display: 'flex', flexDirection: 'column' }}>
-          <p style={{ margin: '0 0 8px', fontWeight: 700 }}>{listLabel} <span className="muted small" style={{ fontWeight: 400 }}>({total.toLocaleString()})</span></p>
+          <p style={{ margin: '0 0 8px', fontWeight: 700 }}>{listLabel} <span className="muted small" style={{ fontWeight: 400 }}>({nfmt(total)} · {nfmt(totalAccounts)} accounts)</span></p>
           <input className="search" style={{ width: '100%', marginBottom: 8 }} placeholder="Search: name, id…" value={filter} onChange={(e) => onFilter(e.target.value)} />
           <div className="ma-bulk">
             <label className="ma-bulk-all"><input type="checkbox" checked={allPageSelected} onChange={togglePage} /> Page</label>
