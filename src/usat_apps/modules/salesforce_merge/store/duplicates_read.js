@@ -33,7 +33,7 @@ async function dashboard_counts(query = real_query) {
 
   // All eight figures are independent reads, so fire them concurrently (the DB layer is a pool) and
   // assemble once — this turns the dashboard load from the SUM of the query latencies into the MAX.
-  const [rTotal, rMerge, rMergeGroups, rClusters, rPairs, rAccts, rBuckets, rSig, rComp, rMergeSig] = await Promise.all([
+  const [rTotal, rMerge, rMergeGroups, rClusters, rPairs, rAccts, rBuckets, rBucketGroups, rSig, rComp, rMergeSig, rMergeable] = await Promise.all([
     safe('SELECT COUNT(*) AS n FROM `' + T_SNAP + '`'),
     safe("SELECT COUNT(*) AS n FROM `" + T_SNAP + "` WHERE salesforce_merge_id <> ''"),
     safe("SELECT COUNT(DISTINCT salesforce_merge_id) AS n FROM `" + T_SNAP + "` WHERE salesforce_merge_id <> ''"),
@@ -42,9 +42,11 @@ async function dashboard_counts(query = real_query) {
     // Duplicate ACCOUNTS = sum of cluster sizes (the individual records in clusters) — the figure
     // that reconciles total accounts -> clusters -> pairs on the dashboard.
     safe('SELECT SUM(CAST(Group_Record_Count__c AS UNSIGNED)) AS n FROM `' + T_CL + '`'),
-    // Per bucket: account count (COUNT(*)) AND group count (distinct merge IDs) — so the Merge-ID review
-    // cards can show "N accounts · G groups" and reconcile with Select Merges (e.g. in_both -> 3,689 · 1,928).
-    safe('SELECT Bucket__c AS bucket, COUNT(*) AS n, COUNT(DISTINCT Salesforce_Merge_Id__c) AS g FROM `' + T_MR + '` GROUP BY Bucket__c'),
+    safe('SELECT Bucket__c AS bucket, COUNT(*) AS n FROM `' + T_MR + '` GROUP BY Bucket__c'),
+    // Per-bucket group count = distinct merge IDs in that bucket (all sizes) — the exact number Select Merges
+    // shows for that bucket. Every account is in one group, so accounts + groups reconcile per bucket.
+    safe("SELECT Bucket__c AS bucket, COUNT(DISTINCT Salesforce_Merge_Id__c) AS g FROM `" + T_MR +
+      "` WHERE Salesforce_Merge_Id__c <> '' GROUP BY Bucket__c"),
     // Pairs by signal — the per-signal link counts summed across clusters. A pair is one signal,
     // so these three sum to the total pairs (no multi bucket for pairs).
     safe('SELECT SUM(CAST(Exact_Link_Count__c AS UNSIGNED)) AS exact, ' +
@@ -63,15 +65,24 @@ async function dashboard_counts(query = real_query) {
       "SUM(CASE WHEN mr.Bucket__c <> 'in_both' THEN 1 ELSE 0 END) AS no_merge " +
       'FROM `' + T_MR + '` mr JOIN `' + T_CL + '` cl ON cl.Consolidated_Group_Key__c = mr.Consolidated_Group_Key__c ' +
       "WHERE mr.Bucket__c <> 'sf_only' GROUP BY cl.Match_Composition__c"),
+    // Mergeable merge-id groups (2+ accounts) + the accounts in them — the numbers Select Merges shows.
+    // The bridge from the account census: accounts-with-merge-id = mergeable-accounts + singletons.
+    safe("SELECT COUNT(*) AS groups, COALESCE(SUM(cnt), 0) AS accounts FROM (SELECT COUNT(*) AS cnt FROM `" + T_MR +
+      "` WHERE Salesforce_Merge_Id__c <> '' GROUP BY Salesforce_Merge_Id__c HAVING COUNT(*) >= 2) x"),
   ]);
 
   if (rTotal) out.total_accounts = Number(rTotal[0].n);
   if (rMerge) out.merge_id_accounts = Number(rMerge[0].n);
   if (rMergeGroups) out.merge_id_groups = Number(rMergeGroups[0].n || 0);
+  if (rMergeable && rMergeable[0]) { out.mergeable_merge_id_groups = Number(rMergeable[0].groups || 0); out.mergeable_merge_id_accounts = Number(rMergeable[0].accounts || 0); }
   if (rClusters) out.clusters = Number(rClusters[0].n);
   if (rPairs) out.duplicate_pairs = Number(rPairs[0].n || 0);
   if (rAccts) out.accounts_in_clusters = Number(rAccts[0].n || 0);
-  if (rBuckets) out.buckets = rBuckets.map(function (x) { return { bucket: x.bucket, count: Number(x.n), groups: Number(x.g || 0) }; });
+  if (rBuckets) {
+    const gByBucket = {};
+    for (const x of (rBucketGroups || [])) gByBucket[x.bucket] = Number(x.g || 0);   // distinct merge IDs per bucket
+    out.buckets = rBuckets.map(function (x) { return { bucket: x.bucket, count: Number(x.n), groups: gByBucket[x.bucket] || 0 }; });
+  }
   if (rSig && rSig[0]) out.signal_breakdown.pairs = {
     exact: Number(rSig[0].exact || 0), fuzzy: Number(rSig[0].fuzzy || 0), nickname: Number(rSig[0].nickname || 0),
   };

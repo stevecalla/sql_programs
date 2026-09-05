@@ -34,7 +34,8 @@ export default function Duplicates() {
   const [foundationState, setFoundationState] = useState(''); // '' all · 'has' · 'none' (any Foundation constituent?)
   const [portalState, setPortalState] = useState(''); // '' all · 'has' · 'none' (any Customer-Portal account?)
   const [openKey, setOpenKey] = useState(null);         // cluster key whose popup is open
-  useEffect(() => { api.duplicatesFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
+  // Refetch facets when the filters change so the Size dropdown counts scope to the current view.
+  useEffect(() => { api.duplicatesFacets({ merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState, portal_state: portalState }).then((r) => setFacets(r.facets || {})).catch(() => {}); }, [mergeState, memberState, foundationState, portalState]);
   const fetcher = useCallback((p) =>
     api.duplicates({ ...p, merge_id_state: mergeState, member_number_state: memberState, foundation_state: foundationState, portal_state: portalState }).then((r) => ({ rows: r.rows, total: r.total, suffix: r.accounts != null ? nfmt(r.accounts) + ' accounts' : '' })),   // "N rows (clusters) · M accounts"
   [mergeState, memberState, foundationState, portalState]);

@@ -100,8 +100,10 @@ async function paged(table, spec, opts, query) {
   return { rows: rows || [], total, page, page_size };
 }
 
-// Distinct values for the low-cardinality columns, to populate header dropdown filters.
-async function facets(view, query = real_query) {
+// Distinct values for the low-cardinality columns, to populate header dropdown filters. `opts` carries the
+// currently-active filters so the SIZE facet counts scope to them (e.g. Bucket = ID only -> only sf_only
+// groups). The other (option-only) facets stay global.
+async function facets(view, opts = {}, query = real_query) {
   const spec = SPECS[view];
   if (!spec || !spec.facet_cols) return {};
   const out = {};
@@ -116,6 +118,22 @@ async function facets(view, query = real_query) {
       out[key] = vals;
     } catch (e) { /* missing table -> no facet for this column */ }
   }
+  // Size dropdown as labeled { value, label } options with a count per size (Def B), SCOPED to the active
+  // filters so the counts match the list (e.g. Bucket = ID only -> "2 accounts (7 groups)"). Merge-id sizes
+  // are accounts-per-merge-id (incl. 1 = singletons); duplicates are cluster sizes.
+  try {
+    if (view === 'merge-id') {
+      const g = merge_group_clauses({ ...flatten_mergeid_opts(opts), all_sizes: true });   // count every size, scoped
+      const r = await query("SELECT cnt AS size, COUNT(*) AS n FROM (SELECT COUNT(*) AS cnt FROM `" + g.T + "`" +
+        g.join_sql + " " + g.where_sql + " GROUP BY Salesforce_Merge_Id__c" + g.having_sql + ") x GROUP BY cnt ORDER BY cnt", g.params);
+      out.size = (r || []).map((x) => { const s = Number(x.size), n = Number(x.n); const u = s === 1 ? ('singleton' + (n === 1 ? '' : 's')) : ('group' + (n === 1 ? '' : 's')); return { value: String(s), label: s + ' account' + (s === 1 ? '' : 's') + ' (' + n.toLocaleString() + ' ' + u + ')' }; });
+    } else if (view === 'duplicates') {
+      const c = build_clauses({ ...opts, page: 1, page_size: 1 }, DUP_SPEC);   // scope by the duplicate filters
+      const r = await query('SELECT CAST(Group_Record_Count__c AS UNSIGNED) AS size, COUNT(*) AS n FROM `' +
+        cfg.RESULT_CONSOLIDATED_TABLE + '` ' + c.join_sql + ' ' + c.where_sql + ' GROUP BY size ORDER BY size', c.params);
+      out.size = (r || []).map((x) => { const s = Number(x.size), n = Number(x.n); return { value: String(s), label: s + ' accounts (' + n.toLocaleString() + ' cluster' + (n === 1 ? '' : 's') + ')' }; });
+    }
+  } catch (e) { /* size facet optional */ }
   return out;
 }
 
@@ -284,6 +302,16 @@ const MR_SPEC = {
         return { sql: 'Consolidated_Group_Key__c IN (' + arr.map(() => '?').join(', ') + ')', params: arr };
       },
     },
+    // Merge-id SIZE filter (Def B): restrict to accounts whose merge ID belongs to a chosen set of
+    // merge-id GROUPS. list_merge_id resolves the size to those merge IDs via the SAME merge_group_keys
+    // builder Select Merges uses, so "Size = N" means "merge IDs shared by N accounts" in BOTH panels.
+    mergeid_in: {
+      build: (keys) => {
+        const arr = Array.isArray(keys) ? keys : [];
+        if (!arr.length) return { sql: '1 = 0' };   // a size with no matching merge-id groups -> empty
+        return { sql: "Salesforce_Merge_Id__c IN (" + arr.map(() => '?').join(', ') + ")", params: arr };
+      },
+    },
     // 'has' / 'none' on the account's Foundation constituent flag (per-row true/false)
     foundation_state: { build: (v) => (String(v) === 'has' ? { sql: "Foundation_Constituent__c LIKE 'true%'" }
       : String(v) === 'none' ? { sql: "(Foundation_Constituent__c IS NULL OR Foundation_Constituent__c NOT LIKE 'true%')" } : null) },
@@ -309,33 +337,31 @@ const MR_SPEC = {
   default_sort: 'bucket',
 };
 async function list_merge_id(opts = {}, query = real_query) {
-  await ensure_cluster_index(query);
   const o = { ...opts, colFilters: { ...(opts.colFilters || {}) } };
-  // Size filter (snappy): resolve the chosen cluster size to its cluster keys, then filter merge-id
-  // rows by those keys — no per-row subquery/join. (Size stays display-only for sorting.)
-  const sizeSel = o.colFilters.size;
+  const f = o.filters || {};
+  // Merge-id GROUP filters, shared with Select Merges so "size" + "groups" mean the SAME thing here:
+  // size = accounts sharing the merge ID (NOT cluster size), and a group is a mergeable set (2+).
+  const gopts = { q: o.q, bucket: f.bucket, foundation_state: f.foundation_state, portal_state: f.portal_state, which_list: o.colFilters.which_list };
+  const sizeSel = String(o.colFilters.size == null ? '' : o.colFilters.size).trim();
   delete o.colFilters.size;
-  if (sizeSel != null && String(sizeSel).trim() !== '') {
-    const kr = await query('SELECT Consolidated_Group_Key__c AS k FROM `' + cfg.RESULT_CONSOLIDATED_TABLE +
-      '` WHERE Group_Record_Count__c = ?', [String(sizeSel).trim()]);
-    o.filters = { ...(o.filters || {}), cluster_in: (kr || []).map((r) => r.k).filter(Boolean) };
+  if (sizeSel !== '') {   // restrict to accounts in merge-id groups of that size (same builder as Select Merges)
+    o.filters = { ...f, mergeid_in: await merge_group_keys({ ...gopts, size: sizeSel }, query) };
   }
   const res = await paged(cfg.RESULT_MERGE_ID_REVIEW_TABLE, MR_SPEC, o, query);
-  // Attach each row's cluster size with ONE lookup over the page's cluster keys (<= page_size).
-  const keys = [...new Set(res.rows.map((r) => r.cluster).filter(Boolean))];
-  if (keys.length) {
-    const ph = keys.map(() => '?').join(', ');
-    const sizes = await query('SELECT Consolidated_Group_Key__c AS k, Group_Record_Count__c AS n FROM `' +
-      cfg.RESULT_CONSOLIDATED_TABLE + '` WHERE Consolidated_Group_Key__c IN (' + ph + ')', keys);
-    const m = new Map((sizes || []).map((x) => [x.k, x.n]));
-    for (const r of res.rows) r.size = (r.cluster && m.has(r.cluster)) ? m.get(r.cluster) : null;
+  // SIZE column = accounts sharing each merge ID within this bucket (1 = a singleton). One lookup / page.
+  const mids = [...new Set(res.rows.map((r) => r.merge_id).filter(Boolean))];
+  if (mids.length) {
+    const params = [...mids];
+    const bf = f.bucket ? MR_SPEC.filter_cols.bucket.build(f.bucket) : null;
+    const bwhere = bf && bf.sql ? ' AND ' + bf.sql : '';
+    if (bf && bf.params) params.push(...bf.params);
+    const sr = await query('SELECT Salesforce_Merge_Id__c AS k, COUNT(*) AS n FROM `' + cfg.RESULT_MERGE_ID_REVIEW_TABLE +
+      '` WHERE Salesforce_Merge_Id__c IN (' + mids.map(() => '?').join(', ') + ')' + bwhere + ' GROUP BY Salesforce_Merge_Id__c', params);
+    const m = new Map((sr || []).map((x) => [x.k, Number(x.n)]));
+    for (const r of res.rows) r.size = r.merge_id ? (m.get(r.merge_id) || 1) : null;
   }
-  // Group companion: how many distinct merge-id GROUPS the filtered accounts span (this page's total is
-  // accounts). Same WHERE the list used, so "N accounts · G groups" reconciles with the merge-id view.
-  const gq = build_clauses({ ...o, page: 1, page_size: 1 }, MR_SPEC);
-  const gr = await query('SELECT COUNT(DISTINCT Salesforce_Merge_Id__c) AS n FROM `' + cfg.RESULT_MERGE_ID_REVIEW_TABLE +
-    '` ' + (gq.join_sql || '') + ' ' + gq.where_sql, gq.params);
-  res.groups = gr && gr[0] ? Number(gr[0].n) : 0;
+  // Group companion = mergeable (2+) merge-id groups in view, matching the dashboard card + Select Merges.
+  res.groups = await merge_group_count({ ...gopts, size: sizeSel || undefined }, query);
   return res;
 }
 
@@ -461,7 +487,11 @@ function merge_group_clauses(opts = {}) {
   if (prt === 'has') havings.push("SUM(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END) > 0");
   else if (prt === 'none') havings.push("SUM(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END) = 0");
   const sz = String(opts.size == null ? '' : opts.size).trim();
+  // A "merge-id group" = ALL accounts sharing a merge id; size can be 1 (a singleton). DEFAULT counts every
+  // group so accounts + groups reconcile everywhere (each account is in exactly one group). "Mergeable" is
+  // just Size >= 2: `opts.mergeable` gates to 2+ (only where actionable-only is wanted); an exact size wins.
   if (/^\d+$/.test(sz)) havings.push("COUNT(*) = " + Number(sz));
+  else if (opts.mergeable) havings.push("COUNT(*) >= 2");
   const wl = String(opts.which_list || '').trim().toLowerCase();   // validated to a fixed set -> inlined LIKE is injection-safe
   if (wl === 'exact' || wl === 'fuzzy' || wl === 'nickname') havings.push("SUM(CASE WHEN Which_List__c LIKE '%" + wl + "%' THEN 1 ELSE 0 END) > 0");
   // Queue filter (staged/unstaged) — same shared SQL predicate the duplicates view + sampler use, joined on

@@ -7,7 +7,9 @@ function fake(rowsByKind) {
   const calls = [];
   const query = async (sql, params) => {
     calls.push({ sql, params });
-    if (/COUNT\(DISTINCT/i.test(sql)) return [{ n: 3 }];
+    if (/SUM\(c\)/i.test(sql)) return [{ n: 9 }];                 // merge_group_account_total (accounts across groups)
+    if (/COUNT\(\*\) AS n FROM \(/i.test(sql)) return [{ n: 3 }]; // merge_group_count (mergeable-group subquery)
+    if (/COUNT\(DISTINCT/i.test(sql)) return [{ n: 3 }];         // merge_group_count (no-HAVING branch)
     if (/GROUP BY Salesforce_Merge_Id__c/i.test(sql)) return rowsByKind.groups || [];
     if (/WHERE Salesforce_Merge_Id__c = \?/i.test(sql)) return rowsByKind.ids || [];
     return rowsByKind.accts || [];

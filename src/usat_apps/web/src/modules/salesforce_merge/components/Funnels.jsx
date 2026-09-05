@@ -84,6 +84,8 @@ export function MergeIdFunnel({ d: passed }) {
   const reviewed = (d.buckets || []).reduce((s, b) => s + b.count, 0);
   if (!reviewed) return <p className="muted">No merge-ID review yet — run the duplicates finder first.</p>;
   const bucketCount = (name) => (d.buckets.find((b) => b.bucket === name)?.count || 0);
+  // A group = a merge ID (any size). Companion shows the group count for the bucket = exactly what Select
+  // Merges shows for that bucket (accounts = the card's big number).
   const bucketGroups = (name) => (d.buckets.find((b) => b.bucket === name)?.groups || 0);
   const inBoth = bucketCount('in_both');
   const sfOnly = bucketCount('sf_only');
@@ -91,18 +93,16 @@ export function MergeIdFunnel({ d: passed }) {
   return (
     <>
       <div className="funnel fade-in">
-        {/* No groups companion here: "Accounts compared" mixes accounts WITH a merge ID and the no-merge-ID
-            "Only in duplicates" bucket, so a single group count would be misleading (groups only span the
-            with-merge-ID subset). The In both / Only-in-merge-IDs cards carry the valid group companions. */}
         <Step k="Accounts compared" v={fmt(reviewed)} sub="Platform merge IDs vs. Salesforce duplicates" sep="" tone="accent" to="/salesforce/merge/merge-id" />
         <Step k="In both" v={fmt(inBoth)} alt={fmt(bucketGroups('in_both')) + ' groups'} sub="has a merge ID & flagged as a duplicate" sep="→" tone="green" to="/salesforce/merge/merge-id" />
         <Step k="Only in merge IDs" v={fmt(sfOnly)} alt={fmt(bucketGroups('sf_only')) + ' groups'} sub="has a merge ID, not flagged as a duplicate" sep="+" tone="amber" to="/salesforce/merge/merge-id" />
         <Step k="Only in duplicates" v={fmt(onlyOurs)} sub="flagged as a duplicate, no merge ID" sep="+" to="/salesforce/merge/merge-id" />
       </div>
       <p className="funnel-note">
-        {fmt(inBoth)} + {fmt(sfOnly)} + {fmt(onlyOurs)} = {fmt(reviewed)} — comparing Membership Platform
-        merge IDs against the duplicates detected in Salesforce: in both, only a merge ID (so not flagged as
-        a duplicate), or detected with no merge ID.
+        {fmt(inBoth)} + {fmt(sfOnly)} + {fmt(onlyOurs)} = {fmt(reviewed)} — comparing Membership Platform merge IDs
+        against the duplicates detected in Salesforce. Each card's <strong>accounts</strong> (big number) and
+        <strong> groups</strong> (small) equal Select Merges → Accounts with merge ids for that bucket. Filter Size ≥ 2
+        for mergeable groups only (Size = 1 = singletons).
       </p>
     </>
   );

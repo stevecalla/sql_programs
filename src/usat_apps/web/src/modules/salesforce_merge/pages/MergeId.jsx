@@ -25,7 +25,8 @@ export default function MergeId() {
   const [facets, setFacets] = useState({});
   const [openKey, setOpenKey] = useState(null);   // cluster key whose popup is open
   const [instUrl, setInstUrl] = useState('');     // org instance base URL for "open in Salesforce" # links
-  useEffect(() => { api.mergeIdFacets().then((r) => setFacets(r.facets || {})).catch(() => {}); }, []);
+  // Refetch facets when the filters change so the Size dropdown counts scope to the current view.
+  useEffect(() => { api.mergeIdFacets({ bucket, portal_state: portalState }).then((r) => setFacets(r.facets || {})).catch(() => {}); }, [bucket, portalState]);
   useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
 
   const fetcher = useCallback((p) =>
@@ -37,7 +38,7 @@ export default function MergeId() {
     { key: 'account', label: 'Account', sort: true, filter: true, copy: true, help: 'The Salesforce account (person) record ID. Click to see the other accounts in its duplicate group (when it is in one).', render: (r) => (r.cluster ? <button type="button" className="linkbtn" title="View the accounts in this group" onClick={() => setOpenKey(r.cluster)}>{r.account}</button> : r.account) },
     { key: 'merge_id', label: 'Merge ID', sort: true, filter: true, wrap: true, copy: true, help: 'The Membership Platform merge ID — accounts sharing one are meant to be merged together.' },
     { key: 'in_dupes', label: 'In duplicates?', sort: 'cluster', filter: true, wrap: true, help: 'Whether the tool also flagged this account as a duplicate — shows the group it is in, or "not found" when it has a merge ID but it was not flagged (only a merge ID).', render: (r) => (r.bucket === 'sf_only' ? 'not found' : (r.cluster || 'yes')) },
-    { key: 'size', label: 'Size', filter: true, help: 'How many accounts are in this account\'s duplicate group. Filter by a cluster size (blank = not in a group).', render: (r) => fmt(r.size) },
+    { key: 'size', label: 'Size', filter: true, help: 'How many accounts share this account\'s merge ID (the merge-id group size). 1 = a singleton — a merge ID on a single account, not mergeable. Filter by size to isolate pairs (2), larger groups, or singletons (1); it matches the Size filter on Select Merges.', render: (r) => fmt(r.size) },
     { key: 'which_list', label: 'Which list', sort: true, filter: true, help: 'Which detection signal flagged it: exact, fuzzy, nickname, or multiple.' },
     { key: 'bucket', label: 'Bucket', sort: true, filter: true, help: 'Where the account falls when comparing Membership Platform merge IDs to the duplicates detected in Salesforce: in_both = has a merge ID & it was flagged; sf_only = has a merge ID, it was not flagged (only a merge ID); the *_only buckets = flagged with no merge ID (only in duplicates).' },
     { key: 'foundation', label: 'Foundation', sort: true, filter: true, help: 'Whether the account is a Foundation constituent.', render: (r) => r.foundation || '—' },

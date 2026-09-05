@@ -37,8 +37,11 @@ export const FILTER_OPTS = {
   portal: [['', 'All'], ['has', 'Has portal'], ['none', 'No portal']],
 };
 
-// Size options are dynamic (from the facets endpoint), so build them from the distinct group sizes.
-export const sizeOptions = (sizes) => [['', 'Any size'], ...(sizes || []).map((s) => [String(s), s + ' accounts'])];
+// Size options are dynamic (from the facets endpoint). Accepts either labeled { value, label } objects
+// (the current facet shape — "2 accounts (7 groups)") or plain size scalars (fallback).
+export const sizeOptions = (sizes) => [['', 'Any size'], ...(sizes || []).map((s) => (s && typeof s === 'object')
+  ? [String(s.value), s.label]
+  : [String(s), s + ' accounts'])];
 
 // The shared dropdown. `label`/`tip`/`opts` come from the maps above; `value`/`onChange(value)` bind the
 // page's own state. Identical markup to the original Select Merges filter cell, so its output is unchanged.

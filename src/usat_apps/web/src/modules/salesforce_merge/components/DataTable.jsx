@@ -215,7 +215,7 @@ export default function DataTable({ columns, fetcher, rows, pageSize = 25, toolb
                     facets[col.key] && facets[col.key].length ? (
                       <select value={colFilters[col.key] || ''} onChange={(e) => setFilter(col.key, e.target.value)}>
                         <option value="">All</option>
-                        {facets[col.key].map((v) => (<option key={v} value={v}>{v}</option>))}
+                        {facets[col.key].map((v) => { const val = (v && typeof v === 'object') ? v.value : v; const lab = (v && typeof v === 'object') ? v.label : v; return (<option key={val} value={val}>{lab}</option>); })}
                       </select>
                     ) : (
                       <input value={colFilters[col.key] || ''} placeholder="contains…" onChange={(e) => setFilter(col.key, e.target.value)} />

@@ -175,9 +175,11 @@ export default function SelectMerges() {
   // Populate the Size dropdown from the facets for the CURRENT source (duplicate clusters vs merge-id groups),
   // so the available sizes match what this view actually contains (mirrors the Merge Ops random panel).
   useEffect(() => {
-    const p = source === 'merge_id' ? api.mergeIdFacets() : api.duplicatesFacets();
-    p.then((r) => setSizeOpts(((r.facets && r.facets.size) || []).map(String))).catch(() => setSizeOpts([]));
-  }, [source]);
+    const p = source === 'merge_id'
+      ? api.mergeIdFacets({ q: filter, bucket: bkState, foundation_state: foundationState, portal_state: portalState, which_list: whichState })
+      : api.duplicatesFacets({ q: filter, merge_id_state: midState, member_number_state: memState, foundation_state: foundationState, portal_state: portalState, match_type: matchState, best_min: simState, tier: tierState });
+    p.then((r) => setSizeOpts((r.facets && r.facets.size) || [])).catch(() => setSizeOpts([]));   // labeled { value, label } size options (counts scoped to the active filters)
+  }, [source, filter, bkState, foundationState, portalState, whichState, midState, memState, matchState, simState, tierState]);
   useEffect(() => { api.mergeOrg().then((r) => setInstUrl(r.instance_url || '')).catch(() => {}); }, []);
 
   // Persist filter selections so they become the user's default next time.
