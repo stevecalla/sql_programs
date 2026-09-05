@@ -130,7 +130,8 @@ function mount(app) {
       const stamp = await harness.get_dataset_stamp();
       const source = String(b.source || 'duplicate').toLowerCase().startsWith('merge') ? 'merge_id' : 'group';
       // Full Select-Merges filter set, passed straight through to matching_keys (filter_cols + filter_map).
-      const o = { env: stamp.env, source, filters: b.filters || {}, colFilters: b.colFilters || {}, queue_filter: b.queue_filter,
+      if (b.queue_filter) await mqueue.ensure_table();   // queue_join reads salesforce_merge_queue
+      const o = { env: stamp.env, source, filters: b.filters || {}, colFilters: b.colFilters || {}, queue_filter: b.queue_filter, q: b.q,
         count: Math.max(1, Math.min(500, Number(b.count) || 10)), seed: Number(b.seed) || (Date.now() % 100000) };
       const sel = await harness.select_targets(o, stamp);
       const ids = await harness.queue_and_approve(sel.entries);
@@ -143,7 +144,8 @@ function mount(app) {
     try {
       const b = req.body || {};
       const view = String(b.source || 'duplicate').toLowerCase().startsWith('merge') ? 'merge-id' : 'duplicates';
-      const count = await reviews.count_matching(view, { filters: b.filters || {}, colFilters: b.colFilters || {}, queue_filter: b.queue_filter });
+      if (b.queue_filter) await mqueue.ensure_table();   // queue_join reads salesforce_merge_queue
+      const count = await reviews.count_matching(view, { filters: b.filters || {}, colFilters: b.colFilters || {}, queue_filter: b.queue_filter, q: b.q });
       res.json({ ok: true, count });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
@@ -398,7 +400,7 @@ function mount(app) {
   };
 
   app.get('/api/salesforce-merge/duplicates', gate, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state, portal_state: req.query.portal_state, size_eq: req.query.size, match_type: req.query.match_type, best_min: req.query.best_min, tier: req.query.tier } })) }); }
+    try { if (req.query.queue_filter) await mqueue.ensure_table(); res.json({ ok: true, ...(await reviews.list_duplicates({ ...page_opts(req), queue_filter: req.query.queue_filter, filters: { merge_id_state: req.query.merge_id_state, member_number_state: req.query.member_number_state, foundation_state: req.query.foundation_state, portal_state: req.query.portal_state, size_eq: req.query.size, match_type: req.query.match_type, best_min: req.query.best_min, tier: req.query.tier } })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/duplicates/facets', gate, async function (req, res) {
@@ -445,7 +447,7 @@ function mount(app) {
 
   // ---- Merge Admin sources + queue ----
   app.get('/api/salesforce-merge/merge-groups', gate, async function (req, res) {
-    try { res.json({ ok: true, ...(await reviews.list_merge_groups({ ...page_opts(req), bucket: req.query.bucket, foundation_state: req.query.foundation_state, portal_state: req.query.portal_state, size: req.query.size, which_list: req.query.which_list })) }); }
+    try { if (req.query.queue_filter) await mqueue.ensure_table(); res.json({ ok: true, ...(await reviews.list_merge_groups({ ...page_opts(req), queue_filter: req.query.queue_filter, bucket: req.query.bucket, foundation_state: req.query.foundation_state, portal_state: req.query.portal_state, size: req.query.size, which_list: req.query.which_list })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
   app.get('/api/salesforce-merge/merge-queue', gate, async function (req, res) {

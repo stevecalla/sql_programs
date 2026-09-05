@@ -74,6 +74,12 @@ function build_clauses(opts, spec) {
     params.push(like(term, col_name));
   }
 
+  // Queue filter (staged/unstaged) — same shared SQL predicate the merge-id view + sampler use. Only
+  // specs that expose a group-key column (spec.queue_key) support it; others ignore queue_filter.
+  let join_sql = '';
+  const qj = spec.queue_key ? queue_join('`' + spec.queue_key + '`', opts.queue_filter) : null;
+  if (qj) { join_sql = qj.join; wheres.push(qj.cond); }
+
   const where_sql = wheres.length ? ('WHERE ' + wheres.join(' AND ')) : '';
 
   // sort: map UI key -> safe ORDER BY expression; default first whitelisted
@@ -81,15 +87,15 @@ function build_clauses(opts, spec) {
   const dir = String(opts.dir).toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
   const order_sql = 'ORDER BY ' + spec.sort[sort_key] + ' ' + dir;
 
-  return { page, page_size, offset, where_sql, order_sql, params, sort_key, dir };
+  return { page, page_size, offset, where_sql, join_sql, order_sql, params, sort_key, dir };
 }
 
 async function paged(table, spec, opts, query) {
-  const { page, page_size, offset, where_sql, order_sql, params } = build_clauses(opts, spec);
-  const total_rows = await query('SELECT COUNT(*) AS n FROM `' + table + '` ' + where_sql, params);
+  const { page, page_size, offset, where_sql, join_sql, order_sql, params } = build_clauses(opts, spec);
+  const total_rows = await query('SELECT COUNT(*) AS n FROM `' + table + '` ' + join_sql + ' ' + where_sql, params);
   const total = total_rows && total_rows[0] ? Number(total_rows[0].n) : 0;
   const rows = await query(
-    'SELECT ' + spec.select + ' FROM `' + table + '` ' + where_sql + ' ' + order_sql + ' LIMIT ? OFFSET ?',
+    'SELECT ' + spec.select + ' FROM `' + table + '` ' + join_sql + ' ' + where_sql + ' ' + order_sql + ' LIMIT ? OFFSET ?',
     params.concat([page_size, offset]));
   return { rows: rows || [], total, page, page_size };
 }
@@ -119,65 +125,44 @@ const KEY_COL = { duplicates: 'Consolidated_Group_Key__c', 'merge-id': 'Salesfor
 // The merge-id view is a GROUP-level query (one row per Salesforce merge id, group-level HAVING filters,
 // blank ids excluded). Both the Select-Merges "Merge-id groups" panel AND the batch sampler go through the
 // SAME builder (merge_group_clauses, below) so their counts and keys always agree — one source of truth.
-// The set of merge-queue source_keys currently "staged" — the SINGLE server-side source of truth for
-// the "already queued / merged" state that Select Merges shows as its Queue filter. Mirrors that page's
-// client-side rule EXACTLY, per source_key: staged = ANY row is active (queued/approved) OR the LATEST
-// row (by created_at, id) is a live merge (done/recreated). restored/failed fall through as NOT staged
-// (re-mergeable), so a merged-then-restored set correctly re-enters the pool. Group keys and merge ids
-// share the source_key column and never collide (different formats), so one set serves both views.
-async function staged_key_set(query = real_query) {
-  const QT = 'salesforce_merge_queue';   // == merge_queue.js TABLE
-  let rows = [];
-  try {
-    rows = await query(
-      "SELECT source_key AS k, " +
-      "MAX(status IN ('queued','approved')) AS active, " +
-      "SUBSTRING_INDEX(GROUP_CONCAT(status ORDER BY created_at DESC, id DESC), ',', 1) AS latest " +
-      "FROM `" + QT + "` GROUP BY source_key", []);
-  } catch (e) { rows = []; }   // queue table not created yet -> nothing is staged
-  const set = new Set();
-  for (const r of (rows || [])) {
-    const active = Number(r.active) === 1;
-    const latest = String(r.latest || '');
-    if (active || latest === 'done' || latest === 'recreated') set.add(String(r.k));
-  }
-  return set;
-}
-
-// Apply the Select-Merges Queue filter to a key list. mode: '' (all) | 'unstaged' (hide queued/merged)
-// | 'staged' (only queued/merged). Same semantics as the panel, so the batch sampler and the panel
-// agree by construction.
-async function apply_queue_filter(keys, mode, query = real_query) {
+// ONE SQL fragment for the Select-Merges "Queue" filter — the SINGLE source of truth shared by BOTH the
+// Select Merges panel (list + count + pagination) AND the Merge Ops batch sampler, so they can never
+// drift. Given the group-key SQL expression, it LEFT JOINs the per-source_key queue state (active = any
+// queued/approved row; latest = most recent status by created_at,id) and returns a WHERE condition:
+//   'staged'   → the key is active OR its latest lifecycle status is a live merge (done/recreated)
+//   'unstaged' → the negation (also true when the key has no queue row at all)
+// restored/failed fall through as NOT staged (re-mergeable), matching Select Merges' original client rule.
+// Group keys and merge ids share the source_key column and never collide (different formats), so one
+// predicate serves both views. Returns null when the filter is off. No bound params (values inlined,
+// and they're fixed literals — injection-safe).
+function queue_join(keyExpr, mode) {
   const m = String(mode || '');
-  if (m !== 'unstaged' && m !== 'staged') return keys || [];
-  const staged = await staged_key_set(query);
-  return (keys || []).filter((k) => staged.has(String(k)) === (m === 'staged'));
+  if (m !== 'staged' && m !== 'unstaged') return null;
+  const join = "LEFT JOIN (SELECT source_key, MAX(status IN ('queued','approved')) AS active, "
+    + "SUBSTRING_INDEX(GROUP_CONCAT(status ORDER BY created_at DESC, id DESC), ',', 1) AS latest "
+    + "FROM `salesforce_merge_queue` GROUP BY source_key) `sq` ON `sq`.source_key = " + keyExpr;
+  const staged = "(`sq`.source_key IS NOT NULL AND (`sq`.active = 1 OR `sq`.latest IN ('done','recreated')))";
+  return { join, cond: (m === 'staged') ? staged : ('NOT ' + staged) };
 }
 
 async function matching_keys(view, opts = {}, query = real_query) {
-  let keys;
-  if (view === 'merge-id') { keys = await merge_group_keys(flatten_mergeid_opts(opts), query); }
-  else {
-    const spec = SPECS[view]; const col = KEY_COL[view];
-    if (!spec || !spec.table || !col) return [];
-    const { where_sql, params } = build_clauses({ ...opts, page: 1, page_size: 1 }, spec);   // page/size unused here
-    const rows = await query('SELECT DISTINCT `' + col + '` AS k FROM `' + spec.table + '` ' + where_sql, params);
-    keys = (rows || []).map((r) => r.k).filter(Boolean);
-  }
-  return apply_queue_filter(keys, opts.queue_filter, query);
+  if (view === 'merge-id') return merge_group_keys(flatten_mergeid_opts(opts), query);
+  const spec = SPECS[view]; const col = KEY_COL[view];
+  if (!spec || !spec.table || !col) return [];
+  const { where_sql, join_sql, params } = build_clauses({ ...opts, page: 1, page_size: 1 }, spec);   // page/size unused here
+  const rows = await query('SELECT DISTINCT `' + col + '` AS k FROM `' + spec.table + '` ' + join_sql + ' ' + where_sql, params);
+  return (rows || []).map((r) => r.k).filter(Boolean);
 }
 
 // COUNT of matching sets for the live "N sets match" readout in the batch UI. Merge-id delegates to the
-// same grouped builder as the review panel; duplicates uses the row-level consolidated clauses. When the
-// Queue filter is engaged, count the post-filter key list itself so the readout equals the sampler pool.
+// same grouped builder as the review panel; duplicates uses the row-level consolidated clauses. The Queue
+// filter (when set) is applied in-SQL via the shared queue_join, so this count equals the panel's total.
 async function count_matching(view, opts = {}, query = real_query) {
-  const qf = String(opts.queue_filter || '');
-  if (qf === 'unstaged' || qf === 'staged') return (await matching_keys(view, opts, query)).length;
   if (view === 'merge-id') return merge_group_count(flatten_mergeid_opts(opts), query);
   const spec = SPECS[view]; const col = KEY_COL[view];
   if (!spec || !spec.table || !col) return 0;
-  const { where_sql, params } = build_clauses({ ...opts, page: 1, page_size: 1 }, spec);
-  const rows = await query('SELECT COUNT(DISTINCT `' + col + '`) AS n FROM `' + spec.table + '` ' + where_sql, params);
+  const { where_sql, join_sql, params } = build_clauses({ ...opts, page: 1, page_size: 1 }, spec);
+  const rows = await query('SELECT COUNT(DISTINCT `' + col + '`) AS n FROM `' + spec.table + '` ' + join_sql + ' ' + where_sql, params);
   return (rows && rows[0]) ? Number(rows[0].n) : 0;
 }
 
@@ -230,6 +215,7 @@ const DUP_SPEC = {
     tier: { build: (v) => { const t = String(v).trim().toLowerCase(); return (t === 'exact' || t === 'fuzzy' || t === 'nickname') ? { sql: 'LOWER(Confidence_Tier__c) = ?', params: [t] } : null; } },
   },
   facet_cols: { signal: 'Match_Composition__c', tier: 'Confidence_Tier__c', size: 'Group_Record_Count__c' },
+  queue_key: 'Consolidated_Group_Key__c',   // group key the Queue filter joins on (see queue_join)
   default_sort: 'size',
 };
 async function list_duplicates(opts = {}, query = real_query) {
@@ -454,23 +440,28 @@ function merge_group_clauses(opts = {}) {
   if (/^\d+$/.test(sz)) havings.push("COUNT(*) = " + Number(sz));
   const wl = String(opts.which_list || '').trim().toLowerCase();   // validated to a fixed set -> inlined LIKE is injection-safe
   if (wl === 'exact' || wl === 'fuzzy' || wl === 'nickname') havings.push("SUM(CASE WHEN Which_List__c LIKE '%" + wl + "%' THEN 1 ELSE 0 END) > 0");
-  return { T, where_sql: "WHERE " + wheres.join(" AND "), having_sql: havings.length ? (" HAVING " + havings.join(" AND ")) : '', params };
+  // Queue filter (staged/unstaged) — same shared SQL predicate the duplicates view + sampler use, joined on
+  // the merge id. Applied as a row-level WHERE (constant per group, since sq is one row per source_key).
+  let join_sql = '';
+  const qj = queue_join('Salesforce_Merge_Id__c', opts.queue_filter);
+  if (qj) { join_sql = ' ' + qj.join; wheres.push(qj.cond); }
+  return { T, join_sql, where_sql: "WHERE " + wheres.join(" AND "), having_sql: havings.length ? (" HAVING " + havings.join(" AND ")) : '', params };
 }
 // The batch sampler passes nested { filters, colFilters }; flatten to what merge_group_clauses expects.
 function flatten_mergeid_opts(opts = {}) {
   const f = opts.filters || {}; const cf = opts.colFilters || {};
-  return { q: opts.q, bucket: f.bucket, foundation_state: f.foundation_state, portal_state: f.portal_state, which_list: cf.which_list, size: cf.size };
+  return { q: opts.q, bucket: f.bucket, foundation_state: f.foundation_state, portal_state: f.portal_state, which_list: cf.which_list, size: cf.size, queue_filter: opts.queue_filter };
 }
 async function merge_group_count(opts = {}, query = real_query) {
-  const { T, where_sql, having_sql, params } = merge_group_clauses(opts);
+  const { T, join_sql, where_sql, having_sql, params } = merge_group_clauses(opts);
   const rows = await query(having_sql
-    ? "SELECT COUNT(*) AS n FROM (SELECT Salesforce_Merge_Id__c FROM `" + T + "` " + where_sql + " GROUP BY Salesforce_Merge_Id__c" + having_sql + ") x"
-    : "SELECT COUNT(DISTINCT Salesforce_Merge_Id__c) AS n FROM `" + T + "` " + where_sql, params);
+    ? "SELECT COUNT(*) AS n FROM (SELECT Salesforce_Merge_Id__c FROM `" + T + "`" + join_sql + " " + where_sql + " GROUP BY Salesforce_Merge_Id__c" + having_sql + ") x"
+    : "SELECT COUNT(DISTINCT Salesforce_Merge_Id__c) AS n FROM `" + T + "`" + join_sql + " " + where_sql, params);
   return rows && rows[0] ? Number(rows[0].n) : 0;
 }
 async function merge_group_keys(opts = {}, query = real_query) {
-  const { T, where_sql, having_sql, params } = merge_group_clauses(opts);
-  const rows = await query("SELECT Salesforce_Merge_Id__c AS k FROM `" + T + "` " + where_sql +
+  const { T, join_sql, where_sql, having_sql, params } = merge_group_clauses(opts);
+  const rows = await query("SELECT Salesforce_Merge_Id__c AS k FROM `" + T + "`" + join_sql + " " + where_sql +
     " GROUP BY Salesforce_Merge_Id__c" + having_sql, params);
   return (rows || []).map((r) => r.k).filter(Boolean);
 }
@@ -478,7 +469,7 @@ async function list_merge_groups(opts = {}, query = real_query) {
   const page = clamp_int(opts.page, 1, 1, 1e9);
   const page_size = clamp_int(opts.page_size, 25, 1, MAX_PAGE_SIZE);
   const offset = (page - 1) * page_size;
-  const { T, where_sql, having_sql, params } = merge_group_clauses(opts);   // shared with the batch sampler
+  const { T, join_sql, where_sql, having_sql, params } = merge_group_clauses(opts);   // shared with the batch sampler
   const total = await merge_group_count(opts, query);
   const rows = await query(
     "SELECT Salesforce_Merge_Id__c AS `merge_id`, " +
@@ -486,7 +477,7 @@ async function list_merge_groups(opts = {}, query = real_query) {
     "COUNT(*) AS `size`, MIN(Consolidated_Group_Key__c) AS `cluster_key`, " +
     "MAX(CASE WHEN Is_Customer_Portal__c = '1' THEN 1 ELSE 0 END) AS `portal`, " +
     "MAX(CASE WHEN Foundation_Constituent__c LIKE 'true%' THEN 1 ELSE 0 END) AS `foundation` " +
-    "FROM `" + T + "` " + where_sql +
+    "FROM `" + T + "`" + join_sql + " " + where_sql +
     " GROUP BY Salesforce_Merge_Id__c" + having_sql + " ORDER BY COUNT(*) DESC, Salesforce_Merge_Id__c ASC LIMIT ? OFFSET ?",
     params.concat([page_size, offset]));
   const out = (rows || []).map((r) => ({
@@ -673,6 +664,6 @@ function export_sql(view, opts = {}) {
 module.exports = {
   list_duplicates, list_merge_id, merge_id_summary, list_accounts, cluster_accounts, facets, export_rows, export_sql,
   list_merge_groups, merge_group_account_ids, accounts_by_ids, resolve_merge_groups, resolve_duplicate_groups, pick_bulk_survivor,
-  matching_keys, count_matching, staged_key_set, apply_queue_filter,
+  matching_keys, count_matching, queue_join,
   build_clauses, MAX_PAGE_SIZE, EXPORT_MAX, // exported for tests
 };
