@@ -132,9 +132,9 @@ export default function MergeOps() {
   const [rMergeId, setRMergeId] = useState(() => readPref('r_merge_id', ''));
   const [rMember, setRMember] = useState(() => readPref('r_member', ''));
   // Queue filter — mirrors Select Merges' "Queue" filter exactly ('' all | 'unstaged' hide queued/merged |
-  // 'staged' only queued/merged). Default 'unstaged' so a random sample skips sets already queued/merged
-  // (a merged-then-restored set re-enters the pool), so a Count of N reliably runs ~N fresh merges.
-  const [rQueueFilter, setRQueueFilter] = useState(() => readPref('r_queue_filter', 'unstaged'));
+  // 'staged' only queued/merged). Defaults to 'All', matching the Select Merges Queue default (parity).
+  // Pick 'Not staged' when you want the sample to skip sets already queued/merged and run fresh merges.
+  const [rQueueFilter, setRQueueFilter] = useState(() => readPref('r_queue_filter', ''));
   const [rSearch, setRSearch] = useState(() => readPref('r_search', ''));   // name/id search — same pool narrowing as Select Merges' list search
   const [facets, setFacets] = useState({});
   const [matchCount, setMatchCount] = useState(null);   // live "N sets match these filters"
